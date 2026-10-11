@@ -27,7 +27,6 @@ from .variables import (
     SATELLITE_INFRARED_IDS,
     SATELLITE_REFLECTANCE_IDS,
     TRUE_COLOR_COMPONENT_IDS,
-    NIGHT_MICRO_COMPONENT_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable_id,
 )
@@ -333,12 +332,9 @@ DUST_CF = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="dus
 ZHOUYE = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="zhouye")
 # A true colour gun is the same kind of number as a Dust RGB gun — a
 # stretched display value in 0–1 from this pipeline's own recipe — and
-# takes the same codebook: code 0 is "no data" (outside the disk, an
-# input lacked, or the night side), black stays a value at code 1.
+# takes the same codebook: code 0 is "no data" (outside the disk or an
+# input lacked), black stays a value at code 1.
 TRUE_COLOR_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="truecolor")
-# A night microphysics gun is the same kind of number again, under the same
-# codebook and the same code 0.
-NIGHT_MICRO_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="nightmicro")
 
 
 # A reflectance channel: the top-of-atmosphere reflectance factor in 0–1,
@@ -405,7 +401,6 @@ QUALITY_SATELLITE = {
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
     **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
     **{gun_id: TRUE_COLOR_GUN for gun_id in TRUE_COLOR_COMPONENT_IDS},
-    **{gun_id: NIGHT_MICRO_GUN for gun_id in NIGHT_MICRO_COMPONENT_IDS},
 }
 COMPACT_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[1] for channel_id in SATELLITE_INFRARED_IDS},
@@ -414,7 +409,6 @@ COMPACT_SATELLITE = {
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
     **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
     **{gun_id: TRUE_COLOR_GUN for gun_id in TRUE_COLOR_COMPONENT_IDS},
-    **{gun_id: NIGHT_MICRO_GUN for gun_id in NIGHT_MICRO_COMPONENT_IDS},
 }
 assert tuple(QUALITY_SATELLITE) == (
     SATELLITE_INFRARED_IDS
@@ -423,7 +417,6 @@ assert tuple(QUALITY_SATELLITE) == (
     + DUST_CF_COMPONENT_IDS
     + ZHOUYE_COMPONENT_IDS
     + TRUE_COLOR_COMPONENT_IDS
-    + NIGHT_MICRO_COMPONENT_IDS
 )
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,

@@ -300,8 +300,7 @@ pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
 /// `SATELLITE_REFLECTANCE_IDS`, `SATELLITE_CHANNEL_IDS`,
 /// `DUST_RGB_BUNDLE_ID`, `DUST_RGB_COMPONENT_IDS`, `DUST_CF_BUNDLE_ID`,
 /// `DUST_CF_COMPONENT_IDS`, `ZHOUYE_BUNDLE_ID`, `ZHOUYE_COMPONENT_IDS`,
-/// `TRUE_COLOR_BUNDLE_ID`, `TRUE_COLOR_COMPONENT_IDS`,
-/// `NIGHT_MICRO_BUNDLE_ID`, `NIGHT_MICRO_COMPONENT_IDS` and
+/// `TRUE_COLOR_BUNDLE_ID`, `TRUE_COLOR_COMPONENT_IDS` and
 /// `SATELLITE_VARIABLE_IDS` in `xuebuild/variables.py`.
 pub const SATELLITE_INFRARED_IDS: &[&str] = &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123"];
 pub const SATELLITE_REFLECTANCE_IDS: &[&str] = &["vis047", "vis051", "vis064", "nir086"];
@@ -321,19 +320,14 @@ pub const DUST_CF_COMPONENT_IDS: [&str; 1] = ["dustcf"];
 pub const ZHOUYE_BUNDLE_ID: &str = "zhouye";
 pub const ZHOUYE_COMPONENT_IDS: [&str; 1] = ["zhouye"];
 /// The true colour composite: three guns produced in the fetch stage from
-/// the reflectance channels by the Python pipeline's own recipe, in bundle
-/// order.
+/// the reflectance channels by day and two infrared windows by night, by
+/// the Python pipeline's own recipe, in bundle order.
 pub const TRUE_COLOR_BUNDLE_ID: &str = "truecolor";
 pub const TRUE_COLOR_COMPONENT_IDS: [&str; 3] = ["truer", "trueg", "trueb"];
-/// The night microphysics composite: three guns produced in the fetch stage
-/// from three infrared windows by the Python pipeline's own recipe, in
-/// bundle order.
-pub const NIGHT_MICRO_BUNDLE_ID: &str = "nightmicro";
-pub const NIGHT_MICRO_COMPONENT_IDS: [&str; 3] = ["nightr", "nightg", "nightb"];
 #[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
 pub const SATELLITE_VARIABLE_IDS: &[&str] = &[
     "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086", "dustr", "dustg",
-    "dustb", "dustcf", "zhouye", "truer", "trueg", "trueb", "nightr", "nightg", "nightb",
+    "dustb", "dustcf", "zhouye", "truer", "trueg", "trueb",
 ];
 
 /// The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
@@ -2028,14 +2022,17 @@ pub const VARIABLES: &[VariableSpec] = &[
     // the 0.64, 0.51 and 0.47 µm reflectances of a slot, each divided by
     // the cosine of the solar zenith and put through one fixed brightness
     // curve, the green on the ABI synthesized from the blue, the red and
-    // the 0.86 µm band it has instead — the Python fetch stage's own
+    // the 0.86 µm band it has instead, blended across the terminator into
+    // white cloud from the 10.4 and 3.9 µm windows over a dark ground on
+    // the night side — the Python fetch stage's own
     // recipe (`xuebuild/satellite/producers.py`), so the producer id is
     // the pipeline's and the version the recipe's. The guns take the next
     // three local-use numbers (7, 8, 9: 1–3 are the Dust RGB's, 4 and 6
-    // the confidences', 5 the aurora's), the guns' codebook and no-data
-    // rule: code 0 is a cell the disk does not cover, an input lacked, or
-    // the night side. Mirror `truer`, `trueg`, `trueb` in
-    // `xuebuild/variables.py`.
+    // the confidences', 5 the aurora's; 10–12 stay unused, since published
+    // windows carried them as the night microphysics guns), the guns'
+    // codebook and no-data rule: code 0 is a cell the disk does not cover
+    // or an input lacked; the night side has a picture. Mirror `truer`,
+    // `trueg`, `trueb` in `xuebuild/variables.py`.
     VariableSpec {
         id: "truer",
         label: "True colour, red gun",
@@ -2086,74 +2083,6 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_discipline: 3,
         grib2_category: 192,
         grib2_number: 9,
-        grib2_level_type: 8,
-        grib2_level_value: None,
-        grib2_statistical: None,
-        grib2_aliases: &[],
-        grib2_alternates: &[],
-        gdal_unit: "",
-        fill_values: &[],
-        producer_id: Some("xue"),
-        grib2_aerosol: None,
-    },
-    // The night microphysics composite, the three guns of the `nightmicro`
-    // bundle: EUMETSAT's Night Microphysics RGB from the 12.3 − 10.4 µm
-    // split window, 10.4 − 3.9 µm and the 10.4 µm window, each stretched
-    // linearly to 0–1 — the Python fetch stage's own recipe, so the
-    // producer id is the pipeline's and the version the recipe's. The next
-    // three local-use numbers (10, 11, 12), the guns' codebook and no-data
-    // rule: code 0 is a cell the disk does not cover or an input lacked.
-    // Mirror `nightr`, `nightg`, `nightb` in `xuebuild/variables.py`.
-    VariableSpec {
-        id: "nightr",
-        label: "Night microphysics, red gun",
-        output_unit: "1",
-        value_range: (-0.004, 1.0),
-        grib_element: "",
-        open_meteo: "",
-        grib2_discipline: 3,
-        grib2_category: 192,
-        grib2_number: 10,
-        grib2_level_type: 8,
-        grib2_level_value: None,
-        grib2_statistical: None,
-        grib2_aliases: &[],
-        grib2_alternates: &[],
-        gdal_unit: "",
-        fill_values: &[],
-        producer_id: Some("xue"),
-        grib2_aerosol: None,
-    },
-    VariableSpec {
-        id: "nightg",
-        label: "Night microphysics, green gun",
-        output_unit: "1",
-        value_range: (-0.004, 1.0),
-        grib_element: "",
-        open_meteo: "",
-        grib2_discipline: 3,
-        grib2_category: 192,
-        grib2_number: 11,
-        grib2_level_type: 8,
-        grib2_level_value: None,
-        grib2_statistical: None,
-        grib2_aliases: &[],
-        grib2_alternates: &[],
-        gdal_unit: "",
-        fill_values: &[],
-        producer_id: Some("xue"),
-        grib2_aerosol: None,
-    },
-    VariableSpec {
-        id: "nightb",
-        label: "Night microphysics, blue gun",
-        output_unit: "1",
-        value_range: (-0.004, 1.0),
-        grib_element: "",
-        open_meteo: "",
-        grib2_discipline: 3,
-        grib2_category: 192,
-        grib2_number: 12,
         grib2_level_type: 8,
         grib2_level_value: None,
         grib2_statistical: None,
@@ -2581,7 +2510,7 @@ mod tests {
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
         SATELLITE_VARIABLE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS,
-        ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS, NIGHT_MICRO_BUNDLE_ID, NIGHT_MICRO_COMPONENT_IDS,
+        ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
     use serde_json::{json, Value};
@@ -2905,7 +2834,7 @@ mod tests {
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
             SATELLITE_VARIABLE_IDS,
-            "the channels, then the dust guns, the confidences, the true colour and the night microphysics guns, in the fixture's order"
+            "the channels, then the dust guns, the confidences and the true colour guns, in the fixture's order"
         );
         assert_eq!(
             fixture["bundles"],
@@ -2914,7 +2843,6 @@ mod tests {
                 DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
                 ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
                 TRUE_COLOR_BUNDLE_ID: TRUE_COLOR_COMPONENT_IDS,
-                NIGHT_MICRO_BUNDLE_ID: NIGHT_MICRO_COMPONENT_IDS,
             }),
             "each composite bundle's components"
         );
@@ -2931,8 +2859,7 @@ mod tests {
             let produced = DUST_RGB_COMPONENT_IDS.contains(&variable_id.as_str())
                 || DUST_CF_COMPONENT_IDS.contains(&variable_id.as_str())
                 || ZHOUYE_COMPONENT_IDS.contains(&variable_id.as_str())
-                || TRUE_COLOR_COMPONENT_IDS.contains(&variable_id.as_str())
-                || NIGHT_MICRO_COMPONENT_IDS.contains(&variable_id.as_str());
+                || TRUE_COLOR_COMPONENT_IDS.contains(&variable_id.as_str());
             assert_eq!(SATELLITE_CHANNEL_IDS.contains(&variable_id.as_str()), !produced, "{variable_id}");
             if produced {
                 assert_eq!(json!({ "id": spec.producer_id }), entry["producer"], "{variable_id} producer");
@@ -2974,7 +2901,7 @@ mod tests {
         }
         // The published grid is the platform's region at the step, past
         // the antimeridian; the ten channels are fetched, one is published
-        // as a scalar and the five composites beside it.
+        // as a scalar and the four composites beside it.
         assert_eq!(himawari.production_grid, (3000, 3000));
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
@@ -2982,7 +2909,7 @@ mod tests {
         assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
         assert_eq!(
             himawari.bundle_composite_ids,
-            &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID, TRUE_COLOR_BUNDLE_ID, NIGHT_MICRO_BUNDLE_ID]
+            &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID, TRUE_COLOR_BUNDLE_ID]
         );
     }
 

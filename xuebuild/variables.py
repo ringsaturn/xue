@@ -1325,14 +1325,17 @@ VARIABLES: dict[str, VariableSpec] = {
     # bundle: the 0.64, 0.51 and 0.47 µm reflectances of a slot, each
     # divided by the cosine of the solar zenith and put through one fixed
     # brightness curve, the green on the ABI synthesized from the blue,
-    # the red and the 0.86 µm band it has instead — the recipe is
+    # the red and the 0.86 µm band it has instead, blended across the
+    # terminator into white cloud from the 10.4 and 3.9 µm windows over a
+    # dark ground on the night side — the recipe is
     # ``xuebuild/satellite/producers.py``'s own (``TrueColorProducer``),
     # so the producer id is this pipeline's and the version the recipe's,
     # not the package's. The guns take the next three local-use numbers
     # (7, 8, 9: 1–3 are the Dust RGB's, 4 and 6 the confidences', 5 the
-    # aurora's), the guns' codebook and no-data rule: code 0 is a cell the
-    # disk does not cover, an input lacked, or the night side, where there
-    # is no sunlit picture to draw.
+    # aurora's; 10–12 stay unused, since published windows carried them as
+    # the night microphysics guns), the guns' codebook and no-data rule: code 0 is a cell
+    # the disk does not cover or an input lacked; the night side has a
+    # picture.
     "truer": VariableSpec(
         id="truer",
         label="True colour, red gun",
@@ -1363,51 +1366,6 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_discipline=3,
         grib2_category=192,
         grib2_number=9,
-        grib2_level_type=8,
-        producer_id="xue",
-    ),
-    # The night microphysics composite, the three guns of the ``nightmicro``
-    # bundle: EUMETSAT's Night Microphysics RGB from three infrared windows
-    # every disk already fetches — red the 12.3 − 10.4 µm split window
-    # (cloud optical thickness), green 10.4 − 3.9 µm (the small droplets of
-    # fog and low stratus), blue the 10.4 µm window (temperature), each
-    # stretched linearly to 0–1 with gamma 1. The recipe is
-    # ``NightMicrophysicsProducer``'s, so the producer id is this
-    # pipeline's and the version the recipe's. The next three local-use
-    # numbers (10, 11, 12, after the true colour's 7–9), the guns' codebook
-    # and no-data rule: code 0 is a cell the disk does not cover or an
-    # input lacked. By day the 3.9 µm window carries reflected sunlight and
-    # the green gun saturates; the picture is still published there.
-    "nightr": VariableSpec(
-        id="nightr",
-        label="Night microphysics, red gun",
-        output_unit="1",
-        value_range=(-0.004, 1),
-        grib2_discipline=3,
-        grib2_category=192,
-        grib2_number=10,
-        grib2_level_type=8,
-        producer_id="xue",
-    ),
-    "nightg": VariableSpec(
-        id="nightg",
-        label="Night microphysics, green gun",
-        output_unit="1",
-        value_range=(-0.004, 1),
-        grib2_discipline=3,
-        grib2_category=192,
-        grib2_number=11,
-        grib2_level_type=8,
-        producer_id="xue",
-    ),
-    "nightb": VariableSpec(
-        id="nightb",
-        label="Night microphysics, blue gun",
-        output_unit="1",
-        value_range=(-0.004, 1),
-        grib2_discipline=3,
-        grib2_category=192,
-        grib2_number=12,
         grib2_level_type=8,
         producer_id="xue",
     ),
@@ -1608,20 +1566,16 @@ DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
 ZHOUYE_BUNDLE_ID = "zhouye"
 ZHOUYE_COMPONENT_IDS: tuple[str] = ("zhouye",)
 # The true colour composite: three guns produced in the fetch stage from
-# the reflectance channels by this pipeline's own recipe, in bundle order.
+# the reflectance channels by day and two infrared windows by night, by
+# this pipeline's own recipe, in bundle order.
 TRUE_COLOR_BUNDLE_ID = "truecolor"
 TRUE_COLOR_COMPONENT_IDS: tuple[str, str, str] = ("truer", "trueg", "trueb")
-# The night microphysics composite: three guns produced in the fetch stage
-# from three infrared windows by this pipeline's own recipe, in bundle order.
-NIGHT_MICRO_BUNDLE_ID = "nightmicro"
-NIGHT_MICRO_COMPONENT_IDS: tuple[str, str, str] = ("nightr", "nightg", "nightb")
 SATELLITE_VARIABLE_IDS: tuple[str, ...] = (
     SATELLITE_CHANNEL_IDS
     + DUST_RGB_COMPONENT_IDS
     + DUST_CF_COMPONENT_IDS
     + ZHOUYE_COMPONENT_IDS
     + TRUE_COLOR_COMPONENT_IDS
-    + NIGHT_MICRO_COMPONENT_IDS
 )
 # The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
 # thicknesses, then the three surface concentrations. Held to the Rust

@@ -2,7 +2,7 @@ name: publish himawari
 
 # Himawari-9's 10.4 µm infrared window (AHI band 13) and the composites
 # the encoder derives from the disk's channels — the Dust RGB, the DEBRA
-# and ZHOUYE dust confidences, the true colour and the night microphysics
+# and ZHOUYE dust confidences and the true colour (by day and by night)
 # — as NOAA redistributes JMA's imager on its open data bucket: the ISatSS
 # full-disk product, one scan every ten minutes cut into 88 calibrated
 # NetCDF tiles on the geostationary projection. The live feed is a rolling

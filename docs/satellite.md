@@ -2,8 +2,7 @@
 
 How a geostationary imager's channels become Xue bundles: the `himawari`,
 `goeseast`, `goeswest` and `meteosat` sources, the `himawarijp` box over
-Japan, their Dust RGB, true colour and night microphysics composites
-and dust confidences, and the seams a further satellite, a second
+Japan, their Dust RGB and true colour composites and dust confidences, and the seams a further satellite, a second
 channel and another composite product go through. The bundle format is
 unchanged (`format.md`); what this document fixes is the fetch stage,
 `xuebuild/satellite/`, and the metadata a satellite variable carries.
@@ -77,8 +76,8 @@ longitudes like the regional radar grids; Meteosat's −60 … 60 sits on
 the prime meridian. The four sources publish the same core variables
 (`ir104` and `dustrgb`; the ABI composite takes the Quick Guide's
 stretches, FCI has no 11.2 µm window and its green gun reads the 10.5 µm
-one) and the true colour and night microphysics composites, the three
-NOAA-hosted ones the dust confidences besides, and every seam below is
+one) and the true colour composite, the three NOAA-hosted ones the dust
+confidences besides, and every seam below is
 shared: what differs between
 them is the platform row and the reader — and, for Meteosat, the cadence
 the source publishes at, which the data policy sets (§"Rounds").
@@ -91,16 +90,15 @@ infrared window at 10.4 µm; the exact central wave number is in the
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
 NOAA-hosted sources fetch six infrared windows and the solar bands (four
 on AHI, three on ABI) and publish `ir104`, the Dust RGB, the dust
-confidences, the true colour and the night microphysics; Meteosat
-fetches four windows and the four solar channels and publishes `ir104`,
-the Dust RGB, the true colour and the night microphysics (§"The dust
-confidences" says why not the confidences).
+confidences and the true colour; Meteosat fetches four windows and the
+four solar channels and publishes `ir104`, the Dust RGB and the true
+colour (§"The dust confidences" says why not the confidences).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
 | `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for the dust confidence), registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `wv062` | 3.9, 6.2 µm (FCI 3.8, 6.3) | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask (and 3.9 µm for the night microphysics, on FCI too), registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039`, `wv062` | 3.9, 6.2 µm (FCI 3.8, 6.3) | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask (and 3.9 µm for the true colour's night side, on FCI too), registered variables, not published by any source | 180–331.8 at 0.6 |
 | `vis047`, `vis051`, `vis064`, `nir086` | 0.47, 0.51, 0.64, 0.86 µm (FCI 0.44, 0.51, 0.64, 0.87) | 1, 2, 3, 4 | 1, —, 2, 3 | 1, 2, 3, 4 | top-of-atmosphere reflectance factor, 0–1 (the product's, not yet divided by the cosine of the solar zenith); fetched for the true colour composite, registered variables (GRIB2 3/0/1, the satellite-image albedo, with the band block), not published by any source | −0.01–1.255 at 0.005 |
 | `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
@@ -176,53 +174,91 @@ with a frame budget needs a rung it can hold.
 
 ### The true colour
 
-`truecolor` is the visible picture: the 0.64, 0.51 and 0.47 µm
-reflectances of a slot as red, green and blue, this pipeline's own recipe
-(`TrueColorProducer`, no package behind it), in a fixed order that the
-tests hold step by step:
+`truecolor` is one picture by day and by night: the visible picture —
+the 0.64, 0.51 and 0.47 µm reflectances of a slot as red, green and
+blue — where the sun is up, white cloud from two infrared windows over a
+dark ground where it is down, blended across the terminator. It is this
+pipeline's own recipe (`TrueColorProducer`, no package behind it), in a
+fixed order that the tests hold step by step:
 
 1. every input reflectance clipped at 0 from below (the products carry
    small negative values in the dark);
 2. the cosine of the solar zenith on every cell at the slot's start
-   (pyorbital, on the grid's own coordinates); a cell with the sun below
-   the horizon is no data;
+   (pyorbital, on the grid's own coordinates), and the zenith θ from it;
 3. each reflectance divided by `max(cos θ, cos 85°)` — the products are
    the reflectance *factor*, not yet normalised for the sun, and the floor
-   keeps the last five degrees of a day from amplifying noise;
+   keeps the last degrees of a day from amplifying noise;
 4. the green: `0.93 × 0.51 µm + 0.07 × 0.86 µm` on an imager with a green
    band (AHI, FCI; the hybrid green that lifts vegetation to the colour
    the eye expects, Miller et al. 2016), or `0.45 × 0.47 µm + 0.45 ×
    0.64 µm + 0.10 × 0.86 µm` on the ABI, which has no green band (the
    CIMSS blend);
-5. red, green and blue through one brightness curve — reflectance 0, 25,
-   55, 100, 255 % to 0, 90, 140, 175, 255 of 255, linear between the
-   knots, the CIRA stretch — clamped to 0–1;
-6. no data in all three guns wherever any input had none, or the sun was
-   below the horizon.
+5. the day guns: red, green and blue through one brightness curve —
+   reflectance 0, 25, 55, 100, 255 % to 0, 90, 140, 175, 255 of 255,
+   linear between the knots, the CIRA stretch — clamped to 0–1;
+6. the night guns: `ground + (1 − ground) × w` on each, with the ground
+   `(0.03, 0.035, 0.05)` and the cloud whiteness `w = max(w_ir, w_low)`:
+   `w_ir = clip((280 K − T₁₀.₄) / 60 K, 0, 1)^0.75` and
+   `w_low = 0.7 × clip((T₁₀.₄ − T₃.₉ − 2 K) / 5 K, 0, 1)`;
+7. `a × day + (1 − a) × night`, with the day weight
+   `a = clip((90° − θ) / 10°, 0, 1)` — 1 to a zenith of 80°, 0 from 90°,
+   linear between — clamped to 0–1;
+8. no data in all three guns wherever a side that carries weight lacked
+   an input: a reflectance where `a > 0`, the 10.4 or 3.9 µm window where
+   `a < 1`.
 
-| gun | AHI, FCI | ABI |
+| gun | day, AHI and FCI | day, ABI | night |
+|---|---|---|---|
+| `truer` | 0.64 µm | 0.64 µm | 0.03 + 0.97 w |
+| `trueg` | 0.93 × 0.51 µm + 0.07 × 0.86 µm | 0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm | 0.035 + 0.965 w |
+| `trueb` | 0.47 µm | 0.47 µm | 0.05 + 0.95 w |
+
+The night constants are named in `producers.py` and are one set for
+every imager, so the disks of the `geo` mosaic meet without a seam after
+dark (AHI, ABI and FCI read their own 10.4/10.3/10.5 and 3.9/3.9/3.8 µm
+channels under the family ids `ir104` and `ir039`); only the day side's
+green differs by imager:
+
+| constant | value | why |
 |---|---|---|
-| `truer` | 0.64 µm | 0.64 µm |
-| `trueg` | 0.93 × 0.51 µm + 0.07 × 0.86 µm | 0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm |
-| `trueb` | 0.47 µm | 0.47 µm |
+| `TRUE_COLOR_TERMINATOR_DEG` | 80°, 90° | the day picture alone to 80°, the night alone once the sun is down; about the span GeoColor fades its layers over |
+| `TRUE_COLOR_NIGHT_GROUND` | 0.03, 0.035, 0.05 | near black with a faint cool cast: a clear night reads as night, not as missing data (code 0), and cloud stands out on it |
+| `TRUE_COLOR_CLOUD_TEMPERATURE_K` | 280 K → 0, 220 K → 1 | warmer than 280 K is the ground or the warmest low cloud, colder than 220 K a deep or high top; about the range of GeoColor's night-side infrared cloud |
+| `TRUE_COLOR_CLOUD_EXPONENT` | 0.75 | below 1, so mid-level cloud is already light grey and high cloud white rather than a flat linear grey |
+| `TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K` | 2 K → 0, 7 K → 1 | small droplets emit poorly at 3.9 µm, so fog and stratus, as warm as the ground and invisible at 10.4 µm alone, read several kelvin colder there; clear sea and vegetated land stay under 2 K (the fog products' threshold) |
+| `TRUE_COLOR_LOW_CLOUD_WHITE` | 0.7 | low cloud a softer grey than high cloud, so the two stay apart as on GeoColor's night side |
+
+The missing-input rule follows the weight: on the full day side
+(`a = 1`) a missing infrared window costs nothing and the day picture
+stays; on the full night side (`a = 0`) the reflectances are not read; in
+the terminator band both sides' inputs must be there. Outside the disk
+every input is missing, so code 0 there as before.
 
 No Rayleigh correction: the limb and the long slant paths keep their blue
 haze. A correction with a lookup table per band would be a new recipe
-version. Which bands a platform feeds the recipe is
-`TrueColorProducer.inputs_for` (four, or three without the 0.51 µm one),
-mirrored by `convert.rs::composite_input_ids` the way the Dust RGB's
-missing 11.2 µm window is.
+version. The night side reads the infrared alone, so it has known
+failures it does not try to fix: a cold clear surface (a winter
+continent, the ice sheets near the disk's edge) is colder than 280 K and
+reads as thin grey cloud; a desert at night, whose quartz emits poorly
+at 3.9 µm, can show a 10.4 − 3.9 µm difference of several kelvin and a
+grey low-cloud veil; and the 3.9 µm window's noise over very cold tops
+is hidden by the infrared ramp, which is already white there. Which
+channels a platform feeds the recipe is `TrueColorProducer.inputs_for`
+(the four solar bands, or three without the 0.51 µm one, then `ir039`
+and `ir104`), mirrored by `convert.rs::composite_input_ids` the way the
+Dust RGB's missing 11.2 µm window is.
 
 The guns are the Dust RGB's shape: three variables of one composite
 bundle, local-use parameters 3 / 192 / **7, 8, 9** on surface 8, the
 guns' codebook (code 0 no data, 0.0 at code 1, 1.0 at code 251), no
 poster, no video, the three-rung ladder. The `producer` block beside each
-is `{"id": "xue", "version": "1"}`: the id names this pipeline, and the
+is `{"id": "xue", "version": "2"}`: the id names this pipeline, and the
 version is the recipe's (`producers.TRUE_COLOR_VERSION`), bumped when a
 constant above changes and never with the package, since a cached slot is
-recomposed when the version it was composed under differs. Code 0 is also
-the night side: there is no sunlit picture to draw, and the shell paints
-nothing there, so the disk's dark half shows the map.
+recomposed when the version it was composed under differs. Numbers 10,
+11 and 12 under `xue` are left unused: earlier windows carried a night
+microphysics composite (`nightmicro`) there, which readers now treat as
+an unknown bundle.
 
 What it costs: the solar bands are the big ones. An AHI slot's 0.5 km red
 band is 390 MB of tiles by day and 230 at night, the three 1 km bands 100
@@ -230,54 +266,14 @@ MB each; an ABI slot's 0.5 km red file is 430 MB by day and 200 at night,
 the two 1 km ones 100 MB. A Himawari round therefore downloads some 700 MB
 of tiles against the windows' 140, a GOES round some 630 against 140,
 warps the 0.5 km band (22 000 × 22 000 cells) once, and caches the frames
-like any channel's. On Meteosat the solar channels cost no download (an
-FCI chunk carries every channel); the reader turns their radiances into
-the same reflectance factor the NOAA products carry, `π L d² / E_sun`
-(§"The FCI reader"), FCI's own 0.51 µm band takes the AHI's hybrid green,
-and the hourly 24-hour window holds some twelve sunlit frames. FCI's
-blue band is 0.444 µm, bluer than the AHI's 0.47, under the family id
-`vis047` (the `band` block carries its wave number); the recipe is not
-changed for it.
-
-### The night microphysics
-
-`nightmicro` is the picture after dark: EUMETSAT's Night Microphysics
-RGB, from three infrared windows every NOAA-hosted disk already fetches
-(no new download), this pipeline's own recipe
-(`NightMicrophysicsProducer`) in a fixed order:
-
-1. red `IR12.3 − IR10.4`, green `IR10.4 − IR3.9`, blue `IR10.4`;
-2. each stretched linearly over its range with gamma 1 and clamped to 0–1;
-3. no data in all three guns wherever any input had none.
-
-| gun | quantity | range | reads |
-|---|---|---|---|
-| `nightr` | 12.3 − 10.4 µm | −4 … +2 K | cloud optical thickness: thick cloud dark, thin cirrus bright |
-| `nightg` | 10.4 − 3.9 µm | 0 … +10 K | small water droplets: fog and low stratus emit poorly at 3.9 µm, so the difference is large |
-| `nightb` | 10.4 µm | 243 … 293 K | temperature: warm ground bright, cold cloud tops dark |
-
-AHI bands 15, 13, 7, ABI channels 15, 13, 7 and FCI IR 12.3, 10.5, 3.8
-take the same numbers (JMA's Himawari version is EUMETSAT's). Read: fog
-and low stratus yellow-green, thick high cloud dark red, thin cirrus
-black to dark blue, a clear warm surface pink. Which channels a platform
-feeds the recipe is `NightMicrophysicsProducer.inputs_for` (all three,
-no stand-in), mirrored by `convert.rs::composite_input_ids`.
-
-The guns are the true colour's shape: three variables of one composite
-bundle, local-use parameters 3 / 192 / **10, 11, 12** on surface 8, the
-guns' codebook (code 0 no data), no poster, no video, the three-rung
-ladder, the `producer` block `{"id": "xue", "version": "1"}` with the
-version the recipe's (`producers.NIGHT_MICRO_VERSION`, bumped when a
-range above changes). Unlike the true colour it reads no sun and is
-composed day and night. By day the 3.9 µm window carries reflected
-sunlight on top of its emission, reads warmer than 10.4 µm, and the green
-gun sits at 0: the day side of this picture is not to be read. The
-viewer's day-night blend (`?blend=night`) draws it only where the true
-colour has no data, which is the night side. The 3.9 µm window's noise
-over very cold cloud tops speckles the green gun there; nothing smooths
-it. Meteosat reads FCI's IR 3.8 for the 3.9 µm window (`ir039`, band
-block 3.80 µm), a channel every chunk already carries, so it costs a
-strip's conversion and no download.
+like any channel's. The night side reads two windows every source already
+fetches, so it costs no download. On Meteosat the solar channels cost no
+download (an FCI chunk carries every channel); the reader turns their
+radiances into the same reflectance factor the NOAA products carry, `π L
+d² / E_sun` (§"The FCI reader"), FCI's own 0.51 µm band takes the AHI's
+hybrid green, and the hourly 24-hour window holds some twelve sunlit
+frames. FCI's blue band is 0.444 µm, bluer than the AHI's 0.47, under
+the family id `vis047` (the `band` block carries its wave number); the recipe is not changed for it.
 
 ### The dust confidences
 
@@ -491,7 +487,7 @@ whole cells of `grid_step`; the fetch warps onto it instead of
 | box | 24–46°N, 122–148°E (whole degrees: the JMA nowcast's 0.005° cells nest 2:1) |
 | grid | 0.01°, 2600 × 2200, tile 64 × 64 (0.64°, 1435 a plane), ladder 0.02 / 0.04 / 0.08° |
 | fetched | `ir039`, `ir086`, `ir104`, `ir112`, `ir123`, `vis047`, `vis051`, `vis064`, `nir086` |
-| published | `ir104`, `dustrgb`, `truecolor`, `nightmicro` (no confidences: their CAMEL months are staged on the disk grids) |
+| published | `ir104`, `dustrgb`, `truecolor` (no confidences: their CAMEL months are staged on the disk grids) |
 | window | 600 s, 3 h |
 
 The ISatSS reader narrows a slot to the box (`ISatSSReader.tiles_covering`).
@@ -510,8 +506,8 @@ overlaps the box: for Japan, six of the 88 (T009–T011, T018–T020). Only
 those make a slot complete, are downloaded and are mosaicked — some 60
 MB a slot over the eight channels other than 3.9 µm by day and 35 MB by
 night (2026-10-11 03:00 and 2026-10-10 15:00 UTC), against 870 and 500
-MB for the disk's ten; the 3.9 µm window adds one more 2 km channel's
-six tiles. A CMIPF slot is one file and an FCI download already crops
+MB for the disk's ten; the 3.9 µm window the true colour's night side
+reads adds one more 2 km channel's six tiles. A CMIPF slot is one file and an FCI download already crops
 its chunks to the disk's rows, so those readers do not narrow
 (`tiles_covering` is None).
 
@@ -519,14 +515,14 @@ The frame cache is keyed by the **source**, `<source>-frames`, since the
 box and the disk warp the same slot onto two grids; a disk's source id is
 its platform's role, so the disks' caches kept their names. A slot of the
 box is eighteen frames of 3–7 MB (some 95 MB). Measured on one sunlit
-hour (2026-10-11 03:00–04:00 UTC, seven slots, before the night
-microphysics was added): the stores are 8.4 MB of `ir104`, 35 MB of
-`dustrgb` and 65 MB of `truecolor` at full resolution and a third more
-for the ladder, some 170 MB. `nightmicro` is three infrared guns like the
-Dust RGB and about its size, composed day and night, which puts a sunlit
-hour near 220 MB and a three-hour round near 0.65 GB; that is why the
-window is three hours and not the disks' six. The true colour is code 0
-on the night side and costs next to nothing there.
+hour (2026-10-11 03:00–04:00 UTC, seven slots, under true colour recipe
+1): the stores are 8.4 MB of `ir104`, 35 MB of `dustrgb` and 65 MB of
+`truecolor` at full resolution and a third more for the ladder, some
+170 MB, near 0.5 GB for a sunlit three-hour round; that is why the
+window is three hours and not the disks' six. The true colour's night
+side is white cloud over a flat dark ground, smoother than the sunlit
+picture, so a night hour costs less than a sunlit one but no longer next
+to nothing.
 
 ## Metadata
 
@@ -878,10 +874,9 @@ both. `PRODUCERS` is keyed by the
 bundle produced; `SourceSpec.bundle_composite_ids` lists what a source
 publishes, and `_fetch_satellite_run` runs every listed producer whose
 channels the window fetches (asked for the Dust RGB's four alone, it
-composes that and not the confidence). `TrueColorProducer` and
-`NightMicrophysicsProducer` are this pipeline's own (`id` `xue`, the
-version each recipe's constant): §"The true colour" and §"The night
-microphysics". shachen is the `satellite`
+composes that and not the confidence). `TrueColorProducer` is this
+pipeline's own (`id` `xue`, the version the recipe's constant): §"The
+true colour". shachen is the `satellite`
 dependency group (`uv sync --group satellite`), imported inside the
 producers and nowhere else.
 
@@ -895,10 +890,12 @@ tile is 1.3 MB and the 0.5 km one 4.7) — and `tests/test_satellite.py`
 runs them through the whole stage — listing, completeness, download,
 mosaic, warp (the solar bands as block means, the sidecar saying so),
 cache, the producers (the Dust RGB held cell for cell to
-`shachen.dustrgb.dust_rgb` called directly, the true colour to its recipe
-written out step by step, with the night side empty and dusk darker than
-noon, the night microphysics to its recipe and to pinned cells of the
-fixture), series, ingest, conversion on the production grid with every
+`shachen.dustrgb.dust_rgb` called directly, the true colour's day side to
+its recipe written out step by step, its night side to the night recipe
+on the fixture's windows — ground and white cloud, never no data, a cold
+top whiter than a warm one, fog lit by the 10.4 − 3.9 µm difference —
+and the terminator blend held monotone and continuous with the
+missing-input rule on each side), series, ingest, conversion on the production grid with every
 composite bundle, a crop past the antimeridian, a `--bundles` build that
 reads one series alone — against a stand-in for the bucket, then through
 both encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
@@ -947,8 +944,8 @@ formula, the strip's footprint and its numbers read back through GDAL's
 own unscaling, the vis_06 strip on the 1 km grid held to
 `π L d² / E_sun` off the file's own constants cell for cell (the algorithm, not
 the 2017 test product's absolute values), the solar frames and the true
-colour composed from them with the night side empty, the IR 3.8 strip in
-kelvin and the night microphysics composed from it, the producer with
+colour composed from them by day, the IR 3.8 strip in kelvin and the true
+colour's night side composed from it and IR 10.5, the producer with
 three inputs held to `dust_rgb` with the 10.5 µm plane as the green
 minuend, the hourly slots against a store that lists ten-minute cycles,
 the series, the ingest, the conversion with the FCI band block and the

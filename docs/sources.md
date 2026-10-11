@@ -160,19 +160,17 @@ tiers. Each publishes:
   after dark a reading at the day's level instead of a fading one. Same
   grid, coverage and scale as `dustcf`; a second product, not a
   replacement.
-- `truecolor`: the visible picture — the 0.64, 0.51 and 0.47 µm reflectances
-  (0.444 µm on Meteosat) as red, green and blue, each divided by the cosine
-  of the solar zenith and put through one brightness curve, the green a
-  hybrid with the 0.86 µm band (synthesized from blue, red and 0.86 µm on
-  the ABI, which has no green band), no Rayleigh correction. Code 0 is no
-  data in every gun, and the night side is code 0: nothing is painted where
-  the sun is down. Xue's own recipe (producer `xue`, version the recipe's).
-  See [`satellite.md`](satellite.md).
-- `nightmicro`: the night picture — EUMETSAT's Night Microphysics RGB,
-  12.3 − 10.4 µm (−4…2 K), 10.4 − 3.9 µm (0…10 K) and 10.4 µm (243…293 K)
-  as red, green and blue; fog and low cloud read yellow-green. Composed day and
-  night, but by day sunlight in the 3.9 µm band pins the green gun at 0.
-  Code 0 is no data in every gun. Xue's own recipe (producer `xue`).
+- `truecolor`: one picture day and night. By day the visible picture — the
+  0.64, 0.51 and 0.47 µm reflectances (0.444 µm on Meteosat) as red, green
+  and blue, each divided by the cosine of the solar zenith and put through
+  one brightness curve, the green a hybrid with the 0.86 µm band
+  (synthesized from blue, red and 0.86 µm on the ABI, which has no green
+  band), no Rayleigh correction. After dark white cloud over a dark
+  ground: the 10.4 µm window from 280 K (clear) to 220 K (white) and, for
+  fog and low cloud, the 10.4 − 3.9 µm difference as a softer grey. The two
+  blend across solar zenith 80–90°. Code 0 is no data in every gun (outside
+  the disk, or an input missing). Xue's own recipe (producer `xue`, version
+  the recipe's). See [`satellite.md`](satellite.md).
 
 The live windows end 15–20 min behind real time. **Meteosat publishes only
 the cycle on each hour**: EUMETSAT releases that cycle under CC BY 4.0 and
