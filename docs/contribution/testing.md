@@ -53,4 +53,7 @@ change (the tc and sounding ones need `bufr_dump`).
 and browser jobs on every push and pull request except prose-only changes
 (`**.md`, `docs/**`). On `release/**` branches the Python job builds the
 wheel from the tree instead of installing PyPI's, since the encoders there
-run ahead of the published wheel (see [releasing](releasing.md)).
+run ahead of the published wheel (see [releasing](releasing.md)). The Rust
+job also runs `make encoder-rust-test` on every run: plain `cargo test`
+leaves the `encoder` feature off, so the native encoder's unit tests and
+its golden run only there.

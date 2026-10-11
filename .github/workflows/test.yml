@@ -91,11 +91,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # tests/prepare_bin_fixture.py encodes the cropped GRIB fixture with the
-      # Python encoder; the Rust decoder must reproduce it byte for byte.
+      # Python encoder; the Rust decoder must reproduce it byte for byte. The
+      # headers and libclang are for the native encoder's own tests below.
       - name: Install GDAL
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin
+          sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev libclang-dev
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -125,6 +126,14 @@ jobs:
 
       - name: Run Rust tests
         run: make test-rust
+
+      # `cargo test` leaves the `encoder` feature off, so the native
+      # encoder's unit tests and its golden (the Rust encoder must write the
+      # bytes the Python reference just wrote) run here, on every pull
+      # request: the Python job's parity tests build the wheel on release
+      # branches only, and cannot catch both tables being wrong together.
+      - name: Run the native encoder's tests
+        run: make encoder-rust-test
 
       # The API Worker links `worker`, which builds only for wasm32, so it is
       # not in `cargo test`'s default members. Compile it for that target here
