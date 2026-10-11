@@ -10,7 +10,8 @@ use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS, SATELLITE_CHANNEL_IDS,
+    cloud_water_level, isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS,
+    SATELLITE_CHANNEL_IDS,
 };
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
@@ -250,6 +251,21 @@ const QUALITY_REFLECTIVITY: LinearCodebook = LinearCodebook {
 const COMPACT_REFLECTIVITY: LinearCodebook = LinearCodebook {
     step: 1.0,
     ..QUALITY_REFLECTIVITY
+};
+// Cloud water mixing ratio in g/kg on every level of the WOOF volume: 0 to
+// 2.53 at 0.01 g/kg, a linear book because a volume's levels must be. Code 0
+// is clear air and below ground alike. Mirrors `QUALITY_CLOUD_WATER` in
+// `xuebuild/quantize.py`.
+const QUALITY_CLOUD_WATER: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 2.53,
+    step: 0.01,
+    nodata_code: 255,
+    name: "clw",
+};
+const COMPACT_CLOUD_WATER: LinearCodebook = LinearCodebook {
+    step: 0.02,
+    ..QUALITY_CLOUD_WATER
 };
 // The satellite infrared window: brightness temperature from 180 K (also
 // what the cells outside the disk become) to 331.8 K at 0.6 K, the full
@@ -831,6 +847,10 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
             Codebook::Linear(QUALITY_REFLECTIVITY)
         }
         _ if reflectivity_level(variable_id).is_some() => Codebook::Linear(COMPACT_REFLECTIVITY),
+        _ if cloud_water_level(variable_id).is_some() && quality => {
+            Codebook::Linear(QUALITY_CLOUD_WATER)
+        }
+        _ if cloud_water_level(variable_id).is_some() => Codebook::Linear(COMPACT_CLOUD_WATER),
         (_, "gust") if quality => Codebook::Linear(QUALITY_GUST),
         (_, "gust") => Codebook::Linear(COMPACT_GUST),
         ("quality", "tcdc") => Codebook::Linear(QUALITY_CLOUD),
@@ -919,4 +939,44 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         return Err(EncodeError::conversion(format!("unknown profile: {profile}")));
     }
     Ok(book)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::codebook;
+    use crate::encode::variables::CLOUD_WATER_VARIABLE_IDS;
+    use serde_json::json;
+
+    /// Every cloud water level takes one linear book: 0.01 g/kg up to code
+    /// 253 at quality and balanced, 0.02 g/kg at compact. 2.53 / 0.02 is a
+    /// hair under 126.5 in binary floating point, so the compact top code
+    /// rounds down to 126, as Python's `floor(… + 0.5)` does.
+    #[test]
+    fn every_cloud_water_level_takes_the_cloud_water_book() {
+        for variable_id in CLOUD_WATER_VARIABLE_IDS {
+            for (profile, scale, maximum_code) in [
+                ("quality", 0.01, 253),
+                ("balanced", 0.01, 253),
+                ("compact", 0.02, 126),
+            ] {
+                let book = codebook(profile, variable_id).expect("book");
+                let metadata = book.metadata();
+                assert_eq!(metadata["type"], json!("linear"), "{variable_id} {profile}");
+                assert_eq!(metadata["offset"], json!(0.0), "{variable_id} {profile}");
+                assert_eq!(metadata["scale"], json!(scale), "{variable_id} {profile}");
+                assert_eq!(metadata["minimumCode"], json!(0), "{variable_id} {profile}");
+                assert_eq!(
+                    metadata["maximumCode"],
+                    json!(maximum_code),
+                    "{variable_id} {profile}"
+                );
+                assert_eq!(
+                    metadata["nodataCode"],
+                    json!(255),
+                    "{variable_id} {profile}"
+                );
+            }
+        }
+        assert!(codebook("quality", "clw6500").is_err());
+    }
 }

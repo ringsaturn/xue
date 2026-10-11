@@ -17,6 +17,7 @@ from .errors import ConversionError
 from .variables import (
     AEROSOL_VARIABLE_IDS,
     CAT_LEVELS_HPA,
+    CLOUD_WATER_VARIABLE_IDS,
     DUST_CF_COMPONENT_IDS,
     ZHOUYE_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
@@ -162,6 +163,17 @@ COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, 
 # the same quantity in the same unit, drawn with the same palette.
 QUALITY_REFLECTIVITY_VOLUME = {variable_id: QUALITY_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
 COMPACT_REFLECTIVITY_VOLUME = {variable_id: COMPACT_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
+# Cloud water mixing ratio: 0–2.53 g/kg at 0.01 g/kg. Liquid water content
+# in a fog or a stratocumulus deck is a few tenths of a gram per kilogram
+# and a convective core's rarely passes 2, so the range clamps only the
+# extreme. Linear like the reflectivity volume: the volume renderer
+# interpolates codes between levels. Code 0 is both "no cloud" and
+# "under the terrain": the series write NaN there and the converter fills
+# it with the bottom of the range, so no nodata code is ever written.
+QUALITY_CLOUD_WATER = TemperatureCodebook(minimum=0.0, maximum=2.53, step=0.01, name="clw")
+COMPACT_CLOUD_WATER = TemperatureCodebook(minimum=0.0, maximum=2.53, step=0.02, name="clw")
+QUALITY_CLOUD_WATER_VOLUME = {variable_id: QUALITY_CLOUD_WATER for variable_id in CLOUD_WATER_VARIABLE_IDS}
+COMPACT_CLOUD_WATER_VOLUME = {variable_id: COMPACT_CLOUD_WATER for variable_id in CLOUD_WATER_VARIABLE_IDS}
 # Wind gust: a speed, so one-sided, at the 10 m components' 0.5 m/s step but
 # over 0–127 m/s — the isobaric wind's ceiling, which no surface gust in a
 # 0.25° model reaches (a category-5 core gusts in the 80s). Spends the full
@@ -656,6 +668,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         **QUALITY_REFLECTIVITY_VOLUME,
+        **QUALITY_CLOUD_WATER_VOLUME,
         "gust": QUALITY_GUST,
         "tcdc": QUALITY_CLOUD,
         "cape": QUALITY_CAPE,
@@ -687,6 +700,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
         **COMPACT_REFLECTIVITY_VOLUME,
+        **COMPACT_CLOUD_WATER_VOLUME,
         "gust": COMPACT_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": COMPACT_CAPE,
@@ -729,6 +743,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
         **QUALITY_REFLECTIVITY_VOLUME,
+        **QUALITY_CLOUD_WATER_VOLUME,
         "gust": QUALITY_GUST,
         "tcdc": COMPACT_CLOUD,
         "cape": QUALITY_CAPE,

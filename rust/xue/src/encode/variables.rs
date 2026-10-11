@@ -382,6 +382,33 @@ pub fn reflectivity_level(variable_id: &str) -> Option<u32> {
     REFLECTIVITY_LEVELS_M.contains(&level).then_some(level)
 }
 
+/// The constant-altitude levels the WOOF nest's cloud water is published
+/// on, in metres above mean sea level, in level order — the order of the
+/// `cloud3d` volume bundle's variables: dense in the boundary layer, sparse
+/// aloft. Mirrors `CLOUD_WATER_LEVELS_M` in `xuebuild/variables.py`.
+pub const CLOUD_WATER_LEVELS_M: [u32; 24] = [
+    250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000,
+    5500, 6000, 7000, 8000, 9000, 10000, 11000, 12000,
+];
+/// The family's ids, `clw<metres>`, in the same order.
+pub const CLOUD_WATER_VARIABLE_IDS: [&str; 24] = [
+    "clw250", "clw500", "clw750", "clw1000", "clw1250", "clw1500", "clw1750", "clw2000", "clw2250",
+    "clw2500", "clw2750", "clw3000", "clw3500", "clw4000", "clw4500", "clw5000", "clw5500",
+    "clw6000", "clw7000", "clw8000", "clw9000", "clw10000", "clw11000", "clw12000",
+];
+
+/// The level in metres of one cloud water family variable (`clw1500` →
+/// 1500), or `None` for anything else — a level that is not registered
+/// included. Mirrors `cloud_water_level` in `xuebuild/variables.py`.
+pub fn cloud_water_level(variable_id: &str) -> Option<u32> {
+    let rest = variable_id.strip_prefix("clw")?;
+    if rest.is_empty() || !rest.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let level: u32 = rest.parse().ok()?;
+    CLOUD_WATER_LEVELS_M.contains(&level).then_some(level)
+}
+
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
 /// Mirrors `SURFACE_TEMPERATURE_IDS` in `xuebuild/variables.py`.
@@ -534,6 +561,35 @@ macro_rules! reflectivity_spec {
             grib2_alternates: &[],
             gdal_unit: "dBZ",
             fill_values: &[-999.0, -99.0],
+            producer_id: None,
+            grib2_aerosol: None,
+        }
+    };
+}
+
+// Cloud water mixing ratio (0/1/22) on one constant altitude in metres MSL.
+// The series arrives in g/kg, the unit it is quantized in, so no conversion
+// follows; a voxel below the ground is the series' NaN fill, which becomes
+// the codebook bottom like any other fill.
+macro_rules! cloud_water_spec {
+    ($id:literal, $label:literal, $metres:literal) => {
+        VariableSpec {
+            id: $id,
+            label: $label,
+            output_unit: "g/kg",
+            value_range: (0.0, 3.0),
+            grib_element: "",
+            open_meteo: "",
+            grib2_discipline: 0,
+            grib2_category: 1,
+            grib2_number: 22,
+            grib2_level_type: 102,
+            grib2_level_value: Some($metres),
+            grib2_statistical: None,
+            grib2_aliases: &[],
+            grib2_alternates: &[],
+            gdal_unit: "g/kg",
+            fill_values: &[],
             producer_id: None,
             grib2_aerosol: None,
         }
@@ -2226,6 +2282,32 @@ pub const VARIABLES: &[VariableSpec] = &[
     reflectivity_spec!("refl17000", "Radar reflectivity at 17 km MSL", 17000.0),
     reflectivity_spec!("refl18000", "Radar reflectivity at 18 km MSL", 18000.0),
     reflectivity_spec!("refl19000", "Radar reflectivity at 19 km MSL", 19000.0),
+    // The WOOF nest's cloud water, one variable per constant-altitude level
+    // (`CLOUD_WATER_LEVELS_M`).
+    cloud_water_spec!("clw250", "Cloud water at 0.25 km MSL", 250.0),
+    cloud_water_spec!("clw500", "Cloud water at 0.5 km MSL", 500.0),
+    cloud_water_spec!("clw750", "Cloud water at 0.75 km MSL", 750.0),
+    cloud_water_spec!("clw1000", "Cloud water at 1 km MSL", 1000.0),
+    cloud_water_spec!("clw1250", "Cloud water at 1.25 km MSL", 1250.0),
+    cloud_water_spec!("clw1500", "Cloud water at 1.5 km MSL", 1500.0),
+    cloud_water_spec!("clw1750", "Cloud water at 1.75 km MSL", 1750.0),
+    cloud_water_spec!("clw2000", "Cloud water at 2 km MSL", 2000.0),
+    cloud_water_spec!("clw2250", "Cloud water at 2.25 km MSL", 2250.0),
+    cloud_water_spec!("clw2500", "Cloud water at 2.5 km MSL", 2500.0),
+    cloud_water_spec!("clw2750", "Cloud water at 2.75 km MSL", 2750.0),
+    cloud_water_spec!("clw3000", "Cloud water at 3 km MSL", 3000.0),
+    cloud_water_spec!("clw3500", "Cloud water at 3.5 km MSL", 3500.0),
+    cloud_water_spec!("clw4000", "Cloud water at 4 km MSL", 4000.0),
+    cloud_water_spec!("clw4500", "Cloud water at 4.5 km MSL", 4500.0),
+    cloud_water_spec!("clw5000", "Cloud water at 5 km MSL", 5000.0),
+    cloud_water_spec!("clw5500", "Cloud water at 5.5 km MSL", 5500.0),
+    cloud_water_spec!("clw6000", "Cloud water at 6 km MSL", 6000.0),
+    cloud_water_spec!("clw7000", "Cloud water at 7 km MSL", 7000.0),
+    cloud_water_spec!("clw8000", "Cloud water at 8 km MSL", 8000.0),
+    cloud_water_spec!("clw9000", "Cloud water at 9 km MSL", 9000.0),
+    cloud_water_spec!("clw10000", "Cloud water at 10 km MSL", 10000.0),
+    cloud_water_spec!("clw11000", "Cloud water at 11 km MSL", 11000.0),
+    cloud_water_spec!("clw12000", "Cloud water at 12 km MSL", 12000.0),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -2238,8 +2320,8 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 #[cfg(test)]
 mod tests {
     use super::{
-        isobaric_family_levels, isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity,
-        AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA,
+        cloud_water_level, isobaric_family_levels, isobaric_variable, reflectivity_level, variable_spec,
+        AerosolIdentity, AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA, CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS,
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_VARIABLE_IDS,
@@ -2324,6 +2406,113 @@ mod tests {
         assert_eq!(variable_spec("refl19000").expect("refl19000").label, "Radar reflectivity at 19 km MSL");
         for other in ["refl", "refl600", "refl3000x", "cref", "reflx500"] {
             assert_eq!(reflectivity_level(other), None, "{other}");
+        }
+    }
+
+    /// `tests/fixtures/volume-registry.json`: every member of the two
+    /// volume families, the 33 reflectivity levels then the 24 cloud water
+    /// levels, held to the Python encoder the way the isobaric fills are.
+    /// `balanced` is `quality` for every one of them.
+    #[test]
+    fn the_volume_registry_matches_the_shared_fixture() {
+        let entries = registry("volume-registry.json");
+        assert_eq!(
+            entries.len(),
+            REFLECTIVITY_VARIABLE_IDS.len() + CLOUD_WATER_VARIABLE_IDS.len()
+        );
+        for (variable_id, entry) in entries {
+            assert!(
+                reflectivity_level(&variable_id).is_some()
+                    || cloud_water_level(&variable_id).is_some(),
+                "{variable_id}"
+            );
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            for (profile, key) in [
+                ("quality", "quality"),
+                ("compact", "compact"),
+                ("balanced", "quality"),
+            ] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(
+                    Value::Object(book.metadata()),
+                    entry[key],
+                    "{variable_id} {profile} codebook"
+                );
+            }
+        }
+    }
+
+    /// The WOOF cloud water family: one variable per level, in level order,
+    /// each the cloud mixing ratio 0/1/22 on its altitude in metres, read in
+    /// g/kg with no fill values of its own.
+    #[test]
+    fn every_cloud_water_level_is_registered_in_metres() {
+        assert_eq!(CLOUD_WATER_LEVELS_M.len(), 24);
+        assert!(CLOUD_WATER_LEVELS_M
+            .windows(2)
+            .all(|pair| pair[0] < pair[1]));
+        for (level, id) in CLOUD_WATER_LEVELS_M.iter().zip(CLOUD_WATER_VARIABLE_IDS) {
+            assert_eq!(id, format!("clw{level}"));
+            assert_eq!(cloud_water_level(id), Some(*level));
+            assert_eq!(reflectivity_level(id), None);
+            let spec = variable_spec(id).unwrap_or_else(|_| panic!("{id}"));
+            assert_eq!(
+                (
+                    spec.grib2_discipline,
+                    spec.grib2_category,
+                    spec.grib2_number,
+                    spec.grib2_level_type
+                ),
+                (0, 1, 22, 102),
+                "{id}"
+            );
+            assert_eq!(spec.grib2_level_value, Some(f64::from(*level)), "{id}");
+            assert_eq!(
+                spec.parameter_metadata()["scaledValueOfFirstFixedSurface"],
+                json!(level),
+                "{id}"
+            );
+            assert_eq!(
+                spec.parameter_metadata()["scaleFactorOfFirstFixedSurface"],
+                json!(0),
+                "{id}"
+            );
+            assert_eq!(
+                (spec.output_unit, spec.gdal_unit, spec.value_range),
+                ("g/kg", "g/kg", (0.0, 3.0))
+            );
+            assert!(
+                spec.fill_values.is_empty() && spec.grib2_statistical.is_none(),
+                "{id}"
+            );
+            assert!(!super::is_static(id), "{id}");
+        }
+        assert_eq!(
+            variable_spec("clw250").expect("clw250").label,
+            "Cloud water at 0.25 km MSL"
+        );
+        assert_eq!(
+            variable_spec("clw1000").expect("clw1000").label,
+            "Cloud water at 1 km MSL"
+        );
+        assert_eq!(
+            variable_spec("clw1250").expect("clw1250").label,
+            "Cloud water at 1.25 km MSL"
+        );
+        assert_eq!(
+            variable_spec("clw12000").expect("clw12000").label,
+            "Cloud water at 12 km MSL"
+        );
+        for other in ["clw", "clw6500", "clw250x", "xclw250", "refl500", "clwmr"] {
+            assert_eq!(cloud_water_level(other), None, "{other}");
         }
     }
 

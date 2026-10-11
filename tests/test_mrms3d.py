@@ -67,7 +67,7 @@ from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import SOURCES, Downsample, source_spec
-from xuebuild.variables import REFLECTIVITY_LEVELS_M, REFLECTIVITY_VARIABLE_IDS, reflectivity_level, variable_spec
+from xuebuild.variables import CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_LEVELS_M, REFLECTIVITY_VARIABLE_IDS, reflectivity_level, variable_spec
 
 FRAMES = (FIXTURES / "mrms3d.2026100423.t0030.crop.grib2", FIXTURES / "mrms3d.2026100423.t0040.crop.grib2")
 STAMPS = ("233040", "234038")
@@ -172,7 +172,7 @@ class RegistryTests(unittest.TestCase):
             )
 
     def test_the_volume_bundle_is_its_levels(self) -> None:
-        self.assertEqual(VOLUME_BUNDLES, {"refl3d": REFLECTIVITY_VARIABLE_IDS})
+        self.assertEqual(VOLUME_BUNDLES, {"refl3d": REFLECTIVITY_VARIABLE_IDS, "cloud3d": CLOUD_WATER_VARIABLE_IDS})
         self.assertEqual(bundle_variable_ids("refl3d"), REFLECTIVITY_VARIABLE_IDS)
         self.assertEqual(bundle_input_ids(MRMS3D, "refl3d"), REFLECTIVITY_VARIABLE_IDS)
         self.assertEqual(published_bundle_ids(MRMS3D), ("refl3d",))

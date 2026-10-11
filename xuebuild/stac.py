@@ -559,8 +559,9 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 "the Copernicus DEM GLO-30. Published is the innermost 500 m domain over Mount Fuji, "
                 "resampled bilinearly from its Lambert conformal grid onto a regular 0.005° grid "
                 "(79 × 61 cells, 138.54°E–138.93°E, 35.22°N–35.52°N) by the wrf-series tool, as an "
-                "hourly forecast from the cycle's first hour. There is no live feed: the run exists as "
-                "showcase cases only. Driving data: NOAA GFS; terrain: Copernicus DEM GLO-30, "
+                "hourly forecast from the cycle's first hour. The cloud water volume carries the model's "
+                "liquid cloud water interpolated onto 24 altitudes from 0.25 to 12 km above mean sea level. "
+                "There is no live feed: the run exists as showcase cases only. Driving data: NOAA GFS; terrain: Copernicus DEM GLO-30, "
                 "© DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under "
                 "COPERNICUS by the European Union and ESA."
             ),
@@ -1147,6 +1148,8 @@ def _bundle_title(bundle_id: str) -> str:
         return "Dust RGB (red, green and blue guns)"
     if bundle_id == "refl3d":
         return "Radar reflectivity volume (33 CAPPI levels, 0.5–19 km MSL)"
+    if bundle_id == "cloud3d":
+        return "Cloud water volume (24 levels, 0.25–12 km MSL)"
     spec = VARIABLES.get(bundle_id)
     return spec.label if spec is not None else bundle_id
 
