@@ -193,8 +193,10 @@ class SourceRegistryTests(unittest.TestCase):
                 CFS.forecast_hours(off_axis)
 
     def test_every_other_source_still_starts_at_the_analysis(self) -> None:
+        # The WOOF nest starts at f001 (tests/test_woof.py); everything else
+        # at the analysis.
         starts = {source_id: spec.first_hour for source_id, spec in SOURCES.items()}
-        self.assertEqual({source_id for source_id, hour in starts.items() if hour}, {"cfs"})
+        self.assertEqual({source_id: hour for source_id, hour in starts.items() if hour}, {"cfs": 6, "woof": 1})
         self.assertEqual(GFS.forecast_hours(6)[0], 0)
 
     def test_the_grid_tiles_and_kind(self) -> None:

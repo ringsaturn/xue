@@ -26,6 +26,8 @@ IDENTITIES = {
     "hrrr": ("HRRR", "wrfsfc", "latest-hrrr.json", FORECAST_CORE),
     "gefsaero": ("GEFS-AEROSOLS", "chem-a2d-0p25", "latest-gefsaero.json", ("aod",)),
     "cfs": ("CFSv2", "time-grib-01", "latest-cfs.json", FORECAST_CORE),
+    # No live feed: a forecast reached through showcase cases alone.
+    "woof": ("WOOF-WRF", "nest", None, ("tmp2m",)),
     # The manifest identity outlived the source id's change from `radar`.
     "cma": ("CMA-RADAR", "l3-mst-cref", "latest-cma.json", ("cref",)),
     "mrms": ("NOAA-MRMS", "conus-cref", "latest-mrms.json", ("cref",)),
@@ -58,6 +60,24 @@ class SourceIdentityTests(unittest.TestCase):
                 self.assertEqual(MODEL_CORE_BUNDLES[model], core)
         self.assertEqual(set(MODEL_PRODUCTS), {model for model, *_ in IDENTITIES.values()})
         self.assertEqual(set(MODEL_CORE_BUNDLES), set(MODEL_PRODUCTS))
+
+    def test_a_forecast_is_fetched_through_its_pointer_and_an_observation_through_its_window(self) -> None:
+        for source_id, spec in SOURCES.items():
+            with self.subTest(source=source_id):
+                self.assertEqual(spec.live, spec.latest_filename is not None)
+                expected = spec.window_hours is not None if spec.observation else spec.live
+                self.assertEqual(spec.fetched, expected)
+        # The WOOF nest is the one source nothing fetches: a forecast with no
+        # pointer, built from a local dataset by a showcase case.
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof"])
+        woof = source_spec("woof")
+        self.assertTrue(woof.series_file and not woof.observation)
+        self.assertEqual((woof.first_hour, woof.steps, woof.horizon_hours), (1, ((72, 1),), 72))
+        self.assertEqual(
+            published_bundle_ids(woof),
+            ("tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog", "wind10m"),
+        )
 
     def test_series_companions_mirror_published_bundles(self) -> None:
         for source_id, spec in SOURCES.items():

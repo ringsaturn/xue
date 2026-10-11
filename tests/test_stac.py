@@ -409,12 +409,21 @@ class CollectionAndCatalogTests(unittest.TestCase):
         self.assertEqual(stac.relocate_item(live, from_dir="gfs", to_dir="gfs.2026081406/1455"), deep)
 
     def test_a_source_without_a_feed_has_no_collection(self) -> None:
-        # Every registered source has a feed now; the rule is checked on a
-        # copy of the radar source with its pointer taken off.
+        # The WOOF nest is the one registered source with no feed: it has
+        # prose (its cases are Items of the showcase and cite its licence)
+        # but no Collection and no child link off the root catalog. The
+        # rule is also checked on a copy of the radar source with its
+        # pointer taken off.
         import dataclasses
 
-        source = dataclasses.replace(source_spec("cma"), latest_filename=None)
         item = stac.run_item(_gfs_manifest(), "dbf3a790", source=source_spec("gfs"), manifest_relative_path="gfs.2026081406/manifest.json")
+        woof = source_spec("woof")
+        self.assertFalse(woof.live)
+        self.assertTrue(stac._source_prose(woof)["title"])
+        with self.assertRaises(stac.StacError):
+            stac.source_collection(woof, item, "gfs.2026081406/item.json")
+        self.assertNotIn("woof/collection.json", [link["href"] for link in stac.root_catalog()["links"]])
+        source = dataclasses.replace(source_spec("cma"), latest_filename=None)
         with self.assertRaises(stac.StacError):
             stac.source_collection(source, item, "gfs.2026081406/item.json")
 
@@ -435,8 +444,11 @@ class CollectionAndCatalogTests(unittest.TestCase):
                 prose = stac._source_prose(source)
                 self.assertTrue(prose["title"] and prose["description"] and prose["license"])
                 if prose["license"] == "other":
+                    # The CMA portal publishes no terms page; the WOOF run
+                    # is a commissioned model run with no licence page of
+                    # its own, published as showcase cases alone.
                     self.assertTrue(
-                        any(link["rel"] == "license" for link in prose["links"]) or source.id == "cma",
+                        any(link["rel"] == "license" for link in prose["links"]) or source.id in ("cma", "woof"),
                         "an `other` license needs a link",
                     )
 

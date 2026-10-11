@@ -2430,17 +2430,24 @@ def convert_bin(
                     # starts at a step of its own — the rate's, whose analysis
                     # frame does not exist — takes the distance from the
                     # previous step of the source's published axis instead,
-                    # which is the interval the model itself accumulated over.
+                    # which is the interval the model itself accumulated over;
+                    # and the first step of an axis that itself starts past
+                    # the analysis (``first_hour``) accumulated from the run
+                    # time, hour 0. Only a total at the analysis names no
+                    # interval at all.
                     hour = frame.lead_seconds // binformat.HOUR_SECONDS
                     if index:
                         interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
                     else:
                         axis = source.forecast_hours(hour, cycle=run_time.hour)
-                        if len(axis) < 2:
+                        if len(axis) >= 2:
+                            interval_start = axis[-2]
+                        elif hour > 0:
+                            interval_start = 0
+                        else:
                             raise ConversionError(
                                 f"the interval precipitation frame at hour {hour} names no interval"
                             )
-                        interval_start = axis[-2]
                     previous = (interval_start, None)
                 elif previous_future is not None and frame is not None:
                     previous = (

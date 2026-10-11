@@ -258,6 +258,40 @@
         }
       ]
     },
+    "woof": {
+      "title": "Recast WOOF (WRF-ARW) nested run",
+      "description": "A WRF-ARW run commissioned by the author on Recast Systems' WOOF service (gpuwm), nested 12 → 3 → 1 → 0.5 km from the NOAA GFS analysis, with the model terrain from the Copernicus DEM GLO-30. Published is the innermost 500 m domain over Mount Fuji, resampled bilinearly from its Lambert conformal grid onto a regular 0.005° grid (79 × 61 cells, 138.54°E–138.93°E, 35.22°N–35.52°N) by the wrf-series tool, as an hourly forecast from the cycle's first hour. There is no live feed: the run exists as showcase cases only. Driving data: NOAA GFS; terrain: Copernicus DEM GLO-30, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "description": "The GFS analysis and forecast the nest is initialised and bounded with.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Copernicus",
+          "description": "The GLO-30 digital elevation model the nest's terrain is interpolated from.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": []
+    },
     "cma": {
       "title": "CMA radar mosaic",
       "description": "The China Meteorological Administration level-3 composite reflectivity mosaic (RADAR_L3_MST_CREF) over China: a national composite every six minutes, decoded from the agency's data portal tiles onto the portal's plate carrée grid at 0.0439° (1792 × 1024 cells, 67.5°E–146.25°E, 11.25°N–56.25°N) and published under cref, as a rolling window rebuilt every few minutes. Source: China Meteorological Administration, National Meteorological Centre (www.nmc.cn).",

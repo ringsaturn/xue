@@ -3042,7 +3042,10 @@ fn sharing_plan(
                 // step of its own — the rate's, whose analysis frame does not
                 // exist — takes the distance from the previous step of the
                 // source's published axis instead, which is the interval the
-                // model itself accumulated over.
+                // model itself accumulated over; and the first step of an axis
+                // that itself starts past the analysis (`first_hour`)
+                // accumulated from the run time, hour 0. Only a total at the
+                // analysis names no interval at all.
                 let hour = frame.expect("a frame").lead_seconds / HOUR_SECONDS;
                 let interval_start = if index > 0 {
                     per_file[index - 1][0].1.lead_seconds / HOUR_SECONDS
@@ -3053,11 +3056,15 @@ fn sharing_plan(
                         .to_offset(time::UtcOffset::UTC)
                         .hour();
                     let axis = source.forecast_hours(hour, Some(u32::from(cycle)))?;
-                    *axis
-                        .get(axis.len().wrapping_sub(2))
-                        .ok_or_else(|| EncodeError::conversion(format!(
-                            "the interval precipitation frame at hour {hour} names no interval"
-                        )))?
+                    match axis.get(axis.len().wrapping_sub(2)) {
+                        Some(&start) => start,
+                        None if hour > 0 => 0,
+                        None => {
+                            return Err(EncodeError::conversion(format!(
+                                "the interval precipitation frame at hour {hour} names no interval"
+                            )))
+                        }
+                    }
                 };
                 Some((interval_start, None))
             }

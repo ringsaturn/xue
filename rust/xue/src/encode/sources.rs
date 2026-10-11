@@ -148,7 +148,8 @@ pub struct SourceSpec {
     /// The manifest `product` string.
     pub product: &'static str,
     /// Per-model mutable live pointer at the data root; `None` for a source
-    /// with no live feed.
+    /// with no live feed (the WOOF nest, a forecast that exists only as
+    /// showcase cases built from a local dataset).
     pub latest_filename: Option<&'static str>,
     /// The published time axis as `(last_hour, step_hours)` segments.
     pub steps: &'static [(i64, i64)],
@@ -189,8 +190,10 @@ pub struct SourceSpec {
     /// analysis lives in another file family, encoded as an instantaneous
     /// analysis where every published frame is a six-hour mean, so the
     /// source declares its axis to start at hour 6 and no f000 is fetched
-    /// at all. [`SourceSpec::forecast_hours`] counts from here, which is
-    /// what every axis check reads. Mirrors `first_hour` in
+    /// at all. The WOOF nest starts at hour 1: its hour 0 is the driving
+    /// GFS analysis on the nest, not a WRF forecast, and the `wrf-series`
+    /// tool drops it. [`SourceSpec::forecast_hours`] counts from here,
+    /// which is what every axis check reads. Mirrors `first_hour` in
     /// `xuebuild/sources.py`.
     pub first_hour: i64,
     /// Input variables absent from the analysis (f000) file.
@@ -308,11 +311,16 @@ impl SourceSpec {
         self.latest_filename.is_some()
     }
 
-    /// Whether a run of the source is fetched from a bucket — every
-    /// forecast, and an observation with a `window_hours` — as opposed to
-    /// read from a local file.
+    /// Whether a run of the source is fetched from a bucket — a forecast
+    /// with a live pointer, and an observation with a `window_hours` — as
+    /// opposed to read from a local file or directory (the CMA file cases,
+    /// the WOOF nest). Mirrors `SourceSpec.fetched` in `xuebuild/sources.py`.
     pub fn fetched(&self) -> bool {
-        !self.observation || self.window_hours.is_some()
+        if self.observation {
+            self.window_hours.is_some()
+        } else {
+            self.live()
+        }
     }
 
     /// The companion family `variable_id` is read from, or `None` for an
@@ -994,6 +1002,65 @@ pub const SOURCES: &[SourceSpec] = &[
         downsample: None,
         cat_calibration: &[],
     },
+    // Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
+    // Fuji showcase, nested 12 → 3 → 1 → 0.5 km from the GFS analysis, read
+    // on its innermost 500 m domain. There is no feed to fetch, so
+    // `latest_filename` is `None` and the source is reached only through
+    // showcase cases naming a dataset directory — the first forecast that is
+    // not `fetched()`. The `xue wrf-series` tool owns every WRF particular
+    // (destaggering, the earth-relative wind, the dewpoint, the layered cloud
+    // maxima, the precipitation differencing, the bilinear regrid from the
+    // Lambert conformal nest onto a regular 0.005° grid) and writes one CF
+    // NetCDF series per variable, so this is a `series_file` forecast like
+    // `ifshres` and the encoder learns no WRF arithmetic. Hourly to 72 hours
+    // — WOOF's usual cap — from f001: f000 is the GFS analysis on the nest,
+    // not a WRF forecast, and the tool drops it (`first_hour`).
+    // Precipitation arrives as the hour's total (`interval_precipitation`,
+    // the registry's `apcp`) at every frame, so nothing is analysis-optional.
+    // The nominal grid is d04 inscribed in the regular grid, 79 x 61 cells:
+    // under 5000 cells a plane, so no ladder. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "woof",
+        manifest_model: "WOOF-WRF",
+        product: "nest",
+        latest_filename: None,
+        steps: &[(72, 1)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
+        input_variable_ids: &[
+            "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc",
+            "hcdc", "hpbl", "dswrf", "orog",
+        ],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: true,
+        average_window_hours: 6,
+        first_hour: 1,
+        optional_at_analysis: &[],
+        statistical_processes: &[("prate", 0)],
+        bands: &[],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf",
+            "orog",
+        ],
+        core_bundle_ids: &["tmp2m"],
+        bundle_vector_ids: &["wind10m"],
+        bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
+        production_grid: (79, 61),
+        // One tile covers the whole nest.
+        tile: (64, 64),
+        variant_factors: &[],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: true,
+        open_meteo: None,
+        downsample: None,
+        cat_calibration: &[],
+    },
     SourceSpec {
         id: "cma",
         manifest_model: "CMA-RADAR",
@@ -1039,13 +1106,14 @@ pub const SOURCES: &[SourceSpec] = &[
     // identity (discipline 209), with the product's sentinels folded to the
     // codebook bottom; the 7000 x 3500 grid is thinned two to one by block
     // maximum onto 0.02°, and the jittered observation times are snapped to
-    // the two-minute mark. No live pointer yet: a build names the window's
-    // first hour as its run. Mirrors `xuebuild/sources.py`.
+    // the two-minute mark. The pointer names the live window; a build may
+    // also name the window's first hour as its run. Mirrors
+    // `xuebuild/sources.py`.
     SourceSpec {
         id: "mrms",
         manifest_model: "NOAA-MRMS",
         product: "conus-cref",
-        latest_filename: None,
+        latest_filename: Some("latest-mrms.json"),
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
@@ -1600,9 +1668,43 @@ mod tests {
         assert_eq!(ifshres.forecast_hours(3, None).expect("axis"), vec![0, 1, 2, 3]);
         assert_eq!(ifshres.production_grid, (3600, 1801));
         assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
-        // Every other forecast source is read record by record.
+        // The WOOF nest is the other series-file forecast, and the one
+        // source with no feed at all: a forecast is fetched only through a
+        // live pointer, so it is neither fetched nor live, and is built
+        // from a local dataset alone. Its axis starts at the first hour and
+        // its precipitation total is on every frame. Mirrors the registry
+        // assertions in `tests/test_woof.py`.
+        let woof = source_spec("woof").expect("woof");
+        assert_eq!((woof.manifest_model, woof.product), ("WOOF-WRF", "nest"));
+        assert!(woof.series_file && !woof.fetched() && !woof.live());
+        assert!(!woof.observation && woof.cadence_seconds.is_none() && woof.window_hours.is_none());
+        assert_eq!(woof.latest_filename, None);
+        assert!(woof.interval_precipitation && woof.optional_at_analysis.is_empty());
+        assert_eq!(woof.statistical_processes, &[("prate", 0)]);
+        assert_eq!(woof.steps, &[(72, 1)]);
+        assert_eq!(woof.first_hour, 1);
+        assert_eq!(woof.forecast_hours(3, None).expect("axis"), vec![1, 2, 3]);
+        assert_eq!(woof.forecast_hours(72, None).expect("axis").len(), 72);
+        assert!(woof.forecast_hours(0, None).is_err() && woof.forecast_hours(73, None).is_err());
+        assert_eq!(woof.input_variable_ids.len(), 13);
+        assert_eq!(woof.bundle_scalar_ids.len(), 11);
+        assert!(woof.input_variable_ids.contains(&"apcp") && !woof.bundle_scalar_ids.contains(&"apcp"));
+        assert_eq!(woof.bundle_vector_ids, &["wind10m"]);
+        assert_eq!(woof.core_bundle_ids, &["tmp2m"]);
+        assert_eq!((woof.production_grid, woof.tile), ((79, 61), (64, 64)));
+        assert!(woof.variant_factors.is_empty());
+        assert!(woof.regrid.is_none() && woof.downsample.is_none() && woof.open_meteo.is_none());
+        // Every other forecast source is read record by record, and every
+        // source but the nest is fetched and live.
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms", "mrms3d"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
+        }
+        for source in SOURCES {
+            assert_eq!(source.fetched() && source.live(), source.id != "woof", "{}", source.id);
+            // A forecast is fetched through its pointer, an observation
+            // through its window.
+            let expected = if source.observation { source.window_hours.is_some() } else { source.live() };
+            assert_eq!(source.fetched(), expected, "{}", source.id);
         }
         // The aerosol source: nine scalar bundles, no vectors, no rain and
         // no temperature, so its core set is the total optical depth.
@@ -1730,9 +1832,15 @@ mod tests {
         for off_axis in [0, 3, 9, 6551, 6558] {
             assert!(cfs.forecast_hours(off_axis, None).is_err(), "f{off_axis}");
         }
-        // Every other source still counts from the analysis.
+        // Every other source but the WOOF nest (from f001) still counts
+        // from the analysis.
         for source in SOURCES {
-            assert_eq!(source.first_hour, if source.id == "cfs" { 6 } else { 0 }, "{}", source.id);
+            let first_hour = match source.id {
+                "cfs" => 6,
+                "woof" => 1,
+                _ => 0,
+            };
+            assert_eq!(source.first_hour, first_hour, "{}", source.id);
         }
         // What it fetches and what it publishes: the surface set and the
         // 10 m pair, no companion family, nothing analysis-optional
@@ -1824,7 +1932,9 @@ mod tests {
     #[test]
     fn every_ladder_is_ascending_powers_of_two_from_the_half_tier() {
         for source in SOURCES {
-            assert!(!source.variant_factors.is_empty(), "{} publishes no ladder", source.id);
+            // The WOOF nest is under 5000 cells a plane and publishes no
+            // reduced tier; every other grid has at least the half.
+            assert_eq!(source.variant_factors.is_empty(), source.id == "woof", "{} publishes no ladder", source.id);
             let mut previous = 1;
             for &factor in source.variant_factors {
                 assert!(factor >= 2 && factor.is_power_of_two(), "{} factor {factor}", source.id);

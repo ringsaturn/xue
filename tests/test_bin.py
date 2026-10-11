@@ -953,7 +953,9 @@ class SourceLadderTests(unittest.TestCase):
             with self.subTest(source=source_id):
                 factors = spec.variant_factors
                 self.assertIsInstance(factors, tuple)
-                self.assertTrue(factors, "a source publishes at least the half tier")
+                # The WOOF nest is under 5000 cells a plane and publishes
+                # no reduced tier; every other grid has at least the half.
+                self.assertEqual(bool(factors), source_id != "woof", "a source publishes at least the half tier")
                 self.assertEqual(list(factors), sorted(set(factors)), "ascending, no repeats")
                 for factor in factors:
                     self.assertGreaterEqual(factor, 2)
@@ -971,7 +973,9 @@ class SourceLadderTests(unittest.TestCase):
             with self.subTest(source=source_id):
                 # The 0.1° IFS HRES plane is 6.5 M cells, past the shell's frame
                 # budget, so it takes two rungs; every other grid the half.
-                expected = (2, 4, 8) if source_id in satellites else (2, 4) if source_id == "ifshres" else (2,)
+                expected = (
+                    (2, 4, 8) if source_id in satellites else (2, 4) if source_id == "ifshres" else () if source_id == "woof" else (2,)
+                )
                 self.assertEqual(factors, expected)
 
 

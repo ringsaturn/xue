@@ -97,9 +97,10 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_series_file_sources_are_the_netcdf_ones(self) -> None:
         self.assertEqual(
             [spec.id for spec in SOURCES.values() if spec.series_file],
-            ["ifshres", "cma", "jma", "himawari", "goeseast", "goeswest", "meteosat", "aurora"],
+            ["ifshres", "woof", "cma", "jma", "himawari", "goeseast", "goeswest", "meteosat", "aurora"],
         )
-        # All fetched: the CMA window out of its archive (tests/test_cma.py),
+        # All fetched but the WOOF nest (tests/test_woof.py): the CMA window
+        # out of its archive (tests/test_cma.py),
         # the satellite window warped from the agency's tiles
         # (tests/test_satellite.py).
         self.assertTrue(source_spec("cma").fetched)

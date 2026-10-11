@@ -68,6 +68,24 @@ def fetched_observation_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def woof_payload(**overrides: object) -> dict[str, object]:
+    """A forecast built from a local dataset: the WOOF nest has no feed, so
+    its case names the directory the ``wrf-series`` tool wrote and no run."""
+    payload: dict[str, object] = {
+        "id": "demo-nest",
+        "title": localized("Demo"),
+        "summary": localized("Demo summary"),
+        "model": "woof",
+        "dataset": "woof/fuji-2026-10-10/",
+        "hours": 12,
+        "bbox": [138.54, 35.22, 138.93, 35.52],
+        "variables": ["wind10m", "tmpsfc", "tmp2m", "prate"],
+        "defaultVariable": "tmpsfc",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def case_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "id": "demo-case",
@@ -327,6 +345,37 @@ class CaseDefinitionTest(unittest.TestCase):
         with self.assertRaises(ShowcaseError):
             parse_case(fetched_observation_payload(variables=["tmp2m"]))
 
+    def test_parses_a_forecast_built_from_a_dataset(self) -> None:
+        # The WOOF nest is a forecast nothing fetches: like the CMA file
+        # case it names a dataset — here the directory of one series per
+        # variable — and no run, and the cycle comes out of the series.
+        spec = parse_case(woof_payload())
+        self.assertEqual(spec.model, "woof")
+        self.assertTrue(spec.from_dataset)
+        self.assertEqual(spec.run, "")
+        self.assertEqual(spec.variables, ("tmp2m", "prate", "tmpsfc", "wind10m"))
+        self.assertEqual(spec.default_variable, "tmpsfc")
+        with mock.patch.dict(os.environ, {OBSERVATION_ROOT_ENV: "/data/observations"}):
+            self.assertEqual(spec.dataset_path, Path("/data/observations/woof/fuji-2026-10-10"))
+        # Its hours are still a point on the published axis, hourly to 72
+        # from f001.
+        parse_case(woof_payload(hours=72))
+        with self.assertRaisesRegex(ShowcaseError, "not on the WOOF-WRF axis"):
+            parse_case(woof_payload(hours=73))
+        with self.assertRaises(ShowcaseError):
+            parse_case(woof_payload(hours=0))
+
+    def test_a_forecast_without_a_feed_names_a_dataset_not_a_run(self) -> None:
+        with self.assertRaisesRegex(ShowcaseError, "has no run to name"):
+            parse_case(woof_payload(run="2026101006"))
+        with self.assertRaisesRegex(ShowcaseError, "dataset must name"):
+            parse_case(woof_payload(dataset=""))
+        with self.assertRaisesRegex(ShowcaseError, "dataset must name"):
+            parse_case({key: value for key, value in woof_payload().items() if key != "dataset"})
+        # A fetched forecast still names a cycle and never a dataset.
+        with self.assertRaisesRegex(ShowcaseError, "names a dataset; ECMWF-HRES is fetched"):
+            parse_case(case_payload(model="ifshres", dataset="ifshres/run/"))
+
     def test_definition_file_must_be_named_after_its_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "other-name.json"
@@ -389,6 +438,53 @@ class CatalogEntryTest(unittest.TestCase):
         self.assertEqual(east, -170.0)
         self.assertLessEqual(south, -20.0)
         self.assertGreaterEqual(north, 10.0)
+
+
+class ViewBlockTest(unittest.TestCase):
+    """The camera a case opens on: validated on the way in, carried onto the
+    catalog row as written."""
+
+    VIEW = {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 62, "bearing": -35, "terrain": 1.5}
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(woof_payload(view=self.VIEW))
+        self.assertEqual(spec.view, self.VIEW)
+        # The two required keys alone are a view; a flat view says so.
+        self.assertEqual(parse_case(case_payload(view={"center": [0, 0], "zoom": 3})).view, {"center": [0, 0], "zoom": 3})
+        self.assertEqual(parse_case(case_payload(view={"center": [0, 0], "zoom": 3, "terrain": False})).view["terrain"], False)
+        self.assertIsNone(parse_case(case_payload()).view)
+
+    def test_a_malformed_view_is_refused(self) -> None:
+        for bad in (
+            [138.73, 35.36],
+            {"zoom": 11.6},
+            {"center": [138.73], "zoom": 11.6},
+            {"center": [181.0, 35.36], "zoom": 11.6},
+            {"center": [138.73, 91.0], "zoom": 11.6},
+            {"center": ["138.73", 35.36], "zoom": 11.6},
+            {"center": [138.73, 35.36], "zoom": 23},
+            {"center": [138.73, 35.36], "zoom": -1},
+            {"center": [138.73, 35.36], "zoom": float("nan")},
+            {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 86},
+            {"center": [138.73, 35.36], "zoom": 11.6, "bearing": 181},
+            {"center": [138.73, 35.36], "zoom": 11.6, "terrain": 0},
+            {"center": [138.73, 35.36], "zoom": 11.6, "terrain": -1},
+            {"center": [138.73, 35.36], "zoom": 11.6, "terrain": True},
+            {"center": [138.73, 35.36], "zoom": True},
+            {"center": [138.73, 35.36], "zoom": 11.6, "roll": 0},
+        ):
+            with self.subTest(view=bad), self.assertRaises(ShowcaseError):
+                parse_case(woof_payload(view=bad))
+
+    def test_the_catalog_row_carries_it_verbatim(self) -> None:
+        entry, _ = build_entry(view=self.VIEW)
+        self.assertEqual(entry["view"], self.VIEW)
+        validate_catalog_entry(entry)
+        entry["view"] = {"center": [0, 0]}
+        with self.assertRaises(ShowcaseError):
+            validate_catalog_entry(entry)
+        without, _ = build_entry()
+        self.assertNotIn("view", without)
 
 
 class RefreshSidecarTest(TempRoot, unittest.TestCase):
