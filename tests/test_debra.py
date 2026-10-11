@@ -45,6 +45,7 @@ from xuebuild.satellite import GOES_EAST, HIMAWARI, METEOSAT, ancillary, assembl
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.producers import PRODUCERS, DebraProducer, split_window_gate
 from xuebuild.satellite.projector import TargetGrid
+from xuebuild.variables import VARIABLES
 
 DEBRA = PRODUCERS["dustcf"]
 #: A grid over the Gobi at a tenth of a degree, inside the land crop's
@@ -429,7 +430,7 @@ class WindowTests(TempRoot, unittest.TestCase):
             raw_root=self.root,
             destination=self.root / "himawari.2026091703",
             series_stem="himawari.2026091703",
-            units={channel.id: "K" for channel in CHANNELS},
+            units={channel.id: VARIABLES[channel.id].output_unit for channel in CHANNELS},
             producers=(DEBRA,),
             ancillary_root=self.ancillary,
             fetch=self.listing,
