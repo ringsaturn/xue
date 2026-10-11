@@ -288,7 +288,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // disk, as HRRR is beside GFS: a plain latitude/longitude box, so no
   // `domain` clip, and not a member of the `geo` mosaic, whose members
   // split the world into longitude bands rather than nest. Publishes the
-  // infrared window, the Dust RGB and the true colour, no dust confidence.
+  // infrared window, the Dust RGB, the true colour and the night
+  // microphysics, no dust confidence.
   himawarijp: {
     id: "himawarijp",
     label: "HIMAWARI-JP",
@@ -297,7 +298,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "truecolor"],
+    railCore: ["ir104", "dustrgb", "truecolor", "nightmicro"],
     region: [122, 24, 148, 46],
     subLongitude: 140.7,
     cadenceSeconds: 600,

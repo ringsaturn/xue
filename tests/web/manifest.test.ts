@@ -804,7 +804,7 @@ describe("dataset kinds", () => {
 
   it("opens the Himawari Japan box on a plain box, outside the mosaic", () => {
     // Mirrors the `himawarijp` entry of SOURCES: the himawari imager on
-    // 24–46°N, 122–148°E at 0.01°, the window and two composites but no
+    // 24–46°N, 122–148°E at 0.01°, the window and three composites but no
     // dust confidence. A latitude/longitude box needs no projected
     // footprint to clip to, and the mosaic's longitude bands leave a nested
     // box out.
@@ -815,7 +815,7 @@ describe("dataset kinds", () => {
       observation: true,
       coreBundles: ["ir104"],
       defaultVariable: "ir104",
-      railCore: ["ir104", "dustrgb", "truecolor"],
+      railCore: ["ir104", "dustrgb", "truecolor", "nightmicro"],
       region: [122, 24, 148, 46],
       subLongitude: FORECAST_MODELS.himawari.subLongitude,
       cadenceSeconds: 600,

@@ -152,10 +152,10 @@ Facts worth getting right:
   is 135.2°W–15.2°W, the West disk 163°E–283°E across the antimeridian.
   `himawarijp` is the same Himawari-9 files over Japan alone: the box
   24°N–46°N, 122°E–148°E on a 0.01° grid (2600 × 2200, about 1.1 km, built
-  from the six of the disk's 88 tiles that reach it), `ir104`, `dustrgb`
-  and `truecolor` (no dust confidence), ten-minute frames, a rolling
-  window of the last two to three hours; a
-  regional dataset beside the disk, not part of the `geo` mosaic.
+  from the six of the disk's 88 tiles that reach it), `ir104`, `dustrgb`,
+  `truecolor` and `nightmicro` (no dust confidence), ten-minute frames, a
+  rolling window of the last two to three hours; a regional dataset beside
+  the disk, not part of the `geo` mosaic.
   `meteosat` is the same two variables and the true colour from
   EUMETSAT's Meteosat-12 (MTG-I1 FCI, 0°, WMO 71 / 210), the disk
   60°W–60°E, read from the EUMETSAT Data Store's FCI Level 1c chunks
@@ -261,7 +261,7 @@ Facts worth getting right:
   `nightmicro` (the night microphysics picture's red, green and blue
   guns, 0–1, a composite with no physical unit; GOES-EAST and GOES-WEST
   the same six, METEOSAT ir104, dustrgb and truecolor, HIMAWARI-JP
-  `ir104`, `dustrgb` and `truecolor`). AURORA:
+  `ir104`, `dustrgb`, `truecolor` and `nightmicro`). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above

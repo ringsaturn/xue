@@ -2,8 +2,9 @@
 
 How a geostationary imager's channels become Xue bundles: the `himawari`,
 `goeseast`, `goeswest` and `meteosat` sources, the `himawarijp` box over
-Japan, their Dust RGB and true colour composites and dust confidences, and the seams a further satellite,
-a second channel and another composite product go through. The bundle format is unchanged (`format.md`); what
+Japan, their Dust RGB, true colour and night microphysics composites
+and dust confidences, and the seams a further satellite, a second
+channel and another composite product go through. The bundle format is unchanged (`format.md`); what
 this document fixes is the fetch stage, `xuebuild/satellite/`, and the
 metadata a satellite variable carries.
 
@@ -487,8 +488,8 @@ whole cells of `grid_step`; the fetch warps onto it instead of
 | platform | `himawari` (the same files, band blocks and producers) |
 | box | 24–46°N, 122–148°E (whole degrees: the JMA nowcast's 0.005° cells nest 2:1) |
 | grid | 0.01°, 2600 × 2200, tile 64 × 64 (0.64°, 1435 a plane), ladder 0.02 / 0.04 / 0.08° |
-| fetched | `ir086`, `ir104`, `ir112`, `ir123`, `vis047`, `vis051`, `vis064`, `nir086` |
-| published | `ir104`, `dustrgb`, `truecolor` (no confidences: their CAMEL months are staged on the disk grids) |
+| fetched | `ir039`, `ir086`, `ir104`, `ir112`, `ir123`, `vis047`, `vis051`, `vis064`, `nir086` |
+| published | `ir104`, `dustrgb`, `truecolor`, `nightmicro` (no confidences: their CAMEL months are staged on the disk grids) |
 | window | 600 s, 3 h |
 
 The ISatSS reader narrows a slot to the box (`ISatSSReader.tiles_covering`).
@@ -505,20 +506,24 @@ the fixture tiles' corners as GDAL reads them to 0.01°. A tile is needed when i
 sample at the edge finds its neighbours), overlaps the box: for Japan,
 six of the 88 (T009–T011, T018–T020). Only those make a slot complete,
 are downloaded and are mosaicked — some 60 MB a slot over the eight
-channels by day and 35 MB by night (2026-10-11 03:00 and 2026-10-10
-15:00 UTC), against 870 and 500 MB for the disk's ten. A CMIPF slot is
+channels other than 3.9 µm by day and 35 MB by night (2026-10-11 03:00
+and 2026-10-10 15:00 UTC), against 870 and 500 MB for the disk's ten;
+the 3.9 µm window adds one more 2 km channel's six tiles. A CMIPF slot is
 one file and an FCI download already crops its chunks to the disk's
 rows, so those readers do not narrow (`tiles_covering` is None).
 
 The frame cache is keyed by the **source**, `<source>-frames`, since the
 box and the disk warp the same slot onto two grids; a disk's source id is
 its platform's role, so the disks' caches kept their names. A slot of the
-box is fourteen frames of 3–7 MB (some 75 MB). Measured on one sunlit
-hour (2026-10-11 03:00–04:00 UTC, seven slots): the stores are 8.4 MB of
-`ir104`, 35 MB of `dustrgb` and 65 MB of `truecolor` at full resolution
-and a third more for the ladder, some 170 MB, which is why the window is
-three hours and not the disks' six; the true colour is code 0 on the
-night side and costs next to nothing there.
+box is eighteen frames of 3–7 MB (some 95 MB). Measured on one sunlit
+hour (2026-10-11 03:00–04:00 UTC, seven slots, before the night
+microphysics was added): the stores are 8.4 MB of `ir104`, 35 MB of
+`dustrgb` and 65 MB of `truecolor` at full resolution and a third more
+for the ladder, some 170 MB. `nightmicro` is three infrared guns like the
+Dust RGB and about its size, composed day and night, which puts a sunlit
+hour near 220 MB and a three-hour round near 0.65 GB; that is why the
+window is three hours and not the disks' six. The true colour is code 0
+on the night side and costs next to nothing there.
 
 ## Metadata
 

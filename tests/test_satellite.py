@@ -1320,13 +1320,17 @@ class JapanSourceTests(unittest.TestCase):
         self.assertEqual((JAPAN.manifest_model, JAPAN.product, JAPAN.latest_filename), ("HIMAWARI-JP", "ahi-japan-0p01", "latest-himawarijp.json"))
         self.assertEqual((JAPAN.platform, JAPAN.grid_step, JAPAN.region, JAPAN.cadence_seconds, JAPAN.window_hours), ("himawari", 0.01, JAPAN_REGION, 600, 3))
         self.assertEqual((JAPAN.production_grid, JAPAN.tile, JAPAN.variant_factors), ((2600, 2200), (64, 64), (2, 4, 8)))
-        # The Dust RGB's windows and the true colour's bands, no confidence.
-        self.assertEqual(binconvert.published_bundle_ids(JAPAN), ("ir104", "dustrgb", "truecolor"))
+        # The Dust RGB's windows, the true colour's bands and the night
+        # microphysics' three windows, no confidence.
+        self.assertEqual(binconvert.published_bundle_ids(JAPAN), ("ir104", "dustrgb", "truecolor", "nightmicro"))
         self.assertEqual(binconvert.bundle_input_ids(JAPAN, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(JAPAN, "truecolor"), ("vis047", "vis051", "vis064", "nir086"))
-        self.assertEqual(JAPAN.input_variable_ids, binconvert.bundle_input_ids(JAPAN, "dustrgb") + binconvert.bundle_input_ids(JAPAN, "truecolor"))
-        # Its bands are the disk's: same spacecraft, same channels.
+        self.assertEqual(binconvert.bundle_input_ids(JAPAN, "nightmicro"), ("ir039", "ir104", "ir123"))
+        self.assertEqual(JAPAN.input_variable_ids, ("ir039", *binconvert.bundle_input_ids(JAPAN, "dustrgb"), *binconvert.bundle_input_ids(JAPAN, "truecolor")))
+        # Its bands are the disk's, in the disk's order: same spacecraft,
+        # same channels.
         self.assertTrue(set(JAPAN.bands) <= set(SPEC.bands))
+        self.assertEqual(list(JAPAN.input_variable_ids), [channel_id for channel_id in SPEC.input_variable_ids if channel_id in JAPAN.input_variable_ids])
         # Every full-disk source takes its platform's region.
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.region is not None], ["himawarijp"])
 
@@ -1468,8 +1472,8 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
     """The Japan source end to end on the fixture: of the six tiles its box
     needs the fixture holds T020 alone, so the reader is told that is all
     the box needs; the frames are warped onto the whole 0.01° grid, the
-    Dust RGB and the true colour composed per slot, and the window built
-    through both encoders."""
+    Dust RGB, the true colour and the night microphysics composed per
+    slot, and the window built through both encoders."""
 
     root_prefix = "xue-himawarijp-convert-"
 
@@ -1493,13 +1497,13 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundles_are_the_box_with_the_disk_s_band(self) -> None:
-        self.assertEqual([path.name.split(".")[-2] for path in self.written], [*JAPAN.input_variable_ids, *DUST_RGB_COMPONENT_IDS, *TRUE_COLOR_COMPONENT_IDS])
+        self.assertEqual([path.name.split(".")[-2] for path in self.written], [*JAPAN.input_variable_ids, *DUST_RGB_COMPONENT_IDS, *TRUE_COLOR_COMPONENT_IDS, *NIGHT_MICRO_COMPONENT_IDS])
         record = json.loads((self.inputs / "fetch.json").read_text(encoding="utf-8"))
         self.assertEqual(record["grid"], {"step": 0.01, "width": 2600, "height": 2200, "firstLongitude": 122.005, "firstLatitude": 45.995})
-        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [8, 8])
+        self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [9, 9])
         self.assertTrue((self.root / "himawarijp-frames" / "dustr").is_dir())
         self.assertFalse((self.root / "himawari-frames").exists())
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor", "nightmicro"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI-JP", "ahi-japan-0p01"))

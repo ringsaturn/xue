@@ -1373,10 +1373,11 @@ pub const SOURCES: &[SourceSpec] = &[
     },
     // Himawari-9 over Japan at 0.01°: the himawari platform and fetch stage
     // on a box of its own, 24–46°N, 122–148°E, rather than the disk — a
-    // regional source like `hrrr` beside `gfs`. Eight channels fetched (the
-    // Dust RGB's four windows, the true colour's four solar bands, each
-    // with the himawari band block), the 10.4 µm window, the Dust RGB and
-    // the true colour published; no dust confidences.
+    // regional source like `hrrr` beside `gfs`. Nine channels fetched (the
+    // 3.9 µm window, the Dust RGB's four windows, the true colour's four
+    // solar bands, each with the himawari band block), the 10.4 µm window,
+    // the Dust RGB, the true colour and the night microphysics published;
+    // no dust confidences.
     SourceSpec {
         id: "himawarijp",
         manifest_model: "HIMAWARI-JP",
@@ -1385,7 +1386,7 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        input_variable_ids: &["ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"],
+        input_variable_ids: &["ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -1395,6 +1396,10 @@ pub const SOURCES: &[SourceSpec] = &[
         optional_at_analysis: &[],
         statistical_processes: &[],
         bands: &[
+            (
+                "ir039",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 257380 },
+            ),
             (
                 "ir086",
                 SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
@@ -1431,7 +1436,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "truecolor"],
+        bundle_composite_ids: &["dustrgb", "truecolor", "nightmicro"],
         bundle_volume_ids: &[],
         // The box at 0.01°: 26° x 22°.
         production_grid: (2600, 2200),
@@ -1829,7 +1834,7 @@ mod tests {
         assert!(japan.series_file && japan.fetched() && japan.live());
         assert_eq!((japan.cadence_seconds, japan.window_hours), (Some(600), Some(3)));
         assert_eq!(japan.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor"]);
+        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor", "nightmicro"]);
         for (band_id, band) in japan.bands {
             assert!(himawari.bands.contains(&(*band_id, *band)), "{band_id}");
         }

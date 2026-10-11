@@ -3572,9 +3572,12 @@ mod composite_tests {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis051", "vis064", "nir086"], "{model}");
         }
-        // The Japan box publishes no confidence: the window, then the two
-        // composites its eight channels feed.
-        assert_eq!(published_bundle_ids(source_spec("himawarijp").expect("himawarijp")), ["ir104", "dustrgb", "truecolor"]);
+        // The Japan box publishes no confidence: the window, then the three
+        // composites its nine channels feed.
+        assert_eq!(
+            published_bundle_ids(source_spec("himawarijp").expect("himawarijp")),
+            ["ir104", "dustrgb", "truecolor", "nightmicro"]
+        );
         for model in ["goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086"], "{model}");
@@ -3593,7 +3596,7 @@ mod composite_tests {
         // Mirrors `NightMicrophysicsProducer.inputs_for`: the 3.9, 10.4 and
         // 12.3 µm windows on every imager, no stand-in.
         assert_eq!(bundle_variable_ids("nightmicro"), ["nightr", "nightg", "nightb"]);
-        for model in ["himawari", "goeseast", "goeswest"] {
+        for model in ["himawari", "himawarijp", "goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "nightmicro"), ["ir039", "ir104", "ir123"], "{model}");
             assert!(published_bundle_ids(source).ends_with(&["nightmicro"]), "{model}");
