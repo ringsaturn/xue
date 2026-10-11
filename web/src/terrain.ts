@@ -25,7 +25,7 @@ export const TERRAIN_SOURCE = "mapterhorn";
  * than from one (it warns when they share), and the browser's HTTP cache
  * fetches each tile once either way. */
 export const TERRAIN_MESH_SOURCE = "mapterhorn-mesh";
-const TERRAIN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+export const TERRAIN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
 export const TERRAIN_MAX_ZOOM = 12;
 /** How deep the camera may go over the 3D relief: z16, as deep as Japan's
  * regional archive (`terrainprotocol.ts`), and one past the basemap's z15,

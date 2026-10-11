@@ -280,6 +280,7 @@ import {
 import { registerTerrainProtocol, TERRAIN_DETAIL_MAX_ZOOM, TERRAIN_DETAIL_TILES } from "./terrainprotocol";
 import { PeakLabels } from "./peaks";
 import { TerrainShadows } from "./shadowlayer";
+import { TerrainContours } from "./terraincontours";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -722,6 +723,7 @@ function applyBasemapInk(darkGround: boolean): void {
     }
   }
   applyLabelInk();
+  terrainContours?.setInk(darkGround);
 }
 
 /** The coastline drawn as a line of its own. Protomaps has no coastline
@@ -801,6 +803,23 @@ function hillshadePaint(darkGround: boolean): HillshadePaint {
 /** The relief's cast shadows (`shadowlayer.ts`), built once the style has
  * loaded, since their layer goes in directly above the hillshade. */
 let terrainShadows: TerrainShadows | null = null;
+/** The relief's contour lines (`terraincontours.ts`), likewise. */
+let terrainContours: TerrainContours | null = null;
+
+function startTerrainContours(): void {
+  const contours = new TerrainContours({
+    map,
+    anchorLayer: FORECAST_ANCHOR_LAYER,
+    darkGround: () => document.body.dataset.ground === "dark",
+    onChange: () => {
+      viewControl.setContours(terrainContours?.enabled ?? false);
+      syncUrl();
+    },
+  });
+  terrainContours = contours;
+  contours.setEnabled(urlScene.contours);
+  viewControl.setContours(contours.enabled);
+}
 
 function startTerrainShadows(): void {
   const shadows = new TerrainShadows({
@@ -991,6 +1010,7 @@ const viewControl = new ViewControl({
   exaggeration: () => urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION,
   onResize: syncControlColumn,
   onVolumeTool: (kind) => pressVolumeTool(kind),
+  onContours: () => terrainContours?.setEnabled(!terrainContours.enabled),
 });
 map.addControl(viewControl, "top-right");
 
@@ -1011,6 +1031,7 @@ function currentScene(): SceneState {
     globe: isGlobeProjection(map),
     terrain: map.getTerrain()?.exaggeration ?? null,
     shadow: terrainShadows?.enabled ?? urlScene.shadow,
+    contours: terrainContours?.enabled ?? urlScene.contours,
   };
 }
 
@@ -9430,6 +9451,7 @@ map.once("load", () => {
   syncBasemapStyle();
   applySceneFromUrl();
   startTerrainShadows();
+  startTerrainContours();
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });

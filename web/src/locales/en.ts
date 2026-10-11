@@ -356,6 +356,7 @@ export const en = {
    * and accessible names. */
   viewGlobeAria: "Globe",
   viewTerrainAria: "3D terrain",
+  viewContoursAria: "Contour lines",
   viewResetNorthAria: "Reset to north",
   viewResetPitchAria: "Reset tilt",
   viewBoxAria: "Storm close-up: drag a box over it",

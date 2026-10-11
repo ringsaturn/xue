@@ -490,6 +490,21 @@ describe("parseCameraFromHash", () => {
   });
 });
 
+describe("terrain contour lines in the scene", () => {
+  it("are off unless the link says on", () => {
+    expect(parseSceneFromSearch("").contours).toBe(false);
+    expect(parseSceneFromSearch("?contours=off").contours).toBe(false);
+    expect(parseSceneFromSearch("?contours=on").contours).toBe(true);
+    expect(parseSceneFromSearch("?contours=1").contours).toBe(true);
+  });
+
+  it("are written as on and dropped when off", () => {
+    const on = searchWithScene("?model=gfs", { globe: false, terrain: null, shadow: false, contours: true });
+    expect(new URLSearchParams(on).get("contours")).toBe("on");
+    expect(searchWithScene("?model=gfs&contours=on", { globe: false, terrain: null, shadow: false, contours: false })).toBe("?model=gfs");
+  });
+});
+
 describe("terrain shadows in the scene", () => {
   it("are off unless the URL switches them on, in any switch spelling", () => {
     expect(parseSceneFromSearch("").shadow).toBe(false);
@@ -501,14 +516,14 @@ describe("terrain shadows in the scene", () => {
   });
 
   it("are read beside the globe and the relief", () => {
-    expect(parseSceneFromSearch("?projection=globe&terrain=2&shadow=on")).toEqual({ globe: true, terrain: 2, shadow: true });
+    expect(parseSceneFromSearch("?projection=globe&terrain=2&shadow=on")).toEqual({ globe: true, terrain: 2, shadow: true, contours: false });
   });
 
   it("write shadow=on when on, nothing when off, and round-trip", () => {
-    const on = searchWithScene("?model=gfs", { globe: false, terrain: null, shadow: true });
+    const on = searchWithScene("?model=gfs", { globe: false, terrain: null, shadow: true, contours: false });
     expect(on).toBe("?model=gfs&shadow=on");
     expect(parseSceneFromSearch(on).shadow).toBe(true);
-    expect(searchWithScene("?model=gfs&shadow=on", { globe: false, terrain: null, shadow: false })).toBe("?model=gfs");
+    expect(searchWithScene("?model=gfs&shadow=on", { globe: false, terrain: null, shadow: false, contours: false })).toBe("?model=gfs");
   });
 });
 
