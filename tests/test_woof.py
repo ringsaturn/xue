@@ -18,7 +18,14 @@ Everything else is the ``ifshres`` series-file path: one CF NetCDF per
 variable, the cycle as the epoch of the ``time`` coordinate, the regional
 grid snapped to the thousandth of a degree, a NaN fill. Neither encoder
 learns any WRF arithmetic — destaggering, the wind rotation, the dewpoint,
-the layered cloud and the Lambert → 0.005° regrid are the tool's.
+the layered cloud, the cloud water's interpolation onto the volume's
+altitudes and the Lambert → 0.005° regrid are the tool's.
+
+The ``cloud3d`` volume is the second volume bundle after MRMS's ``refl3d``:
+24 ``clw<m>`` levels of cloud water (0/1/22 on the altitude surface 102,
+g/kg), each its own series. A level under the model terrain is NaN in the
+series and decodes as 0 g/kg, the bottom of the linear codebook; no nodata
+code is written.
 
 ``tests/fixtures/woof.2026101006/`` is a 20 x 16 cell window of the
 2026-10-10 06Z run's d04 at hours 1 and 2, one file per variable, written
@@ -27,6 +34,7 @@ by the tool with the commands in ``tests/fixtures/README.md``.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import subprocess
@@ -38,7 +46,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import interval_rate, published_bundle_ids
 from xuebuild.binformat import read_bundle
@@ -49,15 +57,17 @@ from xuebuild.quantize import PROFILES
 from xuebuild.showcase import parse_case
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.stac import _source_prose
-from xuebuild.variables import variable_spec
+from xuebuild.variables import CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, cloud_water_level, variable_spec
 
 SERIES_DIR = FIXTURES / "woof.2026101006"
+VOLUME_REGISTRY = FIXTURES / "volume-registry.json"
 SPEC = source_spec("woof")
 RUN_TIME = datetime(2026, 10, 10, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 20, 16
 
 #: The published bundles, in manifest order: the surface set, the cloud
-#: layers, the boundary layer, the radiation, the terrain, and the 10 m pair.
+#: layers, the boundary layer, the radiation, the terrain, the 10 m pair and
+#: the cloud water volume.
 BUNDLES = (
     "tmp2m",
     "prate",
@@ -71,7 +81,10 @@ BUNDLES = (
     "dswrf",
     "orog",
     "wind10m",
+    "cloud3d",
 )
+#: The tool's surface series; the cloud water levels follow them.
+SURFACE_INPUTS = ("tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog")
 
 
 def localized(text: str) -> dict[str, str]:
@@ -80,9 +93,11 @@ def localized(text: str) -> dict[str, str]:
     return {locale: text for locale in LOCALES}
 
 
+@functools.cache
 def source_plane(variable_id: str, band: int) -> np.ndarray:
     """One band of one fixture series, in the file's own units — what the
-    converter's own extraction reads, read independently."""
+    converter's own extraction reads, read independently. Cached: callers
+    must not write into it."""
     name = observation.series_variable_name(variable_id, SPEC)
     dataset = f'NETCDF:"{SERIES_DIR / f"woof.2026101006.{variable_id}.nc"}":{name}'
     with tempfile.TemporaryDirectory() as work:
@@ -94,7 +109,9 @@ def source_plane(variable_id: str, band: int) -> np.ndarray:
             ],
             check=True,
         )
-        return np.fromfile(raw, dtype="<f8").reshape(HEIGHT, WIDTH)
+        plane = np.fromfile(raw, dtype="<f8").reshape(HEIGHT, WIDTH)
+        plane.flags.writeable = False
+        return plane
 
 
 class SourceRegistryTests(unittest.TestCase):
@@ -125,13 +142,10 @@ class SourceRegistryTests(unittest.TestCase):
             with self.subTest(hour=off_axis), self.assertRaisesRegex(DownloadError, "from f001"):
                 SPEC.forecast_hours(off_axis)
 
-    def test_it_publishes_twelve_bundles_and_reads_the_total_for_the_rate(self) -> None:
+    def test_it_publishes_thirteen_bundles_and_reads_the_total_for_the_rate(self) -> None:
         self.assertEqual(published_bundle_ids(SPEC), BUNDLES)
         self.assertEqual(SPEC.core_bundle_ids, ("tmp2m",))
-        self.assertEqual(
-            SPEC.input_variable_ids,
-            ("tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog"),
-        )
+        self.assertEqual(SPEC.input_variable_ids, SURFACE_INPUTS + CLOUD_WATER_VARIABLE_IDS)
         for variable_id in SPEC.input_variable_ids:
             variable_spec(variable_id)
         self.assertNotIn("apcp", published_bundle_ids(SPEC), "the total is an input only")
@@ -154,12 +168,59 @@ class SourceRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(DownloadError, "not fetched"):
             resolve_run("2026101006", hours=12, model="woof")
 
+    def test_the_volume_is_the_cloud_water_on_twenty_four_altitudes(self) -> None:
+        self.assertEqual(SPEC.bundle_volume_ids, ("cloud3d",))
+        self.assertEqual(binconvert.VOLUME_BUNDLES["cloud3d"], CLOUD_WATER_VARIABLE_IDS)
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "cloud3d"), CLOUD_WATER_VARIABLE_IDS)
+        self.assertEqual(
+            CLOUD_WATER_LEVELS_M,
+            (250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000,
+             3500, 4000, 4500, 5000, 5500, 6000, 7000, 8000, 9000, 10000, 11000, 12000),
+        )  # fmt: skip
+        self.assertEqual(CLOUD_WATER_VARIABLE_IDS, tuple(f"clw{level}" for level in CLOUD_WATER_LEVELS_M))
+        self.assertEqual((cloud_water_level("clw1250"), cloud_water_level("clw1300"), cloud_water_level("cref")), (1250, None, None))
+        for variable_id, level in zip(CLOUD_WATER_VARIABLE_IDS, CLOUD_WATER_LEVELS_M):
+            spec = variable_spec(variable_id)
+            self.assertEqual(spec.label, f"Cloud water at {level / 1000:g} km MSL")
+            self.assertEqual((spec.output_unit, spec.gdal_unit, spec.value_range, spec.fill_values), ("g/kg", "g/kg", (0, 3), ()))
+            self.assertEqual(
+                spec.parameter_metadata(),
+                {
+                    "discipline": 0,
+                    "parameterCategory": 1,
+                    "parameterNumber": 22,
+                    "typeOfFirstFixedSurface": 102,
+                    "scaleFactorOfFirstFixedSurface": 0,
+                    "scaledValueOfFirstFixedSurface": level,
+                },
+            )
+            self.assertEqual(observation.accepted_series_units(spec), ("g/kg",), "the tool writes g/kg; there is no unit rule")
+            # Linear in every profile, so the volume renderer can
+            # interpolate codes; balanced keeps the quality step.
+            self.assertEqual(PROFILES["quality"][variable_id].metadata()["maximumCode"], 253)
+            self.assertEqual(PROFILES["balanced"][variable_id], PROFILES["quality"][variable_id])
+            self.assertEqual(PROFILES["compact"][variable_id].step, 0.02)
+            self.assertNotIn(variable_id, binconvert.RAW_VARIABLE_IDS)
+
+    def test_the_committed_volume_registry_still_describes_this_encoder(self) -> None:
+        pinned = json.loads(VOLUME_REGISTRY.read_text(encoding="utf-8"))
+        actual = {variable_id: registry_entry(variable_id) for variable_id in REFLECTIVITY_VARIABLE_IDS + CLOUD_WATER_VARIABLE_IDS}
+        self.assertEqual(
+            pinned,
+            actual,
+            "the volume registry moved; the Rust encoder and the frontend read the same "
+            "fixture, so regenerate tests/fixtures/volume-registry.json deliberately "
+            "(tests/fixtures/README.md) and change every implementation together",
+        )
+        self.assertEqual(list(pinned), list(binconvert.VOLUME_BUNDLES["refl3d"] + binconvert.VOLUME_BUNDLES["cloud3d"]))
+
     def test_the_catalog_prose_names_recast_the_gfs_and_the_dem(self) -> None:
         prose = _source_prose(SPEC)
         self.assertEqual(prose["title"], "Recast WOOF (WRF-ARW) nested run")
         self.assertIn("Recast Systems' WOOF service", prose["description"])
         self.assertIn("0.005°", prose["description"])
         self.assertIn("showcase cases only", prose["description"])
+        self.assertIn("cloud water volume", prose["description"])
         self.assertEqual(prose["license"], "other")
         self.assertEqual([provider["name"] for provider in prose["providers"]], ["NOAA / NCEP", "Copernicus", "Xue"])
 
@@ -210,6 +271,7 @@ class SeriesTests(unittest.TestCase):
 
     def test_every_input_is_a_series_of_its_own(self) -> None:
         files = observation.series_files(SERIES_DIR, SPEC.input_variable_ids)
+        self.assertEqual(len(files), 37)
         self.assertEqual(sorted(files), sorted(SPEC.input_variable_ids))
         for variable_id, path in files.items():
             self.assertEqual(path.name, f"woof.2026101006.{variable_id}.nc")
@@ -265,7 +327,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # f000 is the GFS analysis on the nest and is never written, so the
         # first frame of every bundle is hour 1 — the rate's included, since
         # the total is on every frame rather than missing at an analysis.
-        for name in ("tmp2m", "prate", "wind10m", "lcdc"):
+        for name in ("tmp2m", "prate", "wind10m", "lcdc", "cloud3d"):
             with self.subTest(bundle=name):
                 self.assertEqual(
                     self.bundle(name).metadata["time"],
@@ -310,6 +372,71 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 np.testing.assert_array_equal(codes, codebook.quantize(interval_rate(total, 1)))
                 wet_cells += int((codes > 0).sum())
         self.assertGreater(wet_cells, 0, "the fixture carries some rain to check")
+
+    def test_the_volume_carries_the_cloud_water_levels_in_order(self) -> None:
+        metadata = self.bundle("cloud3d").metadata
+        variables = metadata["variables"]
+        self.assertEqual([variable["id"] for variable in variables], list(CLOUD_WATER_VARIABLE_IDS))
+        self.assertEqual([variable["numericId"] for variable in variables], list(range(1, 25)))
+        for variable, level in zip(variables, CLOUD_WATER_LEVELS_M):
+            with self.subTest(level=level):
+                self.assertEqual(variable["unit"], "g/kg")
+                self.assertEqual(variable["label"], f"Cloud water at {level / 1000:g} km MSL")
+                self.assertEqual(
+                    variable["parameter"],
+                    {
+                        "discipline": 0,
+                        "parameterCategory": 1,
+                        "parameterNumber": 22,
+                        "typeOfFirstFixedSurface": 102,
+                        "scaleFactorOfFirstFixedSurface": 0,
+                        "scaledValueOfFirstFixedSurface": level,
+                    },
+                )
+                self.assertEqual(
+                    variable["quantization"],
+                    {"type": "linear", "offset": 0.0, "scale": 0.01, "minimumCode": 0, "maximumCode": 253, "nodataCode": 255},
+                )
+        self.assertEqual(metadata["grid"], self.bundle("tmp2m").metadata["grid"])
+
+    def test_the_volume_decodes_to_the_series_and_the_ground_to_no_cloud(self) -> None:
+        bundle = self.bundle("cloud3d")
+        codebook = PROFILES["quality"]["clw250"]
+        under_ground = wet = 0
+        for numeric_id, variable_id in enumerate(CLOUD_WATER_VARIABLE_IDS, start=1):
+            for hour in (1, 2):
+                codes = np.asarray(bundle.decode_plane(numeric_id, hour)).reshape(HEIGHT, WIDTH)
+                source = source_plane(variable_id, hour)
+                below = np.isnan(source)
+                # No nodata code is ever written: under the terrain is 0 g/kg.
+                self.assertTrue((codes <= codebook.maximum_code).all(), variable_id)
+                np.testing.assert_array_equal(codes[below], 0, err_msg=variable_id)
+                np.testing.assert_array_equal(codes, codebook.quantize(np.nan_to_num(source, nan=0.0)), err_msg=variable_id)
+                under_ground += int(below.sum())
+                wet += int((codes > 0).sum())
+        self.assertGreater(under_ground, 0, "the fixture carries terrain above some levels")
+        self.assertGreater(wet, 0, "the fixture carries some cloud")
+        # The lowest five levels are all under this window's ground.
+        for numeric_id in range(1, 6):
+            self.assertFalse(np.asarray(bundle.decode_plane(numeric_id, 1)).any())
+        # Hour 2's cloud sits on the flanks at 2 km, short of a gram per kg.
+        decoded = codebook.decode(np.asarray(bundle.decode_plane(CLOUD_WATER_LEVELS_M.index(2000) + 1, 2)))
+        self.assertAlmostEqual(float(decoded.max()), 0.86, delta=0.005)
+
+    def test_the_summit_column_is_ground_then_clear_air(self) -> None:
+        terrain = source_plane("orog", 1)
+        row, column = np.unravel_index(int(terrain.argmax()), terrain.shape)
+        self.assertGreater(float(terrain[row, column]), 3600.0)
+        bundle = self.bundle("cloud3d")
+        for hour in (1, 2):
+            for numeric_id, level in enumerate(CLOUD_WATER_LEVELS_M, start=1):
+                source = float(source_plane(f"clw{level}", hour)[row, column])
+                code = int(np.asarray(bundle.decode_plane(numeric_id, hour)).reshape(HEIGHT, WIDTH)[row, column])
+                with self.subTest(hour=hour, level=level):
+                    # Under the 3633 m summit the series is NaN; above it the
+                    # air is dry on both hours. Either way the code is 0.
+                    self.assertEqual(np.isnan(source), level < 4000)
+                    self.assertEqual(code, 0)
 
     def test_a_complete_run_cannot_be_required_of_a_source_with_no_feed(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):

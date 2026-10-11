@@ -214,13 +214,20 @@ refuses it, and it is reached only through showcase cases naming a
 `wrf` dependency group: netCDF4) owns every WRF particular — destaggering,
 rotating the grid-relative wind to earth-relative, the dewpoint, the
 layered cloud maxima by MSL height (0–2 / 2–6 / >6 km), differencing the
-run-total precipitation into the hour's `apcp`, and the bilinear regrid
-from the Lambert conformal nest onto the regular 0.005° grid inscribed in
-it (79 × 61) — and writes `woof.<run>.<variable>.nc`, one CF series per
+run-total precipitation into the hour's `apcp`, interpolating `QCLOUD`
+linearly in height onto the 24 altitudes of the `clw<m>` family (each
+column's mass-level heights from `PH + PHB`; the lowest level's value
+between the ground and it, zero above the top, NaN under the model
+terrain), and the bilinear regrid from the Lambert conformal nest onto the
+regular 0.005° grid inscribed in it (79 × 61) — and writes `woof.<run>.<variable>.nc`, one CF series per
 variable, so both encoders take the `ifshres` series-file path unchanged.
 Frames start at f001 (`first_hour = 1`: f000 is the GFS analysis on the
 nest, dropped by the tool) and `apcp` is on every frame, so nothing is
 analysis-optional; `prate` is the interval rate (`interval_precipitation`).
+The 24 cloud water levels ship as one volume bundle, `cloud3d`
+(`VOLUME_BUNDLES`, after MRMS's `refl3d`), in g/kg on the linear `clw`
+codebook; the NaN under the terrain is filled as 0 g/kg, so the volume
+carries no nodata code and the viewer hides the ground by occlusion.
 No ladder and no video: a plane is under 5000 cells. `tests/test_woof.py`.
 
 ## Observations
