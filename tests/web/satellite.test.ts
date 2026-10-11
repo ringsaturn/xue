@@ -85,6 +85,25 @@ function gunVariables(order: readonly number[] = [1, 2, 3], producer: BundleProd
 
 const DUST_IDENTITY = { family: "dustrgb" as const, level: null, vector: false };
 
+/** The true colour picture's contract: the encoder's own recipe (producer
+ * `xue`, its version the recipe's), local numbers 7, 8, 9 in the same
+ * discipline and category as the Dust RGB's guns, the guns' codebook. */
+const TRUE_GUN_IDS = ["truer", "trueg", "trueb"] as const;
+const TRUE_PRODUCER: BundleProducer = { id: "xue", version: "1" };
+const TRUE_IDENTITY = { family: "truecolor" as const, level: null, vector: false };
+
+function trueGunVariables(order: readonly number[] = [7, 8, 9], producer: BundleProducer = TRUE_PRODUCER): BundleVariable[] {
+  return order.map((number, at) => ({
+    numericId: at + 1,
+    id: TRUE_GUN_IDS[number - 7]!,
+    label: `True colour, ${["red", "green", "blue"][number - 7]} gun`,
+    unit: "1",
+    parameter: gunParameter(number),
+    producer,
+    quantization: GUN_QUANTIZATION,
+  }));
+}
+
 /** The confidences' contract: shachen's local number 4 (DEBRA) and 5
  * (ZHOUYE, the same chain held to the day's level through the night)
  * beside the guns, each one variable of its own bundle, the guns'
@@ -110,46 +129,62 @@ function confidenceVariable(producer: BundleProducer | null = PRODUCER, id: Conf
 
 describe("the satellite registry", () => {
   it("knows the bundles the encoders register", () => {
-    // Every registry entry is a channel (a brightness temperature with a
-    // band per platform) or a produced field — a gun of the composite, or
-    // one of the dust confidences, the next local numbers under the same
-    // producer; the shell's bundle ids are the published channel, the
-    // composite and the two confidences.
+    // Every registry entry is a channel (a brightness temperature or a
+    // reflectance, with a band per platform) or a produced field — a gun
+    // of a composite (shachen's Dust RGB at 1–3, the encoder's own true
+    // colour at 7–9), or one of the dust confidences, the next local
+    // numbers under shachen; the shell's bundle ids are the published
+    // channel, the two composites and the two confidences.
     for (const [id, entry] of Object.entries(registry)) {
       if (entry.producer) {
-        expect([...GUN_IDS, ...Object.keys(CONFIDENCE_NUMBERS)]).toContain(id);
-        expect(entry.producer).toEqual({ id: "shachen" });
-        const number = id in CONFIDENCE_NUMBERS ? CONFIDENCE_NUMBERS[id as ConfidenceId] : GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1;
+        expect([...GUN_IDS, ...TRUE_GUN_IDS, ...Object.keys(CONFIDENCE_NUMBERS)]).toContain(id);
+        const trueGun = TRUE_GUN_IDS.indexOf(id as (typeof TRUE_GUN_IDS)[number]);
+        expect(entry.producer).toEqual({ id: trueGun >= 0 ? "xue" : "shachen" });
+        const number =
+          id in CONFIDENCE_NUMBERS
+            ? CONFIDENCE_NUMBERS[id as ConfidenceId]
+            : trueGun >= 0
+              ? trueGun + 7
+              : GUN_IDS.indexOf(id as (typeof GUN_IDS)[number]) + 1;
         expect(entry.parameter).toEqual(gunParameter(number));
         expect(entry.unit).toBe("1");
         expect(entry.quality).toEqual(GUN_QUANTIZATION);
         expect(entry.compact).toEqual(GUN_QUANTIZATION);
-      } else {
+      } else if (entry.unit === "K") {
         expect(entry.parameter).toMatchObject({ discipline: 0, parameterCategory: 4, parameterNumber: 4, typeOfFirstFixedSurface: 8 });
-        expect(entry.unit).toBe("K");
         expect(entry.band?.himawari).toBeDefined();
+      } else {
+        // A visible band: the satellite-image albedo parameter with the
+        // band beside it; fetched for the true colour picture, published
+        // by no source, charted by nothing here.
+        expect(entry.parameter).toMatchObject({ discipline: 3, parameterCategory: 0, parameterNumber: 1, typeOfFirstFixedSurface: 8 });
+        expect(entry.unit).toBe("1");
+        expect(entry.band?.himawari).toBeDefined();
+        expect(variableSpec(id)).toBeNull();
       }
     }
     expect(Object.keys(registry)).toContain("ir104");
     expect(Object.keys(registry)).toContain("dustcf");
     expect(Object.keys(registry)).toContain("zhouye");
-    // The composite's components, in bundle order, are the registry's;
+    expect(Object.keys(registry)).toContain("vis064");
+    // Each composite's components, in bundle order, are the registry's;
     // each confidence bundle is its one variable and no composite.
     const { dustcf: confidenceBundle, zhouye: zhouyeBundle, ...compositeBundles } = registryFile.bundles;
     expect(COMPOSITE_BUNDLES).toEqual(compositeBundles);
     expect(confidenceBundle).toEqual(["dustcf"]);
     expect(zhouyeBundle).toEqual(["zhouye"]);
-    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf", "zhouye"]);
+    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
     for (const id of SATELLITE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Four single fields, each with a tile of its own, in the sheet's
+      // Five single fields, each with a tile of its own, in the sheet's
       // satellite group.
       expect(familyOf(id)).toBeNull();
       expect(variableSpec(id)?.family).toBeNull();
       expect(variableSpec(id)?.group).toBe("satellite");
     }
     expect(isCompositeBundle("dustrgb")).toBe(true);
+    expect(isCompositeBundle("truecolor")).toBe(true);
     expect(isCompositeBundle("ir104")).toBe(false);
     expect(isCompositeBundle("dustcf")).toBe(false);
     expect(compositeComponents("dustcf")).toBeNull();
@@ -157,20 +192,23 @@ describe("the satellite registry", () => {
     expect(compositeComponents("zhouye")).toBeNull();
     expect(compositeComponents("dustrgb")).toEqual(GUN_IDS);
     expect(COMPOSITE_BUNDLES.dustrgb).toEqual(GUN_IDS);
+    expect(compositeComponents("truecolor")).toEqual(TRUE_GUN_IDS);
+    expect(COMPOSITE_BUNDLES.truecolor).toEqual(TRUE_GUN_IDS);
   });
 
-  it("gives the composite and the confidences core tiles beside the infrared on every satellite source", () => {
-    // No family: the four are different pictures, and a source with four
-    // fields has room for four tiles, so none hides behind another. The
-    // confidences ship on the ten-minute disks and on the mosaic (a member
-    // whose run lacks a bundle empties for it, `applyMosaicMembers`),
-    // not on Meteosat's hourly cycle.
+  it("gives the composites and the confidences core tiles beside the infrared on every satellite source", () => {
+    // No family: the five are different pictures, and a source with five
+    // fields has room for five tiles, so none hides behind another. The
+    // confidences and the true colour ship on the ten-minute disks and on
+    // the mosaic (a member whose run lacks a bundle empties for it,
+    // `applyMosaicMembers`), not on Meteosat's hourly cycle.
     expect(ISOBARIC_FAMILIES).not.toContain("satellite");
     expect(variableSpec("dustrgb")?.code).toBe("DUST RGB");
     expect(variableSpec("dustcf")?.code).toBe("DEBRA");
     expect(variableSpec("zhouye")?.code).toBe("ZHOUYE");
+    expect(variableSpec("truecolor")?.code).toBe("TRUE COLOR");
     for (const model of ["himawari", "goeseast", "goeswest", "geo"] as const) {
-      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf", "zhouye"]);
+      expect(FORECAST_MODELS[model].railCore).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
     }
     expect(FORECAST_MODELS.meteosat.railCore).toEqual(["ir104", "dustrgb"]);
   });
@@ -323,6 +361,69 @@ describe("the Dust RGB composite", () => {
     expect(spec.title.join(" ")).toBe("Dust RGB");
     expect(spec.label()).toBe("Dust RGB (infrared composite)");
     expect(spec.ground).toBe("slate");
+  });
+});
+
+describe("the true colour composite", () => {
+  it("is named by its producer and the guns' local numbers together", () => {
+    // Three guns, red, green, blue, all the encoder's own: the picture.
+    expect(identityForProducedTriple(trueGunVariables())).toEqual(TRUE_IDENTITY);
+    expect(isCompositeIdentity(TRUE_IDENTITY)).toBe(true);
+    // The order is the file's: the encoders number the guns 7, 8, 9.
+    expect(identityForProducedTriple(trueGunVariables([9, 8, 7]))).toBeNull();
+    // Local numbers mean nothing under another producer: shachen's 7, 8
+    // and 9 are not this picture, and xue's 1, 2 and 3 are not the Dust RGB.
+    expect(identityForProducedTriple(trueGunVariables([7, 8, 9], PRODUCER))).toBeNull();
+    expect(identityForProducedTriple(gunVariables([1, 2, 3], TRUE_PRODUCER))).toBeNull();
+    // Nor without one.
+    expect(identityForProducedTriple(trueGunVariables().map(({ producer: _, ...rest }) => rest))).toBeNull();
+    expect(identityForParameter(gunParameter(7))).toBeNull();
+    // The version is the recipe's and not part of the identity.
+    expect(identityForProducedTriple(trueGunVariables([7, 8, 9], { id: "xue", version: "2" }))).toEqual(TRUE_IDENTITY);
+    // A gun on another surface is another thing.
+    const mixed = trueGunVariables();
+    mixed[1] = { ...mixed[1]!, parameter: { ...mixed[1]!.parameter!, typeOfFirstFixedSurface: 1 } };
+    expect(identityForProducedTriple(mixed)).toBeNull();
+  });
+
+  it("is the whole bundle, in red, green, blue order", () => {
+    const bundle = identifyBundle(trueGunVariables());
+    expect(bundle?.identity).toEqual(TRUE_IDENTITY);
+    expect(bundle?.variables.map((variable) => variable.id)).toEqual([...TRUE_GUN_IDS]);
+    expect(registeredBundleId(TRUE_IDENTITY)).toBe("truecolor");
+    expect(identityForBundleId("truecolor")).toEqual(TRUE_IDENTITY);
+    expect(identifyBundle(trueGunVariables().slice(0, 2))).toBeNull();
+  });
+
+  it("is parsed with its producer by the metadata validator", () => {
+    const parsed = parseBundleMetadata(metadataJson(HIMAWARI_ENVELOPE, trueGunVariables()));
+    expect(parsed.variables.length).toBe(3);
+    expect(parsed.variables[0]!.producer).toEqual(TRUE_PRODUCER);
+    expect(identifyBundle(parsed.variables)?.identity).toEqual(TRUE_IDENTITY);
+  });
+
+  it("keeps code 0 as no data — the night side too — and reads the guns in [0, 1]", () => {
+    const [red] = trueGunVariables();
+    expect(decodeValue(red!, 0)).toBeCloseTo(-0.004, 9);
+    expect(decodeValue(red!, 1)).toBeCloseTo(0, 9);
+    expect(decodeValue(red!, 251)).toBeCloseTo(1, 9);
+    expect(decodeValue(red!, 255)).toBeNull();
+  });
+
+  it("carries a key naming what the picture's colours are", () => {
+    // A photograph is read without a key, but the legend has no bar to
+    // show for a composite, and without a key it would fall back to the
+    // stylesheet's default gradient: so three swatches say what the
+    // colours are, and nothing about the night side, which is not drawn.
+    const spec = variableSpec("truecolor")!;
+    expect(spec.legend()).toEqual([]);
+    const key = spec.legendKey?.() ?? [];
+    expect(key.map((swatch) => swatch.label)).toEqual(["Cloud and snow", "Sea", "Land and vegetation"]);
+    for (const swatch of key) expect(swatch.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(spec.title.join(" ")).toBe("True Color");
+    expect(spec.label()).toBe("True colour (visible composite)");
+    expect(spec.ground).toBe("slate");
+    expect(spec.urlAliases).toContain("visible");
   });
 });
 
