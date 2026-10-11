@@ -337,6 +337,24 @@ class KeyTests(unittest.TestCase):
             satellite_fetch.window_slots(METEOSAT, SLOT_1200, 1, cadence_seconds=900)
 
 
+class PluginEnvironmentTests(unittest.TestCase):
+    @requires_hdf5plugin
+    def test_the_filter_directory_goes_ahead_of_one_already_named(self):
+        import hdf5plugin  # noqa: PLC0415
+
+        from xuebuild.satellite.readers import HDF5_PLUGIN_VARIABLE, hdf5_plugin_environment  # noqa: PLC0415
+
+        with mock.patch.dict(os.environ, {HDF5_PLUGIN_VARIABLE: "/elsewhere/plugins"}):
+            paths = hdf5_plugin_environment()[HDF5_PLUGIN_VARIABLE].split(os.pathsep)
+        self.assertEqual(paths, [str(hdf5plugin.PLUGIN_PATH), "/elsewhere/plugins"])
+        with mock.patch.dict(os.environ, {HDF5_PLUGIN_VARIABLE: str(hdf5plugin.PLUGIN_PATH)}):
+            paths = hdf5_plugin_environment()[HDF5_PLUGIN_VARIABLE].split(os.pathsep)
+        self.assertEqual(paths, [str(hdf5plugin.PLUGIN_PATH)])
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(HDF5_PLUGIN_VARIABLE, None)
+            self.assertEqual(hdf5_plugin_environment()[HDF5_PLUGIN_VARIABLE], str(hdf5plugin.PLUGIN_PATH))
+
+
 class GeometryTests(unittest.TestCase):
     def test_the_needed_chunks_are_the_rows_inside_sixty_degrees(self) -> None:
         # 60° of latitude on the sub-satellite meridian is seen 0.1402 rad
