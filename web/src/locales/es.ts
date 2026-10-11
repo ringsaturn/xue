@@ -175,6 +175,8 @@ export const es: Record<MessageKey, string> = {
   playbackSpeed: "Velocidad de reproducción",
   gifExportAria: "Guardar la animación como GIF",
   gifCancelAria: "Cancelar el GIF",
+  mp4ExportAria: "Guardar la animación como vídeo MP4",
+  mp4CancelAria: "Cancelar el MP4",
   readingManifest: "Cargando el manifiesto",
   forecastHourAria: "Hora de predicción",
   forecastDaysAria: "Tramos diarios de predicción",

@@ -297,7 +297,16 @@ import {
   type VideoStreamSource,
 } from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
-import { deliverGif, exportGif, gifFileName, gifFrameWindow, type GifHost } from "./gifexport";
+import {
+  deliverGif,
+  exportGif,
+  GIF_MAX_FRAMES,
+  gifFileName,
+  gifFrameWindow,
+  type GifHost,
+  type GifProgress,
+} from "./gifexport";
+import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileName } from "./mp4export";
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 
@@ -1106,6 +1115,8 @@ const playLabel = required<HTMLElement>("play-label");
 const speedButton = required<HTMLButtonElement>("speed-button");
 const gifButton = required<HTMLButtonElement>("gif-button");
 const gifLabel = required<HTMLElement>("gif-label");
+const mp4Button = required<HTMLButtonElement>("mp4-button");
+const mp4Label = required<HTMLElement>("mp4-label");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const volumeTile = required<HTMLButtonElement>("volume-tile");
 const speedLabel = required<HTMLElement>("speed-label");
@@ -3787,12 +3798,14 @@ function handleStreamMessage(message: {
   if (activeSession === session) refreshDataCard(session);
 }
 
-/** The GIF export under way, aborted by a second press or by a new dataset. */
-let gifExport: AbortController | null = null;
+/** The loop export under way, GIF or MP4, aborted by a second press or by a
+ * new dataset. One at a time: an export drives the playhead. */
+let loopExport: AbortController | null = null;
 
 const gifHost: GifHost = {
   map,
   show: (index) => trySelectFrame(index),
+  blend: (index, weight) => index + 1 < frameCount() && blendFrames(index, index + 1, weight),
   caption: (index) => ({
     title: variableTitle.textContent ?? "",
     code: variableCode.textContent ?? "",
@@ -3817,54 +3830,107 @@ function gifCredit(): string {
   return [window.location.host, ...notices, "© OPENSTREETMAP · PROTOMAPS"].join(" · ");
 }
 
-function setGifState(running: boolean): void {
-  gifButton.classList.toggle("is-busy", running);
-  const label = t(running ? "gifCancelAria" : "gifExportAria");
-  gifButton.setAttribute("aria-label", label);
-  gifButton.title = label;
-  if (!running) gifLabel.textContent = "GIF";
+/** One of the two files the loop is saved as, and the pill that saves it. */
+interface LoopExportKind {
+  button: HTMLButtonElement;
+  label: HTMLElement;
+  /** What the pill reads at rest, an instrument word in every locale. */
+  idle: string;
+  exportAria: MessageKey;
+  cancelAria: MessageKey;
+  /** Frames of data in one file at most. */
+  maxFrames: number;
+  run: (host: GifHost, frames: number[], onProgress: (progress: GifProgress) => void, signal: AbortSignal) => Promise<Blob>;
+  fileName: (code: string, validTime: number) => string;
+  deliver: (blob: Blob, name: string) => Promise<void>;
+  /** The pill's reading while it runs. */
+  progress: (progress: GifProgress) => string;
+}
+
+const percent = ({ done, total }: GifProgress): string => `${Math.round((done / total) * 100)}%`;
+
+const LOOP_EXPORTS: Record<"gif" | "mp4", LoopExportKind> = {
+  gif: {
+    button: gifButton,
+    label: gifLabel,
+    idle: "GIF",
+    exportAria: "gifExportAria",
+    cancelAria: "gifCancelAria",
+    maxFrames: GIF_MAX_FRAMES,
+    run: exportGif,
+    fileName: gifFileName,
+    deliver: deliverGif,
+    progress: (progress) => (progress.phase === "capture" ? `${progress.done}/${progress.total}` : percent(progress)),
+  },
+  mp4: {
+    button: mp4Button,
+    label: mp4Label,
+    idle: "MP4",
+    exportAria: "mp4ExportAria",
+    cancelAria: "mp4CancelAria",
+    maxFrames: MP4_MAX_FRAMES,
+    run: exportMp4,
+    fileName: mp4FileName,
+    deliver: deliverMp4,
+    // The MP4 samples hundreds of pictures; a count would not fit the pill.
+    progress: percent,
+  },
+};
+
+function setExportState(kind: LoopExportKind, running: boolean): void {
+  kind.button.classList.toggle("is-busy", running);
+  const label = t(running ? kind.cancelAria : kind.exportAria);
+  kind.button.setAttribute("aria-label", label);
+  kind.button.title = label;
+  if (!running) kind.label.textContent = kind.idle;
+}
+
+/** Whether the loop can be saved now: a time axis, and no export running. */
+function setLoopExportEnabled(enabled: boolean): void {
+  gifButton.disabled = !enabled;
+  mp4Button.disabled = !enabled;
 }
 
 /** Capture the loop from the frame on screen and hand the file over, then
  * put the frame and the playback back as they were. */
-async function saveGif(): Promise<void> {
-  if (gifExport) {
-    gifExport.abort();
+async function saveLoop(kind: LoopExportKind): Promise<void> {
+  if (loopExport) {
+    loopExport.abort();
     return;
   }
   if (!activeVariable || isStaticAxis()) return;
   const controller = new AbortController();
-  gifExport = controller;
+  loopExport = controller;
   const resumeVariable = activeVariable;
   const resumeIndex = activeFrameIndex ?? Number(slider.value);
   const resumePlaying = playing;
   stopPlayback();
-  setGifState(true);
-  const frames = gifFrameWindow(frameCount(), resumeIndex);
-  const name = gifFileName(variableCode.textContent ?? "", frameValidTime(frames[0]!));
+  setExportState(kind, true);
+  const frames = gifFrameWindow(frameCount(), resumeIndex, kind.maxFrames);
+  const name = kind.fileName(variableCode.textContent ?? "", frameValidTime(frames[0]!));
   let failed = false;
   try {
-    const blob = await exportGif(
+    const blob = await kind.run(
       gifHost,
       frames,
-      ({ phase, done, total }) => {
-        gifLabel.textContent = phase === "capture" ? `${done}/${total}` : `${Math.round((done / total) * 100)}%`;
+      (progress) => {
+        kind.label.textContent = kind.progress(progress);
       },
       controller.signal,
     );
-    await deliverGif(blob, name);
+    await kind.deliver(blob, name);
   } catch (error) {
     if (!(error instanceof DOMException && error.name === "AbortError")) {
-      console.error("GIF export failed", error);
+      console.error(`${kind.idle} export failed`, error);
       failed = true;
     }
   } finally {
-    gifExport = null;
-    setGifState(false);
+    loopExport = null;
+    setExportState(kind, false);
     if (failed) {
-      gifLabel.textContent = "ERR";
+      kind.label.textContent = "ERR";
       setTimeout(() => {
-        if (!gifExport) gifLabel.textContent = "GIF";
+        if (!loopExport) kind.label.textContent = kind.idle;
       }, 3000);
     }
     // A new dataset aborts the export and owns the frame from then on.
@@ -3961,14 +4027,22 @@ function advancePlayback(timestamp: number): void {
  * magnitude after the mix is a blend of the two wind vectors rather than of
  * two speeds. */
 function blendTowardNext(timestamp: number): void {
-  const session = activeSession;
-  const slot = primarySlot();
-  if (!session || !slot || !activeVariable || activeFrameIndex === null) return;
-  if (slot.displayedReal !== session.id) return;
+  if (activeFrameIndex === null) return;
   const next = activeFrameIndex + 1;
   if (next >= frameCount()) return;
-  const weight = 1 - (nextFrameAt - timestamp) / currentHoldMs;
-  const current = framePlanes(session, activeFrameIndex);
+  blendFrames(activeFrameIndex, next, 1 - (nextFrameAt - timestamp) / currentHoldMs);
+}
+
+/** Set the primary field, the overlays and the volume `weight` of the way
+ * from frame `index` toward `next`; whether the primary's pair was there to
+ * blend. The loop exports sample the sweep through this too. */
+function blendFrames(index: number, next: number, weight: number): boolean {
+  const session = activeSession;
+  const slot = primarySlot();
+  if (!session || !slot || !activeVariable) return false;
+  if (slot.displayedReal !== session.id) return false;
+  let blended = false;
+  const current = framePlanes(session, index);
   const upcoming = framePlanes(session, next);
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
@@ -3980,20 +4054,23 @@ function blendTowardNext(timestamp: number): void {
       upcoming.map((frame) => frame.plane),
       weight,
     );
+    blended = true;
   } else if (current && upcoming && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
     ensureSlotGrid(slot, session);
     slot.layer.setBlend(
-      displayPlane(session, activeFrameIndex, current),
+      displayPlane(session, index, current),
       displayPlane(session, next, upcoming),
       weight,
       sessionCoverage(session, current[0]!.tiles),
     );
+    blended = true;
   }
   // The lines blend their own pair on the same clock, so at any instant the
   // two slots sit at the same fraction of the step. An overlay still catching
   // up (its plane for this frame not decoded, or not on its axis) holds.
-  for (const overlay of overlaySlots()) blendOverlay(overlay, activeFrameIndex, next, weight);
-  blendVolumeOverlay(activeFrameIndex, next, weight);
+  for (const overlay of overlaySlots()) blendOverlay(overlay, index, next, weight);
+  blendVolumeOverlay(index, next, weight);
+  return blended;
 }
 
 /** Sweep one overlay between the planes it holds for two primary frames,
@@ -4015,7 +4092,7 @@ function blendOverlay(slot: RasterSlot, index: number, next: number, weight: num
 }
 
 function startPlayback(): void {
-  if (!activeVariable || slider.disabled || playing || !ready || gifExport) return;
+  if (!activeVariable || slider.disabled || playing || !ready || loopExport) return;
   hideError();
   playing = true;
   restartCadence(activeFrameIndex ?? Number(slider.value));
@@ -7663,7 +7740,7 @@ function syncTimeline(session: VariableSession): void {
   slider.disabled = isStaticAxis();
   playButton.disabled = isStaticAxis();
   speedButton.disabled = isStaticAxis();
-  gifButton.disabled = isStaticAxis();
+  setLoopExportEnabled(!isStaticAxis());
 }
 
 /** An end label of the track: a lead time in whole hours, `+0H` to `+240H`. */
@@ -8826,8 +8903,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   slider.disabled = true;
   playButton.disabled = true;
   speedButton.disabled = true;
-  gifButton.disabled = true;
-  gifExport?.abort();
+  setLoopExportEnabled(false);
+  loopExport?.abort();
   setVariableButtonsDisabled(true);
   document.body.classList.add("is-data-loading");
   dataCard.setAttribute("aria-busy", "true");
@@ -8966,7 +9043,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     slider.disabled = isStaticAxis();
     playButton.disabled = isStaticAxis();
     speedButton.disabled = isStaticAxis();
-    gifButton.disabled = isStaticAxis();
+    setLoopExportEnabled(!isStaticAxis());
     setVariableButtonsDisabled(false);
     if (!isStaticAxis() && !reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
   } catch (error) {
@@ -9231,7 +9308,12 @@ playButton.addEventListener("click", () => {
 // One button cycling the ladder: at four rungs a menu would cost more taps
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
-gifButton.addEventListener("click", () => void saveGif());
+gifButton.addEventListener("click", () => void saveLoop(LOOP_EXPORTS.gif));
+mp4Button.addEventListener("click", () => void saveLoop(LOOP_EXPORTS.mp4));
+// The pill appears only where the browser can encode H.264 itself.
+void isMp4ExportSupported().then((supported) => {
+  mp4Button.hidden = !supported;
+});
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
 /** Poll the live pointer; a changed manifest re-initializes onto the new

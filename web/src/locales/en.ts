@@ -328,6 +328,10 @@ export const en = {
    * translated, and turns into the way to cancel while it runs. */
   gifExportAria: "Save the loop as a GIF",
   gifCancelAria: "Cancel the GIF",
+  /** The MP4 pill beside it, shown only where the browser encodes H.264;
+   * it reads "MP4" and a percentage while it runs. */
+  mp4ExportAria: "Save the loop as an MP4 video",
+  mp4CancelAria: "Cancel the MP4",
   readingManifest: "Loading manifest",
   forecastHourAria: "Forecast hour",
   forecastDaysAria: "Daily forecast segments",
