@@ -89,9 +89,9 @@ infrared window at 10.4 µm; the exact central wave number is in the
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
 NOAA-hosted sources fetch six infrared windows and the solar bands (four
 on AHI, three on ABI) and publish `ir104`, the Dust RGB, the dust
-confidences and the true colour; Meteosat fetches three windows and
-publishes the first two (§"The dust confidences" says why not the
-confidences, §"The true colour" why not the picture).
+confidences and the true colour; Meteosat fetches three windows and the
+four solar channels and publishes `ir104`, the Dust RGB and the true
+colour (§"The dust confidences" says why not the confidences).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
@@ -227,11 +227,14 @@ MB each; an ABI slot's 0.5 km red file is 430 MB by day and 200 at night,
 the two 1 km ones 100 MB. A Himawari round therefore downloads some 700 MB
 of tiles against the windows' 140, a GOES round some 630 against 140,
 warps the 0.5 km band (22 000 × 22 000 cells) once, and caches the frames
-like any channel's. Meteosat publishes no true colour: the FCI reader
-converts radiances to brightness temperature and has no reflectance path
-yet (a reflectance there is `π L / E_sun`, the channel's effective solar
-irradiance being a scalar of its `measured` group), and the hourly window
-would show one sunlit frame in three.
+like any channel's. On Meteosat the solar channels cost no download (an
+FCI chunk carries every channel); the reader turns their radiances into
+the same reflectance factor the NOAA products carry, `π L d² / E_sun`
+(§"The FCI reader"), FCI's own 0.51 µm band takes the AHI's hybrid green,
+and the hourly 24-hour window holds some twelve sunlit frames. FCI's
+blue band is 0.444 µm, bluer than the AHI's 0.47, under the family id
+`vis047` (the `band` block carries its wave number); the recipe is not
+changed for it.
 
 ### The dust confidences
 
@@ -514,16 +517,29 @@ files are opened, and the reader does them itself:
   (`hdf5_plugin_environment`; an environment that already names one is
   left alone);
 - the values are radiances: the reader reads the channel's codes with
-  `gdal_translate`, unpacks them, and converts them with the channel's
-  own Planck coefficients, scalar variables of its `measured` group read
-  through `gdalmdiminfo` — `BT = (c2 ν / ln(1 + c1 ν³ / L) − b) / a`, the
-  conversion the product documents — then writes an Int16 strip in
-  steps of 1/128 K above 100 K (`FCI_BT_SCALE` / `FCI_BT_OFFSET`; a raw
-  file and a VRT that carries the packing and the unit). The step is a
-  binary fraction on purpose: a decimal one such as 0.01 K puts some
-  values an ulp either side of a codebook half-step depending on whether
-  a platform fuses `code × scale + offset`, and the two encoders then
-  disagree by one code on one cell;
+  `gdal_translate`, unpacks them, and converts them by the channel's
+  kind. An infrared channel takes its own Planck coefficients, scalar
+  variables of its `measured` group read through `gdalmdiminfo` —
+  `BT = (c2 ν / ln(1 + c1 ν³ / L) − b) / a`, the conversion the product
+  documents — into an Int16 strip in steps of 1/128 K above 100 K
+  (`FCI_BT_SCALE` / `FCI_BT_OFFSET`). A solar channel takes its
+  effective solar irradiance at 1 AU (`channel_effective_solar_irradiance`
+  in the same group, mW m⁻² (cm⁻¹)⁻¹) and the mean Earth–Sun distance of
+  the chunk's rows (`/state/celestial/earth_sun_distance`, km, over
+  1.495978707e8 for AU): `reflectance_factor = π L d² / E_sun`, not
+  divided by the cosine of the solar zenith (the ISatSS and CMIPF
+  reflectances are not either; the true colour producer divides), into
+  an Int16 strip in steps of 1/4096 from zero (`FCI_REFL_SCALE`;
+  −0.01 … 1.26 is codes −41 … 5161). Either way a raw file and a VRT
+  that carries the packing and the unit (`K` or `1`), and the frame's
+  packing sidecar records the channel's `kind`. The steps are binary
+  fractions on purpose: a decimal one such as 0.01 K puts some values an
+  ulp either side of a codebook half-step depending on whether a
+  platform fuses `code × scale + offset`, and the two encoders then
+  disagree by one code on one cell. A solar channel's group carries the
+  Planck variables too, holding their fill value, so asking it for
+  Planck coefficients is an error ("not an infrared channel?"), as is
+  asking an infrared group for a solar irradiance;
 - the grid mapping (`/data/mtg_geos_projection`: sweep `y`, height
   35786400 m, WGS84, longitude 0) sits in a parent group GDAL does not
   connect to the variable, so the strip's VRT carries the geostationary
@@ -531,9 +547,12 @@ files are opened, and the reader does them itself:
   the chunk's scan-angle coordinates (radians, a column or row number
   packed with a scale and offset) times the height; the strip is written
   west to east and north to south whichever way GDAL read the file. The
+  infrared channels are on a 2 km grid (5568 columns, row step
+  5.5887e-5 rad), the solar ones on a 1 km grid (11 136 columns, half the
+  step, the same disk); a chunk is a fortieth of the rows of either. The
   reader checks the packing of the rows and the grid's width against the
-  constants it plans chunks with (`FCI_IR_GRID`, `FCI_IR_ANGLE_STEP`,
-  `FCI_IR_ANGLE_OFFSET`), so a product change is an error.
+  constants of the grid the channel's `resolution_km` names (`FCI_GRIDS`),
+  and plans chunks with them, so a product change is an error.
 
 The strips of a channel are mosaicked with `gdalbuildvrt`; the projector
 warps that. A chunk carries every channel, so a slot's files are shared
@@ -679,7 +698,10 @@ files, one warp per channel, one composition, one stack per variable and
 a conversion, three to four minutes, so the live window ends fifteen to
 twenty minutes behind real time; an FCI cycle is in the store some five
 minutes after its sensing ends, and its round downloads 900 MB and
-converts 38 strips per channel, five to ten minutes once an hour.
+converts 38 strips per channel for seven channels — the four solar ones
+on the 1 km grid, which read no slower than an infrared one, since a
+strip's time is opening the chunk — some ten to fifteen minutes once an
+hour.
 `.github/workflows/publish-himawari.yml`, `publish-goeseast.yml`,
 `publish-goeswest.yml` and `publish-meteosat.yml` each run one round per
 job on a ten-minute cron and install `gdal-bin` whichever encoder
@@ -801,9 +823,12 @@ own response parsed, the token minted, refused and renewed and a rate
 limit waited out against a fake opener, the chunk names, the cycle's
 slot, the needed chunks and the elevation angle behind them, the Planck
 conversion against the formula, the strip's footprint and its numbers
-read back through GDAL's own unscaling, the producer with three inputs
-held to `dust_rgb` with the 10.5 µm plane as the green minuend, the
-hourly slots against a store that lists ten-minute cycles, the series,
+read back through GDAL's own unscaling, the vis_06 strip on the 1 km grid
+held to `π L d² / E_sun` off the file's own constants cell for cell (the
+algorithm, not the 2017 test product's absolute values), the solar frames
+and the true colour composed from them with the night side empty, the
+producer with three inputs held to `dust_rgb` with the 10.5 µm plane as
+the green minuend, the hourly slots against a store that lists ten-minute cycles, the series,
 the ingest, the conversion with the FCI band block and the hourly axis,
 and the native encoder byte for byte when the wheel knows the source.
 The GDAL-backed cases skip without `hdf5plugin`.
