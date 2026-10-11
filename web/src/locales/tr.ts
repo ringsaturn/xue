@@ -179,6 +179,7 @@ export const tr: Record<MessageKey, string> = {
   gifExportAria: "Döngüyü GIF olarak kaydet",
   gifCancelAria: "GIF’i iptal et",
   mp4ExportAria: "Döngüyü MP4 video olarak kaydet",
+  mp4SizeAria: "Video boyutu",
   mp4CancelAria: "MP4’ü iptal et",
   readingManifest: "Manifest yükleniyor",
   forecastHourAria: "Tahmin saati",

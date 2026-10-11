@@ -1,6 +1,7 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 
 import type { GifWorkerRequest, GifWorkerResponse } from "./gif.worker";
+import type { Mp4SizeId } from "./mp4export";
 
 /**
  * The loop on screen saved as an animated GIF: the frames from the one
@@ -42,6 +43,8 @@ export interface GifHost {
    * decoded (the picture then holds, as it does on screen). Exports that
    * sample between frames use it; the GIF never does. */
   blend?(index: number, weight: number): boolean;
+  /** The size the MP4 is cut to (`mp4export.ts`); 1080p when absent. */
+  mp4Size?(): Mp4SizeId;
 }
 
 /** What the frames are drawn onto, once the basemap is in. */

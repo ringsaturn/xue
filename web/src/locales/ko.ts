@@ -178,6 +178,7 @@ export const ko: Record<MessageKey, string> = {
   gifExportAria: "애니메이션을 GIF로 저장",
   gifCancelAria: "GIF 저장 취소",
   mp4ExportAria: "애니메이션을 MP4 동영상으로 저장",
+  mp4SizeAria: "동영상 해상도",
   mp4CancelAria: "MP4 저장 취소",
   readingManifest: "매니페스트 읽는 중",
   forecastHourAria: "예보 시간",
