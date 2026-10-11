@@ -303,8 +303,12 @@ and the window shrinks to fit it.
   Mapterhorn Terrarium template the hillshade reads (the planet's z12; the
   regional archives are not asked, the plugin overzooms instead), and adds
   a vector source whose tiles the plugin's protocol answers from a worker:
-  minor and major lines at 200/1000 m from zoom 9, 100/500 at 11, 50/250 at
-  13 and 20/100 at 14, the major ones labelled in metres along the line.
+  three tiers a rung — 200/200/1000 m from zoom 9, 100/200/1000 at 11,
+  50/100/500 at 13, 25/50/250 at 15 — where each rung's middle tier is the
+  rung before's fine one, so zooming in adds lines without reweighting any;
+  the fine tier is drawn faint, fading in across its rung and without a
+  casing, so a steep slope reads as a tone, and only the index tier is
+  labelled in metres along the line.
   The two layers go directly under the forecast anchor so they draw over
   every field and line slot but under the coast and the basemap labels; a
   field attaching later lands above them, so a `styledata` listener moves
