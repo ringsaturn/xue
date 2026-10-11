@@ -18,8 +18,9 @@ Everything else is the ``ifshres`` series-file path: one CF NetCDF per
 variable, the cycle as the epoch of the ``time`` coordinate, the regional
 grid snapped to the thousandth of a degree, a NaN fill. Neither encoder
 learns any WRF arithmetic — destaggering, the wind rotation, the dewpoint,
-the layered cloud, the cloud water's interpolation onto the volume's
-altitudes and the Lambert → 0.005° regrid are the tool's.
+the layered cloud, the 80 m wind off the model levels, the sea level
+reduction, the cloud water's interpolation onto the volume's altitudes and
+the Lambert → 0.005° regrid are the tool's.
 
 The ``cloud3d`` volume is the second volume bundle after MRMS's ``refl3d``:
 24 ``clw<m>`` levels of cloud water (0/1/22 on the altitude surface 102,
@@ -66,8 +67,8 @@ RUN_TIME = datetime(2026, 10, 10, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 20, 16
 
 #: The published bundles, in manifest order: the surface set, the cloud
-#: layers, the boundary layer, the radiation, the terrain, the 10 m pair and
-#: the cloud water volume.
+#: layers, the boundary layer, the radiation, the terrain, the sea level
+#: pressure, the 10 m and 80 m pairs and the cloud water volume.
 BUNDLES = (
     "tmp2m",
     "prate",
@@ -80,11 +81,16 @@ BUNDLES = (
     "hpbl",
     "dswrf",
     "orog",
+    "prmsl",
     "wind10m",
+    "wind80m",
     "cloud3d",
 )
 #: The tool's surface series; the cloud water levels follow them.
-SURFACE_INPUTS = ("tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog")
+SURFACE_INPUTS = (
+    "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog",
+    "ugrd80m", "vgrd80m", "prmsl",
+)  # fmt: skip
 
 
 def localized(text: str) -> dict[str, str]:
@@ -142,7 +148,7 @@ class SourceRegistryTests(unittest.TestCase):
             with self.subTest(hour=off_axis), self.assertRaisesRegex(DownloadError, "from f001"):
                 SPEC.forecast_hours(off_axis)
 
-    def test_it_publishes_thirteen_bundles_and_reads_the_total_for_the_rate(self) -> None:
+    def test_it_publishes_fifteen_bundles_and_reads_the_total_for_the_rate(self) -> None:
         self.assertEqual(published_bundle_ids(SPEC), BUNDLES)
         self.assertEqual(SPEC.core_bundle_ids, ("tmp2m",))
         self.assertEqual(SPEC.input_variable_ids, SURFACE_INPUTS + CLOUD_WATER_VARIABLE_IDS)
@@ -150,6 +156,12 @@ class SourceRegistryTests(unittest.TestCase):
             variable_spec(variable_id)
         self.assertNotIn("apcp", published_bundle_ids(SPEC), "the total is an input only")
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "prate"), ("apcp",))
+        # The two wind pairs are read, not derived; the sea level pressure
+        # arrives in pascals, which the converter turns into hectopascals.
+        self.assertEqual(SPEC.bundle_vector_ids, ("wind10m", "wind80m"))
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "wind80m"), ("ugrd80m", "vgrd80m"))
+        self.assertNotIn("wind80m", binconvert.DERIVED_VECTORS)
+        self.assertEqual(observation.accepted_series_units(variable_spec("prmsl")), ("hPa", "Pa"))
         self.assertTrue(SPEC.interval_precipitation)
         self.assertFalse(SPEC.accumulated_precipitation or SPEC.averaged_precipitation)
         self.assertEqual(SPEC.statistical_processes, (("prate", 0),))
@@ -271,7 +283,7 @@ class SeriesTests(unittest.TestCase):
 
     def test_every_input_is_a_series_of_its_own(self) -> None:
         files = observation.series_files(SERIES_DIR, SPEC.input_variable_ids)
-        self.assertEqual(len(files), 37)
+        self.assertEqual(len(files), 40)
         self.assertEqual(sorted(files), sorted(SPEC.input_variable_ids))
         for variable_id, path in files.items():
             self.assertEqual(path.name, f"woof.2026101006.{variable_id}.nc")
@@ -327,7 +339,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # f000 is the GFS analysis on the nest and is never written, so the
         # first frame of every bundle is hour 1 — the rate's included, since
         # the total is on every frame rather than missing at an analysis.
-        for name in ("tmp2m", "prate", "wind10m", "lcdc", "cloud3d"):
+        for name in ("tmp2m", "prate", "prmsl", "wind10m", "wind80m", "lcdc", "cloud3d"):
             with self.subTest(bundle=name):
                 self.assertEqual(
                     self.bundle(name).metadata["time"],
@@ -355,6 +367,35 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 decoded = codebook.decode(np.asarray(bundle.decode_plane(1, 1)).reshape(HEIGHT, WIDTH))
                 source = np.clip(source_plane(name, 1), codebook.minimum, codebook.maximum)
                 self.assertLessEqual(float(np.abs(decoded - source).max()), codebook.metadata()["scale"] / 2 + 1e-9)
+
+    def test_the_sea_level_pressure_is_the_series_pascals_in_hectopascals(self) -> None:
+        bundle = self.bundle("prmsl")
+        codebook = PROFILES["quality"]["prmsl"]
+        self.assertEqual(bundle.metadata["variables"][0]["unit"], "hPa")
+        for hour in (1, 2):
+            with self.subTest(hour=hour):
+                decoded = codebook.decode(np.asarray(bundle.decode_plane(1, hour)).reshape(HEIGHT, WIDTH))
+                source = source_plane("prmsl", hour) / 100.0
+                self.assertLessEqual(float(np.abs(decoded - source).max()), codebook.metadata()["scale"] / 2 + 1e-9)
+                # A window around the summit on a quiet evening: a few
+                # hectopascals either side of 1018.
+                self.assertTrue(1010.0 < float(decoded.min()) and float(decoded.max()) < 1026.0, (decoded.min(), decoded.max()))
+
+    def test_the_80_m_wind_is_the_pair_the_tool_read_off_the_model_levels(self) -> None:
+        bundle = self.bundle("wind80m")
+        variables = bundle.metadata["variables"]
+        self.assertEqual([variable["id"] for variable in variables], ["ugrd80m", "vgrd80m"])
+        self.assertEqual([variable["parameter"]["scaledValueOfFirstFixedSurface"] for variable in variables], [80, 80])
+        codebook = PROFILES["quality"]["ugrd80m"]
+        for numeric_id, variable_id in enumerate(("ugrd80m", "vgrd80m"), start=1):
+            with self.subTest(component=variable_id):
+                decoded = codebook.decode(np.asarray(bundle.decode_plane(numeric_id, 1)).reshape(HEIGHT, WIDTH))
+                self.assertLessEqual(float(np.abs(decoded - source_plane(variable_id, 1)).max()), codebook.metadata()["scale"] / 2 + 1e-9)
+        # Over the summit ridge the 80 m wind runs faster than the 10 m wind
+        # in most cells, and never slower by more than the ridge's shelter.
+        speed_80 = np.hypot(source_plane("ugrd80m", 1), source_plane("vgrd80m", 1))
+        speed_10 = np.hypot(source_plane("ugrd10m", 1), source_plane("vgrd10m", 1))
+        self.assertGreater(float(np.mean(speed_80 > speed_10)), 0.5)
 
     def test_the_rate_is_the_hour_s_total_by_interval_rate(self) -> None:
         # Hour 1's total covers the hour from the run time, hour 2's the hour

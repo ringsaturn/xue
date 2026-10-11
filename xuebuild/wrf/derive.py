@@ -9,6 +9,12 @@ from ..variables import CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS
 
 GRAVITY = 9.81
 KELVIN = 273.15
+#: Gas constant of dry air, J/(kg·K), and the standard lapse rate, K/m, of
+#: the sea level reduction.
+R_DRY = 287.05
+LAPSE_RATE = 0.0065
+#: The hub height the ``wind80m`` pair is read at, metres above ground.
+WIND_80M_AGL = 80.0
 # The same Bolton (1980) constants binconvert.derive_theta_e inverts the
 # dew point with, and the same floor on a dry cell's mixing ratio.
 _MINIMUM_Q = 1e-7
@@ -86,6 +92,48 @@ def altitude_levels(values: np.ndarray, z_mass: np.ndarray, terrain: np.ndarray,
     return out.reshape((len(levels), *values.shape[1:]))
 
 
+def above_ground_level(values: np.ndarray, z_mass: np.ndarray, terrain: np.ndarray, height: float) -> np.ndarray:
+    """A field on the mass levels interpolated, column by column, onto one
+    height above the model ground: linear between the two mass levels that
+    bracket it, the lowest level's value under the lowest level and the top
+    level's above the top. The lowest mass level sits a few metres to a few
+    tens of metres above the ground, so 80 m is bracketed throughout."""
+    nz = values.shape[0]
+    z = z_mass.reshape(nz, -1) - terrain.reshape(1, -1)
+    v = values.reshape(nz, -1)
+    columns = np.arange(z.shape[1])
+    upper = np.sum(z < height, axis=0)
+    above = np.clip(upper, 1, nz - 1)
+    z0, z1 = z[above - 1, columns], z[above, columns]
+    v0, v1 = v[above - 1, columns], v[above, columns]
+    interpolated = v0 + (height - z0) / (z1 - z0) * (v1 - v0)
+    out = np.where(upper == 0, v[0], np.where(upper == nz, v[-1], interpolated))
+    return out.reshape(values.shape[1:])
+
+
+def wind_80m(fields: dict[str, np.ndarray], z_mass: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The earth-relative wind 80 m above the ground: ``U`` and ``V``
+    destaggered onto the mass points, read at 80 m AGL in every column,
+    then turned with the local map rotation."""
+    u = above_ground_level(destagger(fields["U"], axis=2), z_mass, fields["HGT"], WIND_80M_AGL)
+    v = above_ground_level(destagger(fields["V"], axis=1), z_mass, fields["HGT"], WIND_80M_AGL)
+    return rotate_to_earth(u, v, fields["COSALPHA"], fields["SINALPHA"])
+
+
+def sea_level_pressure(psfc: np.ndarray, t2: np.ndarray, q2: np.ndarray, hgt: np.ndarray) -> np.ndarray:
+    """Surface pressure (Pa) reduced to mean sea level, in Pa: the hypsometric
+    equation over the terrain height with the column's mean virtual
+    temperature taken as the 2 m virtual temperature warmed down the
+    standard lapse rate to half the height. A nest is a few tens of
+    kilometres across and its sea level pressure is a background field,
+    not a product, so the plain reduction serves; WRF's own ``slp``
+    (the pressure extrapolated from the model level 100 hPa above the
+    ground) would need the 3D state for a difference under a hectopascal."""
+    virtual = t2 * (1.0 + 0.608 * q2)
+    mean = virtual + LAPSE_RATE * hgt / 2.0
+    return psfc * np.exp(GRAVITY * hgt / (R_DRY * mean))
+
+
 def rain_total(fields: dict[str, np.ndarray]) -> np.ndarray:
     """The run's accumulated precipitation in mm: grid-scale, cumulus and
     shallow-cumulus together."""
@@ -110,6 +158,8 @@ def derive(fields: dict[str, np.ndarray], previous_rain: np.ndarray) -> dict[str
     out["hpbl"] = fields["PBLH"]
     out["dswrf"] = fields["SWDOWN"]
     out["orog"] = fields["HGT"]
+    out["ugrd80m"], out["vgrd80m"] = wind_80m(fields, z_mass)
+    out["prmsl"] = sea_level_pressure(fields["PSFC"], fields["T2"], fields["Q2"], fields["HGT"])
     # Cloud water mixing ratio, kg/kg in WRF, in the registry's g/kg.
     cloud_water = altitude_levels(1000.0 * fields["QCLOUD"], z_mass, fields["HGT"], CLOUD_WATER_LEVELS_M)
     out.update(zip(CLOUD_WATER_VARIABLE_IDS, cloud_water))

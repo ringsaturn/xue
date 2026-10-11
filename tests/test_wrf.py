@@ -42,6 +42,10 @@ Z_W = np.array([0.0, 2000.0, 6000.0, 10000.0])
 CLDFRA_COLUMN = np.array([0.2, 0.5, 0.0])
 #: Cloud water on the mass levels, kg/kg: 1 g/kg at 1 km, half that at 4 km.
 QCLOUD_COLUMN = np.array([0.001, 0.0005, 0.0])
+#: Grid-relative U on the mass levels, uniform in the horizontal: 80 m AGL
+#: is under the lowest level (1 km MSL over 100 to 150 m of terrain), so
+#: the 80 m wind is the lowest level's 10 m/s turned earth-relative.
+U_COLUMN = np.array([10.0, 20.0, 30.0])
 
 
 def _coordinates() -> tuple[np.ndarray, np.ndarray]:
@@ -106,8 +110,8 @@ def write_wrfout(directory: Path, hours: range, *, latitude_shift: float = 0.0) 
             put("RAINSH", np.zeros((NY, NX)), surface)
             put("PHB", np.broadcast_to((Z_W * 9.81)[:, None, None], (NZ + 1, NY, NX)), ("bottom_top_stag", *surface))
             put("PH", np.zeros((NZ + 1, NY, NX)), ("bottom_top_stag", *surface))
-            put("U", np.broadcast_to(np.arange(NX + 1, dtype=float), (NZ, NY, NX + 1)), ("bottom_top", "south_north", "west_east_stag"))
-            put("V", np.broadcast_to(np.arange(NY + 1, dtype=float)[:, None], (NZ, NY + 1, NX)), ("bottom_top", "south_north_stag", "west_east"))
+            put("U", np.broadcast_to(U_COLUMN[:, None, None], (NZ, NY, NX + 1)), ("bottom_top", "south_north", "west_east_stag"))
+            put("V", np.zeros((NZ, NY + 1, NX)), ("bottom_top", "south_north_stag", "west_east"))
             cldfra = np.broadcast_to(CLDFRA_COLUMN[:, None, None], (NZ, NY, NX)).copy()
             cldfra[2, 0, 0] = 0.4
             put("CLDFRA", cldfra, ("bottom_top", *surface))
@@ -156,6 +160,62 @@ class DerivationTests(unittest.TestCase):
         self.assertAlmostEqual(float(covers["mcdc"][0, 0]), 50.0)
         self.assertAlmostEqual(float(covers["hcdc"][0, 0]), 0.0)
         self.assertAlmostEqual(float(covers["tcdc"][0, 0]), 100.0 * (1.0 - 0.8 * 0.5))
+
+    def test_above_ground_level_interpolates_between_the_bracketing_levels(self) -> None:
+        from xuebuild.wrf.derive import above_ground_level
+
+        # Three columns on three mass levels. The first stands on 1 km of
+        # terrain with levels 30, 100 and 300 m above it, so 80 m is five
+        # sevenths of the way from the first to the second; the second has
+        # its lowest level 100 m up, over 80 m; the third's levels all lie
+        # under 80 m.
+        terrain = np.array([[1000.0, 0.0, 500.0]])
+        z_mass = np.array([[[1030.0, 100.0, 510.0]], [[1100.0, 200.0, 530.0]], [[1300.0, 400.0, 560.0]]])
+        values = np.array([[[2.0, 5.0, 1.0]], [[9.0, 6.0, 2.0]], [[12.0, 7.0, 3.0]]])
+        out = above_ground_level(values, z_mass, terrain, 80.0)
+        self.assertEqual(out.shape, (1, 3))
+        self.assertAlmostEqual(float(out[0, 0]), 2.0 + 50.0 / 70.0 * 7.0)
+        self.assertEqual(float(out[0, 1]), 5.0)
+        self.assertEqual(float(out[0, 2]), 3.0)
+        # On a level exactly: that level.
+        self.assertEqual(float(above_ground_level(values, z_mass, terrain, 100.0)[0, 0]), 9.0)
+
+    def test_the_80_m_wind_is_destaggered_read_at_80_m_and_turned_earth_relative(self) -> None:
+        from xuebuild.wrf.derive import wind_80m
+
+        # One mass point: U on its two staggered faces averages to 4, V to 2;
+        # the first level is 50 m up, the second 150 m, so 80 m takes 0.3 of
+        # the way up, and the rotation is 90°.
+        fields = {
+            "U": np.array([[[3.0, 5.0]], [[7.0, 9.0]]]),
+            "V": np.array([[[1.0], [3.0]], [[5.0], [7.0]]]),
+            "HGT": np.array([[200.0]]),
+            "COSALPHA": np.array([[0.0]]),
+            "SINALPHA": np.array([[1.0]]),
+        }
+        z_mass = np.array([[[250.0]], [[350.0]]])
+        u, v = wind_80m(fields, z_mass)
+        grid_u, grid_v = 4.0 + 0.3 * 4.0, 2.0 + 0.3 * 4.0
+        self.assertAlmostEqual(float(u[0, 0]), -grid_v)
+        self.assertAlmostEqual(float(v[0, 0]), grid_u)
+
+    def test_sea_level_pressure_is_the_surface_pressure_at_sea_level_and_hypsometric_above(self) -> None:
+        from xuebuild.wrf.derive import sea_level_pressure
+
+        psfc = np.array([101325.0, 90000.0])
+        t2 = np.array([288.15, 281.65])
+        q2 = np.array([0.01, 0.0])
+        hgt = np.array([0.0, 1000.0])
+        pmsl = sea_level_pressure(psfc, t2, q2, hgt)
+        self.assertEqual(float(pmsl[0]), 101325.0)
+        # 900 hPa at 1000 m with a dry 8.5 °C: the column's mean temperature
+        # is 281.65 + 3.25 K, and 900·exp(9.81·1000 / (287.05·284.9)) is
+        # 1014.7 hPa, the textbook figure to within a hectopascal.
+        expected = 900.0 * math.exp(9.81 * 1000.0 / (287.05 * 284.9))
+        self.assertAlmostEqual(expected, 1014.7, delta=0.1)
+        self.assertAlmostEqual(float(pmsl[1]) / 100.0, expected, places=9)
+        # Moist air is lighter: the same column with 10 g/kg reduces less.
+        self.assertLess(float(sea_level_pressure(psfc, t2, np.array([0.0, 0.01]), hgt)[1]), float(pmsl[1]))
 
     def test_altitude_levels_interpolate_in_the_layer_and_blank_the_ground(self) -> None:
         from xuebuild.wrf.derive import altitude_levels
@@ -280,8 +340,19 @@ class SyntheticRunTests(unittest.TestCase):
                     np.testing.assert_allclose(values, 0.75, atol=1e-6)
                 elif variable_id == "clw12000":
                     np.testing.assert_array_equal(values, 0.0)
+                elif variable_id == "prmsl":
+                    # In pascals, so the converter's division lands on hPa:
+                    # 1000 hPa over 100 to 150 m of terrain at 10 to 12.5 °C
+                    # reduces to between 1012.0 and 1018.0 hPa.
+                    self.assertEqual(data.units, "Pa")
+                    self.assertGreater(float(values.min()), 101200.0)
+                    self.assertLess(float(values.max()), 101800.0)
         with netCDF4.Dataset(out / "woof.2026101006.ugrd10m.nc") as u, netCDF4.Dataset(out / "woof.2026101006.vgrd10m.nc") as v:
             np.testing.assert_allclose(np.hypot(u["ugrd10m"][:], v["vgrd10m"][:]), 3.0, atol=1e-5)
+        with netCDF4.Dataset(out / "woof.2026101006.ugrd80m.nc") as u, netCDF4.Dataset(out / "woof.2026101006.vgrd80m.nc") as v:
+            # 80 m is under the lowest mass level everywhere, so the speed is
+            # that level's 10 m/s whatever the rotation.
+            np.testing.assert_allclose(np.hypot(u["ugrd80m"][:], v["vgrd80m"][:]), U_COLUMN[0], atol=1e-5)
         with self.assertRaisesRegex(XueError, "--force"):
             convert_run(self.run_dir, "d02", out, step=0.05)
 

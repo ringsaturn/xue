@@ -19,6 +19,7 @@ LOG = logging.getLogger(__name__)
 #: The variables one run yields, in file order.
 VARIABLE_IDS = (
     "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf", "orog",
+    "ugrd80m", "vgrd80m", "prmsl",
     *CLOUD_WATER_VARIABLE_IDS,
 )  # fmt: skip
 
@@ -28,6 +29,13 @@ SERIES_UNITS = {
     "°C": "degC",
     "m/s": "m s-1",
     "W/m²": "W m-2",
+}
+#: Variables written in an input unit rather than the registry's: the
+#: converter turns a sea level pressure into hectopascals from pascals
+#: whatever unit the series declares (``binconvert._convert_units``, the
+#: GRIB convention), so a series in hPa would land a hundredfold small.
+SERIES_INPUT_UNITS = {
+    "prmsl": "Pa",
 }
 
 LONG_NAMES = {
@@ -44,6 +52,9 @@ LONG_NAMES = {
     "hpbl": "planetary boundary layer height",
     "dswrf": "downward shortwave radiation at the surface",
     "orog": "terrain height",
+    "ugrd80m": "80 m eastward wind",
+    "vgrd80m": "80 m northward wind",
+    "prmsl": "mean sea level pressure",
     **{
         variable_id: f"cloud water mixing ratio at {level / 1000:g} km MSL"
         for variable_id, level in zip(CLOUD_WATER_VARIABLE_IDS, CLOUD_WATER_LEVELS_M)
@@ -52,6 +63,8 @@ LONG_NAMES = {
 
 
 def series_unit(variable_id: str) -> str:
+    if variable_id in SERIES_INPUT_UNITS:
+        return SERIES_INPUT_UNITS[variable_id]
     unit = variable_spec(variable_id).output_unit
     return SERIES_UNITS.get(unit, unit)
 

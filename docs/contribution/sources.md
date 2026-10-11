@@ -214,13 +214,23 @@ refuses it, and it is reached only through showcase cases naming a
 `wrf` dependency group: netCDF4) owns every WRF particular — destaggering,
 rotating the grid-relative wind to earth-relative, the dewpoint, the
 layered cloud maxima by MSL height (0–2 / 2–6 / >6 km), differencing the
-run-total precipitation into the hour's `apcp`, interpolating `QCLOUD`
-linearly in height onto the 24 altitudes of the `clw<m>` family (each
-column's mass-level heights from `PH + PHB`; the lowest level's value
-between the ground and it, zero above the top, NaN under the model
-terrain), and the bilinear regrid from the Lambert conformal nest onto the
-regular 0.005° grid inscribed in it (79 × 61) — and writes `woof.<run>.<variable>.nc`, one CF series per
-variable, so both encoders take the `ifshres` series-file path unchanged.
+run-total precipitation into the hour's `apcp`, the 80 m wind (`U` and `V`
+destaggered onto the mass points, read linearly between the two model
+levels that bracket 80 m above the ground in each column, then rotated),
+the sea level pressure (`PSFC` reduced hypsometrically over `HGT` with the
+2 m virtual temperature warmed down the standard lapse rate to half the
+height — the plain reduction, not WRF's `slp`, because a nest a few tens
+of kilometres across carries it as a background field; the series is in
+pascals, which the converter turns into hectopascals as it does a GRIB
+record), interpolating `QCLOUD` linearly in height onto the 24 altitudes
+of the `clw<m>` family (each column's mass-level heights from `PH + PHB`;
+the lowest level's value between the ground and it, zero above the top,
+NaN under the model terrain), and the bilinear regrid from the Lambert
+conformal nest onto the regular 0.005° grid inscribed in it (79 × 61; a
+coarser nest takes `--step`) — and writes `woof.<run>.<variable>.nc`, one
+CF series per variable, so both encoders take the `ifshres` series-file
+path unchanged. Published are eleven surface scalars and `prmsl`, the
+`wind10m` and `wind80m` pairs and the `cloud3d` volume.
 Frames start at f001 (`first_hour = 1`: f000 is the GFS analysis on the
 nest, dropped by the tool) and `apcp` is on every frame, so nothing is
 analysis-optional; `prate` is the interval rate (`interval_precipitation`).

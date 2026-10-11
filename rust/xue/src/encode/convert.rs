@@ -3588,7 +3588,7 @@ mod volume_tests {
             published,
             [
                 "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl",
-                "dswrf", "orog", "wind10m", "cloud3d",
+                "dswrf", "orog", "prmsl", "wind10m", "wind80m", "cloud3d",
             ]
         );
         for variable_id in CLOUD_WATER_VARIABLE_IDS {

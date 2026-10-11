@@ -1009,8 +1009,9 @@ pub const SOURCES: &[SourceSpec] = &[
     // showcase cases naming a dataset directory — the first forecast that is
     // not `fetched()`. The `xue wrf-series` tool owns every WRF particular
     // (destaggering, the earth-relative wind, the dewpoint, the layered cloud
-    // maxima, the precipitation differencing, the bilinear regrid from the
-    // Lambert conformal nest onto a regular 0.005° grid) and writes one CF
+    // maxima, the precipitation differencing, the 80 m wind off the model
+    // levels, the sea level reduction, the bilinear regrid from the Lambert
+    // conformal nest onto a regular 0.005° grid) and writes one CF
     // NetCDF series per variable, so this is a `series_file` forecast like
     // `ifshres` and the encoder learns no WRF arithmetic. Hourly to 72 hours
     // — WOOF's usual cap — from f001: f000 is the GFS analysis on the nest,
@@ -1031,10 +1032,10 @@ pub const SOURCES: &[SourceSpec] = &[
         // (`CLOUD_WATER_VARIABLE_IDS`): every one is an input of `cloud3d`.
         input_variable_ids: &[
             "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc",
-            "hcdc", "hpbl", "dswrf", "orog", "clw250", "clw500", "clw750", "clw1000", "clw1250",
-            "clw1500", "clw1750", "clw2000", "clw2250", "clw2500", "clw2750", "clw3000", "clw3500",
-            "clw4000", "clw4500", "clw5000", "clw5500", "clw6000", "clw7000", "clw8000", "clw9000",
-            "clw10000", "clw11000", "clw12000",
+            "hcdc", "hpbl", "dswrf", "orog", "ugrd80m", "vgrd80m", "prmsl", "clw250", "clw500",
+            "clw750", "clw1000", "clw1250", "clw1500", "clw1750", "clw2000", "clw2250", "clw2500",
+            "clw2750", "clw3000", "clw3500", "clw4000", "clw4500", "clw5000", "clw5500", "clw6000",
+            "clw7000", "clw8000", "clw9000", "clw10000", "clw11000", "clw12000",
         ],
         companion_files: &[],
         accumulated_precipitation: false,
@@ -1047,10 +1048,10 @@ pub const SOURCES: &[SourceSpec] = &[
         bands: &[],
         bundle_scalar_ids: &[
             "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf",
-            "orog",
+            "orog", "prmsl",
         ],
         core_bundle_ids: &["tmp2m"],
-        bundle_vector_ids: &["wind10m"],
+        bundle_vector_ids: &["wind10m", "wind80m"],
         bundle_composite_ids: &[],
         bundle_volume_ids: &["cloud3d"],
         production_grid: (79, 61),
@@ -1692,12 +1693,13 @@ mod tests {
         assert_eq!(woof.forecast_hours(3, None).expect("axis"), vec![1, 2, 3]);
         assert_eq!(woof.forecast_hours(72, None).expect("axis").len(), 72);
         assert!(woof.forecast_hours(0, None).is_err() && woof.forecast_hours(73, None).is_err());
-        assert_eq!(woof.input_variable_ids.len(), 37);
-        assert_eq!(&woof.input_variable_ids[13..], CLOUD_WATER_VARIABLE_IDS);
+        assert_eq!(woof.input_variable_ids.len(), 40);
+        assert_eq!(&woof.input_variable_ids[16..], CLOUD_WATER_VARIABLE_IDS);
+        assert_eq!(&woof.input_variable_ids[13..16], &["ugrd80m", "vgrd80m", "prmsl"]);
         assert_eq!(woof.bundle_volume_ids, &["cloud3d"]);
-        assert_eq!(woof.bundle_scalar_ids.len(), 11);
+        assert_eq!(woof.bundle_scalar_ids.len(), 12);
         assert!(woof.input_variable_ids.contains(&"apcp") && !woof.bundle_scalar_ids.contains(&"apcp"));
-        assert_eq!(woof.bundle_vector_ids, &["wind10m"]);
+        assert_eq!(woof.bundle_vector_ids, &["wind10m", "wind80m"]);
         assert_eq!(woof.core_bundle_ids, &["tmp2m"]);
         assert_eq!((woof.production_grid, woof.tile), ((79, 61), (64, 64)));
         assert!(woof.variant_factors.is_empty());
