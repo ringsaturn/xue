@@ -19,8 +19,9 @@ describe("contour thresholds", () => {
 
 describe("contour ink", () => {
   it("is a translucent brown on paper and a pale sand on the dark ground", () => {
-    expect(contourInk(false).line).toMatch(/^rgba\(120, 82, 40, /);
-    expect(contourInk(true).line).toMatch(/^rgba\(255, 226, 180, /);
+    expect(contourInk(false).line).toMatch(/^rgba\(70, 45, 20, /);
+    expect(contourInk(true).line).toMatch(/^rgba\(255, 230, 190, /);
+    expect(contourInk(false).casing).not.toBe(contourInk(false).line);
     expect(contourInk(false).halo).not.toBe(contourInk(true).halo);
   });
 });

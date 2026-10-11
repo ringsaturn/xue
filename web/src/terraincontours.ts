@@ -1,4 +1,4 @@
-import type { Map as MaplibreMap } from "maplibre-gl";
+import type { ExpressionSpecification, Map as MaplibreMap } from "maplibre-gl";
 import { addProtocol } from "maplibre-gl";
 import mlcontour from "maplibre-contour";
 
@@ -14,8 +14,9 @@ import { TERRAIN_MAX_ZOOM, TERRAIN_TILE_URL } from "./terrain";
  *
  * The lines sit directly under the forecast anchor — above every field and
  * line slot, under the coast and the labels — and are moved back there
- * whenever a field attaches above them. Their ink follows the ground like
- * the coast's does (`setInk`).
+ * whenever a field attaches above them. Each line is drawn twice, a pale
+ * casing under the ink, so it reads over a field of any colour; the ink
+ * follows the ground like the coast's does (`setInk`).
  */
 
 /** The zoom the lines appear from: a 200 m interval on a z12 DEM is a
@@ -35,22 +36,28 @@ export const CONTOUR_THRESHOLDS: Record<number, [number, number]> = {
 };
 
 export const CONTOUR_SOURCE = "terrain-contours";
+export const CONTOUR_CASING_LAYER = "terrain-contour-casing";
 export const CONTOUR_LINE_LAYER = "terrain-contour-lines";
 export const CONTOUR_LABEL_LAYER = "terrain-contour-labels";
 
 export interface ContourInk {
   line: string;
+  /** The wider, paler line under the ink: what keeps a line legible over a
+   * field as dense as a temperature fill, as the halo does for the labels. */
+  casing: string;
   text: string;
   halo: string;
 }
 
-/** The lines' ink per ground: a warm brown on paper, as a survey sheet
- * prints its relief, and a pale sand on the dark ground; both translucent so
- * the field shows through and a minor line stays lighter than the coast. */
+/** The lines' ink per ground: a dark brown on paper, as a survey sheet
+ * prints its relief, over a casing of the paper's own tone; a pale sand over
+ * a dark casing on the dark ground. The casing is what the line is read
+ * against where the field under it is any colour — a brown line alone
+ * disappears on an orange temperature fill. */
 export function contourInk(darkGround: boolean): ContourInk {
   return darkGround
-    ? { line: "rgba(255, 226, 180, 0.55)", text: "#f3e6cc", halo: "rgba(0, 0, 0, 0.75)" }
-    : { line: "rgba(120, 82, 40, 0.6)", text: "#5a3e1c", halo: "rgba(243, 239, 230, 0.92)" };
+    ? { line: "rgba(255, 230, 190, 0.85)", casing: "rgba(0, 0, 0, 0.45)", text: "#f3e6cc", halo: "rgba(0, 0, 0, 0.75)" }
+    : { line: "rgba(70, 45, 20, 0.85)", casing: "rgba(243, 239, 230, 0.6)", text: "#4a3014", halo: "rgba(243, 239, 230, 0.92)" };
 }
 
 export interface TerrainContoursOptions {
@@ -109,6 +116,7 @@ export class TerrainContours {
     if (!this.map.getLayer(CONTOUR_LINE_LAYER)) return;
     const ink = contourInk(darkGround);
     this.map.setPaintProperty(CONTOUR_LINE_LAYER, "line-color", ink.line);
+    this.map.setPaintProperty(CONTOUR_CASING_LAYER, "line-color", ink.casing);
     this.map.setPaintProperty(CONTOUR_LABEL_LAYER, "text-color", ink.text);
     this.map.setPaintProperty(CONTOUR_LABEL_LAYER, "text-halo-color", ink.halo);
   }
@@ -118,6 +126,19 @@ export class TerrainContours {
     if (map.getSource(CONTOUR_SOURCE)) return;
     const ink = contourInk(this.options.darkGround());
     map.addSource(CONTOUR_SOURCE, { type: "vector", tiles: [this.tiles], maxzoom: CONTOUR_MAX_ZOOM });
+    const width: ExpressionSpecification = ["case", [">=", ["get", "level"], 1], 1.4, 0.7];
+    map.addLayer(
+      {
+        id: CONTOUR_CASING_LAYER,
+        type: "line",
+        source: CONTOUR_SOURCE,
+        "source-layer": "contours",
+        minzoom: CONTOUR_MIN_ZOOM,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": ink.casing, "line-width": ["+", width, 2.2], "line-blur": 0.8 },
+      },
+      this.anchor(),
+    );
     map.addLayer(
       {
         id: CONTOUR_LINE_LAYER,
@@ -128,8 +149,8 @@ export class TerrainContours {
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": ink.line,
-          "line-width": ["case", [">=", ["get", "level"], 1], 1.3, 0.6],
-          "line-opacity": ["case", [">=", ["get", "level"], 1], 1, 0.8],
+          "line-width": width,
+          "line-opacity": ["case", [">=", ["get", "level"], 1], 1, 0.85],
         },
       },
       this.anchor(),
@@ -162,7 +183,7 @@ export class TerrainContours {
 
   private remove(): void {
     const map = this.map;
-    for (const id of [CONTOUR_LABEL_LAYER, CONTOUR_LINE_LAYER]) if (map.getLayer(id)) map.removeLayer(id);
+    for (const id of [CONTOUR_LABEL_LAYER, CONTOUR_LINE_LAYER, CONTOUR_CASING_LAYER]) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource(CONTOUR_SOURCE)) map.removeSource(CONTOUR_SOURCE);
   }
 
@@ -175,10 +196,10 @@ export class TerrainContours {
     if (!this.on) return;
     const layers = this.map.getStyle().layers ?? [];
     const anchor = layers.findIndex((layer) => layer.id === this.options.anchorLayer);
-    if (anchor < 2) return;
-    if (layers[anchor - 1]?.id === CONTOUR_LABEL_LAYER && layers[anchor - 2]?.id === CONTOUR_LINE_LAYER) return;
+    if (anchor < 3) return;
+    const stacked = [CONTOUR_CASING_LAYER, CONTOUR_LINE_LAYER, CONTOUR_LABEL_LAYER];
+    if (stacked.every((id, at) => layers[anchor - 3 + at]?.id === id)) return;
     if (!this.map.getLayer(CONTOUR_LINE_LAYER)) return;
-    this.map.moveLayer(CONTOUR_LINE_LAYER, this.options.anchorLayer);
-    this.map.moveLayer(CONTOUR_LABEL_LAYER, this.options.anchorLayer);
+    for (const id of stacked) this.map.moveLayer(id, this.options.anchorLayer);
   };
 }
