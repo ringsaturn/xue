@@ -771,6 +771,18 @@ ASTRONOMICAL_UNIT_KM = 1.495978707e8
 #: encoders' output by one code on one cell.
 FCI_BT_SCALE = 0.0078125
 FCI_BT_OFFSET = 100.0
+#: The 3.8 µm window's offset: it adds reflected sunlight by day and reads
+#: well past the 356 K the default packing tops out at over a sunlit desert,
+#: up to the channel's saturation near 450 K; about 200 K the same step
+#: spans −56 … 456 K. A channel keeps one packing for good, since a series
+#: refuses frames packed unlike each other (the frame cache holds weeks of
+#: the others at 100 K).
+FCI_BT_OFFSET_SOLAR_WINDOW = 200.0
+
+
+def fci_bt_offset(channel: Channel) -> float:
+    """The offset a channel's brightness temperature strip packs about."""
+    return FCI_BT_OFFSET_SOLAR_WINDOW if channel.id == "ir039" else FCI_BT_OFFSET
 #: The HDF5 filter every FCI chunk is compressed with (JPEG-LS, filter
 #: 32018): a stock GDAL fails on it with "undefined filter"; the plugin
 #: comes with the ``hdf5plugin`` distribution (the ``satellite`` group)
@@ -1007,7 +1019,7 @@ class FCIReader:
         if missing_below is not None:
             from .assemble import NODATA  # noqa: PLC0415 - assemble imports nothing from here
 
-            floor = int(math.floor((missing_below - FCI_BT_OFFSET) / FCI_BT_SCALE))
+            floor = int(math.floor((missing_below - fci_bt_offset(channel)) / FCI_BT_SCALE))
             vrt.write_text(_mask_below(vrt.read_text(encoding="utf-8"), floor, NODATA), encoding="utf-8")
         return vrt
 
@@ -1189,7 +1201,7 @@ class FCIReader:
             invalid |= ~(radiance > 0.0)
             radiance[invalid] = 1.0
             value = brightness_temperature(radiance, calibration)
-            value_scale, value_offset, unit = FCI_BT_SCALE, FCI_BT_OFFSET, "K"
+            value_scale, value_offset, unit = FCI_BT_SCALE, fci_bt_offset(channel), "K"
         value[invalid] = np.nan
         # GDAL reads the strip in the file's own orientation and says which
         # way its axes run; the strip is written west to east and north to

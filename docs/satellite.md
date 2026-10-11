@@ -627,7 +627,8 @@ files are opened, and the reader does them itself:
   variables of its `measured` group read through `gdalmdiminfo` —
   `BT = (c2 ν / ln(1 + c1 ν³ / L) − b) / a`, the conversion the product
   documents — into an Int16 strip in steps of 1/128 K above 100 K
-  (`FCI_BT_SCALE` / `FCI_BT_OFFSET`). A solar channel takes its
+  (`FCI_BT_SCALE` / `FCI_BT_OFFSET`; IR 3.8, which reads past 356 K over a
+  sunlit desert, about 200 K instead). A solar channel takes its
   effective solar irradiance at 1 AU (`channel_effective_solar_irradiance`
   in the same group, mW m⁻² (cm⁻¹)⁻¹) and the mean Earth–Sun distance of
   the chunk's rows (`/state/celestial/earth_sun_distance`, km, over
