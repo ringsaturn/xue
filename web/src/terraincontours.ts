@@ -25,15 +25,37 @@ export const CONTOUR_MIN_ZOOM = 9;
 /** The deepest contour tile asked for; past it MapLibre overzooms the last. */
 export const CONTOUR_MAX_ZOOM = 15;
 
-/** The minor and major intervals in metres by zoom: what a topographic map
- * prints at that scale, with the major line every fifth. A zoom without an
- * entry uses the next lower one. */
-export const CONTOUR_THRESHOLDS: Record<number, [number, number]> = {
-  9: [200, 1000],
-  11: [100, 500],
-  13: [50, 250],
-  14: [20, 100],
+/** The intervals in metres by zoom, three tiers each: the fine line, the
+ * middle line and the index line (`level` 0, 1, 2 on each feature — the
+ * largest tier the elevation is a multiple of). Each rung's middle tier is
+ * the rung before's fine one, so zooming in adds a finer tier under lines
+ * that keep their weight, and never thins or thickens what was drawn; the
+ * first rung repeats its interval so that it, too, has no fine tier. A
+ * zoom without an entry uses the next lower one. The finest tier waits for
+ * z15 and is 25 m, not 20: on a cliff a thousand metres tall twenty-metre
+ * lines at z14 hatch the slope solid, and every tier must divide the one
+ * above it, since the plugin draws lines at multiples of the finest alone. */
+export const CONTOUR_THRESHOLDS: Record<number, [number, number, number]> = {
+  9: [200, 200, 1000],
+  11: [100, 200, 1000],
+  13: [50, 100, 500],
+  15: [25, 50, 250],
 };
+const INDEX_LEVEL = 2;
+
+/** The fine tier is drawn faint and darkens as the map zooms into its rung,
+ * so a steep slope reads as a tone under the index lines rather than a
+ * hatch; the two tiers above keep their ink. */
+const FINE_OPACITY: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  11, 0.22, 12.9, 0.55,
+  13, 0.22, 14.9, 0.55,
+  15, 0.22, 16.5, 0.6,
+];
+const isFine: ExpressionSpecification = ["==", ["get", "level"], 0];
+const isIndex: ExpressionSpecification = ["==", ["get", "level"], INDEX_LEVEL];
 
 export const CONTOUR_SOURCE = "terrain-contours";
 export const CONTOUR_CASING_LAYER = "terrain-contour-casing";
@@ -126,7 +148,9 @@ export class TerrainContours {
     if (map.getSource(CONTOUR_SOURCE)) return;
     const ink = contourInk(this.options.darkGround());
     map.addSource(CONTOUR_SOURCE, { type: "vector", tiles: [this.tiles], maxzoom: CONTOUR_MAX_ZOOM });
-    const width: ExpressionSpecification = ["case", [">=", ["get", "level"], 1], 1.4, 0.7];
+    const width: ExpressionSpecification = ["case", isIndex, 1.4, isFine, 0.5, 0.9];
+    // The casing goes under the middle and index lines only: a cased fine
+    // line on a dense slope reads as a worm, and the fine tier is faint.
     map.addLayer(
       {
         id: CONTOUR_CASING_LAYER,
@@ -134,8 +158,9 @@ export class TerrainContours {
         source: CONTOUR_SOURCE,
         "source-layer": "contours",
         minzoom: CONTOUR_MIN_ZOOM,
+        filter: [">=", ["get", "level"], 1],
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": ink.casing, "line-width": ["+", width, 2.2], "line-blur": 0.8 },
+        paint: { "line-color": ink.casing, "line-width": ["case", isIndex, 3.2, 2.2], "line-blur": 0.8 },
       },
       this.anchor(),
     );
@@ -150,7 +175,12 @@ export class TerrainContours {
         paint: {
           "line-color": ink.line,
           "line-width": width,
-          "line-opacity": ["case", [">=", ["get", "level"], 1], 1, 0.85],
+          "line-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            ...FINE_OPACITY.slice(3).flatMap((stop, at, stops) => (at % 2 === 0 ? [stop, ["case", isFine, stops[at + 1], 0.9]] : [])),
+          ] as ExpressionSpecification,
         },
       },
       this.anchor(),
@@ -162,7 +192,7 @@ export class TerrainContours {
         source: CONTOUR_SOURCE,
         "source-layer": "contours",
         minzoom: CONTOUR_MIN_ZOOM,
-        filter: [">=", ["get", "level"], 1],
+        filter: isIndex,
         layout: {
           "symbol-placement": "line",
           "symbol-spacing": 320,
