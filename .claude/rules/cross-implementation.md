@@ -66,6 +66,5 @@ fixture.
   `sources.py`: no timestamps, no hostnames, relative links only.
 - All arithmetic on file values in the decoder is checked, and nothing is
   allocated from a file value before it is validated.
-- zstd in-process (Python ≥ 3.14) and the zstd CLI are interchangeable on
-  decode but **not byte-identical on encode**. Byte-identity tests compare
-  like with like.
+- Byte-identity across encoders holds for the same libzstd version; the
+  parity tests skip when the two differ.

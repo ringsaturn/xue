@@ -2,15 +2,14 @@
 
 ## Requirements
 
-- Python ≥ 3.12 with [uv](https://docs.astral.sh/uv/). `uv sync` creates
+- Python ≥ 3.14 with [uv](https://docs.astral.sh/uv/). `uv sync` creates
   `.venv` with NumPy and the `xuepy` wheel. Always run Python as
   `.venv/bin/python`; the Makefile picks it automatically.
 - GDAL ≥ 3.8 with the GRIB driver. Needed by `XUE_ENCODER=python`, by the
   satellite fetch stage (`gdalwarp`, `gdal_translate`, `gdalbuildvrt`)
   whichever encoder converts, and by the tests. The native encoder inspects
   inputs through the wheel's own GDAL.
-- zstd ≥ 1.5: in the standard library on Python ≥ 3.14, the `zstd` CLI
-  below that.
+- zstd ≥ 1.5 comes with the standard library (`compression.zstd`); no CLI.
 - Node.js ≥ 22.
 - A Rust toolchain and `wasm-pack` (the browser decoder, `make wasm`).
 - ffmpeg: the H.264 companions (GFS and HRRR).

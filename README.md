@@ -58,7 +58,7 @@ mosaic of the geostationary imagers, a view rather than a dataset.
 
 ## Quick start
 
-Requirements: Python ≥ 3.12 with [uv](https://docs.astral.sh/uv/), Node.js
+Requirements: Python ≥ 3.14 with [uv](https://docs.astral.sh/uv/), Node.js
 ≥ 22, a Rust toolchain with `wasm-pack`, and GDAL ≥ 3.8 with the GRIB
 driver. Some sources need more (eccodes, om2nc, ffmpeg, credentials); see
 [`docs/contribution/setup.md`](docs/contribution/setup.md).

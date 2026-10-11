@@ -22,8 +22,8 @@ Normative specs, which win over this page: [format.md](../format.md),
   dispatch; `assemble.py` split builds; `stac.py` catalog; `showcase.py`
   cases; `satellite/` ([sources.md](sources.md)); `tc/`, `airport/`,
   `sounding/` ([point-products.md](point-products.md)); `gdal.py`,
-  `zstdcli.py`, `ffmpegcli.py`, `eccodescli.py`, `om2nccli.py`, `jmacli.py`
-  tool wrappers.
+  `ffmpegcli.py`, `eccodescli.py`, `om2nccli.py`, `jmacli.py` tool wrappers;
+  `zstdcli.py` in-process zstd.
 - `rust/xue/` — decoder (`src/decode/`), byte layout (`src/format.rs`), Zarr
   read geometry (`src/zarr.rs`), native encoder (`src/encode/`, `encoder`
   feature).
@@ -141,8 +141,8 @@ unpacks and the native encoder packs through it, so fields cannot drift.
 GDAL, zstd, ffmpeg, eccodes and om2nc run as subprocesses; NumPy is the only
 Python runtime dependency. Exceptions and boundaries:
 
-- zstd runs in process (`compression.zstd`) on Python ≥ 3.14, else the CLI:
-  interchangeable on decode, **not byte-identical on encode**.
+- zstd runs in process (`compression.zstd`); there is no CLI path. Its bytes
+  match the native encoder's only for the same libzstd version.
 - `gdal.dataset_info` reads through the wheel's GDAL (`xue.gdal_info`) when
   converting natively, the subprocess otherwise, following `XUE_ENCODER`, so
   a run never mixes two GDALs and the scheduled workflows need no GDAL

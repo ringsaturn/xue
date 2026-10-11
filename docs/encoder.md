@@ -267,12 +267,10 @@ Four places needed care to reach that:
   parameters (about 5 % larger payloads and different bytes), so
   `zstd_compress` here calls `ZSTD_compress2` one-shot as well.
 
-The last one puts a floor under the comparison: `compression.zstd` is
-Python 3.14+, and below it the reference falls back to piping planes
-through the zstd CLI, which streams. Those frames decode identically and
-are a few per cent larger, so a build on 3.12 is valid but not the same
-bytes, and `tests/test_native.py` skips its byte comparisons there. The
-published runs are built on 3.14.
+The reference compresses through `compression.zstd` (Python 3.14, the
+floor of `xuebuild`), so both encoders run one-shot libzstd. The byte
+comparisons still skip when the two link different libzstd versions
+(`require_comparable_compression` in `tests/_support.py`).
 
 ## Grid families
 

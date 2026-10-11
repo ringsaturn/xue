@@ -14,8 +14,8 @@ paths:
 Background: [`docs/contribution/pipeline.md`](../../docs/contribution/pipeline.md),
 [`sources.md`](../../docs/contribution/sources.md), [`docs/encoder.md`](../../docs/encoder.md).
 
-- **Runtime dependencies stay NumPy + `xuepy`.** GDAL, zstd, ffmpeg, eccodes
-  and om2nc are CLI subprocesses (`gdal.py`, `zstdcli.py`, `ffmpegcli.py`,
+- **Runtime dependencies stay NumPy + `xuepy`.** GDAL, ffmpeg, eccodes
+  and om2nc are CLI subprocesses (`gdal.py`, `ffmpegcli.py`,
   `eccodescli.py`, `om2nccli.py`). Anything heavier goes into a dependency
   group (`zarr`, `cma`, `aurora`, `satellite`) that only its workflow syncs.
 - **om2nc is a licence boundary** (GPL-2.0-only): an executable on PATH only.
