@@ -23,7 +23,9 @@ from .variables import (
     ISOBARIC_LEVELS_HPA,
     OCEAN_VARIABLE_IDS,
     REFLECTIVITY_VARIABLE_IDS,
-    SATELLITE_CHANNEL_IDS,
+    SATELLITE_INFRARED_IDS,
+    SATELLITE_REFLECTANCE_IDS,
+    TRUE_COLOR_COMPONENT_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable_id,
 )
@@ -316,6 +318,26 @@ DUST_RGB_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name
 DUST_CF = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="dustcf")
 # The ZHOUYE confidence is the same number on the same scale.
 ZHOUYE = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="zhouye")
+# A true colour gun is the same kind of number as a Dust RGB gun — a
+# stretched display value in 0–1 from this pipeline's own recipe — and
+# takes the same codebook: code 0 is "no data" (outside the disk, an
+# input lacked, or the night side), black stays a value at code 1.
+TRUE_COLOR_GUN = TemperatureCodebook(minimum=-0.004, maximum=1.0, step=0.004, name="truecolor")
+
+
+# A reflectance channel: the top-of-atmosphere reflectance factor in 0–1,
+# which a sunlit cloud takes a little past 1 (the product's own ceiling is
+# near 1.3). The codebook starts a hundredth below zero so code 0 is the
+# fill outside the disk and the night side's 0.0 is a whole code on both
+# profiles (one compact step, two quality ones; at a half step it would
+# round either way), at 0.005 across 253 codes; the compact profile doubles
+# the step and stops a code short, like the brightness temperature's. No
+# source publishes one; the composite reads the fetch stage's packed series.
+def _reflectance(channel_id: str) -> tuple[TemperatureCodebook, TemperatureCodebook]:
+    return (
+        TemperatureCodebook(minimum=-0.01, maximum=1.255, step=0.005, name=channel_id),
+        TemperatureCodebook(minimum=-0.01, maximum=1.25, step=0.01, name=channel_id),
+    )
 # The aerosol fields, three log1p codebooks. Their interesting range spans
 # orders of magnitude the way a rain rate's does — a clear sky reads an
 # optical depth of 0.05, a dust plume 2, and a linear step fine enough for
@@ -361,18 +383,29 @@ QUALITY_AEROSOL = _aerosol_codebooks(compact=False)
 COMPACT_AEROSOL = _aerosol_codebooks(compact=True)
 assert tuple(QUALITY_AEROSOL) == AEROSOL_VARIABLE_IDS
 QUALITY_SATELLITE = {
-    **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_CHANNEL_IDS},
+    **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_INFRARED_IDS},
+    **{channel_id: _reflectance(channel_id)[0] for channel_id in SATELLITE_REFLECTANCE_IDS},
     **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
     **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
+    **{gun_id: TRUE_COLOR_GUN for gun_id in TRUE_COLOR_COMPONENT_IDS},
 }
 COMPACT_SATELLITE = {
-    **{channel_id: _brightness_temperature(channel_id)[1] for channel_id in SATELLITE_CHANNEL_IDS},
+    **{channel_id: _brightness_temperature(channel_id)[1] for channel_id in SATELLITE_INFRARED_IDS},
+    **{channel_id: _reflectance(channel_id)[1] for channel_id in SATELLITE_REFLECTANCE_IDS},
     **{gun_id: DUST_RGB_GUN for gun_id in DUST_RGB_COMPONENT_IDS},
     **{variable_id: DUST_CF for variable_id in DUST_CF_COMPONENT_IDS},
     **{variable_id: ZHOUYE for variable_id in ZHOUYE_COMPONENT_IDS},
+    **{gun_id: TRUE_COLOR_GUN for gun_id in TRUE_COLOR_COMPONENT_IDS},
 }
-assert tuple(QUALITY_SATELLITE) == SATELLITE_CHANNEL_IDS + DUST_RGB_COMPONENT_IDS + DUST_CF_COMPONENT_IDS + ZHOUYE_COMPONENT_IDS
+assert tuple(QUALITY_SATELLITE) == (
+    SATELLITE_INFRARED_IDS
+    + SATELLITE_REFLECTANCE_IDS
+    + DUST_RGB_COMPONENT_IDS
+    + DUST_CF_COMPONENT_IDS
+    + ZHOUYE_COMPONENT_IDS
+    + TRUE_COLOR_COMPONENT_IDS
+)
 QUALITY_OCEAN = {
     "tmpsfc": QUALITY_SURFACE_TEMPERATURE,
     "icec": QUALITY_ICE_COVER,

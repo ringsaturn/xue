@@ -20,19 +20,23 @@ converters read it off the series.
 Two kinds share the interface: an in-process NumPy function with a fixed
 operation order, which can be held to a golden, and an external one that
 runs elsewhere and writes to the shared bucket, which the pipeline reads
-back the way it reads the CMA archive. Both producers here are the first
-kind, through the ``shachen`` package: the classic Dust RGB, which reads
-the slot's channels and nothing else, and the dust confidences — DEBRA's
-and ZHOUYE's, two bundles of one variable each from one pass over the
-same chain — which also read two ancillary fields (:mod:`ancillary`) the
-fetch stage puts on disk for the slot before the producer runs
-(:meth:`Producer.ancillary_for`). A producer's outputs are the components
-of one or more composite bundles (:attr:`Producer.bundle_ids`); the fetch
-stage runs it once for all of them and caches every output frame.
+back the way it reads the CMA archive. The producers here are all the
+first kind. Two run through the ``shachen`` package: the classic Dust
+RGB, which reads the slot's infrared windows and nothing else, and the
+dust confidences — DEBRA's and ZHOUYE's, two bundles of one variable each
+from one pass over the same chain — which also read two ancillary fields
+(:mod:`ancillary`) the fetch stage puts on disk for the slot before the
+producer runs (:meth:`Producer.ancillary_for`). The third is this
+pipeline's own: the true colour composite from the slot's visible and
+near-infrared reflectances, with the sun's position and nothing else. A
+producer's outputs are the components of one or more composite bundles
+(:attr:`Producer.bundle_ids`); the fetch stage runs it once for all of
+them and caches every output frame.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import UTC as _UTC, datetime
 from importlib.metadata import PackageNotFoundError, version as distribution_version
@@ -431,8 +435,139 @@ class DebraProducer:
         }
 
 
+#: The true colour recipe's own version: what the producer stamps on its
+#: frames and the converters carry into the ``producer`` block. A cached
+#: slot is recomposed when it changes, so it changes exactly when a
+#: constant below does, never with the package.
+TRUE_COLOR_VERSION = "1"
+#: The solar zenith past which the sun-angle normalisation stops growing:
+#: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last five
+#: degrees of a day fade instead of blowing up, and a cell whose sun is
+#: below the horizon is no data.
+TRUE_COLOR_ZENITH_LIMIT_DEG = 85.0
+#: The brightness curve every gun goes through, as reflectance in → gun
+#: out, interpolated linearly between the knots and clamped to [0, 1]:
+#: the CIRA / satpy ``crefl_scaling`` stretch (0, 25, 55, 100, 255 % →
+#: 0, 90, 140, 175, 255 of 255), which lifts the dark ocean and land and
+#: holds bright cloud short of saturation.
+TRUE_COLOR_CURVE_IN: tuple[float, ...] = (0.0, 0.25, 0.55, 1.0, 2.55)
+TRUE_COLOR_CURVE_OUT: tuple[float, ...] = (0.0, 90.0 / 255.0, 140.0 / 255.0, 175.0 / 255.0, 1.0)
+#: The hybrid green on an imager with a 0.51 µm band (AHI, FCI): the band
+#: with a little of the 0.86 µm reflectance, which lifts vegetation to the
+#: green the eye expects (Miller et al. 2016, the Himawari correction).
+TRUE_COLOR_HYBRID_GREEN: tuple[float, float] = (0.93, 0.07)
+#: The synthetic green on an imager without one (ABI): the CIMSS blend of
+#: blue, red and the 0.86 µm band, the fractions satpy's ``abi`` green
+#: uses.
+TRUE_COLOR_SYNTHETIC_GREEN: tuple[float, float, float] = (0.45, 0.45, 0.10)
+
+
+@dataclass(frozen=True)
+class TrueColorProducer:
+    """The true colour composite: the three guns of the ``truecolor``
+    bundle from a slot's 0.47, 0.51 (where the imager has it), 0.64 and
+    0.86 µm reflectances, this pipeline's own recipe in a fixed order:
+
+    1. every input clipped to 0 from below (the products carry small
+       negative reflectances in the dark);
+    2. the cosine of the solar zenith on every cell at the slot's start
+       (pyorbital on the grid's own coordinates, periodic in longitude);
+       a cell with the sun below the horizon is no data;
+    3. each reflectance divided by ``max(cos θ, cos TRUE_COLOR_ZENITH_LIMIT_DEG)``;
+    4. the green: ``0.93 × 0.51 µm + 0.07 × 0.86 µm`` on AHI and FCI, or
+       ``0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm`` on ABI;
+    5. red (0.64 µm), green and blue (0.47 µm) through the brightness
+       curve, clamped to [0, 1];
+    6. no data in all three guns wherever any input had none, or the sun
+       was below the horizon.
+
+    No Rayleigh correction: the limb and the long slant paths keep their
+    blue haze, which a correction with a lookup table per band could take
+    out later under a new recipe version. The id is ``xue`` — the recipe
+    is this pipeline's and no package's — and the version the recipe's."""
+
+    id: str = "xue"
+    bundle_id: str = "truecolor"
+    bundle_ids: tuple[str, ...] = ("truecolor",)
+    inputs: tuple[str, ...] = ("vis047", "vis051", "vis064", "nir086")
+    outputs: tuple[str, ...] = ("truer", "trueg", "trueb")
+    ancillaries: tuple[str, ...] = ()
+
+    @property
+    def version(self) -> str:
+        return TRUE_COLOR_VERSION
+
+    def inputs_for(self, platform: Platform) -> tuple[str, ...]:
+        """The four bands on an imager with a green one; three on the ABI,
+        whose green is synthesized from the other three."""
+        channel_ids = {channel.id for channel in platform.channels}
+        missing = [channel_id for channel_id in self.inputs if channel_id not in channel_ids]
+        if missing == ["vis051"]:
+            return tuple(channel_id for channel_id in self.inputs if channel_id != "vis051")
+        if missing:
+            raise ConversionError(f"{platform.spacecraft} {platform.instrument} has no {missing} for the true colour composite")
+        return self.inputs
+
+    def ancillary_for(self, platform: Platform, slot: datetime, root: Path | None) -> dict[str, Path]:
+        return {}
+
+    def run(
+        self,
+        platform: Platform,
+        inputs: dict[str, np.ndarray],
+        ancillary: dict[str, Path],
+        *,
+        slot: datetime,
+        grid: TargetGrid,
+    ) -> dict[str, np.ndarray]:
+        try:
+            from pyorbital.astronomy import cos_zen  # noqa: PLC0415 - the satellite dependency group
+        except ImportError as exc:
+            raise ConversionError("the true colour producer needs pyorbital: uv sync --group satellite") from exc
+        needed = self.inputs_for(platform)
+        missing = [channel_id for channel_id in needed if channel_id not in inputs]
+        if missing:
+            raise ConversionError(f"the true colour producer needs {list(needed)}; missing {missing}")
+        shape = (grid.height, grid.width)
+        if any(inputs[channel_id].shape != shape for channel_id in needed):
+            raise ConversionError(f"the true colour producer's inputs are not on the {grid.width} x {grid.height} grid")
+
+        # 1. The inputs, negative reflectances clipped to 0; NaN kept.
+        planes = {channel_id: np.maximum(np.asarray(inputs[channel_id], dtype=np.float64), 0.0) for channel_id in needed}
+        # 2. The sun on the grid's own coordinates.
+        lons = grid.first_longitude + np.arange(grid.width, dtype=np.float64) * grid.step
+        lats = grid.first_latitude - np.arange(grid.height, dtype=np.float64) * grid.step
+        lon2d, lat2d = np.meshgrid(lons, lats)
+        cosine = np.asarray(cos_zen(_naive_utc(slot), lon2d, lat2d), dtype=np.float64)
+        lit = cosine > 0.0
+        # 3. Divided by the cosine, floored at the limit.
+        floor = math.cos(math.radians(TRUE_COLOR_ZENITH_LIMIT_DEG))
+        divisor = np.maximum(cosine, floor)
+        normalized = {channel_id: plane / divisor for channel_id, plane in planes.items()}
+        # 4. The green.
+        if "vis051" in normalized:
+            band, nir = TRUE_COLOR_HYBRID_GREEN
+            green = band * normalized["vis051"] + nir * normalized["nir086"]
+        else:
+            blue, red, nir = TRUE_COLOR_SYNTHETIC_GREEN
+            green = blue * normalized["vis047"] + red * normalized["vis064"] + nir * normalized["nir086"]
+        # 5. The curve.
+        guns = (normalized["vis064"], green, normalized["vis047"])
+        # 6. No data where any input had none, or the sun was down.
+        defined = lit.copy()
+        for channel_id in needed:
+            defined &= np.isfinite(planes[channel_id])
+        results: dict[str, np.ndarray] = {}
+        for output_id, gun in zip(self.outputs, guns):
+            stretched = np.interp(np.nan_to_num(gun, nan=0.0), TRUE_COLOR_CURVE_IN, TRUE_COLOR_CURVE_OUT)
+            results[output_id] = np.where(defined, np.clip(stretched, 0.0, 1.0), np.nan)
+        return results
+
+
 PRODUCERS: dict[str, Producer] = {
-    bundle_id: producer for producer in (DustRGBProducer(), DebraProducer()) for bundle_id in producer.bundle_ids
+    bundle_id: producer
+    for producer in (DustRGBProducer(), DebraProducer(), TrueColorProducer())
+    for bundle_id in producer.bundle_ids
 }
 """By the composite bundle each produces; a producer of two bundles is
 listed under both, the same object."""

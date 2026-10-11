@@ -1477,8 +1477,10 @@ SOURCES: dict[str, SourceSpec] = {
     # (``dustrgb``: the classic three-gun dust picture, computed per slot in
     # the fetch stage by the ``shachen`` producer,
     # xuebuild/satellite/producers.py, and read off the series like any
-    # channel). The other twelve channels are platform-registry rows a
-    # source-table line publishes. The tiles are generated about eight
+    # channel). The visible and near-infrared bands 1–4 feed the true
+    # colour composite (``truecolor``, this pipeline's own recipe in the
+    # same module) and are published by no source. The other channels are
+    # platform-registry rows a source-table line publishes. The tiles are generated about eight
     # minutes after a scan starts and listed some fifteen minutes after it,
     # so the live window ends fifteen to twenty minutes behind real time; a
     # rolling publish rebuilds the six-hour window every ten minutes into a round
@@ -1491,11 +1493,16 @@ SOURCES: dict[str, SourceSpec] = {
         product="ahi-fldk-0p04",
         latest_filename="latest-himawari.json",
         steps=(),
-        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123"),
+        # The six infrared windows first (the first is the one a listing
+        # walks), then the four visible and near-infrared bands the true
+        # colour composite reads: AHI bands 1–4 at 1, 1, 0.5 and 1 km,
+        # some 700 MB of tiles a slot against the windows' 140 MB, which
+        # is what a true colour picture costs a round.
+        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=HIMAWARI.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")),
+        bands=HIMAWARI.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         # The platform's region at 0.04°: 120° x 120° is 3000 x 3000 cells,
         # 9 M a frame, 4.6 MB quantized and compressed (an infrared image
@@ -1530,9 +1537,10 @@ SOURCES: dict[str, SourceSpec] = {
     # on the geostationary projection (sweep x), read by the same stage
     # through ``CMIPFReader`` — a slot is one file, the file lands some
     # ten minutes after the scan starts. Each source is the himawari one on
-    # its own disk: the same four windows fetched, ir104 and the Dust RGB
-    # published (with the GOES-R Quick Guide's ABI stretches, which the
-    # producer picks by instrument), the same grid step and window. The
+    # its own disk: the same six windows and the three ABI visible bands
+    # fetched, ir104, the Dust RGB (with the GOES-R Quick Guide's ABI
+    # stretches, which the producer picks by instrument), the confidences
+    # and the true colour published, the same grid step and window. The
     # East disk sits on negative longitudes (−135.2 … −15.2); the West
     # disk crosses the antimeridian and is spelled 163 … 283, the shape
     # Himawari's grid already takes.
@@ -1542,11 +1550,14 @@ SOURCES: dict[str, SourceSpec] = {
         product="abi-fldk-0p04",
         latest_filename="latest-goeseast.json",
         steps=(),
-        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123"),
+        # The six windows, then the three ABI bands the true colour
+        # composite reads (channels 1–3 at 1, 0.5 and 1 km; the ABI has no
+        # green band, so the producer synthesizes one).
+        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=GOES_EAST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")),
+        bands=GOES_EAST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
@@ -1566,11 +1577,14 @@ SOURCES: dict[str, SourceSpec] = {
         product="abi-fldk-0p04",
         latest_filename="latest-goeswest.json",
         steps=(),
-        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123"),
+        # The six windows, then the three ABI bands the true colour
+        # composite reads (channels 1–3 at 1, 0.5 and 1 km; the ABI has no
+        # green band, so the producer synthesizes one).
+        input_variable_ids=("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=GOES_WEST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123")),
+        bands=GOES_WEST.bands(("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "dustcf", "zhouye"),
+        bundle_composite_ids=("dustrgb", "dustcf", "zhouye", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
