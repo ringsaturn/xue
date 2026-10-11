@@ -1,27 +1,30 @@
 name: publish goeswest
 
-# GOES-18's 10.4 µm infrared window (ABI channel 13) and the Dust RGB
-# composite, from NOAA's own open data bucket: the CMIPF full-disk
-# product, each channel of each ten-minute scan as one calibrated netCDF
-# on the geostationary projection, landing some ten minutes after the
-# scan starts. The live feed is a rolling window — the last five whole
-# hours plus the hour in progress, the disk warped onto a 0.04° plate
-# carrée grid (a disk across the antimeridian, spelled 163°E to 283°E), the native ten-minute step — rebuilt every ten
-# minutes into a round subdirectory of its run (<model>.<run>/<HHMM>/)
-# and pointed at by latest-goeswest.json.
+# GOES-18's 10.4 µm infrared window (ABI channel 13) and the composites
+# the encoder derives from the disk's channels — the Dust RGB, the DEBRA
+# and ZHOUYE dust confidences, the true colour and the night microphysics
+# — from NOAA's own open data bucket: the CMIPF full-disk product, each
+# channel of each ten-minute scan as one calibrated netCDF on the
+# geostationary projection, landing some ten minutes after the scan
+# starts. The live feed is a rolling window — the last five whole hours
+# plus the hour in progress, the disk warped onto a 0.04° plate carrée
+# grid (a disk across the antimeridian, spelled 163°E to 283°E), the
+# native ten-minute step — rebuilt every ten minutes into a round
+# subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
+# latest-goeswest.json.
 #
 # The shape is publish-himawari.yml's, GOES-West at 137.0°W in place of
 # Himawari: one round per job on a ten-minute cron, a dispatch with
 # `loop` on running rounds until the deadline. A round lists the newest
 # hour directory, fetches the six windows' files (24 MB each) and the
 # three solar bands' (100 MB for the 1 km ones, 430 MB for the 0.5 km red
-# band by day, some 630 MB a slot in all),
-# warps each once (xuebuild/satellite/, through the system GDAL's
-# gdalwarp — the xuepy wheel's GDAL carries no GeoTIFF driver, so this
-# workflow installs gdal-bin whichever encoder converts), composes the
-# Dust RGB from them, caches the frames on the bucket (`make
-# pull-r2-frames` / `push-r2-frames`), and stacks the window's frames into
-# the NetCDF series the converter reads.
+# band by day, some 630 MB a slot in all), warps each once
+# (xuebuild/satellite/, through the system GDAL's gdalwarp — the xuepy
+# wheel's GDAL carries no GeoTIFF driver, so this workflow installs
+# gdal-bin whichever encoder converts), composes the composites from
+# them, caches the frames on the bucket (`make pull-r2-frames` /
+# `push-r2-frames`), and stacks the window's frames into the NetCDF series
+# the converter reads.
 #
 # Machine time: six jobs an hour of three to four minutes each, roughly
 # 220 hours a month, free on a public repository's standard runners.

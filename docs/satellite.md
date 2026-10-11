@@ -4,9 +4,9 @@ How a geostationary imager's channels become Xue bundles: the `himawari`,
 `goeseast`, `goeswest` and `meteosat` sources, the `himawarijp` box over
 Japan, their Dust RGB, true colour and night microphysics composites
 and dust confidences, and the seams a further satellite, a second
-channel and another composite product go through. The bundle format is unchanged (`format.md`); what
-this document fixes is the fetch stage, `xuebuild/satellite/`, and the
-metadata a satellite variable carries.
+channel and another composite product go through. The bundle format is
+unchanged (`format.md`); what this document fixes is the fetch stage,
+`xuebuild/satellite/`, and the metadata a satellite variable carries.
 
 ## Shape
 
@@ -503,16 +503,17 @@ box around a 56 × 56 lattice of its scan angles put through PROJ's
 ellipsoidal `geos` inverse (`geostationary_lonlat`), with the tiles'
 own projection constants. Over a whole slot of real tiles the footprints
 match those computed from each tile's own geotransform to 1e-10°, and
-the fixture tiles' corners as GDAL reads them to 0.01°. A tile is needed when its footprint, widened by
-0.1° (more than a 2 km pixel wherever a box is useful, so a bilinear
-sample at the edge finds its neighbours), overlaps the box: for Japan,
-six of the 88 (T009–T011, T018–T020). Only those make a slot complete,
-are downloaded and are mosaicked — some 60 MB a slot over the eight
-channels other than 3.9 µm by day and 35 MB by night (2026-10-11 03:00
-and 2026-10-10 15:00 UTC), against 870 and 500 MB for the disk's ten;
-the 3.9 µm window adds one more 2 km channel's six tiles. A CMIPF slot is
-one file and an FCI download already crops its chunks to the disk's
-rows, so those readers do not narrow (`tiles_covering` is None).
+the fixture tiles' corners as GDAL reads them to 0.01°. A tile is needed
+when its footprint, widened by 0.1° (more than a 2 km pixel wherever a
+box is useful, so a bilinear sample at the edge finds its neighbours),
+overlaps the box: for Japan, six of the 88 (T009–T011, T018–T020). Only
+those make a slot complete, are downloaded and are mosaicked — some 60
+MB a slot over the eight channels other than 3.9 µm by day and 35 MB by
+night (2026-10-11 03:00 and 2026-10-10 15:00 UTC), against 870 and 500
+MB for the disk's ten; the 3.9 µm window adds one more 2 km channel's
+six tiles. A CMIPF slot is one file and an FCI download already crops
+its chunks to the disk's rows, so those readers do not narrow
+(`tiles_covering` is None).
 
 The frame cache is keyed by the **source**, `<source>-frames`, since the
 box and the disk warp the same slot onto two grids; a disk's source id is
@@ -922,27 +923,28 @@ the conversion on the East disk with the ABI band block, and the native
 encoder byte for byte. GOES-West is the same reader on its own
 bucket and grid; its tests are the registry's.
 
-`tests/fixtures/meteosat/` is one real FCI chunk (chunk 20 of a full-disk
-cycle from EUMETSAT's public MTG test data, the spectrally representative
-FDHSI cycle of May 2022: simulated 2017 radiances in the operational
-format, rows 2645–2784 of the grid, the strip from the equator to 2.5°S)
-and a trimmed real search response, and `tests/test_meteosat.py` runs
-them under the `meteosat` source with the chunk standing for every chunk
-of every slot (the reader's `needed_chunks` narrowed to it): the store's
-own response parsed, the token minted, refused and renewed and a rate
-limit waited out against a fake opener, the chunk names, the cycle's
-slot, the needed chunks and the elevation angle behind them, the Planck
-conversion against the formula, the strip's footprint and its numbers
-read back through GDAL's own unscaling, the vis_06 strip on the 1 km grid
-held to `π L d² / E_sun` off the file's own constants cell for cell (the
-algorithm, not the 2017 test product's absolute values), the solar frames
-and the true colour composed from them with the night side empty, the
-IR 3.8 strip in kelvin and the night microphysics composed from it, the
-producer with three inputs held to `dust_rgb` with the 10.5 µm plane as
-the green minuend, the hourly slots against a store that lists ten-minute cycles, the series,
-the ingest, the conversion with the FCI band block and the hourly axis,
-and the native encoder byte for byte when the wheel knows the source.
-The GDAL-backed cases skip without `hdf5plugin`.
+`tests/fixtures/meteosat/` is one real FCI chunk (chunk 20 of a
+full-disk cycle from EUMETSAT's public MTG test data, the spectrally
+representative FDHSI cycle of May 2022: simulated 2017 radiances in the
+operational format, rows 2645–2784 of the grid, the strip from the
+equator to 2.5°S) and a trimmed real search response, and
+`tests/test_meteosat.py` runs them under the `meteosat` source with the
+chunk standing for every chunk of every slot (the reader's
+`needed_chunks` narrowed to it): the store's own response parsed, the
+token minted, refused and renewed and a rate limit waited out against a
+fake opener, the chunk names, the cycle's slot, the needed chunks and
+the elevation angle behind them, the Planck conversion against the
+formula, the strip's footprint and its numbers read back through GDAL's
+own unscaling, the vis_06 strip on the 1 km grid held to
+`π L d² / E_sun` off the file's own constants cell for cell (the algorithm, not
+the 2017 test product's absolute values), the solar frames and the true
+colour composed from them with the night side empty, the IR 3.8 strip in
+kelvin and the night microphysics composed from it, the producer with
+three inputs held to `dust_rgb` with the 10.5 µm plane as the green
+minuend, the hourly slots against a store that lists ten-minute cycles,
+the series, the ingest, the conversion with the FCI band block and the
+hourly axis, and the native encoder byte for byte when the wheel knows
+the source. The GDAL-backed cases skip without `hdf5plugin`.
 
 ---
 

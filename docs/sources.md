@@ -151,28 +151,28 @@ tiers. Each publishes:
   [shachen](https://github.com/ringsaturn/shachen); dust reads pink to
   magenta, day and night. Code 0 means no data in every gun. FCI has no
   11.2 µm channel, so Meteosat's green gun is 10.5 − 8.7 µm.
-- `dustcf` (not Meteosat or `himawarijp`): the DEBRA dust confidence (Miller et al. 2017),
-  0–1, over water and inside staged emissivity regions (the Gobi through
-  Japan, the US Southwest, the Saharan corridor). See
+- `dustcf` (not Meteosat or `himawarijp`): the DEBRA dust confidence (Miller
+  et al. 2017), 0–1, over water and inside staged emissivity regions (the
+  Gobi through Japan, the US Southwest, the Saharan corridor). See
   [`satellite.md`](satellite.md).
-- `zhouye` (not Meteosat or `himawarijp`): the ZHOUYE dust confidence, shachen's
-  day-and-night scheme on the same chain: DEBRA's by day, and after dark a
-  reading at the day's level instead of a fading one. Same grid, coverage
-  and scale as `dustcf`; a second product, not a replacement.
-- `truecolor`: the visible picture — the 0.64, 0.51 and
-  0.47 µm reflectances (0.444 µm on Meteosat) as red, green and blue, each divided by the cosine
+- `zhouye` (not Meteosat or `himawarijp`): the ZHOUYE dust confidence,
+  shachen's day-and-night scheme on the same chain: DEBRA's by day, and
+  after dark a reading at the day's level instead of a fading one. Same
+  grid, coverage and scale as `dustcf`; a second product, not a
+  replacement.
+- `truecolor`: the visible picture — the 0.64, 0.51 and 0.47 µm reflectances
+  (0.444 µm on Meteosat) as red, green and blue, each divided by the cosine
   of the solar zenith and put through one brightness curve, the green a
   hybrid with the 0.86 µm band (synthesized from blue, red and 0.86 µm on
   the ABI, which has no green band), no Rayleigh correction. Code 0 is no
-  data in every gun, and the night side is code 0: nothing is painted
-  where the sun is down. Xue's own recipe (producer `xue`, version the
-  recipe's). See [`satellite.md`](satellite.md).
-- `nightmicro`: the night picture — EUMETSAT's Night
-  Microphysics RGB, 12.3 − 10.4 µm (−4…2 K), 10.4 − 3.9 µm (0…10 K) and
-  10.4 µm (243…293 K) as red, green and blue; fog and low cloud read
-  yellow-green. Composed day and night, but by day sunlight in the 3.9 µm
-  band pins the green gun at 0. Code 0 is no data in every gun. Xue's own
-  recipe (producer `xue`).
+  data in every gun, and the night side is code 0: nothing is painted where
+  the sun is down. Xue's own recipe (producer `xue`, version the recipe's).
+  See [`satellite.md`](satellite.md).
+- `nightmicro`: the night picture — EUMETSAT's Night Microphysics RGB,
+  12.3 − 10.4 µm (−4…2 K), 10.4 − 3.9 µm (0…10 K) and 10.4 µm (243…293 K)
+  as red, green and blue; fog and low cloud read yellow-green. Composed day and
+  night, but by day sunlight in the 3.9 µm band pins the green gun at 0.
+  Code 0 is no data in every gun. Xue's own recipe (producer `xue`).
 
 The live windows end 15–20 min behind real time. **Meteosat publishes only
 the cycle on each hour**: EUMETSAT releases that cycle under CC BY 4.0 and
