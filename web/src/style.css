@@ -1481,8 +1481,9 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.5;
 }
 
-/* Wide enough for "48/48" so the capsule does not shift while it counts;
-   while it runs the pill is inked and a second press cancels. */
+/* Wide enough for "48/48" (the MP4 pill reads a percentage) so the capsule
+   does not shift while it counts; while it runs the pill is inked and a
+   second press cancels. */
 .gif-button {
   min-width: 54px;
 }

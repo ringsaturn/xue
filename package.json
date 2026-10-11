@@ -19,6 +19,7 @@
     "@protomaps/basemaps": "^5.7.2",
     "gifenc": "^1.0.3",
     "maplibre-gl": "^6.12.0",
+    "mp4-muxer": "^5.2.2",
     "tzf-wasm": "^2.0.0"
   },
   "devDependencies": {

@@ -172,6 +172,8 @@ export const zh: Record<MessageKey, string> = {
   playbackSpeed: "播放速度",
   gifExportAria: "将动画保存为 GIF",
   gifCancelAria: "取消 GIF",
+  mp4ExportAria: "将动画保存为 MP4 视频",
+  mp4CancelAria: "取消 MP4",
   readingManifest: "正在读取清单",
   forecastHourAria: "预报时次",
   forecastDaysAria: "逐日预报分段",

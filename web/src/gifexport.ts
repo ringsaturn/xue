@@ -37,6 +37,20 @@ export interface GifHost {
   credit(): string;
   /** How long the frame is held in playback, in milliseconds. */
   holdMs(index: number): number;
+  /** Sweep the picture `weight` of the way from the frame shown toward the
+   * next, as playback does between steps; false when the next frame is not
+   * decoded (the picture then holds, as it does on screen). Exports that
+   * sample between frames use it; the GIF never does. */
+  blend?(index: number, weight: number): boolean;
+}
+
+/** What the frames are drawn onto, once the basemap is in. */
+export interface CaptureTarget {
+  /** What the export is called in its errors: `GIF`, `MP4`. */
+  kind: string;
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  credit: string;
 }
 
 export interface GifProgress {
@@ -56,10 +70,14 @@ export function gifFrameWindow(count: number, current: number, max = GIF_MAX_FRA
 
 /** `xue-gfs-prate-sfc-20261005t1200z.gif`: the code line and the first
  * frame's valid time, in characters every file system takes. */
-export function gifFileName(code: string, validTime: number): string {
+export function exportFileName(code: string, validTime: number, extension: string): string {
   const slug = code.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const stamp = new Date(validTime).toISOString().slice(0, 16).replace(/[-:]/g, "").toLowerCase();
-  return `xue-${slug || "map"}-${stamp}z.gif`;
+  return `xue-${slug || "map"}-${stamp}z.${extension}`;
+}
+
+export function gifFileName(code: string, validTime: number): string {
+  return exportFileName(code, validTime, "gif");
 }
 
 /** The captured size: the canvas's own pixels, scaled down to the cap. */
@@ -68,14 +86,18 @@ export function gifSize(width: number, height: number, maxWidth = GIF_MAX_WIDTH)
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function frameShown(host: GifHost, index: number, signal: AbortSignal): Promise<void> {
+export function exportCancelled(kind: string): DOMException {
+  return new DOMException(`${kind} export cancelled`, "AbortError");
+}
+
+async function frameShown(host: GifHost, index: number, signal: AbortSignal, kind: string): Promise<void> {
   const deadline = performance.now() + FRAME_TIMEOUT_MS;
   while (!host.show(index)) {
-    if (signal.aborted) throw new DOMException("GIF export cancelled", "AbortError");
+    if (signal.aborted) throw exportCancelled(kind);
     if (performance.now() > deadline) throw new Error(`frame ${index} did not decode within ${FRAME_TIMEOUT_MS} ms`);
     await sleep(50);
   }
@@ -135,6 +157,43 @@ function drawCaption(context: CanvasRenderingContext2D, caption: GifCaption, cre
   context.restore();
 }
 
+/** The canvas an export draws its frames onto, ready once the basemap's
+ * tiles are in. */
+export async function prepareCapture(
+  host: GifHost,
+  size: { width: number; height: number },
+  kind: string,
+): Promise<CaptureTarget> {
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error(`2D canvas unavailable for the ${kind}`);
+  await mapSettled(host.map);
+  return { kind, canvas, context, credit: host.credit() };
+}
+
+/** Draw one frame onto the target: shown, captured as the map renders it,
+ * captioned. With a weight the picture is swept toward the next frame first;
+ * when that frame is not decoded yet it is shown once to ask for it, and the
+ * sweep is retried from the frame itself. */
+export async function captureFrame(
+  host: GifHost,
+  index: number,
+  target: CaptureTarget,
+  signal: AbortSignal,
+  weight = 0,
+): Promise<void> {
+  await frameShown(host, index, signal, target.kind);
+  if (weight > 0 && host.blend && !host.blend(index, weight)) {
+    await frameShown(host, index + 1, signal, target.kind);
+    await frameShown(host, index, signal, target.kind);
+    host.blend(index, weight);
+  }
+  await captureNextRender(host.map, target.context);
+  drawCaption(target.context, host.caption(index), target.credit);
+}
+
 /** Capture the frames and encode them; resolves to the file. The map keeps
  * whatever frame was last captured, and the caller puts its own back. */
 export async function exportGif(
@@ -143,31 +202,22 @@ export async function exportGif(
   onProgress: (progress: GifProgress) => void,
   signal: AbortSignal,
 ): Promise<Blob> {
-  const { map } = host;
-  const source = map.getCanvas();
+  const source = host.map.getCanvas();
   const size = gifSize(source.width, source.height);
-  const canvas = document.createElement("canvas");
-  canvas.width = size.width;
-  canvas.height = size.height;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("2D canvas unavailable for the GIF");
-  await mapSettled(map);
-  const credit = host.credit();
+  const target = await prepareCapture(host, size, "GIF");
   const captured: ArrayBuffer[] = [];
   const delays: number[] = [];
   for (const [position, index] of frames.entries()) {
-    await frameShown(host, index, signal);
-    await captureNextRender(map, context);
-    drawCaption(context, host.caption(index), credit);
-    captured.push(context.getImageData(0, 0, size.width, size.height).data.buffer as ArrayBuffer);
+    await captureFrame(host, index, target, signal);
+    captured.push(target.context.getImageData(0, 0, size.width, size.height).data.buffer as ArrayBuffer);
     delays.push(host.holdMs(index));
     onProgress({ phase: "capture", done: position + 1, total: frames.length });
   }
-  if (signal.aborted) throw new DOMException("GIF export cancelled", "AbortError");
+  if (signal.aborted) throw exportCancelled("GIF");
   const worker = new Worker(new URL("./gif.worker.ts", import.meta.url), { type: "module" });
   try {
     const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
-      signal.addEventListener("abort", () => reject(new DOMException("GIF export cancelled", "AbortError")), { once: true });
+      signal.addEventListener("abort", () => reject(exportCancelled("GIF")), { once: true });
       worker.onerror = (event) => reject(new Error(event.message || "GIF worker failed"));
       worker.onmessage = (event: MessageEvent<GifWorkerResponse>) => {
         const message = event.data;
@@ -183,10 +233,14 @@ export async function exportGif(
   }
 }
 
+export function deliverGif(blob: Blob, name: string): Promise<void> {
+  return deliverFile(blob, name, "image/gif");
+}
+
 /** Hand the file over: the share sheet where a phone has one for files,
  * a download everywhere else. */
-export async function deliverGif(blob: Blob, name: string): Promise<void> {
-  const file = new File([blob], name, { type: "image/gif" });
+export async function deliverFile(blob: Blob, name: string, type: string): Promise<void> {
+  const file = new File([blob], name, { type });
   const coarse = window.matchMedia("(pointer: coarse)").matches;
   if (coarse && navigator.canShare?.({ files: [file] })) {
     try {
