@@ -7,6 +7,24 @@ changes are in `git log`.
 
 ## 2026-10-11
 
+- New source `woof` (manifest model `WOOF-WRF`, product `nest`): a WRF-ARW
+  nest run on Recast's WOOF service, read from its `wrfout` files by the
+  `xue wrf-series` tool into CF series on a regular 0.005° grid and
+  published only as showcase cases (no live pointer). Hourly from f001;
+  `tmp2m`, `dpt2m`, `tmpsfc`, `wind10m`, `wind80m`, `prate`, `tcdc`,
+  `lcdc`/`mcdc`/`hcdc` (cloud fraction in 0–2 / 2–6 / >6 km MSL bands),
+  `hpbl`, `dswrf`, `orog`, `prmsl` and the `cloud3d` volume.
+- New volume bundle `cloud3d`: the cloud water mixing ratio (GRIB2 0/1/22,
+  g/kg) on 24 altitudes from 250 m to 12 km, variables `clw<m>` in the
+  `volume-registry.json` codebook (linear, 0–2.53 g/kg); the same shape as
+  `refl3d`. Below the model terrain the value is 0, not a no-data code.
+- Showcase case definitions take an optional `view.volume`, a volume
+  bundle among the case's variables that the case opens drawn over its
+  field; `?volume=` on the link outranks it.
+- The viewer's `?contours=on` draws elevation contour lines cut in the
+  browser from the terrain tiles; `?volume=<bundle>` draws a volume over
+  the field; the MP4 export of the loop is new beside the GIF.
+
 - The data API reads the point products (`docs/api.md` § Point products):
   `/v1/soundings[/{station}]`, `/v1/airports[/{icao}]`,
   `/v1/synop[/{station}]` and `/v1/storms[/{storm}]`, each a list of the
