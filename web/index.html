@@ -648,6 +648,16 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVolume">Q</b>
           <span class="rail-name"><span>CLW3D</span> <small data-i18n="varVolume">3D CLOUD</small></span>
         </button>
+        <!-- The day-night switch over the true colour (?blend=night): the
+             night microphysics picture drawn under it, showing wherever the
+             true colour has no data — the night side. Shown while the true
+             colour is the field on a single disk that ships both
+             (main.ts::syncBlendTile). A disk half lit, half dark. -->
+        <button id="blend-tile" type="button" data-toggle aria-pressed="false" data-i18n-tip="varLabelDayNight" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDayNight">D</b>
+          <span class="rail-name"><span>DAY-NIGHT</span> <small data-i18n="varDayNight">BLEND</small></span>
+        </button>
         <!-- The experimental composite's derived layers (?x=): switches
              like the two above — each draws over whatever the fill is. A
              curling stream for the warm moist inflow, a line with the

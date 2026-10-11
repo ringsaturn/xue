@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseCaseFromSearch, parseExperimentFromSearch, parseModelFromSearch } from "../../web/src/urlstate";
 import {
+  blendUnderField,
   compositionForPrimary,
   compositionPrimary,
   parseView,
@@ -141,5 +142,29 @@ describe("the volume overlay", () => {
     expect(volumeOverField({ field: "refl3d", volume: "cloud3d" })).toBeNull();
     // A volume as the field is named by `type`, and `volume` is dropped.
     expect(roundTrip("?model=mrms3d&type=refl3d&volume=cloud3d")).toBe("?model=mrms3d&type=refl3d");
+  });
+});
+
+describe("the day-night blend", () => {
+  it("is parsed from ?blend=night, anything else reading as none", () => {
+    expect(parseView("?model=himawari&type=truecolor&blend=night", DEFAULTS).view.blend).toBe("night");
+    expect(parseView("?model=himawari&type=truecolor&blend=NIGHT", DEFAULTS).view.blend).toBe("night");
+    expect(parseView("?model=himawari&type=truecolor&blend=off", DEFAULTS).view.blend).toBeNull();
+    expect(parseView("?model=himawari&type=truecolor&blend=geocolor", DEFAULTS).view.blend).toBeNull();
+    expect(parseView("?model=himawari&type=truecolor", DEFAULTS).view.blend).toBeNull();
+  });
+
+  it("draws the night microphysics under the true colour and nothing under any other field", () => {
+    expect(blendUnderField({ field: "truecolor", blend: "night" })).toBe("nightmicro");
+    expect(blendUnderField({ field: "truecolor", blend: null })).toBeNull();
+    expect(blendUnderField({ field: "ir104", blend: "night" })).toBeNull();
+    expect(blendUnderField({ field: "nightmicro", blend: "night" })).toBeNull();
+    expect(blendUnderField({ field: null, blend: "night" })).toBeNull();
+  });
+
+  it("is written only while it applies, and survives a round trip", () => {
+    expect(roundTrip("?model=himawari&type=truecolor&blend=night")).toBe("?model=himawari&type=truecolor&blend=night");
+    expect(roundTrip("?model=himawari&type=infrared&blend=night")).toBe("?model=himawari&type=infrared");
+    expect(roundTrip("?model=himawari&type=truecolor&blend=off")).toBe("?model=himawari&type=truecolor");
   });
 });

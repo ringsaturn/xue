@@ -352,6 +352,11 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?volume=cloud3d` — draw a run's volume bundle as a 3D volume over the
   2D field on screen (the cloud water of a `woof` case); ignored when the
   run does not ship it or the field is itself a volume.
+- `?blend=night` — with `type=truecolor` on a single satellite disk, fill
+  the true colour's night side with the night microphysics picture (the
+  day-night view: wherever the true colour has no data, the night
+  microphysics shows); ignored for any other field, on the mosaic, or
+  when the run does not ship `nightmicro`.
 - `?vexag=<number>` — the vertical exaggeration of a 3D volume, up to 200:
   by default 1 (true scale) for a volume under two degrees of longitude
   wide and 10 for a wider one. With the terrain on, the terrain's own
