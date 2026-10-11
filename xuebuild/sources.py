@@ -1323,9 +1323,10 @@ SOURCES: dict[str, SourceSpec] = {
     # ``dataset`` directory — the first forecast that is not ``fetched``.
     # The ``xue wrf-series`` tool (xuebuild/wrf/) owns every WRF particular:
     # destaggering, rotating the grid-relative wind, the dewpoint, the layered
-    # cloud maxima, the precipitation differencing, the cloud water
-    # interpolated from the model levels onto the ``cloud3d`` volume's 24
-    # altitudes (NaN under the terrain, which the converter fills as no
+    # cloud maxima, the precipitation differencing, the 80 m wind read off
+    # the model levels, the surface pressure reduced to sea level, the cloud
+    # water interpolated from the model levels onto the ``cloud3d`` volume's
+    # 24 altitudes (NaN under the terrain, which the converter fills as no
     # cloud) and the bilinear regrid from the Lambert conformal nest onto a
     # regular 0.005° grid; it writes
     # one CF NetCDF series per variable (``woof.<run>.<variable>.nc``), so
@@ -1359,6 +1360,9 @@ SOURCES: dict[str, SourceSpec] = {
             "hpbl",
             "dswrf",
             "orog",
+            "ugrd80m",
+            "vgrd80m",
+            "prmsl",
             *CLOUD_WATER_VARIABLE_IDS,
         ),
         accumulated_precipitation=False,
@@ -1377,8 +1381,9 @@ SOURCES: dict[str, SourceSpec] = {
             "hpbl",
             "dswrf",
             "orog",
+            "prmsl",
         ),
-        bundle_vector_ids=("wind10m",),
+        bundle_vector_ids=("wind10m", "wind80m"),
         bundle_volume_ids=("cloud3d",),
         core_bundle_ids=("tmp2m",),
         production_grid=(79, 61),

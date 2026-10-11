@@ -386,9 +386,11 @@ wrf-series` writes them (`xuebuild/wrf/`): one CF NetCDF per variable,
 `woof.2026101006.<xue id>.nc`, the variable inside carrying the Xue id
 (`observation.series_variable_name`), on a regular 0.005° grid inscribed
 in the nest, latitudes ascending, `time` in hours since the cycle and the
-registry's output unit (`degC`, `m s-1`, `mm`, `%`, `m`, `W m-2`, `g/kg`).
-Thirty-seven files: `tmp2m`, `dpt2m`, `tmpsfc`, `ugrd10m`, `vgrd10m`,
-`apcp`, `tcdc`, `lcdc`, `mcdc`, `hcdc`, `hpbl`, `dswrf`, `orog` and the
+registry's output unit (`degC`, `m s-1`, `mm`, `%`, `m`, `W m-2`, `g/kg`),
+but for the sea level pressure, which is in `Pa` the way a GRIB record
+carries it. Forty files: `tmp2m`, `dpt2m`, `tmpsfc`, `ugrd10m`, `vgrd10m`,
+`apcp`, `tcdc`, `lcdc`, `mcdc`, `hcdc`, `hpbl`, `dswrf`, `orog`,
+`ugrd80m`, `vgrd80m`, `prmsl` and the
 24 cloud water levels `clw250` … `clw12000` of the `cloud3d` volume, NaN
 under the model terrain (in this window everything below 1.25 km, and the
 summit column to 3.5 km). The tool's whole output is 79 by 61 cells
@@ -407,8 +409,8 @@ not published; the files are cut from a local copy of the run directory
 which runs the tool into a scratch directory and cuts the window with every
 attribute intact. The copies are classic NetCDF (`NETCDF3_CLASSIC`, no
 zlib) where the tool writes NETCDF4: a NETCDF4 file carries some 25 KB of
-HDF5 bookkeeping around a 2.5 KB plane, so the 37 files are 170 KB rather
-than 1.3 MB, and `gdalinfo` reports both alike but for the block shape,
+HDF5 bookkeeping around a 2.5 KB plane, so the 40 files are 183 KB rather
+than 1.4 MB, and `gdalinfo` reports both alike but for the block shape,
 which the converter does not read. A change to what the tool writes means
 regenerating the fixture the same way and saying so in the commit.
 
