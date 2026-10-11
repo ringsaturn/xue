@@ -34,34 +34,27 @@ env:
 
 jobs:
   python:
-    name: python ${{ matrix.python-version }}
+    name: python 3.14
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # 3.12 is the floor from pyproject.toml; 3.14 exercises the
-        # in-process stdlib zstd path in xue/zstdcli.py.
-        python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
-      # The reference encoder shells out to GDAL and (below 3.14) the zstd
-      # CLI. ffmpeg is what makes tests/test_native.py compare real H.264
+      # The reference encoder shells out to GDAL. ffmpeg is what makes
+      # tests/test_native.py compare real H.264
       # companions instead of skipping them on both sides, and eccodes'
       # bufr_dump is what lets tests/test_tc.py build the tropical cyclone
       # product from its BUFR fixtures instead of skipping the golden.
-      - name: Install GDAL, zstd, ffmpeg and eccodes
+      - name: Install GDAL, ffmpeg and eccodes
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin zstd ffmpeg libeccodes-tools
+          sudo apt-get install -y --no-install-recommends gdal-bin ffmpeg libeccodes-tools
           gdalinfo --version
-          zstd --version
           bufr_dump -V
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.14"
 
       # The satellite group carries shachen (the Dust RGB producer the
       # himawari, GOES and Meteosat fetch tests run) and hdf5plugin (the
@@ -98,15 +91,15 @@ jobs:
 
       # tests/prepare_bin_fixture.py encodes the cropped GRIB fixture with the
       # Python encoder; the Rust decoder must reproduce it byte for byte.
-      - name: Install GDAL and zstd
+      - name: Install GDAL
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin zstd
+          sudo apt-get install -y --no-install-recommends gdal-bin
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Sync Python environment
         run: uv sync
@@ -173,15 +166,10 @@ jobs:
       # tests/web/zarr.test.ts builds its fixtures with
       # tests/prepare_web_fixture.py the way the Playwright global setup
       # does, so the unit-test job needs the Python environment too.
-      - name: Install zstd
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zstd
-
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Sync Python environment
         run: uv sync
@@ -233,16 +221,11 @@ jobs:
           cache: npm
 
       # tests/prepare_web_fixture.py builds the synthetic bundles; it needs
-      # numpy and (below 3.14) the zstd CLI, but no GDAL.
-      - name: Install zstd
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zstd
-
+      # numpy, but no GDAL.
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Sync Python environment
         run: uv sync

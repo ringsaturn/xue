@@ -279,8 +279,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # 3.14 compresses planes in-process through the stdlib zstd module;
-          # older interpreters shell out per plane and build far slower.
+          # Planes compress in-process through the stdlib zstd module.
           python-version: "3.14"
 
       - name: Sync Python environment
@@ -304,8 +303,7 @@ jobs:
       # lack libaec, so every ECMWF and AIFS job installs the tools — and so would any job whose group reads a
       # companion family marked for the same repack (the matrix's
       # `eccodes`; none is now that the wheel's GDAL reads the JPEG
-      # 2000-packed GFS-Wave file as published). zstd is only reached below
-      # Python 3.14.
+      # 2000-packed GFS-Wave file as published).
       - name: Install ffmpeg / eccodes
         if: ${{ matrix.video || matrix.eccodes || inputs.model == 'ecmwf' || inputs.model == 'aifs' }}
         env:
