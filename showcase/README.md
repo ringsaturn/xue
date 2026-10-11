@@ -91,9 +91,12 @@ retires a case.
      "model": "woof",
      "dataset": "woof/fuji-2026-10-10/",
      "hours": 12,
-     "variables": ["tmpsfc", "tmp2m", "wind10m", "lcdc"]
+     "variables": ["tmpsfc", "tmp2m", "wind10m", "lcdc", "cloud3d"]
    }
    ```
+
+   `cloud3d` is the volume of the run's cloud water on 24 altitudes
+   (0.25–12 km MSL), drawn in 3D over the terrain.
 
    An **MRMS case** is the third shape — an observation that is *fetched*:
    like a forecast case it names a `run`, the first hour of its window

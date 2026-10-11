@@ -42,7 +42,8 @@
     "hpbl",
     "dswrf",
     "prate",
-    "orog"
+    "orog",
+    "cloud3d"
   ],
   "defaultVariable": "tmpsfc",
   "eventTime": "2026-10-10T12:00:00Z",
