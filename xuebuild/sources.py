@@ -1707,11 +1707,17 @@ SOURCES: dict[str, SourceSpec] = {
         product="fci-fldk-0p04",
         latest_filename="latest-meteosat.json",
         steps=(),
-        input_variable_ids=("ir086", "ir104", "ir123"),
+        # The three windows the Dust RGB reads, then the four solar
+        # channels the true colour composite reads, converted by the
+        # reader from radiance to reflectance factor on the 1 km grid
+        # (FCI vis_04 at 0.444 µm under the family id vis047, the band
+        # block carrying its own wave number). Every chunk carries every
+        # channel, so they cost no download, only reading.
+        input_variable_ids=("ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=METEOSAT.bands(("ir086", "ir104", "ir123")),
+        bands=METEOSAT.bands(("ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb",),
+        bundle_composite_ids=("dustrgb", "truecolor"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
