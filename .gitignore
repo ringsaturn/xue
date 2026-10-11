@@ -10,6 +10,7 @@ dist-deploy/
 data/raw/
 data/work/
 data/indicators/
+data/observations/
 web/public/data/gfs.*/
 web/public/data/ecmwf.*/
 web/public/data/sflux.*/
