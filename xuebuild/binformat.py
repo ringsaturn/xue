@@ -354,7 +354,7 @@ def write_bundle(
     dictionary: bytes = b"",
 ) -> None:
     """Assemble a complete Xue v1 file and publish it atomically."""
-    metadata_bytes = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    metadata_bytes = metadata_json_bytes(metadata)
     metadata_offset = HEADER_SIZE
     index_offset = align8(metadata_offset + len(metadata_bytes))
     index_length = INDEX_HEADER_SIZE + ENTRY_SIZE * len(planes)
@@ -441,7 +441,7 @@ def write_bundle_v2(
     one contiguous range and a viewport's tiles contiguous per tile row. The
     writer only checks that the caller produced the right number of them.
     """
-    metadata_bytes = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    metadata_bytes = metadata_json_bytes(metadata)
     grid = metadata["grid"]
     tiles = TileGeometry(grid["width"], grid["height"], tile_width, tile_height)
     frame_count = metadata["time"]["frameCount"]
@@ -1309,3 +1309,20 @@ def read_bundle(path: Path) -> Bundle:
     except OSError as exc:
         raise BundleError(f"cannot read bundle: {path}: {exc}") from exc
     return Bundle(data)
+
+
+def metadata_json_bytes(metadata: dict[str, Any]) -> bytes:
+    """The metadata JSON exactly as a container embeds it: compact, raw
+    UTF-8. A store written from a build's codes takes its ``xue`` block from
+    these bytes, so it carries the very document a container would."""
+    return json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def time_axis(metadata: dict[str, Any]) -> tuple[int, list[int]]:
+    """A metadata document's axis unit and frame offsets, read by the same
+    rules a bundle's embedded metadata is (:meth:`Bundle._parse_time_axis`)."""
+    time_info = metadata["time"]
+    unit_seconds, offsets, _version = Bundle._parse_time_axis(
+        time_info, time_info["frameCount"], metadata["schemaVersion"]
+    )
+    return unit_seconds, offsets
