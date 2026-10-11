@@ -160,7 +160,11 @@ def assert_native_matches(
 ) -> None:
     """Build ``inputs`` through the wheel into ``subject`` the way an
     observation round builds (no video, the manifest beside the bundles)
-    and hold it to the reference build in ``reference``, byte for byte."""
+    and hold it to the reference build in ``reference``, byte for byte.
+    The container alone unless ``options`` say otherwise, as the reference
+    builds the source tests compare against are made."""
+    options.setdefault("container", True)
+    options.setdefault("zarr", False)
     with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
         report = native.convert_bin(
             inputs, subject, model=model, skip_video=True, manifest_path=subject / "manifest.json", **options
@@ -261,8 +265,12 @@ def convert_run(
 ) -> tuple[Path, dict]:
     """A whole run as a scheduled build writes it: the run directory under
     ``root``, its manifest inside, the live pointer beside it. Returns
-    ``root`` and the report."""
+    ``root`` and the report. The container alone unless ``options`` say
+    otherwise: the source tests read the bundles back."""
     from xuebuild.sources import source_spec  # noqa: PLC0415
+
+    options.setdefault("container", True)
+    options.setdefault("zarr", False)
 
     run_directory = root / f"{model}.{run_id}"
     report = implementation.convert_bin(

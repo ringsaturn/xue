@@ -11,7 +11,7 @@ name: publish run
 #             it short of some (a variable that landed between cycles) ->
 #             split the bundles to build into groups (`xuebuild bundle-groups`)
 #   build     one job per group, in parallel: fetch only that group's GRIB
-#             records -> pack its .xue bundles -> upload them to the run
+#             records -> write its bundles' Zarr stores -> upload them to the run
 #             directory on R2 and warm them at the edge -> hand the partial
 #             manifest on as a workflow artifact
 #   finalize  merge the parts into the run's manifest (`xuebuild
@@ -73,25 +73,6 @@ on:
           source whose upstream throttles bursts takes fewer.
         type: number
         default: 16
-      zarr:
-        description: >-
-          Derive a Zarr store beside every bundle and tier
-          (docs/zarr-profile.md) and name it in the manifest, which the
-          shell then opens by default. The dual-publish soak of plan 017
-          phase 5, taken one source at a time: a run built without it is
-          still whole, and the bucket carries both deliveries until the
-          container stops being written.
-        type: boolean
-        default: false
-      container:
-        description: >-
-          Keep the `.xue` container beside the store. Off, a run publishes
-          the store alone: each bundle's `.xue` is removed once its store
-          and its video companions have been read out of it and the
-          manifest names no container — plan 017 phase 7 for one source at
-          a time, which needs `zarr` on and the phase-4 shell live.
-        type: boolean
-        default: true
     secrets:
       R2_ACCESS_KEY_ID:
         required: true
@@ -109,10 +90,6 @@ env:
   # quietly took the subprocess pipeline would take far longer and look
   # identical in the logs.
   XUE_ENCODER: native
-  # The store export (`zarr` input) reaches the bundle jobs through the
-  # encoder's own switch; empty leaves it off.
-  XUE_ZARR: ${{ inputs.zarr && '1' || '' }}
-  XUE_CONTAINER: ${{ inputs.container && '1' || '0' }}
 
 jobs:
   resolve:
@@ -350,7 +327,7 @@ jobs:
             echo "### $MODEL $RUN: $GROUP"
             echo
             echo '```json'
-            jq '{bundles: [.bundles[] | {variable, byteLength, crc32}]}' "build-report-$SLUG.json"
+            jq '{bundles: [.bundles[] | {variable, byteLength: .zarr.byteLength, crc32: .zarr.crc32}]}' "build-report-$SLUG.json"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

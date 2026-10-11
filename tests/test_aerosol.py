@@ -494,6 +494,7 @@ class MetadataValidationTests(ClassTempRoot, unittest.TestCase):
             work_root=cls.root / "work",
             model="gefsaero",
             bundle_ids=("pm25", "aod"),
+            container=True, zarr=False,
         )
         cls.pm25 = read_bundle(output / "pm25.xue").metadata
         cls.aod = read_bundle(output / "aod.xue").metadata

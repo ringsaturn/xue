@@ -798,7 +798,12 @@ class ShowcaseCaseTests(DownloadTests):
             mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}),
         ):
             return build_case(
-                spec, output_root=self.root / "out", raw_root=self.root / "raw", work_root=self.root / "work"
+                spec,
+                output_root=self.root / "out",
+                raw_root=self.root / "raw",
+                work_root=self.root / "work",
+                container=True,
+                zarr=False,
             )
 
     def test_a_case_is_a_cropped_window_of_the_mosaic(self) -> None:
@@ -858,6 +863,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
+                container=True, zarr=False,
             )
 
     def test_the_window_is_a_two_minute_axis_on_the_thinned_grid(self) -> None:
@@ -893,7 +899,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "3500x1750 grid"):
                 binconvert.convert_bin(
-                    self.inputs, self.root / "complete", model="mrms", skip_video=True, require_complete=True, expected_hours=3
+                    self.inputs, self.root / "complete", model="mrms", skip_video=True, require_complete=True, expected_hours=3,
+                    container=True, zarr=False,
                 )
 
     @requires_native_source("mrms", "the MRMS source")

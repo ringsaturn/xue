@@ -69,8 +69,9 @@ def build_local_run(
     ``bbox`` None keeps the whole domain and ``bundle_ids`` None builds every
     bundle the source publishes. Only those bundles' inputs are downloaded,
     into ``raw_root`` (``fetch_run`` adds the ``<model>.<run>`` directory).
-    ``zarr`` and ``container`` exist for the showcase, which still decides
-    them per build; a local run ships the store alone.
+    ``zarr`` and ``container`` exist for the showcase, which can ask for
+    the container too (``showcase build --xue``); a local run ships the
+    store alone.
     """
     source = source_spec(model)
     if run == "latest":

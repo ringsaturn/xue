@@ -437,6 +437,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
+                container=True, zarr=False,
             )
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:

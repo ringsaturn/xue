@@ -2,10 +2,10 @@
 
 Xue packs weather runs and observation windows into per-variable Zarr v3
 stores and plays them back in a static browser page. The layout began as a
-single-file container, `.xue`: no longer published (a live build writes
-none at all), and read by every decoder forever, since published runs and
-cases carry it and are never rebuilt. Both encoders write each store
-straight from the codes they quantized.
+single-file container, `.xue`: no longer published or written unless a
+build asks for it (`--xue`, `container=True`), and read by every decoder
+forever, since published runs and cases carry it and are never rebuilt.
+Both encoders write each store straight from the codes they quantized.
 
 Normative specs, which win over this page: [format.md](../format.md),
 [zarr-profile.md](../zarr-profile.md), [encoder.md](../encoder.md),

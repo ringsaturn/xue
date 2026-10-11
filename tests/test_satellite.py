@@ -1105,6 +1105,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
+                container=True, zarr=False,
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
@@ -1307,6 +1308,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_variants=True,
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
+                container=True, zarr=False,
             )
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
@@ -1324,12 +1326,14 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 report = binconvert.convert_bin(
                     self.inputs, self.root / "only-ir", model="himawari", skip_video=True, skip_variants=True,
                     work_root=self.root / "only-ir-work", bundle_ids=("ir104",),
+                    container=True, zarr=False,
                 )
             self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104"])
             self.assertEqual([str(call.args[0]) for call in inspected.call_args_list], [str(observation.netcdf_dataset(self.inputs / "himawari.2026091703.ir104.nc", "ir104"))])
             report = binconvert.convert_bin(
                 self.inputs, self.root / "only-dust", model="himawari", skip_video=True, skip_variants=True,
                 work_root=self.root / "only-dust-work", bundle_ids=("dustrgb",),
+                container=True, zarr=False,
             )
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["dustrgb"])
         self.assertTrue(filecmp.cmp(self.root / "only-dust" / "dustrgb.xue", self.root / "out" / "dustrgb.xue", shallow=False))
@@ -1529,6 +1533,7 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
+                container=True, zarr=False,
             )
 
     def test_the_bundles_are_the_box_with_the_disk_s_band(self) -> None:

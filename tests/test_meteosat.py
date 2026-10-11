@@ -828,6 +828,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=1,
+                container=True, zarr=False,
             )
 
     def test_the_bundles_are_hourly_with_the_fci_band(self) -> None:

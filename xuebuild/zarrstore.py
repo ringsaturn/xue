@@ -50,10 +50,6 @@ clients fetch as an HTTP suffix range without knowing the object's length —
 zarrita reads only that form; ``start`` lets a reader that already has the
 object length find the index with the first request."""
 
-ENVIRONMENT_VARIABLE = "XUE_ZARR"
-"""Set to ``1`` to make a build derive a store beside every bundle it
-writes, the way ``build-bin --zarr`` does — for the scheduled publishes."""
-
 _EMPTY_ENTRY = 0xFFFFFFFFFFFFFFFF
 """The shard index's marker for an inner chunk that was never written; the
 export writes every chunk, so it never appears, but a reader honours it."""
@@ -66,23 +62,6 @@ _CODEC_BYTES_LITTLE = {"name": "bytes", "configuration": {"endian": "little"}}
 _CODEC_ZSTD = {"name": "zstd", "configuration": {"level": ZSTD_LEVEL, "checksum": True}}
 _CODEC_CRC32C = {"name": "crc32c"}
 _CODEC_DELTA = {"name": DELTA_CODEC, "configuration": {"axis": 0}}
-
-
-def enabled_by_environment() -> bool:
-    return os.environ.get(ENVIRONMENT_VARIABLE, "").strip() == "1"
-
-
-CONTAINER_VARIABLE = "XUE_CONTAINER"
-
-
-def container_enabled_by_environment() -> bool:
-    """Whether a build keeps the ``.xue`` container it wrote: ``XUE_CONTAINER=0``
-    retires it — the store derived from it is the only delivery published,
-    the manifest names no ``path``, and the file is removed once the store
-    and the video companions have been read out of it. The transitional
-    form of plan 017's phase 7, taken one source at a time; anything else,
-    the variable unset included, keeps the container."""
-    return os.environ.get(CONTAINER_VARIABLE, "").strip() != "0"
 
 
 # -- CRC-32C -------------------------------------------------------------------

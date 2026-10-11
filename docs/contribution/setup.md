@@ -56,8 +56,9 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
 .venv/bin/python -m xuebuild convert-bin data/raw/gfs.YYYYMMDDHH \
   --output web/public/data/gfs.YYYYMMDDHH \
   --manifest web/public/data/manifest.json
+.venv/bin/python -m xuebuild build-bin --model ecmwf --run latest
+.venv/bin/python -m xuebuild build-bin --model gfs --run latest --hours 6 --xue           # also the .xue
 .venv/bin/python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
-.venv/bin/python -m xuebuild build-bin --model ecmwf --run latest --zarr
 .venv/bin/python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3            # a past window
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now    # one live round
 .venv/bin/python -m xuebuild build-bin --model himawari --run latest --hours 6 --round now
@@ -68,9 +69,9 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
   (fail without it) or `python` (the reference pipeline). Both produce
   identical bytes.
 - `--hours` may be any hour on the model's axis.
-- `build-bin` writes per bundle a `.xue`, with `--zarr` (`XUE_ZARR=1`) the
-  `<bundle>.zarr/` store derived from it, and with `--no-xue`
-  (`XUE_CONTAINER=0`) the store alone; the reduced tiers (`.half`, plus
+- `build-bin` (and `convert-bin`, `showcase build`) writes per bundle a
+  `<bundle>.zarr/` store straight from the codes, with `--xue` the `.xue`
+  container beside it from the same codes; the reduced tiers (`.half`, plus
   `.quarter` / `.eighth` on satellites), a first-frame poster and, where
   the source enables it, H.264 companions. `--skip-variants` /
   `--skip-video` turn those off. The pressure family gets no poster or

@@ -47,11 +47,6 @@ concurrency:
 
 env:
   ENCODER: ${{ inputs.encoder }}
-  # A case is published as Zarr stores alone, like every live run (plan
-  # 017 phase 7): the store is derived from the `.xue` the build wrote and
-  # the file retired before upload.
-  XUE_ZARR: "1"
-  XUE_CONTAINER: "0"
 
 jobs:
   build:

@@ -78,7 +78,7 @@ encoder-py: ## Install this tree's native encoder into the venv
 	uv pip install --reinstall ./rust/xue-py
 
 mvp: check install wasm ## Build one run (MODEL, RUN, HOURS) and the frontend
-	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) --zarr $(FORCE)
+	$(PYTHON) -m xuebuild build-bin --model $(MODEL) --run $(RUN) $(if $(HOURS),--hours $(HOURS)) --profile $(PROFILE) $(FORCE)
 	npm run build
 
 # An archived run rebuilt for local use (backtesting): BBOX=W,S,E,N crops it,

@@ -1412,9 +1412,9 @@ Normative for byte identity between the two encoders:
 ## File Naming
 
 These conventions sit outside the container but are what an encoder
-writes when a build asks for containers (runs are published as Zarr stores
-named the same way with `.zarr`, [`zarr-profile.md`](zarr-profile.md), with
-no container written): one file per variable per run (`tmp2m.xue`,
+writes when a build asks for containers (`--xue`; a build writes Zarr
+stores named the same way with `.zarr` by default,
+[`zarr-profile.md`](zarr-profile.md), and runs are published that way): one file per variable per run (`tmp2m.xue`,
 `prate.xue`, `dswrf.xue`, `cref.xue`), the two-variable `wind10m.xue`, and
 reduced-resolution renditions named `<variable>.half.xue`,
 `<variable>.quarter.xue` and `<variable>.eighth.xue` (decimated by 2, 4 and

@@ -96,11 +96,6 @@ env:
   # model, else the reference pipeline with a ::warning:: on the run — and
   # the dispatch can still insist on either.
   ENCODER: ${{ inputs.encoder || 'auto' }}
-  # Every round is published as Zarr stores alone (plan 017 phase 7): the
-  # store is derived from the `.xue` the round wrote and the file retired
-  # before upload. A round's export is a fraction of its build.
-  XUE_ZARR: "1"
-  XUE_CONTAINER: "0"
 
 jobs:
   publish:

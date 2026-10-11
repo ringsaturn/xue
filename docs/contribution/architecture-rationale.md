@@ -27,14 +27,14 @@ GPU.
 The Zarr store ([`docs/zarr-profile.md`](../zarr-profile.md)) carries the
 same codes in a layout any Zarr client reads: a container v2 bundle is, to
 within its index format, a sharded Zarr `uint8` array. Since 2026-09-15
-every live run, round and case is published as stores alone
-(`build-bin --zarr --no-xue`). The `.xue` container
+every live run, round and case is published as stores alone (what
+`build-bin` writes by default). The `.xue` container
 ([`docs/format.md`](../format.md)) remains:
 
 - an opt-in output both encoders can still write beside the store, from
   the same codes, so the two carry identical codes by construction;
 - the format every decoder keeps reading, for runs and cases published
-  before the switch and for local builds without `--no-xue`;
+  before the switch and for builds asked for it (`--xue`);
 - the format the golden fixtures and the size comparison above are stated
   in.
 

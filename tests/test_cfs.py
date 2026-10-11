@@ -785,6 +785,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             manifest_path=output / "manifest.part.json",
             model="cfs",
             bundle_ids=("tmp2m", "hgt500", "qflux850"),
+            container=True, zarr=False,
         )
         manifest = json.loads((output / "manifest.part.json").read_text())
         self.assertEqual(
@@ -800,7 +801,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         family_frame_path(frames[1], "pgb").unlink()
         with self.assertRaises(ConversionError) as caught:
             binconvert.convert_bin(
-                frames, root / "out", work_root=root / "work", model="cfs", bundle_ids=("tmp2m", "hgt500")
+                frames, root / "out", work_root=root / "work", model="cfs", bundle_ids=("tmp2m", "hgt500"),
+                container=True, zarr=False,
             )
         self.assertIn("pgb", str(caught.exception))
 
@@ -820,6 +822,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             manifest_path=output / "manifest.part.json",
             model="cfs",
             bundle_ids=("hgt500", "qflux850"),
+            container=True, zarr=False,
         )
         manifest = json.loads((output / "manifest.part.json").read_text())
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["hgt500", "qflux850"])
@@ -895,6 +898,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 model="cfs",
                 require_complete=True,
                 expected_hours=12,
+                container=True, zarr=False,
             )
 
 
