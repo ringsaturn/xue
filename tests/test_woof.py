@@ -305,6 +305,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026101006",
                 manifest_path=cls.root / "out" / "manifest.json",
+                container=True, zarr=False,
             )
 
     def manifest(self) -> dict:
@@ -489,6 +490,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     skip_video=True,
                     require_complete=True,
                     expected_hours=2,
+                    container=True, zarr=False,
                 )
 
     @requires_native_source("woof")

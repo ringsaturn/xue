@@ -117,6 +117,7 @@ class NativeParityTests(ClassTempRoot, unittest.TestCase):
             latest_path=cls.root / name / "latest.json",
             run_id="2026081406",
             model="gfs",
+            container=True, zarr=False,
         )
         return cls.root / name, report
 
@@ -169,6 +170,7 @@ class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
             model="gfs",
             skip_video=True,
             zarr=True,
+            container=True,
         )
         return cls.root / name, report
 
@@ -270,9 +272,10 @@ class NativeReportTests(ClassTempRoot, unittest.TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.reference = binconvert.convert_bin(
-            FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work", skip_video=True
+            FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work", skip_video=True,
+            container=True, zarr=False,
         )
-        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True)
+        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True, container=True, zarr=False)
 
     def test_the_reports_have_the_same_shape(self) -> None:
         self.assertEqual(sorted(self.reference), sorted(self.subject))
@@ -321,6 +324,7 @@ class NativeRestrictedBuildTests(ClassTempRoot, unittest.TestCase):
             bundle_ids=("tmp2m",),
             skip_video=True,
             skip_variants=True,
+            container=True, zarr=False,
         )
         return directory, report
 
@@ -363,6 +367,7 @@ class NativeJpeg2000Tests(ClassTempRoot, unittest.TestCase):
             bundle_ids=cls.WAVE_BUNDLES,
             skip_video=True,
             skip_variants=True,
+            container=True, zarr=False,
         )
         return directory, report
 

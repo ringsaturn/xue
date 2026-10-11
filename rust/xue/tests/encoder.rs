@@ -250,7 +250,13 @@ fn golden_encode_matches_the_python_reference() {
     }
     let output = std::env::temp_dir().join("xue-encode-golden");
     let _ = std::fs::remove_dir_all(&output);
-    convert_bin(&[fixture], &output, &ConvertOptions::default()).expect("conversion");
+    // The golden fixture is the container: ask for it, and for nothing else.
+    let options = ConvertOptions {
+        container: true,
+        zarr: false,
+        ..ConvertOptions::default()
+    };
+    convert_bin(&[fixture], &output, &options).expect("conversion");
     for name in [
         "tmp2m.xue",
         "tmp2m.half.xue",
@@ -336,6 +342,8 @@ fn a_group_of_both_cfs_families_builds_each_on_its_own_grid() {
                 .collect(),
         ),
         manifest_path: Some(output.join("manifest.part.json")),
+        container: true,
+        zarr: false,
         ..ConvertOptions::default()
     };
     convert_bin(&frames, &output, &options).expect("conversion");
@@ -385,6 +393,8 @@ fn a_group_of_the_cfs_family_alone_builds_from_the_family_directory() {
     let options = ConvertOptions {
         model: "cfs".into(),
         bundle_ids: Some(vec!["hgt500".to_string(), "qflux850".to_string()]),
+        container: true,
+        zarr: false,
         ..ConvertOptions::default()
     };
     convert_bin(&[root.join("cfs.2026091900")], &output, &options).expect("conversion");
@@ -412,6 +422,8 @@ fn a_frame_whose_family_file_is_missing_is_refused() {
     let options = ConvertOptions {
         model: "cfs".into(),
         bundle_ids: Some(vec!["tmp2m".to_string(), "hgt500".to_string()]),
+        container: true,
+        zarr: false,
         ..ConvertOptions::default()
     };
     let error = convert_bin(&frames, &root.join("out"), &options).expect_err("refused");

@@ -28,8 +28,6 @@ from .stac import POINT_PRODUCTS, write_point_product_documents, write_run_docum
 from .zarrstore import (
     DEFAULT_INDEX_LOCATION,
     INDEX_LOCATIONS,
-    container_enabled_by_environment,
-    enabled_by_environment,
     export_bundle,
     store_path_for,
 )
@@ -173,7 +171,7 @@ def parser() -> argparse.ArgumentParser:
     )
     convert_bin_parser.add_argument("input", type=Path)
     _model_argument(convert_bin_parser, fetched_only=False)
-    convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for per-variable .xue files")
+    convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for the per-bundle Zarr stores")
     convert_bin_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
     convert_bin_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
     convert_bin_parser.add_argument("--manifest", type=Path, help="write a schema v3 manifest.json to this path")
@@ -194,24 +192,18 @@ def parser() -> argparse.ArgumentParser:
         help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter and .eighth tiers too)",
     )
     convert_bin_parser.add_argument(
-        "--zarr",
-        action="store_true",
-        help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
-        "in the manifest; XUE_ZARR=1 in the environment does the same",
-    )
-    convert_bin_parser.add_argument(
-        "--no-xue",
+        "--xue",
         dest="container",
-        action="store_false",
-        help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
-        "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
+        action="store_true",
+        help="also write each bundle's .xue container (and name it in the manifest) beside its Zarr store, "
+        "from the same codes; a build writes the store alone otherwise",
     )
     convert_bin_parser.add_argument(
         "--no-series",
         dest="series",
         action="store_false",
-        help="do not derive the series companion stores (<bundle>.series.zarr) the point-read bundles "
-        "would otherwise ship (needs --zarr; docs/zarr-profile.md)",
+        help="do not write the series companion stores (<bundle>.series.zarr) the point-read bundles "
+        "would otherwise ship (docs/zarr-profile.md)",
     )
 
     verify_bin_parser = commands.add_parser("verify-bin", help="validate and fully decode a Xue bundle")
@@ -263,24 +255,18 @@ def parser() -> argparse.ArgumentParser:
         help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter and .eighth tiers too)",
     )
     build_bin_parser.add_argument(
-        "--zarr",
-        action="store_true",
-        help="also derive a Zarr v3 store beside every bundle and variant (docs/zarr-profile.md) and name it "
-        "in the manifest; XUE_ZARR=1 in the environment does the same",
-    )
-    build_bin_parser.add_argument(
-        "--no-xue",
+        "--xue",
         dest="container",
-        action="store_false",
-        help="publish the Zarr store alone: remove each .xue once its store and video companions are read "
-        "out of it and name no container in the manifest (needs --zarr); XUE_CONTAINER=0 does the same",
+        action="store_true",
+        help="also write each bundle's .xue container (and name it in the manifest) beside its Zarr store, "
+        "from the same codes; a build writes the store alone otherwise",
     )
     build_bin_parser.add_argument(
         "--no-series",
         dest="series",
         action="store_false",
-        help="do not derive the series companion stores (<bundle>.series.zarr) the point-read bundles "
-        "would otherwise ship (needs --zarr; docs/zarr-profile.md)",
+        help="do not write the series companion stores (<bundle>.series.zarr) the point-read bundles "
+        "would otherwise ship (docs/zarr-profile.md)",
     )
     build_bin_parser.add_argument(
         "--bundles",
@@ -433,15 +419,11 @@ def parser() -> argparse.ArgumentParser:
         help="do not rewrite showcase.json after building",
     )
     showcase_build.add_argument(
-        "--zarr",
-        action="store_true",
-        help="also derive a Zarr v3 store beside every bundle of the case (or set XUE_ZARR=1)",
-    )
-    showcase_build.add_argument(
-        "--no-xue",
+        "--xue",
         dest="container",
-        action="store_false",
-        help="publish each bundle's Zarr store alone and retire its .xue (needs --zarr; or set XUE_CONTAINER=0)",
+        action="store_true",
+        help="also write each bundle's .xue container (and name it in the manifest) beside its Zarr store, "
+        "from the same codes; a build writes the store alone otherwise",
     )
 
     showcase_catalog = showcase_commands.add_parser(
@@ -690,8 +672,7 @@ def main(argv: list[str] | None = None) -> int:
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
                 last_hour=arguments.hours,
-                zarr=arguments.zarr or enabled_by_environment(),
-                container=arguments.container and container_enabled_by_environment(),
+                container=arguments.container,
                 series=arguments.series,
             )
             print(json.dumps(report, indent=2))
@@ -761,8 +742,7 @@ def main(argv: list[str] | None = None) -> int:
                         work_root=arguments.work_dir,
                         force=arguments.force,
                         force_download=arguments.force_download,
-                        zarr=arguments.zarr or enabled_by_environment(),
-                        container=arguments.container and container_enabled_by_environment(),
+                        container=arguments.container,
                     )
                     for spec in load_cases(arguments.cases_dir, tuple(arguments.cases))
                 ]
@@ -846,8 +826,7 @@ def main(argv: list[str] | None = None) -> int:
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
                 bundle_ids=bundle_ids,
-                zarr=arguments.zarr or enabled_by_environment(),
-                container=arguments.container and container_enabled_by_environment(),
+                container=arguments.container,
                 series=arguments.series,
             )
             report["run"] = run.id

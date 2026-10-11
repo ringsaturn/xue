@@ -472,13 +472,13 @@ def build_case(
     work_root: Path,
     force: bool = False,
     force_download: bool = False,
-    zarr: bool = False,
-    container: bool = True,
+    zarr: bool = True,
+    container: bool = False,
 ) -> dict[str, Any]:
     """Fetch (or open), crop and encode one case, and write its manifest and
-    sidecar. ``zarr`` derives a Zarr store beside every bundle, the way
-    ``build-bin --zarr`` does for a run, and ``container=False`` retires the
-    ``.xue`` behind it, the way ``--no-xue`` does.
+    sidecar. A case ships its Zarr stores alone, the way a run does;
+    ``container`` writes each bundle's ``.xue`` as well (``showcase build
+    --xue``).
 
     Only the case's own variables are downloaded, and into a per-case raw
     directory so a partial record set never shadows a full run's cache. A

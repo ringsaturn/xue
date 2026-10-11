@@ -455,6 +455,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
+                container=True, zarr=False,
             )
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
@@ -497,7 +498,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "5600x5000 grid"):
                 binconvert.convert_bin(
-                    self.inputs, self.root / "complete", model="jma", skip_video=True, require_complete=True, expected_hours=3
+                    self.inputs, self.root / "complete", model="jma", skip_video=True, require_complete=True, expected_hours=3,
+                    container=True, zarr=False,
                 )
 
     def test_a_run_directory_holds_exactly_one_series(self) -> None:
@@ -507,7 +509,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         shutil.copy(SERIES, two / "b.nc")
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "exactly one NetCDF series"):
-                binconvert.convert_bin(two, self.root / "two-out", model="jma", skip_video=True)
+                binconvert.convert_bin(two, self.root / "two-out", model="jma", skip_video=True, container=True, zarr=False)
 
     @requires_native_source("jma", "the JMA source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

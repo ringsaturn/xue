@@ -33,9 +33,10 @@ Writing:
   ships: the container's size where one is written, the store's otherwise.
 - `zarrstore.export_bundle` derives the same store from a finished `.xue`
   (`ContainerSource`), for `xue export-zarr` and the fixtures.
-- `build-bin --zarr` / `XUE_ZARR=1` turns it on. `--no-xue` /
-  `XUE_CONTAINER=0` (`container: false` in `publish.yml`) writes no `.xue`
-  at all; the manifest then names the store alone.
+- `build-bin`, `convert-bin` and `showcase build` write the stores alone
+  and the manifest names nothing else; `--xue` (`container=True` in the
+  Python and wheel APIs) writes each bundle's `.xue` beside its store and
+  names both.
 - `xue export-zarr <bundle.xue> [--delta] [--index-location start|end]` by
   hand. The `zarr` dependency group is for tests and delta stores only.
 

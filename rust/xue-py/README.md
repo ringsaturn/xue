@@ -54,8 +54,14 @@ and the CMA radar mosaic.
 report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
 ```
 
+A build writes one Zarr v3 store per bundle (`out/tmp2m.zarr`, …) by
+default; `container=True` writes each bundle's `.xue` beside it, and
+`zarr=False, container=True` the `.xue` alone (what earlier releases wrote
+by default).
+
 The stages are also exposed on their own — `quantize`, `encode_residual`,
-`decimate`, `encode_poster` — taking and returning NumPy arrays.
+`decimate`, `encode_poster`, `write_store` — taking and returning NumPy
+arrays.
 
 ## What is in the wheel
 

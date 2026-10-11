@@ -14,7 +14,7 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
 
   <input>                  a GRIB directory, one or more GRIB files, or one
                            NetCDF file for an observation source
-  --output <dir>           output directory for the per-variable .xue files
+  --output <dir>           output directory for the per-bundle Zarr stores
   --model <name>           gfs | ecmwf | aifs | ifshres | sflux | hrrr | mrms | jma | cma | himawari (default gfs)
   --profile <name>         quality | compact | balanced       (default quality)
   --manifest <path>        write a schema v5 manifest.json here
@@ -26,6 +26,8 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   --bbox <w,s,e,n>         crop every plane to this window, in degrees
   --bundles <a,b>          build only these bundles
   --skip-variants          do not build the reduced .half / .quarter / .eighth tiers
+  --xue                    also write each bundle's .xue container
+  --series <a,b>           also write these bundles' series stores
   --zstd-level <n>         zstd compression level               (default 15)
   --extract-workers <n>    files extracted in parallel
   --compress-workers <n>   planes compressed in parallel
@@ -101,6 +103,10 @@ fn run() -> Result<String, Error> {
                 options.bundle_ids = Some(value()?.split(',').map(str::to_string).collect());
             }
             "--skip-variants" => options.skip_variants = true,
+            "--xue" => options.container = true,
+            "--series" => {
+                options.series_bundle_ids = value()?.split(',').map(str::to_string).collect();
+            }
             "--skip-video" => { /* accepted for CLI parity; no video is built */ }
             "--zstd-level" => options.zstd_level = parse_number(&value()?)? as i32,
             "--extract-workers" => options.extract_workers = parse_number(&value()?)? as usize,
