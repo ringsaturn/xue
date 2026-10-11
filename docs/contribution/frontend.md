@@ -216,7 +216,10 @@ and the window shrinks to fit it.
   the layer holds just those cells (`setRegion`: textures sized to the
   region, uploaded with `UNPACK_ROW_LENGTH`/`SKIP_*` and
   `UNPACK_IMAGE_HEIGHT` set to the plane's height — a 3D upload refuses
-  skipped rows otherwise); a line stands a vertical section, a wall from
+  skipped rows otherwise, and every volume upload runs under
+  `withPlainUnpack`, because MapLibre leaves `UNPACK_PREMULTIPLY_ALPHA_WEBGL`
+  on after its own image uploads and WebGL2 then rejects a 3D texture from
+  a typed array without an error, leaving the volume empty); a line stands a vertical section, a wall from
   sea level to the top painted from the same 3D textures, over the march
   veiled to a third. Pressing a tool again clears what it holds.
 - Altitude correction (`layer.ts::lapseCodes`, formula in `lapse.ts`):
