@@ -144,11 +144,13 @@ Facts worth getting right:
   and GOES-18 (137.0°W, WMO 272), read from NOAA's CMIPF full-disk files,
   the Dust RGB with the GOES-R Quick Guide's ABI stretches; the East disk
   is 135.2°W–15.2°W, the West disk 163°E–283°E across the antimeridian.
-  `meteosat` is the same two variables from EUMETSAT's Meteosat-12 (MTG-I1
-  FCI, 0°, WMO 71 / 210), the disk 60°W–60°E, read from the EUMETSAT Data
-  Store's FCI Level 1c chunks (radiances converted to brightness
-  temperature with the product's Planck coefficients; the Dust RGB's green
-  gun is 10.5 − 8.7 µm, FCI having no 11.2 µm window) — **hourly**: only
+  `meteosat` is the same two variables and the true colour from
+  EUMETSAT's Meteosat-12 (MTG-I1 FCI, 0°, WMO 71 / 210), the disk
+  60°W–60°E, read from the EUMETSAT Data Store's FCI Level 1c chunks
+  (radiances converted to brightness temperature with the product's
+  Planck coefficients, and the solar channels to reflectance factor with
+  its solar irradiances; the Dust RGB's green gun is 10.5 − 8.7 µm, FCI
+  having no 11.2 µm window) — **hourly**: only
   the cycle on each hour is published, a 24-hour window, because the
   EUMETSAT data policy releases that cycle as Core data under CC-BY-4.0
   and the ten-minute cycles between under other terms.
@@ -244,7 +246,7 @@ Facts worth getting right:
   `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent) and
   `truecolor` (the true colour picture's red, green and blue guns, 0–1,
   a composite with no physical unit, no data after dark; GOES-EAST and
-  GOES-WEST the same five, METEOSAT the first two). AURORA:
+  GOES-WEST the same five, METEOSAT ir104, dustrgb and truecolor). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
