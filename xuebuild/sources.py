@@ -1639,23 +1639,25 @@ SOURCES: dict[str, SourceSpec] = {
     # degrees on a 0.01° step, so its cells nest the JMA nowcast's 0.005°
     # ones 2:1. A slot fetches only the six ISatSS tiles reaching into the
     # box (T009–T011, T018–T020) and its frames cache under
-    # ``himawarijp-frames``, apart from the disk's. Three bundles: the
-    # 10.4 µm window, the Dust RGB and the true colour; the dust
-    # confidences are not published here, their ancillary fields being
-    # staged on the disk grids.
+    # ``himawarijp-frames``, apart from the disk's. Four bundles: the
+    # 10.4 µm window, the Dust RGB, the true colour and the night
+    # microphysics; the dust confidences are not published here, their
+    # ancillary fields being staged on the disk grids.
     "himawarijp": SourceSpec(
         id="himawarijp",
         manifest_model="HIMAWARI-JP",
         product="ahi-japan-0p01",
         latest_filename="latest-himawarijp.json",
         steps=(),
-        # The Dust RGB's four windows (the first is the one a listing
-        # walks), then the true colour's four solar bands.
-        input_variable_ids=("ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"),
+        # The 3.9 µm window the night microphysics adds (the first, as on
+        # the disk, is the one a listing walks), the Dust RGB's four
+        # windows, then the true colour's four solar bands: a subset of
+        # the disk's channels in the disk's order.
+        input_variable_ids=("ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=HIMAWARI.bands(("ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
+        bands=HIMAWARI.bands(("ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "truecolor"),
+        bundle_composite_ids=("dustrgb", "truecolor", "nightmicro"),
         core_bundle_ids=("ir104",),
         # 26° x 22° at 0.01°: 5.7 M cells a frame, under the disk's 9 M.
         production_grid=(2600, 2200),
@@ -1669,9 +1671,10 @@ SOURCES: dict[str, SourceSpec] = {
         grid_step=0.01,
         region=(122.0, 24.0, 148.0, 46.0),
         cycle_hours=1,
-        # Three hours: a sunlit hour of the three bundles and their ladder is
-        # some 170 MB of stores (seven frames: the true colour 90 MB, the
-        # Dust RGB 51, ir104 13), so six would be some 0.9 GB a round by day.
+        # Three hours: a sunlit hour of the four bundles and their ladder
+        # is some 220 MB of stores (seven frames: the true colour 90 MB,
+        # the Dust RGB 51, the night microphysics about as much, ir104 13),
+        # some 0.65 GB a round by day, so six would be some 1.3 GB.
         window_hours=3,
         cadence_seconds=600,
         video=False,

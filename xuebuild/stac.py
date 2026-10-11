@@ -772,7 +772,12 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "and 0.47 µm reflectances of AHI bands 3, 2 and 1, each divided by the cosine of the "
             "solar zenith, the green blended with a little of the 0.86 µm band, each gun put through "
             "one fixed brightness curve to 0–1, no Rayleigh correction, the night side no data; this "
-            "pipeline's own recipe, carried as the producer block xue with the recipe's version). "
+            "pipeline's own recipe, carried as the producer block xue with the recipe's version); and "
+            "the night microphysics composite (nightmicro: EUMETSAT's Night Microphysics RGB from AHI "
+            "bands 15, 13 and 7 — 12.3 − 10.4 µm over −4 to 2 K, 10.4 − 3.9 µm over 0 to 10 K and the "
+            "10.4 µm window over 243 to 293 K, each stretched linearly to 0–1; computed by day too, "
+            "where reflected sunlight in the 3.9 µm band saturates the green gun; carried as the "
+            "producer block xue with the recipe's version). "
             "Source: Japan Meteorological Agency, distributed by NOAA; the data are unaltered but "
             "reprojected and composited, and neither JMA nor NOAA endorses this site."
         ),

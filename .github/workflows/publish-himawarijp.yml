@@ -8,19 +8,20 @@ name: publish himawarijp
 # grid (2600 x 2200), the native ten-minute step — rebuilt every ten
 # minutes into a round subdirectory of its run (<model>.<run>/<HHMM>/) and
 # pointed at by latest-himawarijp.json. It publishes the 10.4 µm window,
-# the Dust RGB and the true colour; no dust confidence, so no ANCILLARY.
+# the Dust RGB, the true colour and the night microphysics; no dust
+# confidence, so no ANCILLARY.
 #
 # The shape is publish-himawari.yml's. A round lists the newest complete
 # scan and fetches only the six tiles per channel that reach the box
-# (T009–T011, T018–T020; some 60 MB a slot over eight channels by day, 35
-# by night, against the disk's 870 and 500), warps them once
-# (xuebuild/satellite/, through the system GDAL's gdalwarp — the xuepy
-# wheel's GDAL carries no GeoTIFF driver, so this workflow installs gdal-bin
-# whichever encoder converts), caches the frames on the bucket under
-# himawarijp-frames/, apart from the disk's (`make pull-r2-frames` /
+# (T009–T011, T018–T020; some 60 MB a slot over the eight channels other
+# than 3.9 µm by day, 35 by night, against the disk's 870 and 500), warps
+# them once (xuebuild/satellite/, through the system GDAL's gdalwarp — the
+# xuepy wheel's GDAL carries no GeoTIFF driver, so this workflow installs
+# gdal-bin whichever encoder converts), caches the frames on the bucket
+# under himawarijp-frames/, apart from the disk's (`make pull-r2-frames` /
 # `push-r2-frames`), and stacks the window's frames into the NetCDF series
-# the converter reads. A sunlit hour of stores is some 170 MB, so a round
-# uploads up to some 500 MB by day and half that at night, when the true
+# the converter reads. A sunlit hour of stores is some 220 MB, so a round
+# uploads up to some 650 MB by day and half that at night, when the true
 # colour is empty.
 #
 # Machine time: six jobs an hour of a few minutes each, free on a public

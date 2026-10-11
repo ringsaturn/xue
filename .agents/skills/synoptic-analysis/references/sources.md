@@ -46,7 +46,7 @@ Which model to use:
 | `jma` | JMA precipitation nowcast analysis, Japan: `prate` only, class representative rates 0.5/3/7.5/15/25/40/65/100 mm/h | 0.005°, 121–149°E, 20.5–45.5°N | 5 min | last 2–3 h | minutes |
 | `cma` | CMA radar mosaic, China: `cref` | 0.0439°, 67.5–146.25°E, 11.25–56.25°N | 6 min | last 2–3 h | 20–30 min |
 | `himawari` | Himawari-9 AHI (140.7°E): `ir104` (K), `dustrgb` (3 guns), `dustcf` | 0.04°, 80.7°E–200.7°E (past 180), 60°S–60°N | 10 min | last 5–6 h | 15–20 min |
-| `himawarijp` | Himawari-9 AHI over Japan: `ir104`, `dustrgb`, `truecolor` | **0.01°**, 122–148°E, 24–46°N | 10 min | last 2–3 h | 15–20 min |
+| `himawarijp` | Himawari-9 AHI over Japan: `ir104`, `dustrgb`, `truecolor`, `nightmicro` | **0.01°**, 122–148°E, 24–46°N | 10 min | last 2–3 h | 15–20 min |
 | `goeseast` | GOES-19 ABI (75.2°W): same three | 0.04°, 135.2°W–15.2°W | 10 min | last 5–6 h | ~15 min |
 | `goeswest` | GOES-18 ABI (137°W): same three | 0.04°, 163°E–283°E (past 180) | 10 min | last 5–6 h | ~15 min |
 | `meteosat` | Meteosat-12 FCI (0°): `ir104`, `dustrgb` | 0.04°, 60°W–60°E | **hourly** | last 24 h | ~1 h |
