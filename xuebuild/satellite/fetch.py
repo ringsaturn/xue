@@ -193,6 +193,7 @@ def fetch_frame(
         keys=[item.key for item in objects],
         projector=projector,
         resampling=resampling_for(channel),
+        kind=channel.kind,
     )
     if reader.files_per_channel:
         shutil.rmtree(slot_dir, ignore_errors=True)

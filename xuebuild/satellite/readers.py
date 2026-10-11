@@ -602,15 +602,44 @@ FCI_GROUPS: tuple[str, ...] = (
     "vis_04", "vis_05", "vis_06", "vis_08", "vis_09", "nir_13", "nir_16", "nir_22",
     "ir_38", "wv_63", "wv_73", "ir_87", "ir_97", "ir_105", "ir_123", "ir_133",
 )
-#: The full-disk 2 km grid the infrared channels are on: rows and columns,
-#: and how the file packs a row or column number into a scan angle
-#: (``y = offset + step × row``, radians; the same magnitudes for ``x``
-#: with the sign reversed). A chunk is one fortieth of the rows; the
-#: reader checks these against the file it opens, so a product change is
-#: an error and not a silent misplacement.
-FCI_IR_GRID = 5568
-FCI_IR_ANGLE_STEP = 5.58871526031607e-05
-FCI_IR_ANGLE_OFFSET = -0.155617776423501
+@dataclass(frozen=True)
+class FCIGrid:
+    """One of the full-disk grids an FDHSI chunk carries its channels on:
+    rows and columns, and how the file packs a row or column number into a
+    scan angle (``y = offset + step × row``, radians; the same magnitudes
+    for ``x`` with the sign reversed). A chunk is one fortieth of the rows
+    of either grid; the reader checks these against the file it opens, so
+    a product change is an error and not a silent misplacement."""
+
+    size: int
+    angle_step: float
+    angle_offset: float
+
+
+#: The grids by a channel's ``resolution_km``: the visible and
+#: near-infrared channels on the 1 km grid, the infrared on the 2 km one
+#: (half the step, nearly the same offset: both grids span the same disk).
+FCI_GRIDS: dict[float, FCIGrid] = {
+    1.0: FCIGrid(size=11136, angle_step=2.79435763233999e-05, angle_offset=-0.155603804756852),
+    2.0: FCIGrid(size=5568, angle_step=5.58871526031607e-05, angle_offset=-0.155617776423501),
+}
+
+
+def fci_grid(channel: Channel) -> FCIGrid:
+    try:
+        return FCI_GRIDS[channel.resolution_km]
+    except KeyError as exc:
+        raise ConversionError(f"FCI has no {channel.resolution_km} km grid for {channel.id}") from exc
+
+
+#: How the reader packs a reflectance strip: Int16 steps of 1/4096 from
+#: zero (a reflectance factor of −0.01 … 1.26 is codes −41 … 5161), exact
+#: in binary for the reason the brightness temperature step is below.
+FCI_REFL_SCALE = 2.0**-12
+FCI_REFL_OFFSET = 0.0
+#: One astronomical unit in km: the product gives the Earth–Sun distance
+#: in km and the solar irradiance at 1 AU.
+ASTRONOMICAL_UNIT_KM = 1.495978707e8
 #: How the reader packs a brightness temperature strip: Int16 steps of
 #: 1/128 K above 100 K (180–340 K is codes 10 240–30 720). The step is
 #: exact in binary on purpose: both encoders unscale a code as
@@ -754,22 +783,27 @@ class FCIReader:
                 by_chunk[parsed.chunk] = candidate
         return [by_chunk[chunk] for chunk in sorted(by_chunk)]
 
-    def needed_chunks(self, platform: Platform) -> set[int]:
+    def needed_chunks(self, platform: Platform, channel: Channel | None = None) -> set[int]:
         """The chunks whose rows reach into the platform's region — the
-        disk between ±60° of latitude — from the grid's row packing: a
-        chunk is one fortieth of the rows, and the strip a row is in is
-        known only once the file is open, so two rows of margin are
-        allowed either side. The northern- and southernmost two chunks
-        are past 60° and are never fetched."""
+        disk between ±60° of latitude — from the row packing of the grid
+        ``channel`` is on (the reference channel's when none is named): a
+        chunk is one fortieth of the rows of either grid, and the strip a
+        row is in is known only once the file is open, so two 2 km rows
+        (four 1 km rows) of margin are allowed either side. The northern-
+        and southernmost two chunks are past 60° and are never fetched;
+        the set is the same on both grids, which is what lets one download
+        serve every channel."""
+        grid = fci_grid(channel or platform.channel(platform.reference_channel))
         _, south, _, north = platform.region
         bounds = [
             elevation_angle(latitude, height=35786400.0, semi_major=6378137.0, semi_minor=6356752.314245)
             for latitude in (south, north)
         ]
         low, high = min(bounds), max(bounds)
-        first_row = (low - FCI_IR_ANGLE_OFFSET) / FCI_IR_ANGLE_STEP - 2.0
-        last_row = (high - FCI_IR_ANGLE_OFFSET) / FCI_IR_ANGLE_STEP + 2.0
-        rows_per_chunk = FCI_IR_GRID / platform.tile_count
+        margin = 2.0 * FCI_GRIDS[2.0].angle_step / grid.angle_step
+        first_row = (low - grid.angle_offset) / grid.angle_step - margin
+        last_row = (high - grid.angle_offset) / grid.angle_step + margin
+        rows_per_chunk = grid.size / platform.tile_count
         needed: set[int] = set()
         for chunk in range(1, platform.tile_count + 1):
             chunk_first = math.floor((chunk - 1) * rows_per_chunk) + 1
@@ -821,8 +855,8 @@ class FCIReader:
         return SlotFiles(slot=self.slot_of(platform, min(starts)), paths=paths)
 
     def strip_path(self, files: SlotFiles, channel: Channel, chunk_file: Path) -> Path:
-        """Where a chunk's brightness-temperature strip of one channel is
-        written: beside the chunks, under the channel's id."""
+        """Where a chunk's strip of one channel is written: beside the
+        chunks, under the channel's id."""
         parsed = parse_fci_chunk(chunk_file.name)
         chunk = parsed.chunk if parsed is not None else 0
         return chunk_file.parent / channel.id / f"{chunk:04d}.vrt"
@@ -830,19 +864,19 @@ class FCIReader:
     def open(
         self, files: SlotFiles, workdir: Path, *, channel: Channel | None = None, missing_below: float | None = None
     ) -> Path:
-        """The channel's brightness temperature over the slot's chunks: one
-        strip per chunk (radiance read, Planck-converted, packed,
-        georeferenced by hand) and a VRT mosaicking them. ``workdir`` is
-        where the mosaic goes; the strips sit beside the chunks so
-        :meth:`packing_source` can find them from the files alone."""
+        """The channel over the slot's chunks — an infrared channel's
+        brightness temperature, a visible or near-infrared channel's
+        reflectance factor — as one strip per chunk (radiance read,
+        converted, packed, georeferenced by hand) and a VRT mosaicking
+        them. ``workdir`` is where the mosaic goes; the strips sit beside
+        the chunks so :meth:`packing_source` can find them from the files
+        alone."""
         if channel is None:
             raise ConversionError("an FCI slot is opened for one channel")
-        if channel.kind != "bt":
-            raise ConversionError(f"the FCI reader converts infrared channels to brightness temperature; {channel.id} is not one")
         workdir.mkdir(parents=True, exist_ok=True)
         environment = hdf5_plugin_environment()
-        planck = self.planck_coefficients(files.paths[0], channel, environment)
-        strips = [self.write_strip(chunk_file, channel, planck, self.strip_path(files, channel, chunk_file), environment) for chunk_file in files.paths]
+        calibration = self.calibration(files.paths[0], channel, environment)
+        strips = [self.write_strip(chunk_file, channel, calibration, self.strip_path(files, channel, chunk_file), environment) for chunk_file in files.paths]
         vrt = workdir / f"{files.slot:%Y%m%d%H%M%S}.{channel.id}.vrt"
         run_command(
             ["gdalbuildvrt", "-q", "-overwrite", "-resolution", "highest", str(vrt), *map(str, strips)],
@@ -863,35 +897,74 @@ class FCIReader:
     def subdataset(self, chunk_file: Path, channel: Channel) -> str:
         return f'NETCDF:"{chunk_file}":/data/{self.group(channel)}/measured/effective_radiance'
 
+    def calibration(self, chunk_file: Path, channel: Channel, environment: dict[str, str]) -> dict[str, float]:
+        """What turns the channel's radiance into its quantity: the Planck
+        coefficients of an infrared channel, the solar irradiance and the
+        Earth–Sun distance of a solar one; the same for every chunk of a
+        cycle, so read off one."""
+        if channel.kind == "reflectance":
+            return self.solar_constants(chunk_file, channel, environment)
+        return self.planck_coefficients(chunk_file, channel, environment)
+
+    def _array_values(self, chunk_file: Path, array: str, environment: dict[str, str]) -> list[float]:
+        """A variable's values through ``gdalmdiminfo`` (GDAL's raster
+        side cannot open a variable without dimensions), a scalar as one
+        value; the variable's fill values are left out."""
+        result = run_command(
+            [require_command("gdalmdiminfo"), str(chunk_file), "-array", array, "-detailed"],
+            description=f"read {array} of {chunk_file.name}",
+            env=environment,
+        )
+        try:
+            payload = json.loads(result.stdout)
+            value = payload["values"]
+            values = [float(item) for item in (value if isinstance(value, list) else [value])]
+            fill = payload.get("nodata_value")
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise ConversionError(f"{chunk_file.name} carries no {array}") from exc
+        return [item for item in values if fill is None or item != float(fill)]
+
+    def solar_constants(self, chunk_file: Path, channel: Channel, environment: dict[str, str]) -> dict[str, float]:
+        """A solar channel's radiance-to-reflectance constants: its
+        effective solar irradiance at 1 AU (``measured`` group, in the
+        radiance's units times sr) and the mean Earth–Sun distance of the
+        chunk's rows (``state/celestial``, km) in AU."""
+        group = self.group(channel)
+        irradiance = self._array_values(chunk_file, f"/data/{group}/measured/channel_effective_solar_irradiance", environment)
+        distances = [
+            value
+            for value in self._array_values(chunk_file, "/state/celestial/earth_sun_distance", environment)
+            if math.isfinite(value) and value > 0
+        ]
+        if len(irradiance) != 1 or not math.isfinite(irradiance[0]) or irradiance[0] <= 0:
+            raise ConversionError(f"{chunk_file.name}: {group} carries no solar irradiance (not a solar channel?)")
+        if not distances:
+            raise ConversionError(f"{chunk_file.name} carries no Earth–Sun distance")
+        return {"irradiance": irradiance[0], "distance_au": float(np.mean(distances)) / ASTRONOMICAL_UNIT_KM}
+
     def planck_coefficients(self, chunk_file: Path, channel: Channel, environment: dict[str, str]) -> dict[str, float]:
         """The channel's radiance-to-temperature constants, scalar
-        variables of its ``measured`` group read through ``gdalmdiminfo``
-        (GDAL's raster side cannot open a variable without dimensions);
-        the same for every chunk of a cycle, so read off one."""
+        variables of its ``measured`` group; a solar channel's group has
+        the variables too, holding their fill value."""
         group = self.group(channel)
         values: dict[str, float] = {}
         for name in ("constant_c1", "constant_c2", "coefficient_a", "coefficient_b", "coefficient_wavenumber"):
-            array = f"/data/{group}/measured/radiance_to_bt_conversion_{name}"
-            result = run_command(
-                [require_command("gdalmdiminfo"), str(chunk_file), "-array", array, "-detailed"],
-                description=f"read {array} of {chunk_file.name}",
-                env=environment,
-            )
-            try:
-                value = json.loads(result.stdout)["values"]
-                values[name] = float(value[0] if isinstance(value, list) else value)
-            except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
-                raise ConversionError(f"{chunk_file.name} carries no {array}") from exc
+            found = self._array_values(chunk_file, f"/data/{group}/measured/radiance_to_bt_conversion_{name}", environment)
+            values[name] = found[0] if found else math.nan
         if not all(math.isfinite(value) for value in values.values()) or values["coefficient_wavenumber"] <= 0:
             raise ConversionError(f"{chunk_file.name}: {group} carries no Planck coefficients (not an infrared channel?)")
         return values
 
     def write_strip(
-        self, chunk_file: Path, channel: Channel, planck: dict[str, float], out: Path, environment: dict[str, str]
+        self, chunk_file: Path, channel: Channel, calibration: dict[str, float], out: Path, environment: dict[str, str]
     ) -> Path:
-        """One chunk's channel as a brightness-temperature strip: an Int16
-        raw file and the VRT that georeferences it (a raw raster band with
-        the geostationary SRS, the extent, the packing and the unit)."""
+        """One chunk's channel as a strip of its quantity — brightness
+        temperature or reflectance factor, by the channel's kind, from the
+        constants :meth:`calibration` read — on the grid of the channel's
+        resolution: an Int16 raw file and the VRT that georeferences it (a
+        raw raster band with the geostationary SRS, the extent, the
+        packing and the unit)."""
+        grid = fci_grid(channel)
         subdataset = self.subdataset(chunk_file, channel)
         result = run_command(
             [require_command("gdalinfo"), "-json", subdataset], description=f"inspect {chunk_file.name}", env=environment
@@ -913,9 +986,9 @@ class FCIReader:
             offset = float(metadata[packing + "add_offset"])
         except (KeyError, ValueError) as exc:
             raise ConversionError(f"{chunk_file.name} does not say how its rows are packed") from exc
-        if not (math.isclose(step, FCI_IR_ANGLE_STEP, rel_tol=1e-6) and math.isclose(offset, FCI_IR_ANGLE_OFFSET, rel_tol=1e-6)) or width != FCI_IR_GRID:
+        if not (math.isclose(step, grid.angle_step, rel_tol=1e-6) and math.isclose(offset, grid.angle_offset, rel_tol=1e-6)) or width != grid.size:
             raise ConversionError(
-                f"{chunk_file.name} is not on the FCI 2 km grid the reader knows ({width} columns, row step {step}, offset {offset})"
+                f"{chunk_file.name} {group} is not on the FCI {channel.resolution_km:g} km grid the reader knows ({width} columns, row step {step}, offset {offset})"
             )
         projection = "/data/mtg_geos_projection#"
         try:
@@ -978,27 +1051,36 @@ class FCIReader:
         if fill is not None:
             invalid |= codes == int(fill)
         radiance = codes.astype(np.float64) * scale + add
-        invalid |= ~(radiance > 0.0)
-        radiance[invalid] = 1.0
-        temperature = brightness_temperature(radiance, planck)
-        temperature[invalid] = np.nan
+        if channel.kind == "reflectance":
+            # A dark scene's radiance can be a little below zero (the
+            # codes' offset is negative); it is a measurement, kept, and
+            # the producer clips it.
+            radiance[invalid] = 0.0
+            value = reflectance_factor(radiance, calibration["irradiance"], calibration["distance_au"])
+            value_scale, value_offset, unit = FCI_REFL_SCALE, FCI_REFL_OFFSET, "1"
+        else:
+            invalid |= ~(radiance > 0.0)
+            radiance[invalid] = 1.0
+            value = brightness_temperature(radiance, calibration)
+            value_scale, value_offset, unit = FCI_BT_SCALE, FCI_BT_OFFSET, "K"
+        value[invalid] = np.nan
         # GDAL reads the strip in the file's own orientation and says which
         # way its axes run; the strip is written west to east and north to
         # south whatever that was, so the mosaic has one orientation.
         west = transform[0]
         north = transform[3]
         if transform[1] < 0:
-            temperature = temperature[:, ::-1]
+            value = value[:, ::-1]
             west += transform[1] * width
         if transform[5] > 0:
-            temperature = temperature[::-1, :]
+            value = value[::-1, :]
             north += transform[5] * height
         pixel = abs(transform[1]) * height_m
         line = abs(transform[5]) * height_m
-        finite = np.isfinite(temperature)
-        packed = np.floor(np.where(finite, temperature - FCI_BT_OFFSET, 0.0) / FCI_BT_SCALE + 0.5)
+        finite = np.isfinite(value)
+        packed = np.floor(np.where(finite, value - value_offset, 0.0) / value_scale + 0.5)
         if finite.any() and (packed[finite].min() < -32766 or packed[finite].max() > 32767):
-            raise ConversionError(f"{chunk_file.name}: brightness temperatures overflow the strip's packing")
+            raise ConversionError(f"{chunk_file.name}: {channel.id} overflows the strip's packing")
         from .assemble import NODATA  # noqa: PLC0415 - assemble imports nothing from here
 
         strip = np.where(finite, packed, NODATA).astype("<i2")
@@ -1016,9 +1098,9 @@ class FCIReader:
                     f"  <GeoTransform>{west * height_m!r}, {pixel!r}, 0, {north * height_m!r}, 0, {-line!r}</GeoTransform>",
                     '  <VRTRasterBand dataType="Int16" band="1" subClass="VRTRawRasterBand">',
                     f"    <NoDataValue>{NODATA}</NoDataValue>",
-                    "    <UnitType>K</UnitType>",
-                    f"    <Scale>{FCI_BT_SCALE!r}</Scale>",
-                    f"    <Offset>{FCI_BT_OFFSET!r}</Offset>",
+                    f"    <UnitType>{unit}</UnitType>",
+                    f"    <Scale>{value_scale!r}</Scale>",
+                    f"    <Offset>{value_offset!r}</Offset>",
                     f'    <SourceFilename relativeToVRT="1">{escape(raw_strip.name)}</SourceFilename>',
                     "    <ImageOffset>0</ImageOffset>",
                     "    <PixelOffset>2</PixelOffset>",
@@ -1032,6 +1114,17 @@ class FCIReader:
             encoding="utf-8",
         )
         return out
+
+
+def reflectance_factor(radiance: np.ndarray, irradiance: float, distance_au: float) -> np.ndarray:
+    """The FCI product's radiance-to-reflectance conversion:
+    ``π · L · d² / E`` with the channel's effective solar irradiance ``E``
+    at 1 AU and the Earth–Sun distance ``d`` in AU — a reflectance
+    *factor*, not divided by the cosine of the solar zenith (the ISatSS
+    and CMIPF reflectances are not either; a producer that wants a
+    normalized reflectance divides). The units cancel: ``L`` in
+    mW m⁻² sr⁻¹ (cm⁻¹)⁻¹, ``E`` in mW m⁻² (cm⁻¹)⁻¹."""
+    return math.pi * radiance * (distance_au * distance_au) / irradiance
 
 
 def brightness_temperature(radiance: np.ndarray, planck: dict[str, float]) -> np.ndarray:
