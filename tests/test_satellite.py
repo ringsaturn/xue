@@ -74,6 +74,10 @@ from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.platforms import ABI_CHANNELS, AHI_CHANNELS, GOES_EAST
 from xuebuild.satellite import ancillary
 from xuebuild.satellite.producers import (
+    NIGHT_MICRO_BLUE_RANGE,
+    NIGHT_MICRO_GREEN_RANGE,
+    NIGHT_MICRO_RED_RANGE,
+    NIGHT_MICRO_VERSION,
     PRODUCERS,
     TRUE_COLOR_CURVE_IN,
     TRUE_COLOR_CURVE_OUT,
@@ -81,6 +85,7 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_VERSION,
     TRUE_COLOR_ZENITH_LIMIT_DEG,
     DustRGBProducer,
+    NightMicrophysicsProducer,
     TrueColorProducer,
 )
 from xuebuild.satellite.projector import GdalWarpProjector, TargetGrid
@@ -92,6 +97,8 @@ from xuebuild.variables import (
     ZHOUYE_BUNDLE_ID,
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
+    NIGHT_MICRO_BUNDLE_ID,
+    NIGHT_MICRO_COMPONENT_IDS,
     SATELLITE_CHANNEL_IDS,
     SATELLITE_INFRARED_IDS,
     SATELLITE_REFLECTANCE_IDS,
@@ -114,11 +121,18 @@ INFRARED = tuple(channel for channel in CHANNELS if channel.kind == "bt")
 SOLAR = tuple(channel for channel in CHANNELS if channel.kind == "reflectance")
 #: The channels and the variables every satellite source's fetch writes,
 #: in series order: the channels, the Dust RGB's guns, the confidences,
-#: the true colour's guns.
-SERIES_IDS = SPEC.input_variable_ids + DUST_RGB_COMPONENT_IDS + (DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID) + TRUE_COLOR_COMPONENT_IDS
+#: the true colour's guns, the night microphysics guns.
+SERIES_IDS = (
+    SPEC.input_variable_ids
+    + DUST_RGB_COMPONENT_IDS
+    + (DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID)
+    + TRUE_COLOR_COMPONENT_IDS
+    + NIGHT_MICRO_COMPONENT_IDS
+)
 DUST = PRODUCERS[DUST_RGB_BUNDLE_ID]
 DEBRA = PRODUCERS[DUST_CF_BUNDLE_ID]
 TRUECOLOR = PRODUCERS[TRUE_COLOR_BUNDLE_ID]
+NIGHTMICRO = PRODUCERS[NIGHT_MICRO_BUNDLE_ID]
 #: The fixture's two slots.
 SLOT_0300 = datetime(2026, 9, 17, 3, 0, tzinfo=UTC)
 SLOT_0310 = datetime(2026, 9, 17, 3, 10, tzinfo=UTC)
@@ -279,7 +293,13 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(PROFILES["quality"]["dustr"].decode(np.array([1, 251], dtype=np.uint8)).tolist(), [0.0, 1.0])
         self.assertEqual(
             binconvert.COMPOSITE_BUNDLES,
-            {"dustrgb": ("dustr", "dustg", "dustb"), "dustcf": ("dustcf",), "zhouye": ("zhouye",), "truecolor": ("truer", "trueg", "trueb")},
+            {
+                "dustrgb": ("dustr", "dustg", "dustb"),
+                "dustcf": ("dustcf",),
+                "zhouye": ("zhouye",),
+                "truecolor": ("truer", "trueg", "trueb"),
+                "nightmicro": ("nightr", "nightg", "nightb"),
+            },
         )
         self.assertEqual(binconvert.bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
         self.assertEqual(binconvert.bundle_variable_ids("dustcf"), ("dustcf",))
@@ -302,26 +322,38 @@ class RegistryTests(unittest.TestCase):
             for profile in PROFILES:
                 self.assertEqual(PROFILES[profile][gun_id].metadata(), PROFILES[profile]["dustr"].metadata())
         self.assertEqual(binconvert.bundle_variable_ids("truecolor"), TRUE_COLOR_COMPONENT_IDS)
-        self.assertEqual(SATELLITE_VARIABLE_IDS[-3:], TRUE_COLOR_COMPONENT_IDS)
+        self.assertEqual(SATELLITE_VARIABLE_IDS[-6:-3], TRUE_COLOR_COMPONENT_IDS)
+        # The night microphysics guns: the same producer's next three
+        # numbers, the guns' codebook.
+        for number, gun_id in zip((10, 11, 12), NIGHT_MICRO_COMPONENT_IDS):
+            spec = variable_spec(gun_id)
+            parameter = spec.parameter_metadata()
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
+            self.assertEqual((spec.producer_id, spec.output_unit, spec.value_range), ("xue", "1", (-0.004, 1)))
+            for profile in PROFILES:
+                self.assertEqual(PROFILES[profile][gun_id].metadata(), PROFILES[profile]["dustr"].metadata())
+        self.assertEqual(binconvert.bundle_variable_ids("nightmicro"), NIGHT_MICRO_COMPONENT_IDS)
+        self.assertEqual(SATELLITE_VARIABLE_IDS[-3:], NIGHT_MICRO_COMPONENT_IDS)
 
     def test_the_source_is_a_satellite_series_file_observation(self) -> None:
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
         self.assertEqual((SPEC.platform, SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours), ("himawari", 0.04, 600, 6))
         self.assertEqual(SPEC.input_variable_ids, ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"))
         self.assertEqual(SPEC.input_variable_ids, SATELLITE_CHANNEL_IDS)
-        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf", "zhouye", "truecolor"), ("ir104",)))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor"))
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104",), ("dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"), ("ir104",)))
+        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"))
         # A composite's inputs, for the fetch, are the channels its
         # producer reads; a source that fetched fewer would not publish it.
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustcf"), ("ir039", "wv062", "ir086", "ir104", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086"))
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "nightmicro"), ("ir039", "ir104", "ir123"))
         fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
         self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
         dust_only = dataclasses.replace(SPEC, input_variable_ids=("ir086", "ir104", "ir112", "ir123"))
         self.assertEqual(binconvert.published_bundle_ids(dust_only), ("ir104", "dustrgb"))
         windows_only = dataclasses.replace(SPEC, input_variable_ids=SATELLITE_INFRARED_IDS)
-        self.assertEqual(binconvert.published_bundle_ids(windows_only), ("ir104", "dustrgb", "dustcf", "zhouye"))
+        self.assertEqual(binconvert.published_bundle_ids(windows_only), ("ir104", "dustrgb", "dustcf", "zhouye", "nightmicro"))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
@@ -757,6 +789,83 @@ class FetchTests(TempRoot, unittest.TestCase):
         with self.assertRaisesRegex(ConversionError, "needs"):
             TRUECOLOR.run(GOES_EAST, {"vis047": planes["vis047"]}, {}, slot=SLOT_0300, grid=TILE_GRID)
 
+    def test_three_windows_compose_the_night_microphysics_per_slot(self) -> None:
+        """The night microphysics producer: EUMETSAT's recipe on the 3.9,
+        10.4 and 12.3 µm windows — 12.3 − 10.4 µm over −4…2 K, 10.4 −
+        3.9 µm over 0…10 K, 10.4 µm over 243…293 K, gamma 1, clamped —
+        held here to the same steps written out and to a few pinned cells
+        of the fixture, and defined exactly where all three windows are.
+        Unlike the true colour it reads no sun: the same planes at
+        midnight are the same picture."""
+        self.from_seed()
+        inputs = tuple(HIMAWARI.channel(channel_id) for channel_id in NIGHTMICRO.inputs)
+        window = self.fetch_window(channels=inputs, producers=(NIGHTMICRO,))
+        self.assertEqual(self.downloads, [])
+        self.assertEqual(list(window.series), ["ir039", "ir104", "ir123", "nightr", "nightg", "nightb"])
+        gun = window.slots[0].frames["nightg"]
+        packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
+        self.assertEqual(packing["producer"], {"id": "xue", "version": NIGHT_MICRO_VERSION})
+        self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in NIGHTMICRO.inputs])
+        self.assertNotIn("ancillary", packing)
+        # The recipe, step by step, against the producer's frames.
+        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in inputs}
+        covered = np.all([np.isfinite(plane) for plane in planes.values()], axis=0)
+        self.assertGreater(float(covered.mean()), 0.5)
+        sources = (planes["ir123"] - planes["ir104"], planes["ir104"] - planes["ir039"], planes["ir104"])
+        ranges = (NIGHT_MICRO_RED_RANGE, NIGHT_MICRO_GREEN_RANGE, NIGHT_MICRO_BLUE_RANGE)
+        guns = {}
+        for gun_id, source, (low, high) in zip(NIGHT_MICRO_COMPONENT_IDS, sources, ranges):
+            actual = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
+            guns[gun_id] = actual
+            self.assertEqual(np.isfinite(actual).tolist(), covered.tolist(), gun_id)
+            expected = np.clip((source[covered] - low) / (high - low), 0.0, 1.0)
+            np.testing.assert_allclose(actual[covered], expected, atol=0.00005 + 1e-12)
+        # Red and blue are a picture, not a clamped field. Green is the
+        # day side's known failure: at local noon the 3.9 µm window carries
+        # reflected sunlight, reads warmer than 10.4 µm, and the gun sits
+        # at 0 almost everywhere — the reason the viewer reads this
+        # picture only where the true colour has none.
+        for gun_id in ("nightr", "nightb"):
+            self.assertGreater(float(np.nanstd(guns[gun_id])), 0.05, gun_id)
+        self.assertGreater(float((guns["nightg"][covered] == 0.0).mean()), 0.9)
+        # Pinned cells of the fixture's 03:00 slot, to the frame's four
+        # decimals: (row, column) → red, green, blue.
+        pins = {
+            # Deep convection: a cold top, so blue is 0, its split window
+            # positive (thick ice), red past the middle.
+            (308, 262): (0.5766, 0.0, 0.0),
+            (247, 182): (0.6372, 0.0, 0.0181),
+            (150, 300): (0.2876, 0.0, 0.0),
+            # Warm, clear or thin: red 0 (a negative split window), blue
+            # near the top of its range.
+            (250, 500): (0.0, 0.0, 0.9658),
+            (5, 474): (0.0, 0.0, 0.1427),
+        }
+        for (row, column), expected in pins.items():
+            actual = tuple(round(float(guns[gun_id][row, column]), 4) for gun_id in NIGHT_MICRO_COMPONENT_IDS)
+            np.testing.assert_allclose(actual, expected, atol=0.00015, err_msg=f"{row}, {column}")
+        # Composed once.
+        with mock.patch.object(NightMicrophysicsProducer, "run", side_effect=AssertionError("recomposed")):
+            again = self.fetch_window(channels=inputs, producers=(NIGHTMICRO,))
+        self.assertEqual([item.tiles for item in again.slots], [0, 0])
+        # No sun in the recipe; any input missing is no data in all three.
+        noon = NIGHTMICRO.run(HIMAWARI, planes, {}, slot=SLOT_0300, grid=TILE_GRID)
+        midnight = NIGHTMICRO.run(HIMAWARI, planes, {}, slot=SLOT_0300 + timedelta(hours=12), grid=TILE_GRID)
+        for gun_id in NIGHT_MICRO_COMPONENT_IDS:
+            np.testing.assert_array_equal(noon[gun_id], midnight[gun_id])
+        holed = dict(planes, ir039=np.where(np.arange(TILE_GRID.width) < 100, np.nan, planes["ir039"]))
+        partial = NIGHTMICRO.run(HIMAWARI, holed, {}, slot=SLOT_0300, grid=TILE_GRID)
+        for gun_id in NIGHT_MICRO_COMPONENT_IDS:
+            self.assertTrue(np.all(np.isnan(partial[gun_id][:, :100])), gun_id)
+            np.testing.assert_array_equal(partial[gun_id][:, 100:], noon[gun_id][:, 100:])
+        # After dark the 3.9 µm window reads cooler than 10.4 µm over fog;
+        # a 3.9 µm plane 4 K below the 10.4 µm one puts green at 0.4.
+        foggy = NIGHTMICRO.run(HIMAWARI, dict(planes, ir039=planes["ir104"] - 4.0), {}, slot=SLOT_0300, grid=TILE_GRID)
+        np.testing.assert_allclose(foggy["nightg"][covered], 0.4, atol=1e-12)
+        self.assertEqual(NIGHTMICRO.inputs_for(GOES_EAST), ("ir039", "ir104", "ir123"))
+        with self.assertRaisesRegex(ConversionError, "needs"):
+            NIGHTMICRO.run(HIMAWARI, {"ir104": planes["ir104"]}, {}, slot=SLOT_0300, grid=TILE_GRID)
+
     def test_a_frame_is_the_tiles_on_the_target_grid(self) -> None:
         self.from_seed()
         window = self.fetch_window()
@@ -865,6 +974,7 @@ class FetchTests(TempRoot, unittest.TestCase):
                 {"bundle": "dustrgb", "bundles": ["dustrgb"], "id": "shachen", "version": DUST.version, "inputs": ["ir086", "ir104", "ir112", "ir123"]},
                 {"bundle": "dustcf", "bundles": ["dustcf", "zhouye"], "id": "shachen", "version": DEBRA.version, "inputs": ["ir039", "wv062", "ir086", "ir104", "ir123"]},
                 {"bundle": "truecolor", "bundles": ["truecolor"], "id": "xue", "version": TRUE_COLOR_VERSION, "inputs": ["vis047", "vis051", "vis064", "nir086"]},
+                {"bundle": "nightmicro", "bundles": ["nightmicro"], "id": "xue", "version": NIGHT_MICRO_VERSION, "inputs": ["ir039", "ir104", "ir123"]},
             ],
         )
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T03:00:00Z", "2026-09-17T03:10:00Z"])
@@ -963,7 +1073,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
@@ -1031,6 +1141,30 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             self.assertAlmostEqual(decoded, float(expected[gun_id][row, column]), delta=0.0021, msg=gun_id)
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
 
+    def test_the_night_microphysics_is_three_guns_under_this_pipeline_s_producer(self) -> None:
+        """The night microphysics bundle: the three guns as variables 1, 2
+        and 3, the producer's local numbers 10, 11 and 12 with the producer
+        block `xue` at the recipe's version, the channel's axis and grid,
+        the three-rung ladder; code 0 exactly where the channel has none."""
+        manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
+        entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "nightmicro")
+        self.assertNotIn("poster", entry)
+        self.assertEqual(len(entry["variants"]), 3)
+        bundle = read_bundle(self.root / "out" / "nightmicro.xue")
+        self.assertEqual(bundle.metadata["grid"], read_bundle(self.root / "out" / "ir104.xue").metadata["grid"])
+        variables = bundle.metadata["variables"]
+        self.assertEqual([(variable["numericId"], variable["id"]) for variable in variables], [(1, "nightr"), (2, "nightg"), (3, "nightb")])
+        for number, variable in zip((10, 11, 12), variables):
+            parameter = variable["parameter"]
+            self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
+            self.assertEqual(variable["producer"], {"id": "xue", "version": NIGHT_MICRO_VERSION})
+            self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
+        ir104 = np.asarray(read_bundle(self.root / "out" / "ir104.xue").decode_plane(1, 0)).reshape(3000, 3000)
+        for number in (1, 2, 3):
+            codes = np.asarray(bundle.decode_plane(number, 0)).reshape(3000, 3000)
+            self.assertEqual((codes == 0).tolist(), (ir104 == 0).tolist())
+            self.assertLessEqual(int(codes[ir104 > 0].max()), 251)
+
     def test_the_confidence_is_one_variable_with_the_producer_beside_the_parameter(self) -> None:
         """The DEBRA bundle: one variable, a local-use parameter (the
         producer's number 4) with the producer block beside it and no
@@ -1039,7 +1173,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         channel has none and over land no emissivity is staged for, and a
         value in 1..251 elsewhere inside the disk."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"])
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustcf")
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
@@ -1123,9 +1257,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # bundles' own order.
         self.assertEqual(
             [Path(variant["output"]).name for variant in self.report["variants"]],
-            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
+            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro") for s in ("", ".half", ".quarter", ".eighth")))
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -1139,7 +1273,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
             )
-        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)
