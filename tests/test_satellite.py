@@ -68,7 +68,7 @@ from xuebuild.fetch import (
 from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
-from xuebuild.satellite import HIMAWARI, PLATFORMS, platform
+from xuebuild.satellite import HIMAWARI, METEOSAT, PLATFORMS, platform
 from xuebuild.satellite import assemble, readers
 from xuebuild.satellite import fetch as satellite_fetch
 from xuebuild.satellite.platforms import ABI_CHANNELS, AHI_CHANNELS, GOES_EAST
@@ -752,6 +752,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         # The ABI has no green band: its recipe reads three and blends one.
         self.assertEqual(TRUECOLOR.inputs_for(GOES_EAST), ("vis047", "vis064", "nir086"))
         self.assertEqual(TRUECOLOR.inputs_for(HIMAWARI), ("vis047", "vis051", "vis064", "nir086"))
+        # The FCI has a green band too: Meteosat reads the AHI's four.
+        self.assertEqual(TRUECOLOR.inputs_for(METEOSAT), ("vis047", "vis051", "vis064", "nir086"))
         with self.assertRaisesRegex(ConversionError, "needs"):
             TRUECOLOR.run(GOES_EAST, {"vis047": planes["vis047"]}, {}, slot=SLOT_0300, grid=TILE_GRID)
 
