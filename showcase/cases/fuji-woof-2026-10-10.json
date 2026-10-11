@@ -1,0 +1,58 @@
+{
+  "id": "fuji-woof-2026-10-10",
+  "title": {
+    "zh": "富士山 500 m 降尺度：秋夜的山谷云",
+    "en": "Mount Fuji at 500 m: an autumn night's valley cloud",
+    "zh-Hant": "富士山 500 m 降尺度：秋夜的山谷雲",
+    "ja": "富士山 500 m ダウンスケーリング：秋の夜の谷の雲",
+    "ko": "후지산 500 m 다운스케일링: 가을밤의 골짜기 구름",
+    "de": "Der Fuji in 500 m Auflösung: Talwolken einer Herbstnacht",
+    "fr": "Le mont Fuji à 500 m : nuages de vallée d’une nuit d’automne",
+    "es": "El monte Fuji a 500 m: nubes de valle en una noche de otoño",
+    "pt": "O monte Fuji a 500 m: nuvens de vale numa noite de outono",
+    "tr": "500 m çözünürlükte Fuji Dağı: bir sonbahar gecesinin vadi bulutları",
+    "ru": "Фудзи с шагом 500 м: долинные облака осенней ночи"
+  },
+  "summary": {
+    "zh": "在 Recast 的 WOOF 服务上跑的一次 WRF-ARW 四层嵌套（12 → 3 → 1 → 0.5 km），由 NOAA GFS 2026 年 10 月 10 日 06Z 分析场驱动，这里展示最内层 500 m 域：富士山周围 36 × 34 km 的方框，逐小时从 07Z 到 18Z（日本时 16 时至次日 03 时）。头几帧里太阳落山：山顶格 07Z 已是 3 °C，18Z 降到 −2 °C 以下；山坡与北侧的富士五湖盆地被低云填满，云底从 1.7 km 一路降到 0.8 km，云顶始终不超过 2.3 km，7–9 m/s 的气流越过山脊。「地表与水面温度」是模式的表面温度，湖面与骏河湾全程保持初始场的 24.8 °C，因为这次 run 没有开海洋物理过程。模式地形取自 Copernicus GLO-30 DEM；500 m 的网格落在边界层方案的灰区，公里以下的结构看趋势即可，不宜当定量结果。",
+    "en": "A WRF-ARW run on Recast’s WOOF service, nested 12 → 3 → 1 → 0.5 km from the NOAA GFS analysis of 2026-10-10 06Z and shown here on its innermost 500 m domain, a 36 × 34 km box around Mount Fuji, hourly from 07Z to 18Z (16:00 to 03:00 JST). The sun sets over the first frames: the summit cell, already 3 °C at 07Z, falls below −2 °C by 18Z; the slopes and the Fuji Five Lakes basin to the north fill with low cloud whose base sinks from 1.7 km to 0.8 km while the top stays under 2.3 km, and a 7–9 m/s flow crosses the ridges. The ground and sea surface temperature is the model’s skin temperature; the lakes and Suruga Bay keep their initial 24.8 °C because the run has no ocean physics. The model terrain comes from the Copernicus GLO-30 DEM, and at 500 m the boundary layer sits in the grey zone of its scheme, so sub-kilometre structure is indicative rather than quantitative.",
+    "zh-Hant": "在 Recast 的 WOOF 服務上跑的一次 WRF-ARW 四層嵌套（12 → 3 → 1 → 0.5 km），由 NOAA GFS 2026 年 10 月 10 日 06Z 分析場驅動，這裡展示最內層 500 m 域：富士山周圍 36 × 34 km 的方框，逐小時從 07Z 到 18Z（日本時 16 時至次日 03 時）。頭幾幀裡太陽落山：山頂格 07Z 已是 3 °C，18Z 降到 −2 °C 以下；山坡與北側的富士五湖盆地被低雲填滿，雲底從 1.7 km 一路降到 0.8 km，雲頂始終不超過 2.3 km，7–9 m/s 的氣流越過山脊。「地表與水面溫度」是模式的表面溫度，湖面與駿河灣全程保持初始場的 24.8 °C，因為這次 run 沒有開海洋物理過程。模式地形取自 Copernicus GLO-30 DEM；500 m 的網格落在邊界層方案的灰區，公里以下的結構看趨勢即可，不宜當定量結果。",
+    "ja": "Recast の WOOF サービス上で走らせた WRF-ARW の四重ネスト（12 → 3 → 1 → 0.5 km）。NOAA GFS 2026 年 10 月 10 日 06Z 解析で駆動し、ここでは最内側の 500 m 領域、富士山を囲む 36 × 34 km の範囲を 07Z から 18Z（日本時間 16 時から翌 03 時）まで毎時で見せる。最初の数コマで日が沈む。山頂の格子は 07Z にすでに 3 °C、18Z には −2 °C を下回る。山腹と北側の富士五湖の盆地は低い雲で満たされ、雲底は 1.7 km から 0.8 km まで下がり、雲頂は 2.3 km を超えない。7–9 m/s の流れが尾根を越える。「地表・水面温度」はモデルの表面温度で、湖と駿河湾は海洋物理を入れていないため初期値の 24.8 °C のまま動かない。モデル地形は Copernicus GLO-30 DEM による。500 m の格子は境界層スキームのグレーゾーンにあり、1 km 未満の構造は定量ではなく傾向として読むこと。",
+    "ko": "Recast의 WOOF 서비스에서 돌린 WRF-ARW 4중 네스트(12 → 3 → 1 → 0.5 km). NOAA GFS 2026년 10월 10일 06Z 분석장으로 구동했고, 여기서는 가장 안쪽 500 m 영역, 후지산을 둘러싼 36 × 34 km 상자를 07Z부터 18Z(일본 시간 16시부터 다음 날 03시)까지 매시로 보여 준다. 첫 몇 프레임 사이에 해가 진다. 정상 격자는 07Z에 이미 3 °C였고 18Z에는 −2 °C 아래로 내려간다. 산비탈과 북쪽 후지 5호 분지는 낮은 구름으로 채워지며, 운저는 1.7 km에서 0.8 km까지 내려가고 운정은 2.3 km를 넘지 않는다. 7–9 m/s의 흐름이 능선을 넘는다. 「지표·수면 온도」는 모델의 표면 온도이며, 호수와 스루가만은 해양 물리 과정을 켜지 않아 초기장의 24.8 °C를 끝까지 유지한다. 모델 지형은 Copernicus GLO-30 DEM에서 가져왔고, 500 m 격자는 경계층 방안의 회색 지대에 있어 1 km 미만의 구조는 정량이 아닌 경향으로 읽어야 한다.",
+    "de": "Ein WRF-ARW-Lauf auf Recasts WOOF-Dienst, vierfach genestet 12 → 3 → 1 → 0,5 km aus der NOAA-GFS-Analyse vom 10.10.2026 06Z, hier auf dem innersten 500-m-Gebiet gezeigt: ein 36 × 34 km großes Fenster um den Fuji, stündlich von 07Z bis 18Z (16:00 bis 03:00 JST). Über die ersten Bilder geht die Sonne unter: die Gipfelzelle, um 07Z schon bei 3 °C, fällt bis 18Z unter −2 °C; die Hänge und das Becken der Fuji-Fünf-Seen im Norden füllen sich mit tiefer Bewölkung, deren Untergrenze von 1,7 km auf 0,8 km sinkt, während die Obergrenze unter 2,3 km bleibt, und eine Strömung von 7–9 m/s überquert die Kämme. Die Boden- und Wasseroberflächentemperatur ist die Hauttemperatur des Modells; Seen und die Suruga-Bucht behalten ihre anfänglichen 24,8 °C, weil der Lauf keine Ozeanphysik hat. Das Modellgelände stammt aus dem Copernicus-DEM GLO-30, und bei 500 m liegt die Grenzschicht in der Grauzone ihres Schemas, sodass Strukturen unter einem Kilometer als Hinweis, nicht als Messwert zu lesen sind.",
+    "fr": "Une simulation WRF-ARW sur le service WOOF de Recast, emboîtée 12 → 3 → 1 → 0,5 km à partir de l’analyse NOAA GFS du 10 octobre 2026 à 06Z, montrée ici sur son domaine le plus fin, à 500 m : un cadre de 36 × 34 km autour du mont Fuji, toutes les heures de 07Z à 18Z (16 h à 03 h JST). Le soleil se couche sur les premières images : la maille du sommet, déjà à 3 °C à 07Z, passe sous −2 °C à 18Z ; les versants et le bassin des cinq lacs du Fuji, au nord, se remplissent de nuages bas dont la base descend de 1,7 km à 0,8 km tandis que le sommet reste sous 2,3 km, et un flux de 7–9 m/s franchit les crêtes. La température de la surface du sol et de l’eau est la température de peau du modèle ; les lacs et la baie de Suruga gardent leurs 24,8 °C initiaux, la simulation n’ayant pas de physique océanique. Le relief du modèle vient du MNT Copernicus GLO-30, et à 500 m la couche limite se trouve dans la zone grise de son schéma : les structures sous le kilomètre sont indicatives, pas quantitatives.",
+    "es": "Una simulación WRF-ARW en el servicio WOOF de Recast, anidada 12 → 3 → 1 → 0,5 km a partir del análisis NOAA GFS del 10 de octubre de 2026 a las 06Z y mostrada aquí en su dominio más interno, de 500 m: un recuadro de 36 × 34 km alrededor del monte Fuji, cada hora de 07Z a 18Z (16:00 a 03:00 JST). El sol se pone en los primeros cuadros: la celda de la cumbre, ya a 3 °C a las 07Z, baja de −2 °C a las 18Z; las laderas y la cuenca de los cinco lagos del Fuji, al norte, se llenan de nubes bajas cuya base desciende de 1,7 km a 0,8 km mientras el techo se mantiene por debajo de 2,3 km, y un flujo de 7–9 m/s cruza las crestas. La temperatura de la superficie del suelo y del agua es la temperatura de piel del modelo; los lagos y la bahía de Suruga conservan sus 24,8 °C iniciales porque la simulación no tiene física oceánica. El terreno del modelo procede del MDE Copernicus GLO-30, y a 500 m la capa límite cae en la zona gris de su esquema, así que la estructura por debajo del kilómetro es indicativa, no cuantitativa.",
+    "pt": "Uma simulação WRF-ARW no serviço WOOF da Recast, aninhada 12 → 3 → 1 → 0,5 km a partir da análise NOAA GFS de 10 de outubro de 2026 às 06Z e mostrada aqui no seu domínio mais interno, de 500 m: uma janela de 36 × 34 km em torno do monte Fuji, de hora em hora das 07Z às 18Z (16:00 às 03:00 JST). O sol põe-se nos primeiros quadros: a célula do cume, já a 3 °C às 07Z, desce abaixo de −2 °C às 18Z; as encostas e a bacia dos cinco lagos do Fuji, a norte, enchem-se de nuvens baixas cuja base desce de 1,7 km para 0,8 km enquanto o topo fica abaixo de 2,3 km, e um escoamento de 7–9 m/s atravessa as cristas. A temperatura da superfície do solo e da água é a temperatura de pele do modelo; os lagos e a baía de Suruga mantêm os 24,8 °C iniciais porque a simulação não tem física oceânica. O terreno do modelo vem do MDE Copernicus GLO-30 e, a 500 m, a camada limite está na zona cinzenta do seu esquema, pelo que a estrutura abaixo do quilómetro é indicativa, não quantitativa.",
+    "tr": "Recast’ın WOOF hizmetinde koşturulan, NOAA GFS 10 Ekim 2026 06Z analizinden 12 → 3 → 1 → 0,5 km iç içe dört alanla çalışan bir WRF-ARW simülasyonu; burada en içteki 500 m alan, Fuji Dağı çevresinde 36 × 34 km’lik bir pencere, 07Z’den 18Z’ye (JST 16:00–03:00) saat saat gösteriliyor. İlk karelerde güneş batıyor: 07Z’de zaten 3 °C olan zirve hücresi 18Z’de −2 °C’nin altına iniyor; yamaçlar ve kuzeydeki Fuji Beş Gölü havzası, tabanı 1,7 km’den 0,8 km’ye inen, tepesi ise 2,3 km’nin altında kalan alçak bulutla doluyor ve 7–9 m/s’lik bir akış sırtları aşıyor. Yer ve su yüzeyi sıcaklığı modelin yüzey (skin) sıcaklığıdır; göller ve Suruga Körfezi, koşuda okyanus fiziği olmadığı için başlangıçtaki 24,8 °C’de kalıyor. Model arazisi Copernicus GLO-30 DEM’den geliyor; 500 m’de sınır tabakası şemasının gri bölgesinde olduğu için kilometre altı yapı nicel değil, yol gösterici olarak okunmalı.",
+    "ru": "Расчёт WRF-ARW на сервисе WOOF компании Recast с четырьмя вложенными сетками 12 → 3 → 1 → 0,5 км от анализа NOAA GFS за 10 октября 2026 г. 06Z; здесь показана самая внутренняя область с шагом 500 м — окно 36 × 34 км вокруг Фудзи, ежечасно с 07Z до 18Z (16:00–03:00 JST). На первых кадрах заходит солнце: ячейка вершины, уже 3 °C в 07Z, к 18Z опускается ниже −2 °C; склоны и котловина Пяти озёр Фудзи на севере заполняются низкой облачностью, основание которой опускается с 1,7 км до 0,8 км при верхней границе ниже 2,3 км, а поток 7–9 м/с переваливает через гребни. Температура поверхности суши и воды — это температура поверхности в модели; озёра и залив Суруга сохраняют начальные 24,8 °C, потому что в расчёте нет физики океана. Рельеф модели взят из ЦМР Copernicus GLO-30, а при 500 м пограничный слой попадает в серую зону своей схемы, так что структуры мельче километра следует читать как ориентир, а не как количественный результат."
+  },
+  "model": "woof",
+  "dataset": "woof/fuji-2026-10-10/",
+  "hours": 12,
+  "bbox": [138.54, 35.22, 138.93, 35.52],
+  "variables": [
+    "tmpsfc",
+    "tmp2m",
+    "dpt2m",
+    "wind10m",
+    "lcdc",
+    "mcdc",
+    "hcdc",
+    "tcdc",
+    "hpbl",
+    "dswrf",
+    "prate",
+    "orog"
+  ],
+  "defaultVariable": "tmpsfc",
+  "eventTime": "2026-10-10T12:00:00Z",
+  "tags": ["mountain", "downscaling", "fog", "asia"],
+  "credit": "Recast Systems WOOF (WRF-ARW via gpuwm 2.8.7), run commissioned by the author · initial and boundary conditions NOAA GFS 2026-10-10 06Z · model terrain Copernicus DEM GLO-30",
+  "view": {
+    "center": [138.73, 35.36],
+    "zoom": 11.6,
+    "pitch": 62,
+    "bearing": -35,
+    "terrain": 1.5
+  }
+}
