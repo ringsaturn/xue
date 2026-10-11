@@ -635,7 +635,7 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("gdal_translate"), "the reference encoder needs a system GDAL")
 class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
-    """`convert_bin(..., zarr=True)`: one store beside every bundle and
+    """`convert_bin(..., zarr=True, container=True)`: one store beside every bundle and
     variant, named in the manifest, and the bundles unchanged by it."""
 
     root_prefix = "xue-zarr-build-"
@@ -654,6 +654,7 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=directory / "manifest.json",
                 skip_video=True,
                 zarr=zarr,
+                container=True,
             )
 
     def test_every_bundle_and_variant_has_a_store_named_in_the_manifest(self) -> None:

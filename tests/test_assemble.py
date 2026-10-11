@@ -348,6 +348,7 @@ class SplitBuildIdentityTests(ClassTempRoot, unittest.TestCase):
             latest_path=cls.whole / "latest.json",
             run_id=run_id,
             model="gfs",
+            container=True, zarr=False,
         )
         # Four groups, so that vector, derived and video bundles each share a
         # job with scalars — the grouping the workflow would use, not one
@@ -361,6 +362,7 @@ class SplitBuildIdentityTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=assemble.partial_manifest_path(cls.split / run_directory, group),
                 model="gfs",
                 bundle_ids=group,
+                container=True, zarr=False,
             )
         # The fixture is one analysis frame; convert_bin's default axis is 120 h.
         cls.report = assemble.assemble_run(cls.split, model="gfs", run_id=run_id, expected_hours=120)
@@ -447,6 +449,7 @@ class TopUpIdentityTests(ClassTempRoot, unittest.TestCase):
             latest_path=cls.whole / "latest.json",
             run_id=run_id,
             model="gfs",
+            container=True, zarr=False,
         )
         # The live run: the whole manifest without the ocean set and the wave
         # vector, the way a run published before those bundles existed
@@ -473,6 +476,7 @@ class TopUpIdentityTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=assemble.partial_manifest_path(cls.topped / cls.run_directory, group),
                 model="gfs",
                 bundle_ids=group,
+                container=True, zarr=False,
             )
         cls.report = assemble.assemble_run(
             cls.topped, model="gfs", run_id=run_id, expected_hours=120, base_manifest=cls.base

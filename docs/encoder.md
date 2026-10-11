@@ -147,11 +147,20 @@ The encoder is `convert_bin`, which runs the whole native conversion and
 returns the same report dictionary the Python pipeline returns, plus
 `quantize` / `encode_residual` / `decimate` / `encode_poster`, which take
 and return NumPy arrays so individual stages can be compared against
-`xuebuild/quantize.py` and `xuebuild/temporal.py` without running a build:
+`xuebuild/quantize.py` and `xuebuild/temporal.py` without running a build,
+and `write_store`, which writes one bundle's Zarr store from codes handed
+in as NumPy arrays:
 
 ```python
 report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
+# out/tmp2m.zarr, out/tmp2m.half.zarr, …; and the .xue containers too:
+report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs", container=True)
 ```
+
+`convert_bin` writes the Zarr stores alone by default (`zarr=True`,
+`container=False`), as every live run publishes; `container=True` adds
+each bundle's `.xue` beside its store, from the same codes, and
+`zarr=False, container=True` writes the containers alone.
 
 ### Installing
 

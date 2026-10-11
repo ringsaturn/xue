@@ -8,8 +8,10 @@ repository. `CLAUDE.md` is a symlink to this file.
 Xue packs global weather forecast runs and observation windows into
 per-variable Zarr v3 stores laid out for playback, and plays them back in a
 static browser page (MapLibre + a WebGL2 layer + a Rust/wasm decoder). The
-single-file `.xue` container is no longer published but is still the
-encoders' intermediate and is read by every decoder forever.
+single-file `.xue` container is no longer published or written by default
+(builds write the stores straight from the codes); it stays an opt-in
+encoder output (`--xue`, `container=True`) and is read by every decoder
+forever.
 
 | Path | What |
 |---|---|

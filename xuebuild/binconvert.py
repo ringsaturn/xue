@@ -2084,20 +2084,21 @@ def convert_bin(
     bbox: tuple[float, float, float, float] | None = None,
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
-    zarr: bool = False,
-    container: bool = True,
+    zarr: bool = True,
+    container: bool = False,
     series: bool = True,
 ) -> dict[str, Any]:
-    """Convert a GRIB run into per-variable Xue bundles.
+    """Convert a GRIB run (or a series file) into per-bundle Zarr stores.
 
-    Writes ``<output_dir>/<variable>.xue`` for every scalar variable plus the
-    two-variable ``wind10m.xue`` bundle when the input
-    files carry the 10 m wind components, per-variable posters, the
-    reduced-resolution variants of the source's ladder (``.half.xue``, and
-    on the satellite disks ``.quarter.xue`` and ``.eighth.xue``,
-    ``SourceSpec.variant_factors``), the optional per-variable
-    video artifacts and their debug playlists, and returns build
-    statistics. When ``latest_path`` and ``run_id`` are given, also
+    Writes ``<output_dir>/<bundle>.zarr`` for every scalar variable plus the
+    two-variable ``wind10m.zarr`` bundle when the input files carry the 10 m
+    wind components, the series store (``<bundle>.series.zarr``) of the
+    source's point-read bundles, per-variable posters, the
+    reduced-resolution variants of the source's ladder (``.half.zarr``, and
+    on the satellite disks ``.quarter.zarr`` and ``.eighth.zarr``,
+    ``SourceSpec.variant_factors``), the optional per-variable video
+    artifacts and their debug playlists, and returns build statistics. The
+    ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
     (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
     written manifest.
 

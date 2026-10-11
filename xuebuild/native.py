@@ -320,8 +320,8 @@ def convert_bin(
     bbox: tuple[float, float, float, float] | None = None,
     bundle_ids: tuple[str, ...] | None = None,
     last_hour: int | None = None,
-    zarr: bool = False,
-    container: bool = True,
+    zarr: bool = True,
+    container: bool = False,
     series: bool = True,
 ) -> dict[str, Any]:
     """`binconvert.convert_bin`, run through the native encoder.

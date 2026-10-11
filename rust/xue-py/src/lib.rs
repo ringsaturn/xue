@@ -235,7 +235,8 @@ impl Bundle {
 ///
 /// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts. Returns
 /// the build report as a dictionary. `zarr` writes each bundle's Zarr store
-/// straight from the codes, `container` its `.xue` (at least one of the two);
+/// straight from the codes (the default), `container` its `.xue` too (off by
+/// default; a build needs at least one of the two);
 /// `series_bundle_ids` names the full-resolution bundles that also ship a
 /// series store.
 #[pyfunction]
@@ -259,8 +260,8 @@ impl Bundle {
     extract_workers = None,
     compress_workers = None,
     verbose = false,
-    zarr = false,
-    container = true,
+    zarr = true,
+    container = false,
     series_bundle_ids = None,
 ))]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]

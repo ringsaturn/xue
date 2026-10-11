@@ -80,8 +80,4 @@ jobs:
       # one bundle's fetch plus its 145 frames of 6.5 M cells rather than
       # every bundle's in a row.
       max_jobs: 16
-      # Published as Zarr stores alone (docs/zarr-profile.md); the .xue
-      # container is retired once the store is derived from it.
-      zarr: true
-      container: false
     secrets: inherit

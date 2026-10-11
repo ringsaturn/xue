@@ -274,6 +274,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
+                container=True, zarr=False,
             )
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
@@ -309,7 +310,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "360x181 grid"):
                 binconvert.convert_bin(
-                    self.inputs, self.root / "complete", model="aurora", skip_video=True, require_complete=True, expected_hours=3
+                    self.inputs, self.root / "complete", model="aurora", skip_video=True, require_complete=True, expected_hours=3,
+                    container=True, zarr=False,
                 )
 
     @requires_native_source("aurora")

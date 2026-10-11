@@ -75,10 +75,6 @@ env:
   # 14 GB a frame), more than a runner has, so a wheel that predates the
   # source must fail the round rather than fall back.
   XUE_ENCODER: native
-  # Every round is published as Zarr stores alone: the store is derived
-  # from the `.xue` the round wrote and the file retired before upload.
-  XUE_ZARR: "1"
-  XUE_CONTAINER: "0"
 
 jobs:
   publish:

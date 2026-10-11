@@ -6,9 +6,9 @@ published as a permanent dataset alongside the live feed. Cases are what
 `showcase.html` lists and what `/?case=<id>` plays back.
 
 Everything about a case comes out of the ordinary pipeline: same encoder, same
-Zarr stores (`showcase build --zarr --no-xue`, the way live runs are
-published; cases built before 2026-09-15 were `.xue` containers and have been
-rebuilt), same schema v5 manifest. Only two knobs differ from a live
+Zarr stores (`showcase build` writes them alone, the way live runs are
+published; `--xue` adds the `.xue` containers; cases built before 2026-09-15
+were `.xue` containers and have been rebuilt), same schema v5 manifest. Only two knobs differ from a live
 run — a bounding box (`--bbox`, `crop_grid`) and a subset of variables — and
 both keep the output small enough that a case can stay published forever.
 `make prune-r2` only ever deletes `<model>.<run>/` directories, so nothing
@@ -189,10 +189,9 @@ retires a case.
 
    This writes `web/public/data/showcase/<id>/` (bundles, posters, manifest,
    and a `case.json` sidecar) and rewrites `web/public/data/showcase.json`,
-   the mutable catalog collected from every sidecar on disk. `--zarr` (or
-   `XUE_ZARR=1`) also derives a Zarr store beside every bundle, the way
-   `build-bin --zarr` does for a run, and the viewer then plays the case
-   from the stores by default.
+   the mutable catalog collected from every sidecar on disk. Every bundle
+   is a Zarr store, the way `build-bin` writes a run, and the viewer plays
+   the case from the stores; `--xue` also writes each bundle's `.xue`.
 
    Scratch cases for local development go in `showcase/cases-local/`
    (gitignored) and build with `make showcase CASES_DIR=showcase/cases-local`,

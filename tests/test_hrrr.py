@@ -497,6 +497,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
+                container=True, zarr=False,
             )
 
     def test_every_published_bundle_is_written_on_the_regular_grid(self) -> None:

@@ -423,8 +423,10 @@ impl Default for ConvertOptions {
             extract_workers: cpus.min(16),
             compress_workers: cpus,
             verbose: false,
-            zarr: false,
-            container: true,
+            // The store alone, the way every run publishes; the container
+            // is opt-in.
+            zarr: true,
+            container: false,
             series_bundle_ids: Vec::new(),
         }
     }
