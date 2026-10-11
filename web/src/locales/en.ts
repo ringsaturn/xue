@@ -234,6 +234,12 @@ export const en = {
    * mixing ratio; its tooltip is `varLabelCloud3d`). */
   varVolume: "3D CLOUD",
   glyphVolume: "Q",
+  /** The day-night switch in the overlay section, which fills the true
+   * colour's night side with the night microphysics picture (`?blend=night`):
+   * its gloss after the code DAY-NIGHT and its glyph (the tooltip is
+   * `varLabelDayNight`). Never called GeoColor, which is CIRA's product. */
+  varDayNight: "BLEND",
+  glyphDayNight: "D",
   /** The level row's ALONE member, a switch after the lines' surfaces:
    * its gloss (the visually hidden word after the instrument code ALONE,
    * which stays English) and its tooltip. */
@@ -453,6 +459,7 @@ export const en = {
   varLabelZhouye: "ZHOUYE dust confidence",
   varLabelTruecolor: "True colour (visible composite)",
   varLabelNightmicro: "Night microphysics (infrared composite)",
+  varLabelDayNight: "Day-night: true colour by day, night microphysics after dark",
   varLabelGust: "Wind gust",
   varLabelTcdc: "Total cloud cover",
   varLabelCape: "Convective available potential energy",

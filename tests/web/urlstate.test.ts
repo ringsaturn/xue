@@ -15,12 +15,14 @@ import {
   parseVariableFromSearch,
   parseVerticalExaggerationFromSearch,
   parseVolumeFromSearch,
+  parseBlendFromSearch,
   searchForVariable,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
   searchWithScene,
   searchWithVolume,
+  searchWithBlend,
 } from "../../web/src/urlstate";
 import type { KnownBundleId } from "../../web/src/manifest";
 
@@ -544,6 +546,9 @@ describe("the volume parameters", () => {
     expect(parseVolumeFromSearch("?volume=refl3d")).toBe("refl3d");
     expect(parseVolumeFromSearch("?volume=cloud")).toBeNull();
     expect(parseVolumeFromSearch("?volume=")).toBeNull();
+    expect(parseBlendFromSearch(searchWithBlend("?case=x", "night"))).toBe("night");
+    expect(searchWithBlend("?case=x&blend=night", null)).toBe("?case=x");
+    expect(parseBlendFromSearch("?blend=day")).toBeNull();
   });
 
   it("reads ?vexag= as a positive number up to 200, or the volume's default", () => {

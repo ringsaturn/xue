@@ -154,8 +154,10 @@ import {
   type StationsUrlState,
 } from "./urlstate";
 import {
+  blendUnderField,
   compositionForPrimary,
   compositionPrimary,
+  DAY_NIGHT_BLEND,
   parseView,
   searchForView,
   volumeOverField,
@@ -1154,6 +1156,7 @@ const mp4SizeButton = required<HTMLButtonElement>("mp4-size-button");
 const mp4SizeLabel = required<HTMLElement>("mp4-size-label");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const volumeTile = required<HTMLButtonElement>("volume-tile");
+const blendTile = required<HTMLButtonElement>("blend-tile");
 const speedLabel = required<HTMLElement>("speed-label");
 const validTime = required<HTMLTimeElement>("valid-time");
 const dataCard = required<HTMLElement>("data-card");
@@ -1492,7 +1495,7 @@ function slotOffsetForFrame(slot: RasterSlot, index: number): number | null {
 
 /** The slot a session is drawing in, or null when it is off screen. */
 function slotOfSession(session: VariableSession): RasterSlot | null {
-  for (const slot of [slots.fill, slots.lines, ...memberSlots()]) {
+  for (const slot of [slots.fill, slots.lines, slots.night, ...memberSlots()]) {
     if (slot.session === session) return slot;
   }
   return null;
@@ -1521,12 +1524,20 @@ let metadata: BundleMetadata | null = null;
 // legend, the data card and the ground tone, the lines following it by
 // lead time — plus the overlays and the marks.
 
-/** A slot's raster layer and what it is showing. Two exist for the life of
- * the page — one per slot — and a session takes the slot its kind belongs
- * to: a pressure surface always draws in `lines`, everything else in
- * `fill`, whichever of them is primary at the time. */
+/** A slot's raster layer and what it is showing. Three exist for the life
+ * of the page and a session takes the slot its kind belongs to: a pressure
+ * surface always draws in `lines`, everything else in `fill`, whichever of
+ * them is primary at the time. The third, `night`, is the fill's blend
+ * (`?blend=night`): a composite drawn just under the fill, on the same
+ * disk and the same time axis, which shows wherever the fill discards — a
+ * true colour cell at code 0, the night side. Two layers drawn in order
+ * make the per-texel choice rather than one shader holding six gun
+ * textures (two frames of two composites), which would pass the sixteen
+ * texture units WebGL2 promises once the terrain variant's samplers are
+ * counted; the overlay machinery already follows the playhead with a
+ * second session, frame for frame on a shared axis. */
 interface RasterSlot {
-  role: "fill" | "lines" | "member";
+  role: "fill" | "lines" | "night" | "member";
   layer: ForecastLayer;
   /** The session feeding this slot, or null while it is empty. */
   session: VariableSession | null;
@@ -1612,7 +1623,11 @@ function memberSlots(): RasterSlot[] {
   return list;
 }
 
-const slots: Record<"fill" | "lines", RasterSlot> = { fill: makeSlot("fill"), lines: makeSlot("lines") };
+const slots: Record<"fill" | "lines" | "night", RasterSlot> = {
+  fill: makeSlot("fill"),
+  lines: makeSlot("lines"),
+  night: makeSlot("night"),
+};
 let layersAdded = false;
 
 /** The slot a bundle draws in, by its kind. */
@@ -1626,9 +1641,12 @@ function primarySlot(): RasterSlot | null {
 }
 
 /** Slots showing a session other than the primary — the overlays: the
- * lines over a field, and the mosaic's other members beside it. */
+ * lines over a field, the blend under it, and the mosaic's other members
+ * beside it. */
 function overlaySlots(): RasterSlot[] {
-  return [slots.fill, slots.lines, ...memberSlots()].filter((slot) => slot.session !== null && slot.session !== activeSession);
+  return [slots.fill, slots.lines, slots.night, ...memberSlots()].filter(
+    (slot) => slot.session !== null && slot.session !== activeSession,
+  );
 }
 
 /** Every session with a slot on screen, the primary first: prefetch fans
@@ -5526,6 +5544,7 @@ function syncRail(): void {
   }
   particlesToggle.setAttribute("aria-pressed", String(view.particles));
   syncVolumeTile();
+  syncBlendTile();
   for (const button of derivedButtons()) {
     button.setAttribute("aria-pressed", String(view.derived[button.dataset.derived as "inflow" | "front"]));
   }
@@ -5777,6 +5796,9 @@ function updateVariablePresentation(session: VariableSession): void {
   particlesToggle.hidden = !session.vector && !compositeFlowPublished();
   // The volume switch belongs to a 2D field on a run that ships a volume.
   syncVolumeTile();
+  // The day-night switch belongs to the true colour on a disk that ships
+  // the night picture.
+  syncBlendTile();
   // The field section follows the field on screen: its tile shows beside
   // the core ones while it is there.
   if (manifest) syncFieldTiles(manifest);
@@ -7456,6 +7478,9 @@ synopTile.addEventListener("click", () => toggleStationProduct("synop"));
 
 function ensureLayers(): void {
   if (layersAdded) return;
+  // The blend first, so the fill draws over it and lets it through only
+  // where the fill has no data.
+  map.addLayer(slots.night.layer, FORECAST_ANCHOR_LAYER);
   map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
   // The derived fields sit over the fill and under the lines: a tint over
   // the rain, the isobars over both.
@@ -7879,6 +7904,7 @@ function applyVariable(session: VariableSession): void {
   if (!session.volume) clearVolumeSelection();
   syncVolumeTools();
   applyOverlays();
+  applyBlend();
   applyVolumeOverlay();
   applyMosaicMembers();
   applyComposite();
@@ -8669,6 +8695,85 @@ function setVolumeShown(shown: boolean): void {
   applyVolumeOverlay();
 }
 
+/** The bundle the blend draws under the field, when the run can: the view
+ * names it, the run ships it, and the view is one disk — a mosaic's other
+ * members have no night slot, so half a mosaic would go dark. */
+function shippedBlend(): ForecastBundleId | null {
+  const under = blendUnderField(view);
+  return under !== null && manifest !== null && mosaic === null && hasBundle(manifest, under) ? under : null;
+}
+
+/** Reconcile the night slot with the view: under the true colour it
+ * carries the night microphysics while the blend is on, loading it after
+ * the primary and never blocking it; it empties otherwise. Its frames
+ * follow the primary's by lead seconds, which on a shared axis is frame
+ * for frame. */
+function applyBlend(): void {
+  const slot = slots.night;
+  const wanted = shippedBlend();
+  syncBlendTile();
+  if (wanted === null) {
+    if (slot.session) detachSlot(slot);
+    return;
+  }
+  if (slot.session?.id === wanted) {
+    configureSlotLayer(slot, slot.session, true);
+    if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
+    return;
+  }
+  if (slot.session) detachSlot(slot);
+  const sequence = initializeSequence;
+  loadVariable(wanted, sequence, "overlay")
+    .then((session) => {
+      if (sequence !== initializeSequence || !ready) return;
+      // The view may have moved on while this loaded.
+      if (shippedBlend() !== wanted || slot.session !== null) return;
+      attachBlend(slot, session);
+    })
+    .catch((error: unknown) => {
+      if (sequence !== initializeSequence) return;
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
+    });
+}
+
+/** Put the blend's session in the night slot and hand it the frame on
+ * screen. It shows nothing until its first frame lands: a composite slot
+ * would otherwise draw whatever it held last. */
+function attachBlend(slot: RasterSlot, session: VariableSession): void {
+  configureSlotLayer(slot, session, true);
+  slot.layer.setVisible(false);
+  refreshViewportTiles();
+  const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+  sendPrefetchWindow(index);
+  if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
+  else requestOverlayDecode(slot, index);
+}
+
+/** The overlay section's day-night switch: shown while the true colour is
+ * the field on a single disk that ships the night picture, pressed while
+ * the blend is on. */
+function syncBlendTile(): void {
+  blendTile.hidden = !(
+    view.field === DAY_NIGHT_BLEND.field &&
+    manifest !== null &&
+    mosaic === null &&
+    hasBundle(manifest, DAY_NIGHT_BLEND.under)
+  );
+  blendTile.setAttribute("aria-pressed", String(!blendTile.hidden && view.blend === "night"));
+}
+
+/** Flip the day-night blend under the field. */
+function setBlendShown(shown: boolean): void {
+  const next = shown ? "night" : null;
+  if (view.blend === next) return;
+  view.blend = next;
+  syncBlendTile();
+  syncRailDensity();
+  syncUrl();
+  applyBlend();
+}
+
 /** The experiment's key under the colour scale: a row per derived layer
  * the run can feed — the frontal zone needs the θe, the inflow both
  * inputs — and nothing at all outside the experiment. */
@@ -8906,6 +9011,7 @@ async function activateComposition(next: ViewComposition): Promise<void> {
   }
   // The same primary, other lines: only the overlay changes.
   applyOverlays();
+  applyBlend();
   if (activeSession) {
     updateVariablePresentation(activeSession);
     syncUrl();
@@ -8991,7 +9097,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   currentRun = null;
   currentManifestCrc = null;
   metadata = null;
-  for (const slot of [slots.fill, slots.lines]) {
+  for (const slot of [slots.fill, slots.lines, slots.night]) {
     detachSlot(slot);
     slot.gridSource = null;
   }
@@ -9002,6 +9108,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   detachVolumeOverlay();
   particlesToggle.hidden = true;
   volumeTile.hidden = true;
+  blendTile.hidden = true;
   syncRailDensity();
   clearLabels();
   activeSession = null;
@@ -9441,6 +9548,7 @@ try {
 window.addEventListener("resize", () => setMp4Size(mp4SizeChoice, false));
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
+blendTile.addEventListener("click", () => setBlendShown(view.blend !== "night"));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast).
  * The manifest's crc is what says "new": a forecast's changes with its run
