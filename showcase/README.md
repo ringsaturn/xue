@@ -78,6 +78,23 @@ retires a case.
    someone who has the dataset — the built output is an ordinary case like any
    other.
 
+   A **forecast without a feed** takes the same shape. The WOOF nest
+   (`woof`, a WRF run commissioned on Recast's service) is never fetched:
+   its case names the `dataset` *directory* the `xue wrf-series` tool wrote
+   (one `woof.<run>.<variable>.nc` per variable) and no `run` — the cycle
+   comes out of the series' own time axis — while `hours` is still a point
+   on the source's axis, hourly from f001 to f072.
+
+   ```json
+   {
+     "id": "fuji-woof-2026-10-10",
+     "model": "woof",
+     "dataset": "woof/fuji-2026-10-10/",
+     "hours": 12,
+     "variables": ["tmpsfc", "tmp2m", "wind10m", "lcdc"]
+   }
+   ```
+
    An **MRMS case** is the third shape — an observation that is *fetched*:
    like a forecast case it names a `run`, the first hour of its window
    (any hour, `YYYYMMDDHH`), and `hours` is the window's length; there is
@@ -124,6 +141,17 @@ retires a case.
    `byteLength` and `crc32` when the case is refreshed or rebuilt. A shell
    that does not know the block plays the mosaic alone.
 
+   A case may name the **camera** the viewer opens it on with an optional
+   `view` block, carried onto the catalog row as written: `center` as
+   `[lon, lat]` and `zoom` (0–22), optionally `pitch` (0–85), `bearing`
+   (−180..180) and `terrain`, the vertical exaggeration (a positive number)
+   or `false` for an explicitly flat view. Without one the viewer frames the
+   `bbox` as before; a shell that does not know the block does the same.
+
+   ```json
+   "view": {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 62, "bearing": -35, "terrain": 1.5}
+   ```
+
    Prose is the definition's to change after the fact: a translation added
    or a summary corrected reaches the catalog with
 
@@ -132,7 +160,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit) from its definition and regenerates
+   variable, event time, tags, credit, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.
@@ -188,6 +216,7 @@ The public archives do not go back forever:
 | `jma` | — | No archive: the agency lists three hours and its tiles expire after days. A window can only be built from the decoded-frame cache the live feed keeps on the bucket (`make pull-r2-frames`), and cases are not wired up yet |
 | `himawari` | 2022-12-13 | Every ten minutes from NOAA's `noaa-himawari9` bucket (the ISatSS tiles); a case is a window from any hour, like `mrms`, each scan 26 MB of tiles fetched and warped on the spot, so build it on a runner (`showcase.yml`). Crop with `bbox`: the whole disk is 4.6 MB a frame. Himawari-8's bucket (2019–2022) needs a platform row not written yet |
 | `cma` | 2026-09-06 | Every six minutes from a private daily Zarr archive (`XUE_CMA_ARCHIVE`, read with the `R2_*` credentials, `uv sync --group cma`); a case is a window from any hour, like `mrms`. A case may instead name a local NetCDF series (`dataset`), which is how the cases before the archive were cut |
+| `woof` | — | No feed and no archive: a run is ordered on Recast's WOOF service and converted locally with `xue wrf-series` (`uv sync --group wrf`); a case names the directory it wrote (`dataset`), hourly from f001 to at most f072 |
 
 Pick a cycle a day or two before the event peaks, so the case is a *forecast*
 of the event rather than an analysis of it, and give it enough `hours` to run

@@ -120,8 +120,8 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cma",
-    "mrms", "mrms3d", "jma", "himawari", "goeseast", "goeswest" or "meteosat"."""
+    """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
+    "woof", "cma", "mrms", "mrms3d", "jma", "himawari", "goeseast", "goeswest", "meteosat" or "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
     product: str
@@ -129,9 +129,10 @@ class SourceSpec:
     latest_filename: str | None
     """Per-model mutable live pointer at the data root. GFS uses the bare
     ``latest.json``; the other models use ``latest-<model>.json``. None for a
-    source with no live feed. An observation source with a pointer (MRMS,
-    JMA, the CMA mosaic) points at a rolling window: ``--run latest``
-    resolves to the window ending at the bucket's newest frame."""
+    source with no live feed — the WOOF nest, a forecast that exists only as
+    showcase cases built from a local dataset. An observation source with a
+    pointer (MRMS, JMA, the CMA mosaic) points at a rolling window: ``--run
+    latest`` resolves to the window ending at the bucket's newest frame."""
     steps: tuple[tuple[int, int], ...]
     """The published time axis as ``(last_hour, step_hours)`` segments: the
     series runs at ``step_hours`` up to and including ``last_hour``, then the
@@ -171,9 +172,11 @@ class SourceSpec:
     series begin at the first six-hour step and the cycle's analysis lives
     in another file family, encoded as an instantaneous analysis where every
     published frame is a six-hour mean, so the source declares its axis to
-    start at hour 6 and no f000 is fetched at all. :meth:`forecast_hours`
-    counts from here, which is what every axis check downstream reads.
-    Mirrored in the native encoder's source table."""
+    start at hour 6 and no f000 is fetched at all. The WOOF nest starts at
+    hour 1: its hour 0 is the driving GFS analysis interpolated onto the
+    nest, not a WRF forecast, so the ``wrf-series`` tool drops it.
+    :meth:`forecast_hours` counts from here, which is what every axis check
+    downstream reads. Mirrored in the native encoder's source table."""
     optional_at_analysis: tuple[str, ...] = ()
     """Input variables absent from the analysis (f000) file — sflux carries no
     PRATE record at f000, ECMWF's gust is an interval maximum whose interval
@@ -350,9 +353,10 @@ class SourceSpec:
     per frame matched record by record. Orthogonal to :attr:`observation`:
     ``ifshres`` is a forecast whose frames arrive this way, so its series
     carry a run time and lead times like any cycle's. Orthogonal to
-    :attr:`fetched` too: both are written by the fetch, and a showcase case
-    of the CMA mosaic may name a local file cut from the same mosaics
-    instead."""
+    :attr:`fetched` too: those are written by the fetch, a showcase case of
+    the CMA mosaic may name a local file cut from the same mosaics instead,
+    and the WOOF nest is only ever a local directory the ``wrf-series`` tool
+    wrote."""
     downsample: Downsample | None = None
     """Set when the source is published on a grid coarser than it arrives
     on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
@@ -418,11 +422,15 @@ class SourceSpec:
 
     @property
     def fetched(self) -> bool:
-        """Whether a run of the source is fetched from a bucket — every
-        forecast, and an observation with a :attr:`window_hours` — as
-        opposed to read from a local file. What ``fetch`` and ``build-bin``
-        offer."""
-        return not self.observation or self.window_hours is not None
+        """Whether a run of the source is fetched from a bucket — a forecast
+        with a live pointer, and an observation with a :attr:`window_hours`
+        — as opposed to read from a local file or directory. What ``fetch``
+        and ``build-bin`` offer; ``convert-bin`` and a showcase case built
+        from a ``dataset`` take the rest (the CMA file cases, the WOOF
+        nest)."""
+        if self.observation:
+            return self.window_hours is not None
+        return self.live
 
     @property
     def horizon_hours(self) -> int:
@@ -1304,6 +1312,74 @@ SOURCES: dict[str, SourceSpec] = {
         # a tile is what keeps one cell's nine-month series to a few
         # hundred kilobytes rather than the whole grid's.
         tile=(96, 95),
+        video=False,
+    ),
+    # Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
+    # Fuji showcase, nested 12 → 3 → 1 → 0.5 km from the GFS analysis, read
+    # on its innermost 500 m domain. There is no feed to fetch (the run was
+    # ordered once and sits on local disk), so ``latest_filename`` is None
+    # and the source is reached only through showcase cases naming a
+    # ``dataset`` directory — the first forecast that is not ``fetched``.
+    # The ``xue wrf-series`` tool (xuebuild/wrf/) owns every WRF particular:
+    # destaggering, rotating the grid-relative wind, the dewpoint, the layered
+    # cloud maxima, the precipitation differencing and the bilinear regrid
+    # from the Lambert conformal nest onto a regular 0.005° grid; it writes
+    # one CF NetCDF series per variable (``woof.<run>.<variable>.nc``), so
+    # this is a ``series_file`` forecast like ``ifshres`` and neither encoder
+    # learns any WRF arithmetic. The axis is hourly to 72 hours — WOOF's
+    # usual cap — from f001: f000 is the GFS analysis on the nest, not a
+    # WRF forecast, and the tool drops it (``first_hour``). Precipitation
+    # arrives as the hour's total (``interval_precipitation``, the registry's
+    # ``apcp``) at every frame, so nothing is analysis-optional. The nominal
+    # grid is d04 inscribed in the regular grid, 79 x 61 cells (138.540 to
+    # 138.930°E, 35.220 to 35.520°N): a whole plane is under 5000 cells, so
+    # there is no ladder and no video.
+    "woof": SourceSpec(
+        id="woof",
+        manifest_model="WOOF-WRF",
+        product="nest",
+        latest_filename=None,
+        steps=((72, 1),),
+        first_hour=1,
+        input_variable_ids=(
+            "tmp2m",
+            "dpt2m",
+            "tmpsfc",
+            "ugrd10m",
+            "vgrd10m",
+            "apcp",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "hpbl",
+            "dswrf",
+            "orog",
+        ),
+        accumulated_precipitation=False,
+        interval_precipitation=True,
+        optional_at_analysis=(),
+        statistical_processes=(("prate", 0),),
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "tmpsfc",
+            "dpt2m",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "hpbl",
+            "dswrf",
+            "orog",
+        ),
+        bundle_vector_ids=("wind10m",),
+        core_bundle_ids=("tmp2m",),
+        production_grid=(79, 61),
+        # Two tiles across, one down; the eastern tile is 15 cells wide.
+        tile=(64, 64),
+        variant_factors=(),
+        series_file=True,
         video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity

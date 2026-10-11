@@ -32,12 +32,25 @@ source's tool wrote, and its axis is whatever times that file carries;
 nothing fetches it, so such a case is only rebuildable by someone who has
 the dataset — how the CMA cases were built before the archive. The built
 output is an ordinary case like any other.
+
+A forecast source with no live feed (the WOOF nest: ``SourceSpec.fetched``
+false on a source that is not an observation) takes the same shape as the
+file case: it names the ``dataset`` directory the ``xue wrf-series`` tool
+wrote and no ``run``, and the cycle comes out of the series' own time axis.
+Its ``hours`` is still a point on the source's published axis, counted from
+the source's first hour.
+
+A case may also carry a ``view``: the camera the shell opens the case on
+(center, zoom, pitch, bearing, terrain exaggeration), carried onto the
+catalog row verbatim. A shell that does not know the block opens the case
+on its bounding box as before.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -86,13 +99,13 @@ _LOCALE_TAG = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
 or region. Matching the tags the frontend's own detection normalizes."""
 
 OBSERVATION_ROOT_ENV = "XUE_OBSERVATION_ROOT"
-"""Environment variable holding the root an observation case's ``dataset``
-path is resolved against."""
+"""Environment variable holding the root a case's ``dataset`` path is
+resolved against."""
 
 DEFAULT_OBSERVATION_ROOT = Path("data/observations")
-"""Where observation datasets live by default, relative to the working
-directory. These files are not published anywhere, so an observation case
-built from one is only rebuildable by someone who has it."""
+"""Where local datasets live by default, relative to the working directory.
+These files are not published anywhere, so a case built from one is only
+rebuildable by someone who has it."""
 
 _ID_CHARACTERS = set("abcdefghijklmnopqrstuvwxyz0123456789-")
 
@@ -111,15 +124,17 @@ class CaseSpec:
     model: str
     run: str
     """The archived cycle to fetch — on a fetched observation, the first
-    hour of the window — and empty on a local-file observation case, where
-    the dataset file says when its series starts."""
+    hour of the window — and empty on a case built from a dataset, where
+    the series says when it starts."""
     dataset: str
-    """Local-file observation cases only: the NetCDF file holding the
-    series, resolved against :data:`OBSERVATION_ROOT_ENV` (default
-    :data:`DEFAULT_OBSERVATION_ROOT`) when it is not absolute."""
+    """Cases built from a local dataset only: the NetCDF series file, or
+    the directory holding one series per variable, resolved against
+    :data:`OBSERVATION_ROOT_ENV` (default :data:`DEFAULT_OBSERVATION_ROOT`)
+    when it is not absolute."""
     hours: int
-    """Last hour of the case's axis, counted from its first frame; on a
-    fetched observation, the length of the window."""
+    """Last hour of the case's axis: on a forecast a point on the published
+    axis, on a file observation counted from its first frame, on a fetched
+    observation the length of the window."""
     bbox: tuple[float, float, float, float]
     variables: tuple[str, ...]
     default_variable: str
@@ -132,6 +147,12 @@ class CaseSpec:
     (``docs/nexrad.md``): ``window``, the window manifest of a
     ``xue nexrad-case`` build, relative to the case's directory, and the
     ``defaultSite`` and ``defaultProduct`` the viewer opens on."""
+    view: dict[str, Any] | None = None
+    """The camera the shell opens the case on (:func:`_view_block`):
+    ``center`` as ``[lon, lat]``, ``zoom``, and optionally ``pitch``,
+    ``bearing`` and ``terrain`` (a vertical exaggeration, or ``false`` for an
+    explicitly flat view). Carried onto the catalog row as given; a case
+    without one opens on its bounding box."""
 
     @property
     def output_subdirectory(self) -> str:
@@ -143,16 +164,19 @@ class CaseSpec:
 
     @property
     def from_dataset(self) -> bool:
-        """Whether the case is built from a local observation file rather
-        than fetched — a series-file observation whose definition names a
-        ``dataset`` (the CMA cases cut before the archive), never MRMS."""
-        return self.source.observation and bool(self.dataset)
+        """Whether the case is built from a local dataset rather than
+        fetched: a series-file observation whose definition names a
+        ``dataset`` (the CMA cases cut before the archive) or a forecast
+        with no feed to fetch (the WOOF nest), never MRMS or a cycle on a
+        bucket. :func:`parse_case` holds the definition to the source, so
+        a dataset named is a dataset built from."""
+        return bool(self.dataset)
 
     @property
     def dataset_path(self) -> Path:
-        """The observation file this case is built from."""
+        """The series file or directory this case is built from."""
         if not self.dataset:
-            raise ShowcaseError(f"case {self.id} names no observation dataset")
+            raise ShowcaseError(f"case {self.id} names no dataset")
         path = Path(self.dataset).expanduser()
         if path.is_absolute():
             return path
@@ -193,23 +217,31 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         raise ShowcaseError(f"case {case_id}: model must be a string")
     source = source_spec(model)
 
-    # A forecast case names an archived cycle to fetch, and so does a fetched
-    # observation — the first hour of its window; a local-file observation
-    # case names the file that already holds its series, and its start time
-    # comes out of that file rather than out of the definition. A
+    # A fetched case names what to fetch: a forecast cycle, or the first
+    # hour of a fetched observation's window. A source nothing fetches — a
+    # file observation, or a forecast with no feed (the WOOF nest) — names
+    # the dataset that already holds its series instead, and its start time
+    # comes out of that series rather than out of the definition. A
     # series-file observation with an archive (the CMA mosaic) takes either.
     run = payload.get("run", "")
     dataset = payload.get("dataset", "")
-    from_file = source.observation and (not source.fetched or (source.series_file and bool(dataset)))
+    if not source.fetched and not source.series_file:
+        raise ShowcaseError(f"case {case_id}: {source.manifest_model} is neither fetched nor read from a series")
+    from_file = not source.fetched or (source.observation and source.series_file and bool(dataset))
     parsed_run = None
     if from_file:
         if run:
-            raise ShowcaseError(f"case {case_id}: an observation case built from a file has no run to name")
+            raise ShowcaseError(f"case {case_id}: a case built from a dataset has no run to name")
         if not isinstance(dataset, str) or not dataset:
-            raise ShowcaseError(f"case {case_id}: dataset must name the observation file to build from")
+            raise ShowcaseError(
+                f"case {case_id}: dataset must name the series file or directory to build "
+                f"{source.manifest_model} from"
+            )
     else:
         if dataset:
-            raise ShowcaseError(f"case {case_id}: only an observation case read from a file names a dataset")
+            raise ShowcaseError(
+                f"case {case_id}: only a case read from a dataset names a dataset; {source.manifest_model} is fetched"
+            )
         if not isinstance(run, str) or not run:
             what = "the window's first hour" if source.observation else "a UTC cycle"
             raise ShowcaseError(f"case {case_id}: run must be {what} in YYYYMMDDHH format")
@@ -280,6 +312,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if radar is not None:
         radar = _radar_block(radar, case_id)
 
+    view = payload.get("view")
+    if view is not None:
+        view = _view_block(view, case_id)
+
     return CaseSpec(
         id=case_id,
         title=_localized(payload.get("title"), "title", case_id),
@@ -296,6 +332,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         credit=credit,
         profile=profile,
         radar=radar,
+        view=view,
     )
 
 
@@ -322,6 +359,51 @@ def _radar_block(value: object, case_id: str) -> dict[str, str]:
     if product not in RADAR_PRODUCTS:
         raise ShowcaseError(f"case {case_id}: radar.defaultProduct must be one of {RADAR_PRODUCTS}")
     return {"window": window, "defaultSite": site, "defaultProduct": product}
+
+
+_VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain")
+
+
+def _view_number(value: object, name: str, case_id: str, low: float, high: float) -> float:
+    """A finite number in ``[low, high]``; a bool is not a number here."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ShowcaseError(f"case {case_id}: view.{name} must be a number between {low:g} and {high:g}")
+    if not low <= value <= high:
+        raise ShowcaseError(f"case {case_id}: view.{name} must be between {low:g} and {high:g}, not {value}")
+    return value
+
+
+def _view_block(value: object, case_id: str) -> dict[str, Any]:
+    """A case's ``view`` block, the camera the shell opens it on: a center
+    and a zoom, optionally a pitch, a bearing and the terrain exaggeration
+    (a positive number) or ``false`` for an explicitly flat view. The
+    ranges are MapLibre's; the values pass through as written."""
+    if not isinstance(value, dict) or set(value) - set(_VIEW_KEYS):
+        raise ShowcaseError(f"case {case_id}: view must be {{center, zoom, pitch?, bearing?, terrain?}}")
+    center = value.get("center")
+    if not isinstance(center, list) or len(center) != 2:
+        raise ShowcaseError(f"case {case_id}: view.center must be [longitude, latitude]")
+    view: dict[str, Any] = {
+        "center": [
+            _view_number(center[0], "center[0]", case_id, -180.0, 180.0),
+            _view_number(center[1], "center[1]", case_id, -90.0, 90.0),
+        ],
+        "zoom": _view_number(value.get("zoom"), "zoom", case_id, 0.0, 22.0),
+    }
+    if "pitch" in value:
+        view["pitch"] = _view_number(value["pitch"], "pitch", case_id, 0.0, 85.0)
+    if "bearing" in value:
+        view["bearing"] = _view_number(value["bearing"], "bearing", case_id, -180.0, 180.0)
+    if "terrain" in value:
+        terrain = value["terrain"]
+        if terrain is False:
+            view["terrain"] = False
+        else:
+            exaggeration = _view_number(terrain, "terrain", case_id, 0.0, math.inf)
+            if exaggeration <= 0:
+                raise ShowcaseError(f"case {case_id}: view.terrain must be a positive exaggeration or false")
+            view["terrain"] = exaggeration
+    return view
 
 
 def load_case(path: Path) -> CaseSpec:
@@ -387,21 +469,21 @@ def build_case(
 
     Only the case's own variables are downloaded, and into a per-case raw
     directory so a partial record set never shadows a full run's cache. A
-    local-file observation case downloads nothing: its input is the dataset
-    file the definition names. A fetched observation (MRMS) downloads its
-    window frame by frame, the products of the case's variables only.
+    case built from a dataset downloads nothing: its input is the series
+    file, or the directory of one series per variable, the definition
+    names. A fetched observation (MRMS) downloads its window frame by frame,
+    the products of the case's variables only.
     """
     source = spec.source
     output_dir = output_root / spec.output_subdirectory
     manifest_path = output_dir / "manifest.json"
     if spec.from_dataset:
         inputs = spec.dataset_path
-        if not inputs.is_file():
+        if not inputs.exists():
             raise ShowcaseError(
-                f"case {spec.id}: observation dataset not found at {inputs}; "
-                f"set {OBSERVATION_ROOT_ENV} to where it lives"
+                f"case {spec.id}: dataset not found at {inputs}; set {OBSERVATION_ROOT_ENV} to where it lives"
             )
-        LOG.info("reading %s observation series %s", source.manifest_model, inputs)
+        LOG.info("reading %s series %s", source.manifest_model, inputs)
         report = convert_bin(
             inputs,
             output_dir,
@@ -418,7 +500,7 @@ def build_case(
             model=spec.model,
             bbox=spec.bbox,
             bundle_ids=spec.variables,
-            # A local file holds more than the case.
+            # A local dataset may hold more than the case.
             last_hour=spec.hours,
             zarr=zarr,
             container=container,
@@ -476,8 +558,9 @@ def build_catalog_entry(
         "modelId": spec.model,
         "model": manifest["model"],
         "product": manifest["product"],
-        # An observation case names no cycle, so its run id is the hour its
-        # series starts — the same YYYYMMDDHH shape a forecast cycle has.
+        # A case built from a dataset names no cycle, so its run id comes
+        # out of the manifest: the cycle the series counts from, or the hour
+        # an observation series starts — the same YYYYMMDDHH shape.
         "run": spec.run or _run_id(manifest["runTime"]),
         "runTime": manifest["runTime"],
         "forecastHours": manifest["forecastHours"],
@@ -503,6 +586,8 @@ def build_catalog_entry(
         entry["credit"] = spec.credit
     if spec.radar:
         entry["radar"] = dict(spec.radar)
+    if spec.view:
+        entry["view"] = dict(spec.view)
     validate_catalog_entry(entry)
     return entry
 
@@ -533,14 +618,16 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
     if "radar" in entry:
         _radar_block(entry["radar"], entry["id"])
+    if "view" in entry:
+        _view_block(entry["view"], entry["id"])
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags and the credit are the definition's to change — a translation
-    added, a summary corrected — and none of them names a byte of the
-    bundles. What does (model, run, box, variables) must still match, so a
+    the tags, the credit and the view are the definition's to change — a
+    translation added, a summary corrected, the camera moved — and none of
+    them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
     case rebuilt instead."""
     sidecar = output_root / spec.output_subdirectory / CASE_SIDECAR
@@ -580,6 +667,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("tags", list(spec.tags)),
         ("credit", spec.credit),
         ("radar", dict(spec.radar) if spec.radar else None),
+        ("view", dict(spec.view) if spec.view else None),
     ):
         if value:
             entry[key] = value

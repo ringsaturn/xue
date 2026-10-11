@@ -21,6 +21,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | 3 h to F120 | `aod` |
 | `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
+| `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
 | `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
@@ -200,6 +201,27 @@ into `prate` (`interval_precipitation`; its input `apcp` is read, never
 published). A NaN nodata is a fill (`PlaneSource.fill_nan`), which is how
 sea ice thickness over land arrives. `publish-ifshres.yml` installs the
 pinned om2nc release.
+
+**woof.** A WRF-ARW run commissioned on Recast Systems' WOOF service
+(gpuwm), nested 12 → 3 → 1 → 0.5 km from the GFS and read on its 500 m
+innermost domain over Mount Fuji. There is no feed: `latest_filename` is
+None, so the source is the first forecast that is not `fetched` (a forecast
+is fetched only through a live pointer, an observation only through a
+`window_hours`), it is absent from `fetch` / `build-bin`, `require_complete`
+refuses it, and it is reached only through showcase cases naming a
+`dataset` directory under `XUE_OBSERVATION_ROOT`
+(`showcase/README.md`). The `xue wrf-series` tool (`xuebuild/wrf/`, the
+`wrf` dependency group: netCDF4) owns every WRF particular — destaggering,
+rotating the grid-relative wind to earth-relative, the dewpoint, the
+layered cloud maxima by MSL height (0–2 / 2–6 / >6 km), differencing the
+run-total precipitation into the hour's `apcp`, and the bilinear regrid
+from the Lambert conformal nest onto the regular 0.005° grid inscribed in
+it (79 × 61) — and writes `woof.<run>.<variable>.nc`, one CF series per
+variable, so both encoders take the `ifshres` series-file path unchanged.
+Frames start at f001 (`first_hour = 1`: f000 is the GFS analysis on the
+nest, dropped by the tool) and `apcp` is on every frame, so nothing is
+analysis-optional; `prate` is the interval rate (`interval_precipitation`).
+No ladder and no video: a plane is under 5000 cells. `tests/test_woof.py`.
 
 ## Observations
 
