@@ -30,9 +30,10 @@ producer runs (:meth:`Producer.ancillary_for`). The third is this
 pipeline's own: the true colour composite, one picture by day and by
 night — the slot's visible and near-infrared reflectances where the sun
 is up, white cloud from two infrared windows where it is down, blended
-across the terminator by the sun's position. A producer's outputs are the components of one or more composite
-bundles (:attr:`Producer.bundle_ids`); the fetch stage runs it once for
-all of them and caches every output frame.
+across the terminator by the sun's position. A producer's outputs are
+the components of one or more composite bundles
+(:attr:`Producer.bundle_ids`); the fetch stage runs it once for all of
+them and caches every output frame.
 """
 
 from __future__ import annotations
