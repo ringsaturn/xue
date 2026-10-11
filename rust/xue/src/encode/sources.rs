@@ -1332,7 +1332,7 @@ pub const SOURCES: &[SourceSpec] = &[
         // the windows, the DEBRA and ZHOUYE confidences from five, and the
         // true colour from the four visible and near-infrared bands, each
         // read off the series like any channel.
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
         bundle_volume_ids: &[],
         // The platform's region at 0.04°: 120° x 120°.
         production_grid: (3000, 3000),
@@ -1425,7 +1425,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1503,7 +1503,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
+        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
