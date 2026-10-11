@@ -752,6 +752,38 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 },
             ],
         }
+    # The Japan box is the same imager and the same terms as the disk: the
+    # providers are the disk's, and the links lose the two that only the
+    # confidences it does not publish cite.
+    prose["himawarijp"] = {
+        "title": "Himawari-9 AHI over Japan",
+        "description": (
+            "The Japan Meteorological Agency's Himawari-9 Advanced Himawari Imager at 140.7°E, "
+            "as NOAA redistributes it on its open data bucket (the ISatSS full-disk product), over "
+            "Japan alone: the tiles of each ten-minute scan that reach 24–46°N, 122–148°E, "
+            "reprojected from the geostationary view onto a regular 0.01° grid over that box "
+            "(2600 × 2200 cells, about 1.1 km), as a rolling window rebuilt every ten minutes. "
+            "Published: the 10.4 µm infrared window as brightness temperature (ir104); the classic "
+            "Dust RGB composite (dustrgb: the 12.3 − 10.4 µm split window, 11.2 − 8.6 µm with a "
+            "gamma, and the 10.4 µm window, stretched to three guns in 0–1 with the SEVIRI recipe of "
+            "Lensky and Rosenfeld 2008 as EUMeTrain formalised it), computed from the 8.6, 10.4, 11.2 "
+            "and 12.3 µm windows by the shachen package (Apache-2.0), whose id and version each gun "
+            "carries as its producer block; and the true colour composite (truecolor: the 0.64, 0.51 "
+            "and 0.47 µm reflectances of AHI bands 3, 2 and 1, each divided by the cosine of the "
+            "solar zenith, the green blended with a little of the 0.86 µm band, each gun put through "
+            "one fixed brightness curve to 0–1, no Rayleigh correction, the night side no data; this "
+            "pipeline's own recipe, carried as the producer block xue with the recipe's version). "
+            "Source: Japan Meteorological Agency, distributed by NOAA; the data are unaltered but "
+            "reprojected and composited, and neither JMA nor NOAA endorses this site."
+        ),
+        "license": "other",
+        "providers": list(prose["himawari"]["providers"]),
+        "links": [
+            link
+            for link in prose["himawari"]["links"]
+            if not link["title"].startswith(("Miller et al. (2017)", "CAMEL"))
+        ],
+    }
     prose["meteosat"] = {
         "title": "Meteosat-12 FCI full disk, hourly",
         "description": (

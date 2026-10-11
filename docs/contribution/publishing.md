@@ -75,8 +75,8 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 
 ## Rolling windows
 
-`mrms`, `jma`, `cma`, `himawari`, `goeseast`, `goeswest`, `meteosat` and
-`aurora` each run one round of
+`mrms`, `jma`, `cma`, `himawari`, `himawarijp`, `goeseast`, `goeswest`,
+`meteosat` and `aurora` each run one round of
 [`scripts/window_rounds.sh`](../../scripts/window_rounds.sh) per job
 (`ONCE=true`) on a five-minute cron (ten for the 10-minute imagers). A
 `loop` dispatch runs rounds until twenty past the next hour and yields to
@@ -106,7 +106,8 @@ Per-source switches:
 | `jma` | 3 | `FRAME_CACHE=true` (jma-radar's decoded frames, pulled before and pushed after, pruned to seven days) |
 | `cma` | 3 | `XUE_CMA_ARCHIVE` secret, `uv sync --group cma`; `CMA_ARCHIVE_ACCESS_KEY_ID` / `CMA_ARCHIVE_SECRET_ACCESS_KEY` when the dataset token cannot read the archive |
 | `himawari`, `goeseast`, `goeswest` | 6 | `FRAME_CACHE=true` (warped GeoTIFFs, kept `FRAMES_KEEP_HOURS`=8), `ANCILLARY=true` (CAMEL months for the dust confidence), `--group satellite`, system `gdal-bin` |
-| `meteosat` | 24 | as above plus the `EUMETSAT_*` secrets and `hdf5plugin` |
+| `himawarijp` | 3 | `FRAME_CACHE=true` under `himawarijp-frames` (kept `FRAMES_KEEP_HOURS`=5), no `ANCILLARY`, `--group satellite`, system `gdal-bin` |
+| `meteosat` | 24 | as the disks plus the `EUMETSAT_*` secrets and `hdf5plugin` |
 | `aurora` | 12 | `FRAME_CACHE=true` (the feed has only its newest grid; `force` never clears the cache), `--group aurora` |
 
 ```sh

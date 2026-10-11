@@ -3516,7 +3516,7 @@ mod composite_tests {
     fn the_dust_rgb_reads_four_windows_or_three_without_the_11_2_one() {
         // Mirrors `DustRGBProducer.inputs_for`: AHI and ABI carry the 11.2 µm
         // window, FCI does not and the 10.4 µm one stands in.
-        for model in ["himawari", "goeseast", "goeswest"] {
+        for model in ["himawari", "himawarijp", "goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "dustrgb"), ["ir086", "ir104", "ir112", "ir123"], "{model}");
         }
@@ -3568,8 +3568,13 @@ mod composite_tests {
         // other three; the FCI has one, so Meteosat reads the four. Three
         // guns everywhere.
         assert_eq!(bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
-        let himawari = source_spec("himawari").expect("himawari");
-        assert_eq!(bundle_input_ids(himawari, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
+        for model in ["himawari", "himawarijp"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis051", "vis064", "nir086"], "{model}");
+        }
+        // The Japan box publishes no confidence: the window, then the two
+        // composites its eight channels feed.
+        assert_eq!(published_bundle_ids(source_spec("himawarijp").expect("himawarijp")), ["ir104", "dustrgb", "truecolor"]);
         for model in ["goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086"], "{model}");

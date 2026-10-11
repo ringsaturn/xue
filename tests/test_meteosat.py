@@ -205,7 +205,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual((SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours, SPEC.production_grid, SPEC.tile), (0.04, 3600, 24, (3000, 3000), (64, 64)))
         self.assertEqual(METEOSAT.cadence_seconds, 600)
         self.assertFalse(SPEC.video)
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "goeseast", "goeswest", "meteosat"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"])
 
     def test_the_bands_are_the_fci_s(self) -> None:
         self.assertEqual([band_id for band_id, _ in SPEC.bands], list(SPEC.input_variable_ids))

@@ -34,6 +34,7 @@ IDENTITIES = {
     "mrms3d": ("NOAA-MRMS3D", "conus-refl3d", "latest-mrms3d.json", ("refl3d",)),
     "jma": ("JMA-HRPNS", "japan-prate", "latest-jma.json", ("prate",)),
     "himawari": ("HIMAWARI", "ahi-fldk-0p04", "latest-himawari.json", ("ir104",)),
+    "himawarijp": ("HIMAWARI-JP", "ahi-japan-0p01", "latest-himawarijp.json", ("ir104",)),
     "goeseast": ("GOES-EAST", "abi-fldk-0p04", "latest-goeseast.json", ("ir104",)),
     "goeswest": ("GOES-WEST", "abi-fldk-0p04", "latest-goeswest.json", ("ir104",)),
     "meteosat": ("METEOSAT", "fci-fldk-0p04", "latest-meteosat.json", ("ir104",)),

@@ -28,6 +28,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | 360 s, 3 h window | `cref` |
 | `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | 300 s, 12 h window | `aurora` |
 | `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | 600 s, 6 h window | `ir104` |
+| `himawarijp` | satellite (regional box) | `xuebuild/satellite/`, the tiles over its box, frame cache of its own | 600 s, 3 h window | `ir104` |
 | `meteosat` | satellite | `xuebuild/satellite/` (EUMETSAT Data Store) | 3600 s, 24 h window | `ir104` |
 
 Each source publishes from `.github/workflows/publish-<id>.yml`. Forecast
@@ -311,8 +312,8 @@ re-fetched). Needs the `aurora` dependency group.
 
 ## Satellites
 
-`himawari`, `goeseast`, `goeswest` and `meteosat` are series-file
-observations whose fetch stage is `xuebuild/satellite/`; registry, readers,
+`himawari`, `himawarijp`, `goeseast`, `goeswest` and `meteosat` are
+series-file observations whose fetch stage is `xuebuild/satellite/`; registry, readers,
 projector, frame cache, producers, the Dust RGB and the dust confidence are
 specified in [../satellite.md](../satellite.md). What the rest of the repo
 must keep in mind:
@@ -322,6 +323,14 @@ must keep in mind:
 - The reference pipeline and every satellite workflow need a system GDAL
   with `gdalwarp` whichever encoder converts: the wheel's GDAL has no
   GeoTIFF driver. Workflows install `gdal-bin` and the `satellite` group.
+- **A regional box is a source of its own.** `himawarijp` is the
+  `himawari` platform with `SourceSpec.region` set (24–46°N, 122–148°E)
+  and a finer `grid_step`: the frames are warped onto the box, and the
+  ISatSS reader fetches only the tiles whose footprint reaches it
+  (`ISatSSReader.tiles_covering`). The frame cache is keyed by the source
+  id (`<source>-frames`), so the box and the disk never share a frame;
+  a full-disk source's id is its platform's role, so the disks' cache
+  directories kept their names. `region` is mirrored in `sources.rs`.
 - **Meteosat is hourly.** FCI scans every ten minutes, but EUMETSAT releases
   only the cycle on each hour as Core data under CC-BY-4.0; the cycles
   between are under a licence that does not allow this use. So

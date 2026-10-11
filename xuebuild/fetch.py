@@ -1594,15 +1594,16 @@ def satellite_platform(spec: SourceSpec) -> satellite.Platform:
 
 
 def satellite_grid(spec: SourceSpec) -> satellite_fetch.TargetGrid:
-    """The grid a satellite source is warped onto, held to the source
-    table's ``production_grid`` so a build's completeness check and the
-    fetch agree."""
+    """The grid a satellite source is warped onto — its own region, or the
+    platform's — held to the source table's ``production_grid`` so a
+    build's completeness check and the fetch agree."""
     if spec.grid_step is None:
         raise DownloadError(f"{spec.manifest_model} declares no grid step")
-    grid = satellite_fetch.target_grid(satellite_platform(spec), spec.grid_step)
+    grid = satellite_fetch.target_grid(satellite_platform(spec), spec.grid_step, spec.region)
     if (grid.width, grid.height) != spec.production_grid:
+        whose = "source" if spec.region else "platform"
         raise DownloadError(
-            f"{spec.manifest_model}: the platform's region at {spec.grid_step}° is {grid.width} x {grid.height}, "
+            f"{spec.manifest_model}: the {whose}'s region at {spec.grid_step}° is {grid.width} x {grid.height}, "
             f"not the production grid {spec.production_grid}"
         )
     return grid
@@ -1615,7 +1616,12 @@ def latest_satellite_slot(
     channel — the end of the live window."""
     platform = satellite_platform(spec)
     return satellite_fetch.latest_slot(
-        platform, platform.channel(spec.input_variable_ids[0]), now=now, fetch=fetch, cadence_seconds=spec.cadence_seconds
+        platform,
+        platform.channel(spec.input_variable_ids[0]),
+        now=now,
+        fetch=fetch,
+        cadence_seconds=spec.cadence_seconds,
+        region=spec.region,
     )
 
 
@@ -1657,7 +1663,7 @@ def _fetch_satellite_run(
     """Fetch one window of a satellite source: every slot from the run's
     hour through ``hours`` past it that the bucket holds whole, warped onto
     the published grid (or read back from the frame cache under
-    ``raw_root/<role>-frames``, which ``force`` bypasses) and stacked into
+    ``raw_root/<source>-frames``, which ``force`` bypasses) and stacked into
     one NetCDF series, with a ``fetch.json`` beside it in the shape the
     MRMS fetch leaves so ``window_summary`` and the rolling publish read
     both alike."""
@@ -1693,6 +1699,8 @@ def _fetch_satellite_run(
         producers=producers,
         ancillary_root=satellite_ancillary_root(raw_root),
         cadence_seconds=spec.cadence_seconds,
+        region=spec.region,
+        source_id=spec.id,
         force=force,
         fetch=fetch,
         download=download,

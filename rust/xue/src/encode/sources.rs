@@ -288,6 +288,14 @@ pub struct SourceSpec {
     /// Set when the source is published on a grid coarser than it arrives
     /// on ([`Downsample`]). Mirrors `downsample` in `xuebuild/sources.py`.
     pub downsample: Option<Downsample>,
+    /// For a satellite source that publishes a box smaller than its
+    /// platform's disk (`himawarijp`), the box as `(west, south, east,
+    /// north)` in degrees: the Python fetch stage warps the frames onto it
+    /// and fetches only the tiles reaching into it, and this encoder reads
+    /// the series that stage wrote, whose grid is `production_grid` cells
+    /// over this box. `None` for every other source. Mirrors
+    /// `SourceSpec.region` in `xuebuild/sources.py`.
+    pub region: Option<(f64, f64, f64, f64)>,
     /// Set when the source's records are on a map projection rather than a
     /// regular latitude/longitude grid, and must be resampled onto one of
     /// this step before anything else reads them (`reproject.rs`). The grid
@@ -548,6 +556,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         // ln TI1 over |lat| <= 85°, cos(lat)-weighted: ten 00Z/12Z runs
         // 2024-03 to 2026-06, F000/F024/F048, 29.4 million cells per level.
         cat_calibration: &[(300, -15.5314, 1.1545), (250, -15.8164, 1.1271), (200, -15.6885, 1.1422)],
@@ -620,6 +629,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         // The GFS fit's runs, leads and cells, from the open data records.
         cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
     },
@@ -677,6 +687,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // ECMWF IFS HRES, the deterministic high-resolution forecast on its
@@ -748,6 +759,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: Some("ecmwf_ifs"),
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
@@ -785,6 +797,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // NOAA HRRR: the 3 km convection-allowing model over the contiguous
@@ -839,6 +852,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // CMA weather radar level-3 mosaic composite reflectivity: the national
@@ -896,6 +910,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // NCEP CFSv2: the operational coupled climate forecast, nine months of
@@ -1000,6 +1015,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
@@ -1065,6 +1081,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     SourceSpec {
@@ -1102,6 +1119,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // NOAA MRMS: the national radar mosaic over the contiguous United
@@ -1149,6 +1167,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: Some(Downsample { factor: 2 }),
+        region: None,
         cat_calibration: &[],
     },
     // NOAA MRMS 3D: the national mosaic's merged reflectivity on its 33
@@ -1197,6 +1216,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: false,
         open_meteo: None,
         downsample: Some(Downsample { factor: 5 }),
+        region: None,
         cat_calibration: &[],
     },
     // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
@@ -1244,6 +1264,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // Himawari-9 AHI at 140.7°E as NOAA redistributes it (the ISatSS
@@ -1347,6 +1368,83 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
+        cat_calibration: &[],
+    },
+    // Himawari-9 over Japan at 0.01°: the himawari platform and fetch stage
+    // on a box of its own, 24–46°N, 122–148°E, rather than the disk — a
+    // regional source like `hrrr` beside `gfs`. Eight channels fetched (the
+    // Dust RGB's four windows, the true colour's four solar bands, each
+    // with the himawari band block), the 10.4 µm window, the Dust RGB and
+    // the true colour published; no dust confidences.
+    SourceSpec {
+        id: "himawarijp",
+        manifest_model: "HIMAWARI-JP",
+        product: "ahi-japan-0p01",
+        latest_filename: Some("latest-himawarijp.json"),
+        steps: &[],
+        long_cycles: &[],
+        long_cycle_steps: &[],
+        input_variable_ids: &["ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"],
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 0,
+        optional_at_analysis: &[],
+        statistical_processes: &[],
+        bands: &[
+            (
+                "ir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
+            ),
+            (
+                "ir104",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
+            ),
+            (
+                "ir112",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 88972 },
+            ),
+            (
+                "ir123",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 80772 },
+            ),
+            (
+                "vis047",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 2124811 },
+            ),
+            (
+                "vis051",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1960784 },
+            ),
+            (
+                "vis064",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1564602 },
+            ),
+            (
+                "nir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1167270 },
+            ),
+        ],
+        bundle_scalar_ids: &["ir104"],
+        core_bundle_ids: &["ir104"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &["dustrgb", "truecolor"],
+        bundle_volume_ids: &[],
+        // The box at 0.01°: 26° x 22°.
+        production_grid: (2600, 2200),
+        tile: (64, 64),
+        variant_factors: &[2, 4, 8],
+        regrid: None,
+        observation: true,
+        window_hours: Some(3),
+        cadence_seconds: Some(600),
+        series_file: true,
+        open_meteo: None,
+        downsample: None,
+        region: Some((122.0, 24.0, 148.0, 46.0)),
         cat_calibration: &[],
     },
     // The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
@@ -1437,6 +1535,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     SourceSpec {
@@ -1515,6 +1614,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
@@ -1600,6 +1700,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
     SourceSpec {
@@ -1637,6 +1738,7 @@ pub const SOURCES: &[SourceSpec] = &[
         series_file: true,
         open_meteo: None,
         downsample: None,
+        region: None,
         cat_calibration: &[],
     },
 ];
@@ -1719,6 +1821,22 @@ mod tests {
                 assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
             }
         }
+        // The Japan box is the himawari platform on a region of its own at
+        // 0.01°: its bands are the disk's, its grid the box in whole cells,
+        // and it is the one source that names a region. Mirrors
+        // `tests/test_satellite.py`.
+        let japan = source_spec("himawarijp").expect("himawarijp");
+        assert!(japan.series_file && japan.fetched() && japan.live());
+        assert_eq!((japan.cadence_seconds, japan.window_hours), (Some(600), Some(3)));
+        assert_eq!(japan.bundle_scalar_ids, himawari.bundle_scalar_ids);
+        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor"]);
+        for (band_id, band) in japan.bands {
+            assert!(himawari.bands.contains(&(*band_id, *band)), "{band_id}");
+        }
+        let (west, south, east, north) = japan.region.expect("a region");
+        assert_eq!((west, south, east, north), (122.0, 24.0, 148.0, 46.0));
+        assert_eq!(japan.production_grid, (((east - west) / 0.01).round() as usize, ((north - south) / 0.01).round() as usize));
+        assert_eq!(SOURCES.iter().filter(|source| source.region.is_some()).map(|source| source.id).collect::<Vec<_>>(), ["himawarijp"]);
         // Meteosat publishes the hourly cycle alone (the CC-BY-4.0 one) and
         // has no 11.2 µm window: three windows, the Dust RGB still resolves
         // to its three components, and the DEBRA confidence — five inputs,
@@ -2039,7 +2157,7 @@ mod tests {
                 previous = factor;
             }
         }
-        for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
+        for model in ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4, 8], "{model}");
         }
         // A 6.5 M cell global plane takes two rungs, the way a 9 M cell

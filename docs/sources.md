@@ -128,17 +128,21 @@ window, ending 20–30 min behind real time. The level-3 composite
 reflectivity mosaic (RADAR_L3_MST_CREF) as `cref`, read from an archive
 named by `XUE_CMA_ARCHIVE`.
 
-### Geostationary imagers (`himawari`, `goeseast`, `goeswest`, `meteosat`)
+### Geostationary imagers (`himawari`, `himawarijp`, `goeseast`, `goeswest`, `meteosat`)
 
 | Source | Spacecraft | Disk | Cadence and window |
 |---|---|---|---|
 | `himawari` | Himawari-9 at 140.7°E (NOAA `noaa-himawari9`) | 80.7–200.7°E | 10 min, 6 h |
+| `himawarijp` | Himawari-9, the same files, the tiles over Japan only | 122–148°E, 24–46°N at 0.01° | 10 min, 3 h |
 | `goeseast` | GOES-19 at 75.2°W (`noaa-goes19`) | 135.2°W–15.2°W | 10 min, 6 h |
 | `goeswest` | GOES-18 at 137°W (`noaa-goes18`) | 163–283°E | 10 min, 6 h |
 | `meteosat` | Meteosat-12 at 0° (EUMETSAT Data Store) | 60°W–60°E | hourly, 24 h |
 
-All on a 0.04° plate carrée grid, 60°S–60°N, with half, quarter and eighth
-reduced tiers. Each publishes:
+The disks are on a 0.04° plate carrée grid, 60°S–60°N; `himawarijp` is
+Himawari-9 over a box around Japan at 0.01° (about 1.1 km, where the
+visible bands' 0.5–1 km sampling shows), built from the six of the disk's
+88 tiles that reach the box. All have half, quarter and eighth reduced
+tiers. Each publishes:
 
 - `ir104`: 10.4 µm brightness temperature (180–332 K at 0.6 K; shown in
   °C).
@@ -147,11 +151,11 @@ reduced tiers. Each publishes:
   [shachen](https://github.com/ringsaturn/shachen); dust reads pink to
   magenta, day and night. Code 0 means no data in every gun. FCI has no
   11.2 µm channel, so Meteosat's green gun is 10.5 − 8.7 µm.
-- `dustcf` (not Meteosat): the DEBRA dust confidence (Miller et al. 2017),
+- `dustcf` (not Meteosat or `himawarijp`): the DEBRA dust confidence (Miller et al. 2017),
   0–1, over water and inside staged emissivity regions (the Gobi through
   Japan, the US Southwest, the Saharan corridor). See
   [`satellite.md`](satellite.md).
-- `zhouye` (not Meteosat): the ZHOUYE dust confidence, shachen's
+- `zhouye` (not Meteosat or `himawarijp`): the ZHOUYE dust confidence, shachen's
   day-and-night scheme on the same chain: DEBRA's by day, and after dark a
   reading at the day's level instead of a fading one. Same grid, coverage
   and scale as `dustcf`; a second product, not a replacement.
