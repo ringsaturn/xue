@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot
+from tests._support import ClassTempRoot, requires_native
 from xuebuild import binconvert, binformat, temporal, zarrcodec, zarrstore, zstdcli
 from xuebuild.binconvert import GridInfo, build_metadata
 from xuebuild.errors import BundleError, ManifestError
@@ -509,6 +509,57 @@ class CodesSourceTests(ClassTempRoot, unittest.TestCase):
             zarrstore.CodesSource(
                 metadata, {"tmp2m": [plane(0, 1)] * len(MIXED_HOURS)}, {"tmp2m": "anchor"}, TILE
             )
+
+
+@requires_native
+class NativeStoreWriterTests(ClassTempRoot, unittest.TestCase):
+    """The native store writer (`xue.write_store`) against the reference
+    (`zarrstore.write_store` over a `CodesSource`), object for object, on
+    the same awkward axis and grid: a PREVIOUS and a RAW variable, a unit
+    outside ASCII, map and series layouts, both codec chains."""
+
+    root_prefix = "xue-zarr-native-"
+
+    def test_both_writers_write_the_same_store(self) -> None:
+        import xue
+
+        from tests._support import assert_trees_identical
+
+        for names in (("tmp2m", "prate"), ("tmp2m",)):
+            metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", names)
+            planes = {
+                name: [plane(hour, index) for hour in MIXED_HOURS] for index, name in enumerate(names, start=1)
+            }
+            predictors = {
+                name: "previous" if PREDICTORS[index] == binformat.PREDICTOR_PREVIOUS else "raw"
+                for index, name in enumerate(names, start=1)
+            }
+            source = zarrstore.CodesSource(metadata, planes, predictors, TILE)
+            for series in (False, True):
+                for delta in (False, True):
+                    stem = f"{'-'.join(names)}-{int(series)}-{int(delta)}"
+                    with self.subTest(store=stem):
+                        reference = zarrstore.write_store(
+                            source, self.root / "reference" / f"{stem}.zarr", delta=delta, series=series
+                        )
+                        subject = xue.write_store(
+                            binformat.metadata_json_bytes(metadata).decode("utf-8"),
+                            [
+                                (name, predictors[name] == "previous", [np.ascontiguousarray(p).ravel() for p in planes[name]])
+                                for name in names
+                            ],
+                            TILE,
+                            self.root / "subject" / f"{stem}.zarr",
+                            delta=delta,
+                            series=series,
+                        )
+                        if subject["zstdVersion"] != ".".join(map(str, zstdcli.zstd_version())):
+                            self.skipTest(f"libzstd differs: the wheel carries {subject['zstdVersion']}")
+                        assert_trees_identical(self, reference.path, Path(subject["path"]))
+                        self.assertEqual(
+                            {key: value for key, value in reference.to_dict().items() if key != "path"},
+                            {key: value for key, value in subject.items() if key not in ("path", "zstdVersion")},
+                        )
 
 
 @unittest.skipUnless(zarrcodec.available(), "zarr-python is not installed (uv sync --group zarr)")

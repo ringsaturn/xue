@@ -1965,7 +1965,7 @@ fn compress_all(
     Ok(ChunkTables { variables, groups, chunks })
 }
 
-fn zstd_compress(payload: &[u8], level: i32) -> Result<Vec<u8>> {
+pub(crate) fn zstd_compress(payload: &[u8], level: i32) -> Result<Vec<u8>> {
     // One-shot `ZSTD_compress2` with an explicit checksum, which is what the
     // Python encoder's `compression.zstd.compress` calls. The streaming
     // encoder would produce a frame without the pledged source size and pick
@@ -2968,7 +2968,7 @@ pub fn convert_bin(
     Ok(Value::Object(report))
 }
 
-fn zstd_version() -> String {
+pub fn zstd_version() -> String {
     let version = zstd::zstd_safe::version_number();
     format!(
         "{}.{}.{}",

@@ -49,6 +49,7 @@ pub(crate) mod reproject;
 pub(crate) mod sources;
 pub mod temporal;
 pub(crate) mod variables;
+pub mod zarrstore;
 
 pub use convert::{convert_bin, ConvertOptions};
 pub use errors::{EncodeError, Result};
