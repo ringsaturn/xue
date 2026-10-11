@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "xuepy"
 description = "Xue (雪) weather bundles: decoder, and an experimental native encoder"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "Han Xiao" }]
 keywords = ["weather", "forecast", "meteorology", "grib", "gdal"]
