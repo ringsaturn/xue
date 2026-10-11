@@ -1539,6 +1539,9 @@ interface RasterSlot {
   /** Cache key of the plane on screen, kept so the labels can be traced
    * again and the eviction pass knows to leave it alone. */
   shownKey: string | null;
+  /** The other guns' keys while a composite is on screen, held from
+   * eviction with `shownKey`; empty for one plane. */
+  shownGuns: string[];
   /** Cache key of the plane an overlay is waiting on: the frame at the
    * primary's lead time, not decoded yet. The overlay keeps its last frame
    * up meanwhile and swaps when this one lands. */
@@ -1560,6 +1563,7 @@ function makeSlot(role: RasterSlot["role"], name: string = role): RasterSlot {
     gridSource: null,
     displayedReal: null,
     shownKey: null,
+    shownGuns: [],
     wantedKey: null,
     band: null,
     member: null,
@@ -4133,13 +4137,18 @@ function blendOverlay(slot: RasterSlot, index: number, next: number, weight: num
   const offsetA = slotOffsetForFrame(slot, index);
   const offsetB = slotOffsetForFrame(slot, next);
   if (offsetA === null || offsetB === null) return;
-  const keyA = cacheKey(session, session.variable, offsetA);
+  const variables = session.composite ? session.variables : [session.variable];
+  const keyA = cacheKey(session, variables[0]!, offsetA);
   if (slot.shownKey !== keyA) return;
-  const planeA = planeCache.get(keyA);
-  const planeB = planeCache.get(cacheKey(session, session.variable, offsetB));
-  if (!planeA || !planeB || !sameTileRects(planeA.tiles, planeB.tiles)) return;
+  const framesA = variables.map((variable) => planeCache.get(cacheKey(session, variable, offsetA)));
+  const framesB = variables.map((variable) => planeCache.get(cacheKey(session, variable, offsetB)));
+  const planeA = framesA[0];
+  if (!planeA || [...framesA, ...framesB].some((frame) => !frame || !sameTileRects(planeA.tiles, frame.tiles))) return;
   ensureSlotGrid(slot, session);
-  slot.layer.setBlend(planeA.plane, planeB.plane, weight, sessionCoverage(session, planeA.tiles));
+  // A composite blends its three guns together, as the primary does.
+  const planesA = session.composite ? framesA.map((frame) => frame!.plane) : planeA.plane;
+  const planesB = session.composite ? framesB.map((frame) => frame!.plane) : framesB[0]!.plane;
+  slot.layer.setBlend(planesA, planesB, weight, sessionCoverage(session, planeA.tiles));
 }
 
 function startPlayback(): void {
@@ -4518,6 +4527,7 @@ function trySelectFrame(index: number): boolean {
     }
     slot.displayedReal = session.id;
     slot.shownKey = keys[0]!;
+    slot.shownGuns = [];
     activeFrameIndex = index;
     desiredKey = null;
     // The overlays follow the frame that is actually on screen, not the one
@@ -4565,20 +4575,39 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
     if (slot === slots.lines) clearLabels();
     return;
   }
-  const key = cacheKey(session, session.variable, offset);
-  const frame = cachedFrame(key, session);
-  if (!frame) {
-    slot.wantedKey = key;
-    requestDecode(session, session.variable, offset);
+  // A composite (a member of the satellite mosaic showing true colour or
+  // dust RGB) is three planes, one per gun, and the layer takes them only
+  // together; anything else on an overlay is one plane.
+  const variables = session.composite ? session.variables : [session.variable];
+  const keys = variables.map((variable) => cacheKey(session, variable, offset));
+  const frames = keys.map((key) => cachedFrame(key, session));
+  const missing = keys.findIndex((_, at) => !frames[at]);
+  if (missing >= 0) {
+    // The slot waits on one key at a time: the decode that lands it
+    // comes back here and asks for the next.
+    slot.wantedKey = keys[missing]!;
+    for (const [at, variable] of variables.entries()) {
+      if (!frames[at]) requestDecode(session, variable, offset);
+    }
     return;
   }
-  planeCache.delete(key);
-  planeCache.set(key, frame);
+  for (const [at, key] of keys.entries()) {
+    planeCache.delete(key);
+    planeCache.set(key, frames[at]!);
+  }
+  const frame = frames[0]!;
   ensureSlotGrid(slot, session);
-  slot.layer.setFrame(frame.plane, sessionCoverage(session, frame.tiles));
+  if (session.composite) {
+    const agreed = frames.every((plane) => sameTileRects(frame.tiles, plane!.tiles));
+    const planes = frames.map((plane) => plane!.plane);
+    slot.layer.setFrame(planes, sessionCoverage(session, agreed ? frame.tiles : session.viewTiles));
+  } else {
+    slot.layer.setFrame(frame.plane, sessionCoverage(session, frame.tiles));
+  }
   slot.layer.setVisible(true);
   slot.displayedReal = session.id;
-  slot.shownKey = key;
+  slot.shownKey = keys[0]!;
+  slot.shownGuns = keys.slice(1);
   slot.wantedKey = null;
   if (slot === slots.lines) scheduleLabels(frame, false);
 }
@@ -4588,8 +4617,9 @@ function requestOverlayDecode(slot: RasterSlot, index: number): void {
   const session = slot.session;
   const offset = overlayOffset(slot, index);
   if (!session || offset === null) return;
-  const key = cacheKey(session, session.variable, offset);
-  if (!cachedFrame(key, session)) requestDecode(session, session.variable, offset);
+  for (const variable of session.composite ? session.variables : [session.variable]) {
+    if (!cachedFrame(cacheKey(session, variable, offset), session)) requestDecode(session, variable, offset);
+  }
 }
 
 /** The cache keys of every level of the overlaid volume at the primary's
@@ -4778,6 +4808,7 @@ function handleDecodedFrame(
   }
   for (const overlay of overlaySlots()) {
     if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
+    for (const gun of overlay.shownGuns) displayedKeys.add(gun);
   }
   for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
   for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
@@ -7449,6 +7480,7 @@ function detachSlot(slot: RasterSlot): void {
   slot.session = null;
   slot.displayedReal = null;
   slot.shownKey = null;
+  slot.shownGuns = [];
   slot.wantedKey = null;
   slot.layer.setVisible(false);
 }
@@ -7752,6 +7784,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     slot.gridSource = posterMetadata;
     slot.displayedReal = null;
     slot.shownKey = null;
+    slot.shownGuns = [];
     // Every poster is one scalar plane, even the wind bundle's: switching
     // away from wind has to leave magnitude mode before this uploads.
     target.setVectorField(null);
