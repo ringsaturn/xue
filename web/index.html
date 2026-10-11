@@ -175,8 +175,8 @@
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
               "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)",
-              "true colour composite (the 0.64, 0.51 and 0.47 µm reflectances of Himawari-9, GOES-19 and GOES-18, sun-angle corrected and stretched by the encoder's own recipe, the green synthesized on the ABI; the sunlit disk as seen from orbit, nothing drawn after dark)",
-              "night microphysics composite (EUMETSAT's Night Microphysics RGB from the 12.3−10.4 µm, 10.4−3.9 µm and 10.4 µm stretches of Himawari-9, GOES-19 and GOES-18; fog and low cloud after dark in yellow-green)",
+              "true colour composite (the 0.64, 0.51 and 0.47 µm reflectances of Himawari-9, GOES-19, GOES-18 and Meteosat-12, sun-angle corrected and stretched by the encoder's own recipe, the green synthesized on the ABI; the sunlit disk as seen from orbit, nothing drawn after dark)",
+              "night microphysics composite (EUMETSAT's Night Microphysics RGB from the 12.3−10.4 µm, 10.4−3.9 µm and 10.4 µm stretches of Himawari-9, GOES-19, GOES-18 and Meteosat-12; fog and low cloud after dark in yellow-green)",
               "aurora visibility probability (percent, on a 1° global grid, from the NOAA SWPC OVATION model)"
             ],
             "distribution": [
@@ -457,14 +457,15 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDswrf">S</b>
           <span class="rail-name"><span>SOLAR</span> <small data-i18n="varSolar">FLUX</small></span>
         </button>
-        <!-- The satellite pictures, five tiles: the infrared window is the
+        <!-- The satellite pictures, six tiles: the infrared window is the
              disk with a cloud over it, the Dust RGB composite the disk with
              its three guns, the DEBRA dust confidence the disk with dust
              lofting off its floor, the ZHOUYE confidence the same dust on a
              disk half in night, the true colour picture the disk lit by a
              sun, the night microphysics picture the disk under a crescent
              moon with fog along its floor. All six are core on the
-             ten-minute disks; Meteosat publishes the first two. -->
+             ten-minute disks; Meteosat and the Japan box publish all but
+             the two confidences. -->
         <button type="button" data-variable="ir104" data-i18n-tip="tipSatellite" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M6.5 14.5h8a2.5 2.5 0 0 0 .3-5A3.8 3.8 0 0 0 7.6 9.4 2.6 2.6 0 0 0 6.5 14.5z" fill="currentColor" stroke="none" /><path d="M3.5 12h2M18.5 12h2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIr104">I</b>

@@ -1752,11 +1752,13 @@ SOURCES: dict[str, SourceSpec] = {
     # is anonymous, the download takes a registered account's key and
     # secret (``xuebuild/satellite/eumetsat.py``, the two ``EUMETSAT_*``
     # environment variables). The reader (``FCIReader``) turns each chunk's
-    # radiances into brightness temperature and georeferences the strips
-    # itself, since GDAL reads neither the file's HDF5 filter nor its
-    # grid mapping unaided. FCI has no 11.2 µm window, so three channels
-    # feed the Dust RGB and the green gun reads 10.5 − 8.7 µm, the original
-    # SEVIRI recipe. The imager scans every ten minutes; this source
+    # radiances into brightness temperature or reflectance factor and
+    # georeferences the strips itself, since GDAL reads neither the file's
+    # HDF5 filter nor its grid mapping unaided. FCI has no 11.2 µm window,
+    # so three channels feed the Dust RGB and the green gun reads
+    # 10.5 − 8.7 µm, the original SEVIRI recipe; IR 3.8, IR 10.5 and
+    # IR 12.3 feed the night microphysics. The imager scans every ten
+    # minutes; this source
     # publishes **the cycle on the hour alone** (``cadence_seconds`` 3600
     # against the platform's 600), because the EUMETSAT data policy
     # releases the hourly Level 1 cycle as Core data under CC-BY-4.0 and
@@ -1769,17 +1771,18 @@ SOURCES: dict[str, SourceSpec] = {
         product="fci-fldk-0p04",
         latest_filename="latest-meteosat.json",
         steps=(),
-        # The three windows the Dust RGB reads, then the four solar
-        # channels the true colour composite reads, converted by the
-        # reader from radiance to reflectance factor on the 1 km grid
-        # (FCI vis_04 at 0.444 µm under the family id vis047, the band
-        # block carrying its own wave number). Every chunk carries every
-        # channel, so they cost no download, only reading.
-        input_variable_ids=("ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"),
+        # The 3.8 µm window the night microphysics reads (FCI ir_38 under
+        # the family id ir039), the three windows the Dust RGB reads, then
+        # the four solar channels the true colour composite reads,
+        # converted by the reader from radiance to reflectance factor on
+        # the 1 km grid (FCI vis_04 at 0.444 µm under the family id
+        # vis047, the band block carrying its own wave number). Every chunk
+        # carries every channel, so they cost no download, only reading.
+        input_variable_ids=("ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"),
         accumulated_precipitation=False,
-        bands=METEOSAT.bands(("ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086")),
+        bands=METEOSAT.bands(("ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086")),
         bundle_scalar_ids=("ir104",),
-        bundle_composite_ids=("dustrgb", "truecolor"),
+        bundle_composite_ids=("dustrgb", "truecolor", "nightmicro"),
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),

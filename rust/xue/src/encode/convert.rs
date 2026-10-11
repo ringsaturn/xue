@@ -3558,7 +3558,7 @@ mod composite_tests {
         for bundle_id in ["dustcf", "zhouye"] {
             assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         }
-        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor"]);
+        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor", "nightmicro"]);
     }
 
     #[test]
@@ -3588,15 +3588,16 @@ mod composite_tests {
         }
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert_eq!(bundle_input_ids(meteosat, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
-        assert!(published_bundle_ids(meteosat).ends_with(&["truecolor"]));
+        assert!(published_bundle_ids(meteosat).contains(&"truecolor"));
     }
 
     #[test]
     fn the_night_microphysics_reads_three_windows() {
         // Mirrors `NightMicrophysicsProducer.inputs_for`: the 3.9, 10.4 and
-        // 12.3 µm windows on every imager, no stand-in.
+        // 12.3 µm windows on every imager (FCI's IR 3.8 and IR 10.5 among
+        // them), no stand-in.
         assert_eq!(bundle_variable_ids("nightmicro"), ["nightr", "nightg", "nightb"]);
-        for model in ["himawari", "himawarijp", "goeseast", "goeswest"] {
+        for model in ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_input_ids(source, "nightmicro"), ["ir039", "ir104", "ir123"], "{model}");
             assert!(published_bundle_ids(source).ends_with(&["nightmicro"]), "{model}");
