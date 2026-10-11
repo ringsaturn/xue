@@ -27,18 +27,21 @@ export const CONTOUR_MAX_ZOOM = 15;
 
 /** The intervals in metres by zoom, three tiers each: the fine line, the
  * middle line and the index line (`level` 0, 1, 2 on each feature — the
- * largest tier the elevation is a multiple of). Each rung's middle tier is
- * the rung before's fine one, so zooming in adds a finer tier under lines
- * that keep their weight, and never thins or thickens what was drawn; the
- * first rung repeats its interval so that it, too, has no fine tier. A
- * zoom without an entry uses the next lower one. The finest tier waits for
- * z15 and is 25 m, not 20: on a cliff a thousand metres tall twenty-metre
- * lines at z14 hatch the slope solid, and every tier must divide the one
- * above it, since the plugin draws lines at multiples of the finest alone. */
+ * largest tier the elevation is a multiple of). They follow what a
+ * topographic sheet prints at the zoom's scale — z9 is about 1:1 000 000,
+ * z11 1:270 000, z13 1:70 000, z15 1:17 000 — on the side of fewer lines,
+ * since the relief is shaded under them: a Himalayan flank of 3 800 m over
+ * 10 km is 36 px wide at z9, where 200 m lines would hatch it solid. Each
+ * rung's middle tier is the rung before's fine one, so zooming in adds a
+ * finer tier under lines that keep their weight and never thins or
+ * thickens what was drawn; the first rung has no middle tier (its 500 m
+ * lines are the faint ones under 1 000 m index lines). Every tier divides
+ * the one above it, since the plugin draws lines at multiples of the
+ * finest alone. A zoom without an entry uses the next lower one. */
 export const CONTOUR_THRESHOLDS: Record<number, [number, number, number]> = {
-  9: [200, 200, 1000],
-  11: [100, 200, 1000],
-  13: [50, 100, 500],
+  9: [500, 1000, 1000],
+  11: [250, 500, 1000],
+  13: [50, 250, 500],
   15: [25, 50, 250],
 };
 const INDEX_LEVEL = 2;
@@ -50,9 +53,10 @@ const FINE_OPACITY: ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["zoom"],
-  11, 0.22, 12.9, 0.55,
-  13, 0.22, 14.9, 0.55,
-  15, 0.22, 16.5, 0.6,
+  9, 0.2, 10.9, 0.5,
+  11, 0.2, 12.9, 0.55,
+  13, 0.2, 14.9, 0.55,
+  15, 0.2, 16.5, 0.6,
 ];
 const isFine: ExpressionSpecification = ["==", ["get", "level"], 0];
 const isIndex: ExpressionSpecification = ["==", ["get", "level"], INDEX_LEVEL];
