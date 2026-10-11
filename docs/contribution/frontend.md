@@ -99,27 +99,6 @@ eviction, whole planes always. It never gates the playhead. It is not a
 `RasterSlot` (those own a `ForecastLayer`); a volume as the field is the
 primary and takes the layer itself, and the overlay empties.
 
-A field can be completed where it has no data: the **day-night blend**
-(`ViewState.blend`, `?blend=night`; `viewstate.ts::blendUnderField`).
-With the true colour as the field on a single disk that ships
-`nightmicro`, the overlay section's DAY-NIGHT switch (`#blend-tile`)
-opens the night microphysics session at the overlay tier into a third
-fixed `RasterSlot`, `night`, whose layer sits directly under the fill's
-(`main.ts::applyBlend`). The true colour's code 0 — outside the disk and
-the whole night side — is a discarded fragment, so the night picture shows
-exactly there and nowhere else: the per-texel choice is draw order, not a
-second set of gun textures in the shader (two frames of two composites
-would be six more samplers, past the sixteen units WebGL2 guarantees once
-the terrain variant's are counted). The two bundles share a disk and a
-time axis, so following by lead seconds is frame for frame, and the slot
-rides the overlay path like the lines: decoded after the primary, blended
-on its clock, kept from eviction, never gating the playhead. The true
-colour's 85° floor already fades the terminator; the night picture's
-colours drift there (its green gun goes to 0 as the sun rises), a seam
-left as it is. Not on the mosaic (its other members have no night slot),
-and `blend` is written to the URL only while it applies. Never call it
-GeoColor, which is CIRA's product.
-
 `manifest.ts::pickBundleVariant` chooses the rung from viewport, connection
 and the bundle's longitude span, then a cell budget
 (`main.ts::planeCellBudget`: 2.5 M cells, halved on ≤ 4 GB, quartered on a

@@ -7,9 +7,7 @@
  * both, and a pressure surface named as the field is the lines alone).
  * The **overlays** follow the playhead over the field: the particles, a volume
  * (the cloud water drawn in 3D over a 2D field) and, under the experiment, the
- * two derived layers. A **blend** completes the field where it has no data:
- * the day-night view draws the night microphysics picture under the true
- * colour, so the night side shows it. The **marks** — the storm tracks and the
+ * two derived layers. The **marks** — the storm tracks and the
  * two station products — take no session and have their own pointers.
  * `ViewState` holds all of it; the rail's pressed states, the level row and
  * the address bar are projections of it, and the two functions here are the
@@ -21,7 +19,6 @@
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
-  parseBlendFromSearch,
   parseExperimentFromSearch,
   parseLinesFromSearch,
   parseParticlesFromSearch,
@@ -32,7 +29,6 @@ import {
   parseVolumeFromSearch,
   searchForCaseVariable,
   searchForVariable,
-  searchWithBlend,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
@@ -41,7 +37,6 @@ import {
   searchWithTc,
   searchNamesVolume,
   searchWithVolume,
-  type BlendMode,
   type RadarUrlState,
   type StationsUrlState,
   type TcUrlState,
@@ -73,10 +68,6 @@ export interface ViewState {
   /** The volume bundle drawn over the field (`?volume=`), or null. Only
    * drawn over a 2D field: a volume chosen as the field is the field. */
   volume: ForecastBundleId | null;
-  /** The blend under the field (`?blend=`), or null. Only applies over the
-   * field it is for (`blendUnderField`); kept across other fields, as the
-   * volume is, so coming back to the true colour brings it back. */
-  blend: BlendMode | null;
   /** The experiment's derived layers (`?x=`), meaningful only while it is on. */
   derived: DerivedShown;
   marks: {
@@ -149,7 +140,6 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
-      blend: parseBlendFromSearch(search),
       derived: { inflow: experiment.inflow, front: experiment.front },
       marks: {
         tc: parseTcFromSearch(search),
@@ -170,23 +160,6 @@ export function volumeOverField(view: Pick<ViewState, "field" | "volume">): Fore
   return view.volume;
 }
 
-/** The day-night pairing: the field the blend completes and the bundle
- * drawn under it. Both are composites of the same disk, on the same time
- * axis and grid, so a frame of one is a frame of the other; the true
- * colour's code 0 (no data, which its night side is) is what lets the
- * night picture through. */
-export const DAY_NIGHT_BLEND: { readonly field: ForecastBundleId; readonly under: ForecastBundleId } = {
-  field: "truecolor",
-  under: "nightmicro",
-};
-
-/** The bundle drawn under the view's field: the night microphysics while
- * the field is the true colour with `blend` on; null otherwise. Whether
- * the run ships it is the manifest's answer. */
-export function blendUnderField(view: Pick<ViewState, "field" | "blend">): ForecastBundleId | null {
-  return view.blend === "night" && view.field === DAY_NIGHT_BLEND.field ? DAY_NIGHT_BLEND.under : null;
-}
-
 /** The query string carrying a view, with every unrelated parameter in
  * `search` kept as it was. `type` names the primary; `lines` the surface
  * over a filled field and nothing when the lines are the view; the
@@ -199,8 +172,7 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
       : searchForVariable(primary, search, context.model);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
   const withVolume = searchWithVolume(withLines, volumeOverField(view));
-  const withBlend = searchWithBlend(withVolume, blendUnderField(view) !== null ? view.blend : null);
-  const withParticles = searchWithParticles(withBlend, view.particles || !context.particlesChosen);
+  const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
   const withExperiment = searchWithExperiment(withParticles, { enabled: context.experimentEnabled, ...view.derived });
   const withStations = searchWithStations(withExperiment, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);

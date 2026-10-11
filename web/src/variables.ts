@@ -135,25 +135,16 @@ function catKey(): readonly LegendSwatch[] {
 /** What the true colour picture's colours are: a photograph needs no
  * key to read, but the legend has no bar to show for a composite (the
  * guns are unitless and nothing maps a tick to a value), and without a
- * key it would fall back to the stylesheet's default gradient — so three
- * swatches say what the picture is, and nothing about the night side,
- * which is not drawn at all. */
+ * key it would fall back to the stylesheet's default gradient — so
+ * swatches say what the picture is: three for the sunlit side, two for
+ * the night side, white infrared cloud over the encoder's dark ground
+ * (`TRUE_COLOR_NIGHT_GROUND` in xuebuild/satellite/producers.py). */
 const TRUE_COLOR_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#f2f2f0", labelKey: "legendTruecolorCloud" },
   { color: "#1f4e8c", labelKey: "legendTruecolorSea" },
   { color: "#6b7d3b", labelKey: "legendTruecolorLand" },
-];
-
-/** How to read the night microphysics picture, the EUMETSAT key: fog and
- * low stratus yellow-green, thick high cloud dark red, thin cirrus near
- * black, a clear warm surface pink. By day the green gun saturates and
- * the colours mean none of this, which the key does not try to say; the
- * day-night blend is where the picture is meant to be read. */
-const NIGHT_MICRO_KEY: readonly { color: string; labelKey: MessageKey }[] = [
-  { color: "#c4e36a", labelKey: "legendNightFog" },
-  { color: "#8a1e24", labelKey: "legendNightThickHigh" },
-  { color: "#141a33", labelKey: "legendNightCirrus" },
-  { color: "#d690bf", labelKey: "legendNightClear" },
+  { color: "#c9cacc", labelKey: "legendTruecolorNightCloud" },
+  { color: "#08090d", labelKey: "legendTruecolorNightGround" },
 ];
 
 const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
@@ -1003,11 +994,12 @@ function buildSpecs(): readonly VariableSpec[] {
   // The true colour picture: the 0.64, 0.51 (or synthesized) and 0.47 µm
   // reflectances of the sunlit disk, sun-angle corrected and stretched by
   // the encoder's own recipe, drawn straight as colour like the Dust RGB —
-  // the disk as the eye would see it from orbit. A photograph, not a ramp:
+  // the disk as the eye would see it from orbit — and after dark white
+  // cloud from the infrared windows over a dark ground, blended across the
+  // terminator by the encoder into one picture. A photograph, not a ramp:
   // its key names what the colours are, and its guns read nothing at a
-  // pin. Outside the disk, where an input was missing, and on the night
-  // side every gun is code 0, painted as nothing (the infrared tile is the
-  // picture after dark).
+  // pin. Outside the disk and where an input was missing every gun is
+  // code 0, painted as nothing.
   surface({
     id: "truecolor",
     chart: "truecolor",
@@ -1021,28 +1013,6 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "truecolor",
     urlAliases: ["visible", "rgb", "color", "colour"],
     showcaseCode: "TRUE COLOR",
-  }),
-  // The night microphysics picture: EUMETSAT's Night Microphysics RGB from
-  // the 12.3 − 10.4 µm split window, 10.4 − 3.9 µm and the 10.4 µm window,
-  // stretched by the encoder's own recipe and drawn straight as colour —
-  // fog and low cloud after dark, which the infrared window alone cannot
-  // tell from the ground. Published day and night; by day reflected
-  // sunlight in the 3.9 µm band saturates the green gun, so the day side
-  // is not to be read, and the true colour tile's day-night switch shows
-  // this picture only where the true colour has none.
-  surface({
-    id: "nightmicro",
-    chart: "nightmicro",
-    group: "satellite",
-    code: "NIGHT MICRO",
-    title: ["Night", "Micro"],
-    bufferTitle: "Imagery buffer",
-    labelKey: "varLabelNightmicro",
-    legendKey: NIGHT_MICRO_KEY,
-    ground: "slate",
-    urlName: "nightmicro",
-    urlAliases: ["night", "nightrgb", "microphysics"],
-    showcaseCode: "NIGHT MICRO",
   }),
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid. A space-weather field,
