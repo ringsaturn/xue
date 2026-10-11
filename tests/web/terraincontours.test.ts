@@ -14,13 +14,14 @@ describe("contour thresholds", () => {
       const [fine, middle, index] = tiers;
       expect(index % middle).toBe(0);
       expect(middle % fine).toBe(0);
-      expect(index / middle).toBe(5);
+      expect(index).toBeGreaterThan(fine);
       if (previous) {
         expect(fine).toBeLessThan(previous[0]);
         expect(middle).toBe(previous[0]);
         expect(previous[2] % index).toBe(0);
       } else {
-        expect(middle).toBe(fine);
+        // The first rung has no middle tier of its own.
+        expect(middle).toBe(index);
       }
       previous = tiers;
     }

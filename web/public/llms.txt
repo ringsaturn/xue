@@ -351,7 +351,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   time (or now, before data loads), over the basemap and the forecast, flat
   or in 3D relief, from zoom 9 in (default off).
 - `?contours=on` — draw elevation contour lines over the relief, cut in the
-  browser from the terrain tiles (200 m at zoom 9 down to 25 m at zoom 15,
+  browser from the terrain tiles (500 m at zoom 9 down to 25 m at zoom 15,
   the index line every fifth labelled in metres), from zoom 9 in (default
   off; also a switch on the view tile).
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
