@@ -222,6 +222,154 @@
         "nodataCode": 255
       }
     },
+    "vis047": {
+      "label": "Reflectance, 0.47 \u00b5m",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 0,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 2124811
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.005,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.01,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
+    "vis051": {
+      "label": "Reflectance, 0.51 \u00b5m",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 0,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 1960784
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.005,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.01,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
+    "vis064": {
+      "label": "Reflectance, 0.64 \u00b5m",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 0,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 1564602
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.005,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.01,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
+    "nir086": {
+      "label": "Reflectance, 0.86 \u00b5m",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 0,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "band": {
+        "himawari": {
+          "satelliteSeries": 0,
+          "satelliteNumber": 174,
+          "instrumentType": 297,
+          "scaleFactorOfCentralWaveNumber": 0,
+          "scaledValueOfCentralWaveNumber": 1167270
+        }
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.005,
+        "minimumCode": 0,
+        "maximumCode": 253,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.01,
+        "scale": 0.01,
+        "minimumCode": 0,
+        "maximumCode": 126,
+        "nodataCode": 255
+      }
+    },
     "dustr": {
       "label": "Dust RGB, red gun",
       "unit": "1",
@@ -376,6 +524,99 @@
         "maximumCode": 251,
         "nodataCode": 255
       }
+    },
+    "truer": {
+      "label": "True colour, red gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 7,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
+    },
+    "trueg": {
+      "label": "True colour, green gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
+    },
+    "trueb": {
+      "label": "True colour, blue gun",
+      "unit": "1",
+      "parameter": {
+        "discipline": 3,
+        "parameterCategory": 192,
+        "parameterNumber": 9,
+        "typeOfFirstFixedSurface": 8,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "xue"
+      },
+      "quality": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      },
+      "compact": {
+        "type": "linear",
+        "offset": -0.004,
+        "scale": 0.004,
+        "minimumCode": 0,
+        "maximumCode": 251,
+        "nodataCode": 255
+      }
     }
   },
   "bundles": {
@@ -389,6 +630,11 @@
     ],
     "zhouye": [
       "zhouye"
+    ],
+    "truecolor": [
+      "truer",
+      "trueg",
+      "trueb"
     ]
   }
 }

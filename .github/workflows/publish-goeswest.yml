@@ -13,7 +13,9 @@ name: publish goeswest
 # The shape is publish-himawari.yml's, GOES-West at 137.0°W in place of
 # Himawari: one round per job on a ten-minute cron, a dispatch with
 # `loop` on running rounds until the deadline. A round lists the newest
-# hour directory, fetches the four windows' files (four times 24 MB),
+# hour directory, fetches the six windows' files (24 MB each) and the
+# three solar bands' (100 MB for the 1 km ones, 430 MB for the 0.5 km red
+# band by day, some 630 MB a slot in all),
 # warps each once (xuebuild/satellite/, through the system GDAL's
 # gdalwarp — the xuepy wheel's GDAL carries no GeoTIFF driver, so this
 # workflow installs gdal-bin whichever encoder converts), composes the

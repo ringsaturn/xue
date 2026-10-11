@@ -80,6 +80,7 @@ export type ChartFamily =
   | "dustrgb"
   | "dustcf"
   | "zhouye"
+  | "truecolor"
   | "aod"
   | "aoddust"
   | "aodsalt"
@@ -109,10 +110,10 @@ function vector(family: ChartFamily, level: number | null): VariableIdentity {
 }
 
 /** The composites: a family whose bundle is three colour guns rather than
- * one scalar or a u/v pair, drawn straight as red, green and blue. An
- * identity's `vector` flag is false for them; this is what says the third
- * texture mode is theirs. */
-const COMPOSITE_FAMILIES: readonly ChartFamily[] = ["dustrgb"];
+ * one scalar or a u/v pair, drawn straight as red, green and blue — the
+ * Dust RGB and the true colour picture. An identity's `vector` flag is
+ * false for them; this is what says the third texture mode is theirs. */
+const COMPOSITE_FAMILIES: readonly ChartFamily[] = ["dustrgb", "truecolor"];
 
 /** True when an identity names a colour composite (three guns). */
 export function isCompositeIdentity(identity: VariableIdentity | null): boolean {
@@ -408,14 +409,19 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
  * beside it, so a composite is named by the producer and the parameter
  * numbers of its guns together. The Dust RGB is shachen's local numbers
  * 1, 2 and 3 in the space-products discipline, at the top of the
- * atmosphere like the channels it is made of. */
+ * atmosphere like the channels it is made of; the true colour picture is
+ * the encoder's own recipe, producer `xue`, at numbers 7, 8 and 9 — the
+ * numbers are per producer, so shachen's 7 would be something else. */
 const COMPOSITE_TRIPLES: readonly {
   family: ChartFamily;
   producer: string;
   discipline: number;
   category: number;
   guns: readonly [number, number, number];
-}[] = [{ family: "dustrgb", producer: "shachen", discipline: 3, category: 192, guns: [1, 2, 3] }];
+}[] = [
+  { family: "dustrgb", producer: "shachen", discipline: 3, category: 192, guns: [1, 2, 3] },
+  { family: "truecolor", producer: "xue", discipline: 3, category: 192, guns: [7, 8, 9] },
+];
 
 /** Whether a parameter is in a local-use category, where only a producer
  * can say what it is. */

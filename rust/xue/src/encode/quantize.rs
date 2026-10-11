@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
-    isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS, SATELLITE_CHANNEL_IDS,
+    isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
 };
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
@@ -309,6 +309,43 @@ const ZHOUYE: LinearCodebook = LinearCodebook {
     nodata_code: 255,
     name: "zhouye",
 };
+// A true colour gun is the same kind of number as a Dust RGB gun — a
+// stretched display value in 0–1 from the fetch stage's own recipe — and
+// takes the same codebook: code 0 is "no data" (outside the disk, an input
+// lacked, or the night side), black stays a value at code 1. Mirrors
+// `TRUE_COLOR_GUN` in `xuebuild/quantize.py`.
+const TRUE_COLOR_GUN: LinearCodebook = LinearCodebook {
+    minimum: -0.004,
+    maximum: 1.0,
+    step: 0.004,
+    nodata_code: 255,
+    name: "truecolor",
+};
+// A reflectance channel: the top-of-atmosphere reflectance factor in 0–1,
+// which a sunlit cloud takes a little past 1. The codebook starts one step
+// below zero so code 0 is the fill outside the disk and the night side's
+// 0.0 stays a value at code 1 — the guns' rule — at 0.005 across 253
+// codes; the compact profile doubles the step and stops a code short, like
+// the brightness temperature's. No source publishes one. Mirrors
+// `_reflectance` in `xuebuild/quantize.py`.
+const QUALITY_REFLECTANCE: LinearCodebook = LinearCodebook {
+    minimum: -0.01,
+    maximum: 1.255,
+    step: 0.005,
+    nodata_code: 255,
+    name: "vis064",
+};
+const COMPACT_REFLECTANCE: LinearCodebook = LinearCodebook {
+    maximum: 1.25,
+    step: 0.01,
+    ..QUALITY_REFLECTANCE
+};
+/// Every reflectance channel shares the two codebooks; the name is the
+/// channel's own.
+fn reflectance(channel_id: &'static str, compact: bool) -> LinearCodebook {
+    let base = if compact { COMPACT_REFLECTANCE } else { QUALITY_REFLECTANCE };
+    LinearCodebook { name: channel_id, ..base }
+}
 // Wind gust: one-sided, at the 10 m components' step over the isobaric
 // wind's 127 m/s ceiling, spending the full 0..254 code space.
 const QUALITY_GUST: LinearCodebook = LinearCodebook {
@@ -879,16 +916,25 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
         (_, "ir039" | "wv062" | "ir086" | "ir104" | "ir112" | "ir123") => {
-            let channel_id = SATELLITE_CHANNEL_IDS
+            let channel_id = SATELLITE_INFRARED_IDS
                 .iter()
                 .copied()
                 .find(|id| *id == variable_id)
                 .expect("matched just above");
             Codebook::Linear(brightness_temperature(channel_id, !quality))
         }
+        (_, "vis047" | "vis051" | "vis064" | "nir086") => {
+            let channel_id = SATELLITE_REFLECTANCE_IDS
+                .iter()
+                .copied()
+                .find(|id| *id == variable_id)
+                .expect("matched just above");
+            Codebook::Linear(reflectance(channel_id, !quality))
+        }
         (_, "dustr" | "dustg" | "dustb") => Codebook::Linear(DUST_RGB_GUN),
         (_, "dustcf") => Codebook::Linear(DUST_CF),
         (_, "zhouye") => Codebook::Linear(ZHOUYE),
+        (_, "truer" | "trueg" | "trueb") => Codebook::Linear(TRUE_COLOR_GUN),
         (_, "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust") => {
             let variable_id = AEROSOL_VARIABLE_IDS
                 .iter()

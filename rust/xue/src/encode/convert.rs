@@ -19,8 +19,8 @@ use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPEN
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
     is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
-    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, ZHOUYE_BUNDLE_ID,
-    ZHOUYE_COMPONENT_IDS,
+    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, TRUE_COLOR_BUNDLE_ID,
+    TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
@@ -100,13 +100,14 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
 /// off the observation series as more variables and written as one bundle
 /// in this order — the converter never derives them. The Dust RGB's three
 /// guns, then the DEBRA confidence and the ZHOUYE confidence, two produced
-/// bundles of one variable each. Mirrors `COMPOSITE_BUNDLES` in
-/// `xuebuild/binconvert.py`.
+/// bundles of one variable each, then the true colour composite's three
+/// guns. Mirrors `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
 pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
     let components: &[&str] = match bundle_id {
         DUST_RGB_BUNDLE_ID => &DUST_RGB_COMPONENT_IDS,
         DUST_CF_BUNDLE_ID => &DUST_CF_COMPONENT_IDS,
         ZHOUYE_BUNDLE_ID => &ZHOUYE_COMPONENT_IDS,
+        TRUE_COLOR_BUNDLE_ID => &TRUE_COLOR_COMPONENT_IDS,
         _ => return None,
     };
     Some(components.iter().map(|id| (*id).to_string()).collect())
@@ -134,6 +135,10 @@ const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
 /// vapour band and the 8.6, 10.4 and 12.3 µm windows, all five required.
 /// The ZHOUYE confidence is composed in the same pass from the same five.
 const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123"];
+/// The true colour composite's inputs: the 0.47, 0.51, 0.64 and 0.86 µm
+/// reflectances; the ABI has no 0.51 µm band and its green is synthesized
+/// from the other three.
+const TRUE_COLOR_INPUT_IDS: [&str; 4] = ["vis047", "vis051", "vis064", "nir086"];
 
 /// The channels a composite's producer reads on the source's platform: what
 /// the fetch must download for the composite to be composed, since the
@@ -143,9 +148,12 @@ const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123
 /// windows, or three on an imager without an 11.2 µm one (FCI), where the
 /// 10.4 µm window stands in for the green gun's minuend; the DEBRA and
 /// ZHOUYE confidences read their five with no stand-in, so a source that
-/// fetches fewer cannot publish them (`published_bundle_ids`). The platform's channel
-/// table lives on the Python side; here a source whose inputs lack `ir112`
-/// is one whose imager lacks it.
+/// fetches fewer cannot publish them (`published_bundle_ids`); the true
+/// colour composite reads the four visible and near-infrared bands, or
+/// three on an imager without a 0.51 µm one (ABI), whose green is
+/// synthesized. The platform's channel table lives on the Python side;
+/// here a source whose inputs lack `ir112` or `vis051` is one whose imager
+/// lacks it.
 fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
     match bundle_id {
         DUST_RGB_BUNDLE_ID => Some(
@@ -158,6 +166,13 @@ fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<Strin
         DUST_CF_BUNDLE_ID | ZHOUYE_BUNDLE_ID => {
             Some(DUST_CF_INPUT_IDS.iter().map(|id| (*id).to_string()).collect())
         }
+        TRUE_COLOR_BUNDLE_ID => Some(
+            TRUE_COLOR_INPUT_IDS
+                .iter()
+                .filter(|id| **id != "vis051" || source.input_variable_ids.contains(id))
+                .map(|id| (*id).to_string())
+                .collect(),
+        ),
         _ => None,
     }
 }
@@ -3515,13 +3530,34 @@ mod composite_tests {
                     "{model} {bundle_id}"
                 );
             }
-            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb", "dustcf", "zhouye"], "{model}");
+            assert_eq!(published_bundle_ids(source), ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"], "{model}");
         }
         let meteosat = source_spec("meteosat").expect("meteosat");
         for bundle_id in ["dustcf", "zhouye"] {
             assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         }
         assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb"]);
+    }
+
+    #[test]
+    fn the_true_colour_reads_four_bands_or_three_without_the_green_one() {
+        // Mirrors `TrueColorProducer.inputs_for`: the AHI has a 0.51 µm
+        // band, the ABI does not and its green is synthesized from the
+        // other three. Three guns everywhere; Meteosat fetches no visible
+        // band and does not publish it.
+        assert_eq!(bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
+        let himawari = source_spec("himawari").expect("himawari");
+        assert_eq!(bundle_input_ids(himawari, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
+        for model in ["goeseast", "goeswest"] {
+            let source = source_spec(model).expect(model);
+            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086"], "{model}");
+        }
+        for model in ["himawari", "goeseast", "goeswest"] {
+            let source = source_spec(model).expect(model);
+            assert!(published_bundle_ids(source).ends_with(&["truecolor"]), "{model}");
+        }
+        let meteosat = source_spec("meteosat").expect("meteosat");
+        assert!(!published_bundle_ids(meteosat).contains(&"truecolor"));
     }
 }
 

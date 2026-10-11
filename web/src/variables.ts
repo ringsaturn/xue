@@ -132,6 +132,18 @@ function catKey(): readonly LegendSwatch[] {
   }).reverse();
 }
 
+/** What the true colour picture's colours are: a photograph needs no
+ * key to read, but the legend has no bar to show for a composite (the
+ * guns are unitless and nothing maps a tick to a value), and without a
+ * key it would fall back to the stylesheet's default gradient — so three
+ * swatches say what the picture is, and nothing about the night side,
+ * which is not drawn at all. */
+const TRUE_COLOR_KEY: readonly { color: string; labelKey: MessageKey }[] = [
+  { color: "#f2f2f0", labelKey: "legendTruecolorCloud" },
+  { color: "#1f4e8c", labelKey: "legendTruecolorSea" },
+  { color: "#6b7d3b", labelKey: "legendTruecolorLand" },
+];
+
 const DUST_RGB_KEY: readonly { color: string; labelKey: MessageKey }[] = [
   { color: "#e34fb8", labelKey: "legendDustDust" },
   { color: "#7a1a1a", labelKey: "legendDustThickHigh" },
@@ -955,6 +967,28 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "zhouye",
     urlAliases: ["zhouyecf"],
     showcaseCode: "ZHOUYE",
+  }),
+  // The true colour picture: the 0.64, 0.51 (or synthesized) and 0.47 µm
+  // reflectances of the sunlit disk, sun-angle corrected and stretched by
+  // the encoder's own recipe, drawn straight as colour like the Dust RGB —
+  // the disk as the eye would see it from orbit. A photograph, not a ramp:
+  // its key names what the colours are, and its guns read nothing at a
+  // pin. Outside the disk, where an input was missing, and on the night
+  // side every gun is code 0, painted as nothing (the infrared tile is the
+  // picture after dark).
+  surface({
+    id: "truecolor",
+    chart: "truecolor",
+    group: "satellite",
+    code: "TRUE COLOR",
+    title: ["True", "Color"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelTruecolor",
+    legendKey: TRUE_COLOR_KEY,
+    ground: "slate",
+    urlName: "truecolor",
+    urlAliases: ["visible", "rgb", "color", "colour"],
+    showcaseCode: "TRUE COLOR",
   }),
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid. A space-weather field,
