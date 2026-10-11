@@ -177,7 +177,7 @@ class RegistryTests(unittest.TestCase):
         # The same scalars and core; the Dust RGB alone of the composites,
         # since no emissivity is staged on this disk for the DEBRA confidence.
         self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, ("dustrgb",), himawari.core_bundle_ids))
-        self.assertEqual(himawari.bundle_composite_ids, ("dustrgb", "dustcf", "zhouye"))
+        self.assertEqual(himawari.bundle_composite_ids, ("dustrgb", "dustcf", "zhouye", "truecolor"))
         self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(himawari, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
