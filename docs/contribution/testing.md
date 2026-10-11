@@ -49,7 +49,7 @@ change (the tc and sounding ones need `bufr_dump`).
 
 ## CI
 
-`.github/workflows/test.yml` runs the Python (3.12 and 3.14), Rust, web
+`.github/workflows/test.yml` runs the Python (3.14), Rust, web
 and browser jobs on every push and pull request except prose-only changes
 (`**.md`, `docs/**`). On `release/**` branches the Python job builds the
 wheel from the tree instead of installing PyPI's, since the encoders there
