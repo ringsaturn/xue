@@ -21,12 +21,13 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use xue::encode::convert::{convert_bin as native_convert, ConvertOptions};
+use xue::encode::convert::{convert_bin as native_convert, zstd_version, ConvertOptions};
 use xue::encode::gdalio::info_json;
 use xue::encode::grid::GridInfo;
 use xue::encode::poster::encode_poster as native_encode_poster;
 use xue::encode::quantize::codebook;
 use xue::encode::temporal::encode_residual as native_encode_residual;
+use xue::encode::zarrstore;
 
 fn to_py_error(error: xue::encode::EncodeError) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
@@ -305,6 +306,70 @@ fn convert_bin(
     to_python(python, &report)
 }
 
+/// Write one bundle's Zarr v3 store straight from its codes.
+///
+/// The native counterpart of `xuebuild.zarrstore.write_store` over a
+/// `CodesSource`, for holding the two writers to the same bytes without a
+/// whole build. `metadata_json` is the bundle's metadata document;
+/// `variables` lists `(id, previous, planes)` in the metadata's order, each
+/// plane a flat `uint8` array of `width * height` codes; `tile` is the
+/// `(width, height)` the bundle is cut with. `series` writes the series
+/// layout over `block` instead. Returns the store report.
+#[pyfunction]
+#[pyo3(signature = (metadata_json, variables, tile, path, *, delta = false, series = false, block = None, workers = None))]
+#[allow(clippy::too_many_arguments)]
+fn write_store<'py>(
+    python: Python<'py>,
+    metadata_json: &str,
+    variables: Vec<(String, bool, Vec<PyReadonlyArray1<'py, u8>>)>,
+    tile: (usize, usize),
+    path: PathBuf,
+    delta: bool,
+    series: bool,
+    block: Option<(usize, usize)>,
+    workers: Option<usize>,
+) -> PyResult<Py<PyAny>> {
+    let metadata: serde_json::Value = serde_json::from_str(metadata_json)
+        .map_err(|error| PyValueError::new_err(format!("metadata is not JSON: {error}")))?;
+    let mut owned: Vec<(String, bool, Vec<Vec<u8>>)> = Vec::with_capacity(variables.len());
+    for (id, previous, planes) in &variables {
+        let mut copies = Vec::with_capacity(planes.len());
+        for plane in planes {
+            copies.push(plane.as_slice()?.to_vec());
+        }
+        owned.push((id.clone(), *previous, copies));
+    }
+    let workers = workers.unwrap_or_else(|| {
+        std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get)
+    });
+    let report = python
+        .detach(|| {
+            let codes = zarrstore::StoreCodes {
+                metadata: &metadata,
+                variables: owned
+                    .iter()
+                    .map(|(id, previous, planes)| zarrstore::StoreVariable {
+                        id: id.clone(),
+                        previous: *previous,
+                        planes: planes.iter().map(Vec::as_slice).collect(),
+                    })
+                    .collect(),
+                tile,
+            };
+            let pool = zarrstore::compression_pool(workers)?;
+            let layout = series.then(|| block.unwrap_or(zarrstore::SERIES_BLOCK));
+            zarrstore::write_store(&codes, &path, delta, layout, &pool)
+        })
+        .map_err(to_py_error)?;
+    let mut value = report.to_value();
+    // Byte identity with the reference holds only for the same libzstd, so
+    // a caller comparing the two needs to know which one wrote this.
+    if let Some(object) = value.as_object_mut() {
+        object.insert("zstdVersion".into(), serde_json::json!(zstd_version()));
+    }
+    to_python(python, &value)
+}
+
 /// Quantize one plane of physical values with a registered codebook.
 ///
 /// The NumPy counterpart of `xuebuild.quantize.PROFILES[profile][variable_id]`.
@@ -411,5 +476,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(decimate, module)?)?;
     module.add_function(wrap_pyfunction!(encode_poster, module)?)?;
     module.add_function(wrap_pyfunction!(gdal_info, module)?)?;
+    module.add_function(wrap_pyfunction!(write_store, module)?)?;
     Ok(())
 }
