@@ -16,7 +16,7 @@ RUN_DIR = $(MODEL).$(RUN)$(if $(ROUND),/$(ROUND))
 
 .PHONY: check help install wasm api-worker deploy-api api-dev api-dev-cdn test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel encoder-py mvp serve
 
-check: ## Verify GDAL / zstd / node / wasm-pack versions
+check: ## Verify Python / GDAL / node / wasm-pack versions
 	$(PYTHON) scripts/check_dependencies.py
 
 help: ## List the public targets

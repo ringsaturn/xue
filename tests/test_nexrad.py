@@ -351,11 +351,6 @@ class GoldenTest(unittest.TestCase):
     def test_the_build_matches_the_golden(self) -> None:
         from tests.prepare_nexrad_golden import ROUND, build
 
-        # The golden pins the stores' compressed bytes (through every CRC
-        # that covers them), which only the in-process engine reproduces:
-        # the zstd CLI (Python < 3.14) streams and writes other bytes.
-        if not zstdcli.compresses_in_process():
-            self.skipTest("the stores are compressed through the zstd CLI, which cannot match the golden's bytes")
         expected = FIXTURES / "expected"
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)

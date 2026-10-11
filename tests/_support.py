@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from xuebuild import binconvert, grib2, native, zstdcli
+from xuebuild import binconvert, grib2, native
 from xuebuild.gdal import inspect_grib_multi
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -110,18 +110,12 @@ def requires_native_source(model: str, what: str | None = None):
 
 
 def require_comparable_compression(case: unittest.TestCase, reference: dict, subject: dict) -> None:
-    """Skip unless both encoders compressed the same way.
+    """Skip unless both encoders ran the same libzstd.
 
     Everything downstream of a compressed payload — the bundles, their CRC32s,
     the manifest that records them, the pointer that CRCs the manifest — is
-    only comparable when the two ran the same libzstd the same way.
+    only comparable when the two ran the same libzstd.
     """
-    if not zstdcli.compresses_in_process():
-        case.skipTest(
-            "the reference encoder is compressing through the zstd CLI "
-            "(Python < 3.14), which streams rather than one-shot: the frames "
-            "decode the same but the bytes cannot match"
-        )
     if reference["zstdVersion"] != subject["zstdVersion"]:
         case.skipTest(
             f"libzstd differs: the reference has {reference['zstdVersion']}, "
@@ -167,8 +161,6 @@ def assert_native_matches(
     """Build ``inputs`` through the wheel into ``subject`` the way an
     observation round builds (no video, the manifest beside the bundles)
     and hold it to the reference build in ``reference``, byte for byte."""
-    if not zstdcli.compresses_in_process():
-        case.skipTest("the reference encoder compresses through the zstd CLI")
     with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
         report = native.convert_bin(
             inputs, subject, model=model, skip_video=True, manifest_path=subject / "manifest.json", **options
