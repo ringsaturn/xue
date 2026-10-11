@@ -76,7 +76,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: publish-jma
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-jma-dry-{0}', github.run_id) || 'publish-jma' }}
   # A late cron queues behind the job still running and then finds
   # nothing new; a looping dispatch yields to it on its own.
   cancel-in-progress: false

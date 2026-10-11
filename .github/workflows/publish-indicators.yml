@@ -36,7 +36,9 @@ permissions:
 # One at a time: the index is the product's only entry point, and the month
 # files are appended onto what the previous job left.
 concurrency:
-  group: publish-indicators
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-indicators-dry-{0}', github.run_id) || 'publish-indicators' }}
   cancel-in-progress: false
 
 jobs:

@@ -45,7 +45,9 @@ permissions:
 # live issue is both the fetch's watermark and where an unchanged station
 # file is copied forward from.
 concurrency:
-  group: publish-sounding
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-sounding-dry-{0}', github.run_id) || 'publish-sounding' }}
   cancel-in-progress: false
 
 jobs:

@@ -40,7 +40,9 @@ permissions:
 # object and a half-finished run must never race the pointer flip. The other
 # sources have their own groups and publish independently.
 concurrency:
-  group: publish-gfs
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-gfs-dry-{0}', github.run_id) || 'publish-gfs' }}
   cancel-in-progress: false
 
 jobs:

@@ -42,7 +42,9 @@ permissions:
 # One at a time: the pointer is the product's only mutable object, and the
 # previous hour's index is what the next build's identities carry over from.
 concurrency:
-  group: publish-tc
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-tc-dry-{0}', github.run_id) || 'publish-tc' }}
   cancel-in-progress: false
 
 jobs:

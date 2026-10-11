@@ -43,7 +43,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-aifs
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-aifs-dry-{0}', github.run_id) || 'publish-aifs' }}
   cancel-in-progress: false
 
 jobs:
