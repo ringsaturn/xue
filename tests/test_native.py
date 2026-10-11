@@ -6,11 +6,8 @@ these tests check: same bundles, same posters, same variants, same H.264
 companions, same manifest, same live pointer — byte for byte, from the same
 GRIB fixture, in one run each.
 
-The parity cases skip when the `xuepy` wheel is not installed, and when the
-reference encoder is compressing through the zstd CLI — below Python 3.14 it
-streams through a pipe, which is a different frame from the one-shot compress
-the native encoder does, so identical bytes are not on offer there. Everything
-that does not depend on the compressor is checked regardless, including which
+The parity cases skip when the `xuepy` wheel is not installed. Everything
+that does not depend on the wheel is checked regardless, including which
 encoder gets picked, because that logic is what decides whether a scheduled
 build silently falls back.
 """

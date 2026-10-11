@@ -26,9 +26,8 @@ def main() -> int:
         "Python": (sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
         "GDAL": command_version("gdalinfo", ["--version"], r"GDAL\s+(\d+(?:\.\d+)+)"),
         "Node.js": command_version("node", ["--version"], r"v(\d+(?:\.\d+)+)"),
-        "zstd": command_version("zstd", ["--version"], r"v(\d+(?:\.\d+)+)"),
     }
-    minimums = {"Python": (3, 12), "GDAL": (3, 8), "Node.js": (22, 0), "zstd": (1, 5, 0)}
+    minimums = {"Python": (3, 14), "GDAL": (3, 8), "Node.js": (22, 0)}
     failed = False
     for name, minimum in minimums.items():
         version = discovered[name]
@@ -62,7 +61,7 @@ def main() -> int:
         failed = True
 
     # Which encoder a build will run through. The native one is the default
-    # and the reason the GDAL and zstd command-line tools above stop being hot
+    # and the reason the GDAL command-line tools above stop being hot
     # paths; without it the build still works, one subprocess per plane.
     try:
         from xuebuild import encoder, native
