@@ -3547,15 +3547,15 @@ mod composite_tests {
         for bundle_id in ["dustcf", "zhouye"] {
             assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         }
-        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb"]);
+        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor"]);
     }
 
     #[test]
     fn the_true_colour_reads_four_bands_or_three_without_the_green_one() {
         // Mirrors `TrueColorProducer.inputs_for`: the AHI has a 0.51 µm
         // band, the ABI does not and its green is synthesized from the
-        // other three. Three guns everywhere; Meteosat fetches no visible
-        // band and does not publish it.
+        // other three; the FCI has one, so Meteosat reads the four. Three
+        // guns everywhere.
         assert_eq!(bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
         let himawari = source_spec("himawari").expect("himawari");
         assert_eq!(bundle_input_ids(himawari, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
@@ -3568,7 +3568,8 @@ mod composite_tests {
             assert!(published_bundle_ids(source).ends_with(&["truecolor"]), "{model}");
         }
         let meteosat = source_spec("meteosat").expect("meteosat");
-        assert!(!published_bundle_ids(meteosat).contains(&"truecolor"));
+        assert_eq!(bundle_input_ids(meteosat, "truecolor"), ["vis047", "vis051", "vis064", "nir086"]);
+        assert!(published_bundle_ids(meteosat).ends_with(&["truecolor"]));
     }
 }
 

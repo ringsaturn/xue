@@ -1520,9 +1520,11 @@ pub const SOURCES: &[SourceSpec] = &[
     // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
     // from the EUMETSAT Data Store rather than a public bucket (the Python
     // stage's `FCIReader` turns each chunk's radiances into brightness
-    // temperature and georeferences the strips itself). FCI has no 11.2 µm
-    // window, so three channels feed the Dust RGB and the green gun reads
-    // 10.5 − 8.7 µm, the original SEVIRI recipe (`composite_input_ids`).
+    // temperature or reflectance factor and georeferences the strips
+    // itself). FCI has no 11.2 µm window, so three channels feed the Dust
+    // RGB and the green gun reads 10.5 − 8.7 µm, the original SEVIRI recipe
+    // (`composite_input_ids`); its four solar channels feed the true colour
+    // composite, the 0.51 µm one among them.
     // The imager scans every ten minutes; this source publishes the cycle
     // on the hour alone (`cadence_seconds` 3600 against the platform's
     // 600), because the EUMETSAT data policy releases the hourly Level 1
@@ -1538,7 +1540,10 @@ pub const SOURCES: &[SourceSpec] = &[
         steps: &[],
         long_cycles: &[],
         long_cycle_steps: &[],
-        input_variable_ids: &["ir086", "ir104", "ir123"],
+        // The three windows the Dust RGB reads, then the four solar
+        // channels the true colour composite reads (FCI vis_04, vis_05,
+        // vis_06, vis_08; vis_04 at 0.444 µm under the family id vis047).
+        input_variable_ids: &["ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"],
         companion_files: &[],
         accumulated_precipitation: false,
         averaged_precipitation: false,
@@ -1547,8 +1552,9 @@ pub const SOURCES: &[SourceSpec] = &[
         first_hour: 0,
         optional_at_analysis: &[],
         statistical_processes: &[],
-        // FCI IR_87, IR_105, IR_123 at 8.70, 10.50, 12.30 µm; WMO C-5 71
-        // (Meteosat-12), C-8 210 (FCI).
+        // FCI IR_87, IR_105, IR_123 at 8.70, 10.50, 12.30 µm and VIS_04,
+        // VIS_05, VIS_06, VIS_08 at 0.444, 0.510, 0.640, 0.865 µm; WMO C-5
+        // 71 (Meteosat-12), C-8 210 (FCI).
         bands: &[
             (
                 "ir086",
@@ -1562,11 +1568,27 @@ pub const SOURCES: &[SourceSpec] = &[
                 "ir123",
                 SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 81301 },
             ),
+            (
+                "vis047",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 2252252 },
+            ),
+            (
+                "vis051",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1960784 },
+            ),
+            (
+                "vis064",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1562500 },
+            ),
+            (
+                "nir086",
+                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1156069 },
+            ),
         ],
         bundle_scalar_ids: &["ir104"],
         core_bundle_ids: &["ir104"],
         bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb"],
+        bundle_composite_ids: &["dustrgb", "truecolor"],
         bundle_volume_ids: &[],
         production_grid: (3000, 3000),
         tile: (64, 64),
@@ -1698,17 +1720,18 @@ mod tests {
             }
         }
         // Meteosat publishes the hourly cycle alone (the CC-BY-4.0 one) and
-        // has no 11.2 µm window: three inputs, the Dust RGB still resolves
+        // has no 11.2 µm window: three windows, the Dust RGB still resolves
         // to its three components, and the DEBRA confidence — five inputs,
-        // no stand-in — is not listed.
+        // no stand-in — is not listed; the four solar channels feed the
+        // true colour composite.
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert!(meteosat.series_file && meteosat.fetched() && meteosat.live());
-        assert_eq!(meteosat.input_variable_ids, &["ir086", "ir104", "ir123"]);
+        assert_eq!(meteosat.input_variable_ids, &["ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"]);
         assert_eq!(meteosat.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb"]);
+        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb", "truecolor"]);
         assert_eq!(meteosat.cadence_seconds, Some(3600));
         assert_eq!(meteosat.window_hours, Some(24));
-        assert_eq!(meteosat.bands.len(), 3);
+        assert_eq!(meteosat.bands.len(), 7);
         for (_, band) in meteosat.bands {
             assert_eq!((band.satellite_number, band.instrument_type), (71, 210));
         }
