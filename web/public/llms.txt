@@ -150,6 +150,12 @@ Facts worth getting right:
   and GOES-18 (137.0°W, WMO 272), read from NOAA's CMIPF full-disk files,
   the Dust RGB with the GOES-R Quick Guide's ABI stretches; the East disk
   is 135.2°W–15.2°W, the West disk 163°E–283°E across the antimeridian.
+  `himawarijp` is the same Himawari-9 files over Japan alone: the box
+  24°N–46°N, 122°E–148°E on a 0.01° grid (2600 × 2200, about 1.1 km, built
+  from the six of the disk's 88 tiles that reach it), `ir104`, `dustrgb`
+  and `truecolor` (no dust confidence), ten-minute frames, a rolling
+  window of the last two to three hours; a
+  regional dataset beside the disk, not part of the `geo` mosaic.
   `meteosat` is the same two variables and the true colour from
   EUMETSAT's Meteosat-12 (MTG-I1 FCI, 0°, WMO 71 / 210), the disk
   60°W–60°E, read from the EUMETSAT Data Store's FCI Level 1c chunks
@@ -254,7 +260,8 @@ Facts worth getting right:
   a composite with no physical unit, no data after dark) and
   `nightmicro` (the night microphysics picture's red, green and blue
   guns, 0–1, a composite with no physical unit; GOES-EAST and GOES-WEST
-  the same six, METEOSAT ir104, dustrgb and truecolor). AURORA:
+  the same six, METEOSAT ir104, dustrgb and truecolor, HIMAWARI-JP
+  `ir104`, `dustrgb` and `truecolor`). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
@@ -281,8 +288,8 @@ Facts worth getting right:
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
-  regridding and reclassification by jma-radar — be noted); `himawari` is
-  JMA's Himawari-9 imagery distributed by NOAA (attribution required, the
+  regridding and reclassification by jma-radar — be noted); `himawari` and
+  `himawarijp` are JMA's Himawari-9 imagery distributed by NOAA (attribution required, the
   reprojection noted, no endorsement implied by either agency); `goeseast`
   and `goeswest` are NOAA GOES-R imagery (public domain, attribution
   requested, no endorsement implied); `meteosat` is EUMETSAT Meteosat
@@ -321,10 +328,11 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
-  `himawari`, `goes-19` / `goes-18` of `goeseast` / `goeswest`, `mtg` /
+  `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
+  `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
   mosaic of every geostationary disk). `woof` (`wrf`) is known but has no
   live run, so alone it opens the default; a case pins its own dataset.
@@ -474,7 +482,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
   `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
-  `latest-himawari.json`, `latest-goeseast.json`, `latest-goeswest.json`,
+  `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`, `latest-goeswest.json`,
   `latest-meteosat.json`. Fields: `schemaVersion`, `model`, `product`, `run`
   (YYYYMMDDHH, UTC), `runTime` (ISO 8601), `manifestPath` (relative),
   `manifestCrc32`. Fetch with cache disabled; it changes four times a day
@@ -499,7 +507,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   axis, the variables' GRIB2 parameter blocks and the quantization codebooks
   are inside each bundle — a UTF-8 JSON metadata block after the container's
   header, the store group's `attributes.xue` verbatim.
-- The MRMS, JMA and CMA radar windows and the Himawari window are one directory deeper: the `run` is the window's *first*
+- The MRMS, JMA and CMA radar windows and the satellite windows are one directory deeper: the `run` is the window's *first*
   hour (three hours before the newest frame's, moving on every hour), and
   each five-minute rebuild of that run is a round of its own,
   `mrms.<run>/<HHMM>/manifest.json` (HHMM the round's UTC start), so a

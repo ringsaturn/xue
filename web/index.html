@@ -192,6 +192,7 @@
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "CMA radar mosaic live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cma.json" },
               { "@type": "DataDownload", "name": "Himawari-9 infrared imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawari.json" },
+              { "@type": "DataDownload", "name": "Himawari-9 imagery over Japan at 0.01° live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawarijp.json" },
               { "@type": "DataDownload", "name": "GOES-East imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeseast.json" },
               { "@type": "DataDownload", "name": "GOES-West imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeswest.json" },
               { "@type": "DataDownload", "name": "Meteosat imagery live pointer (rolling window of the last day, hourly)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-meteosat.json" },
@@ -856,6 +857,11 @@
             <button type="button" data-model="himawari" aria-pressed="false">
               <span class="model-name">HIMAWARI</span>
               <small>SATELLITE IR</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="himawarijp" aria-pressed="false">
+              <span class="model-name">HIMAWARI-JP</span>
+              <small>SATELLITE JAPAN 0.01°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="goeseast" aria-pressed="false">

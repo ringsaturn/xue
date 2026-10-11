@@ -29,6 +29,7 @@ export type ForecastModelId =
   | "mrms3d"
   | "jma"
   | "himawari"
+  | "himawarijp"
   | "goeseast"
   | "goeswest"
   | "meteosat"
@@ -280,6 +281,27 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     subLongitude: 140.7,
     cadenceSeconds: 600,
   },
+  // The same imager over Japan alone, 24–46°N, 122–148°E at 0.01° (about
+  // 1.1 km): the encoder fetches only the disk's tiles that reach the box
+  // and warps them onto a grid four times finer than the disk's, where the
+  // visible bands' 0.5–1 km sampling shows. A regional dataset beside the
+  // disk, as HRRR is beside GFS: a plain latitude/longitude box, so no
+  // `domain` clip, and not a member of the `geo` mosaic, whose members
+  // split the world into longitude bands rather than nest. Publishes the
+  // infrared window, the Dust RGB and the true colour, no dust confidence.
+  himawarijp: {
+    id: "himawarijp",
+    label: "HIMAWARI-JP",
+    product: "ahi-japan-0p01",
+    latestFilename: "latest-himawarijp.json",
+    observation: true,
+    coreBundles: ["ir104"],
+    defaultVariable: "ir104",
+    railCore: ["ir104", "dustrgb", "truecolor"],
+    region: [122, 24, 148, 46],
+    subLongitude: 140.7,
+    cadenceSeconds: 600,
+  },
   // The two GOES-R imagers NOAA flies, read from NOAA's own buckets: the
   // same 10.4 µm window and the same Dust RGB as Himawari, one full-disk
   // scan every ten minutes, warped by the encoder onto a 0.04° grid over
@@ -401,9 +423,9 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
 }
 
 /** The datasets in the model switch's order: the eight live forecasts, the
- * nine rolling observation windows (MRMS and its 3D volume, the JMA
- * nowcast, the CMA mosaic, the four geostationary imagers and the SWPC
- * aurora probability) and the geostationary mosaic, a view over the imagers
+ * ten rolling observation windows (MRMS and its 3D volume, the JMA
+ * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
+ * Japan box, and the SWPC aurora probability) and the geostationary mosaic, a view over the imagers
  * with no feed of its own. The switch offers the ones index.html has a
  * button for. A dataset with no pointer that is not a mosaic (the WOOF
  * nest) is absent: it is reached through its showcase cases alone. */
@@ -421,6 +443,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "jma",
   "cma",
   "himawari",
+  "himawarijp",
   "goeseast",
   "goeswest",
   "meteosat",
