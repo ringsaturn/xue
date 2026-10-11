@@ -156,13 +156,14 @@ Facts worth getting right:
   `truecolor` and `nightmicro` (no dust confidence), ten-minute frames, a
   rolling window of the last two to three hours; a regional dataset beside
   the disk, not part of the `geo` mosaic.
-  `meteosat` is the same two variables and the true colour from
-  EUMETSAT's Meteosat-12 (MTG-I1 FCI, 0°, WMO 71 / 210), the disk
-  60°W–60°E, read from the EUMETSAT Data Store's FCI Level 1c chunks
-  (radiances converted to brightness temperature with the product's
-  Planck coefficients, and the solar channels to reflectance factor with
-  its solar irradiances; the Dust RGB's green gun is 10.5 − 8.7 µm, FCI
-  having no 11.2 µm window) — **hourly**: only
+  `meteosat` is the same two variables, the true colour and the night
+  microphysics from EUMETSAT's Meteosat-12 (MTG-I1 FCI, 0°, WMO 71 / 210),
+  the disk 60°W–60°E, read from the EUMETSAT Data Store's FCI Level 1c
+  chunks (radiances converted to brightness temperature with the
+  product's Planck coefficients, and the solar channels to reflectance
+  factor with its solar irradiances; the Dust RGB's green gun is 10.5 −
+  8.7 µm, FCI having no 11.2 µm window, and the night microphysics reads
+  IR 3.8 for 3.9 µm) — **hourly**: only
   the cycle on each hour is published, a 24-hour window, because the
   EUMETSAT data policy releases that cycle as Core data under CC-BY-4.0
   and the ten-minute cycles between under other terms.
@@ -260,8 +261,8 @@ Facts worth getting right:
   a composite with no physical unit, no data after dark) and
   `nightmicro` (the night microphysics picture's red, green and blue
   guns, 0–1, a composite with no physical unit; GOES-EAST and GOES-WEST
-  the same six, METEOSAT ir104, dustrgb and truecolor, HIMAWARI-JP
-  `ir104`, `dustrgb`, `truecolor` and `nightmicro`). AURORA:
+  the same six, METEOSAT and HIMAWARI-JP `ir104`, `dustrgb`, `truecolor`
+  and `nightmicro`). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above

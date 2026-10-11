@@ -72,6 +72,8 @@ from xuebuild.stac import _source_prose
 from xuebuild.variables import (
     DUST_RGB_BUNDLE_ID,
     DUST_RGB_COMPONENT_IDS,
+    NIGHT_MICRO_BUNDLE_ID,
+    NIGHT_MICRO_COMPONENT_IDS,
     SATELLITE_REFLECTANCE_IDS,
     TRUE_COLOR_BUNDLE_ID,
     TRUE_COLOR_COMPONENT_IDS,
@@ -88,6 +90,7 @@ WINDOWS = tuple(channel for channel in CHANNELS if channel.kind == "bt")
 SOLAR = tuple(channel for channel in CHANNELS if channel.kind == "reflectance")
 DUST = PRODUCERS[DUST_RGB_BUNDLE_ID]
 TRUECOLOR = PRODUCERS[TRUE_COLOR_BUNDLE_ID]
+NIGHT = PRODUCERS[NIGHT_MICRO_BUNDLE_ID]
 DAY = datetime(2026, 9, 17, tzinfo=UTC)
 #: The stand-in store's cycles: the hourly ones the source takes, and the
 #: ten-minute ones between that it must pass over.
@@ -190,16 +193,19 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(SPEC.observation and SPEC.series_file and SPEC.fetched and SPEC.live)
         self.assertEqual(SPEC.platform, "meteosat")
         # FCI has no 11.2 µm window: three windows feed the Dust RGB; the
-        # four solar channels the true colour, the 0.51 µm one among them.
-        self.assertEqual(SPEC.input_variable_ids, ("ir086", "ir104", "ir123", *SATELLITE_REFLECTANCE_IDS))
-        # The same scalars and core; the Dust RGB and the true colour of
-        # the composites, since no emissivity is staged on this disk for
-        # the DEBRA confidence.
-        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, ("dustrgb", "truecolor"), himawari.core_bundle_ids))
+        # 3.8 µm window joins two of them in the night microphysics; the
+        # four solar channels feed the true colour, the 0.51 µm one among
+        # them.
+        self.assertEqual(SPEC.input_variable_ids, ("ir039", "ir086", "ir104", "ir123", *SATELLITE_REFLECTANCE_IDS))
+        # The same scalars and core; the Dust RGB, the true colour and the
+        # night microphysics of the composites, since no emissivity is
+        # staged on this disk for the DEBRA confidence.
+        self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, ("dustrgb", "truecolor", "nightmicro"), himawari.core_bundle_ids))
         self.assertEqual(himawari.bundle_composite_ids, ("dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "truecolor"))
+        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "dustrgb", "truecolor", "nightmicro"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086"))
+        self.assertEqual(binconvert.bundle_input_ids(SPEC, "nightmicro"), ("ir039", "ir104", "ir123"))
         self.assertEqual(binconvert.bundle_input_ids(himawari, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
         # The cycle on the hour alone, a day of them.
         self.assertEqual((SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours, SPEC.production_grid, SPEC.tile), (0.04, 3600, 24, (3000, 3000), (64, 64)))
@@ -211,7 +217,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual([band_id for band_id, _ in SPEC.bands], list(SPEC.input_variable_ids))
         bands = dict(SPEC.bands)
         self.assertEqual(bands["ir104"], SatelliteBand(satellite_series=0, satellite_number=71, instrument_type=210, central_wavenumber=95238))
-        self.assertEqual([bands[band_id].central_wavenumber for band_id in ("ir086", "ir104", "ir123")], [114943, 95238, 81301])
+        self.assertEqual([bands[band_id].central_wavenumber for band_id in ("ir039", "ir086", "ir104", "ir123")], [263158, 114943, 95238, 81301])
         # The solar channels by the FCI's own wavelengths: vis_04 is
         # 0.444 µm under the family id vis047, and its band block says so.
         self.assertEqual([bands[band_id].central_wavenumber for band_id in SATELLITE_REFLECTANCE_IDS], [2252252, 1960784, 1562500, 1156069])
@@ -228,9 +234,9 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(DownloadError, "no reader is implemented for 'seviri'"):
             reader_for(METEOSAT_IODC)
         # The FCI channel table maps the instrument's groups to the shared ids.
-        self.assertEqual([channel.band for channel in CHANNELS], [12, 14, 15, 1, 2, 3, 4])
-        self.assertEqual([FCI_GROUPS[channel.band - 1] for channel in CHANNELS], ["ir_87", "ir_105", "ir_123", "vis_04", "vis_05", "vis_06", "vis_08"])
-        self.assertEqual([channel.resolution_km for channel in CHANNELS], [2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0])
+        self.assertEqual([channel.band for channel in CHANNELS], [9, 12, 14, 15, 1, 2, 3, 4])
+        self.assertEqual([FCI_GROUPS[channel.band - 1] for channel in CHANNELS], ["ir_38", "ir_87", "ir_105", "ir_123", "vis_04", "vis_05", "vis_06", "vis_08"])
+        self.assertEqual([channel.resolution_km for channel in CHANNELS], [2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0])
         self.assertEqual(len(METEOSAT.channels), 16)
         self.assertEqual([channel.id for channel in METEOSAT.channels if channel.kind == "bt"], ["ir039", "wv062", "wv073", "ir086", "ir096", "ir104", "ir123", "ir133"])
         self.assertNotIn("ir112", {channel.id for channel in METEOSAT.channels})
@@ -247,6 +253,9 @@ class RegistryTests(unittest.TestCase):
         # The true colour reads the four solar channels on FCI, the AHI's
         # hybrid green included.
         self.assertEqual(TRUECOLOR.inputs_for(METEOSAT), ("vis047", "vis051", "vis064", "nir086"))
+        # The night microphysics reads IR 3.8, IR 10.5 and IR 12.3, no
+        # stand-in.
+        self.assertEqual(NIGHT.inputs_for(METEOSAT), ("ir039", "ir104", "ir123"))
 
     def test_the_catalog_prose_names_eumetsat_the_licence_and_the_hourly_rule(self) -> None:
         prose = _source_prose(SPEC)
@@ -258,6 +267,8 @@ class RegistryTests(unittest.TestCase):
         self.assertIn("on each hour", prose["description"])
         self.assertIn("truecolor", prose["description"])
         self.assertIn("reflectance factor", prose["description"])
+        self.assertIn("nightmicro", prose["description"])
+        self.assertIn("IR 3.8", prose["description"])
         self.assertEqual([link["rel"] for link in prose["links"]], ["license", "cite-as", "describedby"])
 
 
@@ -603,8 +614,8 @@ class FetchTests(TempRoot, unittest.TestCase):
 
     def test_a_slot_is_its_chunk_read_once_for_every_channel(self) -> None:
         window = self.fetch_window(channels=CHANNELS)
-        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_1200, 280), (SLOT_1300, 280)])
-        # One download per slot serves the seven channels.
+        self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_1200, 320), (SLOT_1300, 320)])
+        # One download per slot serves the eight channels.
         self.assertEqual(len(self.downloads), 2)
         self.assertEqual(sorted(window.series), sorted(SPEC.input_variable_ids))
         frames = sorted(path.name for path in (self.root / "meteosat-frames" / "ir104").iterdir())
@@ -683,6 +694,38 @@ class FetchTests(TempRoot, unittest.TestCase):
         midnight = TRUECOLOR.run(METEOSAT, planes, {}, slot=DAY, grid=TILE_GRID)
         self.assertTrue(all(np.all(np.isnan(plane)) for plane in midnight.values()))
 
+    def test_the_night_microphysics_reads_the_3_8_micron_window(self) -> None:
+        window = self.fetch_window(channels=WINDOWS, producers=(NIGHT,))
+        self.assertEqual(list(window.series), ["ir039", "ir086", "ir104", "ir123", *NIGHT_MICRO_COMPONENT_IDS])
+        planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in WINDOWS}
+        # IR 3.8 is a window like IR 10.5: the same strip of the 2 km grid,
+        # converted to kelvin with its own Planck coefficients and packed
+        # the same way.
+        packing = json.loads(assemble.packing_path(window.slots[0].frames["ir039"]).read_text(encoding="utf-8"))
+        self.assertEqual((packing["scale"], packing["unit"], packing["kind"]), (FCI_BT_SCALE, "K", "bt"))
+        ir039 = planes["ir039"]
+        rows = np.where(np.isfinite(ir039).any(axis=1))[0]
+        self.assertEqual((int(rows.min()), int(rows.max())), (25, 88))
+        self.assertGreater(float(np.nanmin(ir039)), 200.0)
+        self.assertLess(float(np.nanmax(ir039)), 340.0)
+        # The guns are the producer's own on those planes, no data wherever
+        # one of the three windows has none.
+        expected = NIGHT.run(METEOSAT, planes, {}, slot=SLOT_1200, grid=TILE_GRID)
+        defined = np.isfinite(ir039) & np.isfinite(planes["ir104"]) & np.isfinite(planes["ir123"])
+        self.assertGreater(int(defined.sum()), 30000)
+        for gun_id in NIGHT_MICRO_COMPONENT_IDS:
+            gun = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
+            self.assertEqual(np.isfinite(gun).tolist(), defined.tolist())
+            np.testing.assert_allclose(gun[defined], expected[gun_id][defined], atol=0.00005 + 1e-12)
+        # The fixture strip is mostly a clear, warm surface at night, the
+        # recipe's pink: the 10.5 µm window near the top of its range
+        # (blue), 10.5 − 3.8 µm at or below zero (green), the split window
+        # spread over its range (red).
+        self.assertGreater(float(np.nanmean(expected["nightb"])), 0.9)
+        self.assertLess(float(np.nanmean(expected["nightg"])), 0.01)
+        self.assertGreater(float(np.nanstd(expected["nightr"])), 0.05)
+        self.assertEqual(json.loads(assemble.packing_path(window.slots[0].frames["nightr"]).read_text(encoding="utf-8"))["producer"], {"id": "xue", "version": NIGHT.version})
+
     @requires_shachen
     def test_the_dust_rgb_reads_the_ten_micron_window_for_green(self) -> None:
         from shachen.constants import DUST_RGB  # noqa: PLC0415
@@ -690,7 +733,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         import xarray as xr  # noqa: PLC0415
 
         window = self.fetch_window(channels=WINDOWS, producers=(DUST,))
-        self.assertEqual(list(window.series), ["ir086", "ir104", "ir123", "dustr", "dustg", "dustb"])
+        self.assertEqual(list(window.series), ["ir039", "ir086", "ir104", "ir123", "dustr", "dustg", "dustb"])
         planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in WINDOWS}
         scene = xr.Dataset({name: xr.DataArray(planes[channel_id], dims=("y", "x")) for name, channel_id in (("bt_tir_86", "ir086"), ("bt_tir_104", "ir104"), ("bt_tir_112", "ir104"), ("bt_tir_123", "ir123"))})
         expected = np.asarray(dust_rgb(scene, DUST_RGB).values)
@@ -709,7 +752,7 @@ class FetchTests(TempRoot, unittest.TestCase):
     def test_the_source_fetch_writes_hourly_series_and_a_fetch_record(self) -> None:
         written = _fetch_satellite_run(SPEC, GfsRun(SLOT_1200), 1, self.root, force=False, input_ids=None, fetch=self.listing, download=self.download)
         run_dir = self.root / "meteosat.2026091712"
-        self.assertEqual(written, [run_dir / f"meteosat.2026091712.{variable_id}.nc" for variable_id in (*SPEC.input_variable_ids, *DUST_RGB_COMPONENT_IDS, *TRUE_COLOR_COMPONENT_IDS)])
+        self.assertEqual(written, [run_dir / f"meteosat.2026091712.{variable_id}.nc" for variable_id in (*SPEC.input_variable_ids, *DUST_RGB_COMPONENT_IDS, *TRUE_COLOR_COMPONENT_IDS, *NIGHT_MICRO_COMPONENT_IDS)])
         record = json.loads((run_dir / "fetch.json").read_text(encoding="utf-8"))
         self.assertEqual((record["model"], record["run"], record["hours"], record["cadenceSeconds"]), ("meteosat", "2026091712", 1, 3600))
         self.assertEqual(record["platform"], "Meteosat-12")
@@ -717,6 +760,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-17T12:00:00Z", "2026-09-17T13:00:00Z"])
         self.assertEqual(record["producers"][0]["inputs"], ["ir086", "ir104", "ir123"])
         self.assertEqual(record["producers"][1]["inputs"], list(SATELLITE_REFLECTANCE_IDS))
+        self.assertEqual(record["producers"][2]["inputs"], ["ir039", "ir104", "ir123"])
         summary = window_summary(run_dir)
         self.assertEqual((summary["frameCount"], summary["latestSlot"]), (2, "2026-09-17T13:00:00Z"))
         series = observation.inspect_observation(run_dir, SPEC, ("ir104", *DUST_RGB_COMPONENT_IDS))
@@ -761,7 +805,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundles_are_hourly_with_the_fci_band(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor", "nightmicro"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("METEOSAT", "fci-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T12:00:00Z")
@@ -780,6 +824,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         truecolor = read_bundle(self.root / "out" / "truecolor.xue")
         self.assertEqual([(v["numericId"], v["id"]) for v in truecolor.metadata["variables"]], [(1, "truer"), (2, "trueg"), (3, "trueb")])
         self.assertEqual(truecolor.metadata["variables"][0]["producer"], {"id": "xue", "version": TRUECOLOR.version})
+        night = read_bundle(self.root / "out" / "nightmicro.xue")
+        self.assertEqual([(v["numericId"], v["id"]) for v in night.metadata["variables"]], [(1, "nightr"), (2, "nightg"), (3, "nightb")])
+        self.assertEqual(night.metadata["variables"][0]["producer"], {"id": "xue", "version": NIGHT.version})
 
     def test_the_planes_are_the_strip_in_kelvin(self) -> None:
         bundle = read_bundle(self.root / "out" / "ir104.xue")
@@ -820,7 +867,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     offset = full.frame_offsets[-1]
                     expected = np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000)[::factor, ::factor]
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
-        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "truecolor") for t, _, _, _ in rungs])
+        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "truecolor", "nightmicro") for t, _, _, _ in rungs])
 
     @requires_native_source("meteosat")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

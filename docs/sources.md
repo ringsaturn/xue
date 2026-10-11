@@ -167,7 +167,7 @@ tiers. Each publishes:
   data in every gun, and the night side is code 0: nothing is painted
   where the sun is down. Xue's own recipe (producer `xue`, version the
   recipe's). See [`satellite.md`](satellite.md).
-- `nightmicro` (not Meteosat): the night picture — EUMETSAT's Night
+- `nightmicro`: the night picture — EUMETSAT's Night
   Microphysics RGB, 12.3 − 10.4 µm (−4…2 K), 10.4 − 3.9 µm (0…10 K) and
   10.4 µm (243…293 K) as red, green and blue; fog and low cloud read
   yellow-green. Composed day and night, but by day sunlight in the 3.9 µm

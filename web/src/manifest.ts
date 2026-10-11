@@ -356,11 +356,11 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
   // Meteosat-12 (MTG-I1) at 0°, EUMETSAT's FCI imager, read from the
   // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel),
-  // the same Dust RGB and true colour, warped onto a 0.04° grid over the
-  // disk's useful extent. The source publishes the hourly repeat cycle alone — the one
-  // EUMETSAT's data policy releases under CC-BY-4.0 for redistribution —
-  // so its window is a day of hourly frames rather than hours of
-  // ten-minute ones. Named by the slot (0° is Meteosat-12 today), never
+  // the same Dust RGB, true colour and night microphysics, warped onto a
+  // 0.04° grid over the disk's useful extent. The source publishes the
+  // hourly repeat cycle alone — the one EUMETSAT's data policy releases
+  // under CC-BY-4.0 for redistribution — so its window is a day of hourly
+  // frames rather than hours of ten-minute ones. Named by the slot (0° is Meteosat-12 today), never
   // the spacecraft, as the other disks are.
   meteosat: {
     id: "meteosat",
@@ -370,7 +370,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "truecolor"],
+    railCore: ["ir104", "dustrgb", "truecolor", "nightmicro"],
     region: [-60, -60, 60, 60],
     subLongitude: 0,
     cadenceSeconds: 3600,
@@ -606,10 +606,9 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
  * day's level through the night: each one scalar in 0–1, painted with a
  * ramp like a channel, not a composite), and the true colour picture the
  * encoder composes from the visible bands (`truecolor`, another
- * `CompositeBundleId`; the ten-minute disks publish it, Meteosat's hourly
- * cycle does not), and the night microphysics picture it composes from the
- * 3.9, 10.4 and 12.3 µm windows (`nightmicro`, the third; the ten-minute
- * disks) — held to the encoders by
+ * `CompositeBundleId`), and the night microphysics picture it composes from
+ * the 3.9, 10.4 and 12.3 µm windows (`nightmicro`, the third; every
+ * satellite source publishes both) — held to the encoders by
  * `tests/fixtures/satellite-registry.json`. */
 type SatelliteId = "ir104" | CompositeBundleId | "dustcf" | "zhouye";
 export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor", "nightmicro"];

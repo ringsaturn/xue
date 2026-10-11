@@ -49,7 +49,7 @@ Which model to use:
 | `himawarijp` | Himawari-9 AHI over Japan: `ir104`, `dustrgb`, `truecolor`, `nightmicro` | **0.01°**, 122–148°E, 24–46°N | 10 min | last 2–3 h | 15–20 min |
 | `goeseast` | GOES-19 ABI (75.2°W): same three | 0.04°, 135.2°W–15.2°W | 10 min | last 5–6 h | ~15 min |
 | `goeswest` | GOES-18 ABI (137°W): same three | 0.04°, 163°E–283°E (past 180) | 10 min | last 5–6 h | ~15 min |
-| `meteosat` | Meteosat-12 FCI (0°): `ir104`, `dustrgb` | 0.04°, 60°W–60°E | **hourly** | last 24 h | ~1 h |
+| `meteosat` | Meteosat-12 FCI (0°): `ir104`, `dustrgb`, `truecolor`, `nightmicro` | 0.04°, 60°W–60°E | **hourly** | last 24 h | ~1 h |
 
 An observation Item's `datetime` / `xue:runTime` is the window's *first*
 hour, not an analysis time; the `time` coordinate is the observation time.
