@@ -484,9 +484,10 @@ class ReflectanceStripTests(TempRoot, unittest.TestCase):
         self.assertIn(f"<Scale>{FCI_REFL_SCALE!r}</Scale>", text)
         self.assertIn("<Offset>0.0</Offset>", text)
         strip = np.fromfile(vrt.with_suffix(".bin"), dtype="<i2").reshape(279, 11136)
-        # The file runs east to west (a negative column step); the strip
-        # is written west to east.
-        radiance = self.radiance(environment)[:, ::-1]
+        # The file's columns already run west to east (its x is positive
+        # towards the west, so the negative step walks eastwards); the
+        # strip keeps their order.
+        radiance = self.radiance(environment)
         expected = np.pi * radiance * constants["distance_au"] ** 2 / constants["irradiance"]
         valid = np.isfinite(expected)
         self.assertGreater(float(valid.mean()), 0.5)
@@ -500,12 +501,13 @@ class ReflectanceStripTests(TempRoot, unittest.TestCase):
                 self.assertEqual(int(strip[row, column]), math.floor(value * 4096 + 0.5))
 
     def test_a_strip_is_placed_by_the_file_s_own_column_packing(self) -> None:
-        """East to west a strip is placed by the file's column packing,
-        never by GDAL's geotransform (Ubuntu 24.04's GDAL 3.8, the one the
-        publishes run, puts these files tens of degrees west): column i
-        (from 1) is the scan angle ``offset + step × i``, the file runs east
-        to west, so the strip's west edge is the last column's angle less
-        half a step, the same on the 2 km and the 1 km grid."""
+        """East to west a strip is placed by the file's column packing:
+        column i (from 1) is the scan angle ``offset + step × i`` measured
+        positive towards the west (the negative of PROJ's geos x), so
+        column 1 is the western limb and the strip's west edge is minus its
+        angle less half a step, on the 2 km and the 1 km grid alike. Read
+        the other way round the disk comes out mirrored about the
+        sub-satellite meridian, as every published frame did."""
         reader = FCIReader()
         environment = hdf5_plugin_environment()
         for channel in (IR104, VIS064):
@@ -517,7 +519,7 @@ class ReflectanceStripTests(TempRoot, unittest.TestCase):
                 text = vrt.read_text(encoding="utf-8")
                 origin_x, pixel, _, _, _, line = (float(part) for part in re.search(r"<GeoTransform>([^<]+)</GeoTransform>", text).group(1).split(","))
                 height = float(re.search(r"\+h=([0-9.e+-]+)", text).group(1))
-                west = (-grid.angle_offset - grid.angle_step * grid.size) - grid.angle_step / 2.0
+                west = (grid.angle_offset + grid.angle_step) - grid.angle_step / 2.0
                 self.assertAlmostEqual(origin_x / height, west, places=9)
                 self.assertAlmostEqual(pixel / height, grid.angle_step, places=12)
                 self.assertAlmostEqual(-line / height, grid.angle_step, places=12)
