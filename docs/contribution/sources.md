@@ -330,7 +330,7 @@ must keep in mind:
   required. It needs the `EUMETSAT_CONSUMER_KEY` / `EUMETSAT_CONSUMER_SECRET`
   secrets (the workflow warns and builds nothing without them) and
   `hdf5plugin` for FCI's JPEG-LS filter.
-- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`) are computed in
+- Composites (`dustrgb`, `dustcf`, `zhouye`, `truecolor`, `nightmicro`) are computed in
   the fetch stage by producers, not by the converter. `bundle_input_ids`
   asks `Producer.inputs_for(platform)`, and
   `convert.rs::composite_input_ids` must answer the same per source (the
@@ -346,6 +346,10 @@ must keep in mind:
   downloads over the windows' 140 (the 0.5 km red band alone is 200–430
   MB a slot); reflectance frames are warped as block means
   (`fetch.resampling_for`), brightness temperatures bilinearly.
+- `nightmicro` is Xue's own recipe too (`NightMicrophysicsProducer`,
+  `producers.NIGHT_MICRO_VERSION`), from `ir039`, `ir104` and `ir123`,
+  which the NOAA disks already fetch: no new download, a fourth producer
+  pass per slot and three more cached frames.
 - `dustcf` ships on the three NOAA-redistributed disks only (Meteosat's
   hourly cycle is not published); its ancillaries need `ANCILLARY=true` in
   the rounds script. The CAMEL months are staged by `xuebuild/satellite/staging.py`
@@ -359,7 +363,7 @@ must keep in mind:
   to the same object, and the fetch runs it once. A source listing only one
   still gets both frames cached; the converter reads what is listed.
 - Frames are kept `FRAMES_KEEP_HOURS` (8; 26 on Meteosat): a day of
-  seventeen variables on a NOAA disk is ~9 GB.
+  twenty variables on a NOAA disk is ~10.5 GB.
 - They ship three lower rungs (`variant_factors` `(2, 4, 8)`): a
   3000 × 3000 plane does not fit the shell's cell budget zoomed out.
 - `tests/fixtures/satellite-registry.json` pins variables and bundles across

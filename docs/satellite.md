@@ -76,8 +76,9 @@ longitudes like the regional radar grids; Meteosat's −60 … 60 sits on
 the prime meridian. The four sources publish the same core variables
 (`ir104` and `dustrgb`; the ABI composite takes the Quick Guide's
 stretches, FCI has no 11.2 µm window and its green gun reads the 10.5 µm
-one), the three NOAA-hosted ones the dust confidences and the true colour
-composite besides, and every seam below is shared: what differs between
+one), the three NOAA-hosted ones the dust confidences, the true colour
+and the night microphysics composites besides, and every seam below is
+shared: what differs between
 them is the platform row and the reader — and, for Meteosat, the cadence
 the source publishes at, which the data policy sets (§"Rounds").
 
@@ -89,15 +90,16 @@ infrared window at 10.4 µm; the exact central wave number is in the
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
 NOAA-hosted sources fetch six infrared windows and the solar bands (four
 on AHI, three on ABI) and publish `ir104`, the Dust RGB, the dust
-confidences and the true colour; Meteosat fetches three windows and the
-four solar channels and publishes `ir104`, the Dust RGB and the true
-colour (§"The dust confidences" says why not the confidences).
+confidences, the true colour and the night microphysics; Meteosat
+fetches three windows and the four solar channels and publishes `ir104`,
+the Dust RGB and the true colour (§"The dust confidences" says why not
+the confidences, §"The night microphysics" why not that picture).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
 | `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for the dust confidence), registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask, registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039`, `wv062` | 3.9, 6.2 µm | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask (and 3.9 µm for the night microphysics), registered variables, not published by any source | 180–331.8 at 0.6 |
 | `vis047`, `vis051`, `vis064`, `nir086` | 0.47, 0.51, 0.64, 0.86 µm (FCI 0.44, 0.51, 0.64, 0.87) | 1, 2, 3, 4 | 1, —, 2, 3 | 1, 2, 3, 4 | top-of-atmosphere reflectance factor, 0–1 (the product's, not yet divided by the cosine of the solar zenith); fetched for the true colour composite, registered variables (GRIB2 3/0/1, the satellite-image albedo, with the band block), not published by any source | −0.01–1.255 at 0.005 |
 | `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
@@ -235,6 +237,44 @@ and the hourly 24-hour window holds some twelve sunlit frames. FCI's
 blue band is 0.444 µm, bluer than the AHI's 0.47, under the family id
 `vis047` (the `band` block carries its wave number); the recipe is not
 changed for it.
+
+### The night microphysics
+
+`nightmicro` is the picture after dark: EUMETSAT's Night Microphysics
+RGB, from three infrared windows every NOAA-hosted disk already fetches
+(no new download), this pipeline's own recipe
+(`NightMicrophysicsProducer`) in a fixed order:
+
+1. red `IR12.3 − IR10.4`, green `IR10.4 − IR3.9`, blue `IR10.4`;
+2. each stretched linearly over its range with gamma 1 and clamped to 0–1;
+3. no data in all three guns wherever any input had none.
+
+| gun | quantity | range | reads |
+|---|---|---|---|
+| `nightr` | 12.3 − 10.4 µm | −4 … +2 K | cloud optical thickness: thick cloud dark, thin cirrus bright |
+| `nightg` | 10.4 − 3.9 µm | 0 … +10 K | small water droplets: fog and low stratus emit poorly at 3.9 µm, so the difference is large |
+| `nightb` | 10.4 µm | 243 … 293 K | temperature: warm ground bright, cold cloud tops dark |
+
+AHI bands 15, 13, 7, ABI channels 15, 13, 7 and FCI IR 12.3, 10.5, 3.8
+take the same numbers (JMA's Himawari version is EUMETSAT's). Read: fog
+and low stratus yellow-green, thick high cloud dark red, thin cirrus
+black to dark blue, a clear warm surface pink. Which channels a platform
+feeds the recipe is `NightMicrophysicsProducer.inputs_for` (all three,
+no stand-in), mirrored by `convert.rs::composite_input_ids`.
+
+The guns are the true colour's shape: three variables of one composite
+bundle, local-use parameters 3 / 192 / **10, 11, 12** on surface 8, the
+guns' codebook (code 0 no data), no poster, no video, the three-rung
+ladder, the `producer` block `{"id": "xue", "version": "1"}` with the
+version the recipe's (`producers.NIGHT_MICRO_VERSION`, bumped when a
+range above changes). Unlike the true colour it reads no sun and is
+composed day and night. By day the 3.9 µm window carries reflected
+sunlight on top of its emission, reads warmer than 10.4 µm, and the green
+gun sits at 0: the day side of this picture is not to be read. The
+viewer's day-night blend (`?blend=night`) draws it only where the true
+colour has no data, which is the night side. The 3.9 µm window's noise
+over very cold cloud tops speckles the green gun there; nothing smooths
+it. Meteosat does not publish it (its source fetches no 3.9 µm window).
 
 ### The dust confidences
 
@@ -762,7 +802,10 @@ both. `PRODUCERS` is keyed by the
 bundle produced; `SourceSpec.bundle_composite_ids` lists what a source
 publishes, and `_fetch_satellite_run` runs every listed producer whose
 channels the window fetches (asked for the Dust RGB's four alone, it
-composes that and not the confidence). shachen is the `satellite`
+composes that and not the confidence). `TrueColorProducer` and
+`NightMicrophysicsProducer` are this pipeline's own (`id` `xue`, the
+version each recipe's constant): §"The true colour" and §"The night
+microphysics". shachen is the `satellite`
 dependency group (`uv sync --group satellite`), imported inside the
 producers and nowhere else.
 
@@ -778,7 +821,8 @@ mosaic, warp (the solar bands as block means, the sidecar saying so),
 cache, the producers (the Dust RGB held cell for cell to
 `shachen.dustrgb.dust_rgb` called directly, the true colour to its recipe
 written out step by step, with the night side empty and dusk darker than
-noon), series, ingest, conversion on the production grid with every
+noon, the night microphysics to its recipe and to pinned cells of the
+fixture), series, ingest, conversion on the production grid with every
 composite bundle, a crop past the antimeridian, a `--bundles` build that
 reads one series alone — against a stand-in for the bucket, then through
 both encoders. `tests/fixtures/debra/` is two crops of a staged CAMEL month
