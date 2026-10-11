@@ -153,7 +153,7 @@ pip install xuepy
 ```
 
 The wheel carries its own GDAL, so nothing else has to be installed and no
-environment variable has to be set. The wheel is `abi3-py311`: one per
+environment variable has to be set. The wheel is `abi3-py314`: one per
 platform, not one per Python minor version. Linux wheels are
 `manylinux_2_39`, tagged with the glibc of the ubuntu-24.04 runner that
 built them, which means Ubuntu 24.04 and later, Debian 13 and later;

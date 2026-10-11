@@ -20,5 +20,5 @@ xue = { path = "../xue", features = ["encoder"] }
 numpy = "0.29"
 # abi3: one wheel per platform rather than one per Python minor version. The
 # wheel carries a bundled GDAL, so the difference is roughly 20 MB against 80.
-pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py314"] }
 serde_json = { version = "1", features = ["preserve_order"] }

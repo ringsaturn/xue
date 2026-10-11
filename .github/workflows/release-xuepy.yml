@@ -112,7 +112,7 @@ jobs:
       - name: Smoke-test the wheel
         run: |
           set -euo pipefail
-          uv venv --python 3.12 /tmp/smoke
+          uv venv --python 3.14 /tmp/smoke
           VIRTUAL_ENV=/tmp/smoke uv pip install numpy "$(ls "${GITHUB_WORKSPACE}"/wheels/*.whl)"
           /tmp/smoke/bin/python - <<'PY'
           import numpy, xue
