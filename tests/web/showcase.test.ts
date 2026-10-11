@@ -114,6 +114,29 @@ describe("showcase catalog", () => {
     expect(steep.cases[0]!.view?.terrain).toBe(10);
   });
 
+  it("reads the volume a view opens with, dropping one it does not know", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const base = { center: [138.73, 35.36], zoom: 11.6, pitch: 62, bearing: -35, terrain: 1.5 };
+      const cloud = validateCatalog(
+        catalogFixture([caseFixture({ variables: ["tmpsfc", "cloud3d"], defaultVariable: "tmpsfc", view: { ...base, volume: "cloud3d" } })]),
+      );
+      expect(cloud.cases[0]!.view).toEqual({ ...base, volume: "cloud3d" });
+      // A volume kind this shell was deployed before, a 2D field named by
+      // mistake, or no string at all: the rest of the view still applies,
+      // silently — the catalog writer is where the name is held to the case.
+      for (const volume of ["fog3d", "tmpsfc", 3, null, ["cloud3d"]]) {
+        warn.mockClear();
+        const catalog = validateCatalog(catalogFixture([caseFixture({ view: { ...base, volume } })]));
+        expect(catalog.cases[0]!.view).toEqual(base);
+        expect(catalog.cases[0]!.view).not.toHaveProperty("volume");
+        expect(warn).not.toHaveBeenCalled();
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("ignores a view block it cannot read, keeping the case", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

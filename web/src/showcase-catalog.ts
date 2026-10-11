@@ -3,6 +3,7 @@ import {
   FORECAST_MODELS,
   isBundleVariableId,
   validateManifest,
+  VOLUME_BUNDLE_LEVELS,
   type ForecastBundleId,
   type ForecastManifest,
   type ForecastModelId,
@@ -76,6 +77,10 @@ export interface ShowcaseView {
    * the ground flat whatever the viewer last had, absent to leave the
    * relief as the link or the viewer had it. */
   terrain?: number | false;
+  /** The volume bundle to open drawn over the field (`ViewState.volume`,
+   * as `?volume=` sets it), when the case names one this shell knows as a
+   * volume. A link that names `volume=` itself outranks it. */
+  volume?: ForecastBundleId;
 }
 
 export interface ShowcaseRadar {
@@ -155,6 +160,12 @@ function viewBlock(input: unknown, id: string): ShowcaseView | undefined {
   if (value.bearing !== undefined) view.bearing = value.bearing as number;
   if (value.terrain !== undefined) {
     view.terrain = value.terrain === false ? false : Math.min(value.terrain as number, VIEW_MAX_TERRAIN);
+  }
+  // A volume this shell does not know as one (a bundle kind published after
+  // it was deployed) is dropped without a word: the case opens on its field
+  // and the camera it names, as it does for a shell with no volume layer.
+  if (typeof value.volume === "string" && VOLUME_BUNDLE_LEVELS.has(value.volume)) {
+    view.volume = value.volume;
   }
   return view;
 }

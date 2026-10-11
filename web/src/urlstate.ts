@@ -307,6 +307,15 @@ export function searchNamesTerrain(search: string): boolean {
   return new URLSearchParams(search).has("terrain");
 }
 
+/** Whether the link said anything about the volume overlay — `?volume=`
+ * present with any value, `off` or an unknown name included. A link that
+ * spoke outranks the volume a showcase case opens with, as `?terrain=`
+ * outranks its relief; `parseVolumeFromSearch` alone cannot tell `off`
+ * from silence. */
+export function searchNamesVolume(search: string): boolean {
+  return new URLSearchParams(search).has("volume");
+}
+
 /** The given query string carrying the scene; the plane, a flat ground and
  * no shadows write nothing. */
 export function searchWithScene(search: string, scene: SceneState): string {

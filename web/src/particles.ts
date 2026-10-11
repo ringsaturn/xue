@@ -307,12 +307,27 @@ uniform float u_particles_res;
 uniform float u_point_size;
 uniform vec4 u_tile;
 uniform float u_max_speed;
+// The clip w of the ground under the screen's centre, or 0 on the globe:
+// a particle's own w against it says how much nearer or farther than the
+// centre it is, so a pitched view draws the foreground wider and brighter
+// and the far ground thinner and dimmer. Flat, every w is the centre's.
+uniform float u_depth_ref;
 out float v_speed_t;
+// The perspective weight: 1 at the centre's depth, more for nearer ground.
+out float v_near;
 ${WIND_SAMPLING.replace(PI_DECLARATION, "")}
 #ifdef XUE_TERRAIN
 ${TERRAIN_VERTEX_GLSL}
 ${TERRAIN_DEPTH_GLSL}
 #endif
+
+// How much wider a particle draws for its pace and its nearness: a fast
+// one over a slow one by a quarter, the foreground over the far ground by
+// the square root of the depth ratio, held to a range so a horizon under a
+// steep pitch does not vanish and the foreground does not blot.
+float pointScale(float speed_t, float near) {
+  return mix(0.8, 1.25, speed_t) * clamp(sqrt(near), 0.6, 1.6);
+}
 
 void main() {
   vec2 lookup = vec2(
@@ -323,11 +338,12 @@ void main() {
   // A particle waiting to be respawned off the model's footprint reads as
   // calm, which the fragment stage leaves undrawn.
   v_speed_t = inGrid(pos) ? clamp(length(windAt(pos)) / u_max_speed, 0.0, 1.0) : 0.0;
-  gl_PointSize = u_point_size;
+  v_near = 1.0;
 #ifdef XUE_TERRAIN
   vec2 local = vec2(fract(pos.x - u_tile.x), pos.y - u_tile.y) / u_tile.z;
   if (local.x >= 1.0 || local.y < 0.0 || local.y >= 1.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = u_point_size;
     v_speed_t = 0.0;
     return;
   }
@@ -337,12 +353,15 @@ void main() {
 #else
   gl_Position = projectTile(vec2(pos.x + u_tile.x, pos.y));
 #endif
+  if (u_depth_ref > 0.0 && gl_Position.w > 0.0) v_near = clamp(u_depth_ref / gl_Position.w, 0.25, 4.0);
+  gl_PointSize = u_point_size * pointScale(v_speed_t, v_near);
 }`;
 }
 
 const DRAW_FRAGMENT_SHADER = `#version 300 es
 precision mediump float;
 in float v_speed_t;
+in float v_near;
 uniform sampler2D u_palette;
 // One tone for every particle, used when u_monochrome is on; the speed
 // palette is still compiled in and is what an overlay drawn on its own uses.
@@ -358,6 +377,11 @@ void main() {
   vec4 color = u_monochrome > 0.5
     ? u_ink
     : texture(u_palette, vec2((v_speed_t * 255.0 + 0.5) / 256.0, 0.5));
+  // Brighter with pace and nearness, as the width is (pointScale), but
+  // never below half: the far ground under a pitched camera is where the
+  // flow is read across the whole region, and a calm is still a flow.
+  float weight = mix(0.6, 1.0, v_speed_t) * clamp(sqrt(v_near), 0.5, 1.0);
+  color.a *= weight;
   out_color = vec4(color.rgb * color.a, color.a);
 }`;
 
@@ -691,7 +715,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       [
         "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
         "u_particles_res", "u_point_size", "u_max_speed", "u_palette",
-        "u_ink", "u_monochrome", ...DOMAIN_UNIFORM_NAMES,
+        "u_ink", "u_monochrome", "u_depth_ref", ...DOMAIN_UNIFORM_NAMES,
         ...PROJECTION_UNIFORM_NAMES, ...TERRAIN_UNIFORM_NAMES,
       ],
       { a_index: INDEX_ATTRIBUTE },
@@ -843,6 +867,22 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.bindVertexArray(null);
   }
 
+  /** The clip w of the ground under the screen's centre, through the
+   * plane's main matrix — what the point pass weighs each particle's own
+   * depth against — or 0 on the globe, whose w is not a distance over the
+   * ground. The centre's height is the terrain's where there is one, as
+   * the seeds take it; flat, w is the same everywhere and the weight 1. */
+  private depthReference(input: CustomRenderMethodInput): number {
+    if (!this.map || isGlobe(input)) return 0;
+    const matrix = input.defaultProjectionData.mainMatrix as ArrayLike<number>;
+    const center = this.map.getCenter();
+    const mx = (center.lng + 180) / 360;
+    const my = mercatorY(center.lat);
+    const plane = this.map.getTerrain() ? (this.map.queryTerrainElevation(center) ?? 0) : 0;
+    const w = matrix[3]! * mx + matrix[7]! * my + matrix[11]! * plane + matrix[15]!;
+    return Number.isFinite(w) && w > 0 ? w : 0;
+  }
+
   /** What screen-space seeding needs this frame, or null where it is off:
    * on the globe and while the view still holds a large part of the world. */
   private screenSeeding(
@@ -983,6 +1023,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.uniform4f(draw.uniforms.u_ink!, ink?.[0] ?? 1, ink?.[1] ?? 1, ink?.[2] ?? 1, ink?.[3] ?? 1);
     gl.uniform1f(draw.uniforms.u_particles_res!, this.particleRes);
     gl.uniform1f(draw.uniforms.u_point_size!, Math.min(3, Math.max(1, 1.3 * (window.devicePixelRatio || 1))));
+    gl.uniform1f(draw.uniforms.u_depth_ref!, this.depthReference(input));
     gl.bindVertexArray(this.indexVertexArray);
     if (tiles) {
       for (const tile of tiles) {

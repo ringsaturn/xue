@@ -64,10 +64,14 @@ const DENSE_DBZ = 55;
 const VOXEL_OPACITY = 0.6;
 
 /** Cloud water's extinction, per g/kg per voxel of path (one texel across):
- * opacity is 1 − exp(−σ · q · path). At 1.6 a 0.3 g/kg deck six voxels
- * deep reaches an optical depth of about 3 (95 % opaque) and reads as a
- * solid layer, while a 0.05 g/kg wisp over the same path stays a veil. */
-const CLOUD_SIGMA = 1.6;
+ * opacity is 1 − exp(−σ · q · path). A real cloud is far denser than a
+ * voxel can show: 0.3 g/kg (0.3 g/m³, 10 µm droplets) extinguishes at
+ * about 0.05 /m, an optical depth of 25 across a 500 m voxel, so a deck
+ * one level thick is a wall, not a haze. σ is a fifth of that: a 0.2 g/kg
+ * layer is opaque within one voxel (so the thin deck on the lowest levels
+ * reads as a deck), while a 0.05 g/kg wisp is still half transparent
+ * through one and keeps the edges soft. */
+const CLOUD_SIGMA = 16;
 
 /** Cloud water under which a sample is clear, in g/kg: below it the linear
  * filter's ramp between a cloudy and a clear voxel would paint a halo of
@@ -82,11 +86,16 @@ const SUN_DIRECTION: readonly [number, number, number] = [-0.5, 0.5, Math.SQRT1_
 
 /** How far towards the sun the one shadow sample is taken, in voxels, and
  * how much path it stands for: a sample two voxels up-sun answers "is
- * there cloud between this point and the light", and weighing it as four
- * voxels of path makes a deck's sunward face lit and its far side dark
- * without a second loop. */
+ * there cloud between this point and the light", and the light through
+ * it is exp(−σ · q · path). The path is short because σ is large: with
+ * σ · path near 12, cloud of 0.05 g/kg up-sun leaves half the light,
+ * 0.1 g/kg a third and 0.3 g/kg almost none, so a deck's sunward face is
+ * lit, its far side dark and the slope between them a gradient that gives
+ * a mountain-side cloud its relief; at a whole voxel of path everything
+ * behind the first voxel of cloud would be shade-coloured and the cloud a
+ * flat block. */
 const SHADOW_OFFSET_VOXELS = 2;
-const SHADOW_PATH_VOXELS = 4;
+const SHADOW_PATH_VOXELS = 0.75;
 
 /** The silver lining: how much a thin, lit edge brightens when the camera
  * looks towards the sun through it, and how tight that forward lobe is
@@ -94,12 +103,14 @@ const SHADOW_PATH_VOXELS = 4;
 const SILVER_STRENGTH = 0.6;
 const SILVER_POWER = 6;
 
-/** The cloud's lit and shaded colours per theme: on the paper basemap a
- * white cloud would vanish, so it is a cool light grey-blue with a
- * slate-blue shade; on the dark basemap it is a warm white over a grey. */
+/** The cloud's lit and shaded colours per theme. On the paper basemap the
+ * cloud sits over warm fills (the temperature palettes run yellow to red),
+ * so it leans the other way: a cool blue-white lit side, brighter than the
+ * yellows, over a slate-blue shade dark enough to read as a body rather
+ * than a haze. On the dark basemap it is a warm white over a grey. */
 type Rgb = readonly [number, number, number];
 const CLOUD_COLOURS: Record<"light" | "dark", { lit: Rgb; shade: Rgb }> = {
-  light: { lit: [0.86, 0.9, 0.96], shade: [0.48, 0.54, 0.64] },
+  light: { lit: [0.9, 0.95, 1.0], shade: [0.36, 0.44, 0.58] },
   dark: { lit: [1.0, 0.97, 0.92], shade: [0.46, 0.47, 0.5] },
 };
 
