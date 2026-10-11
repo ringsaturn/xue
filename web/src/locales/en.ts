@@ -331,6 +331,7 @@ export const en = {
   /** The MP4 pill beside it, shown only where the browser encodes H.264;
    * it reads "MP4" and a percentage while it runs. */
   mp4ExportAria: "Save the loop as an MP4 video",
+  mp4SizeAria: "Video size",
   mp4CancelAria: "Cancel the MP4",
   readingManifest: "Loading manifest",
   forecastHourAria: "Forecast hour",

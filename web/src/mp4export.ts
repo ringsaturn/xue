@@ -23,12 +23,22 @@ import {
 
 /** Frames of data in one file at most: a frame per hour for ten days. */
 export const MP4_MAX_FRAMES = 240;
-/** The output's size cap, 1080p: what players and chats take without a
- * second transcode, and the most a level-4.0 H.264 encoder accepts — a
- * retina canvas is taller than 1080 rows at 1920 across, so both sides
- * are bounded. */
-export const MP4_MAX_WIDTH = 1920;
-export const MP4_MAX_HEIGHT = 1080;
+/** The sizes the file can be cut to, each a box the canvas is scaled to
+ * fit on both sides (a retina canvas is taller than 1080 rows at 1920
+ * across). 1080p is what players and chats take without a second
+ * transcode and the most a level-4.0 H.264 encoder accepts; the larger
+ * two are offered only where the canvas has the pixels, since nothing is
+ * ever scaled up. */
+export const MP4_SIZES = [
+  { id: "1080p", label: "1080P", width: 1920, height: 1080 },
+  { id: "1440p", label: "1440P", width: 2560, height: 1440 },
+  { id: "2160p", label: "4K", width: 3840, height: 2160 },
+] as const;
+export type Mp4SizeId = (typeof MP4_SIZES)[number]["id"];
+export type Mp4SizeRung = (typeof MP4_SIZES)[number];
+export const MP4_DEFAULT_SIZE: Mp4SizeId = "1080p";
+export const MP4_MAX_WIDTH: number = MP4_SIZES[0].width;
+export const MP4_MAX_HEIGHT: number = MP4_SIZES[0].height;
 /** The file's frame rate; the data frames are sampled onto this clock. */
 export const MP4_FPS = 30;
 /** Encodes allowed in flight before capture waits for the encoder. */
@@ -36,8 +46,41 @@ const ENCODE_QUEUE_LIMIT = 4;
 
 /** H.264 profiles in order of preference: High, Main, Constrained Baseline,
  * each at level 4.0 (1080p30), then High at level 5.1 for an encoder that
- * only advertises the larger level; each asked for with hardware first. */
+ * only advertises the larger level; each asked for with hardware first. A
+ * picture past 1080p needs level 5.1 (4K30) from the start. */
 export const MP4_CODECS = ["avc1.640028", "avc1.4d0028", "avc1.42e028", "avc1.640033"] as const;
+export const MP4_CODECS_LARGE = ["avc1.640033", "avc1.4d0033", "avc1.42e033"] as const;
+
+/** The codecs for a picture of this size. */
+export function mp4Codecs(width: number, height: number): readonly string[] {
+  return width * height > MP4_MAX_WIDTH * MP4_MAX_HEIGHT ? MP4_CODECS_LARGE : MP4_CODECS;
+}
+
+/** The rungs a canvas of this size can fill: 1080p always, a larger one
+ * once the canvas reaches it on either side (a retina laptop at 3248 px
+ * across gets 1440p; 4K needs a 4K screen). */
+export function mp4SizeChoices(canvasWidth: number, canvasHeight: number): Mp4SizeRung[] {
+  return MP4_SIZES.filter((rung, at) => at === 0 || canvasWidth >= rung.width || canvasHeight >= rung.height);
+}
+
+/** The rung after `current` in `choices`, around to the first; a choice the
+ * canvas no longer offers starts over. */
+export function nextMp4Size(current: Mp4SizeId, choices: readonly Mp4SizeRung[]): Mp4SizeId {
+  const at = choices.findIndex((rung) => rung.id === current);
+  return (choices[(at + 1) % choices.length] ?? MP4_SIZES[0]).id;
+}
+
+/** A stored choice, or null for anything that is not one of the rungs. */
+export function parseStoredMp4Size(value: string | null): Mp4SizeId | null {
+  return MP4_SIZES.find((rung) => rung.id === value)?.id ?? null;
+}
+
+/** The rung to cut at: the one chosen while the canvas offers it, else the
+ * largest it does. */
+export function mp4SizeRung(choice: Mp4SizeId | undefined, canvasWidth: number, canvasHeight: number): Mp4SizeRung {
+  const choices = mp4SizeChoices(canvasWidth, canvasHeight);
+  return choices.find((rung) => rung.id === choice) ?? choices[choices.length - 1] ?? MP4_SIZES[0];
+}
 export const MP4_ACCELERATION = ["prefer-hardware", "no-preference"] as const satisfies readonly HardwareAcceleration[];
 
 /** One sampled picture: which of the window's frames (by position) and how
@@ -52,22 +95,23 @@ export interface Mp4Step {
 export function mp4Size(
   width: number,
   height: number,
-  maxWidth = MP4_MAX_WIDTH,
-  maxHeight = MP4_MAX_HEIGHT,
+  maxWidth: number = MP4_MAX_WIDTH,
+  maxHeight: number = MP4_MAX_HEIGHT,
 ): { width: number; height: number } {
   const scale = Math.min(1, maxWidth / width, maxHeight / height);
   const even = (value: number) => Math.max(2, Math.round((value * scale) / 2) * 2);
   return { width: even(width), height: even(height) };
 }
 
-/** The target bitrate: 9 Mbit/s for 1080p30, scaled a little under
- * linearly with the pixel count (a bigger picture needs fewer bits per
- * pixel) and with the frame rate (consecutive frames resemble each other
- * more), between what still looks clean and what a chat will take. */
+/** The target bitrate: 14 Mbit/s for 1080p30 — a map is fine lines and
+ * hard edges, which blur before a camera picture would at the 9 Mbit/s a
+ * chat upload aims for — scaled a little under linearly with the pixel
+ * count (a bigger picture needs fewer bits per pixel) and with the frame
+ * rate (consecutive frames resemble each other more), under a 4K ceiling. */
 export function mp4Bitrate(width: number, height: number, fps: number): number {
   const pixels = (width * height) / (1920 * 1080);
-  const bitrate = 9e6 * pixels ** 0.9 * (fps / 30) ** 0.6;
-  return Math.round(Math.min(45e6, Math.max(1.5e6, bitrate)));
+  const bitrate = 14e6 * pixels ** 0.9 * (fps / 30) ** 0.6;
+  return Math.round(Math.min(60e6, Math.max(2e6, bitrate)));
 }
 
 /** The pictures to take, on the file's clock: each data frame covers the
@@ -101,7 +145,7 @@ export function mp4Schedule(holdsMs: readonly number[], fps = MP4_FPS): Mp4Step[
 export function mp4CodecCandidates(width: number, height: number, fps = MP4_FPS): VideoEncoderConfig[] {
   const bitrate = mp4Bitrate(width, height, fps);
   const candidates: VideoEncoderConfig[] = [];
-  for (const codec of MP4_CODECS) {
+  for (const codec of mp4Codecs(width, height)) {
     for (const hardwareAcceleration of MP4_ACCELERATION) {
       candidates.push({
         codec,
@@ -157,7 +201,8 @@ export async function exportMp4(
   signal: AbortSignal,
 ): Promise<Blob> {
   const source = host.map.getCanvas();
-  const size = mp4Size(source.width, source.height);
+  const rung = mp4SizeRung(host.mp4Size?.(), source.width, source.height);
+  const size = mp4Size(source.width, source.height, rung.width, rung.height);
   const config = await mp4EncoderConfig(size.width, size.height, MP4_FPS);
   if (!config) throw new Error("no H.264 encoder configuration is supported");
   const target = await prepareCapture(host, size, "MP4");

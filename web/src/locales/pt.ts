@@ -176,6 +176,7 @@ export const pt: Record<MessageKey, string> = {
   gifExportAria: "Salvar a animação como GIF",
   gifCancelAria: "Cancelar o GIF",
   mp4ExportAria: "Salvar a animação como vídeo MP4",
+  mp4SizeAria: "Tamanho do vídeo",
   mp4CancelAria: "Cancelar o MP4",
   readingManifest: "A carregar o manifesto",
   forecastHourAria: "Hora de previsão",

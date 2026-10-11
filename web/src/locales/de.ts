@@ -176,6 +176,7 @@ export const de: Record<MessageKey, string> = {
   gifExportAria: "Schleife als GIF speichern",
   gifCancelAria: "GIF abbrechen",
   mp4ExportAria: "Schleife als MP4-Video speichern",
+  mp4SizeAria: "Videogröße",
   mp4CancelAria: "MP4 abbrechen",
   readingManifest: "Manifest wird geladen",
   forecastHourAria: "Vorhersagestunde",

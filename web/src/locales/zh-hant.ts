@@ -173,6 +173,7 @@ export const zhHant: Record<MessageKey, string> = {
   gifExportAria: "將動畫存成 GIF",
   gifCancelAria: "取消 GIF",
   mp4ExportAria: "將動畫存成 MP4 影片",
+  mp4SizeAria: "影片解析度",
   mp4CancelAria: "取消 MP4",
   readingManifest: "正在讀取清單",
   forecastHourAria: "預報時次",

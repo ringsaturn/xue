@@ -176,6 +176,7 @@ export const fr: Record<MessageKey, string> = {
   gifExportAria: "Enregistrer l’animation en GIF",
   gifCancelAria: "Annuler le GIF",
   mp4ExportAria: "Enregistrer l’animation en vidéo MP4",
+  mp4SizeAria: "Taille de la vidéo",
   mp4CancelAria: "Annuler le MP4",
   readingManifest: "Chargement du manifeste",
   forecastHourAria: "Échéance de prévision",

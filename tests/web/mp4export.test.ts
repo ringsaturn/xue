@@ -11,27 +11,33 @@ import {
   mp4FileName,
   mp4Schedule,
   mp4Size,
+  mp4SizeChoices,
+  mp4SizeRung,
+  nextMp4Size,
+  parseStoredMp4Size,
+  mp4Codecs,
+  MP4_CODECS_LARGE,
 } from "../../web/src/mp4export";
 
 describe("mp4Bitrate", () => {
   it("is 9 Mbit/s at 1080p30", () => {
-    expect(mp4Bitrate(1920, 1080, 30)).toBe(9_000_000);
+    expect(mp4Bitrate(1920, 1080, 30)).toBe(14_000_000);
   });
 
   it("scales a little under linearly with the pixel count", () => {
     const quarter = mp4Bitrate(960, 540, 30);
-    expect(quarter).toBeGreaterThan(9e6 / 4);
-    expect(quarter).toBeLessThan(9e6 / 2);
-    expect(quarter).toBe(Math.round(9e6 * 0.25 ** 0.9));
+    expect(quarter).toBeGreaterThan(14e6 / 4);
+    expect(quarter).toBeLessThan(14e6 / 2);
+    expect(quarter).toBe(Math.round(14e6 * 0.25 ** 0.9));
   });
 
   it("scales with the frame rate", () => {
-    expect(mp4Bitrate(1920, 1080, 12)).toBe(Math.round(9e6 * (12 / 30) ** 0.6));
+    expect(mp4Bitrate(1920, 1080, 12)).toBe(Math.round(14e6 * (12 / 30) ** 0.6));
   });
 
   it("is clamped at both ends", () => {
-    expect(mp4Bitrate(64, 64, 30)).toBe(1_500_000);
-    expect(mp4Bitrate(7680, 4320, 60)).toBe(45_000_000);
+    expect(mp4Bitrate(64, 64, 30)).toBe(2_000_000);
+    expect(mp4Bitrate(7680, 4320, 60)).toBe(60_000_000);
   });
 });
 
@@ -173,5 +179,41 @@ describe("support detection", () => {
     expect(await mp4EncoderConfig(1280, 720)).toBeNull();
     // The probe is cached for the page's life, so it is read once here.
     expect(await isMp4ExportSupported()).toBe(false);
+  });
+});
+
+describe("mp4 size rungs", () => {
+  it("offers a larger rung once the canvas reaches it on either side", () => {
+    expect(mp4SizeChoices(1280, 720).map((rung) => rung.id)).toEqual(["1080p"]);
+    expect(mp4SizeChoices(3248, 1986).map((rung) => rung.id)).toEqual(["1080p", "1440p"]);
+    expect(mp4SizeChoices(1080, 2340).map((rung) => rung.id)).toEqual(["1080p", "1440p", "2160p"]);
+    expect(mp4SizeChoices(3840, 2160).map((rung) => rung.id)).toEqual(["1080p", "1440p", "2160p"]);
+  });
+
+  it("cycles the choices and starts over past the last or an unoffered one", () => {
+    const choices = mp4SizeChoices(3248, 1986);
+    expect(nextMp4Size("1080p", choices)).toBe("1440p");
+    expect(nextMp4Size("1440p", choices)).toBe("1080p");
+    expect(nextMp4Size("2160p", choices)).toBe("1080p");
+  });
+
+  it("cuts at the chosen rung while the canvas offers it, else the largest it does", () => {
+    expect(mp4SizeRung("1440p", 3248, 1986).id).toBe("1440p");
+    expect(mp4SizeRung("2160p", 3248, 1986).id).toBe("1440p");
+    expect(mp4SizeRung(undefined, 3248, 1986).id).toBe("1440p");
+    expect(mp4SizeRung("1440p", 1280, 720).id).toBe("1080p");
+    expect(mp4Size(3248, 1986, 2560, 1440)).toEqual({ width: 2356, height: 1440 });
+  });
+
+  it("reads a stored choice and nothing else", () => {
+    expect(parseStoredMp4Size("1440p")).toBe("1440p");
+    expect(parseStoredMp4Size("720p")).toBeNull();
+    expect(parseStoredMp4Size(null)).toBeNull();
+  });
+
+  it("asks for level 5.1 past 1080p", () => {
+    expect(mp4Codecs(1920, 1080)).toEqual(MP4_CODECS);
+    expect(mp4Codecs(2354, 1440)).toEqual(MP4_CODECS_LARGE);
+    expect(mp4CodecCandidates(2354, 1440, 30)[0]?.codec).toBe("avc1.640033");
   });
 });

@@ -307,7 +307,18 @@ import {
   type GifHost,
   type GifProgress,
 } from "./gifexport";
-import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileName } from "./mp4export";
+import {
+  deliverMp4,
+  exportMp4,
+  isMp4ExportSupported,
+  MP4_DEFAULT_SIZE,
+  MP4_MAX_FRAMES,
+  mp4FileName,
+  mp4SizeChoices,
+  type Mp4SizeId,
+  nextMp4Size,
+  parseStoredMp4Size,
+} from "./mp4export";
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 
@@ -348,6 +359,7 @@ let currentHoldMs = frameIntervalMs;
  * per-dataset default, here and on later visits. */
 let playbackFpsChosen = false;
 const PLAYBACK_FPS_KEY = "xue-playback-fps";
+const MP4_SIZE_KEY = "xue-mp4-size";
 /** Pre-manifest placeholder frame count: the GFS 240-hour axis
  * (121 hourly frames, then 40 three-hourly). */
 const FRAME_COUNT = 161;
@@ -1138,6 +1150,8 @@ const gifButton = required<HTMLButtonElement>("gif-button");
 const gifLabel = required<HTMLElement>("gif-label");
 const mp4Button = required<HTMLButtonElement>("mp4-button");
 const mp4Label = required<HTMLElement>("mp4-label");
+const mp4SizeButton = required<HTMLButtonElement>("mp4-size-button");
+const mp4SizeLabel = required<HTMLElement>("mp4-size-label");
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 const volumeTile = required<HTMLButtonElement>("volume-tile");
 const speedLabel = required<HTMLElement>("speed-label");
@@ -3838,7 +3852,22 @@ const gifHost: GifHost = {
   }),
   credit: gifCredit,
   holdMs: frameHoldMs,
+  mp4Size: () => mp4SizeChoice,
 };
+
+/** The rung the MP4 is cut to; the pill cycles what the canvas offers. */
+let mp4SizeChoice: Mp4SizeId = MP4_DEFAULT_SIZE;
+
+function setMp4Size(size: Mp4SizeId, remember: boolean): void {
+  mp4SizeChoice = size;
+  mp4SizeLabel.textContent = mp4SizeChoices(map.getCanvas().width, map.getCanvas().height).find((rung) => rung.id === size)?.label ?? size;
+  if (!remember) return;
+  try {
+    localStorage.setItem(MP4_SIZE_KEY, size);
+  } catch {
+    // Preference just won't persist.
+  }
+}
 
 /** The notices the credit line shows for the data on screen, then the
  * basemap's, after the site's address. Which notices are on is the
@@ -3910,6 +3939,7 @@ function setExportState(kind: LoopExportKind, running: boolean): void {
 function setLoopExportEnabled(enabled: boolean): void {
   gifButton.disabled = !enabled;
   mp4Button.disabled = !enabled;
+  mp4SizeButton.disabled = !enabled;
 }
 
 /** Capture the loop from the frame on screen and hand the file over, then
@@ -9350,7 +9380,20 @@ mp4Button.addEventListener("click", () => void saveLoop(LOOP_EXPORTS.mp4));
 // The pill appears only where the browser can encode H.264 itself.
 void isMp4ExportSupported().then((supported) => {
   mp4Button.hidden = !supported;
+  mp4SizeButton.hidden = !supported;
 });
+mp4SizeButton.addEventListener("click", () => {
+  const canvas = map.getCanvas();
+  setMp4Size(nextMp4Size(mp4SizeChoice, mp4SizeChoices(canvas.width, canvas.height)), true);
+});
+// The rung sticks across visits like the playback rate; the label reads the
+// one the canvas offers.
+try {
+  setMp4Size(parseStoredMp4Size(localStorage.getItem(MP4_SIZE_KEY)) ?? MP4_DEFAULT_SIZE, false);
+} catch {
+  setMp4Size(MP4_DEFAULT_SIZE, false);
+}
+window.addEventListener("resize", () => setMp4Size(mp4SizeChoice, false));
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
