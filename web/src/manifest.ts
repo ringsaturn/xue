@@ -254,7 +254,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [80.7, -60, 200.7, 60],
     subLongitude: 140.7,
     cadenceSeconds: 600,
@@ -275,7 +275,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [-135.2, -60, -15.2, 60],
     subLongitude: 284.8,
     cadenceSeconds: 600,
@@ -288,7 +288,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [163, -60, 283, 60],
     subLongitude: 223,
     cadenceSeconds: 600,
@@ -305,7 +305,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     observation: true,
     coreBundles: ["ir104"],
     defaultVariable: "ir104",
-    railCore: ["ir104", "dustrgb", "dustcf", "zhouye"],
+    railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [-180, -60, 180, 60],
     mosaic: true,
     members: ["meteosat", "himawari", "goeswest", "goeseast"],
@@ -459,8 +459,9 @@ type VectorBundleId = "wind10m" | "wind80m" | "wind100m" | `wind${IsobaricLevel}
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
- * draws straight as red, green and blue (the classic Dust RGB). */
-type CompositeBundleId = "dustrgb";
+ * draws straight as red, green and blue (the classic Dust RGB; the true
+ * colour picture from the visible bands). */
+type CompositeBundleId = "dustrgb" | "truecolor";
 
 /** A bundle-level id in a manifest.
  *
@@ -544,13 +545,16 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
  * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
  * file's `band` block says which), the Dust RGB composite a producer
  * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`),
- * and the two dust confidences the same producer derives from five
+ * the two dust confidences the same producer derives from five
  * (`dustcf`, the DEBRA factor, and `zhouye`, the same chain held to the
  * day's level through the night: each one scalar in 0–1, painted with a
- * ramp like a channel, not a composite) — held to the encoders by
+ * ramp like a channel, not a composite), and the true colour picture the
+ * encoder composes from the visible bands (`truecolor`, the other
+ * `CompositeBundleId`; the ten-minute disks publish it, Meteosat's hourly
+ * cycle does not) — held to the encoders by
  * `tests/fixtures/satellite-registry.json`. */
 type SatelliteId = "ir104" | CompositeBundleId | "dustcf" | "zhouye";
-export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf", "zhouye"];
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"];
 
 /** The aerosol set — the aerosol optical depth at 550 nm, for the whole
  * column and for each of five species, and the surface particulate matter
@@ -587,8 +591,9 @@ type VectorComponentId =
   | "vwave";
 
 /** The component variables a composite bundle carries: the three guns of
- * the Dust RGB, in the order the renderer draws them. */
-type CompositeComponentId = "dustr" | "dustg" | "dustb";
+ * the Dust RGB and of the true colour picture, in the order the renderer
+ * draws them. */
+type CompositeComponentId = "dustr" | "dustg" | "dustb" | "truer" | "trueg" | "trueb";
 
 /** Data-level variable ids that can appear inside bundle metadata. A plain
  * string for the same reason `ForecastBundleId` is: a file names its own
@@ -678,10 +683,11 @@ export function vectorComponents(id: ForecastBundleId): readonly [VectorComponen
 }
 
 /** The three guns of every composite bundle, red, green, blue — the order
- * the encoders number them (1, 2, 3) and the renderer's RGB texture takes
- * them in. */
+ * the encoders number them (1, 2, 3; 7, 8, 9) and the renderer's RGB
+ * texture takes them in. */
 export const COMPOSITE_BUNDLES: Record<CompositeBundleId, readonly [CompositeComponentId, CompositeComponentId, CompositeComponentId]> = {
   dustrgb: ["dustr", "dustg", "dustb"],
+  truecolor: ["truer", "trueg", "trueb"],
 };
 
 /** True when a bundle *named* by the convention carries three colour guns

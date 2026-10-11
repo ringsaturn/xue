@@ -116,7 +116,13 @@ Facts worth getting right:
   confidence (`zhouye`: the same chain made diurnally consistent by the
   same package — by day the DEBRA field, at night dust reads at the
   day's level instead of fading; a second product beside `dustcf`, not a
-  replacement, on the same 0–1 scale with the same no-data code), one
+  replacement, on the same 0–1 scale with the same no-data code), and
+  the true colour composite (`truecolor`: three guns in 0–1 from the
+  0.47, 0.51, 0.64 and 0.86 µm reflectances — each divided by the cosine
+  of the solar zenith, the green blended with a little near-infrared,
+  one fixed brightness curve, no Rayleigh correction, the encoder's own
+  recipe stamped as producer `xue`; the sunlit disk as seen from orbit,
+  no data on the night side), one
   full-disk scan every ten minutes,
   reprojected from the geostationary view onto a 0.04° latitude/longitude
   grid over the useful disk (3000 × 3000, 80.7°E–200.7°E — past the
@@ -220,8 +226,10 @@ Facts worth getting right:
   mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
-  `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent;
-  GOES-EAST and GOES-WEST the same four, METEOSAT the first two). AURORA:
+  `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent) and
+  `truecolor` (the true colour picture's red, green and blue guns, 0–1,
+  a composite with no physical unit, no data after dark; GOES-EAST and
+  GOES-WEST the same five, METEOSAT the first two). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
@@ -305,7 +313,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   particles; `waveheight` for the scalar `htsgw`, `waveperiod` for
   `perpw`), the Himawari `infrared` (`ir104`; `ir`, `satellite` and `sat`
   are accepted spellings), `dustrgb` (`dust`), `debra` (`dustcf`,
-  `dustconfidence`) and `zhouye` (`zhouyecf`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
+  `dustconfidence`), `zhouye` (`zhouyecf`) and `truecolor` (`visible`,
+  `rgb`, `color`, `colour`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
   `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
   `pm10` and `pm10dust`, or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
