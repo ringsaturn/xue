@@ -40,10 +40,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # The reference encoder shells out to GDAL. ffmpeg is what makes
-      # tests/test_native.py compare real H.264
-      # companions instead of skipping them on both sides, and eccodes'
-      # bufr_dump is what lets tests/test_tc.py build the tropical cyclone
-      # product from its BUFR fixtures instead of skipping the golden.
+      # tests/test_native.py compare real H.264 companions instead of
+      # skipping them on both sides, and eccodes' bufr_dump is what lets
+      # tests/test_tc.py build the tropical cyclone product from its BUFR
+      # fixtures instead of skipping the golden.
       - name: Install GDAL, ffmpeg and eccodes
         run: |
           sudo apt-get update
