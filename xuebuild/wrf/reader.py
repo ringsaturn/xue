@@ -19,7 +19,7 @@ INSTALL_HINT = "install the wrf group (uv sync --group wrf)"
 #: The fields one output time is read for. ``Times`` is the valid time.
 FIELDS = (
     "T2", "Q2", "PSFC", "U10", "V10", "TSK", "HGT", "PBLH", "SWDOWN",
-    "RAINNC", "RAINC", "RAINSH", "PH", "PHB", "U", "V", "CLDFRA",
+    "RAINNC", "RAINC", "RAINSH", "PH", "PHB", "U", "V", "CLDFRA", "QCLOUD",
     "COSALPHA", "SINALPHA", "XLAT", "XLONG",
 )  # fmt: skip
 
