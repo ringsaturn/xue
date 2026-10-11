@@ -738,12 +738,12 @@ describe("dataset kinds", () => {
       expect(isNowcastModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the nine observation windows among them", () => {
+  it("lists the live feeds, the ten observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the nine observation windows are the
+    // SourceSpec.latest_filename); the ten observation windows are the
     // last of the switch order, and the mosaic — a view over the imagers
     // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -777,6 +777,7 @@ describe("dataset kinds", () => {
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
     expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
     expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
+    expect(FORECAST_MODELS.himawarijp.latestFilename).toBe("latest-himawarijp.json");
     expect(FORECAST_MODELS.goeseast.latestFilename).toBe("latest-goeseast.json");
     expect(FORECAST_MODELS.goeswest.latestFilename).toBe("latest-goeswest.json");
     expect(FORECAST_MODELS.meteosat.latestFilename).toBe("latest-meteosat.json");
@@ -799,6 +800,30 @@ describe("dataset kinds", () => {
       region: [-60, -60, 60, 60],
     });
     expect(isObservationModel("meteosat")).toBe(true);
+  });
+
+  it("opens the Himawari Japan box on a plain box, outside the mosaic", () => {
+    // Mirrors the `himawarijp` entry of SOURCES: the himawari imager on
+    // 24–46°N, 122–148°E at 0.01°, the window and two composites but no
+    // dust confidence. A latitude/longitude box needs no projected
+    // footprint to clip to, and the mosaic's longitude bands leave a nested
+    // box out.
+    expect(FORECAST_MODELS.himawarijp).toMatchObject({
+      id: "himawarijp",
+      label: "HIMAWARI-JP",
+      product: "ahi-japan-0p01",
+      observation: true,
+      coreBundles: ["ir104"],
+      defaultVariable: "ir104",
+      railCore: ["ir104", "dustrgb", "truecolor"],
+      region: [122, 24, 148, 46],
+      subLongitude: FORECAST_MODELS.himawari.subLongitude,
+      cadenceSeconds: 600,
+    });
+    expect(FORECAST_MODELS.himawarijp.domain).toBeUndefined();
+    expect(isObservationModel("himawarijp")).toBe(true);
+    expect(isNowcastModel("himawarijp")).toBe(false);
+    expect(FORECAST_MODELS.geo.members).not.toContain("himawarijp");
   });
 
   it("opens the SWPC aurora probability on its own 1° grid", () => {
