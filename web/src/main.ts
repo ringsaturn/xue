@@ -9287,6 +9287,19 @@ function syncDerivedLegend(): void {
   legendDerived.hidden = legendInflow.hidden && legendFront.hidden && DERIVED_FIRE_IDS.every((id) => legendFire[id].hidden);
 }
 
+/** The top soil layer's moisture, read as a land mask by the fire weather
+ * layers where the run ships it (firewx.ts): fuel burns on land, and the
+ * sea's winds alone would paint the oceans. Only land and water matter, so
+ * its first frame stands for every lead. */
+const FIRE_LAND_MASK: ForecastBundleId = "soilw1";
+
+/** Every input a fire layer reads on a run: its own, and the land mask
+ * for the fire weather layers where the run ships one. */
+function fireInputs(run: ForecastManifest, id: DerivedFireId): readonly ForecastBundleId[] {
+  const inputs = FIRE_DERIVED_INPUTS[id];
+  return id !== "hotspot" && hasBundle(run, FIRE_LAND_MASK) ? [...inputs, FIRE_LAND_MASK] : inputs;
+}
+
 /** Whether a run ships every input of a fire layer. */
 function fireInputsPublished(run: ForecastManifest, id: DerivedFireId): boolean {
   return FIRE_DERIVED_INPUTS[id].every((input) => hasBundle(run, input));
@@ -9398,9 +9411,18 @@ function resetComposite(): void {
   }
 }
 
+/** An input session's frame for a lead: the first frame of the fire
+ * layers' land mask, or of a static axis, stands for every lead; any other
+ * input reads the lead's own. */
+function inputOffsetForLead(session: VariableSession, lead: number): number | null {
+  const time = session.metadata.time;
+  if (time.frameCount === 1 || session.id === FIRE_LAND_MASK) return frameOffsets(time)[0]!;
+  return sessionOffsetForLead(session, lead);
+}
+
 /** Ask an input session for its whole planes at a primary frame. */
 function requestCompositeDecode(session: VariableSession, index: number): void {
-  const offset = sessionOffsetForLead(session, frameLeadSeconds(index));
+  const offset = inputOffsetForLead(session, frameLeadSeconds(index));
   if (offset === null) return;
   for (const variable of session.variables) {
     const key = cacheKey(session, variable, offset);
@@ -9418,7 +9440,7 @@ function compositeInputPlanes(
   lead: number,
   wanted: Set<string>,
 ): { keys: string[]; frames: DecodedFrame[] } | null {
-  const offset = sessionOffsetForLead(session, lead);
+  const offset = inputOffsetForLead(session, lead);
   if (offset === null) return null;
   const keys = session.variables.map((variable) => cacheKey(session, variable, offset));
   const frames: DecodedFrame[] = [];
@@ -9591,7 +9613,7 @@ function applyFireDerived(): void {
   const sequence = initializeSequence;
   const wanted = new Set<ForecastBundleId>();
   for (const id of DERIVED_FIRE_IDS) {
-    if (view.derived[id] && fireInputsPublished(manifest, id)) for (const input of FIRE_DERIVED_INPUTS[id]) wanted.add(input);
+    if (view.derived[id] && fireInputsPublished(manifest, id)) for (const input of fireInputs(manifest, id)) wanted.add(input);
   }
   for (const id of wanted) {
     if (fireDerived.inputs.has(id)) continue;
@@ -9631,13 +9653,14 @@ function resetFireDerived(): void {
  * whatever input planes are decoded: a layer whose inputs are not all
  * there yet keeps its last plane up, the way an overlay does. */
 function trySelectFireDerived(index: number): void {
-  if (!layersAdded || fireDerived.inputs.size === 0) return;
+  const run = manifest;
+  if (!layersAdded || !run || fireDerived.inputs.size === 0) return;
   const lead = frameLeadSeconds(index);
   const planes = new Map<ForecastBundleId, { session: VariableSession; keys: string[]; frames: DecodedFrame[] }>();
   const shownKeys: string[] = [];
   for (const id of DERIVED_FIRE_IDS) {
     if (!view.derived[id]) continue;
-    for (const input of FIRE_DERIVED_INPUTS[id]) {
+    for (const input of fireInputs(run, id)) {
       if (planes.has(input)) continue;
       const session = fireDerived.inputs.get(input);
       const read = session ? compositeInputPlanes(session, lead, fireDerived.wantedKeys) : null;
@@ -9654,7 +9677,8 @@ function trySelectFireDerived(index: number): void {
     return read ? { grid: geoGrid(read.session.metadata), variable: read.session.variable, plane: read.frames[0]!.plane } : null;
   };
   const builtFrom = (ids: readonly ForecastBundleId[]) => ids.flatMap((input) => planes.get(input)!.keys).join("|");
-  const ready = (id: DerivedFireId) => view.derived[id] && FIRE_DERIVED_INPUTS[id].every((input) => planes.has(input));
+  const ready = (id: DerivedFireId) => view.derived[id] && fireInputs(run, id).every((input) => planes.has(input));
+  const land = scalar(FIRE_LAND_MASK);
 
   if (ready("hotspot")) {
     const shortwave = scalar("ir039")!;
@@ -9670,14 +9694,19 @@ function trySelectFireDerived(index: number): void {
     if (u && v && wind.frames.length >= 2) {
       const temperature = scalar("tmp2m")!;
       const dewPoint = scalar("dpt2m")!;
-      showDerived(fireDerived.layers.ffwi, planes.get("tmp2m")!.session, builtFrom(FIRE_DERIVED_INPUTS.ffwi), () =>
-        fosbergPlane(temperature, dewPoint, {
-          grid: geoGrid(wind.session.metadata),
-          u,
-          v,
-          uPlane: wind.frames[0]!.plane,
-          vPlane: wind.frames[1]!.plane,
-        }),
+      showDerived(fireDerived.layers.ffwi, planes.get("tmp2m")!.session, builtFrom(fireInputs(run, "ffwi")), () =>
+        fosbergPlane(
+          temperature,
+          dewPoint,
+          {
+            grid: geoGrid(wind.session.metadata),
+            u,
+            v,
+            uPlane: wind.frames[0]!.plane,
+            vPlane: wind.frames[1]!.plane,
+          },
+          land,
+        ),
       );
     }
   }
@@ -9685,8 +9714,8 @@ function trySelectFireDerived(index: number): void {
     const temperature = scalar("tmp2m")!;
     const dewPoint = scalar("dpt2m")!;
     const gust = scalar("gust")!;
-    showDerived(fireDerived.layers.fwalert, planes.get("tmp2m")!.session, builtFrom(FIRE_DERIVED_INPUTS.fwalert), () =>
-      fireWeatherAlert(temperature, dewPoint, gust),
+    showDerived(fireDerived.layers.fwalert, planes.get("tmp2m")!.session, builtFrom(fireInputs(run, "fwalert")), () =>
+      fireWeatherAlert(temperature, dewPoint, gust, land),
     );
   }
 }
