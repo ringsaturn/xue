@@ -24,8 +24,13 @@ The operation order is part of the output and fixed:
    accumulated in axis order. ``precip`` = the area-weighted daily total,
    ``dry_frac`` = the weight of the cells whose daily total is below 1 mm.
 4. ``gdd`` = ``max(0, min(t2m_mean, 30) − 10)`` from the unrounded mean.
-5. Every value is rounded once, at the end, to 0.01 (Python ``round``,
-   negative zero written as zero).
+5. Soil, per layer and day (:func:`daily_soil`): each frame's
+   area-weighted mean over the cells that hold a value, the weights
+   renormalised over them; ``None`` for a frame whose valued cells carry
+   less than :data:`SOIL_MIN_WEIGHT` of the region. The day's value is the
+   plain mean of its frames' means, ``None`` when it has none.
+6. Every value is rounded once, at the end, to 0.01 (Python ``round``,
+   negative zero written as zero); volumetric soil water to 0.001.
 
 ``complete`` is true when the day is wholly inside the run and every frame
 the source's axis places in it is present: the run starts at or before the
@@ -36,7 +41,7 @@ every expected precipitation frame in ``(start, close]`` is there, where
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -49,7 +54,17 @@ HOT35 = 35.0
 DRY_MM = 1.0
 GDD_BASE = 10.0
 GDD_CAP = 30.0
-SUMMARY_DAYS = 14
+SUMMARY_DAYS = 7
+"""Every source reaches seven complete days, so summaries compare across
+sources; a reader wanting a longer total sums the days."""
+SOIL_LAYERS = (1, 2, 3, 4)
+SOIL_TEMPERATURE_FIELDS = tuple(f"tsoil{layer}" for layer in SOIL_LAYERS)
+SOIL_WATER_FIELDS = tuple(f"soilw{layer}" for layer in SOIL_LAYERS)
+SOIL_FIELDS = (*SOIL_TEMPERATURE_FIELDS, *SOIL_WATER_FIELDS)
+"""The day's soil fields; the field id is the bundle id it is read from."""
+SOIL_MIN_WEIGHT = 0.5
+SOIL_TEMPERATURE_FLOOR = -60.0
+"""Below this a soil temperature is the codebook's "no soil" code (−61 °C)."""
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
@@ -71,6 +86,10 @@ class Series:
 
 def round2(value: float) -> float:
     return round(float(value), 2) + 0.0
+
+
+def round3(value: float) -> float:
+    return round(float(value), 3) + 0.0
 
 
 def _epoch_seconds(moment: datetime) -> int:
@@ -128,11 +147,14 @@ def daily_features(
     weights: np.ndarray,
     utc_offset_hours: int,
     expected_offsets_seconds: Sequence[int] | None = None,
+    soil: Mapping[str, Series | None] | None = None,
 ) -> list[dict[str, Any]]:
     """The §4.1 daily objects of one region, in date order. ``weights`` is
     the region's window of weights (summing to 1). ``expected_offsets_seconds``
     is the axis the source publishes for this run; None takes the
-    temperature axis as given (no gap is then detectable)."""
+    temperature axis as given (no gap is then detectable). ``soil`` maps a
+    soil field to its series, NaN where the store has no value; a field
+    that is absent or None is written as None on every day."""
     if temperature.values.shape[1:] != weights.shape or precipitation.values.shape[1:] != weights.shape:
         raise ValueError("every field must be the shape of the weights window")
     if temperature.run_time != precipitation.run_time:
@@ -164,6 +186,11 @@ def daily_features(
                 total = precipitation_by_day[day] = np.zeros(weights.shape, dtype=np.float64)
             total += rate * (overlap / 3600.0)
 
+    soil_by_field = {
+        field: daily_soil(series, weights, utc_offset_hours) if series is not None else {}
+        for field, series in (soil or {}).items()
+    }
+
     days: list[dict[str, Any]] = []
     for day in sorted(frames_by_day):
         indices = frames_by_day[day]
@@ -192,12 +219,77 @@ def daily_features(
                 "hot30_frac": round2(_weight_where(weights, cell_max > HOT30)),
                 "hot35_frac": round2(_weight_where(weights, cell_max > HOT35)),
                 "gdd": round2(max(0.0, min(mean, GDD_CAP) - GDD_BASE)),
+                **{field: _round_soil(field, soil_by_field.get(field, {}).get(day)) for field in SOIL_FIELDS},
                 "complete": _complete(
                     start - run_start, end - run_start, expected, temperature_offsets, precipitation_offsets
                 ),
             }
         )
     return days
+
+
+def mask_soil(values: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Soil fields with every cell that is not soil set to NaN. The stores
+    write "no soil" as the codebook's bottom code (−0.01 m³/m³, −61 °C)
+    where a record is masked; IFS masks nothing and holds 0 m³/m³ over the
+    sea. So water at or below 0 is not soil, a temperature at the bottom
+    code is not soil, and a layer's temperature is taken only where its
+    water is soil (GFS and AIFS leave sea ice and the sea unmasked in the
+    temperature)."""
+    out: dict[str, np.ndarray] = {}
+    for layer in SOIL_LAYERS:
+        water = values.get(f"soilw{layer}")
+        if water is not None:
+            water = np.where(water > 0.0, water, np.nan)
+            out[f"soilw{layer}"] = water
+        temperature = values.get(f"tsoil{layer}")
+        if temperature is not None:
+            keep = temperature > SOIL_TEMPERATURE_FLOOR
+            if water is not None:
+                keep &= ~np.isnan(water)
+            out[f"tsoil{layer}"] = np.where(keep, temperature, np.nan)
+    return out
+
+
+def _round_soil(field: str, value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round3(value) if field in SOIL_WATER_FIELDS else round2(value)
+
+
+def _valued_mean(weights: np.ndarray, field: np.ndarray) -> float | None:
+    valued = ~np.isnan(field)
+    total = float(np.sum(np.where(valued, weights, 0.0)))
+    if total < SOIL_MIN_WEIGHT:
+        return None
+    return float(np.sum(weights * np.where(valued, field, 0.0))) / total
+
+
+def daily_soil(series: Series, weights: np.ndarray, utc_offset_hours: int) -> dict[int, float | None]:
+    """One soil field's daily values by local day (days since 1970-01-01),
+    unrounded: see the module docstring, step 5."""
+    if series.values.shape[1:] != weights.shape:
+        raise ValueError("every field must be the shape of the weights window")
+    run_start = _epoch_seconds(series.run_time)
+    means_by_day: dict[int, list[float]] = {}
+    seen: set[int] = set()
+    for index, offset in enumerate(series.offsets_seconds):
+        day = _local_day(run_start + offset, utc_offset_hours)
+        seen.add(day)
+        value = _valued_mean(weights, series.values[index])
+        if value is not None:
+            means_by_day.setdefault(day, []).append(value)
+    out: dict[int, float | None] = {}
+    for day in sorted(seen):
+        means = means_by_day.get(day)
+        if not means:
+            out[day] = None
+            continue
+        total = 0.0
+        for value in means:
+            total += value
+        out[day] = total / len(means)
+    return out
 
 
 def _complete(
@@ -219,16 +311,20 @@ def _complete(
 def summarize(days: Sequence[dict[str, Any]], limit: int = SUMMARY_DAYS) -> dict[str, Any]:
     """The line's per-region ``summary``: totals over the first ``limit``
     complete days, summed from the rounded daily values so a reader adds up
-    the same numbers."""
+    the same numbers. ``soilw1_change`` is the top layer's water on the
+    last of those days less the first, None unless both have a value."""
     complete = [day for day in days if day["complete"]][:limit]
     precip = gdd = hot35 = 0.0
     for day in complete:
         precip += day["precip"]
         gdd += day["gdd"]
         hot35 += day["hot35_frac"]
+    first = complete[0].get("soilw1") if complete else None
+    last = complete[-1].get("soilw1") if complete else None
     return {
         "days": len(complete),
         "precip_sum": round2(precip),
         "gdd_sum": round2(gdd),
         "hot35_days": round2(hot35),
+        "soilw1_change": round3(last - first) if first is not None and last is not None else None,
     }

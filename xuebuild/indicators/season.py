@@ -1,14 +1,22 @@
-"""In-season totals per region (``docs/indicators.md`` §4.2), from GFS only.
+"""In-season totals per region (``docs/indicators.md`` §4.2), from ECMWF IFS
+only.
 
-Each local day of a season is taken from the newest GFS run that started at
-or before the day began and covers the whole day (its line marks the day
-``complete``): the cycle within six hours before the day opens when it was
-indexed, an older one when a cycle is missing, in which case the day is
+Each local day of a season is taken from the newest ECMWF run that started
+at or before the day began and covers the whole day (its line marks the day
+``complete``): the cycle within twelve hours before the day opens when it
+was indexed, an older one when a cycle is missing, in which case the day is
 ``partial``. That is the first-day forecast standing in for an analysis;
 it uses only what the feature lines already hold, so a season file is
 rebuilt from the lines and the previous season file alone, and rebuilt to
-the same bytes. ECMWF and AIFS do not enter: their 3- and 6-hourly frames
-make a coarser day than GFS's hourly ones, and their runs are not archived.
+the same bytes.
+
+One source, so the totals do not mix models. IFS rather than GFS: over the
+Brazilian cerrado in the dry-to-wet transition GFS runs several degrees
+warmer and drier than IFS, AIFS and the airports' observations on the first
+day already, and the totals would carry that. IFS rather than AIFS: AIFS
+leaves almost no crop area below 1 mm on a wet day, which empties
+``dry_frac`` and the dry spells. IFS HRES as forwarded by Open-Meteo has the
+hourly first day but no soil fields.
 
 A day counts once the newest indexed run is the cycle that should supply
 it or a later one (it started less than six hours before the day, or
@@ -32,12 +40,12 @@ from typing import Any
 from . import calendar
 from .features import DRY_MM, day_start, round2
 from .regions import REGIONS, region
-from .schema import SCHEMA_VERSION, RANGES
+from .schema import RANGES, SCHEMA_VERSION, SOIL_RANGES
 
-SEASON_SOURCE = "gfs"
-IDEAL_LEAD_HOURS = 6
+SEASON_SOURCE = "ecmwf"
+IDEAL_LEAD_HOURS = 12
 """A day supplied by a run that started less than this before it is not
-partial: the four GFS cycles are six hours apart."""
+partial: the two ECMWF cycles Xue publishes are twelve hours apart."""
 
 SeasonKey = tuple[str, str]
 """``(region id, season id)``."""
@@ -51,12 +59,14 @@ def _run_time(run: str) -> datetime:
     return datetime.strptime(run, "%Y%m%d%H").replace(tzinfo=UTC)
 
 
-def _candidates(lines: Iterable[Mapping[str, Any]]) -> tuple[dict[tuple[str, str], dict[str, Any]], str | None]:
+def _candidates(
+    lines: Iterable[Mapping[str, Any]], source: str
+) -> tuple[dict[tuple[str, str], dict[str, Any]], str | None]:
     """The best row per ``(region, date)`` from the lines, and the newest run."""
     best: dict[tuple[str, str], dict[str, Any]] = {}
     newest: str | None = None
     for line in lines:
-        if line.get("source") != SEASON_SOURCE:
+        if line.get("source") != source:
             continue
         run = line["run"]
         newest = run if newest is None or run > newest else newest
@@ -82,6 +92,7 @@ def _candidates(lines: Iterable[Mapping[str, Any]]) -> tuple[dict[tuple[str, str
                     "partial": lead >= IDEAL_LEAD_HOURS,
                     "flowering": calendar.in_window(region_id, local, "flowering"),
                     **{field: day[field] for field in RANGES},
+                    **{field: day.get(field) for field in SOIL_RANGES},
                     "complete": True,
                 }
     return best, newest
@@ -128,12 +139,13 @@ def build_seasons(
     previous: Mapping[SeasonKey, Mapping[str, Any]],
     *,
     weights_version: str,
+    source: str = SEASON_SOURCE,
 ) -> dict[SeasonKey, dict[str, Any]]:
     """Every season file the lines and the previous files support, keyed by
     ``(region, season)``: the previous rows merged with what the lines
     supply (the newer run wins a date), cut to the days the newest run has
     reached."""
-    best, newest = _candidates(lines)
+    best, newest = _candidates(lines, source)
     through = newest
     for payload in previous.values():
         if through is None or payload["throughRun"] > through:
@@ -169,7 +181,7 @@ def build_seasons(
             "schemaVersion": SCHEMA_VERSION,
             "region": region_id,
             "season": season,
-            "source": SEASON_SOURCE,
+            "source": source,
             "calendar": {"version": calendar.VERSION},
             "weights": {"version": weights_version},
             "windows": {"season": crop.season.spelled(), "flowering": crop.flowering.spelled()},

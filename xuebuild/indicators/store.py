@@ -36,7 +36,7 @@ import numpy as np
 
 from .. import binformat, zarrstore, zstdcli
 from ..errors import XueError
-from ..quantize import PrecipitationCodebook, TemperatureCodebook, codebook_from_metadata
+from ..quantize import codebook_from_metadata
 from ..sources import source_spec
 from .schema import IndicatorsError
 
@@ -253,7 +253,8 @@ class StoreArray:
     delta: bool
     index_location: str
     fill_value: int
-    codebook: TemperatureCodebook | PrecipitationCodebook
+    codebook: Any
+    """The variable's codebook (:func:`quantize.codebook_from_metadata`)."""
     _indexes: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
 
 
@@ -499,14 +500,23 @@ def read_values(
     fetch: Fetch = http_fetch,
     *,
     threads: int = FETCH_THREADS,
+    nodata_as_nan: bool = False,
 ) -> dict[str, np.ndarray]:
     """:func:`read_codes` decoded to physical values (float64, in the
-    variable's ``unit``). A nodata code inside a window is an error: the
-    sources these indicators read have no gaps over land."""
+    variable's ``unit``). A nodata code inside a window is an error: 2 m
+    temperature and precipitation have no gaps over land. Soil fields are
+    masked over water and land ice, and a crop cell on the coast can fall
+    on such a model cell, so ``nodata_as_nan`` decodes those codes as NaN."""
     values = {}
     for name, codes in read_codes(array, windows, fetch, threads=threads).items():
+        missing = codes == array.fill_value
+        if nodata_as_nan and missing.any():
+            codes = np.where(missing, np.uint8(0), codes)
         try:
-            values[name] = array.codebook.decode(codes)
+            decoded = array.codebook.decode(codes)
         except XueError as exc:
             raise StoreError(f"{array.url} window {name}: {exc}") from exc
+        if nodata_as_nan:
+            decoded = np.where(missing, np.nan, decoded)
+        values[name] = decoded
     return values

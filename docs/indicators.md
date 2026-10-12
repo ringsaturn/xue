@@ -9,8 +9,8 @@ public stores, exactly as any outside reader does
 ([`zarr-profile.md`](zarr-profile.md), "Reading"), aggregates it over each
 region with fixed weights, and appends one line per run to a static file.
 The product holds physical quantities only: temperatures, precipitation,
-area fractions and degree days. This document is the normative
-description of that product, schema v1.
+soil temperature and water, area fractions and degree days. This document is the normative
+description of that product, schema v2.
 
 ## 1. Delivery
 
@@ -105,15 +105,33 @@ hold over the step that ends at it (`(previous offset, offset]`, the first
 from the run time). GFS's rate is instantaneous and the others' a mean
 over that step; the indicators treat both alike.
 
+Where the run publishes them, the soil bundles `tsoil1`…`tsoil4` (°C) and
+`soilw1`…`soilw4` (m³/m³) are read as well. A layer number is the source's
+own layer, counted from the surface; the depths are the centres', not one
+set:
+
+| source | layers | depths |
+|---|---|---|
+| `gfs` | 1–4 | 0–10, 10–40, 40–100, 100–200 cm (Noah) |
+| `ecmwf` | 1–4 | 0–7, 7–28, 28–100, 100–289 cm (HTESSEL) |
+| `aifs` | 1–2 | 0–7, 7–28 cm |
+| `ifshres` | none | — |
+
+Volumetric soil water is the land model's own state, held to its own
+field capacity and wilting point: the same number is not equally wet in
+two models. Compare a model with itself (a run with the previous one, a
+day with an earlier day), not across sources. A soil field a run does not
+publish is `null` on every day.
+
 A line:
 
 ```json
-{"schemaVersion":1,"source":"gfs","run":"2026100806","runTime":"2026-10-08T06:00:00Z",
+{"schemaVersion":2,"source":"gfs","run":"2026100806","runTime":"2026-10-08T06:00:00Z",
  "manifest":{"path":"gfs.2026100806/manifest.json","crc32":"1a2b3c4d"},
  "weights":{"version":"1","grid":"0p25","crc32":"…"},"calendar":{"version":"1"},
  "horizon_days":10.0,"frame_step_hours":[[120,1],[240,3]],
  "regions":{"us-soy":{"days":[{"date":"2026-10-08","t2m_mean":12.31,…,"complete":true},…],
-                      "summary":{"days":9,"precip_sum":14.2,"gdd_sum":21.07,"hot35_days":0.0}},…}}
+                      "summary":{"days":7,"precip_sum":14.2,"gdd_sum":21.07,"hot35_days":0.0,"soilw1_change":-0.012}},…}}
 ```
 
 | field | meaning |
@@ -140,7 +158,22 @@ reach:
 | `hot30_frac` | 1 | crop-area fraction whose daily highest 2 m temperature is above 30 °C |
 | `hot35_frac` | 1 | crop-area fraction whose daily highest 2 m temperature is above 35 °C |
 | `gdd` | °C d | growing degree days, `max(0, min(t2m_mean, 30) − 10)` |
+| `tsoil1` … `tsoil4` | °C | mean over the day's frames of the area-weighted soil temperature of the source's layer, or `null` |
+| `soilw1` … `soilw4` | m³/m³ | mean over the day's frames of the area-weighted volumetric soil water of the source's layer, or `null` |
 | `complete` | boolean | every frame the source's axis places in the day is present |
+
+The eight soil fields, one row per id for the index's `features`:
+
+| id | layer |
+|---|---|
+| `tsoil1` | soil temperature, layer 1 |
+| `tsoil2` | soil temperature, layer 2 |
+| `tsoil3` | soil temperature, layer 3 |
+| `tsoil4` | soil temperature, layer 4 |
+| `soilw1` | volumetric soil water, layer 1 |
+| `soilw2` | volumetric soil water, layer 2 |
+| `soilw3` | volumetric soil water, layer 3 |
+| `soilw4` | volumetric soil water, layer 4 |
 
 The operation order is part of the output:
 
@@ -156,7 +189,18 @@ The operation order is part of the output:
    in axis order; `precip` is its area-weighted mean and `dry_frac` the
    weight of the cells below 1 mm.
 4. `gdd` comes from the unrounded `t2m_mean` (base 10 °C, cap 30 °C).
-5. Every number is rounded once, at the end, to two decimals.
+5. Soil, per field: a soil frame belongs to its local day as in step 1.
+   A cell is not soil where its water is at or below 0 m³/m³ (the
+   codebook's bottom code, which the stores write where a record is
+   masked, or IFS's 0 over the sea), where its temperature is the bottom
+   code (−61 °C), and, for a temperature, where the same layer's water is
+   not soil. Each frame's area-weighted mean is over the soil cells, the weights
+   renormalised over them; a frame whose valued cells carry less than half
+   the region's weight has no mean. The day's value is the plain mean of
+   its frames' means, `null` when none has one. The soil axis is the
+   bundle's own and does not enter `complete`.
+6. Every number is rounded once, at the end, to two decimals; the soil
+   water fields to three.
 
 `complete` is true when the run starts at or before the day, every
 temperature frame the source's published axis places in `[start, end)` is
@@ -164,26 +208,40 @@ present, and every rate frame it places in `(start, close]` is present,
 where `close` is the first axis offset at or after the day's end. The first
 and last days of a run are usually incomplete; a reader filters on it.
 
-`summary` sums the first 14 complete days: `days` (how many there were),
+`summary` sums the first 7 complete days, which every source reaches, so
+summaries compare across sources: `days` (how many there were),
 `precip_sum`, `gdd_sum` and `hot35_days` (the sum of `hot35_frac`), from
-the rounded daily values.
+the rounded daily values, and `soilw1_change`, the last of those days'
+`soilw1` less the first's (`null` unless both have one).
 
 A line stores raw values only. The change between two runs for the same
 date is the reader's subtraction of two lines.
 
 ### 4.2 In-season totals: `season/<region>.<season>.json`
 
-From GFS only, rewritten whenever a GFS run is added. Each local day of the
-season is taken from the newest GFS run that started at or before the day
-began and has that day `complete`: normally the cycle within six hours
-before it, the first-day forecast standing in for an analysis. When that
+From ECMWF IFS (`ecmwf`) only, rewritten whenever an ECMWF run is added.
+Each local day of the season is taken from the newest ECMWF run that
+started at or before the day began and has that day `complete`: normally
+the cycle within twelve hours before it (Xue publishes the 00 and 12 UTC
+cycles), the first-day forecast standing in for an analysis. When that
 cycle is missing an older one supplies the day and the day is `partial`. A
-day is counted once the newest indexed GFS run is that cycle or a later
+day is counted once the newest indexed ECMWF run is that cycle or a later
 one, and is replaced only by a newer qualifying run.
+
+One source keeps the totals from mixing models. Over the Brazilian cerrado
+in the dry-to-wet transition GFS runs several degrees warmer and drier than
+IFS and AIFS from the first day on, where airport observations side with
+IFS; AIFS leaves almost no crop area below 1 mm on a wet day. IFS shows
+neither, and it publishes all four soil layers. Its first day is three-hourly,
+so `t2m_max` is the warmest of eight frames, not of twenty-four.
+
+A season file of schema 1 (GFS) is not carried on: the first version 2
+build rebuilds each season from the ECMWF lines on hand, which reach back
+to the product's first day.
 
 | field | meaning |
 |---|---|
-| `region`, `season`, `source` | the file's identity; `source` is `gfs` |
+| `region`, `season`, `source` | the file's identity; `source` is `ecmwf` |
 | `calendar`, `weights`, `windows` | versions, and the region's `season` and `flowering` windows as `["MM-DD", "MM-DD"]` |
 | `throughRun` | the newest GFS run the file reflects |
 | `days_counted`, `days_partial` | rows in `daily`, and how many are partial |
@@ -199,7 +257,7 @@ is archived, so it is never backfilled.
 
 | field | meaning |
 |---|---|
-| `schemaVersion` | `1` |
+| `schemaVersion` | `2` |
 | `product` | `indicators` |
 | `note` | a fixed sentence: what the numbers are and that no agency issued them |
 | `attribution` | `{name, data, license}` per upstream (§10), plus `citation` (the form the upstream asks for) and `notice` (a sentence it requires on adaptations) where the upstream's terms call for them |
@@ -224,7 +282,8 @@ departure from CPC's moving 30-year base (`anomaly`, °C).
 fetches: [{fetched, rows, crc32}], rows: [{season, year, total,
 anomaly}]}`. `rows` is the newest table whole, since CPC revises its last
 months; `fetches` records every fetch that changed it, with the CRC-32 of
-the text as served. `xue indicators-context` refreshes it.
+the text as served. `xue indicators-context` refreshes it at the start of
+every publish job; a failed fetch leaves the pulled file in place.
 
 ## 7. Weights: `weights/<grid>.zarr/`
 
@@ -289,6 +348,12 @@ weights as read (float32, little-endian, in axis order).
 - `schemaVersion` is the layout of this document. A field added within it
   is a widening: readers ignore what they do not know, old lines are not
   rewritten.
+- Version 2 added the soil fields and `soilw1_change`, cut `summary` from
+  14 to 7 days and moved the season files from GFS to ECMWF. Lines are
+  never rewritten, so a month file can hold version 1 lines followed by
+  version 2 ones: a reader takes each line's own `schemaVersion` (a
+  version 1 line has no soil fields and a 14-day summary). The index and
+  the season files are rewritten whole, so they are all of one version.
 - `calendar.version` changes with any window; `weights.version` with any
   weight. Every line and season file records the versions it was computed
   under, and lines already written are never recomputed under new ones.
@@ -300,6 +365,7 @@ weights as read (float32, little-endian, in axis order).
 Before anything is written, the index, every line and every season file
 are validated (`xuebuild/indicators/schema.py`): temperatures −60 … 60 °C,
 daily precipitation 0 … 500 mm, fractions 0 … 1, degree days 0 … 20,
+soil temperature −60 … 60 °C and soil water 0 … 1 m³/m³ or `null`,
 `t2m_min ≤ t2m_mean ≤ t2m_max`, `hot35_frac ≤ hot30_frac`, dates
 ascending, the run spans tiling each month file. A line that fails is
 dropped whole and its source reports the error.

@@ -7,8 +7,9 @@
   coarse grid, with one region, ``us-ia``, whose box straddles both a
   data tile corner and an inner chunk corner;
 - ``store/``: a small data root as the bucket lays one out — ``latest.json``
-  naming ``gfs.2026081506/manifest.json``, whose ``tmp2m`` and ``prate``
-  bundles are Zarr stores. The planes are synthetic (a diurnal temperature
+  naming ``gfs.2026081506/manifest.json``, whose ``tmp2m``, ``prate``,
+  ``tsoil1`` and ``soilw1`` bundles are Zarr stores (layers 2 to 4 absent,
+  so their fields are null). The planes are synthetic (a diurnal temperature
   cycle with a south-to-north gradient, a rain band on the second local
   day) on a regional 1° grid, encoded by the same machinery as the web
   fixture (``tests/prepare_web_fixture.py``), so the store is what a real
@@ -102,7 +103,29 @@ def precipitation(hour: int) -> np.ndarray:
     return np.zeros_like(lon)
 
 
-PLANES = {"tmp2m": temperature, "prate": precipitation}
+def soil_temperature(hour: int) -> np.ndarray:
+    """°C: the top layer, damped and lagging the air, with the codebook's
+    "no soil" bottom (−61 °C) on one cell inside the region, as GFS writes
+    a lake."""
+    plane = 0.6 * temperature(max(hour - 2, 0)) + 8.0
+    plane[NO_SOIL_CELL] = -61.0
+    return plane
+
+
+def soil_water(hour: int) -> np.ndarray:
+    """m³/m³: wetter to the east, drying slowly, refilled by the rain band;
+    "no soil" (−0.01) on the same cell."""
+    longitude, latitude = _coordinates()
+    lon, _lat = np.meshgrid(longitude, latitude)
+    plane = 0.25 + 0.01 * (lon + 95.0) - 0.0005 * hour
+    plane += 0.02 * (precipitation(hour) > 0)
+    plane[NO_SOIL_CELL] = -0.01
+    return plane
+
+
+NO_SOIL_CELL = (8, 17)
+"""A cell inside the region's box with a non-zero weight."""
+PLANES = {"tmp2m": temperature, "prate": precipitation, "tsoil1": soil_temperature, "soilw1": soil_water}
 
 
 def region_weights() -> np.ndarray:
@@ -270,6 +293,7 @@ def build_fixture(output_dir: Path, **options: object) -> dict:
             base_url=base_url,
             weights_dir=weights_dir,
             source_grids=SOURCE_GRIDS,
+            season_source="gfs",
             **options,  # type: ignore[arg-type]
         )
 

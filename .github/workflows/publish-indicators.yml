@@ -75,6 +75,11 @@ jobs:
       - name: Fetch the live index and this month's files
         run: make live-indicators-index
 
+      # The ONI moves once a month; CPC being down must not hold back the
+      # day's rows, so a failed fetch keeps the pulled file and warns.
+      - name: Refresh the ONI context
+        run: make -s indicators-context || echo "::warning::ONI refresh failed; context/oni.json is left as pulled"
+
       # Through the Makefile, which is the one place that knows where the
       # weights were pulled to and where the product builds. A build in which
       # every source fails exits red here, before anything is uploaded.

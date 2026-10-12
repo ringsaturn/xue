@@ -20,6 +20,22 @@
         "byteLength": 16025,
         "crc32": "814b0322"
       }
+    },
+    {
+      "variable": "tsoil1",
+      "zarr": {
+        "path": "tsoil1.zarr",
+        "byteLength": 23377,
+        "crc32": "c1f6daee"
+      }
+    },
+    {
+      "variable": "soilw1",
+      "zarr": {
+        "path": "soilw1.zarr",
+        "byteLength": 17651,
+        "crc32": "1ca27ed7"
+      }
     }
   ]
 }

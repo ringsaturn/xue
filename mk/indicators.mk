@@ -18,7 +18,7 @@ INDICATORS_MONTH ?= $(shell date -u +%Y-%m)
 INDICATORS_PREV_MONTH ?= $(shell $(PYTHON) -c "import datetime as d; t = d.datetime.now(d.timezone.utc).date().replace(day=1) - d.timedelta(days=1); print(t.strftime('%Y-%m'))")
 INDICATORS_R2 = $(R2_ROOT)/indicators
 
-.PHONY: indicators-build live-indicators-index pull-r2-indicators-weights upload-r2-indicators upload-r2-indicators-weights
+.PHONY: indicators-build indicators-context live-indicators-index pull-r2-indicators-weights upload-r2-indicators upload-r2-indicators-weights
 
 indicators-build: ## Build the indicators for SOURCES (INDICATORS_SOURCES) at ROUND
 	$(PYTHON) -m xuebuild indicators-build --sources $(INDICATORS_SOURCES) --round $(INDICATORS_ROUND) --output-dir $(INDICATORS_DIR) --weights-dir $(INDICATORS_WEIGHTS_DIR) $(FORCE)
@@ -27,6 +27,9 @@ indicators-build: ## Build the indicators for SOURCES (INDICATORS_SOURCES) at RO
 # climatology and context file: the month files are the next build's history,
 # so each CRC32 is checked rather than trusted. A missing index is the first
 # publish.
+indicators-context: ## Refresh context/oni.json from NOAA CPC (a no-op when the table is unchanged)
+	$(PYTHON) -m xuebuild indicators-context --output-dir $(INDICATORS_DIR)
+
 live-indicators-index: ## Pull the live indicators index and the files a build appends to
 	@set -e; mkdir -p $(INDICATORS_DIR); \
 	if ! $(S3) cp $(INDICATORS_R2)/index.json $(INDICATORS_DIR)/index.json --only-show-errors 2>/dev/null; then \
