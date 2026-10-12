@@ -3607,6 +3607,13 @@ body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
     grid-column: 1 / -1;
   }
 
+  /* A phone's row cannot hold the chips and the three export pills: the
+     pills squeezed the chips down to their caption. The chips win; export
+     stays on the fields that have no levels to choose. */
+  .timeline-tools:has(.level-row:not([hidden])) :is(#gif-button, #mp4-button, #mp4-size-button) {
+    display: none;
+  }
+
   .timeline-readout {
     grid-row: 2;
   }
