@@ -26,6 +26,9 @@ from .variables import (
     REFLECTIVITY_VARIABLE_IDS,
     SATELLITE_INFRARED_IDS,
     SATELLITE_REFLECTANCE_IDS,
+    SOIL_MOISTURE_IDS,
+    SOIL_TEMPERATURE_IDS,
+    SOIL_VARIABLE_IDS,
     TRUE_COLOR_COMPONENT_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable_id,
@@ -262,6 +265,24 @@ COMPACT_ICE_COVER = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, na
 # 5 m GFS caps the field at.
 QUALITY_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.02, name="icetk")
 COMPACT_ICE_THICKNESS = TemperatureCodebook(minimum=0.0, maximum=5.08, step=0.04, name="icetk")
+# The soil layers (xuebuild/variables.py). Both codebooks start one step
+# below the least real value, so code 0 is "no soil" — the open water and,
+# for the moisture, the sea ice, which the records leave to their bitmap and
+# the converter fills with the bottom of the range — and a real value never
+# lands on it. The temperature runs from that code at −61 °C to 66 °C at
+# the skin temperature's half degree: a real analysis spans −57 °C (the
+# top layer under the Antarctic plateau) to 58 °C (a desert's), and 0 °C,
+# where a frozen layer thaws, is a code in both profiles. The volumetric
+# water content runs from −0.01 to 1 m³/m³ at 0.005 (202 codes): a
+# saturated loam holds about 0.45 and a dry sand 0.05, so a wilting point
+# and a field capacity are tens of codes apart, and 0 is a code in both
+# profiles, as the reflectance's is. The compact profile doubles the step
+# over the same range. The balanced profile takes the quality codebooks:
+# the fields are smooth.
+QUALITY_SOIL_TEMPERATURE = TemperatureCodebook(minimum=-61.0, maximum=66.0, step=0.5, name="tsoil")
+COMPACT_SOIL_TEMPERATURE = TemperatureCodebook(minimum=-61.0, maximum=66.0, step=1.0, name="tsoil")
+QUALITY_SOIL_MOISTURE = TemperatureCodebook(minimum=-0.01, maximum=1.0, step=0.005, name="soilw")
+COMPACT_SOIL_MOISTURE = TemperatureCodebook(minimum=-0.01, maximum=1.0, step=0.01, name="soilw")
 # Aurora probability: 0–100 % at half a percent, the cloud cover's own
 # numbers. The field is a smooth global probability with no fine structure
 # to resolve, so the balanced profile takes its compact 1 % step the way
@@ -439,6 +460,15 @@ COMPACT_OCEAN = {
     "vwave": COMPACT_WAVE_VECTOR,
 }
 assert tuple(QUALITY_OCEAN) == OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS
+QUALITY_SOIL = {
+    **{variable_id: replace(QUALITY_SOIL_TEMPERATURE, name=variable_id) for variable_id in SOIL_TEMPERATURE_IDS},
+    **{variable_id: replace(QUALITY_SOIL_MOISTURE, name=variable_id) for variable_id in SOIL_MOISTURE_IDS},
+}
+COMPACT_SOIL = {
+    **{variable_id: replace(COMPACT_SOIL_TEMPERATURE, name=variable_id) for variable_id in SOIL_TEMPERATURE_IDS},
+    **{variable_id: replace(COMPACT_SOIL_MOISTURE, name=variable_id) for variable_id in SOIL_MOISTURE_IDS},
+}
+assert tuple(QUALITY_SOIL) == SOIL_VARIABLE_IDS
 # The cloud layers take the total's codebook, and its balanced rule.
 QUALITY_CLOUD_LAYER = {
     "lcdc": TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="lcdc"),
@@ -716,6 +746,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aurora": QUALITY_AURORA,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
+        **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
         **QUALITY_PRESSURE,
@@ -748,6 +779,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
+        **COMPACT_SOIL,
         **COMPACT_SATELLITE,
         **COMPACT_AEROSOL,
         **COMPACT_PRESSURE,
@@ -792,6 +824,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,
+        **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
         **QUALITY_PRESSURE,

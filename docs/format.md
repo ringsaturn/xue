@@ -343,6 +343,8 @@ recognize; anything else it can still decode.
 | `htsgw` | 10 / 0 / 3 | 1, no value | Significant height of combined wind waves and swell (GFS-Wave, ECMWF `swh`); WAVEWATCH III writes the surface value as 1 and ECMWF none, so none is declared and any is accepted |
 | `perpw` | 10 / 0 / 11 | 1, no value | Primary wave mean period (GFS-Wave); ECMWF's peak period `pp1d`, 10 / 0 / 34, is the nearest neighbour and accepted on input under this identity |
 | `dirpw` | 10 / 0 / 10 | 1, no value | Primary wave direction, degrees true the waves come from (GFS-Wave); ECMWF's mean wave direction `mwd`, 10 / 0 / 14, is accepted the same way; a record's 360 is reduced to 0 |
+| `tsoil<n>` | 2 / 0 / 2 | 106, the layer's upper bound in m | Soil temperature in layer `n` (1–4) counted from the surface, in °C. The registered surface is GFS's (Noah layers 0–0.1, 0.1–0.4, 0.4–1 and 1–2 m, so 0, 0.1, 0.4 and 1); ECMWF's `sot`, the WMO 2 / 3 / 18 on its soil level surface (151) with layer `n` at value `n − 1` (IFS layers 0–7, 7–28, 28–100 and 100–289 cm), is accepted on input and never written. The id is the layer's index, not its depth: which depths a layer spans is the source's ([sources.md](sources.md)). Water carries no soil: the record's bitmap there becomes the bottom of the codebook, code 0, one step below every real value (GFS, which writes the ice's temperature over sea ice; the IFS writes the model's value over the sea) |
+| `soilw<n>` | 2 / 0 / 192 | 106, the layer's upper bound in m | Volumetric soil moisture in layer `n`, total (liquid and frozen) water in m³/m³, NCEP's local SOILW (not the liquid part, SOILL). ECMWF's `vsw`, the WMO 2 / 0 / 25 on its soil level surface as for `tsoil<n>`, is accepted on input and never written. Water is code 0 as for `tsoil<n>` (GFS, which also masks the sea ice and writes 1 over the ice sheets, and AIFS; the IFS writes 0 over the sea) |
 | `uwave` / `vwave` | 10 / 0 / 250, 10 / 0 / 251 | 1, no value | Wave vector components in metres: the significant wave height laid along the direction the waves travel, derived by the encoder from `htsgw` and `dirpw` as the wind's `(-h sin θ, -h cos θ)`; Xue-local parameter numbers |
 | `prmsl` | 0 / 3 / 1 | 101, no value | Mean sea level pressure, the quantity ECMWF calls `msl` and encodes as 0 / 3 / 0 on this surface, and HRRR writes as its MAPS reduction `MSLMA`, 0 / 3 / 198; both accepted on input, never written (not NCEP's MSLET, 0 / 3 / 192) |
 | `hgt<level>` | 0 / 3 / 5 | 100, `<level>` hPa in Pa | Geopotential height, one variable per isobaric surface |
@@ -846,6 +848,8 @@ values unless noted):
 | `perpw` | 0 s | 0.1 | 254 | 255 | 0.05 s |
 | `dirpw` | 0° | 1.5 | 239 | 255 | 0.75° |
 | `uwave` / `vwave` | −25.4 m | 0.2 | 254 | 255 | 0.1 m |
+| `tsoil<n>` | −61 °C | 0.5 | 254 | 255 | 0.25 °C; code 0 is no soil |
+| `soilw<n>` | −0.01 m³/m³ | 0.005 | 202 | 255 | 0.0025 m³/m³; code 0 is no soil |
 | `prmsl` | 870.5 hPa | 1 | 254 | 255 | 0.5 hPa |
 | `hgt1000` | −905 m | 10 | 254 | 255 | 5 m |
 | `hgt925` | −249 m | 6 | 254 | 255 | 3 m |
@@ -886,7 +890,8 @@ The `compact` profile doubles each `scale` (temperature 1.0 → maximumCode
 110, wind 1.0 → 127, dswrf 10 → 127, cref 1.0 → 80, gust 1.0 → 127, every
 cloud cover 1.0 → 100, cape 50 → 127, cin 8 → 127, vis 0.2 → 127, dpt2m 1.0
 → 110, aptmp2m 2 → 75, pwat 1.0 → 127, hpbl 40 → 127, orog 74 → 127, tmpsfc 1.0 → 127, icec
-1.0 → 100, icetk 0.04 → 127, htsgw and perpw 0.2 → 127, and every
+1.0 → 100, icetk 0.04 → 127, htsgw and perpw 0.2 → 127, tsoil 1.0 → 127,
+soilw 0.01 → 101, and every
 pressure-family and isobaric codebook → half its maximumCode over the same
 range; `cat<level>` 0.01 over 0–0.64 → 64). Two codebooks do not keep the same range: `dirpw`'s compact codebook
 stops at 357° (3 → 119), because 360 / 3
@@ -905,6 +910,12 @@ carries a bitmap, and land comes out of GDAL as its nodata value (9999).
 The encoder maps those points to code 0 (0 m, 0 s, 0°) before quantization,
 as the radar mosaic's fill is handled (see "Xue v1 requires complete input
 planes" below); the `nodataCode` is still never written.
+The soil layers' records do not cover it either (GFS masks the open water,
+and the sea ice for the moisture; AIFS the sea for the moisture). Their
+codebooks start one step below the least real value — −61 °C, −0.01 m³/m³ —
+so the masked points, filled with that bottom, are code 0 and no real value
+is: a reader tells "no soil" from a value without a bitmap, and 0 °C and
+0 m³/m³ are codes of their own in both profiles.
 
 The isobaric temperature takes its range per level: the low end holds the
 Antarctic winter at every surface, the high end the below-ground

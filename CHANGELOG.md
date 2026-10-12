@@ -5,6 +5,27 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-10-12
+
+- New scalar bundles on `gfs` and `ecmwf`: the soil temperature `tsoil1`–`tsoil4`
+  (°C) and the volumetric soil water `soilw1`–`soilw4` (m³/m³) in four
+  layers counted from the surface; `aifs` publishes layers 1 and 2. The id
+  is the layer's index; its depth is the model's (GFS 0–10, 10–40, 40–100,
+  100–200 cm; IFS 0–7, 7–28, 28–100, 100–289 cm), documented in
+  `docs/sources.md`. The parameter block is the GFS record's (2/0/2 and the
+  NCEP-local 2/0/192 on surface 106 at the layer's upper bound); ECMWF's
+  2/3/18 and 2/0/25 on its soil level surface are read under it. Both
+  codebooks start one step below the least real value (−61 °C, −0.01
+  m³/m³), so code 0 is "no soil" where the record has none (open water, and
+  sea ice for GFS's water content); `soil-registry.json` holds the
+  numbers.
+- `indicators` schema 2: each day carries `tsoil1`–`tsoil4` and
+  `soilw1`–`soilw4` (null where the source has no such layer), `summary`
+  covers the first 7 complete days and adds `soilw1_change`, and the
+  season files come from `ecmwf` instead of `gfs` (rebuilt whole from the
+  ECMWF lines). Month files keep their version 1 lines; each line names its
+  version. `context/oni.json` is now refreshed by the publish job.
+
 ## 2026-10-11
 
 - New source `woof` (manifest model `WOOF-WRF`, product `nest`): a WRF-ARW

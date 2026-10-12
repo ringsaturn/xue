@@ -26,8 +26,9 @@ class IndexMessagesTests(unittest.TestCase):
         # precipitation-type flags among them, fetched only to derive the
         # precipitation type) and the vertical velocity, then the ocean —
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
-        # three wave records.
-        self.assertEqual(len(messages), 74)
+        # three wave records — with the orography and the eight soil layers
+        # between the two.
+        self.assertEqual(len(messages), 82)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
@@ -37,7 +38,8 @@ class IndexMessagesTests(unittest.TestCase):
         # records: a primary-file record appended after the ocean trio, its
         # record last of the pgrb2 set and before the wave file's.
         orography = messages[70]
-        ocean = messages[67:70] + messages[71:]
+        soil = messages[71:79]
+        ocean = messages[67:70] + messages[79:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -150,12 +152,24 @@ class IndexMessagesTests(unittest.TestCase):
                 (68, 0, 0, 0, 1, 0.0),
                 (69, 10, 2, 0, 1, 0.0),
                 (70, 10, 2, 1, 1, 0.0),
-                (72, 10, 0, 3, 1, 1.0),
-                (73, 10, 0, 11, 1, 1.0),
-                (74, 10, 0, 10, 1, 1.0),
+                (80, 10, 0, 3, 1, 1.0),
+                (81, 10, 0, 11, 1, 1.0),
+                (82, 10, 0, 10, 1, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))
+        # The soil layers, after the orography: the temperature (2/0/2) then
+        # the volumetric water (NCEP-local 2/0/192) in the four Noah layers,
+        # each on the depth-below-land surface (106) from its upper bound in
+        # metres — the scaled value NCEP writes at scale factor 2, read back
+        # as the same float the registry declares.
+        tops = [0.0, 0.1, 0.4, 1.0]
+        self.assertEqual(
+            [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in soil],
+            [(72 + index, 2, 0, 2, 106, top) for index, top in enumerate(tops)]
+            + [(76 + index, 2, 0, 192, 106, top) for index, top in enumerate(tops)],
+        )
+        self.assertTrue(all(message.statistical_process is None for message in soil))
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:

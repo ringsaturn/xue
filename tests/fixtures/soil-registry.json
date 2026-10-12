@@ -1,0 +1,226 @@
+{
+  "tsoil1": {
+    "label": "Soil temperature, layer 1",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tsoil2": {
+    "label": "Soil temperature, layer 2",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 1,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tsoil3": {
+    "label": "Soil temperature, layer 3",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 1,
+      "scaledValueOfFirstFixedSurface": 4
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "tsoil4": {
+    "label": "Soil temperature, layer 4",
+    "unit": "°C",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 0.5,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -61.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "soilw1": {
+    "label": "Volumetric soil moisture, layer 1",
+    "unit": "m³/m³",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 0
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 202,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 101,
+      "nodataCode": 255
+    }
+  },
+  "soilw2": {
+    "label": "Volumetric soil moisture, layer 2",
+    "unit": "m³/m³",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 1,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 202,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 101,
+      "nodataCode": 255
+    }
+  },
+  "soilw3": {
+    "label": "Volumetric soil moisture, layer 3",
+    "unit": "m³/m³",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 1,
+      "scaledValueOfFirstFixedSurface": 4
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 202,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 101,
+      "nodataCode": 255
+    }
+  },
+  "soilw4": {
+    "label": "Volumetric soil moisture, layer 4",
+    "unit": "m³/m³",
+    "parameter": {
+      "discipline": 2,
+      "parameterCategory": 0,
+      "parameterNumber": 192,
+      "typeOfFirstFixedSurface": 106,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.005,
+      "minimumCode": 0,
+      "maximumCode": 202,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -0.01,
+      "scale": 0.01,
+      "minimumCode": 0,
+      "maximumCode": 101,
+      "nodataCode": 255
+    }
+  }
+}

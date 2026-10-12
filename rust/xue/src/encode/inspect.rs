@@ -17,7 +17,7 @@ use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
 use crate::encode::variables::{
     isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS,
-    SURFACE_TEMPERATURE_IDS,
+    SOIL_MOISTURE_IDS, SOIL_TEMPERATURE_IDS, SURFACE_TEMPERATURE_IDS,
 };
 
 static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -156,6 +156,30 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
                 "aptmp2m" => format!("maximum(-90,minimum(60,{value}))"),
                 _ => format!("maximum(-60,minimum(67,{value}))"),
             })
+        }
+        // The soil temperature takes the temperature's rule over its own
+        // codebook range. Mirrors `celsius_expression(unit, low=-61, high=66)`.
+        soil if SOIL_TEMPERATURE_IDS.contains(&soil) => {
+            let value = match normalize_unit(unit)? {
+                "K" => "A-273.15",
+                "F" => "(A-32)*5/9",
+                _ => "A",
+            };
+            Ok(format!("maximum(-61,minimum(66,{value}))"))
+        }
+        // Volumetric soil water, dimensionless: GDAL spells NCEP's SOILW
+        // "Fraction" and ECMWF's `vsw` "m^3/m^3". Mirrors
+        // `soil_moisture_expression`.
+        soil if SOIL_MOISTURE_IDS.contains(&soil) => {
+            if !["fraction", "proportion", "m^3/m^3", "m3/m3", "m³/m³", "m^3m^-3", "m3m-3", "1", "-", ""]
+                .contains(&compact_unit(unit).as_str())
+            {
+                return Err(EncodeError::conversion(format!(
+                    "unsupported soil moisture unit: {}",
+                    if unit.is_empty() { "<missing>" } else { unit }
+                )));
+            }
+            Ok("maximum(-0.01,minimum(1,A))".into())
         }
         // Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the
         // unit "Proportion"), the codebook quantizes percent.
@@ -660,6 +684,75 @@ fn assembled_aerosol(values: &[i64]) -> AerosolIdentity {
     }
 }
 
+/// One soil layer under the registry's identity or an alternate, read off
+/// the assembled template 4.0 values (the type of first fixed surface, its
+/// scale factor and scaled value at indices 9–11) beside the discipline: the
+/// element and short name do not name a layer in a form two centres share
+/// (GFS's `0-0.1-DBLL`, ECMWF's `0-1-` on a soil level), the template does.
+/// A record of another template is not a soil layer here. Mirrors
+/// `_is_soil_record` in `xuebuild/gdal.py`.
+fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
+    let spec = variable_spec(variable_id)?;
+    if band.item("GRIB_PDS_PDTN") != "0" {
+        return Ok(false);
+    }
+    let Ok(values) = band
+        .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+        .split_whitespace()
+        .map(str::parse::<i64>)
+        .collect::<std::result::Result<Vec<_>, _>>()
+    else {
+        return Ok(false);
+    };
+    let Ok(discipline) = band
+        .item("GRIB_DISCIPLINE")
+        .split_once('(')
+        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
+        .parse::<i64>()
+    else {
+        return Ok(false);
+    };
+    if values.len() < 12 {
+        return Ok(false);
+    }
+    let identities = std::iter::once((
+        spec.grib2_discipline,
+        spec.grib2_category,
+        spec.grib2_number,
+        spec.grib2_level_type,
+        spec.grib2_level_value,
+    ))
+    .chain(spec.grib2_alternates.iter().map(|alternate| {
+        (
+            alternate.discipline,
+            alternate.category,
+            alternate.number,
+            alternate.level_type,
+            alternate.level_value,
+        )
+    }));
+    let (scale, scaled_value) = (values[10], values[11]);
+    for (identity_discipline, category, number, level_type, level_value) in identities {
+        if (discipline, values[0], values[1], values[9])
+            != (
+                i64::from(identity_discipline),
+                i64::from(category),
+                i64::from(number),
+                i64::from(level_type),
+            )
+        {
+            continue;
+        }
+        let Some(expected) = level_value else {
+            return Ok(true);
+        };
+        if scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == expected {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
     let element = band.item("GRIB_ELEMENT").to_uppercase();
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
@@ -667,6 +760,10 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // An aerosol product: the parameter and the aerosol identity, read
         // off the assembled template values rather than the element.
         aerosol if AEROSOL_VARIABLE_IDS.contains(&aerosol) => is_aerosol_record(band, aerosol)?,
+        // A soil layer: the identity read off the assembled template values.
+        soil if SOIL_TEMPERATURE_IDS.contains(&soil) || SOIL_MOISTURE_IDS.contains(&soil) => {
+            is_soil_record(band, soil)?
+        }
         // One element on the 2 m surface: the temperature, the dew point,
         // the apparent temperature.
         "tmp2m" | "dpt2m" | "aptmp2m" => {

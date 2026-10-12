@@ -547,6 +547,34 @@ const COMPACT_ICE_THICKNESS: LinearCodebook = LinearCodebook {
     step: 0.04,
     ..QUALITY_ICE_THICKNESS
 };
+// The soil layers (see `xuebuild/quantize.py`): both codebooks start one
+// step below the least real value, so code 0 is "no soil" — the bitmap the
+// records carry over water, filled with the bottom of the range — and 0 °C
+// and 0 m³/m³ are codes in both profiles. Every layer takes the same two.
+// Mirrors `QUALITY_SOIL_TEMPERATURE` / `QUALITY_SOIL_MOISTURE` and their
+// compact twins.
+const QUALITY_SOIL_TEMPERATURE: LinearCodebook = LinearCodebook {
+    minimum: -61.0,
+    maximum: 66.0,
+    step: 0.5,
+    nodata_code: 255,
+    name: "tsoil",
+};
+const COMPACT_SOIL_TEMPERATURE: LinearCodebook = LinearCodebook {
+    step: 1.0,
+    ..QUALITY_SOIL_TEMPERATURE
+};
+const QUALITY_SOIL_MOISTURE: LinearCodebook = LinearCodebook {
+    minimum: -0.01,
+    maximum: 1.0,
+    step: 0.005,
+    nodata_code: 255,
+    name: "soilw",
+};
+const COMPACT_SOIL_MOISTURE: LinearCodebook = LinearCodebook {
+    step: 0.01,
+    ..QUALITY_SOIL_MOISTURE
+};
 // Aurora probability: 0–100 % at half a percent, the cloud cover's numbers.
 // Balanced takes the 1 % step like every other percent field. Mirrors
 // `QUALITY_AURORA` / `COMPACT_AURORA` in `xuebuild/quantize.py`.
@@ -935,6 +963,14 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
+        // The soil layers: balanced takes the quality books, the fields
+        // being smooth.
+        (_, "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4") if quality => {
+            Codebook::Linear(QUALITY_SOIL_TEMPERATURE)
+        }
+        (_, "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4") => Codebook::Linear(COMPACT_SOIL_TEMPERATURE),
+        (_, "soilw1" | "soilw2" | "soilw3" | "soilw4") if quality => Codebook::Linear(QUALITY_SOIL_MOISTURE),
+        (_, "soilw1" | "soilw2" | "soilw3" | "soilw4") => Codebook::Linear(COMPACT_SOIL_MOISTURE),
         (_, "ir039" | "wv062" | "ir086" | "ir104" | "ir112" | "ir123") => {
             let channel_id = SATELLITE_INFRARED_IDS
                 .iter()

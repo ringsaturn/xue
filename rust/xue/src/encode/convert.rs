@@ -21,7 +21,8 @@ use crate::encode::variables::{
     is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
     DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, TRUE_COLOR_BUNDLE_ID,
     TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
-    CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, STANDARD_GRAVITY, WAVE_VECTOR_COMPONENT_IDS,
+    CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, SOIL_TEMPERATURE_IDS, STANDARD_GRAVITY,
+    WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
@@ -838,18 +839,47 @@ pub fn deaverage_precipitation(
 
 // -- extraction --------------------------------------------------------------
 
+/// Above this a temperature the GDAL GRIB driver labels Celsius is kelvin
+/// (`soil_temperature_unit`). Mirrors `SOIL_KELVIN_THRESHOLD` in
+/// `xuebuild/binconvert.py`.
+const SOIL_KELVIN_THRESHOLD: f64 = 150.0;
+
+/// The unit a soil temperature plane is really in. GDAL's GRIB driver
+/// relabels every kelvin parameter Celsius but converts only those its
+/// tables mark for conversion, and the soil temperatures (NCEP's 2/0/2, the
+/// WMO 2/3/18 ECMWF writes) are not marked: their values come back in kelvin
+/// under a `C` label. A plane labelled Celsius that holds a value above 150
+/// is therefore kelvin. Mirrors `soil_temperature_unit` in
+/// `xuebuild/binconvert.py`.
+fn soil_temperature_unit(unit: &'static str, values: &[f64]) -> &'static str {
+    if unit == "C" && values.iter().any(|value| *value > SOIL_KELVIN_THRESHOLD) {
+        "K"
+    } else {
+        unit
+    }
+}
+
 fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()> {
     match variable_id {
-        // The 2 m temperature, dew point, apparent temperature and the
-        // surface (skin) temperature all take the Celsius rule
-        // (`SURFACE_TEMPERATURE_IDS`).
-        "tmp2m" | "dpt2m" | "aptmp2m" | "tmpsfc" => match normalize_unit(unit)? {
-            "K" => values.iter_mut().for_each(|value| *value -= 273.15),
-            "F" => values
-                .iter_mut()
-                .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
-            _ => {}
-        },
+        // The 2 m temperature, dew point, apparent temperature, the
+        // surface (skin) temperature and the soil temperatures all take the
+        // Celsius rule (`SURFACE_TEMPERATURE_IDS`) — a soil temperature
+        // after `soil_temperature_unit` has read through GDAL's label.
+        "tmp2m" | "dpt2m" | "aptmp2m" | "tmpsfc" | "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4" => {
+            let normalized = normalize_unit(unit)?;
+            let normalized = if SOIL_TEMPERATURE_IDS.contains(&variable_id) {
+                soil_temperature_unit(normalized, values)
+            } else {
+                normalized
+            };
+            match normalized {
+                "K" => values.iter_mut().for_each(|value| *value -= 273.15),
+                "F" => values
+                    .iter_mut()
+                    .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
+                _ => {}
+            }
+        }
         // kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
         // already mm/h.
         "prate" if !precipitation_rate_is_mm_per_hour(unit) => {

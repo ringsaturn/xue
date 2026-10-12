@@ -33,6 +33,11 @@ not a format change.
 - Ocean: skin temperature, sea ice cover and thickness, significant wave
   height and primary period (GFS-Wave), and a derived wave vector (height
   laid along the direction of travel).
+- Soil: temperature (`tsoil1`–`tsoil4`) and total volumetric water
+  (`soilw1`–`soilw4`) in the Noah land model's four layers, 0–10, 10–40,
+  40–100 and 100–200 cm below ground; no soil (code 0) over open water, and
+  for the water content over sea ice too (the temperature there is the
+  ice's; the water content is 1 over the ice sheets).
 - Mean sea level pressure; geopotential height, temperature, relative
   humidity and wind on all eight isobaric surfaces; 850 hPa water vapour
   flux (`q·V/g`, derived).
@@ -42,15 +47,21 @@ not a format change.
 0.25° global, 3-hourly to F144 and 6-hourly to F240. The subset of the GFS
 set that open data carries, under the same identities so a model switch
 keeps the layer. `tp` is differenced into an interval-mean rate and the gust
-is an interval maximum, so both series start at F003. Not available: layer
-cloud covers, visibility, sea ice cover, apparent temperature.
+is an interval maximum, so both series start at F003. The soil layers are
+HTESSEL's, under the GFS layer ids: `tsoil1`–`tsoil4` and `soilw1`–`soilw4`
+span 0–7, 7–28, 28–100 and 100–289 cm, not GFS's depths; the open data
+carries no bitmap, so the sea holds the model's soil temperature and a water
+content of 0. Not available: layer cloud covers, visibility, sea ice cover,
+apparent temperature.
 
 ### ECMWF AIFS Single (`aifs`)
 
 0.25° global, 6-hourly to F360 from every cycle, landing about 5.5 h after
 it. ECMWF's data-driven model from the same open data service, including
-the layer clouds IFS open data lacks. No isobaric relative humidity, gust,
-CAPE, ice thickness or wave period.
+the layer clouds IFS open data lacks. Soil in the IFS's top two layers only
+(`tsoil1`, `tsoil2`, `soilw1`, `soilw2`: 0–7 and 7–28 cm), the water content
+masked over the sea (code 0). No isobaric relative humidity, gust, CAPE, ice
+thickness or wave period.
 
 ### ECMWF IFS HRES via Open-Meteo (`ifshres`, aliases `hres`, `ifs9km`)
 
