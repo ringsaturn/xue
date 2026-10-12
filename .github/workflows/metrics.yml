@@ -1,0 +1,71 @@
+name: metrics
+
+# The run metrics (docs/metrics.md): when each forecast run went live, read
+# back from this repository's own publish workflow records and written to
+# metrics/latency.json on the bucket. Independent of every publish: it reads
+# the Actions API and one file, and a red run here holds nothing back.
+#
+# Every six hours so the newest arrival stays close; a build reads only the
+# workflow runs the previous file does not list, within an API budget, so
+# the first builds after an empty start catch up over a few runs.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and report, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ inputs.dry_run && format('metrics-dry-{0}', github.run_id) || 'metrics' }}
+  cancel-in-progress: false
+
+jobs:
+  latency:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # The standard library does the reading; no optional group.
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Fetch the live metrics
+        run: make live-metrics
+
+      - name: Read the publish runs back
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uv run python -m xuebuild metrics-latency --repo "$GITHUB_REPOSITORY" > metrics-report.json
+          {
+            echo "### metrics"
+            echo
+            echo '```json'
+            jq . metrics-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        run: make upload-r2-metrics DRY_RUN="$DRY_RUN"

@@ -211,6 +211,23 @@ make upload-r2-indicators-weights                 # manual; only when asked
 Existing rows keep the weights version they were computed with; they are not
 recomputed.
 
+## Run metrics
+
+`metrics.yml` (every six hours) reads the forecast publish workflows back
+from the Actions API and rewrites `metrics/latency.json` (spec:
+[`docs/metrics.md`](../metrics.md)). The cycle comes from the finalize job's
+name, `finalize <model> <run>`, and the landing time from its pointer step,
+so renaming either breaks the metrics (`tests/test_metrics.py` pins both).
+The previous file lists the workflow runs already read; a build fetches job
+records only for new ones, at most `METRICS_BUDGET` calls (the token allows
+1,000 an hour), and the rest waits for the next build.
+
+```sh
+make live-metrics                               # the live file, the build's state
+GITHUB_TOKEN=$(gh auth token) make metrics-latency
+make upload-r2-metrics                          # one object, no-cache
+```
+
 ## STAC catalog
 
 The catalog ([`docs/stac.md`](../stac.md)) is derived, never edited: every

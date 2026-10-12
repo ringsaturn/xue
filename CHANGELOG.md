@@ -5,6 +5,13 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-10-13
+
+- New: `metrics/latency.json` (`docs/metrics.md`, `schemaVersion` 1), when
+  each forecast run went live over the last 30 days, measured from the
+  publish workflows: latency from cycle time to the pointer write, missing
+  cycles, and the newest run live at the ERCOT day-ahead close.
+
 ## 2026-10-12
 
 - New scalar bundles on `gfs` and `ecmwf`: the soil temperature `tsoil1`–`tsoil4`

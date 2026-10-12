@@ -17,6 +17,7 @@ terms (see the [README](../README.md#data-and-licensing)).
 | [tc.md](tc.md), [airport.md](airport.md), [sounding.md](sounding.md), [synop.md](synop.md), [nexrad.md](nexrad.md) | The point and single-site radar products: pointer, index, files, `schemaVersion` |
 | [satellite.md](satellite.md) | Geostationary imagery and its composites |
 | [indicators.md](indicators.md) | The agriculture indicators: crop-area-weighted daily quantities per forecast run, appended to monthly files read by byte range |
+| [metrics.md](metrics.md) | The run metrics: when each forecast run went live, measured from the publish workflows |
 | [api.md](api.md) | The data API (experimental) |
 
 ## Versions
@@ -33,6 +34,7 @@ Every artifact carries its own version, none tied to a code release.
 | STAC (`stac_version`) | 1.1.0 | — |
 | Point products (`schemaVersion`, one per product) | see each document | up to the one a reader implements |
 | Indicators (`schemaVersion`) | 1 | 1 |
+| Run metrics (`schemaVersion`) | 1 | 1 |
 
 ## Compatibility
 

@@ -679,6 +679,27 @@ def parser() -> argparse.ArgumentParser:
     )
     indicators_context.add_argument("--dry-run", action="store_true", help="fetch and report; write nothing")
 
+    metrics_latency = commands.add_parser(
+        "metrics-latency",
+        help="read the forecast publish runs back from the GitHub Actions API and rewrite "
+        "metrics/latency.json: when each run went live (docs/metrics.md)",
+    )
+    metrics_latency.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("web/public/data"),
+        help="the data root, holding the previous metrics/latency.json as the bucket has it",
+    )
+    metrics_latency.add_argument(
+        "--workflows-dir", type=Path, default=Path(".github/workflows"), help="where the publish-*.yml callers are"
+    )
+    metrics_latency.add_argument("--repo", default="ringsaturn/xue", help="owner/name of the repository whose runs to read")
+    metrics_latency.add_argument(
+        "--budget", type=int, default=600, help="API calls one build may make; the rest waits for the next (default 600)"
+    )
+    metrics_latency.add_argument("--window-days", type=int, default=30, help="days the summaries cover (default 30)")
+    metrics_latency.add_argument("--dry-run", action="store_true", help="fetch and report; write nothing")
+
     wrf_series = commands.add_parser(
         "wrf-series",
         help="turn one domain of a Recast WOOF (WRF-ARW) run into the per-variable CF NetCDF series the "
@@ -1157,6 +1178,18 @@ def main(argv: list[str] | None = None) -> int:
             # publish; a green job over a hollow index would hide an outage.
             if report["sources"] and all(source["status"] == "failed" for source in report["sources"]):
                 raise XueError("indicators-build: every source failed; see the report")
+        elif arguments.command == "metrics-latency":
+            from .metrics import run_metrics_latency  # noqa: PLC0415
+
+            report = run_metrics_latency(
+                output_dir=arguments.output_dir,
+                workflows_dir=arguments.workflows_dir,
+                repo=arguments.repo,
+                budget=arguments.budget,
+                window_days=arguments.window_days,
+                dry_run=arguments.dry_run,
+            )
+            print(json.dumps(report, indent=2))
         elif arguments.command == "indicators-context":
             from .indicators.context import update_context  # noqa: PLC0415
 
