@@ -810,7 +810,7 @@ export interface VariantDescriptor {
    * downloading the whole tier — the STREAM-INF BANDWIDTH analogue. */
   bandwidth: number;
   /** This tier as a Zarr store, when the build wrote one. */
-  zarr?: ZarrStoreDescriptor;
+  zarr?: ZarrDescriptor;
   /** This tier as a `.xue` container — `path`, `byteLength` and `crc32`
    * are one unit, present whole or absent whole. A tier ships the
    * container, the store, or both; the validator refuses neither. */
@@ -835,7 +835,7 @@ export function containerOf(entry: { path?: string; byteLength?: number; crc32?:
 
 /** What an entry weighs on the wire: the container's bytes, or the store's
  * on an entry that ships only the store. */
-export function deliveryBytes(entry: { byteLength?: number; zarr?: ZarrStoreDescriptor }): number {
+export function deliveryBytes(entry: { byteLength?: number; zarr?: ZarrDescriptor }): number {
   return entry.byteLength ?? entry.zarr?.byteLength ?? 0;
 }
 
@@ -849,6 +849,27 @@ export interface ZarrStoreDescriptor {
   path: string;
   byteLength: number;
   crc32: string;
+}
+
+/** A rolling window's store cut along time (docs/zarr-profile.md,
+ * "Segmented store"): `segments` are ordinary stores in ascending time order
+ * whose axes concatenate into the bundle's, and `byteLength` is their sum.
+ * A segment that has filled its clock span is published once and named by
+ * every later round's manifest, so its URLs, `?v=` included, stay the same
+ * from round to round and a viewer's HTTP cache keeps serving it. */
+export interface SegmentedStoreDescriptor {
+  byteLength: number;
+  segments: ZarrStoreDescriptor[];
+}
+
+/** What a bundle's or a tier's `zarr` field holds: one store, or a window's
+ * segments. */
+export type ZarrDescriptor = ZarrStoreDescriptor | SegmentedStoreDescriptor;
+
+/** The stores a descriptor is made of, in time order: the store itself, or
+ * the segments. */
+export function zarrSegments(descriptor: ZarrDescriptor): ZarrStoreDescriptor[] {
+  return "segments" in descriptor ? descriptor.segments : [descriptor];
 }
 
 export interface VariableBundleDescriptor {
@@ -866,7 +887,7 @@ export interface VariableBundleDescriptor {
   /** Tiny first-frame artifact for instant paint on variable switch. */
   poster?: PosterDescriptor;
   /** The bundle as a Zarr store, when the build derived one. */
-  zarr?: ZarrStoreDescriptor;
+  zarr?: ZarrDescriptor;
   /** The bundle as a series store (`docs/zarr-profile.md`, "Series store"):
    * one inner chunk is a cell's whole series, so a point read is one chunk.
    * Full-resolution only, and derived only for the bundles a pinned point
@@ -948,16 +969,70 @@ function validateContainerFields(entry: Record<string, unknown>, paths: Set<stri
   }
 }
 
-function validateZarrDescriptor(input: unknown, paths: Set<string>, suffix = ".zarr"): ZarrStoreDescriptor {
-  const store = object(input);
-  relativePath(store.path, suffix, paths, suffix === ".zarr" ? "zarr store" : "series store");
+function validateStoreFields(store: Record<string, unknown>): void {
   if (typeof store.byteLength !== "number" || !Number.isInteger(store.byteLength) || store.byteLength <= 0) {
     throw new Error("invalid zarr store byteLength");
   }
   if (typeof store.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(store.crc32)) {
     throw new Error("invalid zarr store crc32");
   }
+}
+
+function validateStoreDescriptor(input: unknown, paths: Set<string>, suffix: string): ZarrStoreDescriptor {
+  const store = object(input);
+  relativePath(store.path, suffix, paths, suffix === ".zarr" ? "zarr store" : "series store");
+  validateStoreFields(store);
   return store as unknown as ZarrStoreDescriptor;
+}
+
+/** The most `..` components a segment's path may begin with: a round's
+ * manifest sits two directories below the data root
+ * (`<model>.<run>/<round>/`) and the segments under `<model>.segments/`
+ * beside the runs, so two climb out of the round and no further. */
+const SEGMENT_MAX_CLIMB = 2;
+
+/** A segment's store path: a relative `.zarr` path that may climb out of
+ * the manifest's directory with leading `..` components only, never one
+ * after a named component. */
+function segmentPath(value: unknown, paths: Set<string>): string {
+  if (typeof value !== "string") throw new Error("invalid zarr segment path");
+  const parts = value.split("/");
+  let climb = 0;
+  while (parts[climb] === "..") climb += 1;
+  if (climb > SEGMENT_MAX_CLIMB) throw new Error("invalid zarr segment path");
+  relativePath(parts.slice(climb).join("/"), ".zarr", new Set<string>(), "zarr segment");
+  if (paths.has(value)) throw new Error("duplicate bundle path");
+  paths.add(value);
+  return value;
+}
+
+/** A segmented store: no `path` or `crc32` of its own, a non-empty list of
+ * segment stores, and a `byteLength` that is exactly their sum, which is
+ * what the shell budgets the tier by. Time order is checked when the
+ * segments are opened, since only their metadata carries the axis. */
+function validateSegmentedDescriptor(store: Record<string, unknown>, paths: Set<string>): SegmentedStoreDescriptor {
+  if (store.path !== undefined || store.crc32 !== undefined) {
+    throw new Error("a segmented zarr store carries no path or crc32 of its own");
+  }
+  if (!Array.isArray(store.segments) || store.segments.length === 0) throw new Error("invalid zarr segment list");
+  let sum = 0;
+  for (const item of store.segments) {
+    const segment = object(item);
+    segmentPath(segment.path, paths);
+    validateStoreFields(segment);
+    sum += segment.byteLength as number;
+  }
+  if (typeof store.byteLength !== "number" || store.byteLength !== sum) {
+    throw new Error("zarr segment byteLengths do not sum to the store's");
+  }
+  return store as unknown as SegmentedStoreDescriptor;
+}
+
+/** A bundle's or a tier's `zarr` field: one store, or segments. */
+function validateZarrDescriptor(input: unknown, paths: Set<string>): ZarrDescriptor {
+  const store = object(input);
+  if (store.segments !== undefined) return validateSegmentedDescriptor(store, paths);
+  return validateStoreDescriptor(store, paths, ".zarr");
 }
 
 function validateVariantDescriptor(input: unknown, paths: Set<string>): VariantDescriptor {
@@ -1069,7 +1144,7 @@ export function validateManifest(
       validateZarrDescriptor(bundle.zarr, paths);
     }
     if (bundle.series !== undefined) {
-      validateZarrDescriptor(bundle.series, paths, ".series.zarr");
+      validateStoreDescriptor(bundle.series, paths, ".series.zarr");
     }
     variables.push(bundle.variable);
   }

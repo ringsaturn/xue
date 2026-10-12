@@ -33,7 +33,7 @@ import {
 } from "../manifest";
 import { decodeValue } from "../palettes";
 import { probeCell, wrap, type ProbeCell } from "../probe";
-import { spawnZarrWorker, zarrInitMessage, zarrRootUrl, zarrStoreFor } from "../zarr/channel";
+import { spawnZarrWorker, zarrInitMessage, zarrStoreFor } from "../zarr/channel";
 
 /** One bundle's series at the point. `codes` is one array per data variable
  * (a scalar has one, a vector its u/v pair), each with one code per frame of
@@ -122,7 +122,6 @@ export function readPointSeries(
   if (!descriptor) return Promise.reject(new Error(`bundle ${bundleId} not published`));
   const store = zarrStoreFor("zarr", descriptor, null);
   if (!store) return Promise.reject(new Error(`bundle ${bundleId} ships no store`));
-  const root = zarrRootUrl(store.path, run.manifestUrl);
   return new Promise((resolve, reject) => {
     const worker = spawnZarrWorker();
     let metadata: BundleMetadata | null = null;
@@ -149,7 +148,7 @@ export function readPointSeries(
       const message = event.data as Record<string, unknown>;
       switch (message.type) {
         case "booted":
-          worker.postMessage(zarrInitMessage(root, store, `${bundleId}@compare`));
+          worker.postMessage(zarrInitMessage(store, run.manifestUrl, `${bundleId}@compare`));
           break;
         case "ready": {
           try {

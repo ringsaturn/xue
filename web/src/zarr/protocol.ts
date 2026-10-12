@@ -26,6 +26,11 @@ export interface ZarrInitStreamMessage {
   crc32: string;
   /** The sum of every object in the store, which `progress` reports against. */
   byteLength: number;
+  /** A rolling window's segments (docs/zarr-profile.md, "Segmented
+   * store"), in time order, each opened as its own store under its own
+   * `?v=` and joined into one axis; `url` and `crc32` then name the first.
+   * Absent for a plain store. */
+  segments?: { url: string; crc32: string }[];
   /** Echoed back in progress/resident messages so the main thread can
    * attribute them to the right variable session. */
   variableKey: string;

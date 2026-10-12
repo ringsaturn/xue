@@ -12,7 +12,7 @@
  */
 
 import type { DataBackend } from "../urlstate";
-import type { VariableBundleDescriptor, VariantDescriptor, ZarrStoreDescriptor } from "../manifest";
+import { zarrSegments, type VariableBundleDescriptor, type VariantDescriptor, type ZarrDescriptor } from "../manifest";
 import type { ZarrInitStreamMessage } from "./protocol";
 
 /** The store a session would open: the tier's own when one was picked,
@@ -23,7 +23,7 @@ export function zarrStoreFor(
   backend: DataBackend,
   descriptor: VariableBundleDescriptor,
   variant: VariantDescriptor | null,
-): ZarrStoreDescriptor | undefined {
+): ZarrDescriptor | undefined {
   const entry = variant ?? descriptor;
   if (backend !== "zarr" && entry.path !== undefined) return undefined;
   return entry.zarr;
@@ -41,20 +41,35 @@ export function zarrObjectUrl(root: string, path: string, crc32: string): string
   return `${root}/${path}?v=${crc32}`;
 }
 
+/** The URL of the store's first root document, as the worker will request
+ * it: what the main thread probes for range support before opening. A
+ * segmented store's segments share an origin, so the first speaks for all. */
+export function zarrProbeUrl(store: ZarrDescriptor, manifestUrl: string): string {
+  const first = zarrSegments(store)[0]!;
+  return zarrObjectUrl(zarrRootUrl(first.path, manifestUrl), "zarr.json", first.crc32);
+}
+
+/** Open a store, or a window's segments, with every root resolved against
+ * the manifest. */
 export function zarrInitMessage(
-  root: string,
-  store: ZarrStoreDescriptor,
+  store: ZarrDescriptor,
+  manifestUrl: string,
   variableKey: string,
   ranges = true,
   payloadBudgetBytes?: number,
 ): ZarrInitStreamMessage {
+  const roots = zarrSegments(store).map((segment) => ({
+    url: zarrRootUrl(segment.path, manifestUrl),
+    crc32: segment.crc32,
+  }));
   return {
     type: "init-stream",
     kind: "zarr",
-    url: root,
-    crc32: store.crc32,
+    url: roots[0]!.url,
+    crc32: roots[0]!.crc32,
     byteLength: store.byteLength,
     variableKey,
+    ...("segments" in store ? { segments: roots } : {}),
     ...(ranges ? {} : { ranges }),
     ...(payloadBudgetBytes === undefined ? {} : { payloadBudgetBytes }),
   };
