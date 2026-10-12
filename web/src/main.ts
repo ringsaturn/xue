@@ -147,6 +147,8 @@ import {
   parseCaseFromSearch,
   parseExperimentFromSearch,
   DERIVED_FIRE_IDS,
+  FIRE_FIELD_ANCHOR,
+  fireFieldOf,
   type DerivedFireId,
   parseModelFromSearch,
   parseResolutionFromSearch,
@@ -349,8 +351,9 @@ applyTheme();
  * far the published data goes, not a product. */
 const experiment = parseExperimentFromSearch(window.location.search);
 const experimentEnabled = experiment.enabled;
-// Markup only the experiment offers (the GIBS credit) starts hidden.
-if (experimentEnabled) for (const node of document.querySelectorAll<HTMLElement>("[data-experiment]")) node.hidden = false;
+/** Whether one radar site is drawn alone (`applyRadarView`): with a fire
+ * field, one of the two reasons the fill is held off screen. */
+let radarAlone = false;
 /** What the experiment opens when the URL names nothing else. */
 const EXPERIMENT_FILL: ForecastBundleId = "prate";
 const EXPERIMENT_LINES: PressureBundleId = "prmsl";
@@ -1263,6 +1266,9 @@ const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
 const fieldSheet = required<HTMLElement>("field-sheet");
 const fieldList = required<HTMLElement>("field-list");
+const imageryTile = required<HTMLButtonElement>("imagery-tile");
+const imagerySheet = required<HTMLElement>("imagery-sheet");
+const imageryList = required<HTMLElement>("imagery-list");
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
@@ -1391,6 +1397,13 @@ const tcSheetControl = createSheet({
 /** The language picker; `renderLanguageList` rebuilds its rows after a
  * switch so the check moves. */
 const renderLanguageList = mountLanguagePicker(langTrigger, langSheet, required<HTMLElement>("lang-list"));
+
+/** The daily imagery sheet, hung from its own overlay tile. */
+createSheet({
+  trigger: imageryTile,
+  sheet: imagerySheet,
+  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
+});
 
 /** The field sheet: every field the run publishes, hung from the rail's
  * MORE tile; its rows are written by `renderFieldSheet` whenever the run
@@ -1784,6 +1797,14 @@ const FIRE_DERIVED_INPUTS: Record<DerivedFireId, readonly ForecastBundleId[]> = 
   hotspot: ["ir039", "ir104"],
   ffwi: ["tmp2m", "dpt2m", "wind10m"],
   fwalert: ["tmp2m", "dpt2m", "gust"],
+};
+
+/** A fire field's code and title over the map, as its tile writes them. */
+const FIRE_FIELD_CODE: Record<DerivedFireId, string> = { hotspot: "HOTSPOT", ffwi: "FFWI", fwalert: "RH·GUST" };
+const FIRE_FIELD_TITLE: Record<DerivedFireId, MessageKey> = {
+  hotspot: "legendHotspot",
+  ffwi: "legendFfwi",
+  fwalert: "legendFwalert",
 };
 
 /** The fire layers' state, the experiment's machinery without the
@@ -5311,7 +5332,7 @@ function levelGroups(): LevelGroup[] {
   const run = manifest;
   const groups: LevelGroup[] = [];
   const fill = view.field;
-  const fillFamily = fill === null ? null : familyOf(fill);
+  const fillFamily = fill === null || fireField() !== null ? null : familyOf(fill);
   if (fill !== null && fillFamily !== null) {
     // The row answers one question — which surface — so a family's
     // variants (sea ice cover and thickness) are not on it; the field
@@ -5410,8 +5431,9 @@ function renderLevelRow(): void {
         // A level changes its own slot: the fill's family member, or the
         // lines wherever they are — the view, or the chart over a field.
         if (group.slot === "lines") {
-          if (removable) void activateComposition({ fill: view.field, lines: null });
-          else if (isPressureBundle(id)) void activateComposition({ fill: view.field, lines: id });
+          const fire = { fire: fireField() };
+          if (removable) void activateComposition({ fill: view.field, lines: null }, fire);
+          else if (isPressureBundle(id)) void activateComposition({ fill: view.field, lines: id }, fire);
         } else {
           void activateComposition({ fill: id, lines: view.lines });
         }
@@ -5553,7 +5575,7 @@ function fieldTileShipped(button: HTMLButtonElement, run: ForecastManifest): boo
  * family's member, or the bundle itself. */
 function fieldTileCurrent(button: HTMLButtonElement): boolean {
   const fill = view.field;
-  if (fill === null) return false;
+  if (fill === null || fireField() !== null) return false;
   const family = button.dataset.family as IsobaricFamily | undefined;
   return family === undefined ? button.dataset.variable === fill : familyOf(fill) === family;
 }
@@ -5745,18 +5767,15 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
     wrapper.append(button, chips);
     nodes.push(wrapper);
   }
-  if (experimentEnabled) nodes.push(...imagerySheetNodes());
   fieldList.replaceChildren(...nodes);
 }
 
 /** The sheet's last group: the NASA GIBS daily pictures, whatever the run,
  * a row of platforms in true colour and one in the false colour that
  * shows fire; pressing the chip on screen takes the picture away. */
-function imagerySheetNodes(): HTMLElement[] {
-  const title = document.createElement("p");
-  title.className = "field-group-heading";
-  title.textContent = t("fieldGroupImagery");
-  title.title = t("gibsTip");
+/** The imagery sheet's two rows, true then false colour, a chip per
+ * platform; rebuilt on a locale switch. */
+function renderImagerySheet(): void {
   const row = (falseColor: boolean): HTMLElement => {
     const chips = document.createElement("div");
     chips.className = "field-chips field-imagery";
@@ -5768,7 +5787,7 @@ function imagerySheetNodes(): HTMLElement[] {
     for (const layer of GIBS_LAYERS.filter((entry) => entry.falseColor === falseColor)) chips.append(imageryChip(layer));
     return chips;
   };
-  return [title, row(false), row(true)];
+  imageryList.replaceChildren(row(false), row(true));
 }
 
 function imageryChip(layer: GibsLayer): HTMLButtonElement {
@@ -5780,7 +5799,7 @@ function imageryChip(layer: GibsLayer): HTMLButtonElement {
   chip.title = layer.layer;
   chip.addEventListener("click", () => {
     setImagery(view.imagery === layer.id ? null : layer.id);
-    for (const other of fieldList.querySelectorAll<HTMLButtonElement>("button[data-imagery]")) {
+    for (const other of imageryList.querySelectorAll<HTMLButtonElement>("button[data-imagery]")) {
       other.setAttribute("aria-pressed", String(other.dataset.imagery === view.imagery));
     }
   });
@@ -5803,6 +5822,7 @@ let gibsImagery: GibsImagery | null = null;
  * frame step; the layer does nothing unless the day changed. */
 function syncGibs(): void {
   const layer = gibsLayer(view.imagery);
+  imageryTile.setAttribute("aria-pressed", String(layer !== null));
   if (layer) document.body.dataset.imagery = layer.id;
   else delete document.body.dataset.imagery;
   if (!mapStyleReady || (layer === null && gibsImagery === null)) return;
@@ -5854,7 +5874,8 @@ function syncRailDensity(): void {
  * is the storm tile, pressed while tracks are drawn, which `applyTcView`
  * sets from what actually loaded. */
 function syncRail(): void {
-  const fill = view.field;
+  // A fire field stands in for the field: its own tile is the pressed one.
+  const fill = fireField() === null ? view.field : null;
   const fillFamily = fill === null ? null : familyOf(fill);
   for (const button of variableButtons()) {
     const family = button.dataset.family as IsobaricFamily | undefined;
@@ -6090,6 +6111,15 @@ function updateVariablePresentation(session: VariableSession): void {
   legendBar.style.background = legendGradientFor(session);
   renderLegendKey(ui.legendKey);
   syncDerivedLegend();
+  // A fire field names itself over the map; its key is the derived row,
+  // the anchor's colour bar is hidden with the anchor (style.css).
+  const fire = fireField();
+  if (fire !== null) {
+    const title = t(FIRE_FIELD_TITLE[fire]);
+    variableCode.textContent = `${model.label} / ${FIRE_FIELD_CODE[fire]}`;
+    variableTitle.textContent = title;
+    legend.setAttribute("aria-label", t("legendAria", { label: title }));
+  }
   // A radar drawn alone keeps the legend for its own scale.
   const radarProduct = legend.dataset.radar;
   if (radarProduct === "n0b" || radarProduct === "n0g") {
@@ -6244,7 +6274,12 @@ function syncUrl(): void {
   const search = searchForView(
     view,
     window.location.search,
-    { model: selectedModelId, caseId: activeCase?.id ?? null, experimentEnabled, particlesChosen },
+    {
+      model: selectedModelId,
+      caseId: activeCase?.id ?? null,
+      experimentEnabled,
+      particlesChosen,
+    },
     DEFAULT_VARIABLE,
   );
   const withScene = searchWithScene(search, currentScene());
@@ -7637,8 +7672,17 @@ function applyRadarView(): void {
 }
 
 function setRadarAlone(alone: boolean): void {
+  radarAlone = alone;
   document.body.classList.toggle("radar-alone", alone);
-  slots.fill.layer.setSuppressed(alone);
+  syncFillSuppressed();
+}
+
+/** Hold the fill off screen while something stands in for it: one radar
+ * site drawn alone, or a fire field drawn on the fill's session. */
+function syncFillSuppressed(): void {
+  const fire = fireField();
+  slots.fill.layer.setSuppressed(radarAlone || fire !== null);
+  document.body.classList.toggle("fire-field", fire !== null);
 }
 
 function syncRadarTime(): void {
@@ -9148,34 +9192,43 @@ function syncDerivedTiles(run: ForecastManifest): void {
   const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
   for (const button of derivedButtons()) {
     const id = button.dataset.derived as DerivedId;
-    if (isFireDerivedId(id)) button.hidden = !experimentEnabled || !fireInputsPublished(run, id);
+    if (isFireDerivedId(id)) button.hidden = !fireInputsPublished(run, id);
     else button.hidden = id === "inflow" ? !flow : !warmth;
   }
   syncRail();
 }
 
-/** Flip one derived layer: off hides it at once, on shows it from the
- * frame on screen (computing it if its inputs are decoded; a fire layer
- * opens its inputs first). */
-function setDerivedShown(id: DerivedId, shown: boolean): void {
+/** Flip one of the experiment's derived layers: off hides it at once, on
+ * shows it from the frame on screen (computing it if its inputs are
+ * decoded). */
+function setDerivedShown(id: "inflow" | "front", shown: boolean): void {
   if (view.derived[id] === shown) return;
   view.derived[id] = shown;
   syncRail();
   syncDerivedLegend();
   syncUrl();
-  if (isFireDerivedId(id)) {
-    if (shown) {
-      applyFireDerived();
-      return;
-    }
-    fireDerived.layers[id].layer.setVisible(false);
-    // An input no layer reads any more goes back to the view's tiles.
-    refreshViewportTiles();
-    return;
-  }
   if (!composite) return;
   if (!shown) composite.layers[id].layer.setVisible(false);
   else if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+}
+
+/** The fire field on screen: the one the view has on, while the run ships
+ * its inputs and its anchor is the field — null otherwise, and the field
+ * is then drawn as itself. */
+function fireField(): DerivedFireId | null {
+  const id = fireFieldOf(view.derived);
+  if (id === null || manifest === null || !fireInputsPublished(manifest, id)) return null;
+  return view.field === FIRE_FIELD_ANCHOR[id] ? id : null;
+}
+
+/** Put a fire field on (or none), hiding the ones going off. */
+function setFireField(next: DerivedFireId | null): void {
+  for (const id of DERIVED_FIRE_IDS) {
+    const on = id === next;
+    if (view.derived[id] === on) continue;
+    view.derived[id] = on;
+    if (!on) fireDerived.layers[id].layer.setVisible(false);
+  }
 }
 
 /** Whether the run on screen ships the experiment's flow bundle — the
@@ -9421,6 +9474,7 @@ const HOTSPOT_CELL_BUDGET = 4_000_000;
  * never blocking it — and hand each the frame on screen as it lands. */
 function applyFireDerived(): void {
   if (!manifest) return;
+  syncFillSuppressed();
   syncDerivedLegend();
   const sequence = initializeSequence;
   const wanted = new Set<ForecastBundleId>();
@@ -9495,7 +9549,7 @@ function trySelectFireDerived(index: number): void {
     const longwave = scalar("ir104")!;
     const validTime = frameValidTime(index);
     showDerived(fireDerived.layers.hotspot, planes.get("ir039")!.session, builtFrom(FIRE_DERIVED_INPUTS.hotspot), () =>
-      hotspots(shortwave, longwave, validTime),
+      hotspots(shortwave, longwave, validTime, FORECAST_MODELS[selectedModelId].subLongitude ?? null),
     );
   }
   if (ready("ffwi")) {
@@ -9528,18 +9582,25 @@ function trySelectFireDerived(index: number): void {
 /** Switch to a composition: load its primary if it is not the one on screen
  * (the existing variable switch), then reconcile the overlays. A slot the
  * run does not ship empties rather than errors. */
-async function activateComposition(next: ViewComposition): Promise<void> {
+async function activateComposition(
+  next: ViewComposition,
+  { fire = null }: { fire?: DerivedFireId | null } = {},
+): Promise<void> {
   variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable) return;
   const resolved = resolveComposition(next, manifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
   const primary = compositionPrimary(resolved, DEFAULT_VARIABLE);
   setComposition(resolved);
+  setFireField(fire);
   if (primary !== activeSession?.id) {
     await activateVariable(primary);
     return;
   }
-  // The same primary, other lines: only the overlay changes.
+  // The same primary, other lines or the fire field on or off over it:
+  // only those change.
   applyOverlays();
+  applyFireDerived();
+  refreshViewportTiles();
   if (activeSession) {
     updateVariablePresentation(activeSession);
     syncUrl();
@@ -9857,9 +9918,10 @@ for (const button of variableButtons()) {
       // The pressure tile is the lines' switch: on over the field, off
       // again; from the lines-alone view it puts the field back rather
       // than leaving the screen empty.
-      if (view.lines === null) void activateComposition({ fill: view.field, lines: preferredPressureVariable() });
+      const fire = { fire: fireField() };
+      if (view.lines === null) void activateComposition({ fill: view.field, lines: preferredPressureVariable() }, fire);
       else if (view.field === null) restoreField();
-      else void activateComposition({ fill: view.field, lines: null });
+      else void activateComposition({ fill: view.field, lines: null }, fire);
     } else if (family !== undefined) {
       // A family tile opens the member last on screen; the level row then
       // moves between its surfaces. Pressed already, a family of variants
@@ -9880,6 +9942,11 @@ for (const button of variableButtons()) {
 for (const button of derivedButtons()) {
   button.addEventListener("click", () => {
     const id = button.dataset.derived as DerivedId;
+    // A fire field is a field tile: a radio, which pressing again keeps.
+    if (isFireDerivedId(id)) {
+      if (fireField() !== id) void activateComposition({ fill: FIRE_FIELD_ANCHOR[id], lines: view.lines }, { fire: id });
+      return;
+    }
     setDerivedShown(id, !view.derived[id]);
   });
 }
@@ -9925,6 +9992,7 @@ function applyAppearance(): void {
  * lines — and the basemap's label language. */
 function applyLocale(): void {
   renderLanguageList();
+  renderImagerySheet();
   probePanel.root.setAttribute("aria-label", t("probeAria"));
   probePanel.close.setAttribute("aria-label", t("probeCloseAria"));
   applyDatasetWording();
@@ -10214,6 +10282,10 @@ updateTransport();
 syncRail();
 buildPlaceholderTicks();
 resetPreloadCard(FRAME_COUNT);
+// The daily imagery has a tile of its own, apart from the fields: no run
+// carries it, so it shows from the start.
+imageryTile.hidden = false;
+renderImagerySheet();
 map.once("load", () => {
   mapStyleReady = true;
   // A theme or language picked while the style was still loading was built

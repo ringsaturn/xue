@@ -77,6 +77,7 @@ export const en = {
   varHotspot: "IR 3.9",
   varFfwi: "FIRE WX",
   varFwalert: "RED FLAG",
+  varImagery: "DAILY",
   /** The ocean set's tiles: the skin temperature is read as the SST it is
    * over water but the gloss says what the field is, sea ice heads with
    * its cover, the waves with their significant height. */
@@ -155,6 +156,7 @@ export const en = {
   glyphHotspot: "H",
   glyphFfwi: "W",
   glyphFwalert: "R",
+  glyphImagery: "G",
   // S for the sea surface, I for ice, H for Hs — the significant wave
   // height's own symbol (W is the wind's).
   glyphTmpsfc: "S",

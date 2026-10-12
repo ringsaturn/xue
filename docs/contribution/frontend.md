@@ -31,7 +31,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
-| `hotspot.ts`, `firewx.ts` | The fire layers (`?derived=`): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`); offered only under `?x=` until tested. |
+| `hotspot.ts`, `firewx.ts` | The fire fields (`?derived=`, one at a time, drawn alone on an anchor input's session): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`). |
 | `gibs.ts` | NASA GIBS daily corrected-reflectance underlay (`?gibs=`): one raster source and layer under the fill, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
@@ -346,7 +346,11 @@ and the window shrinks to fit it.
   the hills) or below `MIN_SHADOW_ZOOM` (9), where a mountain's shadow is a
   few DEM pixels; the switch stays on and the shadows return on the frame
   playback stops at, or when the camera comes close.
-- Derived fire layers (`hotspot.ts`, `firewx.ts`): a pressed tile opens the
+- Derived fire fields (`hotspot.ts`, `firewx.ts`): each is a field tile,
+  one at a time. Pressing one makes its anchor input the view's field
+  (`FIRE_FIELD_ANCHOR`: `ir039`, `tmp2m`), which keeps the timeline and the
+  lines but is held off screen (`syncFillSuppressed`, shared with a radar
+  site drawn alone); any other field press drops it. It opens the
   layer's input sessions beside the composition (`applyFireDerived`), each
   decoding whole planes while a layer that reads it is on, and the plane is
   recomputed on the CPU for every frame shown, into a `ForecastLayer` added
@@ -357,8 +361,8 @@ and the window shrinks to fit it.
   CPU pass, not a fragment shader, so it can be unit-tested and shares
   the experiment's input plumbing: separable box sums keep it linear in
   the cells whatever the window.
-- NASA GIBS underlay (`gibs.ts`, `?gibs=`, offered only under `?x=` until
-  tested): the only layer whose tiles do
+- NASA GIBS underlay (`gibs.ts`, `?gibs=`, from its own overlay tile and
+  `#imagery-sheet`): the only layer whose tiles do
   not come from our bucket or the basemap. GIBS's WMTS (`epsg3857/best`,
   `GoogleMapsCompatible_Level9`, no key, `Access-Control-Allow-Origin: *`)
   serves one picture per platform per UTC day; the date follows the
@@ -381,9 +385,9 @@ copy.
 
 Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
-`#field-sheet`, whose last group picks the GIBS underlay), **overlays**
-(switches: pressure lines, particles, a volume, derived layers — the
-experiment's and the fire layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
+`#field-sheet`, and the three fire fields), **overlays**
+(switches: pressure lines, particles, a volume, the GIBS daily imagery's
+sheet trigger, the experiment's derived layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
 `syncFieldTiles` hides unshipped tiles and writes a generic one for an
 on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px

@@ -52,12 +52,11 @@ describe("?gibs=", () => {
     expect(searchWithGibs("?type=temp&gibs=aqua", null)).toBe("?type=temp");
   });
 
-  it("round-trips through the view, under the experiment only", () => {
+  it("round-trips through the view", () => {
     const defaults = { field: "tmp2m", lines: null, particles: true } as const;
-    expect(parseView("?model=gfs&type=temp&gibs=noaa21-fc", defaults).view.imagery).toBeNull();
-    const search = "?model=gfs&type=temp&x=none&gibs=noaa21-fc";
+    const search = "?model=gfs&type=temp&gibs=noaa21-fc";
     const { view } = parseView(search, defaults);
     expect(view.imagery).toBe("noaa21-fc");
-    expect(searchForView(view, search, { model: "gfs", caseId: null, experimentEnabled: true, particlesChosen: false }, "tmp2m")).toBe(search);
+    expect(searchForView(view, search, { model: "gfs", caseId: null, experimentEnabled: false, particlesChosen: false }, "tmp2m")).toBe(search);
   });
 });
