@@ -1,3 +1,4 @@
+import { gibsLayer } from "./gibs";
 import {
   FORECAST_MODELS,
   isBundleVariableId,
@@ -224,6 +225,69 @@ export function searchWithExperiment(search: string, state: ExperimentState): st
   else if (state.inflow) params.set("x", "inflow");
   else if (state.front) params.set("x", "front");
   else params.set("x", "none");
+  return `?${params.toString()}`;
+}
+
+/** The fire layers the shell derives from published bundles, drawn over
+ * whatever field is on screen: `hotspot` (the 3.9 µm contextual test on
+ * the geostationary disks), `ffwi` (the Fosberg fire weather index) and
+ * `fwalert` (dry air and gusts together). `?derived=hotspot,ffwi` names
+ * the ones drawn; absent, `off` or nothing recognised draws none. Unlike
+ * `?x=` these are no experiment: each shows wherever the run ships its
+ * inputs. Link only, never stored. */
+export const DERIVED_FIRE_IDS = ["hotspot", "ffwi", "fwalert"] as const;
+export type DerivedFireId = (typeof DERIVED_FIRE_IDS)[number];
+export type DerivedFireState = Record<DerivedFireId, boolean>;
+
+const DERIVED_FIRE_ALIASES: Record<string, DerivedFireId> = {
+  hotspot: "hotspot",
+  hotspots: "hotspot",
+  fire: "hotspot",
+  fires: "hotspot",
+  ffwi: "ffwi",
+  fosberg: "ffwi",
+  fireweather: "ffwi",
+  fwalert: "fwalert",
+  alert: "fwalert",
+  redflag: "fwalert",
+};
+
+export function parseDerivedFromSearch(search: string): DerivedFireState {
+  const state: DerivedFireState = { hotspot: false, ffwi: false, fwalert: false };
+  const value = new URLSearchParams(search).get("derived");
+  if (value === null) return state;
+  for (const part of value.split(",")) {
+    const id = DERIVED_FIRE_ALIASES[part.trim().toLowerCase()];
+    if (id) state[id] = true;
+  }
+  return state;
+}
+
+/** The given query string carrying the fire layers drawn, in the fixed
+ * order, and no parameter at all when none is. */
+export function searchWithDerived(search: string, state: DerivedFireState): string {
+  const params = new URLSearchParams(search);
+  const named = DERIVED_FIRE_IDS.filter((id) => state[id]);
+  if (named.length === 0) params.delete("derived");
+  else params.set("derived", named.join(","));
+  return `?${params.toString()}`;
+}
+
+/** The NASA GIBS daily picture drawn under the field (gibs.ts):
+ * `?gibs=snpp`, `?gibs=noaa20-fc`, … — a `GIBS_LAYERS` id — or nothing for
+ * none, which is the default; `off` and anything unknown read as none.
+ * Link only, never stored. */
+export function parseGibsFromSearch(search: string): string | null {
+  const value = new URLSearchParams(search).get("gibs");
+  if (value === null) return null;
+  return gibsLayer(value.trim().toLowerCase())?.id ?? null;
+}
+
+/** The given query string carrying the GIBS picture, or none. */
+export function searchWithGibs(search: string, id: string | null): string {
+  const params = new URLSearchParams(search);
+  if (id === null) params.delete("gibs");
+  else params.set("gibs", id);
   return `?${params.toString()}`;
 }
 

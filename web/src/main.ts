@@ -59,6 +59,9 @@ import {
   thermalFrontZone,
   warmMoistInflow,
 } from "./composite";
+import { fireWeatherAlert, fireWeatherAlertPalette, fosbergPalette, fosbergPlane } from "./firewx";
+import { GIBS_LAYERS, GibsImagery, gibsDate, gibsLayer, type GibsLayer } from "./gibs";
+import { hotspotPalette, hotspots } from "./hotspot";
 import {
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
@@ -142,6 +145,8 @@ import {
   parseCameraFromHash,
   parseCaseFromSearch,
   parseExperimentFromSearch,
+  DERIVED_FIRE_IDS,
+  type DerivedFireId,
   parseModelFromSearch,
   parseResolutionFromSearch,
   parseSceneFromSearch,
@@ -1212,6 +1217,12 @@ const legendDerived = required<HTMLElement>("legend-derived");
 const legendKey = required<HTMLElement>("legend-key");
 const legendInflow = required<HTMLElement>("legend-inflow");
 const legendFront = required<HTMLElement>("legend-front");
+/** The fire layers' rows of the derived key, by layer. */
+const legendFire: Record<DerivedFireId, HTMLElement> = {
+  hotspot: required<HTMLElement>("legend-hotspot"),
+  ffwi: required<HTMLElement>("legend-ffwi"),
+  fwalert: required<HTMLElement>("legend-fwalert"),
+};
 const trackStart = required<HTMLElement>("track-start");
 const trackHorizon = required<HTMLElement>("track-horizon");
 const frameTooltip = required<HTMLOutputElement>("frame-tooltip");
@@ -1707,8 +1718,10 @@ const volumeOverlay: { session: VariableSession | null; wantedKeys: Set<string>;
 /** One field the experiment computes: its layer, the grid it was last
  * configured for, and the input planes the plane on screen was built from
  * (their joined cache keys), so a repeat select never recomputes. */
+type DerivedId = "inflow" | "front" | DerivedFireId;
+
 interface DerivedLayer {
-  id: "inflow" | "front";
+  id: DerivedId;
   layer: ForecastLayer;
   gridSource: BundleMetadata | null;
   builtFrom: string | null;
@@ -1720,7 +1733,7 @@ interface DerivedLayer {
 interface Composite {
   flow: VariableSession | null;
   warmth: VariableSession | null;
-  layers: Record<DerivedLayer["id"], DerivedLayer>;
+  layers: Record<"inflow" | "front", DerivedLayer>;
   /** Input planes not decoded yet for the frame on screen: a decode landing
    * on one of these retries the composite. */
   wantedKeys: Set<string>;
@@ -1748,22 +1761,65 @@ const composite: Composite | null = experimentEnabled
     }
   : null;
 
-/** Whether a session feeds the experiment's derived fields. Such a session
- * always decodes whole planes: the fields are computed over the grid, and
- * the particles the flow runs respawn anywhere on it. */
-function isCompositeInput(session: VariableSession): boolean {
-  return composite !== null && (session === composite.flow || session === composite.warmth);
+/** The bundles each fire layer is computed from, the first being the grid
+ * it is drawn on (hotspot.ts, firewx.ts). A run that ships them all shows
+ * the layer's tile; nothing else is asked of the source. */
+const FIRE_DERIVED_INPUTS: Record<DerivedFireId, readonly ForecastBundleId[]> = {
+  hotspot: ["ir039", "ir104"],
+  ffwi: ["tmp2m", "dpt2m", "wind10m"],
+  fwalert: ["tmp2m", "dpt2m", "gust"],
+};
+
+/** The fire layers' state, the experiment's machinery without the
+ * experiment: input sessions opened beside the composition while a layer
+ * that reads them is on, a derived layer each (added to the map the first
+ * time it is drawn), and the cache keys waited on or shown. */
+interface FireDerived {
+  inputs: Map<ForecastBundleId, VariableSession>;
+  layers: Record<DerivedFireId, DerivedLayer>;
+  wantedKeys: Set<string>;
+  shownKeys: string[];
 }
 
-/** The experiment's input sessions that are not otherwise on screen. */
+const fireDerived: FireDerived = {
+  inputs: new Map(),
+  layers: { hotspot: makeDerivedLayer("hotspot"), ffwi: makeDerivedLayer("ffwi"), fwalert: makeDerivedLayer("fwalert") },
+  wantedKeys: new Set(),
+  shownKeys: [],
+};
+
+/** Whether a session feeds a derived field — the experiment's or a fire
+ * layer's. Such a session always decodes whole planes: the fields are
+ * computed over the grid, and the particles the flow runs respawn
+ * anywhere on it. */
+function isCompositeInput(session: VariableSession): boolean {
+  if (composite !== null && (session === composite.flow || session === composite.warmth)) return true;
+  return shownFireInputs().has(session);
+}
+
+/** The fire layers' input sessions a layer on screen reads: one whose
+ * layers are all off stays resident but decodes nothing for them. */
+function shownFireInputs(): Set<VariableSession> {
+  const inputs = new Set<VariableSession>();
+  for (const id of DERIVED_FIRE_IDS) {
+    if (!view.derived[id]) continue;
+    for (const input of FIRE_DERIVED_INPUTS[id]) {
+      const session = fireDerived.inputs.get(input);
+      if (session) inputs.add(session);
+    }
+  }
+  return inputs;
+}
+
+/** The derived fields' input sessions that are not otherwise on screen. */
 function compositeSessions(): VariableSession[] {
-  if (!composite) return [];
   const shown = new Set<VariableSession>();
   if (activeSession) shown.add(activeSession);
   for (const slot of overlaySlots()) shown.add(slot.session!);
-  return [composite.flow, composite.warmth].filter(
-    (session): session is VariableSession => session !== null && !shown.has(session),
-  );
+  const inputs = shownFireInputs();
+  if (composite?.flow) inputs.add(composite.flow);
+  if (composite?.warmth) inputs.add(composite.warmth);
+  return [...inputs].filter((session) => !shown.has(session));
 }
 /** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
  * and layer; a missing or unrecognized param falls back to the default. */
@@ -4223,6 +4279,7 @@ function updateFrameReadout(index: number): void {
   syncTcTime();
   syncStationTime();
   syncShadowTime(index);
+  syncGibs();
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -4585,6 +4642,7 @@ function trySelectFrame(index: number): boolean {
     for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
     trySelectVolumeOverlay(index);
     trySelectComposite(index);
+    trySelectFireDerived(index);
     requestColumnFrame();
     prefetchNext(index);
     return true;
@@ -4860,6 +4918,7 @@ function handleDecodedFrame(
     for (const gun of overlay.shownGuns) displayedKeys.add(gun);
   }
   for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
+  for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
   for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
     const oldest = planeCache.keys().next().value;
@@ -4905,6 +4964,7 @@ function handleDecodedFrame(
   }
   if (volumeOverlay.wantedKeys.has(key) && activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
   if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+  if (fireDerived.wantedKeys.has(key) && activeFrameIndex !== null) trySelectFireDerived(activeFrameIndex);
 }
 
 /** The track's geometry for the axis on screen: which frames carry a tick
@@ -5514,7 +5574,71 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
     wrapper.append(button, chips);
     nodes.push(wrapper);
   }
+  nodes.push(...imagerySheetNodes());
   fieldList.replaceChildren(...nodes);
+}
+
+/** The sheet's last group: the NASA GIBS daily pictures, whatever the run,
+ * a row of platforms in true colour and one in the false colour that
+ * shows fire; pressing the chip on screen takes the picture away. */
+function imagerySheetNodes(): HTMLElement[] {
+  const title = document.createElement("p");
+  title.className = "field-group-heading";
+  title.textContent = t("fieldGroupImagery");
+  title.title = t("gibsTip");
+  const row = (falseColor: boolean): HTMLElement => {
+    const chips = document.createElement("div");
+    chips.className = "field-chips field-imagery";
+    chips.setAttribute("role", "group");
+    const label = document.createElement("span");
+    label.className = "field-imagery-label";
+    label.textContent = t(falseColor ? "gibsFalseColor" : "gibsTrueColor");
+    chips.append(label);
+    for (const layer of GIBS_LAYERS.filter((entry) => entry.falseColor === falseColor)) chips.append(imageryChip(layer));
+    return chips;
+  };
+  return [title, row(false), row(true)];
+}
+
+function imageryChip(layer: GibsLayer): HTMLButtonElement {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.dataset.imagery = layer.id;
+  chip.setAttribute("aria-pressed", String(view.imagery === layer.id));
+  chip.textContent = layer.code;
+  chip.title = layer.layer;
+  chip.addEventListener("click", () => {
+    setImagery(view.imagery === layer.id ? null : layer.id);
+    for (const other of fieldList.querySelectorAll<HTMLButtonElement>("button[data-imagery]")) {
+      other.setAttribute("aria-pressed", String(other.dataset.imagery === view.imagery));
+    }
+  });
+  return chip;
+}
+
+/** The daily picture under the field (`?gibs=`); null for none. */
+function setImagery(id: string | null): void {
+  if (view.imagery === id) return;
+  view.imagery = id;
+  syncGibs();
+  syncUrl();
+}
+
+let gibsImagery: GibsImagery | null = null;
+
+/** Draw the picture the view names under the field — under the fill
+ * layer once there is one, under the coastline before — on the
+ * playhead's UTC day, and its notice on the credit line. Called on every
+ * frame step; the layer does nothing unless the day changed. */
+function syncGibs(): void {
+  const layer = gibsLayer(view.imagery);
+  if (layer) document.body.dataset.imagery = layer.id;
+  else delete document.body.dataset.imagery;
+  if (!mapStyleReady || (layer === null && gibsImagery === null)) return;
+  gibsImagery ??= new GibsImagery(map);
+  const fill = slots.fill.layer.id;
+  const before = map.getLayer(fill) ? fill : map.getLayer(FORECAST_ANCHOR_LAYER) ? FORECAST_ANCHOR_LAYER : undefined;
+  gibsImagery.show(layer, gibsDate(stationTime(), Date.now()), before);
 }
 
 /** A rail section with nothing to show is hidden whole, and the rule
@@ -5576,7 +5700,7 @@ function syncRail(): void {
   particlesToggle.setAttribute("aria-pressed", String(view.particles));
   syncVolumeTile();
   for (const button of derivedButtons()) {
-    button.setAttribute("aria-pressed", String(view.derived[button.dataset.derived as "inflow" | "front"]));
+    button.setAttribute("aria-pressed", String(view.derived[button.dataset.derived as DerivedId]));
   }
   soundingTile.setAttribute("aria-pressed", String(!soundingTile.hidden && view.marks.stations.soundings));
   airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
@@ -7999,6 +8123,7 @@ function applyVariable(session: VariableSession): void {
   applyVolumeOverlay();
   applyMosaicMembers();
   applyComposite();
+  applyFireDerived();
   applyRadarView();
   syncLapse();
   updateVariablePresentation(session);
@@ -8820,37 +8945,63 @@ function setVolumeShown(shown: boolean): void {
   applyVolumeOverlay();
 }
 
-/** The experiment's key under the colour scale: a row per derived layer
- * the run can feed — the frontal zone needs the θe, the inflow both
- * inputs — and nothing at all outside the experiment. */
+/** The derived key under the colour scale: a row per derived layer the
+ * run can feed and the view draws — the frontal zone needs the θe, the
+ * inflow both experiment inputs, a fire layer all of its own — and the
+ * experiment's rows nothing at all outside it. */
 function syncDerivedLegend(): void {
   const warmth = experimentEnabled && manifest !== null && hasBundle(manifest, EXPERIMENT_WARMTH_ID);
   const flow = warmth && compositeFlowPublished();
   legendInflow.hidden = !(flow && view.derived.inflow);
   legendFront.hidden = !(warmth && view.derived.front);
-  legendDerived.hidden = legendInflow.hidden && legendFront.hidden;
+  for (const id of DERIVED_FIRE_IDS) {
+    legendFire[id].hidden = !(manifest !== null && fireInputsPublished(manifest, id) && view.derived[id]);
+  }
+  legendDerived.hidden = legendInflow.hidden && legendFront.hidden && DERIVED_FIRE_IDS.every((id) => legendFire[id].hidden);
 }
 
-/** The rail's derived-layer tiles: shown under the experiment on a run that
- * ships their inputs, pressed while the layer is drawn. */
+/** Whether a run ships every input of a fire layer. */
+function fireInputsPublished(run: ForecastManifest, id: DerivedFireId): boolean {
+  return FIRE_DERIVED_INPUTS[id].every((input) => hasBundle(run, input));
+}
+
+function isFireDerivedId(id: DerivedId): id is DerivedFireId {
+  return (DERIVED_FIRE_IDS as readonly string[]).includes(id);
+}
+
+/** The rail's derived-layer tiles: the experiment's under the experiment
+ * on a run that ships their inputs, a fire layer's wherever the run ships
+ * its inputs; pressed while the layer is drawn. */
 function syncDerivedTiles(run: ForecastManifest): void {
   const warmth = experimentEnabled && hasBundle(run, EXPERIMENT_WARMTH_ID);
   const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
   for (const button of derivedButtons()) {
-    const id = button.dataset.derived as "inflow" | "front";
-    button.hidden = id === "inflow" ? !flow : !warmth;
+    const id = button.dataset.derived as DerivedId;
+    if (isFireDerivedId(id)) button.hidden = !fireInputsPublished(run, id);
+    else button.hidden = id === "inflow" ? !flow : !warmth;
   }
   syncRail();
 }
 
 /** Flip one derived layer: off hides it at once, on shows it from the
- * frame on screen (computing it if its inputs are decoded). */
-function setDerivedShown(id: "inflow" | "front", shown: boolean): void {
+ * frame on screen (computing it if its inputs are decoded; a fire layer
+ * opens its inputs first). */
+function setDerivedShown(id: DerivedId, shown: boolean): void {
   if (view.derived[id] === shown) return;
   view.derived[id] = shown;
   syncRail();
   syncDerivedLegend();
   syncUrl();
+  if (isFireDerivedId(id)) {
+    if (shown) {
+      applyFireDerived();
+      return;
+    }
+    fireDerived.layers[id].layer.setVisible(false);
+    // An input no layer reads any more goes back to the view's tiles.
+    refreshViewportTiles();
+    return;
+  }
   if (!composite) return;
   if (!shown) composite.layers[id].layer.setVisible(false);
   else if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
@@ -8926,8 +9077,11 @@ function requestCompositeDecode(session: VariableSession, index: number): void {
  * cache, or null when any is missing — those are then asked for and noted,
  * so their arrival retries the composite. A lead the session's axis lacks is
  * null too, and nothing is asked. */
-function compositeInputPlanes(session: VariableSession, lead: number): { keys: string[]; frames: DecodedFrame[] } | null {
-  if (!composite) return null;
+function compositeInputPlanes(
+  session: VariableSession,
+  lead: number,
+  wanted: Set<string>,
+): { keys: string[]; frames: DecodedFrame[] } | null {
   const offset = sessionOffsetForLead(session, lead);
   if (offset === null) return null;
   const keys = session.variables.map((variable) => cacheKey(session, variable, offset));
@@ -8940,7 +9094,7 @@ function compositeInputPlanes(session: VariableSession, lead: number): { keys: s
       continue;
     }
     complete = false;
-    composite.wantedKeys.add(key);
+    wanted.add(key);
     requestDecode(session, session.variables[position]!, offset);
   }
   if (!complete) return null;
@@ -8959,12 +9113,15 @@ function showDerived(derived: DerivedLayer, source: VariableSession, builtFrom: 
     derived.layer.setVisible(true);
     return;
   }
+  // A fire layer joins the map the first time it is drawn, over the fill
+  // and under the lines like the experiment's.
+  if (!map.getLayer(derived.layer.id)) map.addLayer(derived.layer, slots.lines.layer.id);
   if (derived.gridSource !== source.metadata) {
     derived.layer.configureGrid(source.metadata);
     derived.layer.setDomain(modelDomain());
     derived.layer.setContours(derivedContourStyle(derived.id));
     derived.layer.setVectorField(null);
-    derived.layer.setPalette(derived.id === "inflow" ? inflowPalette() : frontPalette());
+    derived.layer.setPalette(derivedPalette(derived.id));
     derived.gridSource = source.metadata;
   }
   derived.layer.setFrame(compute());
@@ -8983,7 +9140,25 @@ function showDerived(derived: DerivedLayer, source: VariableSession, builtFrom: 
  * always draws at multiples of the interval, never lands: an interval of
  * 100 has no multiple between 50 and 51, and the zero contour that would
  * otherwise ring every faint patch is out of range. */
-function derivedContourStyle(id: DerivedLayer["id"]): ContourStyle {
+function derivedContourStyle(id: DerivedId): ContourStyle | null {
+  // A hotspot is a cell or two: drawn as its palette, nothing traced.
+  if (id === "hotspot") return null;
+  if (id === "ffwi" || id === "fwalert") {
+    // The palettes carry their own translucency; one line traces FFWI 50
+    // (a red-flag day) or the edge of the alert region.
+    return {
+      offset: DERIVED_DECODE_OFFSET,
+      scale: 1 / DERIVED_MAX_CODE,
+      interval: 100,
+      emphasisInterval: 0,
+      values: [DERIVED_DECODE_OFFSET + 0.5],
+      lineWidth: 1,
+      emphasisWidth: 1,
+      lineColor: id === "ffwi" ? [0.62, 0.08, 0.06, 0.95] : [0.88, 0.12, 0.16, 0.95],
+      fillAlpha: 1,
+      smoothing: 0,
+    };
+  }
   const inflow = id === "inflow";
   return {
     offset: DERIVED_DECODE_OFFSET,
@@ -9000,6 +9175,14 @@ function derivedContourStyle(id: DerivedLayer["id"]): ContourStyle {
 }
 const DERIVED_DECODE_OFFSET = 50;
 
+function derivedPalette(id: DerivedId): Uint8Array {
+  if (id === "inflow") return inflowPalette();
+  if (id === "front") return frontPalette();
+  if (id === "hotspot") return hotspotPalette();
+  if (id === "ffwi") return fosbergPalette();
+  return fireWeatherAlertPalette();
+}
+
 /** Compute and show the experiment's fields for the primary frame at
  * `index`, and run the particles off the flow, from whatever input planes
  * are decoded: a field whose inputs are not all there yet keeps its last
@@ -9009,8 +9192,8 @@ const DERIVED_DECODE_OFFSET = 50;
 function trySelectComposite(index: number): void {
   if (!composite || !layersAdded) return;
   const lead = frameLeadSeconds(index);
-  const flow = composite.flow ? compositeInputPlanes(composite.flow, lead) : null;
-  const warmth = composite.warmth ? compositeInputPlanes(composite.warmth, lead) : null;
+  const flow = composite.flow ? compositeInputPlanes(composite.flow, lead, composite.wantedKeys) : null;
+  const warmth = composite.warmth ? compositeInputPlanes(composite.warmth, lead, composite.wantedKeys) : null;
   composite.shownKeys = [...(flow?.keys ?? []), ...(warmth?.keys ?? [])];
   for (const key of composite.shownKeys) composite.wantedKeys.delete(key);
   if (warmth && composite.warmth && view.derived.front) {
@@ -9039,6 +9222,135 @@ function trySelectComposite(index: number): void {
     windLayer!.setInk(experimentFlowInk());
     windLayer!.setWindPlanes(flow.frames[0]!.plane, flow.frames[1]!.plane);
     windLayer!.setVisible(true);
+  }
+}
+
+/** The rung a fire layer's input opens at. The hotspot test compares
+ * cells with their neighbours, so its two channels read at the rung the
+ * field on screen reads at, where the run offers that rung for them (on a
+ * satellite source every channel has the same ladder); everything else
+ * takes what an overlay would. */
+function fireInputTier(id: ForecastBundleId): VariantDescriptor | null | undefined {
+  if (!manifest || (id !== "ir039" && id !== "ir104")) return undefined;
+  const reference = activeSession;
+  if (!reference || !hasBundle(manifest, reference.id)) return undefined;
+  const descriptor = manifest.bundles.find((bundle) => bundle.variable === id);
+  if (!descriptor) return undefined;
+  const { width, height } = reference.variant ?? geoGrid(reference.metadata);
+  // The test runs on the CPU over the whole plane every frame: past this
+  // many cells (a full 0.04° disk is 9 M) the overlay's own pick stands.
+  if (width * height > HOTSPOT_CELL_BUDGET) return undefined;
+  if (reference.variant === null) return null;
+  return descriptor.variants?.find((variant) => variant.width === width && variant.height === height);
+}
+const HOTSPOT_CELL_BUDGET = 4_000_000;
+
+/** Open the inputs of every fire layer the view draws and the run can
+ * feed, beside the composition like the experiment's — after the primary,
+ * never blocking it — and hand each the frame on screen as it lands. */
+function applyFireDerived(): void {
+  if (!manifest) return;
+  syncDerivedLegend();
+  const sequence = initializeSequence;
+  const wanted = new Set<ForecastBundleId>();
+  for (const id of DERIVED_FIRE_IDS) {
+    if (view.derived[id] && fireInputsPublished(manifest, id)) for (const input of FIRE_DERIVED_INPUTS[id]) wanted.add(input);
+  }
+  for (const id of wanted) {
+    if (fireDerived.inputs.has(id)) continue;
+    const tier = fireInputTier(id);
+    loadVariable(id, sequence, "overlay", null, tier === undefined ? {} : { tier })
+      .then((session) => {
+        if (sequence !== initializeSequence) return;
+        fireDerived.inputs.set(id, session);
+        refreshViewportTiles();
+        const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+        sendPrefetchWindow(index);
+        if (activeFrameIndex !== null) trySelectFireDerived(activeFrameIndex);
+        else requestCompositeDecode(session, index);
+      })
+      .catch((error: unknown) => {
+        if (sequence !== initializeSequence) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.warn(`fire layer input ${id} unavailable`, error);
+      });
+  }
+  if (activeFrameIndex !== null) trySelectFireDerived(activeFrameIndex);
+}
+
+/** Forget the fire layers' sessions and blank their layers: a new dataset. */
+function resetFireDerived(): void {
+  fireDerived.inputs.clear();
+  fireDerived.wantedKeys.clear();
+  fireDerived.shownKeys = [];
+  for (const derived of Object.values(fireDerived.layers)) {
+    derived.layer.setVisible(false);
+    derived.gridSource = null;
+    derived.builtFrom = null;
+  }
+}
+
+/** Compute and show the fire layers for the primary frame at `index` from
+ * whatever input planes are decoded: a layer whose inputs are not all
+ * there yet keeps its last plane up, the way an overlay does. */
+function trySelectFireDerived(index: number): void {
+  if (!layersAdded || fireDerived.inputs.size === 0) return;
+  const lead = frameLeadSeconds(index);
+  const planes = new Map<ForecastBundleId, { session: VariableSession; keys: string[]; frames: DecodedFrame[] }>();
+  const shownKeys: string[] = [];
+  for (const id of DERIVED_FIRE_IDS) {
+    if (!view.derived[id]) continue;
+    for (const input of FIRE_DERIVED_INPUTS[id]) {
+      if (planes.has(input)) continue;
+      const session = fireDerived.inputs.get(input);
+      const read = session ? compositeInputPlanes(session, lead, fireDerived.wantedKeys) : null;
+      if (session && read) {
+        planes.set(input, { session, ...read });
+        shownKeys.push(...read.keys);
+      }
+    }
+  }
+  fireDerived.shownKeys = shownKeys;
+  for (const key of shownKeys) fireDerived.wantedKeys.delete(key);
+  const scalar = (input: ForecastBundleId) => {
+    const read = planes.get(input);
+    return read ? { grid: geoGrid(read.session.metadata), variable: read.session.variable, plane: read.frames[0]!.plane } : null;
+  };
+  const builtFrom = (ids: readonly ForecastBundleId[]) => ids.flatMap((input) => planes.get(input)!.keys).join("|");
+  const ready = (id: DerivedFireId) => view.derived[id] && FIRE_DERIVED_INPUTS[id].every((input) => planes.has(input));
+
+  if (ready("hotspot")) {
+    const shortwave = scalar("ir039")!;
+    const longwave = scalar("ir104")!;
+    const validTime = frameValidTime(index);
+    showDerived(fireDerived.layers.hotspot, planes.get("ir039")!.session, builtFrom(FIRE_DERIVED_INPUTS.hotspot), () =>
+      hotspots(shortwave, longwave, validTime),
+    );
+  }
+  if (ready("ffwi")) {
+    const wind = planes.get("wind10m")!;
+    const [u, v] = wind.session.variables;
+    if (u && v && wind.frames.length >= 2) {
+      const temperature = scalar("tmp2m")!;
+      const dewPoint = scalar("dpt2m")!;
+      showDerived(fireDerived.layers.ffwi, planes.get("tmp2m")!.session, builtFrom(FIRE_DERIVED_INPUTS.ffwi), () =>
+        fosbergPlane(temperature, dewPoint, {
+          grid: geoGrid(wind.session.metadata),
+          u,
+          v,
+          uPlane: wind.frames[0]!.plane,
+          vPlane: wind.frames[1]!.plane,
+        }),
+      );
+    }
+  }
+  if (ready("fwalert")) {
+    const temperature = scalar("tmp2m")!;
+    const dewPoint = scalar("dpt2m")!;
+    const gust = scalar("gust")!;
+    showDerived(fireDerived.layers.fwalert, planes.get("tmp2m")!.session, builtFrom(FIRE_DERIVED_INPUTS.fwalert), () =>
+      fireWeatherAlert(temperature, dewPoint, gust),
+    );
   }
 }
 
@@ -9150,6 +9462,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   windLayerGridSource = null;
   windLayer?.setVisible(false);
   resetComposite();
+  resetFireDerived();
   detachVolumeOverlay();
   particlesToggle.hidden = true;
   volumeTile.hidden = true;
@@ -9395,7 +9708,7 @@ for (const button of variableButtons()) {
 }
 for (const button of derivedButtons()) {
   button.addEventListener("click", () => {
-    const id = button.dataset.derived as "inflow" | "front";
+    const id = button.dataset.derived as DerivedId;
     setDerivedShown(id, !view.derived[id]);
   });
 }
@@ -9699,6 +10012,7 @@ map.once("load", () => {
   applySceneFromUrl();
   startTerrainShadows();
   startTerrainContours();
+  syncGibs();
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.
   void initialize({ frame: urlCamera === null });

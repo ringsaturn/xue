@@ -600,7 +600,8 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
 /** The satellite bundles — brightness temperature in the 10.4 µm infrared
  * window, one bundle per channel, named by nominal wavelength and
  * instrument-neutral (AHI band 13 and ABI channel 13 are both `ir104`; the
- * file's `band` block says which), the Dust RGB composite a producer
+ * file's `band` block says which), the 3.9 µm shortwave window the fire
+ * pixels show in (`ir039`, one more channel of the same kind), the Dust RGB composite a producer
  * derives from four infrared channels (`dustrgb`, a `CompositeBundleId`),
  * the two dust confidences the same producer derives from five
  * (`dustcf`, the DEBRA factor, and `zhouye`, the same chain held to the
@@ -610,8 +611,8 @@ export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw"
  * windows by night (`truecolor`, another `CompositeBundleId`; every
  * satellite source publishes it) — held to the encoders by
  * `tests/fixtures/satellite-registry.json`. */
-type SatelliteId = "ir104" | CompositeBundleId | "dustcf" | "zhouye";
-export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"];
+type SatelliteId = "ir104" | "ir039" | CompositeBundleId | "dustcf" | "zhouye";
+export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"];
 
 /** The aerosol set — the aerosol optical depth at 550 nm, for the whole
  * column and for each of five species, and the surface particulate matter

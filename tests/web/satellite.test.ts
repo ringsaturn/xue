@@ -190,12 +190,12 @@ describe("the satellite registry", () => {
     expect(COMPOSITE_BUNDLES).toEqual(compositeBundles);
     expect(confidenceBundle).toEqual(["dustcf"]);
     expect(zhouyeBundle).toEqual(["zhouye"]);
-    expect(SATELLITE_IDS).toEqual(["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"]);
+    expect(SATELLITE_IDS).toEqual(["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"]);
     for (const gun of NIGHT_GUN_IDS) expect(Object.keys(registry)).not.toContain(gun);
     for (const id of SATELLITE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
       expect(isVectorBundle(id)).toBe(false);
-      // Five single fields, each with a tile of its own, in the sheet's
+      // Six single fields, none behind another's tile, in the sheet's
       // satellite group.
       expect(familyOf(id)).toBeNull();
       expect(variableSpec(id)?.family).toBeNull();
@@ -260,6 +260,45 @@ describe("the satellite registry", () => {
     expect(identifyBundle([bundleVariable("ir104", wv)])).toBeNull();
     expect(identityForBundleId("ir104")).toEqual({ family: "ir104", level: null, vector: false });
     expect(registeredBundleId({ family: "ir104", level: null, vector: false })).toBe("ir104");
+  });
+
+  it("tells the 3.9 µm shortwave window apart by its band", () => {
+    const { parameter, band } = registry.ir039!;
+    const himawari = band!.himawari as BundleBand;
+    expect(identityForParameter(parameter, himawari)).toEqual({ family: "ir039", level: null, vector: false });
+    // ABI channel 7 at 3.90 µm and FCI's IR3.8 at 3.80 µm are the same chart.
+    for (const wavenumber of [256410, 263158]) {
+      expect(identityForParameter(parameter, { ...himawari, scaleFactorOfCentralWaveNumber: 0, scaledValueOfCentralWaveNumber: wavenumber })).toEqual({
+        family: "ir039",
+        level: null,
+        vector: false,
+      });
+    }
+    expect(registeredBundleId({ family: "ir039", level: null, vector: false })).toBe("ir039");
+    expect(variableSpec("ir039")?.code).toBe("IR 3.9");
+    expect(variableSpec("ir039")?.group).toBe("satellite");
+    expect(variableSpec("ir039")?.floorIsNoData).toBe(true);
+    expect(variableSpec("ir039")?.legend()).toEqual(["120", "80", "40", "0", "-40", "-80"]);
+    // Not on any rail: reached through the field sheet.
+    for (const model of ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "geo"] as const) {
+      expect(FORECAST_MODELS[model].railCore).not.toContain("ir039");
+    }
+  });
+
+  it("paints the shortwave window grey to the warmest ground and in the colours of heat above it", () => {
+    // The widened codebook the encoders publish the channel with.
+    const variable: BundleVariable = {
+      ...bundleVariable("ir039"),
+      quantization: { type: "linear", offset: 180, scale: 0.9, minimumCode: 0, maximumCode: 253, nodataCode: 255 },
+    };
+    const palette = buildPalette(variable);
+    expect(rgba(palette, 0)[3]).toBe(0);
+    const at = (kelvin: number) => rgba(palette, Math.round((kelvin - 180) / 0.9));
+    const saturation = ([r, g, b]: number[]) => Math.max(r!, g!, b!) - Math.min(r!, g!, b!);
+    expect(saturation(at(290))).toBeLessThan(10);
+    expect(at(290)[0]).toBeLessThan(90);
+    expect(saturation(at(330))).toBeGreaterThan(150);
+    expect(at(395)[0]).toBeGreaterThan(250);
   });
 
   it("is parsed with its band by the metadata validator", () => {

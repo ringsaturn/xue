@@ -926,6 +926,28 @@ function buildSpecs(): readonly VariableSpec[] {
     meteogramCode: "IR",
     showcaseCode: "IR",
   }),
+  // The 3.9 µm shortwave window: the channel a burning pixel shows in,
+  // tens of kelvin above the ground around it where the 10.4 µm window
+  // barely stirs. Same kelvin file and Celsius readouts as `ir104`; the
+  // ramp is grey to the warmest ground and the colours of heat above it
+  // (palettes.ts). By day reflected sunlight adds to the emission, so a
+  // sunlit cloud reads warm here. Reached through the field sheet, not the
+  // rail: the hotspot overlay is the everyday way to read it.
+  surface({
+    id: "ir039",
+    chart: "ir039",
+    group: "satellite",
+    code: "IR 3.9",
+    title: ["Shortwave", "Infrared"],
+    bufferTitle: "Imagery buffer",
+    labelKey: "varLabelIr039",
+    legend: ["120", "80", "40", "0", "-40", "-80"],
+    floorIsNoData: true,
+    ground: "slate",
+    urlName: "shortwave",
+    urlAliases: ["swir", "ir39"],
+    showcaseCode: "IR 3.9",
+  }),
   // The Dust RGB: the classic three-gun infrared composite (12.3 − 10.4 µm
   // as red, 11.2 − 8.6 µm as green, 10.4 µm as blue, each stretched and
   // the green gamma'd by the producer), drawn straight as colour, so lofted

@@ -30,6 +30,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
+| `hotspot.ts`, `firewx.ts` | The fire layers (`?derived=`): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`) without the experiment. |
+| `gibs.ts` | NASA GIBS daily corrected-reflectance underlay (`?gibs=`): one raster source and layer under the fill, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
 | `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
@@ -343,6 +345,27 @@ and the window shrinks to fit it.
   the hills) or below `MIN_SHADOW_ZOOM` (9), where a mountain's shadow is a
   few DEM pixels; the switch stays on and the shadows return on the frame
   playback stops at, or when the camera comes close.
+- Derived fire layers (`hotspot.ts`, `firewx.ts`): a pressed tile opens the
+  layer's input sessions beside the composition (`applyFireDerived`), each
+  decoding whole planes while a layer that reads it is on, and the plane is
+  recomputed on the CPU for every frame shown, into a `ForecastLayer` added
+  under the lines the first time it draws. The hotspot's two channels open
+  at the rung the field on screen reads (`fireInputTier`), since the test
+  compares a cell with its neighbours; its day/night split is the sun's
+  elevation at each cell (`shadow.ts::solarEphemeris`). The hotspot is a
+  CPU pass, not a fragment shader, so it can be unit-tested and shares
+  the experiment's input plumbing: separable box sums keep it linear in
+  the cells whatever the window.
+- NASA GIBS underlay (`gibs.ts`, `?gibs=`): the only layer whose tiles do
+  not come from our bucket or the basemap. GIBS's WMTS (`epsg3857/best`,
+  `GoogleMapsCompatible_Level9`, no key, `Access-Control-Allow-Origin: *`)
+  serves one picture per platform per UTC day; the date follows the
+  playhead (`gibsDate`, today's for a forecast frame) and a change swaps
+  the source's tile URLs (`setTiles`). It sits under the fill (under the
+  coastline before a fill exists), outside the built style, so
+  `syncBasemapStyle` leaves it alone. If GIBS is down the underlay is
+  blank and nothing else is affected. The credit line names it while it
+  is on (`body[data-imagery]`).
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
@@ -356,8 +379,9 @@ copy.
 
 Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
-`#field-sheet`), **overlays** (switches: pressure lines, particles, a
-volume, derived layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
+`#field-sheet`, whose last group picks the GIBS underlay), **overlays**
+(switches: pressure lines, particles, a volume, derived layers — the
+experiment's and the fire layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
 `syncFieldTiles` hides unshipped tiles and writes a generic one for an
 on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px
@@ -442,7 +466,7 @@ hidden and pinned models are `localStorage`.
   pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
   and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
-  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`,
+  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`, `?derived=`, `?gibs=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never

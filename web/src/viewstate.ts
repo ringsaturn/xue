@@ -6,8 +6,9 @@
  * make up the composition (`fill` / `lines`; either may be empty but not
  * both, and a pressure surface named as the field is the lines alone).
  * The **overlays** follow the playhead over the field: the particles, a volume
- * (the cloud water drawn in 3D over a 2D field) and, under the experiment, the
- * two derived layers. The **marks** — the storm tracks and the
+ * (the cloud water drawn in 3D over a 2D field), the fire layers the shell
+ * derives (hotspots, fire weather) and, under the experiment, its two
+ * derived layers. The **marks** — the storm tracks and the
  * two station products — take no session and have their own pointers.
  * `ViewState` holds all of it; the rail's pressed states, the level row and
  * the address bar are projections of it, and the two functions here are the
@@ -19,6 +20,8 @@
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
+  parseDerivedFromSearch,
+  parseGibsFromSearch,
   parseExperimentFromSearch,
   parseLinesFromSearch,
   parseParticlesFromSearch,
@@ -29,6 +32,8 @@ import {
   parseVolumeFromSearch,
   searchForCaseVariable,
   searchForVariable,
+  searchWithDerived,
+  searchWithGibs,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
@@ -37,6 +42,7 @@ import {
   searchWithTc,
   searchNamesVolume,
   searchWithVolume,
+  type DerivedFireState,
   type RadarUrlState,
   type StationsUrlState,
   type TcUrlState,
@@ -53,7 +59,9 @@ export interface ViewComposition {
   lines: PressureBundleId | null;
 }
 
-interface DerivedShown {
+/** The derived layers: the experiment's two (`?x=`, meaningful only while
+ * it is on) and the fire layers (`?derived=`), which need no experiment. */
+interface DerivedShown extends DerivedFireState {
   inflow: boolean;
   front: boolean;
 }
@@ -68,8 +76,11 @@ export interface ViewState {
   /** The volume bundle drawn over the field (`?volume=`), or null. Only
    * drawn over a 2D field: a volume chosen as the field is the field. */
   volume: ForecastBundleId | null;
-  /** The experiment's derived layers (`?x=`), meaningful only while it is on. */
+  /** The derived layers drawn over the field. */
   derived: DerivedShown;
+  /** The NASA GIBS daily picture drawn under the field (`?gibs=`), a
+   * `GIBS_LAYERS` id, or null. */
+  imagery: string | null;
   marks: {
     tc: TcUrlState;
     stations: StationsUrlState;
@@ -140,7 +151,8 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
-      derived: { inflow: experiment.inflow, front: experiment.front },
+      derived: { inflow: experiment.inflow, front: experiment.front, ...parseDerivedFromSearch(search) },
+      imagery: parseGibsFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
         stations: parseStationsFromSearch(search),
@@ -173,8 +185,14 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
   const withVolume = searchWithVolume(withLines, volumeOverField(view));
   const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
-  const withExperiment = searchWithExperiment(withParticles, { enabled: context.experimentEnabled, ...view.derived });
-  const withStations = searchWithStations(withExperiment, view.marks.stations);
+  const withExperiment = searchWithExperiment(withParticles, {
+    enabled: context.experimentEnabled,
+    inflow: view.derived.inflow,
+    front: view.derived.front,
+  });
+  const withDerived = searchWithDerived(withExperiment, view.derived);
+  const withGibs = searchWithGibs(withDerived, view.imagery);
+  const withStations = searchWithStations(withGibs, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);
   return searchWithTc(withRadar, view.marks.tc);
 }

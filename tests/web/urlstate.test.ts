@@ -5,6 +5,7 @@ import {
   EXPERIMENT_OFF,
   parseBackendFromSearch,
   parseCameraFromHash,
+  parseDerivedFromSearch,
   parseExperimentFromSearch,
   parseLinesFromSearch,
   parseModelFromSearch,
@@ -16,6 +17,7 @@ import {
   parseVerticalExaggerationFromSearch,
   parseVolumeFromSearch,
   searchForVariable,
+  searchWithDerived,
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
@@ -552,5 +554,25 @@ describe("the volume parameters", () => {
     expect(parseVerticalExaggerationFromSearch("?vexag=0")).toBeNull();
     expect(parseVerticalExaggerationFromSearch("?vexag=500")).toBeNull();
     expect(parseVerticalExaggerationFromSearch("?vexag=tall")).toBeNull();
+  });
+});
+
+describe("the fire layers (?derived=)", () => {
+  it("reads every spelling and ignores the rest", () => {
+    expect(parseDerivedFromSearch("")).toEqual({ hotspot: false, ffwi: false, fwalert: false });
+    expect(parseDerivedFromSearch("?derived=off")).toEqual({ hotspot: false, ffwi: false, fwalert: false });
+    expect(parseDerivedFromSearch("?derived=hotspot")).toEqual({ hotspot: true, ffwi: false, fwalert: false });
+    expect(parseDerivedFromSearch("?derived=FFWI, redflag")).toEqual({ hotspot: false, ffwi: true, fwalert: true });
+    expect(parseDerivedFromSearch("?derived=fires,fosberg,alert,nonsense")).toEqual({ hotspot: true, ffwi: true, fwalert: true });
+  });
+
+  it("writes the layers in a fixed order and nothing when none is drawn", () => {
+    expect(searchWithDerived("?type=temp", { hotspot: false, ffwi: true, fwalert: true })).toBe("?type=temp&derived=ffwi%2Cfwalert");
+    expect(searchWithDerived("?type=temp&derived=ffwi", { hotspot: false, ffwi: false, fwalert: false })).toBe("?type=temp");
+    expect(parseDerivedFromSearch(searchWithDerived("?", { hotspot: true, ffwi: false, fwalert: true }))).toEqual({
+      hotspot: true,
+      ffwi: false,
+      fwalert: true,
+    });
   });
 });
