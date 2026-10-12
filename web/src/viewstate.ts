@@ -5,10 +5,11 @@
  * a time, with its own session and time axis — and the **lines** over it
  * make up the composition (`fill` / `lines`; either may be empty but not
  * both, and a pressure surface named as the field is the lines alone).
+ * A fire layer the shell derives (hotspots, fire weather) stands in for
+ * the field, drawn on its anchor input's session with that held off screen.
  * The **overlays** follow the playhead over the field: the particles, a volume
- * (the cloud water drawn in 3D over a 2D field), the fire layers the shell
- * derives (hotspots, fire weather) and, under the experiment, its two
- * derived layers. The **marks** — the storm tracks and the
+ * (the cloud water drawn in 3D over a 2D field) and, under the experiment,
+ * its two derived layers. The **marks** — the storm tracks and the
  * two station products — take no session and have their own pointers.
  * `ViewState` holds all of it; the rail's pressed states, the level row and
  * the address bar are projections of it, and the two functions here are the
@@ -42,6 +43,8 @@ import {
   searchWithTc,
   searchNamesVolume,
   searchWithVolume,
+  FIRE_FIELD_ANCHOR,
+  fireFieldOf,
   type DerivedFireState,
   type RadarUrlState,
   type StationsUrlState,
@@ -60,7 +63,7 @@ export interface ViewComposition {
 }
 
 /** The derived layers: the experiment's two (`?x=`, meaningful only while
- * it is on) and the fire layers (`?derived=`), which need no experiment. */
+ * it is on) and the fire fields (`?derived=`, at most one on). */
 interface DerivedShown extends DerivedFireState {
   inflow: boolean;
   front: boolean;
@@ -141,9 +144,12 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
   const requestedLines = parseLinesFromSearch(search);
   const requestedParticles = parseParticlesFromSearch(search);
   const experiment = parseExperimentFromSearch(search);
+  // A fire field on is the field, drawn on its anchor's session.
+  const fire = parseDerivedFromSearch(search);
+  const fireField = fireFieldOf(fire);
   const composition = compositionForPrimary(
-    requestedField ?? defaults.field,
-    requestedLines ?? (requestedField === null ? defaults.lines : null),
+    fireField !== null ? FIRE_FIELD_ANCHOR[fireField] : (requestedField ?? defaults.field),
+    requestedLines ?? (requestedField === null && fireField === null ? defaults.lines : null),
   );
   return {
     view: {
@@ -151,22 +157,15 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
-      // The fire layers are not offered yet: they stay behind the experiment
-      // until they are tested.
-      derived: {
-        inflow: experiment.inflow,
-        front: experiment.front,
-        ...(experiment.enabled ? parseDerivedFromSearch(search) : { hotspot: false, ffwi: false, fwalert: false }),
-      },
-      // The GIBS underlay is not offered yet either: experiment only.
-      imagery: experiment.enabled ? parseGibsFromSearch(search) : null,
+      derived: { inflow: experiment.inflow, front: experiment.front, ...fire },
+      imagery: parseGibsFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
         stations: parseStationsFromSearch(search),
         radar: parseRadarFromSearch(search),
       },
     },
-    fieldRequested: requestedField !== null,
+    fieldRequested: requestedField !== null || fireField !== null,
     particlesRequested: requestedParticles !== null,
     volumeRequested: searchNamesVolume(search),
   };

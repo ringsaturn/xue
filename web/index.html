@@ -628,6 +628,28 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWave">H</b>
           <span class="rail-name"><span>WAVE</span> <small data-i18n="varWave">HEIGHT</small></span>
         </button>
+        <!-- The fire fields the shell derives (?derived=), each a field of
+             its own drawn alone over the basemap: hotspots from the 3.9
+             and 10.4 µm channels on a satellite disk (a flame on the
+             disk), the Fosberg index and the dry-and-gusty alert from a
+             model's surface fields (a thermometer in the wind; a flag).
+             Each shown on a run that ships its inputs
+             (main.ts::syncDerivedTiles). -->
+        <button type="button" data-derived="hotspot" data-i18n-tip="legendHotspot" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5c.4 2 3 3.4 3 6.2a3 3 0 0 1-6 0c0-1.4.8-2.2 1.4-2.9.2.9.6 1.4 1.2 1.6-.3-1.6-.4-3.4.4-4.9z" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphHotspot">H</b>
+          <span class="rail-name"><span>HOTSPOT</span> <small data-i18n="varHotspot">IR 3.9</small></span>
+        </button>
+        <button type="button" data-derived="ffwi" data-i18n-tip="legendFfwi" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a2 2 0 0 0-4 0v8.5a4 4 0 1 0 4 0z" /><path d="M7 9v6" /><path d="M13 8h5a2 2 0 1 0-2-2" /><path d="M13 12h7a2 2 0 1 1-2 2" /><path d="M13 16h3" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFfwi">W</b>
+          <span class="rail-name"><span>FFWI</span> <small data-i18n="varFfwi">FIRE WX</small></span>
+        </button>
+        <button type="button" data-derived="fwalert" data-i18n-tip="legendFwalert" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V3.5" /><path d="M6 4.5h11l-2.5 3.5L17 11.5H6z" fill="currentColor" fill-opacity="0.35" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFwalert">R</b>
+          <span class="rail-name"><span>RH·GUST</span> <small data-i18n="varFwalert">RED FLAG</small></span>
+        </button>
         <!-- MORE: not a field but the way to every field the run
              publishes, grouped by quantity in the sheet below the rail;
              hidden when the core tiles already reach them all. -->
@@ -665,6 +687,16 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVolume">Q</b>
           <span class="rail-name"><span>CLW3D</span> <small data-i18n="varVolume">3D CLOUD</small></span>
         </button>
+        <!-- The daily polar-orbiter picture under the field (?gibs=, NASA
+             GIBS): a sheet trigger — which platform, true or false colour,
+             is chosen there; pressed while a picture is drawn. Its own
+             tile, apart from the geostationary fields: one image a day,
+             not a time series. -->
+        <button id="imagery-tile" type="button" data-dialog data-i18n-tip="gibsTip" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.8" /><path d="M3.5 15l4.5-4 4 3.5 3-2.5 5.5 4.5" /><circle cx="16" cy="9" r="1.3" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphImagery">G</b>
+          <span class="rail-name"><span>GIBS</span> <small data-i18n="varImagery">DAILY</small></span>
+        </button>
         <!-- The experimental composite's derived layers (?x=): switches
              like the one above — each draws over whatever the fill is. A
              curling stream for the warm moist inflow, a line with the
@@ -680,27 +712,6 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c3-2 5-4 8-4s5 2 10 0" /><path d="M7 12.5a2 2 0 0 1 4 0" /><path d="M14 11.5a2 2 0 0 1 4 0" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFront">F</b>
           <span class="rail-name"><span>∇θe</span> <small data-i18n="varFront">FRONT</small></span>
-        </button>
-        <!-- The fire layers the shell derives (?derived=): hotspots from
-             the 3.9 and 10.4 µm channels on a satellite disk (a flame on
-             the disk), the Fosberg index and the dry-and-gusty alert from
-             a model's surface fields (a thermometer in the wind; a flag).
-             Each shown on a run that ships its inputs
-             (main.ts::syncDerivedTiles). -->
-        <button type="button" data-derived="hotspot" data-toggle data-i18n-tip="legendHotspot" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5c.4 2 3 3.4 3 6.2a3 3 0 0 1-6 0c0-1.4.8-2.2 1.4-2.9.2.9.6 1.4 1.2 1.6-.3-1.6-.4-3.4.4-4.9z" fill="currentColor" stroke="none" /></svg>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphHotspot">H</b>
-          <span class="rail-name"><span>HOTSPOT</span> <small data-i18n="varHotspot">IR 3.9</small></span>
-        </button>
-        <button type="button" data-derived="ffwi" data-toggle data-i18n-tip="legendFfwi" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a2 2 0 0 0-4 0v8.5a4 4 0 1 0 4 0z" /><path d="M7 9v6" /><path d="M13 8h5a2 2 0 1 0-2-2" /><path d="M13 12h7a2 2 0 1 1-2 2" /><path d="M13 16h3" /></svg>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFfwi">W</b>
-          <span class="rail-name"><span>FFWI</span> <small data-i18n="varFfwi">FIRE WX</small></span>
-        </button>
-        <button type="button" data-derived="fwalert" data-toggle data-i18n-tip="legendFwalert" aria-pressed="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V3.5" /><path d="M6 4.5h11l-2.5 3.5L17 11.5H6z" fill="currentColor" fill-opacity="0.35" /></svg>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFwalert">R</b>
-          <span class="rail-name"><span>RH·GUST</span> <small data-i18n="varFwalert">RED FLAG</small></span>
         </button>
         </div>
         <div class="rail-section" data-section="mark" role="group" data-i18n-aria="markSectionAria" aria-label="Marks">
@@ -992,6 +1003,17 @@
         </div>
       </div>
 
+      <!-- The daily imagery sheet: NASA GIBS platforms in true and false
+           colour, one chip each, written by main.ts. -->
+      <div id="imagery-sheet" class="model-sheet field-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel field-panel" role="dialog" aria-modal="true" data-i18n-aria="fieldGroupImagery" aria-label="Daily imagery">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="fieldGroupImagery">DAILY IMAGERY · NASA GIBS</p>
+          <div id="imagery-list" class="field-list"></div>
+        </div>
+      </div>
+
       <!-- The skew-T sheet, opened from the sounding section of the probe
            panel: the same chart the panel draws, given the height a
            forecaster actually reads a profile at. The canvas is painted by
@@ -1167,7 +1189,7 @@
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
-            <li data-experiment hidden>
+            <li>
               <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noreferrer">
                 <span class="credits-name">NASA GIBS / Worldview</span>
                 <small data-i18n="creditsGibs">DAILY IMAGERY · MODIS AND VIIRS CORRECTED REFLECTANCE, NASA ESDIS</small>

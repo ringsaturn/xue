@@ -557,22 +557,18 @@ describe("the volume parameters", () => {
   });
 });
 
-describe("the fire layers (?derived=)", () => {
-  it("reads every spelling and ignores the rest", () => {
+describe("the fire fields (?derived=)", () => {
+  it("reads every spelling, ignores the rest and keeps one field", () => {
     expect(parseDerivedFromSearch("")).toEqual({ hotspot: false, ffwi: false, fwalert: false });
     expect(parseDerivedFromSearch("?derived=off")).toEqual({ hotspot: false, ffwi: false, fwalert: false });
     expect(parseDerivedFromSearch("?derived=hotspot")).toEqual({ hotspot: true, ffwi: false, fwalert: false });
-    expect(parseDerivedFromSearch("?derived=FFWI, redflag")).toEqual({ hotspot: false, ffwi: true, fwalert: true });
-    expect(parseDerivedFromSearch("?derived=fires,fosberg,alert,nonsense")).toEqual({ hotspot: true, ffwi: true, fwalert: true });
+    expect(parseDerivedFromSearch("?derived=REDFLAG")).toEqual({ hotspot: false, ffwi: false, fwalert: true });
+    expect(parseDerivedFromSearch("?derived=FFWI, redflag")).toEqual({ hotspot: false, ffwi: true, fwalert: false });
+    expect(parseDerivedFromSearch("?derived=alert,fires,nonsense")).toEqual({ hotspot: true, ffwi: false, fwalert: false });
   });
 
-  it("writes the layers in a fixed order and nothing when none is drawn", () => {
-    expect(searchWithDerived("?type=temp", { hotspot: false, ffwi: true, fwalert: true })).toBe("?type=temp&derived=ffwi%2Cfwalert");
+  it("writes the field on and nothing when none is", () => {
+    expect(searchWithDerived("?type=temp", { hotspot: false, ffwi: true, fwalert: false })).toBe("?type=temp&derived=ffwi");
     expect(searchWithDerived("?type=temp&derived=ffwi", { hotspot: false, ffwi: false, fwalert: false })).toBe("?type=temp");
-    expect(parseDerivedFromSearch(searchWithDerived("?", { hotspot: true, ffwi: false, fwalert: true }))).toEqual({
-      hotspot: true,
-      ffwi: false,
-      fwalert: true,
-    });
   });
 });

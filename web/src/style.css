@@ -3366,6 +3366,13 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
 }
 
 /* One radar alone suppresses the field, so only the radar's notice stands. */
+/* A fire field stands in for its anchor: the anchor's scale goes with it,
+   and the derived row is the key. */
+body.fire-field #legend .legend-scale,
+body.fire-field #legend-unit {
+  display: none;
+}
+
 body.radar-alone .source-credit[data-credit-model] {
   display: none;
 }
