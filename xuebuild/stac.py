@@ -1142,7 +1142,24 @@ def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, role
     bytes — so each is an asset of its own."""
     assets: dict[str, Any] = {}
     store = entry.get("zarr")
-    if store is not None:
+    if store is not None and "segments" in store:
+        # A rolling window's store cut by the clock (docs/zarr-profile.md,
+        # "Segmented stores"): one asset per segment, keyed and marked by
+        # the start its directory is named for, which a reader concatenates
+        # along time.
+        for segment in store["segments"]:
+            start = _segment_start(segment["path"])
+            assets[f"{key}@{start}"] = {
+                "href": segment["path"],
+                "type": ZARR_MEDIA_TYPE,
+                "title": f"{title} (segment from {start})",
+                "roles": roles,
+                "xue:kind": "store",
+                "xue:tier": tier,
+                "xue:segment": start,
+                **_file_fields(segment["byteLength"], segment["crc32"], single_file=False),
+            }
+    elif store is not None:
         assets[key] = {
             "href": store["path"],
             "type": ZARR_MEDIA_TYPE,
@@ -1165,6 +1182,15 @@ def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, role
     return assets
 
 
+def _segment_start(path: str) -> str:
+    """The ``YYYYMMDDHHMM`` a segment's directory is named for:
+    ``…/<model>.segments/<start>/<digest>/<store>.zarr``."""
+    parts = path.split("/")
+    if len(parts) < 4 or not parts[-4].endswith(".segments") or not (len(parts[-3]) == 12 and parts[-3].isdigit()):
+        raise ManifestError(f"segment {path} is not under <model>.segments/<YYYYMMDDHHMM>/")
+    return parts[-3]
+
+
 def _variant_tier(variant: dict[str, Any], bundle_id: str) -> str:
     """The tier name of one variant descriptor, read off the suffix of its
     path (``<bundle>.<tier>.xue``, or the store's ``<bundle>.<tier>.zarr``
@@ -1173,7 +1199,8 @@ def _variant_tier(variant: dict[str, Any], bundle_id: str) -> str:
     factor order and carry the grid — and the writer names every file it
     writes by its tier, so a suffix that is not one is the writer's own
     bug, and refused as a manifest the contract does not cover."""
-    path = variant["path"] if "path" in variant else variant["zarr"]["path"]
+    store = variant.get("zarr", {})
+    path = variant["path"] if "path" in variant else store["segments"][0]["path"] if "segments" in store else store["path"]
     name = posixpath.basename(path).split(".")
     tier = name[-2] if len(name) >= 3 else None
     if tier not in VARIANT_TIERS.values():

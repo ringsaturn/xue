@@ -70,11 +70,20 @@ def asset_url(item: dict, key: str) -> str:
     return urljoin(item["_base"], item["assets"][key]["href"])
 
 
-def store_assets(item: dict) -> dict[str, str]:
+def store_assets(item: dict) -> dict[str, str | list[str]]:
     """Bundle id -> store URL, full tier only. Keys are the manifest's bundle
-    ids (`wind10m`, not `ugrd10m`)."""
-    return {k: asset_url(item, k) for k, a in item["assets"].items()
-            if a.get("xue:kind") == "store" and a.get("xue:tier", "full") == "full"}
+    ids (`wind10m`, not `ugrd10m`). A rolling window's store is cut into
+    clock segments (assets `<bundle>@<YYYYMMDDHHMM>`); its value is then the
+    segments' URLs in time order, which `open_store` concatenates."""
+    out: dict[str, str | list[str]] = {}
+    for k, a in sorted(item["assets"].items()):
+        if a.get("xue:kind") != "store" or a.get("xue:tier", "full") != "full":
+            continue
+        if "xue:segment" in a:
+            out.setdefault(k.split("@")[0], []).append(asset_url(item, k))
+        else:
+            out[k] = asset_url(item, k)
+    return out
 
 
 def variables(item: dict) -> dict:
@@ -83,13 +92,18 @@ def variables(item: dict) -> dict:
 
 # --- stores ------------------------------------------------------------------
 
-def open_store(url: str):
-    """xarray Dataset of one bundle store. Every array is dequantized to its
-    physical unit (float32, NaN where nodata), including the log1p codebook
-    that xarray's CF decoding cannot express."""
+def open_store(url: str | list[str]):
+    """xarray Dataset of one bundle store, or of a window's segments joined
+    along time. Every array is dequantized to its physical unit (float32,
+    NaN where nodata), including the log1p codebook that xarray's CF
+    decoding cannot express."""
     import xarray as xr
 
-    ds = xr.open_zarr(url, consolidated=True)
+    if isinstance(url, list):
+        parts = [xr.open_zarr(u, consolidated=True) for u in url]
+        ds = xr.concat(parts, dim="time", combine_attrs="override") if len(parts) > 1 else parts[0]
+    else:
+        ds = xr.open_zarr(url, consolidated=True)
     meta = ds.attrs["xue"]
     if isinstance(meta, str):
         meta = json.loads(meta)
