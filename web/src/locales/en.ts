@@ -231,7 +231,8 @@ export const en = {
   fieldGroupImagery: "DAILY IMAGERY · NASA GIBS",
   gibsTrueColor: "TRUE",
   gibsFalseColor: "FIRE",
-  gibsTip: "Daily picture under the field; the false colour shows burn scars dark red and fires bright",
+  gibsTipTrue: "True colour",
+  gibsTipFire: "Fire false colour: burn scars dark red",
   /** The particle switch as a rail tile in the overlay section: the gloss
    * after the code PARTICLES, and its glyph (the tooltip and accessible
    * name are `particlesToggle` / `particlesToggleAria` below). */
