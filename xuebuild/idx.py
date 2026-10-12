@@ -6,7 +6,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from .errors import DownloadError
-from .variables import VariableSpec
+from .variables import ECMWF_SOIL_LEVEL_TYPE, VariableSpec
 
 
 TARGET_FIELD = ":TMP:2 m above ground:"
@@ -233,7 +233,8 @@ def ecmwf_field_byte_range(
         if matches:
             break
     if len(matches) != 1:
-        field = param if levelist is None else f"{param} at {levelist} hPa"
+        unit = " hPa" if levtype == "pl" else f" ({levtype})"
+        field = param if levelist is None else f"{param} at {levelist}{unit}"
         raise DownloadError(f"expected exactly one {field} record in the ECMWF .index, found {len(matches)}")
     return matches[0]
 
@@ -241,10 +242,18 @@ def ecmwf_field_byte_range(
 def ecmwf_level_selector(spec: VariableSpec) -> tuple[str, str | None]:
     """The ``(levtype, levelist)`` an ECMWF ``.index`` line carries for a
     registered variable: ``pl`` with the level in hectopascals on an isobaric
-    surface (GRIB2 type 100, whose value is pascals), ``sfc`` otherwise —
+    surface (GRIB2 type 100, whose value is pascals); ``sol`` with the layer
+    number for a soil layer, which the registry declares in GFS terms and
+    accepts from ECMWF through an alternate on the soil level surface (type
+    151), whose value is the layer number less one; ``sfc`` otherwise —
     mean sea level included, which the index files under ``sfc``."""
     if spec.grib2_level_type == 100:
         if spec.grib2_level_value is None:
             raise DownloadError(f"{spec.id} is isobaric but names no level")
         return "pl", f"{spec.grib2_level_value / 100:g}"
+    for alternate in spec.grib2_alternates:
+        if alternate.level_type == ECMWF_SOIL_LEVEL_TYPE:
+            if alternate.level_value is None:
+                raise DownloadError(f"{spec.id} is a soil layer but names no level")
+            return "sol", f"{int(alternate.level_value) + 1}"
     return "sfc", None

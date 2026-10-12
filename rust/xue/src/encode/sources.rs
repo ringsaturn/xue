@@ -504,8 +504,10 @@ pub const SOURCES: &[SourceSpec] = &[
         // derived from (input-only, like `spfh850`), and the vertical
         // velocity on three surfaces; then the ocean — the skin temperature
         // and the sea ice fields from pgrb2, the wave fields from the cycle's
-        // GFS-Wave file. Seventy pgrb2 records and three wave records per
-        // frame. Mirrors `xuebuild/sources.py`.
+        // GFS-Wave file; then the land — the soil temperature and water in
+        // the Noah model's four layers. Seventy-nine pgrb2 records (the
+        // static orography among them) and three wave records per frame.
+        // Mirrors `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850",
             "hgt700", "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850",
@@ -515,7 +517,8 @@ pub const SOURCES: &[SourceSpec] = &[
             "vgrd300", "ugrd250", "vgrd250", "ugrd200", "vgrd200", "ugrd100m", "vgrd100m", "gust",
             "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "pwat",
             "hpbl", "crain", "cfrzr", "cicep", "csnow", "vvel850", "vvel700", "vvel500", "tmpsfc",
-            "icec", "icetk", "orog", "htsgw", "perpw", "dirpw",
+            "icec", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2",
+            "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -537,7 +540,8 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300",
             "rh250", "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis",
             "dpt2m", "aptmp2m", "pwat", "hpbl", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "orog",
+            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "tsoil1",
+            "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -581,7 +585,9 @@ pub const SOURCES: &[SourceSpec] = &[
         // velocity on three surfaces, the skin temperature and the sea ice
         // thickness, and from the cycle's `wave` stream the wave height,
         // peak period and mean direction — the direction an input only,
-        // carried by the derived wave vector. Mirrors `xuebuild/sources.py`.
+        // carried by the derived wave vector — and the soil temperature and
+        // water in HTESSEL's four layers under the GFS layer ids. Mirrors
+        // `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700",
             "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700",
@@ -589,7 +595,8 @@ pub const SOURCES: &[SourceSpec] = &[
             "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
             "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
             "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
-            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "htsgw", "perpw", "dirpw",
+            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4",
+            "soilw1", "soilw2", "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -610,7 +617,8 @@ pub const SOURCES: &[SourceSpec] = &[
             "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
             "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
             "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "orog",
+            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "tsoil1", "tsoil2",
+            "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
@@ -639,7 +647,8 @@ pub const SOURCES: &[SourceSpec] = &[
     // AIFS does not carry (no isobaric relative humidity, gust, CAPE, sea
     // ice thickness or peak wave period) plus the three layer cloud covers;
     // its `tp`, `tcc` and cloud layers arrive under identities of their own
-    // that the registry's alternates accept. Mirrors `xuebuild/sources.py`.
+    // that the registry's alternates accept. Its soil is the IFS's top two
+    // layers, all AIFS open data carries. Mirrors `xuebuild/sources.py`.
     SourceSpec {
         id: "aifs",
         manifest_model: "AIFS",
@@ -652,7 +661,7 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
             "tmp925", "tmp850", "tmp500", "spfh850", "ugrd925", "vgrd925", "ugrd850", "vgrd850",
             "ugrd250", "vgrd250", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700",
-            "vvel500", "tmpsfc", "orog", "htsgw", "dirpw",
+            "vvel500", "tmpsfc", "orog", "tsoil1", "tsoil2", "soilw1", "soilw2", "htsgw", "dirpw",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
@@ -671,7 +680,7 @@ pub const SOURCES: &[SourceSpec] = &[
         bundle_scalar_ids: &[
             "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
             "tmp500", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700", "vvel500",
-            "thetae850", "tmpsfc", "htsgw", "orog",
+            "thetae850", "tmpsfc", "htsgw", "tsoil1", "tsoil2", "soilw1", "soilw2", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],

@@ -1592,9 +1592,19 @@ AEROSOL_VARIABLE_IDS: tuple[str, ...] = (
     "pm10",
     "pm10dust",
 )
-# The ids the Celsius rule applies to at the surface: GDAL normalizes every
-# GRIB temperature to Celsius, and the converter accepts K and F as well.
-SURFACE_TEMPERATURE_IDS: tuple[str, ...] = ("tmp2m", "dpt2m", "aptmp2m", "tmpsfc")
+# The ids the Celsius rule applies to at the surface (and in the soil below
+# it): GDAL normalizes every GRIB temperature to Celsius, and the converter
+# accepts K and F as well.
+SURFACE_TEMPERATURE_IDS: tuple[str, ...] = (
+    "tmp2m",
+    "dpt2m",
+    "aptmp2m",
+    "tmpsfc",
+    "tsoil1",
+    "tsoil2",
+    "tsoil3",
+    "tsoil4",
+)
 
 
 # The isobaric families: geopotential height, temperature, relative humidity,
@@ -1975,6 +1985,93 @@ def _cloud_water_spec(level_m: int) -> VariableSpec:
 for _level in CLOUD_WATER_LEVELS_M:
     VARIABLES[cloud_water_variable_id(_level)] = _cloud_water_spec(_level)
 del _level
+
+
+# The soil layers: the land surface model's temperature and volumetric water
+# content in four layers counted from the surface. A layer is identified by
+# its index, not its depth, because the centres cut the soil differently:
+# GFS's Noah model at 0–10, 10–40, 40–100 and 100–200 cm, the IFS's HTESSEL
+# at 0–7, 7–28, 28–100 and 100–289 cm (AIFS publishes the IFS's top two).
+# The registered identity is the GFS record: each layer on the "depth below
+# land surface" surface (106) from its upper bound, in metres — 0, 0.1, 0.4
+# and 1 — with the temperature as 2/0/2 (TSOIL) and the water as the
+# NCEP-local 2/0/192 (SOILW, the total volumetric content, liquid and
+# frozen; SOILL, its liquid part, is not read). ECMWF writes the two as the
+# WMO 2/3/18 (``sot``) and 2/0/25 (``vsw``) on its "soil level" surface
+# (151), level n carrying the value n − 1, which the alternates accept and
+# the ECMWF fetch turns back into the ``levelist`` n of its ``.index``
+# (``idx.ecmwf_level_selector``).
+#
+# Neither field exists over open water. GFS writes both with a bitmap there
+# — the water content over sea ice too, where the temperature is the ice's,
+# and 1 over the ice sheets — as AIFS does its water content over the sea;
+# GDAL hands the masked points back as 9999, and they become the
+# bottom of each codebook, one step below the least real value
+# (xuebuild/quantize.py) — so code 0 is "no soil" and stays apart from every
+# value. The IFS writes no bitmap: its soil temperature over the sea is a
+# value (the model's), and its water content there is 0.
+SOIL_LAYERS: tuple[int, ...] = (1, 2, 3, 4)
+_GFS_SOIL_LAYER_TOPS_M: tuple[float, ...] = (0.0, 0.1, 0.4, 1.0)
+_GFS_SOIL_LAYER_PHRASES: tuple[str, ...] = ("0-0.1", "0.1-0.4", "0.4-1", "1-2")
+SOIL_TEMPERATURE_IDS: tuple[str, ...] = tuple(f"tsoil{layer}" for layer in SOIL_LAYERS)
+SOIL_MOISTURE_IDS: tuple[str, ...] = tuple(f"soilw{layer}" for layer in SOIL_LAYERS)
+SOIL_VARIABLE_IDS: tuple[str, ...] = SOIL_TEMPERATURE_IDS + SOIL_MOISTURE_IDS
+ECMWF_SOIL_LEVEL_TYPE = 151
+
+
+def soil_layer(variable_id: str) -> int | None:
+    """The layer index (1 at the surface) of a ``tsoil<n>`` / ``soilw<n>``
+    variable, or None for anything else."""
+    if variable_id in SOIL_VARIABLE_IDS:
+        return int(variable_id[-1])
+    return None
+
+
+def _soil_spec(variable_id: str) -> VariableSpec:
+    layer = soil_layer(variable_id)
+    assert layer is not None
+    common = dict(
+        id=variable_id,
+        grib2_discipline=2,
+        grib2_level_type=106,
+        grib2_level_value=_GFS_SOIL_LAYER_TOPS_M[layer - 1],
+        fill_values=(9999.0,),
+    )
+    phrase = _GFS_SOIL_LAYER_PHRASES[layer - 1]
+    if variable_id.startswith("tsoil"):
+        common.update(
+            label=f"Soil temperature, layer {layer}",
+            output_unit="°C",
+            value_range=(-61, 66),
+            grib_element="TSOIL",
+            index_field=f":TSOIL:{phrase} m below ground:",
+            ecmwf_param="sot",
+            grib2_category=0,
+            grib2_number=2,
+            grib2_alternates=(RecordAlternate(2, 3, 18, ECMWF_SOIL_LEVEL_TYPE, float(layer - 1)),),
+            gdal_unit="C",
+        )
+    else:
+        common.update(
+            label=f"Volumetric soil moisture, layer {layer}",
+            output_unit="m³/m³",
+            value_range=(-0.01, 1.0),
+            grib_element="SOILW",
+            index_field=f":SOILW:{phrase} m below ground:",
+            ecmwf_param="vsw",
+            grib2_category=0,
+            grib2_number=192,
+            grib2_alternates=(
+                RecordAlternate(2, 0, 25, ECMWF_SOIL_LEVEL_TYPE, float(layer - 1), gdal_unit="m^3/m^3"),
+            ),
+            gdal_unit="Fraction",
+        )
+    return VariableSpec(**common)  # type: ignore[arg-type]
+
+
+for _variable_id in SOIL_VARIABLE_IDS:
+    VARIABLES[_variable_id] = _soil_spec(_variable_id)
+del _variable_id
 
 # Standard gravity, the g in q·V/g.
 STANDARD_GRAVITY = 9.80665

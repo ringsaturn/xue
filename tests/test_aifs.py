@@ -21,7 +21,9 @@ up a thousandfold.
 same 80 x 80 cell Kara Sea window as the IFS fixture (60–80E, 65–85N: sea
 ice, open water and land), the analysis and the first step of the
 2026-09-17 00Z cycle, every record the source fetches in source order —
-thirty at each, the ``oper`` stream's then the two ``wave`` records.
+thirty-five at the analysis (the orography among them) and thirty-four at
+the step, the ``oper`` stream's (the two soil layers AIFS carries among
+them) then the two ``wave`` records.
 """
 
 from __future__ import annotations
@@ -61,12 +63,22 @@ AIFS = source_spec("aifs")
 ECMWF = source_spec("ecmwf")
 GFS = source_spec("gfs")
 # What AIFS open data does not carry of the IFS set (no relative humidity on
-# any pressure level, no gust, CAPE, ice thickness or peak period), what the
+# any pressure level, no gust, CAPE, ice thickness or peak period, no soil
+# below the IFS's second layer), what the
 # IFS source publishes on the isobaric surfaces the AIFS source has not
 # taken up yet (the heights, temperatures and winds beyond the synoptic
 # levels, and the turbulence index they would feed; the records exist in
 # the AIFS open data), and what AIFS adds.
-DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 500, 300, 250, 200)) + ("gust", "cape", "icetk", "perpw")
+DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 500, 300, 250, 200)) + (
+    "gust",
+    "cape",
+    "icetk",
+    "perpw",
+    "tsoil3",
+    "tsoil4",
+    "soilw3",
+    "soilw4",
+)
 NOT_TAKEN_UP = (
     "hgt1000", "hgt925", "hgt300", "hgt200",
     "tmp1000", "tmp700", "tmp300", "tmp250", "tmp200",
@@ -97,7 +109,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertIn(bundle_id, aifs)
         self.assertEqual(set(aifs) - set(ecmwf), set(ADDED))
         self.assertEqual(set(ecmwf) - set(aifs), set(DROPPED) | set(NOT_TAKEN_UP))
-        self.assertEqual(len(aifs), 28)
+        self.assertEqual(len(aifs), 32)
         # The 850 hPa specific humidity still feeds the two derivations.
         self.assertIn("qflux850", aifs)
         self.assertIn("thetae850", aifs)
@@ -217,7 +229,7 @@ class FetchTests(unittest.TestCase):
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path, expected in zip(FIXTURE_FRAMES, (31, 30)):
+        for path, expected in zip(FIXTURE_FRAMES, (35, 34)):
             frames = grib2.inspect_grib_fast(path, AIFS.input_variable_ids, optional_ids=("orog",))
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in AIFS.input_variable_ids if variable_id in frames]

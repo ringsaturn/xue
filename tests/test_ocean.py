@@ -258,14 +258,14 @@ class RegistryTests(unittest.TestCase):
         # stated input order is the order the records sit in the frame.
         primary = gfs.primary_input_ids()
         self.assertEqual(gfs.input_variable_ids, primary + WAVE_IDS)
-        self.assertEqual(len(primary), 71)
+        self.assertEqual(len(primary), 79)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
         ecmwf = source_spec("ecmwf")
         (ecmwf_wave,) = ecmwf.companion_files
         self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids, ecmwf_wave.repack), ("wave", WAVE_IDS, False))
         self.assertEqual(ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS)
-        self.assertEqual(len(ecmwf.primary_input_ids()), 56)
+        self.assertEqual(len(ecmwf.primary_input_ids()), 64)
 
 
 class FetchTests(unittest.TestCase):
@@ -316,11 +316,11 @@ class RepackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"
             path.write_bytes(repacked)
-            self.assertEqual(len(grib2.index_messages(path)), 74, "every message survives, in order")
+            self.assertEqual(len(grib2.index_messages(path)), 82, "every message survives, in order")
             listing = subprocess.run(
                 ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
             ).stdout
-            self.assertEqual(listing.count("grid_simple"), 74)
+            self.assertEqual(listing.count("grid_simple"), 82)
         with self.assertRaises(DownloadError):
             _repack_grid_simple(b"not a grib message", "nowhere")
 
@@ -396,10 +396,10 @@ class MatcherTests(unittest.TestCase):
         # then the wave file's — so both matchers find the six in it.
         gfs = source_spec("gfs")
         fast = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
-        # The orography is the one primary-file record between the sea ice
-        # and the wave file's, so the six ocean records are bands 68-70 and
-        # 72-74.
-        bands = (68, 69, 70, 72, 73, 74)
+        # The orography and the eight soil layers are the primary-file
+        # records between the sea ice and the wave file's, so the six ocean
+        # records are bands 68-70 and 80-82.
+        bands = (68, 69, 70, 80, 81, 82)
         for variable_id, band in zip(OCEAN_VARIABLE_IDS, bands, strict=True):
             self.assertEqual(fast[variable_id].band, band, variable_id)
             self.assertEqual(fast[variable_id].unit, variable_spec(variable_id).gdal_unit)

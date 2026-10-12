@@ -70,6 +70,7 @@ from .variables import (
     ISOBARIC_LEVELS_HPA,
     REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
+    SOIL_TEMPERATURE_IDS,
     SURFACE_TEMPERATURE_IDS,
     VARIABLES,
     WAVE_VECTOR_COMPONENT_IDS,
@@ -836,10 +837,33 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
     )
 
 
+# Above this a temperature the GDAL GRIB driver labels Celsius is kelvin
+# (soil_temperature_unit).
+SOIL_KELVIN_THRESHOLD = 150.0
+
+
+def soil_temperature_unit(unit: str, values: np.ndarray) -> str:
+    """The unit a soil temperature plane is really in. GDAL's GRIB driver
+    relabels every kelvin parameter Celsius but converts only those its
+    tables mark for conversion, and the soil temperatures (NCEP's 2/0/2,
+    the WMO 2/3/18 ECMWF writes) are not marked: their values come back in
+    kelvin under a ``C`` label. A plane labelled Celsius that holds a value
+    above 150 is therefore kelvin — no soil is that hot in Celsius, none
+    that cold in kelvin — and should a GDAL release convert them after all,
+    the values speak for themselves again. The bitmap's fill, the bottom of
+    the codebook, is below the threshold either way. Mirrored in the native
+    encoder's ``convert_units``."""
+    if unit == "C" and values.size and float(values.max()) > SOIL_KELVIN_THRESHOLD:
+        return "K"
+    return unit
+
+
 def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
     isobaric = isobaric_variable(frame.variable_id)
     if frame.variable_id in SURFACE_TEMPERATURE_IDS or (isobaric is not None and isobaric[0] == "tmp"):
         unit = normalize_unit(frame.unit)
+        if frame.variable_id in SOIL_TEMPERATURE_IDS:
+            unit = soil_temperature_unit(unit, values)
         if unit == "K":
             values -= 273.15
         elif unit == "F":
@@ -882,8 +906,8 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # metres, so the geopotential divides by the standard gravity.
         values /= STANDARD_GRAVITY
     # Wind components, geopotential heights, relative humidity, cloud cover,
-    # CAPE, vertical velocity, ice thickness and the wave height and period
-    # are already in their output units.
+    # CAPE, vertical velocity, ice thickness, the wave height and period and
+    # the volumetric soil water are already in their output units.
     return values
 
 

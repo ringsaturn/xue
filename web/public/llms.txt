@@ -190,7 +190,15 @@ Facts worth getting right:
   mountain-wave turbulence), the ocean fields `tmpsfc` (surface / skin temperature, the
   SST over water), `icetk` (sea ice thickness), `htsgw` and `perpw`
   (significant wave height and primary wave period, from the wave model of
-  the same cycle — GFS-Wave, ECMWF's `wave` stream; land is 0 in both), and
+  the same cycle — GFS-Wave, ECMWF's `wave` stream; land is 0 in both), the
+  soil layers `tsoil1`–`tsoil4` (soil temperature, °C) and `soilw1`–`soilw4`
+  (volumetric soil water, m³/m³), layer 1 at the surface — the id is the
+  layer's index and its depth is the model's: GFS 0–10, 10–40, 40–100,
+  100–200 cm; ECMWF 0–7, 7–28, 28–100, 100–289 cm. Code 0 of either is
+  "no soil" (−61 °C / −0.01 m³/m³, one step below any real value): open
+  water on GFS, and sea ice for GFS's water content (1 over the ice
+  sheets); ECMWF has no such mask
+  (its sea holds the model's temperature and a water content of 0) — and
   the vector pairs `wind10m`, `wind<level>` on the same eight surfaces,
   `qflux850` and `wave` (the height laid along the direction the waves travel, u/v in
   metres — the viewer's wave layer; the primary direction is read from it
@@ -209,7 +217,9 @@ Facts worth getting right:
   ice-pellet / snow flags), the 100 m wind pair `wind100m`, and `icec` (sea
   ice cover), which the ECMWF open data does not carry. AIFS: the ECMWF set less what its open data lacks — no
   `rh850` / `rh700` / `rh500` (it carries specific humidity only), no
-  `gust`, `cape`, `icetk` or `perpw` — plus `lcdc`, `mcdc`, `hcdc`; its
+  `gust`, `cape`, `icetk` or `perpw`, and of the soil only the top two
+  layers (`tsoil1`, `tsoil2`, `soilw1`, `soilw2`, the water content
+  "no soil" over the sea) — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean
   over the six-hour step. SFLUX: `tmp2m`,
   `prate`, `dswrf`, `orog`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its

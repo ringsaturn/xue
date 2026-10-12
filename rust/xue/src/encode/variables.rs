@@ -427,7 +427,23 @@ pub fn cloud_water_level(variable_id: &str) -> Option<u32> {
 /// The ids the Celsius rule applies to at the surface: GDAL normalizes every
 /// GRIB temperature to Celsius, and the converter accepts K and F as well.
 /// Mirrors `SURFACE_TEMPERATURE_IDS` in `xuebuild/variables.py`.
-pub const SURFACE_TEMPERATURE_IDS: &[&str] = &["tmp2m", "dpt2m", "aptmp2m", "tmpsfc"];
+pub const SURFACE_TEMPERATURE_IDS: &[&str] = &[
+    "tmp2m", "dpt2m", "aptmp2m", "tmpsfc", "tsoil1", "tsoil2", "tsoil3", "tsoil4",
+];
+
+/// The soil layers, four counted from the surface: the temperature, then the
+/// volumetric water content, held to the Python encoder by
+/// `tests/fixtures/soil-registry.json`. Mirror `SOIL_TEMPERATURE_IDS`,
+/// `SOIL_MOISTURE_IDS` and `SOIL_VARIABLE_IDS` in `xuebuild/variables.py`.
+pub const SOIL_TEMPERATURE_IDS: &[&str] = &["tsoil1", "tsoil2", "tsoil3", "tsoil4"];
+pub const SOIL_MOISTURE_IDS: &[&str] = &["soilw1", "soilw2", "soilw3", "soilw4"];
+#[allow(dead_code)] // read by the registry test; the Python side keys its fixture on it
+pub const SOIL_VARIABLE_IDS: &[&str] = &[
+    "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4",
+];
+/// ECMWF's "soil level" fixed surface (code table 4.5, 151), on which its
+/// open data writes `sot` and `vsw`. Mirrors `ECMWF_SOIL_LEVEL_TYPE`.
+pub const ECMWF_SOIL_LEVEL_TYPE: u8 = 151;
 
 /// The fields that do not vary in time — the model terrain. Only the
 /// analysis frame is fetched and read, and the bundle carries a one-frame
@@ -605,6 +621,77 @@ macro_rules! cloud_water_spec {
             grib2_alternates: &[],
             gdal_unit: "g/kg",
             fill_values: &[],
+            producer_id: None,
+            grib2_aerosol: None,
+        }
+    };
+}
+
+// One soil layer (see `xuebuild/variables.py`): the GFS record on the
+// "depth below land surface" surface (106) from the layer's upper bound in
+// metres, and ECMWF's on its "soil level" surface (151), layer n carrying the
+// value n − 1, accepted as an alternate. Both carry a bitmap over water on
+// GFS, which becomes the bottom of the codebook, one step below the least
+// real value.
+macro_rules! soil_temperature_spec {
+    ($id:literal, $label:literal, $top_m:literal, $ecmwf_level:literal) => {
+        VariableSpec {
+            id: $id,
+            label: $label,
+            output_unit: "°C",
+            value_range: (-61.0, 66.0),
+            grib_element: "TSOIL",
+            open_meteo: "",
+            grib2_discipline: 2,
+            grib2_category: 0,
+            grib2_number: 2,
+            grib2_level_type: 106,
+            grib2_level_value: Some($top_m),
+            grib2_statistical: None,
+            grib2_aliases: &[],
+            grib2_alternates: &[RecordAlternate {
+                discipline: 2,
+                category: 3,
+                number: 18,
+                level_type: ECMWF_SOIL_LEVEL_TYPE,
+                level_value: Some($ecmwf_level),
+                statistical: None,
+                gdal_unit: "",
+            }],
+            gdal_unit: "C",
+            fill_values: &[9999.0],
+            producer_id: None,
+            grib2_aerosol: None,
+        }
+    };
+}
+macro_rules! soil_moisture_spec {
+    ($id:literal, $label:literal, $top_m:literal, $ecmwf_level:literal) => {
+        VariableSpec {
+            id: $id,
+            label: $label,
+            output_unit: "m³/m³",
+            value_range: (-0.01, 1.0),
+            grib_element: "SOILW",
+            open_meteo: "",
+            grib2_discipline: 2,
+            grib2_category: 0,
+            grib2_number: 192,
+            grib2_level_type: 106,
+            grib2_level_value: Some($top_m),
+            grib2_statistical: None,
+            grib2_aliases: &[],
+            grib2_alternates: &[RecordAlternate {
+                discipline: 2,
+                category: 0,
+                number: 25,
+                level_type: ECMWF_SOIL_LEVEL_TYPE,
+                level_value: Some($ecmwf_level),
+                statistical: None,
+                gdal_unit: "m^3/m^3",
+            }],
+            gdal_unit: "Fraction",
+            fill_values: &[9999.0],
             producer_id: None,
             grib2_aerosol: None,
         }
@@ -2492,6 +2579,15 @@ pub const VARIABLES: &[VariableSpec] = &[
     cloud_water_spec!("clw10000", "Cloud water at 10 km MSL", 10000.0),
     cloud_water_spec!("clw11000", "Cloud water at 11 km MSL", 11000.0),
     cloud_water_spec!("clw12000", "Cloud water at 12 km MSL", 12000.0),
+    // The soil layers (`SOIL_VARIABLE_IDS`).
+    soil_temperature_spec!("tsoil1", "Soil temperature, layer 1", 0.0, 0.0),
+    soil_temperature_spec!("tsoil2", "Soil temperature, layer 2", 0.1, 1.0),
+    soil_temperature_spec!("tsoil3", "Soil temperature, layer 3", 0.4, 2.0),
+    soil_temperature_spec!("tsoil4", "Soil temperature, layer 4", 1.0, 3.0),
+    soil_moisture_spec!("soilw1", "Volumetric soil moisture, layer 1", 0.0, 0.0),
+    soil_moisture_spec!("soilw2", "Volumetric soil moisture, layer 2", 0.1, 1.0),
+    soil_moisture_spec!("soilw3", "Volumetric soil moisture, layer 3", 0.4, 2.0),
+    soil_moisture_spec!("soilw4", "Volumetric soil moisture, layer 4", 1.0, 3.0),
 ];
 
 pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
@@ -2509,7 +2605,8 @@ mod tests {
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
-        SATELLITE_VARIABLE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS,
+        SATELLITE_VARIABLE_IDS, SOIL_MOISTURE_IDS, SOIL_TEMPERATURE_IDS, SOIL_VARIABLE_IDS,
+        SURFACE_TEMPERATURE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS,
         ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
@@ -2816,6 +2913,73 @@ mod tests {
                 "{variable_id}: WAVEWATCH III's surface value"
             );
             assert_eq!(spec.grib_element.is_empty(), derived, "{variable_id}: derived, never matched");
+        }
+    }
+
+    /// `tests/fixtures/soil-registry.json`: the soil temperature and the
+    /// volumetric water in four layers, held to the Python encoder the same
+    /// way. A layer's identity is the GFS record — 2/0/2 and the NCEP-local
+    /// 2/0/192 on the depth-below-land surface (106) from its upper bound —
+    /// and ECMWF's the WMO 2/3/18 and 2/0/25 on its soil level surface
+    /// (151), layer n at n − 1, accepted as an alternate.
+    #[test]
+    fn the_soil_registry_matches_the_shared_fixture() {
+        let entries = registry("soil-registry.json");
+        assert_eq!(
+            entries.keys().collect::<Vec<_>>(),
+            SOIL_VARIABLE_IDS,
+            "the temperature then the water, layer by layer, in the fixture's order"
+        );
+        assert_eq!(
+            SOIL_TEMPERATURE_IDS.iter().chain(SOIL_MOISTURE_IDS).copied().collect::<Vec<_>>(),
+            SOIL_VARIABLE_IDS
+        );
+        let tops = [0.0, 0.1, 0.4, 1.0];
+        for (variable_id, entry) in entries {
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            // Smooth fields: balanced is quality.
+            for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", "quality")] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
+                // Water, the bitmap's fill, becomes the bottom of the
+                // codebook: code 0, one step below every real value.
+                let linear = book.as_linear().expect("linear");
+                assert_eq!(linear.minimum, spec.value_range.0, "{variable_id}");
+                let mut code = [1u8];
+                book.quantize(&[spec.value_range.0], &mut code).expect("in range");
+                assert_eq!(code[0], 0, "{variable_id} {profile}: no soil");
+            }
+            let layer: usize = variable_id[variable_id.len() - 1..].parse().expect("a layer");
+            let temperature = SOIL_TEMPERATURE_IDS.contains(&variable_id.as_str());
+            assert_eq!(SURFACE_TEMPERATURE_IDS.contains(&variable_id.as_str()), temperature, "{variable_id}");
+            assert_eq!(
+                (spec.grib2_discipline, spec.grib2_category, spec.grib2_number),
+                if temperature { (2, 0, 2) } else { (2, 0, 192) },
+                "{variable_id}"
+            );
+            assert_eq!(spec.grib2_level_type, 106, "{variable_id}");
+            assert_eq!(spec.grib2_level_value, Some(tops[layer - 1]), "{variable_id}");
+            assert_eq!(spec.fill_values, &[9999.0][..], "{variable_id}");
+            assert_eq!(spec.grib_element, if temperature { "TSOIL" } else { "SOILW" }, "{variable_id}");
+            let [alternate] = spec.grib2_alternates else {
+                panic!("{variable_id}: one ECMWF alternate");
+            };
+            assert_eq!(
+                alternate.triple(),
+                if temperature { (2, 3, 18) } else { (2, 0, 25) },
+                "{variable_id}"
+            );
+            assert_eq!(alternate.level_type, 151, "{variable_id}");
+            assert_eq!(alternate.level_value, Some((layer - 1) as f64), "{variable_id}");
+            assert_eq!(alternate.statistical, None, "{variable_id}");
         }
     }
 

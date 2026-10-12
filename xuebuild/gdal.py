@@ -14,6 +14,9 @@ from .errors import ConversionError
 from .model import SourceFrame
 from .variables import (
     AEROSOL_VARIABLE_IDS,
+    SOIL_MOISTURE_IDS,
+    SOIL_TEMPERATURE_IDS,
+    SOIL_VARIABLE_IDS,
     SURFACE_TEMPERATURE_IDS,
     AerosolIdentity,
     isobaric_variable,
@@ -343,6 +346,16 @@ def ice_thickness_expression(unit: str) -> str:
     return "maximum(0,minimum(5.08,A))"
 
 
+def soil_moisture_expression(unit: str) -> str:
+    """Volumetric soil water, a dimensionless m³/m³ GDAL spells
+    ``Fraction`` for NCEP's SOILW and ``m^3/m^3`` for ECMWF's ``vsw``,
+    clamped to the soilw codebook range."""
+    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
+    if compact not in {"fraction", "proportion", "m^3/m^3", "m3/m3", "m³/m³", "m^3m^-3", "m3m-3", "1", "-", ""}:
+        raise ConversionError(f"unsupported soil moisture unit: {unit or '<missing>'}")
+    return "maximum(-0.01,minimum(1,A))"
+
+
 def wave_height_expression(unit: str) -> str:
     """Significant wave height in metres, clamped to the htsgw codebook range."""
     compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
@@ -550,6 +563,10 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return ice_cover_expression(unit)
     if variable_id == "icetk":
         return ice_thickness_expression(unit)
+    if variable_id in SOIL_TEMPERATURE_IDS:
+        return celsius_expression(unit, low=-61, high=66)
+    if variable_id in SOIL_MOISTURE_IDS:
+        return soil_moisture_expression(unit)
     if variable_id == "htsgw":
         return wave_height_expression(unit)
     if variable_id == "perpw":
@@ -935,6 +952,43 @@ def _assembled_aerosol(values: list[int]) -> AerosolIdentity:
     )
 
 
+def _is_soil_record(metadata: dict[str, str], variable_id: str) -> bool:
+    """One soil layer, under the registry's identity or an alternate, read
+    off the assembled template 4.0 values (the type of first fixed surface,
+    its scale factor and scaled value at indices 9–11) beside the
+    discipline: the element and short name do not say which layer a record
+    is in a form two centres share — GDAL spells GFS's ``0-0.1-DBLL`` and
+    names the element TSOIL / SOILW, and ECMWF's ``0-1-`` on a soil level
+    with SOILTMP / VSOILM — while the template does. A record of another
+    template (an interval statistic) is not a soil layer here."""
+    spec = variable_spec(variable_id)
+    if metadata.get("GRIB_PDS_PDTN") != "0":
+        return False
+    try:
+        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
+        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
+    except ValueError:
+        return False
+    if len(values) < 12:
+        return False
+    identities = [
+        (spec.grib2_discipline, spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
+        *(
+            (alternate.discipline, alternate.category, alternate.number, alternate.level_type, alternate.level_value)
+            for alternate in spec.grib2_alternates
+        ),
+    ]
+    scale, scaled_value = values[10], values[11]
+    for identity_discipline, category, number, level_type, level_value in identities:
+        if (discipline, values[0], values[1], values[9]) != (identity_discipline, category, number, level_type):
+            continue
+        if level_value is None:
+            return True
+        if scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == level_value:
+            return True
+    return False
+
+
 def _is_orography_record(metadata: dict[str, str], description: str) -> bool:
     """The model's terrain height on the ground surface. NCEP publishes it
     as the geopotential height 0/3/5 (GFS, HRRR and sflux, GDAL element
@@ -983,6 +1037,8 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         # (considered as a single layer)" surface (type 200), which GDAL
         # renders like the WMO type 10 and describes in full.
         return _is_entire_atmosphere_record(metadata, description, "PWAT")
+    if variable_id in SOIL_VARIABLE_IDS:
+        return _is_soil_record(metadata, variable_id)
     if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id in ("cin", "hpbl", "crain", "cfrzr", "cicep", "csnow"):

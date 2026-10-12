@@ -12,17 +12,20 @@ point, apparent temperature, precipitable water, planetary boundary layer
 height and the four categorical precipitation-type flags the `ptype` bundle
 is derived from), the 850 / 700 / 500 hPa vertical velocity, the surface
 temperature and the two sea ice fields, the surface orography (the
-geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), and —
+geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), the
+soil temperature and volumetric water in the four Noah layers
+(`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), and —
 appended by the fetcher from the cycle's GFS-Wave file — the significant
-wave height, primary wave period and direction: seventy-four records
-(seventy-one from pgrb2, three from GFS-Wave), in the order
+wave height, primary wave period and direction: eighty-two records
+(seventy-nine from pgrb2, three from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
 `ptype` derivation, the vapour flux derivation and the byte-identity parity
 test all run against real records. About a sixth of the window is land,
-which the wave records leave to their bitmap, so the nodata fill runs
-against real masked points too.
+which the wave records leave to their bitmap (and the sea, five sixths,
+which the soil records leave to theirs), so the nodata fill runs against
+real masked points too.
 
 The fixture was recut from the downloaded analysis with:
 
@@ -35,6 +38,25 @@ gdal_translate -srcwin 1192 208 80 80 -of GRIB \
 
 Widening the GFS input list means recutting it the same way, so the parity
 test keeps building the full published set.
+
+The eight soil records were added to it, after the orography and before
+the wave records, by cutting them alone from the same analysis with the
+same window and splicing the messages in, so the records before them are
+the bytes they were. GDAL's GRIB driver reads the NCEP soil temperature in
+kelvin under a `[C]` label, and its writer then adds 273.15 to what it takes
+for Celsius, so the four temperature bands are cut with an offset that
+undoes it (`-scale 0 1000 -273.15 726.85` is `A − 273.15`; the bitmap
+survives it):
+
+```sh
+# the eight records, by byte range off the pgrb2 .idx (xuebuild.fetch
+# _download_noaa_records with the source's soil ids)
+gdal_translate -b 1 -b 2 -b 3 -b 4 -srcwin 1192 208 80 80 -ot Float64 \
+  -scale 0 1000 -273.15 726.85 -of GRIB /tmp/soil.grib2 /tmp/tsoil.crop.grib2
+gdal_translate -b 5 -b 6 -b 7 -b 8 -srcwin 1192 208 80 80 -of GRIB \
+  /tmp/soil.grib2 /tmp/soilw.crop.grib2
+# then insert both, in that order, before the fixture's last three messages
+```
 
 `gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
 GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way
@@ -78,11 +100,14 @@ gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKI
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: fifty-eight records at
+three `wave` stream records the fetcher appends: sixty-six records at
 each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
 the orography the source fetches at the analysis alone) and the first step
 the gust (the interval maximum, empty at the analysis and therefore
-optional there). The window is
+optional there), and both the soil temperature and volumetric water in
+HTESSEL's four layers (`sot` / `vsw` at `levtype` `sol`, `levelist` 1–4:
+the WMO 2/3/18 and 2/0/25 on the soil level surface 151, layer n at value
+n − 1). The window is
 the Kara Sea, 60E to 80E and 65N to 85N: sea ice (the ice thickness
 carries a bitmap over land), open water (the wave records' bitmap covers
 the ice and the land) and Novaya Zemlya and Yamal, so every fill rule meets
@@ -112,9 +137,11 @@ open data cycle, every record the AIFS source fetches in
 `xuebuild/sources.py` order — the `oper` stream's twenty-nine, then the
 two `wave` records (the significant height and the mean direction; the
 AIFS wave stream carries a mean, not a peak, period, which the source
-leaves out): thirty-one at the analysis — the surface geopotential, the
-source's static orography, among them — and thirty at the step, the run
-total being an all-zero record at the analysis. They hold the four encodings the AIFS open data
+leaves out): thirty-five at the analysis — the surface geopotential, the
+source's static orography, among them — and thirty-four at the step, the
+run total being an all-zero record at the analysis. The four soil records
+(`sot` and `vsw` on the top two soil levels, the water content with a
+bitmap over the sea) sit after the orography. They hold the four encodings the AIFS open data
 writes differently from the IFS — the run-total precipitation as the WMO
 0/1/52 (GDAL's TPRATE) accumulated in kg/m², the total cloud cover as the
 WMO 0/6/1 in percent from the ground surface up, and the low / middle /
@@ -130,6 +157,14 @@ for h in 000 006; do
     tests/fixtures/aifs.2026091700.f$h.crop.grib2
 done
 ```
+
+The soil records of both ECMWF sources were added later the way the GFS
+ones were: fetched alone by byte range off each frame's `.index` (the
+Google mirror still served the September cycles), repacked to grid_simple
+as the fetcher does, cut with the command above, and spliced in before
+each frame's wave records, the records before them untouched. GDAL's
+writer leaves the ECMWF soil temperature in kelvin, so no offset is needed
+there.
 
 `gefsaero.2026091900.f000.crop.grib2` and `gefsaero.2026091900.f003.crop.grib2`
 are an 80 by 80 cell window over the Sahara and the Gulf of Guinea
@@ -435,6 +470,19 @@ change that meant it:
     from xuebuild.binconvert import VOLUME_BUNDLES; \
     print(json.dumps({v: registry_entry(v) for ids in VOLUME_BUNDLES.values() for v in ids}, \
     indent=2, ensure_ascii=False))" > tests/fixtures/volume-registry.json
+```
+
+`soil-registry.json` is the registry golden for the soil layers, the
+temperature then the volumetric water in layers 1–4, each with its label,
+unit, GRIB2 parameter block (the GFS record's) and quality / compact
+codebooks (`tests/test_soil.py`; the Rust encoder reads the same file).
+Regenerate it with the change that meant it:
+
+```sh
+.venv/bin/python -c "import json; from tests._support import registry_entry; \
+    from xuebuild.variables import SOIL_VARIABLE_IDS; \
+    print(json.dumps({v: registry_entry(v) for v in SOIL_VARIABLE_IDS}, \
+    indent=2, ensure_ascii=False))" > tests/fixtures/soil-registry.json
 ```
 
 # Xue fixtures

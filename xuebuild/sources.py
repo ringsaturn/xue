@@ -603,11 +603,13 @@ SOURCES: dict[str, SourceSpec] = {
         # period and direction from the cycle's GFS-Wave file — the
         # direction as an input only, like spfh850: it ships inside the
         # wave vector the converter derives from it and the height, not as
-        # a scalar of its own. The specific humidity above 850 hPa, the
-        # other vapour fluxes and the other vertical velocities stay
-        # unpublished: seventy-one pgrb2 records and three wave records per
-        # frame, one of the pgrb2 records the static orography.
-        # frame.
+        # a scalar of its own. Then the land: the soil temperature and the
+        # total volumetric soil water in the Noah model's four layers
+        # (0–10, 10–40, 40–100 and 100–200 cm), read after the orography.
+        # The specific humidity above 850 hPa, the other vapour fluxes and
+        # the other vertical velocities stay unpublished: seventy-nine
+        # pgrb2 records and three wave records per frame, one of the pgrb2
+        # records the static orography.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -680,6 +682,14 @@ SOURCES: dict[str, SourceSpec] = {
             "icec",
             "icetk",
             "orog",
+            "tsoil1",
+            "tsoil2",
+            "tsoil3",
+            "tsoil4",
+            "soilw1",
+            "soilw2",
+            "soilw3",
+            "soilw4",
             "htsgw",
             "perpw",
             "dirpw",
@@ -739,6 +749,14 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+            "tsoil1",
+            "tsoil2",
+            "tsoil3",
+            "tsoil4",
+            "soilw1",
+            "soilw2",
+            "soilw3",
+            "soilw4",
             "orog",
         ),
         bundle_vector_ids=(
@@ -783,7 +801,10 @@ SOURCES: dict[str, SourceSpec] = {
         # surfaces, the skin temperature and the sea ice thickness, and from
         # the cycle's ``wave`` stream the significant wave height, the peak
         # period and the mean direction — the direction an input only, like
-        # spfh850, carried by the derived wave vector. Not in the open data:
+        # spfh850, carried by the derived wave vector — and the soil
+        # temperature and water in HTESSEL's four layers (0–7, 7–28, 28–100
+        # and 100–289 cm; ``sot`` / ``vsw`` on ``levtype`` ``sol``), under
+        # the GFS layer ids. Not in the open data:
         # the layer cloud covers, the visibility, the sea ice cover, and an
         # apparent temperature record.
         input_variable_ids=(
@@ -843,6 +864,14 @@ SOURCES: dict[str, SourceSpec] = {
             "tmpsfc",
             "icetk",
             "orog",
+            "tsoil1",
+            "tsoil2",
+            "tsoil3",
+            "tsoil4",
+            "soilw1",
+            "soilw2",
+            "soilw3",
+            "soilw4",
             "htsgw",
             "perpw",
             "dirpw",
@@ -894,6 +923,14 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+            "tsoil1",
+            "tsoil2",
+            "tsoil3",
+            "tsoil4",
+            "soilw1",
+            "soilw2",
+            "soilw3",
+            "soilw4",
             "orog",
         ),
         bundle_vector_ids=(
@@ -934,7 +971,9 @@ SOURCES: dict[str, SourceSpec] = {
         # total ``tp`` is in millimetres under the WMO 0/1/52, its ``tcc``
         # the WMO 0/6/1 in percent from the ground surface up, and the
         # layers sit on the ECMWF layer boundaries; the registry's
-        # alternates accept all five under the GFS identities.
+        # alternates accept all five under the GFS identities. Its soil is
+        # the IFS's top two layers (0–7 and 7–28 cm), all AIFS open data
+        # carries, the water content with a bitmap over the sea.
         input_variable_ids=(
             "tmp2m",
             "tp",
@@ -965,6 +1004,10 @@ SOURCES: dict[str, SourceSpec] = {
             "vvel500",
             "tmpsfc",
             "orog",
+            "tsoil1",
+            "tsoil2",
+            "soilw1",
+            "soilw2",
             "htsgw",
             "dirpw",
         ),
@@ -993,6 +1036,10 @@ SOURCES: dict[str, SourceSpec] = {
             "thetae850",
             "tmpsfc",
             "htsgw",
+            "tsoil1",
+            "tsoil2",
+            "soilw1",
+            "soilw2",
             "orog",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
