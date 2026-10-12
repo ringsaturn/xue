@@ -20,7 +20,18 @@ export interface GibsLayer {
   code: string;
   /** True for the false-colour composites. */
   falseColor: boolean;
+  /** The platform's own picture in true colour: the id its pair shares. */
+  platform: string;
 }
+
+/** A platform's chip code on the level row, short enough for its glyph. */
+export const GIBS_PLATFORM_GLYPH: Readonly<Record<string, string>> = {
+  snpp: "NPP",
+  noaa20: "N20",
+  noaa21: "N21",
+  terra: "TER",
+  aqua: "AQU",
+};
 
 /** The deepest tile matrix GIBS serves these layers at in EPSG:3857
  * (`GoogleMapsCompatible_Level9`, about 300 m a pixel); MapLibre overzooms
@@ -28,22 +39,38 @@ export interface GibsLayer {
 export const GIBS_MAX_LEVEL = 9;
 
 export const GIBS_LAYERS: readonly GibsLayer[] = [
-  { id: "snpp", layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor", code: "S-NPP", falseColor: false },
-  { id: "noaa20", layer: "VIIRS_NOAA20_CorrectedReflectance_TrueColor", code: "NOAA-20", falseColor: false },
-  { id: "noaa21", layer: "VIIRS_NOAA21_CorrectedReflectance_TrueColor", code: "NOAA-21", falseColor: false },
-  { id: "terra", layer: "MODIS_Terra_CorrectedReflectance_TrueColor", code: "TERRA", falseColor: false },
-  { id: "aqua", layer: "MODIS_Aqua_CorrectedReflectance_TrueColor", code: "AQUA", falseColor: false },
-  { id: "snpp-fc", layer: "VIIRS_SNPP_CorrectedReflectance_BandsM11-I2-I1", code: "S-NPP", falseColor: true },
-  { id: "noaa20-fc", layer: "VIIRS_NOAA20_CorrectedReflectance_BandsM11-I2-I1", code: "NOAA-20", falseColor: true },
-  { id: "noaa21-fc", layer: "VIIRS_NOAA21_CorrectedReflectance_BandsM11-I2-I1", code: "NOAA-21", falseColor: true },
-  { id: "terra-721", layer: "MODIS_Terra_CorrectedReflectance_Bands721", code: "TERRA", falseColor: true },
-  { id: "aqua-721", layer: "MODIS_Aqua_CorrectedReflectance_Bands721", code: "AQUA", falseColor: true },
+  { id: "snpp", layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor", code: "S-NPP", falseColor: false, platform: "snpp" },
+  { id: "noaa20", layer: "VIIRS_NOAA20_CorrectedReflectance_TrueColor", code: "NOAA-20", falseColor: false, platform: "noaa20" },
+  { id: "noaa21", layer: "VIIRS_NOAA21_CorrectedReflectance_TrueColor", code: "NOAA-21", falseColor: false, platform: "noaa21" },
+  { id: "terra", layer: "MODIS_Terra_CorrectedReflectance_TrueColor", code: "TERRA", falseColor: false, platform: "terra" },
+  { id: "aqua", layer: "MODIS_Aqua_CorrectedReflectance_TrueColor", code: "AQUA", falseColor: false, platform: "aqua" },
+  { id: "snpp-fc", layer: "VIIRS_SNPP_CorrectedReflectance_BandsM11-I2-I1", code: "S-NPP", falseColor: true, platform: "snpp" },
+  { id: "noaa20-fc", layer: "VIIRS_NOAA20_CorrectedReflectance_BandsM11-I2-I1", code: "NOAA-20", falseColor: true, platform: "noaa20" },
+  { id: "noaa21-fc", layer: "VIIRS_NOAA21_CorrectedReflectance_BandsM11-I2-I1", code: "NOAA-21", falseColor: true, platform: "noaa21" },
+  { id: "terra-721", layer: "MODIS_Terra_CorrectedReflectance_Bands721", code: "TERRA", falseColor: true, platform: "terra" },
+  { id: "aqua-721", layer: "MODIS_Aqua_CorrectedReflectance_Bands721", code: "AQUA", falseColor: true, platform: "aqua" },
 ];
 
 export const GIBS_ATTRIBUTION = "NASA GIBS / Worldview";
 
 export function gibsLayer(id: string | null): GibsLayer | null {
   return GIBS_LAYERS.find((layer) => layer.id === id) ?? null;
+}
+
+/** The platforms, in the order their chips are listed. */
+export const GIBS_PLATFORMS: readonly string[] = [...new Set(GIBS_LAYERS.map((layer) => layer.platform))];
+
+/** One platform's picture in true or false colour. */
+export function gibsLayerFor(platform: string, falseColor: boolean): GibsLayer | null {
+  return GIBS_LAYERS.find((layer) => layer.platform === platform && layer.falseColor === falseColor) ?? null;
+}
+
+/** The days the dataset offers, as an axis: `count` UTC days ending today,
+ * the first day's midnight and the number of days. Today's picture fills
+ * in over the day as the orbiters pass. */
+export function gibsDays(nowMs: number, count: number): { startMs: number; count: number } {
+  const today = Date.UTC(new Date(nowMs).getUTCFullYear(), new Date(nowMs).getUTCMonth(), new Date(nowMs).getUTCDate());
+  return { startMs: today - (count - 1) * 86_400_000, count };
 }
 
 /** The UTC day a picture is asked for: the playhead's, or today's when the

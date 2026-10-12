@@ -152,6 +152,8 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   // The geostationary mosaic, a view over the imagers above.
   geo: "geo",
   mosaic: "geo",
+  gibs: "gibs",
+  worldview: "gibs",
   geostationary: "geo",
 };
 
