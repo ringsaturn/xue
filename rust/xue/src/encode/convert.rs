@@ -1919,6 +1919,64 @@ fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
     reduced
 }
 
+/// The variables whose reduced tiers keep the warmest code around each
+/// sample site rather than the site's own: the 3.9 µm window, published to
+/// show fires, whose one-cell hot spots a plain decimation drops three times
+/// in four at the half tier. Mirrors `PEAK_DECIMATION_IDS` in
+/// `xuebuild/binconvert.py`.
+const PEAK_DECIMATION_IDS: [&str; 1] = ["ir039"];
+
+/// Reduced-resolution copy of one quantized plane that keeps peaks: at each
+/// site `decimate_codes` keeps, the largest code within `factor / 2` rows
+/// and columns either side of it, clipped at the plane's edges, so every
+/// cell reaches a site. `nodata_code` counts below every code and is the
+/// site's only when its whole window is nodata.
+///
+/// Mirrors `_decimate_peak_codes(codes, grid, factor, nodata_code)` in
+/// `xuebuild/binconvert.py`.
+fn decimate_peak_codes(codes: &[u8], grid: &GridInfo, factor: usize, nodata_code: u8) -> Vec<u8> {
+    let half = factor / 2;
+    let mut reduced =
+        Vec::with_capacity(grid.width.div_ceil(factor) * grid.height.div_ceil(factor));
+    for row in (0..grid.height).step_by(factor) {
+        let rows = row.saturating_sub(half)..=(row + half).min(grid.height - 1);
+        for column in (0..grid.width).step_by(factor) {
+            let columns = column.saturating_sub(half)..=(column + half).min(grid.width - 1);
+            let mut peak: Option<u8> = None;
+            for r in rows.clone() {
+                for &code in &codes[r * grid.width + columns.start()..=r * grid.width + columns.end()] {
+                    if code != nodata_code {
+                        peak = Some(peak.map_or(code, |p| p.max(code)));
+                    }
+                }
+            }
+            reduced.push(peak.unwrap_or(nodata_code));
+        }
+    }
+    reduced
+}
+
+/// One plane's reduced tier: the peak-keeping decimation for the variables
+/// in `PEAK_DECIMATION_IDS`, the site's own code otherwise. Mirrors
+/// `_decimate_variant_codes` in `xuebuild/binconvert.py`.
+fn decimate_variant_codes(
+    variable_id: &str,
+    codes: &[u8],
+    grid: &GridInfo,
+    factor: usize,
+    profile: &str,
+) -> Result<Vec<u8>> {
+    if !PEAK_DECIMATION_IDS.contains(&variable_id) {
+        return Ok(decimate_codes(codes, grid, factor));
+    }
+    let Some(linear) = codebook(profile, variable_id)?.as_linear().copied() else {
+        return Err(EncodeError::conversion(format!(
+            "{variable_id} keeps its peaks only on a linear codebook"
+        )));
+    };
+    Ok(decimate_peak_codes(codes, grid, factor, linear.nodata_code as u8))
+}
+
 /// HLS `STREAM-INF` style bandwidth hint: average bits per second needed to
 /// keep up with the 12 fps playback rate while downloading the whole tier.
 fn playback_bandwidth(byte_length: usize, frame_count: usize) -> u64 {
@@ -2770,24 +2828,26 @@ pub fn convert_bin(
                     codes_by_offset: codes_by_offset
                         .iter()
                         .map(|(offset, planes)| {
-                            (
+                            Ok((
                                 *offset,
                                 planes
                                     .iter()
                                     .map(|(name, codes)| {
-                                        (
+                                        Ok((
                                             name.clone(),
-                                            decimate_codes(
+                                            decimate_variant_codes(
+                                                name,
                                                 codes,
                                                 grid_for(family_of(name)),
                                                 factor,
-                                            ),
-                                        )
+                                                &options.profile,
+                                            )?,
+                                        ))
                                     })
-                                    .collect(),
-                            )
+                                    .collect::<Result<_>>()?,
+                            ))
                         })
-                        .collect(),
+                        .collect::<Result<_>>()?,
                 })
             })
             .collect::<Result<_>>()?
@@ -3709,11 +3769,11 @@ mod composite_tests {
         let meteosat = source_spec("meteosat").expect("meteosat");
         assert_eq!(bundle_input_ids(meteosat, "dustrgb"), ["ir086", "ir104", "ir123"]);
         // The components are the same three guns everywhere, and every
-        // satellite source publishes ir104 then the composite.
+        // satellite source publishes ir104 and ir039, then the composite.
         for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
             let source = source_spec(model).expect(model);
             assert_eq!(bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
-            assert!(published_bundle_ids(source).starts_with(&["ir104", "dustrgb"]), "{model}");
+            assert!(published_bundle_ids(source).starts_with(&["ir104", "ir039", "dustrgb"]), "{model}");
         }
     }
 
@@ -3736,7 +3796,7 @@ mod composite_tests {
             }
             assert_eq!(
                 published_bundle_ids(source),
-                ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
+                ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"],
                 "{model}"
             );
         }
@@ -3744,7 +3804,7 @@ mod composite_tests {
         for bundle_id in ["dustcf", "zhouye"] {
             assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
         }
-        assert_eq!(published_bundle_ids(meteosat), ["ir104", "dustrgb", "truecolor"]);
+        assert_eq!(published_bundle_ids(meteosat), ["ir104", "ir039", "dustrgb", "truecolor"]);
     }
 
     #[test]
@@ -3763,11 +3823,11 @@ mod composite_tests {
                 "{model}"
             );
         }
-        // The Japan box publishes no confidence: the window, then the three
+        // The Japan box publishes no confidence: the two windows, then the
         // composites its nine channels feed.
         assert_eq!(
             published_bundle_ids(source_spec("himawarijp").expect("himawarijp")),
-            ["ir104", "dustrgb", "truecolor"]
+            ["ir104", "ir039", "dustrgb", "truecolor"]
         );
         for model in ["goeseast", "goeswest"] {
             let source = source_spec(model).expect(model);

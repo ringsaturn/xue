@@ -78,7 +78,7 @@ class GdalWarpProjector:
     stays small."""
 
     def to_grid(self, source: Path, grid: TargetGrid, *, nodata: int, resampling: str, out: Path) -> None:
-        if resampling not in ("near", "bilinear", "cubic", "average"):
+        if resampling not in ("near", "bilinear", "cubic", "average", "max"):
             raise ConversionError(f"unsupported resampling {resampling!r}")
         out.parent.mkdir(parents=True, exist_ok=True)
         temporary = out.with_suffix(out.suffix + ".part.tif")

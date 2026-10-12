@@ -23,7 +23,7 @@
       "quality": {
         "type": "linear",
         "offset": 180.0,
-        "scale": 0.6,
+        "scale": 0.9,
         "minimumCode": 0,
         "maximumCode": 253,
         "nodataCode": 255
@@ -31,7 +31,7 @@
       "compact": {
         "type": "linear",
         "offset": 180.0,
-        "scale": 1.2,
+        "scale": 1.8,
         "minimumCode": 0,
         "maximumCode": 126,
         "nodataCode": 255

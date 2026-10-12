@@ -1407,7 +1407,8 @@ Normative for byte identity between the two encoders:
   for every linear-codebook field.
 - Tile size is a per-source registry value; a reduced-resolution variant
   decimated by `f` (2, 4 or 8: every `f`-th row and column of the canonical
-  plane, from row and column 0) uses `(ceil(tileWidth / f), ceil(tileHeight
+  plane, from row and column 0; the 3.9 µm window's sites carry the largest
+  code within `f / 2` cells, [`satellite.md`](satellite.md)) uses `(ceil(tileWidth / f), ceil(tileHeight
   / f))`, so a tile with the same number covers the same ground in every
   tier. A regional (cropped) file tiles its own grid from its own origin
   with the source's tile size.

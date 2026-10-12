@@ -107,7 +107,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(spec.input_variable_ids[:6], SATELLITE_INFRARED_IDS)
                 self.assertEqual(spec.input_variable_ids[6:], ("vis047", "vis064", "nir086"))
                 self.assertEqual((spec.bundle_scalar_ids, spec.bundle_composite_ids, spec.core_bundle_ids), (himawari.bundle_scalar_ids, himawari.bundle_composite_ids, himawari.core_bundle_ids))
-                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor"))
+                self.assertEqual(binconvert.published_bundle_ids(spec), ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"))
                 self.assertEqual(binconvert.bundle_input_ids(spec, "truecolor"), ("vis047", "vis064", "nir086", "ir039", "ir104"))
                 self.assertEqual((spec.grid_step, spec.cadence_seconds, spec.window_hours, spec.production_grid, spec.tile), (0.04, 600, 6, (3000, 3000), (64, 64)))
                 self.assertFalse(spec.video)

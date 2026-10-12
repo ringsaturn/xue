@@ -329,8 +329,18 @@ COMPACT_WAVE_VECTOR = TemperatureCodebook(minimum=-25.2, maximum=25.2, step=0.4,
 # split-window difference to a tenth reads the fetch stage's packed series,
 # not the codes. The compact profile doubles the step and stops a code
 # short (331.2) like the other linear codebooks.
-# Every infrared window shares the two (the name is the channel's own).
+# Every infrared window shares the two (the name is the channel's own),
+# except the 3.9 µm window, published to show fires: a burning pixel reads
+# far above any surface — AHI band 7 saturates near 400 K — so it runs to
+# 407.7 K at 0.9 K over the same 254 codes, and its compact profile to
+# 406.8 K at 1.8 K. A hot spot is tens of kelvin above its background, so
+# the coarser step costs the fire nothing; the other windows keep 0.6 K.
 def _brightness_temperature(channel_id: str) -> tuple[TemperatureCodebook, TemperatureCodebook]:
+    if channel_id == "ir039":
+        return (
+            TemperatureCodebook(minimum=180.0, maximum=407.7, step=0.9, name=channel_id),
+            TemperatureCodebook(minimum=180.0, maximum=406.8, step=1.8, name=channel_id),
+        )
     return (
         TemperatureCodebook(minimum=180.0, maximum=331.8, step=0.6, name=channel_id),
         TemperatureCodebook(minimum=180.0, maximum=331.2, step=1.2, name=channel_id),

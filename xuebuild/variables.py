@@ -1149,16 +1149,16 @@ VARIABLES: dict[str, VariableSpec] = {
     # The two further windows DEBRA reads (Miller et al. 2017: the 3.9 µm
     # window for the night thin-cirrus test and the 6.2 µm water vapour
     # band for the deep-convection test; AHI bands 7 and 8, ABI channels 7
-    # and 8), the same parameter and codebook again — the 3.9 µm window
-    # by day carries reflected sunlight on top of the emission and can
-    # read above the top of the codebook over desert, which only the test
-    # that saturates at 8 K of contrast ever sees. Fetched for the
-    # confidence field, registered variables, published by no source.
+    # and 8), the same parameter again. The 3.9 µm window is also published
+    # on the disks, to show fires: a burning pixel saturates the band near
+    # 400 K, so its codebook runs to 407.7 K (quantize.py) where the other
+    # windows stop at 331.8 K. The 6.2 µm band is fetched for the
+    # confidence field and published by no source.
     "ir039": VariableSpec(
         id="ir039",
         label="Brightness temperature, 3.9 µm",
         output_unit="K",
-        value_range=(180, 332),
+        value_range=(180, 408),
         grib2_discipline=0,
         grib2_category=4,
         grib2_number=4,

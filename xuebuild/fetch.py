@@ -1701,6 +1701,11 @@ def _fetch_satellite_run(
         cadence_seconds=spec.cadence_seconds,
         region=spec.region,
         source_id=spec.id,
+        # Only a channel the source publishes is warped twice; one read
+        # only as a composite's input has no use for its peak.
+        peak_channel_ids=frozenset(
+            channel.id for channel in channels if channel.id in satellite_fetch.PEAK_CHANNEL_IDS and channel.id in spec.bundle_scalar_ids
+        ),
         force=force,
         fetch=fetch,
         download=download,

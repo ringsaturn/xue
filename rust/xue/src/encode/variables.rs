@@ -1828,17 +1828,17 @@ pub const VARIABLES: &[VariableSpec] = &[
     // The two further windows DEBRA reads (Miller et al. 2017: the 3.9 µm
     // window for the night thin-cirrus test and the 6.2 µm water vapour
     // band for the deep-convection test; AHI bands 7 and 8, ABI channels 7
-    // and 8), the same parameter and codebook again — the 3.9 µm window
-    // by day carries reflected sunlight on top of the emission and can
-    // read above the top of the codebook over desert, which only the test
-    // that saturates at 8 K of contrast ever sees. Fetched for the
-    // confidence field, registered variables, published by no source.
+    // and 8), the same parameter again. The 3.9 µm window is also published
+    // on the disks, to show fires: a burning pixel saturates the band near
+    // 400 K, so its codebook runs to 407.7 K (`quantize.rs`) where the other
+    // windows stop at 331.8 K. The 6.2 µm band is fetched for the
+    // confidence field and published by no source.
     // Mirror `ir039` and `wv062` in `xuebuild/variables.py`.
     VariableSpec {
         id: "ir039",
         label: "Brightness temperature, 3.9 µm",
         output_unit: "K",
-        value_range: (180.0, 332.0),
+        value_range: (180.0, 408.0),
         grib_element: "",
         open_meteo: "",
         grib2_discipline: 0,
@@ -3070,7 +3070,7 @@ mod tests {
         assert!(himawari.series_file && himawari.observation);
         assert_eq!(himawari.cadence_seconds, Some(600));
         assert_eq!(himawari.input_variable_ids, SATELLITE_CHANNEL_IDS);
-        assert_eq!(himawari.bundle_scalar_ids, &["ir104"]);
+        assert_eq!(himawari.bundle_scalar_ids, &["ir104", "ir039"]);
         assert_eq!(
             himawari.bundle_composite_ids,
             &[DUST_RGB_BUNDLE_ID, DUST_CF_BUNDLE_ID, ZHOUYE_BUNDLE_ID, TRUE_COLOR_BUNDLE_ID]
