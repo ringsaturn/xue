@@ -1,0 +1,146 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-10-12T04:00:00Z",
+ "generated": "2026-10-12T04:23:40Z",
+ "window": {
+  "start": "2026-10-05T04:00:00Z",
+  "end": "2026-10-12T04:00:00Z"
+ },
+ "sensors": [
+  {
+   "id": "viirs-snpp",
+   "name": "VIIRS S-NPP",
+   "resolution": 375,
+   "attribution": "NASA FIRMS (LANCE NRT), VIIRS 375 m C2",
+   "license": "NASA-open-data",
+   "url": "https://firms.modaps.eosdis.nasa.gov/",
+   "latest": "2026-10-11T17:43:00Z",
+   "count": 44,
+   "file": {
+    "path": "viirs-snpp.jsonl",
+    "byteLength": 1854,
+    "crc32": "0b586bfa"
+   }
+  },
+  {
+   "id": "viirs-noaa20",
+   "name": "VIIRS NOAA-20",
+   "resolution": 375,
+   "attribution": "NASA FIRMS (LANCE NRT), VIIRS 375 m C2",
+   "license": "NASA-open-data",
+   "url": "https://firms.modaps.eosdis.nasa.gov/",
+   "latest": "2026-10-11T17:22:00Z",
+   "count": 43,
+   "file": {
+    "path": "viirs-noaa20.jsonl",
+    "byteLength": 1933,
+    "crc32": "5469a846"
+   }
+  },
+  {
+   "id": "viirs-noaa21",
+   "name": "VIIRS NOAA-21",
+   "resolution": 375,
+   "attribution": "NASA FIRMS (LANCE NRT), VIIRS 375 m C2",
+   "license": "NASA-open-data",
+   "url": "https://firms.modaps.eosdis.nasa.gov/",
+   "latest": "2026-10-11T17:05:00Z",
+   "count": 44,
+   "file": {
+    "path": "viirs-noaa21.jsonl",
+    "byteLength": 1961,
+    "crc32": "5254b511"
+   }
+  },
+  {
+   "id": "modis-terra",
+   "name": "MODIS Terra",
+   "resolution": 1000,
+   "attribution": "NASA FIRMS (LANCE NRT), MODIS C6.1",
+   "license": "NASA-open-data",
+   "url": "https://firms.modaps.eosdis.nasa.gov/",
+   "latest": "2026-10-11T13:25:00Z",
+   "count": 27,
+   "file": {
+    "path": "modis-terra.jsonl",
+    "byteLength": 1206,
+    "crc32": "624f91ed"
+   }
+  },
+  {
+   "id": "modis-aqua",
+   "name": "MODIS Aqua",
+   "resolution": 1000,
+   "attribution": "NASA FIRMS (LANCE NRT), MODIS C6.1",
+   "license": "NASA-open-data",
+   "url": "https://firms.modaps.eosdis.nasa.gov/",
+   "latest": "2026-10-11T13:55:00Z",
+   "count": 16,
+   "file": {
+    "path": "modis-aqua.jsonl",
+    "byteLength": 807,
+    "crc32": "e49bf8b7"
+   }
+  }
+ ],
+ "hours": [
+  [0, "2026-10-11T01:00:00Z", 1, 1.8, 0, 126],
+  [0, "2026-10-11T03:00:00Z", 18, 167.4, 127, 652],
+  [0, "2026-10-11T05:00:00Z", 21, 230.2, 780, 747],
+  [0, "2026-10-11T11:00:00Z", 1, 3.0, 1528, 132],
+  [0, "2026-10-11T17:00:00Z", 3, 27.5, 1661, 192],
+  [1, "2026-10-05T04:00:00Z", 1, 2.8, 0, 135],
+  [1, "2026-10-11T00:00:00Z", 1, 2.8, 136, 136],
+  [1, "2026-10-11T04:00:00Z", 16, 301.6, 273, 578],
+  [1, "2026-10-11T05:00:00Z", 23, 153.9, 852, 809],
+  [1, "2026-10-11T10:00:00Z", 1, 4.0, 1662, 134],
+  [1, "2026-10-11T17:00:00Z", 1, 6.1, 1797, 135],
+  [2, "2026-10-11T00:00:00Z", 1, 0.8, 0, 133],
+  [2, "2026-10-11T04:00:00Z", 26, 227.3, 134, 903],
+  [2, "2026-10-11T05:00:00Z", 1, 1.5, 1038, 134],
+  [2, "2026-10-11T11:00:00Z", 1, 96.2, 1173, 135],
+  [2, "2026-10-11T16:00:00Z", 1, 28.2, 1309, 136],
+  [2, "2026-10-11T17:00:00Z", 14, 53.9, 1446, 514],
+  [3, "2026-10-11T00:00:00Z", 9, 92.8, 0, 381],
+  [3, "2026-10-11T06:00:00Z", 1, 10.3, 382, 133],
+  [3, "2026-10-11T12:00:00Z", 16, 124.1, 516, 554],
+  [3, "2026-10-11T13:00:00Z", 1, 14.3, 1071, 134],
+  [4, "2026-10-11T00:00:00Z", 1, 14.0, 0, 132],
+  [4, "2026-10-11T07:00:00Z", 14, 505.9, 133, 539],
+  [4, "2026-10-11T13:00:00Z", 1, 22.0, 673, 133]
+ ],
+ "sources": [
+  {
+   "id": "firms-suomi-npp-viirs-c2",
+   "ok": true,
+   "fetched": "2026-10-12T04:23:00Z",
+   "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+   "reports": 44,
+   "rejected": 0
+  },
+  {
+   "id": "firms-noaa-20-viirs-c2",
+   "ok": true,
+   "fetched": "2026-10-12T04:23:00Z",
+   "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv",
+   "reports": 43,
+   "rejected": 0
+  },
+  {
+   "id": "firms-noaa-21-viirs-c2",
+   "ok": true,
+   "fetched": "2026-10-12T04:23:00Z",
+   "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv",
+   "reports": 44,
+   "rejected": 0
+  },
+  {
+   "id": "firms-modis-c6-1",
+   "ok": true,
+   "fetched": "2026-10-12T04:23:00Z",
+   "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv",
+   "reports": 43,
+   "rejected": 0
+  }
+ ]
+}

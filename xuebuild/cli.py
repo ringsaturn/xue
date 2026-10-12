@@ -48,6 +48,12 @@ from .nexrad.schema import floor_round as floor_nexrad_round
 from .nexrad.schema import parse_round as parse_nexrad_round
 from .nexrad.schema import round_directory as nexrad_round_directory
 from .segments import cut_round as cut_round_segments
+from .fire.build import build_product as build_fire_product
+from .fire.build import load_previous_index as load_previous_fire_index
+from .fire.fetch import fetch_round as fetch_fire_round
+from .fire.schema import floor_round as floor_fire_round
+from .fire.schema import parse_round as parse_fire_round
+from .fire.sensors import SOURCES as FIRE_SOURCES
 from .synop.build import build_product as build_synop_product
 from .synop.build import load_previous_index as load_previous_synop_index
 from .synop.fetch import fetch_round as fetch_synop_round
@@ -339,13 +345,14 @@ def parser() -> argparse.ArgumentParser:
     stac_parser.add_argument(
         "--product",
         choices=POINT_PRODUCTS,
-        help="a point product instead of a run (docs/sounding.md, docs/airport.md, docs/synop.md, docs/tc.md); "
+        help="a point product instead of a run (docs/sounding.md, docs/airport.md, docs/synop.md, docs/tc.md, "
+        "docs/nexrad.md, docs/fire.md); "
         "needs --issue",
     )
     stac_parser.add_argument(
         "--issue",
         help="the point product issue whose index.json is on disk: YYYYMMDDHH for sounding and tc, "
-        "YYYYMMDDHHMM for an airport or synop round",
+        "YYYYMMDDHHMM for an airport, synop, nexrad or fire round",
     )
     stac_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
@@ -570,6 +577,33 @@ def parser() -> argparse.ArgumentParser:
     synop_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     synop_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     synop_build.add_argument("--force-download", action="store_true", help="fetch every source again, station tables included")
+
+    fire_build = commands.add_parser(
+        "fire-build",
+        help="fetch the NASA FIRMS active fire files and write one fire.<round>/ index, a <sensor>.jsonl per sensor "
+        "and the pointer",
+    )
+    fire_build.add_argument(
+        "--round",
+        default="now",
+        help="the round, YYYYMMDDHH00 in UTC, or now (this hour)",
+    )
+    fire_build.add_argument(
+        "--sources",
+        help=f"comma-separated FIRMS files to fetch (default: all of {', '.join(source.id for source in FIRE_SOURCES)}); "
+        "the others' sensors carry their history over",
+    )
+    fire_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    fire_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    fire_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous round's index.json, whose sensor files this round merges onto (default: the one the "
+        "local latest-fire.json names, if any; `make live-fire-index` fetches the live one and its files)",
+    )
+    fire_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
+    fire_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
+    fire_build.add_argument("--force-download", action="store_true", help="fetch every file again")
 
     sounding_build = commands.add_parser(
         "sounding-build",
@@ -1047,6 +1081,26 @@ def main(argv: list[str] | None = None) -> int:
                     arguments.raw_dir, moment, previous_index=previous, networks=networks, force=arguments.force_download
                 )
             report = build_synop_product(
+                moment,
+                arguments.raw_dir,
+                arguments.output_dir,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == "fire-build":
+            moment = floor_fire_round(datetime.now(UTC)) if arguments.round == "now" else parse_fire_round(arguments.round)
+            fire_sources = None
+            if arguments.sources:
+                known = tuple(source.id for source in FIRE_SOURCES)
+                fire_sources = tuple(dict.fromkeys(item.strip() for item in arguments.sources.split(",") if item.strip()))
+                unknown = [item for item in fire_sources if item not in known]
+                if unknown:
+                    raise XueError(f"unknown fire sources {unknown}; choose from {', '.join(known)}")
+            previous = load_previous_fire_index(arguments.previous_index, arguments.output_dir)
+            if not arguments.offline:
+                fetch_fire_round(arguments.raw_dir, moment, sources=fire_sources, force=arguments.force_download)
+            report = build_fire_product(
                 moment,
                 arguments.raw_dir,
                 arguments.output_dir,
