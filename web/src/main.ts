@@ -170,6 +170,9 @@ import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
 import { buildAirportCard, buildSoundingCard, buildSynopCard } from "./stations/card";
+import { buildFireCard } from "./fire/card";
+import { fetchFireIndex, type LoadedFireIndex } from "./fire/fetch";
+import { FIRE_CLICKABLE_LAYERS, FireLayers, type FireDetection } from "./fire/layer";
 import {
   fetchAirportIndex,
   fetchAirportStation,
@@ -724,6 +727,7 @@ function applyBasemapTheme(): void {
   applyBasemapInk(darkGround);
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
+  fireLayers?.setInk(darkGround);
   if (radarOverlay) {
     const style = getComputedStyle(document.body);
     radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
@@ -1224,6 +1228,7 @@ const tcTile = required<HTMLButtonElement>("tc-tile");
 const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
 const synopTile = required<HTMLButtonElement>("synop-tile");
+const fireTile = required<HTMLButtonElement>("fire-tile");
 const radarTile = required<HTMLButtonElement>("radar-tile");
 const legendFolded = required<HTMLElement>("legend-folded");
 const tcSheet = required<HTMLElement>("tc-sheet");
@@ -5576,6 +5581,7 @@ function syncRail(): void {
   soundingTile.setAttribute("aria-pressed", String(!soundingTile.hidden && view.marks.stations.soundings));
   airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
   synopTile.setAttribute("aria-pressed", String(!synopTile.hidden && view.marks.stations.synop));
+  fireTile.setAttribute("aria-pressed", String(!fireTile.hidden && view.marks.stations.fire));
   radarTile.setAttribute("aria-pressed", String(!radarTile.hidden && view.marks.radar.on));
 }
 
@@ -7024,6 +7030,11 @@ function renderTcSheet(): void {
 let soundingLoaded: LoadedSoundingIndex | null = null;
 let airportLoaded: LoadedAirportIndex | null = null;
 let synopLoaded: LoadedSynopIndex | null = null;
+/** The active fires (docs/fire.md) ride the station marks' poll, tile row
+ * and `?stations=` switch; their layer is their own, clustered and read by
+ * span rather than whole. */
+let fireLoaded: LoadedFireIndex | null = null;
+let fireLayers: FireLayers | null = null;
 /** Whether a poll has run at all, so a tab that opened hidden still loads
  * the products once while a later poll on a hidden one does not. */
 let stationsPolled = false;
@@ -7038,10 +7049,11 @@ let stationCard: Popup | null = null;
 async function loadStations(): Promise<void> {
   if (document.hidden && stationsPolled) return;
   const base = dataBaseUrl();
-  const [soundings, airports, synop] = await Promise.allSettled([
+  const [soundings, airports, synop, fire] = await Promise.allSettled([
     fetchSoundingIndex(base),
     fetchAirportIndex(base),
     fetchSynopIndex(base),
+    fetchFireIndex(base),
   ]);
   stationsPolled = true;
   // A poll that fails leaves the previous issue drawn; only an answer
@@ -7049,6 +7061,7 @@ async function loadStations(): Promise<void> {
   if (soundings.status === "fulfilled") soundingLoaded = soundings.value;
   if (airports.status === "fulfilled") airportLoaded = airports.value;
   if (synop.status === "fulfilled") synopLoaded = synop.value;
+  if (fire.status === "fulfilled") fireLoaded = fire.value;
   if (activeCase === null && requestedCaseId === null) loadLiveRadar();
   applyStationView();
 }
@@ -7070,6 +7083,7 @@ function applyStationView(): void {
   const soundingAvailable = soundingLoaded !== null && !hidden;
   const airportAvailable = airportLoaded !== null && !hidden;
   const synopAvailable = synopLoaded !== null && !hidden;
+  const fireAvailable = fireLoaded !== null && !hidden;
   let railChanged = false;
   if (soundingTile.hidden === soundingAvailable) {
     soundingTile.hidden = !soundingAvailable;
@@ -7083,11 +7097,17 @@ function applyStationView(): void {
     synopTile.hidden = !synopAvailable;
     railChanged = true;
   }
+  if (fireTile.hidden === fireAvailable) {
+    fireTile.hidden = !fireAvailable;
+    railChanged = true;
+  }
   if (railChanged) syncRailDensity();
   const drawSoundings = soundingAvailable && view.marks.stations.soundings;
   const drawAirports = airportAvailable && view.marks.stations.airports;
   const drawSynop = synopAvailable && view.marks.stations.synop;
+  const drawFire = fireAvailable && view.marks.stations.fire;
   syncRail();
+  applyFireView(drawFire);
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
   // existing.
@@ -7101,13 +7121,68 @@ function applyStationView(): void {
   closeStationCard();
 }
 
+/** The fire layer is added the first time fires are asked for and stays,
+ * empty, when they are switched off, like the station layers. */
+function applyFireView(draw: boolean): void {
+  if (!draw && fireLayers === null) return;
+  if (!mapStyleReady) return;
+  if (!fireLayers) {
+    fireLayers = new FireLayers(map, (error) => console.warn("fire: detections not read:", error));
+  }
+  const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
+  fireLayers.ensure(before);
+  fireLayers.setInk(document.body.dataset.ground === "dark");
+  fireLayers.setTime(stationTime());
+  fireLayers.setIndex(draw ? fireLoaded : null);
+}
+
 /** The valid time the marks are dimmed against: the playhead's, or now
  * before a run has loaded. */
+function stationTime(): number {
+  const index = activeFrameIndex ?? requestedFrameIndex;
+  return metadata && index !== null ? frameValidTime(index) : Date.now();
+}
+
 function syncStationTime(): void {
   syncRadarTime();
+  fireLayers?.setTime(stationTime());
   if (!stationLayers) return;
-  const index = activeFrameIndex ?? requestedFrameIndex;
-  stationLayers.setTime(metadata && index !== null ? frameValidTime(index) : Date.now());
+  stationLayers.setTime(stationTime());
+}
+
+function firePointAt(point: { x: number; y: number }): FireDetection | { cluster: number; lngLat: [number, number] } | null {
+  if (!fireLayers) return null;
+  const layers = FIRE_CLICKABLE_LAYERS.filter((id) => map.getLayer(id) !== undefined);
+  if (!layers.length) return null;
+  const box: [[number, number], [number, number]] = [
+    [point.x - 5, point.y - 5],
+    [point.x + 5, point.y + 5],
+  ];
+  for (const feature of map.queryRenderedFeatures(box, { layers })) {
+    const clusterId = feature.properties?.cluster_id;
+    if (typeof clusterId === "number" && feature.geometry.type === "Point")
+      return { cluster: clusterId, lngLat: feature.geometry.coordinates as [number, number] };
+    const detection = fireLayers.detectionOf(feature);
+    if (detection) return detection;
+  }
+  return null;
+}
+
+/** A cluster opens by zooming to where it splits; a detection opens its
+ * card in the station card's place. */
+function openFire(hit: FireDetection | { cluster: number; lngLat: [number, number] }): void {
+  closeStationCard();
+  if ("cluster" in hit) {
+    void fireLayers
+      ?.clusterZoom(hit.cluster)
+      .then((zoom) => map.easeTo({ center: hit.lngLat, zoom: Math.max(zoom, map.getZoom() + 1) }))
+      .catch(() => map.easeTo({ center: hit.lngLat, zoom: map.getZoom() + 2 }));
+    return;
+  }
+  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 8 })
+    .setLngLat([hit.lon, hit.lat])
+    .setDOMContent(buildFireCard(hit, { formatTime: (time) => formatDate(time) }))
+    .addTo(map);
 }
 
 function stationPointAt(point: { x: number; y: number }): { data: StationPointData; lngLat: [number, number] } | null {
@@ -7494,6 +7569,7 @@ radarTile.addEventListener("click", () => {
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
 synopTile.addEventListener("click", () => toggleStationProduct("synop"));
+fireTile.addEventListener("click", () => toggleStationProduct("fire"));
 
 function ensureLayers(): void {
   if (layersAdded) return;
@@ -9443,16 +9519,24 @@ map.on("click", (event) => {
     showStationCard(station.data, station.lngLat);
     return;
   }
+  // Fires come after the stations: a station's card says more about the
+  // point, and a fire under it is one zoom away.
+  const fire = firePointAt(event.point);
+  if (fire) {
+    openFire(fire);
+    return;
+  }
   closeStationCard();
   setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
-  if (!tcLayers && !stationLayers && !radarOverlay) return;
+  if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers) return;
   const station = stationPointAt(event.point);
   // The mark under the pointer grows by a pixel, which is the only feature
   // state either product keeps.
   stationLayers?.setHover(station?.data ?? null);
-  map.getCanvas().style.cursor = tcPointAt(event.point) || station || radarSiteAt(event.point) ? "pointer" : "";
+  map.getCanvas().style.cursor =
+    tcPointAt(event.point) || station || radarSiteAt(event.point) || firePointAt(event.point) ? "pointer" : "";
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();

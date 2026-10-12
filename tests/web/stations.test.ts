@@ -396,49 +396,52 @@ describe("reading one station by range", () => {
 
 describe("the ?stations= parameter", () => {
   it("is off when the link says nothing", () => {
-    expect(parseStationsFromSearch("")).toEqual({ soundings: false, airports: false, synop: false });
-    expect(parseStationsFromSearch("?stations=off")).toEqual({ soundings: false, airports: false, synop: false });
-    expect(parseStationsFromSearch("?stations=nonsense")).toEqual({ soundings: false, airports: false, synop: false });
+    expect(parseStationsFromSearch("")).toEqual({ soundings: false, airports: false, synop: false, fire: false });
+    expect(parseStationsFromSearch("?stations=off")).toEqual({ soundings: false, airports: false, synop: false, fire: false });
+    expect(parseStationsFromSearch("?stations=nonsense")).toEqual({ soundings: false, airports: false, synop: false, fire: false });
   });
 
   it("reads each product, together and apart", () => {
-    expect(parseStationsFromSearch("?stations=snd")).toEqual({ soundings: true, airports: false, synop: false });
-    expect(parseStationsFromSearch("?stations=apt")).toEqual({ soundings: false, airports: true, synop: false });
-    expect(parseStationsFromSearch("?stations=snd,apt")).toEqual({ soundings: true, airports: true, synop: false });
+    expect(parseStationsFromSearch("?stations=snd")).toEqual({ soundings: true, airports: false, synop: false, fire: false });
+    expect(parseStationsFromSearch("?stations=apt")).toEqual({ soundings: false, airports: true, synop: false, fire: false });
+    expect(parseStationsFromSearch("?stations=snd,apt")).toEqual({ soundings: true, airports: true, synop: false, fire: false });
     expect(parseStationsFromSearch("?stations=SOUNDINGS, Airport")).toEqual({
       soundings: true,
       airports: true,
       synop: false,
+      fire: false,
     });
-    expect(parseStationsFromSearch("?stations=syn")).toEqual({ soundings: false, airports: false, synop: true });
-    expect(parseStationsFromSearch("?stations=Surface,apt")).toEqual({ soundings: false, airports: true, synop: true });
-    expect(parseStationsFromSearch("?stations=on")).toEqual({ soundings: true, airports: true, synop: true });
-    expect(parseStationsFromSearch("?stations=all")).toEqual({ soundings: true, airports: true, synop: true });
+    expect(parseStationsFromSearch("?stations=syn")).toEqual({ soundings: false, airports: false, synop: true, fire: false });
+    expect(parseStationsFromSearch("?stations=Surface,apt")).toEqual({ soundings: false, airports: true, synop: true, fire: false });
+    expect(parseStationsFromSearch("?stations=on")).toEqual({ soundings: true, airports: true, synop: true, fire: true });
+    expect(parseStationsFromSearch("?stations=all")).toEqual({ soundings: true, airports: true, synop: true, fire: true });
   });
 
   it("writes only what differs from the default", () => {
-    expect(searchWithStations("?type=temp", { soundings: false, airports: false, synop: false })).toBe("?type=temp");
-    expect(searchWithStations("?type=temp", { soundings: true, airports: false, synop: false })).toBe(
+    expect(searchWithStations("?type=temp", { soundings: false, airports: false, synop: false, fire: false })).toBe("?type=temp");
+    expect(searchWithStations("?type=temp", { soundings: true, airports: false, synop: false, fire: false })).toBe(
       "?type=temp&stations=snd",
     );
-    expect(searchWithStations("?type=temp", { soundings: true, airports: true, synop: false })).toBe(
+    expect(searchWithStations("?type=temp", { soundings: true, airports: true, synop: false, fire: false })).toBe(
       "?type=temp&stations=snd%2Capt",
     );
-    expect(searchWithStations("?type=temp", { soundings: false, airports: true, synop: true })).toBe(
+    expect(searchWithStations("?type=temp", { soundings: false, airports: true, synop: true, fire: false })).toBe(
       "?type=temp&stations=apt%2Csyn",
     );
     // A link that already named the products is rewritten, not doubled.
-    expect(searchWithStations("?stations=apt", { soundings: false, airports: false, synop: false })).toBe("?");
+    expect(searchWithStations("?stations=apt", { soundings: false, airports: false, synop: false, fire: false })).toBe("?");
   });
 
   it("round-trips what it writes", () => {
     for (const state of [
-      { soundings: false, airports: false, synop: false },
-      { soundings: true, airports: false, synop: false },
-      { soundings: false, airports: true, synop: false },
-      { soundings: true, airports: true, synop: false },
-      { soundings: false, airports: false, synop: true },
-      { soundings: true, airports: true, synop: true },
+      { soundings: false, airports: false, synop: false, fire: false },
+      { soundings: true, airports: false, synop: false, fire: false },
+      { soundings: false, airports: true, synop: false, fire: false },
+      { soundings: true, airports: true, synop: false, fire: false },
+      { soundings: false, airports: false, synop: true, fire: false },
+      { soundings: true, airports: true, synop: true, fire: false },
+      { soundings: false, airports: false, synop: false, fire: true },
+      { soundings: true, airports: true, synop: true, fire: true },
     ]) {
       expect(parseStationsFromSearch(searchWithStations("", state))).toEqual(state);
     }

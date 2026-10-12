@@ -651,6 +651,27 @@ export const en = {
   stationOpenSounding: "Open sounding",
   stationPinHere: "Pin here",
 
+  /** The active fire marks (`docs/fire.md`): satellite fire detections from
+   * NASA FIRMS over the day before the playhead. "Radiative power" is the
+   * fire radiative power the product carries (MW); the confidence words
+   * are the product's own low / nominal / high classes, and the overpass
+   * is the satellite's day or night pass. The sensor names (`VIIRS
+   * NOAA-20`) and the credit line stay as the product words them. */
+  fireTileTip: "Active fires (NASA FIRMS, last 24 h)",
+  varFire: "FIRMS",
+  glyphFire: "F",
+  fireDetection: "Active fire",
+  fireAcquired: "Acquired",
+  fireRadiativePower: "Radiative power",
+  fireBrightness: "Brightness temperature",
+  fireConfidence: "Confidence",
+  fireConfidenceLow: "low",
+  fireConfidenceNominal: "nominal",
+  fireConfidenceHigh: "high",
+  fireOverpass: "Overpass",
+  fireDay: "day",
+  fireNight: "night",
+
   /** The sounding section of the pinned point's panel: the nearest ascent
    * drawn as a skew-T under the meteogram rows, and the full-height sheet
    * the chart opens into.

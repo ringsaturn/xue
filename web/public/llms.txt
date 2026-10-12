@@ -396,7 +396,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   named system is drawn over whatever layer is on screen. `?tcagency=nhc,jtwc`
   and `?tcmodel=gfs,ecmwf` narrow the official and model tracks drawn
   (absent means all); `?tcmembers=on` adds the ensemble members.
-- `?stations=snd|apt|syn` (comma-joined for more than one) — draw the
+- `?stations=snd|apt|syn|fire` (comma-joined for more than one) — draw the
   station marks over whatever layer is on screen: `snd` the radiosonde
   soundings (one circle per station, filled by its 500 hPa temperature;
   the card reads the headline the index carries), `apt` the airports (one
@@ -404,10 +404,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
   the stations with a current TAF), `syn` the surface weather stations
   (one small circle per station, filled by its current temperature, grey
   where it has no thermometer; principal stations at every zoom, automatic
-  ones from zoom 5, precipitation gauges from zoom 7). Absent, or
+  ones from zoom 5, precipitation gauges from zoom 7), `fire` the NASA
+  FIRMS active fires of the 24 h ending at the playhead (sized by fire
+  radiative power, red when recent and brown a day old, clustered at low
+  zoom; `docs/fire.md`). Absent, or
   `?stations=off`, draws none — the default, since thousands of marks on a
   world view read as texture rather than data. `sounding`, `airport`,
-  `synop`, `surface`, their plurals, `on` and `all` are accepted
+  `synop`, `surface`, `fires`, `firms`, their plurals, `on` and `all` are accepted
   spellings. The marks follow the playhead's valid time only in
   that a station observed far from it is drawn faint; they load nothing
   per frame and never hold up playback. Both products also answer a pinned
@@ -529,7 +532,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   every array as `cube:variables`, the cycle as
   `forecast:reference_datetime` — and `showcase/collection.json` with an
   Item per case. The point products below are in it on the same
-  terms: `sounding/`, `airport/`, `synop/` and `tc/` each carry a `collection.json`
+  terms: `sounding/`, `airport/`, `synop/`, `tc/`, `nexrad/` and `fire/` each carry a `collection.json`
   and the live `item.json`, with one `<product>.<issue>/item.json` beside
   each index naming its files as assets (the `?v=`-addressed index, the
   NDJSON file or one JSON file per storm) and the stations' bounding box as
@@ -631,6 +634,23 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   are null; nothing is derived. AMeDAS is reused under JMA's website terms
   (Public Data License v1.0): credit 「出典：気象庁ホームページ」.
 
+- Active fires are a JSON product under the same root, every hour (schema
+  1, `docs/fire.md`): NASA FIRMS's near-real-time detections from VIIRS
+  (S-NPP, NOAA-20, NOAA-21, 375 m) and MODIS (Terra, Aqua, 1 km) over a
+  rolling seven days. The mutable pointer `latest-fire.json` names
+  `fire.<YYYYMMDDHH00>/index.json`, which carries `window` (`start`,
+  `end`), `sensors[]` (id such as `viirs-noaa20`, name, `resolution` in
+  metres, the `attribution` to show, `license`, `latest` acquisition,
+  `count`, and its `<sensor>.jsonl` file with length and CRC32) and
+  `hours[]` rows `[sensor index, hour, count, frpMax MW, offset, length]`,
+  sorted by sensor then hour. Each line of a sensor file is one UTC hour:
+  `hour` (epoch seconds), `n`, and columns `t` (seconds after the hour),
+  `lat` / `lon` (integers of 1e-4°), `frp` (0.1 MW), `bt` (fire-channel
+  brightness temperature, 0.1 K), `conf` (one character per detection,
+  `l` / `n` / `h`) and `dn` (`D` / `N`). One sensor's hours are back to
+  back, so any span of hours is one Range request. FIRMS data are NASA
+  open data; acknowledge LANCE FIRMS (NASA ESDIS).
+
 A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
 8-bit quantized planes on the native grid, temporal residual prediction in
 anchor groups, one Zstandard frame per spatial tile per group, all indexed so
@@ -671,6 +691,10 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
   the normative description of the ten-minute surface station product —
   delivery, the elements and units, identity, the index, the network files
   and each network's source and terms.
+- [Active fire product](https://github.com/ringsaturn/xue/blob/main/docs/fire.md):
+  the normative description of the hourly FIRMS fire product — delivery,
+  the detection encoding, the sensors, the index, the sensor files and the
+  terms.
 - [Radiosonde sounding product](https://github.com/ringsaturn/xue/blob/main/docs/sounding.md):
   the normative description of the hourly sounding product — delivery, the
   fixed-point level arrays, station identity, the index, the station file,

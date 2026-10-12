@@ -558,10 +558,13 @@ export function parseTcFromSearch(search: string): TcUrlState {
  * from the default is written, so the everyday link stays as it was. */
 /** The station marks a link carries: `?stations=snd` for the radiosonde
  * soundings, `?stations=apt` for the airports, `?stations=syn` for the
- * surface stations, any of them joined by commas, and `?stations=off` — or
- * no parameter at all — for none. `sounding`, `airport`, `synop`,
- * `surface`, their plurals, `on` and `all` are accepted spellings, so a
- * link typed out by hand still opens.
+ * surface stations, `?stations=fire` for the satellite fire detections
+ * (`docs/fire.md` — not a station network, but a mark product drawn and
+ * switched the same way, so it rides the same parameter), any of them
+ * joined by commas, and `?stations=off` — or no parameter at all — for
+ * none. `sounding`, `airport`, `synop`, `surface`, `fires`, `firms`, their
+ * plurals, `on` and `all` are accepted spellings, so a link typed out by
+ * hand still opens.
  *
  * Off is the default because on is not a neutral choice: five thousand
  * airport marks on the default view are a texture over the field, not a
@@ -571,9 +574,10 @@ export interface StationsUrlState {
   soundings: boolean;
   airports: boolean;
   synop: boolean;
+  fire: boolean;
 }
 
-const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false, synop: false };
+const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false, synop: false, fire: false };
 
 const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
   snd: "soundings",
@@ -588,6 +592,9 @@ const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
   synop: "synop",
   surface: "synop",
   amedas: "synop",
+  fire: "fire",
+  fires: "fire",
+  firms: "fire",
 };
 
 export function parseStationsFromSearch(search: string): StationsUrlState {
@@ -600,6 +607,7 @@ export function parseStationsFromSearch(search: string): StationsUrlState {
       state.soundings = true;
       state.airports = true;
       state.synop = true;
+      state.fire = true;
       continue;
     }
     const key = STATION_ALIASES[name];
@@ -617,6 +625,7 @@ export function searchWithStations(search: string, state: StationsUrlState): str
   if (state.soundings) parts.push("snd");
   if (state.airports) parts.push("apt");
   if (state.synop) parts.push("syn");
+  if (state.fire) parts.push("fire");
   if (parts.length) params.set("stations", parts.join(","));
   else params.delete("stations");
   return `?${params.toString()}`;

@@ -34,6 +34,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
 | `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
 | `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
+| `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. |
 | `radar/` | Single-site radar overlay (`docs/nexrad.md`): two feeds behind one session (`feed.ts`) — a case's window manifest, one unit per round, and the live source bucket (`live.ts`, §7), one unit per Level 3 object, over the static `sites.json` — a worker that range-reads a round and decodes it with the WASM `decodeChunk` (RAW) or reads a live sweep whole and decodes it with `decodeLevel3`, a session that streams units outward from the playhead, a live site's newest first (≤ 6 in flight, byte budget 384 MB desktop / 96 MB narrow, farthest rounds evicted first), the polar `R8UI` shader on the projection prelude, and radome site marks with ICAO labels. A chosen site is drawn alone (`ForecastLayer.setSuppressed` holds the field off screen; its slot keeps running), its scale takes the field legend (`legend[data-radar]`), REF / VEL are a radio pair on the rail under the radar tile, shown while a site is open, and the level row's `radar` group carries the sweep time and the site as a pressed chip whose ✕ closes it. Follows the playhead, never holds it; not draped on terrain. |
 
 ## Sessions and delivery
@@ -356,7 +357,7 @@ copy.
 Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
 `#field-sheet`), **overlays** (switches: pressure lines, particles, a
-volume, derived layers), **marks** (storms, soundings, airports). Switches carry
+volume, derived layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
 `syncFieldTiles` hides unshipped tiles and writes a generic one for an
 on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px
