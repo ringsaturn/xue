@@ -49,11 +49,16 @@ describe("parseView", () => {
     expect(parseView("?type=temp", { field: "prate", lines: "prmsl", particles: true }).view.lines).toBeNull();
   });
 
+  it("reads the fire layers apart from the experiment", () => {
+    const { view } = parseView("?derived=fosberg,hotspot,bogus", DEFAULTS);
+    expect(view.derived).toEqual({ inflow: false, front: false, hotspot: true, ffwi: true, fwalert: false });
+  });
+
   it("reads the overlays and the marks", () => {
     const { view, particlesRequested } = parseView("?particles=off&x=inflow&stations=snd,apt&tc=EP142026&tcmembers=on", DEFAULTS);
     expect(view.particles).toBe(false);
     expect(particlesRequested).toBe(true);
-    expect(view.derived).toEqual({ inflow: true, front: false });
+    expect(view.derived).toEqual({ inflow: true, front: false, hotspot: false, ffwi: false, fwalert: false });
     expect(view.marks.stations).toEqual({ soundings: true, airports: true, synop: false, fire: false });
     expect(view.marks.tc).toMatchObject({ storm: "EP142026", off: false, members: true });
   });
@@ -69,6 +74,8 @@ describe("searchForView", () => {
     "?model=gfs&type=precip&x=inflow",
     "?model=gfs&type=precip&x=none",
     "?model=gfs&type=precip&stations=snd",
+    "?model=himawari&type=infrared&derived=hotspot",
+    "?model=gfs&type=temp&derived=ffwi%2Cfwalert",
     "?model=gfs&type=precip&stations=snd%2Capt",
     "?model=gfs&type=precip&tc=off",
     "?model=gfs&type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",

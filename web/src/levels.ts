@@ -573,6 +573,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "perpw") return [0, WAVE_PERIOD_CHART_MAX];
   if (family === "dirpw") return [0, 360];
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_CHART_RANGE;
+  if (family === "ir039") return SHORTWAVE_WINDOW_CHART_RANGE;
   // The dust confidences read over [0, 1], their codebook less the code
   // under 0.0 that is no data.
   if (family === "dustcf" || family === "zhouye") return [0, 1];
@@ -647,6 +648,11 @@ export function logLegend(chart: AerosolChart): string[] {
 export const BRIGHTNESS_TEMPERATURE_CHART_RANGE: readonly [number, number] = [183.15, 333.15];
 /** The same domain in Celsius, for the legend's ticks. */
 const BRIGHTNESS_TEMPERATURE_LEGEND_RANGE: readonly [number, number] = [-90, 60];
+/** The 3.9 µm window's domain: from cold cloud tops to the 120 °C a
+ * fire pixel reads at the 0.04° grid, short of the codebook's 407.7 K top
+ * where the sensors saturate. */
+export const SHORTWAVE_WINDOW_CHART_RANGE: readonly [number, number] = [193.15, 393.15];
+const SHORTWAVE_WINDOW_LEGEND_RANGE: readonly [number, number] = [-80, 120];
 
 /** Visibility reads to 25 km — the codebook's 25.4 without the odd tenth;
  * the ramp is transparent long before that. */
@@ -804,6 +810,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "dirpw") return rangeLegend([0, 360], 45);
   // The one legend not in the file's unit: kelvin reads in Celsius.
   if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
+  if (family === "ir039") return rangeLegend(SHORTWAVE_WINDOW_LEGEND_RANGE, 40);
   if (family === "dustcf" || family === "zhouye") return rangeLegend([0, 1], 0.2);
   const aerosol = aerosolChart(family);
   if (aerosol) return logLegend(aerosol);

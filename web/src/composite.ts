@@ -95,7 +95,7 @@ export function ramp(value: number, from: number, to: number): number {
 }
 
 /** Every code of a variable decoded once: NaN for the reserved codes. */
-function decodeTable(variable: BundleVariable): Float32Array {
+export function decodeTable(variable: BundleVariable): Float32Array {
   const table = new Float32Array(256);
   for (let code = 0; code < 256; code += 1) {
     const value = decodeValue(variable, code);

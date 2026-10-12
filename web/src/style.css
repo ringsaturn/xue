@@ -930,6 +930,23 @@ body.is-pressure .legend {
   background: rgba(116, 44, 150, 0.32);
 }
 
+/* The fire layers (hotspot.ts, firewx.ts): opaque heat for a hotspot cell,
+   the Fosberg ramp's red-flag end, the alert's outlined red wash. */
+.legend-swatch-hotspot {
+  border-color: rgb(255, 120, 0);
+  background: rgb(255, 200, 40);
+}
+
+.legend-swatch-ffwi {
+  border-color: rgb(210, 30, 20);
+  background: linear-gradient(to right, rgba(250, 220, 120, 0.5), rgba(210, 30, 20, 0.8));
+}
+
+.legend-swatch-fwalert {
+  border-color: rgb(225, 30, 40);
+  background: rgba(225, 30, 40, 0.35);
+}
+
 /* ---------------------------------------------------------------------------
    Layer rail, on the right edge. It shares one 44px column with the round
    controls above it and the zoom tile between them: same width, same right
@@ -2053,6 +2070,21 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.6;
 }
 
+/* The daily imagery's two rows (true and false colour): a label then the
+   platforms, each a chip, not indented under a field row's icon. */
+.field-imagery {
+  align-items: center;
+  padding-left: 12px;
+}
+
+.field-imagery-label {
+  min-width: 64px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
 /* The check has the model sheet's look but this grid's own cell: the
    third column, centred on the row. */
 .field-list .model-check {
@@ -3157,6 +3189,12 @@ body.radar-alone .source-credit[data-credit-model] {
 }
 
 body.radar-alone .source-credit[data-credit-model="nexrad"] {
+  display: inline;
+}
+
+/* The daily imagery under the field is no dataset: its notice follows the
+   underlay (body[data-imagery], main.ts::syncGibs), radar or not. */
+body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
   display: inline;
 }
 

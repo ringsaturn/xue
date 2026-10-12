@@ -150,6 +150,30 @@ const BRIGHTNESS_TEMPERATURE_STOPS: Stop[] = [
   [332, 14, 14, 14, 255],
 ];
 
+// The 3.9 µm shortwave window, in the file's kelvin: the infrared
+// window's inverted grey for everything a cloud or the ground can be —
+// cold tops light, warm ground dark — and then, past the 310 K a sunlit
+// desert can still reach, the colours of heat: dark red, orange, yellow,
+// white where the sensor nears saturation, so a burning pixel is the one
+// bright point on a dark ground. No enhancement of cold tops: by day this
+// channel carries reflected sunlight and its cloud temperatures are not
+// the 10.4 µm picture's. Alpha rises from nothing at the 180 K fill.
+const SHORTWAVE_WINDOW_STOPS: Stop[] = [
+  [180, 255, 255, 255, 0],
+  [181.5, 235, 235, 235, 255],
+  [213.15, 225, 225, 225, 255],
+  [253.15, 175, 175, 175, 255],
+  [273.15, 120, 120, 120, 255],
+  [293.15, 60, 60, 60, 255],
+  [305.15, 28, 28, 28, 255],
+  [312, 110, 18, 10, 255],
+  [320, 205, 45, 10, 255],
+  [330, 255, 120, 0, 255],
+  [345, 255, 200, 30, 255],
+  [365, 255, 245, 160, 255],
+  [400, 255, 255, 255, 255],
+];
+
 // The DEBRA dust confidence, in [0, 1], and the ZHOUYE confidence built
 // on it, which reads on the same ramp: nothing under 0.1, where the
 // combined factor is noise, then the yellow the operational product paints
@@ -828,6 +852,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "perpw") return WAVE_PERIOD_STOPS;
   if (family === "dirpw") return WAVE_DIRECTION_STOPS;
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
+  if (family === "ir039") return SHORTWAVE_WINDOW_STOPS;
   if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;
   if (family === "aurora") return AURORA_STOPS;
   if (family === "clw") return CLOUD_WATER_STOPS;

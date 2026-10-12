@@ -77,6 +77,7 @@ export type ChartFamily =
   | "dirpw"
   | "wave"
   | "ir104"
+  | "ir039"
   | "dustrgb"
   | "dustcf"
   | "zhouye"
@@ -183,7 +184,7 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * WAVEWATCH III, none once declared) is not part of the identity; (0,4,4)
  * @8 brightness temperature, a satellite channel told apart by the
  * `band` block's central wave number (10–11 µm is the infrared window,
- * `ir104`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
+ * `ir104`, 3.5–4.2 µm the shortwave window, `ir039`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
  * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers), each
  * told apart by the `aerosol` block's species, size and wavelength
  * (`aerosolField`), (0,1,22) @102 cloud water mixing ratio at an altitude
@@ -256,6 +257,9 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
  * field and renders generically. */
 const SATELLITE_CHANNELS: readonly { family: ChartFamily; wavelengthMicrons: readonly [number, number] }[] = [
   { family: "ir104", wavelengthMicrons: [10.0, 11.0] },
+  // The shortwave window: AHI band 7 (3.89 µm), ABI channel 7 (3.90 µm),
+  // FCI's IR3.8 (3.80 µm).
+  { family: "ir039", wavelengthMicrons: [3.5, 4.2] },
 ];
 
 function satelliteChannel(band: BundleBand | undefined): ChartFamily | null {

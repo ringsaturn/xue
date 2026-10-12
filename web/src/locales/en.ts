@@ -40,6 +40,7 @@ export const en = {
   /** The satellite tile: the channel's nominal wavelength in µm after the
    * code (SAT IR 10.4). */
   varInfrared: "IR 10.4",
+  varShortwave: "IR 3.9",
   // The composite's gloss: RGB is the term in every language.
   varDustRgb: "RGB",
   // The confidence field's gloss: the algorithm's name, an instrument code
@@ -73,6 +74,9 @@ export const en = {
   // The experiment's derived layers' captions: one word under the code.
   varInflow: "INFLOW",
   varFront: "FRONT",
+  varHotspot: "IR 3.9",
+  varFfwi: "FIRE WX",
+  varFwalert: "RED FLAG",
   /** The ocean set's tiles: the skin temperature is read as the SST it is
    * over water but the gloss says what the field is, sea ice heads with
    * its cover, the waves with their significant height. */
@@ -114,6 +118,7 @@ export const en = {
   glyphCref: "Z",
   // I for the infrared imagery.
   glyphIr104: "I",
+  glyphIr039: "S",
   // D for the dust composite.
   glyphDustrgb: "D",
   // C for the dust confidence.
@@ -147,6 +152,9 @@ export const en = {
   // The experiment's two derived layers (`?x=`): M for moist, F for front.
   glyphInflow: "M",
   glyphFront: "F",
+  glyphHotspot: "H",
+  glyphFfwi: "W",
+  glyphFwalert: "R",
   // S for the sea surface, I for ice, H for Hs — the significant wave
   // height's own symbol (W is the wind's).
   glyphTmpsfc: "S",
@@ -220,6 +228,10 @@ export const en = {
   fieldGroupSatellite: "SATELLITE",
   fieldGroupSpace: "SPACE WEATHER",
   fieldGroupOther: "OTHER",
+  fieldGroupImagery: "DAILY IMAGERY · NASA GIBS",
+  gibsTrueColor: "TRUE",
+  gibsFalseColor: "FIRE",
+  gibsTip: "Daily picture under the field; the false colour shows burn scars dark red and fires bright",
   /** The particle switch as a rail tile in the overlay section: the gloss
    * after the code PARTICLES, and its glyph (the tooltip and accessible
    * name are `particlesToggle` / `particlesToggleAria` below). */
@@ -279,6 +291,8 @@ export const en = {
   creditsAurora: "SPACE WEATHER · AURORA PROBABILITY · NOAA SWPC OVATION MODEL",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
+  creditsFirms: "ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS",
+  creditsGibs: "DAILY IMAGERY · MODIS AND VIIRS CORRECTED REFLECTANCE, NASA ESDIS",
   creditsRadar: "RADAR MOSAIC",
   creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",
   /** The relief under the fields. Mapterhorn asks for the project to be
@@ -400,6 +414,9 @@ export const en = {
   // that fits on one line at 10px mono next to a 10px square.
   legendInflow: "Warm moist inflow",
   legendFront: "Frontal zone (θe gradient)",
+  legendHotspot: "Fire hotspot (3.9 µm contextual test)",
+  legendFfwi: "Fosberg fire weather index",
+  legendFwalert: "RH under 30 % with gusts of 10 m/s or more",
   /** The Dust RGB's key: what each colour of the composite is a sign
    * of, one row per swatch in place of the bar (the GOES-R Quick Guide's
    * reading). Short noun phrases, one line at 10px mono. */
@@ -442,6 +459,7 @@ export const en = {
   varLabelOrog: "Orography",
   varLabelAurora: "Aurora visibility probability",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
+  varLabelIr039: "Shortwave infrared (3.9 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",
   varLabelDustcf: "DEBRA dust confidence",
   varLabelZhouye: "ZHOUYE dust confidence",
