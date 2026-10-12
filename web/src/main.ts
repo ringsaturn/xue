@@ -1810,6 +1810,13 @@ let generation = 0;
 let playing = false;
 let playbackFrame: number | null = null;
 let nextFrameAt = 0;
+/** When playback last moved the cross-fade between two frames. */
+let lastBlendAt = 0;
+/** The cross-fade between frames repaints the whole map, basemap and
+ * every satellite disk, on each step of the blend weight; at a display's
+ * own rate that is 120 repaints a second on a ProMotion screen for a
+ * sweep the eye reads as smooth at thirty. */
+const BLEND_INTERVAL_MS = 1000 / 30;
 let ready = false;
 let switchingVariable = false;
 
@@ -4095,7 +4102,11 @@ function advancePlayback(timestamp: number): void {
     }
     // When the frame is still decoding, hold the current image; the decode
     // completion will pull playback forward without touching opacity.
-  } else {
+    lastBlendAt = timestamp;
+  } else if (timestamp - lastBlendAt >= BLEND_INTERVAL_MS - 1) {
+    // A millisecond of slack keeps a 60 Hz display on every other frame
+    // rather than skipping to every third on rAF jitter.
+    lastBlendAt = timestamp;
     blendTowardNext(timestamp);
   }
   playbackFrame = window.requestAnimationFrame(advancePlayback);
