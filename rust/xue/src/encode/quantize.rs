@@ -283,11 +283,33 @@ const COMPACT_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
     step: 1.2,
     ..QUALITY_BRIGHTNESS_TEMPERATURE
 };
-/// Every infrared window shares the two brightness-temperature codebooks;
-/// the name is the channel's own. Mirrors `_brightness_temperature` in
-/// `xuebuild/quantize.py`.
+// The 3.9 µm window, published to show fires: a burning pixel reads far
+// above any surface (AHI band 7 saturates near 400 K), so it runs to
+// 407.7 K at 0.9 K over the same code space, and the compact profile to
+// 406.8 K at 1.8 K. Mirrors `_brightness_temperature("ir039")` in
+// `xuebuild/quantize.py`.
+const QUALITY_FIRE_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
+    minimum: 180.0,
+    maximum: 407.7,
+    step: 0.9,
+    nodata_code: 255,
+    name: "ir039",
+};
+const COMPACT_FIRE_BRIGHTNESS_TEMPERATURE: LinearCodebook = LinearCodebook {
+    maximum: 406.8,
+    step: 1.8,
+    ..QUALITY_FIRE_BRIGHTNESS_TEMPERATURE
+};
+/// Every infrared window shares the two brightness-temperature codebooks
+/// but the 3.9 µm one, which has its own; the name is the channel's own.
+/// Mirrors `_brightness_temperature` in `xuebuild/quantize.py`.
 fn brightness_temperature(channel_id: &'static str, compact: bool) -> LinearCodebook {
-    let base = if compact { COMPACT_BRIGHTNESS_TEMPERATURE } else { QUALITY_BRIGHTNESS_TEMPERATURE };
+    let base = match (channel_id, compact) {
+        ("ir039", false) => QUALITY_FIRE_BRIGHTNESS_TEMPERATURE,
+        ("ir039", true) => COMPACT_FIRE_BRIGHTNESS_TEMPERATURE,
+        (_, false) => QUALITY_BRIGHTNESS_TEMPERATURE,
+        (_, true) => COMPACT_BRIGHTNESS_TEMPERATURE,
+    };
     LinearCodebook { name: channel_id, ..base }
 }
 // A Dust RGB gun is a stretched, gamma-corrected number in 0–1 (the

@@ -66,7 +66,10 @@ full codes. The ladder is per source (`SourceSpec.variant_factors`):
 every source has the half (`tmp2m.half.zarr`, the grid decimated by two),
 and the satellite disks add the quarter and the eighth (`ir104.quarter.zarr`,
 `ir104.eighth.zarr`; 3000 → 1500 → 750 → 375 cells a side, the tile 64 →
-32 → 16 → 8), each decimated from the full plane.
+32 → 16 → 8), each decimated from the full plane: every f-th row and
+column, except that the 3.9 µm window (`ir039`) keeps the largest code
+within f/2 cells of each site, so a one-cell hot spot is not dropped
+(`docs/satellite.md`, "The 3.9 µm window").
 
 ## Array metadata
 

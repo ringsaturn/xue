@@ -67,6 +67,23 @@ def resampling_for(channel: Channel) -> str:
     return REFLECTANCE_RESAMPLING if channel.kind == "reflectance" else RESAMPLING
 
 
+#: The warmest source pixel under a cell, for a channel published to show
+#: fires: a 2 km hot spot warped bilinearly onto the 4 km grid spreads over
+#: its neighbours and loses most of its contrast, while the maximum keeps it
+#: where it burns. Only the published bundle takes it — the composites read
+#: the channel as an ordinary radiance field and keep their bilinear frame,
+#: so the peak frame is a second warp of the same downloaded tiles, cached
+#: beside the first under :func:`peak_frame_id`.
+PEAK_RESAMPLING = "max"
+PEAK_CHANNEL_IDS: frozenset[str] = frozenset({"ir039"})
+
+
+def peak_frame_id(channel_id: str) -> str:
+    """The frame-cache id of a channel's peak frame (``ir039peak``):
+    letters and digits only, the shape ``prune-r2-frames`` lists by."""
+    return f"{channel_id}peak"
+
+
 Region = tuple[float, float, float, float]
 """A box as ``(west, south, east, north)`` in degrees."""
 
@@ -174,6 +191,8 @@ class FetchedFrame:
     path: Path
     tiles: int
     """How many tiles were fetched for it this round: 0 for a cache hit."""
+    peak: Path | None = None
+    """The channel's peak frame, when one was asked for."""
 
 
 def fetch_frame(
@@ -190,18 +209,23 @@ def fetch_frame(
     concurrency: int = FETCH_CONCURRENCY,
     projector: str = "gdalwarp",
     region: Region | None = None,
+    peak: bool = False,
 ) -> FetchedFrame | None:
     """One slot of one channel as a frame on the target grid, from the
     cache when it is there, else from the bucket: listed, fetched when
     complete, opened by the reader, warped by the projector, and the tiles
     deleted once the frame is written. With ``region``, only the tiles
     reaching into it are needed and fetched. None when the bucket does not
-    hold the whole slot (or the region's part of it) yet."""
+    hold the whole slot (or the region's part of it) yet. With ``peak``,
+    the slot is also warped by :data:`PEAK_RESAMPLING` into a second frame,
+    and a cache hit needs both."""
     frame = assemble.frame_path(frames_dir, channel, slot)
+    peak_frame = assemble.frame_path(frames_dir, peak_frame_id(channel.id), slot) if peak else None
     reader = reader_for(platform)
-    if frame.is_file() and not force:
-        if cached_frame_version(frame) == reader.frame_version:
-            return FetchedFrame(slot=slot, path=frame, tiles=0)
+    cached = [path for path in (frame, peak_frame) if path is not None]
+    if all(path.is_file() for path in cached) and not force:
+        if all(cached_frame_version(path) == reader.frame_version for path in cached):
+            return FetchedFrame(slot=slot, path=frame, tiles=0, peak=peak_frame)
         LOG.info("%s %s: the cached %s was placed by another reader version, warping again", platform.spacecraft, channel.id, frame.name)
     objects = reader.list_slot(platform, channel, slot, fetch=fetch)
     if not slot_is_complete(platform, objects, region=region):
@@ -228,22 +252,25 @@ def fetch_frame(
     # mosaic or a warp carries a band's scale, offset and unit through only
     # on some GDAL versions (3.13 does, Ubuntu 24.04's 3.8 loses the unit).
     packing = assemble.dataset_packing(reader.packing_source(files, channel=channel))
-    PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=resampling_for(channel), out=frame)
-    assemble.write_packing(
-        frame,
-        packing,
-        slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        tiles=len(objects),
-        keys=[item.key for item in objects],
-        projector=projector,
-        resampling=resampling_for(channel),
-        kind=channel.kind,
-        frameVersion=reader.frame_version,
-    )
+    for out, resampling in ((frame, resampling_for(channel)), (peak_frame, PEAK_RESAMPLING)):
+        if out is None:
+            continue
+        PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=resampling, out=out)
+        assemble.write_packing(
+            out,
+            packing,
+            slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            tiles=len(objects),
+            keys=[item.key for item in objects],
+            projector=projector,
+            resampling=resampling,
+            kind=channel.kind,
+            frameVersion=reader.frame_version,
+        )
     if reader.files_per_channel:
         shutil.rmtree(slot_dir, ignore_errors=True)
     LOG.info("%s %s: warped %s from %d tiles", platform.spacecraft, channel.id, frame.name, len(objects))
-    return FetchedFrame(slot=slot, path=frame, tiles=len(objects))
+    return FetchedFrame(slot=slot, path=frame, tiles=len(objects), peak=peak_frame)
 
 
 def slot_directory(tiles_dir: Path, slot: datetime) -> Path:
@@ -318,6 +345,9 @@ class FetchedSlot:
     slot: datetime
     frames: dict[str, Path]
     """Every variable's frame for the slot, channels and produced alike."""
+    peaks: dict[str, Path]
+    """The peak frame of each channel in ``peak_channel_ids``, by channel
+    id: what that channel's series is stacked from."""
     tiles: int
     """How many tiles were fetched for it this round, over every channel:
     0 for a cache hit."""
@@ -348,6 +378,7 @@ def fetch_window(
     cadence_seconds: int | None = None,
     region: Region | None = None,
     source_id: str | None = None,
+    peak_channel_ids: frozenset[str] = frozenset(),
     force: bool = False,
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
@@ -366,7 +397,10 @@ def fetch_window(
     (``<raw root>/ancillary``); ``region`` the source's box when it
     publishes less than the disk, so a slot fetches only the tiles reaching
     into it; ``source_id`` the source the frames are cached under (the
-    platform's role, which is the full-disk source's id, by default)."""
+    platform's role, which is the full-disk source's id, by default);
+    ``peak_channel_ids`` the channels whose series is stacked from their
+    peak frames (:data:`PEAK_RESAMPLING`) while the producers still read
+    their ordinary ones."""
     for producer in producers:
         missing = [channel_id for channel_id in producer.inputs_for(platform) if channel_id not in {channel.id for channel in channels}]
         if missing:
@@ -376,6 +410,7 @@ def fetch_window(
     fetched: list[FetchedSlot] = []
     for slot in window_slots(platform, run_time, hours, cadence_seconds=cadence_seconds):
         frames: dict[str, Path] = {}
+        peaks: dict[str, Path] = {}
         tiles = 0
         try:
             for channel in channels:
@@ -391,10 +426,13 @@ def fetch_window(
                     download=download,
                     concurrency=concurrency,
                     region=region,
+                    peak=channel.id in peak_channel_ids,
                 )
                 if frame is None:
                     break
                 frames[channel.id] = frame.path
+                if frame.peak is not None:
+                    peaks[channel.id] = frame.peak
                 tiles += frame.tiles
         finally:
             # The slot's downloads (shared by its channels, or what a
@@ -412,7 +450,7 @@ def fetch_window(
                     platform, producer, slot, frames, grid=grid, frames_dir=frames_dir, ancillary_root=ancillary_root, force=force or tiles > 0
                 )
             )
-        fetched.append(FetchedSlot(slot=slot, frames=frames, tiles=tiles))
+        fetched.append(FetchedSlot(slot=slot, frames=frames, peaks=peaks, tiles=tiles))
     shutil.rmtree(tiles_dir, ignore_errors=True)
     if not fetched:
         raise DownloadError(
@@ -431,7 +469,7 @@ def fetch_window(
     def write(variable: assemble.SeriesVariable) -> Path:
         out = assemble.series_path(destination, series_stem, variable.id)
         assemble.write_series(
-            [assemble.Frame(slot=item.slot, path=item.frames[variable.id]) for item in fetched],
+            [assemble.Frame(slot=item.slot, path=item.peaks.get(variable.id, item.frames[variable.id])) for item in fetched],
             variable=variable,
             platform=platform,
             grid=grid,

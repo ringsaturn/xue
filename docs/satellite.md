@@ -74,7 +74,7 @@ west edge inside −180 … 180 and the east edge past 180 — Himawari's 80.7 �
 the shell's viewport arithmetic take; GOES-East stays on negative
 longitudes like the regional radar grids; Meteosat's −60 … 60 sits on
 the prime meridian. The four sources publish the same core variables
-(`ir104` and `dustrgb`; the ABI composite takes the Quick Guide's
+(`ir104`, `ir039` and `dustrgb`; the ABI composite takes the Quick Guide's
 stretches, FCI has no 11.2 µm window and its green gun reads the 10.5 µm
 one) and the true colour composite, the three NOAA-hosted ones the dust
 confidences besides, and every seam below is
@@ -89,16 +89,17 @@ infrared window at 10.4 µm; the exact central wave number is in the
 `sources.py` says which a source publishes (`bundle_scalar_ids`) and
 carries their `band` blocks (`bands`, from `Platform.bands`). The three
 NOAA-hosted sources fetch six infrared windows and the solar bands (four
-on AHI, three on ABI) and publish `ir104`, the Dust RGB, the dust
-confidences and the true colour; Meteosat fetches four windows and the
-four solar channels and publishes `ir104`, the Dust RGB and the true
-colour (§"The dust confidences" says why not the confidences).
+on AHI, three on ABI) and publish `ir104`, `ir039`, the Dust RGB, the
+dust confidences and the true colour; Meteosat fetches four windows and
+the four solar channels and publishes `ir104`, `ir039`, the Dust RGB and
+the true colour (§"The dust confidences" says why not the confidences).
 
 | id | wavelength | AHI | ABI | FCI | quantity | codebook |
 |---|---|---|---|---|---|---|
 | `ir104` | 10.4 µm (FCI 10.5) | 13 | 13 | 14 (IR 10.5) | brightness temperature, K (the shell reads it in °C) | 180–331.8 at 0.6 |
 | `ir086`, `ir112`, `ir123` | 8.6, 11.2, 12.3 µm (FCI 8.7, —, 12.3) | 11, 14, 15 | 11, 14, 15 | 12, —, 15 | brightness temperature; fetched for the Dust RGB (and, but for 11.2 µm, for the dust confidence), registered variables, not published by any source | 180–331.8 at 0.6 |
-| `ir039`, `wv062` | 3.9, 6.2 µm (FCI 3.8, 6.3) | 7, 8 | 7, 8 | 9, 10 | brightness temperature; fetched for the dust confidence's cloud mask (and 3.9 µm for the true colour's night side, on FCI too), registered variables, not published by any source | 180–331.8 at 0.6 |
+| `ir039` | 3.9 µm (FCI 3.8) | 7 | 7 | 9 | brightness temperature, published to show fires (§"The 3.9 µm window"); also read by the dust confidence's cloud mask and the true colour's night side | 180–407.7 at 0.9 |
+| `wv062` | 6.2 µm (FCI 6.3) | 8 | 8 | 10 | brightness temperature; fetched for the dust confidence's cloud mask, a registered variable, not published by any source | 180–331.8 at 0.6 |
 | `vis047`, `vis051`, `vis064`, `nir086` | 0.47, 0.51, 0.64, 0.86 µm (FCI 0.44, 0.51, 0.64, 0.87) | 1, 2, 3, 4 | 1, —, 2, 3 | 1, 2, 3, 4 | top-of-atmosphere reflectance factor, 0–1 (the product's, not yet divided by the cosine of the solar zenith); fetched for the true colour composite, registered variables (GRIB2 3/0/1, the satellite-image albedo, with the band block), not published by any source | −0.01–1.255 at 0.005 |
 | `ir096`, `ir133` | 9.6, 13.3 µm | 12, 16 | 12, 16 | 13, 16 | brightness temperature | registered on the platform; not yet a variable |
 | `wv069`, `wv073` | 6.9, 7.3 µm | 9, 10 | 9, 10 | —, 11 | brightness temperature | same |
@@ -122,6 +123,38 @@ to eight times finer than the grid — as the block mean, so a cloud edge
 is the mean the eye sees from orbit and not a speckle of the four source
 pixels a bilinear sample would pick out of sixty-four. The frame's
 sidecar records which.
+
+### The 3.9 µm window
+
+`ir039` is published to show where it burns. A fire is a few hundred
+metres across and lifts one 2 km pixel tens of kelvin above its
+neighbours, up to AHI band 7's saturation near 400 K; three choices keep
+that pixel in the bundle:
+
+- **Its own codebook**, 180–407.7 K at 0.9 K (compact: to 406.8 K at
+  1.8 K), where the other windows stop at 331.8 K. Linear like theirs, so
+  no reader learns a new codebook type; a hot spot is tens of kelvin, and
+  the coarser step costs it nothing.
+- **A peak frame.** The published series is warped with GDAL's `max`
+  (`fetch.PEAK_RESAMPLING`) — the warmest source pixel under each 0.04°
+  cell — instead of the bilinear sample, which spreads a 2 km hot spot
+  over four cells and loses most of its contrast. The composites read the
+  channel as a radiance field and keep the bilinear frame: a source that
+  publishes `ir039` (`fetch.PEAK_CHANNEL_IDS` ∩ `bundle_scalar_ids`)
+  warps the slot's downloaded tiles twice and caches the second frame
+  beside the first as the variable `ir039peak`, and only the series is
+  stacked from it. The composites' inputs, and so their bytes, are what
+  they were.
+- **A peak-keeping ladder.** The reduced tiers keep, at each decimated
+  site, the largest code within `factor / 2` rows and columns of it
+  (`binconvert._decimate_peak_codes`, mirrored in `convert.rs`), not the
+  site's own: a one-cell hot spot lies on a kept row and column one time
+  in four at the half. The windows overlap by a row and a column, so
+  every cell reaches a site and a peak moves at most half a reduced cell.
+  The other variables keep the plain decimation.
+
+Which pixel is a fire is the shell's decision, not the encoder's: it has
+`ir039` and `ir104` on one grid and compares them per cell.
 
 ### The Dust RGB
 
@@ -487,7 +520,7 @@ whole cells of `grid_step`; the fetch warps onto it instead of
 | box | 24–46°N, 122–148°E (whole degrees: the JMA nowcast's 0.005° cells nest 2:1) |
 | grid | 0.01°, 2600 × 2200, tile 64 × 64 (0.64°, 1435 a plane), ladder 0.02 / 0.04 / 0.08° |
 | fetched | `ir039`, `ir086`, `ir104`, `ir112`, `ir123`, `vis047`, `vis051`, `vis064`, `nir086` |
-| published | `ir104`, `dustrgb`, `truecolor` (no confidences: their CAMEL months are staged on the disk grids) |
+| published | `ir104`, `ir039`, `dustrgb`, `truecolor` (no confidences: their CAMEL months are staged on the disk grids) |
 | window | 600 s, 3 h |
 
 The ISatSS reader narrows a slot to the box (`ISatSSReader.tiles_covering`).
@@ -705,8 +738,9 @@ A projector (`projector.py`, `Projector`) writes the reader's dataset
 resampled onto a `TargetGrid` — edges and step, cell centres half a step
 inside, longitudes allowed past 180 — as an Int16 GeoTIFF with the
 source's nodata, scale and offset on the band. `GdalWarpProjector` is
-`gdalwarp -t_srs EPSG:4326 -te … -tr … -r bilinear`, deterministic for one
-GDAL version, multithreaded. A NumPy projector with a cached lookup table
+`gdalwarp -t_srs EPSG:4326 -te … -tr … -r bilinear` (`average` for a
+reflectance, `max` for a peak frame), deterministic for one GDAL version,
+multithreaded. A NumPy projector with a cached lookup table
 (for parallax correction, or exact alignment with a producer's grid) is
 the same interface.
 

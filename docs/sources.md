@@ -157,6 +157,10 @@ tiers. Each publishes:
 
 - `ir104`: 10.4 µm brightness temperature (180–332 K at 0.6 K; shown in
   °C).
+- `ir039`: 3.9 µm brightness temperature (180–407.7 K at 0.9 K), the
+  warmest 2 km pixel under each cell and, in the reduced tiers, the
+  warmest code around each site, so a fire's hot spot survives the grid.
+  See [`satellite.md`](satellite.md).
 - `dustrgb`: the Dust RGB composite (red 12.3 − 10.4 µm, green 11.2 −
   8.6 µm, blue 10.4 µm), computed per scan by
   [shachen](https://github.com/ringsaturn/shachen); dust reads pink to

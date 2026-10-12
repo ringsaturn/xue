@@ -275,6 +275,15 @@ PRESSURE_BUNDLE_IDS = frozenset(PRESSURE_VARIABLE_IDS)
 # three); any other factor is a registry bug, not a runtime case.
 VARIANT_TIERS: dict[int, str] = {2: "half", 4: "quarter", 8: "eighth"}
 
+# The variables whose reduced tiers keep the warmest code around each sample
+# site rather than the site's own (:func:`_decimate_peak_codes`): the 3.9 µm
+# window is published to show fires, and a hot spot one cell wide sits on a
+# kept row and column only one time in four at the half tier. Its full tier
+# is already the peak of the source pixels (the satellite fetch's
+# ``PEAK_CHANNEL_IDS``). Mirrored by `PEAK_DECIMATION_IDS` in
+# rust/xue/src/encode/convert.rs.
+PEAK_DECIMATION_IDS = frozenset({"ir039"})
+
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
 _EXTRACT_WORKERS = min(16, os.cpu_count() or 4)
 # gdalinfo inspection is a ~1 s subprocess per file; oversubscribe mildly.
@@ -1912,6 +1921,36 @@ def _decimate_codes(codes: np.ndarray, grid: GridInfo, factor: int = 2) -> np.nd
     return np.ascontiguousarray(codes.reshape(grid.height, grid.width)[::factor, ::factor]).ravel()
 
 
+def _decimate_peak_codes(codes: np.ndarray, grid: GridInfo, factor: int, nodata_code: int) -> np.ndarray:
+    """Reduced-resolution copy of one quantized plane that keeps peaks: at
+    each site :func:`_decimate_codes` keeps (rows and columns 0, ``factor``,
+    2 ``factor``, ...), the largest code in the window of ``factor // 2``
+    rows and columns either side of it, clipped at the plane's edges. The
+    windows overlap by a row and a column, so every cell of the full plane
+    reaches a site, and a peak moves at most half a reduced cell. A
+    linear codebook's codes rise with the value; ``nodata_code`` counts
+    below every code and is the site's only when its whole window is
+    nodata."""
+    half = factor // 2
+    plane = codes.reshape(grid.height, grid.width).astype(np.int16)
+    plane[plane == nodata_code] = -1
+    padded = np.pad(plane, half, constant_values=-1)
+    peak = np.full(((grid.height + factor - 1) // factor, (grid.width + factor - 1) // factor), -1, dtype=np.int16)
+    for row in range(2 * half + 1):
+        for column in range(2 * half + 1):
+            np.maximum(peak, padded[row : row + grid.height : factor, column : column + grid.width : factor], out=peak)
+    peak[peak < 0] = nodata_code
+    return np.ascontiguousarray(peak.astype(np.uint8)).ravel()
+
+
+def _decimate_variant_codes(variable_id: str, codes: np.ndarray, grid: GridInfo, factor: int, profile: str) -> np.ndarray:
+    """One plane's reduced tier: the peak-keeping decimation for the
+    variables in :data:`PEAK_DECIMATION_IDS`, the site's own code otherwise."""
+    if variable_id in PEAK_DECIMATION_IDS:
+        return _decimate_peak_codes(codes, grid, factor, PROFILES[profile][variable_id].nodata_code)
+    return _decimate_codes(codes, grid, factor)
+
+
 def _playback_bandwidth(byte_length: int, frame_count: int, *, fps: float = 12.0) -> int:
     """HLS STREAM-INF style bandwidth hint: average bits per second needed to
     keep up with the 12 fps playback rate while downloading the whole tier."""
@@ -2687,7 +2726,7 @@ def convert_bin(
     variant_codes_by_offset = {
         factor: {
             offset: {
-                variable_id: _decimate_codes(codes, grid_for(variable_id), factor)
+                variable_id: _decimate_variant_codes(variable_id, codes, grid_for(variable_id), factor, profile)
                 for variable_id, codes in codes_by_offset[offset].items()
             }
             for offset in offsets
