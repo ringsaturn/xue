@@ -129,6 +129,7 @@ export const ru: Record<MessageKey, string> = {
   fieldSheetHeading: "СЛОИ",
   fieldGroupTemperature: "ТЕМПЕРАТУРА",
   fieldGroupMoisture: "ВЛАГА",
+  fieldGroupSoil: "ПОЧВА",
   fieldGroupWind: "ВЕТЕР",
   fieldGroupDynamics: "ДИНАМИКА",
   fieldGroupRadiation: "РАДИАЦИЯ И ВИДИМОСТЬ",

@@ -127,6 +127,7 @@ export const es: Record<MessageKey, string> = {
   fieldSheetHeading: "CAPAS",
   fieldGroupTemperature: "TEMPERATURA",
   fieldGroupMoisture: "HUMEDAD",
+  fieldGroupSoil: "SUELO",
   fieldGroupWind: "VIENTO",
   fieldGroupDynamics: "DINÁMICA",
   fieldGroupRadiation: "RADIACIÓN Y VISIBILIDAD",

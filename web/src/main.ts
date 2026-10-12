@@ -5644,6 +5644,7 @@ type SheetGroup = FieldGroup | "fire" | "other";
 const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   temperature: "fieldGroupTemperature",
   moisture: "fieldGroupMoisture",
+  soil: "fieldGroupSoil",
   wind: "fieldGroupWind",
   dynamics: "fieldGroupDynamics",
   radiation: "fieldGroupRadiation",

@@ -231,6 +231,7 @@ export const en = {
   fieldSheetHeading: "LAYERS",
   fieldGroupTemperature: "TEMPERATURE",
   fieldGroupMoisture: "MOISTURE",
+  fieldGroupSoil: "SOIL",
   fieldGroupWind: "WIND",
   fieldGroupDynamics: "DYNAMICS",
   fieldGroupRadiation: "RADIATION & VISIBILITY",

@@ -124,6 +124,7 @@ export const ja: Record<MessageKey, string> = {
   fieldSheetHeading: "レイヤ",
   fieldGroupTemperature: "気温",
   fieldGroupMoisture: "水分",
+  fieldGroupSoil: "土壌",
   fieldGroupWind: "風",
   fieldGroupDynamics: "力学",
   fieldGroupRadiation: "放射と視程",
