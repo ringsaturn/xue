@@ -8969,15 +8969,15 @@ function isFireDerivedId(id: DerivedId): id is DerivedFireId {
   return (DERIVED_FIRE_IDS as readonly string[]).includes(id);
 }
 
-/** The rail's derived-layer tiles: the experiment's under the experiment
- * on a run that ships their inputs, a fire layer's wherever the run ships
- * its inputs; pressed while the layer is drawn. */
+/** The rail's derived-layer tiles, all under the experiment: its own on a
+ * run that ships their inputs, a fire layer's wherever the run ships its
+ * inputs; pressed while the layer is drawn. */
 function syncDerivedTiles(run: ForecastManifest): void {
   const warmth = experimentEnabled && hasBundle(run, EXPERIMENT_WARMTH_ID);
   const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
   for (const button of derivedButtons()) {
     const id = button.dataset.derived as DerivedId;
-    if (isFireDerivedId(id)) button.hidden = !fireInputsPublished(run, id);
+    if (isFireDerivedId(id)) button.hidden = !experimentEnabled || !fireInputsPublished(run, id);
     else button.hidden = id === "inflow" ? !flow : !warmth;
   }
   syncRail();
