@@ -297,7 +297,7 @@ import {
   type VideoFrameIndexEntry,
   type VideoStreamSource,
 } from "./webcodecs";
-import { spawnZarrWorker, zarrInitMessage, zarrObjectUrl, zarrRootUrl, zarrStoreFor } from "./zarr/channel";
+import { spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
 import {
   deliverGif,
   exportGif,
@@ -6294,20 +6294,16 @@ function loadVariable(
       // series form, so `?backend=xue` keeps the map path.
       const seriesStore = role === "probe" && dataBackend !== "xue" ? descriptor.series : undefined;
       const store = seriesStore ?? zarrStoreFor(dataBackend, descriptor, variant);
-      const storeRoot = store && runUrl ? zarrRootUrl(store.path, runUrl) : null;
-      const storeStreams =
-        store !== undefined &&
-        storeRoot !== null &&
-        (await supportsRangeRequests(zarrObjectUrl(storeRoot, "zarr.json", store.crc32)));
+      const storeStreams = store !== undefined && runUrl ? await supportsRangeRequests(zarrProbeUrl(store, runUrl)) : false;
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      if (store !== undefined && storeRoot !== null && (storeStreams || !container)) {
+      if (store !== undefined && runUrl && (storeStreams || !container)) {
         if (!storeStreams && role === "probe") {
           throw new Error("range requests unsupported; a probe session never downloads a whole shard");
         }
         streaming = true;
         channel = spawnZarrWorker();
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(storeRoot, store, variableKey, storeStreams, zarrPayloadBudgetBytes());
+        initMessage = zarrInitMessage(store, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
         downloadedBytes = 0;
         format = "Zarr";
         totalBytes = store.byteLength;

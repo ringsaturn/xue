@@ -35,6 +35,7 @@ import {
   tileOf,
   tileShape,
 } from "../../web/src/zarr/shard";
+import { canonicalTimeBlock, mergeSegmentMetadata, SegmentedZarrSession } from "../../web/src/zarr/segmented";
 import { ZarrSession } from "../../web/src/zarr/session";
 import { coalesceRanges, ZarrStore, type FetchLike } from "../../web/src/zarr/store";
 import { localFetch, newFetchLog } from "../../web/tooling/localfetch";
@@ -712,5 +713,151 @@ describe("ZarrSession", () => {
     await expect(session.decodeSeries(1, 144, 0)).rejects.toThrow(/outside/);
     await expect(session.decodeFrame(1, 121)).rejects.toThrow(/no plane/);
     await expect(session.decodeFrame(2, 0)).rejects.toThrow(/no array/);
+  });
+});
+
+// -- a window cut along time -----------------------------------------------------
+
+/** A segment's metadata document: the fixture bundle's, its frames at
+ * `offsets` ten-minute steps from `runTime`, everything else held fixed. */
+function segmentMetadata(runTime: string, offsets: number[], label?: string): string {
+  const document = JSON.parse(readFileSync(`${FIXTURE_ROOT}/tmp2m.zarr/zarr.json`, "utf8")).attributes.xue;
+  document.runTime = runTime;
+  document.time = canonicalTimeBlock(offsets.map((offset) => offset * 600)).block;
+  if (label !== undefined) document.variables[0].label = label;
+  return JSON.stringify(document);
+}
+
+describe("canonicalTimeBlock", () => {
+  it("writes the coarsest unit and the uniform or listed offsets", () => {
+    expect(canonicalTimeBlock([0, 600, 1200]).block).toEqual({ unitSeconds: 600, firstFrameOffset: 0, frameCount: 3, frameStep: 1 });
+    expect(canonicalTimeBlock([0, 3600, 7200]).block).toEqual({ unitSeconds: 3600, firstFrameOffset: 0, frameCount: 3, frameStep: 1 });
+    expect(canonicalTimeBlock([0]).block).toEqual({ unitSeconds: 3600, firstFrameOffset: 0, frameCount: 1, frameStep: 1 });
+    const gap = canonicalTimeBlock([0, 600, 1800, 2400]);
+    expect(gap.block).toEqual({ unitSeconds: 600, firstFrameOffset: 0, frameCount: 4, frameOffsets: [0, 1, 3, 4] });
+    expect(Object.keys(gap.block)).toEqual(["unitSeconds", "firstFrameOffset", "frameCount", "frameOffsets"]);
+  });
+});
+
+describe("mergeSegmentMetadata", () => {
+  it("joins the segments' axes and maps each frame to the bundle's offset", () => {
+    const merged = mergeSegmentMetadata([
+      segmentMetadata("2026-10-12T02:00:00Z", [0, 1, 2, 3, 4, 5]),
+      segmentMetadata("2026-10-12T03:00:00Z", [0, 2, 3]),
+    ]);
+    const document = JSON.parse(merged.metadataJson);
+    expect(document.runTime).toBe("2026-10-12T02:00:00Z");
+    expect(document.time).toEqual({ unitSeconds: 600, firstFrameOffset: 0, frameCount: 9, frameOffsets: [0, 1, 2, 3, 4, 5, 6, 8, 9] });
+    expect(Object.keys(document)).toEqual(Object.keys(JSON.parse(segmentMetadata("2026-10-12T02:00:00Z", [0, 1]))));
+    expect(merged.offsets).toEqual([[0, 1, 2, 3, 4, 5], [6, 8, 9]]);
+    // The joined axis is a bundle axis like any other.
+    expect(parseBundleMetadata(merged.metadataJson).time.frameCount).toBe(9);
+  });
+
+  it("writes a uniform joined axis as a step", () => {
+    const merged = mergeSegmentMetadata([
+      segmentMetadata("2026-10-12T00:00:00Z", [0, 1]),
+      segmentMetadata("2026-10-12T00:20:00Z", [0]),
+    ]);
+    expect(JSON.parse(merged.metadataJson).time).toEqual({ unitSeconds: 600, firstFrameOffset: 0, frameCount: 3, frameStep: 1 });
+    expect(merged.offsets).toEqual([[0, 1], [2]]);
+  });
+
+  it("refuses segments that are not one bundle or not in time order", () => {
+    expect(() =>
+      mergeSegmentMetadata([segmentMetadata("2026-10-12T02:00:00Z", [0, 1]), segmentMetadata("2026-10-12T03:00:00Z", [0, 1], "other")]),
+    ).toThrow(/one bundle/);
+    expect(() =>
+      mergeSegmentMetadata([segmentMetadata("2026-10-12T03:00:00Z", [0, 1]), segmentMetadata("2026-10-12T02:00:00Z", [0, 1])]),
+    ).toThrow(/time order/);
+    // Overlapping: the second segment's first frame is the first's last.
+    expect(() =>
+      mergeSegmentMetadata([
+        segmentMetadata("2026-10-12T02:00:00Z", [0, 1, 2, 3, 4, 5, 6]),
+        segmentMetadata("2026-10-12T03:00:00Z", [0, 1]),
+      ]),
+    ).toThrow(/time order/);
+    expect(() => mergeSegmentMetadata([])).toThrow(/no segments/);
+  });
+});
+
+describe("SegmentedZarrSession", () => {
+  /** The fixture store again, its group's run time moved `hours` later:
+   * a second segment holding the same codes on the next stretch of clock. */
+  function shiftedStore(hours: number): ZarrStore {
+    const base = localFetch(FIXTURE_ROOT);
+    const fetch: FetchLike = async (url, init) => {
+      const response = await base(url, init);
+      if (new URL(url).pathname !== "/zarr.json" || hours === 0) return response;
+      const document = JSON.parse(await response.text());
+      const runTime = Date.parse(document.attributes.xue.runTime) + hours * 3_600_000;
+      document.attributes.xue.runTime = new Date(runTime).toISOString().replace(".000Z", "Z");
+      return new Response(JSON.stringify(document), { status: 200 });
+    };
+    return new ZarrStore("local://tmp2m.zarr", "deadbeef", { fetch });
+  }
+
+  it("reads two segments as one axis, frame by frame and as a series", async () => {
+    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk);
+    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
+    const metadata = parseBundleMetadata(session.metadataJson);
+    expect(metadata.time.frameCount).toBe(242);
+    expect(session.frameOffsets).toEqual(Array.from({ length: 242 }, (_, index) => index));
+    // A frame of the second segment is that segment's chunks, fetched there.
+    const keys = session.chunksFor(1, 125, null);
+    expect(keys.every((key) => key.segment === 1)).toBe(true);
+    expect(session.frameResident(1, 125, null)).toBe(false);
+    await session.ensureChunks(keys);
+    expect(session.frameResident(1, 125, null)).toBe(true);
+    expect(session.frameResident(1, 4, null)).toBe(false);
+    for (const offset of [0, 7, 120]) {
+      expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+      expect(Buffer.from(await session.decodeFrame(1, offset + 121))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+    }
+    const series = await session.decodeSeries(1, 37, 20);
+    const one = Buffer.from(bundle.decodeSeries(1, 37, 20));
+    expect(Buffer.from(series)).toEqual(Buffer.concat([one, one]));
+    await expect(session.decodeFrame(1, 242)).rejects.toThrow(/no plane/);
+  });
+
+  /** What the time chunk holding `frame` costs in compressed chunks: the
+   * payload bytes a whole-plane decode of it leaves held. */
+  async function timeChunkBytes(frame: number): Promise<number> {
+    const session = await ZarrSession.open(shiftedStore(0), wasm.decodeChunk);
+    await session.decodeFrame(1, frame);
+    return session.payloadBytes;
+  }
+
+  it("shares one payload budget over the segments, evicting the least recently used", async () => {
+    const budget = await timeChunkBytes(0);
+    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk, {
+      payloadBudgetBytes: budget,
+    });
+    // The whole budget is the first segment's to use while it plays...
+    await session.decodeFrame(1, 0);
+    expect(session.payloadBytes).toBe(budget);
+    expect(session.frameResident(1, 0, null)).toBe(true);
+    // ...and moving into the second takes it over, evicting the first's.
+    const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
+    expect(Buffer.from(await session.decodeFrame(1, 121))).toEqual(Buffer.from(bundle.decodeFrame(1, 0)));
+    expect(session.frameResident(1, 121, null)).toBe(true);
+    expect(session.frameResident(1, 0, null)).toBe(false);
+    expect(session.payloadBytes).toBeLessThanOrEqual(budget);
+  });
+
+  it("leaves a plain session's own budget as it was", async () => {
+    // Room for either time chunk, not both.
+    const budget = Math.max(await timeChunkBytes(0), await timeChunkBytes(6));
+    const session = await ZarrSession.open(shiftedStore(0), wasm.decodeChunk, { payloadBudgetBytes: budget });
+    expect(session.payloadBudgetBytes).toBe(budget);
+    await session.decodeFrame(1, 0);
+    await session.decodeFrame(1, 6);
+    expect(session.frameResident(1, 6, null)).toBe(true);
+    expect(session.frameResident(1, 0, null)).toBe(false);
+    expect(session.payloadBytes).toBeLessThanOrEqual(budget);
+  });
+
+  it("refuses segments that overlap in time", async () => {
+    await expect(SegmentedZarrSession.open([shiftedStore(0), shiftedStore(100)], wasm.decodeChunk)).rejects.toThrow(/time order/);
   });
 });

@@ -64,6 +64,85 @@ interface VariableArray {
   decoded: Map<number, Uint8Array | null>;
 }
 
+/** One least-recently-used payload budget shared by several sessions: the
+ * segments of a rolling window (`SegmentedZarrSession`). Playback stays in
+ * one segment for minutes, and a budget split evenly would leave it a
+ * fraction of the memory the device allows, with the eviction-bound
+ * re-fetching that follows; one pool lets the segment being played use the
+ * whole budget and evicts whichever segment's chunks were used longest ago.
+ * A session that is given no pool keeps its own budget and order. */
+export class PayloadPool {
+  /** Compressed chunk bytes held right now, over every member. */
+  bytes = 0;
+  private nextMember = 0;
+  /** Every held chunk of every member, oldest use first: a `Map` iterates
+   * in insertion order, so re-inserting is the whole LRU. */
+  private readonly order = new Map<string, { member: PoolMember; name: string; length: number }>();
+
+  constructor(readonly budgetBytes: number) {}
+
+  /** A member's prefix for its chunk names in the shared order. */
+  join(): string {
+    this.nextMember += 1;
+    return `${this.nextMember}|`;
+  }
+
+  add(member: PoolMember, name: string, length: number): void {
+    this.order.set(member.poolKey + name, { member, name, length });
+    this.bytes += length;
+  }
+
+  touch(member: PoolMember, name: string): void {
+    const key = member.poolKey + name;
+    const held = this.order.get(key);
+    if (!held) return;
+    this.order.delete(key);
+    this.order.set(key, held);
+  }
+
+  /** Drop the least recently used chunks, whoever holds them, until the rest
+   * fit the budget, never the one just inserted. */
+  evict(keep: PoolMember, keepName: string): void {
+    if (this.bytes <= this.budgetBytes) return;
+    const kept = keep.poolKey + keepName;
+    for (const [key, held] of this.order) {
+      if (this.bytes <= this.budgetBytes) break;
+      if (key === kept) continue;
+      this.order.delete(key);
+      this.bytes -= held.length;
+      held.member.dropPayload(held.name);
+    }
+  }
+}
+
+/** What a pool needs of a session that holds chunks in it. */
+interface PoolMember {
+  readonly poolKey: string;
+  dropPayload(name: string): void;
+}
+
+/** What the worker drives: one store (`ZarrSession`) or a rolling window's
+ * segments (`SegmentedZarrSession`), answering the same questions in the
+ * bundle's own frame offsets. A key is only ever handed back to the reader
+ * that produced it. */
+export interface ZarrReader {
+  readonly metadataJson: string;
+  readonly planeLength: number;
+  readonly numericIds: number[];
+  readonly frameOffsets: number[];
+  /** Bytes received over the network, coalesced over-reads included. */
+  readonly fetchedBytes: number;
+  tileGeometry(): Uint32Array;
+  clearCache(): void;
+  chunksFor(variableId: number, frameOffset: number, rects: readonly TileRect[] | null): ChunkKey[];
+  isResident(key: ChunkKey): boolean;
+  isFetching(key: ChunkKey): boolean;
+  ensureChunks(keys: readonly ChunkKey[]): Promise<void>;
+  frameResident(variableId: number, frameOffset: number, rects: readonly TileRect[] | null): boolean;
+  decodeFrame(variableId: number, frameOffset: number, rects?: readonly TileRect[] | null): Promise<Uint8Array>;
+  decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array>;
+}
+
 function chunkKey(key: ChunkKey): string {
   return `${key.variableId}:${key.timeChunk}:${key.tile}`;
 }
@@ -72,7 +151,7 @@ function indexKey(variableId: number, shard: number): string {
   return `${variableId}:${shard}`;
 }
 
-export class ZarrSession {
+export class ZarrSession implements ZarrReader, PoolMember {
   /** Bytes of shard indices and inner chunks held, for `progress`; an
    * index counts here the way the container's prefix does. */
   residentBytes = 0;
@@ -89,6 +168,10 @@ export class ZarrSession {
   /** Compressed chunk bytes held right now, the part of `residentBytes`
    * the budget governs. */
   payloadBytes = 0;
+  /** The shared budget this session's chunks count against, in place of
+   * its own `payloadBudgetBytes`, and its prefix in the pool's order. */
+  private pool: PayloadPool | null = null;
+  poolKey = "";
 
   private readonly arrays = new Map<number, VariableArray>();
   private readonly indices = new Map<string, (ShardIndexEntry | null)[]>();
@@ -122,7 +205,7 @@ export class ZarrSession {
   static async open(
     store: ZarrStore,
     decodeChunk: DecodeChunkFn,
-    options: { payloadBudgetBytes?: number } = {},
+    options: { payloadBudgetBytes?: number; payloadPool?: PayloadPool } = {},
   ): Promise<ZarrSession> {
     const group = parseGroupMetadata(new TextDecoder().decode(await store.get("zarr.json")));
     const { metadata } = group;
@@ -154,11 +237,19 @@ export class ZarrSession {
     if (options.payloadBudgetBytes !== undefined && options.payloadBudgetBytes > 0) {
       session.payloadBudgetBytes = options.payloadBudgetBytes;
     }
+    if (options.payloadPool) {
+      session.pool = options.payloadPool;
+      session.poolKey = options.payloadPool.join();
+    }
     return session;
   }
 
   get metadataJson(): string {
     return this.group.metadataJson;
+  }
+
+  get fetchedBytes(): number {
+    return this.store.stats.bytes;
   }
 
   get planeLength(): number {
@@ -303,7 +394,12 @@ export class ZarrSession {
         this.payloads.set(name, bytes);
         this.residentBytes += bytes.byteLength;
         this.payloadBytes += bytes.byteLength;
-        this.evictPayloads(name);
+        if (this.pool) {
+          this.pool.add(this, name, bytes.byteLength);
+          this.pool.evict(this, name);
+        } else {
+          this.evictPayloads(name);
+        }
       } finally {
         this.chunkFetches.delete(name);
       }
@@ -318,7 +414,17 @@ export class ZarrSession {
 
   /** Move a held chunk to the newest end of the cache's order. A `Map`
    * iterates in insertion order, so re-inserting is the whole LRU. */
+  /** Let go of one held chunk, at the pool's request. */
+  dropPayload(name: string): void {
+    const bytes = this.payloads.get(name);
+    if (!bytes) return;
+    this.payloads.delete(name);
+    this.payloadBytes -= bytes.byteLength;
+    this.residentBytes -= bytes.byteLength;
+  }
+
   private touchPayload(name: string): void {
+    this.pool?.touch(this, name);
     const held = this.payloads.get(name);
     if (held === undefined) return;
     this.payloads.delete(name);

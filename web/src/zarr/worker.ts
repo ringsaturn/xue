@@ -25,12 +25,13 @@ import { sameTileRects, type TileRect } from "../tiles";
 import wasmInit, { decodeChunk } from "../wasm/xue";
 import wasmUrl from "../wasm/xue_bg.wasm?url";
 import type { ZarrDecodeMessage, ZarrInitStreamMessage, ZarrSeriesMessage, ZarrWorkerRequest } from "./protocol";
-import { ZarrSession, type ChunkKey } from "./session";
+import { SegmentedZarrSession } from "./segmented";
+import { ZarrSession, type ChunkKey, type ZarrReader } from "./session";
 import { ZarrStore } from "./store";
 
 const PREFETCH_RETRIES = 3;
 
-let session: ZarrSession | null = null;
+let session: ZarrReader | null = null;
 let variableKey = "";
 let totalBytes = 0;
 let decodeFetchCount = 0;
@@ -53,12 +54,12 @@ function post(message: unknown, transfer: Transferable[] = []): void {
 
 function postProgress(): void {
   if (!session) return;
-  post({ type: "progress", variableKey, bytes: session.store.stats.bytes, totalBytes });
+  post({ type: "progress", variableKey, bytes: session.fetchedBytes, totalBytes });
 }
 
 /** The chunks a frame still needs within the window's tiles, neither local
  * nor being fetched. */
-function missingChunks(active: ZarrSession, variableId: number, frameOffset: number): ChunkKey[] {
+function missingChunks(active: ZarrReader, variableId: number, frameOffset: number): ChunkKey[] {
   return active.chunksFor(variableId, frameOffset, windowTiles).filter((key) => !active.isResident(key) && !active.isFetching(key));
 }
 
@@ -116,11 +117,15 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   variableKey = message.variableKey;
   totalBytes = message.byteLength;
   const started = performance.now();
-  const opened = await ZarrSession.open(
-    new ZarrStore(message.url, message.crc32, { ranges: message.ranges ?? true }),
-    decodeChunk,
-    { payloadBudgetBytes: message.payloadBudgetBytes },
-  );
+  const ranges = message.ranges ?? true;
+  const options = { payloadBudgetBytes: message.payloadBudgetBytes };
+  const opened: ZarrReader = message.segments
+    ? await SegmentedZarrSession.open(
+        message.segments.map((segment) => new ZarrStore(segment.url, segment.crc32, { ranges })),
+        decodeChunk,
+        options,
+      )
+    : await ZarrSession.open(new ZarrStore(message.url, message.crc32, { ranges }), decodeChunk, options);
   session = opened;
   post({
     type: "ready",

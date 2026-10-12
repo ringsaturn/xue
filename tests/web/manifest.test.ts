@@ -30,6 +30,7 @@ import {
   VECTOR_BUNDLES,
   isVectorBundle,
   vectorComponents,
+  zarrSegments,
 } from "../../web/src/manifest";
 import { identifyBundle, identityForBundleId } from "../../web/src/identity";
 import { buildPalette, buildWindSpeedPalette, decodeLinear, decodeLog } from "../../web/src/palettes";
@@ -359,8 +360,8 @@ describe("validateManifest", () => {
     storeBearing(withStore).zarr = zarrFixture();
     storeBearing(withStore).variants[0]!.zarr = zarrFixture("gfs.2026081506/tmp2m.half.zarr");
     const manifest = validateManifest(withStore);
-    expect(manifest.bundles[0]!.zarr?.path).toBe("gfs.2026081506/tmp2m.zarr");
-    expect(manifest.bundles[0]!.variants![0]!.zarr?.crc32).toBe("760cef95");
+    expect(zarrSegments(manifest.bundles[0]!.zarr!)[0]!.path).toBe("gfs.2026081506/tmp2m.zarr");
+    expect(zarrSegments(manifest.bundles[0]!.variants![0]!.zarr!)[0]!.crc32).toBe("760cef95");
     expect(manifest.bundles[1]!.zarr).toBeUndefined();
 
     for (const [mutation, message] of [
@@ -382,6 +383,50 @@ describe("validateManifest", () => {
     const notAnObject = manifestFixture();
     storeBearing(notAnObject).zarr = "gfs.2026081506/tmp2m.zarr";
     expect(() => validateManifest(notAnObject)).toThrow("object");
+  });
+
+  it("accepts a segmented store and holds its segments to their own path rules", () => {
+    const segment = (start: string, byteLength: number): ZarrStoreDescriptor => ({
+      path: `../../himawari.segments/${start}/1a2b3c4d/ir104.half.zarr`,
+      byteLength,
+      crc32: "760cef95",
+    });
+    const segmented = () => ({ byteLength: 30, segments: [segment("202610120200", 10), segment("202610120300", 20)] });
+    const withSegments = manifestFixture();
+    storeBearing(withSegments).zarr = segmented();
+    storeBearing(withSegments).variants[0]!.zarr = {
+      byteLength: 5,
+      segments: [{ path: "seg/tmp2m.half.zarr", byteLength: 5, crc32: "0d3a2e6b" }],
+    } as unknown as ZarrStoreDescriptor;
+    const manifest = validateManifest(withSegments);
+    expect(zarrSegments(manifest.bundles[0]!.zarr!).map((store) => store.byteLength)).toEqual([10, 20]);
+    expect(deliveryBytes({ zarr: manifest.bundles[0]!.zarr })).toBe(30);
+
+    const cases: [(store: ReturnType<typeof segmented>) => unknown, string][] = [
+      [(store) => ({ ...store, path: "ir104.half.zarr" }), "no path or crc32"],
+      [(store) => ({ ...store, crc32: "760cef95" }), "no path or crc32"],
+      [(store) => ({ ...store, segments: [] }), "segment list"],
+      [(store) => ({ ...store, byteLength: 31 }), "sum"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "a/../b/ir104.zarr" }], byteLength: 10 }), "segment path"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../../x/ir104.zarr" }], byteLength: 10 }), "segment path"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "/x/ir104.zarr" }], byteLength: 10 }), "segment path"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../x/ir104.xue" }], byteLength: 10 }), "segment path"],
+      [(store) => ({ ...store, segments: [store.segments[0]!, store.segments[0]!], byteLength: 20 }), "duplicate"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, crc32: "dead" }], byteLength: 10 }), "crc32"],
+    ];
+    for (const [mutate, message] of cases) {
+      const broken = manifestFixture();
+      storeBearing(broken).zarr = mutate(segmented());
+      expect(() => validateManifest(broken)).toThrow(message);
+    }
+    // A plain store never climbs out of the manifest's directory.
+    const climbing = manifestFixture();
+    storeBearing(climbing).zarr = zarrFixture("../../himawari.segments/x/ir104.zarr");
+    expect(() => validateManifest(climbing)).toThrow("path");
+    // Nor is a series companion ever segmented.
+    const segmentedSeries = manifestFixture();
+    (storeBearing(segmentedSeries) as { series?: unknown }).series = segmented();
+    expect(() => validateManifest(segmentedSeries)).toThrow("path");
   });
 
   it("accepts an optional series store, and holds it to its own suffix", () => {
