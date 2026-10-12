@@ -1388,8 +1388,30 @@ createSheet({ trigger: creditsTrigger, sheet: creditsSheet });
 /** The language picker: the same sheet again, under the round trigger in the
  * top-right column. Ten languages do not cycle on a press, so the button
  * opens a list of endonyms instead of naming the next one. */
+/** The storm options' chip on the level row: the sheet's trigger while
+ * tracks are drawn, naming the focus (a storm, or ALL). The rail tile is
+ * the tracks' switch; the options live here, the way the radar site's
+ * chip and the GIBS platforms do. */
+const tcLevelGroup = (() => {
+  const root = document.createElement("div");
+  root.className = "level-group";
+  root.dataset.slot = "tc";
+  const caption = document.createElement("span");
+  caption.className = "level-caption";
+  caption.textContent = "TC";
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.dataset.level = "";
+  chip.dataset.slot = "tc";
+  chip.setAttribute("aria-pressed", "true");
+  chip.setAttribute("aria-haspopup", "dialog");
+  chip.setAttribute("aria-expanded", "false");
+  root.append(caption, chip);
+  return { root, chip };
+})();
+
 const tcSheetControl = createSheet({
-  trigger: tcTile,
+  trigger: tcLevelGroup.chip,
   sheet: tcSheet,
   canOpen: () => tcLoaded !== null && activeCase === null,
 });
@@ -5481,6 +5503,8 @@ function renderLevelRow(): void {
     levelRow.append(radarLevelGroup.root);
     levelRow.hidden = false;
   }
+  // The storms' chip likewise belongs to the marks, not the run.
+  renderTcLevelGroup();
   // A row wider than the capsule scrolls: bring each pressed member into
   // view (the lines' last, so the group that changed most recently wins)
   // and fade whichever end is clipped.
@@ -5909,6 +5933,7 @@ function renderImageryLevelRow(): void {
     container.append(button);
   }
   levelRow.append(container);
+  renderTcLevelGroup();
 }
 
 /** The headline on the imagery dataset: the platform and the colour. */
@@ -7396,13 +7421,36 @@ async function applyTcView(): Promise<void> {
   layers?.setViews(views);
   syncTcTime();
   closeTcCard();
-  tcTile.setAttribute("aria-pressed", String(views.length > 0));
+  tcTile.setAttribute("aria-pressed", String(!hidden && !view.marks.tc.off));
+  renderTcLevelGroup();
   renderTcSheet();
   if (view.marks.tc.storm !== null && tcFramed !== view.marks.tc.storm && tcDrawn.length === 1) {
     tcFramed = view.marks.tc.storm;
     const bounds = stormBounds(tcDrawn[0]!);
     if (bounds) map.fitBounds(bounds, { padding: 80, maxZoom: 6, duration: 900 });
   }
+}
+
+/** The storm chip on the level row while tracks are drawn, after the
+ * run's own groups; gone, with the sheet closed, while they are off. Keyed
+ * on the index and the switch, not on the storms drawn, so it holds still
+ * while their tracks load. */
+function renderTcLevelGroup(): void {
+  const shown = activeCase === null && !view.marks.tc.off && (tcLoaded?.index.storms.length ?? 0) > 0;
+  if (!shown) {
+    if (tcSheetControl.isOpen()) tcSheetControl.close();
+    if (tcLevelGroup.root.isConnected) {
+      tcLevelGroup.root.remove();
+      levelRow.hidden = levelRow.childElementCount === 0;
+    }
+    return;
+  }
+  const focus = view.marks.tc.storm;
+  const entry = focus === null ? null : tcLoaded?.index.storms.find((storm) => storm.id === focus);
+  tcLevelGroup.chip.textContent = focus === null ? "ALL" : (entry?.name?.toUpperCase() ?? focus);
+  tcLevelGroup.chip.setAttribute("aria-label", t("tcOptionsAria"));
+  if (!tcLevelGroup.root.isConnected) levelRow.append(tcLevelGroup.root);
+  levelRow.hidden = false;
 }
 
 /** Turn one key on or off within a "null means all" set. */
@@ -7419,7 +7467,6 @@ function renderTcSheet(): void {
     {
       index: tcLoaded?.index ?? null,
       selected: view.marks.tc.storm,
-      hidden: view.marks.tc.off,
       potential: tcPotential,
       agencies: new Set(tcAgencyKeys().filter((key) => view.marks.tc.agencies === null || view.marks.tc.agencies.includes(key))),
       models: new Set(tcModelKeys().filter((key) => view.marks.tc.models === null || view.marks.tc.models.includes(key))),
@@ -7457,11 +7504,6 @@ function renderTcSheet(): void {
       },
       onPotential(on) {
         tcPotential = on;
-        void applyTcView();
-      },
-      onHidden(hidden) {
-        view.marks.tc.off = hidden;
-        syncUrl();
         void applyTcView();
       },
     },
@@ -8030,6 +8072,11 @@ radarTile.addEventListener("click", () => {
 });
 
 
+tcTile.addEventListener("click", () => {
+  view.marks.tc = { ...view.marks.tc, off: !view.marks.tc.off };
+  syncUrl();
+  void applyTcView();
+});
 soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
 synopTile.addEventListener("click", () => toggleStationProduct("synop"));

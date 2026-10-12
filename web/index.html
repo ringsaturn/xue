@@ -731,15 +731,15 @@
         </button>
         </div>
         <div class="rail-section" data-section="mark" role="group" data-i18n-aria="markSectionAria" aria-label="Marks">
-        <!-- The three point products, marks over whatever is on screen,
-             none of them a layer: the tropical cyclone tracks (a sheet
-             trigger — which storms, agencies and models to draw is chosen
-             there; pressed while tracks are drawn; hidden until the
-             product lists a system), the radiosonde soundings (a balloon
-             over its trace) and the airport observations (a wind sock),
-             each its own switch, hidden until its product has loaded and
-             off until it is pressed. -->
-        <button id="tc-tile" type="button" data-dialog data-i18n-tip="tcTileTip" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" hidden>
+        <!-- The point products, marks over whatever is on screen, none of
+             them a layer, each its own switch: the tropical cyclone tracks
+             (on by default, hidden until the product lists a system; which
+             storms, agencies and models to draw is chosen from the TC chip
+             on the level row while they are drawn), the radiosonde
+             soundings (a balloon over its trace) and the airport
+             observations (a wind sock), hidden until their product has
+             loaded and off until pressed. -->
+        <button id="tc-tile" type="button" data-toggle data-i18n-tip="tcTileTip" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12m-2.2 0a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0" /><path d="M14.2 12c0-4.2-2.6-7.5-6.6-8.6" /><path d="M9.8 12c0 4.2 2.6 7.5 6.6 8.6" /><path d="M12 9.8c4.2 0 7.5 2.6 8.6 6.6" /><path d="M12 14.2c-4.2 0-7.5-2.6-8.6-6.6" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTc">C</b>
           <span class="rail-name"><span>TC</span> <small data-i18n="varTc">TRACKS</small></span>

@@ -13,7 +13,6 @@ interface TcPanelState {
   index: TcIndex | null;
   /** The focused storm, or null for every named system. */
   selected: string | null;
-  hidden: boolean;
   potential: boolean;
   agencies: ReadonlySet<string>;
   models: ReadonlySet<string>;
@@ -34,7 +33,6 @@ interface TcPanelHandlers {
   onMembers(on: boolean): void;
   onBest(on: boolean): void;
   onPotential(on: boolean): void;
-  onHidden(hidden: boolean): void;
 }
 
 function row(
@@ -126,7 +124,6 @@ export function renderTcPanel(
   const named = storms.filter((entry) => entry.level === "A");
   const disturbances = storms.filter((entry) => entry.level === "B");
   const potential = storms.filter((entry) => entry.level === "C");
-  const drawn = !state.hidden;
 
   if (
     named.length + disturbances.length === 0 &&
@@ -138,13 +135,13 @@ export function renderTcPanel(
     children.push(none);
   } else {
     children.push(
-      row(t("tcAllSystems"), null, drawn && state.selected === null, () =>
+      row(t("tcAllSystems"), null, state.selected === null, () =>
         handlers.onSelect(null),
       ),
     );
     for (const entry of named) {
       children.push(
-        stormRow(entry, drawn && state.selected === entry.id, () =>
+        stormRow(entry, state.selected === entry.id, () =>
           handlers.onSelect(entry.id),
         ),
       );
@@ -153,7 +150,7 @@ export function renderTcPanel(
       children.push(group(t("tcDisturbances")));
       for (const entry of disturbances) {
         children.push(
-          stormRow(entry, drawn && state.selected === entry.id, () =>
+          stormRow(entry, state.selected === entry.id, () =>
             handlers.onSelect(entry.id),
           ),
         );
@@ -173,7 +170,7 @@ export function renderTcPanel(
     if (state.potential) {
       for (const entry of potential) {
         children.push(
-          stormRow(entry, drawn && state.selected === entry.id, () =>
+          stormRow(entry, state.selected === entry.id, () =>
             handlers.onSelect(entry.id),
           ),
         );
@@ -221,11 +218,6 @@ export function renderTcPanel(
     chips.className = "tc-chips";
     chips.append(
       chip(t("tcBest"), state.best, null, () => handlers.onBest(!state.best)),
-    );
-    chips.append(
-      chip(state.hidden ? t("tcShow") : t("tcHide"), state.hidden, null, () =>
-        handlers.onHidden(!state.hidden),
-      ),
     );
     children.push(chips);
   }

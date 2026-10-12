@@ -412,8 +412,7 @@ export const pt: Record<MessageKey, string> = {
   tcModels: "Trajetórias de modelos",
   tcMembers: "Membros do conjunto",
   tcBest: "Melhor trajetória",
-  tcHide: "Ocultar trajetórias",
-  tcShow: "Mostrar trajetórias",
+  tcOptionsAria: "Opções de ciclones",
 
   soundingTileTip: "Radiossondagens",
   varSounding: "ALTITUDE",

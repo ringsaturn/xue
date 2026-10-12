@@ -391,7 +391,9 @@ Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
 `#field-sheet`, whose fire group lists the three fire fields — only the
 hotspot is a core tile; on NASA GIBS its two colour tiles alone), **overlays** (switches: pressure lines, particles, a
-volume, the experiment's derived layers), **marks** (storms, soundings, airports, stations, fires). Switches carry
+volume, the experiment's derived layers), **marks** (switches: storms,
+soundings, airports, stations, fires; the storms' options hang from a TC
+chip on the level row while tracks are drawn). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
 `syncFieldTiles` hides unshipped tiles and writes a generic one for an
 on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px

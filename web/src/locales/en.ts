@@ -652,8 +652,7 @@ export const en = {
   tcModels: "Model tracks",
   tcMembers: "Ensemble members",
   tcBest: "Best track",
-  tcHide: "Hide tracks",
-  tcShow: "Show tracks",
+  tcOptionsAria: "Storm options",
 
   /** The point products drawn as station marks over whatever is on
    * screen (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`): the

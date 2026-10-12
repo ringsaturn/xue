@@ -407,8 +407,7 @@ export const zhHant: Record<MessageKey, string> = {
   tcModels: "模式路徑",
   tcMembers: "系集成員",
   tcBest: "最佳路徑",
-  tcHide: "隱藏路徑",
-  tcShow: "顯示路徑",
+  tcOptionsAria: "颱風選項",
 
   soundingTileTip: "無線電探空",
   varSounding: "高空",

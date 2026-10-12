@@ -412,8 +412,7 @@ export const de: Record<MessageKey, string> = {
   tcModels: "Modellzugbahnen",
   tcMembers: "Ensemble-Member",
   tcBest: "Best Track",
-  tcHide: "Zugbahnen ausblenden",
-  tcShow: "Zugbahnen zeigen",
+  tcOptionsAria: "Sturmoptionen",
 
   soundingTileTip: "Radiosondenaufstiege",
   varSounding: "HÖHENLUFT",

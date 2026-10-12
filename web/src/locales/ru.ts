@@ -414,8 +414,7 @@ export const ru: Record<MessageKey, string> = {
   tcModels: "Треки моделей",
   tcMembers: "Члены ансамбля",
   tcBest: "Лучший трек",
-  tcHide: "Скрыть треки",
-  tcShow: "Показать треки",
+  tcOptionsAria: "Настройки циклонов",
 
   soundingTileTip: "Радиозондирование",
   varSounding: "ВЫСОТА",
