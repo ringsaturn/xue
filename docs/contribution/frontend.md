@@ -31,7 +31,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
-| `hotspot.ts`, `firewx.ts` | The fire fields (`?derived=`, one at a time, drawn alone on an anchor input's session): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`). |
+| `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`). |
 | `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
@@ -478,7 +478,7 @@ hidden and pinned models are `localStorage`.
   pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
   and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
-  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`, `?derived=`, `?gibs=`,
+  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`, `?gibs=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never

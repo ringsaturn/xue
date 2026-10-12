@@ -1,4 +1,4 @@
-/** The fire layers the shell derives (`?derived=`): the 3.9 µm hotspot
+/** The fire fields the shell derives: the 3.9 µm hotspot
  * test (hotspot.ts) on a synthetic disk, and the Fosberg index and the
  * dry-and-gusty alert (firewx.ts) on synthetic surface fields. */
 

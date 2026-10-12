@@ -6430,7 +6430,7 @@ function syncUrl(): void {
   // The imagery dataset has no field, lines or overlays to name.
   if (imageryMode()) {
     const params = new URLSearchParams(withScene);
-    for (const key of ["type", "lines", "particles", "derived", "volume"]) params.delete(key);
+    for (const key of ["type", "lines", "particles", "volume"]) params.delete(key);
     withScene = `?${params.toString()}`;
   }
   if (withScene === window.location.search) return;

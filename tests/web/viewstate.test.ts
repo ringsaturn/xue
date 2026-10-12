@@ -49,16 +49,12 @@ describe("parseView", () => {
     expect(parseView("?type=temp", { field: "prate", lines: "prmsl", particles: true }).view.lines).toBeNull();
   });
 
-  it("reads one fire field, the first named", () => {
-    expect(parseView("?derived=fosberg,hotspot", DEFAULTS).view.derived).toEqual({ inflow: false, front: false, hotspot: true, ffwi: false, fwalert: false });
-    const { view } = parseView("?derived=fosberg,bogus", DEFAULTS);
-    expect(view.derived).toEqual({ inflow: false, front: false, hotspot: false, ffwi: true, fwalert: false });
-  });
-
-  it("opens a fire field on its anchor, whatever field is named", () => {
-    expect(parseView("?type=precip&derived=ffwi", DEFAULTS).view).toMatchObject({ field: "tmp2m", lines: null });
-    expect(parseView("?derived=hotspot&lines=pressure", DEFAULTS).view).toMatchObject({ field: "ir039", lines: "prmsl" });
-    expect(parseView("?derived=hotspot", DEFAULTS).fieldRequested).toBe(true);
+  it("names no fire field in the link", () => {
+    const { view } = parseView("?model=gfs&type=temp", DEFAULTS);
+    view.derived.ffwi = true;
+    expect(searchForView(view, "?model=gfs&type=temp", { model: "gfs", caseId: null, experimentEnabled: false, particlesChosen: false }, "prate")).toBe(
+      "?model=gfs&type=temp",
+    );
   });
 
   it("reads the overlays and the marks", () => {
@@ -81,8 +77,6 @@ describe("searchForView", () => {
     "?model=gfs&type=precip&x=inflow",
     "?model=gfs&type=precip&x=none",
     "?model=gfs&type=precip&stations=snd",
-    "?model=himawari&type=shortwave&derived=hotspot",
-    "?model=gfs&type=temp&derived=fwalert",
     "?model=gfs&type=precip&stations=snd%2Capt",
     "?model=gfs&type=precip&tc=off",
     "?model=gfs&type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",

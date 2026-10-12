@@ -467,32 +467,27 @@ fall back to defaults rather than fail, so a constructed link always opens.
   of the two are drawn (the rail's two toggle tiles rewrite it). A look at
   how far the published data goes, not a product; the layers are the
   ordinary ones and `?type=` / `?lines=` still pick them.
-- `?derived=hotspot|ffwi|fwalert` (comma-joined for more than one; read
-  only together with `?x=`, which they stay behind for now) — fire
-  layers computed in the browser from published bundles and drawn over
-  whatever field is on screen; each shows only where the run ships its
-  inputs, and nothing is published for it. `hotspot`: on a geostationary
-  disk, cells where the 3.9 − 10.4 µm difference stands at least 10 K and
-  four standard deviations above the clear cells of the 11 × 11 cells
-  around it (or 10 K above them with the 3.9 µm reading over 320 K by
-  day, 310 K by night), cloud by day (10.4 µm at or under 275 K) left out
-  — the contextual test of the operational fire products cut down to two
-  channels on a 0.04° grid; needs `ir039` and `ir104`. `ffwi`: the Fosberg
-  fire weather index (0–100) from `tmp2m`, `dpt2m` and `wind10m`, a
-  translucent ramp with a line at 50. `fwalert`: relative humidity under
-  30 % with a gust of 10 m/s or more (`tmp2m`, `dpt2m`, `gust`), an
-  outlined red wash. `fire`, `fosberg`, `alert` and `redflag` are accepted
-  spellings; absent or `off` draws none. Not `?x=`: these need no
-  experiment.
-- `?gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
+- `?model=gibs&gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
   `snpp-fc|noaa20-fc|noaa21-fc` (VIIRS M11-I2-I1) or `terra-721|aqua-721`
-  (MODIS bands 7-2-1) — the NASA GIBS daily corrected-reflectance picture
-  of that platform drawn under the field (read only together with `?x=`,
-  which it stays behind for now), fetched from GIBS directly
-  (nothing is published for it): the day is the playhead's UTC day, today's
-  for a frame after today. The false colour shows burn scars dark red and
-  active fires bright. Chosen in the field sheet's last group; absent or
-  `off` draws none.
+  (MODIS bands 7-2-1) — NASA GIBS's daily corrected-reflectance picture
+  of that platform, a dataset of its own in the model switch, fetched
+  from GIBS directly (nothing is published for it): the timeline is the
+  last seven UTC days, one picture a day, today's filling in as the
+  orbiters pass. The false colour shows burn scars dark red and active
+  fires bright.
+- Fire fields (no query parameter; a page opens on the published field):
+  computed in the browser from published bundles, each a field of its own
+  picked on the rail or in the field sheet's fire group, shown only where
+  the run ships its inputs. Hotspot: on a geostationary disk, cells whose
+  3.9 µm reading is over 310 K by day or 305 K by night with the
+  3.9 − 10.4 µm difference over 10 K, standing at least 10 K and four
+  standard deviations above the clear cells of the 11 × 11 cells around
+  it (or 10 K above them over 320 K by day, 310 K by night), cloud by day
+  (10.4 µm at or under 275 K) and sun glint within 12° of the specular
+  point left out; needs `ir039` and `ir104`. FFWI: the Fosberg fire
+  weather index (0–100) from `tmp2m`, `dpt2m` and `wind10m`. Red flag:
+  relative humidity under 30 % with a gust of 10 m/s or more (`tmp2m`,
+  `dpt2m`, `gust`). Both over land only where the run ships `soilw1`.
 - `#map=<zoom>/<lat>/<lon>` — the view, in the fragment (MapLibre's named
   hash; the page keeps it current on every move). Without it the page opens
   on the dataset's own region: the world for a global model, the contiguous

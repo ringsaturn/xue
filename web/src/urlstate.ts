@@ -233,10 +233,9 @@ export function searchWithExperiment(search: string, state: ExperimentState): st
 /** The fire layers the shell derives from published bundles, each a field
  * of its own: `hotspot` (the 3.9 µm contextual test on the geostationary
  * disks), `ffwi` (the Fosberg fire weather index) and `fwalert` (dry air
- * and gusts together). `?derived=ffwi` names the one on screen, which then
- * stands in for the field; absent, `off` or nothing recognised is none, and
- * of several named the first in the fixed order wins. Each shows wherever
- * the run ships its inputs. Link only, never stored. */
+ * and gusts together). The one on screen stands in for the field; each
+ * shows wherever the run ships its inputs. Neither the link nor storage
+ * names it: a page opens on the published field. */
 export const DERIVED_FIRE_IDS = ["hotspot", "ffwi", "fwalert"] as const;
 export type DerivedFireId = (typeof DERIVED_FIRE_IDS)[number];
 export type DerivedFireState = Record<DerivedFireId, boolean>;
@@ -252,42 +251,6 @@ export const FIRE_FIELD_ANCHOR: Record<DerivedFireId, ForecastBundleId> = {
 /** The fire field a state has on, or null. */
 export function fireFieldOf(state: DerivedFireState): DerivedFireId | null {
   return DERIVED_FIRE_IDS.find((id) => state[id]) ?? null;
-}
-
-const DERIVED_FIRE_ALIASES: Record<string, DerivedFireId> = {
-  hotspot: "hotspot",
-  hotspots: "hotspot",
-  fire: "hotspot",
-  fires: "hotspot",
-  ffwi: "ffwi",
-  fosberg: "ffwi",
-  fireweather: "ffwi",
-  fwalert: "fwalert",
-  alert: "fwalert",
-  redflag: "fwalert",
-};
-
-export function parseDerivedFromSearch(search: string): DerivedFireState {
-  const state: DerivedFireState = { hotspot: false, ffwi: false, fwalert: false };
-  const value = new URLSearchParams(search).get("derived");
-  if (value === null) return state;
-  for (const part of value.split(",")) {
-    const id = DERIVED_FIRE_ALIASES[part.trim().toLowerCase()];
-    if (id) state[id] = true;
-  }
-  const first = fireFieldOf(state);
-  for (const id of DERIVED_FIRE_IDS) state[id] = id === first;
-  return state;
-}
-
-/** The given query string carrying the fire field on screen, and no
- * parameter at all when none is. */
-export function searchWithDerived(search: string, state: DerivedFireState): string {
-  const params = new URLSearchParams(search);
-  const id = fireFieldOf(state);
-  if (id === null) params.delete("derived");
-  else params.set("derived", id);
-  return `?${params.toString()}`;
 }
 
 /** The NASA GIBS daily picture drawn under the field (gibs.ts):
