@@ -409,8 +409,7 @@ export const ja: Record<MessageKey, string> = {
   tcModels: "モデル進路",
   tcMembers: "アンサンブルメンバー",
   tcBest: "ベストトラック",
-  tcHide: "進路を隠す",
-  tcShow: "進路を表示",
+  tcOptionsAria: "台風の表示設定",
 
   soundingTileTip: "ラジオゾンデ観測",
   varSounding: "高層",

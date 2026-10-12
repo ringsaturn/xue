@@ -415,8 +415,7 @@ export const tr: Record<MessageKey, string> = {
   tcModels: "Model rotaları",
   tcMembers: "Topluluk üyeleri",
   tcBest: "En iyi rota",
-  tcHide: "Rotaları gizle",
-  tcShow: "Rotaları göster",
+  tcOptionsAria: "Fırtına seçenekleri",
 
   soundingTileTip: "Radyosonda ölçümleri",
   varSounding: "YÜKSEK",

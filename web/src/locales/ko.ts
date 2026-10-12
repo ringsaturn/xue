@@ -414,8 +414,7 @@ export const ko: Record<MessageKey, string> = {
   tcModels: "모델 경로",
   tcMembers: "앙상블 멤버",
   tcBest: "최적 경로",
-  tcHide: "경로 숨기기",
-  tcShow: "경로 표시",
+  tcOptionsAria: "태풍 표시 설정",
 
   soundingTileTip: "라디오존데 관측",
   varSounding: "고층",

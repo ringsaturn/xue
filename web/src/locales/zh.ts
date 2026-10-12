@@ -407,8 +407,7 @@ export const zh: Record<MessageKey, string> = {
   tcModels: "模式路径",
   tcMembers: "集合成员",
   tcBest: "最佳路径",
-  tcHide: "隐藏路径",
-  tcShow: "显示路径",
+  tcOptionsAria: "台风选项",
 
   soundingTileTip: "无线电探空",
   varSounding: "高空",

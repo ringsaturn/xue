@@ -125,7 +125,11 @@ test("the storm tile appears with the product and its sheet focuses a storm", as
   ).toBe(true);
   expect(page.url()).not.toContain("tc=");
 
-  await tile.click();
+  // The options hang from the storms' chip on the level row; the tile is
+  // the tracks' switch.
+  const chip = page.locator('.level-group[data-slot="tc"] button');
+  await expect(chip).toHaveText("ALL");
+  await chip.click();
   const sheet = page.locator("#tc-sheet");
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("button", { name: /NORBERT/ })).toBeVisible();
@@ -146,9 +150,10 @@ test("the storm tile appears with the product and its sheet focuses a storm", as
     .poll(() => new URL(page.url()).searchParams.get("tc"))
     .toBe("EP142026");
   await expect(tile).toHaveAttribute("aria-pressed", "true");
+  await expect(chip).toHaveText("NORBERT");
 });
 
-test("?tc= and ?tcagency= open a focused storm with one centre, and hiding writes tc=off", async ({
+test("?tc= and ?tcagency= open a focused storm with one centre, and the tile switches the tracks off and back", async ({
   page,
 }) => {
   // The phone project walks the sheet at a couple of seconds a step.
@@ -166,7 +171,8 @@ test("?tc= and ?tcagency= open a focused storm with one centre, and hiding write
     .poll(() => new URL(page.url()).searchParams.get("tc"))
     .toBe("EP142026");
 
-  await tile.click();
+  const chip = page.locator('.level-group[data-slot="tc"] button');
+  await chip.click();
   const sheet = page.locator("#tc-sheet");
   await expect(
     sheet.getByRole("button", { name: "NHC", exact: true }),
@@ -182,14 +188,23 @@ test("?tc= and ?tcagency= open a focused storm with one centre, and hiding write
     .poll(() => new URL(page.url()).searchParams.has("tcagency"))
     .toBe(false);
 
-  await sheet.getByRole("button", { name: "Hide tracks" }).click();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // One press of the tile takes the tracks and their chip away…
+  await tile.click();
   await expect
     .poll(() => new URL(page.url()).searchParams.get("tc"))
     .toBe("off");
   await expect(tile).toHaveAttribute("aria-pressed", "false");
-  await expect(
-    sheet.getByRole("button", { name: "Show tracks" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(chip).toBeHidden();
+  // …and another brings them back on the storm that was focused.
+  await tile.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("tc"))
+    .toBe("EP142026");
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
+  await expect(chip).toBeVisible();
 });
 
 test("without the product the tile stays hidden", async ({ page }) => {
