@@ -13,12 +13,15 @@ CLI:
   xue_stac.py storms                       the tropical cyclone index headline
   xue_stac.py sounding 47646               one radiosonde station's newest ascent (WMO number)
   xue_stac.py airport RJTT                 one airport's newest METARs and its TAF
+  xue_stac.py fires 46 50 110 124 [--from T] [--to T]   FIRMS active fires in a box, per day and the strongest
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+from datetime import datetime, timezone
 from functools import lru_cache
 from urllib.parse import urljoin
 
@@ -28,7 +31,7 @@ import requests
 ROOT = "https://dataset.ringsaturn.me/xue/"
 FORECAST = ("gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr")
 OBSERVATION = ("mrms", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat")
-POINT = ("sounding", "airport", "tc")
+POINT = ("sounding", "airport", "tc", "fire")
 
 _session = requests.Session()
 _session.headers["User-Agent"] = "xue-synoptic-analysis-skill/1"
@@ -237,6 +240,37 @@ def nearest_airports(lat: float, lon: float, n: int = 3) -> list[dict]:
     return [dict(r, distance_km=round(_km(lat, lon, r["lat"], r["lon"]))) for r in rows[:n]]
 
 
+def fires(south: float, north: float, west: float, east: float, t_from: str | None = None, t_to: str | None = None) -> list[dict]:
+    """FIRMS detections in a box over the live window (seven days), oldest
+    first: one Range request per sensor over the hours asked for. Each is
+    {sensor, time, lat, lon, frp (MW), bt (K), conf (l/n/h), dn (D/N)}."""
+    idx, item = point_index("fire")
+    lo = datetime.fromisoformat(t_from.replace("Z", "+00:00")).timestamp() if t_from else -math.inf
+    hi = datetime.fromisoformat(t_to.replace("Z", "+00:00")).timestamp() if t_to else math.inf
+    out = []
+    for n, sensor in enumerate(idx["sensors"]):
+        rows = [r for r in idx["hours"] if r[0] == n
+                and datetime.fromisoformat(r[1].replace("Z", "+00:00")).timestamp() + 3600 > lo
+                and datetime.fromisoformat(r[1].replace("Z", "+00:00")).timestamp() <= hi]
+        if not rows:
+            continue
+        first, last = rows[0][4], rows[-1][4] + rows[-1][5]
+        url = asset_url(item, sensor["id"])
+        r = _session.get(url, headers={"Range": f"bytes={first}-{last - 1}"}, timeout=120)
+        r.raise_for_status()
+        body = r.content if r.status_code == 206 else r.content[first:last]
+        for line in body.splitlines():
+            ln = json.loads(line)
+            for i in range(ln["n"]):
+                lat, lon, t = ln["lat"][i] / 1e4, ln["lon"][i] / 1e4, ln["hour"] + ln["t"][i]
+                if south <= lat <= north and west <= lon <= east and lo <= t <= hi:
+                    out.append({"sensor": sensor["id"], "time": datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+                                "lat": lat, "lon": lon, "frp": ln["frp"][i] / 10, "bt": ln["bt"][i] / 10,
+                                "conf": ln["conf"][i], "dn": ln["dn"][i]})
+    out.sort(key=lambda f: (f["time"], f["sensor"], f["lat"], f["lon"]))
+    return out
+
+
 def storms() -> tuple[list[dict], dict]:
     idx, item = point_index("tc")
     return idx["storms"], item
@@ -273,6 +307,9 @@ def main(argv=None):
     p = sub.add_parser("storm"); p.add_argument("id")
     p = sub.add_parser("sounding"); p.add_argument("station")
     p = sub.add_parser("airport"); p.add_argument("icao")
+    p = sub.add_parser("fires")
+    p.add_argument("south", type=float); p.add_argument("north", type=float); p.add_argument("west", type=float); p.add_argument("east", type=float)
+    p.add_argument("--from", dest="t_from"); p.add_argument("--to", dest="t_to")
     a = ap.parse_args(argv)
 
     if a.cmd == "sources":
@@ -326,6 +363,15 @@ def main(argv=None):
         _print(sounding(a.station))
     elif a.cmd == "airport":
         _print(airport(a.icao))
+    elif a.cmd == "fires":
+        fs = fires(a.south, a.north, a.west, a.east, a.t_from, a.t_to)
+        days: dict[str, list[dict]] = {}
+        for f in fs:
+            days.setdefault(f["time"][:10], []).append(f)
+        for day, group in days.items():
+            print(f"{day}  {len(group):6d} detections  FRP sum {sum(f['frp'] for f in group):9.1f} MW  max {max(f['frp'] for f in group):7.1f} MW")
+        for f in sorted(fs, key=lambda f: -f["frp"])[:10]:
+            print(f"  {f['time']} {f['sensor']:13} {f['lat']:8.4f} {f['lon']:9.4f}  FRP {f['frp']:7.1f} MW  BT {f['bt']:5.1f} K  {f['conf']}{f['dn']}")
 
 
 if __name__ == "__main__":

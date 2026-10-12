@@ -2,14 +2,14 @@
 """The standard figure set from a case directory written by case_data.py.
 
   case_plots.py DIR [--out DIR/figures] [--tz 9] [--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru]
-      [--figures tracks,upper,verify,surface,moisture,meteogram,skewt,nowcast,ensemble]
+      [--figures tracks,upper,verify,surface,moisture,meteogram,skewt,nowcast,ensemble,fires]
       [--map-times T1,T2] [--point-name 羽田] [--mark 2026-09-21T08Z] [--window T1,T2]
       [--span T1,T2] [--skewt 47646,47678,47971] [--map-box S N W E] [--borders MNG,CHN]
       [--font "Hiragino Sans GB"]
 
 Each figure is drawn only when the directory has what it needs (tracks and
 ensemble need storm.json / ens.json, meteogram needs point.npz, skewt needs
-soundings.json, nowcast needs nowcast.npz, the maps need fields.npz with the
+soundings.json, nowcast needs nowcast.npz, fires needs fires.json, the maps need fields.npz with the
 bundles they read: prmsl, hgt500, wind250, wind850, qflux850, thetae850,
 prate, wind10m, gust). Needs matplotlib. The coastline is Natural Earth 50 m,
 downloaded once into ~/.cache/xue-synoptic/. `--borders MNG,CHN` adds those
@@ -160,11 +160,12 @@ L = {
 
 class Case:
     def __init__(self, d: Path, tz: float, lang: str, borders: tuple[str, ...] = ()):
-        self.d = d; self.tz = timezone(timedelta(hours=tz)); self.tzh = tz; self.T = L[lang]
+        self.d = d; self.tz = timezone(timedelta(hours=tz)); self.tzh = tz; self.T = L[lang]; self.lang = lang
         self.meta = json.loads((d / "meta.json").read_text())
         self.fields = np.load(d / "fields.npz") if (d / "fields.npz").exists() else None
         self.point = np.load(d / "point.npz") if (d / "point.npz").exists() else None
         self.now = np.load(d / "nowcast.npz") if (d / "nowcast.npz").exists() else None
+        self.fires = C._load_json(d, "fires.json")
         self.storm = C._load_json(d, "storm.json"); self.ens = C._load_json(d, "ens.json"); self.snd = C._load_json(d, "soundings.json")
         self.coast = load_coast()
         self.borders = [ln for iso in borders for ln in load_border(iso)]
@@ -484,6 +485,42 @@ def fig_nowcast(case: Case, out: Path, marks, plt):
     fig.tight_layout(); fig.savefig(out / "fig_nowcast.png"); plt.close(fig)
 
 
+FIRE_LABELS = {
+    "zh": ("FIRMS 火点逐日推进（颜色 = UTC 日期，大小 = FRP）", "每小时火点 FRP 合计（MW）", "火点数"),
+    "zh-Hant": ("FIRMS 火點逐日推進（顏色 = UTC 日期，大小 = FRP）", "每小時火點 FRP 合計（MW）", "火點數"),
+    "ja": ("FIRMS 火災検知の日別推移（色 = UTC 日付、大きさ = FRP）", "1 時間ごとの FRP 合計（MW）", "検知数"),
+    "en": ("FIRMS active fires by day (colour = UTC day, size = FRP)", "FRP summed per hour (MW)", "detections"),
+}
+
+
+def fig_fires(case: Case, out: Path, box, marks, plt):
+    """Where it burned, day by day, and how hard, hour by hour: the fire
+    product's detections in the box (NASA FIRMS, VIIRS and MODIS)."""
+    title, frp_label, count_label = FIRE_LABELS.get(case.lang, FIRE_LABELS["en"])
+    fs = case.fires
+    days = sorted({f["time"][:10] for f in fs})
+    cmap = plt.get_cmap("plasma", max(1, len(days)))
+    fig, axs = plt.subplots(1, 2, figsize=(13, 5.2), gridspec_kw={"width_ratios": [1.1, 1]})
+    if box is None:
+        lats = [f["lat"] for f in fs]; lons = [f["lon"] for f in fs]
+        box = (min(lats) - 0.5, max(lats) + 0.5, min(lons) - 0.5, max(lons) + 0.5)
+    setmap(axs[0], box, case, title, marks)
+    for i, day in enumerate(days):
+        group = [f for f in fs if f["time"].startswith(day)]
+        axs[0].scatter([f["lon"] for f in group], [f["lat"] for f in group], s=[4 + min(f["frp"], 200) / 4 for f in group],
+                       color=cmap(i), edgecolors="none", alpha=0.8, label=day[5:], zorder=6)
+    axs[0].legend(fontsize=7, loc="best", markerscale=1.5)
+    hours: dict[str, list[float]] = {}
+    for f in fs:
+        hours.setdefault(f["time"][:13], []).append(f["frp"])
+    ts = [C.parse_time(h + ":00Z").astimezone(case.tz) for h in sorted(hours)]
+    axs[1].bar(ts, [sum(hours[h]) for h in sorted(hours)], width=1 / 24, color="#c0392b")
+    axs[1].set_ylabel(frp_label)
+    twin = axs[1].twinx(); twin.plot(ts, [len(hours[h]) for h in sorted(hours)], ".", color="0.3", ms=4); twin.set_ylabel(count_label)
+    axs[1].set_xlabel(f"UTC{case.tzh:+g}" if case.tzh else "UTC")
+    fig.autofmt_xdate(); fig.tight_layout(); fig.savefig(out / "fig_fires.png"); plt.close(fig)
+
+
 def fig_ensemble(case: Case, out: Path, name, t_from, t_to, mark, plt):
     T = case.T; lat, lon = case.meta["point"]
     res = C.ensemble_spread(case.ens, lat, lon, [], t_from, t_to, box=case.meta.get("box"))
@@ -532,7 +569,7 @@ def main(argv=None):
     box = tuple(a.map_box) if a.map_box else tuple(case.meta["box"]) if case.meta.get("box") else None
     marks = [tuple(case.meta["point"])] if case.meta.get("point") else []
     times = [C.norm_time(t) for t in a.map_times.split(",")] if a.map_times else ([case.meta["times"][0], case.meta["times"][-1]] if len(case.meta.get("times", [])) > 1 else case.meta.get("times", []))
-    want = set(a.figures.split(",")) if a.figures != "all" else {"tracks", "upper", "verify", "surface", "moisture", "meteogram", "skewt", "nowcast", "ensemble"}
+    want = set(a.figures.split(",")) if a.figures != "all" else {"tracks", "upper", "verify", "surface", "moisture", "meteogram", "skewt", "nowcast", "ensemble", "fires"}
     window = a.window.split(",") if a.window else None
     done = []
     if "tracks" in want and case.storm and box:
@@ -551,6 +588,8 @@ def main(argv=None):
         fig_skewt(case, out, a.skewt.split(",") if a.skewt else None, a.skewt_time, plt); done.append("skewt")
     if "nowcast" in want and case.now is not None:
         fig_nowcast(case, out, marks, plt); done.append("nowcast")
+    if "fires" in want and case.fires:
+        fig_fires(case, out, box, marks, plt); done.append("fires")
     if "ensemble" in want and case.ens and case.meta.get("point"):
         fig_ensemble(case, out, a.point_name, a.ens_from, a.ens_to, a.mark, plt); done.append("ensemble")
     print(f"wrote {out}: {', '.join(done)}")

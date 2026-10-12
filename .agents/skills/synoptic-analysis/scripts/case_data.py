@@ -7,6 +7,7 @@ routine diagnostics on it offline.
       [--point 35.55 139.78] [--point-sources gfs,ecmwf,ifshres] \
       [--storm WP242026] [--soundings 47646,47678 | --soundings-near 35.55,139.78,12] \
       [--airport RJTT] [--satellite himawari[:ir104]] [--radar jma] [--nowcast-box S N W E]
+      [--fires [FROM,TO]]
       every store read is a few range requests; a full case is 1-3 minutes.
   case_data.py soundings DIR [--time 2026-09-19T00Z] [--tendency]
       mandatory-level table for every fetched station, and the 12/24 h changes.
@@ -22,7 +23,9 @@ The directory holds: meta.json (what was asked, the run ids), fields.npz
 point.npz (`<src>:<bundle>:<var>` series plus `<src>:<bundle>:time` as epoch
 seconds), storm.json (the tc product's record), ens.json (its ensembles
 decoded to per-member tracks), soundings.json (station lines keyed by WMO
-number), airport.json, nowcast.npz (one satellite and/or radar frame).
+number), airport.json, nowcast.npz (one satellite and/or radar frame),
+fires.json (FIRMS detections in the box over the fire product's seven-day
+window, or FROM,TO within it).
 `case_plots.py` draws the standard figure set from the same directory, and
 the functions below are importable for anything else.
 """
@@ -215,6 +218,11 @@ def cmd_fetch(a):
         ap = X.airport(a.airport)
         (d / "airport.json").write_text(json.dumps(ap))
         print(f"  airport {a.airport}: {len(ap['metars']) if ap else 0} METARs", file=sys.stderr)
+    if a.fires is not None and a.box:
+        t_from, _, t_to = a.fires.partition(",")
+        fs = X.fires(*a.box, norm_time(t_from) if t_from else None, norm_time(t_to) if t_to else None)
+        (d / "fires.json").write_text(json.dumps(fs))
+        print(f"  fires: {len(fs)} detections", file=sys.stderr)
     if a.satellite or a.radar:
         nc = {}
         fetch_nowcast(a.satellite, a.radar, a.nowcast_box or a.box, nc, meta)
@@ -493,6 +501,7 @@ def main(argv=None):
     p.add_argument("--storm"); p.add_argument("--soundings"); p.add_argument("--soundings-near", metavar="LAT,LON,N")
     p.add_argument("--airport"); p.add_argument("--satellite", metavar="SOURCE[:VAR]"); p.add_argument("--radar", metavar="SOURCE[:VAR]")
     p.add_argument("--nowcast-box", type=float, nargs=4, metavar=("S", "N", "W", "E"))
+    p.add_argument("--fires", nargs="?", const="", metavar="FROM,TO", help="FIRMS detections in --box (the whole live window, or FROM,TO)")
     p.set_defaults(fn=cmd_fetch)
     p = sub.add_parser("soundings"); p.add_argument("dir"); p.add_argument("--time"); p.add_argument("--tendency", action="store_true"); p.set_defaults(fn=cmd_soundings)
     p = sub.add_parser("verify"); p.add_argument("dir"); p.add_argument("--source"); p.add_argument("--time"); p.set_defaults(fn=cmd_verify)

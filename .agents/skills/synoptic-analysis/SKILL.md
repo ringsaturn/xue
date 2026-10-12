@@ -75,6 +75,7 @@ python scripts/xue_stac.py storms                       # every tracked TC with 
 python scripts/xue_stac.py storm WP242026               # best track + agency + model forecasts
 python scripts/xue_stac.py sounding 47646               # newest ascent, fixed point (references/sources.md)
 python scripts/xue_stac.py airport RJTT                 # 24 h of METARs and the TAF
+python scripts/xue_stac.py fires 46 50 110 124          # FIRMS active fires in a box: per UTC day + the strongest
 python scripts/xue_stac.py box himawari ir104 20 45 120 150   # cloud-top statistics (K)
 python scripts/xue_stac.py box mrms cref 30 45 -100 -80 --time 2026-09-19T05:00Z
 ```
@@ -108,7 +109,8 @@ python scripts/case_data.py fetch <dir>/case --box 22 48 125 155 \
     --times 2026-09-19T00Z,2026-09-21T06Z,2026-09-21T12Z --sources gfs,ecmwf \
     --point 35.553 139.781 --point-sources gfs,ecmwf,ifshres \
     --storm WP242026 --soundings-near 35.55,139.78,10 --soundings 47971,54857 \
-    --airport RJTT --satellite himawari --radar jma --nowcast-box 30 40 132 146
+    --airport RJTT --satellite himawari --radar jma --nowcast-box 30 40 132 146 \
+    --fires                                                    # FIRMS detections in --box (seven days, or --fires FROM,TO)
 python scripts/case_data.py soundings <dir>/case --tendency      # mandatory levels per station + 12 h changes
 python scripts/case_data.py verify <dir>/case                    # model analysis at the stations vs the ascents
 python scripts/case_data.py ensemble <dir>/case 35.553 139.781 --times 2026-09-21T06Z,2026-09-21T12Z \
@@ -130,7 +132,8 @@ directory layout and the importable functions (`level`, `ascent_at`,
 `profile`, `decode_ensembles`, `ensemble_spread`, `point_frame`, `daily`,
 `accumulate`) are documented in `case_data.py`'s docstring. `case_plots.py`
 writes `fig_tracks`, `fig_upper`, `fig_verify`, `fig_surface`,
-`fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast` and
+`fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast`,
+`fig_fires` (daily progression map and FRP per hour) and
 `fig_ensemble` (PNG) into `--out` (default `<case dir>/figures/`), each only when the directory
 holds what it needs; labels follow the xue viewer's eleven UI locales (`--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru`,
 `zh` by default), times in the `--tz` zone. The report that references those files
