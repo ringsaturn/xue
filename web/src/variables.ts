@@ -253,6 +253,40 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
   });
 }
 
+/** The soil layers of one quantity, top first: the same chart at four
+ * depths, so they differ only in the layer's index. The layer is an
+ * index, not a depth (levels.ts), and the copy says so: "LAYER 1", never
+ * "0–10 CM". A level-row family like the cloud covers, with no soil at the
+ * codebook's bottom (`floorIsNoData`). */
+function soil(entry: {
+  prefix: "tsoil" | "soilw";
+  group: FieldGroup;
+  word: string;
+  title: string;
+  bufferTitle: string;
+  ground: GroundId;
+  urlWords: readonly string[];
+  showcaseWord: string;
+}): VariableSpec[] {
+  return ([1, 2, 3, 4] as const).map((layer) =>
+    surface({
+      id: `${entry.prefix}${layer}`,
+      chart: `${entry.prefix}${layer}`,
+      family: entry.prefix,
+      group: entry.group,
+      code: `${entry.word} L${layer}`,
+      title: [entry.title, `Layer ${layer}`],
+      bufferTitle: entry.bufferTitle,
+      labelKey: `varLabel${entry.prefix === "tsoil" ? "Tsoil" : "Soilw"}${layer}`,
+      floorIsNoData: true,
+      ground: entry.ground,
+      urlName: `${entry.prefix}${layer}`,
+      urlAliases: entry.urlWords.map((word) => `${word}${layer}`),
+      showcaseCode: `${entry.showcaseWord} L${layer}`,
+    }),
+  );
+}
+
 /** The pressure family, from the level registry: drawn as lines, never a
  * field, so no group; the sea level pressure is the one meteogram reads. */
 function pressure(): VariableSpec[] {
@@ -351,6 +385,17 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "sst",
     urlAliases: ["skin", "skintemp", "tsfc"],
     showcaseCode: "SST",
+  }),
+  // The soil temperature is a coat like the air's, on the 2 m ramp.
+  ...soil({
+    prefix: "tsoil",
+    group: "temperature",
+    word: "TSOIL",
+    title: "Soil Temperature",
+    bufferTitle: "Soil temperature buffer",
+    ground: "coat",
+    urlWords: ["soiltemp", "soiltemperature"],
+    showcaseWord: "TSOIL",
   }),
   // Moisture. The translucent washes — humidity, precipitation, cloud,
   // the reduced-visibility ramp — sit on the slate, where the map carries
@@ -516,6 +561,17 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "ptype",
     urlAliases: ["preciptype", "precipitationtype"],
     showcaseCode: "PTYPE",
+  }),
+  // The soil moisture is a wash like the humidity's, on the slate.
+  ...soil({
+    prefix: "soilw",
+    group: "moisture",
+    word: "SOILW",
+    title: "Soil Moisture",
+    bufferTitle: "Soil moisture buffer",
+    ground: "slate",
+    urlWords: ["soilmoist", "soilmoisture"],
+    showcaseWord: "SOILW",
   }),
   // Wind. The speed fields and the gust, translucent at the low end, on
   // the wind's own ground.

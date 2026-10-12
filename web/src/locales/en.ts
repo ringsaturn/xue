@@ -88,6 +88,11 @@ export const en = {
    * with the 2.5 µm cut — a size, so the same in every language. */
   varAod: "TOTAL",
   varPm: "2.5",
+  /** The soil families' tiles: the top layer heads each, and the level
+   * row picks the others by index (a layer is not a depth: the models
+   * cut the soil differently). CJK glosses name the quantity. */
+  varTsoil: "LAYER 1",
+  varSoilw: "LAYER 1",
   /** The upper-air families' tiles: relative humidity and the water vapour
    * flux have no surface member, so the gloss names the field rather than a
    * level. */
@@ -164,6 +169,10 @@ export const en = {
   // microgram per cubic metre a particulate concentration is read in.
   glyphAod: "τ",
   glyphPm: "µ",
+  // E is the station model's letter for the state of the ground; M the
+  // initial of moisture.
+  glyphTsoil: "E",
+  glyphSoilw: "M",
   glyphPressure: "P",
   // U is the WMO symbol for relative humidity; the vapour flux takes the F
   // of flux.
@@ -190,6 +199,8 @@ export const en = {
    * matter, each a family whose species and size cuts are chips. */
   tipAod: "Aerosol optical depth",
   tipPm: "Particulate matter",
+  tipTsoil: "Soil temperature",
+  tipSoilw: "Soil moisture",
   /** The satellite tile: a family tile, the infrared window and the
    * Dust RGB composite behind it. */
   tipSatellite: "Satellite imagery",
@@ -227,6 +238,9 @@ export const en = {
   fieldGroupOcean: "OCEAN",
   fieldGroupSatellite: "SATELLITE",
   fieldGroupSpace: "SPACE WEATHER",
+  fieldGroupFire: "FIRE",
+  modelGroupForecast: "FORECAST MODELS",
+  modelGroupRadar: "RADAR",
   fieldGroupOther: "OTHER",
   fieldGroupImagery: "DAILY IMAGERY · NASA GIBS",
   gibsTrueColor: "TRUE",
@@ -516,6 +530,17 @@ export const en = {
   varLabelPm25: "PM2.5 surface concentration",
   varLabelPm10: "PM10 surface concentration",
   varLabelPm10dust: "Dust PM10 surface concentration",
+  // The soil layers, by index from the surface down: the depths are the
+  // source's (GFS 0–10/10–40/40–100/100–200 cm, IFS 0–7/7–28/28–100/
+  // 100–289 cm), so no label names one.
+  varLabelTsoil1: "Soil temperature, layer 1",
+  varLabelTsoil2: "Soil temperature, layer 2",
+  varLabelTsoil3: "Soil temperature, layer 3",
+  varLabelTsoil4: "Soil temperature, layer 4",
+  varLabelSoilw1: "Volumetric soil moisture, layer 1",
+  varLabelSoilw2: "Volumetric soil moisture, layer 2",
+  varLabelSoilw3: "Volumetric soil moisture, layer 3",
+  varLabelSoilw4: "Volumetric soil moisture, layer 4",
   varLabelPrmsl: "Mean sea level pressure",
   // One string for eight levels: pressure.ts and levels.ts substitute {level}.
   varLabelHeightAtLevel: "{level} hPa geopotential height",

@@ -618,6 +618,18 @@
              scalar direction, published for a day before the vector, has
              no tile — levels.ts). The skin temperature (the SST over water
              — a thermometer over a wave) is above, with the temperatures. -->
+        <!-- The soil, two families of four layers each (L1 the top): the
+             layer is picked on the level row; the depths are the source's. -->
+        <button type="button" data-variable="tsoil1" data-family="tsoil" data-i18n-tip="tipTsoil" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 10h19" /><path d="M5 14.5h3M16 14.5h3M7 19h3M14 19h3" /><path d="M12 3v9.5" /><circle cx="12" cy="13.5" r="1.6" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphTsoil">E</b>
+          <span class="rail-name"><span>TSOIL</span> <small data-i18n="varTsoil">LAYER 1</small></span>
+        </button>
+        <button type="button" data-variable="soilw1" data-family="soilw" data-i18n-tip="tipSoilw" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8h19" /><path d="M12 11c1.8 2.3 3 3.9 3 5.4a3 3 0 0 1-6 0c0-1.5 1.2-3.1 3-5.4z" /><path d="M4 13h3M17 13h3M5 18h2M17 18h2" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphSoilw">M</b>
+          <span class="rail-name"><span>SOILW</span> <small data-i18n="varSoilw">LAYER 1</small></span>
+        </button>
         <button type="button" data-variable="icec" data-family="ice" data-i18n-tip="tipIce" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" /><path d="M12 3l-2 2M12 3l2 2M12 21l-2-2M12 21l2-2" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphIce">I</b>
@@ -835,7 +847,11 @@
         <div class="model-sheet-panel" role="dialog" aria-modal="true" data-i18n-aria="modelSwitchAria" aria-label="Dataset">
           <span class="sheet-grip" aria-hidden="true"></span>
           <p class="sheet-heading" data-i18n="modelHeading">DATASETS</p>
+          <!-- Grouped by kind of data, each heading the field sheet's look:
+               the forecasts, the aerosol run, the radar mosaics, the
+               imagers (the disks, their mosaic and NASA GIBS), the aurora. -->
           <div class="model-switch" role="group">
+            <p class="field-group-heading" data-i18n="modelGroupForecast">FORECAST MODELS</p>
             <button type="button" data-model="gfs" aria-pressed="true">
               <span class="model-name">GFS</span>
               <small>NOAA 0.25°</small>
@@ -871,11 +887,13 @@
               <small>CONUS 3KM</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <p class="field-group-heading" data-i18n="fieldGroupAerosol">AEROSOLS &amp; AIR QUALITY</p>
             <button type="button" data-model="gefsaero" aria-pressed="false">
               <span class="model-name">GEFS-AEROSOLS</span>
               <small>NOAA AEROSOL 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <p class="field-group-heading" data-i18n="modelGroupRadar">RADAR</p>
             <button type="button" data-model="mrms" aria-pressed="false">
               <span class="model-name">MRMS</span>
               <small>CONUS RADAR</small>
@@ -891,6 +909,7 @@
               <small>CHINA RADAR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <p class="field-group-heading" data-i18n="fieldGroupSatellite">SATELLITE</p>
             <button type="button" data-model="himawari" aria-pressed="false">
               <span class="model-name">HIMAWARI</span>
               <small>SATELLITE IR</small>
@@ -916,11 +935,6 @@
               <small>SATELLITE IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
-            <button type="button" data-model="aurora" aria-pressed="false">
-              <span class="model-name">AURORA</span>
-              <small>SWPC OVATION 1°</small>
-              <span class="model-check" aria-hidden="true"></span>
-            </button>
             <button type="button" data-model="geo" aria-pressed="false">
               <span class="model-name">GEO MOSAIC</span>
               <small>SATELLITE IR · ALL DISKS</small>
@@ -929,6 +943,12 @@
             <button type="button" data-model="gibs" aria-pressed="false">
               <span class="model-name">NASA GIBS</span>
               <small>DAILY IMAGERY · POLAR ORBITERS</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <p class="field-group-heading" data-i18n="fieldGroupSpace">SPACE WEATHER</p>
+            <button type="button" data-model="aurora" aria-pressed="false">
+              <span class="model-name">AURORA</span>
+              <small>SWPC OVATION 1°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
           </div>
