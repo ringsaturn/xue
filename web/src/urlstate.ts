@@ -232,9 +232,9 @@ export function searchWithExperiment(search: string, state: ExperimentState): st
  * whatever field is on screen: `hotspot` (the 3.9 µm contextual test on
  * the geostationary disks), `ffwi` (the Fosberg fire weather index) and
  * `fwalert` (dry air and gusts together). `?derived=hotspot,ffwi` names
- * the ones drawn; absent, `off` or nothing recognised draws none. Unlike
- * `?x=` these are no experiment: each shows wherever the run ships its
- * inputs. Link only, never stored. */
+ * the ones drawn; absent, `off` or nothing recognised draws none. Read
+ * only while `?x=` is on (`viewstate.ts`); each then shows wherever the
+ * run ships its inputs. Link only, never stored. */
 export const DERIVED_FIRE_IDS = ["hotspot", "ffwi", "fwalert"] as const;
 export type DerivedFireId = (typeof DERIVED_FIRE_IDS)[number];
 export type DerivedFireState = Record<DerivedFireId, boolean>;

@@ -151,7 +151,13 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
-      derived: { inflow: experiment.inflow, front: experiment.front, ...parseDerivedFromSearch(search) },
+      // The fire layers are not offered yet: they stay behind the experiment
+      // until their thresholds are checked against a known case.
+      derived: {
+        inflow: experiment.inflow,
+        front: experiment.front,
+        ...(experiment.enabled ? parseDerivedFromSearch(search) : { hotspot: false, ffwi: false, fwalert: false }),
+      },
       imagery: parseGibsFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),

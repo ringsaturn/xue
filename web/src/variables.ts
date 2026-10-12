@@ -932,7 +932,7 @@ function buildSpecs(): readonly VariableSpec[] {
   // ramp is grey to the warmest ground and the colours of heat above it
   // (palettes.ts). By day reflected sunlight adds to the emission, so a
   // sunlit cloud reads warm here. Reached through the field sheet, not the
-  // rail: the hotspot overlay is the everyday way to read it.
+  // rail.
   surface({
     id: "ir039",
     chart: "ir039",

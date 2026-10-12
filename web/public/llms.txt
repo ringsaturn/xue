@@ -467,7 +467,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   of the two are drawn (the rail's two toggle tiles rewrite it). A look at
   how far the published data goes, not a product; the layers are the
   ordinary ones and `?type=` / `?lines=` still pick them.
-- `?derived=hotspot|ffwi|fwalert` (comma-joined for more than one) — fire
+- `?derived=hotspot|ffwi|fwalert` (comma-joined for more than one; read
+  only together with `?x=`, which they stay behind for now) — fire
   layers computed in the browser from published bundles and drawn over
   whatever field is on screen; each shows only where the run ships its
   inputs, and nothing is published for it. `hotspot`: on a geostationary
