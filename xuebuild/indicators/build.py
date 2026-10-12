@@ -28,12 +28,13 @@ from ..common import crc32_hex, iso_z, write_bytes_atomic
 from ..errors import XueError
 from ..sources import source_spec
 from . import calendar, season, weights as weights_module
-from .features import Series, daily_features, frame_steps, round2, summarize
+from .features import SOIL_FIELDS, SOIL_WATER_FIELDS, Series, daily_features, frame_steps, mask_soil, round2, summarize
 from .regions import REGION_IDS, regions_index, region
 from .schema import (
     PRODUCT,
     RANGES,
     SCHEMA_VERSION,
+    SOIL_RANGES,
     IndicatorsError,
     encode_json,
     validate_index,
@@ -57,7 +58,7 @@ class SourceEntry:
 
 SOURCES: dict[str, SourceEntry] = {
     "gfs": SourceEntry("0p25", "00, 06, 12, 18 UTC"),
-    "ecmwf": SourceEntry("0p25", "00, 06, 12, 18 UTC"),
+    "ecmwf": SourceEntry("0p25", "00, 12 UTC"),
     "aifs": SourceEntry("0p25", "00, 06, 12, 18 UTC"),
     "ifshres": SourceEntry("0p1", "00, 12 UTC"),
 }
@@ -67,6 +68,12 @@ weights grid each one's stores are on."""
 TEMPERATURE_BUNDLE = "tmp2m"
 PRECIPITATION_BUNDLE = "prate"
 UNITS = {TEMPERATURE_BUNDLE: "°C", PRECIPITATION_BUNDLE: "mm/h"}
+SOIL_UNITS = {
+    **{field: "°C" for field in SOIL_FIELDS if field not in SOIL_WATER_FIELDS},
+    **{field: "m³/m³" for field in SOIL_WATER_FIELDS},
+}
+"""A soil field is read from the bundle of the same id; a source that does
+not publish a layer (AIFS has two) writes null for it."""
 
 NOTE = (
     "Crop-area-weighted daily weather quantities computed from open model data and open crop maps. "
@@ -95,9 +102,28 @@ FEATURES: tuple[dict[str, str], ...] = (
     {"id": "hot30_frac", "unit": "1", "definition": "crop-area fraction whose daily highest 2 m temperature is above 30 °C"},
     {"id": "hot35_frac", "unit": "1", "definition": "crop-area fraction whose daily highest 2 m temperature is above 35 °C"},
     {"id": "gdd", "unit": "°C d", "definition": "growing degree days, max(0, min(t2m_mean, 30) - 10)"},
+    *(
+        {
+            "id": f"tsoil{layer}",
+            "unit": "°C",
+            "definition": f"mean over the day's frames of the area-weighted soil temperature of the source's layer {layer} "
+            "(null where the source has no such layer)",
+        }
+        for layer in (1, 2, 3, 4)
+    ),
+    *(
+        {
+            "id": f"soilw{layer}",
+            "unit": "m³/m³",
+            "definition": f"mean over the day's frames of the area-weighted volumetric soil water of the source's layer {layer} "
+            "(null where the source has no such layer)",
+        }
+        for layer in (1, 2, 3, 4)
+    ),
     {"id": "complete", "unit": "boolean", "definition": "every frame the source's axis places in the day is present"},
 )
-assert tuple(feature["id"] for feature in FEATURES) == (*RANGES, "complete")
+assert tuple(feature["id"] for feature in FEATURES) == (*RANGES, *SOIL_RANGES, "complete")
+assert tuple(SOIL_RANGES) == SOIL_FIELDS
 
 
 # -- local state ---------------------------------------------------------------
@@ -117,6 +143,10 @@ def load_index(output_dir: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     payload = _read_json(path)
+    # A version 1 index has the version 2 shape: what it names (the month
+    # files and their offsets) carries on, and this build writes it anew.
+    if payload.get("schemaVersion") == 1:
+        payload = {**payload, "schemaVersion": SCHEMA_VERSION}
     validate_index(payload)
     return payload
 
@@ -148,6 +178,24 @@ def _expected_offsets(run: RunRef, temperature: StoreArray) -> list[int] | None:
         return None
 
 
+def _soil_arrays(run: RunRef, grid_weights: weights_module.Weights, fetch: Fetch) -> dict[str, StoreArray]:
+    """The soil bundles this run publishes, opened; a bundle the manifest
+    does not list is left out (its field is null), one it lists must open."""
+    listed = {entry.get("variable") for entry in run.manifest.get("bundles", []) if isinstance(entry, dict)}
+    arrays: dict[str, StoreArray] = {}
+    for field in SOIL_FIELDS:
+        if field not in listed:
+            continue
+        array = open_array(run, field, fetch)
+        if array.unit != SOIL_UNITS[field]:
+            raise IndicatorsError(f"{run.source} {field} is in {array.unit!r}, expected {SOIL_UNITS[field]!r}")
+        if array.run_time != run.run_time:
+            raise IndicatorsError(f"{run.source} {field} store is of another run")
+        weights_module.check_grid(grid_weights, array.grid)
+        arrays[field] = array
+    return arrays
+
+
 def compute_line(
     run: RunRef,
     grid_weights: weights_module.Weights,
@@ -171,6 +219,13 @@ def compute_line(
     windows = {region_id: (grid_weights.regions[region_id].rows, grid_weights.regions[region_id].cols) for region_id in region_ids}
     options = {} if threads is None else {"threads": threads}
     values = {bundle_id: read_values(array, windows, fetch, **options) for bundle_id, array in arrays.items()}
+    soil_arrays = _soil_arrays(run, grid_weights, fetch)
+    soil_read = {
+        field: read_values(array, windows, fetch, nodata_as_nan=True, **options) for field, array in soil_arrays.items()
+    }
+    soil_values = {
+        region_id: mask_soil({field: soil_read[field][region_id] for field in soil_read}) for region_id in windows
+    }
     temperature, precipitation = arrays[TEMPERATURE_BUNDLE], arrays[PRECIPITATION_BUNDLE]
     expected = _expected_offsets(run, temperature)
     regions: dict[str, Any] = {}
@@ -181,6 +236,10 @@ def compute_line(
             grid_weights.regions[region_id].weights,
             region(region_id).utc_offset_hours,
             expected,
+            {
+                field: Series(run.run_time, array.offsets_seconds, soil_values[region_id][field])
+                for field, array in soil_arrays.items()
+            },
         )
         regions[region_id] = {"days": days, "summary": summarize(days)}
     line = {
@@ -258,11 +317,11 @@ def _load_weights(weights_dir: Path, grid: str, cache: dict[str, Any]) -> weight
     return value
 
 
-def _gfs_lines(output_dir: Path, files: Mapping[str, bytes]) -> list[dict[str, Any]]:
-    """Every GFS line here: the month files on disk, with the ones this
-    build is writing taken from memory."""
-    paths = {str(path.relative_to(output_dir)) for path in (output_dir / "features" / season.SEASON_SOURCE).glob("*.jsonl")}
-    paths |= {path for path in files if path.startswith(f"features/{season.SEASON_SOURCE}/")}
+def _season_lines(output_dir: Path, files: Mapping[str, bytes], source: str) -> list[dict[str, Any]]:
+    """Every line of the season source here: the month files on disk, with
+    the ones this build is writing taken from memory."""
+    paths = {str(path.relative_to(output_dir)) for path in (output_dir / "features" / source).glob("*.jsonl")}
+    paths |= {path for path in files if path.startswith(f"features/{source}/")}
     lines = []
     for path in sorted(paths):
         data = files[path] if path in files else (output_dir / path).read_bytes()
@@ -270,10 +329,14 @@ def _gfs_lines(output_dir: Path, files: Mapping[str, bytes]) -> list[dict[str, A
     return lines
 
 
-def _previous_seasons(output_dir: Path) -> dict[season.SeasonKey, dict[str, Any]]:
+def _previous_seasons(output_dir: Path, source: str) -> dict[season.SeasonKey, dict[str, Any]]:
+    """The season files here that the build carries on. One of an older
+    schema or another source is rebuilt from the lines instead, whole."""
     found = {}
     for path in sorted((output_dir / "season").glob("*.json")):
         payload = _read_json(path)
+        if payload.get("schemaVersion") != SCHEMA_VERSION or payload.get("source") != source:
+            continue
         validate_season(payload)
         found[(payload["region"], payload["season"])] = payload
     return found
@@ -291,8 +354,10 @@ def build(
     fetch: Fetch = http_fetch,
     source_grids: Mapping[str, str] | None = None,
     threads: int | None = None,
+    season_source: str = season.SEASON_SOURCE,
 ) -> dict[str, Any]:
-    """Run one build round. Returns the report printed by the CLI."""
+    """Run one build round. Returns the report printed by the CLI.
+    ``season_source`` is for fixtures, whose one store is of another source."""
     unknown = [source for source in sources if source not in SOURCES]
     if unknown:
         raise IndicatorsError(f"unknown indicators sources {unknown}; choose from {', '.join(SOURCES)}")
@@ -308,7 +373,7 @@ def build(
     statuses: dict[str, dict[str, Any]] = {}
     report_sources: list[dict[str, Any]] = []
     weights_seen: dict[str, weights_module.Weights] = {}
-    gfs_changed = False
+    season_changed = False
 
     for source in sources:
         status: dict[str, Any] = {"id": source}
@@ -336,7 +401,7 @@ def build(
                     runs.append({"run": run.run, "offset": len(content), "length": len(data)})
                     months[path] = (content + data, runs)
                     status.update(status="added", path=path, offset=len(content), length=len(data))
-                gfs_changed |= source == season.SEASON_SOURCE
+                season_changed |= source == season_source
             statuses[source] = {"ok": True, "error": None}
         except XueError as exc:
             log.warning("indicators %s: %s", source, exc)
@@ -363,9 +428,12 @@ def build(
 
     month_bytes = {path: content for path, (content, _runs) in months.items()}
     season_files: dict[str, bytes] = {}
-    if gfs_changed:
+    if season_changed:
         built = season.build_seasons(
-            _gfs_lines(output_dir, month_bytes), _previous_seasons(output_dir), weights_version=weights_block["version"]
+            _season_lines(output_dir, month_bytes, season_source),
+            _previous_seasons(output_dir, season_source),
+            weights_version=weights_block["version"],
+            source=season_source,
         )
         for (region_id, season_id), payload in built.items():
             validate_season(payload)

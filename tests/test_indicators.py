@@ -32,7 +32,15 @@ from xuebuild import binformat, zarrstore
 from xuebuild.binconvert import build_metadata
 from xuebuild.indicators import calendar, season, store
 from xuebuild.indicators import weights as weights_module
-from xuebuild.indicators.features import Series, daily_features, frame_steps, summarize
+from xuebuild.indicators.features import (
+    SOIL_FIELDS,
+    Series,
+    daily_features,
+    daily_soil,
+    frame_steps,
+    mask_soil,
+    summarize,
+)
 from xuebuild.indicators.regions import REGION_IDS, REGIONS, region
 from xuebuild.indicators.schema import IndicatorsError
 from xuebuild.quantize import PROFILES, codebook_from_metadata
@@ -66,6 +74,7 @@ def features(
     run_time: datetime = MIDNIGHT_RUN,
     utc_offset: int = -6,
     expected: list[int] | None = None,
+    soil: dict | None = None,
 ) -> list[dict]:
     offsets = offsets if offsets is not None else hourly(temperature.shape[0] - 1)
     return daily_features(
@@ -74,6 +83,7 @@ def features(
         weights if weights is not None else uniform(temperature.shape[1:]),
         utc_offset,
         expected,
+        soil,
     )
 
 
@@ -93,6 +103,7 @@ class FeatureTests(unittest.TestCase):
                 "hot30_frac": 0.0,
                 "hot35_frac": 0.0,
                 "gdd": 10.0,
+                **dict.fromkeys(SOIL_FIELDS),
                 "complete": True,
             },
         )
@@ -189,13 +200,58 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(frame_steps([hour * HOUR for hour in [*range(121), *range(123, 241, 3)]]), [[120, 1], [240, 3]])
         days = features(constant(21.0, 24 * 20 + 1), constant(0.1, 24 * 20 + 1))
         summary = summarize(days)
-        self.assertEqual(summary, {"days": 14, "precip_sum": 33.6, "gdd_sum": 154.0, "hot35_days": 0.0})
+        self.assertEqual(
+            summary, {"days": 7, "precip_sum": 16.8, "gdd_sum": 77.0, "hot35_days": 0.0, "soilw1_change": None}
+        )
+
+    def test_soil_is_the_mean_over_valued_cells(self) -> None:
+        # Three-hourly soil water on a 1 x 2 window: the second cell is
+        # water (NaN) on every frame, so the first carries the region.
+        offsets = [hour * HOUR for hour in range(0, 49, 3)]
+        water = np.empty((len(offsets), 1, 2))
+        water[:, 0, 0] = np.linspace(0.30, 0.22, len(offsets))
+        water[:, 0, 1] = np.nan
+        temperature = np.full((len(offsets), 1, 2), 18.0)
+        days = features(
+            constant(20.0, 49, (1, 2)),
+            constant(0.0, 49, (1, 2)),
+            weights=np.array([[0.75, 0.25]]),
+            soil={"soilw1": Series(MIDNIGHT_RUN, offsets, water), "tsoil1": Series(MIDNIGHT_RUN, offsets, temperature)},
+        )
+        first_day = water[:8, 0, 0].mean()
+        self.assertEqual(days[0]["soilw1"], round(float(first_day), 3))
+        self.assertEqual(days[0]["tsoil1"], 18.0)
+        # A layer the source does not publish is null.
+        self.assertIsNone(days[0]["soilw4"])
+        self.assertEqual(
+            summarize(days, limit=2)["soilw1_change"], round(days[1]["soilw1"] - days[0]["soilw1"], 3)
+        )
+
+    def test_what_is_not_soil(self) -> None:
+        # The bottom codes (GFS, AIFS), IFS's 0 over the sea, and a
+        # temperature over a cell whose water is not soil.
+        water = np.array([[[0.3, -0.01, 0.0, 0.2]]])
+        temperature = np.array([[[12.0, 11.0, 15.0, -61.0]]])
+        masked = mask_soil({"soilw1": water, "tsoil1": temperature, "tsoil2": temperature})
+        np.testing.assert_array_equal(np.isnan(masked["soilw1"][0, 0]), [False, True, True, False])
+        np.testing.assert_array_equal(np.isnan(masked["tsoil1"][0, 0]), [False, True, True, True])
+        # Without its layer's water a temperature keeps every real value.
+        np.testing.assert_array_equal(np.isnan(masked["tsoil2"][0, 0]), [False, False, False, True])
+
+    def test_soil_needs_half_the_crop_area_valued(self) -> None:
+        offsets = [0, 6 * HOUR]
+        water = np.array([[[0.3, np.nan]], [[np.nan, np.nan]]])
+        by_day = daily_soil(Series(MIDNIGHT_RUN, offsets, water), np.array([[0.4, 0.6]]), -6)
+        self.assertEqual(list(by_day.values()), [None])
+        by_day = daily_soil(Series(MIDNIGHT_RUN, offsets, water), np.array([[0.6, 0.4]]), -6)
+        self.assertAlmostEqual(list(by_day.values())[0], 0.3)
 
 
 def line(run: str, region_id: str, days: list[tuple[str, float]], *, complete: bool = True) -> dict:
-    """A GFS line carrying only ``(date, precip)`` days of one region."""
+    """A season-source line carrying only ``(date, precip)`` days of one
+    region, as a version 1 line did: no soil fields."""
     return {
-        "source": "gfs",
+        "source": season.SEASON_SOURCE,
         "run": run,
         "regions": {
             region_id: {
@@ -254,10 +310,10 @@ class SeasonTests(unittest.TestCase):
         return season.build_seasons(lines, previous or {}, weights_version="w1")
 
     def test_consecutive_dry_days(self) -> None:
-        # us-ia days open at 06Z; each daily run at 06Z supplies its own day.
+        # us-ia days open at 06Z; each daily 00Z run supplies its own day.
         precip = [0.0, 0.2, 5.0, 0.0, 0.0, 0.9]
         lines = [
-            line(f"202607{10 + index:02d}06", "us-ia", [(f"2026-07-{10 + index:02d}", value)])
+            line(f"202607{10 + index:02d}00", "us-ia", [(f"2026-07-{10 + index:02d}", value)])
             for index, value in enumerate(precip)
         ]
         payload = self.seasons(lines)[("us-ia", "2026")]
@@ -265,34 +321,42 @@ class SeasonTests(unittest.TestCase):
         self.assertEqual(payload["days_counted"], 6)
         self.assertEqual(payload["precip_total"], 6.1)
         self.assertEqual(payload["hot35_days_window"], 3.0)
-        self.assertEqual(payload["throughRun"], "2026071506")
+        self.assertEqual(payload["throughRun"], "2026071500")
+        # The soil a version 1 line lacks is null in the row.
+        self.assertIsNone(payload["daily"][0]["soilw1"])
 
     def test_a_missing_day_ends_a_dry_spell(self) -> None:
         lines = [
-            line("2026071006", "us-ia", [("2026-07-10", 0.0)]),
-            line("2026071106", "us-ia", [("2026-07-11", 0.0)]),
-            line("2026071306", "us-ia", [("2026-07-13", 0.0)]),
+            line("2026071000", "us-ia", [("2026-07-10", 0.0)]),
+            line("2026071100", "us-ia", [("2026-07-11", 0.0)]),
+            line("2026071300", "us-ia", [("2026-07-13", 0.0)]),
         ]
         payload = self.seasons(lines)[("us-ia", "2026")]
         self.assertEqual((payload["cdd_current"], payload["cdd_max"]), (1, 2))
 
     def test_the_newest_run_before_the_day_wins_and_a_missing_cycle_is_partial(self) -> None:
         lines = [
-            line("2026071000", "us-ia", [("2026-07-10", 3.0), ("2026-07-11", 3.0)]),
-            line("2026071006", "us-ia", [("2026-07-10", 0.0)]),
-            # 2026-07-11's own cycle (11 06Z) is missing; 12 06Z has reached it.
-            line("2026071206", "us-ia", [("2026-07-12", 0.0)]),
+            line("2026070912", "us-ia", [("2026-07-10", 3.0), ("2026-07-11", 3.0)]),
+            line("2026071000", "us-ia", [("2026-07-10", 0.0)]),
+            # 2026-07-11's own cycle (11 00Z) is missing; 12 00Z has reached it.
+            line("2026071200", "us-ia", [("2026-07-12", 0.0)]),
         ]
         daily = self.seasons(lines)[("us-ia", "2026")]["daily"]
         self.assertEqual(
             [(day["date"], day["run"], day["lead_hours"], day["partial"]) for day in daily],
-            [("2026-07-10", "2026071006", 0, False), ("2026-07-11", "2026071000", 30, True), ("2026-07-12", "2026071206", 0, False)],
+            [("2026-07-10", "2026071000", 6, False), ("2026-07-11", "2026070912", 42, True), ("2026-07-12", "2026071200", 6, False)],
         )
 
     def test_a_day_waits_for_its_cycle_and_skips_incomplete_days(self) -> None:
-        lines = [line("2026071006", "us-ia", [("2026-07-10", 0.0), ("2026-07-11", 0.0)])]
+        lines = [line("2026071000", "us-ia", [("2026-07-10", 0.0), ("2026-07-11", 0.0)])]
         self.assertEqual([day["date"] for day in self.seasons(lines)[("us-ia", "2026")]["daily"]], ["2026-07-10"])
-        self.assertEqual(self.seasons([line("2026071006", "us-ia", [("2026-07-10", 0.0)], complete=False)]), {})
+        self.assertEqual(self.seasons([line("2026071000", "us-ia", [("2026-07-10", 0.0)], complete=False)]), {})
+
+    def test_only_the_season_source_counts(self) -> None:
+        other = {**line("2026071000", "us-ia", [("2026-07-10", 0.0)]), "source": "gfs"}
+        self.assertEqual(self.seasons([other]), {})
+        files = season.build_seasons([other], {}, weights_version="w1", source="gfs")
+        self.assertEqual(files[("us-ia", "2026")]["source"], "gfs")
 
     def test_a_season_across_the_new_year_is_one_file(self) -> None:
         # br-mt days open at 03Z; the 00Z cycle is three hours before.
@@ -306,16 +370,16 @@ class SeasonTests(unittest.TestCase):
         self.assertEqual([day["lead_hours"] for day in files[("br-mt", "2026-27")]["daily"]], [3, 3])
 
     def test_out_of_season_days_are_not_counted(self) -> None:
-        self.assertEqual(self.seasons([line("2026100106", "us-ia", [("2026-10-01", 0.0)])]), {})
+        self.assertEqual(self.seasons([line("2026100100", "us-ia", [("2026-10-01", 0.0)])]), {})
 
     def test_the_previous_file_carries_days_the_lines_no_longer_hold(self) -> None:
-        first = self.seasons([line("2026071006", "us-ia", [("2026-07-10", 0.0)])])
-        second = self.seasons([line("2026071106", "us-ia", [("2026-07-11", 4.0)])], first)
+        first = self.seasons([line("2026071000", "us-ia", [("2026-07-10", 0.0)])])
+        second = self.seasons([line("2026071100", "us-ia", [("2026-07-11", 4.0)])], first)
         payload = second[("us-ia", "2026")]
         self.assertEqual([day["date"] for day in payload["daily"]], ["2026-07-10", "2026-07-11"])
-        self.assertEqual(payload["throughRun"], "2026071106")
+        self.assertEqual(payload["throughRun"], "2026071100")
         # Rebuilding from the same inputs gives the same file.
-        self.assertEqual(self.seasons([line("2026071106", "us-ia", [("2026-07-11", 4.0)])], first), second)
+        self.assertEqual(self.seasons([line("2026071100", "us-ia", [("2026-07-11", 4.0)])], first), second)
 
 
 def _importable(name: str) -> bool:

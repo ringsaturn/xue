@@ -191,10 +191,24 @@ class GoldenSchemaTests(unittest.TestCase):
             "dates": lambda line: line["regions"]["us-ia"]["days"].reverse(),
             "flag": lambda line: day(line).update(complete=1),
             "nan": lambda line: day(line).update(gdd=float("nan")),
+            "soil water": lambda line: day(line).update(soilw1=1.5),
+            "soil type": lambda line: day(line).update(tsoil2="12"),
+            "summary key": lambda line: line["regions"]["us-ia"]["summary"].pop("soilw1_change"),
         }
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(IndicatorsError):
                 validate_line(self.mutated(change), REGION_IDS)
+
+    def test_a_soil_field_may_be_null(self) -> None:
+        validate_line(self.mutated(lambda line: line["regions"]["us-ia"]["days"][0].update(soilw3=None)), REGION_IDS)
+
+    def test_a_version_1_index_is_carried_on(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            index = json.loads(self.files["index.json"])
+            index["schemaVersion"] = 1
+            (output / "index.json").write_bytes(encode_json(index))
+            self.assertEqual(build_module.load_index(output)["files"], index["files"])
 
     def test_the_index_validator_refuses_a_gap_in_the_runs(self) -> None:
         index = json.loads(self.files["index.json"])

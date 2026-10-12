@@ -36,7 +36,10 @@ __all__ = [
     "validate_season",
 ]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+"""Version 2 added the soil fields and the seven-day summary and moved the
+season files to ECMWF IFS. A month file holds the lines of both versions,
+each marked by its own ``schemaVersion``; only version 2 is written."""
 PRODUCT = "indicators"
 
 
@@ -129,8 +132,13 @@ RANGES: dict[str, tuple[float, float]] = {
     "hot35_frac": (0.0, 1.0),
     "gdd": (0.0, 20.0),
 }
-DAY_FIELDS: tuple[str, ...] = ("date", *RANGES, "complete")
-SUMMARY_FIELDS: tuple[str, ...] = ("days", "precip_sum", "gdd_sum", "hot35_days")
+#: The soil fields of a day, each a number in its range or null.
+SOIL_RANGES: dict[str, tuple[float, float]] = {
+    **{f"tsoil{layer}": (-60.0, 60.0) for layer in (1, 2, 3, 4)},
+    **{f"soilw{layer}": (0.0, 1.0) for layer in (1, 2, 3, 4)},
+}
+DAY_FIELDS: tuple[str, ...] = ("date", *RANGES, *SOIL_RANGES, "complete")
+SUMMARY_FIELDS: tuple[str, ...] = ("days", "precip_sum", "gdd_sum", "hot35_days", "soilw1_change")
 SEASON_TOTALS: tuple[str, ...] = (
     "days_counted",
     "days_partial",
@@ -201,6 +209,9 @@ def _check_day(day: object, label: str, extra: tuple[str, ...] = ()) -> date:
     moment = _date(entry["date"], f"{label}.date")
     for field, (low, high) in RANGES.items():
         _number(entry[field], f"{label}.{field}", low, high)
+    for field, (low, high) in SOIL_RANGES.items():
+        if entry[field] is not None:
+            _number(entry[field], f"{label}.{field}", low, high)
     _require(entry["t2m_min"] <= entry["t2m_mean"] <= entry["t2m_max"], f"{label}: t2m_min <= t2m_mean <= t2m_max")
     _require(entry["hot35_frac"] <= entry["hot30_frac"], f"{label}: hot35_frac must not exceed hot30_frac")
     _require(isinstance(entry["complete"], bool), f"{label}.complete must be a boolean")
@@ -269,6 +280,8 @@ def validate_line(line: object, region_ids: tuple[str, ...]) -> None:
         _number(summary["precip_sum"], f"{label}.summary.precip_sum", 0.0)
         _number(summary["gdd_sum"], f"{label}.summary.gdd_sum", 0.0)
         _number(summary["hot35_days"], f"{label}.summary.hot35_days", 0.0)
+        if summary["soilw1_change"] is not None:
+            _number(summary["soilw1_change"], f"{label}.summary.soilw1_change", -1.0, 1.0)
     check_vocabulary(entry)
 
 
