@@ -153,26 +153,67 @@ def _validate_zarr_descriptor(store: object, variable: str, paths: set[str], suf
     complete without it, and a reader that does not know the field skips it
     — every validator here checks named fields and rejects no extra key.
     ``suffix`` is ``.zarr`` for the map store and ``.series.zarr`` for the
-    series companion, so a descriptor's path names its kind."""
+    series companion, so a descriptor's path names its kind.
+
+    A map store may instead be segmented (docs/zarr-profile.md, "Segmented
+    stores"): ``segments`` lists the stores whose axes concatenate into the
+    bundle's, and ``byteLength`` is their sum."""
     if not isinstance(store, dict):
         raise ManifestError(f"manifest bundle zarr descriptor must be an object for {variable}")
+    if suffix == ".zarr" and "segments" in store:
+        _validate_segmented_descriptor(store, variable, paths)
+        return
+    _validate_store_fields(store, variable, paths, suffix, segment=False)
+
+
+#: How far a segment's path may climb out of the manifest's directory: a
+#: round sits at ``<model>.<run>/<HHMM>/`` and the segments it shares with
+#: its neighbours at ``<model>.segments/`` beside the run directories.
+MAX_SEGMENT_CLIMB = 2
+
+
+def _segment_path_is_relative(path: str) -> bool:
+    parts = path.split("/")
+    climb = 0
+    while climb < len(parts) and parts[climb] == "..":
+        climb += 1
+    rest = parts[climb:]
+    return climb <= MAX_SEGMENT_CLIMB and bool(rest) and ".." not in rest and "" not in rest
+
+
+def _validate_store_fields(store: dict[str, Any], variable: str, paths: set[str], suffix: str, *, segment: bool) -> None:
     path = store.get("path")
     if (
         not isinstance(path, str)
         or not path.endswith(suffix)
         or path.startswith(("/", "http:", "https:"))
-        or ".." in Path(path).parts
+        or (not _segment_path_is_relative(path) if segment else ".." in Path(path).parts)
     ):
         raise ManifestError(f"manifest bundle zarr path must be a relative {suffix} path for {variable}")
     if path in paths:
         raise ManifestError("manifest contains duplicate bundle paths")
     paths.add(path)
     byte_length = store.get("byteLength")
-    if not isinstance(byte_length, int) or byte_length <= 0:
+    if not isinstance(byte_length, int) or isinstance(byte_length, bool) or byte_length <= 0:
         raise ManifestError(f"manifest bundle zarr byteLength must be a positive integer for {variable}")
     crc32 = store.get("crc32")
     if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
         raise ManifestError(f"manifest bundle zarr crc32 must be 8 lowercase hex characters for {variable}")
+
+
+def _validate_segmented_descriptor(store: dict[str, Any], variable: str, paths: set[str]) -> None:
+    if "path" in store or "crc32" in store:
+        raise ManifestError(f"a segmented zarr descriptor carries no path or crc32 of its own for {variable}")
+    segments = store.get("segments")
+    if not isinstance(segments, list) or not segments:
+        raise ManifestError(f"manifest bundle zarr segments must be a non-empty list for {variable}")
+    for segment in segments:
+        if not isinstance(segment, dict):
+            raise ManifestError(f"manifest bundle zarr segment must be an object for {variable}")
+        _validate_store_fields(segment, variable, paths, ".zarr", segment=True)
+    byte_length = store.get("byteLength")
+    if byte_length != sum(segment["byteLength"] for segment in segments) or isinstance(byte_length, bool):
+        raise ManifestError(f"a segmented zarr descriptor's byteLength must be its segments' sum for {variable}")
 
 
 def _validate_grid(grid: object, variable: str) -> None:
