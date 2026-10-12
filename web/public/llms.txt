@@ -335,6 +335,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
+- https://xue.ringsaturn.me/metrics.html — when each forecast run went
+  live, measured from the publish workflows: per source the latest run,
+  latency after the cycle time (median / p90 / max), missing cycles and
+  workflow outcomes over the window, and for each deadline (ERCOT
+  day-ahead close, 10:00 US Central) the newest run live at the cutoff on
+  each day. Measurements, not an SLA; the data is `metrics/latency.json`
+  at the data root (docs/metrics.md).
 - `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of

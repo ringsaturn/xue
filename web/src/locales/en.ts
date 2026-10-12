@@ -803,6 +803,55 @@ export const en = {
   compareHours: "Hours",
   compareNow: "now",
   compareCells: "Each value is the model's own grid cell nearest the point, never an interpolation; times read in your zone.",
+  /* The run-metrics page (metrics.html): when each forecast run went live,
+   * measured from the publish workflows (docs/metrics.md). The heading is
+   * display type, the eyebrow one lowercase word beside it, as on the
+   * comparison page. `metricsNotSla` must say plainly that these are
+   * measurements and no availability commitment. Fact labels
+   * (`metricsLatest` … `metricsRuns`) sit uppercase over a narrow mono
+   * value: keep them to two or three words. Values beside them — run codes
+   * (`2026-10-12 06Z`), h:mm latencies, `P90` — are instrument text and
+   * stay as they are. `metricsTypical` heads an experience value, not a
+   * measurement, and `metricsTypicalNote` (starting with the same `*`)
+   * says so. `metricsOutcome*` follow a count (`11 landed`).
+   * `metricsCommonest` heads the column of the cycle most often live at a
+   * deadline, and `metricsNoneLive` fills a day with nothing live yet.
+   * `metricsFailed` carries an English diagnostic after the colon. */
+  metricsMetaDescription: "When each Xue forecast run went live, measured from the publish workflows: latency after the cycle time, missing cycles, and what was live at the ERCOT day-ahead close.",
+  metricsHeading: "Run arrival",
+  metricsEyebrow: "measured",
+  metricsIntro: "When each forecast run went live on this site, read from the publish workflows' own records: the moment the live pointer was written, and how long after the model's cycle time that was.",
+  metricsNotSla: "These are measurements, not a service level: Xue makes no availability commitment.",
+  metricsGenerated: "Built {time} · last {days} days",
+  metricsLoading: "Reading metrics…",
+  metricsEmpty: "No metrics yet. They are built every six hours from the publish workflows; check back after the next build.",
+  metricsFailed: "Metrics could not be read: {message}",
+  metricsSourcesHeading: "BY SOURCE",
+  metricsLatencyNote: "Latency runs from the cycle time to the moment the run went live, so it includes the model's own production time. All times are UTC.",
+  metricsTimelineNote: "Each strip is the window: one bar per cycle that went live, at its cycle time, its height the latency against the source's own longest; a mark under the line is a cycle that never arrived.",
+  metricsTypicalNote: "* Typical upstream: an experience value for when the model's own data is usually complete after its cycle time, not a measurement. Blank where there is none.",
+  metricsTimelineAria: "{model} arrivals over the window",
+  metricsCadence: "every {hours} h",
+  metricsLatest: "Latest run",
+  metricsLanded: "Live at",
+  metricsLatency: "Latency",
+  metricsMedian: "Median",
+  metricsMax: "Max",
+  metricsTypical: "Typical upstream",
+  metricsCycles: "Cycles landed",
+  metricsMissing: "Missing",
+  metricsMissingList: "Missing cycles",
+  metricsRuns: "Workflow runs",
+  metricsOutcomeLanded: "landed",
+  metricsOutcomeSkipped: "skipped",
+  metricsOutcomeDryRun: "dry run",
+  metricsOutcomeFailed: "failed",
+  metricsBacklog: "{count} workflow runs not read yet; the next build reads them.",
+  metricsDeadlinesHeading: "AT THE DEADLINE",
+  metricsDeadlineIntro: "For each local day, the newest run already live at the cutoff, and how old its cycle was then.",
+  metricsSource: "Source",
+  metricsCommonest: "Usually",
+  metricsNoneLive: "none",
 } as const;
 
 /** Every key the UI can ask for. Each locale module is typed against this,

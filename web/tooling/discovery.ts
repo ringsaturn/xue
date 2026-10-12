@@ -25,7 +25,7 @@ import type { Plugin } from "vite";
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
 
 /** Root-relative pages every deploy has, before the cases. */
-export const STATIC_PAGES: readonly string[] = ["/", "/showcase.html", "/compare.html"];
+export const STATIC_PAGES: readonly string[] = ["/", "/showcase.html", "/compare.html", "/metrics.html"];
 
 /** The sitemap's URL set: the static pages plus one per case, absolute. */
 export function sitemapUrls(caseIds: readonly string[]): string[] {
