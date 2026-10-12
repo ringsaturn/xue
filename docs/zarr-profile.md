@@ -346,6 +346,65 @@ four where they do not. A series store is read for series only: a frame read
 through it would fetch one tiny chunk per block, which is not what it is cut
 for.
 
+## Segmented stores
+
+A rolling window (radar, satellite, the aurora nowcast) is rebuilt every few
+minutes, but between two rounds only its newest frames change. Its map
+stores are therefore published cut along time: each bundle and each
+resolution tier is a list of **segments**, every one an ordinary store under
+this profile, whose axes concatenate into the bundle's.
+
+- A segment holds the frames of one clock interval: an hour for a feed
+  whose frames are less than an hour apart, six hours (from 00, 06, 12 and
+  18 UTC) for an hourly or slower one. The window's newest segment is
+  partial, as is the oldest when the window does not start on a segment
+  boundary; every other one is whole and comes out the same, byte for
+  byte, in every round that holds it.
+- A segment is the bundle's store over those frames: the group's
+  `attributes.xue` is the bundle's metadata with `runTime` the segment's
+  first frame and the `time` block recomputed over its frames by the
+  container's rules (the coarsest `unitSeconds` that fits, `frameStep`
+  when uniform, `frameOffsets` where a slot is missing). Everything else in
+  the metadata, and the cutting of every array, is the bundle's.
+- Segments live beside the run directories, at
+  `<model>.segments/<YYYYMMDDHHMM>/<digest>/<bundle>[.<tier>].zarr`: the
+  segment's start in UTC, then eight hex digits of a SHA-256 over what the
+  store is a function of (the metadata, the codec choices and the codes).
+  The same contents always land under the same path, and different
+  contents never do, so a round names a segment an earlier round published
+  instead of writing it again, and a client's cache of it stays valid from
+  round to round. Like every other published object, a segment is never
+  rewritten under the same path.
+- In the manifest, a segmented `zarr` descriptor carries `segments`, a
+  non-empty list of `{path, byteLength, crc32}` store descriptors in
+  ascending time order, and `byteLength`, their sum. It carries no `path`
+  or `crc32` of its own. A segment's path is relative to the manifest and
+  may climb out of the round's directory with at most two leading `..`
+  components (a round sits at `<model>.<run>/<HHMM>/`), and nowhere else:
+
+  ```json
+  "zarr": {
+    "byteLength": 64212334,
+    "segments": [
+      {"path": "../../himawari.segments/202610112200/1a2b3c4d/ir104.half.zarr",
+       "byteLength": 11030021, "crc32": "8e0c5a1f"},
+      …
+    ]
+  }
+  ```
+
+  A `series` descriptor is never segmented.
+- A reader opens every segment, refuses a list whose segments differ in
+  anything but `runTime` and `time` or whose frames are not strictly
+  ascending across segments, and plays the concatenated axis: frame `i` of
+  the bundle is the frame at its absolute time in the segment that holds it.
+
+Cutting is a publishing step over finished stores (`build-bin --round
+--segments`, `xuebuild/segments.py`): it reads the codes back and writes
+each segment with the reference writer, whichever encoder built the round,
+and it skips every segment the live round already names. The window's
+posters and its `window.json` stay in the round's directory.
+
 ## Polar store
 
 A **polar store** carries radar sweeps in the radar's own coordinates — one

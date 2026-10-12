@@ -98,31 +98,69 @@ fn validate_container_fields(entry: &Value, variable: &str, label: &str) -> Resu
     Ok(())
 }
 
-/// The optional `zarr` descriptor a bundle or a variant may carry: the
-/// bundle's Zarr store (`docs/zarr-profile.md`) as a relative `.zarr` root,
-/// the sum of its objects and the CRC-32 of its root `zarr.json`. The native
-/// encoder never writes one — the store is derived from the finished bundle
-/// on the Python side — but the validator mirrors `xuebuild/manifest.py`
-/// so a manifest that carries one is judged the same way everywhere.
-fn validate_zarr_descriptor(store: &Value, variable: &str) -> Result<()> {
-    if store.is_null() {
-        return Ok(());
-    }
+/// A segment's store path: a relative `.zarr` path that may climb out of
+/// the manifest's directory by at most two leading `..` components (the
+/// model's shared segment directory sits beside the run directories) and
+/// never after a named one.
+fn is_segment_path(path: &str) -> bool {
+    let parts: Vec<&str> = path.split('/').collect();
+    let climbs = parts.iter().take_while(|part| **part == "..").count();
+    climbs <= 2 && climbs < parts.len() && is_relative_artifact_path(&parts[climbs..].join("/"), ".zarr")
+}
+
+/// One store's `path`, `byteLength` and `crc32`, the path judged by `path_ok`.
+fn validate_store(store: &Value, variable: &str, path_ok: fn(&str) -> bool) -> Result<u64> {
     let path = store["path"].as_str().unwrap_or_default();
-    if !store.is_object() || !is_relative_artifact_path(path, ".zarr") {
+    if !store.is_object() || !path_ok(path) {
         return Err(EncodeError::manifest(format!(
             "manifest bundle zarr path must be a relative .zarr path for {variable}"
         )));
     }
-    if !store["byteLength"].as_i64().is_some_and(|length| length > 0) {
+    let Some(length) = store["byteLength"].as_u64().filter(|length| *length > 0) else {
         return Err(EncodeError::manifest(format!(
             "manifest bundle zarr byteLength must be a positive integer for {variable}"
         )));
-    }
+    };
     let crc32 = store["crc32"].as_str().unwrap_or_default();
     if crc32.len() != 8 || !crc32.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
         return Err(EncodeError::manifest(format!(
             "manifest bundle zarr crc32 must be 8 lowercase hex characters for {variable}"
+        )));
+    }
+    Ok(length)
+}
+
+/// The optional `zarr` descriptor a bundle or a variant may carry: the
+/// bundle's Zarr store (`docs/zarr-profile.md`) as a relative `.zarr` root,
+/// the sum of its objects and the CRC-32 of its root `zarr.json` — or, on a
+/// rolling window, a segmented store: `segments`, the time-ordered stores
+/// the axis is cut into, and `byteLength`, their sum, with no `path` or
+/// `crc32` of its own. The native encoder never writes a segmented one — a
+/// window is cut into segments on the Python side after the build — but
+/// the validator mirrors `xuebuild/manifest.py` so a manifest that carries
+/// one is judged the same way everywhere.
+fn validate_zarr_descriptor(store: &Value, variable: &str) -> Result<()> {
+    if store.is_null() {
+        return Ok(());
+    }
+    if store.get("segments").is_none() {
+        return validate_store(store, variable, |path| is_relative_artifact_path(path, ".zarr")).map(|_| ());
+    }
+    if !store["path"].is_null() || !store["crc32"].is_null() {
+        return Err(EncodeError::manifest(format!(
+            "manifest bundle segmented zarr store carries a path or a crc32 for {variable}"
+        )));
+    }
+    let segments = store["segments"].as_array().filter(|segments| !segments.is_empty()).ok_or_else(|| {
+        EncodeError::manifest(format!("manifest bundle zarr segments must be a non-empty list for {variable}"))
+    })?;
+    let mut total = 0u64;
+    for segment in segments {
+        total = total.saturating_add(validate_store(segment, variable, is_segment_path)?);
+    }
+    if store["byteLength"].as_u64() != Some(total) {
+        return Err(EncodeError::manifest(format!(
+            "manifest bundle segmented zarr byteLength must be the sum of its segments for {variable}"
         )));
     }
     Ok(())
@@ -342,6 +380,48 @@ mod tests {
             json!({"path": "tmp2m.zarr", "byteLength": 12, "crc32": "DEADBEEF"}),
             json!({"path": "tmp2m.zarr", "byteLength": 12, "crc32": "dead"}),
             json!("tmp2m.zarr"),
+        ] {
+            assert!(manifest(vec![bundle(Some(store.clone()))]).is_err(), "{store} was accepted");
+        }
+    }
+
+    fn segment(path: &str, length: u64) -> Value {
+        json!({"path": path, "byteLength": length, "crc32": "deadbeef"})
+    }
+
+    #[test]
+    fn a_segmented_store_is_accepted_on_a_bundle_and_on_a_variant() {
+        let store = json!({
+            "byteLength": 30,
+            "segments": [
+                segment("../../himawari.segments/202610120200/0123abcd/tmp2m.zarr", 10),
+                segment("../../himawari.segments/202610120300/89abcdef/tmp2m.zarr", 20),
+            ],
+        });
+        let payload = manifest(vec![bundle(Some(store))]).expect("valid manifest");
+        assert_eq!(payload["bundles"][0]["zarr"]["segments"][1]["byteLength"], 20);
+        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["byteLength"], 30);
+
+        let mut store_only = bundle(Some(json!({"byteLength": 10, "segments": [segment("seg/tmp2m.zarr", 10)]})));
+        for key in ["path", "byteLength", "crc32"] {
+            store_only.as_object_mut().unwrap().remove(key);
+            store_only["variants"][0].as_object_mut().unwrap().remove(key);
+        }
+        assert!(manifest(vec![store_only]).is_ok(), "a segmented store-only entry was rejected");
+    }
+
+    #[test]
+    fn a_malformed_segmented_store_is_rejected() {
+        for store in [
+            json!({"path": "tmp2m.zarr", "crc32": "deadbeef", "byteLength": 10, "segments": [segment("a/tmp2m.zarr", 10)]}),
+            json!({"byteLength": 0, "segments": []}),
+            json!({"byteLength": 11, "segments": [segment("a/tmp2m.zarr", 10)]}),
+            json!({"byteLength": 10, "segments": [segment("../../../a/tmp2m.zarr", 10)]}),
+            json!({"byteLength": 10, "segments": [segment("../a/../tmp2m.zarr", 10)]}),
+            json!({"byteLength": 10, "segments": [segment("..", 10)]}),
+            json!({"byteLength": 10, "segments": [segment("/a/tmp2m.zarr", 10)]}),
+            json!({"byteLength": 10, "segments": [{"path": "a/tmp2m.zarr", "byteLength": 10, "crc32": "DEADBEEF"}]}),
+            json!({"path": "../tmp2m.zarr", "byteLength": 10, "crc32": "deadbeef"}),
         ] {
             assert!(manifest(vec![bundle(Some(store.clone()))]).is_err(), "{store} was accepted");
         }
