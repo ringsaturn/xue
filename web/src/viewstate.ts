@@ -152,13 +152,14 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
       // The fire layers are not offered yet: they stay behind the experiment
-      // until their thresholds are checked against a known case.
+      // until they are tested.
       derived: {
         inflow: experiment.inflow,
         front: experiment.front,
         ...(experiment.enabled ? parseDerivedFromSearch(search) : { hotspot: false, ffwi: false, fwalert: false }),
       },
-      imagery: parseGibsFromSearch(search),
+      // The GIBS underlay is not offered yet either: experiment only.
+      imagery: experiment.enabled ? parseGibsFromSearch(search) : null,
       marks: {
         tc: parseTcFromSearch(search),
         stations: parseStationsFromSearch(search),

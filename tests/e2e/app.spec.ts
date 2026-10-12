@@ -577,9 +577,7 @@ test("the rail is three sections, and MORE lists the fields the core tiles do no
   await expect(more).toHaveAttribute("aria-expanded", "true");
   await expect(sheet.locator("button[data-field]")).toHaveCount(4);
   await expect(sheet.locator('button[data-field="prate"]')).toHaveAttribute("aria-pressed", "true");
-  // The last group is the GIBS daily underlay, offered whatever the run.
-  await expect(sheet.locator(".field-group-heading")).toHaveText(["TEMPERATURE", "MOISTURE", "WIND", "DAILY IMAGERY · NASA GIBS"]);
-  await expect(sheet.locator("button[data-imagery]")).toHaveCount(10);
+  await expect(sheet.locator(".field-group-heading")).toHaveText(["TEMPERATURE", "MOISTURE", "WIND"]);
   // A family's row carries a chip per surface the run publishes, the
   // second way onto a level; a chip opens its member and the tile's gloss
   // follows it.

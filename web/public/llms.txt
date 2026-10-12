@@ -487,7 +487,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
   `snpp-fc|noaa20-fc|noaa21-fc` (VIIRS M11-I2-I1) or `terra-721|aqua-721`
   (MODIS bands 7-2-1) — the NASA GIBS daily corrected-reflectance picture
-  of that platform drawn under the field, fetched from GIBS directly
+  of that platform drawn under the field (read only together with `?x=`,
+  which it stays behind for now), fetched from GIBS directly
   (nothing is published for it): the day is the playhead's UTC day, today's
   for a frame after today. The false colour shows burn scars dark red and
   active fires bright. Chosen in the field sheet's last group; absent or
