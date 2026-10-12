@@ -344,6 +344,8 @@ applyTheme();
  * far the published data goes, not a product. */
 const experiment = parseExperimentFromSearch(window.location.search);
 const experimentEnabled = experiment.enabled;
+// Markup only the experiment offers (the GIBS credit) starts hidden.
+if (experimentEnabled) for (const node of document.querySelectorAll<HTMLElement>("[data-experiment]")) node.hidden = false;
 /** What the experiment opens when the URL names nothing else. */
 const EXPERIMENT_FILL: ForecastBundleId = "prate";
 const EXPERIMENT_LINES: PressureBundleId = "prmsl";
@@ -5574,7 +5576,7 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
     wrapper.append(button, chips);
     nodes.push(wrapper);
   }
-  nodes.push(...imagerySheetNodes());
+  if (experimentEnabled) nodes.push(...imagerySheetNodes());
   fieldList.replaceChildren(...nodes);
 }
 

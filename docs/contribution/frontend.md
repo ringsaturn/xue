@@ -30,7 +30,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
-| `hotspot.ts`, `firewx.ts` | The fire layers (`?derived=`): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`); offered only under `?x=` until the thresholds are checked against a case. |
+| `hotspot.ts`, `firewx.ts` | The fire layers (`?derived=`): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`); offered only under `?x=` until tested. |
 | `gibs.ts` | NASA GIBS daily corrected-reflectance underlay (`?gibs=`): one raster source and layer under the fill, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
@@ -356,7 +356,8 @@ and the window shrinks to fit it.
   CPU pass, not a fragment shader, so it can be unit-tested and shares
   the experiment's input plumbing: separable box sums keep it linear in
   the cells whatever the window.
-- NASA GIBS underlay (`gibs.ts`, `?gibs=`): the only layer whose tiles do
+- NASA GIBS underlay (`gibs.ts`, `?gibs=`, offered only under `?x=` until
+  tested): the only layer whose tiles do
   not come from our bucket or the basemap. GIBS's WMTS (`epsg3857/best`,
   `GoogleMapsCompatible_Level9`, no key, `Access-Control-Allow-Origin: *`)
   serves one picture per platform per UTC day; the date follows the
