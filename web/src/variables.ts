@@ -35,8 +35,8 @@ import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pres
  * group is chart knowledge — what a forecaster would file it under — and
  * the sheet's last group, for bundles no entry stands for, is the sheet's
  * own. */
-export type FieldGroup = "temperature" | "moisture" | "wind" | "dynamics" | "radiation" | "aerosol" | "ocean" | "satellite" | "space";
-export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite", "space"];
+export type FieldGroup = "temperature" | "moisture" | "soil" | "wind" | "dynamics" | "radiation" | "aerosol" | "ocean" | "satellite" | "space";
+export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "soil", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite", "space"];
 
 /** The ground a field is drawn on, by what its palette needs (main.ts
  * maps each to its tones per theme): an opaque coat's near-void, a
@@ -386,17 +386,6 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["skin", "skintemp", "tsfc"],
     showcaseCode: "SST",
   }),
-  // The soil temperature is a coat like the air's, on the 2 m ramp.
-  ...soil({
-    prefix: "tsoil",
-    group: "temperature",
-    word: "TSOIL",
-    title: "Soil Temperature",
-    bufferTitle: "Soil temperature buffer",
-    ground: "coat",
-    urlWords: ["soiltemp", "soiltemperature"],
-    showcaseWord: "TSOIL",
-  }),
   // Moisture. The translucent washes — humidity, precipitation, cloud,
   // the reduced-visibility ramp — sit on the slate, where the map carries
   // the geography and the low end of each ramp still shows.
@@ -562,10 +551,22 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["preciptype", "precipitationtype"],
     showcaseCode: "PTYPE",
   }),
-  // The soil moisture is a wash like the humidity's, on the slate.
+  // Soil, the two quantities side by side. The temperature is a coat like
+  // the air's, on the 2 m ramp; the moisture a wash like the humidity's,
+  // on the slate.
+  ...soil({
+    prefix: "tsoil",
+    group: "soil",
+    word: "TSOIL",
+    title: "Soil Temperature",
+    bufferTitle: "Soil temperature buffer",
+    ground: "coat",
+    urlWords: ["soiltemp", "soiltemperature"],
+    showcaseWord: "TSOIL",
+  }),
   ...soil({
     prefix: "soilw",
-    group: "moisture",
+    group: "soil",
     word: "SOILW",
     title: "Soil Moisture",
     bufferTitle: "Soil moisture buffer",

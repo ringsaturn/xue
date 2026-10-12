@@ -130,6 +130,7 @@ export const tr: Record<MessageKey, string> = {
   fieldSheetHeading: "KATMANLAR",
   fieldGroupTemperature: "SICAKLIK",
   fieldGroupMoisture: "NEM",
+  fieldGroupSoil: "TOPRAK",
   fieldGroupWind: "RÜZGAR",
   fieldGroupDynamics: "DİNAMİK",
   fieldGroupRadiation: "IŞINIM VE GÖRÜŞ",

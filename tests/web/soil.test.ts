@@ -88,16 +88,16 @@ describe("the soil registry", () => {
     expect(familyLabel("soilw4")).toBe("Volumetric soil moisture, layer 4");
   });
 
-  it("files the temperature with the temperatures and the water with the moisture", () => {
+  it("files both quantities under the soil, side by side", () => {
     for (const id of TEMPERATURE_LAYERS) {
       const spec = variableSpec(id)!;
-      expect(spec.group).toBe("temperature");
+      expect(spec.group).toBe("soil");
       expect(spec.family).toBe("tsoil");
       expect(spec.floorIsNoData).toBe(true);
     }
     for (const id of MOISTURE_LAYERS) {
       const spec = variableSpec(id)!;
-      expect(spec.group).toBe("moisture");
+      expect(spec.group).toBe("soil");
       expect(spec.family).toBe("soilw");
       expect(spec.floorIsNoData).toBe(true);
     }

@@ -129,6 +129,7 @@ export const ko: Record<MessageKey, string> = {
   fieldSheetHeading: "레이어",
   fieldGroupTemperature: "기온",
   fieldGroupMoisture: "수분",
+  fieldGroupSoil: "토양",
   fieldGroupWind: "바람",
   fieldGroupDynamics: "역학",
   fieldGroupRadiation: "복사와 시정",

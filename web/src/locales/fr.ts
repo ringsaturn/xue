@@ -127,6 +127,7 @@ export const fr: Record<MessageKey, string> = {
   fieldSheetHeading: "COUCHES",
   fieldGroupTemperature: "TEMPÉRATURE",
   fieldGroupMoisture: "HUMIDITÉ",
+  fieldGroupSoil: "SOL",
   fieldGroupWind: "VENT",
   fieldGroupDynamics: "DYNAMIQUE",
   fieldGroupRadiation: "RAYONNEMENT & VISIBILITÉ",

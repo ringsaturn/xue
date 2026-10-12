@@ -124,6 +124,7 @@ export const zhHant: Record<MessageKey, string> = {
   fieldSheetHeading: "圖層",
   fieldGroupTemperature: "溫度",
   fieldGroupMoisture: "水分",
+  fieldGroupSoil: "土壤",
   fieldGroupWind: "風",
   fieldGroupDynamics: "動力",
   fieldGroupRadiation: "輻射與能見度",
