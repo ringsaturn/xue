@@ -1,0 +1,137 @@
+{
+ "type": "Feature",
+ "stac_version": "1.1.0",
+ "stac_extensions": ["https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+ "id": "fire.202610120500",
+ "collection": "fire",
+ "geometry": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [-180.0, -90.0],
+    [180.0, -90.0],
+    [180.0, 90.0],
+    [-180.0, 90.0],
+    [-180.0, -90.0]
+   ]
+  ]
+ },
+ "bbox": [-180.0, -90.0, 180.0, 90.0],
+ "properties": {
+  "title": "Active fires (NASA FIRMS) · 2026-10-12 05:00Z round",
+  "datetime": "2026-10-12T05:00:00Z",
+  "start_datetime": "2026-10-05T05:00:00Z",
+  "end_datetime": "2026-10-12T01:32:00Z",
+  "xue:product": "fire",
+  "xue:schemaVersion": 1,
+  "xue:issued": "2026-10-12T05:00:00Z",
+  "xue:detections": 176,
+  "xue:sources": [
+   {
+    "id": "firms-suomi-npp-viirs-c2",
+    "ok": true
+   },
+   {
+    "id": "firms-noaa-20-viirs-c2",
+    "ok": true
+   },
+   {
+    "id": "firms-noaa-21-viirs-c2",
+    "ok": true
+   },
+   {
+    "id": "firms-modis-c6-1",
+    "ok": true
+   }
+  ]
+ },
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../fire/collection.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "collection",
+   "href": "../fire/collection.json",
+   "type": "application/json"
+  }
+ ],
+ "assets": {
+  "index": {
+   "href": "index.json?v=fa3920bf",
+   "type": "application/json",
+   "title": "fire index (schema v1)",
+   "roles": ["metadata"],
+   "xue:kind": "index",
+   "file:size": 3597,
+   "xue:crc32": "fa3920bf",
+   "file:checksum": "b20204fa3920bf"
+  },
+  "viirs-snpp": {
+   "href": "viirs-snpp.jsonl?v=0b586bfa",
+   "type": "application/x-ndjson",
+   "title": "VIIRS S-NPP: detections by hour",
+   "description": "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline; one sensor's hours are consecutive, so a span of hours is one `Range: bytes=<first offset>-<last offset+last length-1>` request.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:sensor": "viirs-snpp",
+   "file:size": 1854,
+   "xue:crc32": "0b586bfa",
+   "file:checksum": "b202040b586bfa"
+  },
+  "viirs-noaa20": {
+   "href": "viirs-noaa20.jsonl?v=25532fbf",
+   "type": "application/x-ndjson",
+   "title": "VIIRS NOAA-20: detections by hour",
+   "description": "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline; one sensor's hours are consecutive, so a span of hours is one `Range: bytes=<first offset>-<last offset+last length-1>` request.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:sensor": "viirs-noaa20",
+   "file:size": 1961,
+   "xue:crc32": "25532fbf",
+   "file:checksum": "b2020425532fbf"
+  },
+  "viirs-noaa21": {
+   "href": "viirs-noaa21.jsonl?v=5254b511",
+   "type": "application/x-ndjson",
+   "title": "VIIRS NOAA-21: detections by hour",
+   "description": "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline; one sensor's hours are consecutive, so a span of hours is one `Range: bytes=<first offset>-<last offset+last length-1>` request.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:sensor": "viirs-noaa21",
+   "file:size": 1961,
+   "xue:crc32": "5254b511",
+   "file:checksum": "b202045254b511"
+  },
+  "modis-terra": {
+   "href": "modis-terra.jsonl?v=9597b004",
+   "type": "application/x-ndjson",
+   "title": "MODIS Terra: detections by hour",
+   "description": "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline; one sensor's hours are consecutive, so a span of hours is one `Range: bytes=<first offset>-<last offset+last length-1>` request.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:sensor": "modis-terra",
+   "file:size": 1341,
+   "xue:crc32": "9597b004",
+   "file:checksum": "b202049597b004"
+  },
+  "modis-aqua": {
+   "href": "modis-aqua.jsonl?v=e49bf8b7",
+   "type": "application/x-ndjson",
+   "title": "MODIS Aqua: detections by hour",
+   "description": "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline; one sensor's hours are consecutive, so a span of hours is one `Range: bytes=<first offset>-<last offset+last length-1>` request.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:sensor": "modis-aqua",
+   "file:size": 807,
+   "xue:crc32": "e49bf8b7",
+   "file:checksum": "b20204e49bf8b7"
+  }
+ }
+}

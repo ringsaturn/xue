@@ -93,10 +93,10 @@ _XUE_PROVIDER = {
 
 
 # The point products published beside the runs (`docs/sounding.md`,
-# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`): a fixed list rather than a registry,
+# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`, `docs/fire.md`): a fixed list rather than a registry,
 # since each is its own pipeline under one delivery contract
 # (`xuebuild/pointproduct.py`). They are the root catalog's other children.
-POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad")
+POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad", "fire")
 
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
@@ -116,7 +116,9 @@ def _point_product_prose(product: str) -> dict[str, Any]:
     the Public Data License v1.0, which no SPDX id spells — so the
     Collection is `other` and links each network's terms. The single-site
     radar is NOAA open data with attribution requested, which no SPDX id
-    spells either. The tracks
+    spells either, and so are the FIRMS fire detections: NASA Earth
+    science data, free of restriction with an acknowledgement asked for.
+    The tracks
     come from several centres at once — US government works, ECMWF open
     data under CC BY 4.0, IBTrACS — so the Collection is `other` and the
     links name each.
@@ -275,6 +277,49 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://registry.opendata.aws/noaa-nexrad/",
                     "type": "text/html",
                     "title": "NOAA Open Data Dissemination: open to the public, attribution requested, no endorsement implied",
+                },
+            ],
+        },
+        "fire": {
+            "title": "Active fires (NASA FIRMS)",
+            "description": (
+                "The world's active fire detections from NASA FIRMS's near-real-time products — VIIRS "
+                "375 m on S-NPP, NOAA-20 and NOAA-21, and MODIS 1 km on Terra and Aqua — aggregated every "
+                "hour into a seven-day window: one NDJSON file per sensor with one line per UTC hour, its "
+                "detections as columns (position, acquisition time, fire radiative power, brightness "
+                "temperature, confidence, day or night), each hour's byte span in the index beside it. "
+                "Xue retrieves nothing itself. A rolling window with no fixed start — only the newest round "
+                "is published, and each round carries the whole window. We acknowledge the use of data and "
+                "imagery from LANCE FIRMS operated by NASA's Earth Science Data and Information System "
+                "(ESDIS) with funding provided by NASA Headquarters."
+            ),
+            "license": "other",
+            "keywords": ["fire", "wildfire", "active fire", "hotspot", "firms", "viirs", "modis", "observation"],
+            "providers": [
+                {
+                    "name": "NASA FIRMS / LANCE",
+                    "description": (
+                        "Fire Information for Resource Management System, near-real-time active fire products "
+                        "(VIIRS 375 m C2, MODIS C6.1) from NASA's Land, Atmosphere Near real-time Capability "
+                        "for EOS, part of ESDIS."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.earthdata.nasa.gov/data/tools/firms",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+                    "type": "text/html",
+                    "title": "NASA Earth science data use guidance: no restriction on use, acknowledgement requested",
+                },
+                {
+                    "rel": "about",
+                    "href": "https://www.earthdata.nasa.gov/data/tools/firms/faq",
+                    "type": "text/html",
+                    "title": "FIRMS frequently asked questions: confidence classes, latency, citation",
                 },
             ],
         },
@@ -1510,6 +1555,10 @@ def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[
         return [(float(row[3]), float(row[2])) for row in index["stations"]]
     if product == "nexrad":
         return [(float(row[3]), float(row[2])) for row in index["sites"]]
+    if product == "fire":
+        # The index carries no positions: detections cover whatever burns,
+        # so a round with any states the whole world.
+        return [(-180.0, -90.0), (180.0, 90.0)] if index["hours"] else []
     return [
         (float(storm["position"]["lon"]), float(storm["position"]["lat"]))
         for storm in index["storms"]
@@ -1539,6 +1588,11 @@ def _point_product_period(index: dict[str, Any], product: str, issued: datetime)
         bounds = (
             iso_z(issued - timedelta(hours=24)),
             max((row[7] for row in index["stations"]), default=default),
+        )
+    elif product == "fire":
+        bounds = (
+            index["window"]["start"],
+            max((sensor["latest"] for sensor in index["sensors"]), default=default),
         )
     elif product == "nexrad":
         # The sweeps the window holds, from the first to the newest.
@@ -1614,6 +1668,25 @@ def _point_product_assets(
                 **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
             }
         return assets
+    if product == "fire":
+        for sensor in index["sensors"]:
+            descriptor = sensor["file"]
+            assets[sensor["id"]] = {
+                "href": f"{descriptor['path']}?v={descriptor['crc32']}",
+                "type": NDJSON_MEDIA_TYPE,
+                "title": f"{sensor['name']}: detections by hour",
+                "description": (
+                    "One UTC hour per line, oldest first, its detections as columns. An hour's `offset` and "
+                    "`length` in the index are the byte span of its line's JSON object, excluding the "
+                    "newline; one sensor's hours are consecutive, so a span of hours is one "
+                    "`Range: bytes=<first offset>-<last offset+last length-1>` request."
+                ),
+                "roles": ["data"],
+                "xue:kind": "series",
+                "xue:sensor": sensor["id"],
+                **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+            }
+        return assets
     if product == "nexrad":
         # This round's own stores: the window's older rounds are their own
         # Items, and the manifest (the index asset) spans them all.
@@ -1656,8 +1729,19 @@ def _point_product_assets(
     return assets
 
 
+def _point_product_count(index: dict[str, Any], product: str) -> int:
+    """What an issue holds: storms, radar sites, detections or stations."""
+    if product == "tc":
+        return len(index["storms"])
+    if product == "nexrad":
+        return len(index["sites"])
+    if product == "fire":
+        return sum(sensor["count"] for sensor in index["sensors"])
+    return len(index["stations"])
+
+
 def _point_product_label(product: str, issued: datetime) -> str:
-    if product in ("airport", "synop", "nexrad"):
+    if product in ("airport", "synop", "nexrad", "fire"):
         return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
     return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
 
@@ -1696,7 +1780,7 @@ def point_product_item(
     )
     start, end = _point_product_period(index, product, issued)
     prose = _point_product_prose(product)
-    count_key = "xue:storms" if product == "tc" else "xue:stations"
+    count_key = {"tc": "xue:storms", "fire": "xue:detections"}.get(product, "xue:stations")
     properties: dict[str, Any] = {
         "title": f"{prose['title']} · {_point_product_label(product, issued)}",
         # The issue is one instant a client sorts on; the period it covers
@@ -1707,7 +1791,7 @@ def point_product_item(
         "xue:product": product,
         "xue:schemaVersion": index["schemaVersion"],
         "xue:issued": iso_z(issued),
-        count_key: len(index["storms"] if product == "tc" else index["sites"] if product == "nexrad" else index["stations"]),
+        count_key: _point_product_count(index, product),
         "xue:sources": [{"id": source["id"], "ok": bool(source["ok"])} for source in index["sources"]],
     }
     if product == "sounding":

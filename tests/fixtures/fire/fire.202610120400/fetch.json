@@ -1,0 +1,33 @@
+{
+  "round": "202610120400",
+  "sources": [
+    {
+      "id": "firms-suomi-npp-viirs-c2",
+      "ok": true,
+      "fetched": "2026-10-12T04:23:00Z",
+      "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+      "file": "fire.202610120400/suomi-npp-viirs-c2.csv"
+    },
+    {
+      "id": "firms-noaa-20-viirs-c2",
+      "ok": true,
+      "fetched": "2026-10-12T04:23:00Z",
+      "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv",
+      "file": "fire.202610120400/noaa-20-viirs-c2.csv"
+    },
+    {
+      "id": "firms-noaa-21-viirs-c2",
+      "ok": true,
+      "fetched": "2026-10-12T04:23:00Z",
+      "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv",
+      "file": "fire.202610120400/noaa-21-viirs-c2.csv"
+    },
+    {
+      "id": "firms-modis-c6-1",
+      "ok": true,
+      "fetched": "2026-10-12T04:23:00Z",
+      "url": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv",
+      "file": "fire.202610120400/modis-c6.1.csv"
+    }
+  ]
+}

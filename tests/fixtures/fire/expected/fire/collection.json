@@ -1,0 +1,91 @@
+{
+ "type": "Collection",
+ "stac_version": "1.1.0",
+ "stac_extensions": [],
+ "id": "fire",
+ "title": "Active fires (NASA FIRMS)",
+ "description": "The world's active fire detections from NASA FIRMS's near-real-time products — VIIRS 375 m on S-NPP, NOAA-20 and NOAA-21, and MODIS 1 km on Terra and Aqua — aggregated every hour into a seven-day window: one NDJSON file per sensor with one line per UTC hour, its detections as columns (position, acquisition time, fire radiative power, brightness temperature, confidence, day or night), each hour's byte span in the index beside it. Xue retrieves nothing itself. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window. We acknowledge the use of data and imagery from LANCE FIRMS operated by NASA's Earth Science Data and Information System (ESDIS) with funding provided by NASA Headquarters.",
+ "license": "other",
+ "keywords": ["fire", "wildfire", "active fire", "hotspot", "firms", "viirs", "modis", "observation"],
+ "providers": [
+  {
+   "name": "NASA FIRMS / LANCE",
+   "description": "Fire Information for Resource Management System, near-real-time active fire products (VIIRS 375 m C2, MODIS C6.1) from NASA's Land, Atmosphere Near real-time Capability for EOS, part of ESDIS.",
+   "roles": ["producer", "licensor"],
+   "url": "https://www.earthdata.nasa.gov/data/tools/firms"
+  },
+  {
+   "name": "Xue",
+   "roles": ["processor", "host"],
+   "url": "https://github.com/ringsaturn/xue"
+  }
+ ],
+ "extent": {
+  "spatial": {
+   "bbox": [
+    [-180.0, -90.0, 180.0, 90.0]
+   ]
+  },
+  "temporal": {
+   "interval": [
+    [null, null]
+   ]
+  }
+ },
+ "xue:pointer": "latest-fire.json",
+ "xue:live": "fire.202610120500",
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "item",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Active fires (NASA FIRMS) · 2026-10-12 05:00Z round"
+  },
+  {
+   "rel": "latest-version",
+   "href": "item.json",
+   "type": "application/geo+json",
+   "title": "Active fires (NASA FIRMS) · 2026-10-12 05:00Z round"
+  },
+  {
+   "rel": "alternate",
+   "href": "../fire.202610120500/item.json",
+   "type": "application/geo+json",
+   "title": "Active fires (NASA FIRMS) · 2026-10-12 05:00Z round (beside its index; gone when the issue is)"
+  },
+  {
+   "rel": "xue:pointer",
+   "href": "../latest-fire.json",
+   "type": "application/json",
+   "title": "live pointer (schema v1)"
+  },
+  {
+   "rel": "describedby",
+   "href": "https://github.com/ringsaturn/xue/blob/main/docs/fire.md",
+   "type": "text/markdown",
+   "title": "The fire product, schema v1"
+  },
+  {
+   "rel": "license",
+   "href": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+   "type": "text/html",
+   "title": "NASA Earth science data use guidance: no restriction on use, acknowledgement requested"
+  },
+  {
+   "rel": "about",
+   "href": "https://www.earthdata.nasa.gov/data/tools/firms/faq",
+   "type": "text/html",
+   "title": "FIRMS frequently asked questions: confidence classes, latency, citation"
+  }
+ ]
+}

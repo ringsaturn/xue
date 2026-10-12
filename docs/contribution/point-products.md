@@ -1,11 +1,12 @@
 # Point products
 
-Four products sit beside the gridded runs: tropical cyclone tracks
+Five products sit beside the gridded runs: tropical cyclone tracks
 (`xuebuild/tc/`), airport METAR/TAF (`xuebuild/airport/`), radiosonde
-soundings (`xuebuild/sounding/`) and surface stations
-(`xuebuild/synop/`). Schemas are normative in [../tc.md](../tc.md),
-[../airport.md](../airport.md), [../sounding.md](../sounding.md) and
-[../synop.md](../synop.md); STAC in [../stac.md](../stac.md).
+soundings (`xuebuild/sounding/`), surface stations (`xuebuild/synop/`)
+and active fires (`xuebuild/fire/`). Schemas are normative in
+[../tc.md](../tc.md), [../airport.md](../airport.md),
+[../sounding.md](../sounding.md), [../synop.md](../synop.md) and
+[../fire.md](../fire.md); STAC in [../stac.md](../stac.md).
 
 ## Shared contract
 
@@ -16,11 +17,13 @@ soundings (`xuebuild/sounding/`) and surface stations
   whose `offset` / `length` the index rows carry, so a browser reads one
   station with one Range request and an analyst streams one file. The tc
   index names one `<storm id>.json` per system. A synop round has one
-  JSONL per network, so a network's file stays the size of a network.
+  JSONL per network, so a network's file stays the size of a network; a
+  fire round one JSONL per sensor with one line per UTC hour, so the index
+  addresses hours rather than stations.
 - **One object per issue, never per station**: many small files hurt bucket
   traversal and analysis.
 - **The previous issue is input.** `make live-<product>-index` runs before
-  each build: tc carries identities forward, airport and synop merge history,
+  each build: tc carries identities forward, airport, synop and fire merge history,
   sounding carries forward stations without a new ascent (after checking
   the JSONL's CRC32).
 - **Sources fail alone** into `sources[]`; the pointer is withheld only when
@@ -75,6 +78,26 @@ failed. `AIRPORT_KEEP` rounds are kept.
 - AMeDAS reads the agency's map-page JSON (no API, no SLA); the quality
   rule and the 16-point wind code come from that page's own script.
 
+## Active fires
+
+- FIRMS publishes no API worth the name for a whole-world feed; the
+  last-24-hour CSVs (`<product>/csv/*_Global_24h.csv`, no key) are the
+  input. The 7-day ones are 35–60 MB each and timed out once in testing,
+  so the window is ours: each round merges the 24 h files onto the
+  previous round's sensor files, keyed by (time, lat, lon) in the integer
+  encoding, and drops what is older than seven days.
+- `sensors.py` is two fixed tuples: the FIRMS files (sources) and the
+  sensors they feed. MODIS is one file for Terra and Aqua, split by the
+  `satellite` column; a row whose satellite is not the file's is rejected.
+- `firms.py` reads numbers as `Decimal` so a 5-place coordinate lands on
+  the same 1e-4 integer everywhere. MODIS confidence is classed with
+  FIRMS's own thresholds (30, 80).
+- The previous sensor file is used only when its CRC32 matches the
+  previous index; a mismatch restarts that sensor from the 24 h file.
+- Measured 2026-10-12: about 180 000 detections a day (VIIRS 55–58 k per
+  satellite, MODIS 9.5 k), so the seven-day files are about 30 MB in
+  total (9.5 MB gzipped) and the index a few tens of kilobytes.
+
 ## Single-site radar
 
 - `xuebuild/nexrad/`: `level3.py` reads N0B / N0G (bzip2 packet 16) itself —
@@ -126,8 +149,14 @@ per frame and never gate the playhead; a showcase case hides them, and
   the ascent never reached 500 hPa.
 - Surface stations thin by `rank` (principal always, automatic from zoom
   5, gauges from 7) and are filled by their current temperature.
+- Active fires (`web/src/fire/`) are not stations but ride the same
+  switch and poll. They show the 24 h ending at the playhead, read per
+  sensor as one range over consecutive hour lines with a margin, so a
+  playing run does not refetch; age colour and the after-playhead filter
+  are expressions, and a clustered GeoJSON source keeps the world view
+  cheap.
 - URL state: `?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`,
-  `?stations=snd,apt,syn|off` (link only, never stored).
+  `?stations=snd,apt,syn,fire|off` (link only, never stored).
 
 ### In the probe panel
 

@@ -28,6 +28,7 @@ from xuebuild.sounding import schema as sounding_schema
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.nexrad import schema as nexrad_schema
 from xuebuild.synop import schema as synop_schema
+from xuebuild.fire import schema as fire_schema
 from xuebuild.tc import schema as tc_schema
 
 
@@ -640,6 +641,9 @@ class PointProductTests(unittest.TestCase):
     def synop_item(self) -> dict:
         return self.item("synop", "synop.202610050010", "synop/expected/synop.202610050010/index.json")
 
+    def fire_item(self) -> dict:
+        return self.item("fire", "fire.202610120500", "fire/expected/fire.202610120500/index.json")
+
     def nexrad_item(self) -> dict:
         return self.item("nexrad", "nexrad.202303250145", "nexrad/expected/nexrad.202303250145/index.json")
 
@@ -786,6 +790,26 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(item["bbox"][1], min(row[2] for row in index["stations"]))
         self.assertEqual(item["bbox"][2], max(row[3] for row in index["stations"]))
 
+    def test_a_fire_round_is_an_asset_per_sensor_over_the_window(self) -> None:
+        index, _ = self.index("fire/expected/fire.202610120500/index.json")
+        item = self.fire_item()
+        self.assertEqual(item["id"], "fire.202610120500")
+        self.assertEqual(sorted(item["assets"]), sorted(["index", *(sensor["id"] for sensor in index["sensors"])]))
+        sensor = index["sensors"][1]
+        asset = item["assets"][sensor["id"]]
+        self.assertEqual(asset["href"], f"{sensor['file']['path']}?v={sensor['file']['crc32']}")
+        self.assertEqual(asset["type"], stac.NDJSON_MEDIA_TYPE)
+        self.assertEqual(asset["xue:sensor"], sensor["id"])
+        self.assertEqual(asset["file:size"], sensor["file"]["byteLength"])
+        properties = item["properties"]
+        self.assertEqual(properties["start_datetime"], index["window"]["start"])
+        self.assertEqual(properties["end_datetime"], max(sensor["latest"] for sensor in index["sensors"]))
+        self.assertEqual(properties["xue:detections"], sum(sensor["count"] for sensor in index["sensors"]))
+        self.assertNotIn("xue:stations", properties)
+        self.assertTrue(properties["title"].endswith("2026-10-12 05:00Z round"))
+        # Detections carry no positions in the index: a round states the world.
+        self.assertEqual(item["bbox"], [-180.0, -90.0, 180.0, 90.0])
+
     def test_a_nexrad_round_is_its_own_stores_over_the_window(self) -> None:
         index, _ = self.index("nexrad/expected/nexrad.202303250145/index.json")
         item = self.nexrad_item()
@@ -868,13 +892,14 @@ class PointProductTests(unittest.TestCase):
     def test_the_catalog_lists_every_product(self) -> None:
         children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
         self.assertEqual(
-            children[-6:],
+            children[-7:],
             [
                 "sounding/collection.json",
                 "airport/collection.json",
                 "synop/collection.json",
                 "tc/collection.json",
                 "nexrad/collection.json",
+                "fire/collection.json",
                 "showcase/collection.json",
             ],
         )
@@ -883,7 +908,7 @@ class PointProductTests(unittest.TestCase):
         # The fixed list in stac.py against each product's own schema: an
         # id it does not spell the same way would leave a Collection
         # pointing at a pointer nobody writes.
-        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema, nexrad_schema)
+        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema, nexrad_schema, fire_schema)
         self.assertEqual(sorted(stac.POINT_PRODUCTS), sorted(schema.PRODUCT for schema in schemas))
         items = {
             "sounding": self.sounding_item,
@@ -891,6 +916,7 @@ class PointProductTests(unittest.TestCase):
             "synop": self.synop_item,
             "tc": self.tc_item,
             "nexrad": self.nexrad_item,
+            "fire": self.fire_item,
         }
         for schema in schemas:
             with self.subTest(product=schema.PRODUCT):
