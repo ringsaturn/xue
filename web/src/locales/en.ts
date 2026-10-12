@@ -341,16 +341,28 @@ export const en = {
   /** The speed button reads "12 FPS" in every locale (an instrument value,
    * like the forecast hour); only its accessible name is translated. */
   playbackSpeed: "Playback speed",
-  /** The GIF button beside the speed button reads "GIF" (and its progress,
-   * "12/48", while it captures) in every locale; its accessible name is
-   * translated, and turns into the way to cancel while it runs. */
-  gifExportAria: "Save the loop as a GIF",
-  gifCancelAria: "Cancel the GIF",
-  /** The MP4 pill beside it, shown only where the browser encodes H.264;
-   * it reads "MP4" and a percentage while it runs. */
-  mp4ExportAria: "Save the loop as an MP4 video",
-  mp4SizeAria: "Video size",
-  mp4CancelAria: "Cancel the MP4",
+  /** The corner button that opens the export sheet (a long press saves
+   * again with the last settings); while a file is being made it opens the
+   * sheet again, where the export can be cancelled. The sheet's format, size and rate options
+   * ("GIF", "1080P", "12 FPS") stay as the instrument reads them; its
+   * captions are short uppercase labels like the other sheet headings.
+   * `exportSummary` says what the file will come to: `{size}` reads
+   * `1920×1080`, `{bytes}` `14 MB`. */
+  exportOpenAria: "Export the loop",
+  exportSheetAria: "Export the loop",
+  exportHeading: "EXPORT",
+  exportFormat: "FORMAT",
+  exportSize: "SIZE",
+  exportFps: "RATE",
+  exportRange: "FRAMES",
+  exportFrom: "FROM",
+  exportTo: "TO",
+  exportRun: "Export",
+  exportCancel: "Cancel",
+  exportSummary: "{size} · {frames} frames · {seconds} s · about {bytes}",
+  exportCapturing: "Capturing {done}/{total}",
+  exportEncoding: "Encoding {percent}%",
+  exportFailed: "Export failed",
   readingManifest: "Loading manifest",
   forecastHourAria: "Forecast hour",
   forecastDaysAria: "Daily forecast segments",

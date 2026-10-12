@@ -279,6 +279,17 @@
           </svg>
           <span class="sr-only" data-i18n="compareLink">COMPARE</span>
         </a>
+        <!-- The loop export: a tap opens its sheet, a long press saves
+             again with the settings last used. While a file is being made
+             the ring around the glyph fills (main.ts sets --export-progress).
+             On phones it drops into the right-hand column under this row. -->
+        <button id="export-trigger" class="icon-button export-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="exportOpenAria" aria-label="Export the loop" disabled>
+          <svg class="export-ring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="20.5" pathLength="100" /></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" />
+            <path d="M5 19h14" />
+          </svg>
+        </button>
         <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path d="M10 2a8 8 0 1 0 0 16z" />
@@ -772,16 +783,6 @@
                hidden when there is nothing to choose. -->
           <div id="level-row" class="level-row" role="group" data-i18n-aria="levelSwitchAria" aria-label="Level" hidden></div>
           <div id="load-status" class="load-status" role="status" aria-live="polite" data-i18n="readingManifest">Loading manifest</div>
-          <button id="gif-button" class="pill-button gif-button" type="button" data-i18n-aria="gifExportAria" aria-label="Save the loop as a GIF" disabled>
-            <span id="gif-label">GIF</span>
-          </button>
-          <!-- Shown once the browser proves it can encode H.264 itself. -->
-          <button id="mp4-button" class="pill-button gif-button" type="button" data-i18n-aria="mp4ExportAria" aria-label="Save the loop as an MP4" disabled hidden>
-            <span id="mp4-label">MP4</span>
-          </button>
-          <button id="mp4-size-button" class="pill-button speed-button" type="button" data-i18n-aria="mp4SizeAria" aria-label="Video size" disabled hidden>
-            <span id="mp4-size-label" class="speed-value">1080P</span>
-          </button>
           <button id="speed-button" class="pill-button speed-button" type="button" data-i18n-aria="playbackSpeed" aria-label="Playback speed" disabled>
             <span id="speed-label" class="speed-value">12 FPS</span>
           </button>
@@ -937,6 +938,45 @@
           <span class="sheet-grip" aria-hidden="true"></span>
           <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
           <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
+
+      <!-- The export sheet: format, size, rate and the span of frames, what
+           the file will come to, and the button that makes it. Options are
+           written by main.ts; the last choices are kept for the next file. -->
+      <div id="export-sheet" class="model-sheet export-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel export-panel" role="dialog" aria-modal="true" data-i18n-aria="exportSheetAria" aria-label="Export the loop">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="exportHeading">EXPORT</p>
+          <div class="export-field">
+            <span class="export-caption" id="export-format-caption" data-i18n="exportFormat">FORMAT</span>
+            <div id="export-format" class="export-choices" role="radiogroup" aria-labelledby="export-format-caption"></div>
+          </div>
+          <div class="export-field">
+            <span class="export-caption" id="export-size-caption" data-i18n="exportSize">SIZE</span>
+            <div id="export-size" class="export-choices" role="radiogroup" aria-labelledby="export-size-caption"></div>
+          </div>
+          <div class="export-field">
+            <span class="export-caption" id="export-fps-caption" data-i18n="exportFps">RATE</span>
+            <div id="export-fps" class="export-choices" role="radiogroup" aria-labelledby="export-fps-caption"></div>
+          </div>
+          <div class="export-field export-range">
+            <span class="export-caption" data-i18n="exportRange">FRAMES</span>
+            <label class="export-bound">
+              <span class="export-bound-name" data-i18n="exportFrom">FROM</span>
+              <input id="export-start" type="range" min="0" max="0" step="1" value="0" />
+              <output id="export-start-value" for="export-start">F000</output>
+            </label>
+            <label class="export-bound">
+              <span class="export-bound-name" data-i18n="exportTo">TO</span>
+              <input id="export-end" type="range" min="0" max="0" step="1" value="0" />
+              <output id="export-end-value" for="export-end">F000</output>
+            </label>
+          </div>
+          <p id="export-summary" class="export-summary" aria-live="polite"></p>
+          <div id="export-progress" class="export-progress" hidden><i></i></div>
+          <button id="export-run" class="export-run" type="button" data-i18n="exportRun">Export</button>
         </div>
       </div>
 

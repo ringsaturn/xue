@@ -288,7 +288,7 @@ body.is-data-loading #map {
 .title-block {
   top: 24px;
   left: 20px;
-  max-width: min(560px, calc(100% - 200px));
+  max-width: min(560px, calc(100% - 260px));
   margin: 0;
   font: inherit;
 }
@@ -1498,18 +1498,6 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.5;
 }
 
-/* Wide enough for "48/48" (the MP4 pill reads a percentage) so the capsule
-   does not shift while it counts; while it runs the pill is inked and a
-   second press cancels. */
-.gif-button {
-  min-width: 54px;
-}
-
-.gif-button.is-busy {
-  border-color: var(--text);
-  color: var(--text);
-}
-
 /* The one filled control on the page. 36px, not the 44 of the round
    controls in the corner: the capsule's height is map the viewer loses, and
    the button has nothing within a finger's width of it. */
@@ -1901,6 +1889,200 @@ html[lang="ja"] .rail-glyph {
 
 .lang-list button[aria-current] .model-check::before {
   content: "✓";
+}
+
+/* The export trigger. A long press is a deliberate hold, so the page
+   neither selects nor offers a callout under it. While a file is being made
+   the ring round its edge fills with the progress; a failed export flashes
+   it in the warning colour. */
+.export-trigger {
+  position: relative;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.export-trigger:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.export-ring {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  fill: none;
+  opacity: 0;
+  pointer-events: none;
+  stroke: var(--text);
+  stroke-dasharray: 0 100;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  transform: rotate(-90deg);
+}
+
+.export-trigger.is-busy .export-ring {
+  opacity: 1;
+}
+
+.export-trigger.is-failed {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* The export sheet: the language sheet's shape, hung under its trigger in
+   the top-right row; on phones it docks to the bottom edge like the rest. */
+.export-sheet .model-sheet-panel {
+  top: 80px;
+  right: 20px;
+  left: auto;
+  width: 340px;
+  gap: 12px;
+}
+
+.export-sheet .sheet-heading {
+  padding-bottom: 0;
+}
+
+.export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.export-caption,
+.export-bound-name {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.export-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.export-choices button {
+  height: 32px;
+  flex: 1 1 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.export-choices button[aria-checked="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.export-choices button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.export-choices button:disabled {
+  cursor: default;
+}
+
+.export-choices button:disabled:not([aria-checked="true"]) {
+  opacity: 0.5;
+}
+
+/* The span: two sliders over the same axis, each with the frame it sits
+   on, the way the capsule reads the frame on screen. */
+.export-bound {
+  display: grid;
+  align-items: center;
+  gap: 2px 10px;
+  grid-template-columns: 3.5em minmax(0, 1fr);
+}
+
+.export-bound input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--text);
+}
+
+.export-bound output {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  grid-column: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-summary {
+  min-height: 1.4em;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-progress {
+  height: 3px;
+  margin: 0 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.export-progress[hidden] {
+  display: none;
+}
+
+.export-progress i {
+  display: block;
+  width: calc(var(--export-progress, 0) * 1%);
+  height: 100%;
+  background: var(--text);
+  transition: width 120ms linear;
+}
+
+.export-run {
+  height: 44px;
+  margin: 2px 8px 4px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--text);
+  color: var(--bg);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.export-run.is-busy {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.export-run:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.export-run:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 /* The storm sheet: the language sheet's shape hung from the rail tile on
@@ -3463,8 +3645,17 @@ body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
      globe or the relief, so the view tile stays: on the column, just under
      the round controls. */
   .maplibregl-ctrl-top-right {
-    top: calc(72px + env(safe-area-inset-top));
+    top: calc(128px + env(safe-area-inset-top));
     right: 16px;
+  }
+
+  /* The top row has room for four round controls beside the title; the
+     export trigger heads the right-hand column under them instead, and the
+     view tile moves down a slot. */
+  .export-trigger {
+    position: absolute;
+    top: 56px;
+    right: 0;
   }
 
   .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.view-control) {
@@ -3607,13 +3798,6 @@ body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
     grid-column: 1 / -1;
   }
 
-  /* A phone's row cannot hold the chips and the three export pills: the
-     pills squeezed the chips down to their caption. The chips win; export
-     stays on the fields that have no levels to choose. */
-  .timeline-tools:has(.level-row:not([hidden])) :is(#gif-button, #mp4-button, #mp4-size-button) {
-    display: none;
-  }
-
   .timeline-readout {
     grid-row: 2;
   }
@@ -3649,6 +3833,7 @@ body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
   .lang-sheet .model-sheet-panel,
   .showcase-page .lang-sheet .model-sheet-panel,
   .tc-sheet .model-sheet-panel,
+  .export-sheet .model-sheet-panel,
   .field-sheet .model-sheet-panel {
     top: auto;
     right: 0;
