@@ -289,6 +289,14 @@ ${DOMAIN_GLSL}
 out vec4 out_color;
 const float PI = 3.141592653589793;
 
+// Whether this fragment reconstructs with the 2x2 bilinear support alone
+// instead of the 4x4 Catmull-Rom kernel, set once at the top of main: where
+// a screen pixel already spans most of a texel (a zoomed-out view, a coarse
+// tier) the cubic's extra twelve taps change nothing the eye can see, and
+// on a three-gun composite blending two frames they are 72 of its 96
+// fetches.
+bool fastFilter = false;
+
 // Catmull-Rom weights for the four taps around a sample at fraction t.
 vec4 cubicWeights(float t) {
   float t2 = t * t;
@@ -299,6 +307,13 @@ vec4 cubicWeights(float t) {
     -1.5 * t3 + 2.0 * t2 + 0.5 * t,
     0.5 * t3 - 0.5 * t2
   );
+}
+
+// Catmull-Rom weights for the four taps around a sample at fraction t, or
+// the bilinear pair on the middle two under fastFilter.
+vec4 filterWeights(float t) {
+  if (fastFilter) return vec4(0.0, 1.0 - t, t, 0.0);
+  return cubicWeights(t);
 }
 
 // One texel's code. A raw plane is an R8 texture, whose green channel reads
@@ -324,15 +339,17 @@ float sampleCode(sampler2D data, vec2 uv, out bool missing) {
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
-  vec4 wx = cubicWeights(fraction.x);
-  vec4 wy = cubicWeights(fraction.y);
+  vec4 wx = filterWeights(fraction.x);
+  vec4 wy = filterWeights(fraction.y);
+  int first = fastFilter ? 1 : 0;
+  int last = fastFilter ? 2 : 3;
   float code = 0.0;
   float lo = 1.0;
   float hi = 0.0;
   missing = false;
-  for (int row = 0; row < 4; row += 1) {
+  for (int row = first; row <= last; row += 1) {
     float rowSum = 0.0;
-    for (int column = 0; column < 4; column += 1) {
+    for (int column = first; column <= last; column += 1) {
       vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
       float value = fetchCode(data, texel);
       rowSum += wx[column] * value;
@@ -368,15 +385,17 @@ vec2 sampleCodes(sampler2D data, vec2 uv, out bool missing) {
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
-  vec4 wx = cubicWeights(fraction.x);
-  vec4 wy = cubicWeights(fraction.y);
+  vec4 wx = filterWeights(fraction.x);
+  vec4 wy = filterWeights(fraction.y);
+  int first = fastFilter ? 1 : 0;
+  int last = fastFilter ? 2 : 3;
   vec2 codes = vec2(0.0);
   vec2 lo = vec2(1.0);
   vec2 hi = vec2(0.0);
   missing = false;
-  for (int row = 0; row < 4; row += 1) {
+  for (int row = first; row <= last; row += 1) {
     vec2 rowSum = vec2(0.0);
-    for (int column = 0; column < 4; column += 1) {
+    for (int column = first; column <= last; column += 1) {
       vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
       vec2 value = texture(data, texel).rg;
       rowSum += wx[column] * value;
@@ -401,15 +420,17 @@ vec3 sampleGuns(sampler2D red, sampler2D green, sampler2D blue, vec2 uv, out boo
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
-  vec4 wx = cubicWeights(fraction.x);
-  vec4 wy = cubicWeights(fraction.y);
+  vec4 wx = filterWeights(fraction.x);
+  vec4 wy = filterWeights(fraction.y);
+  int first = fastFilter ? 1 : 0;
+  int last = fastFilter ? 2 : 3;
   vec3 codes = vec3(0.0);
   vec3 lo = vec3(1.0);
   vec3 hi = vec3(0.0);
   missing = false;
-  for (int row = 0; row < 4; row += 1) {
+  for (int row = first; row <= last; row += 1) {
     vec3 rowSum = vec3(0.0);
-    for (int column = 0; column < 4; column += 1) {
+    for (int column = first; column <= last; column += 1) {
       vec2 texel = (base + vec2(float(column - 1), float(row - 1)) + 0.5) / u_size;
       vec3 value = vec3(texture(red, texel).r, texture(green, texel).r, texture(blue, texel).r);
       rowSum += wx[column] * value;
@@ -477,6 +498,11 @@ void main() {
   float delta = mod(longitude - u_first.x, 360.0);
   float u = (delta / u_step.x + 0.5) / u_size.x;
   float v = ((latitude - u_first.y) / u_step.y + 0.5) / u_size.y;
+  // Texels per screen pixel, taken before any fragment of the quad can
+  // discard. The wrap seam of u reads as a huge footprint along one column
+  // and takes the bilinear path there, which is harmless.
+  vec2 footprint = fwidth(vec2(u, v) * u_size);
+  fastFilter = max(footprint.x, footprint.y) > 0.7;
   // Outside the grid there is no data. The pole-to-pole production grids
   // never leave the vertical range, so only a cropped grid is ever clipped;
   // without this the edge texels would smear across the whole map.
