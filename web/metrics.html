@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" data-i18n-content="metricsMetaDescription" content="When each Xue forecast run went live, measured from the publish workflows: latency after the cycle time, missing cycles, and what was live at the ERCOT day-ahead close." />
+    <title>Run metrics · Xue</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Search metadata; pagemeta.ts completes the hreflang set and pins a
+         `?lang=` rendering's canonical to itself, as on the viewer. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/metrics.html" />
+    <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/metrics.html" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/metrics.html?lang=en" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/metrics.html?lang=zh" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/metrics.html?lang=zh-Hant" />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
+
+    <!-- Social cards are scraped from the static markup, before the i18n
+         pass runs, so they stay in English like the pre-JS fallback copy. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/metrics.html" />
+    <meta property="og:title" content="Run metrics · Xue" />
+    <meta property="og:description" content="When each Xue forecast run went live, measured from the publish workflows: latency after the cycle time, missing cycles, and what was live at the ERCOT day-ahead close." />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Run metrics · Xue" />
+    <meta name="twitter:description" content="When each Xue forecast run went live, measured from the publish workflows: latency after the cycle time, missing cycles, and what was live at the ERCOT day-ahead close." />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://xue.ringsaturn.me/metrics.html",
+        "url": "https://xue.ringsaturn.me/metrics.html",
+        "name": "Run metrics · Xue",
+        "description": "When each Xue forecast run went live, measured from the publish workflows: latency after the cycle time, missing cycles, and what was live at the ERCOT day-ahead close.",
+        "isPartOf": { "@type": "WebSite", "@id": "https://xue.ringsaturn.me/#website", "url": "https://xue.ringsaturn.me/", "name": "Xue" }
+      }
+    </script>
+  </head>
+  <body class="showcase-page metrics-page">
+    <main class="showcase-shell metrics-shell">
+      <div class="showcase-topbar">
+        <a class="showcase-back-link" href="./">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" />
+          </svg>
+          <span data-i18n="showcaseHome">Live forecast</span>
+        </a>
+        <div class="showcase-actions">
+          <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
+              <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
+            </svg>
+          </button>
+          <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 0 0 16z" />
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <header class="showcase-header">
+        <h1>
+          <span data-i18n="metricsHeading">Run arrival</span>
+          <span class="showcase-eyebrow" data-i18n="metricsEyebrow">measured</span>
+        </h1>
+        <p class="showcase-intro" data-i18n="metricsIntro">
+          When each forecast run went live on this site, read from the publish workflows' own records: the moment the
+          live pointer was written, and how long after the model's cycle time that was.
+        </p>
+        <p class="metrics-not-sla" data-i18n="metricsNotSla">
+          These are measurements, not a service level: Xue makes no availability commitment.
+        </p>
+        <p class="metrics-generated" id="metrics-generated" hidden></p>
+      </header>
+
+      <p id="metrics-status" class="showcase-status" role="status" aria-live="polite">Reading metrics…</p>
+
+      <section class="metrics-section" id="metrics-sources" hidden>
+        <h2 class="metrics-heading" data-i18n="metricsSourcesHeading">BY SOURCE</h2>
+        <p class="metrics-note" data-i18n="metricsLatencyNote">
+          Latency runs from the cycle time to the moment the run went live, so it includes the model's own production
+          time. All times are UTC.
+        </p>
+        <div class="metrics-source-list"></div>
+        <p class="metrics-note" data-i18n="metricsTimelineNote">
+          Each strip is the window: one bar per cycle that went live, at its cycle time, its height the latency against
+          the source's own longest; a mark under the line is a cycle that never arrived.
+        </p>
+        <p class="metrics-note" data-i18n="metricsTypicalNote">
+          * Typical upstream: an experience value for when the model's own data is usually complete after its cycle
+          time, not a measurement. Blank where there is none.
+        </p>
+      </section>
+
+      <section class="metrics-section" id="metrics-deadlines" hidden>
+        <h2 class="metrics-heading" data-i18n="metricsDeadlinesHeading">AT THE DEADLINE</h2>
+        <p class="metrics-note" data-i18n="metricsDeadlineIntro">
+          For each local day, the newest run already live at the cutoff, and how old its cycle was then.
+        </p>
+        <div class="metrics-deadline-list"></div>
+      </section>
+
+      <footer class="source-note">
+        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
+        <span>·</span>
+        <a href="https://github.com/ringsaturn/xue/blob/main/docs/metrics.md" target="_blank" rel="noreferrer">METRICS SPEC</a>
+      </footer>
+
+      <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/metrics.ts"></script>
+  </body>
+</html>

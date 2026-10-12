@@ -59,13 +59,14 @@ export default defineConfig(({ mode }) => ({
     outDir: "../dist",
     emptyOutDir: true,
     sourcemap: true,
-    // Three pages: the live viewer (which also renders ?case=<id>), the
-    // historical showcase list and the point comparison.
+    // Four pages: the live viewer (which also renders ?case=<id>), the
+    // historical showcase list, the point comparison and the run metrics.
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, "web/index.html"),
         showcase: resolve(import.meta.dirname, "web/showcase.html"),
         compare: resolve(import.meta.dirname, "web/compare.html"),
+        metrics: resolve(import.meta.dirname, "web/metrics.html"),
       },
     },
   },
