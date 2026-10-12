@@ -525,6 +525,27 @@ function bundleVariantBudget(
   return { cells: planeCellBudget(), fullGrid, visibleShare };
 }
 
+/** A geostationary mosaic's budget: the disks share one rung
+ * (`applyMosaicMembers`) and one plane's cell budget between them, so the
+ * share weighed is the sum of every member's share of its own grid. Zoomed
+ * out to the world all of them are in view and the rung is the one whose
+ * disks together fit the budget a lone disk had; zoomed in on one disk the
+ * others drop out of the sum and the rung climbs. Outside a mosaic, the
+ * budget as given. */
+function mosaicBudget(variableId: ForecastBundleId, budget: VariantBudget | undefined): VariantBudget | undefined {
+  if (!mosaic || !budget) return budget;
+  const bounds = map.getBounds();
+  const view = { west: bounds.getWest(), east: bounds.getEast(), south: bounds.getSouth(), north: bounds.getNorth() };
+  let share = 0;
+  for (const member of mosaic.members) {
+    const descriptor = member.manifest.bundles.find((bundle) => bundle.variable === variableId);
+    if (!descriptor) continue;
+    const grid = posterGrid(descriptor, member.manifest.bundles);
+    share += grid ? visibleGridShare(grid, view) : 1;
+  }
+  return { ...budget, visibleShare: Math.max(budget.visibleShare, share) };
+}
+
 // The plane cache is byte-budgeted (not frame-count-limited) and the
 // background prefetch is windowed — a handful of frames ahead of the
 // playhead, a few fetches at a time, narrower on constrained connections.
@@ -1584,9 +1605,9 @@ interface MosaicMember {
   manifestCrc: string;
   band: LongitudeBand;
   slot: RasterSlot | null;
-  /** The bundle the member's slot is opening or showing, so a repeat of
-   * the same request is a no-op. */
-  wantedVariable: ForecastBundleId | null;
+  /** The bundle and rung the member's slot is opening or showing
+   * (`memberWantedKey`), so a repeat of the same request is a no-op. */
+  wanted: string | null;
 }
 
 /** The mosaic on screen (a `FORECAST_MODELS` entry with `mosaic`), or null
@@ -4286,10 +4307,12 @@ function refreshViewportTiles(): void {
 // frame of the new one is decoded, so the swap shows as a change of detail,
 // never as a blank. Overlays take their rung once at open
 // (`overlayResolutionPreference`: the smallest, or the full grid when the
-// grid is coarse enough that the smallest has nothing left to draw) and
-// members of the mosaic open as overlays, so only the primary moves — an
+// grid is coarse enough that the smallest has nothing left to draw), so an
 // overlay opened on a coarse grid's full tier is never weighed again and
-// so never drops off it while the view is what it is.
+// so never drops off it while the view is what it is. The members of a
+// geostationary mosaic are not overlays: the disks are one picture, so
+// they all take the rung the primary is weighed to (`mosaicBudget` shares
+// the budget between them) and follow it when it moves.
 
 const RETIER_SETTLE_MS = 400;
 let retierTimer: ReturnType<typeof setTimeout> | null = null;
@@ -4346,7 +4369,10 @@ async function retierPrimary(): Promise<void> {
     slowConnection(),
     resolutionPreference,
     bundleLongitudeSpan(descriptor),
-    volumeBudget(session.id, bundleVariantBudget(descriptor, manifest.bundles), geoGrid(session.metadata)),
+    mosaicBudget(
+      session.id,
+      volumeBudget(session.id, bundleVariantBudget(descriptor, manifest.bundles), geoGrid(session.metadata)),
+    ),
   );
   if (sameTier(wanted, session.variant)) return;
   retiering = true;
@@ -6182,7 +6208,8 @@ function loadVariable(
       // The caller may have weighed the rung already (`retierPrimary`),
       // and then nothing here is read at all.
       if (options.tier !== undefined) return options.tier;
-      const budget = volumeBudget(variableId, bundleVariantBudget(descriptor, run.bundles));
+      let budget = volumeBudget(variableId, bundleVariantBudget(descriptor, run.bundles));
+      if (role === "primary") budget = mosaicBudget(variableId, budget);
       return pickBundleVariant(
         descriptor.variants,
         neededGridWidth(),
@@ -8323,7 +8350,7 @@ async function openMosaicMembers(model: ForecastModelId): Promise<MosaicMember[]
       manifestCrc: result.value.latest.manifestCrc32,
       band: { start: 0, width: 360 },
       slot: null,
-      wantedVariable: null,
+      wanted: null,
     });
   }
   return members;
@@ -8398,9 +8425,29 @@ function ensureMemberSlot(member: MosaicMember): RasterSlot {
   return slot;
 }
 
+/** The rung of a member's own ladder at the primary's: the variant of
+ * the same width, else the nearest one, or the full grid when the primary
+ * is on it. Every disk of a mosaic is cut on the same step and size, so
+ * the widths match rung for rung. */
+function memberTier(member: MosaicMember, variableId: ForecastBundleId, shown: VariantDescriptor | null): VariantDescriptor | null {
+  if (!shown) return null;
+  const variants = member.manifest.bundles.find((bundle) => bundle.variable === variableId)?.variants ?? [];
+  let best: VariantDescriptor | null = null;
+  for (const variant of variants) {
+    if (!best || Math.abs(variant.width - shown.width) < Math.abs(best.width - shown.width)) best = variant;
+  }
+  return best;
+}
+
+function memberWantedKey(variableId: ForecastBundleId, tier: VariantDescriptor | null): string {
+  return `${variableId}@${tier?.width ?? "full"}`;
+}
+
 /** Reconcile every other member with the primary: each opens the bundle
- * the primary shows — after it, never blocking it — and a member whose
- * run does not ship that bundle empties for it. */
+ * the primary shows on the primary's rung — after it, never blocking it —
+ * and a member whose run does not ship that bundle empties for it. A
+ * change of rung keeps the member's frame up until the new session's
+ * first one lands, as the primary's does. */
 function applyMosaicMembers(): void {
   if (!mosaic || !activeSession || !layersAdded) return;
   const wanted = activeSession.id;
@@ -8408,15 +8455,29 @@ function applyMosaicMembers(): void {
   for (const member of mosaic.members) {
     if (member.id === mosaic.primary) continue;
     const slot = ensureMemberSlot(member);
-    if (member.wantedVariable === wanted && slot.session?.id === wanted) continue;
-    member.wantedVariable = wanted;
-    if (slot.session) detachSlot(slot);
-    if (!hasBundle(member.manifest, wanted)) continue;
-    loadVariable(wanted, sequence, "overlay", member)
+    const tier = memberTier(member, wanted, activeSession.variant);
+    const key = memberWantedKey(wanted, tier);
+    if (member.wanted === key) continue;
+    member.wanted = key;
+    if (slot.session && slot.session.id !== wanted) detachSlot(slot);
+    if (!hasBundle(member.manifest, wanted)) {
+      if (slot.session) detachSlot(slot);
+      continue;
+    }
+    const resident = memberSessions.get(memberSessionKey(member.id, wanted));
+    const stale = resident && !sameTier(resident.variant, tier) ? resident : null;
+    loadVariable(wanted, sequence, "overlay", member, { replace: stale !== null, tier })
       .then((session) => {
         if (sequence !== initializeSequence || !ready) return;
-        if (member.wantedVariable !== wanted || member.slot !== slot) return;
+        if (member.wanted !== key || member.slot !== slot) return;
         attachMember(slot, session);
+        if (stale && stale !== session) disposeSession(stale);
+        // A load already in flight for the bundle answered at its own rung:
+        // weigh the member again now that it has settled.
+        if (!sameTier(session.variant, tier)) {
+          member.wanted = null;
+          applyMosaicMembers();
+        }
       })
       .catch((error: unknown) => {
         if (sequence !== initializeSequence) return;
@@ -8488,7 +8549,7 @@ async function checkMosaicForNewRuns(): Promise<void> {
         member.manifestUrl = loaded.manifestUrl;
         member.run = loaded.latest.run;
         member.manifestCrc = loaded.latest.manifestCrc32;
-        member.wantedVariable = null;
+        member.wanted = null;
         for (const [key, session] of memberSessions) {
           if (!key.startsWith(`${member.id}:`)) continue;
           session.worker.terminate();
@@ -8504,7 +8565,7 @@ async function checkMosaicForNewRuns(): Promise<void> {
           manifestCrc: loaded.latest.manifestCrc32,
           band: { start: 0, width: 360 },
           slot: null,
-          wantedVariable: null,
+          wanted: null,
         });
         bandsChanged = true;
       }
