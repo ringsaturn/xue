@@ -122,7 +122,10 @@ python scripts/case_plots.py <dir>/case --out <dir>/figures --tz 9 --lang zh --p
 
 The first valid time should be the run's analysis frame (or the ascents'
 time) so `verify` and the `verify` figure compare like with like; the map
-figures use `--map-times` (default: the first and last fetched). The
+figures use `--map-times` (default: the first and last fetched). When a
+claim depends on which side of a border something is, draw the border with
+`--borders <ISO3,…>` (geoBoundaries ADM0, OpenStreetMap for most
+countries), never Natural Earth's: its lines are 2–4 km off in places. The
 directory layout and the importable functions (`level`, `ascent_at`,
 `profile`, `decode_ensembles`, `ensemble_spread`, `point_frame`, `daily`,
 `accumulate`) are documented in `case_data.py`'s docstring. `case_plots.py`
