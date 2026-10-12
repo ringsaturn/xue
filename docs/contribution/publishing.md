@@ -92,6 +92,17 @@ pointer names), and on a run change `make prune-r2 KEEP=2` drops older
 runs. One log line per round records the newest frame's age and each
 step's seconds.
 
+With `SEGMENTS=true` a round's stores are cut into clock-aligned segments
+([`zarr-profile.md`](../zarr-profile.md#segmented-stores)) before upload:
+the build reads the live pointer and manifest (`make live-pointer`,
+`make live-manifest`), names again every segment the live round already
+published, and writes only the rest under `<model>.segments/`.
+`upload-r2` copies those before the round's directory, so a round uploads
+the hour in progress and whatever hour just closed, not the window.
+`make prune-r2-segments` then reads every round left on the bucket and
+deletes the segment directories none of them names. `prune-r2` never
+counts `<model>.segments/` as a run.
+
 Every window workflow except MRMS resolves its encoder at job time: it
 takes `native` when the installed wheel's `native.knows_source` has the
 model, else the reference pipeline with a system GDAL and a `::warning::`
