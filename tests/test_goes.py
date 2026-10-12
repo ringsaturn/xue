@@ -24,7 +24,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, requires_gdal_warp, requires_native_source, requires_shachen
+from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen
 from tests.test_satellite import bucket, stage_ancillary
 from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
@@ -443,7 +443,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("GOES-EAST", "abi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T15:00:00Z")
@@ -497,9 +497,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     self.assertEqual((rung.width, rung.height, rung.tiles.tile_width, rung.tiles.tile_height), (side, side, tile, tile))
                     self.assertEqual(rung.metadata["time"], full.metadata["time"])
                     offset = full.frame_offsets[-1]
-                    expected = np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000)[::factor, ::factor]
+                    expected = decimated_rung(np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000), factor, bundle_id)
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
-        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for t, _, _, _ in rungs])
+        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for t, _, _, _ in rungs])
 
     @requires_native_source("goeseast")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
