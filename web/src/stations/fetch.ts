@@ -97,6 +97,12 @@ export function parseContentRange(header: string | null): { offset: number; leng
  * the bytes, not on the decoded text: the offsets the index publishes are
  * byte offsets. */
 async function fetchSpan(url: string, offset: number, length: number): Promise<unknown> {
+  return JSON.parse(new TextDecoder().decode(await fetchSpanBytes(url, offset, length))) as unknown;
+}
+
+/** The bytes of one span of a `.jsonl`, checked as `fetchSpan` describes;
+ * the fire product reads several consecutive lines this way. */
+export async function fetchSpanBytes(url: string, offset: number, length: number): Promise<Uint8Array> {
   const response = await fetchImmutable(url, {
     headers: { Range: rangeHeader(offset, length) },
   });
@@ -123,7 +129,7 @@ async function fetchSpan(url: string, offset: number, length: number): Promise<u
       throw new Error("station file is shorter than the span the index names");
     slice = body.subarray(offset, offset + length);
   }
-  return JSON.parse(new TextDecoder().decode(slice)) as unknown;
+  return slice;
 }
 
 /** One station's whole window of soundings, read by range out of
