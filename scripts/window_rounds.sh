@@ -57,7 +57,9 @@
 # little slack, since their agencies archive the scans), ANCILLARY (true
 # pulls the staged CAMEL months before the first build), HANDOVER_CHECK (a
 # command; empty runs to the deadline), WARM (false skips the edge-cache
-# warm-up of each round).
+# warm-up of each round), SEGMENTS (true cuts each round's stores into
+# clock-aligned segments under <model>.segments/ and uploads only the ones
+# the live round does not already name).
 # PYTHON names the interpreter (the Makefile's default is the project's
 # .venv).
 set -u
@@ -76,6 +78,7 @@ dry_run=${DRY_RUN:-}
 once=${ONCE:-false}
 handover_check=${HANDOVER_CHECK:-}
 warm=${WARM:-true}
+segments=${SEGMENTS:-false}
 python=${PYTHON:-.venv/bin/python}
 data=web/public/data
 raw=data/raw
@@ -123,8 +126,17 @@ while :; do
     prev_run=$(make -s live-run MODEL=$model 2>/dev/null || true)
     build_seconds=0; upload_seconds=0; prune_seconds=0
     t0=$(date -u +%s)
+    segment_args=""
+    if [ "$segments" = true ]; then
+      # The live round's segments are named again, not written again; on a
+      # source's first round both files are empty and every segment is new.
+      make -s live-pointer MODEL=$model > live-pointer.json 2>/dev/null || : > live-pointer.json
+      make -s live-manifest MODEL=$model > live-manifest.json 2>/dev/null || : > live-manifest.json
+      segment_args="--segments --live-pointer live-pointer.json --live-manifest live-manifest.json"
+    fi
+    # shellcheck disable=SC2086 # segment_args is a list of words
     if $python -m xuebuild -v build-bin --model $model --run latest --hours "$hours" \
-        --profile "$profile" --round "$round" --raw-dir $raw --output-dir $data > build-report.json; then
+        --profile "$profile" --round "$round" --raw-dir $raw --output-dir $data $segment_args > build-report.json; then
       run=$(jq -r .run build-report.json)
       built=$(jq -r .window.latestSlot build-report.json)
       build_seconds=$(( $(date -u +%s) - t0 ))
@@ -157,10 +169,15 @@ while :; do
           make prune-r2 MODEL=$model KEEP="$keep" DRY_RUN="$dry_run" \
             || echo "pruning the superseded runs failed; the next round tries again"
         fi
+        if [ "$segments" = true ]; then
+          make prune-r2-segments MODEL=$model DRY_RUN="$dry_run" \
+            || echo "pruning the window's segments failed; the next round tries again"
+        fi
         prune_seconds=$(( $(date -u +%s) - t0 ))
         built_epoch=$($python -c "from datetime import datetime, UTC; print(int(datetime.strptime('$built', '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC).timestamp()))")
         age=$(( pointer_at - built_epoch ))
-        echo "round $round: run $run newest $built age ${age}s at pointer, build ${build_seconds}s upload ${upload_seconds}s prune ${prune_seconds}s total $(( $(date -u +%s) - started ))s"
+        segment_note=$(jq -r 'if .segments then " segments written \(.segments.writtenBytes)B reused \(.segments.reusedBytes)B" else "" end' build-report.json)
+        echo "round $round: run $run newest $built age ${age}s at pointer, build ${build_seconds}s upload ${upload_seconds}s prune ${prune_seconds}s total $(( $(date -u +%s) - started ))s$segment_note"
         # The runner keeps only what the next round reuses: this run's raw
         # frames (the previous run's are linked into it on rotation, so
         # they can go once a round of the new run has fetched; the

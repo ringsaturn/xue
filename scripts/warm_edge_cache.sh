@@ -27,7 +27,9 @@
 # viewer never reads. The objects are named off the local group document
 # (`xue.variables[].id`), since a chunk key is deterministic. The series
 # store is warmed too: a pinned point reads it, and its shard is warmed whole
-# so the first pin does not pay the fill from R2.
+# so the first pin does not pay the fill from R2. A rolling window's
+# segmented store warms the segments this round wrote; the ones it names
+# from an earlier round are not on disk and were warmed by that round.
 #
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
@@ -81,7 +83,12 @@ jobs=${WARM_JOBS:-6}
 # checked to be on disk before anything is listed off it.
 stores=
 if [ "$scope" != manifest ]; then
-  stores=$(jq -r '.bundles[] | ., .variants[] | (.zarr // empty), (.series // empty) | "\(.path) \(.crc32)"' "$source")
+  stores=$(jq -r '.bundles[] | ., .variants[] | (.zarr // empty), (.series // empty)
+    | if .segments then .segments[] else . end
+    | "\(.path) \(.crc32)"' "$source" | while read -r store crc; do
+      case $store in (../*) [ -f "$dir/$store/zarr.json" ] || continue ;; esac
+      printf '%s %s\n' "$store" "$crc"
+    done)
   while read -r store crc; do
     [ -z "$store" ] || [ -f "$dir/$store/zarr.json" ] || { echo "no store at $dir/$store/zarr.json" >&2; exit 1; }
   done <<STORES

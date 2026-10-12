@@ -36,7 +36,7 @@ export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM
 # Prints the CRC32 of the file it is given, as the pointers carry it.
 CRC32 = $(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')"
 
-.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds live-run live-manifest live-window
+.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-window
 
 # Run assets are immutable (?v=<crc32>); the pointer goes last and is what takes
 # the run live. `cp`, not `sync`: a fresh directory has nothing to skip, so a
@@ -45,6 +45,11 @@ upload-r2: ## Upload one built run (RUN, ROUND), warm the edge, take it live
 	@set -e; dir=web/public/data/$(RUN_DIR); \
 	[ -d "$$dir" ] || { echo "no built run at $$dir, pass RUN=YYYYMMDDHH"; exit 1; }; \
 	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND); \
+	segments=web/public/data/$(MODEL).segments; \
+	if [ -n "$(ROUND)" ] && [ -d "$$segments" ]; then \
+		$(S3) cp $$segments $(R2_ROOT)/$(MODEL).segments/ --recursive --no-progress $(DRY_RUN) \
+			--cache-control "public, max-age=31536000, immutable"; \
+	fi; \
 	$(S3) cp $$dir $(R2_ROOT)/$(RUN_DIR)/ --recursive --no-progress $(DRY_RUN) \
 		--exclude "manifest.part.*.json" --exclude "$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
@@ -145,7 +150,7 @@ prune-r2: ## Delete a model's runs beyond the newest KEEP, never the live one
 	listing=$$($(S3) ls $(R2_ROOT)/) \
 		|| { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
 	for run in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' \
-		| sed 's:/$$::' | grep "^$(MODEL)\." | sort -r | tail -n +$$(($(KEEP) + 1))); do \
+		| sed 's:/$$::' | grep "^$(MODEL)\." | grep -v "^$(MODEL)\.segments$$" | sort -r | tail -n +$$(($(KEEP) + 1))); do \
 		if [ "$$run" != "$(MODEL).$$live" ]; then \
 			echo "Deleting $$run..."; \
 			$(S3) rm $(R2_ROOT)/$$run/ --recursive --only-show-errors $(DRY_RUN); \
@@ -183,8 +188,57 @@ prune-r2-rounds: ## Delete a rolling window's old rounds, in clock order
 		fi; \
 	done
 
+# A rolling window's segments (docs/zarr-profile.md, "Segmented stores") are
+# shared by its rounds, so they go when no round left on the bucket names them:
+# every run directory's rounds are read, and every segment directory none of
+# their manifests names is deleted. Runs after prune-r2-rounds and prune-r2.
+define segments_stale
+import json, posixpath, sys
+named = set()
+for argument in sys.argv[1:]:
+    round_path, manifest = argument.split("=", 1)
+    for bundle in json.load(open(manifest))["bundles"]:
+        for entry in (bundle, *bundle.get("variants", [])):
+            for segment in (entry.get("zarr") or {}).get("segments", []):
+                named.add(posixpath.dirname(posixpath.normpath(posixpath.join(round_path, segment["path"]))))
+for line in sys.stdin.read().split():
+    if line not in named:
+        print(line)
+endef
+export segments_stale
+prune-r2-segments: ## Delete a rolling window's segments that no remaining round names
+	@set -e; \
+	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	listing=$$($(S3) ls $(R2_ROOT)/) || { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -q "^$(MODEL)\.segments$$" || exit 0; \
+	manifests=""; \
+	for run in $$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E "^$(MODEL)\.[0-9]{10}$$" || true); do \
+		rounds=$$($(S3) ls $(R2_ROOT)/$$run/) || { echo "listing $$run failed, refusing to prune"; exit 1; }; \
+		for round in $$(printf '%s\n' "$$rounds" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E '^[0-9]{4}$$' || true); do \
+			file=$$tmp/$$run.$$round.json; \
+			$(S3) cp $(R2_ROOT)/$$run/$$round/manifest.json $$file --only-show-errors 2>/dev/null || continue; \
+			manifests="$$manifests $$run/$$round=$$file"; \
+		done; \
+	done; \
+	[ -n "$$manifests" ] || { echo "no round of $(MODEL) left to read, refusing to prune its segments"; exit 1; }; \
+	held=""; \
+	starts=$$($(S3) ls $(R2_ROOT)/$(MODEL).segments/) || { echo "listing the segments failed, refusing to prune"; exit 1; }; \
+	for start in $$(printf '%s\n' "$$starts" | awk '/ PRE /{print $$2}' | sed 's:/$$::'); do \
+		digests=$$($(S3) ls $(R2_ROOT)/$(MODEL).segments/$$start/) || { echo "listing $$start failed, refusing to prune"; exit 1; }; \
+		for digest in $$(printf '%s\n' "$$digests" | awk '/ PRE /{print $$2}' | sed 's:/$$::'); do \
+			held="$$held $(MODEL).segments/$$start/$$digest"; \
+		done; \
+	done; \
+	for stale in $$(printf '%s\n' $$held | $(PYTHON) -c "$$segments_stale" $$manifests); do \
+		echo "Deleting $$stale..."; \
+		$(S3) rm $(R2_ROOT)/$$stale/ --recursive --only-show-errors $(DRY_RUN); \
+	done
+
 live-run: ## Print the run the live pointer names
 	@$(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors | jq -r .run || true
+
+live-pointer: ## Print the live pointer
+	@$(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors 2>/dev/null || true
 
 # The base a top-up merges onto (`assemble-run --base-manifest`).
 live-manifest: ## Print the live run's manifest
