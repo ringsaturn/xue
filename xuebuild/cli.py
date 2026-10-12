@@ -47,6 +47,7 @@ from .nexrad.schema import WINDOW_FILENAME as NEXRAD_WINDOW_FILENAME
 from .nexrad.schema import floor_round as floor_nexrad_round
 from .nexrad.schema import parse_round as parse_nexrad_round
 from .nexrad.schema import round_directory as nexrad_round_directory
+from .segments import cut_round as cut_round_segments
 from .synop.build import build_product as build_synop_product
 from .synop.build import load_previous_index as load_previous_synop_index
 from .synop.fetch import fetch_round as fetch_synop_round
@@ -283,6 +284,24 @@ def parser() -> argparse.ArgumentParser:
         "<model>.<run>/<HHMM>/ subdirectory, so a rebuild of the same run never overwrites artifacts "
         "a viewer may still be reading, and point the live pointer at that round; now for the current "
         "UTC minute",
+    )
+    build_bin_parser.add_argument(
+        "--segments",
+        action="store_true",
+        help="with --round: cut every store into clock-aligned segments under <model>.segments/ "
+        "(docs/zarr-profile.md, \"Segmented stores\"), naming again the ones the live round already published",
+    )
+    build_bin_parser.add_argument(
+        "--live-pointer",
+        type=Path,
+        metavar="PATH",
+        help="with --segments: the live pointer (make live-pointer), whose manifestPath places the live round",
+    )
+    build_bin_parser.add_argument(
+        "--live-manifest",
+        type=Path,
+        metavar="PATH",
+        help="with --segments: the live round's manifest (make live-manifest), whose segments are reused",
     )
 
     assemble_parser = commands.add_parser(
@@ -760,6 +779,8 @@ def main(argv: list[str] | None = None) -> int:
                     )
             if arguments.round is not None and bundle_ids is not None:
                 raise ConversionError("--round builds a whole run; it cannot be combined with --bundles")
+            if arguments.segments and (arguments.round is None or not source.observation):
+                raise ConversionError("--segments cuts a rolling window's round; it needs --round on an observation source")
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model, raw_root=arguments.raw_dir)
             run_directory = f"{source.id}.{run.id}"
             output_directory = arguments.output_dir / run_directory
@@ -829,6 +850,15 @@ def main(argv: list[str] | None = None) -> int:
                 container=arguments.container,
                 series=arguments.series,
             )
+            if arguments.segments:
+                report["segments"] = cut_round_segments(
+                    output_directory,
+                    data_root=arguments.output_dir,
+                    source_id=source.id,
+                    latest_path=latest_path,
+                    live_pointer=arguments.live_pointer,
+                    live_manifest=arguments.live_manifest,
+                )
             report["run"] = run.id
             if arguments.round is not None:
                 report["round"] = arguments.round
