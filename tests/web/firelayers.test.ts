@@ -13,7 +13,7 @@ import {
   fosbergPlane,
   relativeHumidity,
 } from "../../web/src/firewx";
-import { HOTSPOT_THRESHOLDS, backgroundStatistics, dayMask, hotspots } from "../../web/src/hotspot";
+import { HOTSPOT_THRESHOLDS, backgroundStatistics, dayMask, glintMask, hotspots } from "../../web/src/hotspot";
 import type { BundleVariable, LinearQuantization } from "../../web/src/manifest";
 import type { GeoGrid } from "../../web/src/probe";
 
@@ -78,7 +78,7 @@ describe("the hotspot test", () => {
       const { shortwave, longwave } = scene({ [CENTRE]: kelvin });
       return hotspots(shortwave, longwave, NIGHT)[CENTRE]!;
     };
-    const weak = at(305);
+    const weak = at(312);
     const strong = at(400);
     expect(weak).toBeGreaterThan(0);
     expect(strong).toBeGreaterThan(weak);
@@ -103,6 +103,26 @@ describe("the hotspot test", () => {
     const clear = scene({ [CENTRE]: 330 }, {}, { short: 300, long: 295 });
     expect(hotspots(clear.shortwave, clear.longwave, DAY)[CENTRE]).toBeGreaterThan(0);
   });
+
+  it("needs a hot 3.9 µm cell, not only one warmer than its neighbours", () => {
+    // Sunlit low cloud over the sea: 15 K above a 285 K background at
+    // 3.9 µm, still short of the day candidate floor.
+    const { shortwave, longwave } = scene({ [CENTRE]: 300 }, {}, { short: 285, long: 284 });
+    expect(hotspots(shortwave, longwave, DAY)[CENTRE]).toBe(0);
+  });
+
+  it("places the glint between the satellite and the sun", () => {
+    // 06 UTC on 12 October: the sun stands over about 7.6° S 92.5° E, the
+    // satellite over 0° 100° E, and the sea mirrors one into the other
+    // near 3° S 94° E.
+    const near = { width: 1, height: 1, firstLongitude: 94, firstLatitude: -3, longitudeStep: 1, latitudeStep: -1, wraps: false };
+    expect(glintMask(near, DAY, 100, HOTSPOT_THRESHOLDS.glintAngle)[0]).toBe(1);
+    expect(glintMask(grid(1, 1), DAY, 100, HOTSPOT_THRESHOLDS.glintAngle)[0]).toBe(0);
+    // A fire in the synthetic scene at 48° N is far from it.
+    const { shortwave, longwave } = scene({ [CENTRE]: 330 }, {}, { short: 300, long: 295 });
+    expect(hotspots(shortwave, longwave, DAY, 100)[CENTRE]).toBeGreaterThan(0);
+  });
+
 
   it("reads code 0 as no data, not as a 180 K cell", () => {
     const { shortwave, longwave } = scene({ [CENTRE]: 330 });
