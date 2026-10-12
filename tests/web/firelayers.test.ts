@@ -211,4 +211,26 @@ describe("fire weather", () => {
     expect(out[0]).toBeGreaterThan(out[1]!);
     expect(out[0]).toBe(fosbergCode(fosbergIndex(30, relativeHumidity(30, 0), 10)));
   });
+
+  it("leaves water out where the soil moisture says so", () => {
+    // Cell 0 is soil at 0.25 m³/m³, cell 1 water at the codebook's
+    // "no soil" bottom; both dry and windy.
+    const SOILW = linear("soilw1", "m3 m-3", -0.01, 0.005, 202);
+    const land = { grid: g, variable: SOILW, plane: Uint8Array.from([52, 0]) };
+    const ffwi = fosbergPlane(
+      { grid: g, variable: T, plane: encode(T, [30, 30]) },
+      { grid: g, variable: TD, plane: encode(TD, [0, 0]) },
+      { grid: g, u: U, v: V, uPlane: encode(U, [8, 8]), vPlane: encode(V, [6, 6]) },
+      land,
+    );
+    expect(ffwi[0]).toBeGreaterThan(0);
+    expect(ffwi[1]).toBe(0);
+    const alert = fireWeatherAlert(
+      { grid: g, variable: T, plane: encode(T, [30, 30]) },
+      { grid: g, variable: TD, plane: encode(TD, [5, 5]) },
+      { grid: g, variable: GUST, plane: encode(GUST, [12, 12]) },
+      land,
+    );
+    expect([...alert]).toEqual([DERIVED_MAX_CODE, 0]);
+  });
 });

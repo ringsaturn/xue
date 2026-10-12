@@ -79,6 +79,16 @@ function reader(grid: GeoGrid, input: ScalarInput): (cell: number, longitude: nu
   };
 }
 
+/** Whether a cell is land by the top soil layer's moisture, or always
+ * when there is none to read. Water carries no soil: GFS and AIFS write it
+ * as the codebook's bottom (−0.01 m³/m³), the IFS as 0 (format.md), so
+ * anything at or below 0 is not soil — the rule the indicators use. */
+function landTest(grid: GeoGrid, land: ScalarInput | null): (cell: number, longitude: number, latitude: number) => boolean {
+  if (land === null) return () => true;
+  const read = reader(grid, land);
+  return (cell, longitude, latitude) => read(cell, longitude, latitude) > 0;
+}
+
 /** Walk every cell of `grid` with its coordinates. */
 function eachCell(grid: GeoGrid, visit: (cell: number, longitude: number, latitude: number) => void): void {
   for (let row = 0; row < grid.height; row += 1) {
@@ -90,17 +100,25 @@ function eachCell(grid: GeoGrid, visit: (cell: number, longitude: number, latitu
 }
 
 /** The Fosberg index on the temperature's grid, as derived codes: code 0
- * where an input is missing or the index is 0, else the index scaled onto
+ * where an input is missing, over water when `land` (the soil moisture) is
+ * given, or where the index is 0, else the index scaled onto
  * 1 … DERIVED_MAX_CODE. */
-export function fosbergPlane(temperature: ScalarInput, dewPoint: ScalarInput, wind: VectorInput): Uint8Array {
+export function fosbergPlane(
+  temperature: ScalarInput,
+  dewPoint: ScalarInput,
+  wind: VectorInput,
+  land: ScalarInput | null = null,
+): Uint8Array {
   const { grid } = temperature;
   const out = new Uint8Array(grid.width * grid.height);
+  const isLand = landTest(grid, land);
   const readT = reader(grid, temperature);
   const readTd = reader(grid, dewPoint);
   const uTable = decodeTable(wind.u);
   const vTable = decodeTable(wind.v);
   const direct = sameGrid(grid, wind.grid);
   eachCell(grid, (cell, longitude, latitude) => {
+    if (!isLand(cell, longitude, latitude)) return;
     const t = readT(cell, longitude, latitude);
     const td = readTd(cell, longitude, latitude);
     const source = direct ? cell : nearestCell(wind.grid, longitude, latitude);
@@ -122,11 +140,12 @@ export function fosbergCode(index: number): number {
 
 /** The alert on the temperature's grid: DERIVED_MAX_CODE where the air is
  * drier than the alert's humidity and the gust at least its speed, 0
- * elsewhere. */
+ * elsewhere — water included when `land` (the soil moisture) is given. */
 export function fireWeatherAlert(
   temperature: ScalarInput,
   dewPoint: ScalarInput,
   gust: ScalarInput,
+  land: ScalarInput | null = null,
   alert: { humidity: number; gust: number } = FIRE_WEATHER_ALERT,
 ): Uint8Array {
   const { grid } = temperature;
@@ -134,7 +153,9 @@ export function fireWeatherAlert(
   const readT = reader(grid, temperature);
   const readTd = reader(grid, dewPoint);
   const readGust = reader(grid, gust);
+  const isLand = landTest(grid, land);
   eachCell(grid, (cell, longitude, latitude) => {
+    if (!isLand(cell, longitude, latitude)) return;
     const t = readT(cell, longitude, latitude);
     const td = readTd(cell, longitude, latitude);
     const g = readGust(cell, longitude, latitude);
