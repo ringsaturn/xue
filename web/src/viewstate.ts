@@ -21,7 +21,6 @@
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
-  parseDerivedFromSearch,
   parseGibsFromSearch,
   parseExperimentFromSearch,
   parseLinesFromSearch,
@@ -33,7 +32,6 @@ import {
   parseVolumeFromSearch,
   searchForCaseVariable,
   searchForVariable,
-  searchWithDerived,
   searchWithGibs,
   searchWithExperiment,
   searchWithLines,
@@ -43,8 +41,6 @@ import {
   searchWithTc,
   searchNamesVolume,
   searchWithVolume,
-  FIRE_FIELD_ANCHOR,
-  fireFieldOf,
   type DerivedFireState,
   type RadarUrlState,
   type StationsUrlState,
@@ -63,7 +59,7 @@ export interface ViewComposition {
 }
 
 /** The derived layers: the experiment's two (`?x=`, meaningful only while
- * it is on) and the fire fields (`?derived=`, at most one on). */
+ * it is on) and the fire fields (at most one on, never in the link). */
 interface DerivedShown extends DerivedFireState {
   inflow: boolean;
   front: boolean;
@@ -144,12 +140,9 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
   const requestedLines = parseLinesFromSearch(search);
   const requestedParticles = parseParticlesFromSearch(search);
   const experiment = parseExperimentFromSearch(search);
-  // A fire field on is the field, drawn on its anchor's session.
-  const fire = parseDerivedFromSearch(search);
-  const fireField = fireFieldOf(fire);
   const composition = compositionForPrimary(
-    fireField !== null ? FIRE_FIELD_ANCHOR[fireField] : (requestedField ?? defaults.field),
-    requestedLines ?? (requestedField === null && fireField === null ? defaults.lines : null),
+    requestedField ?? defaults.field,
+    requestedLines ?? (requestedField === null ? defaults.lines : null),
   );
   return {
     view: {
@@ -157,7 +150,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
-      derived: { inflow: experiment.inflow, front: experiment.front, ...fire },
+      derived: { inflow: experiment.inflow, front: experiment.front, hotspot: false, ffwi: false, fwalert: false },
       imagery: parseGibsFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
@@ -165,7 +158,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
         radar: parseRadarFromSearch(search),
       },
     },
-    fieldRequested: requestedField !== null || fireField !== null,
+    fieldRequested: requestedField !== null,
     particlesRequested: requestedParticles !== null,
     volumeRequested: searchNamesVolume(search),
   };
@@ -196,8 +189,7 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
     inflow: view.derived.inflow,
     front: view.derived.front,
   });
-  const withDerived = searchWithDerived(withExperiment, view.derived);
-  const withGibs = searchWithGibs(withDerived, view.imagery);
+  const withGibs = searchWithGibs(withExperiment, view.imagery);
   const withStations = searchWithStations(withGibs, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);
   return searchWithTc(withRadar, view.marks.tc);
