@@ -357,8 +357,10 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # The run in the name is how the run metrics (docs/metrics.md) tell which
+  # cycle this job took live; keep the `finalize <model> <run>` shape.
   finalize:
-    name: finalize ${{ inputs.model }}
+    name: finalize ${{ inputs.model }} ${{ needs.resolve.outputs.run }}
     needs: [resolve, build]
     if: needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-24.04
