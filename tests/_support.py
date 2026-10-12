@@ -359,3 +359,25 @@ class ParityCase:
         case: Any = self
         require_comparable_compression(case, self.reference_report, self.subject_report)
         assert_trees_identical(case, self.reference_root, self.subject_root, expect=self.expect)
+
+
+def decimated_rung(plane: Any, factor: int, variable_id: str, profile: str = "quality") -> Any:
+    """What a ladder rung holds for ``plane``: the site's own code every
+    ``factor`` rows and columns, or, for a peak-keeping channel, the largest
+    code in the window ``factor // 2`` either side of the site with nodata
+    below every code. Written as a sliding window, independently of the
+    encoders' shifted maxima."""
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    from xuebuild.quantize import PROFILES
+
+    if variable_id not in binconvert.PEAK_DECIMATION_IDS:
+        return plane[::factor, ::factor]
+    nodata = PROFILES[profile][variable_id].nodata_code
+    half = factor // 2
+    signed = np.where(plane == nodata, -1, plane.astype(np.int16))
+    windows = sliding_window_view(np.pad(signed, half, constant_values=-1), (2 * half + 1, 2 * half + 1))[::factor, ::factor]
+    peak = windows.max(axis=(2, 3))
+    return np.where(peak < 0, nodata, peak).astype(plane.dtype)
+

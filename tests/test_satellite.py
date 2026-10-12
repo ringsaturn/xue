@@ -52,7 +52,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal_warp, requires_native_source, requires_shachen
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen
 from xuebuild import binconvert, observation
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -1167,7 +1167,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
@@ -1274,7 +1274,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         channel has none and over land no emissivity is staged for, and a
         value in 1..251 elsewhere inside the disk."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"])
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "dustcf")
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
@@ -1352,15 +1352,15 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     self.assertEqual(rung.metadata["variables"], full.metadata["variables"])
                     for numeric_id in full.variable_ids:
                         for offset in full.frame_offsets:
-                            expected = np.asarray(full.decode_plane(numeric_id, offset)).reshape(3000, 3000)[::factor, ::factor]
+                            expected = decimated_rung(np.asarray(full.decode_plane(numeric_id, offset)).reshape(3000, 3000), factor, bundle_id)
                             np.testing.assert_array_equal(np.asarray(rung.decode_plane(numeric_id, offset)).reshape(side, side), expected)
         # The build report lists the rungs per bundle, ascending, in the
         # bundles' own order.
         self.assertEqual(
             [Path(variant["output"]).name for variant in self.report["variants"]],
-            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
+            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter", ".eighth")))
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -1375,7 +1375,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 bbox=(-175.0, 0.0, -160.0, 10.0),
                 container=True, zarr=False,
             )
-        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"])
         grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)
@@ -1607,7 +1607,7 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual([frame["tilesFetched"] for frame in record["frames"]], [9, 9])
         self.assertTrue((self.root / "himawarijp-frames" / "dustr").is_dir())
         self.assertFalse((self.root / "himawari-frames").exists())
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "dustrgb", "truecolor"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["ir104", "ir039", "dustrgb", "truecolor"])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI-JP", "ahi-japan-0p01"))
