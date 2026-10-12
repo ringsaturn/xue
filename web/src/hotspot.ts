@@ -34,6 +34,18 @@ export interface HotspotThresholds {
    * reading 320 K among neighbours at 318 K is not a fire. */
   absoluteDay: number;
   absoluteNight: number;
+  /** A cell is a candidate only above these BT3.9s (by day, by night)
+   * with ΔT above `candidateDelta` — MOD14's potential-fire test. Without
+   * it the contextual test alone flags whatever is warmer at 3.9 µm than
+   * its neighbours: sunlit low cloud over the sea, cloud edges, a clear
+   * cell among stratus. */
+  candidateDay: number;
+  candidateNight: number;
+  candidateDelta: number;
+  /** By day a cell within this many degrees of the sun's specular point
+   * seen from the satellite is glint, not fire: the sea mirrors the sun
+   * at 3.9 µm by tens of kelvin. The operational products drop 10–12°. */
+  glintAngle: number;
   /** ΔT must exceed the background's mean by at least this much. */
   minAnomaly: number;
   /** …and, for a cell short of the absolute threshold, by this many
@@ -60,6 +72,10 @@ export interface HotspotThresholds {
 }
 
 export const HOTSPOT_THRESHOLDS: HotspotThresholds = {
+  candidateDay: 310,
+  candidateNight: 305,
+  candidateDelta: 10,
+  glintAngle: 12,
   absoluteDay: 320,
   absoluteNight: 310,
   minAnomaly: 10,
@@ -75,11 +91,13 @@ export const HOTSPOT_THRESHOLDS: HotspotThresholds = {
 /** The hotspots of one frame on the 3.9 µm grid, as derived codes. The
  * 10.4 µm plane is read straight across when it shares the grid, else by
  * nearest cell. `timeMs` is the frame's valid time, which places the
- * terminator. */
+ * terminator; `subLongitude` the satellite, which places the glint (none
+ * is dropped without it). */
 export function hotspots(
   shortwave: ChannelPlane,
   longwave: ChannelPlane,
   timeMs: number,
+  subLongitude: number | null = null,
   thresholds: HotspotThresholds = HOTSPOT_THRESHOLDS,
 ): Uint8Array {
   const { grid } = shortwave;
@@ -91,12 +109,14 @@ export function hotspots(
   const longTable = decodeTable(longwave.variable);
   const direct = sameGrid(grid, longwave.grid);
   const day = dayMask(grid, timeMs, thresholds.dayElevation);
+  const glint = subLongitude === null ? null : glintMask(grid, timeMs, subLongitude, thresholds.glintAngle);
 
   // Per cell: ΔT where both channels read and the cell is not cloud by day
   // (NaN otherwise), and whether it may stand in a neighbour's background.
   const delta = new Float32Array(cells);
   const background = new Uint8Array(cells);
   const hot = new Uint8Array(cells);
+  const candidate = new Uint8Array(cells);
   for (let row = 0; row < height; row += 1) {
     const latitude = grid.firstLatitude + row * grid.latitudeStep;
     for (let column = 0; column < width; column += 1) {
@@ -114,6 +134,8 @@ export function hotspots(
         continue;
       }
       delta[cell] = bt39 - bt104;
+      const floor = isDay ? thresholds.candidateDay : thresholds.candidateNight;
+      if (bt39 > floor && bt39 - bt104 > thresholds.candidateDelta && !(isDay && glint?.[cell] === 1)) candidate[cell] = 1;
       const absolute = isDay ? thresholds.absoluteDay : thresholds.absoluteNight;
       if (bt39 > absolute) hot[cell] = 1;
       // A cell hot outright is not background for its neighbours: a fire
@@ -125,8 +147,8 @@ export function hotspots(
   const stats = backgroundStatistics(delta, background, width, height, grid.wraps, thresholds.window);
   const needed = Math.max(1, Math.ceil(thresholds.minBackgroundShare * (thresholds.window * thresholds.window - 1)));
   for (let cell = 0; cell < cells; cell += 1) {
+    if (candidate[cell] !== 1) continue;
     const value = delta[cell]!;
-    if (Number.isNaN(value)) continue;
     const count = stats.count[cell]!;
     if (count < needed) continue;
     const mean = stats.sum[cell]! / count;
@@ -158,6 +180,49 @@ export function dayMask(grid: GeoGrid, timeMs: number, elevation: number): Uint8
     const b = Math.cos(latitude) * cosDeclination;
     for (let column = 0; column < width; column += 1) {
       if (a + b * cosHour[column]! > threshold) mask[row * width + column] = 1;
+    }
+  }
+  return mask;
+}
+
+/** 1 where the sea would mirror the sun into the satellite's view: the
+ * angle between the line of sight and the sun's ray reflected off a level
+ * surface at the cell is under `angle` degrees. The satellite sits on the
+ * equator at `subLongitude`; the sun is far enough to be a direction. */
+export function glintMask(grid: GeoGrid, timeMs: number, subLongitude: number, angle: number): Uint8Array {
+  const { width, height } = grid;
+  const mask = new Uint8Array(width * height);
+  const ephemeris = solarEphemeris(timeMs);
+  // The subsolar point: the declination's latitude, the longitude where
+  // the hour angle is zero.
+  const sunLongitude = -hourAngle(ephemeris, 0);
+  const cosD = Math.cos(ephemeris.declination);
+  const sun = [cosD * Math.cos(sunLongitude), cosD * Math.sin(sunLongitude), Math.sin(ephemeris.declination)] as const;
+  // Geostationary radius in Earth radii (42 164 km / 6 378 km).
+  const orbit = 6.6107;
+  const satLongitude = (subLongitude * Math.PI) / 180;
+  const sat = [orbit * Math.cos(satLongitude), orbit * Math.sin(satLongitude), 0] as const;
+  const threshold = Math.cos((angle * Math.PI) / 180);
+  for (let row = 0; row < height; row += 1) {
+    const latitude = ((grid.firstLatitude + row * grid.latitudeStep) * Math.PI) / 180;
+    const cosLat = Math.cos(latitude);
+    const z = Math.sin(latitude);
+    for (let column = 0; column < width; column += 1) {
+      const longitude = ((grid.firstLongitude + column * grid.longitudeStep) * Math.PI) / 180;
+      const x = cosLat * Math.cos(longitude);
+      const y = cosLat * Math.sin(longitude);
+      const sunNormal = x * sun[0] + y * sun[1] + z * sun[2];
+      if (sunNormal <= 0) continue;
+      // The sun's ray reflected about the surface normal.
+      const rx = 2 * sunNormal * x - sun[0];
+      const ry = 2 * sunNormal * y - sun[1];
+      const rz = 2 * sunNormal * z - sun[2];
+      const vx = sat[0] - x;
+      const vy = sat[1] - y;
+      const vz = sat[2] - z;
+      const length = Math.hypot(vx, vy, vz);
+      if (x * vx + y * vy + z * vz <= 0) continue;
+      if ((rx * vx + ry * vy + rz * vz) / length > threshold) mask[row * width + column] = 1;
     }
   }
   return mask;
