@@ -5626,6 +5626,10 @@ function syncFieldTiles(run: ForecastManifest): void {
   if (fill !== null && !railTileStandsFor(fill) && !fieldSection.querySelector(`button[data-unknown][data-variable="${fill}"]`)) {
     fieldSection.append(unknownRailTile(fill));
   }
+  for (const button of derivedButtons()) {
+    const id = button.dataset.derived as DerivedId;
+    if (isFireDerivedId(id)) button.hidden = imageryMode() || !fireTileShown(run, id);
+  }
   const rows = fieldSheetRows(run);
   fieldMore.hidden = rows.every((row) => row.core);
   if (fieldMore.hidden) fieldSheetControl.close();
@@ -5636,7 +5640,7 @@ function syncFieldTiles(run: ForecastManifest): void {
 /** The sheet's groups, in the order they are listed (`FIELD_GROUPS`, from
  * the variable table, which also says which group each field is in), then
  * a last one for every bundle the run publishes that no tile stands for. */
-type SheetGroup = FieldGroup | "other";
+type SheetGroup = FieldGroup | "fire" | "other";
 const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   temperature: "fieldGroupTemperature",
   moisture: "fieldGroupMoisture",
@@ -5647,6 +5651,7 @@ const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   ocean: "fieldGroupOcean",
   satellite: "fieldGroupSatellite",
   space: "fieldGroupSpace",
+  fire: "fieldGroupFire",
   other: "fieldGroupOther",
 };
 
@@ -5664,6 +5669,9 @@ interface FieldSheetRow {
   /** Whether the rail carries the field's tile whatever is on screen. */
   core: boolean;
   current: boolean;
+  /** The fire field a press opens over `id`, its anchor; none for a
+   * published field. */
+  fire?: DerivedFireId;
 }
 
 /** One row per field the run publishes, grouped and ordered as the sheet
@@ -5690,6 +5698,13 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
         current: fieldTileCurrent(tile),
       });
     }
+  }
+  // The fire fields the run can feed, after the published ones: computed
+  // here, not shipped, and only the hotspot on the rail.
+  for (const fire of DERIVED_FIRE_IDS) {
+    if (!fireInputsPublished(run, fire)) continue;
+    const tile = derivedButtons().find((button) => button.dataset.derived === fire) ?? null;
+    rows.push({ group: "fire", id: FIRE_FIELD_ANCHOR[fire], members: [], tile, core: FIRE_RAIL_CORE.includes(fire), current: fireField() === fire, fire });
   }
   for (const bundle of run.bundles) {
     const id = bundle.variable;
@@ -5744,7 +5759,7 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
     button.append(icon, text, check);
     button.addEventListener("click", () => {
       fieldSheetControl.close();
-      void activateComposition({ fill: row.id, lines: view.lines });
+      void activateComposition({ fill: row.id, lines: view.lines }, { fire: row.fire ?? null });
     });
     if (row.members.length === 0) {
       nodes.push(button);
@@ -5775,9 +5790,6 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
   fieldList.replaceChildren(...nodes);
 }
 
-/** The sheet's last group: the NASA GIBS daily pictures, whatever the run,
- * a row of platforms in true colour and one in the false colour that
- * shows fire; pressing the chip on screen takes the picture away. */
 /** The picture on screen on the NASA GIBS dataset (`?gibs=`); null for
  * none. */
 function setImagery(id: string | null): void {
@@ -9300,6 +9312,16 @@ function fireInputs(run: ForecastManifest, id: DerivedFireId): readonly Forecast
   return id !== "hotspot" && hasBundle(run, FIRE_LAND_MASK) ? [...inputs, FIRE_LAND_MASK] : inputs;
 }
 
+/** The fire fields the rail carries whatever is on screen; the others are
+ * reached through the field sheet and take a tile only while on screen,
+ * as a field outside the core does. */
+const FIRE_RAIL_CORE: readonly DerivedFireId[] = ["hotspot"];
+
+/** Whether a fire field's rail tile shows on a run. */
+function fireTileShown(run: ForecastManifest, id: DerivedFireId): boolean {
+  return fireInputsPublished(run, id) && (FIRE_RAIL_CORE.includes(id) || fireField() === id);
+}
+
 /** Whether a run ships every input of a fire layer. */
 function fireInputsPublished(run: ForecastManifest, id: DerivedFireId): boolean {
   return FIRE_DERIVED_INPUTS[id].every((input) => hasBundle(run, input));
@@ -9317,7 +9339,7 @@ function syncDerivedTiles(run: ForecastManifest): void {
   const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
   for (const button of derivedButtons()) {
     const id = button.dataset.derived as DerivedId;
-    if (isFireDerivedId(id)) button.hidden = !fireInputsPublished(run, id);
+    if (isFireDerivedId(id)) button.hidden = !fireTileShown(run, id);
     else button.hidden = id === "inflow" ? !flow : !warmth;
   }
   syncRail();
