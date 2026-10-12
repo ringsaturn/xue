@@ -107,6 +107,10 @@ jobs:
     env:
       MODEL: himawari
       FRAME_CACHE: "true"
+      # Cut each round's stores into hour segments and upload only the ones
+      # the live round does not already name (docs/zarr-profile.md,
+      # "Segmented stores").
+      SEGMENTS: "true"
       # A warped frame is 3-6 MB, seven variables share a slot and a day is
       # 144 slots, so a day of the cache is some 4.5 GB. The viewer plays a
       # six-hour window and the agency archives the scans, so the mirror
