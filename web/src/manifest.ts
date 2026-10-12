@@ -34,7 +34,8 @@ export type ForecastModelId =
   | "goeswest"
   | "meteosat"
   | "aurora"
-  | "geo";
+  | "geo"
+  | "gibs";
 
 interface ForecastModelInfo {
   id: ForecastModelId;
@@ -103,6 +104,10 @@ interface ForecastModelInfo {
   mosaic?: boolean;
   /** The datasets a mosaic composes, each clipped to its own band. */
   members?: readonly ForecastModelId[];
+  /** Imagery served whole by someone else (NASA GIBS's daily pictures):
+   * no pointer, no manifest, no bundles. The shell gives it a day axis of
+   * its own and draws the picture as a raster layer (`gibs.ts`). */
+  imagery?: boolean;
 }
 
 /** The rail's core tiles on a forecast model (`ForecastModelInfo.railCore`). */
@@ -354,6 +359,17 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     mosaic: true,
     members: ["meteosat", "himawari", "goeswest", "goeseast"],
   },
+  // NASA GIBS's daily corrected reflectance from the polar orbiters, true
+  // colour and the fire false colour: one picture a UTC day, read straight
+  // from GIBS's tile service. A dataset of its own beside the models and
+  // the disks, though nothing of it is published here.
+  gibs: {
+    id: "gibs",
+    label: "NASA GIBS",
+    product: "gibs-daily",
+    observation: true,
+    imagery: true,
+  },
   // Meteosat-12 (MTG-I1) at 0°, EUMETSAT's FCI imager, read from the
   // EUMETSAT Data Store: the same 10.4 µm window (FCI's 10.5 µm channel),
   // the same Dust RGB and true colour, warped onto a
@@ -420,7 +436,7 @@ export function isNowcastModel(model: ForecastModelId): boolean {
  * and `?model=` never offer it; a case loads its manifest by path. */
 export function isCaseOnlyModel(model: ForecastModelId): boolean {
   const info = FORECAST_MODELS[model];
-  return info.latestFilename === undefined && info.mosaic !== true;
+  return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
 /** The datasets in the model switch's order: the eight live forecasts, the
@@ -451,6 +467,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "meteosat",
   "aurora",
   "geo",
+  "gibs",
 ];
 
 /** The members of a mosaic this build knows, in the mosaic's order; a

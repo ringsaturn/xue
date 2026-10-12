@@ -1,10 +1,11 @@
-/** The NASA GIBS daily underlay (gibs.ts): the layer table, the tile
- * template, the day a playhead asks for, and `?gibs=`. */
+/** The NASA GIBS daily imagery (gibs.ts), a dataset of its own
+ * (`?model=gibs`): the layer table, the tile template, the day axis, the
+ * day a playhead asks for, and `?gibs=`. */
 
 import { describe, expect, it } from "vitest";
 
-import { GIBS_LAYERS, GIBS_MAX_LEVEL, gibsDate, gibsLayer, gibsTileUrl } from "../../web/src/gibs";
-import { parseGibsFromSearch, searchWithGibs } from "../../web/src/urlstate";
+import { GIBS_LAYERS, GIBS_MAX_LEVEL, GIBS_PLATFORMS, gibsDate, gibsDays, gibsLayer, gibsLayerFor, gibsTileUrl } from "../../web/src/gibs";
+import { parseGibsFromSearch, parseModelFromSearch, searchWithGibs } from "../../web/src/urlstate";
 import { parseView, searchForView } from "../../web/src/viewstate";
 
 describe("the GIBS layers", () => {
@@ -58,5 +59,28 @@ describe("?gibs=", () => {
     const { view } = parseView(search, defaults);
     expect(view.imagery).toBe("noaa21-fc");
     expect(searchForView(view, search, { model: "gfs", caseId: null, experimentEnabled: false, particlesChosen: false }, "tmp2m")).toBe(search);
+  });
+});
+
+describe("the GIBS dataset", () => {
+  it("pairs each platform's true and false colour pictures", () => {
+    expect(GIBS_PLATFORMS).toEqual(["snpp", "noaa20", "noaa21", "terra", "aqua"]);
+    for (const platform of GIBS_PLATFORMS) {
+      expect(gibsLayerFor(platform, false)?.platform).toBe(platform);
+      expect(gibsLayerFor(platform, true)?.falseColor).toBe(true);
+    }
+    expect(gibsLayerFor("terra", true)?.id).toBe("terra-721");
+    expect(gibsLayerFor("bogus", false)).toBeNull();
+  });
+
+  it("offers the days ending today, from midnight UTC", () => {
+    const days = gibsDays(Date.parse("2026-10-13T05:30:00Z"), 7);
+    expect(new Date(days.startMs).toISOString()).toBe("2026-10-07T00:00:00.000Z");
+    expect(days.count).toBe(7);
+  });
+
+  it("is a model the URL can name", () => {
+    expect(parseModelFromSearch("?model=gibs")).toBe("gibs");
+    expect(parseModelFromSearch("?model=Worldview")).toBe("gibs");
   });
 });

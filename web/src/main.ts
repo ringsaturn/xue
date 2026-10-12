@@ -60,7 +60,7 @@ import {
   warmMoistInflow,
 } from "./composite";
 import { fireWeatherAlert, fireWeatherAlertPalette, fosbergPalette, fosbergPlane } from "./firewx";
-import { GIBS_LAYERS, GibsImagery, gibsDate, gibsLayer, type GibsLayer } from "./gibs";
+import { GIBS_PLATFORM_GLYPH, GIBS_PLATFORMS, GibsImagery, gibsDate, gibsDays, gibsLayer, gibsLayerFor } from "./gibs";
 import { hotspotPalette, hotspots } from "./hotspot";
 import {
   FORECAST_MODEL_IDS,
@@ -1266,9 +1266,8 @@ const tcList = required<HTMLElement>("tc-list");
 const fieldMore = required<HTMLButtonElement>("field-more");
 const fieldSheet = required<HTMLElement>("field-sheet");
 const fieldList = required<HTMLElement>("field-list");
-const imageryTile = required<HTMLButtonElement>("imagery-tile");
-const imagerySheet = required<HTMLElement>("imagery-sheet");
-const imageryList = required<HTMLElement>("imagery-list");
+/** The NASA GIBS dataset's two field tiles, true and false colour. */
+const imageryTiles = [...document.querySelectorAll<HTMLButtonElement>("button[data-imagery-colour]")];
 // Scoped to buttons: <body> carries data-variable/data-model too (styling
 // state), and must never be hidden or aria-pressed like a switch button.
 const variableRail = document.querySelector<HTMLElement>(".variable-rail");
@@ -1347,6 +1346,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   meteosat: "EUMETSAT / METEOSAT-12 FCI (0.04°, HOURLY)",
   aurora: "NOAA SWPC / OVATION (1°)",
   geo: "GEO MOSAIC",
+  gibs: "NASA GIBS / WORLDVIEW DAILY (300 M)",
 };
 
 /** The member to open when a family's one rail tile is picked: whichever
@@ -1397,13 +1397,6 @@ const tcSheetControl = createSheet({
 /** The language picker; `renderLanguageList` rebuilds its rows after a
  * switch so the check moves. */
 const renderLanguageList = mountLanguagePicker(langTrigger, langSheet, required<HTMLElement>("lang-list"));
-
-/** The daily imagery sheet, hung from its own overlay tile. */
-createSheet({
-  trigger: imageryTile,
-  sheet: imagerySheet,
-  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
-});
 
 /** The field sheet: every field the run publishes, hung from the rail's
  * MORE tile; its rows are written by `renderFieldSheet` whenever the run
@@ -2212,6 +2205,8 @@ function nearestFrameIndexForValidTime(validTime: number): number {
  * "F058:06"). An observation has no run to count from, so it reads as the
  * frame's clock time in the display zone ("09:50"). */
 function formatLead(index: number): string {
+  // A day's picture is named by its UTC day.
+  if (imageryMode()) return formatGibsDay(index);
   if (showingObservations()) return formatClockStamp(frameValidTime(index), displayZone);
   const seconds = frameLeadSeconds(index);
   const hours = Math.floor(seconds / HOUR_SECONDS);
@@ -2226,6 +2221,7 @@ function formatLead(index: number): string {
  * probe: a forecast's hour and valid time, an observation's stamp alone
  * (its readout is already that stamp's clock). */
 function frameStampLine(index: number): string {
+  if (imageryMode()) return `${formatGibsDay(index)} UTC`;
   const stamp = formatCompactDate(frameValidTime(index));
   if (showingNowcast()) return `${stamp}${formatAheadOfClock(frameValidTime(index))}`;
   return showingObservations() ? stamp : `${formatLead(index)} · ${stamp}`;
@@ -4330,7 +4326,7 @@ function stopPlayback(): void {
 
 function advancePlayback(timestamp: number): void {
   playbackFrame = null;
-  if (!playing || !activeVariable) return;
+  if (!playing || (!activeVariable && !imageryMode())) return;
   if (timestamp >= nextFrameAt) {
     // Until a frame of this session is on screen there is nothing to advance
     // from: hold on the pending frame instead of walking the slider forward.
@@ -4356,7 +4352,7 @@ function advancePlayback(timestamp: number): void {
     // When the frame is still decoding, hold the current image; the decode
     // completion will pull playback forward without touching opacity.
     lastBlendAt = timestamp;
-  } else if (timestamp - lastBlendAt >= BLEND_INTERVAL_MS - 1) {
+  } else if (!imageryMode() && timestamp - lastBlendAt >= BLEND_INTERVAL_MS - 1) {
     // A millisecond of slack keeps a 60 Hz display on every other frame
     // rather than skipping to every third on rAF jitter.
     lastBlendAt = timestamp;
@@ -4444,7 +4440,7 @@ function blendOverlay(slot: RasterSlot, index: number, next: number, weight: num
 }
 
 function startPlayback(): void {
-  if (!activeVariable || slider.disabled || playing || !ready || loopExport) return;
+  if ((!activeVariable && !imageryMode()) || slider.disabled || playing || !ready || loopExport) return;
   hideError();
   playing = true;
   restartCadence(activeFrameIndex ?? Number(slider.value));
@@ -4459,7 +4455,8 @@ function updateFrameReadout(index: number): void {
   slider.value = String(index);
   slider.setAttribute("aria-valuetext", showingObservations() ? formatDate(valid) : `${lead}, ${formatDate(valid)}`);
   forecastLead.value = lead;
-  validTime.textContent = formatDate(valid);
+  // A day's picture is a UTC day, not an instant in the display zone.
+  validTime.textContent = imageryMode() ? `${formatGibsDay(index)} UTC` : formatDate(valid);
   validTime.dateTime = new Date(valid).toISOString();
   frameTooltip.value = frameStampLine(index);
   // Read by the tooltip and by the track's playhead, so it is set on the
@@ -4780,6 +4777,14 @@ function sendPrefetchWindow(index: number): void {
 /** Show the frame if every needed plane is decoded (one for scalars, the u/v
  * pair for wind); otherwise request the missing decodes. */
 function trySelectFrame(index: number): boolean {
+  // The imagery dataset has no planes to wait on: the day is the picture.
+  if (imageryMode()) {
+    if (!metadata) return false;
+    requestedFrameIndex = index;
+    activeFrameIndex = index;
+    updateFrameReadout(index);
+    return true;
+  }
   const session = activeSession;
   const slot = primarySlot();
   if (!session || !slot || !layersAdded) return false;
@@ -5773,40 +5778,8 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
 /** The sheet's last group: the NASA GIBS daily pictures, whatever the run,
  * a row of platforms in true colour and one in the false colour that
  * shows fire; pressing the chip on screen takes the picture away. */
-/** The imagery sheet's two rows, true then false colour, a chip per
- * platform; rebuilt on a locale switch. */
-function renderImagerySheet(): void {
-  const row = (falseColor: boolean): HTMLElement => {
-    const chips = document.createElement("div");
-    chips.className = "field-chips field-imagery";
-    chips.setAttribute("role", "group");
-    const label = document.createElement("span");
-    label.className = "field-imagery-label";
-    label.textContent = t(falseColor ? "gibsFalseColor" : "gibsTrueColor");
-    chips.append(label);
-    for (const layer of GIBS_LAYERS.filter((entry) => entry.falseColor === falseColor)) chips.append(imageryChip(layer));
-    return chips;
-  };
-  imageryList.replaceChildren(row(false), row(true));
-}
-
-function imageryChip(layer: GibsLayer): HTMLButtonElement {
-  const chip = document.createElement("button");
-  chip.type = "button";
-  chip.dataset.imagery = layer.id;
-  chip.setAttribute("aria-pressed", String(view.imagery === layer.id));
-  chip.textContent = layer.code;
-  chip.title = layer.layer;
-  chip.addEventListener("click", () => {
-    setImagery(view.imagery === layer.id ? null : layer.id);
-    for (const other of imageryList.querySelectorAll<HTMLButtonElement>("button[data-imagery]")) {
-      other.setAttribute("aria-pressed", String(other.dataset.imagery === view.imagery));
-    }
-  });
-  return chip;
-}
-
-/** The daily picture under the field (`?gibs=`); null for none. */
+/** The picture on screen on the NASA GIBS dataset (`?gibs=`); null for
+ * none. */
 function setImagery(id: string | null): void {
   if (view.imagery === id) return;
   view.imagery = id;
@@ -5816,13 +5789,146 @@ function setImagery(id: string | null): void {
 
 let gibsImagery: GibsImagery | null = null;
 
+/** The days the NASA GIBS dataset offers, ending today. */
+const GIBS_DAY_COUNT = 7;
+/** The picture it opens on when the URL names none. */
+const GIBS_DEFAULT_LAYER = "noaa20";
+
+/** Whether the dataset on screen is the NASA GIBS imagery: no manifest
+ * and no session, a day axis of the shell's own and a raster layer. */
+function imageryMode(): boolean {
+  return !activeCase && FORECAST_MODELS[selectedModelId].imagery === true;
+}
+
+/** Open the NASA GIBS dataset: a day axis standing in for a bundle's time
+ * block, so the timeline, the transport and the marks read it as they read
+ * any observation window, and the picture of the playhead's day. */
+function openImagery(): void {
+  const days = gibsDays(Date.now(), GIBS_DAY_COUNT);
+  metadata = {
+    schemaVersion: 3,
+    model: "gibs",
+    runTime: new Date(days.startMs).toISOString(),
+    time: { frameCount: days.count, unitSeconds: DAY_SECONDS, firstFrameOffset: 0, frameStep: 1 },
+    grid: { width: 0, height: 0 },
+    variables: [],
+  };
+  if (gibsLayer(view.imagery) === null) view.imagery = GIBS_DEFAULT_LAYER;
+  applyDatasetWording();
+  void applyTcView();
+  applyStationView();
+  stampField(formatStamp(new Date(days.startMs + (days.count - 1) * DAY_SECONDS * 1000).toISOString(), "UTC"));
+  if (!playbackFpsChosen) setPlaybackFps(defaultFpsForLoop(loopUnits()), false);
+  slider.max = String(days.count - 1);
+  trackStart.textContent = formatGibsDay(0).slice(5);
+  trackHorizon.textContent = formatGibsDay(days.count - 1).slice(5);
+  activeFrameIndex = null;
+  requestedFrameIndex = null;
+  buildTimeline();
+  syncImageryRail();
+  renderImageryLevelRow();
+  applyImageryTitle();
+  ready = true;
+  // Yesterday's picture is whole; today's fills in as the orbiters pass.
+  trySelectFrame(Math.max(0, days.count - 2));
+  document.body.classList.remove("is-data-loading");
+  dataCard.setAttribute("aria-busy", "false");
+  say(loadStatus, "framesReady", { count: days.count });
+  loadStatus.className = "load-status";
+  slider.disabled = false;
+  playButton.disabled = false;
+  speedButton.disabled = false;
+  setVariableButtonsDisabled(false);
+  syncRailDensity();
+  syncUrl();
+}
+
+/** A day of the imagery axis as its UTC date, `2026-10-12`. */
+function formatGibsDay(index: number): string {
+  return new Date(frameValidTime(index)).toISOString().slice(0, 10);
+}
+
+/** The rail on the imagery dataset: its two colour tiles alone in the
+ * field section, nothing over them; the marks keep their own tiles. */
+function syncImageryRail(): void {
+  const on = imageryMode();
+  document.body.classList.toggle("is-imagery", on);
+  const layer = gibsLayer(view.imagery);
+  for (const tile of imageryTiles) {
+    tile.hidden = !on;
+    tile.setAttribute("aria-pressed", String(on && layer !== null && layer.falseColor === (tile.dataset.imageryColour === "fire")));
+  }
+  if (!on) return;
+  for (const button of variableButtons()) button.hidden = true;
+  for (const button of derivedButtons()) button.hidden = true;
+  fieldMore.hidden = true;
+}
+
+/** The level row on the imagery dataset: the platforms, one chip each. */
+function renderImageryLevelRow(): void {
+  const layer = gibsLayer(view.imagery);
+  levelRow.hidden = false;
+  levelRow.replaceChildren();
+  const container = document.createElement("div");
+  container.className = "level-group";
+  container.dataset.slot = "fill";
+  const caption = document.createElement("span");
+  caption.className = "level-caption";
+  caption.textContent = "SAT";
+  container.append(caption);
+  for (const platform of GIBS_PLATFORMS) {
+    const target = gibsLayerFor(platform, layer?.falseColor ?? false);
+    if (!target) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.level = "";
+    button.setAttribute("aria-pressed", String(layer?.platform === platform));
+    const glyph = document.createElement("b");
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = GIBS_PLATFORM_GLYPH[platform] ?? target.code;
+    const name = document.createElement("span");
+    name.className = "rail-name";
+    const code = document.createElement("span");
+    code.textContent = target.code;
+    name.append(code);
+    button.append(glyph, name);
+    button.addEventListener("click", () => selectImagery(target.id));
+    container.append(button);
+  }
+  levelRow.append(container);
+}
+
+/** The headline on the imagery dataset: the platform and the colour. */
+function applyImageryTitle(): void {
+  const layer = gibsLayer(view.imagery);
+  if (!layer) return;
+  variableCode.textContent = `${FORECAST_MODELS.gibs.label} / ${layer.code}`;
+  variableTitle.textContent = `${layer.code} ${t(layer.falseColor ? "gibsFalseColor" : "gibsTrueColor")}`;
+}
+
+/** Another picture on the imagery dataset, from a colour tile or a
+ * platform chip. */
+function selectImagery(id: string): void {
+  setImagery(id);
+  syncImageryRail();
+  renderImageryLevelRow();
+  applyImageryTitle();
+}
+
+for (const tile of imageryTiles) {
+  tile.addEventListener("click", () => {
+    const platform = gibsLayer(view.imagery)?.platform ?? GIBS_DEFAULT_LAYER;
+    const target = gibsLayerFor(platform, tile.dataset.imageryColour === "fire");
+    if (target) selectImagery(target.id);
+  });
+}
+
 /** Draw the picture the view names under the field — under the fill
  * layer once there is one, under the coastline before — on the
  * playhead's UTC day, and its notice on the credit line. Called on every
  * frame step; the layer does nothing unless the day changed. */
 function syncGibs(): void {
   const layer = gibsLayer(view.imagery);
-  imageryTile.setAttribute("aria-pressed", String(layer !== null));
   if (layer) document.body.dataset.imagery = layer.id;
   else delete document.body.dataset.imagery;
   if (!mapStyleReady || (layer === null && gibsImagery === null)) return;
@@ -6282,7 +6388,13 @@ function syncUrl(): void {
     },
     DEFAULT_VARIABLE,
   );
-  const withScene = searchWithScene(search, currentScene());
+  let withScene = searchWithScene(search, currentScene());
+  // The imagery dataset has no field, lines or overlays to name.
+  if (imageryMode()) {
+    const params = new URLSearchParams(withScene);
+    for (const key of ["type", "lines", "particles", "derived", "volume"]) params.delete(key);
+    withScene = `?${params.toString()}`;
+  }
   if (withScene === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${withScene}${window.location.hash}`);
 }
@@ -9720,6 +9832,18 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   loadStatus.className = "load-status is-loading";
   say(runTime, "awaitingData");
 
+  // The imagery dataset's picture and tiles go with it; any other dataset
+  // drops them.
+  if (!imageryMode() && view.imagery !== null) {
+    view.imagery = null;
+    syncGibs();
+  }
+  syncImageryRail();
+  if (imageryMode()) {
+    openImagery();
+    return;
+  }
+
   try {
     // Two ways in, one manifest contract. The live feed reads the mutable
     // pointer for the current run; a showcase case reads the mutable catalog
@@ -9901,7 +10025,7 @@ slider.addEventListener("pointerdown", () => timelinePanel.classList.add("is-scr
 window.addEventListener("pointerup", () => timelinePanel.classList.remove("is-scrubbing"));
 slider.addEventListener("blur", () => timelinePanel.classList.remove("is-scrubbing"));
 slider.addEventListener("keydown", (event) => {
-  if (!activeVariable || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+  if ((!activeVariable && !imageryMode()) || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
   event.preventDefault();
   stopPlayback();
   generation += 1;
@@ -9992,7 +10116,10 @@ function applyAppearance(): void {
  * lines — and the basemap's label language. */
 function applyLocale(): void {
   renderLanguageList();
-  renderImagerySheet();
+  if (imageryMode()) {
+    renderImageryLevelRow();
+    applyImageryTitle();
+  }
   probePanel.root.setAttribute("aria-label", t("probeAria"));
   probePanel.close.setAttribute("aria-label", t("probeCloseAria"));
   applyDatasetWording();
@@ -10079,7 +10206,7 @@ map.on("click", (event) => {
     return;
   }
   closeStationCard();
-  setProbe(event.lngLat.lng, event.lngLat.lat);
+  if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
   if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers) return;
@@ -10282,10 +10409,6 @@ updateTransport();
 syncRail();
 buildPlaceholderTicks();
 resetPreloadCard(FRAME_COUNT);
-// The daily imagery has a tile of its own, apart from the fields: no run
-// carries it, so it shows from the start.
-imageryTile.hidden = false;
-renderImagerySheet();
 map.once("load", () => {
   mapStyleReady = true;
   // A theme or language picked while the style was still loading was built

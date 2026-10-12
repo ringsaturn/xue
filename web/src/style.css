@@ -3366,6 +3366,13 @@ body[data-credits~="meteosat"] .source-credit[data-credit-model="meteosat"] {
 }
 
 /* One radar alone suppresses the field, so only the radar's notice stands. */
+/* The NASA GIBS dataset is a picture, not a field: no scale, no buffer to
+   report on. */
+body.is-imagery #legend,
+body.is-imagery #data-card {
+  display: none;
+}
+
 /* A fire field stands in for its anchor: the anchor's scale goes with it,
    and the derived row is the key. */
 body.fire-field #legend .legend-scale,

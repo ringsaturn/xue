@@ -786,11 +786,12 @@ describe("dataset kinds", () => {
   it("lists the live feeds, the ten observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
     // SourceSpec.latest_filename); the ten observation windows are the
-    // last of the switch order, and the mosaic — a view over the imagers
-    // with no feed of its own — closes it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo"]);
+    // last of the switch order, then the mosaic — a view over the imagers
+    // with no feed of its own — and NASA GIBS's daily imagery, read from
+    // GIBS itself, close it.
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
-      if (FORECAST_MODELS[model].mosaic) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
+      if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
       expect(isCaseOnlyModel(model)).toBe(false);
     }

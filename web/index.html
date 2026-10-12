@@ -650,6 +650,20 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFwalert">R</b>
           <span class="rail-name"><span>RH·GUST</span> <small data-i18n="varFwalert">RED FLAG</small></span>
         </button>
+        <!-- The NASA GIBS dataset's two fields (?model=gibs): the daily
+             picture in true colour or in the fire false colour (a burn
+             scar dark red, a fire bright). The platform is picked on the
+             level row. Shown on that dataset alone (main.ts::syncImageryRail). -->
+        <button type="button" data-imagery-colour="true" data-i18n-tip="gibsTip" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.8" /><path d="M3.5 15l4.5-4 4 3.5 3-2.5 5.5 4.5" /><circle cx="16" cy="9" r="1.3" /></svg>
+          <b class="rail-glyph" aria-hidden="true">T</b>
+          <span class="rail-name"><span>RGB</span> <small data-i18n="gibsTrueColor">TRUE</small></span>
+        </button>
+        <button type="button" data-imagery-colour="fire" data-i18n-tip="gibsTip" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.8" /><path d="M12 9c.3 1.4 2.2 2.4 2.2 4.4a2.2 2.2 0 0 1-4.4 0c0-1 .6-1.6 1-2.1.2.6.5 1 .9 1.1-.2-1.1-.3-2.4.3-3.4z" fill="currentColor" stroke="none" /></svg>
+          <b class="rail-glyph" aria-hidden="true">F</b>
+          <span class="rail-name"><span>SWIR</span> <small data-i18n="gibsFalseColor">FIRE</small></span>
+        </button>
         <!-- MORE: not a field but the way to every field the run
              publishes, grouped by quantity in the sheet below the rail;
              hidden when the core tiles already reach them all. -->
@@ -686,16 +700,6 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15.5h9.5a3.5 3.5 0 0 0 .4-7A5 5 0 0 0 7.3 9.6 3 3 0 0 0 7 15.5z" /><path d="M5 19.5h12" /><path d="M8 12.5h7" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVolume">Q</b>
           <span class="rail-name"><span>CLW3D</span> <small data-i18n="varVolume">3D CLOUD</small></span>
-        </button>
-        <!-- The daily polar-orbiter picture under the field (?gibs=, NASA
-             GIBS): a sheet trigger — which platform, true or false colour,
-             is chosen there; pressed while a picture is drawn. Its own
-             tile, apart from the geostationary fields: one image a day,
-             not a time series. -->
-        <button id="imagery-tile" type="button" data-dialog data-i18n-tip="gibsTip" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" hidden>
-          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.8" /><path d="M3.5 15l4.5-4 4 3.5 3-2.5 5.5 4.5" /><circle cx="16" cy="9" r="1.3" /></svg>
-          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphImagery">G</b>
-          <span class="rail-name"><span>GIBS</span> <small data-i18n="varImagery">DAILY</small></span>
         </button>
         <!-- The experimental composite's derived layers (?x=): switches
              like the one above — each draws over whatever the fill is. A
@@ -922,6 +926,11 @@
               <small>SATELLITE IR · ALL DISKS</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="gibs" aria-pressed="false">
+              <span class="model-name">NASA GIBS</span>
+              <small>DAILY IMAGERY · POLAR ORBITERS</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -1000,17 +1009,6 @@
           <span class="sheet-grip" aria-hidden="true"></span>
           <p class="sheet-heading" data-i18n="tcHeading">TROPICAL CYCLONES</p>
           <div id="tc-list" class="tc-list" role="group"></div>
-        </div>
-      </div>
-
-      <!-- The daily imagery sheet: NASA GIBS platforms in true and false
-           colour, one chip each, written by main.ts. -->
-      <div id="imagery-sheet" class="model-sheet field-sheet" hidden>
-        <div class="model-sheet-scrim" data-sheet-dismiss></div>
-        <div class="model-sheet-panel field-panel" role="dialog" aria-modal="true" data-i18n-aria="fieldGroupImagery" aria-label="Daily imagery">
-          <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="fieldGroupImagery">DAILY IMAGERY · NASA GIBS</p>
-          <div id="imagery-list" class="field-list"></div>
         </div>
       </div>
 
