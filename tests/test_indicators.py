@@ -209,7 +209,8 @@ class FeatureTests(unittest.TestCase):
         # water (NaN) on every frame, so the first carries the region.
         offsets = [hour * HOUR for hour in range(0, 49, 3)]
         water = np.empty((len(offsets), 1, 2))
-        water[:, 0, 0] = np.linspace(0.30, 0.22, len(offsets))
+        # 0.004 a frame: the first day's mean, 0.286, is no rounding tie.
+        water[:, 0, 0] = 0.30 - 0.004 * np.arange(len(offsets))
         water[:, 0, 1] = np.nan
         temperature = np.full((len(offsets), 1, 2), 18.0)
         days = features(
