@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import oceanJson from "../fixtures/ocean-registry.json";
+import soilJson from "../fixtures/soil-registry.json";
 import surfaceJson from "../fixtures/surface-registry.json";
 
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
 import { isobaricLegend, scalarLegendRange } from "../../web/src/levels";
-import { OCEAN_IDS, SURFACE_DIAGNOSTIC_IDS } from "../../web/src/manifest";
+import { OCEAN_IDS, SOIL_IDS, SURFACE_DIAGNOSTIC_IDS } from "../../web/src/manifest";
 import { decodeValue } from "../../web/src/palettes";
 import { registryVariable, type RegistryEntry } from "./helpers";
 
 /** The single-surface scalar registries, each the committed fixture both
- * encoders are held to (`tests/test_surface.py`, `tests/test_ocean.py`, and
- * the Rust encoder's unit tests). The contract below is the same for each;
+ * encoders are held to (`tests/test_surface.py`, `tests/test_ocean.py`,
+ * `tests/test_soil.py`, and the Rust encoder's unit tests). The contract below is the same for each;
  * what is particular to one lives in its own test file. */
 const REGISTRIES = [
   {
@@ -31,6 +32,13 @@ const REGISTRIES = [
     // The direction's legend closes the circle at 360, which the codebook
     // stops one code short of; every other span sits inside its codebook.
     legendPastCodebook: ["dirpw"],
+  },
+  {
+    name: "soil",
+    registry: soilJson as unknown as Record<string, RegistryEntry>,
+    ids: SOIL_IDS as readonly string[],
+    withoutLegend: [] as string[],
+    legendPastCodebook: [] as string[],
   },
 ];
 

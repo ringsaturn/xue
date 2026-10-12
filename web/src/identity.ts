@@ -92,7 +92,22 @@ export type ChartFamily =
   | "pm10"
   | "pm10dust"
   | "aurora"
-  | "clw";
+  | "clw"
+  | SoilChartFamily;
+
+/** The soil layers, one chart family per layer like the cloud layers: the
+ * same quantity at four depths, told apart by the fixed surface's value
+ * rather than an isobaric level, so the layer is in the family and
+ * `level` stays the hectopascals it is everywhere else. */
+export type SoilChartFamily =
+  | "tsoil1"
+  | "tsoil2"
+  | "tsoil3"
+  | "tsoil4"
+  | "soilw1"
+  | "soilw2"
+  | "soilw3"
+  | "soilw4";
 
 export interface VariableIdentity {
   family: ChartFamily;
@@ -189,7 +204,9 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * told apart by the `aerosol` block's species, size and wavelength
  * (`aerosolField`), (0,1,22) @102 cloud water mixing ratio at an altitude
  * above mean sea level — one level of a cloud volume, whose altitude is
- * the volume's business (volume.ts), not the identity's.
+ * the volume's business (volume.ts), not the identity's, (2,0,2) @106 soil
+ * temperature and (2,0,192) @106 volumetric soil moisture (NCEP-local
+ * SOILW), the layer told apart by the surface's value (`soilLayer`).
  */
 export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -245,7 +262,31 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 0, 3, 196) && surface === 1) return scalar("hpbl", null);
   if (isTriple(parameter, 0, 1, 19) && surface === 1) return scalar("ptype", null);
   if (isTriple(parameter, 0, 1, 22) && surface === 102) return scalar("clw", null);
+  if (isTriple(parameter, 2, 0, 2) && surface === 106) {
+    const layer = soilLayer(SOIL_TEMPERATURE_LAYERS, value);
+    return layer === null ? null : scalar(layer, null);
+  }
+  if (isTriple(parameter, 2, 0, 192) && surface === 106) {
+    const layer = soilLayer(SOIL_MOISTURE_LAYERS, value);
+    return layer === null ? null : scalar(layer, null);
+  }
   return null;
+}
+
+/** The soil layers by the upper bound of the layer the registry writes
+ * them on (surface 106, depth below land in metres): GFS's Noah layers
+ * start at 0, 0.1, 0.4 and 1 m. The IFS's layers are cut elsewhere, but the
+ * encoders write them on the same four values (docs/format.md), so the
+ * value names the layer's index and never its depth. Millimetres, so the
+ * comparison is exact whatever float a scale factor of 1 leaves behind. */
+const SOIL_LAYER_TOPS_MM: readonly number[] = [0, 100, 400, 1000];
+const SOIL_TEMPERATURE_LAYERS: readonly SoilChartFamily[] = ["tsoil1", "tsoil2", "tsoil3", "tsoil4"];
+const SOIL_MOISTURE_LAYERS: readonly SoilChartFamily[] = ["soilw1", "soilw2", "soilw3", "soilw4"];
+
+function soilLayer(layers: readonly SoilChartFamily[], depth: number | null): SoilChartFamily | null {
+  if (depth === null || !Number.isFinite(depth)) return null;
+  const index = SOIL_LAYER_TOPS_MM.indexOf(Math.round(depth * 1000));
+  return index < 0 ? null : layers[index]!;
 }
 
 /** The satellite channel a brightness temperature belongs to, by the

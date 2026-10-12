@@ -561,6 +561,7 @@ export type KnownBundleId =
   | "cloud3d"
   | SurfaceDiagnosticId
   | OceanId
+  | SoilId
   | SatelliteId
   | AerosolId
   | PressureBundleId
@@ -613,6 +614,14 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
  * from the height and direction (`WAVE_COMPONENT_IDS`). */
 type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
 export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
+
+/** The soil set — the land surface model's soil temperature and total
+ * volumetric water content, layer by layer from the surface down. The id is
+ * the layer's index, not its depth: GFS's Noah layers and the IFS's HTESSEL
+ * layers are cut at different depths and share the ids (docs/sources.md).
+ * Held to the encoders by `tests/fixtures/soil-registry.json`. */
+type SoilId = "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4" | "soilw1" | "soilw2" | "soilw3" | "soilw4";
+export const SOIL_IDS: readonly SoilId[] = ["tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4"];
 
 /** The satellite bundles — brightness temperature in the 10.4 µm infrared
  * window, one bundle per channel, named by nominal wavelength and
@@ -683,6 +692,7 @@ type KnownDataVariableId =
   | "cref"
   | SurfaceDiagnosticId
   | OceanId
+  | SoilId
   | AerosolId
   | PressureBundleId
   | IsobaricScalarBundleId
@@ -709,6 +719,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "cloud3d",
   ...SURFACE_DIAGNOSTIC_IDS,
   ...OCEAN_IDS,
+  ...SOIL_IDS,
   ...SATELLITE_IDS,
   ...AEROSOL_IDS,
   "prmsl",

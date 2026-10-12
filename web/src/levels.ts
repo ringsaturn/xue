@@ -16,8 +16,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * waves (the wave vector — significant height along the direction of
  * travel — and the primary period), the aerosol optical depth (the whole
  * column and five species) and the particulate matter (PM2.5, PM10 and
- * the dust part of PM10), and the level row or the sheet's chips pick
- * among those the same way. Precipitation, radiation, reflectivity, the
+ * the dust part of PM10) and the two soil families (temperature and
+ * volumetric moisture, each in four layers from the surface down), and the
+ * level row or the sheet's chips pick among those the same way. Precipitation, radiation, reflectivity, the
  * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
  * temperature) and the skin temperature are single layers and belong to no
  * family.
@@ -26,8 +27,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * ranges are copied from the encoders and held to them by
  * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`),
  * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`) and
- * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`) and
- * `tests/fixtures/aerosol-registry.json` (`tests/web/aerosol.test.ts`), the
+ * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`),
+ * `tests/fixtures/aerosol-registry.json` (`tests/web/aerosol.test.ts`) and
+ * `tests/fixtures/soil-registry.json` (`tests/web/soil.test.ts`), the
  * way pressure.ts is held by its own registry.
  */
 export type IsobaricFamily =
@@ -44,7 +46,9 @@ export type IsobaricFamily =
   | "ice"
   | "wave"
   | "aod"
-  | "pm";
+  | "pm"
+  | "tsoil"
+  | "soilw";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -61,6 +65,8 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "wave",
   "aod",
   "pm",
+  "tsoil",
+  "soilw",
 ];
 
 interface FamilyInfo {
@@ -245,7 +251,35 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "pm10dust", code: "10 DUST" },
     ],
   },
+  // The soil: the land surface model's four layers from the surface down,
+  // the top one heading each family, the level row picking the layer. A
+  // layer is an index, not a depth — GFS's Noah layers end at 10, 40, 100
+  // and 200 cm, the IFS's at 7, 28, 100 and 289, under the same ids — so
+  // the row reads the index and makes no claim about the depth.
+  tsoil: {
+    id: "tsoil",
+    kind: "scalar",
+    surface: "tsoil1",
+    code: "TSOIL",
+    surfaceCode: "L1",
+    glossKey: "varTsoil",
+    levels: soilLevels("tsoil"),
+  },
+  soilw: {
+    id: "soilw",
+    kind: "scalar",
+    surface: "soilw1",
+    code: "SOILW",
+    surfaceCode: "L1",
+    glossKey: "varSoilw",
+    levels: soilLevels("soilw"),
+  },
 };
+
+/** One soil family's layers, top first, each labelled by its index. */
+function soilLevels(prefix: "tsoil" | "soilw"): FamilyMember[] {
+  return [1, 2, 3, 4].map((layer) => ({ id: `${prefix}${layer}` as ForecastBundleId, code: `L${layer}` }));
+}
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
  * tile for: the scalar primary wave direction, which is not a fill (see the
@@ -529,6 +563,25 @@ export const CIN_CHART_RANGE: readonly [number, number] = [-200, 0];
  * marine boundary layer; the codebook runs to 5080 m. */
 export const PBL_CHART_MAX = 4000;
 
+/** The soil temperature reads over ±50 °C, the 2 m ramp's colours at the
+ * same values so frozen ground is the blue frozen air is; the codebook runs
+ * from −60.5 to 66 °C (−61, its bottom, is no soil) and holds a desert
+ * skin's afternoon in a probe past the ramp's top. */
+export const SOIL_TEMPERATURE_CHART_RANGE: readonly [number, number] = [-50, 50];
+/** Volumetric soil moisture reads to 0.5 m³/m³, about the porosity of a
+ * saturated loam; the codebook's 1.0 keeps a peat or an ice sheet's
+ * reading distinct in a probe without stretching the ramp for it. */
+export const SOIL_MOISTURE_CHART_MAX = 0.5;
+
+/** Whether a chart family is one of the soil temperature layers, or one
+ * of the soil moisture layers. */
+export function isSoilTemperature(family: ChartFamily): boolean {
+  return family === "tsoil1" || family === "tsoil2" || family === "tsoil3" || family === "tsoil4";
+}
+export function isSoilMoisture(family: ChartFamily): boolean {
+  return family === "soilw1" || family === "soilw2" || family === "soilw3" || family === "soilw4";
+}
+
 /** The precipitation-type legend: WMO code table 4.201's values GFS
  * reports, each with the colour a chart paints it in and the message key
  * its legend swatch reads under. A categorical field, so its legend is a
@@ -577,6 +630,8 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   // The dust confidences read over [0, 1], their codebook less the code
   // under 0.0 that is no data.
   if (family === "dustcf" || family === "zhouye") return [0, 1];
+  if (isSoilTemperature(family)) return SOIL_TEMPERATURE_CHART_RANGE;
+  if (isSoilMoisture(family)) return [0, SOIL_MOISTURE_CHART_MAX];
   const aerosol = aerosolChart(family);
   if (aerosol) return [0, aerosol.chartMax];
   return null;
@@ -713,6 +768,8 @@ export function familyLabel(id: ForecastBundleId): string {
     wave: "varLabelHtsgw",
     aod: "varLabelAod",
     pm: "varLabelPm25",
+    tsoil: "varLabelTsoil1",
+    soilw: "varLabelSoilw1",
   }[family!] as MessageKey;
   return t(key).replace("{level}", String(level));
 }
@@ -737,6 +794,14 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   pm25: "varLabelPm25",
   pm10: "varLabelPm10",
   pm10dust: "varLabelPm10dust",
+  tsoil1: "varLabelTsoil1",
+  tsoil2: "varLabelTsoil2",
+  tsoil3: "varLabelTsoil3",
+  tsoil4: "varLabelTsoil4",
+  soilw1: "varLabelSoilw1",
+  soilw2: "varLabelSoilw2",
+  soilw3: "varLabelSoilw3",
+  soilw4: "varLabelSoilw4",
 };
 
 /** The instrument-panel code of one isobaric member: "TMP 850MB", "RH
@@ -760,6 +825,8 @@ export function isobaricCode(id: ForecastBundleId): string {
     wave: "WAVE",
     aod: "AOD",
     pm: "PM",
+    tsoil: "TSOIL",
+    soilw: "SOILW",
   }[family];
   return `${word} ${level}MB`;
 }
@@ -812,6 +879,8 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
   if (family === "ir039") return rangeLegend(SHORTWAVE_WINDOW_LEGEND_RANGE, 40);
   if (family === "dustcf" || family === "zhouye") return rangeLegend([0, 1], 0.2);
+  if (isSoilTemperature(family)) return rangeLegend(SOIL_TEMPERATURE_CHART_RANGE, 10);
+  if (isSoilMoisture(family)) return rangeLegend([0, SOIL_MOISTURE_CHART_MAX], 0.1);
   const aerosol = aerosolChart(family);
   if (aerosol) return logLegend(aerosol);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);

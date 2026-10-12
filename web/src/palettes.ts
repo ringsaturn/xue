@@ -11,10 +11,13 @@ import {
   PBL_CHART_MAX,
   PTYPE_CLASSES,
   PWAT_CHART_MAX,
+  SOIL_MOISTURE_CHART_MAX,
   VISIBILITY_CHART_MAX,
   WAVE_HEIGHT_CHART_MAX,
   WAVE_PERIOD_CHART_MAX,
   aerosolChart,
+  isSoilMoisture,
+  isSoilTemperature,
   isobaricRange,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
@@ -630,6 +633,33 @@ const COARSE_PARTICULATE_STOPS: Stop[] = [
   [1000, 120, 20, 60, 255],
 ];
 
+// Soil temperature: the 2 m ramp at the same values, so frozen ground is
+// the blue frozen air is and 0 °C keeps its pale yellow, opaque like the
+// air's. The codebook's bottom, −61 °C, is no soil (open water) rather than
+// a value: transparent, so the sea is the map; the shell also erodes it
+// rather than interpolating across the coast (`floorIsNoData`).
+const SOIL_TEMPERATURE_STOPS: Stop[] = [[-61, 39, 25, 89, 0], [-60.5, 39, 25, 89, 255], ...TEMPERATURE_STOPS];
+
+// Volumetric soil moisture in m³/m³, read the way a drought map is: the
+// browns of dry ground under 0.1, paper tones through the wilting range,
+// greens as the root zone wets and blue at the 0.5 a saturated loam
+// holds. Translucent like the humidity wash, so the map's names still read
+// over the land. Nothing at or below 0: the codebook's bottom is no soil
+// (open water and, on GFS, sea ice), and the IFS writes 0.0 over the sea
+// with no bitmap, which no real soil holds either.
+const SOIL_MOISTURE_STOPS: Stop[] = [
+  [0, 140, 96, 52, 0],
+  [0.004, 140, 96, 52, 200],
+  [0.05, 166, 118, 66, 200],
+  [0.1, 200, 160, 100, 205],
+  [0.15, 226, 206, 150, 210],
+  [0.2, 200, 220, 160, 215],
+  [0.25, 140, 200, 130, 220],
+  [0.3, 80, 170, 120, 225],
+  [0.4, 50, 130, 170, 235],
+  [SOIL_MOISTURE_CHART_MAX, 40, 80, 160, 245],
+];
+
 // Primary wave direction, degrees true the waves come from, on a hue wheel
 // that closes: north red, east yellow, south cyan, west blue, north red
 // again. Not a fill the rail offers (levels.ts) — the file's 0 is both
@@ -856,6 +886,8 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;
   if (family === "aurora") return AURORA_STOPS;
   if (family === "clw") return CLOUD_WATER_STOPS;
+  if (isSoilTemperature(family)) return SOIL_TEMPERATURE_STOPS;
+  if (isSoilMoisture(family)) return SOIL_MOISTURE_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
   if (family === "tmp") return remapStops(TEMPERATURE_STOPS, [-60, 50], temperaturePaletteDomain(level));
   if (family === "rh") return HUMIDITY_STOPS;
