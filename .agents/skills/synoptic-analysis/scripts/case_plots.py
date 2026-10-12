@@ -4,14 +4,20 @@
   case_plots.py DIR [--out DIR/figures] [--tz 9] [--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru]
       [--figures tracks,upper,verify,surface,moisture,meteogram,skewt,nowcast,ensemble]
       [--map-times T1,T2] [--point-name 羽田] [--mark 2026-09-21T08Z] [--window T1,T2]
-      [--span T1,T2] [--skewt 47646,47678,47971] [--map-box S N W E] [--font "Hiragino Sans GB"]
+      [--span T1,T2] [--skewt 47646,47678,47971] [--map-box S N W E] [--borders MNG,CHN]
+      [--font "Hiragino Sans GB"]
 
 Each figure is drawn only when the directory has what it needs (tracks and
 ensemble need storm.json / ens.json, meteogram needs point.npz, skewt needs
 soundings.json, nowcast needs nowcast.npz, the maps need fields.npz with the
 bundles they read: prmsl, hgt500, wind250, wind850, qflux850, thetae850,
 prate, wind10m, gust). Needs matplotlib. The coastline is Natural Earth 50 m,
-downloaded once into ~/.cache/xue-synoptic/.
+downloaded once into ~/.cache/xue-synoptic/. `--borders MNG,CHN` adds those
+countries' outlines from geoBoundaries gbOpen ADM0 at full resolution (cached
+the same way). Natural Earth's borders are kilometres off in places (2–4 km on
+the China–Mongolia line), too coarse to say which side of a border a fire or a
+cell is on; geoBoundaries' accuracy follows its per-country source, which the
+run prints, so name the country whose source is OpenStreetMap.
 """
 from __future__ import annotations
 
@@ -28,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import case_data as C  # noqa: E402
 
 COAST_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_coastline.geojson"
+BORDER_API = "https://www.geoboundaries.org/api/current/gbOpen/{iso}/ADM0/"
 RAIN_LEVELS = [0.5, 1, 2, 5, 10, 20, 40, 80]
 RAIN_COLORS = ["#d9f0ff", "#a6d8ff", "#66b3ff", "#2a80ff", "#ffe066", "#ff9d1a", "#e0261c", "#8e0d8e"]
 MODEL_COLORS = {"gfs": "#c0392b", "ecmwf": "#1f5fbf", "ifshres": "#2e8b57", "aifs": "#8e0d8e", "hrrr": "#d35400", "sflux": "#7f8c8d"}
@@ -152,7 +159,7 @@ L = {
 
 
 class Case:
-    def __init__(self, d: Path, tz: float, lang: str):
+    def __init__(self, d: Path, tz: float, lang: str, borders: tuple[str, ...] = ()):
         self.d = d; self.tz = timezone(timedelta(hours=tz)); self.tzh = tz; self.T = L[lang]
         self.meta = json.loads((d / "meta.json").read_text())
         self.fields = np.load(d / "fields.npz") if (d / "fields.npz").exists() else None
@@ -160,6 +167,7 @@ class Case:
         self.now = np.load(d / "nowcast.npz") if (d / "nowcast.npz").exists() else None
         self.storm = C._load_json(d, "storm.json"); self.ens = C._load_json(d, "ens.json"); self.snd = C._load_json(d, "soundings.json")
         self.coast = load_coast()
+        self.borders = [ln for iso in borders for ln in load_border(iso)]
 
     def local(self, T: str, fmt="%m/%d %H") -> str:
         return C.parse_time(T).astimezone(self.tz).strftime(fmt) + (f" UTC{self.tzh:+g}" if self.tzh else "Z")
@@ -191,6 +199,24 @@ def load_coast():
     return lines
 
 
+def load_border(iso: str):
+    """One country's outline as polygon rings, from its geoBoundaries ADM0."""
+    iso = iso.upper()
+    cache = Path.home() / ".cache" / "xue-synoptic" / f"geoBoundaries-{iso}-ADM0.geojson"
+    import requests
+    if not cache.exists():
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        meta = requests.get(BORDER_API.format(iso=iso), timeout=60); meta.raise_for_status(); meta = meta.json()
+        print(f"borders {iso}: {meta.get('boundarySource')} ({meta.get('boundaryLicense')})", file=sys.stderr)
+        r = requests.get(meta["gjDownloadURL"], timeout=300); r.raise_for_status(); cache.write_bytes(r.content)
+    rings = []
+    for feat in json.loads(cache.read_text())["features"]:
+        geom = feat["geometry"]
+        for poly in (geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]):
+            rings.extend(np.asarray(ring) for ring in poly)
+    return rings
+
+
 # --- map scaffolding ----------------------------------------------------------
 
 def setmap(ax, box, case: Case, title=None, marks=()):
@@ -199,6 +225,10 @@ def setmap(ax, box, case: Case, title=None, marks=()):
         if a[:, 0].max() < w - 5 or a[:, 0].min() > e + 5 or a[:, 1].max() < s - 5 or a[:, 1].min() > n + 5:
             continue
         ax.plot(a[:, 0], a[:, 1], color="0.25", lw=0.6, zorder=5)
+    for a in case.borders:
+        if a[:, 0].max() < w - 5 or a[:, 0].min() > e + 5 or a[:, 1].max() < s - 5 or a[:, 1].min() > n + 5:
+            continue
+        ax.plot(a[:, 0], a[:, 1], color="0.25", lw=0.6, ls=(0, (4, 2)), zorder=5)
     ax.set_xlim(w, e); ax.set_ylim(s, n)
     ax.set_aspect(1 / math.cos(math.radians((s + n) / 2)))
     step = 5 if e - w <= 40 else 10
@@ -487,6 +517,7 @@ def main(argv=None):
     ap.add_argument("--map-box", type=float, nargs=4, metavar=("S", "N", "W", "E"), help="map extent (default: the case box)")
     ap.add_argument("--point-name", default="point"); ap.add_argument("--mark", help="a valid time to mark on the meteogram and ensemble timing")
     ap.add_argument("--window", help="T1,T2 shaded on the meteogram"); ap.add_argument("--span", help="T1,T2 x-limits of the meteogram (default: the whole axis)"); ap.add_argument("--skewt", help="WMO ids for the skew-T panel"); ap.add_argument("--skewt-time")
+    ap.add_argument("--borders", help="ISO 3166-1 alpha-3 codes whose outlines to draw, e.g. MNG,CHN")
     ap.add_argument("--ens-from"); ap.add_argument("--ens-to"); ap.add_argument("--font", default="Hiragino Sans GB,Noto Sans CJK SC,Arial Unicode MS,DejaVu Sans")
     a = ap.parse_args(argv)
 
@@ -496,7 +527,7 @@ def main(argv=None):
     plt.rcParams["font.family"] = a.font.split(","); plt.rcParams["axes.unicode_minus"] = False; plt.rcParams["figure.dpi"] = 130
     import logging; logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
-    case = Case(Path(a.dir), a.tz, a.lang)
+    case = Case(Path(a.dir), a.tz, a.lang, tuple(a.borders.split(",")) if a.borders else ())
     out = Path(a.out) if a.out else Path(a.dir) / "figures"; out.mkdir(parents=True, exist_ok=True)
     box = tuple(a.map_box) if a.map_box else tuple(case.meta["box"]) if case.meta.get("box") else None
     marks = [tuple(case.meta["point"])] if case.meta.get("point") else []

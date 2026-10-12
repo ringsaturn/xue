@@ -277,7 +277,13 @@ def main(argv=None):
 
     if a.cmd == "sources":
         for sid in source_ids():
-            c = collection(sid)
+            # One collection the catalog links but the bucket does not serve
+            # (nexrad's live view publishes nothing) must not hide the rest.
+            try:
+                c = collection(sid)
+            except requests.RequestException as e:
+                print(f"{sid:10} unavailable: {e}")
+                continue
             live = c.get("xue:live")
             ext = c["extent"]["temporal"]["interval"][0]
             print(f"{sid:10} {c.get('title',''):45} live={live} {ext[0]} .. {ext[1]}")
