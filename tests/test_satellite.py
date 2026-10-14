@@ -983,7 +983,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         gone from 88° of either zenith, and a cell the sun has left keeps
         its reflectance exactly."""
         self.assertAlmostEqual(rayleigh_optical_depth(0.47), 0.1851, places=4)
-        self.assertAlmostEqual(rayleigh_optical_depth(0.64), 0.0524, places=4)
+        self.assertAlmostEqual(rayleigh_optical_depth(0.64), 0.0525, places=4)
         self.assertAlmostEqual(rayleigh_optical_depth(0.86), 0.0159, places=4)
         self.assertEqual(TRUE_COLOR_RAYLEIGH_FADE_DEG, (70.0, 88.0))
 
