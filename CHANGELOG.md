@@ -5,6 +5,13 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-10-14
+
+- Fixed: Himawari frames (`himawari`, `himawarijp`) were placed one of
+  each band's own pixels north-west of their ground (the ISatSS tiles'
+  coordinates are a pixel off); the reader now corrects it, so the bands
+  of a composite line up.
+
 ## 2026-10-13
 
 - New: `metrics/latency.json` (`docs/metrics.md`, `schemaVersion` 1), when

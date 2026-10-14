@@ -234,7 +234,10 @@ ISATSS_TILE_ROWS: tuple[tuple[int, int], ...] = ((2, 6), (1, 8), (0, 10), (0, 10
 #: A tile is 550 x 550 pixels at 2 km of a 5500 x 5500 disk, whose west
 #: and north edges the tiles' geotransforms put 2751 pixels from nadir
 #: (T020's origin is one pixel west of the sub-satellite column, 1651
-#: pixels north).
+#: pixels north). That is the files' one-pixel error, which
+#: :func:`_shift_one_pixel_south_east` takes out of the mosaic; the
+#: footprints follow the files, since they only choose tiles and their
+#: margin is wider than a pixel.
 ISATSS_TILE_PIXELS = 550
 ISATSS_EDGE_PIXELS = 2751
 #: The products' ``fixedgrid_projection``: the perspective height and the
@@ -448,12 +451,14 @@ class ISatSSReader:
             ["gdalbuildvrt", "-q", "-overwrite", "-resolution", "highest", str(vrt), *sources],
             description=f"gdalbuildvrt {vrt.name}",
         )
+        text = _shift_one_pixel_south_east(vrt.read_text(encoding="utf-8"))
         if missing_below is not None:
             from .assemble import NODATA, dataset_packing  # noqa: PLC0415 - assemble imports nothing from here
 
             packing = dataset_packing(self.packing_source(files))
             floor = int(math.floor((missing_below - packing.offset) / packing.scale))
-            vrt.write_text(_mask_below(vrt.read_text(encoding="utf-8"), floor, NODATA), encoding="utf-8")
+            text = _mask_below(text, floor, NODATA)
+        vrt.write_text(text, encoding="utf-8")
         return vrt
 
     def packing_source(self, files: SlotFiles, *, channel: Channel | None = None) -> Path:
@@ -469,6 +474,25 @@ class ISatSSReader:
             if footprint is not None and boxes_overlap(footprint, region, ISATSS_TILE_MARGIN_DEG):
                 covering.add(tile)
         return frozenset(covering)
+
+
+def _shift_one_pixel_south_east(vrt: str) -> str:
+    """Move a mosaic of ISatSS tiles one of its own pixels east and one
+    south. The tiles' x/y coordinates put the first pixel's centre half a
+    pixel west (and north) of the edge their ``tile_column_offset`` /
+    ``tile_row_offset`` name, so every band lands one of its own pixels
+    north-west of where it belongs: 0.5 km for the 0.64 µm band, 1 km for
+    the other solar bands, 2 km for the infrared. Left alone, the bands of
+    one composite disagree by up to 1.5 km and every edge of a true colour
+    picture carries a cyan and a red fringe. A VRT holds one channel, so
+    one pixel size moves every tile."""
+    root = ET.fromstring(vrt)
+    transform = root.find("GeoTransform")
+    if transform is None or transform.text is None:
+        raise ConversionError("the ISatSS mosaic has no GeoTransform to correct")
+    origin_x, pixel_x, rotation_x, origin_y, rotation_y, pixel_y = (float(value) for value in transform.text.split(","))
+    transform.text = ", ".join(repr(value) for value in (origin_x + pixel_x, pixel_x, rotation_x, origin_y + pixel_y, rotation_y, pixel_y))
+    return ET.tostring(root, encoding="unicode") + "\n"
 
 
 def _mask_below(vrt: str, floor: int, nodata: int) -> str:

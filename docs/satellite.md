@@ -604,8 +604,20 @@ B14 for channel 7), so the listing prefix spells the channel's own and
 never guesses. The tiles are already calibrated (`Sectorized_CMI`, Int16
 with `scale_factor` 0.064208984375 and `add_offset` 69, kelvin) on the CF
 `geostationary` projection with x/y in microradians; GDAL warns about the
-unit and computes the geotransform correctly. A day's slots are the
-directory listing (`delimiter=/`), a slot's tiles one listing under the
+unit and computes the geotransform from them faithfully. The coordinates
+themselves are one pixel off: a tile's first pixel centre is written half
+a pixel *west* of the edge its `tile_column_offset` names, where it belongs
+half a pixel east of it (T020 of the 0.5 km band starts at x = −500 m where
+the offset says 0), and half a pixel north of its row edge the same way,
+in every band at that band's own pixel. Read as written,
+the 0.5, 1 and 2 km bands of one slot land 0.5, 1 and 2 km north-west of
+their ground and up to 1.5 km apart from each other (measured on a clear
+Korean coast against the coastline: 0.85 grid cells at 0.01° between the
+1 km bands and the 0.64 µm band, 2 cells for the infrared), which fringes
+every edge of the true colour with cyan and red. The reader moves its
+mosaic back one pixel east and one south (`_shift_one_pixel_south_east`),
+after which the bands agree to 0.02 cells. A day's slots are
+the directory listing (`delimiter=/`), a slot's tiles one listing under the
 channel's prefix, a reissued tile the later `c` stamp. The slot opens as a
 `gdalbuildvrt` mosaic of the tiles by georeference. For a source with a
 region of its own the reader also says which tiles reach into it
