@@ -7,6 +7,10 @@ changes are in `git log`.
 
 ## 2026-10-14
 
+- Changed: the `truecolor` recipe is version 3 (`docs/satellite.md`): each
+  reflectance has the molecular sky taken out by an analytic Rayleigh
+  correction before the brightness curve, which is now NASA Worldview's
+  corrected-reflectance stretch; the night side is unchanged.
 - Fixed: Himawari frames (`himawari`, `himawarijp`) were placed one of
   each band's own pixels north-west of their ground (the ISatSS tiles'
   coordinates are a pixel off); the reader now corrects it, so the bands

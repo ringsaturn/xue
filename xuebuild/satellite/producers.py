@@ -441,18 +441,31 @@ class DebraProducer:
 #: frames and the converters carry into the ``producer`` block. A cached
 #: slot is recomposed when it changes, so it changes exactly when a
 #: constant below does, never with the package.
-TRUE_COLOR_VERSION = "2"
+TRUE_COLOR_VERSION = "3"
 #: The solar zenith past which the sun-angle normalisation stops growing:
 #: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last
 #: degrees of a day fade instead of blowing up.
 TRUE_COLOR_ZENITH_LIMIT_DEG = 85.0
 #: The brightness curve every gun goes through, as reflectance in → gun
 #: out, interpolated linearly between the knots and clamped to [0, 1]:
-#: the CIRA / satpy ``crefl_scaling`` stretch (0, 25, 55, 100, 255 % →
-#: 0, 90, 140, 175, 255 of 255), which lifts the dark ocean and land and
-#: holds bright cloud short of saturation.
-TRUE_COLOR_CURVE_IN: tuple[float, ...] = (0.0, 0.25, 0.55, 1.0, 2.55)
-TRUE_COLOR_CURVE_OUT: tuple[float, ...] = (0.0, 90.0 / 255.0, 140.0 / 255.0, 175.0 / 255.0, 1.0)
+#: NASA Worldview's corrected-reflectance stretch (reflectance 0–1.1
+#: spread over 0–255, knots 0, 30, 60, 120, 190, 255 → 0, 110, 160, 210,
+#: 240, 255). Its steep foot is what a Rayleigh-corrected picture needs:
+#: with the sky's own blue taken out, vegetation and sea sit at a few
+#: per cent and a city at ten to fifteen, which a cloud-oriented curve
+#: leaves near black.
+TRUE_COLOR_CURVE_IN: tuple[float, ...] = tuple(1.1 * knot / 255.0 for knot in (0.0, 30.0, 60.0, 120.0, 190.0, 255.0))
+TRUE_COLOR_CURVE_OUT: tuple[float, ...] = tuple(knot / 255.0 for knot in (0.0, 110.0, 160.0, 210.0, 240.0, 255.0))
+#: The geostationary altitude above the equator, in kilometres, from
+#: which the satellite's zenith and azimuth on every cell are computed.
+GEOSTATIONARY_ALTITUDE_KM = 35786.0
+#: Where the Rayleigh correction fades out, as the larger of the solar and
+#: the satellite zenith in degrees: whole at or below the first, none at or
+#: beyond the second, linear between. Single scattering overestimates the
+#: sky's path reflectance on long slant paths, so near the terminator and
+#: the limb the picture falls back to the uncorrected reflectance instead
+#: of going black.
+TRUE_COLOR_RAYLEIGH_FADE_DEG: tuple[float, float] = (70.0, 88.0)
 #: The hybrid green on an imager with a 0.51 µm band (AHI, FCI): the band
 #: with a little of the 0.86 µm reflectance, which lifts vegetation to the
 #: green the eye expects (Miller et al. 2016, the Himawari correction).
@@ -489,6 +502,79 @@ TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K: tuple[float, float] = (2.0, 7.0)
 #: How white low cloud gets at most: a softer grey than high cloud, so the
 #: two layers stay apart as they do on GeoColor's night side.
 TRUE_COLOR_LOW_CLOUD_WHITE = 0.7
+
+
+def rayleigh_optical_depth(wavelength_um: float) -> float:
+    """The molecular atmosphere's optical depth at a wavelength in µm, at
+    standard surface pressure (Hansen and Travis 1974, Eq. 2.29): 0.19 at
+    0.47 µm, 0.05 at 0.64 µm, 0.02 at 0.86 µm."""
+    w = float(wavelength_um)
+    return 0.008569 * w**-4 * (1.0 + 0.0113 * w**-2 + 0.00013 * w**-4)
+
+
+@dataclass(frozen=True)
+class ViewingGeometry:
+    """The sun and the satellite seen from every cell of a grid, in
+    degrees: zeniths from the vertical, azimuths clockwise from north; and
+    the cosine of the solar zenith as pyorbital gives it."""
+
+    sun_cosine: np.ndarray
+    sun_zenith: np.ndarray
+    sun_azimuth: np.ndarray
+    satellite_zenith: np.ndarray
+    satellite_azimuth: np.ndarray
+
+
+def viewing_geometry(platform: Platform, slot: datetime, grid: TargetGrid) -> ViewingGeometry:
+    """The sun at the slot's start and the geostationary satellite over
+    its sub-satellite longitude, on the grid's own coordinates (pyorbital,
+    the satellite dependency group)."""
+    try:
+        from pyorbital.astronomy import cos_zen, get_alt_az  # noqa: PLC0415 - the satellite dependency group
+        from pyorbital.orbital import get_observer_look  # noqa: PLC0415
+    except ImportError as exc:
+        raise ConversionError("the true colour producer needs pyorbital: uv sync --group satellite") from exc
+    lons = grid.first_longitude + np.arange(grid.width, dtype=np.float64) * grid.step
+    lats = grid.first_latitude - np.arange(grid.height, dtype=np.float64) * grid.step
+    lon2d, lat2d = np.meshgrid(lons, lats)
+    when = _naive_utc(slot)
+    cosine = np.asarray(cos_zen(when, lon2d, lat2d), dtype=np.float64)
+    _, sun_azimuth = get_alt_az(when, lon2d, lat2d)
+    satellite_azimuth, elevation = get_observer_look(
+        np.array([platform.sub_longitude]), np.array([0.0]), np.array([GEOSTATIONARY_ALTITUDE_KM]), when, lon2d, lat2d, np.zeros_like(lon2d)
+    )
+    return ViewingGeometry(
+        sun_cosine=cosine,
+        sun_zenith=np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))),
+        sun_azimuth=np.degrees(np.asarray(sun_azimuth, dtype=np.float64)) % 360.0,
+        satellite_zenith=90.0 - np.asarray(elevation, dtype=np.float64),
+        satellite_azimuth=np.asarray(satellite_azimuth, dtype=np.float64) % 360.0,
+    )
+
+
+def rayleigh_corrected(reflectance: np.ndarray, wavelength_um: float, geometry: ViewingGeometry) -> np.ndarray:
+    """A reflectance already divided by the cosine of the solar zenith,
+    with the molecular sky taken out: ``(ρ − ρ_R) / T`` where the path
+    reflectance is single scattering,
+    ``ρ_R = τ × 0.75 (1 + cos² Θ) / (4 μs μv)``, Θ the scattering angle
+    (``cos Θ = −μs μv − sin θs sin θv cos(φs − φv)``) and the two-way
+    transmittance ``T = exp(−τ/2 × (1/μs + 1/μv))`` (half the scattered
+    light goes forward and still arrives), both cosines floored at
+    ``TRUE_COLOR_ZENITH_LIMIT_DEG``. Faded by
+    ``TRUE_COLOR_RAYLEIGH_FADE_DEG`` on the larger zenith, so a long slant
+    path keeps the reflectance it had."""
+    limit = TRUE_COLOR_ZENITH_LIMIT_DEG
+    sun = np.radians(np.minimum(geometry.sun_zenith, limit))
+    view = np.radians(np.minimum(geometry.satellite_zenith, limit))
+    mu_sun, mu_view = np.cos(sun), np.cos(view)
+    relative = np.radians(geometry.sun_azimuth - geometry.satellite_azimuth)
+    scattering = -mu_sun * mu_view - np.sin(sun) * np.sin(view) * np.cos(relative)
+    tau = rayleigh_optical_depth(wavelength_um)
+    path = tau * 0.75 * (1.0 + scattering**2) / (4.0 * mu_sun * mu_view)
+    transmittance = np.exp(-0.5 * tau * (1.0 / mu_sun + 1.0 / mu_view))
+    start, end = TRUE_COLOR_RAYLEIGH_FADE_DEG
+    strength = np.clip((end - np.maximum(geometry.sun_zenith, geometry.satellite_zenith)) / (end - start), 0.0, 1.0)
+    return (1.0 - strength) * reflectance + strength * (reflectance - path) / transmittance
 
 
 def true_color_day_weight(zenith_deg: np.ndarray) -> np.ndarray:
@@ -530,6 +616,10 @@ class TrueColorProducer:
        (pyorbital on the grid's own coordinates, periodic in longitude),
        and the zenith θ from it;
     3. each reflectance divided by ``max(cos θ, cos TRUE_COLOR_ZENITH_LIMIT_DEG)``;
+    3a. each reflectance with the molecular sky taken out at its band's
+       wavelength (:func:`rayleigh_corrected`, the satellite's zenith and
+       azimuth from the platform's sub-satellite longitude), faded out on
+       long slant paths;
     4. the green: ``0.93 × 0.51 µm + 0.07 × 0.86 µm`` on AHI and FCI, or
        ``0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm`` on ABI;
     5. the day guns: red (0.64 µm), green and blue (0.47 µm) through the
@@ -545,10 +635,12 @@ class TrueColorProducer:
        window where ``a < 1``. Full day keeps its picture without the
        infrared, full night without the reflectances.
 
-    No Rayleigh correction: the limb and the long slant paths keep their
-    blue haze, which a correction with a lookup table per band could take
-    out later under a new recipe version. The id is ``xue`` — the recipe
-    is this pipeline's and no package's — and the version the recipe's."""
+    The Rayleigh correction is analytic single scattering, not a lookup
+    table: no package and no downloaded table behind it, and within the
+    fade it agrees with the tabulated corrections to a few thousandths of
+    reflectance, far below what the brightness curve resolves. The id is
+    ``xue`` — the recipe is this pipeline's and no package's — and the
+    version the recipe's."""
 
     id: str = "xue"
     bundle_id: str = "truecolor"
@@ -588,10 +680,6 @@ class TrueColorProducer:
         slot: datetime,
         grid: TargetGrid,
     ) -> dict[str, np.ndarray]:
-        try:
-            from pyorbital.astronomy import cos_zen  # noqa: PLC0415 - the satellite dependency group
-        except ImportError as exc:
-            raise ConversionError("the true colour producer needs pyorbital: uv sync --group satellite") from exc
         needed = self.inputs_for(platform)
         missing = [channel_id for channel_id in needed if channel_id not in inputs]
         if missing:
@@ -603,16 +691,19 @@ class TrueColorProducer:
 
         # 1. The reflectances, negative values clipped to 0; NaN kept.
         planes = {channel_id: np.maximum(np.asarray(inputs[channel_id], dtype=np.float64), 0.0) for channel_id in solar}
-        # 2. The sun on the grid's own coordinates.
-        lons = grid.first_longitude + np.arange(grid.width, dtype=np.float64) * grid.step
-        lats = grid.first_latitude - np.arange(grid.height, dtype=np.float64) * grid.step
-        lon2d, lat2d = np.meshgrid(lons, lats)
-        cosine = np.asarray(cos_zen(_naive_utc(slot), lon2d, lat2d), dtype=np.float64)
-        zenith = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+        # 2. The sun (and the satellite) on the grid's own coordinates.
+        geometry = viewing_geometry(platform, slot, grid)
+        zenith = geometry.sun_zenith
+        cosine = geometry.sun_cosine
         # 3. Divided by the cosine, floored at the limit.
         floor = math.cos(math.radians(TRUE_COLOR_ZENITH_LIMIT_DEG))
         divisor = np.maximum(cosine, floor)
         normalized = {channel_id: plane / divisor for channel_id, plane in planes.items()}
+        # 3a. The molecular sky taken out, band by band.
+        normalized = {
+            channel_id: rayleigh_corrected(plane, platform.channel(channel_id).wavelength_um, geometry)
+            for channel_id, plane in normalized.items()
+        }
         # 4. The green.
         if "vis051" in normalized:
             band, nir = TRUE_COLOR_HYBRID_GREEN
