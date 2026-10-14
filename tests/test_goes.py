@@ -50,6 +50,8 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_SYNTHETIC_GREEN,
     TRUE_COLOR_VERSION,
     TRUE_COLOR_ZENITH_LIMIT_DEG,
+    rayleigh_corrected,
+    viewing_geometry,
 )
 from xuebuild.satellite.projector import TargetGrid
 from xuebuild.satellite.readers import CMIPFReader, parse_cmipf_key, reader_for
@@ -382,7 +384,11 @@ class FetchTests(TempRoot, unittest.TestCase):
         cosine = cos_zen(SLOT_1510.replace(tzinfo=None), lon2d, lat2d)
         self.assertGreater(float(cosine[covered].min()), 0.7)
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
-        normalized = {channel_id: np.maximum(plane, 0.0) / divisor for channel_id, plane in planes.items()}
+        geometry = viewing_geometry(GOES_EAST, SLOT_1510, TILE_GRID)
+        normalized = {
+            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, GOES_EAST.channel(channel_id).wavelength_um, geometry)
+            for channel_id, plane in planes.items()
+        }
         blue, red, nir = TRUE_COLOR_SYNTHETIC_GREEN
         green = blue * normalized["vis047"] + red * normalized["vis064"] + nir * normalized["nir086"]
         for gun_id, source in zip(TRUE_COLOR_COMPONENT_IDS, (normalized["vis064"], green, normalized["vis047"])):

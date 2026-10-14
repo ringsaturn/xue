@@ -177,10 +177,11 @@ tiers. Each publishes:
   replacement.
 - `truecolor`: one picture day and night. By day the visible picture — the
   0.64, 0.51 and 0.47 µm reflectances (0.444 µm on Meteosat) as red, green
-  and blue, each divided by the cosine of the solar zenith and put through
-  one brightness curve, the green a hybrid with the 0.86 µm band
-  (synthesized from blue, red and 0.86 µm on the ABI, which has no green
-  band), no Rayleigh correction. After dark white cloud over a dark
+  and blue, each divided by the cosine of the solar zenith, the molecular
+  sky's scattering taken out (an analytic Rayleigh correction, faded out
+  towards the terminator and the limb) and put through one brightness
+  curve, the green a hybrid with the 0.86 µm band (synthesized from blue,
+  red and 0.86 µm on the ABI, which has no green band). After dark white cloud over a dark
   ground: the 10.4 µm window from 280 K (clear) to 220 K (white) and, for
   fog and low cloud, the 10.4 − 3.9 µm difference as a softer grey. The two
   blend across solar zenith 80–90°. Code 0 is no data in every gun (outside

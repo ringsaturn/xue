@@ -221,14 +221,27 @@ fixed order that the tests hold step by step:
 3. each reflectance divided by `max(cos θ, cos 85°)` — the products are
    the reflectance *factor*, not yet normalised for the sun, and the floor
    keeps the last degrees of a day from amplifying noise;
+3a. the molecular sky taken out of each reflectance at its band's own
+   wavelength λ (`rayleigh_corrected`): `(ρ − ρ_R) / T`, with the single
+   scattering path reflectance `ρ_R = τ × 0.75 (1 + cos² Θ) / (4 μs μv)`,
+   the optical depth `τ = 0.008569 λ⁻⁴ (1 + 0.0113 λ⁻² + 0.00013 λ⁻⁴)`
+   (Hansen and Travis 1974; 0.19 at 0.47 µm, 0.05 at 0.64 µm), the
+   scattering angle `cos Θ = −μs μv − sin θs sin θv cos(φs − φv)` from the
+   sun and the satellite as seen from the cell (pyorbital; the satellite
+   over the platform's sub-satellite longitude at 35 786 km), and the
+   two-way transmittance `T = exp(−τ/2 × (1/μs + 1/μv))`, both cosines
+   floored at 85°; faded out linearly between 70° and 88° of the larger of
+   the two zeniths, where single scattering overestimates the sky and the
+   picture falls back to the uncorrected reflectance;
 4. the green: `0.93 × 0.51 µm + 0.07 × 0.86 µm` on an imager with a green
    band (AHI, FCI; the hybrid green that lifts vegetation to the colour
    the eye expects, Miller et al. 2016), or `0.45 × 0.47 µm + 0.45 ×
    0.64 µm + 0.10 × 0.86 µm` on the ABI, which has no green band (the
    CIMSS blend);
 5. the day guns: red, green and blue through one brightness curve —
-   reflectance 0, 25, 55, 100, 255 % to 0, 90, 140, 175, 255 of 255,
-   linear between the knots, the CIRA stretch — clamped to 0–1;
+   reflectance 0–1.1 spread over 0–255, knots 0, 30, 60, 120, 190, 255 to
+   0, 110, 160, 210, 240, 255, linear between, NASA Worldview's
+   corrected-reflectance stretch — clamped to 0–1;
 6. the night guns: `ground + (1 − ground) × w` on each, with the ground
    `(0.03, 0.035, 0.05)` and the cloud whiteness `w = max(w_ir, w_low)`:
    `w_ir = clip((280 K − T₁₀.₄) / 60 K, 0, 1)^0.75` and
@@ -267,9 +280,18 @@ stays; on the full night side (`a = 0`) the reflectances are not read; in
 the terminator band both sides' inputs must be there. Outside the disk
 every input is missing, so code 0 there as before.
 
-No Rayleigh correction: the limb and the long slant paths keep their blue
-haze. A correction with a lookup table per band would be a new recipe
-version. The night side reads the infrared alone, so it has known
+The Rayleigh correction is what makes the ground readable. Under a
+morning sun near backscatter the sky's own path reflectance at 0.47 µm
+is 0.15–0.18, most of what a forest or the sea returns at the top of
+the atmosphere; left in, every surface sits under the same blue-grey
+veil and a city barely parts from the fields around it. Taken out, sea
+and vegetation sit at a few per cent and a city at ten to fifteen, which
+is why the brightness curve has a steep foot (a cloud-oriented curve
+such as CIRA's leaves that range near black). The correction is
+analytic, not a lookup table, so no package or downloaded table stands
+behind the recipe; inside the fade it is within a few thousandths of
+reflectance of the tabulated corrections, below what the curve resolves.
+Aerosol is not corrected: a hazy day stays hazy. The night side reads the infrared alone, so it has known
 failures it does not try to fix: a cold clear surface (a winter
 continent, the ice sheets near the disk's edge) is colder than 280 K and
 reads as thin grey cloud; a desert at night, whose quartz emits poorly
@@ -285,7 +307,7 @@ The guns are the Dust RGB's shape: three variables of one composite
 bundle, local-use parameters 3 / 192 / **7, 8, 9** on surface 8, the
 guns' codebook (code 0 no data, 0.0 at code 1, 1.0 at code 251), no
 poster, no video, the three-rung ladder. The `producer` block beside each
-is `{"id": "xue", "version": "2"}`: the id names this pipeline, and the
+is `{"id": "xue", "version": "3"}`: the id names this pipeline, and the
 version is the recipe's (`producers.TRUE_COLOR_VERSION`), bumped when a
 constant above changes and never with the package, since a cached slot is
 recomposed when the version it was composed under differs. Numbers 10,
@@ -617,9 +639,9 @@ Korean coast against the coastline: 0.85 grid cells at 0.01° between the
 every edge of the true colour with cyan and red. The reader moves its
 mosaic back one pixel east and one south (`_shift_one_pixel_south_east`),
 after which the bands agree to 0.02 cells. A day's slots are
-the directory listing (`delimiter=/`), a slot's tiles one listing under the
-channel's prefix, a reissued tile the later `c` stamp. The slot opens as a
-`gdalbuildvrt` mosaic of the tiles by georeference. For a source with a
+the directory listing (`delimiter=/`), a slot's tiles one listing under
+the channel's prefix, a reissued tile the later `c` stamp. The slot opens
+as a `gdalbuildvrt` mosaic of the tiles by georeference. For a source with a
 region of its own the reader also says which tiles reach into it
 (`tiles_covering`, §"Regional boxes"); only those make the slot complete,
 are fetched and are mosaicked.

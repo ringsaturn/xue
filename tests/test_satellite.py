@@ -83,12 +83,17 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K,
     TRUE_COLOR_LOW_CLOUD_WHITE,
     TRUE_COLOR_NIGHT_GROUND,
+    TRUE_COLOR_RAYLEIGH_FADE_DEG,
     TRUE_COLOR_TERMINATOR_DEG,
     TRUE_COLOR_VERSION,
     TRUE_COLOR_ZENITH_LIMIT_DEG,
     DustRGBProducer,
     TrueColorProducer,
+    ViewingGeometry,
+    rayleigh_corrected,
+    rayleigh_optical_depth,
     true_color_day_weight,
+    viewing_geometry,
 )
 from xuebuild.satellite.projector import GdalWarpProjector, TargetGrid
 from xuebuild.satellite.readers import ISatSSReader, parse_isatss_key
@@ -748,7 +753,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         """The true colour producer's day side: this pipeline's own recipe
         on the four solar bands, in its fixed order — the reflectances
         clipped at 0, divided by the cosine of the solar zenith floored at
-        85°, the hybrid green, the brightness curve — held here to the
+        85°, the molecular sky taken out band by band, the hybrid green,
+        the brightness curve — held here to the
         same steps written out, and defined exactly where every band has
         data under the noon sun (the day weight is 1 there, so the
         infrared windows the night side reads change nothing). The solar
@@ -766,8 +772,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(json.loads(assemble.packing_path(infrared_frame).read_text(encoding="utf-8"))["resampling"], "bilinear")
         gun = window.slots[0].frames["trueg"]
         packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
-        self.assertEqual(TRUE_COLOR_VERSION, "2")
-        self.assertEqual(packing["producer"], {"id": "xue", "version": "2"})
+        self.assertEqual(TRUE_COLOR_VERSION, "3")
+        self.assertEqual(packing["producer"], {"id": "xue", "version": "3"})
         self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in TRUECOLOR.inputs])
         self.assertNotIn("ancillary", packing)
         # The recipe, step by step, against the producer's frames.
@@ -790,7 +796,12 @@ class FetchTests(TempRoot, unittest.TestCase):
         # well inside the day side of the terminator.
         self.assertGreater(float(cosine.min()), np.cos(np.radians(TRUE_COLOR_TERMINATOR_DEG[0])))
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
-        normalized = {channel_id: np.maximum(plane, 0.0) / divisor for channel_id, plane in planes.items()}
+        geometry = viewing_geometry(HIMAWARI, SLOT_0300, TILE_GRID)
+        np.testing.assert_array_equal(geometry.sun_cosine, cosine)
+        normalized = {
+            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry)
+            for channel_id, plane in planes.items()
+        }
         green = TRUE_COLOR_HYBRID_GREEN[0] * normalized["vis051"] + TRUE_COLOR_HYBRID_GREEN[1] * normalized["nir086"]
         for gun_id, source in zip(TRUE_COLOR_COMPONENT_IDS, (normalized["vis064"], green, normalized["vis047"])):
             actual = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
@@ -931,9 +942,13 @@ class FetchTests(TempRoot, unittest.TestCase):
         night = TRUECOLOR.run(HIMAWARI, planes, {}, slot=SLOT_0300 + timedelta(hours=12), grid=TILE_GRID)
         cosine = cos_zen(dusk.replace(tzinfo=None), lon2d, lat2d)
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
-        normalized = 0.3 / divisor
-        green = TRUE_COLOR_HYBRID_GREEN[0] * normalized + TRUE_COLOR_HYBRID_GREEN[1] * normalized
-        for gun_id, source in zip(TRUE_COLOR_COMPONENT_IDS, (normalized, green, normalized)):
+        geometry = viewing_geometry(HIMAWARI, dusk, TILE_GRID)
+        normalized = {
+            channel_id: rayleigh_corrected(0.3 / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry)
+            for channel_id in ("vis047", "vis051", "vis064", "nir086")
+        }
+        green = TRUE_COLOR_HYBRID_GREEN[0] * normalized["vis051"] + TRUE_COLOR_HYBRID_GREEN[1] * normalized["nir086"]
+        for gun_id, source in zip(TRUE_COLOR_COMPONENT_IDS, (normalized["vis064"], green, normalized["vis047"])):
             day = np.clip(np.interp(source, TRUE_COLOR_CURVE_IN, TRUE_COLOR_CURVE_OUT), 0.0, 1.0)
             expected = weight * day + (1.0 - weight) * night[gun_id]
             np.testing.assert_allclose(blended[gun_id], expected, atol=1e-12)
@@ -959,6 +974,56 @@ class FetchTests(TempRoot, unittest.TestCase):
             np.testing.assert_array_equal(twilight["truer"][full_day], blended["truer"][full_day])
         no_red = dict(planes, vis064=np.full_like(planes["vis064"], np.nan))
         self.assertTrue(np.all(np.isnan(TRUECOLOR.run(HIMAWARI, no_red, {}, slot=dusk, grid=TILE_GRID)["trueg"][band])))
+
+    def test_the_rayleigh_correction_takes_out_the_molecular_sky(self) -> None:
+        """The optical depth is Hansen and Travis's, steep in wavelength;
+        the path reflectance is single scattering at the cell's own sun and
+        satellite angles, taken out and divided by the two-way
+        transmittance; on a long slant path the correction fades and is
+        gone from 88° of either zenith, and a cell the sun has left keeps
+        its reflectance exactly."""
+        self.assertAlmostEqual(rayleigh_optical_depth(0.47), 0.1851, places=4)
+        self.assertAlmostEqual(rayleigh_optical_depth(0.64), 0.0524, places=4)
+        self.assertAlmostEqual(rayleigh_optical_depth(0.86), 0.0159, places=4)
+        self.assertEqual(TRUE_COLOR_RAYLEIGH_FADE_DEG, (70.0, 88.0))
+
+        def at(sun: float, view: float, relative: float) -> ViewingGeometry:
+            return ViewingGeometry(
+                sun_cosine=np.array([np.cos(np.radians(sun))]),
+                sun_zenith=np.array([sun]),
+                sun_azimuth=np.array([relative]),
+                satellite_zenith=np.array([view]),
+                satellite_azimuth=np.array([0.0]),
+            )
+
+        def by_hand(reflectance: float, sun: float, view: float) -> float:
+            # The sun at right angles to the line of sight: cos Θ = −μs μv.
+            mu_sun, mu_view = np.cos(np.radians(sun)), np.cos(np.radians(view))
+            tau = rayleigh_optical_depth(0.47)
+            path = tau * 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * mu_sun * mu_view)
+            return (reflectance - path) / np.exp(-0.5 * tau * (1.0 / mu_sun + 1.0 / mu_view))
+
+        np.testing.assert_allclose(rayleigh_corrected(np.array([0.2]), 0.47, at(30.0, 40.0, 90.0)), [by_hand(0.2, 30.0, 40.0)], atol=1e-12)
+        # Blue loses more than red: the sky is blue.
+        blue = float(0.2 - rayleigh_corrected(np.array([0.2]), 0.47, at(30.0, 40.0, 90.0))[0])
+        red = float(0.2 - rayleigh_corrected(np.array([0.2]), 0.64, at(30.0, 40.0, 90.0))[0])
+        self.assertGreater(blue, 3.0 * red)
+        self.assertGreater(red, 0.0)
+        # Past 88° of either zenith nothing is taken out; half way through
+        # the fade, half of it.
+        for sun, view in ((88.0, 40.0), (40.0, 88.0), (95.0, 40.0)):
+            np.testing.assert_array_equal(rayleigh_corrected(np.array([0.2]), 0.47, at(sun, view, 90.0)), [0.2])
+        np.testing.assert_allclose(rayleigh_corrected(np.array([0.2]), 0.47, at(70.0, 40.0, 90.0)), [by_hand(0.2, 70.0, 40.0)], atol=1e-12)
+        np.testing.assert_allclose(
+            rayleigh_corrected(np.array([0.2]), 0.47, at(79.0, 40.0, 90.0)), [0.5 * 0.2 + 0.5 * by_hand(0.2, 79.0, 40.0)], atol=1e-12
+        )
+        # The satellite seen from the grid: straight overhead at the
+        # sub-satellite point, lower towards the edge of the disk.
+        grid = TargetGrid(west=140.0, south=-1.0, east=160.0, north=1.0, step=1.0)
+        geometry = viewing_geometry(HIMAWARI, SLOT_0300, grid)
+        overhead = int(np.argmin(np.abs(grid.first_longitude + np.arange(grid.width) * grid.step - HIMAWARI.sub_longitude)))
+        self.assertLess(float(geometry.satellite_zenith[0, overhead]), 1.5)
+        self.assertGreater(float(geometry.satellite_zenith[0, -1]), float(geometry.satellite_zenith[0, overhead]) + 15.0)
 
     def test_an_isatss_mosaic_is_moved_one_pixel_south_east(self) -> None:
         """The tiles' coordinates put every band one of its own pixels
@@ -1255,7 +1320,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
     def test_the_true_colour_is_three_guns_under_this_pipeline_s_producer(self) -> None:
         """The true colour bundle: the three guns as variables 1, 2 and 3,
         the producer's local numbers 7, 8 and 9 with the producer block
-        `xue` at the recipe's version 2, the channel's axis and grid, the
+        `xue` at the recipe's version 3, the channel's axis and grid, the
         three-rung ladder; no data in all three guns together, a value
         elsewhere. (A sunlit cell keeps its picture without the infrared,
         so the 10.4 µm channel's gaps are not the composite's.)"""
@@ -1270,7 +1335,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for number, variable in zip((7, 8, 9), variables):
             parameter = variable["parameter"]
             self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
-            self.assertEqual(variable["producer"], {"id": "xue", "version": "2"})
+            self.assertEqual(variable["producer"], {"id": "xue", "version": "3"})
             self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
         empty = None
         for number in (1, 2, 3):

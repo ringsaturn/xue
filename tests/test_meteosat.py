@@ -709,7 +709,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             gun = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
             self.assertEqual(np.isfinite(gun).tolist(), covered.tolist())
             np.testing.assert_allclose(gun[covered], noon[gun_id][covered], atol=0.00005 + 1e-12)
-        self.assertEqual(json.loads(assemble.packing_path(window.slots[0].frames["truer"]).read_text(encoding="utf-8"))["producer"], {"id": "xue", "version": "2"})
+        self.assertEqual(json.loads(assemble.packing_path(window.slots[0].frames["truer"]).read_text(encoding="utf-8"))["producer"], {"id": "xue", "version": "3"})
         # IR 3.8 is a window like IR 10.5: the same strip of the 2 km grid,
         # converted to kelvin with its own Planck coefficients and packed
         # the same way.
