@@ -960,6 +960,23 @@ class FetchTests(TempRoot, unittest.TestCase):
         no_red = dict(planes, vis064=np.full_like(planes["vis064"], np.nan))
         self.assertTrue(np.all(np.isnan(TRUECOLOR.run(HIMAWARI, no_red, {}, slot=dusk, grid=TILE_GRID)["trueg"][band])))
 
+    def test_an_isatss_mosaic_is_moved_one_pixel_south_east(self) -> None:
+        """The tiles' coordinates put every band one of its own pixels
+        north-west of the scan angles their tile offsets name (T020 of
+        band 3 starts at x = −500 m where its column offset says 0); the
+        reader's mosaic moves back by one pixel, so the 0.5, 1 and 2 km
+        bands of a slot land on the same ground."""
+        vrt = (
+            '<VRTDataset rasterXSize="2200" rasterYSize="2200">'
+            "<GeoTransform>-499.99955, 499.99955, 0.0, 3300497.0297, 0.0, -499.99955</GeoTransform>"
+            "</VRTDataset>"
+        )
+        moved = readers._shift_one_pixel_south_east(vrt)
+        transform = [float(value) for value in moved.split("<GeoTransform>")[1].split("</GeoTransform>")[0].split(",")]
+        np.testing.assert_allclose(transform, [0.0, 499.99955, 0.0, 3299997.03015, 0.0, -499.99955], atol=1e-6)
+        with self.assertRaisesRegex(ConversionError, "GeoTransform"):
+            readers._shift_one_pixel_south_east('<VRTDataset rasterXSize="1" rasterYSize="1"></VRTDataset>')
+
     def test_a_frame_is_the_tiles_on_the_target_grid(self) -> None:
         self.from_seed()
         window = self.fetch_window()
