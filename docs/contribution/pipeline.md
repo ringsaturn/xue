@@ -45,8 +45,9 @@ ships, and a listed bundle ships only when its inputs were fetched:
   projected onto EDR with the source's `cat_calibration`, the one derivation
   that reads neighbours, so `_extract_planes` hands it the uncropped planes
   and the crop is cut afterwards) and derived vectors
-  (`binconvert.DERIVED_VECTORS`: `qflux` = q·V/g; `wave` = height along the
-  direction of travel in wind convention, `(-h sin θ, -h cos θ)`).
+  (`binconvert.DERIVED_VECTORS`: `qflux` = q·V/g; `wave`, `windwave`,
+  `swell` = a height along its direction of travel in wind convention,
+  `(-h sin θ, -h cos θ)`).
 
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by

@@ -30,7 +30,10 @@ from .variables import (
     SOIL_TEMPERATURE_IDS,
     SOIL_VARIABLE_IDS,
     TRUE_COLOR_COMPONENT_IDS,
+    SWELL_VECTOR_COMPONENT_IDS,
+    WAVE_PARTITION_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
+    WIND_WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable_id,
 )
 
@@ -470,6 +473,31 @@ COMPACT_OCEAN = {
     "vwave": COMPACT_WAVE_VECTOR,
 }
 assert tuple(QUALITY_OCEAN) == OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS
+# The wind sea and the first swell partition read on the combined fields'
+# own codebooks: a partition's height and period never exceed the
+# combined sea's, and its direction wraps the same way. Their vectors take
+# the wave vector's, so land is (0, 0) and the middle code here too.
+QUALITY_WAVE_PARTITIONS = {
+    "wvhgt": replace(QUALITY_WAVE_HEIGHT, name="wvhgt"),
+    "wvper": replace(QUALITY_WAVE_PERIOD, name="wvper"),
+    "wvdir": replace(QUALITY_WAVE_DIRECTION, name="wvdir"),
+    "swhgt": replace(QUALITY_WAVE_HEIGHT, name="swhgt"),
+    "swper": replace(QUALITY_WAVE_PERIOD, name="swper"),
+    "swdir": replace(QUALITY_WAVE_DIRECTION, name="swdir"),
+    **{variable_id: QUALITY_WAVE_VECTOR for variable_id in WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS},
+}
+COMPACT_WAVE_PARTITIONS = {
+    "wvhgt": replace(COMPACT_WAVE_HEIGHT, name="wvhgt"),
+    "wvper": replace(COMPACT_WAVE_PERIOD, name="wvper"),
+    "wvdir": replace(COMPACT_WAVE_DIRECTION, name="wvdir"),
+    "swhgt": replace(COMPACT_WAVE_HEIGHT, name="swhgt"),
+    "swper": replace(COMPACT_WAVE_PERIOD, name="swper"),
+    "swdir": replace(COMPACT_WAVE_DIRECTION, name="swdir"),
+    **{variable_id: COMPACT_WAVE_VECTOR for variable_id in WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS},
+}
+assert tuple(QUALITY_WAVE_PARTITIONS) == (
+    WAVE_PARTITION_IDS + WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS
+)
 QUALITY_SOIL = {
     **{variable_id: replace(QUALITY_SOIL_TEMPERATURE, name=variable_id) for variable_id in SOIL_TEMPERATURE_IDS},
     **{variable_id: replace(QUALITY_SOIL_MOISTURE, name=variable_id) for variable_id in SOIL_MOISTURE_IDS},
@@ -756,6 +784,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aurora": QUALITY_AURORA,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
+        **QUALITY_WAVE_PARTITIONS,
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
@@ -789,6 +818,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
+        **COMPACT_WAVE_PARTITIONS,
         **COMPACT_SOIL,
         **COMPACT_SATELLITE,
         **COMPACT_AEROSOL,
@@ -834,6 +864,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
         "icec": COMPACT_ICE_COVER,
+        **QUALITY_WAVE_PARTITIONS,
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,

@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::variables::{
     cloud_water_level, isobaric_variable, reflectivity_level, AEROSOL_VARIABLE_IDS, SATELLITE_INFRARED_IDS,
-    SATELLITE_REFLECTANCE_IDS,
+    SATELLITE_REFLECTANCE_IDS, WAVE_PARTITION_IDS,
 };
 
 /// Linear uint8 codebook. Not temperature-specific: it quantizes any linear
@@ -662,6 +662,20 @@ const COMPACT_WAVE_VECTOR: LinearCodebook = LinearCodebook {
     step: 0.4,
     ..QUALITY_WAVE_VECTOR
 };
+/// A wind-sea or swell field's codebook: the combined height's, period's or
+/// direction's, named for the partition. Mirrors `QUALITY_WAVE_PARTITIONS`
+/// / `COMPACT_WAVE_PARTITIONS` in `xuebuild/quantize.py`.
+fn wave_partition(partition_id: &'static str, compact: bool) -> LinearCodebook {
+    let base = match (&partition_id[2..], compact) {
+        ("hgt", false) => QUALITY_WAVE_HEIGHT,
+        ("hgt", true) => COMPACT_WAVE_HEIGHT,
+        ("per", false) => QUALITY_WAVE_PERIOD,
+        ("per", true) => COMPACT_WAVE_PERIOD,
+        (_, false) => QUALITY_WAVE_DIRECTION,
+        (_, true) => COMPACT_WAVE_DIRECTION,
+    };
+    LinearCodebook { name: partition_id, ..base }
+}
 // The cloud layers take the total's codebook, and its balanced rule.
 const fn cloud_layer_codebook(name: &'static str, compact: bool) -> LinearCodebook {
     LinearCodebook {
@@ -985,6 +999,19 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
         (_, "dirpw") => Codebook::Linear(COMPACT_WAVE_DIRECTION),
         (_, "uwave" | "vwave") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
         (_, "uwave" | "vwave") => Codebook::Linear(COMPACT_WAVE_VECTOR),
+        // The wind sea and the first swell partition read on the combined
+        // fields' own codebooks, under their own names; their vectors take
+        // the wave vector's, so land is (0, 0) there too.
+        (_, "wvhgt" | "swhgt" | "wvper" | "swper" | "wvdir" | "swdir") => {
+            let partition_id = WAVE_PARTITION_IDS
+                .iter()
+                .copied()
+                .find(|id| *id == variable_id)
+                .expect("matched just above");
+            Codebook::Linear(wave_partition(partition_id, !quality))
+        }
+        (_, "uwindwave" | "vwindwave" | "uswell" | "vswell") if quality => Codebook::Linear(QUALITY_WAVE_VECTOR),
+        (_, "uwindwave" | "vwindwave" | "uswell" | "vswell") => Codebook::Linear(COMPACT_WAVE_VECTOR),
         // The soil layers: balanced takes the quality books, the fields
         // being smooth.
         (_, "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4") if quality => {

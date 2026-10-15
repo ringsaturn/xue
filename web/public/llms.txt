@@ -209,7 +209,11 @@ Facts worth getting right:
   interval ending at the frame (ECMWF `10fg`) and, like `prate`, has no
   analysis frame; its CAPE is the most-unstable parcel's (`mucape`), its
   wave period the peak period (`pp1d`); its `orog` is the surface
-  geopotential divided by g. GFS additionally: `lcdc`, `mcdc`,
+  geopotential divided by g. GFS additionally: the wind sea and the first
+  (strongest) swell partition from GFS-Wave — `wvhgt` / `wvper` (wind-wave
+  height and mean period), `swhgt` / `swper` (swell height and mean period)
+  and the vector pairs `windwave` and `swell` built the way `wave` is (their
+  directions are not published as scalars) — `lcdc`, `mcdc`,
   `hcdc` (low / middle / high cloud cover), `vis`, `aptmp2m` (apparent
   temperature), `cin` (convective inhibition), `pwat` (precipitable water),
   `hpbl` (planetary boundary layer height), `ptype` (the categorical

@@ -32,7 +32,8 @@ not a format change.
   temperature (derived).
 - Ocean: skin temperature, sea ice cover and thickness, significant wave
   height and primary period (GFS-Wave), and a derived wave vector (height
-  laid along the direction of travel).
+  laid along the direction of travel); the same height, period and vector
+  for the wind sea and for the first swell partition.
 - Soil: temperature (`tsoil1`–`tsoil4`) and total volumetric water
   (`soilw1`–`soilw4`) in the Noah land model's four layers, 0–10, 10–40,
   40–100 and 100–200 cm below ground; no soil (code 0) over open water, and

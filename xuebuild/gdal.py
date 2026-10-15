@@ -567,11 +567,11 @@ def raster_expression(variable_id: str, unit: str) -> str:
         return celsius_expression(unit, low=-61, high=66)
     if variable_id in SOIL_MOISTURE_IDS:
         return soil_moisture_expression(unit)
-    if variable_id == "htsgw":
+    if variable_id in ("htsgw", "wvhgt", "swhgt"):
         return wave_height_expression(unit)
-    if variable_id == "perpw":
+    if variable_id in ("perpw", "wvper", "swper"):
         return wave_period_expression(unit)
-    if variable_id == "dirpw":
+    if variable_id in ("dirpw", "wvdir", "swdir"):
         return wave_direction_expression(unit)
     if variable_id == "orog":
         return orography_expression(unit)
@@ -989,6 +989,38 @@ def _is_soil_record(metadata: dict[str, str], variable_id: str) -> bool:
     return False
 
 
+def _is_ordered_sequence_record(metadata: dict[str, str], variable_id: str) -> bool:
+    """One rank of an ordered sequence (code table 4.5 type 241, local to
+    NCEP): a GFS-Wave swell partition, under the registry's parameter and
+    rank. The three partitions share element, parameter and grid and differ
+    in the surface value alone, which GDAL, knowing no name for the surface,
+    spells ``1-RESERVED(241)`` — so the rank is read off the assembled
+    template 4.0 values (the type of first fixed surface, its scale factor
+    and scaled value at indices 9–11) beside the discipline and parameter,
+    the way a soil layer is. Where the driver did not assemble the
+    template, the short name is the fallback, rank included."""
+    spec = variable_spec(variable_id)
+    if metadata.get("GRIB_ELEMENT", "").upper() != spec.grib_element:
+        return False
+    rank = spec.grib2_level_value
+    try:
+        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
+        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
+    except ValueError:
+        values, discipline = [], -1
+    if metadata.get("GRIB_PDS_PDTN") == "0" and len(values) >= 12:
+        if (discipline, values[0], values[1], values[9]) != (
+            spec.grib2_discipline,
+            spec.grib2_category,
+            spec.grib2_number,
+            spec.grib2_level_type,
+        ):
+            return False
+        scale, scaled_value = values[10], values[11]
+        return scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == rank
+    return metadata.get("GRIB_SHORT_NAME", "").upper() == f"{rank:g}-RESERVED({spec.grib2_level_type})"
+
+
 def _is_orography_record(metadata: dict[str, str], description: str) -> bool:
     """The model's terrain height on the ground surface. NCEP publishes it
     as the geopotential height 0/3/5 (GFS, HRRR and sflux, GDAL element
@@ -1039,8 +1071,10 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
         return _is_entire_atmosphere_record(metadata, description, "PWAT")
     if variable_id in SOIL_VARIABLE_IDS:
         return _is_soil_record(metadata, variable_id)
-    if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"):
+    if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
+    if variable_id in ("swhgt", "swper", "swdir"):
+        return _is_ordered_sequence_record(metadata, variable_id)
     if variable_id in ("cin", "hpbl", "crain", "cfrzr", "cicep", "csnow"):
         return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
     if variable_id == "ptype":

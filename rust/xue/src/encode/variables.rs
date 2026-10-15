@@ -289,6 +289,14 @@ pub const OCEAN_VARIABLE_IDS: &[&str] = &["tmpsfc", "icec", "icetk", "htsgw", "p
 /// The two components of the derived wave vector bundle, in the same
 /// fixture. Mirrors `WAVE_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
 pub const WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwave", "vwave"];
+/// The wind sea and the first swell partition, GFS-Wave only, in the same
+/// fixture, with their two derived vectors' components. Mirror
+/// `WAVE_PARTITION_IDS`, `WIND_WAVE_VECTOR_COMPONENT_IDS` and
+/// `SWELL_VECTOR_COMPONENT_IDS` in `xuebuild/variables.py`.
+#[allow(dead_code)] // read by the registry test
+pub const WAVE_PARTITION_IDS: &[&str] = &["wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir"];
+pub const WIND_WAVE_VECTOR_COMPONENT_IDS: [&str; 2] = ["uwindwave", "vwindwave"];
+pub const SWELL_VECTOR_COMPONENT_IDS: [&str; 2] = ["uswell", "vswell"];
 /// The satellite channels, the composite guns and the confidences, held to
 /// the Python encoder by `tests/fixtures/satellite-registry.json`. The
 /// channels are what a platform's imager measures (a `band` block each
@@ -1682,6 +1690,137 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: None,
         grib2_aerosol: None,
     },
+    // The sea split into its parts, from the same GFS-Wave file: the wind
+    // sea as a height (10/0/5), a mean period (10/0/6) and a direction
+    // (10/0/4) on the water surface like the combined fields, and the first
+    // swell partition as the same three (10/0/8, 10/0/9, 10/0/7) on surface
+    // type 241 (local to NCEP, "ordered sequence of data"), whose value is
+    // the partition's rank — the only thing that tells the three apart, so
+    // the swell identities declare the value and match only 1
+    // (`inspect::is_ordered_sequence_record`). The directions are inputs
+    // only, shipped inside the vectors derived from them. Every record
+    // carries the bitmap the combined fields do. Mirrors `wvhgt` .. `swdir`
+    // in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "wvhgt",
+        label: "Significant height of wind waves",
+        output_unit: "m",
+        value_range: (0.0, 25.0),
+        grib_element: "WVHGT",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 5,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "wvper",
+        label: "Mean period of wind waves",
+        output_unit: "s",
+        value_range: (0.0, 25.0),
+        grib_element: "WVPER",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 6,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "s",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "wvdir",
+        label: "Direction of wind waves",
+        output_unit: "°",
+        value_range: (0.0, 358.0),
+        grib_element: "WVDIR",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 4,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Degree true",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "swhgt",
+        label: "Significant height of swell waves (first partition)",
+        output_unit: "m",
+        value_range: (0.0, 25.0),
+        grib_element: "SWELL",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 8,
+        grib2_level_type: 241,
+        grib2_level_value: Some(1.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "m",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "swper",
+        label: "Mean period of swell waves (first partition)",
+        output_unit: "s",
+        value_range: (0.0, 25.0),
+        grib_element: "SWPER",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 9,
+        grib2_level_type: 241,
+        grib2_level_value: Some(1.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "s",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "swdir",
+        label: "Direction of swell waves (first partition)",
+        output_unit: "°",
+        value_range: (0.0, 358.0),
+        grib_element: "SWDIR",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 7,
+        grib2_level_type: 241,
+        grib2_level_value: Some(1.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "Degree true",
+        fill_values: &[9999.0],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
     // The wave vector: the significant wave height laid along the direction
     // the waves travel, as an eastward and a northward component in metres,
     // derived by the converter from `htsgw` and `dirpw`
@@ -1722,6 +1861,90 @@ pub const VARIABLES: &[VariableSpec] = &[
         grib2_number: 251,
         grib2_level_type: 1,
         grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // The wind-sea and swell vectors, derived the way the wave vector is
+    // (`convert::derive_wave_vector`) from `wvhgt` / `wvdir` and `swhgt` /
+    // `swdir`, under the next four local numbers in the waves category, each
+    // pair on the surface its inputs sit on.
+    VariableSpec {
+        id: "uwindwave",
+        label: "U wind-wave vector component",
+        output_unit: "m",
+        value_range: (-25.0, 25.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 252,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vwindwave",
+        label: "V wind-wave vector component",
+        output_unit: "m",
+        value_range: (-25.0, 25.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 253,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "uswell",
+        label: "U swell vector component",
+        output_unit: "m",
+        value_range: (-25.0, 25.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 254,
+        grib2_level_type: 241,
+        grib2_level_value: Some(1.0),
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    VariableSpec {
+        id: "vswell",
+        label: "V swell vector component",
+        output_unit: "m",
+        value_range: (-25.0, 25.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 10,
+        grib2_category: 0,
+        grib2_number: 255,
+        grib2_level_type: 241,
+        grib2_level_value: Some(1.0),
         grib2_statistical: None,
         grib2_aliases: &[],
         grib2_alternates: &[],
@@ -2606,7 +2829,8 @@ mod tests {
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
         SATELLITE_VARIABLE_IDS, SOIL_MOISTURE_IDS, SOIL_TEMPERATURE_IDS, SOIL_VARIABLE_IDS,
-        SURFACE_TEMPERATURE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS,
+        SURFACE_TEMPERATURE_IDS, TRUE_COLOR_BUNDLE_ID, TRUE_COLOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS, WAVE_PARTITION_IDS,
+        WIND_WAVE_VECTOR_COMPONENT_IDS, SWELL_VECTOR_COMPONENT_IDS,
         ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     };
     use crate::encode::quantize::codebook;
@@ -2863,12 +3087,15 @@ mod tests {
         let expected: Vec<&str> = OCEAN_VARIABLE_IDS
             .iter()
             .chain(&WAVE_VECTOR_COMPONENT_IDS)
+            .chain(WAVE_PARTITION_IDS)
+            .chain(&WIND_WAVE_VECTOR_COMPONENT_IDS)
+            .chain(&SWELL_VECTOR_COMPONENT_IDS)
             .copied()
             .collect();
         assert_eq!(
             entries.keys().collect::<Vec<_>>(),
             expected,
-            "eight variables, in the fixture's order"
+            "eighteen variables, in the fixture's order"
         );
         for (variable_id, entry) in entries {
             let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
@@ -2882,8 +3109,16 @@ mod tests {
             // balanced is quality everywhere but ice cover, read in tenths,
             // which takes the compact 1 % step like cloud cover.
             let balanced_key = if variable_id == "icec" { "compact" } else { "quality" };
-            let wave = matches!(variable_id.as_str(), "htsgw" | "perpw" | "dirpw");
-            let derived = WAVE_VECTOR_COMPONENT_IDS.contains(&variable_id.as_str());
+            let wave = matches!(variable_id.as_str(), "htsgw" | "perpw" | "dirpw")
+                || WAVE_PARTITION_IDS.contains(&variable_id.as_str());
+            let derived = WAVE_VECTOR_COMPONENT_IDS
+                .iter()
+                .chain(&WIND_WAVE_VECTOR_COMPONENT_IDS)
+                .chain(&SWELL_VECTOR_COMPONENT_IDS)
+                .any(|id| *id == variable_id);
+            // The swell partition and its vector sit on rank 1 of the
+            // ordered sequence; every other wave identity declares no value.
+            let ranked = matches!(variable_id.as_str(), "swhgt" | "swper" | "swdir" | "uswell" | "vswell");
             for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", balanced_key)] {
                 let book = codebook(profile, &variable_id)
                     .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
@@ -2909,9 +3144,12 @@ mod tests {
             assert_eq!(spec.fill_values, if masked { &[9999.0][..] } else { &[][..] }, "{variable_id}");
             assert_eq!(
                 spec.grib2_level_value.is_none(),
-                wave || derived,
+                (wave || derived) && !ranked,
                 "{variable_id}: WAVEWATCH III's surface value"
             );
+            if ranked {
+                assert_eq!((spec.grib2_level_type, spec.grib2_level_value), (241, Some(1.0)), "{variable_id}");
+            }
             assert_eq!(spec.grib_element.is_empty(), derived, "{variable_id}: derived, never matched");
         }
     }

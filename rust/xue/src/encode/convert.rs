@@ -22,7 +22,7 @@ use crate::encode::variables::{
     DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, TRUE_COLOR_BUNDLE_ID,
     TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
     CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, SOIL_TEMPERATURE_IDS, STANDARD_GRAVITY,
-    WAVE_VECTOR_COMPONENT_IDS,
+    SWELL_VECTOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS, WIND_WAVE_VECTOR_COMPONENT_IDS,
 };
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
@@ -66,10 +66,26 @@ pub const WIND_80M_BUNDLE_ID: &str = "wind80m";
 pub const WIND_100M_COMPONENT_IDS: [&str; 2] = ["ugrd100m", "vgrd100m"];
 pub const WIND_100M_BUNDLE_ID: &str = "wind100m";
 pub const WAVE_BUNDLE_ID: &str = "wave";
-/// The inputs the wave vector is derived from: the significant wave height
-/// and the primary wave direction. Mirrors `DERIVED_VECTORS["wave"]` in
-/// `xuebuild/binconvert.py`.
-const WAVE_INPUT_IDS: [&str; 2] = ["htsgw", "dirpw"];
+pub const WIND_WAVE_BUNDLE_ID: &str = "windwave";
+pub const SWELL_BUNDLE_ID: &str = "swell";
+/// The wave vectors, each derived from a height and a direction — the
+/// combined sea's, the wind sea's and the first swell partition's — as
+/// `(bundle, inputs, components)`. Mirrors `DERIVED_VECTORS` /
+/// `WAVE_VECTOR_BUNDLE_IDS` in `xuebuild/binconvert.py`.
+const WAVE_VECTORS: [(&str, [&str; 2], [&str; 2]); 3] = [
+    (WAVE_BUNDLE_ID, ["htsgw", "dirpw"], WAVE_VECTOR_COMPONENT_IDS),
+    (WIND_WAVE_BUNDLE_ID, ["wvhgt", "wvdir"], WIND_WAVE_VECTOR_COMPONENT_IDS),
+    (SWELL_BUNDLE_ID, ["swhgt", "swdir"], SWELL_VECTOR_COMPONENT_IDS),
+];
+
+/// The inputs and components of a wave vector bundle, or `None` for any
+/// other bundle.
+fn wave_vector(bundle_id: &str) -> Option<([&'static str; 2], [&'static str; 2])> {
+    WAVE_VECTORS
+        .iter()
+        .find(|(id, _, _)| *id == bundle_id)
+        .map(|(_, inputs, components)| (*inputs, *components))
+}
 
 /// The two component variables of a vector bundle, or `None` for a scalar.
 pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
@@ -82,8 +98,8 @@ pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
     if bundle_id == WIND_100M_BUNDLE_ID {
         return Some((WIND_100M_COMPONENT_IDS[0].into(), WIND_100M_COMPONENT_IDS[1].into()));
     }
-    if bundle_id == WAVE_BUNDLE_ID {
-        return Some((WAVE_VECTOR_COMPONENT_IDS[0].into(), WAVE_VECTOR_COMPONENT_IDS[1].into()));
+    if let Some((_, [u, v])) = wave_vector(bundle_id) {
+        return Some((u.into(), v.into()));
     }
     for (prefix, u, v) in [("wind", "ugrd", "vgrd"), ("qflux", "uqflx", "vqflx")] {
         if let Some(level) = bundle_id.strip_prefix(prefix) {
@@ -302,22 +318,22 @@ pub fn vapour_flux_level(bundle_id: &str) -> Option<u32> {
 }
 
 /// Whether a vector bundle is derived rather than read: a vapour flux pair
-/// or the wave vector. A wind pair is its own two components. Mirrors
+/// or a wave vector. A wind pair is its own two components. Mirrors
 /// `DERIVED_VECTORS` in `xuebuild/binconvert.py`.
 pub fn is_derived_vector(bundle_id: &str) -> bool {
-    bundle_id == WAVE_BUNDLE_ID || vapour_flux_level(bundle_id).is_some()
+    wave_vector(bundle_id).is_some() || vapour_flux_level(bundle_id).is_some()
 }
 
 /// The source inputs one vector bundle is built from: a wind pair is its own
 /// two components; a vapour flux pair is derived from the specific humidity
-/// and both wind components on the same surface; the wave vector from the
-/// significant wave height and the primary wave direction.
+/// and both wind components on the same surface; a wave vector from its
+/// height and its direction.
 pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
     if let Some(level) = vapour_flux_level(bundle_id) {
         return vec![format!("spfh{level}"), format!("ugrd{level}"), format!("vgrd{level}")];
     }
-    if bundle_id == WAVE_BUNDLE_ID {
-        return WAVE_INPUT_IDS.iter().map(|id| (*id).to_string()).collect();
+    if let Some((inputs, _)) = wave_vector(bundle_id) {
+        return inputs.iter().map(|id| (*id).to_string()).collect();
     }
     match vector_components(bundle_id) {
         Some((u, v)) => vec![u, v],
@@ -914,8 +930,9 @@ fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()
         }
         // A direction in degrees true: a record can carry 360, which is the
         // codebook's 0 — reduce it there so the wrap never clamps. Every
-        // value is non-negative here, so this is numpy's `mod`.
-        "dirpw" => values
+        // value is non-negative here, so this is numpy's `mod`. The ids are
+        // `WAVE_DIRECTION_IDS` in `xuebuild/variables.py`.
+        "dirpw" | "wvdir" | "swdir" => values
             .iter_mut()
             .for_each(|value| *value = value.rem_euclid(360.0)),
         // Orography: NCEP writes the geopotential height (gpm, numerically
@@ -1699,7 +1716,7 @@ fn quantize_file(
                 .map(|(_, plane)| plane)
                 .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
         };
-        let (component_u, component_v) = if *bundle_id == WAVE_BUNDLE_ID {
+        let (component_u, component_v) = if wave_vector(bundle_id).is_some() {
             derive_wave_vector(plane(&inputs[0])?, plane(&inputs[1])?)
         } else {
             derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?)

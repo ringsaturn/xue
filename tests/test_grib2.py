@@ -26,9 +26,10 @@ class IndexMessagesTests(unittest.TestCase):
         # precipitation-type flags among them, fetched only to derive the
         # precipitation type) and the vertical velocity, then the ocean —
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
-        # three wave records — with the orography and the eight soil layers
+        # nine wave records — the combined sea, the wind sea and the first
+        # swell partition — with the orography and the eight soil layers
         # between the two.
-        self.assertEqual(len(messages), 82)
+        self.assertEqual(len(messages), 88)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
@@ -144,8 +145,11 @@ class IndexMessagesTests(unittest.TestCase):
         # The ocean fields: the skin temperature and the two sea ice fields
         # on the ground surface (value 0), then the wave fields on the water
         # surface as WAVEWATCH III writes it — value 1, which the registry
-        # declares as None and so accepts. The ice and wave fields are the
-        # first records of GRIB2's oceanographic discipline in the set.
+        # declares as None and so accepts — the wind sea the same way, and
+        # the first swell partition on NCEP's local ordered-sequence surface
+        # (241) at rank 1, which the registry declares exactly. The ice and
+        # wave fields are the first records of GRIB2's oceanographic
+        # discipline in the set.
         self.assertEqual(
             [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in ocean],
             [
@@ -155,6 +159,12 @@ class IndexMessagesTests(unittest.TestCase):
                 (80, 10, 0, 3, 1, 1.0),
                 (81, 10, 0, 11, 1, 1.0),
                 (82, 10, 0, 10, 1, 1.0),
+                (83, 10, 0, 5, 1, 1.0),
+                (84, 10, 0, 6, 1, 1.0),
+                (85, 10, 0, 4, 1, 1.0),
+                (86, 10, 0, 8, 241, 1.0),
+                (87, 10, 0, 9, 241, 1.0),
+                (88, 10, 0, 7, 241, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))

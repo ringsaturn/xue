@@ -111,10 +111,13 @@ takes a new id so an old wheel is not mistaken for a new one (`radar` →
 
 ## Forecasts
 
-**gfs.** The reference source and the full bundle set (65 bundles, isobaric
+**gfs.** The reference source and the full bundle set (79 bundles, isobaric
 families on all eight levels, the clear-air turbulence `cat300`/`cat250`/`cat200`
 with its own `cat_calibration`, the GFS-Wave companion `gfswave.*` beside
-`atmos/`). `tmp2m`, `prate` and `wind10m` ship a `<bundle>.series.zarr`
+`atmos/`, read for the combined sea, the wind sea and the first swell
+partition). The swell partitions sit on NCEP's local surface 241, an ordered
+sequence whose value is the rank; GDAL spells it `1-RESERVED(241)`, so the
+matcher reads the rank off the assembled template. `tmp2m`, `prate` and `wind10m` ship a `<bundle>.series.zarr`
 companion (`series_bundle_ids`; see [../zarr-profile.md](../zarr-profile.md)),
 and with HRRR it is the only source with H.264 video (`SourceSpec.video`).
 `XUE_GFS_BASE_URL` overrides the mirror.

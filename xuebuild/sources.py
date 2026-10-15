@@ -603,12 +603,15 @@ SOURCES: dict[str, SourceSpec] = {
         # period and direction from the cycle's GFS-Wave file — the
         # direction as an input only, like spfh850: it ships inside the
         # wave vector the converter derives from it and the height, not as
-        # a scalar of its own. Then the land: the soil temperature and the
-        # total volumetric soil water in the Noah model's four layers
-        # (0–10, 10–40, 40–100 and 100–200 cm), read after the orography.
+        # a scalar of its own — and the same three again for the wind sea
+        # and for the first swell partition, whose directions likewise ship
+        # only inside the wind-sea and swell vectors. Then the land: the
+        # soil temperature and the total volumetric soil water in the Noah
+        # model's four layers (0–10, 10–40, 40–100 and 100–200 cm), read
+        # after the orography.
         # The specific humidity above 850 hPa, the other vapour fluxes and
         # the other vertical velocities stay unpublished: seventy-nine
-        # pgrb2 records and three wave records per frame, one of the pgrb2
+        # pgrb2 records and nine wave records per frame, one of the pgrb2
         # records the static orography.
         input_variable_ids=(
             "tmp2m",
@@ -693,9 +696,20 @@ SOURCES: dict[str, SourceSpec] = {
             "htsgw",
             "perpw",
             "dirpw",
+            "wvhgt",
+            "wvper",
+            "wvdir",
+            "swhgt",
+            "swper",
+            "swdir",
         ),
         accumulated_precipitation=False,
-        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
+        companion_files=(
+            CompanionFile(
+                id="wave",
+                variable_ids=("htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir"),
+            ),
+        ),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",
@@ -749,6 +763,10 @@ SOURCES: dict[str, SourceSpec] = {
             "icetk",
             "htsgw",
             "perpw",
+            "wvhgt",
+            "wvper",
+            "swhgt",
+            "swper",
             "tsoil1",
             "tsoil2",
             "tsoil3",
@@ -772,6 +790,8 @@ SOURCES: dict[str, SourceSpec] = {
             "wind200",
             "qflux850",
             "wave",
+            "windwave",
+            "swell",
         ),
         # Series companions for the point API's core rows, so
         # `/point?variables=tmp2m,wind10m` and the pinned temperature/wind

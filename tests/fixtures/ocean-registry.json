@@ -222,5 +222,285 @@
       "maximumCode": 126,
       "nodataCode": 255
     }
+  },
+  "wvhgt": {
+    "label": "Significant height of wind waves",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 5,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "wvper": {
+    "label": "Mean period of wind waves",
+    "unit": "s",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 6,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "wvdir": {
+    "label": "Direction of wind waves",
+    "unit": "°",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 4,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.5,
+      "minimumCode": 0,
+      "maximumCode": 239,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 3.0,
+      "minimumCode": 0,
+      "maximumCode": 119,
+      "nodataCode": 255
+    }
+  },
+  "swhgt": {
+    "label": "Significant height of swell waves (first partition)",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 8,
+      "typeOfFirstFixedSurface": 241,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "swper": {
+    "label": "Mean period of swell waves (first partition)",
+    "unit": "s",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 9,
+      "typeOfFirstFixedSurface": 241,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.1,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 127,
+      "nodataCode": 255
+    }
+  },
+  "swdir": {
+    "label": "Direction of swell waves (first partition)",
+    "unit": "°",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 7,
+      "typeOfFirstFixedSurface": 241,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.5,
+      "minimumCode": 0,
+      "maximumCode": 239,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 3.0,
+      "minimumCode": 0,
+      "maximumCode": 119,
+      "nodataCode": 255
+    }
+  },
+  "uwindwave": {
+    "label": "U wind-wave vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 252,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "vwindwave": {
+    "label": "V wind-wave vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 253,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "uswell": {
+    "label": "U swell vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 254,
+      "typeOfFirstFixedSurface": 241,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
+  },
+  "vswell": {
+    "label": "V swell vector component",
+    "unit": "m",
+    "parameter": {
+      "discipline": 10,
+      "parameterCategory": 0,
+      "parameterNumber": 255,
+      "typeOfFirstFixedSurface": 241,
+      "scaleFactorOfFirstFixedSurface": 0,
+      "scaledValueOfFirstFixedSurface": 1
+    },
+    "quality": {
+      "type": "linear",
+      "offset": -25.4,
+      "scale": 0.2,
+      "minimumCode": 0,
+      "maximumCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": -25.2,
+      "scale": 0.4,
+      "minimumCode": 0,
+      "maximumCode": 126,
+      "nodataCode": 255
+    }
   }
 }

@@ -1056,6 +1056,110 @@ VARIABLES: dict[str, VariableSpec] = {
         gdal_unit="Degree true",
         fill_values=(9999.0,),
     ),
+    # The sea split into its parts, from the same GFS-Wave file: the wind
+    # sea — the waves the local wind is still raising — as a height
+    # (10/0/5), a mean period (10/0/6) and a direction (10/0/4) on the water
+    # surface like the combined fields, and the first swell partition — the
+    # most energetic system of waves that have left the wind that raised
+    # them — as the same three (10/0/8, 10/0/9, 10/0/7). WAVEWATCH III
+    # writes up to three swell partitions as an ordered sequence: surface
+    # type 241 (local to NCEP, "ordered sequence of data"), whose value is
+    # the partition's rank, 1 being the strongest. The rank is the only thing
+    # that tells the three apart — same parameter, same grid — so the swell
+    # identities declare the value and match only 1. GDAL knows no name for
+    # the surface and spells it ``1-RESERVED(241)``; the matcher reads the
+    # rank off the assembled template instead (gdal._is_ordered_sequence_record).
+    # The directions are degrees true the waves come *from*, like ``dirpw``,
+    # and like it are inputs only: each ships inside the vector derived from
+    # it and its height. Every record carries the bitmap the combined fields
+    # do, and land becomes the bottom of each codebook the same way.
+    "wvhgt": VariableSpec(
+        id="wvhgt",
+        label="Significant height of wind waves",
+        output_unit="m",
+        value_range=(0, 25),
+        grib_element="WVHGT",
+        index_field=":WVHGT:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=5,
+        grib2_level_type=1,
+        gdal_unit="m",
+        fill_values=(9999.0,),
+    ),
+    "wvper": VariableSpec(
+        id="wvper",
+        label="Mean period of wind waves",
+        output_unit="s",
+        value_range=(0, 25),
+        grib_element="WVPER",
+        index_field=":WVPER:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=6,
+        grib2_level_type=1,
+        gdal_unit="s",
+        fill_values=(9999.0,),
+    ),
+    "wvdir": VariableSpec(
+        id="wvdir",
+        label="Direction of wind waves",
+        output_unit="°",
+        value_range=(0, 358),
+        grib_element="WVDIR",
+        index_field=":WVDIR:surface:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=4,
+        grib2_level_type=1,
+        gdal_unit="Degree true",
+        fill_values=(9999.0,),
+    ),
+    "swhgt": VariableSpec(
+        id="swhgt",
+        label="Significant height of swell waves (first partition)",
+        output_unit="m",
+        value_range=(0, 25),
+        grib_element="SWELL",
+        index_field=":SWELL:1 in sequence:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=8,
+        grib2_level_type=241,
+        grib2_level_value=1.0,
+        gdal_unit="m",
+        fill_values=(9999.0,),
+    ),
+    "swper": VariableSpec(
+        id="swper",
+        label="Mean period of swell waves (first partition)",
+        output_unit="s",
+        value_range=(0, 25),
+        grib_element="SWPER",
+        index_field=":SWPER:1 in sequence:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=9,
+        grib2_level_type=241,
+        grib2_level_value=1.0,
+        gdal_unit="s",
+        fill_values=(9999.0,),
+    ),
+    "swdir": VariableSpec(
+        id="swdir",
+        label="Direction of swell waves (first partition)",
+        output_unit="°",
+        value_range=(0, 358),
+        grib_element="SWDIR",
+        index_field=":SWDIR:1 in sequence:",
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=7,
+        grib2_level_type=241,
+        grib2_level_value=1.0,
+        gdal_unit="Degree true",
+        fill_values=(9999.0,),
+    ),
     # The wave vector: the significant wave height laid along the direction
     # the waves travel, as an eastward and a northward component in metres
     # — derived by the converter from ``htsgw`` and ``dirpw``
@@ -1085,6 +1189,55 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_category=0,
         grib2_number=251,
         grib2_level_type=1,
+    ),
+    # The wind-sea and swell vectors: each partition's height laid along its
+    # own direction of travel, derived the way the wave vector is
+    # (binconvert.derive_wave_vector) from ``wvhgt`` / ``wvdir`` and
+    # ``swhgt`` / ``swdir``, under the next four local numbers in the waves
+    # category. Each pair sits on the surface its inputs do: the wind sea's
+    # on the water surface with no value, the swell's on the first rank of
+    # the ordered sequence.
+    "uwindwave": VariableSpec(
+        id="uwindwave",
+        label="U wind-wave vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=252,
+        grib2_level_type=1,
+    ),
+    "vwindwave": VariableSpec(
+        id="vwindwave",
+        label="V wind-wave vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=253,
+        grib2_level_type=1,
+    ),
+    "uswell": VariableSpec(
+        id="uswell",
+        label="U swell vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=254,
+        grib2_level_type=241,
+        grib2_level_value=1.0,
+    ),
+    "vswell": VariableSpec(
+        id="vswell",
+        label="V swell vector component",
+        output_unit="m",
+        value_range=(-25, 25),
+        grib2_discipline=10,
+        grib2_category=0,
+        grib2_number=255,
+        grib2_level_type=241,
+        grib2_level_value=1.0,
     ),
     # The satellite channels: brightness temperature at the top of the
     # atmosphere (GRIB2 0/4/4 on surface 8, "nominal top of the
@@ -1543,6 +1696,15 @@ VARIABLES: dict[str, VariableSpec] = {
 # also carries the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
+# The wind sea and the first swell partition, GFS-Wave only, held to the
+# Rust encoder by the same ocean registry fixture, with their two derived
+# vectors' components.
+WAVE_PARTITION_IDS: tuple[str, ...] = ("wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir")
+WIND_WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwindwave", "vwindwave")
+SWELL_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uswell", "vswell")
+# The water-surface directions the converter reduces modulo 360 before
+# quantization, so a record's 360 is the codebook's 0.
+WAVE_DIRECTION_IDS: tuple[str, ...] = ("dirpw", "wvdir", "swdir")
 # The satellite channels, the composite guns and the confidences, held to
 # the Rust encoder and the frontend by tests/fixtures/satellite-registry.json
 # the same way. The channels are what a platform's imager measures (a

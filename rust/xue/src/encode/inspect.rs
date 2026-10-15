@@ -192,8 +192,8 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             }
             Ok("maximum(0,minimum(100,A*100))".into())
         }
-        // Sea ice thickness and significant wave height, in metres.
-        "icetk" | "htsgw" => {
+        // Sea ice thickness and the significant wave heights, in metres.
+        "icetk" | "htsgw" | "wvhgt" | "swhgt" => {
             if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
                 return Err(EncodeError::conversion(format!(
                     "unsupported {} unit: {}",
@@ -208,7 +208,7 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
             })
         }
         // Wave period in seconds.
-        "perpw" => {
+        "perpw" | "wvper" | "swper" => {
             if !["s", "sec", "second", "seconds"].contains(&compact_unit(unit).as_str()) {
                 return Err(EncodeError::conversion(format!(
                     "unsupported wave period unit: {}",
@@ -219,7 +219,7 @@ pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
         }
         // Wave direction in degrees true (GDAL spells it "Degree true"); the
         // converter reduces it modulo 360 itself.
-        "dirpw" => {
+        "dirpw" | "wvdir" | "swdir" => {
             if !["degreetrue", "degtrue", "degrees", "degree", "deg", "degreestrue"]
                 .contains(&compact_unit(unit).as_str())
             {
@@ -753,6 +753,51 @@ fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
     Ok(false)
 }
 
+/// One rank of an ordered sequence (code table 4.5 type 241, local to
+/// NCEP): a GFS-Wave swell partition, under the registry's parameter and
+/// rank. The three partitions share element, parameter and grid and differ
+/// in the surface value alone, which GDAL spells `1-RESERVED(241)`, so the
+/// rank is read off the assembled template 4.0 values beside the
+/// discipline and parameter; where the driver did not assemble the
+/// template, the short name is the fallback, rank included. Mirrors
+/// `_is_ordered_sequence_record` in `xuebuild/gdal.py`.
+fn is_ordered_sequence_record(band: &BandInfo, variable_id: &str, element: &str, short_name: &str) -> Result<bool> {
+    let spec = variable_spec(variable_id)?;
+    if element != spec.grib_element {
+        return Ok(false);
+    }
+    let rank = spec.grib2_level_value.unwrap_or(f64::NAN);
+    let values = band
+        .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+        .split_whitespace()
+        .map(str::parse::<i64>)
+        .collect::<std::result::Result<Vec<_>, _>>();
+    let discipline = band
+        .item("GRIB_DISCIPLINE")
+        .split_once('(')
+        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
+        .parse::<i64>();
+    let (values, discipline) = match (values, discipline) {
+        (Ok(values), Ok(discipline)) => (values, discipline),
+        _ => (Vec::new(), -1),
+    };
+    if band.item("GRIB_PDS_PDTN") == "0" && values.len() >= 12 {
+        if (discipline, values[0], values[1], values[9])
+            != (
+                i64::from(spec.grib2_discipline),
+                i64::from(spec.grib2_category),
+                i64::from(spec.grib2_number),
+                i64::from(spec.grib2_level_type),
+            )
+        {
+            return Ok(false);
+        }
+        let (scale, scaled_value) = (values[10], values[11]);
+        return Ok(scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == rank);
+    }
+    Ok(short_name == format!("{rank}-RESERVED({})", spec.grib2_level_type))
+}
+
 fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
     let element = band.item("GRIB_ELEMENT").to_uppercase();
     let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
@@ -811,7 +856,8 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
         // most-unstable CAPE departing from surface type 17, which GDAL
         // describes as such and gives no short name of its own.
         "dswrf" | "gust" | "cape" | "cin" | "hpbl" | "crain" | "cfrzr" | "cicep" | "csnow"
-        | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw" => {
+        | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw" | "wvhgt" | "wvper"
+        | "wvdir" => {
             let text = searchable(band).to_lowercase();
             let registered = variable_spec(variable_id)?.grib_element;
             let aliases: &[&str] = match registered {
@@ -833,6 +879,8 @@ fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
                     && element == "CAPE"
                     && (text.contains("most unstable") || text.contains("mudl")))
         }
+        // One rank of an ordered sequence: a GFS-Wave swell partition.
+        "swhgt" | "swper" | "swdir" => is_ordered_sequence_record(band, variable_id, &element, &short_name)?,
         // One cloud cover element on its own layer surface (code table 4.5
         // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
         // `0-HCY`); the interval averages are never downloaded. AIFS writes

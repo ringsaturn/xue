@@ -506,7 +506,9 @@ pub const SOURCES: &[SourceSpec] = &[
         // and the sea ice fields from pgrb2, the wave fields from the cycle's
         // GFS-Wave file; then the land — the soil temperature and water in
         // the Noah model's four layers. Seventy-nine pgrb2 records (the
-        // static orography among them) and three wave records per frame.
+        // static orography among them) and nine wave records per frame: the
+        // combined sea, the wind sea and the first swell partition, each a
+        // height, a period and a direction, every direction an input only.
         // Mirrors `xuebuild/sources.py`.
         input_variable_ids: &[
             "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850",
@@ -518,11 +520,12 @@ pub const SOURCES: &[SourceSpec] = &[
             "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "pwat",
             "hpbl", "crain", "cfrzr", "cicep", "csnow", "vvel850", "vvel700", "vvel500", "tmpsfc",
             "icec", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2",
-            "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
+            "soilw3", "soilw4", "htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt",
+            "swper", "swdir",
         ],
         companion_files: &[CompanionFile {
             id: "wave",
-            variable_ids: &["htsgw", "perpw", "dirpw"],
+            variable_ids: &["htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir"],
             production_grid: None,
             tile: None,
         }],
@@ -540,13 +543,14 @@ pub const SOURCES: &[SourceSpec] = &[
             "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300",
             "rh250", "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis",
             "dpt2m", "aptmp2m", "pwat", "hpbl", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "tsoil1",
-            "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
+            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "wvhgt",
+            "wvper", "swhgt", "swper", "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2",
+            "soilw3", "soilw4", "orog",
         ],
         core_bundle_ids: &["tmp2m", "prate"],
         bundle_vector_ids: &[
             "wind10m", "wind100m", "wind1000", "wind925", "wind850", "wind700", "wind500",
-            "wind300", "wind250", "wind200", "qflux850", "wave",
+            "wind300", "wind250", "wind200", "qflux850", "wave", "windwave", "swell",
         ],
         bundle_composite_ids: &[],
         bundle_volume_ids: &[],
@@ -1967,11 +1971,11 @@ mod tests {
             assert_eq!(wave.id, "wave");
             for variable_id in wave.variable_ids {
                 assert!(source.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
-                // The direction is an input only: it ships inside the wave
+                // A direction is an input only: it ships inside the wave
                 // vector derived from it, not as a scalar of its own.
                 assert_eq!(
                     source.bundle_scalar_ids.contains(variable_id),
-                    *variable_id != "dirpw",
+                    !matches!(*variable_id, "dirpw" | "wvdir" | "swdir"),
                     "{model} {variable_id}"
                 );
                 assert_eq!(source.companion_of(variable_id).map(|c| c.id), Some("wave"));
@@ -1979,7 +1983,10 @@ mod tests {
             assert!(source.bundle_vector_ids.contains(&"wave"));
             assert!(source.companion_of("tmpsfc").is_none());
             // Assembly order: the companion's records come last.
-            assert_eq!(&source.input_variable_ids[source.input_variable_ids.len() - 3..], wave.variable_ids);
+            assert_eq!(
+                &source.input_variable_ids[source.input_variable_ids.len() - wave.variable_ids.len()..],
+                wave.variable_ids
+            );
         }
         for model in ["sflux", "hrrr", "cma"] {
             assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");

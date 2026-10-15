@@ -72,8 +72,11 @@ from .variables import (
     STANDARD_GRAVITY,
     SOIL_TEMPERATURE_IDS,
     SURFACE_TEMPERATURE_IDS,
+    SWELL_VECTOR_COMPONENT_IDS,
     VARIABLES,
+    WAVE_DIRECTION_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
+    WIND_WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable,
     variable_spec,
 )
@@ -93,11 +96,13 @@ remain readable; nothing new is written at them."""
 # for the frontend's magnitude shader and particle layer: the 10 m wind, the
 # wind on each isobaric surface, the water vapour flux the converter derives
 # on each surface from the specific humidity and the wind there, and the
-# wave vector it derives from the significant wave height and the primary
-# wave direction.
+# wave vectors it derives from a height and a direction: the combined sea's,
+# the wind sea's and the first swell partition's.
 WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
 WIND_BUNDLE_ID = "wind10m"
 WAVE_BUNDLE_ID = "wave"
+WIND_WAVE_BUNDLE_ID = "windwave"
+SWELL_BUNDLE_ID = "swell"
 # The 80 m wind pair HRRR writes for wind power, a vector bundle of its own.
 WIND_80M_COMPONENT_IDS = ("ugrd80m", "vgrd80m")
 WIND_80M_BUNDLE_ID = "wind80m"
@@ -112,16 +117,23 @@ VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
     **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
     WAVE_BUNDLE_ID: WAVE_VECTOR_COMPONENT_IDS,
+    WIND_WAVE_BUNDLE_ID: WIND_WAVE_VECTOR_COMPONENT_IDS,
+    SWELL_BUNDLE_ID: SWELL_VECTOR_COMPONENT_IDS,
 }
 
 # The vector bundles the converter derives rather than reads, and what from:
 # a vapour flux pair from the specific humidity and both wind components on
-# its surface, the wave vector from the wave height and direction. A wind
+# its surface, each wave vector from a height and a direction. A wind
 # pair is its own two components and is not here.
 DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
     **{f"qflux{level}": (f"spfh{level}", f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
     WAVE_BUNDLE_ID: ("htsgw", "dirpw"),
+    WIND_WAVE_BUNDLE_ID: ("wvhgt", "wvdir"),
+    SWELL_BUNDLE_ID: ("swhgt", "swdir"),
 }
+# The derived vectors laid out of a height and a direction rather than a
+# humidity and a wind.
+WAVE_VECTOR_BUNDLE_IDS = frozenset({WAVE_BUNDLE_ID, WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID})
 
 
 # Composite bundles: the variables an algorithm derived from a source's
@@ -905,7 +917,7 @@ def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
         # Cloud cover: percent as pgrb2 carries it, or the 0–1 fraction
         # ECMWF writes (GDAL spells that unit "-"), scaled up.
         values *= 100.0
-    elif frame.variable_id == "dirpw":
+    elif frame.variable_id in WAVE_DIRECTION_IDS:
         # A direction in degrees true: a record can carry 360, which is the
         # codebook's 0 — reduce it there so the wrap never clamps.
         values = np.mod(values, 360.0)
@@ -934,10 +946,13 @@ def derive_vapour_flux(
 
 
 def derive_wave_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[np.ndarray, np.ndarray]:
-    """The wave vector: the significant wave height, already in metres, laid
-    along the direction the waves travel, as an eastward and a northward
-    component. The primary direction is degrees true the waves come *from*
-    (the meteorological convention the wind uses), so the components are
+    """A wave vector: a significant wave height, already in metres, laid
+    along the direction those waves travel, as an eastward and a northward
+    component — the combined sea's (``wave``), the wind sea's
+    (``windwave``) or the first swell partition's (``swell``), each from
+    its own height and direction. Every direction is degrees true the
+    waves come *from* (the meteorological convention the wind uses), so
+    the components are
     the wind's ``(-h sin θ, -h cos θ)`` and a reader's ``atan2(-u, -v)``
     gives the direction back. Land is 0 m from 0°, so (0, 0). The
     operations run in this order, in float64 — degrees to radians by one
@@ -953,7 +968,7 @@ def derive_wave_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[n
 def derive_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[np.ndarray, np.ndarray]:
     """The two components of one derived vector bundle, from the planes of
     its inputs."""
-    if bundle_id == WAVE_BUNDLE_ID:
+    if bundle_id in WAVE_VECTOR_BUNDLE_IDS:
         return derive_wave_vector(values, bundle_id)
     return derive_vapour_flux(values, bundle_id)
 

@@ -16,8 +16,9 @@ geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), the
 soil temperature and volumetric water in the four Noah layers
 (`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), and —
 appended by the fetcher from the cycle's GFS-Wave file — the significant
-wave height, primary wave period and direction: eighty-two records
-(seventy-nine from pgrb2, three from GFS-Wave), in the order
+wave height, primary wave period and direction, then the height, mean
+period and direction of the wind sea and of the first swell partition:
+eighty-eight records (seventy-nine from pgrb2, nine from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
@@ -57,6 +58,23 @@ gdal_translate -b 5 -b 6 -b 7 -b 8 -srcwin 1192 208 80 80 -of GRIB \
   /tmp/soil.grib2 /tmp/soilw.crop.grib2
 # then insert both, in that order, before the fixture's last three messages
 ```
+
+The six wind-sea and swell records were appended after the other three
+wave records the same way, cut alone from the cycle's GFS-Wave file
+(`gfswave.t06z.global.0p25.f000.grib2` of 2026-08-14, records 8, 12, 16,
+9, 13 and 17 by byte range off its `.idx`: `WVHGT`, `WVPER`, `WVDIR`, then
+`SWELL`, `SWPER`, `SWDIR` at `1 in sequence`). Cropped on its own, the
+wave file's 0.2500000111° step puts the window's origin a hair off the
+pgrb2 grid, so the crop is pinned to the bounds the other records carry
+(their grid section is identical):
+
+```sh
+gdal_translate -srcwin 1192 208 80 80 -a_ullr 117.875 38.125 137.875 18.125 \
+  -of GRIB /tmp/six.grib2 /tmp/six.crop.grib2
+cat tests/fixtures/gfs.2026081406.f000.crop.grib2 /tmp/six.crop.grib2 > /tmp/new.grib2
+```
+
+GDAL's writer keeps the swell records on surface 241 at rank 1.
 
 `gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
 GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way

@@ -20,6 +20,14 @@ vector bundle derived from two scalars that are published themselves: the
 height laid along the direction of travel, so the frontend draws the sea
 the way it draws the wind. Its derivation is checked here for convention
 and for the round trip back through the codebook.
+
+GFS-Wave also splits the sea into the wind sea and up to three swell
+partitions; the wind sea and the first (strongest) partition are read
+too, each as a height, a period and a direction, with a vector of their
+own (``windwave``, ``swell``) derived the way the wave vector is. The
+partitions sit on NCEP's local ordered-sequence surface (type 241), whose
+value is the rank — the one thing that tells them apart, so both matchers
+are held to rank 1 here.
 """
 
 from __future__ import annotations
@@ -41,9 +49,11 @@ from xuebuild import grib2
 from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
 from xuebuild.binconvert import (
     DERIVED_VECTORS,
+    SWELL_BUNDLE_ID,
     VECTOR_BUNDLES,
     VIDEO_VARIABLE_IDS,
     WAVE_BUNDLE_ID,
+    WIND_WAVE_BUNDLE_ID,
     GridInfo,
     _convert_units,
     _extract_planes,
@@ -63,27 +73,38 @@ from xuebuild.fetch import (
     object_url,
     wave_object_url,
 )
-from xuebuild.gdal import _band_matches, raster_expression
+from xuebuild.gdal import _band_matches, inspect_grib_multi, raster_expression
 from xuebuild.grib2 import MessageInfo, _matches
 from xuebuild.model import GfsRun, SourceFrame
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import source_spec
-from xuebuild.variables import OCEAN_VARIABLE_IDS, WAVE_VECTOR_COMPONENT_IDS, variable_spec
+from xuebuild.variables import (
+    OCEAN_VARIABLE_IDS,
+    SWELL_VECTOR_COMPONENT_IDS,
+    WAVE_PARTITION_IDS,
+    WAVE_VECTOR_COMPONENT_IDS,
+    WIND_WAVE_VECTOR_COMPONENT_IDS,
+    variable_spec,
+)
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 REGISTRY = FIXTURES / "ocean-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 WAVE_IDS = ("htsgw", "perpw", "dirpw")
+# Every vector component derived from a height and a direction, and every
+# id the ocean registry fixture holds.
+VECTOR_COMPONENT_IDS = WAVE_VECTOR_COMPONENT_IDS + WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS
+REGISTRY_IDS = OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS + WAVE_PARTITION_IDS + WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS
+# GFS reads the combined sea, the wind sea and the first swell partition
+# from its wave file; ECMWF's wave stream carries the combined sea alone.
+GFS_WAVE_IDS = WAVE_IDS + WAVE_PARTITION_IDS
 GDAL_GRIB_NODATA = 9999.0
 
 
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
         expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {
-            variable_id: registry_entry(variable_id)
-            for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS
-        }
+        actual = {variable_id: registry_entry(variable_id) for variable_id in REGISTRY_IDS}
         self.assertEqual(
             actual,
             expected,
@@ -94,7 +115,7 @@ class RegistryTests(unittest.TestCase):
     def test_balanced_is_quality_except_for_ice_cover(self) -> None:
         # Ice concentration is read in tenths, so production takes the same
         # 1 % step cloud cover does.
-        for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS:
+        for variable_id in REGISTRY_IDS:
             expected = "compact" if variable_id == "icec" else "quality"
             self.assertEqual(
                 PROFILES["balanced"][variable_id].metadata(),
@@ -103,14 +124,14 @@ class RegistryTests(unittest.TestCase):
             )
 
     def test_the_code_space_is_spent(self) -> None:
-        for variable_id in OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS:
+        for variable_id in REGISTRY_IDS:
             quality = PROFILES["quality"][variable_id]
             compact = PROFILES["compact"][variable_id]
             with self.subTest(variable=variable_id):
                 self.assertEqual(compact.step, quality.step * 2)
                 self.assertLessEqual(quality.maximum_code, 254)
                 self.assertGreaterEqual(quality.maximum_code, 200)
-                if variable_id in WAVE_VECTOR_COMPONENT_IDS:
+                if variable_id in VECTOR_COMPONENT_IDS:
                     # Symmetric, and 0 on the grid in both profiles: land
                     # is (0, 0) exactly, so the compact codebook gives up a
                     # code at each end rather than the middle.
@@ -126,7 +147,22 @@ class RegistryTests(unittest.TestCase):
         # Every profile of the direction codebook stops short of 360, which
         # would alias 0.
         for profile in ("quality", "compact", "balanced"):
-            self.assertLess(PROFILES[profile]["dirpw"].maximum, 360.0, profile)
+            for direction_id in ("dirpw", "wvdir", "swdir"):
+                self.assertLess(PROFILES[profile][direction_id].maximum, 360.0, (profile, direction_id))
+        # A partition reads on the combined sea's own codebooks.
+        for profile in ("quality", "compact", "balanced"):
+            for combined_id, partition_ids in (
+                ("htsgw", ("wvhgt", "swhgt")),
+                ("perpw", ("wvper", "swper")),
+                ("dirpw", ("wvdir", "swdir")),
+                ("uwave", VECTOR_COMPONENT_IDS),
+            ):
+                for partition_id in partition_ids:
+                    self.assertEqual(
+                        PROFILES[profile][partition_id].metadata(),
+                        PROFILES[profile][combined_id].metadata(),
+                        (profile, partition_id),
+                    )
         # The skin temperature shares the 2 m temperature's floor and step
         # and runs seventeen degrees further.
         self.assertEqual((PROFILES["quality"]["tmpsfc"].minimum, PROFILES["quality"]["tmpsfc"].step), (-60.0, 0.5))
@@ -214,16 +250,18 @@ class RegistryTests(unittest.TestCase):
                 self.assertNotIn(variable_id, published)
             else:
                 self.assertIn(variable_id, published)
-        # The wave vector is the last bundle GFS publishes: a vector derived
-        # from the height, which stays published beside it, and the
-        # direction, which does not.
-        self.assertEqual(published[-1], WAVE_BUNDLE_ID)
+        # The wave vectors are the last bundles GFS publishes: each derived
+        # from a height, which stays published beside it, and a direction,
+        # which does not.
+        self.assertEqual(published[-3:], (WAVE_BUNDLE_ID, WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID))
         self.assertEqual(VECTOR_BUNDLES[WAVE_BUNDLE_ID], WAVE_VECTOR_COMPONENT_IDS)
         self.assertEqual(DERIVED_VECTORS[WAVE_BUNDLE_ID], ("htsgw", "dirpw"))
         self.assertEqual(vector_input_ids(WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertEqual(bundle_input_ids(gfs, WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertNotIn(WAVE_BUNDLE_ID, VIDEO_VARIABLE_IDS)
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
+        for bundle_id in WAVE_PARTITION_IDS + (WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID):
+            self.assertNotIn(bundle_id, ecmwf, "ECMWF open data carries no partitions")
         for variable_id in OCEAN_VARIABLE_IDS + (WAVE_BUNDLE_ID,):
             self.assertEqual(variable_id in ecmwf, variable_id not in ("icec", "dirpw"), variable_id)
         self.assertEqual(ecmwf[-1], WAVE_BUNDLE_ID)
@@ -235,7 +273,7 @@ class RegistryTests(unittest.TestCase):
     def test_the_wave_fields_come_from_the_companion_family(self) -> None:
         gfs = source_spec("gfs")
         (wave,) = gfs.companion_files
-        self.assertEqual((wave.id, wave.variable_ids), ("wave", WAVE_IDS))
+        self.assertEqual((wave.id, wave.variable_ids), ("wave", GFS_WAVE_IDS))
         # WAVEWATCH III packs its records as JPEG 2000. The wheel's GDAL
         # reads that since it took OpenJPEG on board (the JP2 fixture below
         # is what proves it), so the family is fetched as published and no
@@ -250,14 +288,14 @@ class RegistryTests(unittest.TestCase):
             "a repacked family flags every group that reads it, the wave vector's included",
         )
         self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(source_spec("sflux"), 100)))
-        for variable_id in WAVE_IDS:
+        for variable_id in GFS_WAVE_IDS:
             self.assertIs(gfs.companion_of(variable_id), wave)
         for variable_id in ("tmpsfc", "icec", "icetk", "tmp2m", "prate"):
             self.assertIsNone(gfs.companion_of(variable_id))
         # Assembly order: every primary record, then the companion's, so the
         # stated input order is the order the records sit in the frame.
         primary = gfs.primary_input_ids()
-        self.assertEqual(gfs.input_variable_ids, primary + WAVE_IDS)
+        self.assertEqual(gfs.input_variable_ids, primary + GFS_WAVE_IDS)
         self.assertEqual(len(primary), 79)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
@@ -316,11 +354,11 @@ class RepackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"
             path.write_bytes(repacked)
-            self.assertEqual(len(grib2.index_messages(path)), 82, "every message survives, in order")
+            self.assertEqual(len(grib2.index_messages(path)), 88, "every message survives, in order")
             listing = subprocess.run(
                 ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
             ).stdout
-            self.assertEqual(listing.count("grid_simple"), 82)
+            self.assertEqual(listing.count("grid_simple"), 88)
         with self.assertRaises(DownloadError):
             _repack_grid_simple(b"not a grib message", "nowhere")
 
@@ -354,6 +392,20 @@ class MatcherTests(unittest.TestCase):
             self.assertTrue(_matches(variable_spec("dirpw"), message(10, 0, 10, 1, level_value)), level_value)
         self.assertFalse(_matches(variable_spec("htsgw"), message(10, 0, 5, 1, 1.0)), "the wind-wave height")
         self.assertFalse(_matches(variable_spec("htsgw"), message(10, 0, 3, 241, 1.0)), "a swell partition")
+        # The wind sea on the water surface, any value, like the combined sea.
+        for variable_id, number in (("wvhgt", 5), ("wvper", 6), ("wvdir", 4)):
+            for level_value in (1.0, 0.0, None):
+                self.assertTrue(_matches(variable_spec(variable_id), message(10, 0, number, 1, level_value)), variable_id)
+            self.assertFalse(_matches(variable_spec(variable_id), message(10, 0, number, 241, 1.0)), variable_id)
+        # The swell: rank 1 of the ordered sequence and nothing else — the
+        # second and third partitions are the same parameter on the same
+        # surface type.
+        for variable_id, number in (("swhgt", 8), ("swper", 9), ("swdir", 7)):
+            spec = variable_spec(variable_id)
+            self.assertTrue(_matches(spec, message(10, 0, number, 241, 1.0)), variable_id)
+            for level_value in (2.0, 3.0, None):
+                self.assertFalse(_matches(spec, message(10, 0, number, 241, level_value)), (variable_id, level_value))
+            self.assertFalse(_matches(spec, message(10, 0, number, 1, 1.0)), variable_id)
 
     def test_gdal_bands_match_on_element_and_surface(self) -> None:
         self.assertTrue(_band_matches("tmpsfc", {"GRIB_ELEMENT": "TMP", "GRIB_SHORT_NAME": "0-SFC"}, ""))
@@ -373,9 +425,35 @@ class MatcherTests(unittest.TestCase):
             self.assertTrue(_band_matches(variable_id, {"GRIB_ELEMENT": element}, '1[-] SFC="Ground or water surface"'))
             self.assertFalse(_band_matches(variable_id, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": "1-RESERVED(241)"}, ""))
             self.assertFalse(_band_matches(variable_id, {"GRIB_ELEMENT": "WVHGT", "GRIB_SHORT_NAME": "1-SFC"}, ""))
+        for variable_id, element in (("wvhgt", "WVHGT"), ("wvper", "WVPER"), ("wvdir", "WVDIR")):
+            self.assertTrue(_band_matches(variable_id, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": "1-SFC"}, ""))
+            self.assertFalse(_band_matches(variable_id, {"GRIB_ELEMENT": "HTSGW", "GRIB_SHORT_NAME": "1-SFC"}, ""))
+
+        # The swell partitions as GDAL reports them: no name for surface
+        # 241, the rank in the short name and in the assembled template.
+        def swell_band(element: str, number: int, rank: int, assembled: bool = True) -> dict[str, str]:
+            metadata = {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": f"{rank}-RESERVED(241)"}
+            if assembled:
+                metadata |= {
+                    "GRIB_DISCIPLINE": "10(Oceanographic_Products)",
+                    "GRIB_PDS_PDTN": "0",
+                    "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES": f"0 {number} 2 0 11 0 0 1 0 241 0 {rank} 255 0 0",
+                }
+            return metadata
+
+        for variable_id, element, number in (("swhgt", "SWELL", 8), ("swper", "SWPER", 9), ("swdir", "SWDIR", 7)):
+            with self.subTest(variable=variable_id):
+                for assembled in (True, False):
+                    self.assertTrue(_band_matches(variable_id, swell_band(element, number, 1, assembled), ""))
+                    self.assertFalse(_band_matches(variable_id, swell_band(element, number, 2, assembled), ""))
+                    self.assertFalse(_band_matches(variable_id, swell_band(element, number, 3, assembled), ""))
+                # Another parameter number under the same element is not it.
+                self.assertFalse(_band_matches(variable_id, swell_band(element, number + 1, 1), ""))
+                # The water surface is not the sequence.
+                self.assertFalse(_band_matches(variable_id, {"GRIB_ELEMENT": element, "GRIB_SHORT_NAME": "1-SFC"}, ""))
 
     def test_units_are_accepted_as_gdal_reports_them(self) -> None:
-        for variable_id in OCEAN_VARIABLE_IDS:
+        for variable_id in OCEAN_VARIABLE_IDS + WAVE_PARTITION_IDS:
             spec = variable_spec(variable_id)
             with self.subTest(variable=variable_id):
                 raster_expression(variable_id, spec.gdal_unit)
@@ -399,10 +477,15 @@ class MatcherTests(unittest.TestCase):
         # The orography and the eight soil layers are the primary-file
         # records between the sea ice and the wave file's, so the six ocean
         # records are bands 68-70 and 80-82.
-        bands = (68, 69, 70, 80, 81, 82)
-        for variable_id, band in zip(OCEAN_VARIABLE_IDS, bands, strict=True):
+        # The wind sea and the swell partition follow, 83-88.
+        bands = (68, 69, 70, 80, 81, 82, 83, 84, 85, 86, 87, 88)
+        for variable_id, band in zip(OCEAN_VARIABLE_IDS + WAVE_PARTITION_IDS, bands, strict=True):
             self.assertEqual(fast[variable_id].band, band, variable_id)
             self.assertEqual(fast[variable_id].unit, variable_spec(variable_id).gdal_unit)
+        # GDAL, through the record matchers, finds the same bands.
+        slow = inspect_grib_multi(FIXTURE, WAVE_PARTITION_IDS)
+        for variable_id in WAVE_PARTITION_IDS:
+            self.assertEqual(slow[variable_id].band, fast[variable_id].band, variable_id)
 
 
 class ConversionTests(unittest.TestCase):
@@ -419,12 +502,13 @@ class ConversionTests(unittest.TestCase):
         np.testing.assert_array_equal(_convert_units(self.frame("perpw", "s"), np.array([11.0])), [11.0])
 
     def test_a_direction_of_360_is_the_codebook_zero(self) -> None:
-        direction = _convert_units(self.frame("dirpw", "Degree true"), np.array([0.0, 359.37, 360.0, 1.35]))
-        np.testing.assert_allclose(direction, [0.0, 359.37, 0.0, 1.35])
-        codes = PROFILES["quality"]["dirpw"].quantize(direction)
-        # 359.37 clamps to the top code (358.5°), a degree short of the wrap,
-        # rather than to a code that would read as 360 = 0.
-        self.assertEqual(codes.tolist(), [0, 239, 0, 1])
+        for direction_id in ("dirpw", "wvdir", "swdir"):
+            direction = _convert_units(self.frame(direction_id, "Degree true"), np.array([0.0, 359.37, 360.0, 1.35]))
+            np.testing.assert_allclose(direction, [0.0, 359.37, 0.0, 1.35])
+            codes = PROFILES["quality"][direction_id].quantize(direction)
+            # 359.37 clamps to the top code (358.5°), a degree short of the
+            # wrap, rather than to a code that would read as 360 = 0.
+            self.assertEqual(codes.tolist(), [0, 239, 0, 1], direction_id)
 
     def test_land_becomes_the_bottom_of_the_wave_codebooks(self) -> None:
         gfs = source_spec("gfs")
@@ -452,6 +536,27 @@ class ConversionTests(unittest.TestCase):
         np.testing.assert_array_equal(planes["icec"], 0.0)
         np.testing.assert_array_equal(planes["icetk"], 0.0)
 
+    def test_the_partitions_share_the_combined_sea_land(self) -> None:
+        gfs = source_spec("gfs")
+        grid = _grid_info(FIXTURE)
+        frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
+        with tempfile.TemporaryDirectory() as work:
+            planes = _extract_planes({v: frames[v] for v in ("htsgw", *WAVE_PARTITION_IDS)}, grid, Path(work))
+        land = planes["htsgw"] == 0.0
+        for variable_id in WAVE_PARTITION_IDS:
+            with self.subTest(variable=variable_id):
+                self.assertTrue(np.isfinite(planes[variable_id]).all())
+                self.assertLess(planes[variable_id].max(), GDAL_GRIB_NODATA)
+                np.testing.assert_array_equal(planes[variable_id][land], 0.0)
+        # Every partition is a sea of its own: the fixture's window holds
+        # both a wind sea and a swell, the swell of a longer period.
+        for partition_id in ("wvhgt", "swhgt"):
+            self.assertGreater(planes[partition_id].max(), 1.0, partition_id)
+        swell = planes["swhgt"] > 0.1
+        self.assertGreater(np.count_nonzero(swell), 0)
+        self.assertGreater(planes["swper"][swell].min(), 1.5)
+        self.assertGreater(planes["swper"].max(), planes["wvper"].max())
+
 
 class WaveVectorTests(unittest.TestCase):
     """The wave vector: the significant height along the direction of
@@ -476,6 +581,36 @@ class WaveVectorTests(unittest.TestCase):
         # bundles to their own derivation.
         same_u, same_v = derive_vector({"htsgw": np.array([1.0]), "dirpw": np.array([30.0])}, WAVE_BUNDLE_ID)
         np.testing.assert_array_equal((same_u, same_v), derive_wave_vector({"htsgw": np.array([1.0]), "dirpw": np.array([30.0])}, WAVE_BUNDLE_ID))
+
+    def test_the_wind_sea_and_swell_vectors_are_derived_the_same_way(self) -> None:
+        self.assertEqual(VECTOR_BUNDLES[WIND_WAVE_BUNDLE_ID], WIND_WAVE_VECTOR_COMPONENT_IDS)
+        self.assertEqual(VECTOR_BUNDLES[SWELL_BUNDLE_ID], SWELL_VECTOR_COMPONENT_IDS)
+        self.assertEqual(DERIVED_VECTORS[WIND_WAVE_BUNDLE_ID], ("wvhgt", "wvdir"))
+        self.assertEqual(DERIVED_VECTORS[SWELL_BUNDLE_ID], ("swhgt", "swdir"))
+        gfs = source_spec("gfs")
+        self.assertEqual(bundle_input_ids(gfs, WIND_WAVE_BUNDLE_ID), ("wvhgt", "wvdir"))
+        self.assertEqual(bundle_input_ids(gfs, SWELL_BUNDLE_ID), ("swhgt", "swdir"))
+        heights, directions = np.array([2.0, 3.0]), np.array([90.0, 45.0])
+        expected = derive_wave_vector({"htsgw": heights, "dirpw": directions}, WAVE_BUNDLE_ID)
+        for bundle_id, (height_id, direction_id) in (
+            (WIND_WAVE_BUNDLE_ID, ("wvhgt", "wvdir")),
+            (SWELL_BUNDLE_ID, ("swhgt", "swdir")),
+        ):
+            actual = derive_vector({height_id: heights, direction_id: directions}, bundle_id)
+            np.testing.assert_array_equal(actual, expected, bundle_id)
+        # Local numbers in the waves category, each pair on its inputs'
+        # surface: the wind sea's the water surface with no value, the
+        # swell's the first rank of the ordered sequence.
+        for variable_id, number, level in (
+            ("uwindwave", 252, (1, None)),
+            ("vwindwave", 253, (1, None)),
+            ("uswell", 254, (241, 1.0)),
+            ("vswell", 255, (241, 1.0)),
+        ):
+            spec = variable_spec(variable_id)
+            self.assertEqual((spec.grib2_discipline, spec.grib2_category, spec.grib2_number), (10, 0, number))
+            self.assertEqual((spec.grib2_level_type, spec.grib2_level_value), level)
+            self.assertEqual((spec.grib_element, spec.index_field, spec.fill_values), ("", "", ()))
 
     def test_land_is_the_middle_code_of_both_components(self) -> None:
         # Land is 0 m from 0° in the inputs (the bitmap's fill), so the
