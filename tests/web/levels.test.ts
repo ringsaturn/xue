@@ -48,10 +48,11 @@ const registry = registryJson as unknown as Record<string, RegistryEntry>;
 describe("the isobaric family registry", () => {
   it("knows every variable the encoders register, and nothing else", () => {
     // The isobaric pairs: not the 10, 80 or 100 m wind (surface pairs, no
-    // fixture of their own), and not the wave vector, which the ocean
+    // fixture of their own), and not the wave vectors, which the ocean
     // registry carries.
+    const surfaceComponents = ["ugrd10m", "ugrd80m", "ugrd100m", "uwave", "uwindwave", "uswell"];
     const componentIds = Object.values(VECTOR_BUNDLES)
-      .filter(([u]) => u !== "ugrd10m" && u !== "ugrd80m" && u !== "ugrd100m" && u !== "uwave")
+      .filter(([u]) => !surfaceComponents.includes(u))
       .flatMap(([u, v]) => [u, v]);
     const scalarIds = ISOBARIC_FILL_IDS.filter((id) => !isVectorBundle(id));
     expect([...scalarIds, ...componentIds].sort()).toEqual(Object.keys(registry).sort());
