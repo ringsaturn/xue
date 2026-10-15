@@ -52,6 +52,11 @@ describe("EmbedHub", () => {
     expect(viewer.setTime(Date.parse("2026-10-16T00:00:00Z"))).toBeNull();
   });
 
+  it("reports no landing when the shell refuses the frame", () => {
+    const h: EmbedHost = { map: {} as MaplibreMap, time: () => 1, seek: () => null, source: () => GFS };
+    expect(new EmbedHub(h).viewer.setTime(1000)).toBeNull();
+  });
+
   it("passes seeks through and refuses a time that is not a number", () => {
     const { h, seeks } = host({ source: GFS });
     const viewer = new EmbedHub(h).viewer;
@@ -90,6 +95,18 @@ describe("EmbedHub", () => {
     state.source = { ...GFS, variable: "wind10m", caseId: "doksuri-2023", manifestCrc32: null };
     hub.emitSource();
     expect(seen).toHaveBeenCalledTimes(3);
+  });
+
+  it("fires source when a rolling window moves on without naming a run", () => {
+    const window: EmbedSource = { ...GFS, model: "mrms", run: null, variable: "cref", runTime: "2026-10-15T06:00:00Z" };
+    const { h, state } = host({ source: window });
+    const hub = new EmbedHub(h);
+    const seen = vi.fn();
+    hub.viewer.on("source", seen);
+    hub.emitSource();
+    state.source = { ...window, runTime: "2026-10-15T06:10:00Z" };
+    hub.emitSource();
+    expect(seen).toHaveBeenCalledTimes(2);
   });
 
   it("stops calling a listener once unsubscribed", () => {
