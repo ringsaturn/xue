@@ -538,11 +538,16 @@ interface XueViewer {
   re-renders the same frame, stays silent. It fires on every frame during
   playback, so a listener must be cheap.
 - **`setTime(ms)`** stops playback and selects the frame nearest to `ms`: a
-  time outside the axis lands on the first or the last frame.
-- **`source`** fires from `applyVariable`, once per (model, run, variable,
-  case). A re-tier of the same variable stays silent. `model` is the source
-  id (`gfs`, a case's own model), `variable` the bundle id, `manifestCrc32`
-  the live pointer's (null for a case).
+  time outside the axis lands on the first or the last frame. It returns the
+  valid time it landed on, or null when the shell could not select the frame
+  yet (its layers still being added).
+- **`source`** fires from `applyVariable`, once per (model, run, run time,
+  variable, case): a rolling window, which names no run, fires again as each
+  round moves its run time on, and a re-tier of the same variable stays
+  silent. `model` is the source id (`gfs`, a case's own model), `variable`
+  the bundle id, `manifestCrc32` the live pointer's (null for a case). The
+  GIBS imagery view has no variable session, so it never yields a source:
+  `source()` stays null and the event does not fire there.
 - **Ground.** There is no theme API. Ink for marks on the map follows
   `body[data-ground]` (see "Layout and theming"), which changes with the
   theme and with the variable, so read it at draw time or observe the

@@ -2243,8 +2243,7 @@ function embedSeek(validTime: number): number | null {
   generation += 1;
   // Nearest frame on the axis, so a time outside it lands on the first or last.
   const index = nearestFrameIndexForValidTime(validTime);
-  trySelectFrame(index);
-  return frameValidTime(index);
+  return trySelectFrame(index) ? frameValidTime(index) : null;
 }
 
 function embedSource(): EmbedSource | null {

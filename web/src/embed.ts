@@ -44,8 +44,10 @@ export interface EmbedHost {
   source(): EmbedSource | null;
 }
 
+/** What makes a dataset another one. `runTime` covers a rolling window,
+ * which names no run but moves on with every round. */
 function sourceKey(source: EmbedSource): string {
-  return [source.model, source.run ?? "", source.variable, source.caseId ?? ""].join("\u0000");
+  return [source.model, source.run ?? "", source.runTime, source.variable, source.caseId ?? ""].join("\u0000");
 }
 
 export class EmbedHub {
@@ -80,7 +82,8 @@ export class EmbedHub {
     this.fire("time");
   }
 
-  /** The dataset changed; a re-tier of the same variable stays silent. */
+  /** The dataset changed (model, run or its run time, variable, case); a
+   * re-tier of the same variable stays silent. */
   emitSource(): void {
     const source = this.host.source();
     if (source === null) return;
