@@ -35,6 +35,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
+| `embed.ts` | The embed API, `window.xueViewer` (see "Embedding"). |
 | `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
 | `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
 | `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. |
@@ -506,6 +507,54 @@ hidden and pinned models are `localStorage`.
   is dropped from the view without a warning. A dataset reached only through cases (`woof`) has no
   pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
   model sheet, and `?model=` naming it falls back to the default.
+
+## Embedding
+
+A page that builds this shell from source can draw its own layers over the
+map in step with playback through `window.xueViewer` (`embed.ts`). It is
+always installed, at the end of the map's `load` callback, and announced by
+a `xue:ready` event on `window`; a script that runs later finds the object
+already there.
+
+```ts
+interface XueViewer {
+  version: 1;
+  map: maplibregl.Map;
+  time(): number | null;              // epoch ms
+  setTime(ms: number): number | null; // the valid time it landed on
+  source(): { model: string; run: string | null; runTime: string; variable: string;
+              caseId: string | null; manifestCrc32: string | null } | null;
+  on(event: "time" | "source", callback: () => void): () => void; // returns the unsubscribe
+}
+```
+
+- **Readiness.** `time()`, `setTime()` and `source()` return null until the
+  shell is ready and a dataset has loaded, and again while a model switch is
+  in flight (`selectedModelId` names the next model before `metadata` does).
+  Wait for the first `source` event.
+- **`time`** is the timeline pointer: the frame asked for, which may lead the
+  screen by a frame while it decodes. The event fires from
+  `updateFrameReadout`, once per valid time; a locale or zone change, which
+  re-renders the same frame, stays silent. It fires on every frame during
+  playback, so a listener must be cheap.
+- **`setTime(ms)`** stops playback and selects the frame nearest to `ms`: a
+  time outside the axis lands on the first or the last frame.
+- **`source`** fires from `applyVariable`, once per (model, run, variable,
+  case). A re-tier of the same variable stays silent. `model` is the source
+  id (`gfs`, a case's own model), `variable` the bundle id, `manifestCrc32`
+  the live pointer's (null for a case).
+- **Ground.** There is no theme API. Ink for marks on the map follows
+  `body[data-ground]` (see "Layout and theming"), which changes with the
+  theme and with the variable, so read it at draw time or observe the
+  attribute.
+- **`map` is outside the `version` promise.** It is MapLibre's own object and
+  changes with MapLibre upgrades. The shell's layer and source ids carry no
+  prefix, so an embedder prefixes its own and adds, never edits or removes,
+  the shell's. Its layers survive a theme or locale switch, because
+  `syncBasemapStyle` patches properties in place and never calls
+  `map.setStyle`.
+- Listener exceptions are caught and logged; they never reach the shell.
+- `version` changes only for an incompatible change; fields are only added.
 
 ## Discovery
 

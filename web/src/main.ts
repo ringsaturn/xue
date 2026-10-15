@@ -224,6 +224,7 @@ import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
 import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
+import { installEmbedApi, type EmbedHub, type EmbedSource } from "./embed";
 import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
 import type { Feature, FeatureCollection } from "geojson";
 import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
@@ -1933,6 +1934,8 @@ let lastBlendAt = 0;
 const BLEND_INTERVAL_MS = 1000 / 30;
 let ready = false;
 let switchingVariable = false;
+/** The embed API (`embed.ts`), installed once the map has loaded. */
+let embedHub: EmbedHub | null = null;
 
 const sessions = new Map<ForecastBundleId, VariableSession>();
 const sessionLoads = new Map<ForecastBundleId, Promise<VariableSession>>();
@@ -2221,6 +2224,40 @@ function frameValidTime(index: number): number {
 function nearestFrameIndexForValidTime(validTime: number): number {
   const base = metadata ? Date.parse(metadata.runTime) : 0;
   return nearestFrameIndex((validTime - base) / 1000);
+}
+
+/** The embed API's reads: the timeline pointer's valid time (the frame
+ * asked for, which may lead the screen by a frame while it decodes), and
+ * the dataset on screen. Null until the shell is ready and a dataset is
+ * loaded: before that `metadata` is absent, and during a model switch
+ * `selectedModelId` already names the next model while `metadata` is still
+ * the last one's. */
+function embedTime(): number | null {
+  if (!ready || !metadata) return null;
+  return frameValidTime(Number(slider.value));
+}
+
+function embedSeek(validTime: number): number | null {
+  if (!ready || !metadata) return null;
+  stopPlayback();
+  generation += 1;
+  // Nearest frame on the axis, so a time outside it lands on the first or last.
+  const index = nearestFrameIndexForValidTime(validTime);
+  trySelectFrame(index);
+  return frameValidTime(index);
+}
+
+function embedSource(): EmbedSource | null {
+  const session = activeSession;
+  if (!ready || !metadata || !session) return null;
+  return {
+    model: activeCase ? activeCase.modelId : selectedModelId,
+    run: currentRun,
+    runTime: metadata.runTime,
+    variable: session.id,
+    caseId: activeCase?.id ?? null,
+    manifestCrc32: activeCase ? null : currentManifestCrc,
+  };
 }
 
 /** The instrument readout. A forecast reads as the forecast hour it has
@@ -4492,6 +4529,7 @@ function updateFrameReadout(index: number): void {
   syncStationTime();
   syncShadowTime(index);
   syncGibs();
+  embedHub?.emitTime();
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -8517,6 +8555,7 @@ function applyVariable(session: VariableSession): void {
   syncLapse();
   updateVariablePresentation(session);
   syncUrl();
+  embedHub?.emitSource();
   updateCacheReadout();
   // The data card reflects only the variable on screen: its own delivery
   // format, its own downloaded bytes, and its own delivery state — never a
@@ -10512,6 +10551,7 @@ buildPlaceholderTicks();
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {
   mapStyleReady = true;
+  embedHub = installEmbedApi({ map, time: embedTime, seek: embedSeek, source: embedSource });
   // A theme or language picked while the style was still loading was built
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
