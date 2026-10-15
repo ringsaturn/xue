@@ -520,6 +520,16 @@ export const en = {
   varLabelHtsgw: "Significant wave height",
   varLabelPerpw: "Primary wave period",
   varLabelDirpw: "Primary wave direction",
+  /** The wind sea and the first swell partition, drawn like the waves:
+   * the vector labels name height and direction both. */
+  varLabelWindwave: "Wind sea: significant height and direction",
+  varLabelSwell: "Swell: significant height and direction (first partition)",
+  varLabelWvhgt: "Significant height of wind waves",
+  varLabelWvper: "Mean period of wind waves",
+  varLabelWvdir: "Direction of wind waves",
+  varLabelSwhgt: "Significant height of swell (first partition)",
+  varLabelSwper: "Mean period of swell (first partition)",
+  varLabelSwdir: "Direction of swell (first partition)",
   // The aerosol set: the optical depth at 550 nm for the whole column and
   // by species, and the surface particulate concentrations by size cut.
   varLabelAod: "Aerosol optical depth at 550 nm",

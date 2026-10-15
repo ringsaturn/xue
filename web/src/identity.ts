@@ -27,7 +27,8 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * gust, the four cloud covers, CAPE, visibility, dew point, apparent
  * temperature — and the ocean set: skin temperature, sea ice cover and
  * thickness, wave height, period and direction, and the wave vector, the
- * height laid along the direction of travel as a u/v pair — and the
+ * height laid along the direction of travel as a u/v pair, and the same
+ * three scalars and vector for the wind sea and the first swell — and the
  * satellite channels, one family per nominal wavelength: the brightness
  * temperature parameter is the same for every infrared band, and the
  * `band` block beside it says which — the satellite composites, a
@@ -76,6 +77,14 @@ export type ChartFamily =
   | "perpw"
   | "dirpw"
   | "wave"
+  | "wvhgt"
+  | "wvper"
+  | "wvdir"
+  | "swhgt"
+  | "swper"
+  | "swdir"
+  | "windwave"
+  | "swell"
   | "ir104"
   | "ir039"
   | "dustrgb"
@@ -172,6 +181,14 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
   );
 }
 
+/** True on the first swell partition: WAVEWATCH III writes its swell
+ * partitions on code table 4.5 type 241, "ordered sequence of data", the
+ * surface's value the partition's place in the sequence. Only the first is
+ * published, and the second and third would be other fields. */
+function isFirstSwell(parameter: BundleParameter): boolean {
+  return parameter.typeOfFirstFixedSurface === 241 && surfaceValue(parameter) === 1;
+}
+
 /**
  * The identity of one scalar variable, or null when its parameters are not
  * ones this shell has chart knowledge for.
@@ -194,9 +211,12 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
  * the encoders derive from the resolved flow), (0,0,0) @1 surface (skin)
  * temperature, (10,2,0) @1 sea ice
  * cover, (10,2,1) @1 sea ice thickness, (10,0,3) / (10,0,11) / (10,0,10)
- * @1 significant wave height, primary wave period and direction — the
- * oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
- * WAVEWATCH III, none once declared) is not part of the identity; (0,4,4)
+ * @1 significant wave height, primary wave period and direction, (10,0,5) /
+ * (10,0,6) / (10,0,4) @1 the wind sea's height, mean period and direction —
+ * the oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
+ * WAVEWATCH III, none once declared) is not part of the identity; (10,0,8) /
+ * (10,0,9) / (10,0,7) @241 value 1 the first swell partition's height,
+ * mean period and direction (`isFirstSwell`); (0,4,4)
  * @8 brightness temperature, a satellite channel told apart by the
  * `band` block's central wave number (10–11 µm is the infrared window,
  * `ir104`, 3.5–4.2 µm the shortwave window, `ir039`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
@@ -240,6 +260,14 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 10, 0, 3) && surface === 1) return scalar("htsgw", null);
   if (isTriple(parameter, 10, 0, 11) && surface === 1) return scalar("perpw", null);
   if (isTriple(parameter, 10, 0, 10) && surface === 1) return scalar("dirpw", null);
+  if (isTriple(parameter, 10, 0, 5) && surface === 1) return scalar("wvhgt", null);
+  if (isTriple(parameter, 10, 0, 6) && surface === 1) return scalar("wvper", null);
+  if (isTriple(parameter, 10, 0, 4) && surface === 1) return scalar("wvdir", null);
+  if (isFirstSwell(parameter)) {
+    if (isTriple(parameter, 10, 0, 8)) return scalar("swhgt", null);
+    if (isTriple(parameter, 10, 0, 9)) return scalar("swper", null);
+    if (isTriple(parameter, 10, 0, 7)) return scalar("swdir", null);
+  }
   if (isTriple(parameter, 0, 0, 3) && level !== null) return scalar("thetae", level);
   if (isTriple(parameter, 0, 19, 29) && level !== null) return scalar("cat", level);
   if (isTriple(parameter, 0, 0, 6) && surface === 103 && value === 2) return scalar("dpt2m", null);
@@ -419,11 +447,15 @@ function aerosolField(fields: readonly AerosolField[], aerosol: BundleAerosol | 
  * the oceanographic discipline's waves category, the height along the
  * direction of travel — sits on the water surface like the wave fields it
  * is derived from, its surface value no more part of the identity than
- * theirs. */
+ * theirs; the wind sea's and the first swell's vectors are the same
+ * construction on the next local numbers, the swell's on its partition's
+ * surface. */
 const VECTOR_PAIRS: readonly { family: ChartFamily; u: readonly [number, number, number]; v: readonly [number, number, number] }[] = [
   { family: "wind", u: [0, 2, 2], v: [0, 2, 3] },
   { family: "qflux", u: [0, 1, 250], v: [0, 1, 251] },
   { family: "wave", u: [10, 0, 250], v: [10, 0, 251] },
+  { family: "windwave", u: [10, 0, 252], v: [10, 0, 253] },
+  { family: "swell", u: [10, 0, 254], v: [10, 0, 255] },
 ];
 
 /**
@@ -446,7 +478,10 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
       if (value === 100) return vector("wind100m", null);
       return null;
     }
-    if (pair.family === "wave") return u.typeOfFirstFixedSurface === 1 ? vector("wave", null) : null;
+    if (pair.family === "wave" || pair.family === "windwave") {
+      return u.typeOfFirstFixedSurface === 1 ? vector(pair.family, null) : null;
+    }
+    if (pair.family === "swell") return isFirstSwell(u) ? vector("swell", null) : null;
     const level = isobaricLevel(u);
     return level === null ? null : vector(pair.family, level);
   }

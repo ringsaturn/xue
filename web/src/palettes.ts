@@ -18,6 +18,9 @@ import {
   aerosolChart,
   isSoilMoisture,
   isSoilTemperature,
+  isWaveDirection,
+  isWaveHeight,
+  isWavePeriod,
   isobaricRange,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
@@ -878,9 +881,9 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "tmpsfc") return TEMPERATURE_STOPS;
   if (family === "icec") return ICE_COVER_STOPS;
   if (family === "icetk") return ICE_THICKNESS_STOPS;
-  if (family === "htsgw") return WAVE_HEIGHT_STOPS;
-  if (family === "perpw") return WAVE_PERIOD_STOPS;
-  if (family === "dirpw") return WAVE_DIRECTION_STOPS;
+  if (isWaveHeight(family)) return WAVE_HEIGHT_STOPS;
+  if (isWavePeriod(family)) return WAVE_PERIOD_STOPS;
+  if (isWaveDirection(family)) return WAVE_DIRECTION_STOPS;
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_STOPS;
   if (family === "ir039") return SHORTWAVE_WINDOW_STOPS;
   if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;

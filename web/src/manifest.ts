@@ -527,7 +527,7 @@ export type IsobaricScalarBundleId =
  * height, the same parameters on surface type 103 value 100), the wind on
  * each isobaric surface, and the water vapour flux the encoder derives
  * there. */
-type VectorBundleId = "wind10m" | "wind80m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave";
+type VectorBundleId = "wind10m" | "wind80m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave" | "windwave" | "swell";
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
@@ -608,12 +608,39 @@ export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
 
 /** The ocean set — the surface (skin) temperature, which is the SST over
  * water, sea ice cover and thickness, and the GFS-Wave significant wave
- * height, primary wave period and direction — single layers held to the
+ * height, primary wave period and direction, and the same three for the
+ * wind sea and the first swell partition — single layers held to the
  * encoders by `tests/fixtures/ocean-registry.json`. The same registry
- * carries the components of the `wave` vector bundle the encoders derive
- * from the height and direction (`WAVE_COMPONENT_IDS`). */
-type OceanId = "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw";
-export const OCEAN_IDS: readonly OceanId[] = ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw"];
+ * carries the components of the `wave`, `windwave` and `swell` vector
+ * bundles the encoders derive from each height and direction
+ * (`WAVE_COMPONENT_IDS`, `WINDWAVE_COMPONENT_IDS`, `SWELL_COMPONENT_IDS`). */
+type OceanId =
+  | "tmpsfc"
+  | "icec"
+  | "icetk"
+  | "htsgw"
+  | "perpw"
+  | "dirpw"
+  | "wvhgt"
+  | "wvper"
+  | "wvdir"
+  | "swhgt"
+  | "swper"
+  | "swdir";
+export const OCEAN_IDS: readonly OceanId[] = [
+  "tmpsfc",
+  "icec",
+  "icetk",
+  "htsgw",
+  "perpw",
+  "dirpw",
+  "wvhgt",
+  "wvper",
+  "wvdir",
+  "swhgt",
+  "swper",
+  "swdir",
+];
 
 /** The soil set — the land surface model's soil temperature and total
  * volumetric water content, layer by layer from the surface down. The id is
@@ -672,7 +699,11 @@ type VectorComponentId =
   | `uqflx${IsobaricLevel}`
   | `vqflx${IsobaricLevel}`
   | "uwave"
-  | "vwave";
+  | "vwave"
+  | "uwindwave"
+  | "vwindwave"
+  | "uswell"
+  | "vswell";
 
 /** The component variables a composite bundle carries: the three guns of
  * the Dust RGB and the true colour picture, in the order the renderer
@@ -736,11 +767,16 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...perLevel("wind"),
   ...perLevel("qflux"),
   "wave",
+  "windwave",
+  "swell",
 ];
 export const WIND_COMPONENT_IDS: readonly KnownDataVariableId[] = ["ugrd10m", "vgrd10m"];
 /** The wave vector's pair: the significant wave height laid along the
  * direction the waves travel, in metres, in the wind's u/v convention. */
 export const WAVE_COMPONENT_IDS: readonly ["uwave", "vwave"] = ["uwave", "vwave"];
+/** The same pair for the wind sea and for the first swell partition. */
+export const WINDWAVE_COMPONENT_IDS: readonly ["uwindwave", "vwindwave"] = ["uwindwave", "vwindwave"];
+export const SWELL_COMPONENT_IDS: readonly ["uswell", "vswell"] = ["uswell", "vswell"];
 
 /** The u/v component pair of every vector bundle. */
 export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
@@ -752,6 +788,8 @@ export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId,
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
   ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
   wave: WAVE_COMPONENT_IDS,
+  windwave: WINDWAVE_COMPONENT_IDS,
+  swell: SWELL_COMPONENT_IDS,
 } as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
 
 /** Bundles drawn as a volume, by manifest id, with their level count: the

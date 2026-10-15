@@ -169,7 +169,7 @@
               "geopotential height on isobaric surfaces",
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
-              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation",
+              "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation, with the same height, period and vector for the wind sea and the first swell partition",
               "aerosol optical depth at 550 nm (total, dust, sea salt, sulphate, organic carbon, black carbon) and surface PM2.5, PM10 and dust PM10 concentrations (GEFS-Aerosols)",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
@@ -614,9 +614,9 @@
              cover and thickness on the level row) and the waves (two
              swells; the wave vector — height as the fill, direction as
              particles — and the primary period on the level row, the
-             scalar height standing in on a run without the vector; the
-             scalar direction, published for a day before the vector, has
-             no tile — levels.ts). The skin temperature (the SST over water
+             scalar height standing in on a run without the vector, then
+             the wind sea and the first swell, each a vector and a period;
+             the scalar directions have no tile — levels.ts). The skin temperature (the SST over water
              — a thermometer over a wave) is above, with the temperatures. -->
         <!-- The soil, two families of four layers each (L1 the top): the
              layer is picked on the level row; the depths are the source's. -->

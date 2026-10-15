@@ -14,7 +14,8 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * families are not isobaric at all and list their members outright: cloud
  * cover (the total and the three layers), sea ice (cover and thickness),
  * waves (the wave vector — significant height along the direction of
- * travel — and the primary period), the aerosol optical depth (the whole
+ * travel — and the primary period, then the same pair for the wind sea and
+ * the first swell), the aerosol optical depth (the whole
  * column and five species) and the particulate matter (PM2.5, PM10 and
  * the dust part of PM10) and the two soil families (temperature and
  * volumetric moisture, each in four layers from the surface down), and the
@@ -201,7 +202,11 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   // published as a scalar for one day before the vector: as a fill it
   // wraps at north and paints land, 0 in the file, as north, so it never
   // had a tile, and a run that still carries it is reachable by URL
-  // (`?type=wavedirection`).
+  // (`?type=wavedirection`). The wind sea and the first swell partition
+  // follow, each a vector with its mean period beside it, the scalar
+  // height standing in for its vector the way `htsgw` does for `wave`; a
+  // run without them (every source but GFS) offers exactly the three
+  // above, since the sheet lists only what the run ships.
   wave: {
     id: "wave",
     kind: "vector",
@@ -213,6 +218,12 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wave", code: "HEIGHT" },
       { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
       { id: "perpw", code: "PERIOD" },
+      { id: "windwave", code: "WIND SEA" },
+      { id: "wvhgt", code: "WIND SEA", standInFor: "windwave" },
+      { id: "wvper", code: "SEA PERIOD" },
+      { id: "swell", code: "SWELL" },
+      { id: "swhgt", code: "SWELL", standInFor: "swell" },
+      { id: "swper", code: "SWELL PERIOD" },
     ],
   },
   // The aerosol optical depth at 550 nm: the whole column heads the
@@ -283,11 +294,12 @@ function soilLevels(prefix: "tsoil" | "soilw"): FamilyMember[] {
 
 /** Bundles the shell has chart knowledge for but deliberately writes no rail
  * tile for: the scalar primary wave direction, which is not a fill (see the
- * wave family above) — the wave vector is how it is drawn — and the cloud
+ * wave family above) — the wave vector is how it is drawn — and so the
+ * wind sea's and the first swell's directions, and the cloud
  * water volume, which draws over a field from the overlay section's volume
  * switch. Reachable by URL on a run that carries them, which gets no
  * generic tile for them either. */
-export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw", "cloud3d"];
+export const UNTILED_BUNDLE_IDS: readonly ForecastBundleId[] = ["dirpw", "wvdir", "swdir", "cloud3d"];
 
 /** The cloud water volume's chart span, in g/kg: its codebook's. */
 export const CLOUD_WATER_CHART_MAX = 2.5;
@@ -539,6 +551,25 @@ export const ICE_THICKNESS_CHART_MAX = 5;
 export const WAVE_HEIGHT_CHART_MAX = 10;
 export const WAVE_PERIOD_CHART_MAX = 20;
 
+/** The wave fields by kind, whichever part of the sea they describe: the
+ * combined sea, the wind sea or the first swell. Each kind reads on one
+ * ramp and one legend, so a metre of swell is the colour a metre of
+ * combined sea is. */
+export function isWaveHeight(family: ChartFamily): boolean {
+  return family === "htsgw" || family === "wvhgt" || family === "swhgt";
+}
+export function isWavePeriod(family: ChartFamily): boolean {
+  return family === "perpw" || family === "wvper" || family === "swper";
+}
+export function isWaveDirection(family: ChartFamily): boolean {
+  return family === "dirpw" || family === "wvdir" || family === "swdir";
+}
+/** The vectors whose magnitude is a wave height: drawn with the height's
+ * ramp, its ceiling and its legend, and with particles at the wave pace. */
+export function isWaveVector(family: ChartFamily): boolean {
+  return family === "wave" || family === "windwave" || family === "swell";
+}
+
 /** The surface diagnostics' chart ceilings — where each palette saturates
  * and what its legend spans, narrower than the codebook where the codebook
  * keeps headroom the chart does not need. Gust reuses the wind speed ramp
@@ -622,9 +653,9 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "tmpsfc") return temperaturePaletteDomain(null);
   if (family === "icec") return [0, 100];
   if (family === "icetk") return [0, ICE_THICKNESS_CHART_MAX];
-  if (family === "htsgw") return [0, WAVE_HEIGHT_CHART_MAX];
-  if (family === "perpw") return [0, WAVE_PERIOD_CHART_MAX];
-  if (family === "dirpw") return [0, 360];
+  if (isWaveHeight(family)) return [0, WAVE_HEIGHT_CHART_MAX];
+  if (isWavePeriod(family)) return [0, WAVE_PERIOD_CHART_MAX];
+  if (isWaveDirection(family)) return [0, 360];
   if (family === "ir104") return BRIGHTNESS_TEMPERATURE_CHART_RANGE;
   if (family === "ir039") return SHORTWAVE_WINDOW_CHART_RANGE;
   // The dust confidences read over [0, 1], their codebook less the code
@@ -728,7 +759,7 @@ const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
  * with no registered ceiling takes the 10 m one. */
 export function vectorMaxMagnitude(family: ChartFamily, level: number | null): number {
   if (family === "qflux") return 50;
-  if (family === "wave") return WAVE_HEIGHT_CHART_MAX;
+  if (isWaveVector(family)) return WAVE_HEIGHT_CHART_MAX;
   // The 100 m pair is a wind at hub height: the 10 m ramp's own ceiling, so
   // a speed is the same colour on both.
   if (family === "wind80m" || family === "wind100m") return 40;
@@ -749,6 +780,8 @@ export function familyLabel(id: ForecastBundleId): string {
     if (id === "wind80m") return t("varLabelWind80m");
     if (id === "wind100m") return t("varLabelWind100m");
     if (id === "wave") return t("varLabelWave");
+    if (id === "windwave") return t("varLabelWindwave");
+    if (id === "swell") return t("varLabelSwell");
     const listed = MEMBER_LABEL_KEYS[id];
     if (listed) return t(listed);
     return id;
@@ -785,6 +818,10 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   icetk: "varLabelIcetk",
   htsgw: "varLabelHtsgw",
   perpw: "varLabelPerpw",
+  wvhgt: "varLabelWvhgt",
+  wvper: "varLabelWvper",
+  swhgt: "varLabelSwhgt",
+  swper: "varLabelSwper",
   aod: "varLabelAod",
   aoddust: "varLabelAoddust",
   aodsalt: "varLabelAodsalt",
@@ -858,7 +895,7 @@ export function niceStep(span: number): number {
  * codebook. */
 export function isobaricLegend(identity: VariableIdentity): string[] | null {
   const { family, level, vector } = identity;
-  if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], family === "wave" ? 2 : 10);
+  if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], isWaveVector(family) ? 2 : 10);
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
@@ -872,9 +909,9 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);
   if (family === "icec") return rangeLegend([0, 100], 20);
   if (family === "icetk") return rangeLegend([0, ICE_THICKNESS_CHART_MAX], 1);
-  if (family === "htsgw") return rangeLegend([0, WAVE_HEIGHT_CHART_MAX], 2);
-  if (family === "perpw") return rangeLegend([0, WAVE_PERIOD_CHART_MAX], 4);
-  if (family === "dirpw") return rangeLegend([0, 360], 45);
+  if (isWaveHeight(family)) return rangeLegend([0, WAVE_HEIGHT_CHART_MAX], 2);
+  if (isWavePeriod(family)) return rangeLegend([0, WAVE_PERIOD_CHART_MAX], 4);
+  if (isWaveDirection(family)) return rangeLegend([0, 360], 45);
   // The one legend not in the file's unit: kelvin reads in Celsius.
   if (family === "ir104") return rangeLegend(BRIGHTNESS_TEMPERATURE_LEGEND_RANGE, 30);
   if (family === "ir039") return rangeLegend(SHORTWAVE_WINDOW_LEGEND_RANGE, 40);

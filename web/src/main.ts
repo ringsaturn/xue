@@ -114,6 +114,7 @@ import {
   familyOf,
   familyVariants,
   isobaricCode,
+  isWaveVector,
   levelCode,
   niceStep,
   rangeLegend,
@@ -8192,7 +8193,7 @@ function vectorPalette(session: VariableSession): Uint8Array {
   const max = sessionMaxMagnitude(session);
   const family = session.identity?.family;
   if (family === "qflux") return buildVapourFluxPalette(max);
-  if (family === "wave") return buildWaveFieldPalette(max);
+  if (family !== undefined && isWaveVector(family)) return buildWaveFieldPalette(max);
   return buildWindFieldPalette(max);
 }
 
@@ -8202,7 +8203,8 @@ function vectorPalette(session: VariableSession): Uint8Array {
  * second of wind — a three-metre sea like a fresh breeze, a storm sea past
  * the ramp's ceiling like a gale. */
 function sessionParticlePace(session: VariableSession): number {
-  return session.identity?.family === "wave" ? WAVE_PARTICLE_PACE : 1;
+  const family = session.identity?.family;
+  return family !== undefined && isWaveVector(family) ? WAVE_PARTICLE_PACE : 1;
 }
 const WAVE_PARTICLE_PACE = 3;
 

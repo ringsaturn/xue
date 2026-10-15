@@ -29,9 +29,9 @@ const REGISTRIES = [
     registry: oceanJson as unknown as Record<string, RegistryEntry>,
     ids: OCEAN_IDS as readonly string[],
     withoutLegend: [] as string[],
-    // The direction's legend closes the circle at 360, which the codebook
+    // The directions' legend closes the circle at 360, which the codebook
     // stops one code short of; every other span sits inside its codebook.
-    legendPastCodebook: ["dirpw"],
+    legendPastCodebook: ["dirpw", "wvdir", "swdir"],
   },
   {
     name: "soil",

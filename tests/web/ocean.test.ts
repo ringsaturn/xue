@@ -25,8 +25,10 @@ import {
 import {
   KNOWN_BUNDLE_IDS,
   OCEAN_IDS,
+  SWELL_COMPONENT_IDS,
   VECTOR_BUNDLES,
   WAVE_COMPONENT_IDS,
+  WINDWAVE_COMPONENT_IDS,
   isVectorBundle,
   type BundleVariable,
 } from "../../web/src/manifest";
@@ -48,9 +50,19 @@ function bundleVariable(
   return registryVariable(id, registry[id]!, registry[id]![profile]);
 }
 
+/** The wave family's listed members, in chip order. */
+const WAVE_MEMBERS = ["wave", "htsgw", "perpw", "windwave", "wvhgt", "wvper", "swell", "swhgt", "swper"];
+
+/** What the field sheet offers for the wave family on a run shipping
+ * `published`: the members less the stand-ins, less what the run lacks. */
+function offeredIn(published: ReadonlySet<string>): string[] {
+  const has = (id: string) => published.has(id);
+  return familyMembers("wave", has).filter(has);
+}
+
 describe("the ocean registry", () => {
   it("knows exactly the variables the encoders register", () => {
-    expect([...OCEAN_IDS, ...WAVE_COMPONENT_IDS].sort()).toEqual(
+    expect([...OCEAN_IDS, ...WAVE_COMPONENT_IDS, ...WINDWAVE_COMPONENT_IDS, ...SWELL_COMPONENT_IDS].sort()).toEqual(
       Object.keys(registry).sort(),
     );
     for (const id of OCEAN_IDS) {
@@ -61,6 +73,8 @@ describe("the ocean registry", () => {
     expect(KNOWN_BUNDLE_IDS).toContain("wave");
     expect(isVectorBundle("wave")).toBe(true);
     expect(VECTOR_BUNDLES.wave).toEqual(WAVE_COMPONENT_IDS);
+    expect(VECTOR_BUNDLES.windwave).toEqual(WINDWAVE_COMPONENT_IDS);
+    expect(VECTOR_BUNDLES.swell).toEqual(SWELL_COMPONENT_IDS);
     // Sea ice and the waves are families the level row picks within; the
     // skin temperature is a single layer, and the wave direction — no fill
     // — belongs to no tile: the vector is how it is drawn.
@@ -71,12 +85,18 @@ describe("the ocean registry", () => {
     expect(familyOf("perpw")).toBe("wave");
     expect(familyOf("tmpsfc")).toBeNull();
     expect(familyOf("dirpw")).toBeNull();
+    expect(familyOf("windwave")).toBe("wave");
+    expect(familyOf("swell")).toBe("wave");
+    expect(familyOf("wvper")).toBe("wave");
+    expect(familyOf("swhgt")).toBe("wave");
+    expect(familyOf("wvdir")).toBeNull();
+    expect(familyOf("swdir")).toBeNull();
     expect(familyMembers("ice")).toEqual(["icec", "icetk"]);
     // Cover and thickness are different quantities: variants, so the level
     // row has only the surface member to offer and lists nothing.
     expect(familyVariants("ice")).toEqual(["icec", "icetk"]);
     expect(familyLevels("ice")).toEqual(["icec"]);
-    expect(familyVariants("wave")).toEqual(["wave", "htsgw", "perpw"]);
+    expect(familyVariants("wave")).toEqual(WAVE_MEMBERS);
     expect(familyLevels("wave")).toEqual(["wave"]);
     expect(FAMILIES.ice.surface).toBe("icec");
     expect(FAMILIES.wave.surface).toBe("wave");
@@ -87,27 +107,63 @@ describe("the ocean registry", () => {
       levelCode("wave"),
       levelCode("htsgw"),
       levelCode("perpw"),
-    ]).toEqual(["COVER", "THICK", "HEIGHT", "HEIGHT", "PERIOD"]);
+      levelCode("windwave"),
+      levelCode("wvhgt"),
+      levelCode("wvper"),
+      levelCode("swell"),
+      levelCode("swhgt"),
+      levelCode("swper"),
+    ]).toEqual([
+      "COVER",
+      "THICK",
+      "HEIGHT",
+      "HEIGHT",
+      "PERIOD",
+      "WIND SEA",
+      "WIND SEA",
+      "SEA PERIOD",
+      "SWELL",
+      "SWELL",
+      "SWELL PERIOD",
+    ]);
   });
 
   it("offers the scalar height only on a run without the wave vector", () => {
     // Without a run to ask, every listed member: the wave vector heads the
     // family and the scalar height stands in for it.
-    expect(familyMembers("wave")).toEqual(["wave", "htsgw", "perpw"]);
+    expect(familyMembers("wave")).toEqual(WAVE_MEMBERS);
     // A run that ships the vector: the scalar height leaves the level row
     // (reachable by URL still), so HEIGHT is one button.
     const withVector = new Set(["wave", "htsgw", "perpw", "dirpw"]);
-    expect(familyMembers("wave", (id) => withVector.has(id))).toEqual([
-      "wave",
-      "perpw",
-    ]);
+    expect(offeredIn(withVector)).toEqual(["wave", "perpw"]);
     // A run that predates the vector keeps its height fill.
     const scalarsOnly = new Set(["htsgw", "perpw", "dirpw"]);
     expect(familyMembers("wave", (id) => scalarsOnly.has(id))).toEqual([
       "wave",
       "htsgw",
       "perpw",
+      "windwave",
+      "wvhgt",
+      "wvper",
+      "swell",
+      "swhgt",
+      "swper",
     ]);
+    expect(offeredIn(scalarsOnly)).toEqual(["htsgw", "perpw"]);
+    // A GFS run with the wind sea and the swell: each vector heads its
+    // part of the sea and its scalar height leaves the chips.
+    const partitioned = new Set([
+      "wave",
+      "htsgw",
+      "perpw",
+      "windwave",
+      "wvhgt",
+      "wvper",
+      "swell",
+      "swhgt",
+      "swper",
+    ]);
+    expect(offeredIn(partitioned)).toEqual(["wave", "perpw", "windwave", "wvper", "swell", "swper"]);
     // Stand-ins are a listed-family affair; the isobaric families are as
     // they were.
     expect(familyMembers("wind", () => true)).toEqual(familyMembers("wind"));
@@ -201,6 +257,54 @@ describe("the ocean registry", () => {
     expect(
       identityForParameter({ ...registry.icec!.parameter, discipline: 0 }),
     ).toBeNull();
+  });
+
+  it("identifies the wind sea and the first swell, and no other partition", () => {
+    const pairs = [
+      ["windwave", "uwindwave", "vwindwave", [252, 253]],
+      ["swell", "uswell", "vswell", [254, 255]],
+    ] as const;
+    for (const [family, uId, vId, numbers] of pairs) {
+      const u = registry[uId]!.parameter;
+      const v = registry[vId]!.parameter;
+      expect([u.discipline, u.parameterCategory, u.parameterNumber]).toEqual([10, 0, numbers[0]]);
+      expect([v.discipline, v.parameterCategory, v.parameterNumber]).toEqual([10, 0, numbers[1]]);
+      const identity = { family, level: null, vector: true };
+      expect(identityForParameterPair(u, v)).toEqual(identity);
+      expect(identityForParameterPair(v, u)).toBeNull();
+      expect(identityForBundleId(family)).toEqual(identity);
+      expect(registeredBundleId(identity as never)).toBe(family);
+      // Drawn as a wave height: the same ceiling, ramp and legend.
+      expect(vectorMaxMagnitude(family, null)).toBe(WAVE_HEIGHT_CHART_MAX);
+      expect(isobaricLegend(identity as never)).toEqual(["10", "8", "6", "4", "2", "0"]);
+    }
+    // The swell partitions sit on the "ordered sequence" surface, the
+    // value their place in it: only the first is a field this shell knows.
+    const swell = registry.swhgt!.parameter;
+    expect(swell.typeOfFirstFixedSurface).toBe(241);
+    expect(identityForParameter(swell)?.family).toBe("swhgt");
+    for (const place of [2, 3]) {
+      const other = { ...swell, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: place };
+      expect(identityForParameter(other)).toBeNull();
+      const u = { ...registry.uswell!.parameter, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: place };
+      const v = { ...registry.vswell!.parameter, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: place };
+      expect(identityForParameterPair(u, v)).toBeNull();
+    }
+    // The swell's numbers on the water surface are not the swell.
+    expect(identityForParameter({ ...swell, typeOfFirstFixedSurface: 1 })).toBeNull();
+    // The wind sea's surface value is no part of its identity, as the
+    // combined sea's is not.
+    for (const value of [0, 1]) {
+      const sea = { ...registry.wvhgt!.parameter, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: value };
+      expect(identityForParameter(sea)?.family).toBe("wvhgt");
+    }
+    // Every height, period and direction reads on its kind's ramp.
+    const ramp = (id: string, metres: number) => {
+      const palette = buildPalette(bundleVariable(id));
+      return rgba(palette, Math.round(metres / registry[id]!.quality.scale));
+    };
+    for (const [id, like] of [["wvhgt", "htsgw"], ["swhgt", "htsgw"], ["wvper", "perpw"], ["swper", "perpw"]] as const)
+      for (const value of [1, 4, 9]) expect(ramp(id, value)).toEqual(ramp(like, value));
   });
 
   it("reads each legend over its chart span", () => {
