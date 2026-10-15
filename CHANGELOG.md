@@ -5,6 +5,16 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-10-15
+
+- New bundles on `gfs`, from the GFS-Wave file already read for the
+  combined sea: the wind sea's significant height `wvhgt` (m) and mean
+  period `wvper` (s), the first swell partition's `swhgt` (m) and `swper`
+  (s), and the derived vectors `windwave` (`uwindwave`/`vwindwave`,
+  10/0/252–253) and `swell` (`uswell`/`vswell`, 10/0/254–255, surface 241
+  rank 1), each a height laid along the direction its waves travel, as
+  `wave` is (`docs/format.md`). The directions are inputs only.
+
 ## 2026-10-14
 
 - Changed: the `truecolor` recipe is version 3 (`docs/satellite.md`): each
