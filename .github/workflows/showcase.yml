@@ -10,7 +10,7 @@ name: showcase
 # is 26 MB of tiles per ten-minute scan, which the runner takes in seconds
 # and a home connection in minutes. The published catalog (showcase.json)
 # is collected from every case on disk, so the job first pulls the live
-# cases' sidecars and manifests (`make live-showcase-catalog`) — an upload
+# cases' sidecars, manifests and radar windows (`make live-showcase-catalog`) — an upload
 # from a runner that only knew the case it built would unlist the rest.
 #
 # Dispatch only: a case is a decision, not a schedule.
