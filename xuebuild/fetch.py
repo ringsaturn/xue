@@ -1635,6 +1635,37 @@ def _satellite_run_is_complete(
     return latest_satellite_slot(spec, now=now, fetch=fetch) >= run.time + timedelta(hours=hours)
 
 
+def satellite_case_grid(spec: SourceSpec, bbox: tuple[float, float, float, float]) -> satellite_fetch.TargetGrid:
+    """The cells a case's crop keeps of the published grid
+    (:func:`binconvert.crop_grid`), as a grid of their own: a case warps
+    only those, from only the tiles reaching into them, and the
+    converter's crop of that grid by the same box is the whole of it. The
+    edges stay in the platform's frame, so a disk running past 180°E keeps
+    its longitudes."""
+    from .binconvert import GridInfo, crop_grid  # the converter imports nothing of the fetch's
+
+    grid = satellite_grid(spec)
+    published = GridInfo(
+        width=grid.width,
+        height=grid.height,
+        first_longitude=grid.first_longitude,
+        first_latitude=grid.first_latitude,
+        longitude_step=grid.step,
+        latitude_step=-grid.step,
+    )
+    window = crop_grid(published, bbox).crop
+    assert window is not None
+    west = grid.west + window.column_start * grid.step
+    north = grid.north - window.row_start * grid.step
+    return satellite_fetch.TargetGrid(
+        west=round(west, 10),
+        south=round(north - window.height * grid.step, 10),
+        east=round(west + window.width * grid.step, 10),
+        north=round(north, 10),
+        step=grid.step,
+    )
+
+
 def satellite_ancillary_root(raw_root: Path) -> Path:
     """Where a producer's ancillary fields live, beside the run and frame
     directories: the staged CAMEL months ``make pull-r2-ancillary``
@@ -1657,6 +1688,7 @@ def _fetch_satellite_run(
     *,
     force: bool,
     input_ids: tuple[str, ...] | None,
+    bbox: tuple[float, float, float, float] | None = None,
     fetch: Callable[[str], str] | None = None,
     download: Callable[[str], bytes] | None = None,
 ) -> list[Path]:
@@ -1666,7 +1698,9 @@ def _fetch_satellite_run(
     ``raw_root/<source>-frames``, which ``force`` bypasses) and stacked into
     one NetCDF series, with a ``fetch.json`` beside it in the shape the
     MRMS fetch leaves so ``window_summary`` and the rolling publish read
-    both alike."""
+    both alike. With ``bbox`` (a showcase case or a local run) the grid is
+    the cells its crop keeps (:func:`satellite_case_grid`): a slot then
+    costs the few tiles over the box, not the disk."""
     if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
         raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
     platform = satellite_platform(spec)
@@ -1684,7 +1718,8 @@ def _fetch_satellite_run(
             if all(channel_id in channel_ids for channel_id in satellite_producers.producer_for(bundle_id).inputs_for(platform))
         )
     )
-    grid = satellite_grid(spec)
+    grid = satellite_grid(spec) if bbox is None else satellite_case_grid(spec, bbox)
+    region = spec.region if bbox is None else (grid.west, grid.south, grid.east, grid.north)
     destination = raw_root / f"{spec.id}.{run.id}"
     window = satellite_fetch.fetch_window(
         platform,
@@ -1699,7 +1734,7 @@ def _fetch_satellite_run(
         producers=producers,
         ancillary_root=satellite_ancillary_root(raw_root),
         cadence_seconds=spec.cadence_seconds,
-        region=spec.region,
+        region=region,
         source_id=spec.id,
         # Only a channel the source publishes is warped twice; one read
         # only as a composite's input has no use for its peak.
@@ -2311,11 +2346,14 @@ def fetch_run(
     force: bool = False,
     model: str = "gfs",
     input_ids: tuple[str, ...] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> list[Path]:
     """Fetch every frame of a run, ``spec.fetch_concurrency`` frames at a
     time (each frame is several fresh HTTPS round-trips, so a sequential
     fetch is latency-bound, not bandwidth-bound). Results keep frame order.
-    ECMWF retries a failed frame in place so completed frames remain reusable."""
+    ECMWF retries a failed frame in place so completed frames remain reusable.
+    ``bbox`` narrows a satellite window to the cells a crop to it keeps;
+    every other source is fetched whole and cropped by the converter."""
     spec = source_spec(model)
     if spec.mrms:
         return _fetch_mrms_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
@@ -2328,7 +2366,7 @@ def fetch_run(
     if spec.id == "cfs":
         return _fetch_cfs_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     if spec.platform is not None:
-        return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+        return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids, bbox=bbox)
     if spec.open_meteo is not None:
         return _fetch_open_meteo_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
     destination = raw_root / f"{spec.id}.{run.id}"

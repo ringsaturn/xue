@@ -1704,5 +1704,45 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
         assert_native_matches(self, self.inputs, self.root / "out", self.report, self.root / "native", model="himawarijp", require_complete=True, expected_hours=3)
 
 
+class CaseGridTest(unittest.TestCase):
+    """A case's satellite window is warped onto the cells its crop keeps."""
+
+    def test_the_case_grid_is_the_crop_of_the_published_one(self) -> None:
+        from xuebuild.fetch import satellite_case_grid, satellite_grid
+        from xuebuild.sources import source_spec
+
+        spec = source_spec("himawari")
+        box = (117.0, 45.5, 122.0, 48.5)
+        case = satellite_case_grid(spec, box)
+        published = satellite_grid(spec)
+        info = binconvert.GridInfo(
+            width=published.width,
+            height=published.height,
+            first_longitude=published.first_longitude,
+            first_latitude=published.first_latitude,
+            longitude_step=published.step,
+            latitude_step=-published.step,
+        )
+        cropped = binconvert.crop_grid(info, box)
+        self.assertEqual((case.width, case.height), (cropped.width, cropped.height))
+        self.assertEqual((case.first_longitude, case.first_latitude), (cropped.first_longitude, cropped.first_latitude))
+        # Cropping the case grid again by the same box keeps all of it.
+        again = binconvert.crop_grid(
+            binconvert.GridInfo(
+                width=case.width,
+                height=case.height,
+                first_longitude=case.first_longitude,
+                first_latitude=case.first_latitude,
+                longitude_step=case.step,
+                latitude_step=-case.step,
+            ),
+            box,
+        )
+        self.assertEqual((again.width, again.height, again.first_longitude), (case.width, case.height, case.first_longitude))
+        # And the window fetches the few tiles over the box, not the disk.
+        tiles = readers.reader_for(HIMAWARI).tiles_covering(HIMAWARI, (case.west, case.south, case.east, case.north))
+        self.assertLess(len(tiles), HIMAWARI.tile_count // 10)
+
+
 if __name__ == "__main__":
     unittest.main()
