@@ -93,7 +93,7 @@ def build_local_run(
         LOG.info("fetching %s run %s f000-f%03d (%s)", source.manifest_model, run, hours, ", ".join(input_ids))
     # Exactly the requested frames: the raw directory can hold more, left
     # behind by an earlier build of the same run with a longer range.
-    inputs = fetch_run(parsed, hours, raw_root, force=force_download, model=model, input_ids=input_ids)
+    inputs = fetch_run(parsed, hours, raw_root, force=force_download, model=model, input_ids=input_ids, bbox=bbox)
     if source.series_file:
         # A series-file fetch leaves one series per variable in its run
         # directory, and both encoders take that directory, reading the
