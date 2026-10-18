@@ -180,7 +180,7 @@ import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, resolveTcStormId, stormBounds, type LoadedTcIndex } from "./tc/tracks";
 import { buildAirportCard, buildSoundingCard, buildSynopCard } from "./stations/card";
 import { buildFireCard } from "./fire/card";
-import { fetchFireIndex, type LoadedFireIndex } from "./fire/fetch";
+import { fetchCaseFireIndex, fetchFireIndex, type LoadedFireIndex } from "./fire/fetch";
 import { FIRE_CLICKABLE_LAYERS, FireLayers, type FireDetection } from "./fire/layer";
 import {
   fetchAirportIndex,
@@ -5875,6 +5875,20 @@ function imageryMode(): boolean {
   return !activeCase && FORECAST_MODELS[selectedModelId].imagery === true;
 }
 
+/** Whether a case's daily picture stands in for its field: the case names
+ * one (`showcase-catalog.ts` `imagery`) and the view has one up. */
+function caseImageryOn(): boolean {
+  return activeCase?.imagery !== undefined && view.imagery !== null;
+}
+
+/** Put a case's picture up in place of its field, or take it down. */
+function setCaseImagery(id: string | null): void {
+  setImagery(id);
+  syncImageryRail();
+  syncFillSuppressed();
+  syncRail();
+}
+
 /** Open the NASA GIBS dataset: a day axis standing in for a bundle's time
  * block, so the timeline, the transport and the marks read it as they read
  * any observation window, and the picture of the playhead's day. */
@@ -5929,6 +5943,15 @@ function syncImageryRail(): void {
   const on = imageryMode();
   document.body.classList.toggle("is-imagery", on);
   const layer = gibsLayer(view.imagery);
+  // A case with a picture keeps its fields and offers the two colours
+  // beside them; pressing one puts the picture in place of the field.
+  if (activeCase?.imagery !== undefined) {
+    for (const tile of imageryTiles) {
+      tile.hidden = false;
+      tile.setAttribute("aria-pressed", String(layer !== null && layer.falseColor === (tile.dataset.imageryColour === "fire")));
+    }
+    return;
+  }
   for (const tile of imageryTiles) {
     tile.hidden = !on;
     tile.setAttribute("aria-pressed", String(on && layer !== null && layer.falseColor === (tile.dataset.imageryColour === "fire")));
@@ -5993,8 +6016,21 @@ function selectImagery(id: string): void {
 
 for (const tile of imageryTiles) {
   tile.addEventListener("click", () => {
+    const falseColor = tile.dataset.imageryColour === "fire";
+    if (activeCase?.imagery !== undefined) {
+      // Pressed again, the field comes back.
+      const current = gibsLayer(view.imagery);
+      if (current !== null && current.falseColor === falseColor) {
+        setCaseImagery(null);
+        return;
+      }
+      const platform = current?.platform ?? gibsLayer(activeCase.imagery.layer)?.platform ?? GIBS_DEFAULT_LAYER;
+      const target = gibsLayerFor(platform, falseColor);
+      if (target) setCaseImagery(target.id);
+      return;
+    }
     const platform = gibsLayer(view.imagery)?.platform ?? GIBS_DEFAULT_LAYER;
-    const target = gibsLayerFor(platform, tile.dataset.imageryColour === "fire");
+    const target = gibsLayerFor(platform, falseColor);
     if (target) selectImagery(target.id);
   });
 }
@@ -6056,8 +6092,9 @@ function syncRailDensity(): void {
  * is the storm tile, pressed while tracks are drawn, which `applyTcView`
  * sets from what actually loaded. */
 function syncRail(): void {
-  // A fire field stands in for the field: its own tile is the pressed one.
-  const fill = fireField() === null ? view.field : null;
+  // A fire field or a case's picture stands in for the field: its own tile
+  // is the pressed one.
+  const fill = fireField() === null && !caseImageryOn() ? view.field : null;
   const fillFamily = fill === null ? null : familyOf(fill);
   for (const button of variableButtons()) {
     const family = button.dataset.family as IsobaricFamily | undefined;
@@ -7618,7 +7655,8 @@ function applyStationView(): void {
   const soundingAvailable = soundingLoaded !== null && !hidden;
   const airportAvailable = airportLoaded !== null && !hidden;
   const synopAvailable = synopLoaded !== null && !hidden;
-  const fireAvailable = fireLoaded !== null && !hidden;
+  // A case carries its own round, if any, in place of the live one.
+  const fireAvailable = activeCase !== null ? activeCase.fire !== undefined && caseFireLoaded !== null : fireLoaded !== null;
   let railChanged = false;
   if (soundingTile.hidden === soundingAvailable) {
     soundingTile.hidden = !soundingAvailable;
@@ -7668,7 +7706,7 @@ function applyFireView(draw: boolean): void {
   fireLayers.ensure(before);
   fireLayers.setInk(document.body.dataset.ground === "dark");
   fireLayers.setTime(stationTime());
-  fireLayers.setIndex(draw ? fireLoaded : null);
+  fireLayers.setIndex(draw ? (activeCase !== null ? caseFireLoaded : fireLoaded) : null);
 }
 
 /** The valid time the marks are dimmed against: the playhead's, or now
@@ -7785,6 +7823,11 @@ function toggleStationProduct(product: keyof StationsUrlState): void {
 /** Whether the link named a radar state: a case's default then does not
  * override it. */
 const requestedRadarFromUrl = new URLSearchParams(window.location.search).has("radar");
+const requestedImageryFromUrl = new URLSearchParams(window.location.search).has("gibs");
+const requestedStationsFromUrl = new URLSearchParams(window.location.search).has("stations");
+/** Whether a case's picture was put up once already: re-entering the case
+ * keeps what the viewer chose since. */
+let caseImageryApplied = false;
 
 /** Where the overlay reads its sites and sweeps: the live source, or the
  * case's window. */
@@ -7801,6 +7844,25 @@ function loadLiveRadar(): void {
   if (radarFeed?.live) return;
   radarFeed = liveFeed();
   applyRadarView();
+}
+
+/** The case's own fire round, read once per case. */
+let caseFireLoaded: LoadedFireIndex | null = null;
+let fireCaseLoadedFor: string | null = null;
+
+async function loadCaseFire(showcaseCase: ShowcaseCase): Promise<void> {
+  const fire = showcaseCase.fire;
+  if (!fire || fireCaseLoadedFor === showcaseCase.id) return;
+  fireCaseLoadedFor = showcaseCase.id;
+  try {
+    caseFireLoaded = await fetchCaseFireIndex(dataBaseUrl(), fire.indexPath, fire.crc32, fire.byteLength);
+    // A case's detections are its story: on unless the link says otherwise.
+    if (!requestedStationsFromUrl) view.marks.stations = { ...view.marks.stations, fire: true };
+  } catch (error) {
+    console.warn(`fire: case ${showcaseCase.id} round not read:`, error instanceof Error ? error.message : error);
+    caseFireLoaded = null;
+  }
+  applyStationView();
 }
 
 async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
@@ -7883,10 +7945,11 @@ function setRadarAlone(alone: boolean): void {
 }
 
 /** Hold the fill off screen while something stands in for it: one radar
- * site drawn alone, or a fire field drawn on the fill's session. */
+ * site drawn alone, a fire field drawn on the fill's session, or a case's
+ * daily picture. */
 function syncFillSuppressed(): void {
   const fire = fireField();
-  slots.fill.layer.setSuppressed(radarAlone || fire !== null);
+  slots.fill.layer.setSuppressed(radarAlone || fire !== null || caseImageryOn());
   document.body.classList.toggle("fire-field", fire !== null);
 }
 
@@ -9973,7 +10036,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
 
   // The imagery dataset's picture and tiles go with it; any other dataset
   // drops them.
-  if (!imageryMode() && view.imagery !== null) {
+  if (!imageryMode() && view.imagery !== null && requestedCaseId === null) {
     view.imagery = null;
     syncGibs();
   }
@@ -10009,6 +10072,15 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       document.body.classList.add("is-showcase");
       updateCasePresentation(found);
       void loadCaseRadar(found);
+      void loadCaseFire(found);
+      // A case with a picture opens on it unless the link names one (or
+      // the case was entered before); one without drops any it was handed.
+      if (!found.imagery) view.imagery = null;
+      else if (!requestedImageryFromUrl && !caseImageryApplied) view.imagery = found.imagery.layer;
+      caseImageryApplied = true;
+      syncGibs();
+      syncImageryRail();
+      syncFillSuppressed();
       // Frame the event before any byte lands, so the first painted plane
       // arrives on the region it belongs to rather than on the world view.
       applyCaseCamera(found, frame);
@@ -10176,6 +10248,8 @@ for (const button of variableButtons()) {
   button.addEventListener("click", () => {
     const id = button.dataset.variable;
     if (!isBundleVariableId(id)) return;
+    // A field tile takes a case's picture down: the field is what it asks for.
+    if (caseImageryOn() && button.dataset.group !== "pressure") setCaseImagery(null);
     const family = button.dataset.family as IsobaricFamily | undefined;
     if (button.dataset.group === "pressure") {
       // The pressure tile is the lines' switch: on over the field, off
@@ -10207,6 +10281,7 @@ for (const button of derivedButtons()) {
     const id = button.dataset.derived as DerivedId;
     // A fire field is a field tile: a radio, which pressing again keeps.
     if (isFireDerivedId(id)) {
+      if (caseImageryOn()) setCaseImagery(null);
       if (fireField() !== id) void activateComposition({ fill: FIRE_FIELD_ANCHOR[id], lines: view.lines }, { fire: id });
       return;
     }
