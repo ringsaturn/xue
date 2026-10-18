@@ -53,6 +53,7 @@ from .fire.build import load_previous_index as load_previous_fire_index
 from .fire.fetch import fetch_round as fetch_fire_round
 from .fire.schema import floor_round as floor_fire_round
 from .fire.schema import parse_round as parse_fire_round
+from .fire.schema import WINDOW_HOURS as FIRE_WINDOW_HOURS
 from .fire.sensors import SOURCES as FIRE_SOURCES
 from .synop.build import build_product as build_synop_product
 from .synop.build import load_previous_index as load_previous_synop_index
@@ -604,6 +605,13 @@ def parser() -> argparse.ArgumentParser:
     fire_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     fire_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     fire_build.add_argument("--force-download", action="store_true", help="fetch every file again")
+    fire_build.add_argument(
+        "--window-hours",
+        type=int,
+        default=FIRE_WINDOW_HOURS,
+        help=f"how far back the round's files reach (default: {FIRE_WINDOW_HOURS}, the live product's seven days); "
+        "a showcase case's round holds its whole event",
+    )
 
     sounding_build = commands.add_parser(
         "sounding-build",
@@ -1127,6 +1135,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.output_dir,
                 previous_index=previous,
                 force=arguments.force,
+                window_hours=arguments.window_hours,
             )
             print(json.dumps(report, indent=2, ensure_ascii=False))
         elif arguments.command == "sounding-build":

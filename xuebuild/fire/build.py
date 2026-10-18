@@ -140,10 +140,13 @@ def build_product(
     previous_index: dict[str, Any] | None = None,
     force: bool = False,
     now: datetime | None = None,
+    window_hours: int = WINDOW_HOURS,
 ) -> dict[str, Any]:
     """Read the round's fetched files and the previous round's sensor
     files, write ``fire.<round>/`` — a file per sensor and the index over
-    them — and, unless no source answered, the pointer."""
+    them — and, unless no source answered, the pointer. ``window_hours``
+    is the live product's seven days unless a showcase case needs its
+    whole event in one round."""
     now = now or datetime.now(UTC)
     directory = output_root / round_directory(moment)
     if (directory / INDEX_FILENAME).exists() and not force:
@@ -151,7 +154,9 @@ def build_product(
 
     record = read_fetch_record(raw_root, moment)
     record_statuses = {status.id: status for status in record.sources} if record is not None else {}
-    start = moment - timedelta(hours=WINDOW_HOURS)
+    if window_hours <= 0:
+        raise FireProductError("the window must be at least an hour long")
+    start = moment - timedelta(hours=window_hours)
     horizon = int(start.timestamp())
 
     fresh: dict[str, list[Detection]] = defaultdict(list)

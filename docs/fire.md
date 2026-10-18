@@ -141,8 +141,10 @@ is not listed.
 
 - `issued` is the round, `generated` when the build ran.
 - `window` is the span the files hold: `start` is seven days before
-  `issued`. A detection is kept when its acquisition time is at or after
-  `start`; nothing later is cut, so a granule acquired before the build ran
+  `issued` (longer for a showcase case's round, built to hold its whole
+  event; readers take the window as written). A detection is kept when its
+  acquisition time is at or after `start`; nothing later is cut, so a
+  granule acquired before the build ran
   but after the round's hour is published.
 - `sensors[]` is one entry per sensor with a detection in the window, in
   §3's order: its id, display `name` and nominal `resolution` in metres;
