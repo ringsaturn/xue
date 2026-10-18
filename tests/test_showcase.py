@@ -656,3 +656,66 @@ class RadarOverlayTest(unittest.TestCase):
             self.assertEqual(block["crc32"], crc32_hex(data))
             with self.assertRaises(ShowcaseError):
                 _catalog_radar(root, {"id": "demo-case", "radar": {**self.RADAR, "defaultSite": "NQA"}})
+
+
+class FireOverlayTest(unittest.TestCase):
+    """A case's fire block: checked in the definition, carried onto the
+    row, and measured from the built round at catalog time."""
+
+    FIRE = {"window": "fire/index.json"}
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(case_payload(fire=dict(self.FIRE)))
+        self.assertEqual(spec.fire, self.FIRE)
+        entry, _ = build_entry(fire=dict(self.FIRE))
+        self.assertEqual(entry["fire"], self.FIRE)
+
+    def test_a_malformed_block_is_refused(self) -> None:
+        for fire in (
+            {"window": "../other/index.json"},
+            {"window": "/fire/index.json"},
+            {"window": "fire/latest-fire.json"},
+            {**self.FIRE, "extra": 1},
+            "fire/index.json",
+        ):
+            with self.subTest(fire=fire), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(fire=fire))
+
+    def test_the_catalog_measures_the_built_round(self) -> None:
+        import shutil
+
+        from tests.prepare_fire_golden import ROUNDS, build_rounds
+        from xuebuild.common import crc32_hex
+        from xuebuild.fire.schema import parse_round, round_directory
+        from xuebuild.showcase import _catalog_fire
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            entry = {"id": "demo-case", "fire": dict(self.FIRE)}
+            with self.assertRaises(ShowcaseError):
+                _catalog_fire(root, entry)  # not built yet
+            built = root / "built"
+            build_rounds(built)
+            target = root / "showcase" / "demo-case" / "fire"
+            shutil.copytree(built / round_directory(parse_round(ROUNDS[0])), target)
+            block = _catalog_fire(root, entry)
+            data = (target / "index.json").read_bytes()
+            self.assertEqual(block, {**self.FIRE, "byteLength": len(data), "crc32": crc32_hex(data)})
+            (target / "viirs-snpp.jsonl").unlink()
+            with self.assertRaises(ShowcaseError):
+                _catalog_fire(root, entry)  # a sensor file is missing
+
+
+class ImageryTest(unittest.TestCase):
+    """A case's GIBS picture: one of the shell's layers, carried onto the row."""
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(case_payload(imagery={"layer": "noaa21-fc"}))
+        self.assertEqual(spec.imagery, {"layer": "noaa21-fc"})
+        entry, _ = build_entry(imagery={"layer": "noaa21-fc"})
+        self.assertEqual(entry["imagery"], {"layer": "noaa21-fc"})
+
+    def test_an_unknown_picture_is_refused(self) -> None:
+        for imagery in ({"layer": "goes"}, {"layer": "snpp", "date": "2026-10-10"}, "snpp"):
+            with self.subTest(imagery=imagery), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(imagery=imagery))

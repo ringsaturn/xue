@@ -254,7 +254,11 @@ On a runner, [`showcase.yml`](../../.github/workflows/showcase.yml) takes
 case ids by dispatch, pulls the live catalog rows first
 (`make live-showcase-catalog`) so the rewritten `showcase.json` still
 lists every case, builds and uploads. The archives sit in AWS us-east-1,
-where a runner is fastest. Authoring: [`showcase/README.md`](../../showcase/README.md).
+where a runner is fastest. A case whose inputs exist only on one machine
+(a fire round cut from downloaded granules, a local frame cache) is built
+there and uploaded by hand: its own directory, then a `showcase.json`
+collected after `make live-showcase-catalog`, never a sync of the whole
+local tree. Authoring: [`showcase/README.md`](../../showcase/README.md).
 
 ## The shell
 

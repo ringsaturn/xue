@@ -149,6 +149,14 @@ class CaseSpec:
     (``docs/nexrad.md``): ``window``, the window manifest of a
     ``xue nexrad-case`` build, relative to the case's directory, and the
     ``defaultSite`` and ``defaultProduct`` the viewer opens on."""
+    fire: dict[str, str] | None = None
+    """The active fire detections the case plays over its own axis
+    (``docs/fire.md``): ``window``, the ``index.json`` of a ``xue
+    fire-build`` round written into the case's directory, relative to it."""
+    imagery: dict[str, str] | None = None
+    """The NASA GIBS daily picture the shell offers in place of the case's
+    field and opens on (``web/src/gibs.ts``): ``layer``, one of
+    :data:`GIBS_LAYERS`. Nothing is built for it: the tiles come from GIBS."""
     view: dict[str, Any] | None = None
     """The camera the shell opens the case on (:func:`_view_block`):
     ``center`` as ``[lon, lat]``, ``zoom``, and optionally ``pitch``,
@@ -315,6 +323,14 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if radar is not None:
         radar = _radar_block(radar, case_id)
 
+    fire = payload.get("fire")
+    if fire is not None:
+        fire = _fire_block(fire, case_id)
+
+    imagery = payload.get("imagery")
+    if imagery is not None:
+        imagery = _imagery_block(imagery, case_id)
+
     view = payload.get("view")
     if view is not None:
         view = _view_block(view, case_id, ordered)
@@ -335,6 +351,8 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         credit=credit,
         profile=profile,
         radar=radar,
+        fire=fire,
+        imagery=imagery,
         view=view,
     )
 
@@ -362,6 +380,45 @@ def _radar_block(value: object, case_id: str) -> dict[str, str]:
     if product not in RADAR_PRODUCTS:
         raise ShowcaseError(f"case {case_id}: radar.defaultProduct must be one of {RADAR_PRODUCTS}")
     return {"window": window, "defaultSite": site, "defaultProduct": product}
+
+
+def _fire_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``fire`` block: the index of a fire round inside the case's
+    own directory."""
+    if not isinstance(value, dict) or set(value) - {"window", "byteLength", "crc32"}:
+        raise ShowcaseError(f"case {case_id}: fire must be {{window}}")
+    window = value.get("window")
+    if (
+        not isinstance(window, str)
+        or not window.endswith("/index.json")
+        or window.startswith("/")
+        or ".." in window.split("/")
+    ):
+        raise ShowcaseError(f"case {case_id}: fire.window must be an index.json inside the case directory")
+    return {"window": window}
+
+
+GIBS_LAYERS = (
+    "snpp",
+    "noaa20",
+    "noaa21",
+    "terra",
+    "aqua",
+    "snpp-fc",
+    "noaa20-fc",
+    "noaa21-fc",
+    "terra-721",
+    "aqua-721",
+)
+"""The GIBS pictures the shell draws (``web/src/gibs.ts`` ``GIBS_LAYERS``),
+by their ``?gibs=`` spelling."""
+
+
+def _imagery_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``imagery`` block: the GIBS picture it opens on."""
+    if not isinstance(value, dict) or set(value) != {"layer"} or value["layer"] not in GIBS_LAYERS:
+        raise ShowcaseError(f"case {case_id}: imagery must be {{layer}}, layer one of {GIBS_LAYERS}")
+    return {"layer": value["layer"]}
 
 
 _VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain", "volume")
@@ -599,6 +656,10 @@ def build_catalog_entry(
         entry["credit"] = spec.credit
     if spec.radar:
         entry["radar"] = dict(spec.radar)
+    if spec.fire:
+        entry["fire"] = dict(spec.fire)
+    if spec.imagery:
+        entry["imagery"] = dict(spec.imagery)
     if spec.view:
         entry["view"] = dict(spec.view)
     validate_catalog_entry(entry)
@@ -631,6 +692,10 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
     if "radar" in entry:
         _radar_block(entry["radar"], entry["id"])
+    if "fire" in entry:
+        _fire_block(entry["fire"], entry["id"])
+    if "imagery" in entry:
+        _imagery_block(entry["imagery"], entry["id"])
     if "view" in entry:
         _view_block(entry["view"], entry["id"], variables)
 
@@ -680,6 +745,8 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("tags", list(spec.tags)),
         ("credit", spec.credit),
         ("radar", dict(spec.radar) if spec.radar else None),
+        ("fire", dict(spec.fire) if spec.fire else None),
+        ("imagery", dict(spec.imagery) if spec.imagery else None),
         ("view", dict(spec.view) if spec.view else None),
     ):
         if value:
@@ -722,6 +789,8 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
             raise ShowcaseError(f"case {entry['id']} has an invalid manifest: {exc}") from exc
         if "radar" in entry:
             entry["radar"] = _catalog_radar(output_root, entry)
+        if "fire" in entry:
+            entry["fire"] = _catalog_fire(output_root, entry)
         entries.append(entry)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
@@ -748,6 +817,27 @@ def _catalog_radar(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
         raise ShowcaseError(f"case {entry['id']} has an invalid radar window: {exc}") from exc
     if block["defaultSite"] not in {row[0] for row in window["sites"]}:
         raise ShowcaseError(f"case {entry['id']}: radar.defaultSite {block['defaultSite']} is not in its window")
+    return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
+
+
+def _catalog_fire(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """The fire block as the catalog publishes it: the round index's length
+    and CRC32 (its ``?v=``), measured from the built file, which must be a
+    valid fire index whose sensor files sit beside it."""
+    from .fire.schema import read_index  # the fire package imports nothing of the showcase's
+
+    block = _fire_block(entry["fire"], entry["id"])
+    path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["window"]
+    if not path.is_file():
+        raise ShowcaseError(f"case {entry['id']} names a fire window that is not built: {path}")
+    data = path.read_bytes()
+    try:
+        index = read_index(path)
+    except XueError as exc:
+        raise ShowcaseError(f"case {entry['id']} has an invalid fire window: {exc}") from exc
+    for sensor in index["sensors"]:
+        if not (path.parent / sensor["file"]["path"]).is_file():
+            raise ShowcaseError(f"case {entry['id']}: fire window names {sensor['file']['path']}, which is not built")
     return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
 
 
