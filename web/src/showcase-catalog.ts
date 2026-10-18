@@ -8,6 +8,7 @@ import {
   type ForecastManifest,
   type ForecastModelId,
 } from "./manifest";
+import { gibsLayer } from "./gibs";
 import { latitudeOf, longitudeOf, mercatorX, mercatorY, worldPixels, zoomForSpan } from "./mercator";
 
 /**
@@ -58,6 +59,12 @@ export interface ShowcaseCase {
   /** The single-site radar overlay the case plays over its axis
    * (`docs/nexrad.md`), when it carries one. */
   radar?: ShowcaseRadar;
+  /** The active fire detections the case plays over its axis
+   * (`docs/fire.md`), when it carries a round of its own. */
+  fire?: ShowcaseFire;
+  /** The NASA GIBS daily picture the case can show in place of its field
+   * (`gibs.ts`), when it names one. */
+  imagery?: ShowcaseImagery;
   /** The camera the case opens on, when it names one: a mountain is looked
    * at from a side, not fitted from above. Absent, the region is framed. */
   view?: ShowcaseView;
@@ -92,6 +99,61 @@ export interface ShowcaseRadar {
   defaultProduct: "n0b" | "n0g";
 }
 
+export interface ShowcaseFire {
+  /** The round's index, from the data root, and its `?v=`. */
+  indexPath: string;
+  crc32: string;
+  byteLength: number;
+}
+
+export interface ShowcaseImagery {
+  /** The GIBS layer (`gibs.ts` id, a `?gibs=` spelling) the case opens on. */
+  layer: string;
+}
+
+/** A case-relative `…/index.json` path that stays inside the case. */
+function caseIndexPath(window: unknown): window is string {
+  return (
+    typeof window === "string" &&
+    window.endsWith("/index.json") &&
+    !window.startsWith("/") &&
+    !window.split("/").includes("..")
+  );
+}
+
+/** A case's fire block, or undefined when it has none or carries one this
+ * shell cannot read: the case then plays without the detections. */
+function fireBlock(input: unknown, id: string): ShowcaseFire | undefined {
+  if (input === undefined) return undefined;
+  const value = input as Record<string, unknown> | null;
+  const ok =
+    caseIndexPath(value?.window) &&
+    typeof value?.crc32 === "string" &&
+    /^[0-9a-f]{8}$/.test(value.crc32) &&
+    typeof value?.byteLength === "number";
+  if (!ok) {
+    console.warn(`showcase: case ${id} carries a fire block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return {
+    indexPath: `showcase/${id}/${value!.window as string}`,
+    crc32: value!.crc32 as string,
+    byteLength: value!.byteLength as number,
+  };
+}
+
+/** A case's imagery block, or undefined when it has none or names a
+ * picture this shell does not know. */
+function imageryBlock(input: unknown, id: string): ShowcaseImagery | undefined {
+  if (input === undefined) return undefined;
+  const layer = (input as Record<string, unknown> | null)?.layer;
+  if (typeof layer !== "string" || gibsLayer(layer) === null) {
+    console.warn(`showcase: case ${id} carries an imagery block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return { layer };
+}
+
 /** A case's radar block, or undefined when it has none or carries one this
  * shell cannot read: the case then plays without the overlay rather than
  * not at all. */
@@ -100,10 +162,7 @@ function radarBlock(input: unknown, id: string): ShowcaseRadar | undefined {
   const value = input as Record<string, unknown> | null;
   const window = value?.window;
   const ok =
-    typeof window === "string" &&
-    window.endsWith("/index.json") &&
-    !window.startsWith("/") &&
-    !window.split("/").includes("..") &&
+    caseIndexPath(window) &&
     typeof value?.crc32 === "string" &&
     /^[0-9a-f]{8}$/.test(value.crc32) &&
     typeof value?.byteLength === "number" &&
@@ -269,6 +328,8 @@ function validateCase(input: unknown): ShowcaseCase {
     }
   }
   const radar = radarBlock(value.radar, id);
+  const fire = fireBlock(value.fire, id);
+  const imagery = imageryBlock(value.imagery, id);
   const view = viewBlock(value.view, id);
   const entry: ShowcaseCase = {
     ...(value as unknown as ShowcaseCase),
@@ -279,6 +340,10 @@ function validateCase(input: unknown): ShowcaseCase {
   };
   if (radar) entry.radar = radar;
   else delete entry.radar;
+  if (fire) entry.fire = fire;
+  else delete entry.fire;
+  if (imagery) entry.imagery = imagery;
+  else delete entry.imagery;
   if (view) entry.view = view;
   else delete entry.view;
   return entry;

@@ -3,6 +3,7 @@
  * per sensor, one range request covering the consecutive hour lines a time
  * span needs. Nothing here touches the map. */
 
+import { fetchImmutable } from "../fetchimmutable";
 import { loadPointerIndex, type LoadedIndex } from "../pointerindex";
 import { fetchSpanBytes, stationFileUrl } from "../stations/fetch";
 import {
@@ -20,6 +21,27 @@ export type LoadedFireIndex = LoadedIndex<FirePointer, FireIndex>;
 
 export function fetchFireIndex(baseUrl: string): Promise<LoadedFireIndex | null> {
   return loadPointerIndex(baseUrl, FIRE_POINTER_FILENAME, parseFirePointer, parseFireIndex, "fire");
+}
+
+/** A showcase case's own round (`showcase-catalog.ts` `fire`): no pointer,
+ * since a case never changes, but the index the catalog row names at its
+ * `?v=`, standing in for the pointer a live round is read through. */
+export async function fetchCaseFireIndex(
+  baseUrl: string,
+  indexPath: string,
+  crc32: string,
+  byteLength: number,
+): Promise<LoadedFireIndex> {
+  const indexUrl = new URL(indexPath, new URL(baseUrl, document.baseURI));
+  indexUrl.searchParams.set("v", crc32);
+  const response = await fetchImmutable(indexUrl);
+  if (!response.ok) throw new Error(`fire index request failed: ${response.status}`);
+  const index = parseFireIndex(await response.json());
+  return {
+    pointer: { schemaVersion: 1, product: "fire", issued: index.issued, path: indexPath, byteLength, crc32 },
+    index,
+    indexUrl: indexUrl.href,
+  };
 }
 
 /** One sensor's rows whose hour overlaps `[from, to)` (epoch ms), and the

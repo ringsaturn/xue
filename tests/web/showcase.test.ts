@@ -164,6 +164,36 @@ describe("showcase catalog", () => {
     }
   });
 
+  it("reads a case's fire round and picture, resolving the round inside the case", () => {
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          fire: { window: "fire/index.json", byteLength: 5830, crc32: "0123abcd" },
+          imagery: { layer: "noaa21-fc" },
+        }),
+      ]),
+    );
+    expect(catalog.cases[0]!.fire).toEqual({
+      indexPath: "showcase/zhengzhou-2021/fire/index.json",
+      byteLength: 5830,
+      crc32: "0123abcd",
+    });
+    expect(catalog.cases[0]!.imagery).toEqual({ layer: "noaa21-fc" });
+  });
+
+  it("ignores a fire or imagery block it cannot read, keeping the case", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({ fire: { window: "../fire/index.json", byteLength: 1, crc32: "0123abcd" }, imagery: { layer: "goes" } }),
+      ]),
+    );
+    expect(catalog.cases).toHaveLength(1);
+    expect(catalog.cases[0]!.fire).toBeUndefined();
+    expect(catalog.cases[0]!.imagery).toBeUndefined();
+    warn.mockRestore();
+  });
+
   it("admits a case on the shape of its variable names, not on a registry", () => {
     // Same rule the run manifest is admitted by: a case built from a bundle
     // this build has never heard of is a layer it renders generically.
