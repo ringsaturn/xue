@@ -144,6 +144,32 @@ retires a case.
    `byteLength` and `crc32` when the case is refreshed or rebuilt. A shell
    that does not know the block plays the mosaic alone.
 
+   A case may carry **active fires** over its axis: an optional `fire`
+   block names a fire round built into the case's directory
+   ([`docs/fire.md`](../docs/fire.md)), which the viewer draws in place of
+   the live product, switched on, the 24 hours before the playhead.
+
+   ```json
+   "fire": {"window": "fire/index.json"}
+   ```
+
+   Build the round with `xue fire-build --offline --window-hours <h>` from
+   a raw directory of FIRMS-format files, long enough a window that its
+   start reaches the first detection, and copy its `index.json` and sensor
+   files to `showcase/<id>/fire/`. The catalog row gains the index's
+   `byteLength` and `crc32` when the catalog is written, as for a radar
+   window.
+
+   A case may also name a **daily picture**: `imagery` is one of the NASA
+   GIBS layers the shell draws (`web/src/gibs.ts`, the `?gibs=` spellings),
+   which the viewer offers beside the case's fields in true and false
+   colour and opens on, in place of the field, on the playhead's UTC day.
+   Nothing is built for it; the tiles come from GIBS.
+
+   ```json
+   "imagery": {"layer": "noaa21-fc"}
+   ```
+
    A case may name the **camera** the viewer opens it on with an optional
    `view` block, carried onto the catalog row as written: `center` as
    `[lon, lat]` and `zoom` (0–22), optionally `pitch` (0–85), `bearing`
@@ -169,7 +195,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, imagery, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.
