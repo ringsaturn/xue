@@ -235,6 +235,18 @@ class MergeTest(unittest.TestCase):
         index = read_index(self.output / round_directory(later) / "index.json")
         self.assertEqual((index["sensors"], index["hours"]), ([], []))
 
+    def test_a_longer_window_keeps_what_seven_days_drop(self) -> None:
+        later = self.first + timedelta(days=8)
+        self._record(later, ok=True)
+        build_product(
+            later, self.raw, self.output, previous_index=load_previous_index(None, self.output), now=later, window_hours=24 * 9
+        )
+        index = read_index(self.output / round_directory(later) / "index.json")
+        self.assertEqual(index["window"]["start"], "2026-10-11T04:00:00Z")
+        self.assertEqual([sensor["id"] for sensor in index["sensors"]], [sensor.id for sensor in SENSORS])
+        with self.assertRaises(FireProductError):
+            build_product(later, self.raw, self.output, force=True, now=later, window_hours=0)
+
     def test_a_previous_file_that_is_not_its_index_starts_the_window_again(self) -> None:
         later = self.first + timedelta(hours=1)
         self._record(later, ok=True)
