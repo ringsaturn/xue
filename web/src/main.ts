@@ -302,7 +302,9 @@ import {
   fetchCatalog,
   localizedText,
   type ShowcaseCase,
+  type ShowcaseMarker,
 } from "./showcase-catalog";
+import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
 import {
   createVideoDecodeChannel,
   isWebCodecsSupported,
@@ -747,6 +749,7 @@ function applyBasemapTheme(): void {
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
   fireLayers?.setInk(darkGround);
+  caseMarkers?.setInk(darkGround);
   if (radarOverlay) {
     const style = getComputedStyle(document.body);
     radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
@@ -1326,6 +1329,7 @@ setCaseSummaryOpen(storedCaseSummaryOpen(), false);
 const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
+const caseMarkerList = required<HTMLUListElement>("case-markers");
 
 const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
@@ -6482,7 +6486,55 @@ function updateCasePresentation(showcaseCase: ShowcaseCase): void {
   caseTitle.textContent = localizedText(showcaseCase.title, locale);
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
   caseRegion.textContent = formatRegion(showcaseCase.bbox);
+  renderCaseMarkers(showcaseCase);
   caseBanner.hidden = false;
+}
+
+/** The case's markers, on the map and as the row of buttons under the
+ * summary that opens each one's card. */
+let caseMarkers: CaseMarkerLayers | null = null;
+
+function renderCaseMarkers(showcaseCase: ShowcaseCase): void {
+  const markers = showcaseCase.markers ?? [];
+  caseMarkerList.hidden = markers.length === 0;
+  caseMarkerList.replaceChildren(
+    ...markers.map((marker) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.kind = marker.kind;
+      const glyph = document.createElement("span");
+      glyph.className = "case-marker-glyph";
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent = MARKER_GLYPHS[marker.kind];
+      const label = document.createElement("span");
+      label.textContent = localizedText(marker.label, locale);
+      button.append(glyph, label);
+      button.addEventListener("click", () => {
+        map.easeTo({ center: [marker.lon, marker.lat], zoom: Math.max(map.getZoom(), 8) });
+        showMarkerCard(marker);
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+  if (markers.length === 0 && caseMarkers === null) return;
+  if (!mapStyleReady) return;
+  caseMarkers ??= new CaseMarkerLayers(map);
+  caseMarkers.setInk(document.body.dataset.ground === "dark");
+  caseMarkers.setTime(stationTime());
+  caseMarkers.setMarkers(markers, locale);
+}
+
+/** A marker's card, in the station card's place: opening either closes
+ * the other. */
+function showMarkerCard(marker: ShowcaseMarker): void {
+  closeStationCard();
+  closeTcCard();
+  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "320px", offset: 12 })
+    .setLngLat([marker.lon, marker.lat])
+    .setDOMContent(buildMarkerCard(marker, { locale, formatTime: (time) => formatDate(time) }))
+    .addTo(map);
 }
 
 /** Keep the address bar shareable: reflect the on-screen model and
@@ -7719,6 +7771,7 @@ function stationTime(): number {
 function syncStationTime(): void {
   syncRadarTime();
   fireLayers?.setTime(stationTime());
+  caseMarkers?.setTime(stationTime());
   if (!stationLayers) return;
   stationLayers.setTime(stationTime());
 }
@@ -10397,6 +10450,12 @@ map.on("click", (event) => {
     return;
   }
   closeTcCard();
+  // A case's marker is its own annotation, over every other mark.
+  const marker = caseMarkers?.markerAt(event.point);
+  if (marker) {
+    showMarkerCard(marker);
+    return;
+  }
   // A radar site's mark picks that site; the sweep under the pointer is
   // not a mark, so the field's probe still takes a click on it.
   const radarSite = radarSiteAt(event.point);
@@ -10423,13 +10482,19 @@ map.on("click", (event) => {
   if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
-  if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers) return;
+  if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers && !caseMarkers) return;
   const station = stationPointAt(event.point);
   // The mark under the pointer grows by a pixel, which is the only feature
   // state either product keeps.
   stationLayers?.setHover(station?.data ?? null);
   map.getCanvas().style.cursor =
-    tcPointAt(event.point) || station || radarSiteAt(event.point) || firePointAt(event.point) ? "pointer" : "";
+    caseMarkers?.markerAt(event.point) ||
+    tcPointAt(event.point) ||
+    station ||
+    radarSiteAt(event.point) ||
+    firePointAt(event.point)
+      ? "pointer"
+      : "";
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();

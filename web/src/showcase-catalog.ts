@@ -68,6 +68,26 @@ export interface ShowcaseCase {
   /** The camera the case opens on, when it names one: a mountain is looked
    * at from a side, not fitted from above. Absent, the region is framed. */
   view?: ShowcaseView;
+  /** Labelled points of context the case draws over its map (a place, an
+   * event), when it names any. */
+  markers?: ShowcaseMarker[];
+}
+
+export interface ShowcaseMarkerSource {
+  title: string;
+  url: string;
+}
+
+export interface ShowcaseMarker {
+  id: string;
+  kind: "place" | "event";
+  lon: number;
+  lat: number;
+  /** When the event happened, epoch ms, if the marker names it. */
+  time?: number;
+  label: Record<string, string>;
+  note: Record<string, string>;
+  sources: ShowcaseMarkerSource[];
 }
 
 /** A case's own opening camera (`showcase.json` `view`), applied in place of
@@ -152,6 +172,77 @@ function imageryBlock(input: unknown, id: string): ShowcaseImagery | undefined {
     return undefined;
   }
   return { layer };
+}
+
+/** Whether a point lies in a case box; `east < west` crosses the
+ * antimeridian. */
+export function boundsContain([west, south, east, north]: CaseBounds, lon: number, lat: number): boolean {
+  if (!(lat >= south && lat <= north)) return false;
+  return west <= east ? lon >= west && lon <= east : lon >= west || lon <= east;
+}
+
+/** A locale map with at least one usable string, or null. */
+function markerText(value: unknown): Record<string, string> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const strings: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) if (typeof item === "string" && item.length > 0) strings[key] = item;
+  return Object.keys(strings).length > 0 ? strings : null;
+}
+
+/** One marker, or null when it is not one this shell can draw. */
+function markerEntry(input: unknown, box: CaseBounds): ShowcaseMarker | null {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return null;
+  const value = input as Record<string, unknown>;
+  const { id, kind, lon, lat } = value;
+  if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) return null;
+  if (kind !== "place" && kind !== "event") return null;
+  if (typeof lon !== "number" || typeof lat !== "number" || !Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  if (!boundsContain(box, lon, lat)) return null;
+  const label = markerText(value.label);
+  const note = markerText(value.note);
+  if (!label || !note) return null;
+  let time: number | undefined;
+  if (value.time !== undefined) {
+    time = typeof value.time === "string" ? Date.parse(value.time) : Number.NaN;
+    if (!Number.isFinite(time)) return null;
+  }
+  const sources: ShowcaseMarkerSource[] = [];
+  if (Array.isArray(value.sources)) {
+    for (const source of value.sources as unknown[]) {
+      const { title, url } = (source ?? {}) as Record<string, unknown>;
+      // A link the card opens: https only, so a row can never hand the page
+      // a `javascript:` URL.
+      if (typeof title === "string" && title.length > 0 && typeof url === "string" && /^https:\/\/[^\s/]+\.\S+$/.test(url)) {
+        sources.push({ title, url });
+      }
+    }
+  }
+  const marker: ShowcaseMarker = { id, kind, lon, lat, label, note, sources };
+  if (time !== undefined) marker.time = time;
+  return marker;
+}
+
+/** A case's markers, keeping each one this shell can draw: one it cannot
+ * (a kind added after it was deployed, a point outside the box) is dropped
+ * with a warning, and the rest still draw. */
+export function markersBlock(input: unknown, id: string, box: CaseBounds): ShowcaseMarker[] | undefined {
+  if (input === undefined) return undefined;
+  if (!Array.isArray(input)) {
+    console.warn(`showcase: case ${id} carries a markers block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  const markers: ShowcaseMarker[] = [];
+  const seen = new Set<string>();
+  for (const item of input as unknown[]) {
+    const marker = markerEntry(item, box);
+    if (!marker || seen.has(marker.id)) {
+      console.warn(`showcase: case ${id} carries a marker this shell cannot draw; skipping it`);
+      continue;
+    }
+    seen.add(marker.id);
+    markers.push(marker);
+  }
+  return markers.length > 0 ? markers : undefined;
 }
 
 /** A case's radar block, or undefined when it has none or carries one this
@@ -331,13 +422,17 @@ function validateCase(input: unknown): ShowcaseCase {
   const fire = fireBlock(value.fire, id);
   const imagery = imageryBlock(value.imagery, id);
   const view = viewBlock(value.view, id);
+  const bbox = bounds(value.bbox, "bbox");
+  const markers = markersBlock(value.markers, id, bbox);
   const entry: ShowcaseCase = {
     ...(value as unknown as ShowcaseCase),
     title: localized(value.title, "title"),
     summary: localized(value.summary, "summary"),
-    bbox: bounds(value.bbox, "bbox"),
+    bbox,
     dataBbox: bounds(value.dataBbox, "dataBbox"),
   };
+  if (markers) entry.markers = markers;
+  else delete entry.markers;
   if (radar) entry.radar = radar;
   else delete entry.radar;
   if (fire) entry.fire = fire;

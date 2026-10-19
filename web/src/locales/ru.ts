@@ -474,6 +474,10 @@ export const ru: Record<MessageKey, string> = {
   fireOverpass: "Пролёт",
   fireDay: "день",
   fireNight: "ночь",
+  markerPlace: "Место",
+  markerEvent: "Событие",
+  markerSources: "Источники",
+  caseMarkersAria: "Места и события этого случая",
 
   soundingObserved: "НАБЛ",
   soundingModel: "МОДЕЛЬ",

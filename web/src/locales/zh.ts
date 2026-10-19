@@ -467,6 +467,10 @@ export const zh: Record<MessageKey, string> = {
   fireOverpass: "过境",
   fireDay: "白天",
   fireNight: "夜间",
+  markerPlace: "地点",
+  markerEvent: "事件",
+  markerSources: "来源",
+  caseMarkersAria: "本案例的地点和事件",
 
   soundingObserved: "实测",
   soundingModel: "模式",

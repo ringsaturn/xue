@@ -536,6 +536,78 @@ body.is-showcase .model-caret {
   letter-spacing: 0.06em;
 }
 
+/* The case's markers as a row of chips under the region: the same points
+   the map draws, for a reader who does not use the map. */
+.case-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.case-markers[hidden] {
+  display: none;
+}
+
+.case-markers button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+}
+
+.case-markers button:hover,
+.case-markers button:focus-visible {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
+/* The map's two marks in tints that read on either theme's card. */
+.case-markers [data-kind="place"] .case-marker-glyph {
+  color: #5b7fa8;
+}
+
+.case-markers [data-kind="event"] .case-marker-glyph {
+  color: #e0442c;
+}
+
+.marker-card {
+  max-width: 300px;
+}
+
+.marker-card-note {
+  margin: 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.marker-card-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.marker-card-sources a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text) 35%, transparent);
+  text-underline-offset: 2px;
+}
+
 /* ---------------------------------------------------------------------------
    The buffer card, doubling as YouTube-style "stats for nerds": it shows on
    its own only while data loads (or on error); the map's right-click menu

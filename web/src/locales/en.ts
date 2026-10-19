@@ -737,6 +737,14 @@ export const en = {
   fireOverpass: "Overpass",
   fireDay: "day",
   fireNight: "night",
+  /** A showcase case's markers (`casemarkers.ts`): labelled points of
+   * context on the map. The kind word heads the card a marker opens;
+   * `markerSources` heads its list of links; `caseMarkersAria` names
+   * the list of markers under the case summary. */
+  markerPlace: "Place",
+  markerEvent: "Event",
+  markerSources: "Sources",
+  caseMarkersAria: "Places and events in this case",
 
   /** The sounding section of the pinned point's panel: the nearest ascent
    * drawn as a skew-T under the meteogram rows, and the full-height sheet

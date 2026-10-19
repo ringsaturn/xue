@@ -194,6 +194,70 @@ describe("showcase catalog", () => {
     warn.mockRestore();
   });
 
+  it("reads a case's markers, the time as epoch ms", () => {
+    const marker = {
+      id: "ignition",
+      kind: "event",
+      lon: 110.5,
+      lat: 30.25,
+      time: "2021-07-20T03:46:00Z",
+      label: { zh: "起火点", en: "Ignition" },
+      note: { zh: "说明", en: "Note" },
+      sources: [{ title: "Bulletin", url: "https://example.org/post/1" }],
+    };
+    const place = { id: "port", kind: "place", lon: 120, lat: 40, label: { en: "Port" }, note: { en: "A crossing" } };
+    const catalog = validateCatalog(catalogFixture([caseFixture({ markers: [marker, place] })]));
+    expect(catalog.cases[0]!.markers).toEqual([
+      { ...marker, time: Date.parse("2021-07-20T03:46:00Z") },
+      { ...place, sources: [] },
+    ]);
+    // A case without markers carries none.
+    expect(validateCatalog(catalogFixture()).cases[0]!.markers).toBeUndefined();
+  });
+
+  it("skips a marker it cannot draw, keeping the case and the other markers", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const good = { id: "port", kind: "place", lon: 120, lat: 40, label: { en: "Port" }, note: { en: "A crossing" } };
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          markers: [
+            good,
+            { ...good, id: "ship", kind: "vessel" },
+            { ...good, id: "far", lon: 140 },
+            { ...good, id: "late", time: "someday" },
+            { ...good, id: "blank", label: { en: "" } },
+            good,
+          ],
+        }),
+        caseFixture({ id: "other-case", manifestPath: "showcase/other-case/manifest.json", markers: "port" }),
+      ]),
+    );
+    expect(catalog.cases).toHaveLength(2);
+    expect(catalog.cases[0]!.markers!.map((marker) => marker.id)).toEqual(["port"]);
+    expect(catalog.cases[1]!.markers).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it("keeps only https source links", () => {
+    const marker = {
+      id: "port",
+      kind: "place",
+      lon: 120,
+      lat: 40,
+      label: { en: "Port" },
+      note: { en: "A crossing" },
+      sources: [
+        { title: "Safe", url: "https://example.org/a" },
+        { title: "Plain", url: "http://example.org/b" },
+        { title: "Script", url: "javascript:alert(1)" },
+        { title: "", url: "https://example.org/c" },
+      ],
+    };
+    const catalog = validateCatalog(catalogFixture([caseFixture({ markers: [marker] })]));
+    expect(catalog.cases[0]!.markers![0]!.sources).toEqual([{ title: "Safe", url: "https://example.org/a" }]);
+  });
+
   it("admits a case on the shape of its variable names, not on a registry", () => {
     // Same rule the run manifest is admitted by: a case built from a bundle
     // this build has never heard of is a layer it renders generically.

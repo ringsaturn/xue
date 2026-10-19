@@ -474,6 +474,10 @@ export const ko: Record<MessageKey, string> = {
   fireOverpass: "통과",
   fireDay: "주간",
   fireNight: "야간",
+  markerPlace: "장소",
+  markerEvent: "사건",
+  markerSources: "출처",
+  caseMarkersAria: "이 사례의 장소와 사건",
 
   soundingObserved: "관측",
   soundingModel: "모델",

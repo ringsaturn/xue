@@ -469,6 +469,10 @@ export const ja: Record<MessageKey, string> = {
   fireOverpass: "通過",
   fireDay: "昼",
   fireNight: "夜",
+  markerPlace: "地点",
+  markerEvent: "出来事",
+  markerSources: "出典",
+  caseMarkersAria: "この事例の地点と出来事",
 
   soundingObserved: "実測",
   soundingModel: "モデル",

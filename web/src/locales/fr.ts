@@ -472,6 +472,10 @@ export const fr: Record<MessageKey, string> = {
   fireOverpass: "Passage",
   fireDay: "jour",
   fireNight: "nuit",
+  markerPlace: "Lieu",
+  markerEvent: "Événement",
+  markerSources: "Sources",
+  caseMarkersAria: "Lieux et événements de ce cas",
 
   soundingObserved: "OBS",
   soundingModel: "MODÈLE",

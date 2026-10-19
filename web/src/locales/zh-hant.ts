@@ -467,6 +467,10 @@ export const zhHant: Record<MessageKey, string> = {
   fireOverpass: "過境",
   fireDay: "白天",
   fireNight: "夜間",
+  markerPlace: "地點",
+  markerEvent: "事件",
+  markerSources: "來源",
+  caseMarkersAria: "本個案的地點和事件",
 
   soundingObserved: "實測",
   soundingModel: "模式",

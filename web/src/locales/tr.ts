@@ -475,6 +475,10 @@ export const tr: Record<MessageKey, string> = {
   fireOverpass: "Geçiş",
   fireDay: "gündüz",
   fireNight: "gece",
+  markerPlace: "Yer",
+  markerEvent: "Olay",
+  markerSources: "Kaynaklar",
+  caseMarkersAria: "Bu vakadaki yerler ve olaylar",
 
   soundingObserved: "GÖZLEM",
   soundingModel: "MODEL",
