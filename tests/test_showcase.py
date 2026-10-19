@@ -719,3 +719,92 @@ class ImageryTest(unittest.TestCase):
         for imagery in ({"layer": "goes"}, {"layer": "snpp", "date": "2026-10-10"}, "snpp"):
             with self.subTest(imagery=imagery), self.assertRaises(ShowcaseError):
                 parse_case(case_payload(imagery=imagery))
+
+
+class MarkersTest(unittest.TestCase):
+    """A case's markers: labelled points checked in the definition and
+    carried onto the row as written."""
+
+    MARKER = {
+        "id": "ignition",
+        "kind": "event",
+        "lon": 110.5,
+        "lat": 30.25,
+        "time": "2021-07-20T03:46:00Z",
+        "label": localized("Ignition"),
+        "note": localized("Where it started"),
+        "sources": [{"title": "Agency bulletin", "url": "https://example.org/post/1"}],
+    }
+
+    def marker(self, **overrides: object) -> dict[str, object]:
+        return {**self.MARKER, **overrides}
+
+    def place(self) -> dict[str, object]:
+        place = self.marker(id="port", kind="place", lon=120, lat=40)
+        del place["time"], place["sources"]
+        return place
+
+    def test_the_definition_carries_them(self) -> None:
+        spec = parse_case(case_payload(markers=[self.marker(), self.place()]))
+        self.assertEqual(spec.markers, (self.MARKER, self.place()))
+        entry, _ = build_entry(markers=[self.marker(), self.place()])
+        self.assertEqual(entry["markers"], [self.MARKER, self.place()])
+        validate_catalog_entry(entry)
+
+    def test_a_case_without_markers_has_none(self) -> None:
+        self.assertEqual(parse_case(case_payload()).markers, ())
+        entry, _ = build_entry()
+        self.assertNotIn("markers", entry)
+
+    def test_a_malformed_marker_is_refused(self) -> None:
+        missing_ja = {locale: "x" for locale in LOCALES if locale != "ja"}
+        for markers in (
+            "ignition",
+            [self.marker(kind="fire")],
+            [self.marker(id="Ignition")],
+            [self.marker(), self.marker()],  # the same id twice
+            [self.marker(lon=130.0)],  # east of the box
+            [self.marker(lat=float("nan"))],
+            [self.marker(lat=True)],
+            [self.marker(time="20 July")],
+            [self.marker(time="2021-07-20T03:46:00")],  # no zone
+            [self.marker(label=missing_ja)],
+            [self.marker(note="Where it started")],
+            [self.marker(sources=[{"title": "Bulletin", "url": "http://example.org/post/1"}])],
+            [self.marker(sources=[{"title": "", "url": "https://example.org/post/1"}])],
+            [self.marker(sources=[{"url": "https://example.org/post/1"}])],
+            [self.marker(extra=1)],
+            [self.marker(id=f"m{index}") for index in range(25)],
+        ):
+            with self.subTest(markers=markers), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(markers=markers))
+
+    def test_the_box_may_cross_the_antimeridian(self) -> None:
+        bbox = [170.0, -50.0, -170.0, -30.0]
+        for lon in (175.0, -175.0):
+            parse_case(case_payload(bbox=bbox, markers=[self.marker(lon=lon, lat=-40.0)]))
+        with self.assertRaises(ShowcaseError):
+            parse_case(case_payload(bbox=bbox, markers=[self.marker(lon=0.0, lat=-40.0)]))
+
+    def test_a_row_is_held_to_the_two_authored_locales(self) -> None:
+        # A row already on the bucket is held to zh and en, as its title is.
+        entry, _ = build_entry(markers=[self.marker()])
+        entry["markers"][0]["note"] = {"zh": "起火点", "en": "Where it started"}
+        validate_catalog_entry(entry)
+        entry["markers"][0]["note"] = {"en": "Where it started"}
+        with self.assertRaises(ShowcaseError):
+            validate_catalog_entry(entry)
+
+    def test_refresh_follows_the_definition(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            entry, manifest = build_entry()
+            case_dir = root / "showcase" / "demo-case"
+            case_dir.mkdir(parents=True)
+            (case_dir / "manifest.json").write_bytes(json.dumps(manifest).encode())
+            (case_dir / "case.json").write_text(json.dumps(entry), encoding="utf-8")
+            refreshed = refresh_sidecar(parse_case(case_payload(markers=[self.marker()])), root)
+            self.assertEqual(refreshed["markers"], [self.MARKER])
+            self.assertEqual(collect_catalog(root)["cases"][0]["markers"], [self.MARKER])
+            refreshed = refresh_sidecar(parse_case(case_payload()), root)
+            self.assertNotIn("markers", refreshed)

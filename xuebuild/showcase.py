@@ -44,7 +44,9 @@ A case may also carry a ``view``: the camera the shell opens the case on
 (center, zoom, pitch, bearing, terrain exaggeration) and the volume bundle
 it opens drawn over the field, carried onto the catalog row verbatim. A
 shell that does not know the block opens the case on its bounding box as
-before.
+before. Its ``markers`` are labelled points of context inside the box (a
+crossing, an ignition), each with a note and its sources, carried onto the
+row the same way; a shell that does not know them draws none.
 """
 
 from __future__ import annotations
@@ -157,6 +159,11 @@ class CaseSpec:
     """The NASA GIBS daily picture the shell offers in place of the case's
     field and opens on (``web/src/gibs.ts``): ``layer``, one of
     :data:`GIBS_LAYERS`. Nothing is built for it: the tiles come from GIBS."""
+    markers: tuple[dict[str, Any], ...] = ()
+    """Labelled points of context the shell draws over the case
+    (:func:`_markers_block`): a place or an event, each with a label and a
+    note in every locale, an optional time and the sources it rests on.
+    Carried onto the catalog row as given."""
     view: dict[str, Any] | None = None
     """The camera the shell opens the case on (:func:`_view_block`):
     ``center`` as ``[lon, lat]``, ``zoom``, and optionally ``pitch``,
@@ -335,6 +342,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if view is not None:
         view = _view_block(view, case_id, ordered)
 
+    bounds = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    markers = payload.get("markers")
+    markers = _markers_block(markers, case_id, bounds) if markers is not None else []
+
     return CaseSpec(
         id=case_id,
         title=_localized(payload.get("title"), "title", case_id),
@@ -343,7 +354,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         run=run,
         dataset=dataset,
         hours=hours,
-        bbox=(float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])),
+        bbox=bounds,
         variables=ordered,
         default_variable=default_variable,
         event_time=event_time,
@@ -353,6 +364,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         radar=radar,
         fire=fire,
         imagery=imagery,
+        markers=tuple(markers),
         view=view,
     )
 
@@ -419,6 +431,93 @@ def _imagery_block(value: object, case_id: str) -> dict[str, str]:
     if not isinstance(value, dict) or set(value) != {"layer"} or value["layer"] not in GIBS_LAYERS:
         raise ShowcaseError(f"case {case_id}: imagery must be {{layer}}, layer one of {GIBS_LAYERS}")
     return {"layer": value["layer"]}
+
+
+MARKER_KINDS = ("place", "event")
+"""What a marker stands for: somewhere (a crossing, a town) or something
+that happened there (an ignition), which may name when."""
+
+MAX_MARKERS = 24
+"""More than this is a layer of its own, not context for one case."""
+
+_MARKER_KEYS = {"id", "kind", "lon", "lat", "time", "label", "note", "sources"}
+
+
+def _in_bounds(lon: float, lat: float, bbox: Sequence[float]) -> bool:
+    """Whether a point lies in ``[west, south, east, north]``, a box whose
+    east is less than its west crossing the antimeridian."""
+    west, south, east, north = bbox
+    if not south <= lat <= north:
+        return False
+    return west <= lon <= east if west <= east else lon >= west or lon <= east
+
+
+def _markers_block(
+    value: object, case_id: str, bbox: Sequence[float], required: tuple[str, ...] = LOCALES
+) -> list[dict[str, Any]]:
+    """A case's ``markers``: labelled points inside its ``bbox``. Each has a
+    unique slug ``id``, a ``kind`` (:data:`MARKER_KINDS`), ``lon``/``lat``,
+    optionally a ``time`` (ISO), a ``label`` and a ``note`` held to the same
+    locales as the title, and ``sources``, each a ``title`` and an https
+    ``url``. The values pass through as written."""
+    if not isinstance(value, list) or len(value) > MAX_MARKERS:
+        raise ShowcaseError(f"case {case_id}: markers must be a list of at most {MAX_MARKERS}")
+    markers: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        where = f"markers[{index}]"
+        if not isinstance(item, dict) or set(item) - _MARKER_KEYS:
+            raise ShowcaseError(f"case {case_id}: {where} must be {{id, kind, lon, lat, time?, label, note, sources?}}")
+        marker_id = item.get("id")
+        if not isinstance(marker_id, str) or not marker_id or set(marker_id) - _ID_CHARACTERS:
+            raise ShowcaseError(f"case {case_id}: {where}.id must be lowercase letters, digits and hyphens")
+        if marker_id in seen:
+            raise ShowcaseError(f"case {case_id}: marker id {marker_id} appears twice")
+        seen.add(marker_id)
+        where = f"marker {marker_id}"
+        kind = item.get("kind")
+        if kind not in MARKER_KINDS:
+            raise ShowcaseError(f"case {case_id}: {where}.kind must be one of {MARKER_KINDS}")
+        lon, lat = item.get("lon"), item.get("lat")
+        for name, number in (("lon", lon), ("lat", lat)):
+            if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
+                raise ShowcaseError(f"case {case_id}: {where}.{name} must be a finite number")
+        if not _in_bounds(lon, lat, bbox):
+            raise ShowcaseError(f"case {case_id}: {where} at {lon}, {lat} lies outside the case bbox")
+        marker: dict[str, Any] = {"id": marker_id, "kind": kind, "lon": lon, "lat": lat}
+        if "time" in item:
+            time = item["time"]
+            try:
+                if not isinstance(time, str):
+                    raise ValueError
+                parsed = datetime.fromisoformat(time.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ShowcaseError(f"case {case_id}: {where}.time must be an ISO timestamp") from exc
+            # A time without a zone means a different instant to every viewer.
+            if parsed.tzinfo is None:
+                raise ShowcaseError(f"case {case_id}: {where}.time must name its zone (end it in Z)")
+            marker["time"] = time
+        marker["label"] = _localized(item.get("label"), f"{where}.label", case_id, required)
+        marker["note"] = _localized(item.get("note"), f"{where}.note", case_id, required)
+        sources = item.get("sources", [])
+        if not isinstance(sources, list):
+            raise ShowcaseError(f"case {case_id}: {where}.sources must be a list")
+        checked = []
+        for source in sources:
+            if (
+                not isinstance(source, dict)
+                or set(source) != {"title", "url"}
+                or not isinstance(source["title"], str)
+                or not source["title"].strip()
+                or not isinstance(source["url"], str)
+                or not re.fullmatch(r"https://[^\s/]+\.[^\s]+", source["url"])
+            ):
+                raise ShowcaseError(f"case {case_id}: {where}.sources must each be {{title, url}} with an https url")
+            checked.append({"title": source["title"].strip(), "url": source["url"]})
+        if checked:
+            marker["sources"] = checked
+        markers.append(marker)
+    return markers
 
 
 _VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain", "volume")
@@ -660,6 +759,8 @@ def build_catalog_entry(
         entry["fire"] = dict(spec.fire)
     if spec.imagery:
         entry["imagery"] = dict(spec.imagery)
+    if spec.markers:
+        entry["markers"] = [dict(marker) for marker in spec.markers]
     if spec.view:
         entry["view"] = dict(spec.view)
     validate_catalog_entry(entry)
@@ -698,12 +799,14 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _imagery_block(entry["imagery"], entry["id"])
     if "view" in entry:
         _view_block(entry["view"], entry["id"], variables)
+    if "markers" in entry:
+        _markers_block(entry["markers"], entry["id"], entry["bbox"], REQUIRED_LOCALES)
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit and the view are the definition's to change — a
+    the tags, the credit, the markers and the view are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -747,6 +850,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("radar", dict(spec.radar) if spec.radar else None),
         ("fire", dict(spec.fire) if spec.fire else None),
         ("imagery", dict(spec.imagery) if spec.imagery else None),
+        ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
         ("view", dict(spec.view) if spec.view else None),
     ):
         if value:

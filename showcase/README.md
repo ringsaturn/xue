@@ -187,6 +187,36 @@ retires a case.
    "view": {"center": [138.73, 35.36], "zoom": 11.6, "pitch": 62, "bearing": -35, "terrain": 1.5, "volume": "cloud3d"}
    ```
 
+   A case may carry **markers**: labelled points of context the viewer
+   draws over the map — a `place` (a border crossing, a town) or an
+   `event` (an ignition) — each opening a card with its note and its
+   sources when clicked, and listed under the summary for a reader who
+   does not use the map. An event with a `time` is drawn faint until the
+   playhead reaches it.
+
+   ```json
+   "markers": [
+     {
+       "id": "ignition",
+       "kind": "event",
+       "lon": 119.395,
+       "lat": 46.883,
+       "time": "2026-10-08T03:46:00Z",
+       "label": { "zh": "起火点", "en": "Ignition", "…": "…" },
+       "note": { "zh": "…", "en": "…", "…": "…" },
+       "sources": [{ "title": "NEMA bulletin, 12 Oct 2026", "url": "https://nema.gov.mn/post/180594" }]
+     }
+   ]
+   ```
+
+   `id` is a slug, unique within the case; `kind` is `place` or `event`;
+   `lon`/`lat` must lie inside the case's `bbox`; `time` is optional and
+   carries its zone; `label` and `note` carry every UI locale, as `title`
+   and `summary` do; `sources` is optional, each a `title` and an `https`
+   `url`. At most 24 markers. The notes are held to the same rule as the
+   summary: what a cited source says, nothing more. A shell that does not
+   know the field draws none.
+
    Prose is the definition's to change after the fact: a translation added
    or a summary corrected reaches the catalog with
 
@@ -195,7 +225,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, imagery, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, imagery, markers, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.
