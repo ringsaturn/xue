@@ -184,6 +184,7 @@
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
               { "@type": "DataDownload", "name": "GFS surface-flux live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-sflux.json" },
               { "@type": "DataDownload", "name": "ECMWF live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ecmwf.json" },
+              { "@type": "DataDownload", "name": "ECMWF IFS 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifs.json" },
               { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
@@ -893,6 +894,11 @@
             <button type="button" data-model="ecmwf" aria-pressed="false">
               <span class="model-name">ECMWF</span>
               <small>IFS 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="ifs" aria-pressed="false">
+              <span class="model-name">IFS</span>
+              <small>ECMWF 0.1°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="aifs" aria-pressed="false">

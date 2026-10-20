@@ -770,7 +770,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero"] as const)
+    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "gefsaero"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
 
@@ -789,13 +789,14 @@ describe("dataset kinds", () => {
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
       expect(isCaseOnlyModel(model)).toBe(false);
     }
     expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
+    expect(FORECAST_MODELS.ifs).toMatchObject({ label: "IFS", product: "ifs-0p1", latestFilename: "latest-ifs.json" });
     expect(FORECAST_MODELS.ifshres).toMatchObject({ label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" });
     // The seasonal run ships the forecast core pair, so it takes the
     // default `coreBundles` and the default opening layer; only its rail

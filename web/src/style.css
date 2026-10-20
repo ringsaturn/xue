@@ -3598,6 +3598,7 @@ html[lang="ja"] .rail-glyph {
 }
 
 body[data-model="ecmwf"] .source-credit[data-credit-model="ecmwf"],
+body[data-model="ifs"] .source-credit[data-credit-model="ecmwf"],
 body[data-model="aifs"] .source-credit[data-credit-model="ecmwf"],
 body[data-model="ifshres"] .source-credit[data-credit-model="ifshres"],
 body[data-model="cma"] .source-credit[data-credit-model="cma"],

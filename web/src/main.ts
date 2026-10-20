@@ -1342,6 +1342,7 @@ const riverCredit = required<HTMLElement>("river-credit");
 const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
   ecmwf: "ECMWF / IFS (0.25°)",
+  ifs: "ECMWF / IFS (0.1°)",
   aifs: "ECMWF / AIFS SINGLE (0.25°)",
   ifshres: "ECMWF / IFS HRES (0.1°)",
   cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
