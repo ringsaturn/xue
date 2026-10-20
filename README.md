@@ -36,6 +36,7 @@ is no longer published and every decoder still reads it.
 | NOAA GFS (`gfs`) | 0.25° global · hourly to F120, 3-hourly to F240 | <a href="https://dataset.ringsaturn.me/xue/latest.json"><img alt="the newest gfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest.json&query=%24.runTime&label=&color=0b7cbd&style=flat-square&cacheSeconds=600" width="170"></a> |
 | GFS surface flux (`sflux`) | ~13 km Gaussian global · as GFS | <a href="https://dataset.ringsaturn.me/xue/latest-sflux.json"><img alt="the newest sflux run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-sflux.json&query=%24.runTime&label=&color=2b6cb0&style=flat-square&cacheSeconds=600" width="170"></a> |
 | ECMWF IFS open data (`ecmwf`) | 0.25° global · 3-hourly to F144, 6-hourly to F240 | <a href="https://dataset.ringsaturn.me/xue/latest-ecmwf.json"><img alt="the newest ecmwf run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ecmwf.json&query=%24.runTime&label=&color=1f6f8b&style=flat-square&cacheSeconds=600" width="170"></a> |
+| ECMWF IFS open data 0.1° (`ifs`) | 0.1° global · as `ecmwf`, two hours later | <a href="https://dataset.ringsaturn.me/xue/latest-ifs.json"><img alt="the newest ifs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifs.json&query=%24.runTime&label=&color=2b8ca8&style=flat-square&cacheSeconds=600" width="170"></a> |
 | ECMWF AIFS Single (`aifs`) | 0.25° global · 6-hourly to F360 | <a href="https://dataset.ringsaturn.me/xue/latest-aifs.json"><img alt="the newest aifs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.runTime&label=&color=3c7a89&style=flat-square&cacheSeconds=600" width="170"></a> |
 | ECMWF IFS HRES via Open-Meteo (`ifshres`) | 0.1° global · hourly to F090, then 3- and 6-hourly to F360; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-ifshres.json"><img alt="the newest ifshres run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.runTime&label=&color=2a9d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA HRRR (`hrrr`) | 0.03° contiguous US · hourly to F18, hourly cycles | <a href="https://dataset.ringsaturn.me/xue/latest-hrrr.json"><img alt="the newest hrrr run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.runTime&label=&color=7b4ea3&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -68,7 +69,7 @@ driver. Some sources need more (eccodes, om2nc, ffmpeg, credentials); see
 uv sync                   # creates .venv with NumPy and the xuepy wheel
 make check                # verifies tool versions
 make mvp                  # builds the latest GFS run and the frontend
-make mvp MODEL=ecmwf      # or another forecast: aifs, ifshres, sflux, hrrr, gefsaero, cfs
+make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, gefsaero, cfs
 make serve                # serves the result on 127.0.0.1
 ```
 
