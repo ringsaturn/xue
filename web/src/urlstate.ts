@@ -99,7 +99,8 @@ function resolveType(value: string): ForecastBundleId | null {
 const MODEL_ALIASES: Record<string, ForecastModelId> = {
   gfs: "gfs",
   ecmwf: "ecmwf",
-  ifs: "ecmwf",
+  ifs: "ifs",
+  "ifs-0p1": "ifs",
   aifs: "aifs",
   "aifs-single": "aifs",
   ifshres: "ifshres",

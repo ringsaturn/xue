@@ -17,6 +17,7 @@ type ForecastVariableId = "tmp2m" | "prate";
 export type ForecastModelId =
   | "gfs"
   | "ecmwf"
+  | "ifs"
   | "aifs"
   | "ifshres"
   | "cfs"
@@ -128,6 +129,10 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     railCore: ["tmp2m", "prate", "wind10m", "dswrf"],
   },
   ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
+  // The same IFS cycle's records on the model's full 0.1° regular grid
+  // (3600 × 1801, the ifshres grid), from ECMWF's 0p1 open data: the
+  // ecmwf bundle set, pressure levels included, landing two hours later.
+  ifs: { id: "ifs", label: "IFS", product: "ifs-0p1", latestFilename: "latest-ifs.json" },
   // ECMWF's data-driven model, AIFS Single, from the same open data service
   // on the same 0.25° grid: six-hourly to 360 hours from every cycle.
   aifs: { id: "aifs", label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" },
@@ -471,7 +476,7 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
   return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
-/** The datasets in the model switch's order: the eight live forecasts, the
+/** The datasets in the model switch's order: the nine live forecasts, the
  * ten rolling observation windows (MRMS and its 3D volume, the JMA
  * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
  * Japan box, and the SWPC aurora probability) and the geostationary
@@ -483,6 +488,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
   "ecmwf",
+  "ifs",
   "aifs",
   "ifshres",
   "cfs",

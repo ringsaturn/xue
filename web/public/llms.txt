@@ -17,11 +17,15 @@
 
 Facts worth getting right:
 
-- Fifteen live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
+- Sixteen live sources, one shell. `gfs`: NOAA GFS 0.25°, hourly to F120 then
   3-hourly to F240 (161 frames). `sflux`: GFS surface flux on its native
   ~13 km Gaussian grid, same cadence, the only source with solar radiation
   (`dswrf`). `ecmwf`: ECMWF IFS open data 0.25°, 3-hourly to F144 then
-  6-hourly to F240 (65 frames). `aifs`: ECMWF AIFS Single open data, the
+  6-hourly to F240 (65 frames). `ifs`: the same IFS cycle's records on
+  the model's full 0.1° regular grid (3600 × 1801), ECMWF's 0p1 open data
+  published since 2026-10-20 — the `ecmwf` bundle set, pressure levels and
+  waves included, on the same axis, landing about two hours later (the
+  sixteenth live source). `aifs`: ECMWF AIFS Single open data, the
   centre's data-driven model on the same 0.25° grid, 6-hourly to F360 from
   every cycle (61 frames), landing about five and a half hours after the
   cycle. `ifshres`: ECMWF's operational IFS HRES — the deterministic
@@ -31,7 +35,7 @@ Facts worth getting right:
   F090, 3-hourly to F144 then 6-hourly to F360 (145 frames), from the 00Z
   and 12Z cycles alone, complete about six and a half hours after the
   cycle. It is the thirteenth live source and carries no isobaric levels,
-  which the 0.25° `ecmwf` open data keeps. `hrrr`: NOAA HRRR, 3 km over the contiguous
+  which `ecmwf` and `ifs` keep. `hrrr`: NOAA HRRR, 3 km over the contiguous
   United States, a new cycle every hour, hourly to F18 (19 frames) — the
   one regional source, resampled from its Lambert conformal grid onto a
   0.03° latitude/longitude grid (2441 × 1051) over the domain's footprint;
@@ -235,7 +239,8 @@ Facts worth getting right:
   layers (`tsoil1`, `tsoil2`, `soilw1`, `soilw2`, the water content
   "no soil" over the sea) — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean
-  over the six-hour step. SFLUX: `tmp2m`,
+  over the six-hour step. IFS (`ifs`): the ECMWF set as published, on the
+  0.1° grid. SFLUX: `tmp2m`,
   `prate`, `dswrf`, `orog`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its
   9 km product carries — `tmp2m`, `prate`, `dswrf`, `prmsl`, `gust`,
   `tcdc`, `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, `tmpsfc`,
@@ -367,8 +372,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
-  — which live source (`ifs` is an alias of `ecmwf`, `aifs-single` of
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+  — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
