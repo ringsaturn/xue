@@ -1,6 +1,6 @@
 PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
-# A source id from xuebuild/sources.py (gfs, ecmwf, aifs, ifshres, sflux, hrrr,
-# gefsaero, cfs, mrms, jma, cma, himawari, goeseast, goeswest, meteosat, ...).
+# A source id from xuebuild/sources.py (gfs, ecmwf, ifs, aifs, ifshres, sflux,
+# hrrr, gefsaero, cfs, mrms, jma, cma, himawari, goeseast, goeswest, meteosat, ...).
 MODEL ?= gfs
 # A forecast cycle YYYYMMDDHH, or an observation window's first hour;
 # `latest` resolves the newest (the live rolling window on an observation).

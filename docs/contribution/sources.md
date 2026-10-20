@@ -16,6 +16,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `gfs` | forecast | `.idx` byte ranges, NOAA (Google mirror) | 1 h to F120, 3 h to F240; 6-hourly cycles | `tmp2m`, `prate` |
 | `sflux` | forecast | as GFS, surface flux files | as GFS | `tmp2m`, `prate` |
 | `ecmwf` | forecast | ECMWF open data, repacked from CCSDS | 3 h to F144, 6 h to F240 | `tmp2m`, `prate` |
+| `ifs` | forecast | ECMWF open data at 0.1°, `-sfc`/`-pl` objects reassembled | as `ecmwf` | `tmp2m`, `prate` |
 | `aifs` | forecast | ECMWF open data (`aifs-single`) | 6 h to F360 | `tmp2m`, `prate` |
 | `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | 1 h to F18; hourly cycles | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | 3 h to F120 | `aod` |
@@ -136,8 +137,24 @@ so a model switch keeps the layer; the gust is analysis-optional and spelled
 their own (`cat_calibration`): on the same runs IFS's ln TI1 mean sits about
 0.25 below GFS's at every level.
 
+**ifs.** The same cycle's records as `ecmwf` at the model's full 0.1°
+regular grid (the `0p1` objects beside the `0p25` ones, published since
+the 2026-10-20 06z cycle), landing about two hours after the 0.25° set.
+The registry entry is `ecmwf`'s — inputs, companions, bundles, axis rules
+and, pending a refit on 0.1° runs, the `cat_calibration` — at `ifshres`'s
+grid, tile and two-rung ladder. What differs is the fetch: at 0.1° the
+`oper` stream is split into a `-sfc` object (every surface and soil
+record) and a `-pl` one (the pressure levels), and the `wave` stream is
+one object suffixed `-sfc` (`fetch.py::EcmwfOpenData`, `split`). The
+fetcher picks each record's object by its level type
+(`ecmwf_object_part`), loads each `.index` once per frame and assembles
+one GRIB per step in source order, so the converter sees the same frame
+as for `ecmwf`; a run is complete only when all three objects are at
+both ends. The 06/18 cycles reach 144 h here (90 h at 0.25°,
+`short_cycle_hours`), so `latest` skips them only past that.
+
 **aifs.** ECMWF's AIFS Single, fetched by the IFS path under another model
-directory (`fetch.py::ECMWF_OPEN_DATA_MODELS`, `ifs` | `aifs-single`),
+directory (`fetch.py::ECMWF_OPEN_DATA_MODELS`, `aifs-single` beside `ifs`),
 landing ~5.5 h after each cycle. Its open data encodes five fields unlike
 IFS, each a `RecordAlternate` under the GFS identity: `tp` as WMO 0/1/52 in
 **kg/m² (mm)** rather than local 0/1/193 in metres (the unit rule
