@@ -160,6 +160,28 @@ retires a case.
    `byteLength` and `crc32` when the catalog is written, as for a radar
    window.
 
+   A flood case may carry **river flow** beside its field: an optional
+   `river` block names a river index built into the case's directory
+   ([`docs/river.md`](../docs/river.md)). On a network case it is a
+   hydrological model's streamflow on every reach (the National Water
+   Model for `guadalupe-2025`), one network store per track over the
+   reaches' GeoParquet; on a grid case, whose model discharge is the case's
+   own field (EFAS), it carries the gauges' observed series, their
+   reported peaks and the mapped flood extents.
+
+   ```json
+   "river": {"index": "river/index.json"}
+   ```
+
+   Build the directory with `python -m xuebuild.river build
+   showcase/river-cases/<id>.json` (writing
+   `web/public/data/showcase/<id>/river/` from the work directory the
+   definition names; GeoParquet needs pyarrow), then refresh the case. The
+   catalog row gains the index's `byteLength` and `crc32` when the catalog
+   is written, after every store, gauge line and extent the index names is
+   checked against the files beside it. A shell that does not know the
+   block plays the field alone.
+
    A case may also name a **daily picture**: `imagery` is one of the NASA
    GIBS layers the shell draws (`web/src/gibs.ts`, the `?gibs=` spellings),
    which the viewer offers beside the case's fields in true and false
@@ -225,7 +247,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, imagery, markers, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, river, imagery, markers, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.

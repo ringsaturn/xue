@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"class": "Flooded area"}, "geometry": {"type": "Polygon", "coordinates": [[[-98.99, 30.01], [-98.97, 30.01], [-98.97, 30.03], [-98.99, 30.01]]]}}]}

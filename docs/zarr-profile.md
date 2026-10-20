@@ -8,7 +8,8 @@ write and for what a store must look like to be one of these. The container itse
 [`format.md`](format.md); this profile adds nothing to it and changes
 nothing in it. A second branch, the [polar store](#polar-store), carries
 radar sweeps in beam-and-gate coordinates for products that have no grid
-and no container.
+and no container, and a third, the [network store](#network-store), one
+value per river reach per frame.
 
 A store is a function of a bundle's metadata, its quantized codes, its tile
 and each variable's predictor, and of nothing else. A build writes it
@@ -509,6 +510,118 @@ dimensions, the chunking and the attributes are its own.
   product that publishes the chunk spans (`nexrad.md` §4) lets a reader
   skip the index and read the chunk directly, one range per site per
   round in either kind of store.
+
+## Network store
+
+A **network store** carries a quantity that lives on the reaches of a
+river network — one value per reach per frame — instead of on a grid. It
+is the profile's third branch and the one a river case writes
+([`river.md`](river.md)); it has no `.xue` counterpart and is never
+derived from a bundle. The reaches' geometry is not in the store: it is a
+GeoParquet file beside it, cut so that one index serves both. Everything
+in "Array metadata" and "Reading" applies except where this section says
+otherwise: the shard, the index, the codecs and the reading of an inner
+chunk are the same; the dimensions, the chunking and the attributes are
+its own.
+
+- A store holds one **track**: one product over one run of frames, an
+  analysis window or one forecast cycle. The group's attributes carry a
+  `xue_network` block in place of `xue` and `xue_profile`; its `version` is
+  this branch's version, `1`. A reader tells the three branches apart by
+  which block is present and refuses a group carrying more than one of
+  `xue`, `xue_polar` and `xue_network`, or a `version` it does not
+  implement.
+- The block:
+
+  ```json
+  "xue_network": {
+    "version": 1, "model": "NWM v3.0", "product": "short_range",
+    "runTime": "2025-07-04T09:00:00Z",
+    "time": { "unitSeconds": 3600, "firstFrameOffset": 1, "frameCount": 18, "frameStep": 1 },
+    "geometry": { "path": "reaches.parquet", "byteLength": 1114663, "crc32": "de943f65",
+                  "featureCount": 10940, "rowGroupRows": 4096 },
+    "variables": [ { "numericId": 1, "id": "streamflow", "label": "Streamflow", "unit": "m3/s",
+                     "quantization": { "type": "log1p", "…": "…" } } ]
+  }
+  ```
+
+  `runTime` is the cycle of a forecast and the first frame of an analysis
+  window. `time` follows the container's rules exactly
+  ([`format.md`](format.md), "Time Axis"): offsets from `runTime` on the
+  coarsest unit that fits, `frameStep` when uniform, `frameOffsets`
+  otherwise. `geometry` names the GeoParquet by a path relative to the
+  directory holding the store, its length and the CRC-32 of its bytes, its
+  row count (`featureCount`) and its row group length (`rowGroupRows`).
+  `variables` lists the one variable, `streamflow`, with its codebook.
+- One data array, `streamflow`, `uint8` of shape `[frameCount,
+  featureCount]` with `dimension_names` `["time", "feature"]`, carrying
+  exactly one `sharding_indexed` codec. Feature `f` is row `f` of the
+  GeoParquet.
+- Chunking. The inner chunk is `[6, rowGroupRows]`: six frames of one row
+  group's reaches, time chunk `t` covering frames `[6t, 6t + 6)` as in a
+  grid store. The outer chunk (shard) is the whole array rounded up to
+  whole inner chunks, `[6 × ceil(frameCount / 6), rowGroupRows ×
+  ceil(featureCount / rowGroupRows)]`, so `c/0/0` is the only data object;
+  its index holds one pair per inner chunk in row-major order, time chunk
+  by time chunk and within each the row groups in order, followed by the
+  CRC-32C of the pairs. Frames past the axis and features past the last
+  row are stored as `fill_value`. One frame is one contiguous run of the
+  shard (every row group of one time chunk), and one reach's series is one
+  chunk per time chunk.
+- Inner codec chain `[xue.delta{axis: 0}, bytes, zstd]` (level 15,
+  content checksum): consecutive hours of one reach differ by a code or
+  two. A reader must accept `[bytes, zstd]` as well. Index codecs `[bytes
+  little-endian, crc32c]`, `index_location` `end`, and the never-written
+  pair are as above.
+- `fill_value` is the codebook's `nodataCode`, 255.
+- Codes. The `log1p` codebook of [`format.md`](format.md) with `trace`
+  0.01, `scale` 1.0 and `maximum` 100000 (m³/s): code 0 is a flow below
+  0.01 m³/s, codes 1–253 the logarithmic grid, about 4.7 % apart, 254 a
+  flow above the maximum, and 255 no value — a reach the model does not
+  route, such as one inside a lake, or a time it has none. The data
+  array's attributes repeat the variable as `xue_network.variable` and
+  carry `_FillValue` 255; there is no CF packing, as for any `log1p`
+  variable.
+- Side arrays, beside the data array, each one chunk under `[bytes]`
+  (little-endian), as a grid store's coordinates are:
+
+  | array | dtype | shape | meaning |
+  |---|---|---|---|
+  | `feature_id` | `int64` | `[feature]` | the reach's identifier in its source (NWM `feature_id`) |
+  | `time` | `int64` | `[time]` | the frame's valid time, Unix seconds UTC |
+  | `baseflow` | `float32` | `[feature]` | the reach's usual flow before the event, m³/s; `NaN` where unknown |
+
+- The group carries consolidated metadata, written last, and the store's
+  `crc32` is the CRC-32 of its group document, as for a grid store.
+
+**The GeoParquet.** The reaches are a GeoParquet 1.1 file: column
+`geometry`, WKB `LineString` in WGS84 longitude and latitude (no `crs`
+key, GeoParquet's `OGC:CRS84` default); a `covering.bbox` column `bbox`, a
+struct of `xmin`, `ymin`, `xmax`, `ymax` in `float32` rounded outward so
+the box always contains the line; and `feature_id` (`int64`), `order`
+(`int8`, the stream order) and `gage` (`string`, nullable: the gauge on the
+reach, if any), in the order `feature_id`, `order`, `gage`, `geometry`,
+`bbox`. Rows are sorted along a Hilbert curve by the length-weighted
+centroid of each line (a 2^16 grid over the network's extent), and cut
+into row groups of exactly `rowGroupRows` rows (4096), the last one
+shorter, zstd-compressed. Row group `g` holds rows `[g × rowGroupRows,
+(g + 1) × rowGroupRows)`, the reaches of the store's feature chunk `g`, so
+a reader that wants one area reads the row groups whose `bbox` statistics
+meet it and then exactly the matching inner chunks, and a reader that has
+a row from a click knows the chunk without a lookup.
+
+Measured on the Guadalupe 2025 case (10,940 reaches of NWM v3.0, Hilbert
+order): the GeoParquet is 1,114,663 bytes with a 6,579-byte footer and row
+groups of 415,954, 394,267 and 297,851 bytes. The 73-frame hourly
+analysis shard is 145,650 bytes under the delta chain and 163,086 under
+`[bytes, zstd]`; the 18-frame forecast shard 33,631 and 38,768. The side
+arrays weigh 132 KB per store, most of the store at these sizes: whole
+stores are 286,352 and 173,890 bytes.
+
+Reading one frame: the group, the array's `zarr.json`, the shard index
+(suffix range), then one range covering the frame's time chunk. Reading
+one reach's series: the same index, then one chunk per time chunk at the
+reach's row group.
 
 ## Equivalence with the container
 
