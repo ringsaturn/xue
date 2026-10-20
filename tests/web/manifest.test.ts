@@ -1017,6 +1017,104 @@ describe("dataset kinds", () => {
     expect(() => validateManifest({ ...nest, model: "HRRR", product: "wrfsfc" }, "woof")).toThrow();
   });
 
+  it("knows the two EFAS runs as forecasts reached through their cases alone", () => {
+    // Mirrors the `efas` and `efaswb` entries of SOURCES: EFAS v5 river
+    // discharge, the HRES forecast and the water-balance analysis on the
+    // same 1-arcmin European grid and the same six-hourly axis, neither
+    // with a live pointer — like the WOOF nest, in the table (a case names
+    // it by its manifest strings) but not in the switch or behind `?model=`.
+    expect(FORECAST_MODELS.efas).toMatchObject({
+      id: "efas",
+      label: "EFAS-v5",
+      product: "hres",
+      coreBundles: ["dis06"],
+      defaultVariable: "disrp",
+      railCore: ["disrp", "dis06", "upstream"],
+      region: [-25.25, 22.75, 50.25, 72.25],
+    });
+    expect(FORECAST_MODELS.efaswb).toMatchObject({
+      id: "efaswb",
+      label: "EFAS-v5-WB",
+      product: "water_balance",
+      coreBundles: ["dis06"],
+      defaultVariable: "disrp",
+    });
+    for (const model of ["efas", "efaswb"] as const) {
+      expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
+      expect(FORECAST_MODELS[model].domain).toBeUndefined();
+      expect(isCaseOnlyModel(model)).toBe(true);
+      expect(isObservationModel(model)).toBe(false);
+      expect(FORECAST_MODEL_IDS).not.toContain(model);
+      expect(modelDefaultVariable(model, "prate")).toBe("disrp");
+    }
+    // A case: a crop of the 4530 × 2970 grid, the 20-frame axis from +6 h
+    // to +120 h, the three river bundles as Zarr stores.
+    const store = (id: string) => ({ zarr: { path: `${id}.zarr`, byteLength: 1, crc32: "00000000" } });
+    const flood = {
+      schemaVersion: 5,
+      model: "EFAS-v5",
+      product: "hres",
+      runTime: "2024-10-28T00:00:00Z",
+      forecastHours: 120,
+      bundles: [
+        { variable: "disrp", ...store("disrp") },
+        { variable: "dis06", ...store("dis06") },
+        { variable: "upstream", ...store("upstream") },
+      ],
+    };
+    expect(validateManifest(flood, "efas").bundles.map((bundle) => bundle.variable)).toEqual(["disrp", "dis06", "upstream"]);
+    const classesOnly = { ...flood, bundles: [flood.bundles[0]!] };
+    expect(() => validateManifest(classesOnly, "efas")).toThrow(/no bundle for variable dis06/);
+    expect(validateManifest(classesOnly, "efas", { requireCoreVariables: false }).bundles).toHaveLength(1);
+    const balance = { ...flood, model: "EFAS-v5-WB", product: "water_balance" };
+    expect(validateManifest(balance, "efaswb").bundles).toHaveLength(3);
+    // The two runs are not interchangeable, and each product is its own.
+    expect(() => validateManifest(flood, "efaswb")).toThrow();
+    expect(() => validateManifest(balance, "efas")).toThrow();
+    expect(() => validateManifest({ ...flood, product: "water_balance" }, "efas")).toThrow(/unsupported manifest product/);
+    // The whole grid and the full axis pass the bundle metadata validator:
+    // it has no size ceiling, and twenty frames fit the u16 offsets.
+    const whole = parseBundleMetadata(
+      JSON.stringify({
+        schemaVersion: 3,
+        model: "EFAS-v5",
+        runTime: "2024-10-28T00:00:00Z",
+        time: { unitSeconds: 3600, firstFrameOffset: 6, frameCount: 20, frameStep: 6 },
+        grid: {
+          width: 4530,
+          height: 2970,
+          firstLongitude: -25.241666666666667,
+          firstLatitude: 72.24166666666667,
+          longitudeStep: 1 / 60,
+          latitudeStep: -1 / 60,
+          wrapLongitude: false,
+        },
+        variables: [
+          {
+            numericId: 1,
+            id: "dis06",
+            label: "River discharge, 6 h mean",
+            unit: "m³/s",
+            parameter: {
+              discipline: 1,
+              parameterCategory: 0,
+              parameterNumber: 7,
+              typeOfFirstFixedSurface: 1,
+              scaleFactorOfFirstFixedSurface: null,
+              scaledValueOfFirstFixedSurface: null,
+              typeOfStatisticalProcessing: 0,
+            },
+            quantization: { type: "log1p", trace: 0.1, scale: 10, maximum: 100000, minimumCode: 1, maximumCode: 253, zeroCode: 0, overflowCode: 254, nodataCode: 255 },
+          },
+        ],
+      }),
+    );
+    expect(frameOffsets(whole.time)).toHaveLength(20);
+    expect(frameOffsets(whole.time)[0]).toBe(6);
+    expect(frameOffsets(whole.time)[19]).toBe(120);
+    expect(identifyBundle(whole.variables)?.identity).toEqual({ family: "dis06", level: null, vector: false });
+  });
+
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {
     // Mirrors the `mrms3d` entry of SOURCES: the MRMS 3D reflectivity is a
     // dataset of its own beside the composite, one `refl3d` bundle that

@@ -24,6 +24,7 @@ import {
   worldRowAt,
 } from "./projection";
 import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
+import type { Sampling } from "./variables";
 
 /**
  * MapLibre custom layer that renders one quantized R8 forecast plane on the
@@ -250,6 +251,13 @@ uniform vec2 u_decode;
 // real value (the cold-top enhancement, for an infrared picture) along the
 // edge. The radar mosaic's 0 is "no echo", an ordinary value, and stays 0.
 uniform float u_floor_nodata;
+// How a scalar is reconstructed between cell centres (variables.ts
+// Sampling): 0 the bicubic reconstruction below; 1 the nearest cell's own
+// code, for a field whose cells are features rather than samples of a
+// surface (a river network one cell wide, which any filter would smear
+// into its no-data neighbours); 2 the nearest cell, and the two frames
+// stepped at the blend's midpoint rather than mixed, for a class field.
+uniform float u_nearest;
 // A band of longitude the layer is clipped to (the mosaic's seam between
 // two disks): on (x > 0.5), its western edge in degrees (y) and its width
 // eastward (z). A point is inside when its eastward distance from the
@@ -336,6 +344,12 @@ float fetchCode(sampler2D data, vec2 texel) {
 // half of a data cell facing a no-data neighbour is eroded, and the cell's
 // own centre still paints.
 float sampleCode(sampler2D data, vec2 uv, out bool missing) {
+  missing = false;
+  if (u_nearest > 0.5) {
+    // The texel whose cell holds the sample: its centre is where the read
+    // lands, so the texture's own filter has nothing to blend.
+    return fetchCode(data, (floor(uv * u_size) + 0.5) / u_size);
+  }
   vec2 position = uv * u_size - 0.5;
   vec2 base = floor(position);
   vec2 fraction = position - base;
@@ -562,7 +576,8 @@ void main() {
       bool missingB = false;
       float codeB = sampleCode(u_data_b, vec2(u, v), missingB);
       if (missingB) discard;
-      code = mix(code, codeB, u_mix);
+      // A class field steps: halfway between two classes is a third.
+      code = u_nearest > 1.5 ? (u_mix < 0.5 ? code : codeB) : mix(code, codeB, u_mix);
     }
 #ifdef XUE_TERRAIN
     if (u_lapse.x > 0.0) code = clamp(code + u_lapse.x * lapseCodes(longitude, latitude, code), 0.0, u_lapse.z);
@@ -818,6 +833,7 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Contour drawing, off by default: a filled field draws no contours. */
   private contours: ContourStyle | null = null;
   private floorNoData = false;
+  private sampling: Sampling = "smooth";
   /** Magnitude mode, off by default: a plane is one code per cell unless a
    * vector field says otherwise. */
   private vector: VectorField | null = null;
@@ -1115,6 +1131,16 @@ export class ForecastLayer implements CustomLayerInterface {
   setFloorNoData(flag: boolean): void {
     if (this.floorNoData === flag) return;
     this.floorNoData = flag;
+    this.map?.triggerRepaint();
+  }
+
+  /** How a scalar field is reconstructed between cell centres
+   * (`VariableSpec.sampling`): bicubic for a model field, the nearest
+   * cell for a river network, and the nearest cell stepped between frames
+   * for a class field. The vector and composite modes always filter. */
+  setSampling(mode: Sampling): void {
+    if (this.sampling === mode) return;
+    this.sampling = mode;
     this.map?.triggerRepaint();
   }
 
@@ -1466,6 +1492,7 @@ export class ForecastLayer implements CustomLayerInterface {
     const contours = this.contours;
     gl.uniform2f(this.uniforms.u_decode!, contours?.offset ?? 0, contours?.scale ?? 0);
     gl.uniform1f(this.uniforms.u_floor_nodata!, this.floorNoData ? 1 : 0);
+    gl.uniform1f(this.uniforms.u_nearest!, this.sampling === "classes" ? 2 : this.sampling === "nearest" ? 1 : 0);
     gl.uniform4f(
       this.uniforms.u_contour!,
       contours?.interval ?? 0,
@@ -1601,7 +1628,7 @@ export function setFieldShadow(shadow: FieldShadow | null): void {
 
 const MAP_UNIFORM_NAMES = [
   "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
-  "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_contour", "u_contour_values",
+  "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_nearest", "u_contour", "u_contour_values",
   "u_contour_value_count", "u_line_color", "u_fill_alpha",
   "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
   "u_composite", "u_composite_offset", "u_composite_scale",

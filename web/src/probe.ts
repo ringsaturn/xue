@@ -23,7 +23,8 @@
  * cell — the model's own value, not an interpolation of it.
  */
 
-import { decodeValue } from "./palettes";
+import { identifyBundle } from "./identity";
+import { decodeValue, readingValue } from "./palettes";
 import type { BundleMetadata, BundleVariable } from "./manifest";
 
 /** The grid cell a probe reads, and the coordinates of its center. */
@@ -260,12 +261,15 @@ export function probeSeriesValues(
   variables: readonly ProbeVariable[],
   frameOffsets: readonly number[],
 ): ProbeValue[] {
+  // A scalar reads through its identity, which says where a code the
+  // codebook decodes is still no reading (the river fields' code 0).
+  const identity = variables.length === 1 ? (identifyBundle([variables[0]!.variable])?.identity ?? null) : null;
   return frameOffsets.map((offset) => {
     const values: (number | null)[] = [];
     for (const { key, variable } of variables) {
       const code = series.code(key, offset);
       if (code === undefined) return undefined;
-      values.push(decodeValue(variable, code));
+      values.push(identity === null ? decodeValue(variable, code) : readingValue(variable, code, identity));
     }
     if (values.some((value) => value === null)) return null;
     if (values.length === 1) return values[0]!;

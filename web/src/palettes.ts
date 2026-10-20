@@ -5,6 +5,7 @@ import {
   CIN_CHART_RANGE,
   CLOUD_WATER_CHART_MAX,
   DEW_POINT_CHART_RANGE,
+  DISRP_CLASSES,
   GUST_SPEED_MAX,
   ICE_THICKNESS_CHART_MAX,
   OMEGA_PALETTE_MAX,
@@ -436,6 +437,51 @@ const OROGRAPHY_STOPS: Stop[] = [
 const PTYPE_STOPS: Stop[] = [
   [0, 0, 0, 0, 0],
   ...PTYPE_CLASSES.map(({ code, rgb }) => [code, rgb[0], rgb[1], rgb[2], 255] as Stop),
+];
+
+// River discharge, m³/s, on a logarithmic ramp: a stop per half decade,
+// so the linear interpolation between stops reads as even steps of the
+// logarithm — a light blue for a brook through blue for a river to the
+// purple of a great river or a flood, from 1 to 10 000 m³/s. Under 1 m³/s
+// the trickle fades rather than vanishes, since a river cell is a river.
+// A cell that is not a river is the codebook's zero (0 m³/s) and is
+// painted as nothing, so the land between the rivers stays the map.
+const DISCHARGE_STOPS: Stop[] = [
+  [0, 190, 225, 245, 0],
+  [0.1, 190, 225, 245, 90],
+  [1, 170, 215, 245, 170],
+  [3, 135, 195, 240, 200],
+  [10, 95, 170, 235, 225],
+  [30, 60, 140, 225, 240],
+  [100, 40, 105, 215, 250],
+  [300, 45, 75, 200, 255],
+  [1000, 75, 55, 190, 255],
+  [3000, 110, 45, 180, 255],
+  [10000, 135, 30, 160, 255],
+];
+
+// The return-period classes (`levels.ts::DISRP_CLASSES`), a stop on each
+// class code: the field is drawn cell by cell and never blended between
+// classes, so every code that reaches the palette is a class. Code 0 is
+// no class (not a river, or not evaluated) and is painted as nothing.
+const DISRP_STOPS: Stop[] = [
+  [0, 0, 0, 0, 0],
+  ...DISRP_CLASSES.map(({ code, rgb, alpha }) => [code, rgb[0], rgb[1], rgb[2], alpha] as Stop),
+];
+
+// Upstream area, km², the static map of the network a discharge field
+// sits on: a grey ramp, a stop per decade from the 10 km² headwater to a
+// 100 000 km² basin, rising in weight and opacity so the trunk rivers
+// stand out of the capillaries. A cell that is not a river is the
+// codebook's zero (0 km²) and is painted as nothing.
+const UPSTREAM_STOPS: Stop[] = [
+  [0, 200, 200, 200, 0],
+  [1, 200, 200, 200, 60],
+  [10, 190, 190, 190, 110],
+  [100, 160, 160, 160, 160],
+  [1000, 125, 125, 125, 205],
+  [10000, 90, 90, 90, 235],
+  [100000, 50, 50, 50, 255],
 ];
 
 // Clear-air turbulence as stepped intensity classes (`levels.ts::CAT_CLASSES`):
@@ -889,6 +935,9 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (family === "dustcf" || family === "zhouye") return DUST_CONFIDENCE_STOPS;
   if (family === "aurora") return AURORA_STOPS;
   if (family === "clw") return CLOUD_WATER_STOPS;
+  if (family === "dis06") return DISCHARGE_STOPS;
+  if (family === "disrp") return DISRP_STOPS;
+  if (family === "upstream") return UPSTREAM_STOPS;
   if (isSoilTemperature(family)) return SOIL_TEMPERATURE_STOPS;
   if (isSoilMoisture(family)) return SOIL_MOISTURE_STOPS;
   if (family === "hgt" && linear) return pressureStops(linear);
@@ -908,6 +957,20 @@ export function decodeValue(variable: BundleVariable, code: number): number | nu
     ? decodeLinear(variable.quantization, code)
     : decodeLog(variable.quantization, code);
 }
+
+/** One code as a reading at a pin: its value, or null where the code is
+ * no reading though the codebook decodes it — the river fields' code 0,
+ * which is a cell that is not a river (0 m³/s, 0 km²) or a class EFAS
+ * does not evaluate. `identity` is the bundle's, as for `buildPalette`. */
+export function readingValue(
+  variable: BundleVariable,
+  code: number,
+  identity: VariableIdentity | null = identityForBundleId(variable.id),
+): number | null {
+  if (code === 0 && identity !== null && RIVER_FAMILIES.has(identity.family)) return null;
+  return decodeValue(variable, code);
+}
+const RIVER_FAMILIES: ReadonlySet<string> = new Set(["dis06", "disrp", "upstream"]);
 
 /** The precipitation ramp's colour at one rate in mm/h — the same stops
  * the continuous palette is built from, so a stepped key that samples this

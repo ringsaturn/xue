@@ -147,6 +147,7 @@
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
               { "@type": "Dataset", "name": "Recast WOOF (WRF-ARW nested run at 500 m over Mount Fuji; showcase cases only, no live run)" },
+              { "@type": "Dataset", "name": "Copernicus Emergency Management Service EFAS v5 river discharge, forecast and water balance (1 arcmin over Europe; showcase cases only, no live run)", "url": "https://ewds.climate.copernicus.eu/datasets/efas-forecast" },
               { "@type": "Dataset", "name": "NOAA Climate Forecast System version 2 (CFSv2)", "url": "https://registry.opendata.aws/noaa-cfs/" },
               { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "JMA High-resolution Precipitation Nowcast (気象庁 高解像度降水ナウキャスト)", "url": "https://www.jma.go.jp/bosai/en_nowc/", "license": "https://www.jma.go.jp/jma/kishou/info/coment.html" },
@@ -176,7 +177,8 @@
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
               "Dust RGB composite (the 12.3−10.4 µm, 11.2−8.6 µm and 10.4 µm stretches of the classic EUMETSAT / GOES-R recipe, computed by shachen; lofted mineral dust in magenta)",
               "true colour composite (the 0.64, 0.51 and 0.47 µm reflectances of Himawari-9, GOES-19, GOES-18 and Meteosat-12, sun-angle corrected and stretched by the encoder's own recipe, the green synthesized on the ABI; the sunlit disk as seen from orbit by day, and after dark white cloud from the 10.4 µm window and the 10.4−3.9 µm difference over a dark ground, blended across the terminator into one picture)",
-              "aurora visibility probability (percent, on a 1° global grid, from the NOAA SWPC OVATION model)"
+              "aurora visibility probability (percent, on a 1° global grid, from the NOAA SWPC OVATION model)",
+              "river discharge (six-hour mean, m³/s), its flood return-period class (below the 1.5-year level, 1.5-, 2-, 5- and 20-year) and the upstream area of each river cell (EFAS v5 forecast and water balance, showcase cases over Europe)"
             ],
             "distribution": [
               { "@type": "DataDownload", "name": "GFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest.json" },
@@ -643,6 +645,25 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphWave">H</b>
           <span class="rail-name"><span>WAVE</span> <small data-i18n="varWave">HEIGHT</small></span>
         </button>
+        <!-- The rivers, EFAS's three fields: the return-period class (a
+             river over a flood gauge's rising marks), the six-hourly
+             discharge (a river with the flow arrows on it) and the static
+             upstream area (a river's branches joining into one trunk). -->
+        <button type="button" data-variable="disrp" data-i18n-tip="varLabelDisrp" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 18c2.4-2.4 4.8-2.4 7.2 0s4.8 2.4 7.2 0 3.6-1.8 4.6-.8" /><path d="M18 3v11" /><path d="M18 5h2.5M18 8.5h2M18 12h2.5" /><path d="M3.5 13.5h10" stroke-dasharray="2 2" /></svg>
+          <b class="rail-glyph" aria-hidden="true">F</b>
+          <span class="rail-name"><span>FLOOD</span> <small data-i18n="varDisrp">RP</small></span>
+        </button>
+        <button type="button" data-variable="dis06" data-i18n-tip="varLabelDis06" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c4 0 5 4 9 4s5-4 9-4" /><path d="M3 15c4 0 5 4 9 4s5-4 9-4" /><path d="M9 12h6M13 10l2 2-2 2" /></svg>
+          <b class="rail-glyph" aria-hidden="true">Q</b>
+          <span class="rail-name"><span>RIVER</span> <small data-i18n="varDis06">6H</small></span>
+        </button>
+        <button type="button" data-variable="upstream" data-i18n-tip="varLabelUpstream" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21v-7" /><path d="M12 14l-6-6M12 14l6-6" /><path d="M6 8l-3-4.5M6 8l1-5M18 8l3-4.5M18 8l-1-5" /></svg>
+          <b class="rail-glyph" aria-hidden="true">A</b>
+          <span class="rail-name"><span>BASIN</span> <small data-i18n="varUpstream">AREA</small></span>
+        </button>
         <!-- The fire fields the shell derives, each a field of
              its own drawn alone over the basemap: hotspots from the 3.9
              and 10.4 µm channels on a satellite disk (a flame on the
@@ -1077,6 +1098,7 @@
           <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
           <span class="source-credit" data-credit-model="himawari">IMAGERY <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA HIMAWARI-9</a> VIA <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (REPROJECTED) ·</span>
           <span class="source-credit" data-credit-model="goes">IMAGERY <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (REPROJECTED) ·</span>
+          <span class="source-credit" data-credit-model="efas">CONTAINS MODIFIED <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS EMERGENCY MANAGEMENT SERVICE</a> INFORMATION (EFAS) ·</span>
           <span class="source-credit" data-credit-model="meteosat">CONTAINS MODIFIED <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> METEOSAT DATA (REPROJECTED) ·</span>
           <span class="source-credit" data-credit-imagery="gibs">IMAGERY <a href="https://worldview.earthdata.nasa.gov" target="_blank" rel="noreferrer">NASA GIBS / WORLDVIEW</a> ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
@@ -1137,6 +1159,13 @@
               <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
                 <span class="credits-name">Open-Meteo</span>
                 <small data-i18n="creditsIfsHres">ADAPTED FROM ECMWF IFS BY ECMWF, LICENSED UNDER CC BY 4.0 · VIA OPEN-METEO · IFS HRES ~9 KM, RESAMPLED TO 0.1°</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://ewds.climate.copernicus.eu" target="_blank" rel="noreferrer">
+                <span class="credits-name">Copernicus EMS EFAS</span>
+                <small data-i18n="creditsEfas">RIVER DISCHARGE · COPERNICUS EMS EFAS v5, EUROPE 1′ · CASES ONLY</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
