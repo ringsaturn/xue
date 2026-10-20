@@ -2711,7 +2711,7 @@ def convert_bin(
             "height": poster_grid.height,
             "byteLength": len(payload),
             "crc32": crc32_hex(payload),
-            "metadataJson": json.dumps(build_metadata(run_time, variable_offsets[variable_id], poster_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)),
+            "metadataJson": json.dumps(build_metadata(run_time, variable_offsets[variable_id], poster_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds, producers=producer_versions)),
         }
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
 

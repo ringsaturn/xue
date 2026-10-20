@@ -476,6 +476,43 @@ than 1.4 MB, and `gdalinfo` reports both alike but for the block shape,
 which the converter does not read. A change to what the tool writes means
 regenerating the fixture the same way and saying so in the commit.
 
+`efas.2024102712/` and `efaswb.2024102600/` are the EFAS v5 river fields
+as `xue efas-series` writes them (`xuebuild/efas/`): one CF NetCDF per
+variable, `<model>.<run>.<xue id>.nc` for `dis06` (m³/s), `disrp` (the
+return-period class, `1`) and `upstream` (km²), the last two stamped
+`producer_id = xue`, `producer_version = 1`, latitudes ascending, `time`
+in hours since the run, the declared fill −9999 (`_FillValue`, the
+registry's `fill_values`) off the rivers and where no class is evaluated;
+`disrp` is 1–5 elsewhere. Each is every frame (f006 … f120, six-hourly) of a 21 by 15
+cell window of the 1/60° EFAS grid (rows 1962–1976 from the north,
+columns 1470–1490: 0.742–0.408°W, 39.308–39.542°N) over the Rambla del
+Poyo and the lower Turia: the HRES cycle of 2024-10-27 12Z, in which the
+cell standing for the Poyo A-3 gauge (196 km² upstream, row 4 column 9 of
+the window counted from the north) passes its 20-year level (class 5) at f060; and
+the water balance from 2024-10-26 00Z, in which it stays below its
+1.5-year level. They were cut by the tool itself, from the Early Warning
+Data Store GRIBs (`efas-forecast`: HRES `dis06` leads 6–120 h of the
+cycle; `efas-historical`: the water balance `dis06` of 2024-10-26 00Z to
+10-31 18Z), the four EFAS v5.1 threshold maps from the CEMS auxiliary data
+page and the v5 upstream area map, in a directory laid out as `raw/` is
+here:
+
+```sh
+cd raw
+xue efas-series efas-forecast/2024102712_hres_dis06_lead006-120.grib --model efas \
+    --thresholds aux --upstream static/efas-historical_upstream_area_v5_0.nc \
+    --bbox=-0.75,39.3,-0.4,39.55 --out <repo>/tests/fixtures/efas.2024102712
+xue efas-series efas-historical/2024102600-2024103118_v5_dis06.grib --model efaswb \
+    --start 2024-10-26T00:00:00Z --thresholds aux \
+    --upstream static/efas-historical_upstream_area_v5_0.nc \
+    --bbox=-0.75,39.3,-0.4,39.55 --out <repo>/tests/fixtures/efaswb.2024102600
+```
+
+(`xue` is `.venv/bin/python -m xuebuild` after `uv sync --group efas
+--inexact`.) The three files are 144 KB a directory. A change to what the
+tool writes means regenerating them the same way and saying so in the
+commit.
+
 `volume-registry.json` is the registry golden for the volume bundles'
 levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
 `clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter
@@ -551,6 +588,19 @@ The BUFR crops were cut with:
 ```sh
 printf 'set unpack=1;\nif (stormIdentifier is "14E" || stormIdentifier is "70W") { write; }\n' > sel.filter
 bufr_filter -o 2026091200-oper-tf.bufr sel.filter 20260912000000-360h-oper-tf.bufr
+```
+
+`river-registry.json` is the registry golden for the EFAS river fields
+in bundle order — `dis06`, `disrp`, `upstream` — each with its label,
+unit, GRIB2 parameter block and quality / compact codebooks
+(`tests/test_efas.py`; the Rust encoder and the frontend read the same
+file). Regenerate it with the change that meant it:
+
+```sh
+.venv/bin/python -c "import json; from tests._support import registry_entry; \
+    from xuebuild.variables import RIVER_VARIABLE_IDS; \
+    print(json.dumps({v: registry_entry(v) for v in RIVER_VARIABLE_IDS}, \
+    indent=2, ensure_ascii=False))" > tests/fixtures/river-registry.json
 ```
 
 `stac-prose.json` pins what the STAC catalog says about who owns the data

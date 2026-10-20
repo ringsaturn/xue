@@ -85,6 +85,22 @@ _NOAA_LICENSE_LINK = {
     "type": "text/html",
     "title": "NOAA open data dissemination",
 }
+# EFAS is produced by ECMWF as the computational centre of the Copernicus
+# Emergency Management Service and licensed as CEMS-FLOODS, which has no
+# SPDX id; the licence asks for the "contains modified" credit and that
+# the data not be presented as a flood warning.
+_ECMWF_CEMS_PROVIDER = {
+    "name": "ECMWF / Copernicus Emergency Management Service",
+    "description": "EFAS, run by ECMWF for the Copernicus Emergency Management Service, from the Early Warning Data Store.",
+    "roles": ["producer", "licensor"],
+    "url": "https://ewds.climate.copernicus.eu/",
+}
+_CEMS_FLOODS_LICENSE_LINK = {
+    "rel": "license",
+    "href": "https://ewds.climate.copernicus.eu/licences/cems-floods",
+    "type": "text/html",
+    "title": "CEMS-FLOODS datasets licence",
+}
 _XUE_PROVIDER = {
     "name": "Xue",
     "roles": ["processor", "host"],
@@ -627,6 +643,44 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 _XUE_PROVIDER,
             ],
             "links": [],
+        },
+        "efas": {
+            "title": "Copernicus EFAS v5 HRES river discharge forecast",
+            "description": (
+                "The European Flood Awareness System (EFAS v5, LISFLOOD) forecast driven by the ECMWF "
+                "high-resolution run: the river discharge as the mean over the six hours ending at each "
+                "frame, on the EFAS 1/60° grid over Europe (4530 × 2970 cells, 25.25°W–50.25°E, "
+                "22.75°N–72.25°N), six-hourly from 6 to 120 hours after the 00Z or 12Z cycle; beside it "
+                "the return-period class of each frame against the EFAS v5.1 flood thresholds (1.5, 2, 5 "
+                "and 20 years, evaluated where the upstream area exceeds 50 km² and the 1.5-year level "
+                "1 m³/s) and the static upstream area, both derived by the efas-series tool. Retrieved "
+                "from the Early Warning Data Store, which publishes forecasts thirty days after the "
+                "cycle: there is no live feed, and the runs exist as showcase cases only. Contains "
+                "modified Copernicus Emergency Management Service information 2024. EFAS data are for "
+                "information only and do not constitute a flood warning."
+            ),
+            "license": "other",
+            "providers": [_ECMWF_CEMS_PROVIDER, _XUE_PROVIDER],
+            "links": [_CEMS_FLOODS_LICENSE_LINK],
+        },
+        "efaswb": {
+            "title": "Copernicus EFAS v5 water balance river discharge",
+            "description": (
+                "The European Flood Awareness System (EFAS v5, LISFLOOD) water balance, the simulation "
+                "forced by observed meteorology that the forecasts start from: the river discharge as "
+                "the mean over the six hours ending at each frame, on the EFAS 1/60° grid over Europe "
+                "(4530 × 2970 cells, 25.25°W–50.25°E, 22.75°N–72.25°N), six-hourly over a window of "
+                "120 hours named by its start; beside it the return-period class of each frame against "
+                "the EFAS v5.1 flood thresholds (1.5, 2, 5 and 20 years, evaluated where the upstream "
+                "area exceeds 50 km² and the 1.5-year level 1 m³/s) and the static upstream area, both "
+                "derived by the efas-series tool. Retrieved from the Early Warning Data Store; there is "
+                "no live feed, and the windows exist as showcase cases only. Contains modified "
+                "Copernicus Emergency Management Service information 2024. EFAS data are for "
+                "information only and do not constitute a flood warning."
+            ),
+            "license": "other",
+            "providers": [_ECMWF_CEMS_PROVIDER, _XUE_PROVIDER],
+            "links": [_CEMS_FLOODS_LICENSE_LINK],
         },
         "cma": {
             "title": "CMA radar mosaic",

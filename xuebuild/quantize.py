@@ -24,6 +24,7 @@ from .variables import (
     ISOBARIC_LEVELS_HPA,
     OCEAN_VARIABLE_IDS,
     REFLECTIVITY_VARIABLE_IDS,
+    RIVER_VARIABLE_IDS,
     SATELLITE_INFRARED_IDS,
     SATELLITE_REFLECTANCE_IDS,
     SOIL_MOISTURE_IDS,
@@ -714,6 +715,34 @@ QUALITY_CAT = TemperatureCodebook(minimum=0.0, maximum=0.635, step=0.005, name="
 COMPACT_CAT = TemperatureCodebook(minimum=0.0, maximum=0.64, step=0.01, name="cat")
 
 
+# The EFAS river fields (``RIVER_VARIABLE_IDS``), held to the native
+# encoder and the frontend by tests/fixtures/river-registry.json. The
+# discharge spans six orders of magnitude on one plane — a 50 km² headwater
+# carries a few m³/s, the Danube's mouth ten thousand — so it takes the log
+# codebook: 0.1 m³/s is the trace, 10 m³/s the knee (a step of about
+# 0.4 m³/s below it, under 4 % of the value above it) and 100 000 m³/s the
+# top. The upstream area the same way in km²: 1 km² trace, 100 km² knee,
+# 10 million km² top (the largest European basin is under a million). The
+# return-period class is a class codebook — the value is the class, the
+# same book in every profile, as for the precipitation type — whose code 0
+# is "not evaluated" (the series' fill, as on the soil layers) and 1–5 the
+# classes from below the 1.5-year level to at or above the 20-year one. The
+# compact profile halves the log books' code space, as for the
+# precipitation rate.
+QUALITY_DISCHARGE = PrecipitationCodebook(trace=0.1, scale=10.0, maximum=100000.0, name="dis06")
+COMPACT_DISCHARGE = PrecipitationCodebook(
+    trace=0.1, scale=10.0, maximum=100000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="dis06"
+)
+RETURN_PERIOD_CLASS = TemperatureCodebook(minimum=0.0, maximum=5.0, step=1.0, name="disrp")
+QUALITY_UPSTREAM = PrecipitationCodebook(trace=1.0, scale=100.0, maximum=10000000.0, name="upstream")
+COMPACT_UPSTREAM = PrecipitationCodebook(
+    trace=1.0, scale=100.0, maximum=10000000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="upstream"
+)
+QUALITY_RIVER = {"dis06": QUALITY_DISCHARGE, "disrp": RETURN_PERIOD_CLASS, "upstream": QUALITY_UPSTREAM}
+COMPACT_RIVER = {"dis06": COMPACT_DISCHARGE, "disrp": RETURN_PERIOD_CLASS, "upstream": COMPACT_UPSTREAM}
+assert tuple(QUALITY_RIVER) == RIVER_VARIABLE_IDS == tuple(COMPACT_RIVER)
+
+
 def _isobaric_codebooks(*, compact: bool) -> dict[str, TemperatureCodebook]:
     books: dict[str, TemperatureCodebook] = {}
     for level in ISOBARIC_LEVELS_HPA:
@@ -788,6 +817,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
+        **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
     },
@@ -822,6 +852,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_SOIL,
         **COMPACT_SATELLITE,
         **COMPACT_AEROSOL,
+        **COMPACT_RIVER,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
     },
@@ -868,6 +899,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
+        **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},

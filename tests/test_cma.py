@@ -120,12 +120,13 @@ class SourceRegistryTests(unittest.TestCase):
         # a forecast rather than an observation (tests/test_ifshres.py).
         self.assertEqual(
             [spec.id for spec in SOURCES.values() if spec.series_file],
-            ["ifshres", "woof", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
+            ["ifshres", "woof", "efas", "efaswb", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
         )
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"])
-        # Every source but the WOOF nest, a forecast with no feed that is
-        # built from a local dataset alone (tests/test_woof.py).
-        self.assertTrue(all(spec.fetched and spec.live for spec in SOURCES.values() if spec.id != "woof"))
+        # Every source but the WOOF nest and the two EFAS runs, forecasts
+        # with no feed built from a local dataset alone (tests/test_woof.py,
+        # tests/test_efas.py).
+        self.assertTrue(all(spec.fetched and spec.live for spec in SOURCES.values() if spec.id not in ("woof", "efas", "efaswb")))
 
     def test_the_catalog_prose_names_the_agency_and_the_archive(self) -> None:
         prose = _source_prose(CMA)
