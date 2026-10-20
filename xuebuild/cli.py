@@ -160,6 +160,13 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "goeseast / goeswest, the same from GOES-19 and GOES-18 (NOAA's CMIPF full-disk files), "
             "or meteosat, the same from Meteosat-12 FCI on the hour alone (the EUMETSAT Data Store, an "
             "account's EUMETSAT_CONSUMER_KEY / EUMETSAT_CONSUMER_SECRET in the environment)"
+            + (
+                ""
+                if fetched_only
+                else "; with no feed, read from the directory a local tool wrote: woof, a Recast WOOF (WRF-ARW) "
+                "nest (xue wrf-series), and efas / efaswb, the Copernicus EFAS v5 river discharge forecast "
+                "and water balance on its 1/60 degree grid (6-hourly from 6 to 120 hours, xue efas-series)"
+            )
         ),
     )
 
@@ -719,6 +726,44 @@ def parser() -> argparse.ArgumentParser:
     wrf_series.add_argument("--step", type=float, default=0.005, help="cell size of the regular grid in degrees (default 0.005)")
     wrf_series.add_argument("--force", action="store_true", help="replace series files already in --out")
 
+    efas_series = commands.add_parser(
+        "efas-series",
+        help="turn one EFAS v5 dis06 GRIB (a HRES forecast cycle or a stretch of the water balance) into the "
+        "per-variable CF NetCDF series the efas / efaswb sources convert: <model>.<run>.<variable>.nc for "
+        "dis06, its return-period class disrp and the upstream area",
+    )
+    efas_series.add_argument("grib", type=Path, help="the EFAS GRIB2 file, every message dis06 on the EFAS grid")
+    efas_series.add_argument(
+        "--model", choices=("efas", "efaswb"), default="efas", help="efas, a HRES forecast cycle (default); efaswb, the water balance"
+    )
+    efas_series.add_argument(
+        "--thresholds",
+        type=Path,
+        required=True,
+        help="directory holding the four EFAS v5.1 return levels, flood_threshold_efas_v5.1_rl_{1.5,2.0,5.0,20.0}.nc",
+    )
+    efas_series.add_argument("--upstream", type=Path, required=True, help="the EFAS v5 upstream area map (ec_upArea, m²)")
+    efas_series.add_argument("--out", type=Path, required=True, help="directory the series files are written into")
+    efas_series.add_argument(
+        "--start",
+        help="the run as ISO 8601 UTC: required for the water balance, which has no cycle (its frames are the "
+        "six-hour means ending 6 ... --hours hours later); optional for a forecast, whose cycle it must repeat",
+    )
+    efas_series.add_argument("--hours", type=int, help="the last forecast hour written (default: the whole 120 h axis)")
+    efas_series.add_argument(
+        "--bbox", help="west,south,east,north: write only the cells whose centres lie inside (default: the whole EFAS grid)"
+    )
+    efas_series.add_argument("--force", action="store_true", help="replace series files already in --out")
+
+    river_case = commands.add_parser(
+        "river-case",
+        help="write one showcase case's river/ directory (docs/river.md: gauges, reaches, flood extents) "
+        "from a river case definition; the same as python -m xuebuild.river build",
+    )
+    river_case.add_argument("definition", type=Path, help="showcase/river-cases/<id>.json")
+    river_case.add_argument("--work", type=Path, help="the work directory, in place of the definition's")
+    river_case.add_argument("--output", type=Path, help="the river/ directory to write, in place of the definition's")
+
     return root
 
 
@@ -770,6 +815,34 @@ def main(argv: list[str] | None = None) -> int:
                 command=shlex.join(["xue", *(argv if argv is not None else sys.argv[1:])]),
             ):
                 print(summary.line())
+        elif arguments.command == "efas-series":
+            from .efas import convert as convert_efas  # noqa: PLC0415 - reads GRIB and NetCDF in-process
+
+            start = None
+            if arguments.start:
+                try:
+                    start = datetime.fromisoformat(arguments.start.replace("Z", "+00:00"))
+                except ValueError as exc:
+                    raise XueError(f"--start {arguments.start!r} is not an ISO 8601 time") from exc
+                start = (start if start.tzinfo else start.replace(tzinfo=UTC)).astimezone(UTC)
+            for summary in convert_efas(
+                arguments.grib,
+                arguments.thresholds,
+                arguments.upstream,
+                arguments.out,
+                model=arguments.model,
+                start=start,
+                hours=arguments.hours,
+                bbox=parse_bbox(arguments.bbox) if arguments.bbox else None,
+                force=arguments.force,
+                command=shlex.join(["xue", *(argv if argv is not None else sys.argv[1:])]),
+            ):
+                print(summary.line())
+        elif arguments.command == "river-case":
+            from .river.build import build as build_river, load_definition as load_river_definition  # noqa: PLC0415
+
+            index = build_river(load_river_definition(arguments.definition, work=arguments.work, output=arguments.output))
+            print(json.dumps({key: index[key] for key in index if key != "gauges"}, indent=2, ensure_ascii=False))
         elif arguments.command == "verify-bin":
             print(json.dumps(verify_bin(arguments.bundle), indent=2))
         elif arguments.command == "export-zarr":

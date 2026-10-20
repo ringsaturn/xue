@@ -133,9 +133,10 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertIsNone(SPEC.open_meteo)
         self.assertIsNone(SPEC.regrid)
         self.assertFalse(SPEC.video)
-        # The one source nothing fetches; every other is fetched and live.
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof"])
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof"])
+        # Nothing fetches it, nor the two EFAS runs (tests/test_efas.py);
+        # every other source is fetched and live.
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof", "efas", "efaswb"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof", "efas", "efaswb"])
 
     def test_the_axis_is_hourly_from_the_first_hour_to_seventy_two(self) -> None:
         self.assertEqual(SPEC.steps, ((72, 1),))

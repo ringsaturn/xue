@@ -42,6 +42,10 @@ cma = ["zarr>=3.1", "numcodecs>=0.16", "s3fs>=2024.10", "xarray>=2025.1", "netcd
 aurora = ["xarray>=2025.1", "netcdf4>=1.7"]
 # The WRF (Recast WOOF) series tool: reads wrfout files and writes the CF series (xuebuild/wrf/).
 wrf = ["netcdf4>=1.7"]
+# The EFAS series tool: reads the EWDS GRIB2 (template 4.72, which GDAL reads without metadata) and writes the CF series (xuebuild/efas/).
+efas = ["eccodes>=2.39", "eccodeslib>=2.39", "netcdf4>=1.7"]
+# The river case product: the GeoParquet reach geometry (xuebuild/river/geoparquet.py imports pyarrow lazily).
+river = ["pyarrow>=26.0"]
 # The satellite fetch: the Dust RGB and dust confidence producers (shachen) and the FCI JPEG-LS filter.
 satellite = ["shachen>=0.4.0", "xarray>=2025.1", "hdf5plugin>=5.0"]
 # The offline soybean area weights (scripts/indicators_weights.py); xuebuild never imports them.

@@ -22,6 +22,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
+| `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | 6 h from F6 to F120 | `dis06` |
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
 | `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
@@ -243,6 +244,71 @@ The 24 cloud water levels ship as one volume bundle, `cloud3d`
 codebook; the NaN under the terrain is filled as 0 g/kg, so the volume
 carries no nodata code and the viewer hides the ground by occlusion.
 No ladder and no video: a plane is under 5000 cells. `tests/test_woof.py`.
+
+**efas, efaswb.** The Copernicus Emergency Management Service's European
+Flood Awareness System (EFAS v5, LISFLOOD, run by ECMWF): `efas` is the
+forecast driven by the ECMWF high-resolution run (`EFAS-v5` / `hres`,
+00Z and 12Z cycles), `efaswb` the water balance, the same model forced by
+observed meteorology that the forecasts start from (`EFAS-v5-WB` /
+`water_balance`). Both are on the EFAS grid, 4530 × 2970 cells of 1/60°
+from 25.25°W to 50.25°E and 22.75°N to 72.25°N (cell centres half a step
+in). The Early Warning Data Store releases them thirty days after the
+cycle, so there is **no live feed**: as for `woof`, `latest_filename` is
+None, nothing fetches them, `require_complete` refuses them, and a run is
+requested by hand (`ewds.climate.copernicus.eu`, one queued request per
+dataset) and reached only through a showcase case naming the `dataset`
+directory. The `xue efas-series` tool (`xuebuild/efas/`, the `efas`
+dependency group: the eccodes bindings with `eccodeslib`, and netCDF4;
+`uv sync --group efas --inexact`) owns every EFAS particular. It reads one
+GRIB with eccodes — every message `dis06`, WMO 1/0/7 "discharge from
+rivers or streams" on the ground or water surface, product template 4.72
+with statistical process 0 over 6 h, which GDAL decodes without any of
+its metadata — and holds each message to that identity and the grid.
+A forecast's run is the messages' reference time and each frame the end of
+its six-hour interval. The water balance has no cycle: `--start` names
+the run, and each message is valid at its own validity date or, where the
+store wrote no real date, six hours after the previous one from the start.
+Frames are kept on the source's axis, f006 … `--hours` (120 by default).
+A cell off the rivers is the GRIB's bitmap; eccodes would hand it back as
+the message's `missingValue`, 9999, which a large river's discharge
+reaches, so the reader sets `missingValue` to the series fill −9999
+(`EFAS_SERIES_FILL`) first. Beside the discharge it derives two
+fields, stamped `producer_id = xue`, `producer_version = 1`
+(`PRODUCER_VERSION`): the **return-period class** `disrp` of each frame
+against EFAS v5.1's flood thresholds
+(`flood_threshold_efas_v5.1_rl_{1.5,2.0,5.0,20.0}.nc` from the CEMS
+auxiliary data page, `--thresholds` is their directory) — 1 below the
+1.5-year level, then 2, 3, 4, 5 at or above the 1.5-, 2-, 5- and 20-year
+levels — evaluated, as EFAS evaluates it, only where the upstream area
+exceeds 50 km² and the 1.5-year level 1 m³/s, the fill elsewhere; and the
+**upstream area** `upstream` from the v5 static map (`ec_upArea`, m² with
+no unit attribute, written in km²), the same plane on every frame so a
+viewer reads it at any frame and the delta codec makes the repeats nearly
+free. It writes `<model>.<run>.<variable>.nc`, one CF series per variable
+in `write_series`'s shape, so both encoders take the series-file path
+unchanged. The whole grid by default (a 120 h HRES run is 159 MB of
+`dis06`, 36 MB of `disrp` and 368 MB of `upstream`); `--bbox` keeps only
+the cells whose centres lie inside, which the converter accepts because a
+series-file build takes its grid from the file and holds it to
+`production_grid` only when a complete run is required. The identities are
+`dis06` 1/0/7 on surface 1 with `typeOfStatisticalProcessing: 0`
+(`statistical_processes`), log codebook (0.1 m³/s trace, 10 knee,
+100 000 top); `disrp` 1/192/1 under producer `xue`, a class codebook 0–5
+whose code 0 is "not evaluated";
+`upstream` 1/192/2 under producer `xue`, log codebook (1 km² trace, 100
+knee, 10⁷ top) — `tests/fixtures/river-registry.json`. The series carry
+no NaN: every series declares `_FillValue` −9999 and every river
+variable names it as its one `fill_values` entry with `value_range[0]` 0,
+so both encoders fold it to the codebook bottom twice over, through the
+file's declared fill (`observation._plane_source`) and the registry's
+(`binconvert._fill_missing`), as the soil layers' 9999 is folded to "no
+soil": no river is zero discharge and zero area, and an unevaluated cell
+class 0, apart from every class. No ladder and no video: a case
+is a box of a few thousand cells. The STAC prose carries the CEMS-FLOODS
+licence, the credit "Contains modified Copernicus Emergency Management
+Service information 2024" and the licence's caveat that EFAS data are for
+information only and do not constitute a flood warning.
+`tests/test_efas.py`.
 
 ## Observations
 

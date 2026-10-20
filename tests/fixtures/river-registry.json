@@ -1,0 +1,98 @@
+{
+  "dis06": {
+    "label": "River discharge, 6 h mean",
+    "unit": "m³/s",
+    "parameter": {
+      "discipline": 1,
+      "parameterCategory": 0,
+      "parameterNumber": 7,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 0.1,
+      "scale": 10.0,
+      "maximum": 100000.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 0.1,
+      "scale": 10.0,
+      "maximum": 100000.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  },
+  "disrp": {
+    "label": "Return-period class",
+    "unit": "1",
+    "parameter": {
+      "discipline": 1,
+      "parameterCategory": 192,
+      "parameterNumber": 1,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 5,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "linear",
+      "offset": 0.0,
+      "scale": 1.0,
+      "minimumCode": 0,
+      "maximumCode": 5,
+      "nodataCode": 255
+    }
+  },
+  "upstream": {
+    "label": "Upstream area",
+    "unit": "km²",
+    "parameter": {
+      "discipline": 1,
+      "parameterCategory": 192,
+      "parameterNumber": 2,
+      "typeOfFirstFixedSurface": 1,
+      "scaleFactorOfFirstFixedSurface": null,
+      "scaledValueOfFirstFixedSurface": null
+    },
+    "quality": {
+      "type": "log1p",
+      "trace": 1.0,
+      "scale": 100.0,
+      "maximum": 10000000.0,
+      "minimumCode": 1,
+      "maximumCode": 253,
+      "zeroCode": 0,
+      "overflowCode": 254,
+      "nodataCode": 255
+    },
+    "compact": {
+      "type": "log1p",
+      "trace": 1.0,
+      "scale": 100.0,
+      "maximum": 10000000.0,
+      "minimumCode": 1,
+      "maximumCode": 125,
+      "zeroCode": 0,
+      "overflowCode": 126,
+      "nodataCode": 127
+    }
+  }
+}

@@ -24,6 +24,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+#: The fill value of the EFAS series ``xue efas-series`` writes: a cell
+#: that is not a river, or whose return-period class EFAS does not
+#: evaluate. Every river variable declares it as its one ``fill_values``
+#: entry, so both encoders fold it to the bottom of the range.
+EFAS_SERIES_FILL = -9999.0
+
+
 @dataclass(frozen=True)
 class RecordAlternate:
     """Another record the same quantity arrives as at another centre, when
@@ -1522,6 +1529,74 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=8,
         producer_id="xue",
     ),
+    # EFAS v5 river discharge (the Copernicus Emergency Management Service's
+    # European Flood Awareness System, LISFLOOD on a 1/60° grid): the mean
+    # discharge over the six hours ending at the frame, as EFAS writes it —
+    # WMO 1/0/7 "discharge from rivers or streams" on the ground or water
+    # surface with no value, product template 4.72 with statistical process
+    # 0 (average) over 6 h. ``grib2_statistical`` records what the record
+    # carries; the bundle says it through ``SourceSpec.statistical_processes``.
+    # The ``xue efas-series`` tool reads the GRIB with eccodes (GDAL reads
+    # template 4.72's values but none of its metadata) and writes a series,
+    # so no fetch matches on this identity; it is the one the bundle carries.
+    # A cell that is not a river (three cells in five, the GRIB's bitmap) is
+    # the series' fill, ``EFAS_SERIES_FILL``, which ``fill_values`` folds to
+    # the bottom of the range: zero discharge, the zero code. The fill is
+    # negative because 9999, the GRIB's own missing value, is a discharge a
+    # large river reaches. A log codebook: one plane spans a trickle to the
+    # Danube's mouth.
+    "dis06": VariableSpec(
+        id="dis06",
+        label="River discharge, 6 h mean",
+        output_unit="m³/s",
+        value_range=(0, 100000),
+        grib2_discipline=1,
+        grib2_category=0,
+        grib2_number=7,
+        grib2_level_type=1,
+        grib2_statistical=0,
+        fill_values=(EFAS_SERIES_FILL,),
+    ),
+    # The return-period class of each frame's discharge against EFAS v5.1's
+    # own flood thresholds (the 1.5-, 2-, 5- and 20-year return levels of its
+    # long-term LISFLOOD run): 1 below the 1.5-year level, then 2, 3, 4, 5 at
+    # or above each. EFAS evaluates a threshold only where the upstream area
+    # exceeds 50 km² and the 1.5-year level exceeds 1 m³/s; any other cell
+    # is the series' fill, which ``fill_values`` folds to the bottom of the
+    # range, so class 0 is "not evaluated" and stays apart from every class,
+    # as code 0 is "no soil" on the soil layers. A field this pipeline
+    # derives (the ``efas-series`` tool), so it is a local-use number in the
+    # hydrological discipline under the ``xue`` producer, and a class
+    # codebook.
+    "disrp": VariableSpec(
+        id="disrp",
+        label="Return-period class",
+        output_unit="1",
+        value_range=(0, 5),
+        grib2_discipline=1,
+        grib2_category=192,
+        grib2_number=1,
+        grib2_level_type=1,
+        producer_id="xue",
+        fill_values=(EFAS_SERIES_FILL,),
+    ),
+    # The area draining through each cell, from EFAS v5's static map
+    # (``ec_upArea``, square metres, written here in km²); not a river where
+    # the map has no value, which is the series' fill and zero area. Static, but published on every frame: a viewer
+    # reads it beside the discharge at the same frame, and the delta codec
+    # makes the repeats nearly free. The next local-use number.
+    "upstream": VariableSpec(
+        id="upstream",
+        label="Upstream area",
+        output_unit="km²",
+        value_range=(0, 10000000),
+        grib2_discipline=1,
+        grib2_category=192,
+        grib2_number=2,
+        grib2_level_type=1,
+        producer_id="xue",
+        fill_values=(EFAS_SERIES_FILL,),
+    ),
     # The GEFS-Aerosols fields (NOAA's GEFS ``chem`` member, the
     # GOCART aerosol model coupled to the GFS), the first aerosol products
     # this pipeline reads: GRIB2 product definition template 4.48, whose
@@ -1721,6 +1796,9 @@ DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
 # The DEBRA confidence is a composite bundle of one variable: produced in
 # the fetch stage like the guns, read off the series as a variable of its
 # own, never derived by a converter.
+#: The EFAS river fields in bundle order: the discharge, its return-period
+#: class and the upstream area (``tests/fixtures/river-registry.json``).
+RIVER_VARIABLE_IDS: tuple[str, ...] = ("dis06", "disrp", "upstream")
 DUST_CF_BUNDLE_ID = "dustcf"
 DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
 # The ZHOUYE confidence is the same shape: one produced variable, its own

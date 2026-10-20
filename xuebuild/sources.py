@@ -16,7 +16,7 @@ from pathlib import Path
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .reproject import Regrid
-from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, VARIABLES
+from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, RIVER_VARIABLE_IDS, VARIABLES
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "woof", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "woof", "efas", "efaswb", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -1467,6 +1467,69 @@ SOURCES: dict[str, SourceSpec] = {
         tile=(64, 64),
         variant_factors=(),
         series_file=True,
+        video=False,
+    ),
+    # EFAS v5 (the Copernicus Emergency Management Service's European Flood
+    # Awareness System, run by ECMWF): LISFLOOD's river discharge on a
+    # regular 1/60° grid over Europe, 4530 x 2970 cells from 25.25°W to
+    # 50.25°E and 22.75°N to 72.25°N. The open data on the Early Warning
+    # Data Store reach the public thirty days after the cycle, so there is
+    # no live feed (``latest_filename`` None, like the WOOF nest): a run is
+    # requested by hand and converted locally by ``xue efas-series``
+    # (xuebuild/efas/), which reads the GRIB with eccodes, derives the
+    # return-period class against EFAS v5.1's thresholds and writes one CF
+    # series per variable (``efas.<run>.<variable>.nc``) — the ``woof``
+    # series-file forecast path, so neither encoder learns any EFAS rule.
+    # ``dis06`` is the mean over the six hours ending at the frame, so the
+    # axis starts at f006 (``first_hour``) and the value is declared a mean;
+    # the upstream area is the static map repeated on every frame. One
+    # forecast cycle every twelve hours (00Z, 12Z) to 120 hours at the
+    # 6-hourly step the HRES dis06 is published at. A plane is 13.5 M cells,
+    # but a case is a box of a few thousand, so there is no ladder and no
+    # video; 64 x 64 cells is about a degree.
+    "efas": SourceSpec(
+        id="efas",
+        manifest_model="EFAS-v5",
+        product="hres",
+        latest_filename=None,
+        steps=((120, 6),),
+        first_hour=6,
+        input_variable_ids=RIVER_VARIABLE_IDS,
+        accumulated_precipitation=False,
+        statistical_processes=(("dis06", 0),),
+        bundle_scalar_ids=RIVER_VARIABLE_IDS,
+        core_bundle_ids=("dis06",),
+        production_grid=(4530, 2970),
+        tile=(64, 64),
+        variant_factors=(),
+        series_file=True,
+        cycle_hours=12,
+        video=False,
+    ),
+    # The EFAS water balance: the same LISFLOOD forced by observed rain
+    # rather than a forecast (the CEMS ``efas-historical`` dataset), the
+    # analysis the forecasts start from. It has no cycle; ``xue efas-series
+    # --model efaswb --start`` names a window's start as the run, and the
+    # frames are the six-hour means ending 6 ... 120 hours after it, so the
+    # axis, the grid and everything else are the forecast's own and a viewer
+    # compares the two frame for frame.
+    "efaswb": SourceSpec(
+        id="efaswb",
+        manifest_model="EFAS-v5-WB",
+        product="water_balance",
+        latest_filename=None,
+        steps=((120, 6),),
+        first_hour=6,
+        input_variable_ids=RIVER_VARIABLE_IDS,
+        accumulated_precipitation=False,
+        statistical_processes=(("dis06", 0),),
+        bundle_scalar_ids=RIVER_VARIABLE_IDS,
+        core_bundle_ids=("dis06",),
+        production_grid=(4530, 2970),
+        tile=(64, 64),
+        variant_factors=(),
+        series_file=True,
+        cycle_hours=6,
         video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity
