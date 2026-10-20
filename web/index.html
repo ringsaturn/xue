@@ -323,6 +323,10 @@
           <!-- The case's markers as text: each button opens the marker's
                card on the map (main.ts::renderCaseMarkers). -->
           <ul class="case-markers" id="case-markers" hidden data-i18n-aria="caseMarkersAria" aria-label="Places and events in this case"></ul>
+          <!-- The case's river data (docs/river.md): the track switch, the
+               key, the extents' switch, the disclaimer and the credits
+               (main.ts::loadCaseRiver, river/case.ts::renderPanel). -->
+          <div class="case-river" id="case-river" hidden></div>
         </div>
       </div>
 
@@ -1100,6 +1104,8 @@
           <span class="source-credit" data-credit-model="goes">IMAGERY <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (REPROJECTED) ·</span>
           <span class="source-credit" data-credit-model="efas">CONTAINS MODIFIED <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS EMERGENCY MANAGEMENT SERVICE</a> INFORMATION (EFAS) ·</span>
           <span class="source-credit" data-credit-model="meteosat">CONTAINS MODIFIED <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> METEOSAT DATA (REPROJECTED) ·</span>
+          <!-- A river case's credits and its shown extents' (river/case.ts::credits). -->
+          <span class="source-credit" id="river-credit" data-credit-river></span>
           <span class="source-credit" data-credit-imagery="gibs">IMAGERY <a href="https://worldview.earthdata.nasa.gov" target="_blank" rel="noreferrer">NASA GIBS / WORLDVIEW</a> ·</span>
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
           · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>

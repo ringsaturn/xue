@@ -570,6 +570,94 @@ body.is-showcase .model-caret {
   border-color: color-mix(in srgb, var(--text) 40%, transparent);
 }
 
+/* The case's river block: the track switch, the key, the extents' switch,
+   then the disclaimer and the credits in the summary's muted ink. */
+.case-river {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.case-river[hidden] {
+  display: none;
+}
+
+.case-river-heading {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.case-river-tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.case-river-tracks button,
+.case-river-extents {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+}
+
+.case-river-extents {
+  align-self: flex-start;
+}
+
+.case-river-tracks button[aria-pressed="true"],
+.case-river-extents[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--text) 45%, transparent);
+  color: var(--text);
+}
+
+.case-river-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.case-river-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.case-river-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.case-river-note,
+.case-river-credits {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.case-river-credits {
+  font-size: 10px;
+}
+
 /* The map's two marks in tints that read on either theme's card. */
 .case-markers [data-kind="place"] .case-marker-glyph {
   color: #5b7fa8;
@@ -3104,6 +3192,88 @@ html[lang="ja"] .rail-glyph {
 }
 
 /* ---------------------------------------------------------------------------
+   The gauge section: a river case's gauge as a hydrograph under the
+   meteogram rows, on the same two columns — code, name and the two
+   readouts on the left, the chart over the capsule's track on the right,
+   the reported peaks listed under it. */
+
+.gauge-section {
+  display: grid;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.gauge-section[hidden] {
+  display: none;
+}
+
+.gauge-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 8px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.gauge-name {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+}
+
+.gauge-source {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 11px;
+  text-overflow: ellipsis;
+}
+
+.gauge-plot {
+  min-width: 0;
+}
+
+.gauge-chart {
+  display: block;
+  width: 100%;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.gauge-peaks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 4px 0 2px;
+  padding: 0;
+  list-style: none;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.gauge-peaks[hidden] {
+  display: none;
+}
+
+.gauge-peak-value {
+  margin-right: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.gauge-peak-note {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
    The sounding section: the nearest ascent as a skew-T under the meteogram
    rows, behind a disclosure whose header reads like one more row — the code
    in the label column, the station and its distance on the axis column. */
@@ -3465,6 +3635,11 @@ body.radar-alone .source-credit[data-credit-model="nexrad"] {
 /* The daily imagery under the field is no dataset: its notice follows the
    underlay (body[data-imagery], main.ts::syncGibs), radar or not. */
 body[data-imagery] .source-credit[data-credit-imagery="gibs"] {
+  display: inline;
+}
+
+/* A river case's credits, while its data is on the map. */
+body[data-river] .source-credit[data-credit-river] {
   display: inline;
 }
 

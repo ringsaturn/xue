@@ -71,6 +71,9 @@ export interface ShowcaseCase {
   /** Labelled points of context the case draws over its map (a place, an
    * event), when it names any. */
   markers?: ShowcaseMarker[];
+  /** The river directory the case plays beside its field
+   * (`docs/river.md`), when it carries one. */
+  river?: ShowcaseRiver;
 }
 
 export interface ShowcaseMarkerSource {
@@ -126,6 +129,13 @@ export interface ShowcaseFire {
   byteLength: number;
 }
 
+export interface ShowcaseRiver {
+  /** The river index, from the data root, and its `?v=`. */
+  indexPath: string;
+  crc32: string;
+  byteLength: number;
+}
+
 export interface ShowcaseImagery {
   /** The GIBS layer (`gibs.ts` id, a `?gibs=` spelling) the case opens on. */
   layer: string;
@@ -157,6 +167,29 @@ function fireBlock(input: unknown, id: string): ShowcaseFire | undefined {
   }
   return {
     indexPath: `showcase/${id}/${value!.window as string}`,
+    crc32: value!.crc32 as string,
+    byteLength: value!.byteLength as number,
+  };
+}
+
+/** A case's river block, or undefined when it has none or carries one
+ * this shell cannot read: the case then plays its field alone. */
+export function riverBlock(input: unknown, id: string): ShowcaseRiver | undefined {
+  if (input === undefined) return undefined;
+  const value = input as Record<string, unknown> | null;
+  const ok =
+    caseIndexPath(value?.index) &&
+    typeof value?.crc32 === "string" &&
+    /^[0-9a-f]{8}$/.test(value.crc32) &&
+    typeof value?.byteLength === "number" &&
+    Number.isInteger(value.byteLength) &&
+    value.byteLength > 0;
+  if (!ok) {
+    console.warn(`showcase: case ${id} carries a river block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return {
+    indexPath: `showcase/${id}/${value!.index as string}`,
     crc32: value!.crc32 as string,
     byteLength: value!.byteLength as number,
   };
@@ -421,6 +454,7 @@ function validateCase(input: unknown): ShowcaseCase {
   const radar = radarBlock(value.radar, id);
   const fire = fireBlock(value.fire, id);
   const imagery = imageryBlock(value.imagery, id);
+  const river = riverBlock(value.river, id);
   const view = viewBlock(value.view, id);
   const bbox = bounds(value.bbox, "bbox");
   const markers = markersBlock(value.markers, id, bbox);
@@ -439,6 +473,8 @@ function validateCase(input: unknown): ShowcaseCase {
   else delete entry.fire;
   if (imagery) entry.imagery = imagery;
   else delete entry.imagery;
+  if (river) entry.river = river;
+  else delete entry.river;
   if (view) entry.view = view;
   else delete entry.view;
   return entry;
