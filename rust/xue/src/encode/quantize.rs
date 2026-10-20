@@ -215,6 +215,56 @@ const fn aerosol_codebook(variable_id: &'static str, compact: bool) -> Precipita
 }
 // ±63.5 m/s covers every 10 m wind with headroom; the 0.5 m/s step is far
 // below what a particle animation can resolve.
+// The EFAS river fields (`RIVER_VARIABLE_IDS`), held to the Python
+// encoder and the frontend by tests/fixtures/river-registry.json. The
+// discharge spans six orders of magnitude on one plane, so it takes the
+// log codebook: 0.1 m³/s the trace, 10 m³/s the knee, 100 000 m³/s the
+// top. The upstream area the same way in km²: 1 km² trace, 100 km² knee,
+// 10 million km² top. The return-period class is a class codebook, the
+// same book in every profile as for the precipitation type, whose code 0
+// is "not evaluated" (the series' fill). The compact profile halves the
+// log books' code space, as for the precipitation rate; balanced takes the
+// quality books. Mirror `QUALITY_DISCHARGE`, `COMPACT_DISCHARGE`,
+// `RETURN_PERIOD_CLASS`, `QUALITY_UPSTREAM` and `COMPACT_UPSTREAM` in
+// `xuebuild/quantize.py`.
+const QUALITY_DISCHARGE: PrecipitationCodebook = PrecipitationCodebook {
+    trace: 0.1,
+    scale: 10.0,
+    maximum: 100000.0,
+    maximum_code: 253,
+    overflow_code: 254,
+    nodata_code: 255,
+    name: "dis06",
+};
+const COMPACT_DISCHARGE: PrecipitationCodebook = PrecipitationCodebook {
+    maximum_code: 125,
+    overflow_code: 126,
+    nodata_code: 127,
+    ..QUALITY_DISCHARGE
+};
+const RETURN_PERIOD_CLASS: LinearCodebook = LinearCodebook {
+    minimum: 0.0,
+    maximum: 5.0,
+    step: 1.0,
+    nodata_code: 255,
+    name: "disrp",
+};
+const QUALITY_UPSTREAM: PrecipitationCodebook = PrecipitationCodebook {
+    trace: 1.0,
+    scale: 100.0,
+    maximum: 10000000.0,
+    maximum_code: 253,
+    overflow_code: 254,
+    nodata_code: 255,
+    name: "upstream",
+};
+const COMPACT_UPSTREAM: PrecipitationCodebook = PrecipitationCodebook {
+    maximum_code: 125,
+    overflow_code: 126,
+    nodata_code: 127,
+    ..QUALITY_UPSTREAM
+};
+
 const QUALITY_WIND: LinearCodebook = LinearCodebook {
     minimum: -63.5,
     maximum: 63.5,
@@ -1048,6 +1098,11 @@ pub fn codebook(profile: &str, variable_id: &str) -> Result<Codebook> {
                 .expect("matched just above");
             Codebook::Precipitation(aerosol_codebook(variable_id, !quality))
         }
+        (_, "dis06") if quality => Codebook::Precipitation(QUALITY_DISCHARGE),
+        (_, "dis06") => Codebook::Precipitation(COMPACT_DISCHARGE),
+        (_, "disrp") => Codebook::Linear(RETURN_PERIOD_CLASS),
+        (_, "upstream") if quality => Codebook::Precipitation(QUALITY_UPSTREAM),
+        (_, "upstream") => Codebook::Precipitation(COMPACT_UPSTREAM),
         _ if pressure_codebook(variable_id, !quality).is_some() => Codebook::Linear(
             pressure_codebook(variable_id, !quality).expect("checked just above"),
         ),

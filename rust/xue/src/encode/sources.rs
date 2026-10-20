@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
-use crate::encode::variables::{AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS};
+use crate::encode::variables::{AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, RIVER_VARIABLE_IDS};
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
@@ -1097,6 +1097,99 @@ pub const SOURCES: &[SourceSpec] = &[
         region: None,
         cat_calibration: &[],
     },
+    // EFAS v5 (the Copernicus Emergency Management Service's European Flood
+    // Awareness System, run by ECMWF): LISFLOOD's river discharge on a
+    // regular 1/60° grid over Europe, 4530 x 2970 cells from 25.25°W to
+    // 50.25°E and 22.75°N to 72.25°N. The open data reach the public thirty
+    // days after the cycle, so there is no live feed (`latest_filename`
+    // `None`, like the WOOF nest): a run is converted locally by the Python
+    // `xue efas-series` tool, which reads the GRIB with eccodes, derives the
+    // return-period class and writes one CF series per variable
+    // (`efas.<run>.<variable>.nc`) — the `woof` series-file forecast path,
+    // so this encoder learns no EFAS rule. `dis06` is the mean over the six
+    // hours ending at the frame, so the axis starts at f006 (`first_hour`)
+    // and the value is declared a mean; the upstream area is the static map
+    // repeated on every frame. To 120 hours at the 6-hourly step. A plane is
+    // 13.5 M cells but a case is a box of a few thousand, so there is no
+    // ladder; 64 x 64 cells is about a degree. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "efas",
+        manifest_model: "EFAS-v5",
+        product: "hres",
+        latest_filename: None,
+        steps: &[(120, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
+        input_variable_ids: RIVER_VARIABLE_IDS,
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[("dis06", 0)],
+        bands: &[],
+        bundle_scalar_ids: RIVER_VARIABLE_IDS,
+        core_bundle_ids: &["dis06"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
+        production_grid: (4530, 2970),
+        tile: (64, 64),
+        variant_factors: &[],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: true,
+        open_meteo: None,
+        downsample: None,
+        region: None,
+        cat_calibration: &[],
+    },
+    // The EFAS water balance: the same LISFLOOD forced by observed rain
+    // rather than a forecast, the analysis the forecasts start from. It has
+    // no cycle; the `efas-series` tool names a window's start as the run and
+    // the frames are the six-hour means ending 6 ... 120 hours after it, so
+    // the axis, the grid and everything else are the forecast's own.
+    // Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "efaswb",
+        manifest_model: "EFAS-v5-WB",
+        product: "water_balance",
+        latest_filename: None,
+        steps: &[(120, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
+        input_variable_ids: RIVER_VARIABLE_IDS,
+        companion_files: &[],
+        accumulated_precipitation: false,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 6,
+        optional_at_analysis: &[],
+        statistical_processes: &[("dis06", 0)],
+        bands: &[],
+        bundle_scalar_ids: RIVER_VARIABLE_IDS,
+        core_bundle_ids: &["dis06"],
+        bundle_vector_ids: &[],
+        bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
+        production_grid: (4530, 2970),
+        tile: (64, 64),
+        variant_factors: &[],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: true,
+        open_meteo: None,
+        downsample: None,
+        region: None,
+        cat_calibration: &[],
+    },
     SourceSpec {
         id: "cma",
         manifest_model: "CMA-RADAR",
@@ -1778,7 +1871,7 @@ pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
 #[cfg(test)]
 mod tests {
     use super::{family_frame_path, source_spec, Path, CFS_PGB_IDS, SOURCES};
-    use crate::encode::variables::CLOUD_WATER_VARIABLE_IDS;
+    use crate::encode::variables::{CLOUD_WATER_VARIABLE_IDS, RIVER_VARIABLE_IDS};
 
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
@@ -1938,7 +2031,12 @@ mod tests {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
         for source in SOURCES {
-            assert_eq!(source.fetched() && source.live(), source.id != "woof", "{}", source.id);
+            assert_eq!(
+                source.fetched() && source.live(),
+                !["woof", "efas", "efaswb"].contains(&source.id),
+                "{}",
+                source.id
+            );
             // A forecast is fetched through its pointer, an observation
             // through its window.
             let expected = if source.observation { source.window_hours.is_some() } else { source.live() };
@@ -2077,7 +2175,7 @@ mod tests {
         // from the analysis.
         for source in SOURCES {
             let first_hour = match source.id {
-                "cfs" => 6,
+                "cfs" | "efas" | "efaswb" => 6,
                 "woof" => 1,
                 _ => 0,
             };
@@ -2177,8 +2275,14 @@ mod tests {
     fn every_ladder_is_ascending_powers_of_two_from_the_half_tier() {
         for source in SOURCES {
             // The WOOF nest is under 5000 cells a plane and publishes no
-            // reduced tier; every other grid has at least the half.
-            assert_eq!(source.variant_factors.is_empty(), source.id == "woof", "{} publishes no ladder", source.id);
+            // reduced tier, nor do the EFAS sources, whose cases are boxes of
+            // a few thousand cells; every other grid has at least the half.
+            assert_eq!(
+                source.variant_factors.is_empty(),
+                ["woof", "efas", "efaswb"].contains(&source.id),
+                "{} publishes no ladder",
+                source.id
+            );
             let mut previous = 1;
             for &factor in source.variant_factors {
                 assert!(factor >= 2 && factor.is_power_of_two(), "{} factor {factor}", source.id);
@@ -2194,6 +2298,48 @@ mod tests {
         assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "mrms3d", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
+        }
+    }
+
+    /// The EFAS forecast and water balance: series-file forecasts with no
+    /// feed, six-hourly from the first six-hour mean to f120, three bundles
+    /// with the discharge declared a mean. Mirrors the source assertions in
+    /// `tests/test_efas.py`.
+    #[test]
+    fn the_efas_sources_are_series_file_forecasts_with_no_feed() {
+        let ids: Vec<&str> = SOURCES.iter().map(|source| source.id).collect();
+        let woof = ids.iter().position(|id| *id == "woof").expect("woof");
+        assert_eq!(&ids[woof + 1..woof + 3], &["efas", "efaswb"], "the Python table's order");
+        for (id, model, product) in [("efas", "EFAS-v5", "hres"), ("efaswb", "EFAS-v5-WB", "water_balance")] {
+            let source = source_spec(id).expect(id);
+            assert_eq!((source.manifest_model, source.product), (model, product), "{id}");
+            assert_eq!(source.latest_filename, None, "{id}");
+            assert!(source.series_file && !source.observation && !source.fetched() && !source.live(), "{id}");
+            assert!(source.window_hours.is_none() && source.cadence_seconds.is_none(), "{id}");
+            assert!(source.open_meteo.is_none() && source.regrid.is_none() && source.downsample.is_none(), "{id}");
+            assert_eq!(source.steps, &[(120, 6)], "{id}");
+            assert_eq!(source.first_hour, 6, "{id}");
+            let hours: Vec<i64> = (1..=20).map(|step| step * 6).collect();
+            assert_eq!(source.forecast_hours(120, None).expect("axis"), hours, "{id}");
+            assert_eq!(source.forecast_hours(12, None).expect("axis"), vec![6, 12], "{id}");
+            for off_axis in [0, 9, 126] {
+                assert!(source.forecast_hours(off_axis, None).is_err(), "{id} f{off_axis}");
+            }
+            assert_eq!(source.input_variable_ids, RIVER_VARIABLE_IDS, "{id}");
+            assert_eq!(source.bundle_scalar_ids, RIVER_VARIABLE_IDS, "{id}");
+            assert_eq!(source.core_bundle_ids, &["dis06"], "{id}");
+            assert_eq!(source.statistical_processes, &[("dis06", 0)], "{id}");
+            assert!(source.optional_at_analysis.is_empty() && source.companion_files.is_empty(), "{id}");
+            assert!(
+                !source.accumulated_precipitation
+                    && !source.averaged_precipitation
+                    && !source.interval_precipitation,
+                "{id}"
+            );
+            assert!(source.bundle_vector_ids.is_empty() && source.bundle_composite_ids.is_empty(), "{id}");
+            assert!(source.bundle_volume_ids.is_empty(), "{id}");
+            assert_eq!((source.production_grid, source.tile), ((4530, 2970), (64, 64)), "{id}");
+            assert!(source.variant_factors.is_empty(), "{id}");
         }
     }
 }

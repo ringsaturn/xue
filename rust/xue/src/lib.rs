@@ -31,6 +31,8 @@
 //! * [`mod@level3`] — NEXRAD Level 3 N0B / N0G sweeps, a port of the
 //!   Python reader the polar store is built from, so the browser can read a
 //!   live site's sweeps straight from the public bucket.
+//! * [`mod@network`] — the Zarr profile's network store: one value per
+//!   river reach per frame, read IO-free like [`mod@zarr`].
 //! * `encode` — the native encoder, behind the off-by-default `encoder`
 //!   feature because it links GDAL. Not a link: on a decode-only build
 //!   the module does not exist, so linking it would dangle there.
@@ -38,6 +40,7 @@
 pub mod format;
 pub mod decode;
 pub mod level3;
+pub mod network;
 pub mod zarr;
 
 pub use decode::{decode_chunk, Bundle, StreamingBundle};

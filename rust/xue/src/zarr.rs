@@ -204,7 +204,7 @@ pub fn decode_value(quantization: &Quantization, code: u8) -> Option<f64> {
     }
 }
 
-fn parse_quantization(value: &Value) -> Result<Quantization, DecodeError> {
+pub(crate) fn parse_quantization(value: &Value) -> Result<Quantization, DecodeError> {
     let kind = value.get("type").and_then(|v| v.as_str());
     let code = |key: &str| -> Result<f64, DecodeError> {
         value
@@ -325,8 +325,28 @@ pub struct ZarrGroup {
     pub profile: u32,
 }
 
-/// The store root's `zarr.json` (`docs/zarr-profile.md`, "Attributes").
-pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
+/// The profile's three branches (`docs/zarr-profile.md`): a bundle's grid
+/// store, a radar's polar store and a river's network store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreKind {
+    Grid,
+    Polar,
+    Network,
+}
+
+/// The group attribute that names each branch.
+const BRANCH_BLOCKS: [(&str, StoreKind); 3] = [
+    ("xue", StoreKind::Grid),
+    ("xue_polar", StoreKind::Polar),
+    ("xue_network", StoreKind::Network),
+];
+
+/// A Zarr v3 group document's attributes, and the branch they declare: exactly
+/// one of `xue`, `xue_polar` and `xue_network` is present, or the group is
+/// none of the profile's.
+pub(crate) fn group_branch(
+    text: &str,
+) -> Result<(StoreKind, serde_json::Map<String, Value>), DecodeError> {
     let value: Value =
         serde_json::from_str(text).map_err(|_| err("group metadata is not valid JSON"))?;
     if value.get("zarr_format").and_then(|v| v.as_u64()) != Some(3)
@@ -334,10 +354,33 @@ pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
     {
         return Err(err("not a Zarr v3 group"));
     }
-    let attributes = value
-        .get("attributes")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| err("group attributes missing"))?;
+    let Some(Value::Object(attributes)) = value.get("attributes").cloned() else {
+        return Err(err("group attributes missing"));
+    };
+    let mut present = BRANCH_BLOCKS
+        .iter()
+        .filter(|(key, _)| attributes.contains_key(*key))
+        .map(|&(_, kind)| kind);
+    match (present.next(), present.next()) {
+        (Some(kind), None) => Ok((kind, attributes)),
+        (None, _) => Err(err("group attributes carry no xue metadata block")),
+        (Some(_), Some(_)) => Err(err(
+            "group attributes carry more than one of xue, xue_polar and xue_network",
+        )),
+    }
+}
+
+/// Which branch of the profile a store's group document declares.
+pub fn store_kind(text: &str) -> Result<StoreKind, DecodeError> {
+    group_branch(text).map(|(kind, _)| kind)
+}
+
+/// The store root's `zarr.json` (`docs/zarr-profile.md`, "Attributes").
+pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
+    let (kind, attributes) = group_branch(text)?;
+    if kind != StoreKind::Grid {
+        return Err(err("group is not a grid store"));
+    }
     let xue = attributes
         .get("xue")
         .filter(|v| v.is_object())
@@ -422,12 +465,26 @@ fn codec_names(value: &Value, what: &str) -> Result<Vec<String>, DecodeError> {
     Ok(names)
 }
 
-/// The array's `zarr.json`, held to the profile: `uint8`, three dimensions, a
-/// regular chunk grid, exactly one `sharding_indexed` codec, an inner chain of
-/// `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes, zstd]`, index codecs
-/// `[bytes, crc32c]` little-endian, and an outer chunk of whole time chunks of
-/// whole tiles.
-pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
+/// The fields every sharded `uint8` array of the profile shares — a grid
+/// variable, a network store's `streamflow` — once the document is held to the
+/// codec rules: a regular chunk grid, the default key encoding, exactly one
+/// `sharding_indexed` codec, an inner chain of `[bytes, zstd]` or
+/// `[xue.delta{axis: 0}, bytes, zstd]`, index codecs `[bytes, crc32c]`
+/// little-endian at the `start` or `end`, and a `uint8` fill value. The
+/// shapes are checked for their rank and for being positive; how they relate
+/// is each branch's own rule.
+#[derive(Debug, Clone)]
+pub(crate) struct ShardedArray {
+    pub(crate) value: Value,
+    pub(crate) shape: Vec<u64>,
+    pub(crate) shard_shape: Vec<u64>,
+    pub(crate) inner_shape: Vec<u64>,
+    pub(crate) delta: bool,
+    pub(crate) index_location: IndexLocation,
+    pub(crate) fill_value: u8,
+}
+
+pub(crate) fn parse_sharded_array(text: &str, rank: usize) -> Result<ShardedArray, DecodeError> {
     let value: Value =
         serde_json::from_str(text).map_err(|_| err("array metadata is not valid JSON"))?;
     if value.get("zarr_format").and_then(|v| v.as_u64()) != Some(3)
@@ -442,7 +499,7 @@ pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
         value
             .get("shape")
             .ok_or_else(|| err("array shape missing"))?,
-        3,
+        rank,
         "array shape",
     )?;
     let chunk_grid = value
@@ -457,7 +514,7 @@ pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
             .get("configuration")
             .and_then(|v| v.get("chunk_shape"))
             .ok_or_else(|| err("chunk shape missing"))?,
-        3,
+        rank,
         "chunk shape",
     )?;
     let key_encoding = value
@@ -500,7 +557,7 @@ pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
         sharding
             .get("chunk_shape")
             .ok_or_else(|| err("inner chunk shape missing"))?,
-        3,
+        rank,
         "inner chunk shape",
     )?;
     let inner = codec_names(
@@ -556,7 +613,32 @@ pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
         "end" => IndexLocation::End,
         other => return Err(err(format!("unknown index location {other}"))),
     };
+    Ok(ShardedArray {
+        value,
+        shape,
+        shard_shape,
+        inner_shape,
+        delta,
+        index_location,
+        fill_value: fill_value as u8,
+    })
+}
 
+/// The array's `zarr.json`, held to the profile: `uint8`, three dimensions, a
+/// regular chunk grid, exactly one `sharding_indexed` codec, an inner chain of
+/// `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes, zstd]`, index codecs
+/// `[bytes, crc32c]` little-endian, and an outer chunk of whole time chunks of
+/// whole tiles.
+pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
+    let ShardedArray {
+        shape,
+        shard_shape,
+        inner_shape,
+        delta,
+        index_location,
+        fill_value,
+        ..
+    } = parse_sharded_array(text, 3)?;
     let frame_count = shape[0] as u32;
     let height = shape[1] as u32;
     let width = shape[2] as u32;
@@ -589,7 +671,7 @@ pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
         chunks_per_shard: (shard_frames / time_chunk) * tile_count,
         delta,
         index_location,
-        fill_value: fill_value as u8,
+        fill_value,
     })
 }
 

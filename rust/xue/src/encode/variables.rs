@@ -347,6 +347,19 @@ pub const AEROSOL_VARIABLE_IDS: &[&str] = &[
     "aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust",
 ];
 
+/// The fill value of the EFAS series the `efas-series` tool writes: a cell
+/// that is not a river, or whose return-period class EFAS does not
+/// evaluate. Every river variable declares it as its one `fill_values`
+/// entry, so it folds to the bottom of the range. Negative because 9999,
+/// the GRIB's own missing value, is a discharge a large river reaches.
+/// Mirrors `EFAS_SERIES_FILL` in `xuebuild/variables.py`.
+pub const EFAS_SERIES_FILL: f64 = -9999.0;
+/// The EFAS river fields in bundle order: the discharge, its return-period
+/// class and the upstream area, held to the Python encoder and the frontend
+/// by `tests/fixtures/river-registry.json`. Mirrors `RIVER_VARIABLE_IDS` in
+/// `xuebuild/variables.py`.
+pub const RIVER_VARIABLE_IDS: &[&str] = &["dis06", "disrp", "upstream"];
+
 /// The constant-altitude levels the MRMS 3D reflectivity mosaic is published
 /// on, in metres above mean sea level, in level order — the order of the
 /// `refl3d` volume bundle's variables. Mirrors `REFLECTIVITY_LEVELS_M` in
@@ -2403,6 +2416,88 @@ pub const VARIABLES: &[VariableSpec] = &[
         producer_id: Some("xue"),
         grib2_aerosol: None,
     },
+    // EFAS v5 river discharge (LISFLOOD on a 1/60° grid): the mean discharge
+    // over the six hours ending at the frame, WMO 1/0/7 "discharge from
+    // rivers or streams" on the ground or water surface with no value,
+    // product template 4.72 with statistical process 0 over 6 h. The
+    // `efas-series` tool writes a series, so nothing matches a record on
+    // this identity; it is the one the bundle carries. A cell that is not a
+    // river is the series' fill, `EFAS_SERIES_FILL`, which `fill_values`
+    // folds to the bottom of the range: zero discharge, the zero code. A
+    // log codebook: one plane spans a trickle to the Danube's mouth. Mirror
+    // `dis06` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "dis06",
+        label: "River discharge, 6 h mean",
+        output_unit: "m³/s",
+        value_range: (0.0, 100000.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 1,
+        grib2_category: 0,
+        grib2_number: 7,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: Some(0),
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[EFAS_SERIES_FILL],
+        producer_id: None,
+        grib2_aerosol: None,
+    },
+    // The return-period class of each frame's discharge against EFAS
+    // v5.1's flood thresholds: 1 below the 1.5-year level, then 2, 3, 4, 5
+    // at or above the 1.5-, 2-, 5- and 20-year levels. A cell EFAS does not
+    // evaluate is the series' fill, folded to the bottom of the range, so
+    // class 0 is "not evaluated". Derived by the `efas-series` tool: a
+    // local-use number in the hydrological discipline under the `xue`
+    // producer, and a class codebook. Mirror `disrp` in
+    // `xuebuild/variables.py`.
+    VariableSpec {
+        id: "disrp",
+        label: "Return-period class",
+        output_unit: "1",
+        value_range: (0.0, 5.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 1,
+        grib2_category: 192,
+        grib2_number: 1,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[EFAS_SERIES_FILL],
+        producer_id: Some("xue"),
+        grib2_aerosol: None,
+    },
+    // The area draining through each cell, from EFAS v5's static map, in
+    // km²; the series' fill (no river) is zero area. Static, but published
+    // on every frame beside the discharge. The next local-use number.
+    // Mirror `upstream` in `xuebuild/variables.py`.
+    VariableSpec {
+        id: "upstream",
+        label: "Upstream area",
+        output_unit: "km²",
+        value_range: (0.0, 10000000.0),
+        grib_element: "",
+        open_meteo: "",
+        grib2_discipline: 1,
+        grib2_category: 192,
+        grib2_number: 2,
+        grib2_level_type: 1,
+        grib2_level_value: None,
+        grib2_statistical: None,
+        grib2_aliases: &[],
+        grib2_alternates: &[],
+        gdal_unit: "",
+        fill_values: &[EFAS_SERIES_FILL],
+        producer_id: Some("xue"),
+        grib2_aerosol: None,
+    },
     // The GEFS-Aerosols fields (NOAA's GEFS `chem` member, the GOCART
     // aerosol model coupled to the GFS), the first aerosol products this
     // pipeline reads: GRIB2 product definition template 4.48, whose
@@ -2824,7 +2919,7 @@ pub fn variable_spec(variable_id: &str) -> Result<&'static VariableSpec> {
 mod tests {
     use super::{
         cloud_water_level, isobaric_family_levels, isobaric_variable, reflectivity_level, variable_spec,
-        AerosolIdentity, AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA, CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS,
+        AerosolIdentity, AEROSOL_VARIABLE_IDS, CAT_LEVELS_HPA, EFAS_SERIES_FILL, RIVER_VARIABLE_IDS, CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS,
         DUST_CF_BUNDLE_ID, DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS,
         ISOBARIC_FAMILIES, ISOBARIC_LEVELS_HPA, OCEAN_VARIABLE_IDS, REFLECTIVITY_LEVELS_M,
         REFLECTIVITY_VARIABLE_IDS, SATELLITE_CHANNEL_IDS, SATELLITE_INFRARED_IDS, SATELLITE_REFLECTANCE_IDS,
@@ -3357,6 +3452,51 @@ mod tests {
                 assert!(book.as_linear().is_none(), "{variable_id}: a log1p codebook");
             }
         }
+    }
+
+    /// `tests/fixtures/river-registry.json`: the EFAS river fields, held
+    /// to the Python encoder and the frontend the same way — the discharge
+    /// and the upstream area on log1p codebooks, the return-period class on
+    /// a class codebook that is the same in every profile; every one folds
+    /// the series' -9999 fill to the bottom of its range, code 0.
+    #[test]
+    fn the_river_registry_matches_the_shared_fixture() {
+        let entries = registry("river-registry.json");
+        assert_eq!(
+            entries.keys().collect::<Vec<_>>(),
+            RIVER_VARIABLE_IDS,
+            "three variables, in the fixture's order"
+        );
+        for (variable_id, entry) in entries {
+            let spec = variable_spec(&variable_id).unwrap_or_else(|_| panic!("{variable_id}"));
+            assert_eq!(json!(spec.label), entry["label"], "{variable_id}");
+            assert_eq!(json!(spec.output_unit), entry["unit"], "{variable_id}");
+            assert_eq!(
+                Value::Object(spec.parameter_metadata()),
+                entry["parameter"],
+                "{variable_id} GRIB2 identity"
+            );
+            assert_eq!(spec.fill_values, &[EFAS_SERIES_FILL][..], "{variable_id}");
+            assert_eq!(spec.value_range.0, 0.0, "{variable_id}");
+            assert_eq!(spec.producer_id, (variable_id != "dis06").then_some("xue"), "{variable_id}");
+            assert_eq!(spec.grib2_statistical, (variable_id == "dis06").then_some(0), "{variable_id}");
+            assert!(spec.grib_element.is_empty(), "{variable_id}: never matched as a record");
+            // Balanced takes the quality codebook.
+            for (profile, key) in [("quality", "quality"), ("compact", "compact"), ("balanced", "quality")] {
+                let book = codebook(profile, &variable_id)
+                    .unwrap_or_else(|error| panic!("{variable_id} {profile}: {error}"));
+                assert_eq!(Value::Object(book.metadata()), entry[key], "{variable_id} {profile} codebook");
+                assert_eq!(book.as_linear().is_some(), variable_id == "disrp", "{variable_id}");
+                let mut code = [1u8];
+                book.quantize(&[spec.value_range.0], &mut code).expect("in range");
+                assert_eq!(code[0], 0, "{variable_id} {profile}: the fill's code");
+            }
+        }
+        // The class codes are the classes.
+        let book = codebook("quality", "disrp").expect("disrp");
+        let mut codes = [0u8; 6];
+        book.quantize(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0], &mut codes).expect("in range");
+        assert_eq!(codes, [0, 1, 2, 3, 4, 5]);
     }
 
     /// `tests/fixtures/pressure-registry.json`, the committed golden the
