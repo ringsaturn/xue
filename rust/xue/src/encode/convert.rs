@@ -3688,7 +3688,7 @@ mod grid_family_tests {
         for variable_id in CFS_PGB_IDS {
             assert_eq!(grid_family_of(cfs, variable_id), Some("pgb"), "{variable_id}");
         }
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms", "mrms3d"] {
+        for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms", "mrms3d"] {
             let source = source_spec(model).expect(model);
             for bundle_id in source
                 .bundle_scalar_ids
@@ -4301,7 +4301,7 @@ mod cat_tests {
 
     #[test]
     fn gfs_and_ecmwf_publish_and_calibrate_all_three() {
-        for model in ["gfs", "ecmwf"] {
+        for model in ["gfs", "ecmwf", "ifs"] {
             let source = source_spec(model).unwrap();
             let published: Vec<&str> =
                 published_bundle_ids(source).into_iter().filter(|id| id.starts_with("cat")).collect();

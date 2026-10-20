@@ -645,6 +645,73 @@ pub const SOURCES: &[SourceSpec] = &[
         // The GFS fit's runs, leads and cells, from the open data records.
         cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
     },
+    // The same records as `ecmwf`, from the same cycle, on the model's full
+    // 0.1° regular grid: ECMWF's 0p1 open data, published since the
+    // 2026-10-20 06z cycle. Its `oper` stream is split into `sfc` and `pl`
+    // objects that the Python fetch stage reassembles, so this encoder sees
+    // one GRIB per frame exactly as for `ecmwf`. Grid, tile and ladder as
+    // `ifshres`. Mirrors `xuebuild/sources.py`.
+    SourceSpec {
+        id: "ifs",
+        manifest_model: "IFS",
+        product: "ifs-0p1",
+        latest_filename: Some("latest-ifs.json"),
+        steps: &[(144, 3), (240, 6)],
+        long_cycles: &[],
+        long_cycle_steps: &[],
+        input_variable_ids: &[
+            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700",
+            "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700",
+            "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500",
+            "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
+            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
+            "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
+            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4",
+            "soilw1", "soilw2", "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
+        ],
+        companion_files: &[CompanionFile {
+            id: "wave",
+            variable_ids: &["htsgw", "perpw", "dirpw"],
+            production_grid: None,
+            tile: None,
+        }],
+        accumulated_precipitation: true,
+        averaged_precipitation: false,
+        interval_precipitation: false,
+        average_window_hours: 6,
+        first_hour: 0,
+        optional_at_analysis: &["gust"],
+        statistical_processes: &[("prate", 0), ("gust", 2)],
+        bands: &[],
+        bundle_scalar_ids: &[
+            "tmp2m", "prate", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300",
+            "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
+            "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
+            "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
+            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "tsoil1", "tsoil2",
+            "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
+        ],
+        core_bundle_ids: &["tmp2m", "prate"],
+        bundle_vector_ids: &[
+            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
+            "wind200", "qflux850", "wave",
+        ],
+        bundle_composite_ids: &[],
+        bundle_volume_ids: &[],
+        production_grid: (3600, 1801),
+        tile: (90, 95),
+        variant_factors: &[2, 4],
+        regrid: None,
+        observation: false,
+        window_hours: None,
+        cadence_seconds: None,
+        series_file: false,
+        open_meteo: None,
+        downsample: None,
+        region: None,
+        // The 0.25° `ecmwf` fit, pending a refit on 0.1° runs.
+        cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
+    },
     // ECMWF's data-driven model, AIFS Single, from the same open data
     // service: an `oper` and a `wave` stream on the same 0.25° grid, every
     // cycle six-hourly to 360 hours. What the IFS source publishes less what
@@ -2027,7 +2094,7 @@ mod tests {
         assert!(woof.regrid.is_none() && woof.downsample.is_none() && woof.open_meteo.is_none());
         // Every other forecast source is read record by record, and every
         // source but the nest is fetched and live.
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms", "mrms3d"] {
+        for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms", "mrms3d"] {
             assert!(!source_spec(model).expect(model).series_file, "{model}");
         }
         for source in SOURCES {
@@ -2063,7 +2130,7 @@ mod tests {
 
     #[test]
     fn the_wave_fields_come_from_the_companion_family() {
-        for model in ["gfs", "ecmwf"] {
+        for model in ["gfs", "ecmwf", "ifs"] {
             let source = source_spec(model).expect(model);
             let [wave] = source.companion_files else { panic!("one companion family") };
             assert_eq!(wave.id, "wave");
@@ -2091,7 +2158,7 @@ mod tests {
         }
         // The wave families share the source's grid: their records are
         // appended to the frame and nothing about them is a grid family.
-        for model in ["gfs", "ecmwf", "aifs"] {
+        for model in ["gfs", "ecmwf", "ifs", "aifs"] {
             let source = source_spec(model).expect(model);
             assert_eq!(source.grid_families().count(), 0, "{model}");
             for variable_id in source.input_variable_ids {
@@ -2266,6 +2333,55 @@ mod tests {
         assert!(ecmwf.bundle_scalar_ids.contains(&"gust"));
     }
 
+    /// The 0.1° IFS source is the 0.25° one on the model's full grid: the
+    /// same inputs, companions, bundles, axis and (for now) turbulence
+    /// fit, differing in identity, grid, tile and ladder alone. Mirrors
+    /// the registry assertions in `tests/test_ifs.py`.
+    #[test]
+    fn ifs_is_ecmwf_on_the_full_0p1_grid() {
+        let ecmwf = source_spec("ecmwf").expect("ecmwf");
+        let ifs = source_spec("ifs").expect("ifs");
+        assert_eq!(ifs.input_variable_ids, ecmwf.input_variable_ids);
+        assert_eq!(ifs.bundle_scalar_ids, ecmwf.bundle_scalar_ids);
+        assert_eq!(ifs.bundle_vector_ids, ecmwf.bundle_vector_ids);
+        assert_eq!(ifs.core_bundle_ids, ecmwf.core_bundle_ids);
+        assert_eq!(ifs.bundle_composite_ids, ecmwf.bundle_composite_ids);
+        assert_eq!(ifs.bundle_volume_ids, ecmwf.bundle_volume_ids);
+        assert_eq!(ifs.companion_files.len(), ecmwf.companion_files.len());
+        for (mine, theirs) in ifs.companion_files.iter().zip(ecmwf.companion_files) {
+            assert_eq!((mine.id, mine.variable_ids), (theirs.id, theirs.variable_ids));
+        }
+        assert_eq!(ifs.optional_at_analysis, ecmwf.optional_at_analysis);
+        assert_eq!(ifs.statistical_processes, ecmwf.statistical_processes);
+        assert_eq!(ifs.steps, ecmwf.steps);
+        assert_eq!(ifs.first_hour, ecmwf.first_hour);
+        assert_eq!(ifs.cat_calibration, ecmwf.cat_calibration);
+        assert_eq!(
+            (ifs.accumulated_precipitation, ifs.averaged_precipitation, ifs.interval_precipitation),
+            (ecmwf.accumulated_precipitation, ecmwf.averaged_precipitation, ecmwf.interval_precipitation)
+        );
+        assert_eq!((ifs.manifest_model, ifs.product), ("IFS", "ifs-0p1"));
+        assert_eq!(ifs.latest_filename, Some("latest-ifs.json"));
+        assert_eq!(ifs.steps, &[(144, 3), (240, 6)]);
+        assert_eq!(ifs.production_grid, (3600, 1801));
+        assert_eq!(ifs.tile, (90, 95));
+        assert_eq!(ifs.variant_factors, &[2, 4]);
+        assert_ne!(ifs.manifest_model, ecmwf.manifest_model);
+        assert_ne!(ifs.product, ecmwf.product);
+        assert_ne!(ifs.latest_filename, ecmwf.latest_filename);
+        assert_ne!(ifs.production_grid, ecmwf.production_grid);
+        assert_ne!(ifs.tile, ecmwf.tile);
+        assert_ne!(ifs.variant_factors, ecmwf.variant_factors);
+        // Read record by record off a fetched cycle, like `ecmwf`, not as
+        // the `ifshres` series.
+        assert!(ifs.fetched() && ifs.live() && !ifs.observation && !ifs.series_file);
+        assert!(ifs.open_meteo.is_none() && ifs.regrid.is_none() && ifs.downsample.is_none());
+        assert!(ifs.region.is_none() && ifs.window_hours.is_none() && ifs.cadence_seconds.is_none());
+        let ifshres = source_spec("ifshres").expect("ifshres");
+        assert_eq!((ifs.production_grid, ifs.tile), (ifshres.production_grid, ifshres.tile));
+        assert_eq!(ifs.variant_factors, ifshres.variant_factors);
+    }
+
     /// The resolution ladder is powers of two from the half tier down,
     /// strictly ascending, so each rung is the one above decimated once more
     /// and the tier names (`half`, `quarter`, `eighth`) are unambiguous.
@@ -2295,7 +2411,9 @@ mod tests {
         }
         // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
         // satellite disk takes three.
-        assert_eq!(source_spec("ifshres").expect("ifshres").variant_factors, &[2, 4]);
+        for model in ["ifshres", "ifs"] {
+            assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4], "{model}");
+        }
         for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "mrms3d", "jma"] {
             assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
         }
