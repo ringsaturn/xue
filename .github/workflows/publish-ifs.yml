@@ -1,0 +1,69 @@
+name: publish ifs
+
+# ECMWF IFS open data at 0.1° (`ifs`): the same cycle's records as `ecmwf`
+# on the model's full regular grid, 3-hourly to 144 h and 6-hourly to F240.
+# The pipeline lives in the reusable publish.yml; this file only owns the
+# schedule and the manual knobs.
+
+on:
+  schedule:
+    # The 0p1 objects of a cycle land about two hours after the 0p25 set:
+    # the 12z cycle was complete at 21:34 UTC on 2026-10-20, nine and a half
+    # hours after the cycle. Only the 00z and 12z cycles reach F240 (06z and
+    # 18z stop at 144 h); `--run latest` walks back over the cycle grid, so
+    # a short cycle is skipped rather than half-published.
+    - cron: "40 10,22 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "40 11,23 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-ifs-dry-{0}', github.run_id) || 'publish-ifs' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: ifs
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # As for ecmwf: the paced mirrors answer bursts with 503 Slow Down and
+      # every build job is another client. A frame is six times the bytes
+      # of a 0.25° one, so the jobs are bandwidth-bound rather than
+      # latency-bound and more of them would not help.
+      max_jobs: 8
+    secrets: inherit
