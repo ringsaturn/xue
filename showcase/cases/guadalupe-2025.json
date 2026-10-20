@@ -1,0 +1,104 @@
+{
+  "id": "guadalupe-2025",
+  "title": {
+    "zh": "2025 年 7 月瓜达卢佩河山洪",
+    "zh-Hant": "2025 年 7 月瓜達盧佩河山洪",
+    "en": "The Guadalupe River flash flood, July 2025",
+    "ja": "2025年7月 グアダルーペ川の鉄砲水",
+    "ko": "2025년 7월 과달루페강 돌발 홍수",
+    "de": "Die Sturzflut am Guadalupe River, Juli 2025",
+    "fr": "La crue éclair du Guadalupe, juillet 2025",
+    "es": "La crecida repentina del río Guadalupe, julio de 2025",
+    "pt": "A cheia repentina do rio Guadalupe, julho de 2025",
+    "tr": "Guadalupe Nehri ani seli, Temmuz 2025",
+    "ru": "Паводок на реке Гуадалупе, июль 2025"
+  },
+  "summary": {
+    "zh": "2025 年 7 月 3 日夜间到 4 日凌晨，雷暴在得克萨斯州丘陵地区停滞，瓜达卢佩河在 4 日黎明前暴涨。美国地质调查局（USGS）估计亨特站的洪峰约 8,900 m³/s，出现在 10:05 UTC（中部夏令时凌晨 5:05）；克尔县有一百多人遇难。此处是 7 月 4 日 00Z 起报的 HRRR 前 18 小时降水率与组合反射率，叠加美国国家水模型（NWM v3.0）各河段的流量（分析场，以及 09Z 起报的短期预报），并附亨特、克尔维尔、康福特三个 USGS 水文站的实测过程线。模式输出与观测，不构成预警。",
+    "zh-Hant": "2025 年 7 月 3 日夜間到 4 日凌晨，雷暴在德克薩斯州丘陵地區停滯，瓜達盧佩河在 4 日黎明前暴漲。美國地質調查局（USGS）估計亨特站的洪峰約 8,900 m³/s，出現在 10:05 UTC（中部夏令時間凌晨 5:05）；克爾郡有一百多人罹難。此處是 7 月 4 日 00Z 起報的 HRRR 前 18 小時降水率與組合回波，疊加美國國家水模型（NWM v3.0）各河段的流量（分析場，以及 09Z 起報的短期預報），並附亨特、克爾維爾、康福特三個 USGS 水文站的實測過程線。模式輸出與觀測，不構成預警。",
+    "en": "Overnight on 3–4 July 2025 thunderstorms stalled over the Texas Hill Country and the Guadalupe River rose before dawn on the 4th. USGS estimates the peak at Hunt near 8,900 m³/s at 10:05 UTC (5:05 am CDT); more than a hundred people died in Kerr County. This is the first 18 hours of the HRRR cycle of 00Z on 4 July, precipitation rate and composite reflectivity, with the NOAA National Water Model (v3.0) streamflow on every river reach — its analysis and its 09Z short-range forecast — and the observed hydrographs of the USGS gauges at Hunt, Kerrville and Comfort. Model output and observations, not a warning.",
+    "ja": "2025年7月3日夜から4日未明にかけて雷雨がテキサス州ヒルカントリー上空に停滞し、グアダルーペ川は4日の夜明け前に急激に増水した。米国地質調査所（USGS）はハントでのピーク流量を 10:05 UTC（中部夏時間午前5時05分）に約 8,900 m³/s と推定しており、カー郡では100人を超える人が亡くなった。これは7月4日 00Z 初期値の HRRR の最初の18時間の降水強度と合成反射強度に、米国国立水モデル（NWM v3.0）の河道ごとの流量（解析値と 09Z 初期値の短時間予報）を重ね、ハント、カービル、コンフォートの USGS 観測所の実測ハイドログラフを添えたもの。モデル出力と観測であり、警報ではない。",
+    "ko": "2025년 7월 3일 밤부터 4일 새벽까지 뇌우가 텍사스 힐컨트리 상공에 머물렀고, 과달루페강은 4일 동트기 전에 급격히 불어났다. 미국 지질조사국(USGS)은 헌트 관측소의 첨두 유량을 10:05 UTC(중부 서머타임 오전 5시 5분) 약 8,900 m³/s로 추정하며, 커 카운티에서 100명이 넘게 숨졌다. 이 사례는 7월 4일 00Z HRRR의 처음 18시간 강수 강도와 합성 반사도에 미국 국가 물 모델(NWM v3.0)의 하천 구간별 유량(분석장과 09Z 단기 예보)을 겹치고, 헌트·커빌·컴퍼트 USGS 관측소의 실측 수문곡선을 함께 보여 준다. 모델 출력과 관측이며 경보가 아니다.",
+    "de": "In der Nacht vom 3. auf den 4. Juli 2025 blieben Gewitter über dem Texas Hill Country stehen, und der Guadalupe River stieg vor der Morgendämmerung des 4. stark an. Der USGS schätzt den Scheitel bei Hunt auf etwa 8.900 m³/s um 10:05 UTC (5:05 Uhr CDT); im Kerr County kamen mehr als hundert Menschen ums Leben. Dies sind die ersten 18 Stunden des HRRR-Laufs von 00Z am 4. Juli, Niederschlagsrate und Komposit-Reflektivität, mit dem Abfluss des NOAA National Water Model (v3.0) auf jedem Flussabschnitt – Analyse und Kurzfristvorhersage von 09Z – sowie den gemessenen Ganglinien der USGS-Pegel Hunt, Kerrville und Comfort. Modelldaten und Beobachtungen, keine Warnung.",
+    "fr": "Dans la nuit du 3 au 4 juillet 2025, des orages sont restés bloqués sur le Hill Country texan et le Guadalupe est monté avant l’aube du 4. L’USGS estime le pic à Hunt à environ 8 900 m³/s à 10:05 UTC (5 h 05 CDT) ; plus d’une centaine de personnes sont mortes dans le comté de Kerr. Voici les 18 premières heures du cycle HRRR de 00Z le 4 juillet, intensité des précipitations et réflectivité composite, avec le débit du NOAA National Water Model (v3.0) sur chaque tronçon de rivière — son analyse et sa prévision à courte échéance de 09Z — et les hydrogrammes observés aux stations USGS de Hunt, Kerrville et Comfort. Sorties de modèle et observations, pas une alerte.",
+    "es": "En la noche del 3 al 4 de julio de 2025, las tormentas se estancaron sobre el Hill Country de Texas y el río Guadalupe creció antes del amanecer del día 4. El USGS estima el pico en Hunt en unos 8.900 m³/s a las 10:05 UTC (5:05 CDT); más de un centenar de personas murieron en el condado de Kerr. Estas son las primeras 18 horas del ciclo HRRR de las 00Z del 4 de julio, intensidad de precipitación y reflectividad compuesta, con el caudal del NOAA National Water Model (v3.0) en cada tramo de río —su análisis y su pronóstico de corto plazo de las 09Z— y los hidrogramas observados en las estaciones del USGS en Hunt, Kerrville y Comfort. Salidas de modelo y observaciones, no un aviso.",
+    "pt": "Na noite de 3 para 4 de julho de 2025, trovoadas estacionaram sobre o Hill Country do Texas e o rio Guadalupe subiu antes do amanhecer do dia 4. O USGS estima o pico em Hunt em cerca de 8.900 m³/s às 10:05 UTC (5h05 CDT); mais de cem pessoas morreram no condado de Kerr. Estas são as primeiras 18 horas do ciclo HRRR das 00Z de 4 de julho, taxa de precipitação e refletividade composta, com a vazão do NOAA National Water Model (v3.0) em cada trecho de rio — a sua análise e a previsão de curto prazo das 09Z — e os hidrogramas observados nas estações do USGS em Hunt, Kerrville e Comfort. Saídas de modelo e observações, não um alerta.",
+    "tr": "3–4 Temmuz 2025 gecesi gök gürültülü fırtınalar Teksas Hill Country üzerinde durakladı ve Guadalupe Nehri 4 Temmuz şafağından önce hızla yükseldi. USGS, Hunt’taki pik debiyi 10:05 UTC’de (CDT 05.05) yaklaşık 8.900 m³/s olarak tahmin ediyor; Kerr County’de yüzden fazla kişi hayatını kaybetti. Bu, 4 Temmuz 00Z HRRR çevriminin ilk 18 saatinin yağış şiddeti ve bileşik yansıtırlığı; üzerinde NOAA Ulusal Su Modeli’nin (NWM v3.0) her nehir kesimindeki debisi — analizi ve 09Z kısa vadeli tahmini — ile Hunt, Kerrville ve Comfort USGS istasyonlarının gözlenen hidrografları var. Model çıktısı ve gözlem, uyarı değil.",
+    "ru": "В ночь с 3 на 4 июля 2025 года грозы застыли над Техасским Хилл-Кантри, и река Гуадалупе резко поднялась перед рассветом 4-го. По оценке USGS, пик расхода у Ханта составил около 8 900 м³/с в 10:05 UTC (5:05 CDT); в округе Керр погибли более ста человек. Это первые 18 часов прогона HRRR от 00Z 4 июля — интенсивность осадков и составная отражаемость — вместе с расходом воды по каждому участку рек из Национальной водной модели NOAA (NWM v3.0): её анализ и краткосрочный прогноз от 09Z, а также наблюдённые гидрографы постов USGS в Ханте, Керрвилле и Комфорте. Модельные данные и наблюдения, не предупреждение."
+  },
+  "model": "hrrr",
+  "run": "2025070400",
+  "hours": 18,
+  "bbox": [-100.55, 29.0, -97.45, 31.0],
+  "variables": ["prate", "cref"],
+  "defaultVariable": "prate",
+  "eventTime": "2025-07-04T10:05:00Z",
+  "tags": ["flood", "north-america"],
+  "credit": "NOAA HRRR; NOAA National Water Model v3.0; USGS NWIS",
+  "markers": [
+    {
+      "id": "hunt",
+      "kind": "place",
+      "lon": -99.3217,
+      "lat": 30.0699,
+      "label": {"zh": "亨特", "zh-Hant": "亨特", "en": "Hunt", "ja": "ハント", "ko": "헌트", "de": "Hunt", "fr": "Hunt", "es": "Hunt", "pt": "Hunt", "tr": "Hunt", "ru": "Хант"},
+      "note": {
+        "zh": "USGS 08165500 瓜达卢佩河亨特站。估计洪峰约 8,900 m³/s（10:05 UTC），水位记录在 10:10 UTC 中断。",
+        "zh-Hant": "USGS 08165500 瓜達盧佩河亨特站。估計洪峰約 8,900 m³/s（10:05 UTC），水位紀錄在 10:10 UTC 中斷。",
+        "en": "USGS 08165500, Guadalupe River at Hunt. Estimated peak near 8,900 m³/s at 10:05 UTC; the stage record stops at 10:10 UTC.",
+        "ja": "USGS 08165500 グアダルーペ川ハント観測所。推定ピーク約 8,900 m³/s（10:05 UTC）、水位記録は 10:10 UTC で途切れる。",
+        "ko": "USGS 08165500 과달루페강 헌트 관측소. 추정 첨두 약 8,900 m³/s(10:05 UTC), 수위 기록은 10:10 UTC에 끊긴다.",
+        "de": "USGS 08165500, Guadalupe River bei Hunt. Geschätzter Scheitel etwa 8.900 m³/s um 10:05 UTC; die Wasserstandsreihe bricht um 10:10 UTC ab.",
+        "fr": "USGS 08165500, le Guadalupe à Hunt. Pic estimé à environ 8 900 m³/s à 10:05 UTC ; la série des hauteurs s’interrompt à 10:10 UTC.",
+        "es": "USGS 08165500, río Guadalupe en Hunt. Pico estimado de unos 8.900 m³/s a las 10:05 UTC; el registro de nivel se corta a las 10:10 UTC.",
+        "pt": "USGS 08165500, rio Guadalupe em Hunt. Pico estimado de cerca de 8.900 m³/s às 10:05 UTC; o registo de nível interrompe-se às 10:10 UTC.",
+        "tr": "USGS 08165500, Hunt’ta Guadalupe Nehri. Tahmini pik yaklaşık 8.900 m³/s, 10:05 UTC; su seviyesi kaydı 10:10 UTC’de kesiliyor.",
+        "ru": "USGS 08165500, река Гуадалупе у Ханта. Оценка пика — около 8 900 м³/с в 10:05 UTC; запись уровня обрывается в 10:10 UTC."
+      },
+      "sources": [{"title": "USGS 08165500 Guadalupe Rv at Hunt, TX", "url": "https://waterdata.usgs.gov/monitoring-location/08165500/"}]
+    },
+    {
+      "id": "kerrville",
+      "kind": "place",
+      "lon": -99.1403,
+      "lat": 30.0474,
+      "label": {"zh": "克尔维尔", "zh-Hant": "克爾維爾", "en": "Kerrville", "ja": "カービル", "ko": "커빌", "de": "Kerrville", "fr": "Kerrville", "es": "Kerrville", "pt": "Kerrville", "tr": "Kerrville", "ru": "Керрвилл"},
+      "note": {
+        "zh": "克尔县县治。USGS 08166200 克尔维尔站的洪峰约 8,440 m³/s，出现在 11:45 UTC。",
+        "zh-Hant": "克爾郡郡治。USGS 08166200 克爾維爾站的洪峰約 8,440 m³/s，出現在 11:45 UTC。",
+        "en": "Seat of Kerr County. USGS 08166200 at Kerrville peaked near 8,440 m³/s at 11:45 UTC.",
+        "ja": "カー郡の郡庁所在地。USGS 08166200 カービル観測所のピークは約 8,440 m³/s（11:45 UTC）。",
+        "ko": "커 카운티 군청 소재지. USGS 08166200 커빌 관측소의 첨두는 약 8,440 m³/s(11:45 UTC).",
+        "de": "Verwaltungssitz des Kerr County. Der USGS-Pegel 08166200 bei Kerrville erreichte etwa 8.440 m³/s um 11:45 UTC.",
+        "fr": "Chef-lieu du comté de Kerr. La station USGS 08166200 de Kerrville a culminé à environ 8 440 m³/s à 11:45 UTC.",
+        "es": "Sede del condado de Kerr. La estación USGS 08166200 en Kerrville alcanzó unos 8.440 m³/s a las 11:45 UTC.",
+        "pt": "Sede do condado de Kerr. A estação USGS 08166200 em Kerrville atingiu cerca de 8.440 m³/s às 11:45 UTC.",
+        "tr": "Kerr County’nin merkezi. Kerrville’deki USGS 08166200 istasyonu 11:45 UTC’de yaklaşık 8.440 m³/s ile pik yaptı.",
+        "ru": "Административный центр округа Керр. Пост USGS 08166200 у Керрвилла достиг около 8 440 м³/с в 11:45 UTC."
+      },
+      "sources": [{"title": "USGS 08166200 Guadalupe Rv at Kerrville, TX", "url": "https://waterdata.usgs.gov/monitoring-location/08166200/"}]
+    },
+    {
+      "id": "comfort",
+      "kind": "place",
+      "lon": -98.905,
+      "lat": 29.9677,
+      "label": {"zh": "康福特", "zh-Hant": "康福特", "en": "Comfort", "ja": "コンフォート", "ko": "컴퍼트", "de": "Comfort", "fr": "Comfort", "es": "Comfort", "pt": "Comfort", "tr": "Comfort", "ru": "Комфорт"},
+      "note": {
+        "zh": "USGS 08167000 瓜达卢佩河康福特站，在克尔维尔下游。洪峰约 4,640 m³/s，出现在 15:45 UTC（临时数据）。",
+        "zh-Hant": "USGS 08167000 瓜達盧佩河康福特站，在克爾維爾下游。洪峰約 4,640 m³/s，出現在 15:45 UTC（臨時資料）。",
+        "en": "USGS 08167000, Guadalupe River at Comfort, downstream of Kerrville. Peak near 4,640 m³/s at 15:45 UTC (provisional).",
+        "ja": "USGS 08167000 グアダルーペ川コンフォート観測所、カービルの下流。ピーク約 4,640 m³/s（15:45 UTC、暫定値）。",
+        "ko": "USGS 08167000 과달루페강 컴퍼트 관측소, 커빌 하류. 첨두 약 4,640 m³/s(15:45 UTC, 잠정치).",
+        "de": "USGS 08167000, Guadalupe River bei Comfort, unterhalb von Kerrville. Scheitel etwa 4.640 m³/s um 15:45 UTC (vorläufig).",
+        "fr": "USGS 08167000, le Guadalupe à Comfort, en aval de Kerrville. Pic d’environ 4 640 m³/s à 15:45 UTC (provisoire).",
+        "es": "USGS 08167000, río Guadalupe en Comfort, aguas abajo de Kerrville. Pico de unos 4.640 m³/s a las 15:45 UTC (provisional).",
+        "pt": "USGS 08167000, rio Guadalupe em Comfort, a jusante de Kerrville. Pico de cerca de 4.640 m³/s às 15:45 UTC (provisório).",
+        "tr": "USGS 08167000, Comfort’ta Guadalupe Nehri, Kerrville’in mansabında. Pik yaklaşık 4.640 m³/s, 15:45 UTC (geçici).",
+        "ru": "USGS 08167000, река Гуадалупе у Комфорта, ниже Керрвилла. Пик около 4 640 м³/с в 15:45 UTC (предварительно)."
+      },
+      "sources": [{"title": "USGS 08167000 Guadalupe Rv at Comfort, TX", "url": "https://waterdata.usgs.gov/monitoring-location/08167000/"}]
+    }
+  ],
+  "river": {"index": "river/index.json"}
+}

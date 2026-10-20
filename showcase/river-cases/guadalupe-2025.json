@@ -1,0 +1,13 @@
+{
+  "id": "guadalupe-2025",
+  "kind": "network",
+  "work": "tmp/2025-07-04-guadalupe/work",
+  "output": "web/public/data/showcase/guadalupe-2025/river",
+  "model": "NWM v3.0",
+  "tracks": [
+    {"id": "analysis", "kind": "analysis", "product": "analysis_assim"},
+    {"id": "short_range-2025070409", "kind": "forecast", "product": "short_range", "cycle": "2025-07-04T09:00:00Z"}
+  ],
+  "gauges": ["08165500", "08166200", "08167000"],
+  "disclaimer": "National Water Model output is a simulation, not an observation or a warning. USGS values are provisional where not approved, and the Hunt peak is a USGS estimate."
+}
