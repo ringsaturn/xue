@@ -125,6 +125,13 @@ and the window shrinks to fit it.
 - `layer.ts`: one quantized R8 plane, inverse Web Mercator, palette lookup
   in the fragment shader, two frames blended by `u_mix`. **Never animate
   raster opacity.**
+- Sampling (`setSampling`, from `VariableSpec.sampling`): scalars are
+  reconstructed bicubically, except a field whose cells are features
+  rather than samples of a surface. The EFAS river fields are one cell
+  wide with no data around them, so `dis06` and `upstream` read the
+  nearest texel (`nearest`), and the return-period class `disrp` also
+  steps between frames at `u_mix = 0.5` instead of mixing codes
+  (`classes`), since the code halfway between two classes is a third.
 - Vectors: `setVectorField` uses RG8 (u red, v green, the packing
   `particles.ts` needs, interleaved once per frame) and colours by
   `magnitude / levels.ts::vectorMaxMagnitude`. Only the wind pair is
@@ -505,7 +512,7 @@ hidden and pinned models are `localStorage`.
   manifest is open; a link that said anything about the volume
   (`?volume=`, `off` included: `ParsedView.volumeRequested`) outranks it,
   the tile still turns it off, and a volume name the shell does not know
-  is dropped from the view without a warning. A dataset reached only through cases (`woof`) has no
+  is dropped from the view without a warning. A dataset reached only through cases (`woof`, `efas`, `efaswb`) has no
   pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
   model sheet, and `?model=` naming it falls back to the default.
 

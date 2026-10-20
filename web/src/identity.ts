@@ -40,7 +40,8 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * set: the optical depth at 550 nm, one family for the whole column and one
  * per species, and the surface particulate matter by size cut, told apart
  * by the `aerosol` block beside a parameter that is the same for every
- * species). */
+ * species — and the hydrology set: the river discharge, and the
+ * return-period class and upstream area a producer derived beside it). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -102,6 +103,9 @@ export type ChartFamily =
   | "pm10dust"
   | "aurora"
   | "clw"
+  | "dis06"
+  | "disrp"
+  | "upstream"
   | SoilChartFamily;
 
 /** The soil layers, one chart family per layer like the cloud layers: the
@@ -226,7 +230,13 @@ function isFirstSwell(parameter: BundleParameter): boolean {
  * above mean sea level — one level of a cloud volume, whose altitude is
  * the volume's business (volume.ts), not the identity's, (2,0,2) @106 soil
  * temperature and (2,0,192) @106 volumetric soil moisture (NCEP-local
- * SOILW), the layer told apart by the surface's value (`soilLayer`).
+ * SOILW), the layer told apart by the surface's value (`soilLayer`),
+ * (1,0,7) river discharge — the hydrological discipline's own parameter,
+ * on whatever surface the source writes it, the six-hour mean EFAS
+ * publishes as `dis06`. The statistical process (code table 4.10: 0, the
+ * average) is not part of the identity, as it is not for the
+ * precipitation rate or the gust: a parameter names one chart however the
+ * step was reduced.
  */
 export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
@@ -290,6 +300,7 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isTriple(parameter, 0, 3, 196) && surface === 1) return scalar("hpbl", null);
   if (isTriple(parameter, 0, 1, 19) && surface === 1) return scalar("ptype", null);
   if (isTriple(parameter, 0, 1, 22) && surface === 102) return scalar("clw", null);
+  if (isTriple(parameter, 1, 0, 7)) return scalar("dis06", null);
   if (isTriple(parameter, 2, 0, 2) && surface === 106) {
     const layer = soilLayer(SOIL_TEMPERATURE_LAYERS, value);
     return layer === null ? null : scalar(layer, null);
@@ -524,7 +535,11 @@ function isLocalUse(parameter: BundleParameter): boolean {
  * discipline, at the top of the atmosphere with the guns it is derived
  * beside; the ZHOUYE confidence, the same chain held to the day's level
  * through the night, is its number 6 (5 is the aurora's, under no
- * producer). */
+ * producer). The hydrology set's derived fields are the encoder's own
+ * (producer `xue`) in the hydrological discipline's first local category:
+ * the EFAS return-period class of the discharge, number 1, and the
+ * upstream area each river cell drains, number 2 — numbers per
+ * producer and per discipline, so they collide with nothing above. */
 const PRODUCED_SCALARS: readonly {
   family: ChartFamily;
   producer: string;
@@ -534,6 +549,8 @@ const PRODUCED_SCALARS: readonly {
 }[] = [
   { family: "dustcf", producer: "shachen", discipline: 3, category: 192, number: 4 },
   { family: "zhouye", producer: "shachen", discipline: 3, category: 192, number: 6 },
+  { family: "disrp", producer: "xue", discipline: 1, category: 192, number: 1 },
+  { family: "upstream", producer: "xue", discipline: 1, category: 192, number: 2 },
 ];
 
 /**

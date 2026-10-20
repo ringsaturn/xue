@@ -626,6 +626,43 @@ export const PTYPE_CLASSES: readonly { code: number; rgb: readonly [number, numb
   { code: 8, rgb: [138, 92, 196], labelKey: "legendPtypeIcePellets" },
 ];
 
+/** The return-period classes of the EFAS discharge (`disrp`), the code
+ * the encoder writes for each, in the EFAS web map's colours: a river
+ * below its 1.5-year flood level a faint grey-blue so the network still
+ * reads, then light yellow, yellow, red and purple for the 1.5-, 2-, 5- and
+ * 20-year levels. A class field: its legend is a key of swatches and it is
+ * drawn cell by cell, never blended between classes
+ * (`VariableSpec.sampling`). Code 0 is no class — a cell that is not a
+ * river, or one EFAS does not evaluate — the way the soil fields' bottom
+ * code is no soil: transparent, in no key, and no reading at a pin. */
+export const DISRP_CLASSES: readonly {
+  code: number;
+  rgb: readonly [number, number, number];
+  alpha: number;
+  labelKey: MessageKey;
+}[] = [
+  { code: 1, rgb: [150, 170, 190], alpha: 110, labelKey: "legendDisrpBelow" },
+  { code: 2, rgb: [255, 240, 140], alpha: 255, labelKey: "legendDisrp1p5" },
+  { code: 3, rgb: [250, 200, 0], alpha: 255, labelKey: "legendDisrp2" },
+  { code: 4, rgb: [230, 30, 30], alpha: 255, labelKey: "legendDisrp5" },
+  { code: 5, rgb: [150, 40, 170], alpha: 255, labelKey: "legendDisrp20" },
+];
+
+/** The legend label of one return-period class code, or null for code 0
+ * (no class) and anything the table does not hold — what a pin reads. */
+export function disrpClassLabelKey(code: number): MessageKey | null {
+  return DISRP_CLASSES.find((entry) => entry.code === code)?.labelKey ?? null;
+}
+
+/** The river discharge's chart: its codebook (`log1p`, trace 0.1 m³/s,
+ * scale 10, maximum 100 000) and the 10 000 m³/s the legend reads to — a
+ * great river in flood; the Danube's mouth peaks near it. */
+export const DISCHARGE_CHART: AerosolChart = { trace: 0.1, scale: 10, maximum: 100_000, chartMax: 10_000 };
+/** The upstream area's chart: its codebook (`log1p`, trace 1 km², scale
+ * 100, maximum 10⁷) and the 100 000 km² the legend reads to, a large
+ * river basin; the Danube's whole is about 800 000. */
+export const UPSTREAM_CHART: AerosolChart = { trace: 1, scale: 100, maximum: 10_000_000, chartMax: 100_000 };
+
 /** The value span a filled scalar's legend reads over, or null where the
  * span is the codebook's own: a registered temperature surface takes its
  * windowed domain, a surface diagnostic its chart ceiling. */
@@ -665,6 +702,9 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (isSoilMoisture(family)) return [0, SOIL_MOISTURE_CHART_MAX];
   const aerosol = aerosolChart(family);
   if (aerosol) return [0, aerosol.chartMax];
+  if (family === "dis06") return [0, DISCHARGE_CHART.chartMax];
+  if (family === "upstream") return [0, UPSTREAM_CHART.chartMax];
+  // The return-period class is categorical: a swatch key, no span.
   return null;
 }
 
@@ -679,7 +719,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
  * fields at 1000, past which the codebook keeps a plume distinct in a
  * probe. Because the codebook is logarithmic, the legend's evenly spaced
  * ticks fall on values that are not round (`logLegend`). */
-interface AerosolChart {
+export interface AerosolChart {
   trace: number;
   scale: number;
   maximum: number;
@@ -920,6 +960,8 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (isSoilMoisture(family)) return rangeLegend([0, SOIL_MOISTURE_CHART_MAX], 0.1);
   const aerosol = aerosolChart(family);
   if (aerosol) return logLegend(aerosol);
+  if (family === "dis06") return logLegend(DISCHARGE_CHART);
+  if (family === "upstream") return logLegend(UPSTREAM_CHART);
   if (family === "vvel" && isRegisteredLevel(level)) return rangeLegend([-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX], 0.5);
   if (family === "thetae" && isRegisteredLevel(level)) return rangeLegend(thetaEPaletteDomain(level), 5);
   // The turbulence's legend is a key of intensity classes, not ticks

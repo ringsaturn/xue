@@ -114,6 +114,12 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   // it beside `?case=` reads as the case, not as a bad model.
   woof: "woof",
   wrf: "woof",
+  // The two EFAS runs are cases only too, for the same reason.
+  efas: "efas",
+  "efas-v5": "efas",
+  efaswb: "efaswb",
+  "efas-wb": "efaswb",
+  "efas-v5-wb": "efaswb",
   gefsaero: "gefsaero",
   "gefs-aerosols": "gefsaero",
   gefsaerosols: "gefsaero",

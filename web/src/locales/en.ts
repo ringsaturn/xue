@@ -37,6 +37,11 @@ export const en = {
   /** The aurora tile: the field is a probability, so the gloss is the
    * unit. */
   varAurora: "PROB",
+  /** The river tiles: the discharge's six-hour step, the return period
+   * (RP), and the upstream area's unit-less word. */
+  varDis06: "6H",
+  varDisrp: "RP",
+  varUpstream: "AREA",
   /** The satellite tile: the channel's nominal wavelength in µm after the
    * code (SAT IR 10.4). */
   varInfrared: "IR 10.4",
@@ -237,6 +242,7 @@ export const en = {
   fieldGroupRadiation: "RADIATION & VISIBILITY",
   fieldGroupAerosol: "AEROSOLS & AIR QUALITY",
   fieldGroupOcean: "OCEAN",
+  fieldGroupHydrology: "RIVERS & FLOODS",
   fieldGroupSatellite: "SATELLITE",
   fieldGroupSpace: "SPACE WEATHER",
   fieldGroupFire: "FIRE",
@@ -305,6 +311,7 @@ export const en = {
   /** The aurora line names the model and the agency; NOAA's US
    * government work needs no licence but asks for the source. */
   creditsAurora: "SPACE WEATHER · AURORA PROBABILITY · NOAA SWPC OVATION MODEL",
+  creditsEfas: "RIVER DISCHARGE · COPERNICUS EMS EFAS v5, EUROPE 1′ · CASES ONLY",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsFirms: "ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS",
@@ -467,6 +474,13 @@ export const en = {
   legendPtypeFreezingRain: "Freezing rain",
   legendPtypeSnow: "Snow",
   legendPtypeIcePellets: "Ice pellets",
+  /** The EFAS return-period classes, each the flood level a river cell's
+   * discharge has reached; the years stay numerals. */
+  legendDisrpBelow: "Below 1.5-year level",
+  legendDisrp1p5: "≥ 1.5-year level",
+  legendDisrp2: "≥ 2-year level",
+  legendDisrp5: "≥ 5-year level",
+  legendDisrp20: "≥ 20-year level",
   /** The turbulence key's intensity words (ICAO's light / moderate /
    * severe, with the WAFS severe-forecast threshold splitting moderate);
    * the EDR span after each word is appended untranslated. Keep them as
@@ -486,6 +500,9 @@ export const en = {
   varLabelCloud3d: "3D cloud water",
   varLabelOrog: "Orography",
   varLabelAurora: "Aurora visibility probability",
+  varLabelDis06: "River discharge (6 h mean)",
+  varLabelDisrp: "Return-period class",
+  varLabelUpstream: "Upstream area",
   varLabelIr104: "Infrared imagery (10.4 µm brightness temperature)",
   varLabelIr039: "Shortwave infrared (3.9 µm brightness temperature)",
   varLabelDustrgb: "Dust RGB (infrared composite)",

@@ -11,8 +11,8 @@ type ForecastVariableId = "tmp2m" | "prate";
  * immutable run directories and its own manifest identity, and — when it has
  * a live feed — its own mutable live pointer at the data root. GFS uses the
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
- * The WOOF nest has no live feed: it is a forecast archive that reaches the
- * app only as showcase cases. The radar mosaics, the JMA nowcast and the
+ * The WOOF nest and the two EFAS river-discharge runs have no live feed:
+ * each is a forecast archive that reaches the app only as showcase cases. The radar mosaics, the JMA nowcast and the
  * imagers are observations *and* live, each a rolling window. */
 export type ForecastModelId =
   | "gfs"
@@ -23,6 +23,8 @@ export type ForecastModelId =
   | "sflux"
   | "hrrr"
   | "woof"
+  | "efas"
+  | "efaswb"
   | "gefsaero"
   | "cma"
   | "mrms"
@@ -175,6 +177,36 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     coreBundles: ["tmp2m"],
     defaultVariable: "tmpsfc",
     railCore: ["tmpsfc", "tmp2m", "wind10m", "lcdc"],
+  },
+  // Copernicus EMS EFAS v5, the European Flood Awareness System: LISFLOOD
+  // river discharge on a 1-arcmin (1/60°) regular grid over Europe, cell
+  // centres from 25.24°W, 72.24°N to 50.24°E, 22.76°N (4530 × 2970), six-
+  // hourly from +6 to +120 h. Like the WOOF nest it is cases only: no
+  // pointer, no place in the model switch, a case loads its manifest by
+  // path and frames its own crop of the grid. The `hres` run is the
+  // forecast forced by the IFS HRES; `efaswb` is the water-balance run
+  // forced by observations, the analysis the forecast starts from, on the
+  // same grid and axis. Both open on the return-period class, the field a
+  // flood map is read by, with the discharge and the static upstream area
+  // beside it. A river is one cell wide, so all three draw without
+  // smoothing (`VariableSpec.sampling`).
+  efas: {
+    id: "efas",
+    label: "EFAS-v5",
+    product: "hres",
+    coreBundles: ["dis06"],
+    defaultVariable: "disrp",
+    railCore: ["disrp", "dis06", "upstream"],
+    region: [-25.25, 22.75, 50.25, 72.25],
+  },
+  efaswb: {
+    id: "efaswb",
+    label: "EFAS-v5-WB",
+    product: "water_balance",
+    coreBundles: ["dis06"],
+    defaultVariable: "disrp",
+    railCore: ["disrp", "dis06", "upstream"],
+    region: [-25.25, 22.75, 50.25, 72.25],
   },
   // NOAA GEFS-Aerosols, the global aerosol member of the GEFS: aerosol
   // optical depth at 550 nm for the whole column and by species, and the
@@ -445,8 +477,8 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
  * Japan box, and the SWPC aurora probability) and the geostationary
  * mosaic, a view over the imagers with no feed of its own. The switch
  * offers the ones index.html has a button for. A dataset with no pointer
- * that is not a mosaic (the WOOF nest) is absent: it is reached through
- * its showcase cases alone. */
+ * that is not a mosaic (the WOOF nest, the two EFAS runs) is absent: it is
+ * reached through its showcase cases alone. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
@@ -564,6 +596,7 @@ export type KnownBundleId =
   | SoilId
   | SatelliteId
   | AerosolId
+  | HydrologyId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
@@ -679,6 +712,14 @@ export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "ir039", "dustrgb
 type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
 export const AEROSOL_IDS: readonly AerosolId[] = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"];
 
+/** The hydrology set — EFAS river discharge, the mean over each six-hour
+ * step (`dis06`), the return-period class the encoder derives from it
+ * against the EFAS thresholds (`disrp`), and the static upstream area of
+ * each river cell (`upstream`) — single layers that exist only on river
+ * cells: everything else is the codebook's no-data code. */
+type HydrologyId = "dis06" | "disrp" | "upstream";
+export const HYDROLOGY_IDS: readonly HydrologyId[] = ["dis06", "disrp", "upstream"];
+
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
  * naming a bundle badly, never for naming one this build does not know. */
@@ -725,6 +766,7 @@ type KnownDataVariableId =
   | OceanId
   | SoilId
   | AerosolId
+  | HydrologyId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorComponentId
@@ -753,6 +795,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...SOIL_IDS,
   ...SATELLITE_IDS,
   ...AEROSOL_IDS,
+  ...HYDROLOGY_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),

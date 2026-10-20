@@ -107,6 +107,7 @@ import {
 } from "./identity";
 import {
   FAMILIES,
+  disrpClassLabelKey,
   bundleLevel,
   familyLabel,
   familyLevels,
@@ -171,7 +172,7 @@ import {
   type ViewComposition,
   type ViewState,
 } from "./viewstate";
-import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type GroundId, type LegendSwatch } from "./variables";
+import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type GroundId, type LegendSwatch, type Sampling } from "./variables";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS, type StormView, type TcPointData } from "./tc/layers";
@@ -252,7 +253,7 @@ import {
   type MeteogramRowData,
   type MeteogramRowSpec,
 } from "./meteogram";
-import { displayUnit, displayValue } from "./units";
+import { displayUnit, displayValue, formatValueReadout } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
 import { frameCacheKey, parseFrameCacheKey, variableKey } from "./sessionkeys";
@@ -1340,6 +1341,8 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   woof: "RECAST / WOOF WRF-ARW NEST FUJI",
+  efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
+  efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
@@ -2953,15 +2956,14 @@ function syncCompareLink(): void {
 }
 syncCompareLink();
 
-/** Decimals worth showing for a value: a linear codebook resolves exactly as
- * far as its step, and the logarithmic one resolves light rain much more
- * finely than heavy. */
+/** A readout's digits (`units.ts::formatValueReadout`); a class field
+ * reads as its class's name. */
 function formatProbeValue(variable: BundleVariable, value: number): string {
-  if (variable.quantization.type === "linear") {
-    const step = variable.quantization.scale;
-    return value.toFixed(step >= 1 ? 0 : step >= 0.1 ? 1 : 2);
+  if (identifyBundle([variable])?.identity.family === "disrp") {
+    const key = disrpClassLabelKey(value);
+    return key === null ? "--" : t(key);
   }
-  return value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2);
+  return formatValueReadout(variable, value);
 }
 
 /** Pin a point and open its panel. Before a session exists there is no grid
@@ -5716,6 +5718,7 @@ const FIELD_GROUP_LABEL: Record<SheetGroup, MessageKey> = {
   radiation: "fieldGroupRadiation",
   aerosol: "fieldGroupAerosol",
   ocean: "fieldGroupOcean",
+  hydrology: "fieldGroupHydrology",
   satellite: "fieldGroupSatellite",
   space: "fieldGroupSpace",
   fire: "fieldGroupFire",
@@ -8273,6 +8276,13 @@ function floorIsNoData(chartId: KnownBundleId | null): boolean {
   return chartId !== null && (variableSpec(chartId)?.floorIsNoData ?? false);
 }
 
+/** How a chart is reconstructed between cells (`VariableSpec.sampling`):
+ * bicubic for every field the table does not say otherwise of, an unknown
+ * one included. */
+function samplingFor(chartId: KnownBundleId | null): Sampling {
+  return chartId === null ? "smooth" : (variableSpec(chartId)?.sampling ?? "smooth");
+}
+
 /** Point a slot's layer at a session: its palette, its contour style (the
  * chart's own when the lines are the view, the overlay's over a field), and
  * magnitude mode for wind. */
@@ -8297,6 +8307,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setVectorField(null);
     layer.setCompositeField(field);
     layer.setFloorNoData(false);
+    layer.setSampling("smooth");
     // The shader reads no palette in this mode, but the layer draws
     // nothing until it holds one; the red gun's own will do.
     layer.setPalette(buildPalette(session.variable, null));
@@ -8325,6 +8336,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     );
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay, geoGrid(session.metadata).longitudeStep));
     layer.setFloorNoData(floorIsNoData(session.chartId));
+    layer.setSampling(samplingFor(session.chartId));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
     // the field would be worse than none.
@@ -8574,6 +8586,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     target.setPalette(buildPalette(variable));
     target.setContours(contourStyleFor(variable, undefined, false, geoGrid(posterMetadata).longitudeStep));
     target.setFloorNoData(floorIsNoData(registeredBundleId(identityForBundleId(variable.id))));
+    target.setSampling(samplingFor(registeredBundleId(identityForBundleId(variable.id))));
     target.setFrame(plane);
     target.setVisible(true);
   } catch (error) {

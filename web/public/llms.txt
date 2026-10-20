@@ -94,7 +94,17 @@ Facts worth getting right:
   pointer and no place in the model switch; `/?case=fuji-woof-2026-10-10`
   opens it, framed by the case's own camera, and
   `/?case=fuji-woof-2026-10-10&volume=cloud3d` draws its cloud water in 3D
-  over the field. `jma` is the seventh
+  over the field. `efas` and `efaswb` are cases only as well: the
+  Copernicus Emergency Management Service's European Flood Awareness
+  System (EFAS v5, LISFLOOD) river discharge on its 1-arcmin (1/60°)
+  regular grid over Europe (4530 × 2970 cells, 25.25°W–50.25°E and
+  22.75°N–72.25°N; a case ships a crop of it), six-hourly from +6 to
+  +120 h. `efas` (manifest model `EFAS-v5`, product `hres`) is the
+  forecast forced by the ECMWF HRES; `efaswb` (`EFAS-v5-WB`, product
+  `water_balance`) is the water-balance run forced by observations, the
+  analysis the forecast starts from, on the same grid and axis. Neither
+  has a live pointer or a place in the model switch; a case opens them on
+  the return-period class. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -273,6 +283,14 @@ Facts worth getting right:
   after dark; GOES-EAST and GOES-WEST the same five, METEOSAT and
   HIMAWARI-JP `ir104`, `dustrgb` and `truecolor`). AURORA:
   `aurora` (aurora visibility probability, percent, on a 1° global grid).
+  EFAS-v5 and EFAS-v5-WB (`efas`, `efaswb`): `dis06` (river discharge,
+  the mean over the six hours ending at the frame, m³/s, GRIB2 1/0/7 with
+  statistical process 0), `disrp` (its return-period class against the
+  EFAS thresholds, producer `xue`, local 1/192/1: 0 below the 1.5-year
+  level, 1 at or above it, 2 the 2-year, 3 the 5-year, 4 the 20-year) and
+  `upstream` (the area draining through the cell, km², producer `xue`,
+  local 1/192/2, static); all three exist only on river cells, and the
+  viewer draws them cell by cell, without smoothing.
   Names
   are `<family><level>`; the level is in hPa, `2m`/`10m` are heights above
   ground, `prmsl` is mean sea level pressure.
@@ -311,7 +329,10 @@ Facts worth getting right:
   requested, no endorsement implied); `ifshres` is ECMWF IFS HRES
   forwarded by Open-Meteo, CC BY 4.0 ("Adapted from ECMWF IFS by ECMWF,
   licensed under CC BY 4.0", via Open-Meteo, open-meteo.com — neither
-  ECMWF nor Open-Meteo endorses this use); the basemap
+  ECMWF nor Open-Meteo endorses this use); `efas` and `efaswb` are
+  Copernicus Emergency Management Service information from the Early
+  Warning Data Store, under its terms ("Contains modified Copernicus
+  Emergency Management Service information"); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -352,8 +373,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
-  mosaic of every geostationary disk). `woof` (`wrf`) is known but has no
-  live run, so alone it opens the default; a case pins its own dataset.
+  mosaic of every geostationary disk). `woof` (`wrf`), `efas` and
+  `efaswb` are known but have no live run, so alone they open the
+  default; a case pins its own dataset.
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -370,7 +392,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `dustconfidence`), `zhouye` (`zhouyecf`), `truecolor` (`visible`,
   `rgb`, `color`, `colour`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
   `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
-  `pm10` and `pm10dust`, or a bundle name such as `tmp850`,
+  `pm10` and `pm10dust`, the EFAS `returnperiod` (`disrp`, `floodclass`,
+  `rp`), `discharge` (`dis06`, `dis`, `riverdischarge`, `streamflow`) and
+  `upstream` (`upstreamarea`, `uparea`, `catchment`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
   `z500`, `humidity700`, `vapour850`, `omega700`, `subtropicalhigh`
   (= `hgt500`) are accepted spellings.

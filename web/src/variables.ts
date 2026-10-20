@@ -27,7 +27,7 @@
 
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { CAT_CLASSES, PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
+import { CAT_CLASSES, DISRP_CLASSES, PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
 import { CAT_LEVELS, ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pressureLegend, type PressureBundleId } from "./pressure";
 
@@ -35,8 +35,41 @@ import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pres
  * group is chart knowledge — what a forecaster would file it under — and
  * the sheet's last group, for bundles no entry stands for, is the sheet's
  * own. */
-export type FieldGroup = "temperature" | "moisture" | "soil" | "wind" | "dynamics" | "radiation" | "aerosol" | "ocean" | "satellite" | "space";
-export const FIELD_GROUPS: readonly FieldGroup[] = ["temperature", "moisture", "soil", "wind", "dynamics", "radiation", "aerosol", "ocean", "satellite", "space"];
+export type FieldGroup =
+  | "temperature"
+  | "moisture"
+  | "soil"
+  | "wind"
+  | "dynamics"
+  | "radiation"
+  | "aerosol"
+  | "ocean"
+  | "hydrology"
+  | "satellite"
+  | "space";
+export const FIELD_GROUPS: readonly FieldGroup[] = [
+  "temperature",
+  "moisture",
+  "soil",
+  "wind",
+  "dynamics",
+  "radiation",
+  "aerosol",
+  "ocean",
+  "hydrology",
+  "satellite",
+  "space",
+];
+
+/** How the renderer reconstructs a field between cell centres
+ * (`layer.ts::setSampling`): `smooth` is the bicubic reconstruction every
+ * model field takes; `nearest` paints each cell its own value, for a field
+ * whose cells are features rather than samples of a smooth surface — a
+ * river network one cell wide, which any interpolation would smear into
+ * its no-data neighbours and out of sight; `classes` is `nearest` whose
+ * frames also step rather than blend, for a class field, where the code
+ * halfway between two classes is a third class the data never held. */
+export type Sampling = "smooth" | "nearest" | "classes";
 
 /** The ground a field is drawn on, by what its palette needs (main.ts
  * maps each to its tones per theme): an opaque coat's near-void, a
@@ -57,6 +90,8 @@ export interface VariableSpec {
    * — so the renderer erodes rather than interpolates across it
    * (`layer.ts::setFloorNoData`). The radar mosaic's 0 dBZ is a value. */
   floorIsNoData: boolean;
+  /** How the renderer reconstructs the field between cells (`Sampling`). */
+  sampling: Sampling;
   /** The field sheet's group; null for the lines, which are no field. */
   group: FieldGroup | null;
   /** The instrument code, after the model's ("GFS / TMP 2M"). */
@@ -132,6 +167,17 @@ function catKey(): readonly LegendSwatch[] {
   }).reverse();
 }
 
+/** The return-period class's key: one swatch per class, the highest
+ * first like a ramp's top tick, the colours its palette paints
+ * (`levels.ts::DISRP_CLASSES`). Built on demand for the same cycle reason
+ * as `ptypeKey`. */
+function disrpKey(): readonly { color: string; labelKey: MessageKey }[] {
+  return DISRP_CLASSES.map(({ rgb, alpha, labelKey }) => ({
+    color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${(alpha / 255).toFixed(3)})`,
+    labelKey,
+  })).reverse();
+}
+
 /** What the true colour picture's colours are: a photograph needs no
  * key to read, but the legend has no bar to show for a composite (the
  * guns are unitless and nothing maps a tick to a value), and without a
@@ -173,6 +219,7 @@ interface SurfaceEntry {
   /** A swatch key in place of the bar (`VariableSpec.legendKey`). */
   legendKey?: readonly { color: string; labelKey: MessageKey }[];
   floorIsNoData?: boolean;
+  sampling?: Sampling;
   ground: GroundId;
   urlName: string;
   urlAliases?: readonly string[];
@@ -189,6 +236,7 @@ function surface(entry: SurfaceEntry): VariableSpec {
     vector: entry.vector ?? false,
     family: entry.family ?? null,
     floorIsNoData: entry.floorIsNoData ?? false,
+    sampling: entry.sampling ?? "smooth",
     group: entry.group,
     code: entry.code,
     title: entry.title,
@@ -236,6 +284,7 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
       vector: entry.vector ?? false,
       family: entry.family,
       floorIsNoData: false,
+      sampling: "smooth",
       group: entry.group,
       code: isobaricCode(id),
       title: [`${level} hPa`, entry.word],
@@ -299,6 +348,7 @@ function pressure(): VariableSpec[] {
       vector: false,
       family: "hgt",
       floorIsNoData: false,
+      sampling: "smooth",
       group: null,
       code: pressureCode(id),
       title: level === null ? ["Sea Level", "Pressure"] : [`${level} hPa`, "Height"],
@@ -1224,6 +1274,55 @@ function buildSpecs(): readonly VariableSpec[] {
     urlName: "aurora",
     urlAliases: ["ovation"],
     showcaseCode: "AUR",
+  }),
+  // The hydrology set, EFAS's river network: the return-period class the
+  // flood map is read by, the six-hourly mean discharge it is derived
+  // from, and the static upstream area under both. Each lives on river
+  // cells alone, one cell wide, so each is drawn cell by cell, and the
+  // class never blends between frames.
+  surface({
+    id: "disrp",
+    chart: "disrp",
+    group: "hydrology",
+    code: "DIS RP",
+    title: ["Return-Period", "Class"],
+    bufferTitle: "Discharge buffer",
+    labelKey: "varLabelDisrp",
+    legendKey: disrpKey(),
+    sampling: "classes",
+    ground: "slate",
+    urlName: "returnperiod",
+    urlAliases: ["disrp", "floodclass", "rp"],
+    showcaseCode: "FLOOD RP",
+  }),
+  surface({
+    id: "dis06",
+    chart: "dis06",
+    group: "hydrology",
+    code: "DIS 6H",
+    title: ["River", "Discharge"],
+    bufferTitle: "Discharge buffer",
+    labelKey: "varLabelDis06",
+    sampling: "nearest",
+    ground: "slate",
+    urlName: "discharge",
+    urlAliases: ["dis", "riverdischarge", "streamflow"],
+    meteogramCode: "DIS",
+    showcaseCode: "DISCHARGE",
+  }),
+  surface({
+    id: "upstream",
+    chart: "upstream",
+    group: "hydrology",
+    code: "UPS AREA",
+    title: ["Upstream", "Area"],
+    bufferTitle: "Basin buffer",
+    labelKey: "varLabelUpstream",
+    sampling: "nearest",
+    ground: "slate",
+    urlName: "upstream",
+    urlAliases: ["upstreamarea", "uparea", "catchment"],
+    showcaseCode: "UPS AREA",
   }),
   // The lines.
   ...pressure(),

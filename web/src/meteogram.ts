@@ -36,6 +36,7 @@ export type MeteogramRowId =
   | "cloudtop"
   | "particulate"
   | "aod"
+  | "discharge"
   | "taf";
 
 /** How a row draws its series: traces, bars from a baseline, or one shaded
@@ -85,6 +86,9 @@ const ROW_TEMPLATES: readonly RowTemplate[] = [
   // the way the precipitation's bars are.
   { id: "particulate", kind: "line", bundles: ["pm25", "pm10"], range: null, baseline: 0 },
   { id: "aod", kind: "line", bundles: ["aod"], range: null, baseline: 0 },
+  // The river run's row: the discharge at the cell as a hydrograph, from
+  // zero so a rise reads against the dry bed.
+  { id: "discharge", kind: "line", bundles: ["dis06"], range: null, baseline: 0 },
 ];
 
 /** Every bundle any row could read; what a pinned point opens sessions for
