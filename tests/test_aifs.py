@@ -182,7 +182,10 @@ class RegistryAlternateTests(unittest.TestCase):
 class FetchTests(unittest.TestCase):
     def test_the_model_directory_sits_beside_the_ifs(self) -> None:
         run = GfsRun(datetime(2026, 9, 17, 0, tzinfo=UTC))
-        self.assertEqual(ECMWF_OPEN_DATA_MODELS, {"ecmwf": "ifs", "aifs": "aifs-single"})
+        self.assertEqual(
+            {model: data.directory for model, data in ECMWF_OPEN_DATA_MODELS.items()},
+            {"ecmwf": "ifs", "aifs": "aifs-single", "ifs": "ifs"},
+        )
         self.assertEqual(
             ecmwf_object_url(run, 6, model="aifs"),
             "https://storage.googleapis.com/ecmwf-open-data/20260917/00z/aifs-single/0p25/oper/20260917000000-6h-oper-fc.grib2",

@@ -12,9 +12,14 @@ from unittest.mock import Mock, patch
 
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
+    ECMWF_OPEN_DATA_MODELS,
     _download_ecmwf_payload,
     _request,
+    _run_is_complete,
+    ecmwf_companion_object_url,
+    ecmwf_object_part,
     ecmwf_object_url,
+    model_object_url,
     fetch_frame,
     fetch_range,
     fetch_run,
@@ -179,6 +184,123 @@ class FetchTests(unittest.TestCase):
             )
         )
         self.assertEqual(sum("-wave-fc.grib2" in url for url in requested_ranges), 3)
+
+    def test_the_0p1_ifs_objects_are_split_by_level_type(self) -> None:
+        run = GfsRun(datetime(2026, 10, 20, 12, tzinfo=UTC))
+        prefix = "https://storage.googleapis.com/ecmwf-open-data/20261020/12z/ifs/0p1/"
+        self.assertEqual(
+            ecmwf_object_url(run, 3, model="ifs", part="sfc"), prefix + "oper/20261020120000-3h-oper-fc-sfc.grib2"
+        )
+        self.assertEqual(
+            ecmwf_object_url(run, 3, model="ifs", part="pl"), prefix + "oper/20261020120000-3h-oper-fc-pl.grib2"
+        )
+        self.assertEqual(
+            ecmwf_companion_object_url(run, 240, "wave", model="ifs"),
+            prefix + "wave/20261020120000-240h-wave-fc-sfc.grib2",
+        )
+        self.assertEqual(model_object_url(run, 0, "ifs"), ecmwf_object_url(run, 0, model="ifs", part="sfc"))
+        # The 0.25° objects stay combined, and the old call shapes name them.
+        self.assertEqual(
+            ecmwf_object_url(run, 3),
+            "https://storage.googleapis.com/ecmwf-open-data/20261020/12z/ifs/0p25/oper/20261020120000-3h-oper-fc.grib2",
+        )
+        self.assertEqual(model_object_url(run, 3, "ecmwf"), ecmwf_object_url(run, 3))
+        self.assertTrue(ecmwf_companion_object_url(run, 3, "wave").endswith("/wave/20261020120000-3h-wave-fc.grib2"))
+        # A part is required on a split oper stream, refused on a combined
+        # one, and the wave stream of a split source has only its -sfc object.
+        with self.assertRaisesRegex(DownloadError, "sfc or pl"):
+            ecmwf_object_url(run, 3, model="ifs")
+        with self.assertRaises(DownloadError):
+            ecmwf_object_url(run, 3, model="ecmwf", part="sfc")
+        with self.assertRaises(DownloadError):
+            ecmwf_object_url(run, 3, model="ifs", stream="wave", part="pl")
+        with self.assertRaises(DownloadError):
+            ecmwf_object_url(run, 3, model="gfs")
+        self.assertEqual(ECMWF_OPEN_DATA_MODELS["ifs"].short_cycle_hours, 144)
+        self.assertEqual(ECMWF_OPEN_DATA_MODELS["ecmwf"].short_cycle_hours, 90)
+        self.assertIsNone(ECMWF_OPEN_DATA_MODELS["aifs"].short_cycle_hours)
+        self.assertEqual(
+            {model: (service.directory, service.resolution, service.split) for model, service in ECMWF_OPEN_DATA_MODELS.items()},
+            {"ecmwf": ("ifs", "0p25", False), "aifs": ("aifs-single", "0p25", False), "ifs": ("ifs", "0p1", True)},
+        )
+
+    def test_the_part_follows_the_level_type(self) -> None:
+        self.assertEqual(ecmwf_object_part("hgt500"), "pl")
+        self.assertEqual(ecmwf_object_part("ugrd200"), "pl")
+        self.assertEqual(ecmwf_object_part("tmp2m"), "sfc")
+        self.assertEqual(ecmwf_object_part("prmsl"), "sfc")
+        # The soil layers (levtype sol) travel with the surface records.
+        self.assertEqual(ecmwf_object_part("tsoil1"), "sfc")
+        self.assertEqual(ecmwf_object_part("soilw4"), "sfc")
+
+    def test_an_ifs_run_is_complete_only_with_all_three_objects(self) -> None:
+        run = GfsRun(datetime(2026, 10, 20, 12, tzinfo=UTC))
+        probed: list[str] = []
+
+        def exists(url: str) -> bool:
+            probed.append(url)
+            return "-240h-oper-fc-pl" not in url
+
+        self.assertFalse(_run_is_complete(run, 240, "ifs", exists))
+        names = {url.rsplit("/", 1)[1] for url in probed}
+        self.assertEqual(
+            names,
+            {
+                f"20261020120000-{hour}h-{name}.grib2"
+                for hour in (0, 240)
+                for name in ("oper-fc-sfc", "oper-fc-pl", "wave-fc-sfc")
+            },
+        )
+        self.assertTrue(all("/ifs/0p1/" in url for url in probed))
+        self.assertTrue(_run_is_complete(run, 240, "ifs", lambda url: True))
+
+    def test_ifs_resolution_skips_the_short_cycles_only_past_144_hours(self) -> None:
+        now = datetime(2026, 10, 20, 23, 0, tzinfo=UTC)
+        self.assertEqual(resolve_run("latest", hours=144, now=now, exists=lambda url: True, model="ifs").id, "2026102018")
+        self.assertEqual(resolve_run("latest", hours=240, now=now, exists=lambda url: True, model="ifs").id, "2026102012")
+        # The 0.25° short cycles stop at 90 h.
+        self.assertEqual(resolve_run("latest", hours=120, now=now, exists=lambda url: True, model="ecmwf").id, "2026102012")
+        self.assertEqual(resolve_run("latest", hours=90, now=now, exists=lambda url: True, model="ecmwf").id, "2026102018")
+
+    def test_an_ifs_frame_reads_each_part_from_its_own_index_in_source_order(self) -> None:
+        run = GfsRun(datetime(2026, 10, 20, 12, tzinfo=UTC))
+        spec = source_spec("ifs")
+        requested_indexes: list[str] = []
+        located: list[tuple[str, str]] = []
+
+        def fetch_text(url: str) -> str:
+            requested_indexes.append(url)
+            return url.rsplit("-", 1)[1].removesuffix(".index")
+
+        def locate(text: str, param: str, **kwargs: object) -> ByteRange:
+            located.append((text, param))
+            return ByteRange(len(located), len(located))
+
+        def fetch_range(url: str, byte_range: ByteRange) -> bytes:
+            return url.rsplit("-", 1)[1].removesuffix(".grib2").encode() + b","
+
+        with (
+            patch("xuebuild.fetch.fetch_text", side_effect=fetch_text),
+            patch("xuebuild.fetch.fetch_range", side_effect=fetch_range),
+            patch("xuebuild.fetch.ecmwf_field_byte_range", side_effect=locate),
+        ):
+            payload = _download_ecmwf_payload(run, 3, spec)
+
+        wanted = [variable_id for variable_id in spec.input_variable_ids if not variable_spec(variable_id).static]
+        expected_parts = [
+            "sfc" if spec.companion_of(variable_id) is not None else ecmwf_object_part(variable_id) for variable_id in wanted
+        ]
+        # One index per object, the first time a record needs it; every
+        # record located in the index of its own object; the bytes in the
+        # source's input order whichever object each came from.
+        self.assertEqual(
+            [url.rsplit("/", 1)[1] for url in requested_indexes],
+            ["20261020120000-3h-oper-fc-sfc.index", "20261020120000-3h-oper-fc-pl.index", "20261020120000-3h-wave-fc-sfc.index"],
+        )
+        self.assertEqual([text for text, _ in located], expected_parts)
+        self.assertEqual([param for _, param in located], [variable_spec(variable_id).ecmwf_param for variable_id in wanted])
+        self.assertEqual(payload.decode().rstrip(",").split(","), expected_parts)
+        self.assertEqual(expected_parts.count("pl"), 44)
 
     def test_a_frame_that_carries_none_of_the_requested_records_is_refused(self) -> None:
         # A static field is fetched at the analysis alone, so a later frame

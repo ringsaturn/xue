@@ -252,12 +252,45 @@ def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
 # and axis.
 ECMWF_COMPANION_STREAMS: dict[str, str] = {"wave": "wave"}
 
-# The sources served by the ECMWF open data service, by the model directory
-# each is published under (``<date>/<cycle>z/<model>/0p25/<stream>/``): the
-# IFS and the data-driven AIFS Single share the mirrors, the ``.index``
-# shape, the CCSDS packing and the two streams, and are fetched by one
-# path.
-ECMWF_OPEN_DATA_MODELS: dict[str, str] = {"ecmwf": "ifs", "aifs": "aifs-single"}
+@dataclass(frozen=True)
+class EcmwfOpenData:
+    """Where one source sits on the ECMWF open data service
+    (``<date>/<cycle>z/<directory>/<resolution>/<stream>/``)."""
+
+    directory: str
+    """The model directory: ``ifs`` or ``aifs-single``."""
+    resolution: str
+    """``0p25`` or ``0p1``."""
+    split: bool
+    """Whether the ``oper`` stream is two objects, ``-sfc`` (every surface
+    and soil record) and ``-pl`` (the pressure levels), and the ``wave``
+    stream one object suffixed ``-sfc``; a combined stream is one object
+    with no suffix."""
+    short_cycle_hours: int | None
+    """The last hour the 06 and 18 cycles reach, or None when every cycle
+    reaches the published axis."""
+
+
+# The sources served by the ECMWF open data service: the IFS at both of its
+# published resolutions and the data-driven AIFS Single share the mirrors,
+# the ``.index`` shape, the CCSDS packing and the two streams, and are
+# fetched by one path. The 0.1° IFS objects (published since the 2026-10-20
+# 06z cycle) carry the same records as the 0.25° ones, split by level type,
+# and land about two hours later.
+ECMWF_OPEN_DATA_MODELS: dict[str, EcmwfOpenData] = {
+    "ecmwf": EcmwfOpenData("ifs", "0p25", False, 90),
+    "aifs": EcmwfOpenData("aifs-single", "0p25", False, None),
+    "ifs": EcmwfOpenData("ifs", "0p1", True, 144),
+}
+
+
+def ecmwf_open_data(model: str) -> EcmwfOpenData:
+    """Where ``model`` sits on the service, or a :class:`DownloadError` for
+    a source it does not carry."""
+    try:
+        return ECMWF_OPEN_DATA_MODELS[model]
+    except KeyError:
+        raise DownloadError(f"{model} is not served by the ECMWF open data service") from None
 
 
 def ecmwf_object_url(
@@ -267,18 +300,39 @@ def ecmwf_object_url(
     base_url: str | None = None,
     stream: str = "oper",
     model: str = "ecmwf",
+    part: str | None = None,
 ) -> str:
     """ECMWF open data with an unpadded ``-{h}h-`` step in the object name:
     the ``oper`` atmosphere by default, or a companion family's stream, of
     the IFS by default or of another source the service carries
-    (:data:`ECMWF_OPEN_DATA_MODELS`)."""
-    try:
-        directory = ECMWF_OPEN_DATA_MODELS[model]
-    except KeyError:
-        raise DownloadError(f"{model} is not served by the ECMWF open data service") from None
-    filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-{stream}-fc.grib2"
+    (:data:`ECMWF_OPEN_DATA_MODELS`). On a split source the ``oper`` stream
+    is named with its ``part`` (``sfc`` or ``pl``, required) and any other
+    stream is its one ``-sfc`` object; a combined source takes no part."""
+    service = ecmwf_open_data(model)
+    if service.split:
+        if stream == "oper":
+            if part not in ("sfc", "pl"):
+                raise DownloadError(f"{model} {stream} objects are split: name the part, sfc or pl")
+            suffix = f"-{part}"
+        else:
+            if part not in (None, "sfc"):
+                raise DownloadError(f"{model} {stream} is one -sfc object, not a {part} part")
+            suffix = "-sfc"
+    elif part is not None:
+        raise DownloadError(f"{model} {stream} is one object with no {part} part")
+    else:
+        suffix = ""
+    filename = f"{run.date}{run.cycle}0000-{forecast_hour}h-{stream}-fc{suffix}.grib2"
     base = (base_url or ECMWF_BASE_URLS[0]).rstrip("/")
-    return f"{base}/{run.date}/{run.cycle}z/{directory}/0p25/{stream}/{filename}"
+    return f"{base}/{run.date}/{run.cycle}z/{service.directory}/{service.resolution}/{stream}/{filename}"
+
+
+def ecmwf_object_part(variable_id: str) -> str:
+    """The ``oper`` object of a split source that carries one variable:
+    ``pl`` for a pressure-level record, ``sfc`` for every other, the soil
+    layers (``levtype`` ``sol``) included."""
+    levtype, _ = ecmwf_level_selector(VARIABLES[variable_id])
+    return "pl" if levtype == "pl" else "sfc"
 
 
 def ecmwf_companion_object_url(
@@ -1786,7 +1840,10 @@ def _fetch_satellite_run(
 
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
     if model in ECMWF_OPEN_DATA_MODELS:
-        return ecmwf_object_url(run, forecast_hour, model=model)
+        # The object a log line or a probe names: on a split source the
+        # surface part, which every frame touches.
+        part = "sfc" if ECMWF_OPEN_DATA_MODELS[model].split else None
+        return ecmwf_object_url(run, forecast_hour, model=model, part=part)
     if model == "cfs":
         # CFSv2 has no object per forecast hour: a run is one object per
         # variable holding the whole series. The hour is ignored and the
@@ -1974,14 +2031,17 @@ def _run_is_complete(
             urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
         return all(exists(url) for url in urls)
 
-    # Both ends of every family, on one mirror: the wave stream lands on
-    # its own schedule, and a run is complete only when it is there too.
+    # Both ends of every object a frame touches, on one mirror: the wave
+    # stream lands on its own schedule, and so does each part of a split
+    # stream, and a run is complete only when all of them are there.
     label = source_spec(model).manifest_model
+    parts: tuple[str | None, ...] = ("sfc", "pl") if ECMWF_OPEN_DATA_MODELS[model].split else (None,)
     transient_error: DownloadError | None = None
     for base_url in ECMWF_BASE_URLS:
         urls = [
-            ecmwf_object_url(run, 0, base_url=base_url, model=model),
-            ecmwf_object_url(run, hours, base_url=base_url, model=model),
+            ecmwf_object_url(run, hour, base_url=base_url, model=model, part=part)
+            for part in parts
+            for hour in (0, hours)
         ]
         for companion in source_spec(model).companion_files:
             urls += [
@@ -2051,9 +2111,13 @@ def resolve_run(
 
     cycle = timedelta(hours=spec.cycle_hours)
     candidate = floor_to_cycle(now or datetime.now(UTC), spec.cycle_hours)
+    # ECMWF's 06 and 18 cycles stop short of the published axis, so a
+    # horizon past them is answered by the newest 00 or 12 cycle.
+    service = ECMWF_OPEN_DATA_MODELS.get(model)
+    short_cycle_hours = service.short_cycle_hours if service is not None else None
     for _ in range(max_cycles):
         run = GfsRun(candidate)
-        if model == "ecmwf" and hours > 90 and run.cycle in {"06", "18"}:
+        if short_cycle_hours is not None and hours > short_cycle_hours and run.cycle in {"06", "18"}:
             candidate -= cycle
             continue
         LOG.info("checking %s run %s", label, run.id)
@@ -2205,51 +2269,63 @@ def _download_hrrr_payload(
     raise DownloadError(f"no HRRR mirror has run {run.id} f{forecast_hour:02d}: " + ", ".join(missing))
 
 
-def _download_ecmwf_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
-    """The requested records of one ECMWF open data object, located through
-    its ``.index`` sidecar and fetched as byte ranges, in the order given."""
-    if not variable_ids:
-        return b""
-    index_text = fetch_text(url.removesuffix(".grib2") + ".index")
-    byte_ranges = []
+def _ecmwf_record_object(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, variable_id: str, base_url: str
+) -> str:
+    """The object of one mirror that carries one variable of a frame: a
+    companion family's stream, or the ``oper`` stream — the part of it the
+    record's level type selects when the source's objects are split."""
+    companion = spec.companion_of(variable_id)
+    if companion is not None:
+        return ecmwf_companion_object_url(run, forecast_hour, companion.id, base_url=base_url, model=spec.id)
+    part = ecmwf_object_part(variable_id) if ECMWF_OPEN_DATA_MODELS[spec.id].split else None
+    return ecmwf_object_url(run, forecast_hour, base_url=base_url, model=spec.id, part=part)
+
+
+def _download_ecmwf_records(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, variable_ids: tuple[str, ...], base_url: str
+) -> bytes:
+    """The requested records of one frame from one mirror, in the order
+    given: each located through the ``.index`` sidecar of the object that
+    carries it — loaded once per object, however many records it serves
+    — and fetched as a byte range."""
+    indexes: dict[str, str] = {}
+    located: list[tuple[str, ByteRange]] = []
     for variable_id in variable_ids:
+        url = _ecmwf_record_object(run, forecast_hour, spec, variable_id, base_url)
+        if url not in indexes:
+            indexes[url] = fetch_text(url.removesuffix(".grib2") + ".index")
         variable = VARIABLES[variable_id]
         levtype, levelist = ecmwf_level_selector(variable)
-        byte_ranges.append(
-            ecmwf_field_byte_range(
-                index_text,
-                variable.ecmwf_param,
-                levtype=levtype,
-                levelist=levelist,
-                alternate_params=variable.ecmwf_alternate_params,
+        located.append(
+            (
+                url,
+                ecmwf_field_byte_range(
+                    indexes[url],
+                    variable.ecmwf_param,
+                    levtype=levtype,
+                    levelist=levelist,
+                    alternate_params=variable.ecmwf_alternate_params,
+                ),
             )
         )
-    return b"".join(fetch_range(url, byte_range) for byte_range in byte_ranges)
+    return b"".join(fetch_range(url, byte_range) for url, byte_range in located)
 
 
 def _download_ecmwf_payload(
     run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
 ) -> bytes:
-    """One frame's GRIB from the first mirror that serves the whole of it:
-    the ``oper`` records, then each companion family's from its own stream
-    — so a frame narrowed to one family's variables touches only that
-    family's object, as on the NOAA side."""
+    """One frame's GRIB from the first mirror that serves the whole of it,
+    the records in the source's input order whichever object each comes
+    from — so a frame narrowed to one family's or one level type's
+    variables touches only that object, as on the NOAA side."""
     errors: list[str] = []
     wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
     for base_url in ECMWF_BASE_URLS:
         try:
-            payload = _download_ecmwf_records(
-                ecmwf_object_url(run, forecast_hour, base_url=base_url, model=spec.id),
-                tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
-            )
-            for companion in spec.companion_files:
-                payload += _download_ecmwf_records(
-                    ecmwf_companion_object_url(run, forecast_hour, companion.id, base_url=base_url, model=spec.id),
-                    tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids),
-                )
             # Index offsets are scoped to a particular replica. Restart the
             # whole frame on the next mirror if any range request fails.
-            return payload
+            return _download_ecmwf_records(run, forecast_hour, spec, wanted, base_url)
         except DownloadError as exc:
             errors.append(f"{base_url}: {exc}")
             LOG.warning(
