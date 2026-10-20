@@ -513,11 +513,17 @@ body.is-showcase .model-caret {
    hurricane's rain shield), and a paragraph over that has no ground tone
    to sit on — a text shadow is not enough. Chrome tokens, like every card. */
 .case-detail {
+  /* Stops above the capsule (bottom 16px) with a margin either side; a
+     river block makes the card tall enough to reach it. The rest scrolls. */
+  max-height: calc(100vh - 144px - var(--capsule-height, 90px) - 32px);
+  max-height: calc(100dvh - 144px - var(--capsule-height, 90px) - 32px);
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   backdrop-filter: blur(12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .case-detail p {
@@ -934,9 +940,11 @@ body.stats-visible .stat-graph-wrap {
 /* ---------------------------------------------------------------------------
    Color scale, on the left edge. */
 
+/* --legend-left moves the legend beside an open case card that would
+   otherwise cover it (main.ts measures the two). */
 .legend {
   top: 50%;
-  left: 20px;
+  left: var(--legend-left, 20px);
   display: flex;
   flex-direction: column;
   align-items: center;
