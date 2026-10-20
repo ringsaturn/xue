@@ -46,7 +46,10 @@ it opens drawn over the field, carried onto the catalog row verbatim. A
 shell that does not know the block opens the case on its bounding box as
 before. Its ``markers`` are labelled points of context inside the box (a
 crossing, an ignition), each with a note and its sources, carried onto the
-row the same way; a shell that does not know them draws none.
+row the same way; a shell that does not know them draws none. Its
+``river`` names the river index built into its directory
+(``docs/river.md``): reach streamflow, gauges and flood extents the shell
+plays beside the field, and ignores when it does not know the block.
 """
 
 from __future__ import annotations
@@ -155,6 +158,10 @@ class CaseSpec:
     """The active fire detections the case plays over its own axis
     (``docs/fire.md``): ``window``, the ``index.json`` of a ``xue
     fire-build`` round written into the case's directory, relative to it."""
+    river: dict[str, str] | None = None
+    """The river flow the case plays beside its field (``docs/river.md``):
+    ``index``, the ``river/index.json`` a ``python -m xuebuild.river
+    build`` wrote into the case's directory, relative to it."""
     imagery: dict[str, str] | None = None
     """The NASA GIBS daily picture the shell offers in place of the case's
     field and opens on (``web/src/gibs.ts``): ``layer``, one of
@@ -334,6 +341,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if fire is not None:
         fire = _fire_block(fire, case_id)
 
+    river = payload.get("river")
+    if river is not None:
+        river = _river_block(river, case_id)
+
     imagery = payload.get("imagery")
     if imagery is not None:
         imagery = _imagery_block(imagery, case_id)
@@ -363,6 +374,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         profile=profile,
         radar=radar,
         fire=fire,
+        river=river,
         imagery=imagery,
         markers=tuple(markers),
         view=view,
@@ -408,6 +420,22 @@ def _fire_block(value: object, case_id: str) -> dict[str, str]:
     ):
         raise ShowcaseError(f"case {case_id}: fire.window must be an index.json inside the case directory")
     return {"window": window}
+
+
+def _river_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``river`` block: the river index inside the case's own
+    directory (``docs/river.md``)."""
+    if not isinstance(value, dict) or set(value) - {"index", "byteLength", "crc32"}:
+        raise ShowcaseError(f"case {case_id}: river must be {{index}}")
+    index = value.get("index")
+    if (
+        not isinstance(index, str)
+        or not index.endswith("/index.json")
+        or index.startswith("/")
+        or ".." in index.split("/")
+    ):
+        raise ShowcaseError(f"case {case_id}: river.index must be an index.json inside the case directory")
+    return {"index": index}
 
 
 GIBS_LAYERS = (
@@ -757,6 +785,8 @@ def build_catalog_entry(
         entry["radar"] = dict(spec.radar)
     if spec.fire:
         entry["fire"] = dict(spec.fire)
+    if spec.river:
+        entry["river"] = dict(spec.river)
     if spec.imagery:
         entry["imagery"] = dict(spec.imagery)
     if spec.markers:
@@ -795,6 +825,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _radar_block(entry["radar"], entry["id"])
     if "fire" in entry:
         _fire_block(entry["fire"], entry["id"])
+    if "river" in entry:
+        _river_block(entry["river"], entry["id"])
     if "imagery" in entry:
         _imagery_block(entry["imagery"], entry["id"])
     if "view" in entry:
@@ -806,7 +838,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit, the markers and the view are the definition's to change — a
+    the tags, the credit, the river, the markers and the view are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -849,6 +881,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("credit", spec.credit),
         ("radar", dict(spec.radar) if spec.radar else None),
         ("fire", dict(spec.fire) if spec.fire else None),
+        ("river", dict(spec.river) if spec.river else None),
         ("imagery", dict(spec.imagery) if spec.imagery else None),
         ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
         ("view", dict(spec.view) if spec.view else None),
@@ -895,6 +928,8 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
             entry["radar"] = _catalog_radar(output_root, entry)
         if "fire" in entry:
             entry["fire"] = _catalog_fire(output_root, entry)
+        if "river" in entry:
+            entry["river"] = _catalog_river(output_root, entry)
         entries.append(entry)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
@@ -942,6 +977,25 @@ def _catalog_fire(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     for sensor in index["sensors"]:
         if not (path.parent / sensor["file"]["path"]).is_file():
             raise ShowcaseError(f"case {entry['id']}: fire window names {sensor['file']['path']}, which is not built")
+    return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
+
+
+def _catalog_river(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """The river block as the catalog publishes it: the river index's
+    length and CRC32 (its ``?v=``), measured from the built file, which
+    must be a valid index whose every store, GeoParquet, gauge line and
+    extent matches what is beside it."""
+    from .river.schema import read_index  # the river package imports nothing of the showcase's
+
+    block = _river_block(entry["river"], entry["id"])
+    path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["index"]
+    if not path.is_file():
+        raise ShowcaseError(f"case {entry['id']} names a river index that is not built: {path}")
+    data = path.read_bytes()
+    try:
+        read_index(path)
+    except XueError as exc:
+        raise ShowcaseError(f"case {entry['id']} has an invalid river index: {exc}") from exc
     return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
 
 

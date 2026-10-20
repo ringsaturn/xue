@@ -82,3 +82,6 @@ build/
 rust/xue-py/pysrc/xue/*.so
 # Claude Code scratch worktrees
 .claude/worktrees/
+
+# River case staging written by `python -m xuebuild.river build` before a case directory exists
+data/river-staging/

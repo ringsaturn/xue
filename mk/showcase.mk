@@ -15,11 +15,13 @@ showcase-check: ## Validate case definitions
 # live cases' sidecars first; a one-case catalog would unlist the rest. A
 # radar case's row is measured from its window manifest, an index.json
 # inside the case directory, so those come too; a fire window's row is
-# checked against its sensor files, the JSONL beside its index.
-live-showcase-catalog: ## Pull the published cases' sidecars, manifests, radar and fire windows
+# checked against its sensor files, the JSONL beside its index; a river
+# index's row is checked against every store, GeoParquet, gauge line and
+# extent in the case's river/ directory, so that directory comes whole.
+live-showcase-catalog: ## Pull the published cases' sidecars, manifests, radar, fire and river data
 	@set -e; mkdir -p web/public/data/showcase; \
 	$(S3) sync $(R2_ROOT)/showcase/ web/public/data/showcase/ \
-		--exclude "*" --include "*/case.json" --include "*/manifest.json" --include "*/index.json" --include "*.jsonl" --only-show-errors; \
+		--exclude "*" --include "*/case.json" --include "*/manifest.json" --include "*/index.json" --include "*.jsonl" --include "*/river/*" --only-show-errors; \
 	echo "live cases: $$(ls web/public/data/showcase/*/case.json 2>/dev/null | wc -l | tr -d ' ')"
 
 showcase-refresh: ## Rewrite built cases' catalog rows from their definitions
