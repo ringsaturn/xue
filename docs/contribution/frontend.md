@@ -40,6 +40,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
 | `casemarkers.ts` | A case's markers (`showcase-catalog.ts` `ShowcaseMarker`, `showcase/README.md`): one GeoJSON symbol layer on top of the map, a canvas-drawn icon per kind (place, event) and a haloed label in the UI locale, inked from the ground like the basemap's labels. An event's `time` dims it until the playhead reaches it, as a paint expression. A click opens its card (note, time, `https` source links) in the station card's slot. The banner lists the same markers as buttons so the text is reachable without the map. A marker the shell cannot read is dropped on its own; the rest still draw. |
 | `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. |
+| `river/` | A case's river data (`docs/river.md`): the index and gauge lines (`index.ts`), the reaches' GeoParquet read by range (`parquet.ts`, `wkb.ts`), the network store (`store.ts`), the line layer (`layer.ts`, `palette.ts`), gauges and extents on the map with the case-panel controls (`case.ts`), the gauge's hydrograph in the probe panel (`gauge.ts`, `hydrograph.ts`). See "River layer" below. |
 | `radar/` | Single-site radar overlay (`docs/nexrad.md`): two feeds behind one session (`feed.ts`) — a case's window manifest, one unit per round, and the live source bucket (`live.ts`, §7), one unit per Level 3 object, over the static `sites.json` — a worker that range-reads a round and decodes it with the WASM `decodeChunk` (RAW) or reads a live sweep whole and decodes it with `decodeLevel3`, a session that streams units outward from the playhead, a live site's newest first (≤ 6 in flight, byte budget 384 MB desktop / 96 MB narrow, farthest rounds evicted first), the polar `R8UI` shader on the projection prelude, and radome site marks with ICAO labels. A chosen site is drawn alone (`ForecastLayer.setSuppressed` holds the field off screen; its slot keeps running), its scale takes the field legend (`legend[data-radar]`), REF / VEL are a radio pair on the rail under the radar tile, shown while a site is open, and the level row's `radar` group carries the sweep time and the site as a pressed chip whose ✕ closes it. Follows the playhead, never holds it; not draped on terrain. |
 
 ## Sessions and delivery
@@ -388,6 +389,78 @@ and the window shrinks to fit it.
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
+
+## River layer
+
+A showcase case whose catalog row carries a `river` block
+(`showcase-catalog.ts::riverBlock`) plays its river directory
+([`docs/river.md`](../river.md)) beside the field. `main.ts::loadCaseRiver`
+fetches `river/index.json?v=<crc32>` once per case and validates it
+(`river/index.ts::parseRiverIndex`, the writer's rules); a refused index or
+a failed request is one console warning and the case plays its field alone.
+`river/case.ts::RiverCase` then owns everything on the map:
+
+- **Geometry** (network case). `river/parquet.ts` reads `reaches.parquet`
+  through hyparquet over an `AsyncBuffer` whose every `slice` is one Range
+  request (`rangeAsyncBuffer`; a 200 answer is kept whole): the footer
+  first (16 KB suffix), then, on every `moveend`, the geometry column of
+  the row groups whose `bbox` covering statistics meet the view — all of
+  them when the view holds the case's `bbox`. The parquet reader is a lazy
+  chunk, loaded only on a network case. WKB is decoded by `river/wkb.ts`
+  (hyparquet's own GeoJSON conversion is off). Row group `g` is the
+  store's feature chunk `g`, so a row's index is its feature.
+- **Values**. `river/store.ts::NetworkStore` opens a track's store with the
+  grid reader's pieces: `zarr/store.ts` (range coalescing, `?v=`),
+  `zarr/shard.ts::parseShardIndex`, and the WASM `decodeChunk`
+  (`river/decode.ts` loads it on the main thread; a frame is two 24 KB
+  chunks). The group must carry `xue_network` version 1 and repeat the
+  index's geometry; the array is `uint8 [time, feature]`, one shard,
+  inner chunk `[6, rowGroupRows]`, `[xue.delta, bytes, zstd]` or `[bytes,
+  zstd]`. A frame is its time chunk's chunks for the row groups in hand,
+  issued in one microtask (one merged range); a reach's series is one
+  chunk per time chunk. Codes go through the `log1p` table
+  (`codebookTable`: 0 → 0, 254 → the maximum, 255 → NaN). `time` and
+  `baseflow` are read whole at open.
+- **Time**. The playhead's valid time comes from `updateFrameReadout`
+  (the frame asked for) and from `blendFrames` during playback (the
+  sweep's fraction, so the reaches move with the field's `u_mix`).
+  `framePair` takes the latest track frame at or before it and the next;
+  before the track's first frame nothing is drawn; past its last the last
+  holds. The two frames are blended linearly per reach on the CPU
+  (`blendValues`).
+- **Drawing** (`river/layer.ts`, a custom WebGL2 layer). Every segment is
+  an instance of a four-vertex strip carrying its two ends in Mercator and
+  its feature; geometry goes up once per row group. Per frame only an
+  RG32F texture of (flow, usual flow) changes, read with `texelFetch`.
+  The vertex stage projects both ends through MapLibre's `projectTile`
+  prelude (plane with three world copies, or globe) and extrudes across the
+  segment in device pixels. Colour: ratio `Q / max(baseflow, 1)` in four
+  classes, < 2 grey, 2–10 yellow, 10–100 red, ≥ 100 purple, the
+  `DISRP_CLASSES` hues; width `1 + log10(Q)` device pixels, 1 to 5; no
+  value is a faint 1 px grey (`river/palette.ts`, the same arithmetic in
+  TypeScript for the tests). The layer is added before the first symbol
+  layer: over the field and the coastline, under the labels and the
+  case's markers. It is not draped on the 3D relief.
+- **Gauges** are one circle layer (hollow rings, inked per ground) over
+  the reaches. A click pins the probe at the gauge (a grid gauge at its
+  `sample` cell) with `river/gauge.ts`'s section under the meteogram rows:
+  the observed line (one Range read of `gauges.jsonl`, `fetchSpanBytes`),
+  the outflow line where the gauge has one, the model at the gauge (the
+  track's column `feature`, or the case's `dis06` probe series on a grid
+  case), the reported peaks numbered on the chart and listed under it, on
+  a log axis by whole decades, on the meteogram's own columns and playhead
+  (`river/hydrograph.ts`).
+- **Extents** are fetched the first time the playhead passes their `at`
+  and drawn as translucent blue fills under the reaches; the case panel's
+  switch hides them. The credit line (`#river-credit`, shown under
+  `body[data-river]`) names the index's credits and each extent on screen.
+- **Case panel**. `RiverCase.renderPanel` fills `#case-river` under the
+  summary: the track switch (analysis first and by default, then each
+  forecast by its UTC cycle), the key, the extents' switch, the gauge hint,
+  the index's disclaimer and its credits.
+
+Tests: `tests/web/river-*.test.ts`; the synthetic GeoParquet and network
+store are written by `tests/web/fixtures/river.ts` (README beside it).
 
 ## Rail and view state
 

@@ -306,6 +306,10 @@ import {
   type ShowcaseMarker,
 } from "./showcase-catalog";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
+import { RiverCase } from "./river/case";
+import { createGaugeSection } from "./river/gauge";
+import type { TimedSeries } from "./river/hydrograph";
+import { fetchRiverIndex, type RiverGauge } from "./river/index";
 import {
   createVideoDecodeChannel,
   isWebCodecsSupported,
@@ -751,6 +755,7 @@ function applyBasemapTheme(): void {
   stationLayers?.setInk(darkGround);
   fireLayers?.setInk(darkGround);
   caseMarkers?.setInk(darkGround);
+  riverCase?.setInk(darkGround);
   if (radarOverlay) {
     const style = getComputedStyle(document.body);
     radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
@@ -1331,6 +1336,8 @@ const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
 const caseMarkerList = required<HTMLUListElement>("case-markers");
+const caseRiverPanel = required<HTMLElement>("case-river");
+const riverCredit = required<HTMLElement>("river-credit");
 
 const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
@@ -2704,6 +2711,9 @@ const soundingSection: SoundingSection = createSoundingSection({
   },
 });
 
+/** A river case's gauge in the probe panel, under the meteogram rows
+ * (`river/gauge.ts`); shown only while a gauge's mark opened the pin. */
+const gaugeSection = createGaugeSection(() => scheduleProbeRender());
 const probePanel = buildProbePanel();
 
 // The full-height copy of the chart, one of the shell's sheets: the panel's
@@ -2854,7 +2864,7 @@ function buildProbePanel() {
   rows.append(rowList, rowsChart);
   // The sounding section is the last thing in the panel: the rows are the
   // point's own forecast, and the ascent beside it is context under them.
-  root.append(head, rows, soundingSection.root);
+  root.append(head, rows, gaugeSection.root, soundingSection.root);
   timelinePanel.parentElement!.insertBefore(root, timelinePanel);
   return {
     root,
@@ -2968,7 +2978,7 @@ function formatProbeValue(variable: BundleVariable, value: number): string {
 
 /** Pin a point and open its panel. Before a session exists there is no grid
  * to sample against, so a click is simply ignored. */
-function setProbe(longitude: number, latitude: number): void {
+function setProbe(longitude: number, latitude: number, gauge: RiverGauge | null = null): void {
   if (!activeSession) return;
   // Off a regional model's own footprint the grid still holds a value — the
   // encoder's edge extension — but no forecast; there is nothing to pin.
@@ -2978,6 +2988,9 @@ function setProbe(longitude: number, latitude: number): void {
     return;
   }
   probe = new ProbeSeries(longitude, latitude);
+  // A gauge's mark pins the gauge's own point and adds its hydrograph; a
+  // click anywhere else drops it.
+  gaugeSection.setGauge(gauge ? (riverCase?.loaded ?? null) : null, gauge);
   // The requests tracked for the previous pin say nothing about this cell,
   // and keeping them would suppress the series read when a point is pinned
   // again later.
@@ -3074,6 +3087,7 @@ function closeProbe(): void {
   probeSynopSeries.clear();
   probeSynopSequence += 1;
   soundingSection.setStation(null, null, 0);
+  gaugeSection.setGauge(null, null);
   probeMarker?.remove();
   probePanel.root.hidden = true;
   // Unpinned, the clock is the viewer's own again.
@@ -3514,6 +3528,7 @@ function renderProbe(): void {
   probePanel.hint.textContent = !cell || session.composite ? "" : sampled >= offsets.length ? t("probeComplete") : t("probeHint");
   drawProbeChart(values, index, variable);
   renderProbeRows(series, index);
+  renderProbeGauge(series, index);
   // The ascent under the rows: its own time, never the playhead's, but the
   // model column laid over it comes from the series just read.
   soundingSection.render();
@@ -3789,6 +3804,42 @@ function renderProbeRows(series: ProbeSeries, index: number): void {
   drawProbeRowsChart(rows, index, offsets.length);
 }
 
+/** The pinned gauge's hydrograph: its observed line (the section reads it),
+ * and the model at it — the track's column on a network case, the case's
+ * own discharge field at the pin on a grid one. */
+function renderProbeGauge(series: ProbeSeries, index: number): void {
+  const gauge = gaugeSection.gauge();
+  if (!gauge || !metadata) return;
+  const leads = frameAxis().map((_, position) => frameLeadSeconds(position));
+  const runTimeMs = frameValidTime(0) - (leads[0] ?? 0) * 1000;
+  let modelled: TimedSeries | null = null;
+  if (gauge.feature !== undefined) {
+    modelled = riverCase?.modelSeries(gauge) ?? null;
+  } else {
+    const discharge = sessions.get("dis06");
+    if (discharge) {
+      const read = probeSessionSeries(series, discharge, leads);
+      modelled = {
+        times: leads.map((lead) => runTimeMs + lead * 1000),
+        values: read.values.map((value) => (typeof value === "number" ? value : null)),
+      };
+    }
+  }
+  const styles = getComputedStyle(document.body);
+  gaugeSection.render({
+    runTimeMs,
+    leadSeconds: leads,
+    selected: index,
+    time: frameValidTime(index),
+    modelled,
+    formatTime: (time) => formatDate(time),
+    ink: {
+      ink: styles.getPropertyValue("--accent").trim() || "#54d6c7",
+      muted: styles.getPropertyValue("--muted").trim() || "#8ca6b2",
+    },
+  });
+}
+
 function drawProbeRowsChart(rows: MeteogramRowData[], selected: number, count: number): void {
   const canvas = probePanel.rowsChart;
   const context = canvas.getContext("2d");
@@ -3852,6 +3903,7 @@ function bindProbeScrub(canvas: HTMLCanvasElement): void {
 }
 bindProbeScrub(probePanel.canvas);
 bindProbeScrub(probePanel.rowsChart);
+bindProbeScrub(gaugeSection.canvas);
 
 
 /** The label column the stylesheet gives the probe panel and the capsule:
@@ -4445,6 +4497,11 @@ function blendTowardNext(timestamp: number): void {
  * from frame `index` toward `next`; whether the primary's pair was there to
  * blend. The loop exports sample the sweep through this too. */
 function blendFrames(index: number, next: number, weight: number): boolean {
+  // The reaches sweep on the same clock, by valid time on their own axis.
+  if (riverCase && metadata) {
+    const from = frameValidTime(index);
+    riverCase.setTime(from + (frameValidTime(next) - from) * weight);
+  }
   const session = activeSession;
   const slot = primarySlot();
   if (!session || !slot || !activeVariable) return false;
@@ -4532,6 +4589,9 @@ function updateFrameReadout(index: number): void {
   scheduleProbeRender();
   syncTcTime();
   syncStationTime();
+  // The reaches follow the frame asked for, as the readout does, not the
+  // one still on screen while it decodes.
+  riverCase?.setTime(valid);
   syncShadowTime(index);
   syncGibs();
   embedHub?.emitTime();
@@ -6490,6 +6550,7 @@ function updateCasePresentation(showcaseCase: ShowcaseCase): void {
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
   caseRegion.textContent = formatRegion(showcaseCase.bbox);
   renderCaseMarkers(showcaseCase);
+  if (riverCase) riverCase.renderPanel(caseRiverPanel);
   caseBanner.hidden = false;
 }
 
@@ -7919,6 +7980,54 @@ async function loadCaseFire(showcaseCase: ShowcaseCase): Promise<void> {
     caseFireLoaded = null;
   }
   applyStationView();
+}
+
+/** The case's river data (`docs/river.md`), read once per case: the
+ * reaches, gauges and extents on the map, the block in the case panel,
+ * the credits on the credit line. An index this shell cannot read is a
+ * warning, and the case plays its field alone. */
+let riverCase: RiverCase | null = null;
+let riverCaseLoadedFor: string | null = null;
+
+async function loadCaseRiver(showcaseCase: ShowcaseCase): Promise<void> {
+  const river = showcaseCase.river;
+  if (!river || riverCaseLoadedFor === showcaseCase.id || !mapStyleReady) return;
+  riverCaseLoadedFor = showcaseCase.id;
+  const loaded = await fetchRiverIndex(dataBaseUrl(), river);
+  if (!loaded || activeCase?.id !== showcaseCase.id) return;
+  riverCase = new RiverCase({
+    map,
+    loaded,
+    bbox: showcaseCase.bbox,
+    onChange: () => {
+      syncRiverCredit();
+      scheduleProbeRender();
+    },
+  });
+  try {
+    riverCase.start();
+  } catch (error) {
+    console.warn("river: layers not added:", error instanceof Error ? error.message : error);
+    riverCase.dispose();
+    riverCase = null;
+    return;
+  }
+  riverCase.setInk(document.body.dataset.ground === "dark");
+  riverCase.setTime(stationTime());
+  riverCase.renderPanel(caseRiverPanel);
+  syncRiverCredit();
+}
+
+/** The credit line's river notice: the index's credits and each extent
+ * on screen, while the case's river data is up. */
+function syncRiverCredit(): void {
+  if (!riverCase) {
+    delete document.body.dataset.river;
+    riverCredit.textContent = "";
+    return;
+  }
+  document.body.dataset.river = "";
+  riverCredit.textContent = `${riverCase.credits().join(" · ")} ·`;
 }
 
 async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
@@ -10139,6 +10248,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       updateCasePresentation(found);
       void loadCaseRadar(found);
       void loadCaseFire(found);
+      void loadCaseRiver(found);
       // A case with a picture opens on it unless the link names one (or
       // the case was entered before); one without drops any it was handed.
       if (!found.imagery) view.imagery = null;
@@ -10469,6 +10579,15 @@ map.on("click", (event) => {
     showMarkerCard(marker);
     return;
   }
+  // A river gauge pins its own point with its hydrograph: a grid case's
+  // at the model cell it was snapped to, where the field is sampled.
+  const gauge = riverCase?.gaugeAt(event.point);
+  if (gauge) {
+    closeStationCard();
+    const [longitude, latitude] = gauge.sample ?? [gauge.lon, gauge.lat];
+    setProbe(longitude, latitude, gauge);
+    return;
+  }
   // A radar site's mark picks that site; the sweep under the pointer is
   // not a mark, so the field's probe still takes a click on it.
   const radarSite = radarSiteAt(event.point);
@@ -10495,13 +10614,14 @@ map.on("click", (event) => {
   if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
-  if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers && !caseMarkers) return;
+  if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers && !caseMarkers && !riverCase) return;
   const station = stationPointAt(event.point);
   // The mark under the pointer grows by a pixel, which is the only feature
   // state either product keeps.
   stationLayers?.setHover(station?.data ?? null);
   map.getCanvas().style.cursor =
     caseMarkers?.markerAt(event.point) ||
+    riverCase?.gaugeAt(event.point) ||
     tcPointAt(event.point) ||
     station ||
     radarSiteAt(event.point) ||
@@ -10534,6 +10654,7 @@ copyDebugButton.addEventListener("click", () => {
 statsClose.addEventListener("click", () => setStatsVisible(false));
 // The viewport-sampling row tracks zoom/resize while the panel is pinned.
 map.on("moveend", () => {
+  riverCase?.viewChanged();
   refreshViewportTiles();
   updateStatsReadout();
   refreshLabels();

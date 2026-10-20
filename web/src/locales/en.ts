@@ -762,6 +762,30 @@ export const en = {
   markerEvent: "Event",
   markerSources: "Sources",
   caseMarkersAria: "Places and events in this case",
+  /** A showcase case's river data (`river/`, docs/river.md): the block
+   * in the case panel — `riverHeading`, the track switch (`riverTracksAria`;
+   * the analysis, or a forecast named by its UTC cycle, which stays an
+   * instrument stamp), the key of flow against the reach's usual flow
+   * (`riverRatio*`, numerals in every locale), the flood extents' switch,
+   * the hint that the circles are gauges — and the gauge's hydrograph in
+   * the probe panel: the two series' words and the peaks list's heading.
+   * The index's disclaimer and credits are shown as published, in English. */
+  riverHeading: "River flow",
+  riverTracksAria: "River model run",
+  riverTrackAnalysis: "Analysis",
+  riverTrackForecast: "Forecast {cycle}",
+  riverKeyAria: "Flow against its usual flow",
+  riverRatio2: "< 2× usual",
+  riverRatio10: "2–10×",
+  riverRatio100: "10–100×",
+  riverRatioMax: "≥ 100×",
+  riverExtents: "Flood extents",
+  riverGaugeHint: "Circles are gauges: click one for its hydrograph.",
+  riverObserved: "observed",
+  riverModelled: "model",
+  riverPeaks: "Reported peaks",
+  riverGaugeLoading: "loading…",
+  riverGaugeUnavailable: "unavailable",
 
   /** The sounding section of the pinned point's panel: the nearest ascent
    * drawn as a skew-T under the meteogram rows, and the full-height sheet
