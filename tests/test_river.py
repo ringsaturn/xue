@@ -67,7 +67,10 @@ class CodebookTests(unittest.TestCase):
         self.assertEqual(codes[-2], 255)
         self.assertEqual(codes[-1], 0)
         decoded = network.dequantize(codes)
-        for value, back in zip(values[2:7], decoded[2:7]):
+        # Below 1 m³/s log1p is close to linear, so the grid is about 0.046
+        # m³/s a code there; the 4.7 % relative spacing holds from 1 m³/s up.
+        self.assertLess(abs(decoded[2] - values[2]), 0.05)
+        for value, back in zip(values[3:7], decoded[3:7]):
             self.assertLess(abs(back - value) / value, 0.025)
         self.assertTrue(math.isnan(decoded[-2]))
 
