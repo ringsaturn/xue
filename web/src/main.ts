@@ -6222,6 +6222,22 @@ new ResizeObserver(() => {
   if (metadata) buildTimeline();
 }).observe(forecastDays);
 if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
+// An open case card can run down past the legend's top (a river block adds
+// tracks, a key and credits), and the legend reads nothing on top of a
+// card. When the card reaches it, the legend moves to the card's right-hand
+// edge; the stylesheet reads --legend-left. The legend is measured in its
+// home position first, so the rule is about the card alone.
+function placeLegendBesideCase(): void {
+  const root = document.documentElement.style;
+  root.removeProperty("--legend-left");
+  if (caseBanner.hidden || caseBanner.hasAttribute("data-collapsed") || legend.hidden) return;
+  const card = caseBanner.getBoundingClientRect();
+  const home = legend.getBoundingClientRect();
+  if (card.bottom + 12 > home.top && card.right > home.left) root.setProperty("--legend-left", `${Math.round(card.right + 16)}px`);
+}
+new ResizeObserver(placeLegendBesideCase).observe(caseBanner);
+new ResizeObserver(placeLegendBesideCase).observe(legend);
+window.addEventListener("resize", placeLegendBesideCase);
 
 /** The swatch key a picture or a set of classes shows in place of the bar
  * and its ticks (the Dust RGB: what each colour is a sign of; the
