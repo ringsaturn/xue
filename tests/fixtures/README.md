@@ -148,6 +148,28 @@ for h in 000 003; do
 done
 ```
 
+`ifs.2026102012.f000.crop.grib2` and `ifs.2026102012.f003.crop.grib2`
+are a 100 by 100 cell window of the analysis and the first step of the
+2026-10-20 12:00 UTC ECMWF open data cycle at 0.1° (the `0p1` objects,
+published since the 2026-10-20 06z cycle), the same sixty-six records as
+the ecmwf crop in the same order — the `ifs` source fetches `ecmwf`'s
+inputs — assembled by the fetcher from the three objects the resolution
+is split into (`oper` `-sfc` and `-pl`, `wave` `-sfc`), so the fixture
+proves the split fetch reassembles one frame per step. The window is the
+north of Novaya Zemlya and the Kara Sea beyond it, 60E to 70E and 75N to
+85N: sea ice, open water and land, the ecmwf crop's idea at the finer
+step. Complex packing keeps each under 400 KB. Cut, after the fetcher had
+assembled and repacked the frames, with:
+
+```sh
+python -m xuebuild fetch --model ifs --run 2026102012 --hours 3 --raw-dir /tmp/raw
+for h in 000 003; do
+  gdal_translate -srcwin 2400 50 100 100 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/ifs.2026102012/ifs.2026102012.f$h.grib2 \
+    tests/fixtures/ifs.2026102012.f$h.crop.grib2
+done
+```
+
 `aifs.2026091700.f000.crop.grib2` and `aifs.2026091700.f006.crop.grib2`
 are the same 80 by 80 cell Kara Sea window (`-srcwin 960 20 80 80`) of the
 analysis and the first step of the 2026-09-17 00:00 UTC ECMWF AIFS Single

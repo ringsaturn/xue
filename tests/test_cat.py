@@ -223,7 +223,7 @@ class RegistryTests(unittest.TestCase):
         self.assertLessEqual({"cat300", "cat250", "cat200"}, RAW_VARIABLE_IDS)
 
     def test_gfs_and_ecmwf_publish_and_calibrate_all_three(self) -> None:
-        for model in ("gfs", "ecmwf"):
+        for model in ("gfs", "ecmwf", "ifs"):
             source = source_spec(model)
             published = published_bundle_ids(source)
             self.assertEqual([b for b in published if b.startswith("cat")], ["cat300", "cat250", "cat200"])

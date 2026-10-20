@@ -20,6 +20,7 @@ FORECAST_CORE = ("tmp2m", "prate")
 IDENTITIES = {
     "gfs": ("GFS", "pgrb2.0p25", "latest.json", FORECAST_CORE),
     "ecmwf": ("ECMWF", "ifs-0p25", "latest-ecmwf.json", FORECAST_CORE),
+    "ifs": ("IFS", "ifs-0p1", "latest-ifs.json", FORECAST_CORE),
     "aifs": ("AIFS", "aifs-single-0p25", "latest-aifs.json", FORECAST_CORE),
     "ifshres": ("ECMWF-HRES", "ifs-hres-0p1", "latest-ifshres.json", FORECAST_CORE),
     "sflux": ("GFS-SFLUX", "sfluxgrb", "latest-sflux.json", FORECAST_CORE),
