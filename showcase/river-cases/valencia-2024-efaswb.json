@@ -1,0 +1,8 @@
+{
+  "id": "valencia-2024-efaswb",
+  "kind": "grid",
+  "work": "tmp/2024-10-29-valencia/work",
+  "output": "web/public/data/showcase/valencia-2024-efaswb/river",
+  "gauges": ["poyo-a3", "forata", "magro-guadassuar", "turia-vilamarxant", "turia-repartiment", "jucar-huerto-mulet", "jucar-cullera"],
+  "extent": ["extent/aoi03-horta-sud.geojson", "extent/aoi04-algemesi.geojson", "extent/aoi01-valencia-province.geojson"]
+}

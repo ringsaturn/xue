@@ -1,0 +1,163 @@
+{
+  "id": "valencia-2024-efas",
+  "title": {
+    "zh": "2024 瓦伦西亚 DANA：10 月 27 日 12Z 的 EFAS 河流预报",
+    "zh-Hant": "2024 瓦倫西亞 DANA：10 月 27 日 12Z 的 EFAS 河流預報",
+    "en": "Valencia DANA 2024: the EFAS river forecast of 27 October 12Z",
+    "ja": "2024 年バレンシア DANA：10 月 27 日 12Z の EFAS 河川予報",
+    "ko": "2024 발렌시아 DANA: 10월 27일 12Z EFAS 하천 예보",
+    "de": "DANA Valencia 2024: die EFAS-Flussvorhersage vom 27. Oktober 12Z",
+    "fr": "DANA de Valence 2024 : la prévision fluviale EFAS du 27 octobre 12Z",
+    "es": "DANA de Valencia 2024: la previsión fluvial de EFAS del 27 de octubre 12Z",
+    "pt": "DANA de Valência 2024: a previsão fluvial EFAS de 27 de outubro 12Z",
+    "tr": "Valencia DANA 2024: 27 Ekim 12Z EFAS nehir tahmini",
+    "ru": "DANA в Валенсии, 2024: речной прогноз EFAS от 27 октября 12Z"
+  },
+  "summary": {
+    "zh": "2024 年 10 月 29 日，一个切断低压（DANA）给瓦伦西亚省带来极端降雨，当晚波约干河在帕伊波塔和南部果园区（l'Horta Sud）一带漫溢。这里是欧洲洪水预警系统 EFAS v5 在 10 月 27 日 12Z 发布的 HRES 预报，逐 6 小时到 120 小时：河道流量（每帧之前 6 小时的平均值）、它相对 EFAS 自己的 1.5、2、5、20 年一遇阈值的等级，以及上游集水面积。EFAS 在这里的绝对流量比实测洪峰低一到两个数量级（波约 A-3 格点最大 30 m³/s，实测 2,283 m³/s），但阈值来自同一个模式气候，所以等级仍有信号：波约 A-3 格点在截至 10 月 30 日 00Z 的一帧超过 20 年一遇，距发布 60 小时。阈值只在上游面积超过 50 km² 的河道上评估。EFAS 数据仅供参考，不构成洪水预警。",
+    "zh-Hant": "2024 年 10 月 29 日，一個切斷低壓（DANA）給瓦倫西亞省帶來極端降雨，當晚波約乾河在帕伊波塔和南部果園區（l'Horta Sud）一帶漫溢。這裡是歐洲洪水預警系統 EFAS v5 在 10 月 27 日 12Z 發布的 HRES 預報，逐 6 小時到 120 小時：河道流量（每幀之前 6 小時的平均值）、它相對 EFAS 自己的 1.5、2、5、20 年一遇閾值的等級，以及上游集水面積。EFAS 在這裡的絕對流量比實測洪峰低一到兩個數量級（波約 A-3 格點最大 30 m³/s，實測 2,283 m³/s），但閾值來自同一個模式氣候，所以等級仍有訊號：波約 A-3 格點在截至 10 月 30 日 00Z 的一幀超過 20 年一遇，距發布 60 小時。閾值只在上游面積超過 50 km² 的河道上評估。EFAS 資料僅供參考，不構成洪水預警。",
+    "en": "On 29 October 2024 a cut-off low (DANA) brought extreme rain to the province of Valencia, and that evening the Rambla del Poyo overflowed through Paiporta and the towns of l'Horta Sud. This is the EFAS v5 HRES forecast issued on 27 October at 12Z, six-hourly to 120 hours: the river discharge (the mean over the six hours before each frame), its class against EFAS's own 1.5-, 2-, 5- and 20-year return levels, and the upstream area. EFAS's absolute discharges here are one to two orders of magnitude below the gauged peaks (30 m³/s at most at the Poyo A-3 cell, against 2,283 m³/s measured), but its thresholds come from the same model climate, so the class carries the signal: the Poyo A-3 cell passes its 20-year level on the frame ending 30 October 00Z, 60 hours after the forecast was issued. Thresholds are evaluated only on rivers draining more than 50 km². EFAS data are for information only and do not constitute a flood warning.",
+    "ja": "2024 年 10 月 29 日、切離低気圧（DANA）がバレンシア県に記録的な雨をもたらし、その夜ポヨ涸れ川がパイポルタとロルタ・スッド（l'Horta Sud）の町々で氾濫した。これは欧州洪水警戒システム EFAS v5 が 10 月 27 日 12Z に出した HRES 予報で、120 時間まで 6 時間ごと：河川流量（各コマに至る 6 時間の平均）、EFAS 自身の 1.5・2・5・20 年確率閾値に対する階級、上流集水面積。ここでの EFAS の流量の絶対値は観測ピークより 1〜2 桁小さい（ポヨ A-3 格子で最大 30 m³/s、観測は 2,283 m³/s）が、閾値も同じモデル気候から作られているので、階級には信号がある：ポヨ A-3 格子は 10 月 30 日 00Z に終わるコマで 20 年確率を超える。発表から 60 時間後だ。閾値は上流面積 50 km² を超える河道でのみ評価される。EFAS のデータは情報提供のみを目的とし、洪水警報ではない。",
+    "ko": "2024년 10월 29일 절리 저기압(DANA)이 발렌시아주에 극한 호우를 내렸고, 그날 저녁 포요 건천이 파이포르타와 로르타 수드(l'Horta Sud) 일대에서 범람했다. 이것은 유럽 홍수 경보 시스템 EFAS v5가 10월 27일 12Z에 낸 HRES 예보로, 120시간까지 6시간 간격이다: 하천 유량(각 프레임 이전 6시간 평균), EFAS 자체의 1.5·2·5·20년 빈도 임계값에 대한 등급, 상류 집수 면적. 여기서 EFAS의 절대 유량은 관측 첨두보다 한두 자릿수 작지만(포요 A-3 격자 최대 30 m³/s, 관측 2,283 m³/s), 임계값도 같은 모델 기후에서 나오므로 등급에는 신호가 있다: 포요 A-3 격자는 10월 30일 00Z에 끝나는 프레임에서 20년 빈도를 넘는다. 발표 60시간 뒤다. 임계값은 상류 면적 50 km²를 넘는 하천에서만 평가된다. EFAS 자료는 정보 제공용이며 홍수 경보가 아니다.",
+    "de": "Am 29. Oktober 2024 brachte ein abgeschnürtes Tief (DANA) extremen Regen über die Provinz Valencia, und am Abend trat die Rambla del Poyo in Paiporta und den Orten der l'Horta Sud über die Ufer. Dies ist die EFAS-v5-HRES-Vorhersage vom 27. Oktober 12Z, sechsstündlich bis 120 Stunden: der Abfluss (Mittel der sechs Stunden vor jedem Bild), seine Klasse gegenüber EFAS’ eigenen 1,5-, 2-, 5- und 20-jährlichen Schwellen und das Einzugsgebiet. Die absoluten Abflüsse von EFAS liegen hier ein bis zwei Größenordnungen unter den gemessenen Scheiteln (höchstens 30 m³/s in der Zelle Poyo A-3 gegenüber 2.283 m³/s gemessen), doch die Schwellen stammen aus demselben Modellklima, sodass die Klasse das Signal trägt: Die Zelle Poyo A-3 überschreitet ihre 20-jährliche Schwelle im Bild, das am 30. Oktober 00Z endet, 60 Stunden nach der Ausgabe. Schwellen werden nur an Gewässern mit mehr als 50 km² Einzugsgebiet ausgewertet. EFAS-Daten dienen nur der Information und stellen keine Hochwasserwarnung dar.",
+    "fr": "Le 29 octobre 2024, une goutte froide (DANA) a apporté des pluies extrêmes sur la province de Valence, et le soir même la Rambla del Poyo a débordé à Paiporta et dans les communes de l'Horta Sud. Voici la prévision HRES d’EFAS v5 émise le 27 octobre à 12Z, toutes les six heures jusqu’à 120 heures : le débit (moyenne des six heures précédant chaque image), sa classe par rapport aux seuils de retour de 1,5, 2, 5 et 20 ans propres à EFAS, et la surface du bassin amont. Les débits absolus d’EFAS y sont d’un à deux ordres de grandeur sous les pics mesurés (30 m³/s au plus à la maille Poyo A-3, contre 2 283 m³/s mesurés), mais ses seuils viennent du même climat de modèle, si bien que la classe porte le signal : la maille Poyo A-3 dépasse son seuil vicennal sur l’image qui se termine le 30 octobre à 00Z, 60 heures après l’émission. Les seuils ne sont évalués que sur les cours d’eau drainant plus de 50 km². Les données EFAS sont fournies à titre d’information et ne constituent pas une alerte crue.",
+    "es": "El 29 de octubre de 2024 una DANA descargó lluvias extremas sobre la provincia de Valencia, y esa tarde la Rambla del Poyo se desbordó en Paiporta y los municipios de l'Horta Sud. Esta es la previsión HRES de EFAS v5 emitida el 27 de octubre a las 12Z, cada seis horas hasta 120 horas: el caudal (la media de las seis horas anteriores a cada fotograma), su clase frente a los umbrales de 1,5, 2, 5 y 20 años del propio EFAS y la superficie de cuenca vertiente. Los caudales absolutos de EFAS aquí son de uno a dos órdenes de magnitud inferiores a los picos aforados (30 m³/s como máximo en la celda Poyo A-3, frente a 2.283 m³/s medidos), pero sus umbrales salen del mismo clima del modelo, así que la clase lleva la señal: la celda Poyo A-3 supera su umbral de 20 años en el fotograma que termina el 30 de octubre a las 00Z, 60 horas después de la emisión. Los umbrales solo se evalúan en cauces con más de 50 km² de cuenca. Los datos de EFAS son solo informativos y no constituyen un aviso de inundación.",
+    "pt": "A 29 de outubro de 2024 uma depressão isolada (DANA) trouxe chuva extrema à província de Valência, e nessa noite a Rambla del Poyo transbordou em Paiporta e nas localidades de l'Horta Sud. Esta é a previsão HRES do EFAS v5 emitida a 27 de outubro às 12Z, de seis em seis horas até 120 horas: o caudal (média das seis horas antes de cada quadro), a sua classe face aos limiares de 1,5, 2, 5 e 20 anos do próprio EFAS e a área da bacia a montante. Os caudais absolutos do EFAS aqui são uma a duas ordens de grandeza inferiores aos picos medidos (30 m³/s no máximo na célula Poyo A-3, contra 2.283 m³/s medidos), mas os limiares vêm do mesmo clima do modelo, pelo que a classe transporta o sinal: a célula Poyo A-3 ultrapassa o limiar de 20 anos no quadro que termina a 30 de outubro às 00Z, 60 horas após a emissão. Os limiares só são avaliados em cursos de água com mais de 50 km² de bacia. Os dados EFAS são apenas informativos e não constituem um aviso de cheia.",
+    "tr": "29 Ekim 2024’te bir kesik alçak (DANA) Valencia iline aşırı yağış getirdi ve o akşam Rambla del Poyo, Paiporta ile l'Horta Sud kasabalarında taştı. Bu, EFAS v5’in 27 Ekim 12Z’de yayımladığı HRES tahmini; 120 saate kadar altı saatte bir: nehir debisi (her kareden önceki altı saatin ortalaması), EFAS’ın kendi 1,5, 2, 5 ve 20 yıllık dönüş eşiklerine göre sınıfı ve yukarı havza alanı. EFAS’ın buradaki mutlak debileri ölçülen piklerin bir-iki büyüklük mertebesi altında (Poyo A-3 hücresinde en çok 30 m³/s, ölçülen 2.283 m³/s), ama eşikler aynı model ikliminden geldiği için sınıf sinyali taşıyor: Poyo A-3 hücresi, 30 Ekim 00Z’de biten karede, yayından 60 saat sonra, 20 yıllık eşiğini aşıyor. Eşikler yalnızca 50 km²’den büyük havzalı akarsularda değerlendirilir. EFAS verileri yalnızca bilgi amaçlıdır ve taşkın uyarısı değildir.",
+    "ru": "29 октября 2024 года отсечённый циклон (DANA) принёс экстремальные осадки в провинцию Валенсия, и вечером Рамбла-дель-Пойо вышла из берегов в Пайпорте и городках л’Орта-Суд. Это прогноз HRES системы EFAS v5 от 27 октября 12Z, каждые шесть часов до 120 часов: расход воды (среднее за шесть часов до каждого кадра), его класс относительно собственных порогов EFAS повторяемостью 1,5, 2, 5 и 20 лет и площадь водосбора. Абсолютные расходы EFAS здесь на один-два порядка ниже измеренных пиков (не более 30 м³/с в ячейке Пойо A-3 против измеренных 2 283 м³/с), но пороги взяты из того же модельного климата, поэтому класс несёт сигнал: ячейка Пойо A-3 превышает свой 20-летний порог на кадре, оканчивающемся 30 октября в 00Z, через 60 часов после выпуска прогноза. Пороги оцениваются только на реках с водосбором больше 50 км². Данные EFAS носят информационный характер и не являются предупреждением о паводке."
+  },
+  "model": "efas",
+  "dataset": "efas/valencia-2024-efas/",
+  "hours": 120,
+  "bbox": [
+    -1.5,
+    38.8,
+    0.5,
+    40.2
+  ],
+  "variables": [
+    "disrp",
+    "dis06",
+    "upstream"
+  ],
+  "defaultVariable": "disrp",
+  "eventTime": "2024-10-29T17:55:00Z",
+  "tags": [
+    "flood",
+    "europe"
+  ],
+  "credit": "Copernicus EMS EFAS v5 (ECMWF)",
+  "river": {
+    "index": "river/index.json"
+  },
+  "markers": [
+    {
+      "id": "paiporta",
+      "kind": "place",
+      "lon": -0.4176,
+      "lat": 39.4278,
+      "label": {
+        "zh": "帕伊波塔",
+        "zh-Hant": "帕伊波塔",
+        "en": "Paiporta",
+        "ja": "パイポルタ",
+        "ko": "파이포르타",
+        "de": "Paiporta",
+        "fr": "Paiporta",
+        "es": "Paiporta",
+        "pt": "Paiporta",
+        "tr": "Paiporta",
+        "ru": "Пайпорта"
+      },
+      "note": {
+        "zh": "波约干河（Rambla del Poyo）下游的城镇；10 月 29 日，干河在托伦特和帕伊波塔一带完全漫溢。这里没有水文站。西班牙生态转型部（MITECO）2024 年胡卡尔流域洪水风险管理计划跟踪报告估计，流到干河末段的流量可能约 3,000 m³/s（仍在水文研究中），而国家洪泛区制图（SNCZI）给 500 年一遇的是 1,500 m³/s。",
+        "zh-Hant": "波約乾河（Rambla del Poyo）下游的城鎮；10 月 29 日，乾河在托倫特和帕伊波塔一帶完全漫溢。這裡沒有水文站。西班牙生態轉型部（MITECO）2024 年胡卡爾流域洪水風險管理計畫追蹤報告估計，流到乾河末段的流量可能約 3,000 m³/s（仍在水文研究中），而國家洪泛區製圖（SNCZI）給 500 年一遇的是 1,500 m³/s。",
+        "en": "Town on the lower Rambla del Poyo, where with Torrent the ravine overflowed completely on 29 October. There is no gauge here. MITECO's 2024 follow-up report on the Júcar flood risk management plan puts the flow that reached the ravine's last reach, still under hydrological study, at about 3,000 m³/s, against 1,500 m³/s for a 500-year return period in the national flood zone mapping (SNCZI).",
+        "ja": "ポヨ涸れ川（Rambla del Poyo）下流の町。10 月 29 日、トレントとパイポルタで涸れ川は完全に氾濫した。ここに観測所はない。スペイン環境移行省（MITECO）の 2024 年フカル川流域洪水リスク管理計画フォローアップ報告は、涸れ川の最下流に達した流量を約 3,000 m³/s（水文学的検討中）と見積もる。国の浸水域図（SNCZI）が 500 年確率とするのは 1,500 m³/s。",
+        "ko": "포요 건천(Rambla del Poyo) 하류의 도시. 10월 29일 토렌트와 파이포르타 일대에서 건천이 완전히 범람했다. 이곳에는 관측소가 없다. 스페인 생태전환부(MITECO)의 2024년 후카르 유역 홍수위험관리계획 점검 보고서는 건천 말단에 도달한 유량을 약 3,000 m³/s(수문 검토 중)로 추정하며, 국가 홍수구역 지도(SNCZI)의 500년 빈도 유량은 1,500 m³/s다.",
+        "de": "Ort am Unterlauf der Rambla del Poyo, wo die Schlucht am 29. Oktober zusammen mit Torrent vollständig über die Ufer trat. Hier gibt es keinen Pegel. Der MITECO-Folgebericht 2024 zum Hochwasserrisikomanagementplan des Júcar schätzt den Abfluss, der den letzten Abschnitt erreichte, auf etwa 3.000 m³/s (hydrologisch noch in Prüfung), gegenüber 1.500 m³/s für ein 500-jährliches Ereignis in der nationalen Überschwemmungskartierung (SNCZI).",
+        "fr": "Commune du cours inférieur de la Rambla del Poyo, où, avec Torrent, le ravin a entièrement débordé le 29 octobre. Il n’y a pas de station ici. Le rapport de suivi 2024 du MITECO sur le plan de gestion des risques d’inondation du Júcar estime le débit arrivé au dernier tronçon, encore à l’étude, à environ 3 000 m³/s, contre 1 500 m³/s pour une période de retour de 500 ans dans la cartographie nationale des zones inondables (SNCZI).",
+        "es": "Municipio del tramo bajo de la Rambla del Poyo, donde el 29 de octubre, junto con Torrent, el barranco se desbordó por completo. Aquí no hay estación de aforo. El informe de seguimiento 2024 del MITECO sobre el PGRI del Júcar estima que el caudal que llegó al tramo final, aún en estudio hidrológico, pudo ser de unos 3.000 m³/s, frente a los 1.500 m³/s que el SNCZI asocia a un periodo de retorno de 500 años.",
+        "pt": "Município do troço inferior da Rambla del Poyo, onde, com Torrent, a ribeira transbordou por completo a 29 de outubro. Não há estação hidrométrica aqui. O relatório de acompanhamento de 2024 do MITECO sobre o plano de gestão de riscos de inundação do Júcar estima o caudal que chegou ao troço final, ainda em estudo hidrológico, em cerca de 3.000 m³/s, contra 1.500 m³/s para um período de retorno de 500 anos na cartografia nacional de zonas inundáveis (SNCZI).",
+        "tr": "Rambla del Poyo’nun aşağı kesimindeki kasaba; 29 Ekim’de vadi Torrent ile birlikte burada tamamen taştı. Burada ölçüm istasyonu yok. MITECO’nun Júcar taşkın riski yönetim planı 2024 izleme raporu, vadinin son kesimine ulaşan debiyi (hidrolojik incelemesi sürüyor) yaklaşık 3.000 m³/s olarak tahmin ediyor; ulusal taşkın alanı haritalaması (SNCZI) 500 yıllık dönüş için 1.500 m³/s veriyor.",
+        "ru": "Город в низовьях Рамбла-дель-Пойо, где 29 октября русло вместе с Торрентом полностью вышло из берегов. Гидропоста здесь нет. Отчёт MITECO за 2024 год о плане управления паводковыми рисками бассейна Хукара оценивает расход, дошедший до нижнего участка (гидрологическое исследование продолжается), примерно в 3 000 м³/с, тогда как национальное картирование зон затопления (SNCZI) даёт для повторяемости раз в 500 лет 1 500 м³/с."
+      }
+    },
+    {
+      "id": "poyo-a3",
+      "kind": "place",
+      "lon": -0.5917,
+      "lat": 39.475,
+      "label": {
+        "zh": "波约干河 A-3 站",
+        "zh-Hant": "波約乾河 A-3 站",
+        "en": "Poyo at the A-3",
+        "ja": "ポヨ涸れ川 A-3 観測所",
+        "ko": "포요 건천 A-3 관측소",
+        "de": "Poyo an der A-3",
+        "fr": "Poyo à l’A-3",
+        "es": "Poyo en la A-3",
+        "pt": "Poyo na A-3",
+        "tr": "A-3’te Poyo",
+        "ru": "Пойо у трассы A-3"
+      },
+      "note": {
+        "zh": "SAIH 在波约干河与 A-3 高速公路交叉处（里瓦罗哈德图里亚）的水文站。10 月 29 日 17:55 UTC 传感器因洪水损毁失联前，最后记录的流量为 2,282.9 m³/s（CHJ，暂定值）。标记画在代表该站的 EFAS 格点上（上游面积 196 km²）；EFAS 自己在这一格的 20 年一遇阈值约 23 m³/s。",
+        "zh-Hant": "SAIH 在波約乾河與 A-3 高速公路交叉處（里瓦羅哈德圖里亞）的水文站。10 月 29 日 17:55 UTC 感測器因洪水損毀失聯前，最後記錄的流量為 2,282.9 m³/s（CHJ，暫定值）。標記畫在代表該站的 EFAS 格點上（上游面積 196 km²）；EFAS 自己在這一格的 20 年一遇閾值約 23 m³/s。",
+        "en": "SAIH gauge where the Rambla del Poyo crosses the A-3 at Riba-roja de Túria. Its last discharge, 2,282.9 m³/s at 17:55 UTC on 29 October, came before flood damage cut the sensor off (CHJ, provisional). Marked on the EFAS cell that stands for it (196 km² upstream), where EFAS's own 20-year level is about 23 m³/s.",
+        "ja": "ポヨ涸れ川が A-3 高速道路と交わる地点（リバロハ・デ・トゥリア）の SAIH 観測所。10 月 29 日 17:55 UTC、洪水でセンサーが失われる前の最後の流量は 2,282.9 m³/s（CHJ、暫定値）。マーカーはこの観測所を代表する EFAS 格子（上流面積 196 km²）に置いた。この格子の EFAS 自身の 20 年確率閾値は約 23 m³/s。",
+        "ko": "포요 건천이 A-3 고속도로와 교차하는 지점(리바로하 데 투리아)의 SAIH 관측소. 10월 29일 17:55 UTC 홍수로 센서가 끊기기 전 마지막 유량은 2,282.9 m³/s(CHJ, 잠정값). 표식은 이 관측소를 대표하는 EFAS 격자(상류 면적 196 km²)에 두었으며, 이 격자의 EFAS 자체 20년 빈도 임계값은 약 23 m³/s다.",
+        "de": "SAIH-Pegel, wo die Rambla del Poyo bei Riba-roja de Túria die A-3 kreuzt. Der letzte Abfluss, 2.282,9 m³/s um 17:55 UTC am 29. Oktober, wurde gemessen, bevor die Flut den Sensor zerstörte (CHJ, vorläufig). Markiert auf der EFAS-Zelle, die ihn vertritt (196 km² Einzugsgebiet); EFAS’ eigene 20-jährliche Schwelle liegt dort bei etwa 23 m³/s.",
+        "fr": "Station SAIH où la Rambla del Poyo croise l’A-3 à Riba-roja de Túria. Son dernier débit, 2 282,9 m³/s à 17:55 UTC le 29 octobre, précède la destruction du capteur par la crue (CHJ, provisoire). Placée sur la maille EFAS qui la représente (196 km² de bassin amont), où le seuil vicennal propre à EFAS est d’environ 23 m³/s.",
+        "es": "Estación del SAIH donde la Rambla del Poyo cruza la A-3, en Riba-roja de Túria. Su último caudal, 2.282,9 m³/s a las 17:55 UTC del 29 de octubre, es anterior a que la avenida dejara el sensor sin datos (CHJ, provisional). Marcada en la celda EFAS que la representa (196 km² de cuenca), donde el umbral de 20 años del propio EFAS es de unos 23 m³/s.",
+        "pt": "Estação do SAIH onde a Rambla del Poyo cruza a A-3, em Riba-roja de Túria. O último caudal, 2.282,9 m³/s às 17:55 UTC de 29 de outubro, precede a perda do sensor danificado pela cheia (CHJ, provisório). Marcada na célula EFAS que a representa (196 km² de bacia a montante), onde o limiar de 20 anos do próprio EFAS é de cerca de 23 m³/s.",
+        "tr": "Rambla del Poyo’nun Riba-roja de Túria’da A-3 otoyolunu kestiği yerdeki SAIH istasyonu. Sel sensörü devre dışı bırakmadan önceki son debi 29 Ekim 17:55 UTC’de 2.282,9 m³/s (CHJ, geçici). İşaret, istasyonu temsil eden EFAS hücresine (196 km² yukarı havza) konuldu; EFAS’ın bu hücredeki kendi 20 yıllık eşiği yaklaşık 23 m³/s.",
+        "ru": "Пост SAIH в месте пересечения Рамбла-дель-Пойо с трассой A-3 у Риба-роха-де-Турии. Последний расход, 2 282,9 м³/с в 17:55 UTC 29 октября, записан до того, как паводок вывел датчик из строя (CHJ, предварительно). Отмечен на ячейке EFAS, которая его представляет (площадь водосбора 196 км²); собственный 20-летний порог EFAS в ней около 23 м³/с."
+      },
+      "sources": [
+        {
+          "title": "CHJ SAIH, Episodio de lluvias y avenidas del 28 de octubre al 4 de noviembre de 2024 (15 Jan 2025)",
+          "url": "https://saih.chj.es/docs/20241029-1104Informe-Episodio-C-version2.pdf"
+        }
+      ]
+    },
+    {
+      "id": "forata",
+      "kind": "place",
+      "lon": -0.725,
+      "lat": 39.3583,
+      "label": {
+        "zh": "福拉塔水库",
+        "zh-Hant": "福拉塔水庫",
+        "en": "Forata dam",
+        "ja": "フォラタ・ダム",
+        "ko": "포라타 댐",
+        "de": "Talsperre Forata",
+        "fr": "Barrage de Forata",
+        "es": "Presa de Forata",
+        "pt": "Barragem de Forata",
+        "tr": "Forata Barajı",
+        "ru": "Плотина Фората"
+      },
+      "note": {
+        "zh": "马格罗河上的福拉塔水库（亚托瓦）。CHJ 的 SAIH 记录 10 月 29 日最大入库流量 2,016.7 m³/s（17:55 UTC）、最大出库流量 1,091.8 m³/s（20:10 UTC，暂定值）。标记画在代表水库的 EFAS 格点上（上游面积 1,344 km²）。",
+        "zh-Hant": "馬格羅河上的福拉塔水庫（亞托瓦）。CHJ 的 SAIH 記錄 10 月 29 日最大入庫流量 2,016.7 m³/s（17:55 UTC）、最大出庫流量 1,091.8 m³/s（20:10 UTC，暫定值）。標記畫在代表水庫的 EFAS 格點上（上游面積 1,344 km²）。",
+        "en": "Forata reservoir on the Río Magro at Yátova. CHJ's SAIH recorded a peak inflow of 2,016.7 m³/s at 17:55 UTC and a peak outflow of 1,091.8 m³/s at 20:10 UTC on 29 October (provisional). Marked on the EFAS cell that stands for the reservoir (1,344 km² upstream).",
+        "ja": "マグロ川のフォラタ貯水池（ヤトバ）。CHJ の SAIH は 10 月 29 日に最大流入量 2,016.7 m³/s（17:55 UTC）、最大放流量 1,091.8 m³/s（20:10 UTC）を記録した（暫定値）。マーカーは貯水池を代表する EFAS 格子（上流面積 1,344 km²）に置いた。",
+        "ko": "마그로강의 포라타 저수지(야토바). CHJ의 SAIH는 10월 29일 최대 유입량 2,016.7 m³/s(17:55 UTC), 최대 방류량 1,091.8 m³/s(20:10 UTC)를 기록했다(잠정값). 표식은 저수지를 대표하는 EFAS 격자(상류 면적 1,344 km²)에 두었다.",
+        "de": "Stausee Forata am Río Magro bei Yátova. Das SAIH der CHJ verzeichnete am 29. Oktober einen Spitzenzufluss von 2.016,7 m³/s um 17:55 UTC und eine Spitzenabgabe von 1.091,8 m³/s um 20:10 UTC (vorläufig). Markiert auf der EFAS-Zelle, die den Stausee vertritt (1.344 km² Einzugsgebiet).",
+        "fr": "Retenue de Forata sur le Río Magro, à Yátova. Le SAIH de la CHJ a enregistré le 29 octobre un débit entrant maximal de 2 016,7 m³/s à 17:55 UTC et un débit sortant maximal de 1 091,8 m³/s à 20:10 UTC (provisoire). Placée sur la maille EFAS qui représente la retenue (1 344 km² de bassin amont).",
+        "es": "Embalse de Forata, en el río Magro (Yátova). El SAIH de la CHJ registró el 29 de octubre un caudal máximo de entrada de 2.016,7 m³/s a las 17:55 UTC y uno de salida de 1.091,8 m³/s a las 20:10 UTC (provisional). Marcado en la celda EFAS que representa el embalse (1.344 km² de cuenca).",
+        "pt": "Albufeira de Forata, no rio Magro (Yátova). O SAIH da CHJ registou a 29 de outubro um caudal máximo de entrada de 2.016,7 m³/s às 17:55 UTC e um de saída de 1.091,8 m³/s às 20:10 UTC (provisório). Marcada na célula EFAS que representa a albufeira (1.344 km² de bacia a montante).",
+        "tr": "Río Magro üzerindeki Forata barajı (Yátova). CHJ’nin SAIH sistemi 29 Ekim’de 17:55 UTC’de 2.016,7 m³/s en yüksek giriş ve 20:10 UTC’de 1.091,8 m³/s en yüksek çıkış debisi kaydetti (geçici). İşaret, barajı temsil eden EFAS hücresine (1.344 km² yukarı havza) konuldu.",
+        "ru": "Водохранилище Фората на реке Магро у Ятовы. SAIH CHJ 29 октября зафиксировала максимальный приток 2 016,7 м³/с в 17:55 UTC и максимальный сброс 1 091,8 м³/с в 20:10 UTC (предварительно). Отмечено на ячейке EFAS, которая представляет водохранилище (площадь водосбора 1 344 км²)."
+      },
+      "sources": [
+        {
+          "title": "CHJ SAIH, Episodio de lluvias y avenidas del 28 de octubre al 4 de noviembre de 2024 (15 Jan 2025)",
+          "url": "https://saih.chj.es/docs/20241029-1104Informe-Episodio-C-version2.pdf"
+        }
+      ]
+    }
+  ]
+}
