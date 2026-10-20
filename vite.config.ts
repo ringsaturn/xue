@@ -2,40 +2,46 @@ import { statSync } from "node:fs";
 import { join, normalize, resolve } from "node:path";
 
 import { loadEnv } from "vite";
-import type { Plugin } from "vite";
+import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 import { discoveryFiles } from "./web/tooling/discovery";
 
-/** The static server behind `vite preview` (sirv) misreads a suffix range
- * — `bytes=-N`, which the Zarr reader uses for a shard index — as
- * `bytes=0-N` and answers with the object's head, one byte too long, where
- * every CDN and bucket answers with its tail. The shell then reports a
- * "range response length mismatch". This rewrites a suffix range into the
- * absolute range it means, from the file's size, before sirv sees it; a
- * file that is not there falls through to sirv's own 404. */
+/** The static server behind `vite preview` and the dev server's public
+ * directory (both sirv) misread a suffix range — `bytes=-N`, which the Zarr
+ * reader uses for a shard index — as `bytes=0-N` and answer with the
+ * object's head, one byte too long, where every CDN and bucket answers with
+ * its tail. The shell then reports a "range response length mismatch". This
+ * rewrites a suffix range into the absolute range it means, from the file's
+ * size, before sirv sees it; a file that is not there falls through to
+ * sirv's own 404. */
 function suffixRanges(): Plugin {
+  const rewrite = (roots: string[]): Connect.NextHandleFunction => (req, _res, next) => {
+    const match = /^bytes=-(\d+)$/.exec(req.headers.range ?? "");
+    if (match && req.url) {
+      const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+      for (const root of roots) {
+        const file = normalize(join(root, pathname));
+        if (!file.startsWith(root)) continue;
+        try {
+          const size = statSync(file).size;
+          const length = Math.min(Number(match[1]), size);
+          req.headers.range = `bytes=${size - length}-${size - 1}`;
+          break;
+        } catch {
+          // not a file here: try the next root, else sirv answers
+        }
+      }
+    }
+    next();
+  };
   return {
     name: "xue:suffix-ranges",
+    configureServer(server) {
+      server.middlewares.use(rewrite([server.config.publicDir, server.config.root]));
+    },
     configurePreviewServer(server) {
-      const outDir = resolve(server.config.root, server.config.build.outDir);
-      server.middlewares.use((req, _res, next) => {
-        const match = /^bytes=-(\d+)$/.exec(req.headers.range ?? "");
-        if (match && req.url) {
-          const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
-          const file = normalize(join(outDir, pathname));
-          if (file.startsWith(outDir)) {
-            try {
-              const size = statSync(file).size;
-              const length = Math.min(Number(match[1]), size);
-              req.headers.range = `bytes=${size - length}-${size - 1}`;
-            } catch {
-              // not a file: sirv answers
-            }
-          }
-        }
-        next();
-      });
+      server.middlewares.use(rewrite([resolve(server.config.root, server.config.build.outDir)]));
     },
   };
 }
