@@ -330,7 +330,7 @@ mod tests {
     fn a_derived_rate_declares_its_statistical_process() {
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-        for (model, expected) in [("gfs", false), ("ecmwf", true), ("sflux", true)] {
+        for (model, expected) in [("gfs", false), ("ecmwf", true), ("ifs", true), ("sflux", true)] {
             let source = source_spec(model).expect("source");
             let metadata =
                 build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600, &[])
