@@ -169,8 +169,13 @@ fn synthetic_values_dequantize_within_a_code() {
                 255 => assert!(value.is_nan()),
                 0 => assert_eq!(value, 0.0),
                 254 => assert!(value > 100_000.0),
+                // A round trip lands within half a code: the grid is
+                // (ln(1 + 100000) - ln(1 + 0.01)) / 252 = 0.0457 in log1p
+                // space, which is 4.7 % relative far above 1 m3/s but
+                // wider below (the (1 + v) / v factor), so the check is in
+                // the codebook's own space.
                 _ => assert!(
-                    ((value - source) / source).abs() < 0.025,
+                    ((value + 1.0).ln() - (source + 1.0).ln()).abs() < 0.0235,
                     "reach {feature} frame {frame}: {value} against {source}"
                 ),
             }
