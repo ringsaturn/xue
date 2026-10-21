@@ -179,18 +179,19 @@ class MatcherTests(unittest.TestCase):
             self.assertFalse(_band_matches(variable_id, other_level, ""))
 
     def test_a_derived_component_is_never_matched(self) -> None:
-        with self.assertRaises(ConversionError):
-            _band_matches("uqflx850", {"GRIB_ELEMENT": "SPFH"}, "")
+        # No GRIB band carries it, so its entry has no matching rules.
+        self.assertEqual(variable_spec("uqflx850").gdal_rules, ())
+        self.assertFalse(_band_matches("uqflx850", {"GRIB_ELEMENT": "SPFH"}, ""))
 
     def test_units_follow_the_family(self) -> None:
-        self.assertEqual(raster_expression("tmp850", "[C]"), raster_expression("tmp2m", "[C]"))
-        self.assertEqual(raster_expression("tmp850", "K"), "maximum(-60,minimum(50,A-273.15))")
-        self.assertEqual(raster_expression("rh700", "[%]"), "maximum(0,minimum(100,A))")
-        self.assertEqual(raster_expression("spfh850", "[kg/kg]"), "A*1000")
-        self.assertEqual(raster_expression("ugrd850", "[m/s]"), raster_expression("ugrd10m", "[m/s]"))
+        self.assertEqual(raster_expression(variable_spec("tmp850"), "[C]"), raster_expression(variable_spec("tmp2m"), "[C]"))
+        self.assertEqual(raster_expression(variable_spec("tmp850"), "K"), "A-273.15")
+        self.assertEqual(raster_expression(variable_spec("rh700"), "[%]"), "A")
+        self.assertEqual(raster_expression(variable_spec("spfh850"), "[kg/kg]"), "A*1000")
+        self.assertEqual(raster_expression(variable_spec("ugrd850"), "[m/s]"), raster_expression(variable_spec("ugrd10m"), "[m/s]"))
         for variable_id, unit in (("rh700", "kg/kg"), ("spfh850", "g/kg"), ("spfh850", "%")):
             with self.assertRaises(ConversionError):
-                raster_expression(variable_id, unit)
+                raster_expression(variable_spec(variable_id), unit)
 
 
 if __name__ == "__main__":

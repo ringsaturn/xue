@@ -139,7 +139,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertEqual(spec.value_range, (-64, 64))
             for profile in PROFILES.values():
                 self.assertIs(profile[component], profile["ugrd10m"], component)
-        self.assertEqual(raster_expression("ugrd80m", "m/s"), raster_expression("ugrd10m", "m/s"))
+        self.assertEqual(raster_expression(variable_spec("ugrd80m"), "m/s"), raster_expression(variable_spec("ugrd10m"), "m/s"))
         eighty = {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "80-HTGL", "GRIB_COMMENT": "u-component of wind [m/s]"}
         self.assertTrue(_band_matches("ugrd80m", eighty, '80[m] HTGL="Specified height level above ground"'))
         self.assertFalse(_band_matches("vgrd80m", eighty, '80[m] HTGL="Specified height level above ground"'))
@@ -289,9 +289,9 @@ class RecordMatchingTests(unittest.TestCase):
         self.assertEqual(cref.grib2_aliases, ((0, 16, 196),))
         self.assertEqual(cref.parameter_metadata()["parameterNumber"], 5)
         self.assertEqual(cref.index_field, ":REFC:entire atmosphere:")
-        self.assertEqual(raster_expression("cref", "dB"), raster_expression("cref", "dBZ"))
+        self.assertEqual(raster_expression(variable_spec("cref"), "dB"), raster_expression(variable_spec("cref"), "dBZ"))
         with self.assertRaises(ConversionError):
-            raster_expression("cref", "mm")
+            raster_expression(variable_spec("cref"), "mm")
         mslma = {"GRIB_ELEMENT": "MSLMA", "GRIB_SHORT_NAME": "0-MSL", "GRIB_COMMENT": "MSLP (MAPS System Reduction) [Pa]"}
         self.assertTrue(_band_matches("prmsl", mslma, '0[-] MSL="Mean sea level"'))
         refc = {"GRIB_ELEMENT": "REFC", "GRIB_SHORT_NAME": "0-EATM", "GRIB_COMMENT": "Maximum / Composite radar reflectivity [dB]"}

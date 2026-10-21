@@ -296,14 +296,14 @@ class MatcherTests(unittest.TestCase):
 
     def test_units_are_accepted_as_gdal_reports_them(self) -> None:
         for variable_id in SOIL_TEMPERATURE_IDS:
-            self.assertEqual(raster_expression(variable_id, "[C]"), "maximum(-61,minimum(66,A))")
-            self.assertEqual(raster_expression(variable_id, "K"), "maximum(-61,minimum(66,A-273.15))")
+            self.assertEqual(raster_expression(variable_spec(variable_id), "[C]"), "A")
+            self.assertEqual(raster_expression(variable_spec(variable_id), "K"), "A-273.15")
         for variable_id in SOIL_MOISTURE_IDS:
             for unit in ("[Fraction]", "m^3/m^3", "[m^3/m^3]", "Proportion"):
-                self.assertEqual(raster_expression(variable_id, unit), "maximum(-0.01,minimum(1,A))", unit)
+                self.assertEqual(raster_expression(variable_spec(variable_id), unit), "A", unit)
         for variable_id, unit in (("tsoil1", "m"), ("soilw1", "%"), ("soilw1", "kg/m^2")):
             with self.assertRaises(ConversionError):
-                raster_expression(variable_id, unit)
+                raster_expression(variable_spec(variable_id), unit)
 
     def test_the_fixtures_carry_every_layer_and_both_matchers_agree(self) -> None:
         cases = (
@@ -323,8 +323,8 @@ class MatcherTests(unittest.TestCase):
                         self.assertEqual(fast[variable_id].band, band, variable_id)
                         self.assertEqual(reference[variable_id].band, band, variable_id)
                         self.assertEqual(
-                            raster_expression(variable_id, fast[variable_id].unit),
-                            raster_expression(variable_id, reference[variable_id].unit),
+                            raster_expression(variable_spec(variable_id), fast[variable_id].unit),
+                            raster_expression(variable_spec(variable_id), reference[variable_id].unit),
                             variable_id,
                         )
                     for variable_id in variable_ids:

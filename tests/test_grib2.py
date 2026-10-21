@@ -210,8 +210,8 @@ class InspectGribFastTests(unittest.TestCase):
             self.assertEqual(fast_frame.valid_time, reference_frame.valid_time)
             self.assertEqual(fast_frame.lead_seconds, reference_frame.lead_seconds)
             self.assertEqual(
-                raster_expression(variable_id, fast_frame.unit),
-                raster_expression(variable_id, reference_frame.unit),
+                raster_expression(variable_spec(variable_id), fast_frame.unit),
+                raster_expression(variable_spec(variable_id), reference_frame.unit),
             )
 
     def test_missing_variable_raises_unless_optional(self) -> None:

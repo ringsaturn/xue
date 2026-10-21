@@ -20,7 +20,7 @@ from xuebuild.binconvert import (
 )
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import fetch_frame, resolve_run, sflux_object_url
-from xuebuild.gdal import averaged_precipitation_expression, flux_expression, raster_expression
+from xuebuild.gdal import raster_expression
 from xuebuild.idx import field_byte_range
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
 from xuebuild.model import GfsRun
@@ -193,13 +193,13 @@ class DswrfRegistryTests(unittest.TestCase):
             self.assertLessEqual(codebook.maximum_code, 254, profile)
 
     def test_flux_units_and_expression(self) -> None:
-        self.assertEqual(flux_expression("[W/(m^2)]"), "maximum(0,minimum(1270,A))")
-        self.assertEqual(raster_expression("dswrf", "W/m^2"), "maximum(0,minimum(1270,A))")
+        self.assertEqual(raster_expression(variable_spec("dswrf"), "[W/(m^2)]"), "A")
+        self.assertEqual(raster_expression(variable_spec("dswrf"), "W/m^2"), "A")
         with self.assertRaises(ConversionError):
-            flux_expression("J/m^2")
-        self.assertEqual(averaged_precipitation_expression("[kg/(m^2 s)]"), "A")
+            raster_expression(variable_spec("dswrf"), "J/m^2")
+        self.assertEqual(raster_expression(variable_spec("prate_ave"), "[kg/(m^2 s)]"), "A")
         with self.assertRaises(ConversionError):
-            averaged_precipitation_expression("mm")
+            raster_expression(variable_spec("prate_ave"), "mm")
 
     def test_source_registry(self) -> None:
         spec = source_spec("sflux")

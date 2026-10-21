@@ -319,32 +319,32 @@ class MatcherTests(unittest.TestCase):
         self.assertFalse(_band_matches("ugrd80m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "100-HTGL"}, ""))
         self.assertFalse(_band_matches("ugrd80m", {"GRIB_ELEMENT": "UGRD"}, "100[m] HTGL=100 m above ground"))
         self.assertFalse(_band_matches("ugrd100m", {"GRIB_ELEMENT": "UGRD", "GRIB_SHORT_NAME": "80-HTGL"}, ""))
-        self.assertEqual(raster_expression("tcdc", "-"), "maximum(0,minimum(100,A*100))")
-        self.assertEqual(raster_expression("tcdc", "%"), "maximum(0,minimum(100,A))")
+        self.assertEqual(raster_expression(variable_spec("tcdc"), "-"), "A*100")
+        self.assertEqual(raster_expression(variable_spec("tcdc"), "%"), "A")
 
     def test_units_are_accepted_as_gdal_reports_them(self) -> None:
         for variable_id in SURFACE_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             with self.subTest(variable=variable_id):
-                raster_expression(variable_id, spec.gdal_unit)
-                raster_expression(variable_id, f"[{spec.gdal_unit}]")
-        self.assertEqual(raster_expression("gust", "[m/s]"), "maximum(0,minimum(127,A))")
-        self.assertEqual(raster_expression("tcdc", "[%]"), "maximum(0,minimum(100,A))")
-        self.assertEqual(raster_expression("cape", "[J/kg]"), "maximum(0,minimum(6350,A))")
-        self.assertEqual(raster_expression("vis", "[m]"), "A/1000")
-        self.assertEqual(raster_expression("dpt2m", "[C]"), "maximum(-70,minimum(40,A))")
-        self.assertEqual(raster_expression("dpt2m", "K"), "maximum(-70,minimum(40,A-273.15))")
-        self.assertEqual(raster_expression("aptmp2m", "[C]"), "maximum(-90,minimum(60,A))")
-        self.assertEqual(raster_expression("lcdc", "[%]"), raster_expression("tcdc", "[%]"))
-        self.assertEqual(raster_expression("cin", "[J/kg]"), "maximum(-1016,minimum(0,A))")
-        self.assertEqual(raster_expression("pwat", "[kg/(m^2)]"), "maximum(0,minimum(127,A))")
-        self.assertEqual(raster_expression("pwat", "kg m**-2"), "maximum(0,minimum(127,A))")
-        self.assertEqual(raster_expression("hpbl", "[m]"), "maximum(0,minimum(5080,A))")
-        self.assertEqual(raster_expression("ptype", "[1]"), "maximum(0,minimum(8,A))")
-        self.assertEqual(raster_expression("crain", "(Code table 4.222)"), "maximum(0,minimum(1,A))")
+                raster_expression(variable_spec(variable_id), spec.gdal_unit)
+                raster_expression(variable_spec(variable_id), f"[{spec.gdal_unit}]")
+        self.assertEqual(raster_expression(variable_spec("gust"), "[m/s]"), "A")
+        self.assertEqual(raster_expression(variable_spec("tcdc"), "[%]"), "A")
+        self.assertEqual(raster_expression(variable_spec("cape"), "[J/kg]"), "A")
+        self.assertEqual(raster_expression(variable_spec("vis"), "[m]"), "A/1000")
+        self.assertEqual(raster_expression(variable_spec("dpt2m"), "[C]"), "A")
+        self.assertEqual(raster_expression(variable_spec("dpt2m"), "K"), "A-273.15")
+        self.assertEqual(raster_expression(variable_spec("aptmp2m"), "[C]"), "A")
+        self.assertEqual(raster_expression(variable_spec("lcdc"), "[%]"), raster_expression(variable_spec("tcdc"), "[%]"))
+        self.assertEqual(raster_expression(variable_spec("cin"), "[J/kg]"), "A")
+        self.assertEqual(raster_expression(variable_spec("pwat"), "[kg/(m^2)]"), "A")
+        self.assertEqual(raster_expression(variable_spec("pwat"), "kg m**-2"), "A")
+        self.assertEqual(raster_expression(variable_spec("hpbl"), "[m]"), "A")
+        self.assertEqual(raster_expression(variable_spec("ptype"), "[1]"), "A")
+        self.assertEqual(raster_expression(variable_spec("crain"), "(Code table 4.222)"), "A")
         for variable_id, unit in (("gust", "km/h"), ("tcdc", "kg/kg"), ("cape", "m^2/s^2"), ("vis", "km"), ("dpt2m", "%")):
             with self.assertRaises(ConversionError):
-                raster_expression(variable_id, unit)
+                raster_expression(variable_spec(variable_id), unit)
 
 
 if __name__ == "__main__":

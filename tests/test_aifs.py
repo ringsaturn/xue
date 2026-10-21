@@ -13,7 +13,8 @@ and the three layer cloud covers, which IFS open data does not carry, sit
 on ECMWF's layer boundaries as first fixed surfaces (the ground, 800 hPa,
 450 hPa) rather than GRIB2's cloud layer surfaces (214 / 224 / 234). Each
 is a ``RecordAlternate`` accepted under the GFS identity, and the
-millimetre accumulation is a unit rule (``precipitation_accumulation_is_mm``)
+millimetre accumulation is a unit rule (the ``precipitation-accumulation``
+rule's millimetre spellings)
 the converter reads off the alternate's unit so the plane is not scaled
 up a thousandfold.
 
@@ -48,11 +49,7 @@ from xuebuild.fetch import (
     model_object_url,
     resolve_run,
 )
-from xuebuild.gdal import (
-    accumulation_expression,
-    precipitation_accumulation_is_mm,
-    raster_expression,
-)
+from xuebuild.gdal import raster_expression
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
 from xuebuild.stac import prose_document
@@ -168,15 +165,13 @@ class RegistryAlternateTests(unittest.TestCase):
             self.assertEqual(spec.grib2_level_type, {"lcdc": 214, "mcdc": 224, "hcdc": 234}[layer], "the identity written")
 
     def test_the_millimetre_accumulation_is_left_alone(self) -> None:
+        tp = variable_spec("tp")
         for unit in ("kg/(m^2*s)", "[kg/(m^2*s)]", "kg m**-2", "kg/m^2", "mm"):
-            self.assertTrue(precipitation_accumulation_is_mm(unit), unit)
-            self.assertEqual(accumulation_expression(unit), "A")
+            self.assertEqual(raster_expression(tp, unit), "A", unit)
         for unit in ("-", "m", ""):
-            self.assertFalse(precipitation_accumulation_is_mm(unit), unit)
-            self.assertEqual(accumulation_expression(unit), "A")
+            self.assertEqual(raster_expression(tp, unit), "A*1000", unit)
         with self.assertRaises(ConversionError):
-            accumulation_expression("in")
-        self.assertEqual(raster_expression("tp", "kg/(m^2*s)"), raster_expression("tp", "-"))
+            raster_expression(tp, "in")
 
 
 class FetchTests(unittest.TestCase):

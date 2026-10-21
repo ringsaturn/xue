@@ -188,9 +188,9 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(books[variable_id], books["cref"], f"{profile} {variable_id}")
         self.assertTrue(set(REFLECTIVITY_VARIABLE_IDS) <= RAW_VARIABLE_IDS)
         for variable_id in ("refl500", "refl19000"):
-            self.assertEqual(raster_expression(variable_id, "dBZ"), "maximum(0,minimum(80,A))")
+            self.assertEqual(raster_expression(variable_spec(variable_id), "dBZ"), "A")
         with self.assertRaises(ConversionError):
-            raster_expression("refl500", "mm/hr")
+            raster_expression(variable_spec("refl500"), "mm/hr")
 
 
 class SlotRuleTests(unittest.TestCase):

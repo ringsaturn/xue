@@ -58,14 +58,11 @@ from .bundles import (  # noqa: F401  (the bundle table's names, re-exported for
 )
 from .common import crc32_hex
 from .errors import ConversionError, DownloadError
+from . import rules
 from .gdal import (
     discover_inputs,
     dataset_info,
     inspect_grib_multi,
-    normalize_unit,
-    orography_is_metres,
-    precipitation_accumulation_is_mm,
-    precipitation_rate_is_mm_per_hour,
     raster_expression,
     require_command,
     run_command,
@@ -85,11 +82,7 @@ from .variables import (
     CAT_LEVELS_HPA,
     REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
-    SOIL_TEMPERATURE_IDS,
-    SURFACE_TEMPERATURE_IDS,
     VARIABLES,
-    WAVE_DIRECTION_IDS,
-    isobaric_variable,
     variable_spec,
 )
 from .videoconvert import build_debug_playlist, encode_variable_video
@@ -767,56 +760,15 @@ def soil_temperature_unit(unit: str, values: np.ndarray) -> str:
 
 
 def _convert_units(frame: SourceFrame, values: np.ndarray) -> np.ndarray:
-    isobaric = isobaric_variable(frame.variable_id)
-    if frame.variable_id in SURFACE_TEMPERATURE_IDS or (isobaric is not None and isobaric[0] == "tmp"):
-        unit = normalize_unit(frame.unit)
-        if frame.variable_id in SOIL_TEMPERATURE_IDS:
-            unit = soil_temperature_unit(unit, values)
-        if unit == "K":
-            values -= 273.15
-        elif unit == "F":
-            values = (values - 32.0) * 5.0 / 9.0
-    elif frame.variable_id == "prate" and not precipitation_rate_is_mm_per_hour(frame.unit):
-        # kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
-        # already mm/h.
-        values *= 3600.0
-    elif frame.variable_id == "tp" and not precipitation_accumulation_is_mm(frame.unit):
-        # ECMWF run-total precipitation accumulation, metres -> mm (AIFS
-        # writes it in mm already); the rate derivation (de-accumulation)
-        # happens later against the previous frame.
-        values *= 1000.0
-    elif frame.variable_id == "prmsl":
-        # GRIB2 carries mean sea level pressure in pascals; the codebook
-        # quantizes hectopascals.
-        values /= 100.0
-    elif isobaric is not None and isobaric[0] == "spfh":
-        # GRIB2 carries specific humidity as a mass ratio (kg/kg); the
-        # codebook quantizes g/kg.
-        values *= 1000.0
-    elif frame.variable_id == "vis":
-        # GRIB2 carries visibility in metres; the codebook quantizes km.
-        values /= 1000.0
-    elif frame.variable_id == "icec":
-        # GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
-        # quantizes percent.
-        values *= 100.0
-    elif frame.variable_id in ("tcdc", "lcdc", "mcdc", "hcdc") and frame.unit.strip().strip("[]()") != "%":
-        # Cloud cover: percent as pgrb2 carries it, or the 0–1 fraction
-        # ECMWF writes (GDAL spells that unit "-"), scaled up.
-        values *= 100.0
-    elif frame.variable_id in WAVE_DIRECTION_IDS:
-        # A direction in degrees true: a record can carry 360, which is the
-        # codebook's 0 — reduce it there so the wrap never clamps.
-        values = np.mod(values, 360.0)
-    elif frame.variable_id == "orog" and not orography_is_metres(frame.unit):
-        # ECMWF open data writes the surface geopotential (m² s⁻²) where
-        # NCEP writes the geopotential height (gpm); the codebook quantizes
-        # metres, so the geopotential divides by the standard gravity.
-        values /= STANDARD_GRAVITY
-    # Wind components, geopotential heights, relative humidity, cloud cover,
-    # CAPE, vertical velocity, ice thickness, the wave height and period and
-    # the volumetric soil water are already in their output units.
-    return values
+    """One plane taken to its published unit by the variable's conversion
+    rule (:func:`xuebuild.rules.convert`). A soil temperature's unit is
+    read through :func:`soil_temperature_unit` first: GDAL labels the
+    plane Celsius whether or not it converted it."""
+    spec = variable_spec(frame.variable_id)
+    unit = frame.unit
+    if spec.conversion.rule == "soil-temperature":
+        unit = soil_temperature_unit(rules.temperature_unit(unit), values)
+    return rules.convert(spec.conversion, unit, values)
 
 
 def derive_vapour_flux(
@@ -1321,7 +1273,8 @@ def _check_reference_frames(
             or fast.run_time != reference.run_time
             or fast.valid_time != reference.valid_time
             or fast.lead_seconds != reference.lead_seconds
-            or raster_expression(variable_id, fast.unit) != raster_expression(variable_id, reference.unit)
+            or raster_expression(variable_spec(variable_id), fast.unit)
+            != raster_expression(variable_spec(variable_id), reference.unit)
         ):
             raise ConversionError(
                 f"GRIB2 header index disagrees with gdalinfo for {variable_id} in {fast.path}: "

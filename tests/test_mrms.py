@@ -71,7 +71,7 @@ from xuebuild.fetch import (
     resolve_run,
     window_summary,
 )
-from xuebuild.gdal import _band_matches, inspect_grib_multi, precipitation_rate_is_mm_per_hour, raster_expression
+from xuebuild.gdal import _band_matches, inspect_grib_multi, raster_expression
 from xuebuild.manifest import (
     build_bin_manifest,
     build_latest_pointer,
@@ -567,13 +567,12 @@ class RecordMatchingTests(unittest.TestCase):
         self.assertEqual(prate.parameter_metadata()["parameterCategory"], 1)
 
     def test_the_rate_unit_decides_the_scaling(self) -> None:
-        self.assertTrue(precipitation_rate_is_mm_per_hour("[mm/hr]"))
-        self.assertTrue(precipitation_rate_is_mm_per_hour("mm/h"))
-        self.assertFalse(precipitation_rate_is_mm_per_hour("kg/(m^2 s)"))
-        self.assertEqual(raster_expression("prate", "mm/hr"), "maximum(0,minimum(50,A))")
-        self.assertEqual(raster_expression("prate", "kg/(m^2 s)"), "maximum(0,minimum(50,A*3600))")
+        self.assertEqual(raster_expression(variable_spec("prate"), "[mm/hr]"), "A")
+        self.assertEqual(raster_expression(variable_spec("prate"), "mm/h"), "A")
+        self.assertEqual(raster_expression(variable_spec("prate"), "mm/hr"), "A")
+        self.assertEqual(raster_expression(variable_spec("prate"), "kg/(m^2 s)"), "A*3600")
         with self.assertRaises(ConversionError):
-            raster_expression("prate", "mm")
+            raster_expression(variable_spec("prate"), "mm")
         frame = SourceFrame(FRAMES[0], 2, "prate", RUN.time, RUN.time, 0, "mm/hr")
         np.testing.assert_array_equal(binconvert._convert_units(frame, np.array([0.0, 2.5])), [0.0, 2.5])
         frame = SourceFrame(FRAMES[0], 2, "prate", RUN.time, RUN.time, 0, "kg/(m^2 s)")

@@ -41,12 +41,7 @@ from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, vid
 from xuebuild.binformat import Bundle, BundleError, read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import GEFS_BASE_URL, _run_is_complete, gefsaero_object_url, model_object_url, resolve_run
-from xuebuild.gdal import (
-    _band_matches,
-    aerosol_optical_depth_expression,
-    particulate_matter_expression,
-    raster_expression,
-)
+from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.idx import field_byte_range
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
@@ -239,18 +234,20 @@ class RegistryTests(unittest.TestCase):
 
     def test_the_raster_expressions_accept_gdal_s_units_and_nothing_else(self) -> None:
         for unit in ("[Numeric]", "Numeric", "-", ""):
-            self.assertEqual(aerosol_optical_depth_expression(unit), "maximum(0,minimum(5,A))")
+            self.assertEqual(raster_expression(variable_spec("aod"), unit), "A")
         for unit in ("[10^-6g/m^3]", "10^-6g/m^3", "ug/m^3", "µg/m³"):
-            self.assertEqual(particulate_matter_expression(unit, maximum=1000), "maximum(0,minimum(1000,A))")
+            self.assertEqual(raster_expression(variable_spec("pm25"), unit), "A")
         with self.assertRaises(ConversionError):
-            aerosol_optical_depth_expression("kg/m^3")
+            raster_expression(variable_spec("aod"), "kg/m^3")
         with self.assertRaises(ConversionError):
-            particulate_matter_expression("kg/m^3", maximum=1000)
+            raster_expression(variable_spec("pm25"), "kg/m^3")
         for variable_id in AOD_IDS:
-            self.assertEqual(raster_expression(variable_id, "[Numeric]"), "maximum(0,minimum(5,A))")
-        self.assertEqual(raster_expression("pm25", "[10^-6g/m^3]"), "maximum(0,minimum(1000,A))")
-        self.assertEqual(raster_expression("pm10", "[10^-6g/m^3]"), "maximum(0,minimum(2000,A))")
-        self.assertEqual(raster_expression("pm10dust", "[10^-6g/m^3]"), "maximum(0,minimum(2000,A))")
+            self.assertEqual(raster_expression(variable_spec(variable_id), "[Numeric]"), "A")
+        for variable_id in ("pm25", "pm10", "pm10dust"):
+            self.assertEqual(raster_expression(variable_spec(variable_id), "[10^-6g/m^3]"), "A")
+        # The clamp is the codebook's: 1000 for PM2.5, 2000 for PM10.
+        self.assertEqual(variable_spec("pm25").value_range[1], 1000)
+        self.assertEqual(variable_spec("pm10").value_range[1], 2000)
 
 
 class SourceRegistryTests(unittest.TestCase):

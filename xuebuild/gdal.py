@@ -1,36 +1,24 @@
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
 import shutil
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import rules
 from .errors import ConversionError
 from .model import SourceFrame
-from .variables import (
-    AEROSOL_VARIABLE_IDS,
-    SOIL_MOISTURE_IDS,
-    SOIL_TEMPERATURE_IDS,
-    SOIL_VARIABLE_IDS,
-    SURFACE_TEMPERATURE_IDS,
-    AerosolIdentity,
-    isobaric_variable,
-    reflectivity_level,
-    variable_spec,
-)
+from .rules import GdalRule
+from .variables import AerosolIdentity, VariableSpec, variable_spec
 
 
 SUPPORTED_EXTENSIONS = {".grb", ".grb2", ".grib2"}
-HEIGHT_RE = re.compile(r"(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
-TEN_METRE_RE = re.compile(r"(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
-EIGHTY_METRE_RE = re.compile(r"(?:^|[^0-9])80(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
-HUNDRED_METRE_RE = re.compile(r"(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
-
 
 def require_command(command: str) -> str:
     resolved = shutil.which(command)
@@ -126,725 +114,63 @@ def _timestamp(metadata: dict[str, str], key: str) -> datetime | None:
         return None
 
 
-def normalize_unit(unit: str) -> str:
-    compact = unit.strip().strip("[]()").lower().replace("°", "").replace("degrees", "").replace("degree", "")
-    compact = " ".join(compact.split())
-    aliases = {
-        "k": "K",
-        "kelvin": "K",
-        "c": "C",
-        "celsius": "C",
-        "degc": "C",
-        "f": "F",
-        "fahrenheit": "F",
-        "degf": "F",
-    }
-    if compact not in aliases:
-        raise ConversionError(f"unsupported temperature unit: {unit or '<missing>'}")
-    return aliases[compact]
 
+def raster_expression(spec: VariableSpec, unit: str) -> str:
+    """The raster expression one record of ``spec`` takes under ``unit``
+    (:func:`xuebuild.rules.expression`): the unit rule's arithmetic alone.
+    The header index and the gdalinfo pass compare it for identity; it is
+    never written. Raises for a spelling the rule refuses."""
+    return rules.expression(spec.conversion, unit)
 
-def celsius_expression(unit: str, *, low: int = -60, high: int = 50) -> str:
-    """A temperature in Celsius, from whichever of K / C / F the record
-    reports, clamped to a codebook's range — the 2 m temperature's by
-    default; the dew point and the apparent temperature pass their own."""
-    normalized = normalize_unit(unit)
-    if normalized == "K":
-        value = "A-273.15"
-    elif normalized == "F":
-        value = "(A-32)*5/9"
-    else:
-        value = "A"
-    return f"maximum({low},minimum({high},{value}))"
 
+# ---------------------------------------------------------------------------
+# Band matching: one evaluator per rule of docs/registry.md §match, each
+# reading the band's metadata as GDAL describes it.
 
-# How GDAL spells a rate already in millimetres per hour: the MRMS
-# radar-derived precipitation rate arrives that way, and takes no scaling.
-_MM_PER_HOUR_UNITS = {"mm/hr", "mm/h"}
 
+def _searchable(metadata: dict[str, str], description: str, *, short_name: bool = True) -> str:
+    """The band's prose, joined: the short name, comment, level and
+    description, lower-cased."""
+    fields = [metadata.get("GRIB_COMMENT", ""), metadata.get("GRIB_LEVEL", ""), description]
+    if short_name:
+        fields.insert(0, metadata.get("GRIB_SHORT_NAME", "").upper())
+    return " ".join(fields).lower()
 
-def precipitation_rate_is_mm_per_hour(unit: str) -> bool:
-    """Whether a precipitation rate record is already in mm/h (MRMS), as
-    opposed to the kg m⁻² s⁻¹ every NWP record carries."""
-    return re.sub(r"[\s*()\[\]]", "", unit.strip().lower()) in _MM_PER_HOUR_UNITS
 
+def _element(metadata: dict[str, str]) -> str:
+    return metadata.get("GRIB_ELEMENT", "").upper()
 
-def precipitation_expression(unit: str) -> str:
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
-    if compact in _MM_PER_HOUR_UNITS:
-        return "maximum(0,minimum(50,A))"
-    aliases = {
-        "kg/m^2s",
-        "kg/m2s",
-        "kgm^-2s^-1",
-        "kgm-2s-1",
-    }
-    if compact not in aliases:
-        raise ConversionError(f"unsupported precipitation rate unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(50,A*3600))"
 
+def _short_name(metadata: dict[str, str]) -> str:
+    return metadata.get("GRIB_SHORT_NAME", "").upper()
 
-def averaged_precipitation_expression(unit: str) -> str:
-    """GFS sflux PRATE arrives as the mean rate (kg/m^2 s) over an averaging
-    window. The expression is identity — the converter turns window averages
-    into per-step rates itself."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
-    aliases = {
-        "kg/m^2s",
-        "kg/m2s",
-        "kgm^-2s^-1",
-        "kgm-2s-1",
-    }
-    if compact not in aliases:
-        raise ConversionError(f"unsupported precipitation rate unit: {unit or '<missing>'}")
-    return "A"
 
+def _assembled(metadata: dict[str, str]) -> tuple[list[int], int]:
+    """Template 4.0's assembled values and the discipline, as integers;
+    empty and -1 where the driver did not assemble them."""
+    try:
+        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
+        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
+    except ValueError:
+        return [], -1
+    return values, discipline
 
-def flux_expression(unit: str) -> str:
-    """Radiative flux in W/m^2, clamped to the dswrf codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
-    aliases = {"w/m^2", "w/m2", "wm^-2", "wm-2"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported radiative flux unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(1270,A))"
 
-
-def wind_expression(unit: str) -> str:
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    aliases = {"m/s", "m/sec", "ms-1", "ms^-1", "mps"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported wind component unit: {unit or '<missing>'}")
-    return "maximum(-64,minimum(64,A))"
-
-
-def gust_expression(unit: str) -> str:
-    """Wind gust: a speed in the wind components' unit, one-sided, clamped
-    to the gust codebook's range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    aliases = {"m/s", "m/sec", "ms-1", "ms^-1", "mps"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported wind gust unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(127,A))"
-
-
-def cloud_cover_expression(unit: str) -> str:
-    """Cloud cover in percent — as pgrb2 carries it, or scaled up from the
-    0–1 fraction ECMWF writes (GDAL spells that unit "-")."""
-    compact = unit.strip().strip("[]()").lower()
-    if compact == "%":
-        return "maximum(0,minimum(100,A))"
-    if compact in {"-", "1", "fraction", "proportion", "(0 - 1)", "0-1"}:
-        return "maximum(0,minimum(100,A*100))"
-    raise ConversionError(f"unsupported cloud cover unit: {unit or '<missing>'}")
-
-
-def visibility_expression(unit: str) -> str:
-    """Visibility: GRIB2 carries metres, the codebook quantizes kilometres.
-    Only metres are accepted — a file already in km would divide twice, and
-    no source publishes one."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"m", "metre", "meter", "metres", "meters"}:
-        raise ConversionError(f"unsupported visibility unit: {unit or '<missing>'}")
-    return "A/1000"
-
-
-def reflectivity_expression(unit: str) -> str:
-    """Composite reflectivity in dBZ, which GDAL's GRIB tables spell "dB"
-    and the radar mosaic's NetCDF spells in full; clamped to the cref
-    codebook's range. Sub-zero returns are below the codebook — the mosaic
-    treats them as no echo, and so does this."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"db", "dbz"}:
-        raise ConversionError(f"unsupported reflectivity unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(80,A))"
-
-
-def vertical_velocity_expression(unit: str) -> str:
-    """Vertical velocity in pressure coordinates, already in Pa/s."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"pa/s", "pas-1", "pas^-1"}:
-        raise ConversionError(f"unsupported vertical velocity unit: {unit or '<missing>'}")
-    return "maximum(-6.35,minimum(6.35,A))"
-
-
-def cape_expression(unit: str) -> str:
-    """Convective available potential energy in J/kg, clamped to the cape
-    codebook's range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    aliases = {"j/kg", "jkg-1", "jkg^-1"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported CAPE unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(6350,A))"
-
-
-def cin_expression(unit: str) -> str:
-    """Convective inhibition in J/kg, clamped to the cin codebook's range:
-    0 at the top, -1016 J/kg at the bottom, one-sided the other way from
-    cape."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    aliases = {"j/kg", "jkg-1", "jkg^-1"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported convective inhibition unit: {unit or '<missing>'}")
-    return "maximum(-1016,minimum(0,A))"
-
-
-def precipitable_water_expression(unit: str) -> str:
-    """Precipitable water, a column mass in kg/m² — one kilogram per square
-    metre is a millimetre of liquid water, and the codebook quantizes the
-    number either spelling gives, so no conversion applies."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2")
-    aliases = {"kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "kgm**-2", "mm", "kgs-1m-1"}
-    if compact not in aliases:
-        raise ConversionError(f"unsupported precipitable water unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(127,A))"
-
-
-def boundary_layer_height_expression(unit: str) -> str:
-    """Planetary boundary layer height in metres, clamped to the hpbl
-    codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"m", "metre", "meter", "metres", "meters"}:
-        raise ConversionError(f"unsupported boundary layer height unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(5080,A))"
-
-
-def categorical_expression(unit: str) -> str:
-    """One of the four 0/1 categorical precipitation-type flags (GRIB2 code
-    table 4.222), which GDAL reports under a unit that is the code table's
-    own name rather than a physical unit — ``0=no; 1=yes``, or
-    ``(Code table 4.222)`` from another driver. Clamped to 0–1."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("codetable", "")
-    if compact not in {"1", "-", "", "4.222", "0=no;1=yes"} and "4.222" not in compact and "0=no" not in compact:
-        raise ConversionError(f"unsupported categorical unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(1,A))"
-
-
-def precipitation_type_expression(unit: str) -> str:
-    """The derived categorical precipitation type, which is never read from a
-    record; the expression exists so a registry walk over every surface
-    diagnostic can ask for one. WMO code table 4.201's values, 0 to 8."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("codetable", "")
-    if compact not in {"1", "-", "", "4.201"} and "4.201" not in compact:
-        raise ConversionError(f"unsupported precipitation type unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(8,A))"
-
-
-def ice_cover_expression(unit: str) -> str:
-    """Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the unit
-    "Proportion"), the codebook quantizes percent."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"proportion", "fraction", "1", "-", ""}:
-        raise ConversionError(f"unsupported sea ice cover unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(100,A*100))"
-
-
-def ice_thickness_expression(unit: str) -> str:
-    """Sea ice thickness in metres, clamped to the icetk codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"m", "metre", "meter", "metres", "meters"}:
-        raise ConversionError(f"unsupported sea ice thickness unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(5.08,A))"
-
-
-def soil_moisture_expression(unit: str) -> str:
-    """Volumetric soil water, a dimensionless m³/m³ GDAL spells
-    ``Fraction`` for NCEP's SOILW and ``m^3/m^3`` for ECMWF's ``vsw``,
-    clamped to the soilw codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"fraction", "proportion", "m^3/m^3", "m3/m3", "m³/m³", "m^3m^-3", "m3m-3", "1", "-", ""}:
-        raise ConversionError(f"unsupported soil moisture unit: {unit or '<missing>'}")
-    return "maximum(-0.01,minimum(1,A))"
-
-
-def wave_height_expression(unit: str) -> str:
-    """Significant wave height in metres, clamped to the htsgw codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"m", "metre", "meter", "metres", "meters"}:
-        raise ConversionError(f"unsupported wave height unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(25.4,A))"
-
-
-def wave_period_expression(unit: str) -> str:
-    """Wave period in seconds, clamped to the perpw codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"s", "sec", "second", "seconds"}:
-        raise ConversionError(f"unsupported wave period unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(25.4,A))"
-
-
-def wave_direction_expression(unit: str) -> str:
-    """Wave direction in degrees true (GDAL spells it "Degree true"); the
-    converter reduces it modulo 360 itself."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"degreetrue", "degtrue", "degrees", "degree", "deg", "degreestrue"}:
-        raise ConversionError(f"unsupported wave direction unit: {unit or '<missing>'}")
-    return "A"
-
-
-# The spellings of a precipitation accumulation already in millimetres
-# (kg/m²): AIFS writes its run total that way, under the WMO 0/1/52 whose
-# GDAL table entry is a rate, so the unit GDAL reports carries a per-second
-# the values do not have.
-_MM_ACCUMULATION_UNITS = {"kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "mm", "kg/m^2s", "kg/m^2*s", "kg/m2s", "kg/m2*s"}
-
-
-def aerosol_optical_depth_expression(unit: str) -> str:
-    """Aerosol optical depth, a dimensionless number GDAL reports as
-    ``[Numeric]``, clamped to the aod codebook range."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"numeric", "1", "-", ""}:
-        raise ConversionError(f"unsupported aerosol optical depth unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(5,A))"
-
-
-def particulate_matter_expression(unit: str, *, maximum: int) -> str:
-    """A particulate matter concentration in µg/m³ (GDAL spells NCEP's
-    PMTF / PMTC unit ``10^-6g/m^3``), clamped to the codebook range: 1000
-    for PM2.5, 2000 for PM10."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact not in {"10^-6g/m^3", "10^-6g/m3", "ug/m^3", "ug/m3", "µg/m^3", "µg/m3", "µg/m³"}:
-        raise ConversionError(f"unsupported particulate matter unit: {unit or '<missing>'}")
-    return f"maximum(0,minimum({maximum},A))"
-
-
-def precipitation_accumulation_is_mm(unit: str) -> bool:
-    """Whether a run-total precipitation record is already in millimetres
-    (AIFS ``tp``), as opposed to the metres IFS open data carries."""
-    return re.sub(r"[\s*()\[\]]", "", unit.strip().lower()).replace("²", "^2") in _MM_ACCUMULATION_UNITS
-
-
-def accumulation_expression(unit: str) -> str:
-    """ECMWF tp arrives in metres of accumulated water (GDAL reports the
-    ECMWF-local parameter's unit as "-"), AIFS tp in millimetres. The
-    expression is identity either way — the converter scales the metres and
-    de-accumulates consecutive planes itself."""
-    compact = unit.strip().strip("[]()").lower()
-    if compact not in {"-", "m", ""} and not precipitation_accumulation_is_mm(unit):
-        raise ConversionError(f"unsupported precipitation accumulation unit: {unit or '<missing>'}")
-    return "A"
-
-
-def pressure_expression(unit: str) -> str:
-    """Mean sea level pressure. GRIB2 carries it in pascals and the codebook
-    quantizes hectopascals, so this is the one pressure-family field with a
-    unit conversion. Only Pa is accepted: a file already in hPa would divide
-    twice, and no source publishes one."""
-    compact = unit.strip().strip("[]()")
-    if compact != "Pa":
-        raise ConversionError(f"unsupported pressure unit: {unit or '<missing>'}")
-    return "A/100"
-
-
-def height_expression(unit: str) -> str:
-    """Geopotential height, already in metres. GDAL reports GFS HGT as
-    "gpm" (geopotential metres); a source spelling it "m" means the same
-    number to within the difference between geopotential and geometric
-    height, which at these levels is far below the codebook step."""
-    compact = unit.strip().strip("[]()")
-    if compact not in {"gpm", "m"}:
-        raise ConversionError(f"unsupported geopotential height unit: {unit or '<missing>'}")
-    return "A"
-
-
-# How GDAL and eccodes spell the surface geopotential ECMWF open data
-# carries as its orography: m² s⁻², in whichever punctuation the driver
-# reports it ("(m^2)/(s^2)" from the GRIB driver, "m**2 s**-2" from the
-# header index). Compacted to one spelling for the test.
-_GEOPOTENTIAL_UNITS = {"m2/s2", "m2s-2"}
-
-
-def _compact_unit(unit: str) -> str:
-    return re.sub(r"[\s*\[\]()^]", "", unit.strip().lower()).replace("²", "2")
-
-
-def orography_is_metres(unit: str) -> bool:
-    """Whether an orography record is already in metres — NCEP's
-    geopotential height (``gpm``) — rather than the geopotential
-    (m² s⁻²) ECMWF open data writes, which must be divided by g."""
-    return _compact_unit(unit) in {"gpm", "m"}
-
-
-def orography_expression(unit: str) -> str:
-    """Orography, in metres. NCEP writes the geopotential height (``gpm``,
-    numerically metres); ECMWF open data the geopotential itself
-    (m² s⁻²), which the converter divides by the standard gravity
-    (:func:`xuebuild.binconvert._convert_units`). This expression is the
-    unit's acceptance rule alone, shared by both encoders' cross-check; the
-    arithmetic is the converter's."""
-    compact = _compact_unit(unit)
-    if compact in {"gpm", "m"} or compact in _GEOPOTENTIAL_UNITS:
-        return "A"
-    raise ConversionError(f"unsupported orography unit: {unit or '<missing>'}")
-
-
-def humidity_expression(unit: str) -> str:
-    """Relative humidity, already in percent."""
-    compact = unit.strip().strip("[]()")
-    if compact != "%":
-        raise ConversionError(f"unsupported relative humidity unit: {unit or '<missing>'}")
-    return "maximum(0,minimum(100,A))"
-
-
-def specific_humidity_expression(unit: str) -> str:
-    """Specific humidity: GRIB2 carries a mass ratio (kg/kg), the codebook
-    quantizes g/kg. Only kg/kg is accepted — a file already in g/kg would
-    scale twice, and no source publishes one."""
-    compact = re.sub(r"[\s*()\[\]]", "", unit.strip().lower())
-    if compact != "kg/kg":
-        raise ConversionError(f"unsupported specific humidity unit: {unit or '<missing>'}")
-    return "A*1000"
-
-
-def isobaric_expression(variable_id: str, unit: str) -> str:
-    """The unit rule of one isobaric-family record, by family. Temperature
-    takes the 2 m temperature's rule (GDAL normalizes every GRIB temperature
-    to Celsius), the wind components the 10 m pair's; the flux components are
-    derived and never arrive as a record."""
-    family, _level = isobaric_variable(variable_id) or (None, None)
-    if family == "hgt":
-        return height_expression(unit)
-    if family == "tmp":
-        return celsius_expression(unit)
-    if family == "rh":
-        return humidity_expression(unit)
-    if family == "spfh":
-        return specific_humidity_expression(unit)
-    if family in ("ugrd", "vgrd"):
-        return wind_expression(unit)
-    if family == "vvel":
-        return vertical_velocity_expression(unit)
-    raise ConversionError(f"unsupported variable: {variable_id}")
-
-
-def raster_expression(variable_id: str, unit: str) -> str:
-    if variable_id == "tmp2m":
-        return celsius_expression(unit)
-    if variable_id == "prate":
-        return precipitation_expression(unit)
-    if variable_id == "prate_ave":
-        return averaged_precipitation_expression(unit)
-    if variable_id == "tp":
-        return accumulation_expression(unit)
-    if variable_id == "dswrf":
-        return flux_expression(unit)
-    if variable_id in ("ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m", "ugrd100m", "vgrd100m"):
-        return wind_expression(unit)
-    if variable_id == "prmsl":
-        return pressure_expression(unit)
-    if variable_id == "gust":
-        return gust_expression(unit)
-    if variable_id == "tcdc":
-        return cloud_cover_expression(unit)
-    if variable_id == "cape":
-        return cape_expression(unit)
-    if variable_id == "cin":
-        return cin_expression(unit)
-    if variable_id == "pwat":
-        return precipitable_water_expression(unit)
-    if variable_id == "hpbl":
-        return boundary_layer_height_expression(unit)
-    if variable_id in ("crain", "cfrzr", "cicep", "csnow"):
-        return categorical_expression(unit)
-    if variable_id == "ptype":
-        return precipitation_type_expression(unit)
-    if variable_id == "vis":
-        return visibility_expression(unit)
-    if variable_id == "cref" or reflectivity_level(variable_id) is not None:
-        return reflectivity_expression(unit)
-    if variable_id == "dpt2m":
-        return celsius_expression(unit, low=-70, high=40)
-    if variable_id == "aptmp2m":
-        return celsius_expression(unit, low=-90, high=60)
-    if variable_id in ("lcdc", "mcdc", "hcdc"):
-        return cloud_cover_expression(unit)
-    if variable_id == "tmpsfc":
-        return celsius_expression(unit, low=-60, high=67)
-    if variable_id == "icec":
-        return ice_cover_expression(unit)
-    if variable_id == "icetk":
-        return ice_thickness_expression(unit)
-    if variable_id in SOIL_TEMPERATURE_IDS:
-        return celsius_expression(unit, low=-61, high=66)
-    if variable_id in SOIL_MOISTURE_IDS:
-        return soil_moisture_expression(unit)
-    if variable_id in ("htsgw", "wvhgt", "swhgt"):
-        return wave_height_expression(unit)
-    if variable_id in ("perpw", "wvper", "swper"):
-        return wave_period_expression(unit)
-    if variable_id in ("dirpw", "wvdir", "swdir"):
-        return wave_direction_expression(unit)
-    if variable_id == "orog":
-        return orography_expression(unit)
-    if variable_id in AEROSOL_VARIABLE_IDS:
-        if variable_id.startswith("aod"):
-            return aerosol_optical_depth_expression(unit)
-        return particulate_matter_expression(unit, maximum=int(variable_spec(variable_id).value_range[1]))
-    if isobaric_variable(variable_id) is not None:
-        return isobaric_expression(variable_id, unit)
-    raise ConversionError(f"unsupported variable: {variable_id}")
-
-
-def _is_two_metre_record(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One GRIB element on the 2 m surface: the temperature, the dew point,
-    the apparent temperature."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    )
-    return short_name in {"2-HTGL", "2-M-HTGL"} or bool(HEIGHT_RE.search(searchable))
-
-
-def _is_surface_precipitation_rate(metadata: dict[str, str], description: str) -> bool:
-    if metadata.get("GRIB_ELEMENT", "").upper() != "PRATE":
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return short_name == "0-SFC" or "surface" in searchable
-
-
-def _is_total_precipitation(metadata: dict[str, str], description: str) -> bool:
-    """ECMWF open data tp: GRIB2 discipline 0, category 1, local parameter
-    193 — GDAL's tables do not know it, so GRIB_ELEMENT is "unknown" and the
-    comment carries the raw triple. AIFS writes its run total under the WMO
-    0/1/52, which GDAL's tables name TPRATE ("Total precipitation rate");
-    the fetched files carry no other record of that element."""
-    if metadata.get("GRIB_ELEMENT", "").lower() not in {"unknown", "tp", "apcp", "tprate"}:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    comment = metadata.get("GRIB_COMMENT", "")
-    searchable = " ".join([comment, metadata.get("GRIB_LEVEL", ""), description]).lower()
-    return (short_name == "0-SFC" or "surface" in searchable) and (
-        "cat 1, subcat 193" in comment or "total precipitation" in searchable
-    )
-
-
-# The elements GDAL names another centre's spelling of a surface quantity
-# by, accepted beside the registry's own: ECMWF's skin temperature is SKINT
-# where pgrb2's surface TMP is the same field, its peak wave period PWPER
-# and its mean wave direction WWSDIR stand in for WAVEWATCH III's PERPW and
-# DIRPW (the registry's alias triples).
-_SURFACE_ELEMENT_ALIASES: dict[str, tuple[str, ...]] = {
-    "TMP": ("SKINT",),
-    "PERPW": ("PWPER",),
-    "DIRPW": ("WWSDIR",),
-}
-
-
-def _is_surface_record(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One GRIB element on the ground or water surface (DSWRF, GUST, CAPE,
-    the surface temperature, the sea ice and wave fields). The fetched files
-    carry only the instantaneous surface record of each, so element +
-    surface level is unambiguous — the interval averages and the mixed-layer
-    CAPE variants are never downloaded. GDAL spells the surface ``0-SFC``;
-    the GFS-Wave records carry a surface value of 1 and come out ``1-SFC``,
-    so any value on the SFC surface is accepted. The prose test looks for
-    the surface's own name rather than the word "surface", which the
-    isobaric levels the same TMP element is fetched on also carry
-    ("Isobaric surface")."""
-    if metadata.get("GRIB_ELEMENT", "").upper() not in (element, *_SURFACE_ELEMENT_ALIASES.get(element, ())):
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return short_name.endswith("-SFC") or 'sfc="' in searchable or "ground or water surface" in searchable
-
-
-def _is_ecmwf_total_cloud_cover(metadata: dict[str, str], description: str) -> bool:
-    """ECMWF ``tcc``: the ECMWF-local 0/6/192 on the ground surface — GDAL's
-    tables do not know it, so GRIB_ELEMENT is "unknown" and the comment
-    carries the raw triple, the way it does for ``tp``."""
-    if metadata.get("GRIB_ELEMENT", "").lower() != "unknown":
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    comment = metadata.get("GRIB_COMMENT", "")
-    searchable = " ".join([comment, metadata.get("GRIB_LEVEL", ""), description]).lower()
-    return (short_name == "0-SFC" or "ground or water surface" in searchable) and "cat 6, subcat 192" in comment
-
-
-def _is_most_unstable_cape(metadata: dict[str, str], description: str) -> bool:
-    """ECMWF ``mucape``: the CAPE element departing from surface type 17,
-    the level of the most unstable parcel, which GDAL describes as such and
-    gives no short name of its own."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != "CAPE":
-        return False
-    searchable = " ".join([metadata.get("GRIB_COMMENT", ""), metadata.get("GRIB_LEVEL", ""), description]).lower()
-    return "most unstable" in searchable or "mudl" in searchable
-
-
-def _is_interval_maximum_gust(metadata: dict[str, str], description: str) -> bool:
-    """ECMWF ``10fg``: the gust element on the 10 m surface (the maximum over
-    the interval ending at the frame); pgrb2's instantaneous gust sits on the
-    ground surface and is matched by :func:`_is_surface_record`."""
-    return _is_ten_metre_wind(metadata, description, "GUST")
-
-
-def _is_entire_atmosphere_record(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One GRIB element on the entire atmosphere (surface type 10), which
-    GDAL spells ``0-EATM``; the phrase fallback catches drivers that do not.
-    The fetched pgrb2 files carry the instantaneous TCDC record alone — the
-    per-layer cloud covers and the interval average are never downloaded."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return short_name == "0-EATM" or "entire atmosphere" in searchable
-
-
-# The cloud layer surfaces as GDAL spells them (code table 4.5 types 214,
-# 224, 234), with the phrase fallback for a driver that does not.
-_CLOUD_LAYER_SURFACES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "LCDC": ("0-LCY", ("low cloud",)),
-    "MCDC": ("0-MCY", ("middle cloud", "medium cloud")),
-    "HCDC": ("0-HCY", ("high cloud",)),
-}
-
-
-def _is_cloud_layer_record(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One cloud cover element on its own layer surface. The fetched pgrb2
-    files carry the instantaneous record of each layer alone — the interval
-    averages are never downloaded — so element + surface is unambiguous.
-    AIFS writes the layers on surfaces of their own (the ground, 800 hPa,
-    450 hPa; the registry's alternates), which GDAL spells ``0-80000-SFC``,
-    ``80000-45000-ISBL`` and ``45000-ISBL``: those match on the layer's
-    name in the comment ("Low cloud cover", "Medium cloud cover", "High
-    cloud cover")."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name_token, phrases = _CLOUD_LAYER_SURFACES[element]
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return short_name == short_name_token or any(phrase in searchable for phrase in phrases)
-
-
-def _is_ten_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    )
-    return short_name in {"10-HTGL", "10-M-HTGL"} or bool(TEN_METRE_RE.search(searchable))
-
-
-def _is_eighty_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One wind component on the 80 m surface (type 103, value 80), which
-    HRRR's wrfsfc writes for wind power. GDAL spells it ``80-HTGL``."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    )
-    return short_name in {"80-HTGL", "80-M-HTGL"} or bool(EIGHTY_METRE_RE.search(searchable))
-
-
-def _is_hundred_metre_wind(metadata: dict[str, str], description: str, element: str) -> bool:
-    """One wind component on the 100 m surface (type 103, value 100), which
-    pgrb2 writes for wind power. GDAL spells it ``100-HTGL``."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    )
-    return short_name in {"100-HTGL", "100-M-HTGL"} or bool(HUNDRED_METRE_RE.search(searchable))
-
-
-def _is_mean_sea_level_pressure(metadata: dict[str, str], description: str) -> bool:
-    """PRMSL on GRIB2 surface 101 (mean sea level). GDAL spells that short
-    name ``0-MSL``; the phrase fallback catches drivers that do not. ECMWF
-    ``msl`` is plain pressure on that surface (the registry's 0/3/0 alias),
-    which GDAL names PRES, and HRRR's is the MAPS reduction MSLMA (the
-    0/3/198 alias) — the surface is what makes them the same field."""
-    if metadata.get("GRIB_ELEMENT", "").upper() not in {"PRMSL", "PRES", "MSLMA"}:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return short_name == "0-MSL" or "mean sea level" in searchable
-
-
-def _is_isobaric_record(metadata: dict[str, str], description: str, element: str, level_hpa: int) -> bool:
-    """One GRIB element on one isobaric surface.
-
-    The surface value is pascals in GRIB2 itself, and that is what GDAL
-    reports: the 850 hPa record comes back as short name ``85000-ISBL`` with
-    the description ``85000[Pa] ISBL="Isobaric surface"``. Hectopascals are
-    accepted too — that is how the level is spelled in an ``.idx`` phrase and
-    in every human-facing description — so a driver reporting ``850-ISBL``
-    still matches. Whichever unit, it must name *this* level: a matcher that
-    let 500 also match 1000 (or 50000 Pa also match 100000) would silently
-    pick the wrong plane."""
-    if metadata.get("GRIB_ELEMENT", "").upper() != element:
-        return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    if short_name in {f"{level_hpa}-ISBL", f"{level_hpa * 100}-ISBL"}:
+def _surface_value_matches(values: list[int], level_value: float | None) -> bool:
+    """Whether template 4.0's first fixed surface (scale factor and scaled
+    value at indices 10–11) spells ``level_value``; None accepts any."""
+    if level_value is None:
         return True
-    searchable = " ".join(
-        [
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    )
-    return bool(_isobaric_level_re(level_hpa).search(searchable))
+    scale, scaled_value = values[10], values[11]
+    return scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == level_value
 
 
+@functools.lru_cache(maxsize=None)
+def _height_re(metres: int) -> re.Pattern[str]:
+    return re.compile(rf"(?:^|[^0-9]){metres}(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground", re.IGNORECASE)
+
+
+@functools.lru_cache(maxsize=None)
 def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
     """The level written either way: ``850 mb`` / ``850 hPa`` / ``85000 Pa``
     (GDAL writes the pascals form with the unit bracketed, ``85000[Pa]``)."""
@@ -854,68 +180,132 @@ def _isobaric_level_re(level_hpa: int) -> re.Pattern[str]:
     )
 
 
-def _is_mrms_record(metadata: dict[str, str], variable_id: str) -> bool:
-    """One MRMS product under the registry's MRMS identity for
-    ``variable_id`` — its own (the reflectivity volume's levels) or its
-    discipline-209 alternate (the composite, the rate): GDAL names the
-    record by the product (its local table for centre 161 —
-    ``MergedReflectivityQCComposite``, ``PrecipRate``,
-    ``MergedReflectivityQC``), on the MRMS-local discipline 209, at a
-    height above mean sea level. The element is not enough: the volume's
-    33 levels share one, so the level must be this identity's too — read
-    off the assembled template (type of first fixed surface, scale factor
-    and scaled value at indices 9–11 of template 4.0), or, where the driver
-    did not assemble it, off the short name GDAL spells it with
-    (``3000-GPML``)."""
-    spec = variable_spec(variable_id)
-    if not spec.mrms_product:
+def _is_surface(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One of the rule's elements on the ground or water surface. The
+    fetched files carry only the instantaneous surface record of each, so
+    element + surface level is unambiguous — the interval averages and the
+    mixed-layer CAPE variants are never downloaded. GDAL spells the surface
+    ``0-SFC``; the GFS-Wave records carry a surface value of 1 and come out
+    ``1-SFC``, so any value on the SFC surface is accepted. The prose test
+    looks for the surface's own name rather than the word "surface", which
+    the isobaric levels the same TMP element is fetched on also carry
+    ("Isobaric surface")."""
+    if _element(metadata) not in rule.elements:
         return False
-    element = spec.mrms_product.split("_", 1)[0]
-    if metadata.get("GRIB_ELEMENT", "") != element or metadata.get("GRIB_DISCIPLINE", "") != "209":
+    searchable = _searchable(metadata, description)
+    return _short_name(metadata).endswith("-SFC") or 'sfc="' in searchable or "ground or water surface" in searchable
+
+
+def _is_height(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The element on the ``metres`` m above-ground surface: GDAL spells it
+    ``<metres>-HTGL``; the phrase fallback catches a driver that does not."""
+    if _element(metadata) != rule.element:
         return False
-    identity = next(
-        (
-            (alternate.category, alternate.number, alternate.level_type, alternate.level_value)
-            for alternate in spec.grib2_alternates
-            if alternate.discipline == 209
-        ),
-        (spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
-    )
-    category, number, level_type, level_value = identity
-    try:
-        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
-    except ValueError:
-        values = []
-    if metadata.get("GRIB_PDS_PDTN") == "0" and len(values) >= 12:
-        if (values[0], values[1], values[9]) != (category, number, level_type):
-            return False
-        if level_value is None:
-            return True
-        scale, scaled_value = values[10], values[11]
-        return scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == level_value
-    if level_type != 102 or level_value is None:
+    assert rule.metres is not None
+    short_name = _short_name(metadata)
+    searchable = " ".join([short_name, metadata.get("GRIB_COMMENT", ""), metadata.get("GRIB_LEVEL", ""), description])
+    return short_name in {f"{rule.metres}-HTGL", f"{rule.metres}-M-HTGL"} or bool(_height_re(rule.metres).search(searchable))
+
+
+def _is_entire_atmosphere(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The element on the entire atmosphere (surface type 10, or NCEP's
+    200, which GDAL renders like it), spelled ``0-EATM``; the phrase
+    fallback catches drivers that do not. The fetched pgrb2 files carry
+    the instantaneous record alone — the per-layer cloud covers and the
+    interval average are never downloaded."""
+    if _element(metadata) != rule.element:
+        return False
+    return _short_name(metadata) == "0-EATM" or "entire atmosphere" in _searchable(metadata, description)
+
+
+def _is_mean_sea_level(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One of the elements on GRIB2 surface 101 (mean sea level), which
+    GDAL spells ``0-MSL``; the phrase fallback catches drivers that do
+    not. The surface is what makes the elements the same field."""
+    if _element(metadata) not in rule.elements:
+        return False
+    return _short_name(metadata) == "0-MSL" or "mean sea level" in _searchable(metadata, description)
+
+
+def _is_isobaric(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The element on one isobaric surface.
+
+    The surface value is pascals in GRIB2 itself, and that is what GDAL
+    reports: the 850 hPa record comes back as short name ``85000-ISBL`` with
+    the description ``85000[Pa] ISBL="Isobaric surface"``. Hectopascals are
+    accepted too — that is how the level is spelled in an ``.idx`` phrase and
+    in every human-facing description — so a driver reporting ``850-ISBL``
+    still matches. Whichever unit, it must name *this* level: a matcher that
+    let 500 also match 1000 (or 50000 Pa also match 100000) would silently
+    pick the wrong plane."""
+    if _element(metadata) != rule.element:
+        return False
+    assert rule.hpa is not None
+    if _short_name(metadata) in {f"{rule.hpa}-ISBL", f"{rule.hpa * 100}-ISBL"}:
         return True
-    return metadata.get("GRIB_SHORT_NAME", "").upper() == f"{level_value:g}-GPML"
+    searchable = " ".join([metadata.get("GRIB_COMMENT", ""), metadata.get("GRIB_LEVEL", ""), description])
+    return bool(_isobaric_level_re(rule.hpa).search(searchable))
 
 
-def _is_aerosol_record(metadata: dict[str, str], variable_id: str) -> bool:
-    """One GRIB2 aerosol product (template 4.48) under the registry's
-    parameter *and* aerosol identity for ``variable_id``. The driver's
-    tables name the fields by element (``AOTK``, ``PMTF``) and surface, which
-    a dozen of GEFS-Aerosols' records share; what tells them apart is in the
-    template itself, which GDAL exposes whole as
+def _is_cloud_layer(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One cloud cover element on its own layer surface, as GDAL spells it
+    (code table 4.5 types 214, 224, 234), with the layer's name as the
+    fallback. The fetched pgrb2 files carry the instantaneous record of
+    each layer alone — the interval averages are never downloaded — so
+    element + surface is unambiguous. AIFS writes the layers on surfaces of
+    their own (the ground, 800 hPa, 450 hPa; the registry's alternates),
+    which GDAL spells ``0-80000-SFC``, ``80000-45000-ISBL`` and
+    ``45000-ISBL``: those match on the layer's name in the comment ("Low
+    cloud cover", "Medium cloud cover", "High cloud cover")."""
+    if _element(metadata) != rule.element:
+        return False
+    searchable = _searchable(metadata, description)
+    return _short_name(metadata) == rule.short_name.upper() or any(phrase in searchable for phrase in rule.phrases)
+
+
+def _is_template(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The record under the entry's identity or an alternate, read off the
+    assembled template 4.0 values (the parameter category and number, the
+    type of first fixed surface, its scale factor and scaled value at
+    indices 0, 1, 9–11) beside the discipline: the element and short name
+    do not say which soil layer a record is in a form two centres share —
+    GDAL spells GFS's ``0-0.1-DBLL`` and names the element TSOIL / SOILW,
+    and ECMWF's ``0-1-`` on a soil level with SOILTMP / VSOILM — while the
+    template does. A record of another template (an interval statistic)
+    is not it."""
+    if metadata.get("GRIB_PDS_PDTN") != "0":
+        return False
+    values, discipline = _assembled(metadata)
+    if len(values) < 12:
+        return False
+    identities = [
+        (spec.grib2_discipline, spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
+        *(
+            (alternate.discipline, alternate.category, alternate.number, alternate.level_type, alternate.level_value)
+            for alternate in spec.grib2_alternates
+        ),
+    ]
+    for identity_discipline, category, number, level_type, level_value in identities:
+        if (discipline, values[0], values[1], values[9]) != (identity_discipline, category, number, level_type):
+            continue
+        if _surface_value_matches(values, level_value):
+            return True
+    return False
+
+
+def _is_template_aerosol(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One GRIB2 aerosol product (template 4.48) under the entry's
+    parameter *and* aerosol identity. The driver's tables name the fields
+    by element (``AOTK``, ``PMTF``) and surface, which a dozen of
+    GEFS-Aerosols' records share; what tells them apart is in the template
+    itself, which GDAL exposes whole as
     ``GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`` (the template's fields in order,
-    space-separated) beside ``GRIB_PDS_PDTN``. A record of another template,
-    or one the driver did not assemble, is not this record."""
-    spec = variable_spec(variable_id)
+    space-separated) beside ``GRIB_PDS_PDTN``. A record of another
+    template, or one the driver did not assemble, is not this record."""
     identity = spec.grib2_aerosol
     if identity is None or metadata.get("GRIB_PDS_PDTN") != "48":
         return False
-    try:
-        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
-        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
-    except ValueError:
-        return False
+    values, discipline = _assembled(metadata)
     if len(values) < 23:
         return False
     if (discipline, values[0], values[1]) != (spec.grib2_discipline, spec.grib2_category, spec.grib2_number):
@@ -952,62 +342,19 @@ def _assembled_aerosol(values: list[int]) -> AerosolIdentity:
     )
 
 
-def _is_soil_record(metadata: dict[str, str], variable_id: str) -> bool:
-    """One soil layer, under the registry's identity or an alternate, read
-    off the assembled template 4.0 values (the type of first fixed surface,
-    its scale factor and scaled value at indices 9–11) beside the
-    discipline: the element and short name do not say which layer a record
-    is in a form two centres share — GDAL spells GFS's ``0-0.1-DBLL`` and
-    names the element TSOIL / SOILW, and ECMWF's ``0-1-`` on a soil level
-    with SOILTMP / VSOILM — while the template does. A record of another
-    template (an interval statistic) is not a soil layer here."""
-    spec = variable_spec(variable_id)
-    if metadata.get("GRIB_PDS_PDTN") != "0":
-        return False
-    try:
-        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
-        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
-    except ValueError:
-        return False
-    if len(values) < 12:
-        return False
-    identities = [
-        (spec.grib2_discipline, spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
-        *(
-            (alternate.discipline, alternate.category, alternate.number, alternate.level_type, alternate.level_value)
-            for alternate in spec.grib2_alternates
-        ),
-    ]
-    scale, scaled_value = values[10], values[11]
-    for identity_discipline, category, number, level_type, level_value in identities:
-        if (discipline, values[0], values[1], values[9]) != (identity_discipline, category, number, level_type):
-            continue
-        if level_value is None:
-            return True
-        if scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == level_value:
-            return True
-    return False
-
-
-def _is_ordered_sequence_record(metadata: dict[str, str], variable_id: str) -> bool:
+def _is_template_rank(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
     """One rank of an ordered sequence (code table 4.5 type 241, local to
-    NCEP): a GFS-Wave swell partition, under the registry's parameter and
+    NCEP): a GFS-Wave swell partition, under the entry's parameter and
     rank. The three partitions share element, parameter and grid and differ
     in the surface value alone, which GDAL, knowing no name for the surface,
     spells ``1-RESERVED(241)`` — so the rank is read off the assembled
-    template 4.0 values (the type of first fixed surface, its scale factor
-    and scaled value at indices 9–11) beside the discipline and parameter,
-    the way a soil layer is. Where the driver did not assemble the
-    template, the short name is the fallback, rank included."""
-    spec = variable_spec(variable_id)
-    if metadata.get("GRIB_ELEMENT", "").upper() != spec.grib_element:
+    template 4.0 values beside the discipline and parameter, the way a soil
+    layer is. Where the driver did not assemble the template, the short
+    name is the fallback, rank included."""
+    if _element(metadata) != spec.grib_element:
         return False
     rank = spec.grib2_level_value
-    try:
-        values = [int(field) for field in metadata.get("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "").split()]
-        discipline = int(metadata.get("GRIB_DISCIPLINE", "").split("(", 1)[0])
-    except ValueError:
-        values, discipline = [], -1
+    values, discipline = _assembled(metadata)
     if metadata.get("GRIB_PDS_PDTN") == "0" and len(values) >= 12:
         if (discipline, values[0], values[1], values[9]) != (
             spec.grib2_discipline,
@@ -1016,114 +363,139 @@ def _is_ordered_sequence_record(metadata: dict[str, str], variable_id: str) -> b
             spec.grib2_level_type,
         ):
             return False
-        scale, scaled_value = values[10], values[11]
-        return scaled_value != 0xFFFFFFFF and scaled_value / (10.0**scale) == rank
-    return metadata.get("GRIB_SHORT_NAME", "").upper() == f"{rank:g}-RESERVED({spec.grib2_level_type})"
+        return rank is not None and _surface_value_matches(values, rank)
+    return _short_name(metadata) == f"{rank:g}-RESERVED({spec.grib2_level_type})"
 
 
-def _is_orography_record(metadata: dict[str, str], description: str) -> bool:
-    """The model's terrain height on the ground surface. NCEP publishes it
-    as the geopotential height 0/3/5 (GFS, HRRR and sflux, GDAL element
-    ``HGT``, ``:HGT:surface:``); ECMWF open data as the geopotential itself
-    0/3/4, which GDAL names ``GP`` and describes only in the comment, so
-    the geopotential spelling is accepted beside the element. Both sit on
-    surface type 1, and a fetched file carries no other record of either
-    element."""
-    element = metadata.get("GRIB_ELEMENT", "").upper()
-    if element == "HGT":
-        return _is_surface_record(metadata, description, "HGT")
-    if element not in {"GP", "Z"}:
+def _is_template_mrms(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One MRMS product under the entry's MRMS identity — its own (the
+    reflectivity volume's levels) or its discipline-209 alternate (the
+    composite, the rate): GDAL names the record by the product (its local
+    table for centre 161 — ``MergedReflectivityQCComposite``,
+    ``PrecipRate``, ``MergedReflectivityQC``), on the MRMS-local discipline
+    209, at a height above mean sea level. The element is not enough: the
+    volume's 33 levels share one, so the level must be this identity's too
+    — read off the assembled template (type of first fixed surface, scale
+    factor and scaled value at indices 9–11 of template 4.0), or, where the
+    driver did not assemble it, off the short name GDAL spells it with
+    (``3000-GPML``)."""
+    if not spec.mrms_product:
         return False
-    short_name = metadata.get("GRIB_SHORT_NAME", "").upper()
-    searchable = " ".join(
-        [
-            short_name,
-            metadata.get("GRIB_COMMENT", ""),
-            metadata.get("GRIB_LEVEL", ""),
-            description,
-        ]
-    ).lower()
-    return (short_name.endswith("-SFC") or "ground or water surface" in searchable) and "geopotential" in searchable
+    element = spec.mrms_product.split("_", 1)[0]
+    if metadata.get("GRIB_ELEMENT", "") != element or metadata.get("GRIB_DISCIPLINE", "") != "209":
+        return False
+    category, number, level_type, level_value = next(
+        (
+            (alternate.category, alternate.number, alternate.level_type, alternate.level_value)
+            for alternate in spec.grib2_alternates
+            if alternate.discipline == 209
+        ),
+        (spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
+    )
+    values, _discipline = _assembled(metadata)
+    if metadata.get("GRIB_PDS_PDTN") == "0" and len(values) >= 12:
+        if (values[0], values[1], values[9]) != (category, number, level_type):
+            return False
+        return _surface_value_matches(values, level_value)
+    if level_type != 102 or level_value is None:
+        return True
+    return _short_name(metadata) == f"{level_value:g}-GPML"
+
+
+def _is_total_precipitation(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """ECMWF open data tp: GRIB2 discipline 0, category 1, local parameter
+    193 — GDAL's tables do not know it, so GRIB_ELEMENT is "unknown" and the
+    comment carries the raw triple. AIFS writes its run total under the WMO
+    0/1/52, which GDAL's tables name TPRATE ("Total precipitation rate");
+    the fetched files carry no other record of that element."""
+    if metadata.get("GRIB_ELEMENT", "").lower() not in {"unknown", "tp", "apcp", "tprate"}:
+        return False
+    comment = metadata.get("GRIB_COMMENT", "")
+    searchable = _searchable(metadata, description, short_name=False)
+    return (_short_name(metadata) == "0-SFC" or "surface" in searchable) and (
+        "cat 1, subcat 193" in comment or "total precipitation" in searchable
+    )
+
+
+def _is_local_parameter(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """A centre-local parameter on the ground surface GDAL's tables do not
+    know (ECMWF ``tcc``, the ECMWF-local 0/6/192): GRIB_ELEMENT is
+    "unknown" and the comment carries the raw triple, the way it does for
+    ``tp``."""
+    if metadata.get("GRIB_ELEMENT", "").lower() != "unknown":
+        return False
+    comment = metadata.get("GRIB_COMMENT", "")
+    searchable = _searchable(metadata, description, short_name=False)
+    return (_short_name(metadata) == "0-SFC" or "ground or water surface" in searchable) and (
+        f"cat {rule.category}, subcat {rule.number}" in comment
+    )
+
+
+def _is_phrase(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The element described by one of the phrases: ECMWF ``mucape``, the
+    CAPE element departing from surface type 17, the level of the most
+    unstable parcel, which GDAL describes as such and gives no short name
+    of its own."""
+    if _element(metadata) != rule.element:
+        return False
+    searchable = _searchable(metadata, description, short_name=False)
+    return any(phrase in searchable for phrase in rule.phrases)
+
+
+def _is_geopotential_surface(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """The geopotential on the ground surface: ECMWF open data's orography,
+    0/3/4, which GDAL names ``GP`` and describes only in the comment."""
+    if _element(metadata) not in rule.elements:
+        return False
+    searchable = _searchable(metadata, description)
+    return (
+        _short_name(metadata).endswith("-SFC") or "ground or water surface" in searchable
+    ) and "geopotential" in searchable
+
+
+_MATCHERS: dict[str, Callable[[GdalRule, VariableSpec, dict[str, str], str], bool]] = {
+    "surface": _is_surface,
+    "height": _is_height,
+    "entire-atmosphere": _is_entire_atmosphere,
+    "mean-sea-level": _is_mean_sea_level,
+    "isobaric": _is_isobaric,
+    "cloud-layer": _is_cloud_layer,
+    "template": _is_template,
+    "template-aerosol": _is_template_aerosol,
+    "template-rank": _is_template_rank,
+    "template-mrms": _is_template_mrms,
+    "total-precipitation": _is_total_precipitation,
+    "local-parameter": _is_local_parameter,
+    "phrase": _is_phrase,
+    "geopotential-surface": _is_geopotential_surface,
+}
+assert set(_MATCHERS) == rules.MATCH_RULES
+
+
+def rule_matches(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """Whether one rule accepts the band."""
+    return _MATCHERS[rule.rule](rule, spec, metadata, description)
 
 
 def _band_matches(variable_id: str, metadata: dict[str, str], description: str) -> bool:
-    if variable_id in AEROSOL_VARIABLE_IDS:
-        return _is_aerosol_record(metadata, variable_id)
-    if variable_id in ("tmp2m", "dpt2m", "aptmp2m"):
-        return _is_two_metre_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id == "prate":
-        # pgrb2 fetches only the instantaneous PRATE record, so the surface
-        # matcher hits exactly it; the MRMS rate is its own product.
-        return _is_surface_precipitation_rate(metadata, description) or _is_mrms_record(metadata, variable_id)
-    if variable_id == "prate_ave":
-        # sflux files carry only the interval-averaged PRATE record.
-        return _is_surface_precipitation_rate(metadata, description)
-    if variable_id == "tp":
-        return _is_total_precipitation(metadata, description)
-    if variable_id == "gust":
-        return _is_surface_record(metadata, description, "GUST") or _is_interval_maximum_gust(metadata, description)
-    if variable_id == "cape":
-        return _is_surface_record(metadata, description, "CAPE") or _is_most_unstable_cape(metadata, description)
-    if variable_id == "pwat":
-        # NCEP writes the column total on its local "entire atmosphere
-        # (considered as a single layer)" surface (type 200), which GDAL
-        # renders like the WMO type 10 and describes in full.
-        return _is_entire_atmosphere_record(metadata, description, "PWAT")
-    if variable_id in SOIL_VARIABLE_IDS:
-        return _is_soil_record(metadata, variable_id)
-    if variable_id in ("dswrf", "vis", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir"):
-        return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("swhgt", "swper", "swdir"):
-        return _is_ordered_sequence_record(metadata, variable_id)
-    if variable_id in ("cin", "hpbl", "crain", "cfrzr", "cicep", "csnow"):
-        return _is_surface_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id == "ptype":
-        raise ConversionError("ptype is derived, not a GRIB record")
-    if variable_id == "tcdc":
-        # pgrb2's entire-atmosphere record, IFS open data's local fraction,
-        # or AIFS's WMO record as a layer from the ground surface up.
-        return (
-            _is_entire_atmosphere_record(metadata, description, "TCDC")
-            or _is_ecmwf_total_cloud_cover(metadata, description)
-            or _is_surface_record(metadata, description, "TCDC")
-        )
-    if variable_id == "cref":
-        return _is_entire_atmosphere_record(
-            metadata, description, variable_spec(variable_id).grib_element
-        ) or _is_mrms_record(metadata, variable_id)
-    if reflectivity_level(variable_id) is not None:
-        # One level of the MRMS reflectivity volume: the product's own
-        # identity, level included.
-        return _is_mrms_record(metadata, variable_id)
-    if variable_id in ("lcdc", "mcdc", "hcdc"):
-        return _is_cloud_layer_record(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("ugrd10m", "vgrd10m"):
-        return _is_ten_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("ugrd80m", "vgrd80m"):
-        return _is_eighty_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id in ("ugrd100m", "vgrd100m"):
-        return _is_hundred_metre_wind(metadata, description, variable_spec(variable_id).grib_element)
-    if variable_id == "prmsl":
-        return _is_mean_sea_level_pressure(metadata, description)
-    if variable_id == "orog":
-        return _is_orography_record(metadata, description)
-    isobaric = isobaric_variable(variable_id)
-    if isobaric is not None:
-        spec = variable_spec(variable_id)
-        if not spec.grib_element:
-            raise ConversionError(f"{variable_id} is derived, not a GRIB record")
-        return _is_isobaric_record(metadata, description, spec.grib_element, isobaric[1])
-    raise ConversionError(f"unsupported variable: {variable_id}")
+    """Whether the band is the variable's record: any of the entry's GDAL
+    rules accepts it. A field no GRIB band carries has no rules and
+    matches nothing."""
+    spec = variable_spec(variable_id)
+    return any(rule_matches(rule, spec, metadata, description) for rule in spec.gdal_rules or ())
 
 
 def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> SourceFrame:
+    spec = variable_spec(variable_id)
     unit_value = metadata.get("GRIB_UNIT") or metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
+    # A temperature's unit is carried as the one letter its rule reads it
+    # through; any other as GDAL spells it, brackets off.
     unit = (
-        normalize_unit(unit_value)
-        if variable_id in SURFACE_TEMPERATURE_IDS
+        rules.temperature_unit(unit_value)
+        if spec.conversion.rule in ("celsius", "soil-temperature")
         else unit_value.strip().strip("[]")
     )
-    raster_expression(variable_id, unit)
+    raster_expression(spec, unit)
     run_time = _timestamp(metadata, "GRIB_REF_TIME")
     valid_time = _timestamp(metadata, "GRIB_VALID_TIME")
     forecast_seconds = metadata.get("GRIB_FORECAST_SECONDS")

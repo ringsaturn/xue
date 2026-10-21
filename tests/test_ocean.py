@@ -456,18 +456,18 @@ class MatcherTests(unittest.TestCase):
         for variable_id in OCEAN_VARIABLE_IDS + WAVE_PARTITION_IDS:
             spec = variable_spec(variable_id)
             with self.subTest(variable=variable_id):
-                raster_expression(variable_id, spec.gdal_unit)
-                raster_expression(variable_id, f"[{spec.gdal_unit}]")
-        self.assertEqual(raster_expression("tmpsfc", "[C]"), "maximum(-60,minimum(67,A))")
-        self.assertEqual(raster_expression("tmpsfc", "K"), "maximum(-60,minimum(67,A-273.15))")
-        self.assertEqual(raster_expression("icec", "[Proportion]"), "maximum(0,minimum(100,A*100))")
-        self.assertEqual(raster_expression("icetk", "[m]"), "maximum(0,minimum(5.08,A))")
-        self.assertEqual(raster_expression("htsgw", "[m]"), "maximum(0,minimum(25.4,A))")
-        self.assertEqual(raster_expression("perpw", "[s]"), "maximum(0,minimum(25.4,A))")
-        self.assertEqual(raster_expression("dirpw", "[Degree true]"), "A")
+                raster_expression(variable_spec(variable_id), spec.gdal_unit)
+                raster_expression(variable_spec(variable_id), f"[{spec.gdal_unit}]")
+        self.assertEqual(raster_expression(variable_spec("tmpsfc"), "[C]"), "A")
+        self.assertEqual(raster_expression(variable_spec("tmpsfc"), "K"), "A-273.15")
+        self.assertEqual(raster_expression(variable_spec("icec"), "[Proportion]"), "A*100")
+        self.assertEqual(raster_expression(variable_spec("icetk"), "[m]"), "A")
+        self.assertEqual(raster_expression(variable_spec("htsgw"), "[m]"), "A")
+        self.assertEqual(raster_expression(variable_spec("perpw"), "[s]"), "A")
+        self.assertEqual(raster_expression(variable_spec("dirpw"), "[Degree true]"), "A")
         for variable_id, unit in (("icec", "%"), ("icetk", "cm"), ("htsgw", "ft"), ("perpw", "Hz"), ("dirpw", "rad"), ("tmpsfc", "m")):
             with self.assertRaises(ConversionError):
-                raster_expression(variable_id, unit)
+                raster_expression(variable_spec(variable_id), unit)
 
     def test_the_fixture_carries_every_ocean_record(self) -> None:
         # The GRIB fixture is recut from the whole GFS frame — pgrb2 records

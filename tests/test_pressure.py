@@ -24,7 +24,7 @@ import numpy as np
 
 from tests._support import FIXTURES, registry_entry
 from xuebuild.errors import ConversionError
-from xuebuild.gdal import _band_matches, height_expression, pressure_expression, raster_expression
+from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.quantize import (
     CONTOUR_INTERVALS,
     EMPHASIS_CONTOURS,
@@ -169,22 +169,22 @@ class CodebookTests(unittest.TestCase):
 
 class RecordMatchingTests(unittest.TestCase):
     def test_pressure_converts_pascals_and_refuses_anything_else(self) -> None:
-        self.assertEqual(pressure_expression("[Pa]"), "A/100")
-        self.assertEqual(raster_expression("prmsl", "Pa"), "A/100")
+        self.assertEqual(raster_expression(variable_spec("prmsl"), "[Pa]"), "A/100")
+        self.assertEqual(raster_expression(variable_spec("prmsl"), "Pa"), "A/100")
         with self.assertRaisesRegex(ConversionError, "unsupported pressure unit"):
-            pressure_expression("hPa")
+            raster_expression(variable_spec("prmsl"), "hPa")
 
     def test_height_takes_geopotential_metres_as_is(self) -> None:
-        self.assertEqual(height_expression("[gpm]"), "A")
-        self.assertEqual(raster_expression("hgt500", "m"), "A")
-        with self.assertRaisesRegex(ConversionError, "geopotential height unit"):
-            height_expression("dam")
+        self.assertEqual(raster_expression(variable_spec("hgt500"), "[gpm]"), "A")
+        self.assertEqual(raster_expression(variable_spec("hgt500"), "m"), "A")
+        with self.assertRaisesRegex(ConversionError, "unsupported unit: dam"):
+            raster_expression(variable_spec("hgt500"), "dam")
 
     def test_the_declared_gdal_units_are_the_ones_the_matchers_accept(self) -> None:
         for variable_id in PRESSURE_VARIABLE_IDS:
             spec = variable_spec(variable_id)
             with self.subTest(variable=variable_id):
-                raster_expression(variable_id, spec.gdal_unit)
+                raster_expression(variable_spec(variable_id), spec.gdal_unit)
 
     def test_mean_sea_level_pressure_matches_its_own_record(self) -> None:
         self.assertTrue(
