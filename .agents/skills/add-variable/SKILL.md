@@ -17,15 +17,23 @@ Read `.claude/rules/encoder.md` and
 - **A new quantity**: a `VariableSpec` registration in GRIB2 terms
   (parameter triple, fixed surface, unit, matching hints such as the `.idx`
   phrase or the ECMWF param, and `grib2_aliases` / `grib2_alternates` for
-  another centre's spelling), a codebook in `quantize.py`, and optionally
-  frontend chart knowledge.
-- **Derived**: `binconvert.DERIVED_SCALARS` / `DERIVED_VECTORS` (fixed
-  operation order, mirrored in `rust/xue/src/encode/convert.rs`). It ships
-  only when all of its inputs are fetched.
+  another centre's spelling), its rules where the defaults do not fit
+  (`conversion`: the unit rule and the spellings a record may carry;
+  `gdal_rules`: how its band is told apart, derived from the identity
+  unless set; `predictor`, `decimation`, `companions` — every name out of
+  the closed sets of `xuebuild/rules.py`, `docs/registry.md`), a codebook
+  in `quantize.py`, and optionally frontend chart knowledge. Never a
+  branch on the id: the encoders read the entry.
+- **Derived**: a `BundleSpec` in `xuebuild/bundles.py` with a `derivation`
+  (one of the six kinds; its arithmetic in `binconvert.py` has a fixed
+  operation order, mirrored in `rust/xue/src/encode/convert.rs`). It
+  ships only when all of its inputs are fetched.
 
 ## Steps
 
-1. `xuebuild/variables.py`: register it (or confirm the family covers it).
+1. `xuebuild/variables.py`: register it (or confirm the family covers it),
+   setting the rule fields that differ from the defaults; a vector,
+   composite, volume or derived bundle in `xuebuild/bundles.py`.
 2. `xuebuild/sources.py`: add its inputs to the source's fetched variables
    and the id to `bundle_scalar_ids` / `bundle_vector_ids`, in the source's
    existing order. ECMWF follows GFS order, so a model switch keeps the
@@ -35,7 +43,9 @@ Read `.claude/rules/encoder.md` and
 4. Fixtures:
    - recut the source's crop GRIB if it needs new records
      (`tests/fixtures/README.md` has the exact `gdal_translate -srcwin`);
-   - regenerate the affected registry fixture
+   - regenerate the registry snapshot
+     (`xue registry --output tests/fixtures/registry.json`, said in the
+     commit) and the affected family fixture
      (`tests/fixtures/*-registry.json`); the failing registry test names it.
 5. Frontend (optional; an unknown id renders generically):
    `web/src/variables.ts` (one `VariableSpec` row), `levels.ts` for a family

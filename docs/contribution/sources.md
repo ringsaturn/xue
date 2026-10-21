@@ -259,7 +259,7 @@ Frames start at f001 (`first_hour = 1`: f000 is the GFS analysis on the
 nest, dropped by the tool) and `apcp` is on every frame, so nothing is
 analysis-optional; `prate` is the interval rate (`interval_precipitation`).
 The 24 cloud water levels ship as one volume bundle, `cloud3d`
-(`VOLUME_BUNDLES`, after MRMS's `refl3d`), in g/kg on the linear `clw`
+(a `volume` in `bundles.py`, after MRMS's `refl3d`), in g/kg on the linear `clw`
 codebook; the NaN under the terrain is filled as 0 g/kg, so the volume
 carries no nodata code and the viewer hides the ground by occlusion.
 No ladder and no video: a plane is under 5000 cells. `tests/test_woof.py`.
@@ -335,7 +335,8 @@ information only and do not constitute a flood warning.
 slot is kept only when every product has it) and re-keyed onto the window's
 axis (`binconvert.py::_snap_observation_frames`,
 mirrored in `convert.rs`). Records match under `cref` / `prate` through
-`RecordAlternate`s for the MRMS-local discipline 209 (`_is_mrms_record`);
+`RecordAlternate`s for the MRMS-local discipline 209 (the `template-mrms`
+rule in their `gdal_rules`);
 the `-999` / `-99` / `-3` sentinels are `fill_values`. `downsample` factor
 2; MRMS writes its last coordinate short, hence the step snap. The
 workflow's `--hours 4` covers three whole hours plus the hour in progress. `pickBundleVariant` scales the needed width by the bundle's
@@ -344,7 +345,7 @@ longitude span, so a regional grid can take its half tier zoomed out.
 **mrms3d.** The same mosaic's reflectivity on its 33 constant-altitude
 levels (`REFLECTIVITY_LEVELS_M`, 500 m to 19 km MSL), each a product of its
 own on the bucket and an id of its own (`refl<metres>`), published as one
-`refl3d` bundle (`binconvert.py::VOLUME_BUNDLES`, after the composites in
+`refl3d` bundle (a `volume` in `bundles.py`, after the composites in
 manifest order; no poster, no video). The levels are scanned every two
 minutes and published every ten: `SourceSpec.object_cadence_seconds` (120)
 is the bucket's interval, `cadence_seconds` (600) the axis's, and
@@ -353,8 +354,9 @@ only on a multiple of the latter. A frame is therefore the scan stamped in
 `[mark, mark + 120 s)`, every level from that one scan, and a mark any level
 lacks is a gap; the window listing, the live slot and the completeness check
 all go through it (`SourceSpec.mrms` is the dispatch key for both sources).
-The levels share one GRIB element, so `_is_mrms_record` compares the level
-too (template 4.0's assembled surface, or the `<metres>-GPML` short name);
+The levels share one GRIB element, so the `template-mrms` rule compares the
+level too (template 4.0's assembled surface, or the `<metres>-GPML` short
+name);
 the identity written is the MRMS-local 209/9/0 on surface 102, since no WMO
 parameter names a reflectivity on an altitude surface. Codebooks and the
 RAW predictor are `cref`'s. Thinned five to one by block maximum onto 0.05°
@@ -473,9 +475,13 @@ forecast).
 
 1. **Registry.** A `SourceSpec` in `xuebuild/sources.py` (axis or window,
    cadence, inputs, published and core bundles, grid, tile, ladder, video,
-   fetch concurrency). New variables in `xuebuild/variables.py` and their
-   codebooks in `xuebuild/quantize.py` for every profile; a new family also
-   regenerates its registry fixture under `tests/fixtures/`.
+   fetch concurrency). New variables in `xuebuild/variables.py` — the
+   identity plus, where the defaults do not fit, the `conversion`,
+   `gdal_rules`, `predictor`, `decimation` and `companions` fields — and
+   their codebooks in `xuebuild/quantize.py` for every profile; a new
+   bundle that is not a plain scalar in `xuebuild/bundles.py`. Regenerate
+   `tests/fixtures/registry.json`, and a new family's fixture under
+   `tests/fixtures/`.
 2. **Fetch.** The dispatch in `xuebuild/fetch.py`: frame URLs or the fetch
    tool, the completeness check, and for an observation the latest-slot
    resolver wired into `latest_observation_slot` / `resolve_run`. An

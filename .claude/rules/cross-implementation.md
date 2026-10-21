@@ -42,11 +42,20 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 | GRIB matching / template parsing | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
 | Zarr shard reading | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
 
-Registries are held to one set of ids and codebooks by committed fixtures:
-`tests/fixtures/{isobaric,pressure,surface,ocean,aerosol,satellite,tc}-registry.json`.
-When a test reports that a registry moved, regenerate the fixture
-deliberately and change every implementation that reads it, never only the
-fixture.
+Registries are held to one set of ids, codebooks and rules by committed
+fixtures: `tests/fixtures/registry.json` is the whole registry document
+(`docs/registry.md`: every variable's identity, codebooks, unit rule, GDAL
+rules, predictor, decimation and companions; every bundle; every source),
+printed by `xue registry` and read by the native encoder in place of a
+table of its own; the per-family
+`tests/fixtures/{isobaric,pressure,surface,ocean,aerosol,satellite,soil,volume,river,tc}-registry.json`
+hold the native encoder and the frontend to the same ids and codebooks.
+The Python encoder never selects behaviour by a variable or bundle id: a
+rule is a field of `VariableSpec` / `BundleSpec`, named out of the closed
+sets of `xuebuild/rules.py`. When a test reports that a registry moved,
+regenerate the fixture deliberately (`xue registry --output
+tests/fixtures/registry.json`, said in the commit) and change every
+implementation that reads it, never only the fixture.
 
 ## Invariants that are easy to break
 

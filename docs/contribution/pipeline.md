@@ -18,14 +18,23 @@ fetch concurrency. Adding a model starts here; mirrors are
 
 **`variables.py`** — one entry per variable in GRIB2 terms (triple, surface,
 label, unit) plus matching hints (`.idx` phrase, ECMWF param,
-`ecmwf_alternate_params` for fields spelled differently along the axis). It
-feeds both record matching and the v3 `parameter` block; it assigns no
-container id.
+`ecmwf_alternate_params` for fields spelled differently along the axis) and
+every rule the encoders apply to it, named out of the closed sets of
+`rules.py` ([`docs/registry.md`](../registry.md)): `conversion` (the unit
+rule: which spellings a record may carry and the arithmetic to the
+published unit), `gdal_rules` (how its record is told apart among a GRIB's
+bands; derived from the identity by `default_gdal_rules` unless set),
+`predictor` (`delta` / `raw`), `decimation` (`sample` / `peak`) and
+`companions` (`poster`, `video`). Nothing in the encoders selects behaviour
+by a variable's id: a new quantity sets the fields that differ from the
+defaults and the rest follows. It feeds both record matching and the v3
+`parameter` block; it assigns no container id.
 
 - Another centre's record matches a variable through `grib2_aliases`
   (another triple, same surface) or `grib2_alternates` (a `RecordAlternate`:
   surface, value, statistical process, GDAL unit). Both encoders match by
-  GRIB2 header index and by GDAL band metadata; aliases are never written.
+  GRIB2 header index and by GDAL band metadata (`gdal_rules`, evaluated in
+  `gdal.py` and `inspect.rs`); aliases are never written.
 - Input-only entries are read, never published: ECMWF `tp` and sflux
   `prate_ave` (into `prate`), `dirpw`, `spfh<level>`, and GFS's
   `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `binconvert.derive_ptype`).
@@ -33,21 +42,37 @@ container id.
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.
 
+**`bundles.py` (`BundleSpec`)** — every bundle that is more than the scalar
+of the variable of the same id: a vector's two members, a composite's
+members and producer, a volume's levels, and a derivation (`kind`, `inputs`,
+`level_hpa`) for the bundles the converter computes. The converter resolves
+a bundle's inputs and algorithm off the entry; the per-kind views
+(`VECTOR_BUNDLES`, `DERIVED_VECTORS`, `COMPOSITE_BUNDLES`, `VOLUME_BUNDLES`,
+`DERIVED_SCALARS`) are for readers that walk one kind.
+
+**`registry.py`** — serialises the four tables as the registry document
+(`xue registry`), the one description the native encoder reads; the
+committed snapshot `tests/fixtures/registry.json` is held to the tables by
+`tests/test_registry.py`.
+
 ## Registration is not publication
 
 `SourceSpec.bundle_scalar_ids` / `bundle_vector_ids` list what a source
 ships, and a listed bundle ships only when its inputs were fetched:
 
 - vectors (`wind10m`, `wind<level>`, …): every input in
-  `binconvert.vector_input_ids`;
-- derived scalars (`binconvert.DERIVED_SCALARS`: `thetae`, Bolton 1980 in a
-  fixed operation order the native side must repeat; `cat`, Ellrod TI1
-  projected onto EDR with the source's `cat_calibration`, the one derivation
-  that reads neighbours, so `_extract_planes` hands it the uncropped planes
-  and the crop is cut afterwards) and derived vectors
-  (`binconvert.DERIVED_VECTORS`: `qflux` = q·V/g; `wave`, `windwave`,
-  `swell` = a height along its direction of travel in wind convention,
-  `(-h sin θ, -h cos θ)`).
+  `bundles.vector_input_ids`;
+- derived scalars (a `BundleSpec` with a `derivation`: `theta-e`, Bolton
+  1980 in a fixed operation order the native side must repeat;
+  `clear-air-turbulence`, Ellrod TI1 projected onto EDR with the source's
+  `cat_calibration`, the one derivation that reads neighbours, so
+  `_extract_planes` hands it the uncropped planes and the crop is cut
+  afterwards; `precipitation-type`) and derived vectors (`vapour-flux`:
+  `qflux` = q·V/g; `wave-vector`: `wave`, `windwave`, `swell` = a height
+  along its direction of travel in wind convention, `(-h sin θ, -h cos θ)`).
+  The `prate` bundle's `precipitation-rate` derivation takes whichever of
+  its inputs the source lists, by the source's precipitation flags
+  (`binconvert.precipitation_mode`).
 
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by
@@ -67,11 +92,14 @@ the first step.
 
 ## Registry fixtures
 
-`tests/fixtures/*-registry.json` hold the three implementations to one set
-of ids and codebooks. Widening a source's inputs means recutting its crop
-fixture (`gfs.*.crop.grib2` with the same run and `-srcwin`; the two-frame
-`ecmwf.*` / `aifs.*` pairs) and regenerating the registry fixtures
-([testing.md](testing.md)).
+`tests/fixtures/registry.json` is the whole registry document, held to the
+tables by `tests/test_registry.py` (regenerate with
+`xue registry --output tests/fixtures/registry.json` and say so in the
+commit); the per-family `tests/fixtures/*-registry.json` hold the native
+encoder and the frontend to the same ids and codebooks. Widening a source's
+inputs means recutting its crop fixture (`gfs.*.crop.grib2` with the same
+run and `-srcwin`; the two-frame `ecmwf.*` / `aifs.*` pairs) and
+regenerating the registry fixtures ([testing.md](testing.md)).
 
 ## Modules
 
@@ -87,7 +115,14 @@ fixture (`gfs.*.crop.grib2` with the same run and `-srcwin`; the two-frame
     satellites): every f-th row and column of the codes, tile divided by f
     (`variant_tier`, `_variant_grid`, `_bundle_tile`); `variants` are in
     ascending factor order and nothing keys on the suffix;
-  - video only for surface fields where `SourceSpec.video` is on.
+  - a video companion only for the variables whose `companions` name it,
+    and only where `SourceSpec.video` is on; the chunk predictor and the
+    ladder's decimation are the variable's `predictor` and `decimation`.
+- **`gdal.py`** (mirrored by `inspect.rs`): `gdalinfo` in, `SourceFrame`s
+  out. A band is a variable's record when any of its `gdal_rules` accepts
+  it (one evaluator per rule name); the unit is checked by the variable's
+  `conversion` (`rules.expression`, the arithmetic alone, which the header
+  index and the gdalinfo pass compare for identity).
 - **`quantize.py` / `temporal.py` / `binformat.py`**: codebooks, modulo-256
   residual prediction, container I/O.
 - **`manifest.py`**: manifest and pointer, both validated on write.
