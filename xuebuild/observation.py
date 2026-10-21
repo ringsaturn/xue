@@ -25,7 +25,8 @@ from .errors import ConversionError
 from .gdal import dataset_info
 from .model import PlaneSource, SourceFrame
 from .sources import SourceSpec
-from .variables import SURFACE_TEMPERATURE_IDS, VariableSpec, isobaric_variable, variable_spec
+from . import rules
+from .variables import VariableSpec, variable_spec
 
 LOG = logging.getLogger(__name__)
 
@@ -142,22 +143,25 @@ def accepted_series_units(spec: VariableSpec) -> tuple[str, ...]:
     the whole of the check and it must be strict — a number quantized in the
     wrong unit is silent. The rule is: the registry's ``output_unit``, the
     same unit spelled the way udunits spells it (:data:`_UNIT_SPELLINGS`),
-    or an input unit the converter already knows how to turn into it for
-    *this* variable (``binconvert._convert_units``) — kelvin or fahrenheit
-    for a temperature, pascals for the sea level pressure, metres for the
-    visibility. Anything else is refused. Mirrored by
+    or a spelling the variable's conversion rule reads a record under
+    (:func:`xuebuild.rules.accepted_units`, compacted: kelvin or
+    fahrenheit for a temperature, pascals for the sea level pressure,
+    metres for the visibility; a ``none`` rule that names no spellings adds
+    nothing, so the published unit is the whole of the check). Anything
+    else is refused (:func:`series_unit_accepted`). Mirrored by
     ``encode/observation.rs``, which must answer the same list."""
     units = [spec.output_unit, *_UNIT_SPELLINGS.get(spec.output_unit, ())]
-    isobaric = isobaric_variable(spec.id)
-    if spec.id in SURFACE_TEMPERATURE_IDS or (isobaric is not None and isobaric[0] == "tmp"):
-        # The three spellings normalize_unit accepts, which is what the
-        # converter reads a temperature through.
-        units += ["K", "C", "F"]
-    elif spec.id == "prmsl":
-        units.append("Pa")
-    elif spec.id == "vis":
-        units.append("m")
+    units += rules.accepted_units(spec.conversion) or ()
     return tuple(dict.fromkeys(units))
+
+
+def series_unit_accepted(spec: VariableSpec, unit: str) -> bool:
+    """Whether a series file's unit is one of :func:`accepted_series_units`:
+    the published unit and its udunits spelling as written, the conversion
+    rule's spellings after the rule's compaction."""
+    if unit in (spec.output_unit, *_UNIT_SPELLINGS.get(spec.output_unit, ())):
+        return True
+    return rules.accepted_units(spec.conversion) is not None and rules.accepts(spec.conversion, unit)
 
 
 def series_files(path: Path, variable_ids: tuple[str, ...]) -> dict[str, Path]:
@@ -233,10 +237,9 @@ def inspect_observation(
 
         spec = variable_spec(variable_id)
         unit = str(bands[0].get("unit", "")).strip()
-        accepted = accepted_series_units(spec)
-        if unit not in accepted:
+        if not series_unit_accepted(spec, unit):
             raise ConversionError(
-                f"{dataset} reports unit {unit or '<missing>'}, expected {' or '.join(accepted)}"
+                f"{dataset} reports unit {unit or '<missing>'}, expected {' or '.join(accepted_series_units(spec))}"
             )
         # A produced variable carries the producer that made it as two
         # attributes of the variable (the fetch stage stamps them,

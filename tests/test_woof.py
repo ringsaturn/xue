@@ -162,7 +162,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(SPEC.bundle_vector_ids, ("wind10m", "wind80m"))
         self.assertEqual(binconvert.bundle_input_ids(SPEC, "wind80m"), ("ugrd80m", "vgrd80m"))
         self.assertNotIn("wind80m", binconvert.DERIVED_VECTORS)
-        self.assertEqual(observation.accepted_series_units(variable_spec("prmsl")), ("hPa", "Pa"))
+        self.assertEqual(observation.accepted_series_units(variable_spec("prmsl")), ("hPa", "pa"))
         self.assertTrue(SPEC.interval_precipitation)
         self.assertFalse(SPEC.accumulated_precipitation or SPEC.averaged_precipitation)
         self.assertEqual(SPEC.statistical_processes, (("prate", 0),))

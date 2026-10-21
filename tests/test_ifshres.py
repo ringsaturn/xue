@@ -56,7 +56,7 @@ from xuebuild.fetch import (
 )
 from xuebuild.manifest import validate_bin_manifest
 from xuebuild.model import GfsRun
-from xuebuild.observation import accepted_series_units
+from xuebuild.observation import accepted_series_units, series_unit_accepted
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import source_spec
 from xuebuild.stac import _source_prose
@@ -221,16 +221,25 @@ class VariableRegistryTests(unittest.TestCase):
         self.assertNotIn("apcp", PROFILES["quality"])
 
     def test_the_accepted_units_are_the_registry_s_and_what_the_converter_can_read(self) -> None:
-        self.assertEqual(accepted_series_units(variable_spec("tmp2m")), ("°C", "degC", "K", "C", "F"))
-        self.assertEqual(accepted_series_units(variable_spec("prmsl")), ("hPa", "Pa"))
-        self.assertEqual(accepted_series_units(variable_spec("vis")), ("km", "m"))
-        self.assertEqual(accepted_series_units(variable_spec("gust")), ("m/s", "m s-1"))
-        self.assertEqual(accepted_series_units(variable_spec("dswrf")), ("W/m²", "W m-2"))
-        self.assertEqual(accepted_series_units(variable_spec("cape")), ("J/kg", "J kg-1"))
+        self.assertEqual(
+            accepted_series_units(variable_spec("tmp2m")),
+            ("°C", "degC", "k", "kelvin", "c", "celsius", "degc", "f", "fahrenheit", "degf"),
+        )
+        self.assertEqual(accepted_series_units(variable_spec("prmsl")), ("hPa", "pa"))
+        self.assertEqual(accepted_series_units(variable_spec("vis")), ("km", "m", "metre", "meter", "metres", "meters"))
+        self.assertEqual(accepted_series_units(variable_spec("gust")), ("m/s", "m s-1", "m/sec", "ms-1", "ms^-1", "mps"))
+        self.assertEqual(accepted_series_units(variable_spec("dswrf")), ("W/m²", "W m-2", "w/m^2", "w/m2", "wm^-2", "wm-2"))
+        self.assertEqual(accepted_series_units(variable_spec("cape")), ("J/kg", "J kg-1", "j/kg", "jkg-1", "jkg^-1"))
+        self.assertEqual(accepted_series_units(variable_spec("tcdc")), ("%", "-", "1", "fraction", "proportion", "0-1"))
+        # A quantity whose rule names no spellings keeps the registry's unit.
         self.assertEqual(accepted_series_units(variable_spec("apcp")), ("mm", "kg m-2"))
-        # A quantity with one spelling and no conversion keeps the one unit.
-        self.assertEqual(accepted_series_units(variable_spec("tcdc")), ("%",))
-        self.assertEqual(accepted_series_units(variable_spec("icetk")), ("m",))
+        self.assertEqual(accepted_series_units(variable_spec("ir104")), ("K",))
+        # The rule's spellings are compared after compaction, the registry's
+        # as written.
+        for variable_id, unit in (("tmp2m", "K"), ("tmp2m", "degC"), ("prmsl", "Pa"), ("vis", "m"), ("gust", "m s-1"), ("tcdc", "-")):
+            self.assertTrue(series_unit_accepted(variable_spec(variable_id), unit), (variable_id, unit))
+        for variable_id, unit in (("tmp2m", "rankine"), ("prmsl", "mb"), ("vis", "km "), ("ir104", "k"), ("apcp", "m")):
+            self.assertFalse(series_unit_accepted(variable_spec(variable_id), unit), (variable_id, unit))
 
 
 class IntervalRateTests(unittest.TestCase):

@@ -22,7 +22,7 @@ import numpy as np
 
 from tests._support import FIXTURES, requires_gdal
 from xuebuild.errors import DownloadError, XueError
-from xuebuild.observation import accepted_series_units
+from xuebuild.observation import series_unit_accepted
 from xuebuild.reproject import LambertConformal
 from xuebuild.variables import variable_spec
 
@@ -318,7 +318,7 @@ class SyntheticRunTests(unittest.TestCase):
                 self.assertEqual(data.dtype, np.float32)
                 self.assertTrue(math.isnan(float(data._FillValue)))
                 self.assertTrue(data.filters()["zlib"])
-                self.assertIn(data.units, accepted_series_units(variable_spec(variable_id)))
+                self.assertTrue(series_unit_accepted(variable_spec(variable_id), data.units), data.units)
                 values = np.asarray(data[:], dtype=np.float64)
                 self.assertFalse(np.isnan(values).any())
                 if variable_id == "apcp":
@@ -415,7 +415,7 @@ class FixtureTests(unittest.TestCase):
                 data = ds[variable_id]
                 self.assertEqual(data.shape, (2, 16, 20))
                 self.assertEqual(ds.forecast_reference_time, "2026-10-10T06:00:00Z")
-                self.assertIn(data.units, accepted_series_units(variable_spec(variable_id)))
+                self.assertTrue(series_unit_accepted(variable_spec(variable_id), data.units), data.units)
                 np.testing.assert_array_equal(ds["time"][:], [1.0, 2.0])
 
 
