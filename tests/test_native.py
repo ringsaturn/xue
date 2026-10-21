@@ -27,8 +27,9 @@ from tests._support import (
     require_comparable_compression,
     requires_native,
 )
-from xuebuild import binconvert, binformat, encoder, native
+from xuebuild import binconvert, binformat, encoder, native, registry
 from xuebuild.errors import ConversionError
+from xuebuild.sources import source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
@@ -83,6 +84,63 @@ class EncoderSelectionTests(unittest.TestCase):
                     report = encoder.convert_bin(FIXTURE_GRIB, Path("out"), model="gfs")
         self.assertEqual(report, {"ok": "native"})
         delegate.assert_called_once()
+
+
+class RegistryHandoverTests(unittest.TestCase):
+    """The wheel carries no table of its own: every call hands it this
+    tree's registry document, and `knows_source` is the question of whether
+    the installed wheel implements that document, asked of a wheel that
+    may be real or faked here."""
+
+    def _wheel(self, raising: Exception) -> tuple[object, list[dict]]:
+        calls: list[dict] = []
+
+        class Module:
+            @staticmethod
+            def convert_bin(inputs, output_dir, **kwargs):
+                calls.append({"inputs": list(inputs), "output_dir": output_dir, **kwargs})
+                raise raising
+
+        return Module(), calls
+
+    def test_knows_source_probes_with_the_document_and_no_input(self) -> None:
+        module, calls = self._wheel(RuntimeError("no GRIB files given"))
+        with mock.patch.object(native, "available", return_value=True), mock.patch.object(
+            native, "require", return_value=module
+        ):
+            self.assertTrue(native.knows_source("gfs"))
+        (call,) = calls
+        self.assertEqual(call["inputs"], [])
+        self.assertEqual(call["model"], "gfs")
+        self.assertEqual(call["bundle_ids"], list(binconvert.published_bundle_ids(source_spec("gfs"))))
+        self.assertEqual(call["registry"], registry.document_json())
+        self.assertEqual(json.loads(call["registry"])["registrySchema"], registry.REGISTRY_SCHEMA)
+
+    def test_a_wheel_that_refuses_the_document_does_not_know_the_source(self) -> None:
+        for message in (
+            "registry document: variables.tmp2m: unknown variant `fahrenheit`",
+            "registry document: registrySchema 2 is not one this encoder implements (1)",
+            "unsupported model: gfs",
+            "GFS publishes [\"tmp2m\"], not [\"tmp2m\", \"prate\"]",
+        ):
+            with self.subTest(message=message):
+                module, _calls = self._wheel(RuntimeError(message))
+                with mock.patch.object(native, "available", return_value=True), mock.patch.object(
+                    native, "require", return_value=module
+                ):
+                    self.assertFalse(native.knows_source("gfs"))
+
+    def test_without_the_wheel_no_source_is_known(self) -> None:
+        with mock.patch.object(native, "available", return_value=False):
+            self.assertFalse(native.knows_source("gfs"))
+
+    def test_a_build_hands_the_wheel_the_document(self) -> None:
+        module, calls = self._wheel(RuntimeError("stop here"))
+        with mock.patch.object(native, "require", return_value=module), self.assertRaises(RuntimeError):
+            native.convert_bin(FIXTURE_GRIB, Path("out"), model="gfs", skip_video=True)
+        (call,) = calls
+        self.assertEqual(call["registry"], registry.document_json())
+        self.assertEqual(call["series_bundle_ids"], list(source_spec("gfs").series_bundle_ids))
 
 
 @requires_native

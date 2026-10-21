@@ -41,6 +41,7 @@ from .manifest import (
     write_bin_manifest,
     write_pointer_to_manifest,
 )
+from .registry import document_json
 from .sources import SourceSpec, source_spec
 from .videoconvert import build_debug_playlist, encode_variable_video
 from .zstdcli import DEFAULT_LEVEL as DEFAULT_ZSTD_LEVEL
@@ -84,25 +85,36 @@ def available() -> bool:
 
 
 def knows_source(model: str) -> bool:
-    """Whether the installed wheel's source table has ``model`` with every
-    bundle this source table publishes for it.
+    """Whether the installed wheel can build ``model`` from this tree's
+    registry document, with every bundle the document publishes for it.
 
-    The wheel carries a table of its own, and one that predates a source
-    refuses the model — and one that predates a bundle refuses the
-    ``bundle_ids`` — before it looks at any input, so an empty input list
-    is enough to ask, and nothing is read or written. What a test that
-    needs a wheel at least as new as some source skips on, and what the
-    scheduled builds ask before taking the native path. A source whose
-    shape changes takes a new id for the same reason: a wheel that knows
-    the old id must not be taken for one that knows the new shape; a source
-    that gains a bundle is caught by the bundle list."""
+    The wheel carries no table of its own: it reads the registry document
+    (:mod:`xuebuild.registry`, ``docs/registry.md``) and refuses it whole,
+    before it looks at any input, when the document names a schema, a rule
+    or a codebook type the wheel does not implement — which is what a wheel
+    that predates such a change does. So an empty input list is enough to
+    ask, and nothing is read or written. What a test that needs a wheel at
+    least as new as some rule skips on, and what the scheduled builds ask
+    before taking the native path. A table change — a new source, a new
+    bundle, a new level of a known family — needs no new wheel: the
+    document carries it."""
     if not available():
         return False
     try:
-        require().convert_bin([], Path(os.devnull), model=model, bundle_ids=list(published_bundle_ids(source_spec(model))))
+        require().convert_bin(
+            [],
+            Path(os.devnull),
+            model=model,
+            bundle_ids=list(published_bundle_ids(source_spec(model))),
+            registry=document_json(),
+        )
     except Exception as exc:  # noqa: BLE001 - the wheel raises a plain RuntimeError
         message = str(exc)
-        return "unsupported model" not in message and "publishes" not in message
+        return (
+            "registry document" not in message
+            and "unsupported model" not in message
+            and "publishes" not in message
+        )
     return True
 
 
@@ -343,6 +355,10 @@ def convert_bin(
     report = module.convert_bin(
         inputs,
         Path(output_dir),
+        # The variables, bundles and sources of this tree, as the one
+        # document the wheel builds from (docs/registry.md): the wheel
+        # carries no table of its own.
+        registry=document_json(),
         profile=profile,
         model=model,
         zstd_level=zstd_level,
@@ -364,13 +380,13 @@ def convert_bin(
         series_bundle_ids=list(source.series_bundle_ids) if series else [],
     )
 
-    # The wheel carries a source table of its own. One that predates this
-    # repository's would build the run it knows — fewer bundles, silently —
-    # and a scheduled publish pins the native path precisely so a shortfall
-    # cannot pass unnoticed, so the sets are compared here. (A vector bundle
-    # or a derived scalar whose inputs a run turned out to lack is left out
-    # by both encoders alike; that case never reaches this check because the
-    # inputs were fetched off the same table.)
+    # The wheel built from the document this tree handed it, so the bundle
+    # set should be this tree's; a scheduled publish pins the native path
+    # precisely so a shortfall cannot pass unnoticed, and the sets are
+    # compared here rather than trusted. (A vector bundle or a derived
+    # scalar whose inputs a run turned out to lack is left out by both
+    # encoders alike; that case never reaches this check because the inputs
+    # were fetched off the same tables.)
     expected = tuple(
         bundle_id
         for bundle_id in published_bundle_ids(source)
@@ -381,8 +397,8 @@ def convert_bin(
         raise ConversionError(
             f"{DISTRIBUTION} {version() or 'dev'} built {list(written)} where this "
             f"xuebuild publishes {list(expected)} for {source.manifest_model}; the "
-            "wheel's source table is out of step with xuebuild/sources.py — "
-            "release or upgrade the wheel, or set XUE_ENCODER=python"
+            "wheel does not read the registry document the way this tree writes "
+            "it — release or upgrade the wheel, or set XUE_ENCODER=python"
         )
 
     videos: dict[str, dict[str, Any]] = {}
