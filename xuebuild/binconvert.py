@@ -29,6 +29,33 @@ from typing import Any
 import numpy as np
 
 from . import binformat, grib2, temporal, zarrstore, zstdcli
+from .bundles import (  # noqa: F401  (the bundle table's names, re-exported for its readers)
+    BUNDLES,
+    CAT_SHEAR_LAYERS,
+    COMPOSITE_BUNDLES,
+    DERIVED_SCALARS,
+    DERIVED_VECTORS,
+    PRECIPITATION_RATE_BUNDLE_ID,
+    SWELL_BUNDLE_ID,
+    VECTOR_BUNDLES,
+    VOLUME_BUNDLES,
+    WAVE_BUNDLE_ID,
+    WIND_100M_BUNDLE_ID,
+    WIND_100M_COMPONENT_IDS,
+    WIND_80M_BUNDLE_ID,
+    WIND_80M_COMPONENT_IDS,
+    WIND_BUNDLE_ID,
+    WIND_COMPONENT_IDS,
+    WIND_WAVE_BUNDLE_ID,
+    bundle,
+    bundle_variable_ids,
+    cat_level,
+    derivation,
+    is_derived_scalar,
+    theta_e_level,
+    vapour_flux_level,
+    vector_input_ids,
+)
 from .common import crc32_hex
 from .errors import ConversionError, DownloadError
 from .gdal import (
@@ -51,32 +78,17 @@ from .manifest import (
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
-from .satellite.platforms import platform as satellite_platform
-from .satellite.producers import PRODUCERS
 from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import Downsample, SourceSpec, family_frame_path, source_spec
 from .variables import (
-    DUST_CF_BUNDLE_ID,
-    DUST_CF_COMPONENT_IDS,
-    DUST_RGB_BUNDLE_ID,
-    ZHOUYE_BUNDLE_ID,
-    ZHOUYE_COMPONENT_IDS,
-    DUST_RGB_COMPONENT_IDS,
-    TRUE_COLOR_BUNDLE_ID,
-    TRUE_COLOR_COMPONENT_IDS,
     CAT_LEVELS_HPA,
-    CLOUD_WATER_VARIABLE_IDS,
-    ISOBARIC_LEVELS_HPA,
     REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
     SOIL_TEMPERATURE_IDS,
     SURFACE_TEMPERATURE_IDS,
-    SWELL_VECTOR_COMPONENT_IDS,
     VARIABLES,
     WAVE_DIRECTION_IDS,
-    WAVE_VECTOR_COMPONENT_IDS,
-    WIND_WAVE_VECTOR_COMPONENT_IDS,
     isobaric_variable,
     variable_spec,
 )
@@ -89,161 +101,6 @@ METADATA_SCHEMA_VERSION = 3
 carries its GRIB2 parameter identity (docs/format.md). Earlier versions
 remain readable; nothing new is written at them."""
 
-# Scalar variables ship one single-variable bundle each (with a poster, and
-# for the surface fields a video companion); which scalars a source publishes
-# is the source's business (sources.py bundle_scalar_ids — sflux adds dswrf).
-# A vector field ships its two components together in one two-variable bundle
-# for the frontend's magnitude shader and particle layer: the 10 m wind, the
-# wind on each isobaric surface, the water vapour flux the converter derives
-# on each surface from the specific humidity and the wind there, and the
-# wave vectors it derives from a height and a direction: the combined sea's,
-# the wind sea's and the first swell partition's.
-WIND_COMPONENT_IDS = ("ugrd10m", "vgrd10m")
-WIND_BUNDLE_ID = "wind10m"
-WAVE_BUNDLE_ID = "wave"
-WIND_WAVE_BUNDLE_ID = "windwave"
-SWELL_BUNDLE_ID = "swell"
-# The 80 m wind pair HRRR writes for wind power, a vector bundle of its own.
-WIND_80M_COMPONENT_IDS = ("ugrd80m", "vgrd80m")
-WIND_80M_BUNDLE_ID = "wind80m"
-# The 100 m wind pair, the hub height of a modern turbine: the same parameters
-# on the 100 m surface, a vector bundle of its own.
-WIND_100M_COMPONENT_IDS = ("ugrd100m", "vgrd100m")
-WIND_100M_BUNDLE_ID = "wind100m"
-VECTOR_BUNDLES: dict[str, tuple[str, str]] = {
-    WIND_BUNDLE_ID: WIND_COMPONENT_IDS,
-    WIND_80M_BUNDLE_ID: WIND_80M_COMPONENT_IDS,
-    WIND_100M_BUNDLE_ID: WIND_100M_COMPONENT_IDS,
-    **{f"wind{level}": (f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
-    **{f"qflux{level}": (f"uqflx{level}", f"vqflx{level}") for level in ISOBARIC_LEVELS_HPA},
-    WAVE_BUNDLE_ID: WAVE_VECTOR_COMPONENT_IDS,
-    WIND_WAVE_BUNDLE_ID: WIND_WAVE_VECTOR_COMPONENT_IDS,
-    SWELL_BUNDLE_ID: SWELL_VECTOR_COMPONENT_IDS,
-}
-
-# The vector bundles the converter derives rather than reads, and what from:
-# a vapour flux pair from the specific humidity and both wind components on
-# its surface, each wave vector from a height and a direction. A wind
-# pair is its own two components and is not here.
-DERIVED_VECTORS: dict[str, tuple[str, ...]] = {
-    **{f"qflux{level}": (f"spfh{level}", f"ugrd{level}", f"vgrd{level}") for level in ISOBARIC_LEVELS_HPA},
-    WAVE_BUNDLE_ID: ("htsgw", "dirpw"),
-    WIND_WAVE_BUNDLE_ID: ("wvhgt", "wvdir"),
-    SWELL_BUNDLE_ID: ("swhgt", "swdir"),
-}
-# The derived vectors laid out of a height and a direction rather than a
-# humidity and a wind.
-WAVE_VECTOR_BUNDLE_IDS = frozenset({WAVE_BUNDLE_ID, WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID})
-
-
-# Composite bundles: the variables an algorithm derived from a source's
-# channels in the *fetch stage* (xuebuild/satellite/producers.py), read off
-# the observation series as more variables and written as one bundle in
-# this order — the converter never derives them. The Dust RGB's three guns,
-# then the DEBRA confidence and the ZHOUYE confidence, two produced bundles
-# of one variable each, then the true colour composite's three guns.
-# Mirrored in encode/convert.rs.
-COMPOSITE_BUNDLES: dict[str, tuple[str, ...]] = {
-    DUST_RGB_BUNDLE_ID: DUST_RGB_COMPONENT_IDS,
-    DUST_CF_BUNDLE_ID: DUST_CF_COMPONENT_IDS,
-    ZHOUYE_BUNDLE_ID: ZHOUYE_COMPONENT_IDS,
-    TRUE_COLOR_BUNDLE_ID: TRUE_COLOR_COMPONENT_IDS,
-}
-
-
-# Volume bundles: many variables each read directly off the source's
-# records and written as one bundle in this order — the MRMS reflectivity
-# mosaic's 33 constant-altitude levels and a model's cloud water on 24,
-# lowest first, so a cell's column is one tile's adjacent chunks. Nothing
-# is derived; the bundle is a packaging of its members. Mirrored in
-# encode/convert.rs.
-VOLUME_BUNDLES: dict[str, tuple[str, ...]] = {
-    "refl3d": REFLECTIVITY_VARIABLE_IDS,
-    "cloud3d": CLOUD_WATER_VARIABLE_IDS,
-}
-
-
-def bundle_variable_ids(bundle_id: str) -> tuple[str, ...]:
-    """The variables one bundle carries, in bundle order: a scalar's own,
-    a vector's pair, a composite's components, a volume's levels."""
-    if bundle_id in VECTOR_BUNDLES:
-        return VECTOR_BUNDLES[bundle_id]
-    if bundle_id in COMPOSITE_BUNDLES:
-        return COMPOSITE_BUNDLES[bundle_id]
-    if bundle_id in VOLUME_BUNDLES:
-        return VOLUME_BUNDLES[bundle_id]
-    return (bundle_id,)
-
-
-# Scalar bundles the converter derives rather than reads: the equivalent
-# potential temperature on each isobaric surface, from the temperature and
-# the specific humidity there, and the categorical precipitation type from
-# the four NCEP flags. Like a vapour flux bundle, listing one in a source's
-# scalars publishes it only when every input is fetched, and an input that
-# serves only the derivation is released once it is done.
-# The clear-air turbulence index on each of its surfaces: the deformation is
-# taken on the surface itself, the vertical shear across the pair of
-# surfaces ``(above, below)`` that brackets it among the eight registered —
-# centred at 250 hPa, one-sided at the two ends.
-CAT_SHEAR_LAYERS: dict[int, tuple[int, int]] = {300: (250, 300), 250: (200, 300), 200: (200, 250)}
-
-
-def _cat_input_ids(level: int) -> tuple[str, ...]:
-    """The inputs of ``cat<level>``, each once: the wind and height above,
-    then below, then the wind on the surface (already listed for 300 and
-    200, whose surface is one end of the layer)."""
-    above, below = CAT_SHEAR_LAYERS[level]
-    return tuple(
-        dict.fromkeys(
-            (
-                f"ugrd{above}",
-                f"vgrd{above}",
-                f"hgt{above}",
-                f"ugrd{below}",
-                f"vgrd{below}",
-                f"hgt{below}",
-                f"ugrd{level}",
-                f"vgrd{level}",
-            )
-        )
-    )
-
-
-DERIVED_SCALARS: dict[str, tuple[str, ...]] = {
-    **{f"thetae{level}": (f"tmp{level}", f"spfh{level}") for level in ISOBARIC_LEVELS_HPA},
-    # The four categorical flags, in the order derive_ptype combines them.
-    "ptype": ("crain", "cfrzr", "cicep", "csnow"),
-    **{f"cat{level}": _cat_input_ids(level) for level in CAT_LEVELS_HPA},
-}
-
-
-def theta_e_level(bundle_id: str) -> int | None:
-    """The isobaric surface of a ``thetae<level>`` bundle, or None."""
-    if bundle_id.startswith("thetae") and bundle_id in DERIVED_SCALARS:
-        return int(bundle_id[len("thetae") :])
-    return None
-
-
-def cat_level(bundle_id: str) -> int | None:
-    """The isobaric surface of a ``cat<level>`` bundle, or None."""
-    if bundle_id.startswith("cat") and bundle_id in DERIVED_SCALARS:
-        return int(bundle_id[len("cat") :])
-    return None
-
-
-def vapour_flux_level(bundle_id: str) -> int | None:
-    """The isobaric surface of a ``qflux<level>`` bundle, or None."""
-    if bundle_id.startswith("qflux") and bundle_id in VECTOR_BUNDLES:
-        return int(bundle_id[len("qflux") :])
-    return None
-
-
-def vector_input_ids(bundle_id: str) -> tuple[str, ...]:
-    """The source inputs one vector bundle is built from: a wind pair is its
-    own two components; a vapour flux pair is derived from the specific
-    humidity and both wind components on the same surface; the wave vector
-    from the significant wave height and the primary wave direction."""
-    return DERIVED_VECTORS.get(bundle_id, VECTOR_BUNDLES[bundle_id])
 
 
 # The scalars that also get an H.264 companion: the surface fields the video
@@ -439,32 +296,57 @@ class PlaneStats:
     overflow_points: int
 
 
-# Every source names its precipitation input differently (GFS prate, ECMWF
-# tp, sflux prate_ave, Open-Meteo apcp), so a bundle's inputs are resolved off
-# the source's own input list rather than hard-coded per model.
-PRECIPITATION_INPUT_IDS = ("prate", "tp", "prate_ave", "apcp")
-
-
 def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
-    """The source input variables one published bundle is built from."""
-    if bundle_id in VECTOR_BUNDLES:
-        return vector_input_ids(bundle_id)
-    if bundle_id in COMPOSITE_BUNDLES:
-        # The channels its producer reads on the source's platform: what the
-        # fetch must download for the composite to be composed, since the
-        # components themselves are never fetched. (The Rust encoder keys
-        # the same answer by source in `convert.rs::composite_input_ids`.)
-        producer = PRODUCERS[bundle_id]
-        if source.platform is None:
-            return producer.inputs
-        return producer.inputs_for(satellite_platform(source.platform))
-    if bundle_id in VOLUME_BUNDLES:
-        return VOLUME_BUNDLES[bundle_id]
-    if bundle_id in DERIVED_SCALARS:
-        return DERIVED_SCALARS[bundle_id]
-    if bundle_id == "prate":
-        return (next(vid for vid in source.input_variable_ids if vid in PRECIPITATION_INPUT_IDS),)
-    return (bundle_id,)
+    """The source input variables one published bundle is built from
+    (:mod:`xuebuild.bundles`): a plain scalar's own record; a vector's or a
+    volume's members; a derivation's inputs; a composite's channels — what
+    the fetch must download for it to be composed, since the components
+    themselves are never fetched — less an optional one the source does
+    not fetch. The precipitation rate's input is whichever of the
+    derivation's inputs the source lists (GFS prate, ECMWF tp, sflux
+    prate_ave, Open-Meteo apcp), resolved off the source's own input list
+    rather than hard-coded per model."""
+    spec = bundle(bundle_id)
+    if spec is None:
+        return (bundle_id,)
+    if spec.kind == "composite":
+        return tuple(
+            input_id
+            for input_id in spec.inputs
+            if input_id not in spec.optional_inputs or input_id in source.input_variable_ids
+        )
+    if spec.derivation is None:
+        return spec.members
+    if spec.derivation.kind == "precipitation-rate":
+        return (next(vid for vid in source.input_variable_ids if vid in spec.derivation.inputs),)
+    return spec.derivation.inputs
+
+
+def precipitation_mode(source: SourceSpec) -> str | None:
+    """How the source's precipitation input becomes the published rate:
+    ``accumulated`` (a run total, differenced against the previous frame),
+    ``averaged`` (a window mean, de-averaged), ``interval`` (the total over
+    the step, divided by its length), or None for a rate read as it is."""
+    if source.accumulated_precipitation:
+        return "accumulated"
+    if source.averaged_precipitation:
+        return "averaged"
+    if source.interval_precipitation:
+        return "interval"
+    return None
+
+
+def _precipitation_plan(source: SourceSpec, variable_ids: tuple[str, ...]) -> tuple[str, str] | None:
+    """The raw precipitation input this build reads and the mode that turns
+    it into the rate, or None when the rate is read as it is or the input
+    is not among ``variable_ids`` (a build that asked for other bundles)."""
+    mode = precipitation_mode(source)
+    if mode is None:
+        return None
+    input_id = next(iter(bundle_input_ids(source, PRECIPITATION_RATE_BUNDLE_ID)), None)
+    if input_id is None or input_id not in variable_ids:
+        return None
+    return input_id, mode
 
 
 def grid_family_of(source: SourceSpec, variable_id: str) -> str | None:
@@ -530,7 +412,7 @@ def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tu
     return tuple(
         variable_id
         for variable_id in scalar_ids
-        if (variable_id == "prate" and (source.accumulated_precipitation or source.averaged_precipitation))
+        if (variable_id == PRECIPITATION_RATE_BUNDLE_ID and precipitation_mode(source) in ("accumulated", "averaged"))
         or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
     )
 
@@ -973,7 +855,8 @@ def derive_wave_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[n
 def derive_vector(values: dict[str, np.ndarray], bundle_id: str) -> tuple[np.ndarray, np.ndarray]:
     """The two components of one derived vector bundle, from the planes of
     its inputs."""
-    if bundle_id in WAVE_VECTOR_BUNDLE_IDS:
+    derived = derivation(bundle_id)
+    if derived is not None and derived.kind == "wave-vector":
         return derive_wave_vector(values, bundle_id)
     return derive_vapour_flux(values, bundle_id)
 
@@ -1223,9 +1106,12 @@ def derive_scalar(values: dict[str, np.ndarray], bundle_id: str) -> np.ndarray:
     """The one plane of a derived scalar bundle: the equivalent potential
     temperature from the temperature and specific humidity on its surface,
     the categorical precipitation type from the four flags."""
-    if bundle_id == "ptype":
+    derived = derivation(bundle_id)
+    if derived is not None and derived.kind == "precipitation-type":
         return derive_ptype(values, bundle_id)
-    return derive_theta_e(values, bundle_id)
+    if derived is not None and derived.kind == "theta-e":
+        return derive_theta_e(values, bundle_id)
+    raise ConversionError(f"{bundle_id} is not a derived scalar")
 
 
 def deaccumulate_precipitation(
@@ -1749,8 +1635,13 @@ def _quantize_file(
     drop_ids: frozenset[str] = frozenset(),
     derived_scalar_ids: tuple[str, ...] = (),
     cat_calibration: Mapping[int, tuple[float, float]] | None = None,
+    precipitation: tuple[str, str] | None = None,
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
+
+    ``precipitation`` names the raw precipitation input and the mode that
+    turns it into the rate (:func:`_precipitation_plan`); None reads the
+    rate as it is.
 
     ``derived_vector_ids`` names the vapour flux bundles and
     ``derived_scalar_ids`` the equivalent potential temperatures to derive
@@ -1791,7 +1682,11 @@ def _quantize_file(
         if own_precipitation is not None:
             own_precipitation.set_exception(exc)
         raise
-    raw_precipitation_id = next((vid for vid in ("tp", "prate_ave", "apcp") if vid in values), None)
+    # The analysis frame of a source whose input is optional there carries
+    # no raw plane, and derives nothing.
+    raw_precipitation_id, mode = (None, None)
+    if precipitation is not None and precipitation[0] in values:
+        raw_precipitation_id, mode = precipitation
     if own_precipitation is not None:
         own_precipitation.set_result(values[raw_precipitation_id])
     previous_plane: np.ndarray | None = None
@@ -1799,27 +1694,29 @@ def _quantize_file(
     if previous_precipitation is not None:
         previous_hour, previous_future = previous_precipitation
         previous_plane = previous_future.result() if previous_future is not None else None
-    if raw_precipitation_id == "tp":
+    if mode == "accumulated":
         # ECMWF: replace the run-total accumulation (already mm) with the
         # mean rate over the step that ends at this frame (mm/h). The step is
         # the actual distance to the previous frame — six hours past the
         # 144-hour cadence change, three before it.
         step = hour - previous_hour if previous_hour is not None else 1
-        values["prate"] = deaccumulate_precipitation(values.pop("tp"), previous_plane, step)
-    elif raw_precipitation_id == "apcp":
+        values[PRECIPITATION_RATE_BUNDLE_ID] = deaccumulate_precipitation(
+            values.pop(raw_precipitation_id), previous_plane, step
+        )
+    elif mode == "interval":
         # Open-Meteo: the file already holds the total that fell over the
         # interval since the model's previous native output time, so the
         # rate is that total over the interval's length in hours — the
         # distance to the frame before this one on the axis.
         if previous_hour is None:
             raise ConversionError(f"the interval precipitation frame at hour {hour} names no interval")
-        values["prate"] = interval_rate(values.pop("apcp"), hour - previous_hour)
-    elif raw_precipitation_id == "prate_ave":
+        values[PRECIPITATION_RATE_BUNDLE_ID] = interval_rate(values.pop(raw_precipitation_id), hour - previous_hour)
+    elif mode == "averaged":
         # sflux: PRATE is the window-cumulative mean rate (kg/m^2 s); derive
         # the per-step rate against the previous frame of the same averaging
         # window (the window's first frame differences against zero).
-        values["prate"] = deaverage_precipitation(
-            values.pop("prate_ave"),
+        values[PRECIPITATION_RATE_BUNDLE_ID] = deaverage_precipitation(
+            values.pop(raw_precipitation_id),
             hour,
             previous_plane,
             previous_hour,
@@ -2518,7 +2415,8 @@ def convert_bin(
         # previous frame of the same averaging window (the window's first
         # frame differences against zero). An Open-Meteo apcp total needs no
         # predecessor plane, only the length of the interval it covers.
-        raw_precipitation_id = next((vid for vid in ("tp", "prate_ave", "apcp") if vid in variable_ids), None)
+        precipitation = _precipitation_plan(source, variable_ids)
+        raw_precipitation_id = precipitation[0] if precipitation is not None else None
 
         def sharing_plan():
             """Yield (frames, previous (hour, future | None) | None, own future
@@ -2563,7 +2461,7 @@ def convert_bin(
                 if frame is not None and not source.interval_precipitation and index + 1 < len(per_file):
                     successor = per_file[index + 1].get(raw_precipitation_id)
                     if successor is not None and (
-                        raw_precipitation_id == "tp"
+                        precipitation_mode(source) == "accumulated"
                         or average_window_start(
                             successor.lead_seconds // binformat.HOUR_SECONDS, source.average_window_hours
                         )
@@ -2593,6 +2491,7 @@ def convert_bin(
                     drop_ids,
                     derived_scalar_ids,
                     cat_calibration,
+                    precipitation,
                 ),
                 sharing_plan(),
             )

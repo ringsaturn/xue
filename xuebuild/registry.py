@@ -1,8 +1,8 @@
 """The registry document: the variables, bundles and sources an encoder
 builds, as one JSON document (docs/registry.md).
 
-The Python tables (``variables.py``, ``quantize.py``, ``sources.py`` and the
-bundle tables of ``binconvert.py``) are the authors; this module is their
+The Python tables (``variables.py``, ``bundles.py``, ``quantize.py`` and
+``sources.py``) are the authors; this module is their
 one serialization. The native encoder takes the document in place of a
 table of its own, so a change to a table is a change to the document and
 nothing has to be released for it; the committed snapshot
@@ -21,21 +21,8 @@ import json
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from .binconvert import (
-    COMPOSITE_BUNDLES,
-    DERIVED_SCALARS,
-    DERIVED_VECTORS,
-    PRECIPITATION_INPUT_IDS,
-    VECTOR_BUNDLES,
-    VOLUME_BUNDLES,
-    WAVE_VECTOR_BUNDLE_IDS,
-    cat_level,
-    theta_e_level,
-)
-from .errors import ConversionError
+from .bundles import BUNDLES
 from .quantize import PROFILES
-from .satellite.platforms import PLATFORMS
-from .satellite.producers import PRODUCERS
 from .sources import SOURCES
 from .variables import VARIABLES, VariableSpec
 
@@ -107,54 +94,7 @@ def variable_entry(spec: VariableSpec) -> dict[str, Any]:
 
 
 def _bundles() -> dict[str, Any]:
-    bundles: dict[str, Any] = {}
-    for bundle_id, members in VECTOR_BUNDLES.items():
-        entry: dict[str, Any] = {"kind": "vector", "members": list(members)}
-        if bundle_id in DERIVED_VECTORS:
-            entry["derivation"] = {
-                "kind": "wave-vector" if bundle_id in WAVE_VECTOR_BUNDLE_IDS else "vapour-flux",
-                "inputs": list(DERIVED_VECTORS[bundle_id]),
-            }
-        bundles[bundle_id] = entry
-    for bundle_id, members in COMPOSITE_BUNDLES.items():
-        producer = PRODUCERS[bundle_id]
-        # An input the recipe has a stand-in for on an imager that lacks
-        # it: read when the source fetches it, left out when it does not.
-        # A platform the recipe cannot run on at all drops nothing here.
-        optional: set[str] = set()
-        for platform in PLATFORMS.values():
-            try:
-                optional.update(set(producer.inputs) - set(producer.inputs_for(platform)))
-            except ConversionError:
-                continue
-        bundles[bundle_id] = {
-            "kind": "composite",
-            "members": list(members),
-            "producer": producer.id,
-            "inputs": list(producer.inputs),
-            "optionalInputs": [input_id for input_id in producer.inputs if input_id in optional],
-        }
-    for bundle_id, members in VOLUME_BUNDLES.items():
-        bundles[bundle_id] = {"kind": "volume", "members": list(members)}
-    for bundle_id, inputs in DERIVED_SCALARS.items():
-        derivation: dict[str, Any] = {}
-        if theta_e_level(bundle_id) is not None:
-            derivation["kind"] = "theta-e"
-        elif cat_level(bundle_id) is not None:
-            derivation["kind"] = "clear-air-turbulence"
-        else:
-            derivation["kind"] = "precipitation-type"
-        derivation["inputs"] = list(inputs)
-        if theta_e_level(bundle_id) is not None:
-            derivation["levelHpa"] = theta_e_level(bundle_id)
-        elif cat_level(bundle_id) is not None:
-            derivation["levelHpa"] = cat_level(bundle_id)
-        bundles[bundle_id] = {"kind": "scalar", "derivation": derivation}
-    bundles["prate"] = {
-        "kind": "scalar",
-        "derivation": {"kind": "precipitation-rate", "inputs": list(PRECIPITATION_INPUT_IDS)},
-    }
-    return dict(sorted(bundles.items()))
+    return {bundle_id: spec.document() for bundle_id, spec in sorted(BUNDLES.items())}
 
 
 def _camel(name: str) -> str:
