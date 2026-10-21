@@ -145,7 +145,72 @@ def assert_trees_identical(
         if path.is_dir():
             continue
         with case.subTest(artifact=relative):
-            case.assertTrue(filecmp.cmp(path, subject / relative, shallow=False), f"{relative} differs")
+            if not filecmp.cmp(path, subject / relative, shallow=False):
+                case.fail(f"{relative} differs: {describe_difference(path, subject / relative)}")
+
+
+def _json_differences(left: Any, right: Any, prefix: str = "") -> list[str]:
+    """The paths at which two JSON documents differ, each with both values."""
+    if isinstance(left, dict) and isinstance(right, dict):
+        found: list[str] = []
+        for key in sorted(set(left) | set(right)):
+            if key not in left or key not in right:
+                found.append(f"{prefix}/{key}: {'missing' if key not in left else 'present'} in the reference")
+            else:
+                found.extend(_json_differences(left[key], right[key], f"{prefix}/{key}"))
+        return found
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return [f"{prefix}: {len(left)} items in the reference, {len(right)} in the subject"]
+        found = []
+        for index, (one, other) in enumerate(zip(left, right)):
+            found.extend(_json_differences(one, other, f"{prefix}[{index}]"))
+        return found
+    if left == right:
+        return []
+    return [f"{prefix}: {str(left)[:120]!r} != {str(right)[:120]!r}"]
+
+
+def describe_difference(reference: Path, subject: Path, limit: int = 12) -> str:
+    """Where two artifacts of a parity test differ, for the failure message:
+    the paths of a JSON document, a bundle's metadata and then its planes,
+    any other file's first differing byte."""
+    import json  # noqa: PLC0415 - the failure path only
+
+    import numpy as np  # noqa: PLC0415
+
+    from xuebuild.binformat import read_bundle, time_axis  # noqa: PLC0415
+
+    try:
+        if reference.suffix == ".json":
+            found = _json_differences(json.loads(reference.read_text()), json.loads(subject.read_text()))
+            return "; ".join(found[:limit]) + (f"; … {len(found)} in all" if len(found) > limit else "")
+        if reference.suffix == ".xue":
+            left, right = read_bundle(reference), read_bundle(subject)
+            found = _json_differences(left.metadata, right.metadata)
+            if found:
+                return "metadata " + "; ".join(found[:limit]) + (f"; … {len(found)} in all" if len(found) > limit else "")
+            _, offsets = time_axis(left.metadata)
+            for variable in left.metadata["variables"]:
+                numeric_id = int(variable["numericId"])
+                for offset in offsets:
+                    one = np.asarray(left.decode_plane(numeric_id, offset))
+                    other = np.asarray(right.decode_plane(numeric_id, offset))
+                    if np.array_equal(one, other):
+                        continue
+                    where = np.flatnonzero(one != other)
+                    samples = ", ".join(f"[{index}] {one[index]} != {other[index]}" for index in where[:5])
+                    found.append(
+                        f"{variable.get('id', numeric_id)} frame {offset}: {where.size} of {one.size} codes differ ({samples})"
+                    )
+                    if len(found) >= limit:
+                        return "planes " + "; ".join(found)
+            return "planes " + "; ".join(found) if found else "same metadata and planes, the bytes differ elsewhere"
+        one_bytes, other_bytes = reference.read_bytes(), subject.read_bytes()
+        first = next((index for index, (a, b) in enumerate(zip(one_bytes, other_bytes)) if a != b), min(len(one_bytes), len(other_bytes)))
+        return f"{len(one_bytes)} vs {len(other_bytes)} bytes, first difference at offset {first}"
+    except Exception as exc:  # noqa: BLE001 - a diagnosis must never hide the failure
+        return f"(could not describe: {exc!r})"
 
 
 def assert_native_matches(
