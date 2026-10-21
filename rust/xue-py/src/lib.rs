@@ -25,12 +25,20 @@ use xue::encode::convert::{convert_bin as native_convert, zstd_version, ConvertO
 use xue::encode::gdalio::info_json;
 use xue::encode::grid::GridInfo;
 use xue::encode::poster::encode_poster as native_encode_poster;
-use xue::encode::quantize::codebook;
+use xue::encode::registry::Registry;
 use xue::encode::temporal::encode_residual as native_encode_residual;
 use xue::encode::zarrstore;
 
 fn to_py_error(error: xue::encode::EncodeError) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
+}
+
+/// The registry document (`docs/registry.md`) a caller hands in as JSON
+/// text — `xuebuild.registry.document_json()` — parsed and validated whole
+/// before anything is read. A document outside the closed sets this wheel
+/// implements is refused here, with the field and value named.
+fn parse_registry(text: &str) -> PyResult<std::sync::Arc<Registry>> {
+    Registry::parse(text).map_err(to_py_error)
 }
 
 /// Turn a `serde_json::Value` into the equivalent Python object, so the report
@@ -234,16 +242,19 @@ impl Bundle {
 /// Convert gridded input into per-variable Xue bundles.
 ///
 /// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts. Returns
-/// the build report as a dictionary. `zarr` writes each bundle's Zarr store
-/// straight from the codes (the default), `container` its `.xue` too (off by
-/// default; a build needs at least one of the two);
-/// `series_bundle_ids` names the full-resolution bundles that also ship a
-/// series store.
+/// the build report as a dictionary. `registry` is the registry document
+/// as JSON text (`xuebuild.registry.document_json()`): the variables,
+/// bundles and sources the build is made from, which this wheel carries no
+/// table of. `zarr` writes each bundle's Zarr store straight from the codes
+/// (the default), `container` its `.xue` too (off by default; a build needs
+/// at least one of the two); `series_bundle_ids` names the full-resolution
+/// bundles that also ship a series store.
 #[pyfunction]
 #[pyo3(signature = (
     inputs,
     output_dir,
     *,
+    registry,
     profile = "quality".to_string(),
     model = "gfs".to_string(),
     zstd_level = None,
@@ -269,6 +280,7 @@ fn convert_bin(
     python: Python<'_>,
     inputs: Vec<PathBuf>,
     output_dir: PathBuf,
+    registry: &str,
     profile: String,
     model: String,
     zstd_level: Option<i32>,
@@ -311,10 +323,11 @@ fn convert_bin(
         container,
         series_bundle_ids: series_bundle_ids.unwrap_or_default(),
     };
+    let registry = parse_registry(registry)?;
     // The conversion is long and holds no Python objects; releasing the GIL
     // lets a caller keep using the interpreter while it runs.
     let report = python
-        .detach(|| native_convert(&inputs, &output_dir, &options))
+        .detach(|| native_convert(&inputs, &output_dir, &options, &registry))
         .map_err(to_py_error)?;
     to_python(python, &report)
 }
@@ -383,17 +396,22 @@ fn write_store<'py>(
     to_python(python, &value)
 }
 
-/// Quantize one plane of physical values with a registered codebook.
+/// Quantize one plane of physical values with a variable's codebook, read
+/// from the registry document's `quantization.<profile>` block.
 ///
 /// The NumPy counterpart of `xuebuild.quantize.PROFILES[profile][variable_id]`.
 #[pyfunction]
+#[pyo3(signature = (profile, variable_id, values, *, registry))]
 fn quantize<'py>(
     python: Python<'py>,
     profile: &str,
     variable_id: &str,
     values: PyReadonlyArray1<'py, f64>,
+    registry: &str,
 ) -> PyResult<Bound<'py, PyArray1<u8>>> {
-    let book = codebook(profile, variable_id).map_err(to_py_error)?;
+    let book = parse_registry(registry)?
+        .codebook(profile, variable_id)
+        .map_err(to_py_error)?;
     let values = values.as_slice()?;
     let mut codes = vec![0u8; values.len()];
     book.quantize(values, &mut codes).map_err(to_py_error)?;

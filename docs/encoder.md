@@ -90,14 +90,53 @@ the build pipeline* for the path that does.
 
 `make check` reports which one a build would take. The scheduled `publish-*`
 workflows pin `native`: a run that fell back to the Python pipeline would
-take hours longer and look identical in the logs. `publish-jma.yml` is the
-exception: a wheel ships on the crate's tags, not with every source, so
-the wheel on PyPI can predate the model, and a scheduled run cannot pass an
-input. Its `Resolve the encoder` step asks `native.knows_source(model)`
-(an empty conversion, refused before any input is read) and sets
-`XUE_ENCODER=native` when the installed wheel has the source, else
-`python` with GDAL installed and a `::warning::` on the run, so the fall
-back is explicit rather than silent; a dispatch can still insist on either.
+take hours longer and look identical in the logs. `publish-jma.yml` and the
+other rolling windows are the exception: a wheel ships on the crate's
+tags, so the wheel on PyPI can predate a rule the registry document now
+names, and a scheduled run cannot pass an input. Their `Resolve the
+encoder` step asks `native.knows_source(model)` (an empty conversion with
+the document, refused before any input is read) and sets
+`XUE_ENCODER=native` when the installed wheel implements the document,
+else `python` with GDAL installed and a `::warning::` on the run, so the
+fall back is explicit rather than silent; a dispatch can still insist on
+either.
+
+## The registry document
+
+The native encoder holds no table of variables, bundles or sources. It
+reads the registry document ([`registry.md`](registry.md)) — the one JSON
+document the Python tables author and `xue registry` prints — and builds
+from that: every codebook, every GRIB band rule, every unit conversion,
+every bundle's members and derivation, every source's inputs and grid
+come out of the document (`rust/xue/src/encode/registry.rs` parses it,
+`units.rs` and `inspect.rs` implement its rule names). No code path in
+`rust/xue/src/encode/` selects behaviour by matching a variable or bundle
+id; what an id *means* is what its entry says.
+
+The document reaches the encoder two ways:
+
+- the wheel's `convert_bin(..., registry=...)` takes it as a required
+  keyword argument carrying the JSON text, and `xuebuild/native.py` passes
+  `xuebuild.registry.document_json()` on every call, including the
+  empty-input probe `knows_source` makes; `xue.quantize` takes the same
+  `registry=` keyword, since a codebook is a block of the document;
+- `xue-encode convert-bin` takes `--registry <path>`, and without one
+  reads the snapshot embedded at build time, `rust/xue/registry.json`,
+  which a crate test holds byte-identical to `tests/fixtures/registry.json`
+  (`xue registry` should write both).
+
+The encoder validates the whole document before any input is read
+(`registry.md` §Validation) and refuses it with the field and value named
+when it carries a `registrySchema`, a rule, a derivation or a codebook
+type the encoder does not implement; a key it does not know it ignores.
+So a *table* change — a new source, a new bundle, another level of a known
+family, a changed codebook, a changed set of inputs — is a commit to
+`main` and needs no release: the next build hands the new document to the
+wheel already installed. A release is still needed for what the document
+cannot say: a new rule name under `conversion` or `match.gdal`, a new
+`derivation.kind` or codebook `type`, a new ingest path (a file shape the
+converter does not read), or a `registrySchema` bump, each of which the
+installed wheel refuses until the wheel that implements it ships.
 
 The native encoder writes the Zarr stores itself, straight from its codes
 (`rust/xue/src/encode/zarrstore.rs`, the counterpart of

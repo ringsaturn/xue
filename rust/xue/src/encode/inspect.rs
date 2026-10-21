@@ -4,10 +4,12 @@
 //! This is the reference matcher: the converter runs it once per run on the
 //! first file, both to probe wind availability and to cross-check the much
 //! faster GRIB2 header index (`gribindex.rs`) that locates the bands every
-//! extraction reads.
+//! extraction reads. A variable's record is recognised by the `match.gdal`
+//! rules of its registry entry (`docs/registry.md` §`match`), any one of
+//! which accepting the band; each rule here carries the exact semantics of
+//! the `_is_*` helper in `xuebuild/gdal.py` it transcribes.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
 use regex::Regex;
 use time::OffsetDateTime;
@@ -15,501 +17,19 @@ use time::OffsetDateTime;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{
-    isobaric_variable, reflectivity_level, variable_spec, AerosolIdentity, AEROSOL_VARIABLE_IDS,
-    SOIL_MOISTURE_IDS, SOIL_TEMPERATURE_IDS, SURFACE_TEMPERATURE_IDS,
-};
-
-static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[^0-9])2(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
-});
-static TEN_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[^0-9])10(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
-});
-static EIGHTY_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[^0-9])80(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
-});
-static HUNDRED_METRE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[^0-9])100(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground").expect("valid regex")
-});
+use crate::encode::registry::{Conversion, GdalRule, Registry};
+use crate::encode::units::temperature_unit;
+use crate::encode::variables::{AerosolIdentity, VariableSpec};
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["grb", "grb2", "grib2"];
 
-/// Collapse a temperature unit string to `K`, `C` or `F`.
-pub fn normalize_unit(unit: &str) -> Result<&'static str> {
-    let compact = unit
-        .trim()
-        .trim_matches(|character| "[]()".contains(character))
-        .to_lowercase()
-        .replace('°', "")
-        .replace("degrees", "")
-        .replace("degree", "");
-    let compact = compact.split_whitespace().collect::<Vec<_>>().join(" ");
-    match compact.as_str() {
-        "k" | "kelvin" => Ok("K"),
-        "c" | "celsius" | "degc" => Ok("C"),
-        "f" | "fahrenheit" | "degf" => Ok("F"),
-        _ => Err(EncodeError::conversion(format!(
-            "unsupported temperature unit: {}",
-            if unit.is_empty() { "<missing>" } else { unit }
-        ))),
-    }
-}
-
-/// Whether a precipitation rate record is already in mm/h (MRMS), as
-/// opposed to the kg m⁻² s⁻¹ every NWP record carries. Mirrors
-/// `precipitation_rate_is_mm_per_hour` in `xuebuild/gdal.py`.
-pub fn precipitation_rate_is_mm_per_hour(unit: &str) -> bool {
-    matches!(compact_unit(unit).as_str(), "mm/hr" | "mm/h")
-}
-
-/// Whether a run-total precipitation record is already in millimetres
-/// (kg/m²): AIFS writes its total that way, under the WMO 0/1/52 whose
-/// GDAL table entry is a rate, so the unit GDAL reports carries a
-/// per-second the values do not have. IFS open data carries metres.
-/// Mirrors `precipitation_accumulation_is_mm` in `xuebuild/gdal.py`.
-pub fn precipitation_accumulation_is_mm(unit: &str) -> bool {
-    matches!(
-        compact_unit(unit).as_str(),
-        "kg/m^2" | "kg/m2" | "kgm^-2" | "kgm-2" | "mm" | "kg/m^2s" | "kg/m^2*s" | "kg/m2s" | "kg/m2*s"
-    )
-}
-
-fn compact_unit(unit: &str) -> String {
-    unit.trim()
-        .to_lowercase()
-        .replace('²', "^2")
-        .chars()
-        .filter(|character| !" *()[]".contains(*character))
-        .collect()
-}
-
-/// The per-variable unit acceptance the Python converter expresses as a GDAL
-/// raster expression. Only its *identity* matters here — the converter
-/// compares the string of the header-index frame against the gdalinfo frame —
-/// so the expressions are reproduced verbatim.
-pub fn raster_expression(variable_id: &str, unit: &str) -> Result<String> {
-    let rate_units = ["kg/m^2s", "kg/m2s", "kgm^-2s^-1", "kgm-2s-1"];
-    match variable_id {
-        // A rate already in mm/h (the MRMS radar-derived rate) takes no
-        // scaling. Mirrors `precipitation_expression` in `xuebuild/gdal.py`.
-        "prate" if precipitation_rate_is_mm_per_hour(unit) => {
-            Ok("maximum(0,minimum(50,A))".into())
-        }
-        "tmp2m" => {
-            let value = match normalize_unit(unit)? {
-                "K" => "A-273.15",
-                "F" => "(A-32)*5/9",
-                _ => "A",
-            };
-            Ok(format!("maximum(-60,minimum(50,{value}))"))
-        }
-        "prate" | "prate_ave" => {
-            if !rate_units.contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported precipitation rate unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok(if variable_id == "prate" {
-                "maximum(0,minimum(50,A*3600))".into()
-            } else {
-                "A".into()
-            })
-        }
-        "tp" => {
-            let compact = unit
-                .trim()
-                .trim_matches(|character| "[]()".contains(character))
-                .to_lowercase();
-            if !matches!(compact.as_str(), "-" | "m" | "")
-                && !precipitation_accumulation_is_mm(unit)
-            {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported precipitation accumulation unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("A".into())
-        }
-        "dswrf" => {
-            if !["w/m^2", "w/m2", "wm^-2", "wm-2"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported radiative flux unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(1270,A))".into())
-        }
-        "ugrd10m" | "vgrd10m" | "ugrd80m" | "vgrd80m" | "ugrd100m" | "vgrd100m" => wind_expression(unit),
-        // The 2 m dew point, the apparent temperature and the surface (skin)
-        // temperature take the temperature's rule over their own codebook
-        // ranges.
-        "dpt2m" | "aptmp2m" | "tmpsfc" => {
-            let value = match normalize_unit(unit)? {
-                "K" => "A-273.15",
-                "F" => "(A-32)*5/9",
-                _ => "A",
-            };
-            Ok(match variable_id {
-                "dpt2m" => format!("maximum(-70,minimum(40,{value}))"),
-                "aptmp2m" => format!("maximum(-90,minimum(60,{value}))"),
-                _ => format!("maximum(-60,minimum(67,{value}))"),
-            })
-        }
-        // The soil temperature takes the temperature's rule over its own
-        // codebook range. Mirrors `celsius_expression(unit, low=-61, high=66)`.
-        soil if SOIL_TEMPERATURE_IDS.contains(&soil) => {
-            let value = match normalize_unit(unit)? {
-                "K" => "A-273.15",
-                "F" => "(A-32)*5/9",
-                _ => "A",
-            };
-            Ok(format!("maximum(-61,minimum(66,{value}))"))
-        }
-        // Volumetric soil water, dimensionless: GDAL spells NCEP's SOILW
-        // "Fraction" and ECMWF's `vsw` "m^3/m^3". Mirrors
-        // `soil_moisture_expression`.
-        soil if SOIL_MOISTURE_IDS.contains(&soil) => {
-            if !["fraction", "proportion", "m^3/m^3", "m3/m3", "m³/m³", "m^3m^-3", "m3m-3", "1", "-", ""]
-                .contains(&compact_unit(unit).as_str())
-            {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported soil moisture unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(-0.01,minimum(1,A))".into())
-        }
-        // Sea ice cover: GRIB2 carries a 0–1 proportion (GDAL spells the
-        // unit "Proportion"), the codebook quantizes percent.
-        "icec" => {
-            if !["proportion", "fraction", "1", "-", ""].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported sea ice cover unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(100,A*100))".into())
-        }
-        // Sea ice thickness and the significant wave heights, in metres.
-        "icetk" | "htsgw" | "wvhgt" | "swhgt" => {
-            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported {} unit: {}",
-                    if variable_id == "icetk" { "sea ice thickness" } else { "wave height" },
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok(if variable_id == "icetk" {
-                "maximum(0,minimum(5.08,A))".into()
-            } else {
-                "maximum(0,minimum(25.4,A))".into()
-            })
-        }
-        // Wave period in seconds.
-        "perpw" | "wvper" | "swper" => {
-            if !["s", "sec", "second", "seconds"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported wave period unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(25.4,A))".into())
-        }
-        // Wave direction in degrees true (GDAL spells it "Degree true"); the
-        // converter reduces it modulo 360 itself.
-        "dirpw" | "wvdir" | "swdir" => {
-            if !["degreetrue", "degtrue", "degrees", "degree", "deg", "degreestrue"]
-                .contains(&compact_unit(unit).as_str())
-            {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported wave direction unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("A".into())
-        }
-        // Composite reflectivity in dBZ, which GDAL's GRIB tables spell
-        // "dB" and the radar mosaic's NetCDF spells in full; sub-zero
-        // returns are below the codebook, no echo either way. Every level of
-        // the 3D mosaic takes the same rule.
-        id if id == "cref" || reflectivity_level(id).is_some() => {
-            if !["db", "dbz"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported reflectivity unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(80,A))".into())
-        }
-        // Visibility: GRIB2 carries metres, the codebook quantizes km.
-        "vis" => {
-            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported visibility unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("A/1000".into())
-        }
-        // Wind gust: a speed in the wind components' unit, one-sided.
-        "gust" => {
-            let compact: String = unit
-                .trim()
-                .to_lowercase()
-                .chars()
-                .filter(|character| !" *()[]".contains(*character))
-                .collect();
-            if !["m/s", "m/sec", "ms-1", "ms^-1", "mps"].contains(&compact.as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported wind gust unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(127,A))".into())
-        }
-        // Cloud cover — the total and the layers — in percent as pgrb2
-        // carries it, or scaled up from the 0–1 fraction ECMWF writes (GDAL
-        // spells that unit "-").
-        "tcdc" | "lcdc" | "mcdc" | "hcdc" => {
-            match unit
-                .trim()
-                .trim_matches(|character| "[]()".contains(character))
-                .to_lowercase()
-                .as_str()
-            {
-                "%" => Ok("maximum(0,minimum(100,A))".into()),
-                "-" | "1" | "fraction" | "proportion" | "(0 - 1)" | "0-1" => {
-                    Ok("maximum(0,minimum(100,A*100))".into())
-                }
-                _ => Err(EncodeError::conversion(format!(
-                    "unsupported cloud cover unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                ))),
-            }
-        }
-        // CAPE in J/kg.
-        "cape" => {
-            if !["j/kg", "jkg-1", "jkg^-1"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported CAPE unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(6350,A))".into())
-        }
-        // Convective inhibition in J/kg, one-sided the other way from cape:
-        // 0 at the top, -1016 J/kg at the bottom.
-        "cin" => {
-            if !["j/kg", "jkg-1", "jkg^-1"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported convective inhibition unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(-1016,minimum(0,A))".into())
-        }
-        // Precipitable water, a column mass in kg/m² — one kilogram per
-        // square metre is a millimetre of liquid water, so no conversion
-        // applies. Mirrors `precipitable_water_expression`.
-        "pwat" => {
-            if !["kg/m^2", "kg/m2", "kgm^-2", "kgm-2", "kgm**-2", "mm", "kgs-1m-1"]
-                .contains(&compact_unit(unit).as_str())
-            {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported precipitable water unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(127,A))".into())
-        }
-        // Planetary boundary layer height in metres.
-        "hpbl" => {
-            if !["m", "metre", "meter", "metres", "meters"].contains(&compact_unit(unit).as_str()) {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported boundary layer height unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(5080,A))".into())
-        }
-        // The four 0/1 categorical precipitation-type flags (GRIB2 code
-        // table 4.222), which GDAL reports under a unit that is the code
-        // table's own name rather than a physical unit — `0=no; 1=yes`, or
-        // `(Code table 4.222)` from another driver.
-        "crain" | "cfrzr" | "cicep" | "csnow" => {
-            let compact = compact_unit(unit).replace("codetable", "");
-            if !matches!(compact.as_str(), "1" | "-" | "" | "4.222" | "0=no;1=yes")
-                && !compact.contains("4.222")
-                && !compact.contains("0=no")
-            {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported categorical unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(1,A))".into())
-        }
-        // The derived categorical precipitation type, which is never read
-        // from a record; the expression exists so a registry walk over every
-        // surface diagnostic can ask for one (WMO code table 4.201, 0 to 8).
-        "ptype" => {
-            let compact = compact_unit(unit).replace("codetable", "");
-            if !matches!(compact.as_str(), "1" | "-" | "" | "4.201") && !compact.contains("4.201") {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported precipitation type unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("maximum(0,minimum(8,A))".into())
-        }
-        // Mean sea level pressure: GRIB2 carries pascals, the codebook
-        // quantizes hectopascals. Only Pa is accepted — a file already in
-        // hPa would divide twice, and no source publishes one.
-        "prmsl" => {
-            if unit.trim().trim_matches(|character| "[]()".contains(character)) != "Pa" {
-                return Err(EncodeError::conversion(format!(
-                    "unsupported pressure unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )));
-            }
-            Ok("A/100".into())
-        }
-        // The isobaric families, by family: geopotential height is already
-        // in metres (GDAL reports GFS HGT as "gpm"; a source spelling it "m"
-        // differs by less than the codebook step), temperature takes the 2 m
-        // temperature's rule, the wind components the 10 m pair's, relative
-        // humidity is percent, and specific humidity is a kg/kg mass ratio
-        // the codebook quantizes in g/kg.
-        // The aerosol fields: an optical depth is a dimensionless number
-        // GDAL reports as `[Numeric]`, a particulate matter concentration
-        // is in µg/m³ already (GDAL spells NCEP's PMTF / PMTC unit
-        // `10^-6g/m^3`); each is clamped to its codebook range (1000 for
-        // PM2.5, 2000 for PM10). Mirror `aerosol_optical_depth_expression`
-        // and `particulate_matter_expression` in `xuebuild/gdal.py`.
-        other if AEROSOL_VARIABLE_IDS.contains(&other) => {
-            let compact: String = unit
-                .trim()
-                .to_lowercase()
-                .chars()
-                .filter(|character| !" *()[]".contains(*character))
-                .collect();
-            if other.starts_with("aod") {
-                if !["numeric", "1", "-", ""].contains(&compact.as_str()) {
-                    return Err(EncodeError::conversion(format!(
-                        "unsupported aerosol optical depth unit: {}",
-                        if unit.is_empty() { "<missing>" } else { unit }
-                    )));
-                }
-                Ok("maximum(0,minimum(5,A))".into())
-            } else {
-                if !["10^-6g/m^3", "10^-6g/m3", "ug/m^3", "ug/m3", "µg/m^3", "µg/m3", "µg/m³"]
-                    .contains(&compact.as_str())
-                {
-                    return Err(EncodeError::conversion(format!(
-                        "unsupported particulate matter unit: {}",
-                        if unit.is_empty() { "<missing>" } else { unit }
-                    )));
-                }
-                let maximum = variable_spec(other)?.value_range.1 as i64;
-                Ok(format!("maximum(0,minimum({maximum},A))"))
-            }
-        }
-        "orog" => {
-            // NCEP's geopotential height (gpm) or ECMWF open data's surface
-            // geopotential (m² s⁻²); the converter divides the latter by g.
-            let compact = compact_unit(unit);
-            if matches!(compact.as_str(), "gpm" | "m" | "m^2/s^2" | "m^2s^-2") {
-                Ok("A".into())
-            } else {
-                Err(EncodeError::conversion(format!(
-                    "unsupported orography unit: {}",
-                    if unit.is_empty() { "<missing>" } else { unit }
-                )))
-            }
-        }
-        other if isobaric_variable(other).is_some() => {
-            let (family, _) = isobaric_variable(other).expect("checked");
-            let compact = unit.trim().trim_matches(|character| "[]()".contains(character));
-            match family {
-                "hgt" => {
-                    if !matches!(compact, "gpm" | "m") {
-                        return Err(EncodeError::conversion(format!(
-                            "unsupported geopotential height unit: {}",
-                            if unit.is_empty() { "<missing>" } else { unit }
-                        )));
-                    }
-                    Ok("A".into())
-                }
-                "tmp" => {
-                    let value = match normalize_unit(unit)? {
-                        "K" => "A-273.15",
-                        "F" => "(A-32)*5/9",
-                        _ => "A",
-                    };
-                    Ok(format!("maximum(-60,minimum(50,{value}))"))
-                }
-                "rh" => {
-                    if compact != "%" {
-                        return Err(EncodeError::conversion(format!(
-                            "unsupported relative humidity unit: {}",
-                            if unit.is_empty() { "<missing>" } else { unit }
-                        )));
-                    }
-                    Ok("maximum(0,minimum(100,A))".into())
-                }
-                "spfh" => {
-                    let compact: String = unit
-                        .trim()
-                        .to_lowercase()
-                        .chars()
-                        .filter(|character| !" *()[]".contains(*character))
-                        .collect();
-                    if compact != "kg/kg" {
-                        return Err(EncodeError::conversion(format!(
-                            "unsupported specific humidity unit: {}",
-                            if unit.is_empty() { "<missing>" } else { unit }
-                        )));
-                    }
-                    Ok("A*1000".into())
-                }
-                "ugrd" | "vgrd" => wind_expression(unit),
-                // Vertical velocity in pressure coordinates, already Pa/s.
-                "vvel" => {
-                    if !["pa/s", "pas-1", "pas^-1"].contains(&compact_unit(unit).as_str()) {
-                        return Err(EncodeError::conversion(format!(
-                            "unsupported vertical velocity unit: {}",
-                            if unit.is_empty() { "<missing>" } else { unit }
-                        )));
-                    }
-                    Ok("maximum(-6.35,minimum(6.35,A))".into())
-                }
-                _ => Err(EncodeError::conversion(format!(
-                    "unsupported variable: {other}"
-                ))),
-            }
-        }
-        other => Err(EncodeError::conversion(format!(
-            "unsupported variable: {other}"
-        ))),
-    }
-}
-
-fn wind_expression(unit: &str) -> Result<String> {
-    let compact: String = unit
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter(|character| !" *()[]".contains(*character))
-        .collect();
-    if !["m/s", "m/sec", "ms-1", "ms^-1", "mps"].contains(&compact.as_str()) {
-        return Err(EncodeError::conversion(format!(
-            "unsupported wind component unit: {}",
-            if unit.is_empty() { "<missing>" } else { unit }
-        )));
-    }
-    Ok("maximum(-64,minimum(64,A))".into())
+/// The unit rule's arithmetic as a GDAL raster expression over the band
+/// `A`, or an error when the rule does not accept `unit`. Only its
+/// *identity* matters: the converter compares the string of the
+/// header-index frame against the GDAL frame, and nothing writes it.
+/// Mirrors `rules.expression`.
+pub fn raster_expression(spec: &VariableSpec, unit: &str) -> Result<String> {
+    spec.conversion.expression(unit)
 }
 
 /// Whether one band carries the given element on the given isobaric surface.
@@ -520,7 +40,7 @@ fn wind_expression(unit: &str) -> Result<String> {
 /// too — that is how the level is spelled in an `.idx` phrase and in every
 /// human-facing description. Whichever unit, it must name *this* level: a
 /// matcher that let 500 also match 1000 (or 50000 Pa also match 100000) would
-/// silently pick the wrong plane.
+/// silently pick the wrong plane. Mirrors `_is_isobaric_record`.
 fn is_isobaric_record(band: &BandInfo, element: &str, level_hpa: u32) -> bool {
     if band.item("GRIB_ELEMENT").to_uppercase() != element {
         return false;
@@ -543,9 +63,11 @@ fn is_isobaric_record(band: &BandInfo, element: &str, level_hpa: u32) -> bool {
     .is_match(&text)
 }
 
+/// The short name, comment, level and description joined — what every
+/// prose rule searches.
 fn searchable(band: &BandInfo) -> String {
     [
-        band.item("GRIB_SHORT_NAME"),
+        band.item("GRIB_SHORT_NAME").to_uppercase().as_str(),
         band.item("GRIB_COMMENT"),
         band.item("GRIB_LEVEL"),
         &band.description,
@@ -553,7 +75,162 @@ fn searchable(band: &BandInfo) -> String {
     .join(" ")
 }
 
-/// One MRMS product under the registry's MRMS identity for `variable_id` —
+/// The comment, level and description joined, lower-cased: the text the
+/// rules that read the raw parameter triple out of the comment search,
+/// which never includes the short name.
+fn prose(band: &BandInfo) -> String {
+    [band.item("GRIB_COMMENT"), band.item("GRIB_LEVEL"), &band.description]
+        .join(" ")
+        .to_lowercase()
+}
+
+/// `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` as integers, empty when absent or
+/// not integers.
+fn assembled_values(band: &BandInfo) -> Vec<i64> {
+    band.item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+        .split_whitespace()
+        .map(str::parse::<i64>)
+        .collect::<std::result::Result<_, _>>()
+        .unwrap_or_default()
+}
+
+/// `GRIB_DISCIPLINE` as an integer: GDAL writes it `0(Meteorological)`.
+fn discipline(band: &BandInfo) -> Option<i64> {
+    band.item("GRIB_DISCIPLINE")
+        .split_once('(')
+        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
+        .parse::<i64>()
+        .ok()
+}
+
+/// One element on the ground or water surface. GDAL spells the surface
+/// `0-SFC`; the GFS-Wave records carry a surface value of 1 and come out
+/// `1-SFC`, so any value on the SFC surface is accepted. The prose test
+/// looks for the surface's own name rather than the word "surface", which
+/// the isobaric levels the same TMP element is fetched on also carry
+/// ("Isobaric surface"). Mirrors `_is_surface_record`.
+fn is_surface_record(band: &BandInfo, elements: &[String]) -> bool {
+    let element = band.item("GRIB_ELEMENT").to_uppercase();
+    if !elements.contains(&element) {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    let text = searchable(band).to_lowercase();
+    short_name.ends_with("-SFC") || text.contains("sfc=\"") || text.contains("ground or water surface")
+}
+
+/// One element on the `metres` m surface (type 103), which GDAL spells
+/// `<metres>-HTGL`. Mirrors `_is_two_metre_record`, `_is_ten_metre_wind`
+/// and their siblings, one regex per height.
+fn is_height_record(band: &BandInfo, element: &str, metres: u32) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    if short_name == format!("{metres}-HTGL") || short_name == format!("{metres}-M-HTGL") {
+        return true;
+    }
+    Regex::new(&format!(
+        r"(?i)(?:^|[^0-9]){metres}(?:\.0+)?\s*m(?:eter)?s?\s+above\s+ground"
+    ))
+    .expect("valid regex")
+    .is_match(&searchable(band))
+}
+
+/// One element on the entire atmosphere (surface type 10), which GDAL
+/// spells `0-EATM`; the phrase fallback catches drivers that do not, and
+/// NCEP's local type 200, which GDAL renders like type 10 and describes in
+/// full. Mirrors `_is_entire_atmosphere_record`.
+fn is_entire_atmosphere_record(band: &BandInfo, element: &str) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    short_name == "0-EATM" || searchable(band).to_lowercase().contains("entire atmosphere")
+}
+
+/// One of `elements` on GRIB2 surface 101 (mean sea level), which GDAL
+/// spells `0-MSL`; the phrase fallback catches drivers that do not. Mirrors
+/// `_is_mean_sea_level_pressure`.
+fn is_mean_sea_level_record(band: &BandInfo, elements: &[String]) -> bool {
+    if !elements.contains(&band.item("GRIB_ELEMENT").to_uppercase()) {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    short_name == "0-MSL" || searchable(band).to_lowercase().contains("mean sea level")
+}
+
+/// One cloud cover element on its own layer surface (code table 4.5 types
+/// 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` / `0-HCY`), or on a
+/// surface of its own named by the layer's phrase in the comment. Mirrors
+/// `_is_cloud_layer_record`.
+fn is_cloud_layer_record(band: &BandInfo, element: &str, token: &str, phrases: &[String]) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    let text = searchable(band).to_lowercase();
+    short_name == token.to_uppercase() || phrases.iter().any(|phrase| text.contains(phrase.as_str()))
+}
+
+/// The elements GDAL names a run-total precipitation record by, lower-cased:
+/// ECMWF open data's local 0/1/193 is unknown to its tables (so the comment
+/// carries the raw triple), AIFS's WMO 0/1/52 it names TPRATE.
+const TOTAL_PRECIPITATION_ELEMENTS: [&str; 4] = ["unknown", "tp", "apcp", "tprate"];
+
+/// A run-total precipitation record on the surface, by one of the elements
+/// above and the local triple or the phrase in its comment. Mirrors
+/// `_is_total_precipitation`.
+fn is_total_precipitation(band: &BandInfo) -> bool {
+    if !TOTAL_PRECIPITATION_ELEMENTS.contains(&band.item("GRIB_ELEMENT").to_lowercase().as_str()) {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    let comment = band.item("GRIB_COMMENT");
+    let text = prose(band);
+    (short_name == "0-SFC" || text.contains("surface"))
+        && (comment.contains("cat 1, subcat 193") || text.contains("total precipitation"))
+}
+
+/// A centre-local parameter on the ground surface GDAL's tables do not
+/// know (ECMWF's `tcc`, 0/6/192): GRIB_ELEMENT is "unknown" and the comment
+/// carries the raw triple. Mirrors `_is_ecmwf_total_cloud_cover`.
+fn is_local_parameter(band: &BandInfo, category: u8, number: u8) -> bool {
+    if band.item("GRIB_ELEMENT").to_lowercase() != "unknown" {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    (short_name == "0-SFC" || prose(band).contains("ground or water surface"))
+        && band
+            .item("GRIB_COMMENT")
+            .contains(&format!("cat {category}, subcat {number}"))
+}
+
+/// One element described by a phrase rather than a surface GDAL names
+/// (ECMWF's most-unstable CAPE departs from surface type 17, which GDAL
+/// describes as such and gives no short name of its own). Mirrors
+/// `_is_most_unstable_cape`.
+fn is_phrase_record(band: &BandInfo, element: &str, phrases: &[String]) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != element {
+        return false;
+    }
+    let text = prose(band);
+    phrases.iter().any(|phrase| text.contains(phrase.as_str()))
+}
+
+/// The surface geopotential on the ground surface, which GDAL names `GP`
+/// and describes only in the comment. Mirrors the geopotential branch of
+/// `_is_orography_record`.
+fn is_geopotential_surface_record(band: &BandInfo, elements: &[String]) -> bool {
+    if !elements.contains(&band.item("GRIB_ELEMENT").to_uppercase()) {
+        return false;
+    }
+    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
+    let text = searchable(band).to_lowercase();
+    (short_name.ends_with("-SFC") || text.contains("ground or water surface")) && text.contains("geopotential")
+}
+
+/// One MRMS product under the registry's MRMS identity for the variable —
 /// its own (the 3D mosaic's reflectivity levels) or its discipline-209
 /// alternate (the composite, the rate): GDAL names the record by the product
 /// (its local table for centre 161 — `MergedReflectivityQCComposite`,
@@ -563,63 +240,53 @@ fn searchable(band: &BandInfo) -> String {
 /// read off the assembled template (the parameter at indices 0–1, the type
 /// of first fixed surface, its scale factor and scaled value at 9–11 of
 /// template 4.0), or, where the driver did not assemble it, off the short
-/// name GDAL spells it with (`3000-GPML`). Mirrors `_is_mrms_record` in
-/// `xuebuild/gdal.py`; `element` is the product's name in upper case, as
-/// `band_matches` compares.
-fn is_mrms_record(band: &BandInfo, variable_id: &str, element: &str) -> Result<bool> {
-    if band.item("GRIB_ELEMENT").to_uppercase() != element || band.item("GRIB_DISCIPLINE") != "209" {
-        return Ok(false);
+/// name GDAL spells it with (`3000-GPML`). Mirrors `_is_mrms_record`.
+fn is_mrms_record(band: &BandInfo, spec: &VariableSpec) -> bool {
+    let Some(element) = spec.matching.mrms_product.split('_').next().filter(|element| !element.is_empty()) else {
+        return false;
+    };
+    if band.item("GRIB_ELEMENT") != element || band.item("GRIB_DISCIPLINE") != "209" {
+        return false;
     }
-    let spec = variable_spec(variable_id)?;
     let (category, number, level_type, level_value) = spec
-        .grib2_alternates
+        .matching
+        .alternates
         .iter()
         .find(|alternate| alternate.discipline == 209)
         .map_or(
             (spec.grib2_category, spec.grib2_number, spec.grib2_level_type, spec.grib2_level_value),
             |alternate| (alternate.category, alternate.number, alternate.level_type, alternate.level_value),
         );
-    let values: Vec<i64> = band
-        .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
-        .split_whitespace()
-        .map(str::parse::<i64>)
-        .collect::<std::result::Result<_, _>>()
-        .unwrap_or_default();
+    let values = assembled_values(band);
     if band.item("GRIB_PDS_PDTN") == "0" && values.len() >= 12 {
-        if (values[0], values[1], values[9])
-            != (i64::from(category), i64::from(number), i64::from(level_type))
-        {
-            return Ok(false);
+        if (values[0], values[1], values[9]) != (i64::from(category), i64::from(number), i64::from(level_type)) {
+            return false;
         }
         let Some(expected) = level_value else {
-            return Ok(true);
+            return true;
         };
         let (scale, scaled_value) = (values[10], values[11]);
-        return Ok(scaled_value != i64::from(u32::MAX)
-            && scaled_value as f64 / 10f64.powi(scale as i32) == expected);
+        return scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == expected;
     }
     let Some(expected) = level_value.filter(|_| level_type == 102) else {
-        return Ok(true);
+        return true;
     };
-    Ok(band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{expected}-GPML"))
+    band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{expected}-GPML")
 }
 
 /// One GRIB2 aerosol product (template 4.48) under the registry's parameter
-/// *and* aerosol identity for `variable_id`. The driver's tables name the
-/// fields by element (`AOTK`, `PMTF`) and surface, which a dozen of
-/// GEFS-Aerosols' records share; what tells them apart is in the template
-/// itself, which GDAL exposes whole as `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES`
-/// (the template's fields in order, space-separated) beside
+/// *and* aerosol identity. The driver's tables name the fields by element
+/// (`AOTK`, `PMTF`) and surface, which a dozen of GEFS-Aerosols' records
+/// share; what tells them apart is in the template itself, which GDAL
+/// exposes whole as `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` beside
 /// `GRIB_PDS_PDTN`. A record of another template, or one the driver did not
-/// assemble, is not this record. Mirrors `_is_aerosol_record` in
-/// `xuebuild/gdal.py`.
-fn is_aerosol_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
-    let spec = variable_spec(variable_id)?;
+/// assemble, is not this record. Mirrors `_is_aerosol_record`.
+fn is_aerosol_record(band: &BandInfo, spec: &VariableSpec) -> bool {
     let Some(identity) = spec.grib2_aerosol else {
-        return Ok(false);
+        return false;
     };
     if band.item("GRIB_PDS_PDTN") != "48" {
-        return Ok(false);
+        return false;
     }
     let Ok(values) = band
         .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
@@ -627,18 +294,13 @@ fn is_aerosol_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
         .map(str::parse::<i64>)
         .collect::<std::result::Result<Vec<_>, _>>()
     else {
-        return Ok(false);
+        return false;
     };
-    let Ok(discipline) = band
-        .item("GRIB_DISCIPLINE")
-        .split_once('(')
-        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
-        .parse::<i64>()
-    else {
-        return Ok(false);
+    let Some(discipline) = discipline(band) else {
+        return false;
     };
     if values.len() < 23 {
-        return Ok(false);
+        return false;
     }
     if (discipline, values[0], values[1])
         != (
@@ -647,25 +309,24 @@ fn is_aerosol_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
             i64::from(spec.grib2_number),
         )
     {
-        return Ok(false);
+        return false;
     }
     if values[20] != i64::from(spec.grib2_level_type) {
-        return Ok(false);
+        return false;
     }
     if let Some(expected) = spec.grib2_level_value {
         let (scale, scaled_value) = (values[21], values[22]);
         if scaled_value == i64::from(u32::MAX) || scaled_value as f64 / 10f64.powi(scale as i32) != expected {
-            return Ok(false);
+            return false;
         }
     }
-    Ok(assembled_aerosol(&values) == identity)
+    assembled_aerosol(&values) == identity
 }
 
 /// The aerosol identity of template 4.48's assembled values: type at index
 /// 2, the size interval at 3–7, the wavelength interval at 8–12. An
 /// interval of the missing type carries no limits, as the header index
-/// reads it (`gribindex.rs`). Mirrors `_assembled_aerosol` in
-/// `xuebuild/gdal.py`.
+/// reads it (`gribindex.rs`). Mirrors `_assembled_aerosol`.
 fn assembled_aerosol(values: &[i64]) -> AerosolIdentity {
     let missing = i64::from(AerosolIdentity::MISSING_TYPE);
     let limit = |index: usize| -> Option<(i8, u32)> {
@@ -684,17 +345,15 @@ fn assembled_aerosol(values: &[i64]) -> AerosolIdentity {
     }
 }
 
-/// One soil layer under the registry's identity or an alternate, read off
-/// the assembled template 4.0 values (the type of first fixed surface, its
-/// scale factor and scaled value at indices 9–11) beside the discipline: the
-/// element and short name do not name a layer in a form two centres share
-/// (GFS's `0-0.1-DBLL`, ECMWF's `0-1-` on a soil level), the template does.
-/// A record of another template is not a soil layer here. Mirrors
-/// `_is_soil_record` in `xuebuild/gdal.py`.
-fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
-    let spec = variable_spec(variable_id)?;
+/// A record under the registry's identity or an alternate, read off the
+/// assembled template 4.0 values (the type of first fixed surface, its
+/// scale factor and scaled value at indices 9–11) beside the discipline: a
+/// soil layer, whose element and short name do not name the layer in a form
+/// two centres share. A record of another template is not one. Mirrors
+/// `_is_soil_record`.
+fn is_template_record(band: &BandInfo, spec: &VariableSpec) -> bool {
     if band.item("GRIB_PDS_PDTN") != "0" {
-        return Ok(false);
+        return false;
     }
     let Ok(values) = band
         .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
@@ -702,18 +361,13 @@ fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
         .map(str::parse::<i64>)
         .collect::<std::result::Result<Vec<_>, _>>()
     else {
-        return Ok(false);
+        return false;
     };
-    let Ok(discipline) = band
-        .item("GRIB_DISCIPLINE")
-        .split_once('(')
-        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
-        .parse::<i64>()
-    else {
-        return Ok(false);
+    let Some(discipline) = discipline(band) else {
+        return false;
     };
     if values.len() < 12 {
-        return Ok(false);
+        return false;
     }
     let identities = std::iter::once((
         spec.grib2_discipline,
@@ -722,7 +376,7 @@ fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
         spec.grib2_level_type,
         spec.grib2_level_value,
     ))
-    .chain(spec.grib2_alternates.iter().map(|alternate| {
+    .chain(spec.matching.alternates.iter().map(|alternate| {
         (
             alternate.discipline,
             alternate.category,
@@ -744,13 +398,13 @@ fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
             continue;
         }
         let Some(expected) = level_value else {
-            return Ok(true);
+            return true;
         };
         if scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == expected {
-            return Ok(true);
+            return true;
         }
     }
-    Ok(false)
+    false
 }
 
 /// One rank of an ordered sequence (code table 4.5 type 241, local to
@@ -760,11 +414,10 @@ fn is_soil_record(band: &BandInfo, variable_id: &str) -> Result<bool> {
 /// rank is read off the assembled template 4.0 values beside the
 /// discipline and parameter; where the driver did not assemble the
 /// template, the short name is the fallback, rank included. Mirrors
-/// `_is_ordered_sequence_record` in `xuebuild/gdal.py`.
-fn is_ordered_sequence_record(band: &BandInfo, variable_id: &str, element: &str, short_name: &str) -> Result<bool> {
-    let spec = variable_spec(variable_id)?;
-    if element != spec.grib_element {
-        return Ok(false);
+/// `_is_ordered_sequence_record`.
+fn is_rank_record(band: &BandInfo, spec: &VariableSpec) -> bool {
+    if band.item("GRIB_ELEMENT").to_uppercase() != spec.matching.grib_element {
+        return false;
     }
     let rank = spec.grib2_level_value.unwrap_or(f64::NAN);
     let values = band
@@ -772,13 +425,8 @@ fn is_ordered_sequence_record(band: &BandInfo, variable_id: &str, element: &str,
         .split_whitespace()
         .map(str::parse::<i64>)
         .collect::<std::result::Result<Vec<_>, _>>();
-    let discipline = band
-        .item("GRIB_DISCIPLINE")
-        .split_once('(')
-        .map_or(band.item("GRIB_DISCIPLINE"), |(number, _)| number)
-        .parse::<i64>();
-    let (values, discipline) = match (values, discipline) {
-        (Ok(values), Ok(discipline)) => (values, discipline),
+    let (values, discipline) = match (values, discipline(band)) {
+        (Ok(values), Some(discipline)) => (values, discipline),
         _ => (Vec::new(), -1),
     };
     if band.item("GRIB_PDS_PDTN") == "0" && values.len() >= 12 {
@@ -790,217 +438,47 @@ fn is_ordered_sequence_record(band: &BandInfo, variable_id: &str, element: &str,
                 i64::from(spec.grib2_level_type),
             )
         {
-            return Ok(false);
+            return false;
         }
         let (scale, scaled_value) = (values[10], values[11]);
-        return Ok(scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == rank);
+        return scaled_value != i64::from(u32::MAX) && scaled_value as f64 / 10f64.powi(scale as i32) == rank;
     }
-    Ok(short_name == format!("{rank}-RESERVED({})", spec.grib2_level_type))
+    band.item("GRIB_SHORT_NAME").to_uppercase() == format!("{rank}-RESERVED({})", spec.grib2_level_type)
 }
 
-fn band_matches(variable_id: &str, band: &BandInfo) -> Result<bool> {
-    let element = band.item("GRIB_ELEMENT").to_uppercase();
-    let short_name = band.item("GRIB_SHORT_NAME").to_uppercase();
-    Ok(match variable_id {
-        // An aerosol product: the parameter and the aerosol identity, read
-        // off the assembled template values rather than the element.
-        aerosol if AEROSOL_VARIABLE_IDS.contains(&aerosol) => is_aerosol_record(band, aerosol)?,
-        // A soil layer: the identity read off the assembled template values.
-        soil if SOIL_TEMPERATURE_IDS.contains(&soil) || SOIL_MOISTURE_IDS.contains(&soil) => {
-            is_soil_record(band, soil)?
-        }
-        // One element on the 2 m surface: the temperature, the dew point,
-        // the apparent temperature.
-        "tmp2m" | "dpt2m" | "aptmp2m" => {
-            element == variable_spec(variable_id)?.grib_element
-                && (matches!(short_name.as_str(), "2-HTGL" | "2-M-HTGL")
-                    || HEIGHT_RE.is_match(&searchable(band)))
-        }
-        // sflux files carry only the interval-averaged PRATE record, pgrb2
-        // fetches only the instantaneous one — the same surface matcher hits
-        // exactly the record its source provides; the MRMS rate is its own
-        // product.
-        "prate" | "prate_ave" => {
-            (element == "PRATE"
-                && (short_name == "0-SFC" || searchable(band).to_lowercase().contains("surface")))
-                || (variable_id == "prate" && is_mrms_record(band, variable_id, "PRECIPRATE")?)
-        }
-        // ECMWF open data tp: GDAL's tables do not know the local parameter
-        // 0/1/193, so GRIB_ELEMENT is "unknown" and the comment carries the
-        // raw triple. AIFS writes its run total under the WMO 0/1/52, which
-        // GDAL's tables name TPRATE ("Total precipitation rate"); the
-        // fetched files carry no other record of that element.
-        "tp" => {
-            let comment = band.item("GRIB_COMMENT").to_string();
-            let text = [comment.as_str(), band.item("GRIB_LEVEL"), &band.description]
-                .join(" ")
-                .to_lowercase();
-            matches!(element.to_lowercase().as_str(), "unknown" | "tp" | "apcp" | "tprate")
-                && (short_name == "0-SFC" || text.contains("surface"))
-                && (comment.contains("cat 1, subcat 193")
-                    || text.contains("total precipitation"))
-        }
-        // One element on the ground or water surface: the fetched files
-        // carry only the instantaneous surface record of each, so element +
-        // surface is unambiguous. GDAL spells the surface `0-SFC`; the
-        // GFS-Wave records carry a surface value of 1 and come out `1-SFC`,
-        // so any value on the SFC surface is accepted. The prose test looks
-        // for the surface's own name rather than the word "surface", which
-        // the isobaric levels the same TMP element is fetched on also carry
-        // ("Isobaric surface"). Beside the registry's element, the one GDAL
-        // names another centre's spelling by: ECMWF's skin temperature is
-        // SKINT, its peak wave period PWPER and its mean wave direction
-        // WWSDIR (the registry's alias triples). Two ECMWF records sit on
-        // another surface altogether and are matched by their own rule: the
-        // gust on the 10 m surface (the interval maximum, `10fg`) and the
-        // most-unstable CAPE departing from surface type 17, which GDAL
-        // describes as such and gives no short name of its own.
-        "dswrf" | "gust" | "cape" | "cin" | "hpbl" | "crain" | "cfrzr" | "cicep" | "csnow"
-        | "vis" | "tmpsfc" | "icec" | "icetk" | "htsgw" | "perpw" | "dirpw" | "wvhgt" | "wvper"
-        | "wvdir" => {
-            let text = searchable(band).to_lowercase();
-            let registered = variable_spec(variable_id)?.grib_element;
-            let aliases: &[&str] = match registered {
-                "TMP" => &["SKINT"],
-                "PERPW" => &["PWPER"],
-                "DIRPW" => &["WWSDIR"],
-                _ => &[],
-            };
-            let on_surface = (element == registered || aliases.contains(&element.as_str()))
-                && (short_name.ends_with("-SFC")
-                    || text.contains("sfc=\"")
-                    || text.contains("ground or water surface"));
-            on_surface
-                || (variable_id == "gust"
-                    && element == "GUST"
-                    && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
-                        || TEN_METRE_RE.is_match(&searchable(band))))
-                || (variable_id == "cape"
-                    && element == "CAPE"
-                    && (text.contains("most unstable") || text.contains("mudl")))
-        }
-        // One rank of an ordered sequence: a GFS-Wave swell partition.
-        "swhgt" | "swper" | "swdir" => is_ordered_sequence_record(band, variable_id, &element, &short_name)?,
-        // One cloud cover element on its own layer surface (code table 4.5
-        // types 214 / 224 / 234, which GDAL spells `0-LCY` / `0-MCY` /
-        // `0-HCY`); the interval averages are never downloaded. AIFS writes
-        // the layers on surfaces of their own (the ground, 800 hPa, 450 hPa;
-        // the registry's alternates), which GDAL spells `0-80000-SFC`,
-        // `80000-45000-ISBL` and `45000-ISBL`: those match on the layer's
-        // name in the comment.
-        "lcdc" | "mcdc" | "hcdc" => {
-            let (token, phrases): (&str, &[&str]) = match variable_id {
-                "lcdc" => ("0-LCY", &["low cloud"]),
-                "mcdc" => ("0-MCY", &["middle cloud", "medium cloud"]),
-                _ => ("0-HCY", &["high cloud"]),
-            };
-            let text = searchable(band).to_lowercase();
-            element == variable_spec(variable_id)?.grib_element
-                && (short_name == token || phrases.iter().any(|phrase| text.contains(phrase)))
-        }
-        // The entire atmosphere (surface type 10), which GDAL spells
-        // `0-EATM`; the per-layer cloud covers are never downloaded. ECMWF
-        // `tcc` is the ECMWF-local 0/6/192 on the ground surface — GDAL's
-        // tables do not know it, so GRIB_ELEMENT is "unknown" and the
-        // comment carries the raw triple, the way it does for `tp`. AIFS
-        // writes the WMO TCDC as a layer from the ground surface up, which
-        // GDAL spells `0-SFC` like any surface record.
-        "tcdc" | "cref" => {
-            let text = searchable(band).to_lowercase();
-            let comment = band.item("GRIB_COMMENT");
-            (element == variable_spec(variable_id)?.grib_element
-                && (short_name == "0-EATM" || text.contains("entire atmosphere")))
-                || (variable_id == "tcdc"
-                    && element.to_lowercase() == "unknown"
-                    && (short_name == "0-SFC" || text.contains("ground or water surface"))
-                    && comment.contains("cat 6, subcat 192"))
-                || (variable_id == "tcdc"
-                    && element == "TCDC"
-                    && (short_name.ends_with("-SFC")
-                        || text.contains("sfc=\"")
-                        || text.contains("ground or water surface")))
-                || (variable_id == "cref"
-                    && is_mrms_record(band, variable_id, "MERGEDREFLECTIVITYQCCOMPOSITE")?)
-        }
-        // Precipitable water: NCEP writes the column total on its local
-        // "entire atmosphere (considered as a single layer)" surface (type
-        // 200), which GDAL renders like the WMO type 10 and describes in
-        // full. Mirrors `_is_entire_atmosphere_record(…, "PWAT")`.
-        "pwat" => {
-            let text = searchable(band).to_lowercase();
-            element == variable_spec(variable_id)?.grib_element
-                && (short_name == "0-EATM" || text.contains("entire atmosphere"))
-        }
-        // The model terrain on the ground surface: NCEP's geopotential
-        // height (element HGT) or ECMWF open data's surface geopotential
-        // (element GP, described only in the comment). Mirrors
-        // `_is_orography_record`.
-        "orog" => {
-            let text = searchable(band).to_lowercase();
-            let on_surface = short_name.ends_with("-SFC")
-                || text.contains("sfc=\"")
-                || text.contains("ground or water surface");
-            on_surface
-                && (element == "HGT"
-                    || (matches!(element.as_str(), "GP" | "Z") && text.contains("geopotential")))
-        }
-        "ugrd10m" | "vgrd10m" => {
-            element == variable_spec(variable_id)?.grib_element
-                && (matches!(short_name.as_str(), "10-HTGL" | "10-M-HTGL")
-                    || TEN_METRE_RE.is_match(&searchable(band)))
-        }
-        // One wind component on the 80 m surface (type 103, value 80),
-        // which HRRR's wrfsfc writes for wind power; GDAL spells it
-        // `80-HTGL`. Mirrors `_is_eighty_metre_wind`.
-        "ugrd80m" | "vgrd80m" => {
-            element == variable_spec(variable_id)?.grib_element
-                && (matches!(short_name.as_str(), "80-HTGL" | "80-M-HTGL")
-                    || EIGHTY_METRE_RE.is_match(&searchable(band)))
-        }
-        // One wind component on the 100 m surface (type 103, value 100),
-        // which pgrb2 writes for wind power; GDAL spells it `100-HTGL`.
-        // Mirrors `_is_hundred_metre_wind`.
-        "ugrd100m" | "vgrd100m" => {
-            element == variable_spec(variable_id)?.grib_element
-                && (matches!(short_name.as_str(), "100-HTGL" | "100-M-HTGL")
-                    || HUNDRED_METRE_RE.is_match(&searchable(band)))
-        }
-        // The derived precipitation type is never a GRIB record.
-        // Mirrors `ptype` in `_band_matches`.
-        "ptype" => {
-            return Err(EncodeError::conversion("ptype is derived, not a GRIB record"))
-        }
-        // PRMSL on GRIB2 surface 101 (mean sea level); GDAL spells that
-        // short name `0-MSL`, and the phrase fallback catches drivers that
-        // do not. ECMWF `msl` is plain pressure on that surface (the
-        // registry's 0/3/0 alias), which GDAL names PRES, and HRRR's is the
-        // MAPS reduction MSLMA (the 0/3/198 alias) — the surface is what
-        // makes them the same field.
-        "prmsl" => {
-            matches!(element.as_str(), "PRMSL" | "PRES" | "MSLMA")
-                && (short_name == "0-MSL"
-                    || searchable(band).to_lowercase().contains("mean sea level"))
-        }
-        // One level of the MRMS 3D reflectivity mosaic.
-        other if reflectivity_level(other).is_some() => {
-            is_mrms_record(band, other, "MERGEDREFLECTIVITYQC")?
-        }
-        other if isobaric_variable(other).is_some() => {
-            let (_, level) = isobaric_variable(other).expect("checked");
-            let spec = variable_spec(other)?;
-            if spec.grib_element.is_empty() {
-                return Err(EncodeError::conversion(format!(
-                    "{other} is derived, not a GRIB record"
-                )));
-            }
-            is_isobaric_record(band, spec.grib_element, level)
-        }
-        other => {
-            return Err(EncodeError::conversion(format!(
-                "unsupported variable: {other}"
-            )))
-        }
-    })
+/// Whether one rule accepts the band for `spec`.
+fn rule_matches(rule: &GdalRule, spec: &VariableSpec, band: &BandInfo) -> bool {
+    match rule {
+        GdalRule::Surface { elements } => is_surface_record(band, elements),
+        GdalRule::Height { element, metres } => is_height_record(band, element, *metres),
+        GdalRule::EntireAtmosphere { element } => is_entire_atmosphere_record(band, element),
+        GdalRule::MeanSeaLevel { elements } => is_mean_sea_level_record(band, elements),
+        GdalRule::Isobaric { element, hpa } => is_isobaric_record(band, element, *hpa),
+        GdalRule::CloudLayer {
+            element,
+            short_name,
+            phrases,
+        } => is_cloud_layer_record(band, element, short_name, phrases),
+        GdalRule::Template => is_template_record(band, spec),
+        GdalRule::TemplateAerosol => is_aerosol_record(band, spec),
+        GdalRule::TemplateRank => is_rank_record(band, spec),
+        GdalRule::TemplateMrms => is_mrms_record(band, spec),
+        GdalRule::TotalPrecipitation => is_total_precipitation(band),
+        GdalRule::LocalParameter { category, number } => is_local_parameter(band, *category, *number),
+        GdalRule::Phrase { element, phrases } => is_phrase_record(band, element, phrases),
+        GdalRule::GeopotentialSurface { elements } => is_geopotential_surface_record(band, elements),
+    }
+}
+
+/// Whether the band is the variable's record: any one of its `match.gdal`
+/// rules accepting. A field no GRIB band carries (a derived field, a
+/// series-file variable) has no rules and matches nothing. Mirrors
+/// `_band_matches`.
+pub(crate) fn band_matches(spec: &VariableSpec, band: &BandInfo) -> bool {
+    spec.matching
+        .gdal
+        .iter()
+        .any(|rule| rule_matches(rule, spec, band))
 }
 
 fn timestamp(band: &BandInfo, key: &str) -> Option<OffsetDateTime> {
@@ -1008,7 +486,7 @@ fn timestamp(band: &BandInfo, key: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::from_unix_timestamp(raw as i64).ok()
 }
 
-fn frame_from_band(path: &Path, variable_id: &str, band: &BandInfo) -> Result<SourceFrame> {
+fn frame_from_band(path: &Path, spec: &VariableSpec, band: &BandInfo) -> Result<SourceFrame> {
     let raw_unit = if band.item("GRIB_UNIT").is_empty() {
         band.item("GRIB_COMMENT")
             .rsplit_once('[')
@@ -1018,15 +496,17 @@ fn frame_from_band(path: &Path, variable_id: &str, band: &BandInfo) -> Result<So
     } else {
         band.item("GRIB_UNIT").to_string()
     };
-    let unit = if SURFACE_TEMPERATURE_IDS.contains(&variable_id) {
-        normalize_unit(&raw_unit)?.to_string()
+    // A temperature's unit is carried as the one letter its rule reads it
+    // through; any other as GDAL spelled it, brackets off.
+    let unit = if matches!(spec.conversion, Conversion::Celsius | Conversion::SoilTemperature) {
+        temperature_unit(&raw_unit)?.to_string()
     } else {
         raw_unit
             .trim()
             .trim_matches(|character| "[]".contains(character))
             .to_string()
     };
-    raster_expression(variable_id, &unit)?;
+    raster_expression(spec, &unit)?;
     let valid_time = timestamp(band, "GRIB_VALID_TIME");
     let run_time = timestamp(band, "GRIB_REF_TIME").or_else(|| {
         let forecast: f64 = band.metadata.get("GRIB_FORECAST_SECONDS")?.parse().ok()?;
@@ -1048,7 +528,7 @@ fn frame_from_band(path: &Path, variable_id: &str, band: &BandInfo) -> Result<So
     Ok(SourceFrame {
         path: path.to_path_buf(),
         band: band.number,
-        variable_id: variable_id.to_string(),
+        variable_id: spec.id.clone(),
         run_time,
         valid_time,
         lead_seconds: delta,
@@ -1064,6 +544,7 @@ pub fn inspect_grib_multi(
     path: &Path,
     variable_ids: &[&str],
     optional_ids: &[&str],
+    registry: &Registry,
 ) -> Result<Vec<(String, SourceFrame)>> {
     if !path.is_file() {
         return Err(EncodeError::conversion(format!(
@@ -1075,9 +556,10 @@ pub fn inspect_grib_multi(
     let bands = dataset.bands()?;
     let mut frames = Vec::new();
     for variable_id in variable_ids {
+        let spec = registry.variable(variable_id)?;
         let matches: Vec<&BandInfo> = bands
             .iter()
-            .filter(|band| band_matches(variable_id, band).unwrap_or(false))
+            .filter(|band| band_matches(spec, band))
             .collect();
         if matches.is_empty() && optional_ids.contains(variable_id) {
             continue;
@@ -1085,14 +567,14 @@ pub fn inspect_grib_multi(
         if matches.len() != 1 {
             return Err(EncodeError::conversion(format!(
                 "expected exactly one {} band for {variable_id} in {}, found {}",
-                variable_spec(variable_id)?.grib_element,
+                spec.matching.grib_element,
                 path.display(),
                 matches.len()
             )));
         }
         frames.push((
             (*variable_id).to_string(),
-            frame_from_band(path, variable_id, matches[0])?,
+            frame_from_band(path, spec, matches[0])?,
         ));
     }
     Ok(frames)
@@ -1101,27 +583,18 @@ pub fn inspect_grib_multi(
 #[cfg(test)]
 mod tests {
     use super::{band_matches, raster_expression, BandInfo};
+    use crate::encode::registry::Registry;
     use std::collections::HashMap;
 
-    /// One level of the MRMS 3D mosaic as GDAL's GRIB driver describes it.
-    fn mrms_level(metres: u32) -> BandInfo {
-        let metadata: HashMap<String, String> = [
-            ("GRIB_ELEMENT", "MergedReflectivityQC".to_string()),
-            ("GRIB_SHORT_NAME", format!("{metres}-GPML")),
-            ("GRIB_DISCIPLINE", "209".to_string()),
-            ("GRIB_UNIT", "[dBZ]".to_string()),
-            ("GRIB_PDS_PDTN", "0".to_string()),
-            (
-                "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES",
-                format!("9 0 8 0 97 0 0 0 0 102 0 {metres} 255 1 0"),
-            ),
-        ]
-        .into_iter()
-        .map(|(key, value)| (key.to_string(), value))
-        .collect();
+    /// A band as GDAL's GRIB driver describes it.
+    fn band(items: &[(&str, &str)], description: &str) -> BandInfo {
+        let metadata: HashMap<String, String> = items
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+            .collect();
         BandInfo {
             number: 1,
-            description: String::new(),
+            description: description.to_string(),
             metadata,
             unit: String::new(),
             scale: 1.0,
@@ -1130,42 +603,166 @@ mod tests {
         }
     }
 
+    /// One level of the MRMS 3D mosaic as GDAL's GRIB driver describes it.
+    fn mrms_level(metres: u32) -> BandInfo {
+        band(
+            &[
+                ("GRIB_ELEMENT", "MergedReflectivityQC"),
+                ("GRIB_SHORT_NAME", &format!("{metres}-GPML")),
+                ("GRIB_DISCIPLINE", "209"),
+                ("GRIB_UNIT", "[dBZ]"),
+                ("GRIB_PDS_PDTN", "0"),
+                (
+                    "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES",
+                    &format!("9 0 8 0 97 0 0 0 0 102 0 {metres} 255 1 0"),
+                ),
+            ],
+            "",
+        )
+    }
+
+    fn matches(variable_id: &str, band: &BandInfo) -> bool {
+        band_matches(Registry::embedded().variable(variable_id).unwrap(), band)
+    }
+
     /// Every level is the same element on discipline 209: the level read
     /// off the assembled template is what tells them apart, and a level is
     /// never taken for its neighbour (the composite's matcher is
     /// level-blind and must stay out of the family).
     #[test]
     fn an_mrms_level_matches_its_own_variable_only() {
-        let band = mrms_level(3000);
-        assert!(band_matches("refl3000", &band).expect("registered"));
-        for other in ["refl500", "refl300", "refl30000", "refl3500"] {
-            assert!(!band_matches(other, &band).unwrap_or(false), "{other}");
+        let level = mrms_level(3000);
+        assert!(matches("refl3000", &level));
+        for other in ["refl500", "refl3500"] {
+            assert!(!matches(other, &level), "{other}");
         }
-        assert!(!band_matches("cref", &band).expect("registered"));
+        assert!(!matches("cref", &level));
         // Without the assembled values, the short name says the same.
         let mut bare = mrms_level(500);
         bare.metadata.remove("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES");
-        assert!(band_matches("refl500", &bare).expect("registered"));
-        assert!(!band_matches("refl750", &bare).expect("registered"));
+        assert!(matches("refl500", &bare));
+        assert!(!matches("refl750", &bare));
         // Another surface type at the same value is not the level.
         let mut wrong_surface = mrms_level(3000);
         wrong_surface.metadata.insert(
             "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES".into(),
             "9 0 8 0 97 0 0 0 0 103 0 3000 255 1 0".into(),
         );
-        assert!(!band_matches("refl3000", &wrong_surface).expect("registered"));
+        assert!(!matches("refl3000", &wrong_surface));
         // Nor is another discipline.
         let mut wrong_discipline = mrms_level(3000);
         wrong_discipline.metadata.insert("GRIB_DISCIPLINE".into(), "0".into());
-        assert!(!band_matches("refl3000", &wrong_discipline).expect("registered"));
+        assert!(!matches("refl3000", &wrong_discipline));
+        // The composite and the rate match their discipline-209 alternates.
+        let composite = band(
+            &[
+                ("GRIB_ELEMENT", "MergedReflectivityQCComposite"),
+                ("GRIB_SHORT_NAME", "500-GPML"),
+                ("GRIB_DISCIPLINE", "209"),
+                ("GRIB_PDS_PDTN", "0"),
+                ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "10 0 8 0 97 0 0 0 0 102 0 500 255 1 0"),
+            ],
+            "",
+        );
+        assert!(matches("cref", &composite) && !matches("refl500", &composite));
+    }
+
+    /// One band of each rule, as GDAL spells the records the sources carry.
+    #[test]
+    fn each_gdal_rule_accepts_the_band_it_transcribes() {
+        // surface: pgrb2's instantaneous rate, the wave records' `1-SFC`,
+        // ECMWF's SKINT spelling of the skin temperature.
+        let prate = band(&[("GRIB_ELEMENT", "PRATE"), ("GRIB_SHORT_NAME", "0-SFC")], "0[-] SFC=\"Ground or water surface\"");
+        assert!(matches("prate", &prate) && !matches("prate_ave", &band(&[("GRIB_ELEMENT", "PRATE"), ("GRIB_SHORT_NAME", "85000-ISBL")], "")));
+        assert!(matches("htsgw", &band(&[("GRIB_ELEMENT", "HTSGW"), ("GRIB_SHORT_NAME", "1-SFC")], "")));
+        assert!(matches("tmpsfc", &band(&[("GRIB_ELEMENT", "SKINT")], "0[-] SFC=\"Ground or water surface\"")));
+        assert!(!matches("tmpsfc", &band(&[("GRIB_ELEMENT", "TMP"), ("GRIB_SHORT_NAME", "85000-ISBL")], "Isobaric surface")));
+        // height: the 2 m, 10 m, 80 m and 100 m surfaces by short name or
+        // phrase, each refusing the others.
+        assert!(matches("tmp2m", &band(&[("GRIB_ELEMENT", "TMP"), ("GRIB_SHORT_NAME", "2-HTGL")], "")));
+        assert!(matches("tmp2m", &band(&[("GRIB_ELEMENT", "TMP")], "2.0 m above ground")));
+        assert!(!matches("tmp2m", &band(&[("GRIB_ELEMENT", "TMP")], "12 m above ground")));
+        assert!(matches("ugrd10m", &band(&[("GRIB_ELEMENT", "UGRD"), ("GRIB_SHORT_NAME", "10-M-HTGL")], "")));
+        assert!(!matches("ugrd10m", &band(&[("GRIB_ELEMENT", "UGRD"), ("GRIB_SHORT_NAME", "100-HTGL")], "")));
+        assert!(matches("ugrd80m", &band(&[("GRIB_ELEMENT", "UGRD"), ("GRIB_SHORT_NAME", "80-HTGL")], "")));
+        assert!(matches("vgrd100m", &band(&[("GRIB_ELEMENT", "VGRD")], "100 meters above ground")));
+        // The gust: pgrb2's on the surface, ECMWF's on the 10 m surface.
+        assert!(matches("gust", &band(&[("GRIB_ELEMENT", "GUST"), ("GRIB_SHORT_NAME", "0-SFC")], "")));
+        assert!(matches("gust", &band(&[("GRIB_ELEMENT", "GUST"), ("GRIB_SHORT_NAME", "10-HTGL")], "")));
+        // entire-atmosphere and the cloud layers.
+        assert!(matches("tcdc", &band(&[("GRIB_ELEMENT", "TCDC"), ("GRIB_SHORT_NAME", "0-EATM")], "")));
+        assert!(matches("pwat", &band(&[("GRIB_ELEMENT", "PWAT")], "entire atmosphere (considered as a single layer)")));
+        assert!(matches("lcdc", &band(&[("GRIB_ELEMENT", "LCDC"), ("GRIB_SHORT_NAME", "0-LCY")], "")));
+        assert!(matches("mcdc", &band(&[("GRIB_ELEMENT", "MCDC"), ("GRIB_SHORT_NAME", "80000-45000-ISBL")], "Medium cloud cover")));
+        assert!(!matches("hcdc", &band(&[("GRIB_ELEMENT", "HCDC"), ("GRIB_SHORT_NAME", "0-LCY")], "")));
+        // local-parameter: ECMWF's tcc, which GDAL does not know.
+        let tcc = band(&[("GRIB_ELEMENT", "unknown"), ("GRIB_SHORT_NAME", "0-SFC"), ("GRIB_COMMENT", "unknown [-] (disc 0, cat 6, subcat 192)")], "");
+        assert!(matches("tcdc", &tcc));
+        // mean-sea-level: NCEP's PRMSL, ECMWF's PRES, HRRR's MSLMA.
+        for element in ["PRMSL", "PRES", "MSLMA"] {
+            assert!(matches("prmsl", &band(&[("GRIB_ELEMENT", element), ("GRIB_SHORT_NAME", "0-MSL")], "")), "{element}");
+        }
+        assert!(!matches("prmsl", &band(&[("GRIB_ELEMENT", "PRES"), ("GRIB_SHORT_NAME", "0-SFC")], "")));
+        // isobaric: pascals or hectopascals, this level and no other.
+        assert!(matches("rh850", &band(&[("GRIB_ELEMENT", "RH"), ("GRIB_SHORT_NAME", "85000-ISBL")], "")));
+        assert!(matches("rh850", &band(&[("GRIB_ELEMENT", "RH")], "850 mb")));
+        assert!(!matches("rh500", &band(&[("GRIB_ELEMENT", "RH"), ("GRIB_SHORT_NAME", "100000-ISBL")], "1000[Pa] ISBL")));
+        // total-precipitation: ECMWF's local triple and AIFS's TPRATE.
+        assert!(matches("tp", &band(&[("GRIB_ELEMENT", "unknown"), ("GRIB_SHORT_NAME", "0-SFC"), ("GRIB_COMMENT", "unknown [-] (disc 0, cat 1, subcat 193)")], "")));
+        assert!(matches("tp", &band(&[("GRIB_ELEMENT", "TPRATE"), ("GRIB_COMMENT", "Total precipitation rate")], "surface")));
+        assert!(!matches("tp", &band(&[("GRIB_ELEMENT", "PRATE"), ("GRIB_SHORT_NAME", "0-SFC")], "")));
+        // phrase: the most-unstable CAPE.
+        assert!(matches("cape", &band(&[("GRIB_ELEMENT", "CAPE"), ("GRIB_COMMENT", "Most unstable CAPE")], "")));
+        assert!(!matches("cape", &band(&[("GRIB_ELEMENT", "CAPE"), ("GRIB_SHORT_NAME", "9000-18000-SPDL")], "")));
+        // geopotential-surface: ECMWF's z, and NCEP's HGT by the surface rule.
+        assert!(matches("orog", &band(&[("GRIB_ELEMENT", "GP"), ("GRIB_SHORT_NAME", "0-SFC"), ("GRIB_COMMENT", "Geopotential [(m^2)/(s^2)]")], "")));
+        assert!(matches("orog", &band(&[("GRIB_ELEMENT", "HGT"), ("GRIB_SHORT_NAME", "0-SFC")], "")));
+        assert!(!matches("orog", &band(&[("GRIB_ELEMENT", "HGT"), ("GRIB_SHORT_NAME", "85000-ISBL")], "")));
+        // template: a soil layer by its assembled surface, under either
+        // centre's identity.
+        let tsoil = band(&[("GRIB_ELEMENT", "TSOIL"), ("GRIB_DISCIPLINE", "2(Land Surface)"), ("GRIB_PDS_PDTN", "0"), ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "0 2 2 0 81 0 0 1 0 106 0 0 106 1 1")], "");
+        assert!(matches("tsoil1", &tsoil) && !matches("tsoil2", &tsoil));
+        let sot = band(&[("GRIB_ELEMENT", "SOILTMP"), ("GRIB_DISCIPLINE", "2"), ("GRIB_PDS_PDTN", "0"), ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "3 18 0 0 0 0 1 0 0 151 0 0 151 0 1")], "");
+        assert!(matches("tsoil1", &sot) && !matches("soilw1", &sot));
+        // template-rank: a swell partition by its rank, with the short-name
+        // fallback.
+        let swell = band(&[("GRIB_ELEMENT", "SWELL"), ("GRIB_DISCIPLINE", "10"), ("GRIB_PDS_PDTN", "0"), ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "0 8 0 0 0 0 1 0 0 241 0 1 255 0 0")], "");
+        assert!(matches("swhgt", &swell));
+        assert!(matches("swhgt", &band(&[("GRIB_ELEMENT", "SWELL"), ("GRIB_SHORT_NAME", "1-RESERVED(241)")], "")));
+        assert!(!matches("swhgt", &band(&[("GRIB_ELEMENT", "SWELL"), ("GRIB_SHORT_NAME", "2-RESERVED(241)")], "")));
+        assert!(!matches("swhgt", &band(&[("GRIB_ELEMENT", "HTSGW"), ("GRIB_SHORT_NAME", "1-RESERVED(241)")], "")));
+        // template-aerosol: the identity whole, type and intervals included.
+        let aod = band(&[("GRIB_ELEMENT", "AOTK"), ("GRIB_DISCIPLINE", "0(Meteorological)"), ("GRIB_PDS_PDTN", "48"), ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", "20 102 62001 0 6 20 0 0 7 9 545 9 565 2 0 0 1 0 0 0 10 0 0 255 0 0")], "");
+        assert!(matches("aoddust", &aod) && !matches("aod", &aod) && !matches("aodsalt", &aod));
+        assert!(!matches("tcdc", &aod));
+        // A derived field has no rule and matches no band; that is a miss,
+        // not an error.
+        assert!(!matches("ptype", &prate));
+        assert!(!matches("thetae850", &prate));
+        assert!(!matches("ir039", &prate));
     }
 
     #[test]
-    fn a_reflectivity_level_takes_the_composite_s_rule() {
-        assert_eq!(
-            raster_expression("refl19000", "dBZ").expect("dBZ"),
-            raster_expression("cref", "dBZ").expect("dBZ")
-        );
-        assert!(raster_expression("refl500", "mm/h").is_err());
+    fn the_raster_expression_is_the_rule_s_arithmetic_alone() {
+        let registry = Registry::embedded();
+        let expression = |variable_id: &str, unit: &str| raster_expression(registry.variable(variable_id).unwrap(), unit);
+        assert_eq!(expression("refl19000", "dBZ").unwrap(), expression("cref", "dBZ").unwrap());
+        assert!(expression("refl500", "mm/h").is_err());
+        assert_eq!(expression("tmp2m", "K").unwrap(), "A-273.15");
+        assert_eq!(expression("tmp850", "[C]").unwrap(), "A");
+        assert_eq!(expression("prate", "kg/(m^2 s)").unwrap(), "A*3600");
+        assert_eq!(expression("prate", "mm/hr").unwrap(), "A");
+        assert_eq!(expression("tp", "-").unwrap(), "A*1000");
+        assert_eq!(expression("tp", "").unwrap(), "A*1000");
+        assert_eq!(expression("tp", "kg/(m^2*s)").unwrap(), "A");
+        assert_eq!(expression("prmsl", "Pa").unwrap(), "A/100");
+        assert!(expression("prmsl", "hPa").is_err());
+        assert_eq!(expression("vis", "m").unwrap(), "A/1000");
+        assert_eq!(expression("spfh850", "kg/kg").unwrap(), "A*1000");
+        assert_eq!(expression("icec", "Proportion").unwrap(), "A*100");
+        assert_eq!(expression("orog", "(m^2)/(s^2)").unwrap(), "A/9.80665");
+        assert_eq!(expression("dirpw", "Degree true").unwrap(), "A");
+        assert_eq!(expression("ir039", "anything").unwrap(), "A");
+        assert!(expression("ugrd10m", "knots").is_err());
     }
 }

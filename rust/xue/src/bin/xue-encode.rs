@@ -8,6 +8,7 @@ use std::process::ExitCode;
 
 use xue::encode::convert::{convert_bin, ConvertOptions};
 use xue::encode::errors::EncodeError;
+use xue::encode::registry::Registry;
 
 const USAGE: &str = "\
 usage: xue-encode convert-bin <input>... --output <dir> [options]
@@ -15,8 +16,10 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   <input>                  a GRIB directory, one or more GRIB files, or one
                            NetCDF file for an observation source
   --output <dir>           output directory for the per-bundle Zarr stores
-  --model <name>           gfs | ecmwf | aifs | ifshres | sflux | hrrr | mrms | jma | cma | himawari (default gfs)
+  --model <name>           a source id of the registry document    (default gfs)
   --profile <name>         quality | compact | balanced       (default quality)
+  --registry <path>        the registry document (docs/registry.md) to build
+                           from; the snapshot embedded at release by default
   --manifest <path>        write a schema v5 manifest.json here
   --latest <path>          also write the mutable live pointer here
   --run <id>               the YYYYMMDDHH cycle id the pointer names
@@ -81,6 +84,7 @@ fn run() -> Result<String, Error> {
 
     let mut inputs: Vec<PathBuf> = Vec::new();
     let mut output: Option<PathBuf> = None;
+    let mut registry_path: Option<PathBuf> = None;
     let mut options = ConvertOptions::default();
     while let Some(argument) = arguments.next() {
         let mut value = || {
@@ -92,6 +96,7 @@ fn run() -> Result<String, Error> {
             "--output" => output = Some(PathBuf::from(value()?)),
             "--model" => options.model = value()?,
             "--profile" => options.profile = value()?,
+            "--registry" => registry_path = Some(PathBuf::from(value()?)),
             "--manifest" => options.manifest_path = Some(PathBuf::from(value()?)),
             "--latest" => options.latest_path = Some(PathBuf::from(value()?)),
             "--run" => options.run_id = Some(value()?),
@@ -130,7 +135,16 @@ fn run() -> Result<String, Error> {
     let Some(output) = output else {
         return Err(Error::Usage("convert-bin needs --output".into()));
     };
-    let report = convert_bin(&inputs, &output, &options)?;
+    let registry = match registry_path {
+        Some(path) => {
+            let text = std::fs::read_to_string(&path).map_err(|error| {
+                Error::Usage(format!("cannot read the registry document {}: {error}", path.display()))
+            })?;
+            Registry::parse(&text)?
+        }
+        None => Registry::embedded(),
+    };
+    let report = convert_bin(&inputs, &output, &options, &registry)?;
     Ok(serde_json::to_string_pretty(&report).expect("serializable report"))
 }
 

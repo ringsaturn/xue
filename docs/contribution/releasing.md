@@ -25,15 +25,22 @@ it); it depends on the `xuepy` wheel.
 ## The flow
 
 Everything happens on a `release/0.N` branch, and `main` receives the
-release only once it is complete. So `main` never carries an encoder or
-source-table change without the wheel that matches it, and the scheduled
-publishes keep working throughout the release window.
+release only once it is complete. So `main` never carries an encoder
+change without the wheel that matches it, and the scheduled publishes keep
+working throughout the release window.
 
-1. **Branch**: `git checkout -b release/0.N main`. Commit the encoder or
-   source-table change there, or merge it in. `test.yml` runs on
-   `release/**`, and its Python job builds the wheel from the tree
-   (`make encoder-py`) instead of installing PyPI's, so native parity is
-   checked against the code being released.
+A change to the registry tables alone (`xuebuild/variables.py`,
+`quantize.py`, `sources.py`, the bundle tables of `binconvert.py`) is not
+an encoder change and takes none of this: it is a commit to `main` with
+the regenerated `tests/fixtures/registry.json` and `rust/xue/registry.json`
+(`xue registry`), and the next build hands the new document to the wheel
+already installed (see "Why the floor tracks the current release").
+
+1. **Branch**: `git checkout -b release/0.N main`. Commit the encoder
+   change there, or merge it in. `test.yml` runs on `release/**`, and its
+   Python job builds the wheel from the tree (`make encoder-py`) instead of
+   installing PyPI's, so native parity is checked against the code being
+   released.
 2. **Release commit** on the branch, `chore: release 0.N.0`: bump `version`
    in `rust/xue/Cargo.toml` and `rust/xue-py/Cargo.toml`, and refresh
    `rust/Cargo.lock`. Nothing else goes in this commit.
@@ -63,28 +70,39 @@ pipe such as `uv lock | tail`, which hides a failure.
 
 ## Why the floor tracks the current release
 
-The wheel carries its own copy of the source table (`xuebuild/sources.py`
-mirrored in `rust/xue/src/encode/`). A wheel whose table publishes a
-different bundle set for a source refuses to build it, and the scheduled
-forecast workflows pin `XUE_ENCODER=native`, so an older wheel fails the
-build instead of quietly publishing less. The floor is therefore the first
-release whose table matches this tree's `sources.py`, and the upper bound
-keeps an unrelocked tree from picking up a newer table.
+The wheel carries no table of variables, bundles or sources. It reads the
+registry document this tree hands it on every call
+(`xuebuild.registry.document_json()`, `docs/registry.md`), and what it
+carries instead is the set of *rules* that document can name: the
+`registrySchema` it implements, the `conversion` and `match.gdal` rule
+names, the `derivation.kind`s and the codebook types (`docs/encoder.md`
+§"The registry document"). A wheel handed a document that names a rule it
+does not implement refuses the whole document before reading any input,
+and the scheduled forecast workflows pin `XUE_ENCODER=native`, so an older
+wheel fails the build instead of quietly building less.
+
+The floor is therefore the first release that implements every rule name
+this tree's document uses and its `registrySchema`, and the upper bound
+keeps an unrelocked tree from picking up a wheel whose rules have moved
+on. A table change — a new source, a new bundle, a new level, a changed
+codebook or input list — moves no rule and no schema: it is a commit to
+`main` with the regenerated snapshots, and no release follows.
 
 ## Why the release lives on a branch
 
-If an encoder or source-table change merged to `main` before its wheel
-shipped, `main` would still install the old locked wheel. Then
+If an encoder change (a new rule, derivation, codebook type or ingest path,
+or a schema bump) merged to `main` before its wheel shipped, `main` would
+still install the old locked wheel, which refuses the document. Then
 `tests/test_native.py` (byte parity between the two encoders) and the
-scheduled publishes of the affected sources, which pin
-`XUE_ENCODER=native`, would fail until the relock. Raising the floor before
-the wheel is on PyPI is worse: `uv sync` fails everywhere, because the
-version cannot be resolved. Keeping steps 1–4 on `release/0.N` confines
-both failure windows to the branch.
+scheduled publishes, which pin `XUE_ENCODER=native`, would fail until the
+relock. Raising the floor before the wheel is on PyPI is worse: `uv sync`
+fails everywhere, because the version cannot be resolved. Keeping steps
+1–4 on `release/0.N` confines both failure windows to the branch.
 
-Workflows that publish a source a released wheel may not know yet
-(`publish-jma.yml` and the other rolling windows except MRMS) resolve the
-encoder at job time with `native.knows_source`, and fall back to the
+Workflows that publish a source whose document a released wheel may not
+implement yet (`publish-jma.yml` and the other rolling windows except
+MRMS) resolve the encoder at job time with `native.knows_source`, which
+hands the wheel the document and reads its answer, and fall back to the
 reference pipeline with a warning.
 
 ## Deploy order

@@ -17,7 +17,7 @@ use time::OffsetDateTime;
 use crate::encode::binformat::write_atomic;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
-use crate::encode::sources::SOURCES;
+use crate::encode::registry::Registry;
 
 /// A bundle's `variable` is a name, not a registered number: it must look like
 /// one (`^[a-z][a-z0-9]*$`) and be unique within the manifest, and nothing
@@ -32,11 +32,10 @@ use crate::encode::sources::SOURCES;
 /// manifest's `model` string): a forecast manifest naming neither
 /// temperature nor precipitation, or a radar manifest without the
 /// reflectivity, describes a run the viewer cannot open.
-fn core_bundle_ids(model: &str) -> Result<&'static [&'static str]> {
-    SOURCES
-        .iter()
-        .find(|source| source.manifest_model == model)
-        .map(|source| source.core_bundle_ids)
+fn core_bundle_ids<'a>(registry: &'a Registry, model: &str) -> Result<&'a [String]> {
+    registry
+        .source_by_manifest_model(model)
+        .map(|source| source.core_bundle_ids.as_slice())
         .ok_or_else(|| EncodeError::manifest(format!("manifest model is not a registered dataset: {model}")))
 }
 
@@ -180,6 +179,7 @@ pub fn build_bin_manifest(
     model: &str,
     product: &str,
     require_core_variables: bool,
+    registry: &Registry,
 ) -> Result<Value> {
     let mut payload = Map::new();
     payload.insert("schemaVersion".into(), json!(5));
@@ -189,14 +189,14 @@ pub fn build_bin_manifest(
     payload.insert("forecastHours".into(), json!(expected_hours));
     payload.insert("bundles".into(), Value::Array(bundles));
     let payload = Value::Object(payload);
-    validate_bin_manifest(&payload, require_core_variables)?;
+    validate_bin_manifest(&payload, require_core_variables, registry)?;
     Ok(payload)
 }
 
 /// The structural rules a reader depends on. Deliberately a subset of the
 /// Python validator — the bundle paths, the shape of a bundle name, and the
 /// core set — since the Python side stays the contract's reference.
-fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Result<()> {
+fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry: &Registry) -> Result<()> {
     let bundles = payload["bundles"]
         .as_array()
         .ok_or_else(|| EncodeError::manifest("manifest bundles must be a list"))?;
@@ -224,8 +224,8 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool) -> Resul
         seen.push(variable);
     }
     if require_core_variables {
-        for variable in core_bundle_ids(payload["model"].as_str().unwrap_or_default())? {
-            if !seen.contains(variable) {
+        for variable in core_bundle_ids(registry, payload["model"].as_str().unwrap_or_default())? {
+            if !seen.contains(&variable.as_str()) {
                 return Err(EncodeError::manifest(format!(
                     "manifest is missing the required {variable} bundle"
                 )));
@@ -326,7 +326,8 @@ mod tests {
     fn manifest(entries: Vec<Value>) -> Result<Value> {
         let mut bundles = entries;
         bundles.push(json!({"variable": "prate", "path": "prate.xue", "byteLength": 10, "crc32": "0123abcd"}));
-        build_bin_manifest(datetime!(2026-08-15 06:00 UTC), bundles, 120, "GFS", "pgrb2.0p25", true)
+        let registry = crate::encode::registry::Registry::embedded();
+        build_bin_manifest(datetime!(2026-08-15 06:00 UTC), bundles, 120, "GFS", "pgrb2.0p25", true, &registry)
     }
 
     #[test]

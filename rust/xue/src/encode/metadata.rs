@@ -12,9 +12,8 @@ use time::OffsetDateTime;
 use crate::encode::binformat::HOUR_SECONDS;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::grid::GridInfo;
-use crate::encode::quantize::codebook;
+use crate::encode::registry::Registry;
 use crate::encode::sources::SourceSpec;
-use crate::encode::variables::variable_spec;
 use crate::format::gcd;
 
 /// Bundle metadata schema this encoder writes: every variable descriptor
@@ -83,8 +82,9 @@ fn variable_metadata(
     source: &SourceSpec,
     profile: &str,
     producers: &[(String, (String, String))],
+    registry: &Registry,
 ) -> Result<Value> {
-    let spec = variable_spec(variable_id)?;
+    let spec = registry.variable(variable_id)?;
     let mut parameter = spec.parameter_metadata();
     if let Some((_, process)) = source
         .statistical_processes
@@ -109,7 +109,7 @@ fn variable_metadata(
         // which channel of which instrument this one is.
         block.insert("band".into(), Value::Object(band.metadata()));
     }
-    if let Some(registered) = spec.producer_id {
+    if let Some(registered) = spec.producer_id.as_deref() {
         // A composite's gun: the algorithm that derived it, whose version is
         // the series' stamp (the fetch stage ran it; the converter did not).
         let stamp = producers
@@ -124,15 +124,15 @@ fn variable_metadata(
             })?;
         block.insert("producer".into(), json!({ "id": stamp.0, "version": stamp.1 }));
     }
-    if let Some(aerosol) = spec.grib2_aerosol {
+    if let Some(aerosol) = &spec.aerosol {
         // An aerosol product: the parameter names the quantity, the block
         // beside it the species and the intervals it was computed over —
         // the rest of the identity a template 4.48 record carries.
-        block.insert("aerosol".into(), Value::Object(aerosol.metadata()));
+        block.insert("aerosol".into(), Value::Object(aerosol.clone()));
     }
     block.insert(
         "quantization".into(),
-        Value::Object(codebook(profile, variable_id)?.metadata()),
+        Value::Object(registry.codebook(profile, variable_id)?.metadata()),
     );
     Ok(Value::Object(block))
 }
@@ -147,6 +147,7 @@ pub fn build_metadata(
     source: &SourceSpec,
     unit_seconds: i64,
     producers: &[(String, (String, String))],
+    registry: &Registry,
 ) -> Result<Value> {
     let mut block = Map::new();
     block.insert("schemaVersion".into(), json!(METADATA_SCHEMA_VERSION));
@@ -167,7 +168,7 @@ pub fn build_metadata(
                 .iter()
                 .enumerate()
                 .map(|(index, variable_id)| {
-                    variable_metadata(variable_id, index as u8 + 1, source, profile, producers)
+                    variable_metadata(variable_id, index as u8 + 1, source, profile, producers, registry)
                 })
                 .collect::<Result<Vec<_>>>()?,
         ),
@@ -249,7 +250,8 @@ impl serde_json::ser::Formatter for SpacedFormatter {
 mod tests {
     use super::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
     use crate::encode::grid::GridInfo;
-    use crate::encode::sources::{source_spec, SatelliteBand};
+    use crate::encode::registry::Registry;
+    use crate::encode::sources::SatelliteBand;
 
     #[test]
     fn the_axis_unit_is_the_coarsest_that_fits() {
@@ -263,18 +265,20 @@ mod tests {
 
     #[test]
     fn metadata_is_schema_version_three_and_compact() {
-        let source = source_spec("gfs").expect("gfs");
+        let registry = Registry::embedded();
+        let source = registry.source("gfs").expect("gfs");
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-        let uniform = build_metadata(run_time, &[0, 1, 2], &grid, "quality", &["tmp2m"], source, 3600, &[])
+        let uniform = build_metadata(run_time, &[0, 1, 2], &grid, "quality", &["tmp2m"], source, 3600, &[], &registry)
             .expect("metadata");
         let text = serde_json::to_string(&uniform).expect("json");
         assert!(text.starts_with(r#"{"schemaVersion":3,"model":"GFS","product":"pgrb2.0p25""#));
         assert!(text.contains(r#""time":{"unitSeconds":3600,"firstFrameOffset":0,"frameCount":3,"frameStep":1}"#));
         assert!(text.contains(r#""parameter":{"discipline":0,"parameterCategory":0,"parameterNumber":0,"typeOfFirstFixedSurface":103,"scaleFactorOfFirstFixedSurface":0,"scaledValueOfFirstFixedSurface":2}"#));
+        assert!(text.contains(r#""quantization":{"type":"linear","offset":-60.0,"scale":0.5,"minimumCode":0,"maximumCode":220,"nodataCode":255}"#));
 
         // A mixed-cadence axis lists its offsets rather than declaring a step.
-        let mixed = build_metadata(run_time, &[0, 1, 2, 5], &grid, "quality", &["tmp2m"], source, 3600, &[])
+        let mixed = build_metadata(run_time, &[0, 1, 2, 5], &grid, "quality", &["tmp2m"], source, 3600, &[], &registry)
             .expect("metadata");
         let text = serde_json::to_string(&mixed).expect("json");
         assert!(text.contains(r#""frameOffsets":[0,1,2,5]"#));
@@ -286,19 +290,20 @@ mod tests {
         // No registered source images from a spacecraft yet; the block is
         // written from the source table's `bands` and decoded back by the
         // reader, whose own tests hold its shape.
-        let mut source = *source_spec("cma").expect("cma");
-        source.bands = &[(
-            "cref",
+        let registry = Registry::embedded();
+        let mut source = registry.source("cma").expect("cma").clone();
+        source.bands = vec![(
+            "cref".to_string(),
             SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96061 },
         )];
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
-        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], &source, 360, &[])
+        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], &source, 360, &[], &registry)
             .expect("metadata");
         let text = serde_json::to_string(&metadata).expect("json");
         assert!(text.contains(r#"},"band":{"satelliteSeries":0,"satelliteNumber":174,"instrumentType":297,"scaleFactorOfCentralWaveNumber":0,"scaledValueOfCentralWaveNumber":96061},"quantization":{"#));
         crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
-        let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], source_spec("cma").unwrap(), 360, &[])
+        let plain = build_metadata(run_time, &[0, 1], &grid, "quality", &["cref"], registry.source("cma").unwrap(), 360, &[], &registry)
             .expect("metadata");
         assert!(!serde_json::to_string(&plain).unwrap().contains("band"));
     }
@@ -308,10 +313,11 @@ mod tests {
     /// decoder reads it back; an ordinary variable writes none.
     #[test]
     fn an_aerosol_product_writes_its_identity_beside_the_parameter() {
-        let source = source_spec("gefsaero").expect("gefsaero");
+        let registry = Registry::embedded();
+        let source = registry.source("gefsaero").expect("gefsaero");
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-09-19 00:00:00 UTC);
-        let metadata = build_metadata(run_time, &[0, 3], &grid, "balanced", &["aoddust", "pm25"], source, 3600, &[])
+        let metadata = build_metadata(run_time, &[0, 3], &grid, "balanced", &["aoddust", "pm25"], source, 3600, &[], &registry)
             .expect("metadata");
         let text = serde_json::to_string(&metadata).expect("json");
         assert!(text.contains(
@@ -321,7 +327,7 @@ mod tests {
             r#""aerosolType":62000,"typeOfSizeInterval":0,"scaleFactorOfFirstSize":7,"scaledValueOfFirstSize":25,"scaleFactorOfSecondSize":0,"scaledValueOfSecondSize":0,"typeOfWavelengthInterval":255,"scaleFactorOfFirstWavelength":null,"scaledValueOfFirstWavelength":null,"scaleFactorOfSecondWavelength":null,"scaledValueOfSecondWavelength":null}"#
         ));
         crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
-        let plain = build_metadata(run_time, &[0, 3], &grid, "balanced", &["tmp2m"], source_spec("gfs").unwrap(), 3600, &[])
+        let plain = build_metadata(run_time, &[0, 3], &grid, "balanced", &["tmp2m"], registry.source("gfs").unwrap(), 3600, &[], &registry)
             .expect("metadata");
         assert!(!serde_json::to_string(&plain).unwrap().contains("aerosol"));
     }
@@ -330,10 +336,11 @@ mod tests {
     fn a_derived_rate_declares_its_statistical_process() {
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
         let run_time = time::macros::datetime!(2026-08-14 06:00:00 UTC);
+        let registry = Registry::embedded();
         for (model, expected) in [("gfs", false), ("ecmwf", true), ("ifs", true), ("sflux", true)] {
-            let source = source_spec(model).expect("source");
+            let source = registry.source(model).expect("source");
             let metadata =
-                build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600, &[])
+                build_metadata(run_time, &[3], &grid, "quality", &["prate"], source, 3600, &[], &registry)
                     .expect("metadata");
             let text = serde_json::to_string(&metadata).expect("json");
             assert_eq!(
