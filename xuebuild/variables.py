@@ -1254,7 +1254,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # that tells the three apart — same parameter, same grid — so the swell
     # identities declare the value and match only 1. GDAL knows no name for
     # the surface and spells it ``1-RESERVED(241)``; the matcher reads the
-    # rank off the assembled template instead (gdal._is_ordered_sequence_record).
+    # rank off the assembled template instead (the ``template-rank`` rule).
     # The directions are degrees true the waves come *from*, like ``dirpw``,
     # and like it are inputs only: each ships inside the vector derived from
     # it and its height. Every record carries the bitmap the combined fields

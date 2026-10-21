@@ -159,8 +159,9 @@ both ends. The 06/18 cycles reach 144 h here (90 h at 0.25°,
 directory (`fetch.py::ECMWF_OPEN_DATA_MODELS`, `aifs-single` beside `ifs`),
 landing ~5.5 h after each cycle. Its open data encodes five fields unlike
 IFS, each a `RecordAlternate` under the GFS identity: `tp` as WMO 0/1/52 in
-**kg/m² (mm)** rather than local 0/1/193 in metres (the unit rule
-`gdal.precipitation_accumulation_is_mm`, mirrored in `inspect.rs`), `tcc` as
+**kg/m² (mm)** rather than local 0/1/193 in metres (the
+`precipitation-accumulation` rule's millimetre spellings, mirrored in
+`inspect.rs`), `tcc` as
 WMO 0/6/1 in percent, and the three layer clouds on the ECMWF layer
 boundaries (ground, 800 hPa, 450 hPa). No isobaric `r`, gust, CAPE, ice
 thickness or peak wave period. `tests/test_aifs.py`.
