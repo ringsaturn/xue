@@ -224,7 +224,6 @@ describe("parseModelFromSearch", () => {
   it("resolves served models and their aliases, case-insensitively", () => {
     expect(parseModelFromSearch("?model=gfs")).toBe("gfs");
     expect(parseModelFromSearch("?model=ECMWF")).toBe("ecmwf");
-    expect(parseModelFromSearch("?model=ifs")).toBe("ecmwf");
     expect(parseModelFromSearch("?model=ifs")).toBe("ifs");
     expect(parseModelFromSearch("?model=IFS-0p1")).toBe("ifs");
     expect(parseModelFromSearch("?model=aifs")).toBe("aifs");
