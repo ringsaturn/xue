@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DISRP_CLASSES } from "../../web/src/levels";
 import { decadeLabel, logRange, valueNear } from "../../web/src/river/hydrograph";
-import { packValues, segmentInstances } from "../../web/src/river/layer";
+import { boundsMeetTile, instanceBounds, packValues, segmentInstances } from "../../web/src/river/layer";
 import { reachClass, reachRatio, reachWidthPx, riverClassColors, RIVER_NODATA_COLOR } from "../../web/src/river/palette";
 
 describe("river classes", () => {
@@ -52,6 +52,17 @@ describe("the line layer's buffers", () => {
     expect(Array.from(instances.subarray(0, 5))).toEqual([0, 0.5, 0.5, 0.5, 100]);
     expect(instances[9]).toBe(100);
     expect(instances[14]).toBe(101);
+  });
+
+  it("bound a row group so a terrain tile far from it skips it", () => {
+    const bounds = instanceBounds(Float32Array.from([0.25, 0.5, 0.3, 0.4, 7, 0.3, 0.45, 0.28, 0.42, 8]));
+    expect(bounds).toEqual([0.25, 0.4, 0.3, 0.5].map(Math.fround));
+    // The tile holding the group, the same tile one world copy over, and
+    // one beside it.
+    expect(boundsMeetTile(bounds, 0.25, 0.375, 0.125)).toBe(true);
+    expect(boundsMeetTile(bounds, -0.75, 0.375, 0.125)).toBe(true);
+    expect(boundsMeetTile(bounds, 0.5, 0.375, 0.125)).toBe(false);
+    expect(boundsMeetTile(instanceBounds(new Float32Array(0)), 0, 0, 1)).toBe(false);
   });
 
   it("pack no value as a negative flow and an unknown usual flow as 0", () => {
