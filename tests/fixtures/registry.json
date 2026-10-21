@@ -17501,6 +17501,7 @@
     "cat200": {
       "kind": "scalar",
       "derivation": {
+        "kind": "clear-air-turbulence",
         "inputs": [
           "ugrd200",
           "vgrd200",
@@ -17509,13 +17510,13 @@
           "vgrd250",
           "hgt250"
         ],
-        "kind": "clear-air-turbulence",
         "levelHpa": 200
       }
     },
     "cat250": {
       "kind": "scalar",
       "derivation": {
+        "kind": "clear-air-turbulence",
         "inputs": [
           "ugrd200",
           "vgrd200",
@@ -17526,13 +17527,13 @@
           "ugrd250",
           "vgrd250"
         ],
-        "kind": "clear-air-turbulence",
         "levelHpa": 250
       }
     },
     "cat300": {
       "kind": "scalar",
       "derivation": {
+        "kind": "clear-air-turbulence",
         "inputs": [
           "ugrd250",
           "vgrd250",
@@ -17541,7 +17542,6 @@
           "vgrd300",
           "hgt300"
         ],
-        "kind": "clear-air-turbulence",
         "levelHpa": 300
       }
     },
@@ -17622,13 +17622,13 @@
     "ptype": {
       "kind": "scalar",
       "derivation": {
+        "kind": "precipitation-type",
         "inputs": [
           "crain",
           "cfrzr",
           "cicep",
           "csnow"
-        ],
-        "kind": "precipitation-type"
+        ]
       }
     },
     "qflux1000": {
@@ -17806,88 +17806,88 @@
     "thetae1000": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp1000",
           "spfh1000"
         ],
-        "kind": "theta-e",
         "levelHpa": 1000
       }
     },
     "thetae200": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp200",
           "spfh200"
         ],
-        "kind": "theta-e",
         "levelHpa": 200
       }
     },
     "thetae250": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp250",
           "spfh250"
         ],
-        "kind": "theta-e",
         "levelHpa": 250
       }
     },
     "thetae300": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp300",
           "spfh300"
         ],
-        "kind": "theta-e",
         "levelHpa": 300
       }
     },
     "thetae500": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp500",
           "spfh500"
         ],
-        "kind": "theta-e",
         "levelHpa": 500
       }
     },
     "thetae700": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp700",
           "spfh700"
         ],
-        "kind": "theta-e",
         "levelHpa": 700
       }
     },
     "thetae850": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp850",
           "spfh850"
         ],
-        "kind": "theta-e",
         "levelHpa": 850
       }
     },
     "thetae925": {
       "kind": "scalar",
       "derivation": {
+        "kind": "theta-e",
         "inputs": [
           "tmp925",
           "spfh925"
         ],
-        "kind": "theta-e",
         "levelHpa": 925
       }
     },

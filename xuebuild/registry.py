@@ -137,15 +137,18 @@ def _bundles() -> dict[str, Any]:
     for bundle_id, members in VOLUME_BUNDLES.items():
         bundles[bundle_id] = {"kind": "volume", "members": list(members)}
     for bundle_id, inputs in DERIVED_SCALARS.items():
-        derivation: dict[str, Any] = {"inputs": list(inputs)}
+        derivation: dict[str, Any] = {}
         if theta_e_level(bundle_id) is not None:
             derivation["kind"] = "theta-e"
-            derivation["levelHpa"] = theta_e_level(bundle_id)
         elif cat_level(bundle_id) is not None:
             derivation["kind"] = "clear-air-turbulence"
-            derivation["levelHpa"] = cat_level(bundle_id)
         else:
             derivation["kind"] = "precipitation-type"
+        derivation["inputs"] = list(inputs)
+        if theta_e_level(bundle_id) is not None:
+            derivation["levelHpa"] = theta_e_level(bundle_id)
+        elif cat_level(bundle_id) is not None:
+            derivation["levelHpa"] = cat_level(bundle_id)
         bundles[bundle_id] = {"kind": "scalar", "derivation": derivation}
     bundles["prate"] = {
         "kind": "scalar",
