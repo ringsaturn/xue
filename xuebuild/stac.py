@@ -1335,17 +1335,22 @@ def _variant_tier(variant: dict[str, Any], bundle_id: str) -> str:
     return tier
 
 
+# The titles of the bundles whose members' labels do not name the whole:
+# the composite and volume bundles with a prose of their own.
+_BUNDLE_TITLES: dict[str, str] = {
+    "dustrgb": "Dust RGB (red, green and blue guns)",
+    "refl3d": "Radar reflectivity volume (33 CAPPI levels, 0.5–19 km MSL)",
+    "cloud3d": "Cloud water volume (24 levels, 0.25–12 km MSL)",
+}
+
+
 def _bundle_title(bundle_id: str) -> str:
     if bundle_id in VECTOR_BUNDLES:
         u, v = VECTOR_BUNDLES[bundle_id]
         labels = [VARIABLES[c].label for c in (u, v) if c in VARIABLES]
         return " / ".join(labels) if labels else bundle_id
-    if bundle_id == "dustrgb":
-        return "Dust RGB (red, green and blue guns)"
-    if bundle_id == "refl3d":
-        return "Radar reflectivity volume (33 CAPPI levels, 0.5–19 km MSL)"
-    if bundle_id == "cloud3d":
-        return "Cloud water volume (24 levels, 0.25–12 km MSL)"
+    if bundle_id in _BUNDLE_TITLES:
+        return _BUNDLE_TITLES[bundle_id]
     spec = VARIABLES.get(bundle_id)
     return spec.label if spec is not None else bundle_id
 
