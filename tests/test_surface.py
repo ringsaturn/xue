@@ -28,7 +28,6 @@ from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     PTYPE_CODES,
     VECTOR_BUNDLES,
-    VIDEO_VARIABLE_IDS,
     derive_ptype,
     published_bundle_ids,
 )
@@ -176,7 +175,7 @@ class RegistryTests(unittest.TestCase):
         for variable_id in SURFACE_VARIABLE_IDS:
             self.assertIn(variable_id, gfs)
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
-            self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
+            self.assertNotIn("video", variable_spec(variable_id).companions)
         self.assertIn("wind100m", gfs)
         self.assertIn("wind80m", published_bundle_ids(source_spec("hrrr")))
         ecmwf = published_bundle_ids(source_spec("ecmwf"))

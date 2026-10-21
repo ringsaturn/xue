@@ -43,7 +43,6 @@ from xuebuild import grib2
 from xuebuild.binconvert import (
     SOIL_KELVIN_THRESHOLD,
     VECTOR_BUNDLES,
-    VIDEO_VARIABLE_IDS,
     _convert_units,
     _extract_planes,
     _grid_info,
@@ -227,7 +226,7 @@ class SourceTests(unittest.TestCase):
                     self.assertIsNone(source.companion_of(variable_id), variable_id)
                     self.assertNotIn(variable_id, source.optional_at_analysis)
                     self.assertNotIn(variable_id, VECTOR_BUNDLES)
-                    self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
+                    self.assertNotIn("video", variable_spec(variable_id).companions)
                     self.assertFalse(variable_spec(variable_id).static, variable_id)
         for model in ("hrrr", "sflux", "ifshres", "cfs", "gefsaero"):
             published = published_bundle_ids(source_spec(model))

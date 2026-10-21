@@ -75,12 +75,10 @@ from .manifest import (
 )
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .observation import inspect_observation
-from .quantize import PRESSURE_VARIABLE_IDS, PROFILES, PrecipitationCodebook, TemperatureCodebook
+from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
 from .sources import Downsample, SourceSpec, family_frame_path, source_spec
 from .variables import (
-    CAT_LEVELS_HPA,
-    REFLECTIVITY_VARIABLE_IDS,
     STANDARD_GRAVITY,
     VARIABLES,
     variable_spec,
@@ -96,39 +94,22 @@ remain readable; nothing new is written at them."""
 
 
 
-# The scalars that also get an H.264 companion: the surface fields the video
-# path was built for. It is an opt-in path (`?use_h264=true`), so the
-# upper-air fills ship bundles and posters only rather than cost the
-# scheduled build an ffmpeg pass per level — and a source can turn the
-# companion off altogether (`SourceSpec.video`), which is what
-# `video_variable_ids` reads.
-VIDEO_VARIABLE_IDS = frozenset({"tmp2m", "prate", "dswrf", "cref"})
-
-
 def video_variable_ids(source: SourceSpec) -> frozenset[str]:
-    """The scalars of one source that ship an H.264 companion: the surface
-    fields above, or none at all where the source has switched the video
-    path off."""
-    return VIDEO_VARIABLE_IDS if source.video else frozenset()
+    """The scalars of one source that ship an H.264 companion: the
+    variables whose ``companions`` name ``video`` (the surface fields the
+    video path was built for; it is an opt-in path, ``?use_h264=true``, so
+    the upper-air fills ship bundles and posters only rather than cost the
+    scheduled build an ffmpeg pass per level), or none at all where the
+    source has switched the video path off (``SourceSpec.video``)."""
+    if not source.video:
+        return frozenset()
+    return frozenset(variable_id for variable_id, spec in VARIABLES.items() if "video" in spec.companions)
 
 
-# Precipitation and radar reflectivity move with weather systems, so temporal
-# differencing makes them larger, not smaller: their chunks stack the codes
-# RAW. Every linear-codebook field is smooth enough to chain against the
-# previous frame inside its chunk. The categorical precipitation type is RAW
-# for the same reason a codebook of classes never differences: every class
-# boundary moves with the weather, and a category's code is not a number.
-# The clear-air turbulence index is a product of horizontal and vertical
-# gradients, cell-scale structure that does not persist three hours: on a
-# real GFS and ECMWF run, nil clamp included, chaining makes its chunks
-# half as large again as RAW.
-RAW_VARIABLE_IDS = {"prate", "cref", "ptype", *REFLECTIVITY_VARIABLE_IDS, *(f"cat{level}" for level in CAT_LEVELS_HPA)}
-# The pressure family (sea level pressure, pressure-level geopotential
-# heights) ships bundles only: the frontend draws it as contour lines, which
-# needs the exact codes and never the H.264 companion's chroma-subsampled
-# approximation, and a poster would paint a filled field the view does not
-# show. Everything else about them is an ordinary linear scalar bundle.
-PRESSURE_BUNDLE_IDS = frozenset(PRESSURE_VARIABLE_IDS)
+def _predictor(variable_id: str) -> int:
+    """The container predictor the variable's ``predictor`` rule names:
+    chunks chain against the previous frame, or stack the codes raw."""
+    return binformat.PREDICTOR_RAW if variable_spec(variable_id).predictor == "raw" else binformat.PREDICTOR_PREVIOUS
 
 # The resolution ladder's tier names by decimation factor: the suffix of
 # the rendition's files (`<bundle>.half.xue`, `<bundle>.half.zarr`) and its
@@ -136,15 +117,6 @@ PRESSURE_BUNDLE_IDS = frozenset(PRESSURE_VARIABLE_IDS)
 # (the half alone for every grid but the satellite disks, which take all
 # three); any other factor is a registry bug, not a runtime case.
 VARIANT_TIERS: dict[int, str] = {2: "half", 4: "quarter", 8: "eighth"}
-
-# The variables whose reduced tiers keep the warmest code around each sample
-# site rather than the site's own (:func:`_decimate_peak_codes`): the 3.9 µm
-# window is published to show fires, and a hot spot one cell wide sits on a
-# kept row and column only one time in four at the half tier. Its full tier
-# is already the peak of the source pixels (the satellite fetch's
-# ``PEAK_CHANNEL_IDS``). Mirrored by `PEAK_DECIMATION_IDS` in
-# rust/xue/src/encode/convert.rs.
-PEAK_DECIMATION_IDS = frozenset({"ir039"})
 
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
 _EXTRACT_WORKERS = min(16, os.cpu_count() or 4)
@@ -1767,14 +1739,7 @@ def _bundle_chunks(
     id order the spec fixes is the bundle's own variable order.
     """
     numeric_ids = {variable_id: index for index, variable_id in enumerate(variable_ids, start=1)}
-    predictors = {
-        numeric_ids[variable_id]: (
-            binformat.PREDICTOR_RAW
-            if variable_id in RAW_VARIABLE_IDS
-            else binformat.PREDICTOR_PREVIOUS
-        )
-        for variable_id in variable_ids
-    }
+    predictors = {numeric_ids[variable_id]: _predictor(variable_id) for variable_id in variable_ids}
     planes = {
         offset: {numeric_ids[variable_id]: codes[offset][variable_id] for variable_id in variable_ids}
         for offset in offsets
@@ -1814,9 +1779,12 @@ def _decimate_peak_codes(codes: np.ndarray, grid: GridInfo, factor: int, nodata_
 
 
 def _decimate_variant_codes(variable_id: str, codes: np.ndarray, grid: GridInfo, factor: int, profile: str) -> np.ndarray:
-    """One plane's reduced tier: the peak-keeping decimation for the
-    variables in :data:`PEAK_DECIMATION_IDS`, the site's own code otherwise."""
-    if variable_id in PEAK_DECIMATION_IDS:
+    """One plane's reduced tier by the variable's ``decimation`` rule: the
+    peak-keeping decimation (:func:`_decimate_peak_codes`) for a variable
+    whose full tier is already the peak of the source pixels and whose
+    one-cell hot spots must survive the half tier — the 3.9 µm window,
+    published to show fires — or the site's own code."""
+    if variable_spec(variable_id).decimation == "peak":
         return _decimate_peak_codes(codes, grid, factor, PROFILES[profile][variable_id].nodata_code)
     return _decimate_codes(codes, grid, factor)
 
@@ -1840,7 +1808,10 @@ def _store_source(
     return zarrstore.CodesSource(
         metadata,
         {variable_id: [codes[offset][variable_id] for offset in offsets] for variable_id in variable_ids},
-        {variable_id: "raw" if variable_id in RAW_VARIABLE_IDS else "previous" for variable_id in variable_ids},
+        {
+            variable_id: "raw" if variable_spec(variable_id).predictor == "raw" else "previous"
+            for variable_id in variable_ids
+        },
         tile,
     )
 
@@ -2470,11 +2441,12 @@ def convert_bin(
         for bundle_id in available_vector_ids + available_composite_ids + available_volume_ids
         for variable_id in bundle_variable_ids(bundle_id)
     )
-    # Scalars that also ship a poster — every published scalar but the
-    # contour-drawn pressure family — and, among those, the surface fields
-    # that also get a video companion when ffmpeg is around.
+    # Scalars that also ship a poster — every published scalar whose
+    # companions name one, which leaves out the contour-drawn pressure
+    # family — and, among those, the surface fields that also get a video
+    # companion when ffmpeg is around.
     companion_variable_ids = tuple(
-        variable_id for variable_id in scalar_variable_ids if variable_id not in PRESSURE_BUNDLE_IDS
+        variable_id for variable_id in scalar_variable_ids if "poster" in variable_spec(variable_id).companions
     )
     video_bundle_ids = tuple(
         variable_id for variable_id in companion_variable_ids if variable_id in video_variable_ids(source)

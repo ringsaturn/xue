@@ -213,7 +213,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertEqual(PROFILES["quality"][variable_id].metadata()["maximumCode"], 253)
             self.assertEqual(PROFILES["balanced"][variable_id], PROFILES["quality"][variable_id])
             self.assertEqual(PROFILES["compact"][variable_id].step, 0.02)
-            self.assertNotIn(variable_id, binconvert.RAW_VARIABLE_IDS)
+            self.assertEqual(variable_spec(variable_id).predictor, "delta")
 
     def test_the_committed_volume_registry_still_describes_this_encoder(self) -> None:
         pinned = json.loads(VOLUME_REGISTRY.read_text(encoding="utf-8"))

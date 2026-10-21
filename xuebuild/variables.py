@@ -397,6 +397,8 @@ VARIABLES: dict[str, VariableSpec] = {
         # pgrb2 fetches only the instantaneous PRATE record, so the surface
         # rule hits exactly it; the MRMS rate is its own product.
         gdal_rules=(rules.surface("PRATE"), rules.template_mrms()),
+        # Precipitation moves with weather systems, so temporal differencing
+        # makes its chunks larger, not smaller: the codes stack raw.
         predictor="raw",
         companions=("poster", "video"),
         label="Precipitation rate",
@@ -655,6 +657,7 @@ VARIABLES: dict[str, VariableSpec] = {
         # it in full.
         conversion=rules.REFLECTIVITY,
         gdal_rules=(rules.entire_atmosphere("REFC"), rules.template_mrms()),
+        # Reflectivity moves with the weather like precipitation: raw codes.
         predictor="raw",
         companions=("poster", "video"),
         label="Composite radar reflectivity",
@@ -947,6 +950,8 @@ VARIABLES: dict[str, VariableSpec] = {
     "ptype": VariableSpec(
         id="ptype",
         conversion=rules.code_table("4.201"),
+        # A codebook of classes never differences: every class boundary moves
+        # with the weather, and a category's code is not a number.
         predictor="raw",
         label="Precipitation type",
         output_unit="1",
@@ -1496,6 +1501,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # confidence field and published by no source.
     "ir039": VariableSpec(
         id="ir039",
+        # Published to show fires: a hot spot one cell wide sits on a kept row
+        # and column only one time in four at the half tier, so the reduced
+        # tiers keep the warmest code around each site. The full tier is
+        # already the peak of the source pixels (the fetch's PEAK_CHANNEL_IDS).
         decimation="peak",
         label="Brightness temperature, 3.9 µm",
         output_unit="K",

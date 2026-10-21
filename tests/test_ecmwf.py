@@ -34,7 +34,7 @@ from datetime import UTC, datetime
 import numpy as np
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
-from xuebuild import binconvert, grib2
+from xuebuild import grib2
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
 from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
@@ -101,7 +101,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertEqual(video_variable_ids(source_spec(model)), frozenset(), model)
         for model in ("gfs", "hrrr"):
             self.assertTrue(source_spec(model).video, model)
-            self.assertEqual(video_variable_ids(source_spec(model)), binconvert.VIDEO_VARIABLE_IDS, model)
+            self.assertEqual(video_variable_ids(source_spec(model)), {"tmp2m", "prate", "dswrf", "cref"}, model)
 
 
 class FetchTests(unittest.TestCase):

@@ -51,7 +51,6 @@ from xuebuild.binconvert import (
     DERIVED_VECTORS,
     SWELL_BUNDLE_ID,
     VECTOR_BUNDLES,
-    VIDEO_VARIABLE_IDS,
     WAVE_BUNDLE_ID,
     WIND_WAVE_BUNDLE_ID,
     GridInfo,
@@ -64,6 +63,7 @@ from xuebuild.binconvert import (
     derive_wave_vector,
     published_bundle_ids,
     vector_input_ids,
+    video_variable_ids,
 )
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -240,7 +240,7 @@ class RegistryTests(unittest.TestCase):
         for variable_id in OCEAN_VARIABLE_IDS:
             self.assertIn(variable_id, gfs.input_variable_ids)
             self.assertNotIn(variable_id, VECTOR_BUNDLES)
-            self.assertNotIn(variable_id, VIDEO_VARIABLE_IDS)
+            self.assertNotIn("video", variable_spec(variable_id).companions)
             # The direction ships inside the wave vector only: as a scalar
             # it is no chart (0 is north and land alike), and the vector
             # carries it to five degrees where the sea is over a metre.
@@ -258,7 +258,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(DERIVED_VECTORS[WAVE_BUNDLE_ID], ("htsgw", "dirpw"))
         self.assertEqual(vector_input_ids(WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertEqual(bundle_input_ids(gfs, WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
-        self.assertNotIn(WAVE_BUNDLE_ID, VIDEO_VARIABLE_IDS)
+        self.assertNotIn(WAVE_BUNDLE_ID, video_variable_ids(gfs))
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         for bundle_id in WAVE_PARTITION_IDS + (WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID):
             self.assertNotIn(bundle_id, ecmwf, "ECMWF open data carries no partitions")

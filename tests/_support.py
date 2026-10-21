@@ -436,8 +436,9 @@ def decimated_rung(plane: Any, factor: int, variable_id: str, profile: str = "qu
     from numpy.lib.stride_tricks import sliding_window_view
 
     from xuebuild.quantize import PROFILES
+    from xuebuild.variables import variable_spec
 
-    if variable_id not in binconvert.PEAK_DECIMATION_IDS:
+    if variable_spec(variable_id).decimation != "peak":
         return plane[::factor, ::factor]
     nodata = PROFILES[profile][variable_id].nodata_code
     half = factor // 2

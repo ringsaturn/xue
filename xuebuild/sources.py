@@ -392,7 +392,7 @@ class SourceSpec:
     ``tile`` describe it, not the projected source."""
     video: bool = True
     """Whether the source's surface fields also ship their H.264 companion
-    (:data:`xuebuild.binconvert.VIDEO_VARIABLE_IDS`). The video path is an
+    (the variables whose ``companions`` name ``video``). The video path is an
     opt-in the Xue decoder serves without, so a source turns it off where
     the companion costs more than it is worth: ECMWF's is a quarter the
     size of GFS's and never asked for, and a lossless encode of the sflux

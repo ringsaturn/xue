@@ -22,7 +22,6 @@ from xuebuild.binconvert import (
     CAT_SHEAR_LAYERS,
     DERIVED_SCALARS,
     EARTH_RADIUS_M,
-    RAW_VARIABLE_IDS,
     CropWindow,
     GridInfo,
     _derive_cat_plane,
@@ -220,7 +219,8 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(spec.parameter_metadata()["parameterNumber"], 29)
         self.assertEqual(PROFILES["quality"]["cat300"].metadata()["maximumCode"], 127)
         # Stacked RAW: chaining measured 50-54 % larger on real runs.
-        self.assertLessEqual({"cat300", "cat250", "cat200"}, RAW_VARIABLE_IDS)
+        for bundle_id in ("cat300", "cat250", "cat200"):
+            self.assertEqual(variable_spec(bundle_id).predictor, "raw", bundle_id)
 
     def test_gfs_and_ecmwf_publish_and_calibrate_all_three(self) -> None:
         for model in ("gfs", "ecmwf", "ifs"):

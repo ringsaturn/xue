@@ -43,7 +43,6 @@ from tests._support import (
 )
 from xuebuild import binconvert, binformat, fetch, grib2, stac
 from xuebuild.binconvert import (
-    RAW_VARIABLE_IDS,
     VOLUME_BUNDLES,
     bundle_input_ids,
     bundle_variable_ids,
@@ -186,7 +185,8 @@ class RegistryTests(unittest.TestCase):
         for profile, books in PROFILES.items():
             for variable_id in REFLECTIVITY_VARIABLE_IDS:
                 self.assertEqual(books[variable_id], books["cref"], f"{profile} {variable_id}")
-        self.assertTrue(set(REFLECTIVITY_VARIABLE_IDS) <= RAW_VARIABLE_IDS)
+        for variable_id in REFLECTIVITY_VARIABLE_IDS:
+            self.assertEqual(variable_spec(variable_id).predictor, "raw", variable_id)
         for variable_id in ("refl500", "refl19000"):
             self.assertEqual(raster_expression(variable_spec(variable_id), "dBZ"), "A")
         with self.assertRaises(ConversionError):

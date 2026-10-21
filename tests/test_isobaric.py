@@ -25,12 +25,12 @@ import numpy as np
 from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     VECTOR_BUNDLES,
-    VIDEO_VARIABLE_IDS,
     bundle_input_ids,
     derive_vapour_flux,
     published_bundle_ids,
     vapour_flux_level,
     vector_input_ids,
+    video_variable_ids,
 )
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
@@ -147,7 +147,7 @@ class VectorBundleTests(unittest.TestCase):
         )
 
     def test_only_the_surface_fields_get_a_video_companion(self) -> None:
-        self.assertEqual(set(VIDEO_VARIABLE_IDS), {"tmp2m", "prate", "dswrf", "cref"})
+        self.assertEqual(set(video_variable_ids(source_spec("gfs"))), {"tmp2m", "prate", "dswrf", "cref"})
 
     def test_the_vapour_flux_is_q_v_over_g(self) -> None:
         q = np.array([10.0, 0.0, 20.0])  # g/kg
