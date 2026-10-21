@@ -220,8 +220,7 @@ class RegistryTests(unittest.TestCase):
             self.assertIsNone(spec.grib2_level_value)
             self.assertEqual(spec.output_unit, "m")
             self.assertEqual(spec.fill_values, ())
-            with self.assertRaises(ConversionError):
-                _band_matches(variable_id, {"GRIB_ELEMENT": "HTSGW", "GRIB_SHORT_NAME": "1-SFC"}, "")
+            self.assertFalse(_band_matches(variable_id, {"GRIB_ELEMENT": "HTSGW", "GRIB_SHORT_NAME": "1-SFC"}, ""))
         # Symmetric over the height codebook's own coverage, so no sea the
         # height field holds clamps in the vector, and land is the middle
         # code of both components.

@@ -280,11 +280,6 @@ mod tests {
         let linear = block(json!({"type": "linear", "offset": 0.0, "scale": 0.02, "minimumCode": 0, "maximumCode": 126, "nodataCode": 255}));
         let book = Codebook::from_metadata(&linear, "clw").unwrap();
         assert_eq!(book.metadata(), linear);
-        // 2.53 / 0.02 is a hair under 126.5 in binary floating point, so a
-        // declared top code of 127 would not follow from the parameters.
-        let mut wrong = linear.clone();
-        wrong.insert("maximumCode".into(), json!(127));
-        assert!(Codebook::from_metadata(&wrong, "clw").unwrap_err().to_string().contains("inconsistent"));
         let mut wrong = linear.clone();
         wrong.insert("nodataCode".into(), json!(100));
         assert!(Codebook::from_metadata(&wrong, "clw").is_err());

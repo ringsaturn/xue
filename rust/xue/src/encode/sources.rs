@@ -483,7 +483,7 @@ mod tests {
         assert_eq!(gfs.grid_families().count(), 0);
         assert!(gfs.companion_of("htsgw").is_some() && gfs.grid_family_of("htsgw").is_none());
         assert!(gfs.fetched() && !registry.source("woof").unwrap().fetched());
-        assert!(registry.source("mrms").unwrap().fetched() && !registry.source("cma").unwrap().fetched());
+        assert!(registry.source("mrms").unwrap().fetched() && !registry.source("efas").unwrap().fetched());
     }
 
     #[test]
