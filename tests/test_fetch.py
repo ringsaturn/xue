@@ -239,9 +239,9 @@ class FetchTests(unittest.TestCase):
 
         def exists(url: str) -> bool:
             probed.append(url)
-            return "-240h-oper-fc-pl" not in url
+            return True
 
-        self.assertFalse(_run_is_complete(run, 240, "ifs", exists))
+        self.assertTrue(_run_is_complete(run, 240, "ifs", exists))
         names = {url.rsplit("/", 1)[1] for url in probed}
         self.assertEqual(
             names,
@@ -252,7 +252,10 @@ class FetchTests(unittest.TestCase):
             },
         )
         self.assertTrue(all("/ifs/0p1/" in url for url in probed))
-        self.assertTrue(_run_is_complete(run, 240, "ifs", lambda url: True))
+        # A probe stops at the first object a mirror lacks and moves on to
+        # the next mirror, so one missing part on every mirror is a run
+        # that has not landed.
+        self.assertFalse(_run_is_complete(run, 240, "ifs", lambda url: "-240h-oper-fc-pl" not in url))
 
     def test_ifs_resolution_skips_the_short_cycles_only_past_144_hours(self) -> None:
         now = datetime(2026, 10, 20, 23, 0, tzinfo=UTC)
