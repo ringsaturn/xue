@@ -108,6 +108,10 @@ def knows_source(model: str) -> bool:
             bundle_ids=list(published_bundle_ids(source_spec(model))),
             registry=document_json(),
         )
+    except TypeError:
+        # A wheel from before the document: its convert_bin has no
+        # ``registry`` keyword, so it cannot build from this tree at all.
+        return False
     except Exception as exc:  # noqa: BLE001 - the wheel raises a plain RuntimeError
         message = str(exc)
         return (
