@@ -243,7 +243,7 @@ impl Conversion {
     /// One plane's values taken to the published unit, by the rule's
     /// arithmetic under `unit`, in place: one operation per value, in f64,
     /// the operation `rules.convert` runs. A temperature's unit is read
-    /// through [`temperature_unit`], after the soil read-through for a soil
+    /// through `temperature_unit`, after the soil read-through for a soil
     /// temperature; a direction is reduced modulo 360 so a record's 360
     /// lands on the codebook's 0 (every value is non-negative there, so
     /// this is numpy's `mod`). A spelling the rule does not scale under
