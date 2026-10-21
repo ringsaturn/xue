@@ -342,6 +342,11 @@ def parser() -> argparse.ArgumentParser:
     _model_argument(assemble_parser)
     assemble_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
+    registry_parser = commands.add_parser(
+        "registry", help="print the registry document (docs/registry.md): the variables, bundles and sources this tree builds"
+    )
+    registry_parser.add_argument("--output", type=Path, help="write the document here instead of standard output")
+
     stac_parser = commands.add_parser(
         "stac",
         help="rewrite a published run's or point product issue's STAC documents (docs/stac.md) from the "
@@ -1025,6 +1030,14 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "registry":
+            from .registry import document_json  # noqa: PLC0415
+
+            text = document_json()
+            if arguments.output is None:
+                sys.stdout.write(text)
+            else:
+                arguments.output.write_text(text, encoding="utf-8")
         elif arguments.command == "stac" and arguments.product is not None:
             if arguments.issue is None:
                 raise XueError(f"stac --product {arguments.product} needs the issue it describes: --issue YYYYMMDDHH")

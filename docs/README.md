@@ -12,6 +12,7 @@ terms (see the [README](../README.md#data-and-licensing)).
 | [format.md](format.md) | The `.xue` container (v1, v2), the bundle metadata JSON (`schemaVersion` 1–3), the codebooks and the residual arithmetic |
 | [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store |
 | [stac.md](stac.md) | The STAC catalog: layout, run Items, source Collections, point products, the showcase |
+| [registry.md](registry.md) | The registry document: the variables, bundles and sources an encoder builds, the closed sets of rules it names |
 | [encoder.md](encoder.md) | The native encoder and its byte-for-byte parity rule with the reference encoder |
 | [sources.md](sources.md) | What each source publishes: variables, grids, axes, caveats |
 | [tc.md](tc.md), [airport.md](airport.md), [sounding.md](sounding.md), [synop.md](synop.md), [nexrad.md](nexrad.md) | The point and single-site radar products: pointer, index, files, `schemaVersion` |
