@@ -276,8 +276,14 @@ pub fn snap_global_longitudes(grid: GridInfo) -> GridInfo {
     }
 }
 
-/// The steps a regional grid is snapped to: whole thousandths of a degree.
-const REGIONAL_STEP_UNIT: f64 = 1e-3;
+/// The steps a regional grid is snapped to, as (unit, divisor) in the
+/// order they are tried: whole thousandths of a degree, then whole
+/// arc-minutes (EFAS's 1/60°, which no decimal spells: the double GDAL
+/// derives for it needs seventeen digits, more than some `gdalinfo`
+/// releases print). Mirrors `_REGIONAL_STEP_UNITS` in `xuebuild/binconvert.py`.
+fn regional_step_units() -> [(f64, f64); 2] {
+    [(1e-3, 1000.0), (1.0 / 60.0, 60.0)]
+}
 
 /// Give a regional grid the round step it was clearly published on — the
 /// port of `_snap_regional_steps` in `xuebuild/binconvert.py`, which
@@ -286,12 +292,13 @@ const REGIONAL_STEP_UNIT: f64 = 1e-3;
 /// The same GDAL habit that puts a global grid a hair off the globe puts a
 /// regional one a hair off its step: MRMS writes the last longitude of its
 /// 0.01° grid two millionths short, which GDAL turns into a 0.0099999997°
-/// step. A grid whose cells, at the nearest whole thousandth of a degree,
-/// span its extent to within a thousandth of a cell is on that step, on
-/// both axes independently, and its first *center* is placed on the
-/// half-step grid (a grid whose edges are on whole steps has its centers
-/// half a step in) when it lies within the same tolerance. A step that is
-/// not near a thousandth passes through unchanged, as does a global grid.
+/// step. A grid whose cells, at the nearest whole thousandth of a degree
+/// or, failing that, the nearest whole arc-minute (EFAS's 1/60°), span its
+/// extent to within a thousandth of a cell is on that step, on both axes
+/// independently, and its first *center* is placed on the half-step grid
+/// (a grid whose edges are on whole steps has its centers half a step in)
+/// when it lies within the same tolerance. A step that is near neither
+/// passes through unchanged, as does a global grid.
 pub fn snap_regional_steps(grid: GridInfo) -> GridInfo {
     if grid.wraps() {
         return grid;
@@ -310,21 +317,24 @@ pub fn snap_regional_steps(grid: GridInfo) -> GridInfo {
 }
 
 /// One axis of [`snap_regional_steps`]: `(step, first)` snapped, or as
-/// given. The snapped values are whole thousandths divided out at the end —
+/// given. The snapped values are whole units divided out at the end —
 /// `30 / 1000` is the double nearest 0.03 where `30 * 0.001` is not.
 fn snap_axis(step: f64, first: f64, count: usize) -> (f64, f64) {
-    let thousandths = (step / REGIONAL_STEP_UNIT + 0.5).floor();
-    let rounded = thousandths / 1000.0;
     let count = count as f64;
-    if thousandths == 0.0 || (count * step - count * rounded).abs() > step.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
-        return (step, first);
+    for (unit, divisor) in regional_step_units() {
+        let units = (step / unit + 0.5).floor();
+        let rounded = units / divisor;
+        if units == 0.0 || (count * step - count * rounded).abs() > step.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
+            continue;
+        }
+        let half_steps = (first / (rounded / 2.0) + 0.5).floor();
+        let mut snapped_first = (half_steps * units) / (2.0 * divisor);
+        if (snapped_first - first).abs() > rounded.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
+            snapped_first = first;
+        }
+        return (rounded, snapped_first);
     }
-    let half_steps = (first / (rounded / 2.0) + 0.5).floor();
-    let mut snapped_first = (half_steps * thousandths) / 2000.0;
-    if (snapped_first - first).abs() > rounded.abs() * GLOBAL_SPAN_TOLERANCE_CELLS {
-        snapped_first = first;
-    }
-    (rounded, snapped_first)
+    (step, first)
 }
 
 /// Roll grids that start at Greenwich to the -180-first layout.
@@ -570,6 +580,29 @@ mod tests {
         // 0.03 comes out as the double nearest 0.03, not 30 * 0.001.
         let thirty = snap_regional_steps(GridInfo::new(100, 100, -100.0, 40.0, 0.03 + 1e-10, -0.03));
         assert_eq!(thirty.longitude_step, 0.03);
+    }
+
+    /// The EFAS grid is on the arc-minute, which no thousandth spells: GDAL
+    /// derives 0.016666666666666607 and -0.016666666666666226 from the
+    /// coordinates, and both axes land on the double nearest 1/60 with the
+    /// centers on the half-minute grid — the same doubles the Python side
+    /// writes, however many digits its `gdalinfo` printed.
+    #[test]
+    fn the_efas_grid_snaps_to_its_arc_minute() {
+        let (lon_step, lat_step) = (0.016666666666666607, -0.016666666666666226);
+        let full = snap_regional_steps(GridInfo::new(4530, 2970, -25.25 + lon_step / 2.0, 72.25 + lat_step / 2.0, lon_step, lat_step));
+        assert_eq!((full.longitude_step, full.latitude_step), (1.0 / 60.0, -1.0 / 60.0));
+        assert_eq!((full.first_longitude, full.first_latitude), (-3029.0 / 120.0, 8669.0 / 120.0));
+        let crop = snap_regional_steps(GridInfo::new(21, 15, -0.75 + lon_step / 2.0, 39.55 + lat_step / 2.0, lon_step, lat_step));
+        assert_eq!((crop.first_longitude, crop.first_latitude), (-89.0 / 120.0, 4745.0 / 120.0));
+        // A step a whole thousandth off stays off; so does one near no minute.
+        for grid in [
+            GridInfo::new(100, 100, -100.0, 40.0, 0.011, -0.011),
+            GridInfo::new(100, 100, -100.0, 40.0, 0.0175, -0.0175),
+        ] {
+            let same = snap_regional_steps(grid.clone());
+            assert_eq!((same.longitude_step, same.first_longitude), (grid.longitude_step, grid.first_longitude));
+        }
     }
 
     /// The CFSv2 T126 Gaussian grid, as GDAL reports the surface flux

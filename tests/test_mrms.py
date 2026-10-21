@@ -682,6 +682,21 @@ class GridTests(unittest.TestCase):
         # An origin off the half-step grid keeps its step only.
         self.assertEqual(_snap_axis(0.0099999997, -129.9, 7000), (0.01, -129.9))
 
+    def test_the_efas_grid_snaps_to_its_arc_minute(self) -> None:
+        # No thousandth spells 1/60: GDAL derives these steps from the
+        # coordinates, and both axes land on the double nearest 1/60 with the
+        # centers on the half-minute grid, as the native encoder's do
+        # whatever digits `gdalinfo` printed.
+        lon_step, lat_step = 0.016666666666666607, -0.016666666666666226
+        full = _snap_regional_steps(GridInfo(4530, 2970, -25.25 + lon_step / 2, 72.25 + lat_step / 2, lon_step, lat_step))
+        self.assertEqual((full.longitude_step, full.latitude_step), (1 / 60, -1 / 60))
+        self.assertEqual((full.first_longitude, full.first_latitude), (-3029 / 120, 8669 / 120))
+        crop = _snap_regional_steps(GridInfo(21, 15, -0.75 + lon_step / 2, 39.55 + lat_step / 2, lon_step, lat_step))
+        self.assertEqual((crop.first_longitude, crop.first_latitude), (-89 / 120, 4745 / 120))
+        # A step a whole thousandth off stays off; so does one near no minute.
+        for step in (0.011, 0.0175):
+            self.assertEqual(_snap_axis(step, -100.0, 100), (step, -100.0))
+
     def test_the_block_maximum(self) -> None:
         reduction = BlockReduction(factor=2, source_width=4, source_height=2)
         self.assertEqual(reduction.source_shape, (2, 4))

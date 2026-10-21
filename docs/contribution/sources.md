@@ -91,9 +91,11 @@ satellites, `ifshres`). The fetch stage owns every projection on this path,
 so neither encoder does Gaussian or geostationary arithmetic.
 
 **Grids.** A global grid is snapped to `360 / width` and a regional grid's
-steps to the thousandth of a degree (`_snap_regional_steps`, mirrored in
-`grid.rs`), since GDAL derives the step from the first and last coordinates
-and some producers write the last one short. A `downsample`
+steps to the thousandth of a degree or, failing that, the arc-minute
+(`_snap_regional_steps`, mirrored in `grid.rs`), since GDAL derives the step
+from the first and last coordinates and some producers write the last one
+short; the arc-minute also keeps the two encoders on one double for EFAS's
+1/60°, which `gdalinfo -json` prints short of its seventeen digits. A `downsample`
 (`BlockReduction` on the `GridInfo`) publishes coarser than the source,
 applied in `_extract_planes` after the fill rules and before the crop. A
 `regrid` resamples a projected grid (HRRR, below). `fill_values` fold
