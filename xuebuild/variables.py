@@ -23,6 +23,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import rules
+from .rules import STANDARD_GRAVITY, Conversion, GdalRule  # noqa: F401  (re-exported)
+
 
 #: The fill value of the EFAS series ``xue efas-series`` writes: a cell
 #: that is not a river, or whose return-period class EFAS does not
@@ -248,6 +251,44 @@ class VariableSpec:
     poster and resolution ladder. What marks it is this flag, mirrored in
     the native encoder's source table, and the one-frame axis the reader
     already knows how to draw."""
+    conversion: Conversion = rules.NONE
+    """The unit rule (:mod:`xuebuild.rules`): the arithmetic that takes a
+    record's values to :attr:`output_unit` and the unit spellings a record
+    may carry. ``none`` without spellings accepts any: a field that never
+    arrives as a record, or a series written in its published unit."""
+    gdal_rules: tuple[GdalRule, ...] | None = None
+    """How the record is recognised among a GRIB's bands as GDAL describes
+    them: a list of rules, any one of which accepts the band. Left None,
+    it is derived from the identity (:func:`default_gdal_rules`): a
+    surface-type-1 element on the surface, a 103 at its height, a 100 on
+    its isobaric level, and so on; empty for a field no GRIB band carries.
+    Set where a centre spells the record another way as well (ECMWF's
+    gust on the 10 m surface, its skin temperature as SKINT)."""
+    predictor: str = "delta"
+    """``delta`` chains each chunk against the previous frame; ``raw``
+    stacks the codes as they are, for a field that moves with the weather
+    (precipitation, reflectivity, a categorical type) and so differences
+    larger rather than smaller."""
+    decimation: str = "sample"
+    """How the reduced tiers sample the full one: ``sample`` keeps the
+    site's own code, ``peak`` the warmest code around it (the 3.9 µm
+    window, so a one-cell fire survives the half tier)."""
+    companions: tuple[str, ...] = ("poster",)
+    """Which of ``poster`` and ``video`` the variable's scalar bundle ships
+    beside the store. ``video`` is further subject to the source's
+    ``video`` flag. Empty for the contour-drawn pressure family, whose
+    exact codes a chroma-subsampled frame cannot carry and whose filled
+    poster the view never shows."""
+
+    def __post_init__(self) -> None:
+        if self.gdal_rules is None:
+            object.__setattr__(self, "gdal_rules", default_gdal_rules(self))
+        if self.predictor not in rules.PREDICTORS:
+            raise ValueError(f"{self.id}: unknown predictor {self.predictor}")
+        if self.decimation not in rules.DECIMATIONS:
+            raise ValueError(f"{self.id}: unknown decimation {self.decimation}")
+        if not set(self.companions) <= rules.COMPANIONS:
+            raise ValueError(f"{self.id}: unknown companions {self.companions}")
 
     def parameter_metadata(self) -> dict[str, object]:
         """The variable's GRIB2 identity, as a schema v3 metadata block.
@@ -298,9 +339,45 @@ def _aod_550nm_identity(aerosol_type: int) -> AerosolIdentity:
     )
 
 
+def default_gdal_rules(spec: VariableSpec) -> tuple[GdalRule, ...]:
+    """The GDAL matching rules an entry's identity implies, for an entry
+    that names none of its own: the element on the surface its type names
+    (1 the ground or water surface, 103 a height above ground, 10 and
+    NCEP's 200 the entire atmosphere, 101 mean sea level, 100 an isobaric
+    level), the assembled template where the element and surface do not
+    tell records apart (an aerosol product, a soil layer, a rank of an
+    ordered sequence, an MRMS product on its altitude). Nothing for a
+    field no GRIB band carries."""
+    element = spec.grib_element
+    if spec.grib2_aerosol is not None:
+        return (rules.template_aerosol(),)
+    if not element:
+        return ()
+    level_type, level_value = spec.grib2_level_type, spec.grib2_level_value
+    if level_type == 1:
+        return (rules.surface(element),)
+    if level_type == 103 and level_value is not None:
+        return (rules.height(element, int(level_value)),)
+    if level_type in (10, 200):
+        return (rules.entire_atmosphere(element),)
+    if level_type == 101:
+        return (rules.mean_sea_level(element),)
+    if level_type == 100 and level_value is not None:
+        return (rules.isobaric(element, int(level_value / 100)),)
+    if level_type == 106:
+        return (rules.template(),)
+    if level_type == 241:
+        return (rules.template_rank(),)
+    if level_type == 102 and spec.mrms_product:
+        return (rules.template_mrms(),)
+    return ()
+
+
 VARIABLES: dict[str, VariableSpec] = {
     "tmp2m": VariableSpec(
         id="tmp2m",
+        conversion=rules.CELSIUS,
+        companions=("poster", "video"),
         label="2 meter temperature",
         output_unit="°C",
         value_range=(-60, 50),
@@ -316,6 +393,12 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "prate": VariableSpec(
         id="prate",
+        conversion=rules.PRECIPITATION_RATE,
+        # pgrb2 fetches only the instantaneous PRATE record, so the surface
+        # rule hits exactly it; the MRMS rate is its own product.
+        gdal_rules=(rules.surface("PRATE"), rules.template_mrms()),
+        predictor="raw",
+        companions=("poster", "video"),
         label="Precipitation rate",
         output_unit="mm/h",
         value_range=(0, 50),
@@ -345,6 +428,8 @@ VARIABLES: dict[str, VariableSpec] = {
     # IFS record's metres are scaled up.
     "tp": VariableSpec(
         id="tp",
+        conversion=rules.PRECIPITATION_ACCUMULATION,
+        gdal_rules=(rules.total_precipitation(),),
         label="Total precipitation",
         output_unit="m",
         value_range=(0, 1),
@@ -370,6 +455,8 @@ VARIABLES: dict[str, VariableSpec] = {
     # no source fetches them.
     "apcp": VariableSpec(
         id="apcp",
+        # Read off an Open-Meteo series, never a GRIB band.
+        gdal_rules=(),
         label="Total precipitation",
         output_unit="mm",
         value_range=(0, 1000),
@@ -389,6 +476,9 @@ VARIABLES: dict[str, VariableSpec] = {
     # prate and prate_ave itself never reaches a bundle.
     "prate_ave": VariableSpec(
         id="prate_ave",
+        # The expression is identity: the converter turns window averages
+        # into per-step rates itself.
+        conversion=rules.MASS_RATE,
         label="Window-averaged precipitation rate",
         output_unit="kg/m^2s",
         value_range=(0, 1),
@@ -405,6 +495,8 @@ VARIABLES: dict[str, VariableSpec] = {
     # solar-radiation layer of the sflux source.
     "dswrf": VariableSpec(
         id="dswrf",
+        conversion=rules.RADIATIVE_FLUX,
+        companions=("poster", "video"),
         label="Downward shortwave radiation flux",
         output_unit="W/m²",
         value_range=(0, 1270),
@@ -422,6 +514,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # two-variable wind10m bundle and rendered by the GPU particle layer.
     "ugrd10m": VariableSpec(
         id="ugrd10m",
+        conversion=rules.SPEED,
         label="10 meter U wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -437,6 +530,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "vgrd10m": VariableSpec(
         id="vgrd10m",
+        conversion=rules.SPEED,
         label="10 meter V wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -455,6 +549,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # HRRR's wrfsfc writes for wind power where pgrb2 writes 100 m.
     "ugrd80m": VariableSpec(
         id="ugrd80m",
+        conversion=rules.SPEED,
         label="80 meter U wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -468,6 +563,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "vgrd80m": VariableSpec(
         id="vgrd80m",
+        conversion=rules.SPEED,
         label="80 meter V wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -484,6 +580,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # surface (type 103, value 100), which pgrb2 writes for wind power.
     "ugrd100m": VariableSpec(
         id="ugrd100m",
+        conversion=rules.SPEED,
         label="100 meter U wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -497,6 +594,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "vgrd100m": VariableSpec(
         id="vgrd100m",
+        conversion=rules.SPEED,
         label="100 meter V wind component",
         output_unit="m/s",
         value_range=(-64, 64),
@@ -520,6 +618,14 @@ VARIABLES: dict[str, VariableSpec] = {
     # carries no value.
     "prmsl": VariableSpec(
         id="prmsl",
+        # GRIB2 carries pascals; the codebook quantizes hectopascals. Only
+        # Pa is accepted: a file already in hPa would divide twice, and no
+        # source publishes one.
+        conversion=rules.PASCAL_TO_HECTOPASCAL,
+        # GDAL names the ECMWF record PRES and HRRR's MSLMA; the surface is
+        # what makes them the same field.
+        gdal_rules=(rules.mean_sea_level("PRMSL", "PRES", "MSLMA"),),
+        companions=(),
         label="Mean sea level pressure",
         output_unit="hPa",
         value_range=(870, 1125),
@@ -545,6 +651,12 @@ VARIABLES: dict[str, VariableSpec] = {
     # bundle draw with one palette.
     "cref": VariableSpec(
         id="cref",
+        # GDAL's GRIB tables spell dBZ "dB"; the radar mosaic's NetCDF spells
+        # it in full.
+        conversion=rules.REFLECTIVITY,
+        gdal_rules=(rules.entire_atmosphere("REFC"), rules.template_mrms()),
+        predictor="raw",
+        companions=("poster", "video"),
         label="Composite radar reflectivity",
         output_unit="dBZ",
         value_range=(0, 80),
@@ -586,6 +698,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # step, like a de-accumulated rate.
     "gust": VariableSpec(
         id="gust",
+        conversion=rules.SPEED,
+        # pgrb2's instantaneous gust on the ground surface, ECMWF's interval
+        # maximum on the 10 m surface.
+        gdal_rules=(rules.surface("GUST"), rules.height("GUST", 10)),
         label="Wind gust",
         output_unit="m/s",
         value_range=(0, 127),
@@ -619,6 +735,16 @@ VARIABLES: dict[str, VariableSpec] = {
     # renders ``0-EATM`` either way, so that is an alternate record too.
     "tcdc": VariableSpec(
         id="tcdc",
+        conversion=rules.CLOUD_COVER,
+        # pgrb2's entire-atmosphere record, IFS open data's local fraction
+        # (0/6/192, which GDAL's tables do not know, so the element is
+        # "unknown" and the comment carries the triple), or AIFS's WMO
+        # record as a layer from the ground surface up.
+        gdal_rules=(
+            rules.entire_atmosphere("TCDC"),
+            rules.local_parameter(6, 192),
+            rules.surface("TCDC"),
+        ),
         label="Total cloud cover",
         output_unit="%",
         value_range=(0, 100),
@@ -647,6 +773,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # parcel, the same chart.
     "cape": VariableSpec(
         id="cape",
+        conversion=rules.ENERGY_PER_MASS,
+        # ECMWF's mucape departs from surface type 17, which GDAL describes
+        # as the most unstable parcel's level and gives no short name.
+        gdal_rules=(rules.surface("CAPE"), rules.phrase("CAPE", "most unstable", "mudl")),
         label="Convective available potential energy",
         output_unit="J/kg",
         value_range=(0, 6350),
@@ -668,6 +798,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # weak 0 to -50 capping that decides whether a storm fires.
     "cin": VariableSpec(
         id="cin",
+        conversion=rules.ENERGY_PER_MASS,
         label="Convective inhibition",
         output_unit="J/kg",
         value_range=(-1016.0, 0.0),
@@ -685,6 +816,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # ~5 km a deep desert or marine boundary layer reaches.
     "hpbl": VariableSpec(
         id="hpbl",
+        conversion=rules.METRES,
         label="Planetary boundary layer height",
         output_unit="m",
         value_range=(0.0, 5080.0),
@@ -707,6 +839,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # static relief layer and, later, a finer DEM beside it.
     "orog": VariableSpec(
         id="orog",
+        conversion=rules.GEOPOTENTIAL_TO_METRES,
+        # NCEP's HGT on the surface; ECMWF's geopotential, which GDAL names
+        # GP and describes only in the comment.
+        gdal_rules=(rules.surface("HGT"), rules.geopotential_surface("GP", "Z")),
         label="Orography",
         output_unit="m",
         value_range=(-430.0, 8968.0),
@@ -734,6 +870,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # so none of the four ever reaches a bundle and none needs a codebook.
     "crain": VariableSpec(
         id="crain",
+        # GDAL reports the flags under the code table's own name rather than
+        # a physical unit: ``0=no; 1=yes``, or ``(Code table 4.222)`` from
+        # another driver.
+        conversion=rules.code_table("4.222"),
         label="Categorical rain",
         output_unit="1",
         value_range=(0.0, 1.0),
@@ -751,6 +891,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "cfrzr": VariableSpec(
         id="cfrzr",
+        conversion=rules.code_table("4.222"),
         label="Categorical freezing rain",
         output_unit="1",
         value_range=(0.0, 1.0),
@@ -765,6 +906,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "cicep": VariableSpec(
         id="cicep",
+        conversion=rules.code_table("4.222"),
         label="Categorical ice pellets",
         output_unit="1",
         value_range=(0.0, 1.0),
@@ -779,6 +921,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "csnow": VariableSpec(
         id="csnow",
+        conversion=rules.code_table("4.222"),
         label="Categorical snow",
         output_unit="1",
         value_range=(0.0, 1.0),
@@ -803,6 +946,8 @@ VARIABLES: dict[str, VariableSpec] = {
     # encoders must share that order to stay byte-identical.
     "ptype": VariableSpec(
         id="ptype",
+        conversion=rules.code_table("4.201"),
+        predictor="raw",
         label="Precipitation type",
         output_unit="1",
         value_range=(0.0, 8.0),
@@ -815,6 +960,9 @@ VARIABLES: dict[str, VariableSpec] = {
     # (GFS caps it at ~24 km); the codebook quantizes kilometres.
     "vis": VariableSpec(
         id="vis",
+        # Only metres are accepted: a file already in km would divide twice,
+        # and no source publishes one.
+        conversion=rules.METRE_TO_KILOMETRE,
         label="Visibility",
         output_unit="km",
         value_range=(0, 25),
@@ -832,6 +980,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # data carries it as ``2d``.
     "dpt2m": VariableSpec(
         id="dpt2m",
+        conversion=rules.CELSIUS,
         label="2 meter dew point temperature",
         output_unit="°C",
         value_range=(-70, 40),
@@ -850,6 +999,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # record of its own rather than a derivation, so it is GFS-only.
     "aptmp2m": VariableSpec(
         id="aptmp2m",
+        conversion=rules.CELSIUS,
         label="2 meter apparent temperature",
         output_unit="°C",
         value_range=(-90, 60),
@@ -870,6 +1020,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # arrives. ECMWF open data carries the same field as ``tcwv``.
     "pwat": VariableSpec(
         id="pwat",
+        conversion=rules.COLUMN_MASS,
         label="Precipitable water",
         output_unit="kg/m²",
         value_range=(0.0, 127.0),
@@ -892,6 +1043,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # IFS open data carries none of them.
     "lcdc": VariableSpec(
         id="lcdc",
+        conversion=rules.CLOUD_COVER,
+        # The layer surface as GDAL spells it (code table 4.5 type 214), with
+        # the layer's name as the fallback for AIFS's own surfaces.
+        gdal_rules=(rules.cloud_layer("LCDC", "0-LCY", "low cloud"),),
         label="Low cloud cover",
         output_unit="%",
         value_range=(0, 100),
@@ -908,6 +1063,8 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "mcdc": VariableSpec(
         id="mcdc",
+        conversion=rules.CLOUD_COVER,
+        gdal_rules=(rules.cloud_layer("MCDC", "0-MCY", "middle cloud", "medium cloud"),),
         label="Middle cloud cover",
         output_unit="%",
         value_range=(0, 100),
@@ -924,6 +1081,8 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "hcdc": VariableSpec(
         id="hcdc",
+        conversion=rules.CLOUD_COVER,
+        gdal_rules=(rules.cloud_layer("HCDC", "0-HCY", "high cloud"),),
         label="High cloud cover",
         output_unit="%",
         value_range=(0, 100),
@@ -954,6 +1113,10 @@ VARIABLES: dict[str, VariableSpec] = {
     # and a bitmap over land; ECMWF open data carries no ice cover.
     "tmpsfc": VariableSpec(
         id="tmpsfc",
+        conversion=rules.CELSIUS,
+        # ECMWF's skin temperature is SKINT where pgrb2's surface TMP is the
+        # same field.
+        gdal_rules=(rules.surface("TMP", "SKINT"),),
         label="Surface temperature",
         output_unit="°C",
         value_range=(-60, 67),
@@ -970,6 +1133,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "icec": VariableSpec(
         id="icec",
+        conversion=rules.PROPORTION_TO_PERCENT,
         label="Sea ice cover",
         output_unit="%",
         value_range=(0, 100),
@@ -984,6 +1148,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "icetk": VariableSpec(
         id="icetk",
+        conversion=rules.METRES,
         label="Sea ice thickness",
         output_unit="m",
         value_range=(0, 5),
@@ -1018,6 +1183,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # nodata value, 9999, and becomes the bottom of each codebook.
     "htsgw": VariableSpec(
         id="htsgw",
+        conversion=rules.METRES,
         label="Significant wave height",
         output_unit="m",
         value_range=(0, 25),
@@ -1033,6 +1199,9 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "perpw": VariableSpec(
         id="perpw",
+        conversion=rules.SECONDS,
+        # ECMWF's peak period, PWPER, stands in for WAVEWATCH III's PERPW.
+        gdal_rules=(rules.surface("PERPW", "PWPER"),),
         label="Primary wave mean period",
         output_unit="s",
         value_range=(0, 25),
@@ -1049,6 +1218,11 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "dirpw": VariableSpec(
         id="dirpw",
+        # Degrees true (GDAL spells it "Degree true"); the converter reduces it
+        # modulo 360 itself.
+        conversion=rules.DEGREES_TRUE,
+        # ECMWF's mean wave direction, WWSDIR, stands in for DIRPW.
+        gdal_rules=(rules.surface("DIRPW", "WWSDIR"),),
         label="Primary wave direction",
         output_unit="°",
         value_range=(0, 358),
@@ -1082,6 +1256,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # do, and land becomes the bottom of each codebook the same way.
     "wvhgt": VariableSpec(
         id="wvhgt",
+        conversion=rules.METRES,
         label="Significant height of wind waves",
         output_unit="m",
         value_range=(0, 25),
@@ -1096,6 +1271,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "wvper": VariableSpec(
         id="wvper",
+        conversion=rules.SECONDS,
         label="Mean period of wind waves",
         output_unit="s",
         value_range=(0, 25),
@@ -1110,6 +1286,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "wvdir": VariableSpec(
         id="wvdir",
+        conversion=rules.DEGREES_TRUE,
         label="Direction of wind waves",
         output_unit="°",
         value_range=(0, 358),
@@ -1124,6 +1301,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "swhgt": VariableSpec(
         id="swhgt",
+        conversion=rules.METRES,
         label="Significant height of swell waves (first partition)",
         output_unit="m",
         value_range=(0, 25),
@@ -1139,6 +1317,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "swper": VariableSpec(
         id="swper",
+        conversion=rules.SECONDS,
         label="Mean period of swell waves (first partition)",
         output_unit="s",
         value_range=(0, 25),
@@ -1154,6 +1333,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "swdir": VariableSpec(
         id="swdir",
+        conversion=rules.DEGREES_TRUE,
         label="Direction of swell waves (first partition)",
         output_unit="°",
         value_range=(0, 358),
@@ -1316,6 +1496,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # confidence field and published by no source.
     "ir039": VariableSpec(
         id="ir039",
+        decimation="peak",
         label="Brightness temperature, 3.9 µm",
         output_unit="K",
         value_range=(180, 408),
@@ -1617,6 +1798,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # and interval, since a dozen AOTK lines share the surface.
     "aod": VariableSpec(
         id="aod",
+        conversion=rules.DIMENSIONLESS,
         label="Aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1631,6 +1813,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "aoddust": VariableSpec(
         id="aoddust",
+        conversion=rules.DIMENSIONLESS,
         label="Dust aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1645,6 +1828,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "aodsalt": VariableSpec(
         id="aodsalt",
+        conversion=rules.DIMENSIONLESS,
         label="Sea salt aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1659,6 +1843,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "aodsulf": VariableSpec(
         id="aodsulf",
+        conversion=rules.DIMENSIONLESS,
         label="Sulphate aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1673,6 +1858,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "aodorg": VariableSpec(
         id="aodorg",
+        conversion=rules.DIMENSIONLESS,
         label="Organic carbon aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1687,6 +1873,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "aodbc": VariableSpec(
         id="aodbc",
+        conversion=rules.DIMENSIONLESS,
         label="Black carbon aerosol optical depth at 550 nm",
         output_unit="1",
         value_range=(0, 5),
@@ -1701,6 +1888,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "pm25": VariableSpec(
         id="pm25",
+        conversion=rules.PARTICULATE,
         label="PM2.5 surface concentration",
         output_unit="µg/m³",
         value_range=(0, 1000),
@@ -1716,6 +1904,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "pm10": VariableSpec(
         id="pm10",
+        conversion=rules.PARTICULATE,
         label="PM10 surface concentration",
         output_unit="µg/m³",
         value_range=(0, 2000),
@@ -1731,6 +1920,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     "pm10dust": VariableSpec(
         id="pm10dust",
+        conversion=rules.PARTICULATE,
         label="Dust PM10 surface concentration",
         output_unit="µg/m³",
         value_range=(0, 2000),
@@ -1980,6 +2170,12 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=3,
             grib2_number=5,
             gdal_unit="gpm",
+            # A source spelling it "m" means the same number to within the
+            # difference between geopotential and geometric height, far
+            # below the codebook step at these levels.
+            conversion=rules.GEOPOTENTIAL_METRES,
+            # Contour-drawn: bundles only, like the sea level pressure.
+            companions=(),
             **common,
         )
     if family == "tmp":
@@ -1995,6 +2191,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=0,
             grib2_number=0,
             gdal_unit="C",
+            conversion=rules.CELSIUS,
             **common,
         )
     if family == "rh":
@@ -2008,6 +2205,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=1,
             grib2_number=1,
             gdal_unit="%",
+            conversion=rules.PERCENT,
             **common,
         )
     if family == "spfh":
@@ -2023,6 +2221,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=1,
             grib2_number=0,
             gdal_unit="kg/kg",
+            conversion=rules.MASS_RATIO_TO_G_PER_KG,
             **common,
         )
     if family in ("ugrd", "vgrd"):
@@ -2037,6 +2236,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=2,
             grib2_number=2 if family == "ugrd" else 3,
             gdal_unit="m/s",
+            conversion=rules.SPEED,
             **common,
         )
     if family == "vvel":
@@ -2053,6 +2253,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             grib2_category=2,
             grib2_number=8,
             gdal_unit="Pa/s",
+            conversion=rules.VERTICAL_VELOCITY,
             **common,
         )
     if family == "thetae":
@@ -2083,6 +2284,10 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
             value_range=(0.0, 0.635),
             grib2_category=19,
             grib2_number=29,
+            # Cell-scale structure that does not persist three hours: on a
+            # real GFS and ECMWF run, chaining makes its chunks half as
+            # large again as RAW.
+            predictor="raw",
             **common,
         )
     # Water vapour flux, q·V/g in g·cm⁻¹·hPa⁻¹·s⁻¹ — the unit a Chinese
@@ -2165,6 +2370,8 @@ def _reflectivity_spec(level_m: int) -> VariableSpec:
         grib2_level_value=float(level_m),
         gdal_unit="dBZ",
         fill_values=(-999.0, -99.0),
+        conversion=rules.REFLECTIVITY,
+        predictor="raw",
     )
 
 
@@ -2290,6 +2497,7 @@ def _soil_spec(variable_id: str) -> VariableSpec:
             grib2_number=2,
             grib2_alternates=(RecordAlternate(2, 3, 18, ECMWF_SOIL_LEVEL_TYPE, float(layer - 1)),),
             gdal_unit="C",
+            conversion=rules.SOIL_TEMPERATURE,
         )
     else:
         common.update(
@@ -2305,6 +2513,7 @@ def _soil_spec(variable_id: str) -> VariableSpec:
                 RecordAlternate(2, 0, 25, ECMWF_SOIL_LEVEL_TYPE, float(layer - 1), gdal_unit="m^3/m^3"),
             ),
             gdal_unit="Fraction",
+            conversion=rules.SOIL_MOISTURE,
         )
     return VariableSpec(**common)  # type: ignore[arg-type]
 
@@ -2312,10 +2521,6 @@ def _soil_spec(variable_id: str) -> VariableSpec:
 for _variable_id in SOIL_VARIABLE_IDS:
     VARIABLES[_variable_id] = _soil_spec(_variable_id)
 del _variable_id
-
-# Standard gravity, the g in q·V/g.
-STANDARD_GRAVITY = 9.80665
-
 
 def variable_spec(variable_id: str) -> VariableSpec:
     try:
