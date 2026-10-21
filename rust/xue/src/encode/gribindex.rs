@@ -17,7 +17,8 @@ use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::model::SourceFrame;
-use crate::encode::variables::{variable_spec, AerosolIdentity, VariableSpec};
+use crate::encode::registry::Registry;
+use crate::encode::variables::{AerosolIdentity, VariableSpec};
 
 /// Product definition templates whose octets 10-34 share the 4.0 layout and
 /// that we know how to time-stamp. 4.8 adds the statistical interval. 4.48
@@ -272,27 +273,29 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
 /// An aerosol product matches on its aerosol identity too, whole, and only
 /// a variable registered with one matches it. Mirrors `_matching_unit` in
 /// `xuebuild/grib2.py`.
-fn matching_unit(spec: &VariableSpec, message: &MessageInfo) -> Option<&'static str> {
+fn matching_unit<'a>(spec: &'a VariableSpec, message: &MessageInfo) -> Option<&'a str> {
     let triple = (
         message.discipline,
         message.parameter_category,
         message.parameter_number,
     );
+    let identity = &spec.matching;
     let primary = (triple == (spec.grib2_discipline, spec.grib2_category, spec.grib2_number)
-        || spec.grib2_aliases.contains(&triple))
+        || identity.aliases.contains(&triple))
         && message.level_type == spec.grib2_level_type
         && spec
             .grib2_level_value
             .is_none_or(|expected| message.level_value == Some(expected))
-        && message.statistical_process == spec.grib2_statistical
+        && message.statistical_process == identity.statistical
         && message.aerosol == spec.grib2_aerosol;
     if primary {
-        return Some(spec.gdal_unit);
+        return Some(&identity.gdal_unit);
     }
     if message.aerosol.is_some() {
         return None;
     }
-    spec.grib2_alternates
+    identity
+        .alternates
         .iter()
         .find(|alternate| {
             triple == alternate.triple()
@@ -304,9 +307,9 @@ fn matching_unit(spec: &VariableSpec, message: &MessageInfo) -> Option<&'static 
         })
         .map(|alternate| {
             if alternate.gdal_unit.is_empty() {
-                spec.gdal_unit
+                identity.gdal_unit.as_str()
             } else {
-                alternate.gdal_unit
+                alternate.gdal_unit.as_str()
             }
         })
 }
@@ -326,6 +329,7 @@ pub fn inspect_grib_fast(
     path: &Path,
     variable_ids: &[&str],
     optional_ids: &[&str],
+    registry: &Registry,
 ) -> Result<Vec<(String, SourceFrame)>> {
     if !path.is_file() {
         return Err(EncodeError::conversion(format!(
@@ -336,7 +340,7 @@ pub fn inspect_grib_fast(
     let messages = index_messages(path)?;
     let mut frames = Vec::new();
     for variable_id in variable_ids {
-        let spec = variable_spec(variable_id)?;
+        let spec = registry.variable(variable_id)?;
         let found: Vec<&MessageInfo> = messages
             .iter()
             .filter(|message| matches(spec, message))
@@ -347,7 +351,7 @@ pub fn inspect_grib_fast(
         if found.len() != 1 {
             return Err(EncodeError::conversion(format!(
                 "expected exactly one {} band for {variable_id} in {}, found {}",
-                spec.grib_element,
+                spec.matching.grib_element,
                 path.display(),
                 found.len()
             )));
@@ -380,7 +384,8 @@ pub fn inspect_grib_fast(
 #[cfg(test)]
 mod tests {
     use super::{matches, matching_unit, MessageInfo};
-    use crate::encode::variables::{variable_spec, AerosolIdentity};
+    use crate::encode::registry::Registry;
+    use crate::encode::variables::AerosolIdentity;
     use time::OffsetDateTime;
 
     fn message(category: u8, number: u8, level_type: u8) -> MessageInfo {
@@ -405,31 +410,32 @@ mod tests {
     /// aerosol product, nor an aerosol variable an ordinary record.
     #[test]
     fn an_aerosol_record_matches_on_its_aerosol_identity_whole() {
-        let aod = variable_spec("aod").unwrap();
-        let dust = variable_spec("aoddust").unwrap();
+        let registry = Registry::embedded();
+        let aod = registry.variable("aod").unwrap();
+        let dust = registry.variable("aoddust").unwrap();
         let mut total = message(20, 102, 10);
         total.aerosol = aod.grib2_aerosol;
-        assert_eq!(matching_unit(&aod, &total), Some("Numeric"));
-        assert_eq!(matching_unit(&dust, &total), None);
+        assert_eq!(matching_unit(aod, &total), Some("Numeric"));
+        assert_eq!(matching_unit(dust, &total), None);
         total.aerosol = dust.grib2_aerosol;
-        assert_eq!(matching_unit(&dust, &total), Some("Numeric"));
-        assert_eq!(matching_unit(&aod, &total), None);
+        assert_eq!(matching_unit(dust, &total), Some("Numeric"));
+        assert_eq!(matching_unit(aod, &total), None);
         total.aerosol = None;
-        assert_eq!(matching_unit(&aod, &total), None);
-        let tcdc = variable_spec("tcdc").unwrap();
+        assert_eq!(matching_unit(aod, &total), None);
+        let tcdc = registry.variable("tcdc").unwrap();
         let mut cloud = message(6, 1, 10);
         cloud.aerosol = aod.grib2_aerosol;
-        assert_eq!(matching_unit(&tcdc, &cloud), None);
+        assert_eq!(matching_unit(tcdc, &cloud), None);
 
-        let pm10 = variable_spec("pm10").unwrap();
-        let pm10dust = variable_spec("pm10dust").unwrap();
+        let pm10 = registry.variable("pm10").unwrap();
+        let pm10dust = registry.variable("pm10dust").unwrap();
         let mut coarse = message(13, 192, 1);
         coarse.level_value = Some(0.0);
         coarse.aerosol = pm10.grib2_aerosol;
-        assert_eq!(matching_unit(&pm10, &coarse), Some("10^-6g/m^3"));
-        assert_eq!(matching_unit(&pm10dust, &coarse), None);
+        assert_eq!(matching_unit(pm10, &coarse), Some("10^-6g/m^3"));
+        assert_eq!(matching_unit(pm10dust, &coarse), None);
         coarse.aerosol = Some(AerosolIdentity { size_first: Some((7, 25)), ..pm10.grib2_aerosol.unwrap() });
-        assert_eq!(matching_unit(&pm10, &coarse), None);
+        assert_eq!(matching_unit(pm10, &coarse), None);
     }
 
     /// ECMWF `msl`: plain pressure (0/3/0) on the mean sea level surface is
@@ -437,12 +443,13 @@ mod tests {
     /// surface pressure, a different field, and MSLET stays unregistered.
     #[test]
     fn an_alias_triple_matches_on_the_same_surface_only() {
-        let prmsl = variable_spec("prmsl").unwrap();
-        assert!(matches(&prmsl, &message(3, 1, 101)));
-        assert!(matches(&prmsl, &message(3, 0, 101)));
-        assert!(matches(&prmsl, &message(3, 198, 101)));
-        assert!(!matches(&prmsl, &message(3, 0, 1)));
-        assert!(!matches(&prmsl, &message(3, 192, 101)));
+        let registry = Registry::embedded();
+        let prmsl = registry.variable("prmsl").unwrap();
+        assert!(matches(prmsl, &message(3, 1, 101)));
+        assert!(matches(prmsl, &message(3, 0, 101)));
+        assert!(matches(prmsl, &message(3, 198, 101)));
+        assert!(!matches(prmsl, &message(3, 0, 1)));
+        assert!(!matches(prmsl, &message(3, 192, 101)));
     }
 
     /// An alternate is a whole identity: ECMWF's gust is the same parameter
@@ -452,26 +459,27 @@ mod tests {
     /// surface value is still required of a record under the primary triple.
     #[test]
     fn an_alternate_matches_as_a_whole_identity_with_its_own_unit() {
-        let gust = variable_spec("gust").unwrap();
+        let registry = Registry::embedded();
+        let gust = registry.variable("gust").unwrap();
         let mut maximum = message(2, 22, 103);
         maximum.level_value = Some(10.0);
         maximum.statistical_process = Some(2);
-        assert_eq!(matching_unit(&gust, &maximum), Some("m/s"));
+        assert_eq!(matching_unit(gust, &maximum), Some("m/s"));
         maximum.statistical_process = None;
-        assert_eq!(matching_unit(&gust, &maximum), None);
+        assert_eq!(matching_unit(gust, &maximum), None);
         let mut surface = message(2, 22, 1);
         surface.level_value = Some(0.0);
-        assert_eq!(matching_unit(&gust, &surface), Some("m/s"));
+        assert_eq!(matching_unit(gust, &surface), Some("m/s"));
         surface.level_value = None;
-        assert_eq!(matching_unit(&gust, &surface), None);
+        assert_eq!(matching_unit(gust, &surface), None);
 
-        let tcdc = variable_spec("tcdc").unwrap();
-        assert_eq!(matching_unit(&tcdc, &message(6, 1, 10)), Some("%"));
-        assert_eq!(matching_unit(&tcdc, &message(6, 192, 1)), Some("-"));
-        assert_eq!(matching_unit(&tcdc, &message(6, 192, 10)), None);
+        let tcdc = registry.variable("tcdc").unwrap();
+        assert_eq!(matching_unit(tcdc, &message(6, 1, 10)), Some("%"));
+        assert_eq!(matching_unit(tcdc, &message(6, 192, 1)), Some("-"));
+        assert_eq!(matching_unit(tcdc, &message(6, 192, 10)), None);
 
-        let tmpsfc = variable_spec("tmpsfc").unwrap();
-        assert_eq!(matching_unit(&tmpsfc, &message(0, 17, 1)), Some("C"));
-        assert_eq!(matching_unit(&tmpsfc, &message(0, 0, 1)), None);
+        let tmpsfc = registry.variable("tmpsfc").unwrap();
+        assert_eq!(matching_unit(tmpsfc, &message(0, 17, 1)), Some("C"));
+        assert_eq!(matching_unit(tmpsfc, &message(0, 0, 1)), None);
     }
 }

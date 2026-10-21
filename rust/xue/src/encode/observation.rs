@@ -43,8 +43,9 @@ use time::{Duration, OffsetDateTime};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::{PlaneSource, SourceFrame};
+use crate::encode::registry::Registry;
 use crate::encode::sources::SourceSpec;
-use crate::encode::variables::{isobaric_variable, variable_spec, VariableSpec, SURFACE_TEMPERATURE_IDS};
+use crate::encode::variables::VariableSpec;
 
 pub const NETCDF_EXTENSIONS: &[&str] = &["nc", "nc4", "cdf"];
 
@@ -134,15 +135,15 @@ fn parse_iso(text: &str) -> Option<OffsetDateTime> {
 /// applies only on the source read through Open-Meteo
 /// (`SourceSpec::open_meteo`). The port of `series_variable_name` in
 /// `xuebuild/observation.py`.
-pub fn series_variable_name<'a>(variable_id: &'a str, source: &SourceSpec) -> Result<&'a str> {
+pub fn series_variable_name<'a>(variable_id: &'a str, source: &SourceSpec, registry: &'a Registry) -> Result<&'a str> {
     if source.open_meteo.is_none() {
         return Ok(variable_id);
     }
-    let spec = variable_spec(variable_id)?;
-    Ok(if spec.open_meteo.is_empty() {
+    let spec = registry.variable(variable_id)?;
+    Ok(if spec.matching.open_meteo.is_empty() {
         variable_id
     } else {
-        spec.open_meteo
+        &spec.matching.open_meteo
     })
 }
 
@@ -165,37 +166,45 @@ const UNIT_SPELLINGS: [(&str, &[&str]); 5] = [
 /// the registry's; a series file has no identity to match, so the unit is the
 /// whole of the check and it must be strict — a number quantized in the wrong
 /// unit is silent. The rule is: the registry's `output_unit`, the same unit
-/// spelled the way udunits spells it ([`UNIT_SPELLINGS`]), or an input unit
-/// the converter already knows how to turn into it for *this* variable
-/// (`convert::convert_units`) — kelvin or fahrenheit for a temperature,
-/// pascals for the sea level pressure, metres for the visibility. Anything
-/// else is refused. The port of `accepted_series_units` in
+/// spelled the way udunits spells it ([`UNIT_SPELLINGS`]), or a spelling the
+/// variable's conversion rule reads a record under
+/// (`Conversion::accepted_units`, compacted: kelvin or fahrenheit for a
+/// temperature, pascals for the sea level pressure, metres for the
+/// visibility; a `none` rule that names no spellings adds nothing, so the
+/// published unit is the whole of the check). Anything else is refused
+/// ([`series_unit_accepted`]). The port of `accepted_series_units` in
 /// `xuebuild/observation.py`, which must answer the same list in the same
 /// order.
-pub fn accepted_series_units(spec: &VariableSpec) -> Vec<&'static str> {
-    let mut units: Vec<&'static str> = vec![spec.output_unit];
+pub fn accepted_series_units(spec: &VariableSpec) -> Vec<&str> {
+    let mut units: Vec<&str> = vec![&spec.output_unit];
     for (output_unit, spellings) in UNIT_SPELLINGS {
         if output_unit == spec.output_unit {
             units.extend_from_slice(spellings);
         }
     }
-    let isobaric_temperature = matches!(isobaric_variable(spec.id), Some(("tmp", _)));
-    if SURFACE_TEMPERATURE_IDS.contains(&spec.id) || isobaric_temperature {
-        // The three spellings normalize_unit accepts, which is what the
-        // converter reads a temperature through.
-        units.extend_from_slice(&["K", "C", "F"]);
-    } else if spec.id == "prmsl" {
-        units.push("Pa");
-    } else if spec.id == "vis" {
-        units.push("m");
-    }
-    let mut seen: Vec<&'static str> = Vec::with_capacity(units.len());
+    units.extend(spec.conversion.accepted_units().unwrap_or_default());
+    let mut seen: Vec<&str> = Vec::with_capacity(units.len());
     for unit in units {
         if !seen.contains(&unit) {
             seen.push(unit);
         }
     }
     seen
+}
+
+/// Whether a series file's unit is one of [`accepted_series_units`]: the
+/// published unit and its udunits spelling as written, the conversion
+/// rule's spellings after the rule's compaction. The port of
+/// `series_unit_accepted` in `xuebuild/observation.py`.
+pub fn series_unit_accepted(spec: &VariableSpec, unit: &str) -> bool {
+    if unit == spec.output_unit
+        || UNIT_SPELLINGS
+            .iter()
+            .any(|(output_unit, spellings)| *output_unit == spec.output_unit && spellings.contains(&unit))
+    {
+        return true;
+    }
+    spec.conversion.accepted_units().is_some() && spec.conversion.accepts(unit)
 }
 
 /// Whether the bands declare a CF `_FillValue` of NaN in their own
@@ -343,6 +352,7 @@ pub fn inspect_observation(
     path: &Path,
     source: &SourceSpec,
     variable_ids: Option<&[&str]>,
+    registry: &Registry,
 ) -> Result<ObservationSeries> {
     if !source.observation && !source.series_file {
         return Err(EncodeError::conversion(format!(
@@ -352,7 +362,7 @@ pub fn inspect_observation(
     }
     let variable_ids: Vec<&str> = match variable_ids {
         Some(ids) => ids.to_vec(),
-        None => source.input_variable_ids.to_vec(),
+        None => source.input_variable_ids.iter().map(String::as_str).collect(),
     };
     if variable_ids.is_empty() {
         return Err(EncodeError::conversion(format!(
@@ -374,7 +384,7 @@ pub fn inspect_observation(
                 file.display()
             )));
         }
-        let dataset_name = netcdf_dataset(file, series_variable_name(variable_id, source)?);
+        let dataset_name = netcdf_dataset(file, series_variable_name(variable_id, source, registry)?);
         let dataset = Dataset::open(&dataset_name)?;
         let attributes_global = dataset.metadata("");
         let (epoch, scale) =
@@ -387,15 +397,14 @@ pub fn inspect_observation(
             )));
         }
 
-        let spec = variable_spec(variable_id)?;
+        let spec = registry.variable(variable_id)?;
         let unit = bands[0].unit.trim().to_string();
-        let accepted = accepted_series_units(spec);
-        if !accepted.contains(&unit.as_str()) {
+        if !series_unit_accepted(spec, &unit) {
             return Err(EncodeError::conversion(format!(
                 "{} reports unit {}, expected {}",
                 dataset_name.display(),
                 if unit.is_empty() { "<missing>" } else { &unit },
-                accepted.join(" or ")
+                accepted_series_units(spec).join(" or ")
             )));
         }
         // A produced variable carries the producer that made it as two
@@ -404,7 +413,7 @@ pub fn inspect_observation(
         // the metadata.
         let producer_id = bands[0].metadata.get("producer_id").map(String::as_str);
         let producer_version = bands[0].metadata.get("producer_version").map(|v| v.trim());
-        match spec.producer_id {
+        match spec.producer_id.as_deref() {
             Some(registered) => {
                 if producer_id != Some(registered) {
                     return Err(EncodeError::conversion(format!(
@@ -582,7 +591,7 @@ pub fn inspect_observation(
     // same times.)
     let reference = variable_ids
         .iter()
-        .position(|id| !source.optional_at_analysis.contains(id))
+        .position(|id| !source.is_optional_at_analysis(id))
         .unwrap_or(0);
     let axis: Vec<(OffsetDateTime, i64)> = per_variable_frames[reference]
         .iter()
@@ -596,7 +605,7 @@ pub fn inspect_observation(
         if other == axis {
             continue;
         }
-        if source.optional_at_analysis.contains(&variable_ids[index])
+        if source.is_optional_at_analysis(variable_ids[index])
             && analysis_less.is_some_and(|expected| other == expected)
         {
             continue;
@@ -630,4 +639,40 @@ pub fn inspect_observation(
         plane_sources,
         producers,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{accepted_series_units, series_unit_accepted};
+    use crate::encode::registry::Registry;
+
+    /// The published unit and its udunits spelling as written, then the
+    /// rule's compacted spellings; a `none` rule without spellings adds
+    /// nothing. Mirrors `tests/test_observation.py`'s reading of
+    /// `accepted_series_units`.
+    #[test]
+    fn a_series_is_accepted_under_its_unit_or_its_rule_s_spellings() {
+        let registry = Registry::embedded();
+        let tmp2m = registry.variable("tmp2m").unwrap();
+        assert_eq!(
+            accepted_series_units(tmp2m),
+            ["°C", "degC", "k", "kelvin", "c", "celsius", "degc", "f", "fahrenheit", "degf"]
+        );
+        for unit in ["°C", "degC", "K", "[C]", "degrees F"] {
+            assert!(series_unit_accepted(tmp2m, unit), "{unit}");
+        }
+        assert!(!series_unit_accepted(tmp2m, "Pa"));
+        let prmsl = registry.variable("prmsl").unwrap();
+        assert_eq!(accepted_series_units(prmsl), ["hPa", "pa"]);
+        assert!(series_unit_accepted(prmsl, "hPa") && series_unit_accepted(prmsl, "Pa"));
+        assert!(!series_unit_accepted(prmsl, "mb"));
+        let wind = registry.variable("ugrd10m").unwrap();
+        assert_eq!(accepted_series_units(wind), ["m/s", "m s-1", "m/sec", "ms-1", "ms^-1", "mps"]);
+        assert!(series_unit_accepted(wind, "m s-1") && series_unit_accepted(wind, "[m/s]"));
+        let channel = registry.variable("ir039").unwrap();
+        assert_eq!(accepted_series_units(channel), ["K"]);
+        assert!(series_unit_accepted(channel, "K") && !series_unit_accepted(channel, "k"));
+        let rate = registry.variable("prate").unwrap();
+        assert!(series_unit_accepted(rate, "mm/h") && series_unit_accepted(rate, "kg m-2 s-1"));
+    }
 }

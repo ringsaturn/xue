@@ -146,8 +146,9 @@ impl ProjectedGrid {
 }
 
 /// What a source declares: that its planes are projected and must be
-/// resampled onto a regular grid of `step` degrees.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// resampled onto a regular grid of `step` degrees (the document's
+/// `{"step": degrees}`).
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
 pub struct Regrid {
     pub step: f64,
 }

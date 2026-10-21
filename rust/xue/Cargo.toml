@@ -63,9 +63,10 @@ gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
 grib = { version = "0.18", default-features = false, optional = true }
 libc = { version = "0.2", optional = true }
 rayon = { version = "1", optional = true }
-# Only for the Serialize trait: the metadata writer drives serde_json with a
-# custom formatter, to reproduce the spacing Python's json.dumps defaults to.
-serde = { version = "1", optional = true }
+# The Serialize trait for the metadata writer, which drives serde_json with a
+# custom formatter to reproduce the spacing Python's json.dumps defaults to,
+# and the Deserialize derive for the registry document (encode/registry.rs).
+serde = { version = "1", features = ["derive"], optional = true }
 regex = { version = "1", optional = true }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"], optional = true }
 zstd = { version = "0.14", optional = true }

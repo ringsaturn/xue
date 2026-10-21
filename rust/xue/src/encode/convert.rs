@@ -17,215 +17,26 @@ use time::OffsetDateTime;
 use crate::encode::binformat::{self, ChunkPayload, ChunkTables, HOUR_SECONDS};
 use crate::format::{ChunkEntry, Predictor, TileGeometry, VariableEntry, NO_DEPENDENCY};
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::variables::{
-    is_static, isobaric_variable, reflectivity_level, variable_spec, CAT_LEVELS_HPA, DUST_CF_BUNDLE_ID,
-    DUST_CF_COMPONENT_IDS, DUST_RGB_BUNDLE_ID, DUST_RGB_COMPONENT_IDS, ISOBARIC_LEVELS_HPA, TRUE_COLOR_BUNDLE_ID,
-    TRUE_COLOR_COMPONENT_IDS, ZHOUYE_BUNDLE_ID, ZHOUYE_COMPONENT_IDS,
-    CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, SOIL_TEMPERATURE_IDS, STANDARD_GRAVITY,
-    SWELL_VECTOR_COMPONENT_IDS, WAVE_VECTOR_COMPONENT_IDS, WIND_WAVE_VECTOR_COMPONENT_IDS,
-};
+use crate::encode::variables::{VariableSpec, STANDARD_GRAVITY};
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
 use crate::encode::grid::{
     crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps, GridInfo,
 };
 use crate::encode::gribindex::inspect_grib_fast;
-use crate::encode::inspect::{
-    inspect_grib_multi, normalize_unit, precipitation_accumulation_is_mm,
-    precipitation_rate_is_mm_per_hour, raster_expression, SUPPORTED_EXTENSIONS,
-};
+use crate::encode::inspect::{inspect_grib_multi, raster_expression, SUPPORTED_EXTENSIONS};
 use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
 use crate::encode::metadata::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
 use crate::encode::model::{PlaneSource, SourceFrame};
 use crate::encode::observation::inspect_observation;
 use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
-use crate::encode::quantize::{codebook, Codebook};
+use crate::encode::quantize::Book;
+use crate::encode::registry::{Companion, Decimation, DerivationKind, Registry};
 use crate::encode::reproject::{build_resampler, lambert_conformal_from_wkt, ProjectedGrid};
-use crate::encode::sources::{family_frame_path, source_spec, SourceSpec};
+use crate::encode::sources::{family_frame_path, SourceSpec};
 use crate::encode::temporal::build_chunks;
 use crate::encode::zarrstore;
-
-/// Scalar variables ship one single-variable bundle each; the two wind
-/// components ship together in one two-variable bundle for the GPU particle
-/// layer — as does the wind on each isobaric surface, the water vapour
-/// flux the converter derives there, and the wave vector it derives from
-/// the wave height and direction. Mirrors `VECTOR_BUNDLES` in
-/// `xuebuild/binconvert.py`.
-pub const WIND_COMPONENT_IDS: [&str; 2] = ["ugrd10m", "vgrd10m"];
-pub const WIND_BUNDLE_ID: &str = "wind10m";
-/// The 80 m wind pair HRRR writes for wind power, a vector bundle of its
-/// own. Mirrors `WIND_80M_COMPONENT_IDS` / `WIND_80M_BUNDLE_ID` in
-/// `xuebuild/binconvert.py`.
-pub const WIND_80M_COMPONENT_IDS: [&str; 2] = ["ugrd80m", "vgrd80m"];
-pub const WIND_80M_BUNDLE_ID: &str = "wind80m";
-/// The 100 m wind pair, the hub height of a modern turbine: the same
-/// parameters on the 100 m surface, a vector bundle of its own. Mirrors
-/// `WIND_100M_COMPONENT_IDS` / `WIND_100M_BUNDLE_ID` in
-/// `xuebuild/binconvert.py`.
-pub const WIND_100M_COMPONENT_IDS: [&str; 2] = ["ugrd100m", "vgrd100m"];
-pub const WIND_100M_BUNDLE_ID: &str = "wind100m";
-pub const WAVE_BUNDLE_ID: &str = "wave";
-pub const WIND_WAVE_BUNDLE_ID: &str = "windwave";
-pub const SWELL_BUNDLE_ID: &str = "swell";
-/// The wave vectors, each derived from a height and a direction — the
-/// combined sea's, the wind sea's and the first swell partition's — as
-/// `(bundle, inputs, components)`. Mirrors `DERIVED_VECTORS` /
-/// `WAVE_VECTOR_BUNDLE_IDS` in `xuebuild/binconvert.py`.
-const WAVE_VECTORS: [(&str, [&str; 2], [&str; 2]); 3] = [
-    (WAVE_BUNDLE_ID, ["htsgw", "dirpw"], WAVE_VECTOR_COMPONENT_IDS),
-    (WIND_WAVE_BUNDLE_ID, ["wvhgt", "wvdir"], WIND_WAVE_VECTOR_COMPONENT_IDS),
-    (SWELL_BUNDLE_ID, ["swhgt", "swdir"], SWELL_VECTOR_COMPONENT_IDS),
-];
-
-/// The inputs and components of a wave vector bundle, or `None` for any
-/// other bundle.
-fn wave_vector(bundle_id: &str) -> Option<([&'static str; 2], [&'static str; 2])> {
-    WAVE_VECTORS
-        .iter()
-        .find(|(id, _, _)| *id == bundle_id)
-        .map(|(_, inputs, components)| (*inputs, *components))
-}
-
-/// The two component variables of a vector bundle, or `None` for a scalar.
-pub fn vector_components(bundle_id: &str) -> Option<(String, String)> {
-    if bundle_id == WIND_BUNDLE_ID {
-        return Some((WIND_COMPONENT_IDS[0].into(), WIND_COMPONENT_IDS[1].into()));
-    }
-    if bundle_id == WIND_80M_BUNDLE_ID {
-        return Some((WIND_80M_COMPONENT_IDS[0].into(), WIND_80M_COMPONENT_IDS[1].into()));
-    }
-    if bundle_id == WIND_100M_BUNDLE_ID {
-        return Some((WIND_100M_COMPONENT_IDS[0].into(), WIND_100M_COMPONENT_IDS[1].into()));
-    }
-    if let Some((_, [u, v])) = wave_vector(bundle_id) {
-        return Some((u.into(), v.into()));
-    }
-    for (prefix, u, v) in [("wind", "ugrd", "vgrd"), ("qflux", "uqflx", "vqflx")] {
-        if let Some(level) = bundle_id.strip_prefix(prefix) {
-            if let Ok(level) = level.parse::<u32>() {
-                if ISOBARIC_LEVELS_HPA.contains(&level) {
-                    return Some((format!("{u}{level}"), format!("{v}{level}")));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Composite bundles: the variables an algorithm derived from a source's
-/// channels in the *fetch stage* (`xuebuild/satellite/producers.py`), read
-/// off the observation series as more variables and written as one bundle
-/// in this order — the converter never derives them. The Dust RGB's three
-/// guns, then the DEBRA confidence and the ZHOUYE confidence, two produced
-/// bundles of one variable each, then the true colour composite's three
-/// guns. Mirrors
-/// `COMPOSITE_BUNDLES` in `xuebuild/binconvert.py`.
-pub fn composite_components(bundle_id: &str) -> Option<Vec<String>> {
-    let components: &[&str] = match bundle_id {
-        DUST_RGB_BUNDLE_ID => &DUST_RGB_COMPONENT_IDS,
-        DUST_CF_BUNDLE_ID => &DUST_CF_COMPONENT_IDS,
-        ZHOUYE_BUNDLE_ID => &ZHOUYE_COMPONENT_IDS,
-        TRUE_COLOR_BUNDLE_ID => &TRUE_COLOR_COMPONENT_IDS,
-        _ => return None,
-    };
-    Some(components.iter().map(|id| (*id).to_string()).collect())
-}
-
-/// The MRMS 3D reflectivity volume: one variable per constant-altitude level.
-pub const REFLECTIVITY_VOLUME_BUNDLE_ID: &str = "refl3d";
-/// The WOOF nest's cloud water volume: one variable per constant-altitude
-/// level.
-pub const CLOUD_WATER_VOLUME_BUNDLE_ID: &str = "cloud3d";
-
-/// Volume bundles: many variables, each read directly from its own record
-/// or series, written as one bundle in this order — the MRMS 3D mosaic's
-/// reflectivity on its 33 levels and the WOOF nest's cloud water on its 24,
-/// each bottom to top. Unlike a composite's, the members are the source's
-/// own inputs. Mirrors `VOLUME_BUNDLES` in `xuebuild/binconvert.py`.
-pub fn volume_components(bundle_id: &str) -> Option<Vec<String>> {
-    let members: &[&str] = match bundle_id {
-        REFLECTIVITY_VOLUME_BUNDLE_ID => &REFLECTIVITY_VARIABLE_IDS,
-        CLOUD_WATER_VOLUME_BUNDLE_ID => &CLOUD_WATER_VARIABLE_IDS,
-        _ => return None,
-    };
-    Some(members.iter().map(|id| (*id).to_string()).collect())
-}
-
-/// The Dust RGB's inputs: the 8.6, 10.4, 11.2 and 12.3 µm windows.
-const DUST_RGB_INPUT_IDS: [&str; 4] = ["ir086", "ir104", "ir112", "ir123"];
-/// The DEBRA confidence's inputs: the 3.9 µm window, the 6.2 µm water
-/// vapour band and the 8.6, 10.4 and 12.3 µm windows, all five required.
-/// The ZHOUYE confidence is composed in the same pass from the same five.
-const DUST_CF_INPUT_IDS: [&str; 5] = ["ir039", "wv062", "ir086", "ir104", "ir123"];
-/// The true colour composite's inputs: the 0.47, 0.51, 0.64 and 0.86 µm
-/// reflectances for the day side, then the 3.9 and 10.4 µm windows for the
-/// night side; the ABI has no 0.51 µm band and its green is synthesized
-/// from the other three.
-const TRUE_COLOR_INPUT_IDS: [&str; 6] = ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"];
-
-/// The channels a composite's producer reads on the source's platform: what
-/// the fetch must download for the composite to be composed, since the
-/// components themselves are never fetched. Mirrors each producer's
-/// `inputs_for` in `xuebuild/satellite/producers.py` through
-/// `binconvert.bundle_input_ids` — the Dust RGB reads the four infrared
-/// windows, or three on an imager without an 11.2 µm one (FCI), where the
-/// 10.4 µm window stands in for the green gun's minuend; the DEBRA and
-/// ZHOUYE confidences read their five with no stand-in, so a source that
-/// fetches fewer cannot publish them (`published_bundle_ids`); the true
-/// colour composite reads the four visible and near-infrared bands, or
-/// three on an imager without a 0.51 µm one (ABI), whose green is
-/// synthesized, and the 3.9 and 10.4 µm windows on every imager. The
-/// platform's channel table lives on the Python side;
-/// here a source whose inputs lack `ir112` or `vis051` is one whose imager
-/// lacks it.
-fn composite_input_ids(source: &SourceSpec, bundle_id: &str) -> Option<Vec<String>> {
-    match bundle_id {
-        DUST_RGB_BUNDLE_ID => Some(
-            DUST_RGB_INPUT_IDS
-                .iter()
-                .filter(|id| **id != "ir112" || source.input_variable_ids.contains(id))
-                .map(|id| (*id).to_string())
-                .collect(),
-        ),
-        DUST_CF_BUNDLE_ID | ZHOUYE_BUNDLE_ID => {
-            Some(DUST_CF_INPUT_IDS.iter().map(|id| (*id).to_string()).collect())
-        }
-        TRUE_COLOR_BUNDLE_ID => Some(
-            TRUE_COLOR_INPUT_IDS
-                .iter()
-                .filter(|id| **id != "vis051" || source.input_variable_ids.contains(id))
-                .map(|id| (*id).to_string())
-                .collect(),
-        ),
-        _ => None,
-    }
-}
-
-/// The variables one bundle carries, in bundle order: a scalar's own, a
-/// vector's pair, a composite's components, a volume's levels. Mirrors
-/// `bundle_variable_ids` in `xuebuild/binconvert.py`.
-pub fn bundle_variable_ids(bundle_id: &str) -> Vec<String> {
-    if let Some((u, v)) = vector_components(bundle_id) {
-        return vec![u, v];
-    }
-    if let Some(components) = composite_components(bundle_id) {
-        return components;
-    }
-    if let Some(members) = volume_components(bundle_id) {
-        return members;
-    }
-    vec![bundle_id.to_string()]
-}
-
-/// The isobaric surface of a `thetae<level>` bundle — the equivalent
-/// potential temperature the converter derives from the temperature and the
-/// specific humidity there — or `None`. Mirrors `DERIVED_SCALARS` /
-/// `theta_e_level` in `xuebuild/binconvert.py`.
-pub fn theta_e_level(bundle_id: &str) -> Option<u32> {
-    let level: u32 = bundle_id.strip_prefix("thetae")?.parse().ok()?;
-    ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
-}
 
 /// The clear-air turbulence index on each of its surfaces, `(level, above,
 /// below)`: the deformation is taken on the surface itself, the vertical
@@ -233,13 +44,6 @@ pub fn theta_e_level(bundle_id: &str) -> Option<u32> {
 /// registered — centred at 250 hPa, one-sided at the two ends. Mirrors
 /// `CAT_SHEAR_LAYERS` in `xuebuild/binconvert.py`.
 const CAT_SHEAR_LAYERS: [(u32, u32, u32); 3] = [(300, 250, 300), (250, 200, 300), (200, 200, 250)];
-
-/// The isobaric surface of a `cat<level>` bundle, or `None`. Mirrors
-/// `cat_level` in `xuebuild/binconvert.py`.
-pub fn cat_level(bundle_id: &str) -> Option<u32> {
-    let level: u32 = bundle_id.strip_prefix("cat")?.parse().ok()?;
-    CAT_LEVELS_HPA.contains(&level).then_some(level)
-}
 
 /// `(above, below)`, the surfaces the vertical shear of `cat<level>` is
 /// taken across.
@@ -250,130 +54,16 @@ fn cat_shear_layer(level: u32) -> Option<(u32, u32)> {
         .map(|&(_, above, below)| (above, below))
 }
 
-/// The inputs of `cat<level>`, each once: the wind and height above, then
-/// below, then the wind on the surface (already listed for 300 and 200,
-/// whose surface is one end of the layer). Mirrors `_cat_input_ids` in
-/// `xuebuild/binconvert.py`.
-fn cat_input_ids(level: u32) -> Option<Vec<String>> {
-    let (above, below) = cat_shear_layer(level)?;
-    let mut inputs: Vec<String> = Vec::with_capacity(8);
-    for id in [
-        format!("ugrd{above}"),
-        format!("vgrd{above}"),
-        format!("hgt{above}"),
-        format!("ugrd{below}"),
-        format!("vgrd{below}"),
-        format!("hgt{below}"),
-        format!("ugrd{level}"),
-        format!("vgrd{level}"),
-    ] {
-        if !inputs.contains(&id) {
-            inputs.push(id);
-        }
-    }
-    Some(inputs)
-}
-
-/// The published scalars of `scalar_ids` whose series has no analysis frame:
-/// the precipitation rate a source derives by de-accumulating or
-/// de-averaging, and any scalar read from a record the source lists under
-/// `optional_at_analysis`. Mirrors `analysis_optional_ids` in
-/// `xuebuild/binconvert.py`.
-pub fn analysis_optional_ids<'a>(source: &SourceSpec, scalar_ids: &[&'a str]) -> Vec<&'a str> {
-    scalar_ids
-        .iter()
-        .copied()
-        .filter(|variable_id| {
-            (*variable_id == "prate"
-                && (source.accumulated_precipitation || source.averaged_precipitation))
-                || bundle_input_ids(source, variable_id)
-                    .iter()
-                    .any(|input_id| source.optional_at_analysis.contains(&input_id.as_str()))
-        })
-        .collect()
-}
-
-/// The source inputs a derived scalar is built from, or `None` for a scalar
-/// read from a record. The equivalent potential temperature reads the
-/// temperature and specific humidity on its surface; the precipitation type
-/// reads the four categorical flags; the clear-air turbulence index the wind
-/// and height on the surfaces bounding its shear layer and the wind on its
-/// own. Mirrors
-/// `DERIVED_SCALARS` in `xuebuild/binconvert.py`.
-pub fn derived_scalar_inputs(bundle_id: &str) -> Option<Vec<String>> {
-    if bundle_id == "ptype" {
-        return Some(PTYPE_INPUT_IDS.iter().map(|id| (*id).to_string()).collect());
-    }
-    if let Some(level) = cat_level(bundle_id) {
-        return cat_input_ids(level);
-    }
-    let level = theta_e_level(bundle_id)?;
-    Some(vec![format!("tmp{level}"), format!("spfh{level}")])
-}
-
-/// The isobaric surface of a `qflux<level>` bundle, or `None`.
-pub fn vapour_flux_level(bundle_id: &str) -> Option<u32> {
-    let level: u32 = bundle_id.strip_prefix("qflux")?.parse().ok()?;
-    ISOBARIC_LEVELS_HPA.contains(&level).then_some(level)
-}
-
-/// Whether a vector bundle is derived rather than read: a vapour flux pair
-/// or a wave vector. A wind pair is its own two components. Mirrors
-/// `DERIVED_VECTORS` in `xuebuild/binconvert.py`.
-pub fn is_derived_vector(bundle_id: &str) -> bool {
-    wave_vector(bundle_id).is_some() || vapour_flux_level(bundle_id).is_some()
-}
-
-/// The source inputs one vector bundle is built from: a wind pair is its own
-/// two components; a vapour flux pair is derived from the specific humidity
-/// and both wind components on the same surface; a wave vector from its
-/// height and its direction.
-pub fn vector_input_ids(bundle_id: &str) -> Vec<String> {
-    if let Some(level) = vapour_flux_level(bundle_id) {
-        return vec![format!("spfh{level}"), format!("ugrd{level}"), format!("vgrd{level}")];
-    }
-    if let Some((inputs, _)) = wave_vector(bundle_id) {
-        return inputs.iter().map(|id| (*id).to_string()).collect();
-    }
-    match vector_components(bundle_id) {
-        Some((u, v)) => vec![u, v],
-        None => vec![bundle_id.to_string()],
-    }
-}
-/// Linear-codebook fields are smooth enough for the six-frame ANCHOR groups;
-/// precipitation stays independent RAW planes.
-/// Precipitation and radar reflectivity move with weather systems, so
-/// temporal differencing makes them larger, not smaller: their chunks stack
-/// the codes RAW. Every linear-codebook field chains against the previous
-/// frame inside its chunk. The categorical precipitation type is RAW for the
-/// same reason a codebook of classes never differences: every class boundary
-/// moves with the weather, and a category's code is not a number. Every
-/// level of the 3D reflectivity mosaic is RAW like the composite. The
-/// clear-air turbulence index is a product of gradients, cell-scale
-/// structure that does not persist from one frame to the next. Mirrors
-/// `RAW_VARIABLE_IDS` in `xuebuild/binconvert.py`.
-fn is_raw_variable(variable_id: &str) -> bool {
-    matches!(variable_id, "prate" | "cref" | "ptype")
-        || reflectivity_level(variable_id).is_some()
-        || cat_level(variable_id).is_some()
-}
-/// The pressure family: mean sea level pressure and the isobaric geopotential
-/// heights. The frontend draws them as contour lines, so they ship bundles
-/// only — no poster (it would paint a filled field the view never shows) and
-/// no H.264 companion. Mirrors `PRESSURE_BUNDLE_IDS` in
-/// `xuebuild/binconvert.py`.
-const PRESSURE_BUNDLE_IDS: [&str; 9] = [
-    "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300", "hgt250", "hgt200",
-];
-/// Every source names its precipitation input differently (GFS `prate`,
-/// ECMWF `tp`, sflux `prate_ave`, Open-Meteo `apcp`).
-const PRECIPITATION_INPUT_IDS: [&str; 4] = ["prate", "tp", "prate_ave", "apcp"];
-/// The raw precipitation inputs the per-file stage replaces with a rate: the
-/// two a frame differences against its predecessor, and the interval total
-/// that only needs the interval's length.
-const DERIVED_PRECIPITATION_IDS: [&str; 3] = ["tp", "prate_ave", "apcp"];
-
 pub const DEFAULT_ZSTD_LEVEL: i32 = 15;
+
+/// The bundles the build report's named statistics describe
+/// (`temperatureMaxAbsError`, `precipitationOverflowPoints`,
+/// `windMaxAbsError`): the reference report names the same three, so a
+/// report compares key for key whatever the source published. Names in a
+/// report, not a rule the pipeline dispatches on.
+const REPORT_TEMPERATURE_ID: &str = "tmp2m";
+const REPORT_PRECIPITATION_ID: &str = "prate";
+const REPORT_WIND_BUNDLE_ID: &str = "wind10m";
 
 /// One file's frames, keyed by variable id, in the source's own order.
 type FileFrames = Vec<(String, SourceFrame)>;
@@ -506,42 +196,11 @@ pub fn discover_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// The source input variables one published bundle is built from.
-///
-/// Every source names its precipitation input differently (GFS `prate`, ECMWF
-/// `tp`, sflux `prate_ave`), so the prate bundle's input is resolved off the
-/// source's own list rather than hard-coded per model.
-pub fn bundle_input_ids(source: &SourceSpec, bundle_id: &str) -> Vec<String> {
-    if vector_components(bundle_id).is_some() {
-        return vector_input_ids(bundle_id);
-    }
-    if let Some(inputs) = composite_input_ids(source, bundle_id) {
-        return inputs;
-    }
-    if let Some(members) = volume_components(bundle_id) {
-        return members;
-    }
-    if let Some(inputs) = derived_scalar_inputs(bundle_id) {
-        return inputs;
-    }
-    if bundle_id == "prate" {
-        return source
-            .input_variable_ids
-            .iter()
-            .copied()
-            .filter(|id| PRECIPITATION_INPUT_IDS.contains(id))
-            .take(1)
-            .map(str::to_string)
-            .collect();
-    }
-    vec![bundle_id.to_string()]
-}
-
 /// The id of the grid family one input is read from, or `None` for an input
 /// on the source's own grid (`SourceSpec::grid_family_of`). Mirrors
 /// `grid_family_of` in `xuebuild/binconvert.py`.
-pub fn grid_family_of(source: &SourceSpec, variable_id: &str) -> Option<&'static str> {
-    source.grid_family_of(variable_id).map(|companion| companion.id)
+pub fn grid_family_of<'a>(source: &'a SourceSpec, variable_id: &str) -> Option<&'a str> {
+    source.grid_family_of(variable_id).map(|companion| companion.id.as_str())
 }
 
 /// The grid family one bundle is built on: the family every one of its inputs
@@ -555,9 +214,13 @@ pub fn grid_family_of(source: &SourceSpec, variable_id: &str) -> Option<&'static
 /// three from the CFSv2 pressure-level family, which is what makes it one
 /// bundle's worth of one grid.) Mirrors `bundle_grid_family` in
 /// `xuebuild/binconvert.py`.
-pub fn bundle_grid_family(source: &SourceSpec, bundle_id: &str) -> Result<Option<&'static str>> {
-    let mut families: Vec<Option<&'static str>> = Vec::new();
-    for variable_id in bundle_input_ids(source, bundle_id) {
+pub fn bundle_grid_family<'a>(
+    registry: &Registry,
+    source: &'a SourceSpec,
+    bundle_id: &str,
+) -> Result<Option<&'a str>> {
+    let mut families: Vec<Option<&'a str>> = Vec::new();
+    for variable_id in registry.bundle_input_ids(source, bundle_id) {
         let family = grid_family_of(source, &variable_id);
         if !families.contains(&family) {
             families.push(family);
@@ -597,7 +260,7 @@ fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result<Vec<PathBu
                 return Err(error);
             }
             for companion in source.grid_families() {
-                let directory = inputs[0].join(companion.id);
+                let directory = inputs[0].join(&companion.id);
                 if directory.is_dir() {
                     return Ok(discover_inputs(&[directory])?
                         .into_iter()
@@ -610,46 +273,6 @@ fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result<Vec<PathBu
             Err(error)
         }
     }
-}
-
-/// Every bundle a source can publish, in manifest order: its scalars, then
-/// each listed vector bundle whose inputs the source fetches, then each
-/// listed composite whose producer's channels it fetches, then each listed
-/// volume whose members it fetches. A derived scalar counts the same way —
-/// listed, it ships only when its inputs are.
-pub fn published_bundle_ids(source: &SourceSpec) -> Vec<&'static str> {
-    let mut ids: Vec<&'static str> = source
-        .bundle_scalar_ids
-        .iter()
-        .copied()
-        .filter(|bundle_id| {
-            bundle_input_ids(source, bundle_id)
-                .iter()
-                .all(|id| source.input_variable_ids.contains(&id.as_str()))
-        })
-        .collect();
-    for bundle_id in source.bundle_vector_ids {
-        let inputs = vector_input_ids(bundle_id);
-        if inputs
-            .iter()
-            .all(|id| source.input_variable_ids.contains(&id.as_str()))
-        {
-            ids.push(bundle_id);
-        }
-    }
-    for bundle_id in source
-        .bundle_composite_ids
-        .iter()
-        .chain(source.bundle_volume_ids)
-    {
-        if bundle_input_ids(source, bundle_id)
-            .iter()
-            .all(|id| source.input_variable_ids.contains(&id.as_str()))
-        {
-            ids.push(bundle_id);
-        }
-    }
-    ids
 }
 
 // -- grid --------------------------------------------------------------------
@@ -855,142 +478,27 @@ pub fn deaverage_precipitation(
 
 // -- extraction --------------------------------------------------------------
 
-/// Above this a temperature the GDAL GRIB driver labels Celsius is kelvin
-/// (`soil_temperature_unit`). Mirrors `SOIL_KELVIN_THRESHOLD` in
-/// `xuebuild/binconvert.py`.
-const SOIL_KELVIN_THRESHOLD: f64 = 150.0;
-
-/// The unit a soil temperature plane is really in. GDAL's GRIB driver
-/// relabels every kelvin parameter Celsius but converts only those its
-/// tables mark for conversion, and the soil temperatures (NCEP's 2/0/2, the
-/// WMO 2/3/18 ECMWF writes) are not marked: their values come back in kelvin
-/// under a `C` label. A plane labelled Celsius that holds a value above 150
-/// is therefore kelvin. Mirrors `soil_temperature_unit` in
-/// `xuebuild/binconvert.py`.
-fn soil_temperature_unit(unit: &'static str, values: &[f64]) -> &'static str {
-    if unit == "C" && values.iter().any(|value| *value > SOIL_KELVIN_THRESHOLD) {
-        "K"
-    } else {
-        unit
-    }
-}
-
-fn convert_units(variable_id: &str, unit: &str, values: &mut [f64]) -> Result<()> {
-    match variable_id {
-        // The 2 m temperature, dew point, apparent temperature, the
-        // surface (skin) temperature and the soil temperatures all take the
-        // Celsius rule (`SURFACE_TEMPERATURE_IDS`) — a soil temperature
-        // after `soil_temperature_unit` has read through GDAL's label.
-        "tmp2m" | "dpt2m" | "aptmp2m" | "tmpsfc" | "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4" => {
-            let normalized = normalize_unit(unit)?;
-            let normalized = if SOIL_TEMPERATURE_IDS.contains(&variable_id) {
-                soil_temperature_unit(normalized, values)
-            } else {
-                normalized
-            };
-            match normalized {
-                "K" => values.iter_mut().for_each(|value| *value -= 273.15),
-                "F" => values
-                    .iter_mut()
-                    .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
-                _ => {}
-            }
-        }
-        // kg m⁻² s⁻¹ (a millimetre per second) to mm/h; the MRMS rate is
-        // already mm/h.
-        "prate" if !precipitation_rate_is_mm_per_hour(unit) => {
-            values.iter_mut().for_each(|value| *value *= 3600.0)
-        }
-        "prate" => {}
-        // ECMWF run-total precipitation accumulation, metres -> mm (AIFS
-        // writes it in mm already); the rate derivation happens later
-        // against the previous frame.
-        "tp" if !precipitation_accumulation_is_mm(unit) => {
-            values.iter_mut().for_each(|value| *value *= 1000.0)
-        }
-        "tp" => {}
-        // GRIB2 carries mean sea level pressure in pascals; the codebook
-        // quantizes hectopascals.
-        "prmsl" => values.iter_mut().for_each(|value| *value /= 100.0),
-        // GRIB2 carries visibility in metres; the codebook quantizes km.
-        "vis" => values.iter_mut().for_each(|value| *value /= 1000.0),
-        // GRIB2 carries sea ice cover as a 0–1 proportion; the codebook
-        // quantizes percent.
-        "icec" => values.iter_mut().for_each(|value| *value *= 100.0),
-        // Cloud cover: percent as pgrb2 carries it, or the 0–1 fraction
-        // ECMWF writes (GDAL spells that unit "-"), scaled up.
-        "tcdc" | "lcdc" | "mcdc" | "hcdc" => {
-            if unit
-                .trim()
-                .trim_matches(|character| "[]()".contains(character))
-                != "%"
-            {
-                values.iter_mut().for_each(|value| *value *= 100.0);
-            }
-        }
-        // A direction in degrees true: a record can carry 360, which is the
-        // codebook's 0 — reduce it there so the wrap never clamps. Every
-        // value is non-negative here, so this is numpy's `mod`. The ids are
-        // `WAVE_DIRECTION_IDS` in `xuebuild/variables.py`.
-        "dirpw" | "wvdir" | "swdir" => values
-            .iter_mut()
-            .for_each(|value| *value = value.rem_euclid(360.0)),
-        // Orography: NCEP writes the geopotential height (gpm, numerically
-        // metres); ECMWF open data the surface geopotential (m² s⁻²), which
-        // divides by the standard gravity. Mirrors `_convert_units`.
-        "orog" => {
-            let compact: String = unit
-                .trim()
-                .to_lowercase()
-                .chars()
-                .filter(|character| !" *()[]".contains(*character))
-                .collect();
-            if !matches!(compact.as_str(), "gpm" | "m") {
-                values.iter_mut().for_each(|value| *value /= STANDARD_GRAVITY);
-            }
-        }
-        other => match isobaric_variable(other) {
-            // Isobaric temperature follows the 2 m rule.
-            Some(("tmp", _)) => match normalize_unit(unit)? {
-                "K" => values.iter_mut().for_each(|value| *value -= 273.15),
-                "F" => values
-                    .iter_mut()
-                    .for_each(|value| *value = (*value - 32.0) * 5.0 / 9.0),
-                _ => {}
-            },
-            // GRIB2 carries specific humidity as a mass ratio (kg/kg); the
-            // codebook quantizes g/kg.
-            Some(("spfh", _)) => values.iter_mut().for_each(|value| *value *= 1000.0),
-            // Wind components, geopotential heights, relative humidity,
-            // cloud cover, CAPE, vertical velocity, ice thickness and the
-            // wave height and period are already in their output units.
-            _ => {}
-        },
-    }
-    Ok(())
+/// Take one plane to the variable's unit by its conversion rule
+/// (`units.rs`): the arithmetic the rule applies under the record's
+/// spelling, once per value, in f64 — the operation `rules.convert` runs
+/// for `_convert_units` in `xuebuild/binconvert.py`. The spelling was
+/// accepted when the frame was inspected; a spelling the rule does not
+/// scale under (a series already in the published unit) takes the identity.
+fn convert_units(spec: &VariableSpec, unit: &str, values: &mut [f64]) -> Result<()> {
+    spec.conversion.convert(unit, values)
 }
 
 /// The smallest specific humidity the derivation sees, in kg/kg: a dry
 /// stratospheric cell can carry zero, whose vapour pressure has no logarithm.
 const THETA_E_MINIMUM_Q: f64 = 1e-7;
 
-/// The four categorical precipitation-type flags, in the order
-/// [`derive_ptype`] combines them. Mirrors `DERIVED_SCALARS["ptype"]` in
-/// `xuebuild/binconvert.py`.
-const PTYPE_INPUT_IDS: [&str; 4] = ["crain", "cfrzr", "cicep", "csnow"];
-
 /// GRIB2 code table 4.201's codes for the four types pgrb2's categorical
-/// flags report, and the order they are combined in: rain, then freezing
-/// rain, then ice pellets, then snow, each later flag overriding an earlier
-/// one. Both encoders share this order so even a point the model should
-/// never produce encodes byte-identically. Mirrors `PTYPE_CODES` in
-/// `xuebuild/binconvert.py`.
-const PTYPE_CODES: [(&str, f64); 4] = [
-    ("crain", 1.0),
-    ("cfrzr", 3.0),
-    ("cicep", 8.0),
-    ("csnow", 5.0),
-];
+/// flags report, in the order the derivation's inputs list them and are
+/// combined in: rain, then freezing rain, then ice pellets, then snow, each
+/// later flag overriding an earlier one. Both encoders share this order so
+/// even a point the model should never produce encodes byte-identically.
+/// Mirrors `PTYPE_CODES` in `xuebuild/binconvert.py`.
+const PTYPE_CODES: [f64; 4] = [1.0, 3.0, 8.0, 5.0];
 
 /// The equivalent potential temperature on one isobaric surface, in K, from
 /// the temperature already in °C and the specific humidity already in g/kg
@@ -1020,13 +528,21 @@ pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa:
 }
 
 /// The categorical precipitation type on the ground, from the four 0/1 flags
-/// pgrb2 carries: WMO code table 4.201's value for each (1 rain, 3 freezing
-/// rain, 5 snow, 8 ice pellets), 0 where none is set. The flags are combined
-/// in `PTYPE_CODES` order, each setting the code where it is non-zero.
-/// Comparisons and selects only, in f64 — exactly what `derive_ptype` in
-/// `xuebuild/binconvert.py` does, so the two encoders stay byte-identical on
-/// a field neither reads from a record.
-pub fn derive_ptype(values: &[(String, Vec<f64>)]) -> Result<Vec<f64>> {
+/// pgrb2 carries — the derivation's `inputs`, rain, freezing rain, ice
+/// pellets and snow in that order: WMO code table 4.201's value for each
+/// (1, 3, 8, 5), 0 where none is set. The flags are combined in that order,
+/// each setting the code where it is non-zero. Comparisons and selects
+/// only, in f64 — exactly what `derive_ptype` in `xuebuild/binconvert.py`
+/// does, so the two encoders stay byte-identical on a field neither reads
+/// from a record.
+pub fn derive_ptype(values: &[(String, Vec<f64>)], inputs: &[String]) -> Result<Vec<f64>> {
+    if inputs.len() != PTYPE_CODES.len() {
+        return Err(EncodeError::conversion(format!(
+            "the precipitation type combines {} flags, not {}",
+            PTYPE_CODES.len(),
+            inputs.len()
+        )));
+    }
     let plane = |name: &str| -> Result<&[f64]> {
         values
             .iter()
@@ -1034,8 +550,8 @@ pub fn derive_ptype(values: &[(String, Vec<f64>)]) -> Result<Vec<f64>> {
             .map(|(_, plane)| plane.as_slice())
             .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for ptype")))
     };
-    let mut codes = vec![0.0f64; plane(PTYPE_INPUT_IDS[0])?.len()];
-    for (variable_id, code) in PTYPE_CODES {
+    let mut codes = vec![0.0f64; plane(&inputs[0])?.len()];
+    for (variable_id, code) in inputs.iter().zip(PTYPE_CODES) {
         let plane = plane(variable_id)?;
         for (slot, value) in codes.iter_mut().zip(plane) {
             if *value > 0.0 {
@@ -1232,9 +748,7 @@ pub fn ellrod_ti1(input: &CatPlanes, level: u32) -> Result<(Vec<f64>, Vec<bool>)
 /// cell `exp(a + b * ln(max(TI1, CAT_TI1_FLOOR)))`, then 0 where that is
 /// strictly below [`CAT_EDR_NIL`] (0.10 itself keeps its code) and 0 where
 /// TI1 is undefined — exactly `derive_cat` in `xuebuild/binconvert.py`.
-pub fn derive_cat(input: &CatPlanes, bundle_id: &str, calibration: (f64, f64)) -> Result<Vec<f64>> {
-    let level = cat_level(bundle_id)
-        .ok_or_else(|| EncodeError::conversion(format!("{bundle_id} is not a clear-air turbulence bundle")))?;
+pub fn derive_cat(input: &CatPlanes, level: u32, calibration: (f64, f64)) -> Result<Vec<f64>> {
     let (mean, std) = calibration;
     let (ti1, valid) = ellrod_ti1(input, level)?;
     let b = CAT_EDR_LOG_STD / std;
@@ -1298,10 +812,11 @@ pub fn uncropped_wraps(grid: &GridInfo) -> bool {
 fn derive_cat_plane<'a>(
     plane: impl Fn(&str) -> Result<&'a [f64]>,
     bundle_id: &str,
+    level: u32,
+    inputs: &[String],
     grid: &GridInfo,
     calibration: &[(u32, f64, f64)],
 ) -> Result<Vec<f64>> {
-    let level = cat_level(bundle_id).expect("a clear-air turbulence bundle");
     let &(_, mean, std) = calibration.iter().find(|(at, _, _)| *at == level).ok_or_else(|| {
         EncodeError::conversion(format!(
             "the source publishes {bundle_id} without a ln TI1 calibration for {level} hPa"
@@ -1309,7 +824,6 @@ fn derive_cat_plane<'a>(
     })?;
     let (rows, columns) = uncropped_shape(grid);
     let latitudes = uncropped_latitudes(grid);
-    let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
     let planes = inputs
         .iter()
         .map(|id| Ok((id.as_str(), plane(id)?)))
@@ -1324,7 +838,7 @@ fn derive_cat_plane<'a>(
             latitude_step: grid.latitude_step,
             wraps: uncropped_wraps(grid),
         },
-        bundle_id,
+        level,
         (mean, std),
     )?;
     Ok(match grid.crop {
@@ -1405,6 +919,7 @@ fn extract_planes(
     grids: &PlaneGrids,
     plane_sources: &PlaneSources,
     uncropped_ids: &[String],
+    registry: &Registry,
 ) -> Result<(Vec<(String, Vec<f64>)>, Vec<(String, Vec<f64>)>)> {
     // The files in first-seen order, each with the positions in `frames` of
     // the variables it holds.
@@ -1455,7 +970,7 @@ fn extract_planes(
                     unfinished.push((position, plane));
                 } else {
                     let (finished, whole) =
-                        finish_plane(&frames[position], plane, grids, plane_sources, keep_whole(position))?;
+                        finish_plane(&frames[position], plane, grids, plane_sources, keep_whole(position), registry)?;
                     planes[position] = Some(finished);
                     wholes[position] = whole;
                 }
@@ -1463,7 +978,7 @@ fn extract_planes(
         }
         for (position, plane) in unfinished {
             let (finished, whole) =
-                finish_plane(&frames[position], plane, grids, plane_sources, keep_whole(position))?;
+                finish_plane(&frames[position], plane, grids, plane_sources, keep_whole(position), registry)?;
             planes[position] = Some(finished);
             wholes[position] = whole;
         }
@@ -1494,8 +1009,10 @@ fn finish_plane(
     grids: &PlaneGrids,
     plane_sources: &PlaneSources,
     keep_whole: bool,
+    registry: &Registry,
 ) -> Result<(Vec<f64>, Option<Vec<f64>>)> {
     let source = &frame.path;
+    let spec = registry.variable(variable_id)?;
     let grid = grids.for_variable(variable_id)?;
     let (source_height, source_width) = grid.source_shape();
     if grid.column_roll > 0 {
@@ -1514,7 +1031,7 @@ fn finish_plane(
     // fill never blends into its neighbours; then the projected plane
     // lands on the regular grid, and only then is a regional window cut.
     plane_sources.for_variable(variable_id)?.apply_fill(&mut plane);
-    fill_missing(variable_id, &mut plane)?;
+    fill_missing(spec, &mut plane);
     if let Some(resample) = &grid.resample {
         plane = resample.take(&plane)?;
     }
@@ -1535,9 +1052,9 @@ fn finish_plane(
             source.display()
         )));
     }
-    convert_units(variable_id, &frame.unit, &mut plane)?;
+    convert_units(spec, &frame.unit, &mut plane)?;
     if let Some(whole) = whole.as_mut() {
-        convert_units(variable_id, &frame.unit, whole)?;
+        convert_units(spec, &frame.unit, whole)?;
     }
     Ok((plane, whole))
 }
@@ -1548,19 +1065,17 @@ fn finish_plane(
 /// bitmap); a variable that covers its grid declares none and passes through
 /// untouched. Runs before unit conversion, on the raw record values — the
 /// port of `_fill_missing` in `xuebuild/binconvert.py`.
-fn fill_missing(variable_id: &str, plane: &mut [f64]) -> Result<()> {
-    let spec = variable_spec(variable_id)?;
+fn fill_missing(spec: &VariableSpec, plane: &mut [f64]) {
     if spec.fill_values.is_empty() {
-        return Ok(());
+        return;
     }
     PlaneSource {
         unscale: false,
-        fill_values: spec.fill_values.to_vec(),
+        fill_values: spec.fill_values.clone(),
         fill_nan: false,
         fill_replacement: spec.value_range.0,
     }
     .apply_fill(plane);
-    Ok(())
 }
 
 // -- per-file quantization ---------------------------------------------------
@@ -1603,33 +1118,46 @@ impl PlaneSlot {
 /// per-variable quantization statistics the acceptance gate reads.
 type QuantizedFile = (i64, Vec<(String, Vec<u8>)>, Vec<PlaneStats>);
 
+/// The precipitation rate the per-file stage derives on a source whose
+/// precipitation arrives accumulated, averaged or as an interval total:
+/// `(bundle id, raw input id)` (`Registry::derived_precipitation`).
+type DerivedPrecipitation = (String, String);
+
+#[allow(clippy::too_many_arguments)]
 fn quantize_file(
     frames: &FileFrames,
     grids: &PlaneGrids,
     profile: &str,
     plane_source: &PlaneSources,
-    average_window_hours: i64,
+    source: &SourceSpec,
+    precipitation: Option<&DerivedPrecipitation>,
     previous: Option<(i64, Option<Arc<PlaneSlot>>)>,
     own: Option<Arc<PlaneSlot>>,
     derived_vector_ids: &[&str],
     drop_ids: &[String],
     derived_scalar_ids: &[&str],
-    cat_calibration: &[(u32, f64, f64)],
+    registry: &Registry,
 ) -> Result<QuantizedFile> {
     let lead = frames[0].1.lead_seconds;
     // The precipitation derivations below are GRIB-only, and every GRIB record
     // is a whole hour out, so they can work in hours.
     let hour = lead / HOUR_SECONDS;
 
+    // A derivation reading neighbours (the turbulence index) takes its
+    // inputs whole, before any crop.
     let mut uncropped_ids: Vec<String> = Vec::new();
-    for bundle_id in derived_scalar_ids.iter().filter(|id| cat_level(id).is_some()) {
-        for id in derived_scalar_inputs(bundle_id).expect("a derived scalar") {
-            if !uncropped_ids.contains(&id) {
-                uncropped_ids.push(id);
+    for bundle_id in derived_scalar_ids {
+        let Some(derivation) = registry.scalar_derivation(bundle_id) else { continue };
+        if derivation.kind != DerivationKind::ClearAirTurbulence {
+            continue;
+        }
+        for id in &derivation.inputs {
+            if !uncropped_ids.contains(id) {
+                uncropped_ids.push(id.clone());
             }
         }
     }
-    let (extracted, uncropped) = match extract_planes(frames, grids, plane_source, &uncropped_ids) {
+    let (extracted, uncropped) = match extract_planes(frames, grids, plane_source, &uncropped_ids, registry) {
         Ok(planes) => planes,
         Err(error) => {
             // Unblock the successor waiting on this worker's plane.
@@ -1641,10 +1169,9 @@ fn quantize_file(
     };
     let mut values: Vec<(String, Vec<f64>)> = extracted;
 
-    let raw_precipitation_id = DERIVED_PRECIPITATION_IDS
-        .iter()
-        .find(|id| values.iter().any(|(name, _)| name == *id))
-        .copied();
+    let raw_precipitation_id = precipitation
+        .filter(|(_, raw_id)| values.iter().any(|(name, _)| name == raw_id))
+        .map(|(_, raw_id)| raw_id.as_str());
     if let (Some(slot), Some(raw_id)) = (own, raw_precipitation_id) {
         let plane = values
             .iter()
@@ -1665,19 +1192,19 @@ fn quantize_file(
         };
     }
 
-    if let Some(raw_id) = raw_precipitation_id {
+    if let (Some(raw_id), Some((bundle_id, _))) = (raw_precipitation_id, precipitation) {
         let position = values
             .iter()
             .position(|(name, _)| name == raw_id)
             .expect("raw precipitation plane");
         let (_, raw) = values.remove(position);
-        let derived = if raw_id == "tp" {
+        let derived = if source.accumulated_precipitation {
             // ECMWF: replace the run-total accumulation (already mm) with the
             // mean rate over the step that ends at this frame (mm/h). The step
             // is the actual distance to the previous frame.
             let step = previous_hour.map_or(1, |previous| hour - previous);
             deaccumulate_precipitation(&raw, previous_plane.as_deref().map(Vec::as_slice), step)
-        } else if raw_id == "apcp" {
+        } else if source.interval_precipitation {
             // Open-Meteo: the file already holds the total that fell over the
             // interval since the model's previous native output time, so the
             // rate is that total over the interval's length in hours — the
@@ -1697,10 +1224,10 @@ fn quantize_file(
                 hour,
                 previous_plane.as_deref().map(Vec::as_slice),
                 previous_hour,
-                average_window_hours,
+                source.average_window_hours,
             )?
         };
-        values.insert(position, ("prate".to_string(), derived));
+        values.insert(position, (bundle_id.clone(), derived));
     }
 
     // The derived vector bundles — the vapour flux, the wave vector — from
@@ -1708,7 +1235,10 @@ fn quantize_file(
     // derivation (and are not published themselves) are released here
     // rather than quantized and carried through the whole run.
     for bundle_id in derived_vector_ids {
-        let inputs = vector_input_ids(bundle_id);
+        let derivation = registry
+            .derivation(bundle_id)
+            .ok_or_else(|| EncodeError::conversion(format!("{bundle_id} is not a derived bundle")))?;
+        let inputs = &derivation.inputs;
         let plane = |name: &str| -> Result<&Vec<f64>> {
             values
                 .iter()
@@ -1716,47 +1246,65 @@ fn quantize_file(
                 .map(|(_, plane)| plane)
                 .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
         };
-        let (component_u, component_v) = if wave_vector(bundle_id).is_some() {
-            derive_wave_vector(plane(&inputs[0])?, plane(&inputs[1])?)
-        } else {
-            derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?)
+        let (component_u, component_v) = match derivation.kind {
+            DerivationKind::WaveVector => derive_wave_vector(plane(&inputs[0])?, plane(&inputs[1])?),
+            DerivationKind::VapourFlux => {
+                derive_vapour_flux(plane(&inputs[0])?, plane(&inputs[1])?, plane(&inputs[2])?)
+            }
+            other => {
+                return Err(EncodeError::conversion(format!(
+                    "{bundle_id} is a vector bundle derived by {other:?}, which is not a vector algorithm"
+                )))
+            }
         };
-        let (u_id, v_id) = vector_components(bundle_id).expect("a derived vector bundle is a vector");
-        values.push((u_id, component_u));
-        values.push((v_id, component_v));
+        let (u_id, v_id) = registry
+            .vector_components(bundle_id)
+            .expect("a derived vector bundle is a vector");
+        values.push((u_id.to_string(), component_u));
+        values.push((v_id.to_string(), component_v));
     }
     // The derived scalars, after the vapour flux and before the
     // derivation-only inputs go: the equivalent potential temperatures read
     // the specific humidity on their surface, the precipitation type the four
     // categorical flags.
     for bundle_id in derived_scalar_ids {
-        let derived = if *bundle_id == "ptype" {
-            derive_ptype(&values)?
-        } else if cat_level(bundle_id).is_some() {
-            let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
-            let grid = grids.for_variable(&inputs[0])?;
-            // A cropped grid's inputs were kept whole beside the window;
-            // an uncropped grid's published planes are the whole planes.
-            let plane = |name: &str| -> Result<&[f64]> {
-                uncropped
-                    .iter()
-                    .chain(values.iter())
-                    .find(|(id, _)| id == name)
-                    .map(|(_, plane)| plane.as_slice())
-                    .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
-            };
-            derive_cat_plane(plane, bundle_id, grid, cat_calibration)?
-        } else {
-            let inputs = derived_scalar_inputs(bundle_id).expect("a derived scalar");
-            let level = theta_e_level(bundle_id).expect("a derived scalar has a level");
-            let plane = |name: &str| -> Result<&Vec<f64>> {
-                values
-                    .iter()
-                    .find(|(id, _)| id == name)
-                    .map(|(_, plane)| plane)
-                    .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
-            };
-            derive_theta_e(plane(&inputs[0])?, plane(&inputs[1])?, level)
+        let derivation = registry
+            .scalar_derivation(bundle_id)
+            .ok_or_else(|| EncodeError::conversion(format!("{bundle_id} is not a derived scalar")))?;
+        let inputs = &derivation.inputs;
+        let derived = match derivation.kind {
+            DerivationKind::PrecipitationType => derive_ptype(&values, inputs)?,
+            DerivationKind::ClearAirTurbulence => {
+                let level = derivation.level_hpa.expect("validated: a surface");
+                let grid = grids.for_variable(&inputs[0])?;
+                // A cropped grid's inputs were kept whole beside the window;
+                // an uncropped grid's published planes are the whole planes.
+                let plane = |name: &str| -> Result<&[f64]> {
+                    uncropped
+                        .iter()
+                        .chain(values.iter())
+                        .find(|(id, _)| id == name)
+                        .map(|(_, plane)| plane.as_slice())
+                        .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+                };
+                derive_cat_plane(plane, bundle_id, level, inputs, grid, &source.cat_calibration)?
+            }
+            DerivationKind::ThetaE => {
+                let level = derivation.level_hpa.expect("validated: a surface");
+                let plane = |name: &str| -> Result<&Vec<f64>> {
+                    values
+                        .iter()
+                        .find(|(id, _)| id == name)
+                        .map(|(_, plane)| plane)
+                        .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+                };
+                derive_theta_e(plane(&inputs[0])?, plane(&inputs[1])?, level)
+            }
+            other => {
+                return Err(EncodeError::conversion(format!(
+                    "{bundle_id} is a scalar bundle derived by {other:?}, which is not a per-frame algorithm"
+                )))
+            }
         };
         values.push(((*bundle_id).to_string(), derived));
     }
@@ -1765,11 +1313,11 @@ fn quantize_file(
     let mut codes = Vec::with_capacity(values.len());
     let mut stats = Vec::with_capacity(values.len());
     for (variable_id, plane_values) in &values {
-        let book = codebook(profile, variable_id)?;
+        let book = registry.codebook(profile, variable_id)?;
         let mut plane_codes = vec![0u8; plane_values.len()];
         book.quantize(plane_values, &mut plane_codes)?;
-        match book {
-            Codebook::Linear(linear) => {
+        match &book.book {
+            Book::Linear(linear) => {
                 let mut clamped = 0u64;
                 let mut max_error = 0.0f64;
                 for (value, code) in plane_values.iter().zip(&plane_codes) {
@@ -1786,7 +1334,7 @@ fn quantize_file(
                     overflow_points: 0,
                 });
             }
-            Codebook::Precipitation(precipitation) => {
+            Book::Precipitation(precipitation) => {
                 let overflow = plane_codes
                     .iter()
                     .filter(|code| u16::from(**code) == precipitation.overflow_code)
@@ -1877,19 +1425,19 @@ fn bundle_chunks(
     offsets: &[i64],
     codes: &BTreeMap<i64, Vec<(String, Vec<u8>)>>,
     geometry: &TileGeometry,
+    registry: &Registry,
 ) -> Result<ChunkTables> {
-    let variables: Vec<VariableEntry> = variable_ids
-        .iter()
-        .enumerate()
-        .map(|(index, variable_id)| VariableEntry {
+    let mut variables: Vec<VariableEntry> = Vec::with_capacity(variable_ids.len());
+    for (index, variable_id) in variable_ids.iter().enumerate() {
+        variables.push(VariableEntry {
             variable_id: index as u8 + 1,
-            predictor: if is_raw_variable(variable_id) {
+            predictor: if registry.is_raw(variable_id)? {
                 Predictor::Raw
             } else {
                 Predictor::Previous
             },
-        })
-        .collect();
+        });
+    }
 
     // Numeric id back to the name the code planes are keyed by.
     let names: BTreeMap<u8, &str> = variable_ids
@@ -1936,13 +1484,6 @@ fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
     reduced
 }
 
-/// The variables whose reduced tiers keep the warmest code around each
-/// sample site rather than the site's own: the 3.9 µm window, published to
-/// show fires, whose one-cell hot spots a plain decimation drops three times
-/// in four at the half tier. Mirrors `PEAK_DECIMATION_IDS` in
-/// `xuebuild/binconvert.py`.
-const PEAK_DECIMATION_IDS: [&str; 1] = ["ir039"];
-
 /// Reduced-resolution copy of one quantized plane that keeps peaks: at each
 /// site `decimate_codes` keeps, the largest code within `factor / 2` rows
 /// and columns either side of it, clipped at the plane's edges, so every
@@ -1973,8 +1514,10 @@ fn decimate_peak_codes(codes: &[u8], grid: &GridInfo, factor: usize, nodata_code
     reduced
 }
 
-/// One plane's reduced tier: the peak-keeping decimation for the variables
-/// in `PEAK_DECIMATION_IDS`, the site's own code otherwise. Mirrors
+/// One plane's reduced tier: the peak-keeping decimation for a variable
+/// whose registry entry asks for it (the 3.9 µm window, published to show
+/// fires, whose one-cell hot spots a plain decimation drops three times in
+/// four at the half tier), the site's own code otherwise. Mirrors
 /// `_decimate_variant_codes` in `xuebuild/binconvert.py`.
 fn decimate_variant_codes(
     variable_id: &str,
@@ -1982,11 +1525,13 @@ fn decimate_variant_codes(
     grid: &GridInfo,
     factor: usize,
     profile: &str,
+    registry: &Registry,
 ) -> Result<Vec<u8>> {
-    if !PEAK_DECIMATION_IDS.contains(&variable_id) {
+    if registry.variable(variable_id)?.decimation != Decimation::Peak {
         return Ok(decimate_codes(codes, grid, factor));
     }
-    let Some(linear) = codebook(profile, variable_id)?.as_linear().copied() else {
+    let book = registry.codebook(profile, variable_id)?;
+    let Some(linear) = book.as_linear() else {
         return Err(EncodeError::conversion(format!(
             "{variable_id} keeps its peaks only on a linear codebook"
         )));
@@ -2169,20 +1714,28 @@ pub fn convert_bin(
     inputs: &[PathBuf],
     output_dir: &Path,
     options: &ConvertOptions,
+    registry: &Registry,
 ) -> Result<Value> {
-    let source = source_spec(&options.model)?;
+    let source = registry.source(&options.model)?;
     if !options.container && !options.zarr {
         return Err(EncodeError::conversion(
             "a build without the container needs the store: pass zarr=True",
         ));
     }
-    if !crate::encode::quantize::PROFILES.contains(&options.profile.as_str()) {
+    if !registry.knows_profile(&options.profile) {
         return Err(EncodeError::conversion(format!(
             "unknown profile: {}",
             options.profile
         )));
     }
-    let published = published_bundle_ids(source);
+    let published = registry.published_bundle_ids(source);
+    // Every published variable must carry the profile asked for, and the
+    // document is refused before any input is read when one does not.
+    for bundle_id in &published {
+        for variable_id in registry.bundle_variable_ids(bundle_id) {
+            registry.codebook(&options.profile, &variable_id)?;
+        }
+    }
     if let Some(bundle_ids) = &options.bundle_ids {
         let unsupported = bundle_ids
             .iter()
@@ -2198,10 +1751,10 @@ pub fn convert_bin(
     // -- frame discovery ----------------------------------------------------
     let mut per_file: Vec<FileFrames>;
     let variable_ids: Vec<String>;
-    let available_vector_ids: Vec<&'static str>;
-    let available_derived_ids: Vec<&'static str>;
-    let available_composite_ids: Vec<&'static str>;
-    let available_volume_ids: Vec<&'static str>;
+    let available_vector_ids: Vec<&str>;
+    let available_derived_ids: Vec<&str>;
+    let available_composite_ids: Vec<&str>;
+    let available_volume_ids: Vec<&str>;
     let drop_ids: Vec<String>;
     let grid_path: PathBuf;
     let plane_source: PlaneSources;
@@ -2209,7 +1762,7 @@ pub fn convert_bin(
     // Which grid family each variable is read on: empty for every source but
     // CFSv2, whose pressure-level inputs sit in a frame file of their own on
     // a grid of their own (`sources::CompanionFile`).
-    let mut variable_families: Vec<(String, Option<&'static str>)>;
+    let mut variable_families: Vec<(String, Option<&str>)>;
 
     if source.series_file {
         // A series-file source is one NetCDF file holding a whole variable's
@@ -2239,7 +1792,7 @@ pub fn convert_bin(
                 source.manifest_model
             )));
         }
-        let requested_bundle_ids: Vec<&'static str> = published
+        let requested_bundle_ids: Vec<&str> = published
             .iter()
             .copied()
             .filter(|bundle_id| {
@@ -2259,10 +1812,10 @@ pub fn convert_bin(
         // path sorts its own the same way.
         let mut series_variable_ids: Vec<String> = Vec::new();
         for bundle_id in &requested_bundle_ids {
-            let carried = if composite_components(bundle_id).is_some() {
-                bundle_variable_ids(bundle_id)
+            let carried = if registry.composite_components(bundle_id).is_some() {
+                registry.bundle_variable_ids(bundle_id)
             } else {
-                bundle_input_ids(source, bundle_id)
+                registry.bundle_input_ids(source, bundle_id)
             };
             for variable_id in carried {
                 if !series_variable_ids.contains(&variable_id) {
@@ -2270,9 +1823,9 @@ pub fn convert_bin(
                 }
             }
         }
-        series_variable_ids.sort_by_key(|id| source.optional_at_analysis.contains(&id.as_str()));
+        series_variable_ids.sort_by_key(|id| source.is_optional_at_analysis(id));
         let series_variable_refs: Vec<&str> = series_variable_ids.iter().map(String::as_str).collect();
-        let series = inspect_observation(&input, source, Some(&series_variable_refs))?;
+        let series = inspect_observation(&input, source, Some(&series_variable_refs), registry)?;
         grid_path = series.dataset().to_path_buf();
         per_file = series.frames;
         // `last_hour` trims the series to a leading window of the file, and
@@ -2299,9 +1852,10 @@ pub fn convert_bin(
         available_vector_ids = requested_bundle_ids
             .iter()
             .copied()
-            .filter(|bundle_id| vector_components(bundle_id).is_some())
+            .filter(|bundle_id| registry.vector_components(bundle_id).is_some())
             .filter(|bundle_id| {
-                vector_input_ids(bundle_id)
+                registry
+                    .vector_input_ids(bundle_id)
                     .iter()
                     .all(|id| series.datasets.iter().any(|(name, _)| name == id))
             })
@@ -2310,12 +1864,12 @@ pub fn convert_bin(
         available_composite_ids = requested_bundle_ids
             .iter()
             .copied()
-            .filter(|bundle_id| composite_components(bundle_id).is_some())
+            .filter(|bundle_id| registry.composite_components(bundle_id).is_some())
             .collect();
         available_volume_ids = requested_bundle_ids
             .iter()
             .copied()
-            .filter(|bundle_id| volume_components(bundle_id).is_some())
+            .filter(|bundle_id| registry.volume_components(bundle_id).is_some())
             .collect();
         drop_ids = Vec::new();
         plane_source = PlaneSources::PerVariable(series.plane_sources);
@@ -2329,18 +1883,18 @@ pub fn convert_bin(
         // fetched before the wind components joined the download set still
         // build cleanly) and serves as the per-run cross-check reference for
         // the GRIB2 header index used on every file.
-        let mut inspect_ids: Vec<&str> = source.input_variable_ids.to_vec();
+        let mut inspect_ids: Vec<&str> = source.input_variable_ids.iter().map(String::as_str).collect();
         if let Some(bundle_ids) = &options.bundle_ids {
             let needed: Vec<String> = bundle_ids
                 .iter()
-                .flat_map(|bundle_id| bundle_input_ids(source, bundle_id))
+                .flat_map(|bundle_id| registry.bundle_input_ids(source, bundle_id))
                 .collect();
             inspect_ids.retain(|id| needed.iter().any(|needed| needed == id));
         }
-        let requested_vector_ids: Vec<&'static str> = published
+        let requested_vector_ids: Vec<&str> = published
             .iter()
             .copied()
-            .filter(|id| vector_components(id).is_some())
+            .filter(|id| registry.vector_components(id).is_some())
             .filter(|id| {
                 options
                     .bundle_ids
@@ -2348,10 +1902,10 @@ pub fn convert_bin(
                     .is_none_or(|ids| ids.iter().any(|wanted| wanted == id))
             })
             .collect();
-        let requested_derived_ids: Vec<&'static str> = published
+        let requested_derived_ids: Vec<&str> = published
             .iter()
             .copied()
-            .filter(|id| derived_scalar_inputs(id).is_some())
+            .filter(|id| registry.scalar_derivation(id).is_some())
             .filter(|id| {
                 options
                     .bundle_ids
@@ -2363,29 +1917,29 @@ pub fn convert_bin(
         // scalar — may be absent; one that is also a published scalar may not.
         let mut vector_only_ids: Vec<String> = Vec::new();
         for bundle_id in requested_vector_ids.iter().chain(&requested_derived_ids) {
-            for id in bundle_input_ids(source, bundle_id) {
-                if !source.bundle_scalar_ids.contains(&id.as_str()) && !vector_only_ids.contains(&id) {
+            for id in registry.bundle_input_ids(source, bundle_id) {
+                if !source.bundle_scalar_ids.contains(&id) && !vector_only_ids.contains(&id) {
                     vector_only_ids.push(id);
                 }
             }
         }
-        let mut optional: Vec<&str> = source.optional_at_analysis.to_vec();
+        let mut optional: Vec<&str> = source.optional_at_analysis.iter().map(String::as_str).collect();
         optional.extend(vector_only_ids.iter().map(String::as_str));
         // Which grid family each input is read from — `None` for every input
         // of every source but CFSv2. The reference pass runs once per family
         // in play, each over that family's own file.
-        let input_families: Vec<(String, Option<&'static str>)> = source
+        let input_families: Vec<(String, Option<&str>)> = source
             .input_variable_ids
             .iter()
-            .map(|variable_id| ((*variable_id).to_string(), grid_family_of(source, variable_id)))
+            .map(|variable_id| (variable_id.clone(), grid_family_of(source, variable_id)))
             .collect();
-        let family_of = |variable_id: &str| -> Option<&'static str> {
+        let family_of = |variable_id: &str| -> Option<&str> {
             input_families
                 .iter()
                 .find(|(id, _)| id == variable_id)
                 .and_then(|(_, family)| *family)
         };
-        let mut inspect_families: Vec<Option<&'static str>> = Vec::new();
+        let mut inspect_families: Vec<Option<&str>> = Vec::new();
         for variable_id in &inspect_ids {
             let family = family_of(variable_id);
             if !inspect_families.contains(&family) {
@@ -2403,6 +1957,7 @@ pub fn convert_bin(
                 &family_frame_path(&paths[0], family),
                 &family_ids,
                 &optional,
+                registry,
             )? {
                 reference_frames.retain(|(id, _)| *id != entry.0);
                 reference_frames.push(entry);
@@ -2413,7 +1968,8 @@ pub fn convert_bin(
             .iter()
             .copied()
             .filter(|bundle_id| {
-                vector_input_ids(bundle_id)
+                registry
+                    .vector_input_ids(bundle_id)
                     .iter()
                     .all(|id| reference_frames.iter().any(|(name, _)| name == id))
             })
@@ -2422,7 +1978,8 @@ pub fn convert_bin(
             .iter()
             .copied()
             .filter(|bundle_id| {
-                bundle_input_ids(source, bundle_id)
+                registry
+                    .bundle_input_ids(source, bundle_id)
                     .iter()
                     .all(|id| reference_frames.iter().any(|(name, _)| name == id))
             })
@@ -2431,7 +1988,7 @@ pub fn convert_bin(
             if !available_vector_ids.contains(bundle_id) && !available_derived_ids.contains(bundle_id) {
                 eprintln!(
                     "WARNING building without the {bundle_id} bundle, {} are not all in {}",
-                    bundle_input_ids(source, bundle_id).join(", "),
+                    registry.bundle_input_ids(source, bundle_id).join(", "),
                     paths[0].display()
                 );
             }
@@ -2448,7 +2005,7 @@ pub fn convert_bin(
             .collect();
         let scalar_count = ordered.len();
         for bundle_id in available_vector_ids.iter().chain(&available_derived_ids) {
-            for id in bundle_input_ids(source, bundle_id) {
+            for id in registry.bundle_input_ids(source, bundle_id) {
                 if !ordered.contains(&id) {
                     ordered.push(id);
                 }
@@ -2459,8 +2016,8 @@ pub fn convert_bin(
         // for the whole run.
         let components: Vec<String> = available_vector_ids
             .iter()
-            .filter_map(|bundle_id| vector_components(bundle_id))
-            .flat_map(|(u, v)| [u, v])
+            .filter_map(|bundle_id| registry.vector_components(bundle_id))
+            .flat_map(|(u, v)| [u.to_string(), v.to_string()])
             .collect();
         drop_ids = ordered[scalar_count..]
             .iter()
@@ -2471,15 +2028,10 @@ pub fn convert_bin(
         // its forecast hour, so it must be one no file can lack. Stable-sorting
         // the analysis-optional inputs to the back is enough unless nothing
         // else was asked for.
-        ordered.sort_by_key(|id| {
-            (
-                is_static(id),
-                source.optional_at_analysis.contains(&id.as_str()),
-            )
-        });
+        ordered.sort_by_key(|id| (registry.is_static(id), source.is_optional_at_analysis(id)));
         if ordered.is_empty()
-            || source.optional_at_analysis.contains(&ordered[0].as_str())
-            || is_static(&ordered[0])
+            || source.is_optional_at_analysis(&ordered[0])
+            || registry.is_static(&ordered[0])
         {
             return Err(EncodeError::conversion(format!(
                 "a {} build needs at least one variable present in every file, including the \
@@ -2492,17 +2044,19 @@ pub fn convert_bin(
         let static_refs: Vec<&str> = ordered_refs
             .iter()
             .copied()
-            .filter(|id| is_static(id))
+            .filter(|id| registry.is_static(id))
             .collect();
+        let optional_at_analysis: Vec<&str> = source.optional_at_analysis.iter().map(String::as_str).collect();
         per_file = prepare_frames_all(
             &paths,
             &ordered_refs,
-            source.optional_at_analysis,
+            &optional_at_analysis,
             &reference_frames,
             source.cadence_seconds,
             &input_families,
             &static_refs,
             options,
+            registry,
         )?;
         available_composite_ids = Vec::new();
         // A volume's levels are every one of them an input the run must
@@ -2518,7 +2072,7 @@ pub fn convert_bin(
                     .is_none_or(|ids| ids.iter().any(|wanted| wanted == bundle_id))
             })
             .filter(|bundle_id| {
-                volume_components(bundle_id).is_some_and(|members| {
+                registry.volume_components(bundle_id).is_some_and(|members| {
                     members
                         .iter()
                         .all(|id| reference_frames.iter().any(|(name, _)| name == id))
@@ -2590,14 +2144,14 @@ pub fn convert_bin(
     // are read from, for one it reads its own. `None` throughout on every
     // source but CFSv2, so there is one family and one grid as there always
     // was.
-    for bundle_id in published_bundle_ids(source) {
-        let family = bundle_grid_family(source, bundle_id)?;
-        for variable_id in bundle_variable_ids(bundle_id) {
+    for bundle_id in registry.published_bundle_ids(source) {
+        let family = bundle_grid_family(registry, source, bundle_id)?;
+        for variable_id in registry.bundle_variable_ids(bundle_id) {
             variable_families.retain(|(id, _)| *id != variable_id);
             variable_families.push((variable_id, family));
         }
     }
-    let family_of = |variable_id: &str| -> Option<&'static str> {
+    let family_of = |variable_id: &str| -> Option<&str> {
         variable_families
             .iter()
             .find(|(id, _)| id == variable_id)
@@ -2607,14 +2161,14 @@ pub fn convert_bin(
     // checked against that family's production grid. The families are in
     // input order, so the primary file's — the run's grid in the build report
     // — comes first wherever this build reads it at all.
-    let mut family_order: Vec<Option<&'static str>> = Vec::new();
+    let mut family_order: Vec<Option<&str>> = Vec::new();
     for variable_id in &variable_ids {
         let family = family_of(variable_id);
         if !family_order.contains(&family) {
             family_order.push(family);
         }
     }
-    let mut grids: Vec<(Option<&'static str>, GridInfo)> = Vec::new();
+    let mut grids: Vec<(Option<&str>, GridInfo)> = Vec::new();
     for family in &family_order {
         let mut family_grid = grid_info(&family_frame_path(&grid_path, *family), source)?;
         if options.require_complete {
@@ -2644,7 +2198,7 @@ pub fn convert_bin(
         }
         grids.push((*family, family_grid));
     }
-    let grid_for = |family: Option<&'static str>| -> &GridInfo {
+    let grid_for = |family: Option<&str>| -> &GridInfo {
         &grids
             .iter()
             .find(|(held, _)| *held == family)
@@ -2669,15 +2223,16 @@ pub fn convert_bin(
         per_file.len(),
         options.extract_workers
     );
-    let raw_precipitation_id = DERIVED_PRECIPITATION_IDS
-        .iter()
-        .find(|id| variable_ids.iter().any(|name| name == *id))
-        .copied();
-    let plan = sharing_plan(&per_file, raw_precipitation_id, source)?;
+    // The rate the per-file stage derives, when this build reads its raw
+    // input at all.
+    let precipitation: Option<DerivedPrecipitation> = registry
+        .derived_precipitation(source)?
+        .filter(|(_, raw_id)| variable_ids.contains(raw_id));
+    let plan = sharing_plan(&per_file, precipitation.as_ref().map(|(_, raw_id)| raw_id.as_str()), source)?;
     let derived_vector_ids: Vec<&str> = available_vector_ids
         .iter()
         .copied()
-        .filter(|bundle_id| is_derived_vector(bundle_id))
+        .filter(|bundle_id| registry.is_derived_vector(bundle_id))
         .collect();
     let derived_scalar_ids: Vec<&str> = available_derived_ids.clone();
     let results = for_each_ordered(per_file.len(), options.extract_workers, |index| {
@@ -2687,13 +2242,14 @@ pub fn convert_bin(
             &read_grids,
             &options.profile,
             &plane_source,
-            source.average_window_hours,
+            source,
+            precipitation.as_ref(),
             previous,
             own,
             &derived_vector_ids,
             &drop_ids,
             &derived_scalar_ids,
-            source.cat_calibration,
+            registry,
         )
     })?;
 
@@ -2715,8 +2271,8 @@ pub fn convert_bin(
     let mut scalar_variable_ids: Vec<&str> = source
         .bundle_scalar_ids
         .iter()
-        .copied()
-        .filter(|id| derived_scalar_inputs(id).is_none() || available_derived_ids.contains(id))
+        .map(String::as_str)
+        .filter(|id| registry.scalar_derivation(id).is_none() || available_derived_ids.contains(id))
         .collect();
     if let Some(bundle_ids) = &options.bundle_ids {
         scalar_variable_ids.retain(|id| bundle_ids.iter().any(|wanted| wanted == id));
@@ -2728,16 +2284,20 @@ pub fn convert_bin(
         .chain(&available_composite_ids)
         .chain(&available_volume_ids)
     {
-        encoded_variable_ids.extend(bundle_variable_ids(bundle_id));
+        encoded_variable_ids.extend(registry.bundle_variable_ids(bundle_id));
     }
-    // Scalars that also ship a poster — every published scalar but the
-    // contour-drawn pressure family, which a filled first-frame poster would
-    // misrepresent (the native encoder writes no video at all; xuebuild's
-    // `native.py` adds those afterwards, and skips the same set).
+    // Scalars that also ship a poster — every published scalar whose entry
+    // lists one; the contour-drawn pressure family lists none, since a
+    // filled first-frame poster would misrepresent it (the native encoder
+    // writes no video at all; xuebuild's `native.py` adds those afterwards).
     let companion_variable_ids: Vec<&str> = scalar_variable_ids
         .iter()
         .copied()
-        .filter(|id| !PRESSURE_BUNDLE_IDS.contains(id))
+        .filter(|id| {
+            registry
+                .variable(id)
+                .is_ok_and(|spec| spec.companions.contains(&Companion::Poster))
+        })
         .collect();
 
     // Per-variable time axes. A variable with no data for the analysis frame
@@ -2755,14 +2315,14 @@ pub fn convert_bin(
     // job for the rate alone on a source whose precipitation input has no
     // analysis file) carries every frame it read.
     if offsets.len() > 1 && offsets[0] == 0 {
-        for variable_id in analysis_optional_ids(source, &scalar_variable_ids) {
+        for variable_id in registry.analysis_optional_ids(source, &scalar_variable_ids) {
             variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
         }
     }
     // A static field does not vary in time: its one frame is the first, and
     // its bundle carries just that offset. Mirrors `xuebuild/binconvert.py`.
     for variable_id in &encoded_variable_ids {
-        if is_static(variable_id) {
+        if registry.is_static(variable_id) {
             variable_offsets.insert(variable_id.clone(), vec![offsets[0]]);
         }
     }
@@ -2793,6 +2353,7 @@ pub fn convert_bin(
             source,
             unit_seconds,
             &producer_versions,
+            registry,
         )?;
         poster_reports.insert(
             variable_id,
@@ -2822,13 +2383,13 @@ pub fn convert_bin(
     // A source with more than one grid gets one rung per factor per family:
     // a family's rung is its own grid decimated, so a bundle's tier keeps the
     // tile geometry of its own grid.
-    struct Rung {
+    struct Rung<'a> {
         suffix: String,
         factor: usize,
-        grids: Vec<(Option<&'static str>, GridInfo)>,
+        grids: Vec<(Option<&'a str>, GridInfo)>,
         codes_by_offset: BTreeMap<i64, Vec<(String, Vec<u8>)>>,
     }
-    let ladder: Vec<Rung> = if options.skip_variants {
+    let ladder: Vec<Rung<'_>> = if options.skip_variants {
         Vec::new()
     } else {
         source
@@ -2858,6 +2419,7 @@ pub fn convert_bin(
                                                 grid_for(family_of(name)),
                                                 factor,
                                                 &options.profile,
+                                                registry,
                                             )?,
                                         ))
                                     })
@@ -2901,7 +2463,7 @@ pub fn convert_bin(
         // The bundle is written on its own family's grid, with that family's
         // tile: one grid for every source but CFSv2, whose pressure-level
         // bundles are 1° where its surface ones are the T126 Gaussian grid.
-        let family = family_of(bundle_variable_ids(bundle_id)[0].as_str());
+        let family = family_of(registry.bundle_variable_ids(bundle_id)[0].as_str());
         tiers.push(Tier {
             bundle_id,
             suffix: "",
@@ -2926,7 +2488,7 @@ pub fn convert_bin(
     }
     let pool = zarrstore::compression_pool(options.compress_workers)?;
     let write_tier = |tier: &Tier<'_>| -> Result<Value> {
-        let bundle_variables: Vec<String> = bundle_variable_ids(tier.bundle_id);
+        let bundle_variables: Vec<String> = registry.bundle_variable_ids(tier.bundle_id);
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: &[i64] = &variable_offsets[variables[0]];
         let (_, family_tile) = source.family_grid(family_of(variables[0]))?;
@@ -2939,6 +2501,7 @@ pub fn convert_bin(
             source,
             unit_seconds,
             &producer_versions,
+            registry,
         )?;
         let tile = bundle_tile(family_tile, tier.grid, tier.factor);
         let mut report = if options.container {
@@ -2949,7 +2512,7 @@ pub fn convert_bin(
                 tile.1 as u32,
             )
             .map_err(|error| EncodeError::conversion(error.0))?;
-            let tables = bundle_chunks(&variables, bundle_offsets, tier.codes, &geometry)?;
+            let tables = bundle_chunks(&variables, bundle_offsets, tier.codes, &geometry, registry)?;
             write_variable_bundle(
                 tier.bundle_id,
                 &output_dir.join(format!("{}{}.xue", tier.bundle_id, tier.suffix)),
@@ -2986,7 +2549,7 @@ pub fn convert_bin(
                     .collect::<Result<Vec<_>>>()?;
                 store_variables.push(zarrstore::StoreVariable {
                     id: (*variable_id).to_owned(),
-                    previous: !is_raw_variable(variable_id),
+                    previous: !registry.is_raw(variable_id)?,
                     planes,
                 });
             }
@@ -3078,7 +2641,7 @@ pub fn convert_bin(
     };
     let mut report = Map::new();
     report.insert("outputDir".into(), json!(output_dir.display().to_string()));
-    report.insert("model".into(), json!(source.manifest_model));
+    report.insert("model".into(), json!(&source.manifest_model));
     report.insert("grid".into(), Value::Object(grid.metadata()));
     report.insert("profile".into(), json!(options.profile));
     report.insert("zstdLevel".into(), json!(options.zstd_level));
@@ -3100,31 +2663,38 @@ pub fn convert_bin(
             .filter_map(|bundle| delivered_byte_length(bundle))
             .sum::<u64>()),
     );
-    report.insert("temperatureMaxAbsError".into(), json!(stat_max(&["tmp2m"])));
+    // The report's named statistics are the reference report's keys
+    // (`binconvert.convert_bin`): the 2 m temperature, the rate and the
+    // 10 m wind pair by name, whatever the source published.
+    report.insert(
+        "temperatureMaxAbsError".into(),
+        json!(stat_max(&[REPORT_TEMPERATURE_ID])),
+    );
     report.insert(
         "temperatureClampedPoints".into(),
-        json!(stat_clamped(&["tmp2m"])),
+        json!(stat_clamped(&[REPORT_TEMPERATURE_ID])),
     );
     report.insert(
         "precipitationOverflowPoints".into(),
         json!(stats
             .iter()
-            .filter(|item| item.variable_id == "prate")
+            .filter(|item| item.variable_id == REPORT_PRECIPITATION_ID)
             .map(|item| item.overflow_points)
             .sum::<u64>()),
     );
-    if available_vector_ids.contains(&WIND_BUNDLE_ID) {
-        report.insert("windMaxAbsError".into(), json!(stat_max(&WIND_COMPONENT_IDS)));
-        report.insert(
-            "windClampedPoints".into(),
-            json!(stat_clamped(&WIND_COMPONENT_IDS)),
-        );
+    if available_vector_ids.contains(&REPORT_WIND_BUNDLE_ID) {
+        let (u, v) = registry
+            .vector_components(REPORT_WIND_BUNDLE_ID)
+            .expect("a built vector bundle is a vector");
+        report.insert("windMaxAbsError".into(), json!(stat_max(&[u, v])));
+        report.insert("windClampedPoints".into(), json!(stat_clamped(&[u, v])));
     }
 
     // Quantization acceptance runs over the *encoded* variables (prate is the
     // derived output on ECMWF/sflux; the raw input has no codebook).
     for variable_id in &encoded_variable_ids {
-        let Some(linear) = codebook(&options.profile, variable_id)?.as_linear().copied() else {
+        let book = registry.codebook(&options.profile, variable_id)?;
+        let Some(linear) = book.as_linear() else {
             continue;
         };
         let worst = stat_max(&[variable_id]);
@@ -3149,7 +2719,7 @@ pub fn convert_bin(
                 let variable = bundle["variable"].as_str().unwrap_or_default();
                 // The bundle's grid is its family's; `family_of` is keyed by
                 // variable id, and a vector bundle's id is not one.
-                let family = bundle_grid_family(source, variable)?;
+                let family = bundle_grid_family(registry, source, variable)?;
                 bundle_manifest_entry(
                     bundle,
                     manifest_dir,
@@ -3168,9 +2738,10 @@ pub fn convert_bin(
             run_time,
             entries,
             expected_hours,
-            source.manifest_model,
-            source.product,
+            &source.manifest_model,
+            &source.product,
             require_core,
+            registry,
         )?;
         write_json(manifest_path, &payload, options.force)?;
         log!(options, "wrote manifest {}", manifest_path.display());
@@ -3184,8 +2755,8 @@ pub fn convert_bin(
                 run_time,
                 &relative.to_string_lossy().replace('\\', "/"),
                 &crc32_hex(manifest_bytes.as_bytes()),
-                source.manifest_model,
-                source.product,
+                &source.manifest_model,
+                &source.product,
             );
             write_json(latest_path, &pointer, true)?;
             log!(
@@ -3371,7 +2942,10 @@ fn sharing_plan(
             if !source.interval_precipitation && index + 1 < per_file.len() {
                 if let Some(successor) = frame_of(&per_file[index + 1], raw_id) {
                     let hour = frame.lead_seconds / HOUR_SECONDS;
-                    let shares = raw_id == "tp"
+                    // A run total differences against its predecessor
+                    // unconditionally; a window average only against the
+                    // previous frame of the same window.
+                    let shares = source.accumulated_precipitation
                         || average_window_start(
                             successor.lead_seconds / HOUR_SECONDS,
                             source.average_window_hours,
@@ -3409,14 +2983,15 @@ fn prepare_frames_all(
     optional_at_analysis: &[&str],
     reference_frames: &FileFrames,
     cadence_seconds: Option<i64>,
-    families: &[(String, Option<&'static str>)],
+    families: &[(String, Option<&str>)],
     static_ids: &[&str],
     options: &ConvertOptions,
+    registry: &Registry,
 ) -> Result<Vec<FileFrames>> {
     use rayon::prelude::*;
 
     // The variables of each family, in first-seen order.
-    let mut by_family: Vec<(Option<&'static str>, Vec<&str>)> = Vec::new();
+    let mut by_family: Vec<(Option<&str>, Vec<&str>)> = Vec::new();
     for variable_id in variable_ids {
         let family = families
             .iter()
@@ -3464,10 +3039,10 @@ fn prepare_frames_all(
     };
 
     let fast: Result<Vec<FileFrames>> = inspect_all(&|path, ids| {
-        inspect_grib_fast(path, ids, &inspection_optional)
+        inspect_grib_fast(path, ids, &inspection_optional, registry)
     })
     .and_then(|per_file| {
-        check_reference_frames(&per_file[0], reference_frames, variable_ids)?;
+        check_reference_frames(&per_file[0], reference_frames, variable_ids, registry)?;
         Ok(per_file)
     });
     let mut per_file = match fast {
@@ -3476,7 +3051,7 @@ fn prepare_frames_all(
             eprintln!(
                 "WARNING GRIB2 header index unavailable ({error}); falling back to GDAL inspection"
             );
-            inspect_all(&|path, ids| inspect_grib_multi(path, ids, &inspection_optional))?
+            inspect_all(&|path, ids| inspect_grib_multi(path, ids, &inspection_optional, registry))?
         }
     };
     log!(options, "indexed {} files", per_file.len());
@@ -3624,8 +3199,10 @@ fn check_reference_frames(
     fast_frames: &FileFrames,
     reference_frames: &FileFrames,
     variable_ids: &[&str],
+    registry: &Registry,
 ) -> Result<()> {
     for variable_id in variable_ids {
+        let spec = registry.variable(variable_id)?;
         let fast = frame_of(fast_frames, variable_id);
         let reference = frame_of(reference_frames, variable_id);
         match (fast, reference) {
@@ -3640,8 +3217,8 @@ fn check_reference_frames(
                     || fast.run_time != reference.run_time
                     || fast.valid_time != reference.valid_time
                     || fast.lead_seconds != reference.lead_seconds
-                    || raster_expression(variable_id, &fast.unit)?
-                        != raster_expression(variable_id, &reference.unit)?
+                    || raster_expression(spec, &fast.unit)?
+                        != raster_expression(spec, &reference.unit)?
                 {
                     return Err(EncodeError::conversion(format!(
                         "GRIB2 header index disagrees with GDAL for {variable_id} in {}",
@@ -3657,7 +3234,7 @@ fn check_reference_frames(
 #[cfg(test)]
 mod grid_family_tests {
     use super::{bundle_grid_family, grid_family_of};
-    use crate::encode::sources::{source_spec, CFS_PGB_IDS};
+    use crate::encode::registry::Registry;
 
     /// Which grid each of a source's bundles is built on, from the registry
     /// alone: every CFSv2 pressure-level bundle reads the `pgb` family, every
@@ -3666,9 +3243,10 @@ mod grid_family_tests {
     /// nothing about them changed.
     #[test]
     fn every_bundle_is_built_on_one_grid() {
-        let cfs = source_spec("cfs").expect("cfs");
+        let registry = Registry::embedded();
+        let cfs = registry.source("cfs").expect("cfs");
         for bundle_id in ["tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "wind10m"] {
-            assert_eq!(bundle_grid_family(cfs, bundle_id).expect("one grid"), None, "{bundle_id}");
+            assert_eq!(bundle_grid_family(&registry, cfs, bundle_id).expect("one grid"), None, "{bundle_id}");
         }
         for bundle_id in [
             "prmsl", "hgt1000", "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850",
@@ -3677,7 +3255,7 @@ mod grid_family_tests {
             "qflux500",
         ] {
             assert_eq!(
-                bundle_grid_family(cfs, bundle_id).expect("one grid"),
+                bundle_grid_family(&registry, cfs, bundle_id).expect("one grid"),
                 Some("pgb"),
                 "{bundle_id}"
             );
@@ -3685,19 +3263,19 @@ mod grid_family_tests {
         // The vapour flux reads the humidity and the wind pair on its
         // surface, all three from the family, which is what makes it one
         // bundle's worth of one grid.
-        for variable_id in CFS_PGB_IDS {
+        for variable_id in &cfs.companion_files[0].variable_ids {
             assert_eq!(grid_family_of(cfs, variable_id), Some("pgb"), "{variable_id}");
         }
         for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms", "mrms3d"] {
-            let source = source_spec(model).expect(model);
+            let source = registry.source(model).expect(model);
             for bundle_id in source
                 .bundle_scalar_ids
                 .iter()
-                .chain(source.bundle_vector_ids)
-                .chain(source.bundle_volume_ids)
+                .chain(&source.bundle_vector_ids)
+                .chain(&source.bundle_volume_ids)
             {
                 assert_eq!(
-                    bundle_grid_family(source, bundle_id).expect("one grid"),
+                    bundle_grid_family(&registry, source, bundle_id).expect("one grid"),
                     None,
                     "{model} {bundle_id}"
                 );
@@ -3772,25 +3350,26 @@ mod ladder_tests {
 
 #[cfg(test)]
 mod composite_tests {
-    use super::{bundle_input_ids, bundle_variable_ids, composite_components, published_bundle_ids};
-    use crate::encode::sources::source_spec;
+    use crate::encode::registry::Registry;
 
     #[test]
     fn the_dust_rgb_reads_four_windows_or_three_without_the_11_2_one() {
         // Mirrors `DustRGBProducer.inputs_for`: AHI and ABI carry the 11.2 µm
-        // window, FCI does not and the 10.4 µm one stands in.
+        // window, FCI does not and the 10.4 µm one stands in — the document's
+        // `optionalInputs`, read when the source fetches them.
+        let registry = Registry::embedded();
         for model in ["himawari", "himawarijp", "goeseast", "goeswest"] {
-            let source = source_spec(model).expect(model);
-            assert_eq!(bundle_input_ids(source, "dustrgb"), ["ir086", "ir104", "ir112", "ir123"], "{model}");
+            let source = registry.source(model).expect(model);
+            assert_eq!(registry.bundle_input_ids(source, "dustrgb"), ["ir086", "ir104", "ir112", "ir123"], "{model}");
         }
-        let meteosat = source_spec("meteosat").expect("meteosat");
-        assert_eq!(bundle_input_ids(meteosat, "dustrgb"), ["ir086", "ir104", "ir123"]);
+        let meteosat = registry.source("meteosat").expect("meteosat");
+        assert_eq!(registry.bundle_input_ids(meteosat, "dustrgb"), ["ir086", "ir104", "ir123"]);
         // The components are the same three guns everywhere, and every
         // satellite source publishes ir104 and ir039, then the composite.
         for model in ["himawari", "goeseast", "goeswest", "meteosat"] {
-            let source = source_spec(model).expect(model);
-            assert_eq!(bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
-            assert!(published_bundle_ids(source).starts_with(&["ir104", "ir039", "dustrgb"]), "{model}");
+            let source = registry.source(model).expect(model);
+            assert_eq!(registry.bundle_variable_ids("dustrgb"), ["dustr", "dustg", "dustb"]);
+            assert!(registry.published_bundle_ids(source).starts_with(&["ir104", "ir039", "dustrgb"]), "{model}");
         }
     }
 
@@ -3800,105 +3379,92 @@ mod composite_tests {
         // every platform, and a source that fetches fewer (Meteosat) does
         // not publish it. The ZHOUYE confidence is composed in the same
         // pass from the same five, its own bundle of one variable after it.
-        assert_eq!(bundle_variable_ids("dustcf"), ["dustcf"]);
-        assert_eq!(bundle_variable_ids("zhouye"), ["zhouye"]);
+        let registry = Registry::embedded();
+        assert_eq!(registry.bundle_variable_ids("dustcf"), ["dustcf"]);
+        assert_eq!(registry.bundle_variable_ids("zhouye"), ["zhouye"]);
         for model in ["himawari", "goeseast", "goeswest"] {
-            let source = source_spec(model).expect(model);
+            let source = registry.source(model).expect(model);
             for bundle_id in ["dustcf", "zhouye"] {
                 assert_eq!(
-                    bundle_input_ids(source, bundle_id),
+                    registry.bundle_input_ids(source, bundle_id),
                     ["ir039", "wv062", "ir086", "ir104", "ir123"],
                     "{model} {bundle_id}"
                 );
             }
             assert_eq!(
-                published_bundle_ids(source),
+                registry.published_bundle_ids(source),
                 ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"],
                 "{model}"
             );
         }
-        let meteosat = source_spec("meteosat").expect("meteosat");
-        for bundle_id in ["dustcf", "zhouye"] {
-            assert_eq!(bundle_input_ids(meteosat, bundle_id), ["ir039", "wv062", "ir086", "ir104", "ir123"]);
-        }
-        assert_eq!(published_bundle_ids(meteosat), ["ir104", "ir039", "dustrgb", "truecolor"]);
+        let meteosat = registry.source("meteosat").expect("meteosat");
+        assert_eq!(registry.published_bundle_ids(meteosat), ["ir104", "ir039", "dustrgb", "truecolor"]);
     }
 
     #[test]
     fn the_true_colour_reads_four_bands_or_three_without_the_green_one() {
         // Mirrors `TrueColorProducer.inputs_for`: the AHI has a 0.51 µm
         // band, the ABI does not and its green is synthesized from the
-        // other three; the FCI has one, so Meteosat reads the four. The
-        // night side's 3.9 and 10.4 µm windows on every imager. Three guns
-        // everywhere.
-        assert_eq!(bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
-        for model in ["himawari", "himawarijp"] {
-            let source = source_spec(model).expect(model);
+        // other three; the FCI has one, so Meteosat reads the four.
+        let registry = Registry::embedded();
+        assert_eq!(registry.bundle_variable_ids("truecolor"), ["truer", "trueg", "trueb"]);
+        for model in ["himawari", "himawarijp", "meteosat"] {
+            let source = registry.source(model).expect(model);
             assert_eq!(
-                bundle_input_ids(source, "truecolor"),
+                registry.bundle_input_ids(source, "truecolor"),
                 ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"],
                 "{model}"
             );
         }
-        // The Japan box publishes no confidence: the two windows, then the
-        // composites its nine channels feed.
         assert_eq!(
-            published_bundle_ids(source_spec("himawarijp").expect("himawarijp")),
+            registry.published_bundle_ids(registry.source("himawarijp").expect("himawarijp")),
             ["ir104", "ir039", "dustrgb", "truecolor"]
         );
         for model in ["goeseast", "goeswest"] {
-            let source = source_spec(model).expect(model);
-            assert_eq!(bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086", "ir039", "ir104"], "{model}");
+            let source = registry.source(model).expect(model);
+            assert_eq!(registry.bundle_input_ids(source, "truecolor"), ["vis047", "vis064", "nir086", "ir039", "ir104"], "{model}");
         }
-        for model in ["himawari", "goeseast", "goeswest"] {
-            let source = source_spec(model).expect(model);
-            assert!(published_bundle_ids(source).contains(&"truecolor"), "{model}");
-        }
-        let meteosat = source_spec("meteosat").expect("meteosat");
-        assert_eq!(bundle_input_ids(meteosat, "truecolor"), ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104"]);
-        assert!(published_bundle_ids(meteosat).contains(&"truecolor"));
-        // Every satellite source fetches what the true colour reads, and
-        // no source lists a night microphysics composite.
-        for source in crate::encode::sources::SOURCES.iter().filter(|source| source.bundle_composite_ids.contains(&"truecolor")) {
-            for input in bundle_input_ids(source, "truecolor") {
-                assert!(source.input_variable_ids.contains(&input.as_str()), "{} {input}", source.id);
+        // Every satellite source fetches what the true colour reads.
+        for source in registry.sources().filter(|source| source.bundle_composite_ids.iter().any(|id| id == "truecolor")) {
+            for input in registry.bundle_input_ids(source, "truecolor") {
+                assert!(source.has_input(&input), "{} {input}", source.id);
             }
         }
-        assert!(crate::encode::sources::SOURCES.iter().all(|source| !source.bundle_composite_ids.contains(&"nightmicro")));
-        assert!(composite_components("nightmicro").is_none());
+        assert!(registry.composite_components("nightmicro").is_none());
     }
-
 }
 
 #[cfg(test)]
 mod volume_tests {
-    use super::{bundle_input_ids, bundle_variable_ids, is_raw_variable, published_bundle_ids};
-    use crate::encode::sources::source_spec;
-    use crate::encode::variables::{CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS};
+    use crate::encode::registry::Registry;
 
     /// The `refl3d` volume carries the 33 levels bottom to top, reads each
     /// from its own record, publishes after every other kind of bundle and
-    /// stacks every level RAW, as the composite does. Mirrors
-    /// `VOLUME_BUNDLES` in `xuebuild/binconvert.py` and `tests/test_mrms3d.py`.
+    /// stacks every level RAW, as the composite does.
     #[test]
     fn the_reflectivity_volume_is_its_33_levels_in_order() {
-        let source = source_spec("mrms3d").expect("mrms3d");
-        assert_eq!(bundle_variable_ids("refl3d"), REFLECTIVITY_VARIABLE_IDS);
-        assert_eq!(bundle_input_ids(source, "refl3d"), REFLECTIVITY_VARIABLE_IDS);
-        assert_eq!(published_bundle_ids(source), ["refl3d"]);
-        for variable_id in REFLECTIVITY_VARIABLE_IDS {
-            assert!(is_raw_variable(variable_id), "{variable_id}");
+        let registry = Registry::embedded();
+        let source = registry.source("mrms3d").expect("mrms3d");
+        let levels = registry.volume_components("refl3d").expect("a volume");
+        assert_eq!(levels.len(), 33);
+        assert_eq!((levels[0].as_str(), levels[32].as_str()), ("refl500", "refl19000"));
+        assert_eq!(registry.bundle_variable_ids("refl3d"), levels);
+        assert_eq!(registry.bundle_input_ids(source, "refl3d"), levels);
+        assert_eq!(registry.published_bundle_ids(source), ["refl3d"]);
+        for variable_id in levels {
+            assert!(registry.is_raw(variable_id).unwrap(), "{variable_id}");
         }
-        for variable_id in ["prate", "cref", "ptype"] {
-            assert!(is_raw_variable(variable_id), "{variable_id}");
+        for variable_id in ["prate", "cref", "ptype", "cat300"] {
+            assert!(registry.is_raw(variable_id).unwrap(), "{variable_id}");
         }
-        for variable_id in ["tmp2m", "refl", "refl600", "ir104"] {
-            assert!(!is_raw_variable(variable_id), "{variable_id}");
+        for variable_id in ["tmp2m", "ir104", "clw1500"] {
+            assert!(!registry.is_raw(variable_id).unwrap(), "{variable_id}");
         }
+        assert!(registry.is_raw("refl600").is_err());
         // No other source publishes one.
         for model in ["gfs", "ecmwf", "mrms", "himawari", "cma", "woof"] {
             assert!(
-                !published_bundle_ids(source_spec(model).expect(model)).contains(&"refl3d"),
+                !registry.published_bundle_ids(registry.source(model).expect(model)).contains(&"refl3d"),
                 "{model}"
             );
         }
@@ -3906,31 +3472,25 @@ mod volume_tests {
 
     /// The `cloud3d` volume carries the 24 cloud water levels bottom to
     /// top, reads each from its own series and publishes after the nest's
-    /// scalars and its wind. Unlike reflectivity, cloud water is smooth from
-    /// one hour to the next, so its levels chain like any linear field.
-    /// Mirrors `VOLUME_BUNDLES` in `xuebuild/binconvert.py`.
+    /// scalars and its wind.
     #[test]
     fn the_cloud_water_volume_is_its_24_levels_in_order() {
-        let source = source_spec("woof").expect("woof");
-        assert_eq!(bundle_variable_ids("cloud3d"), CLOUD_WATER_VARIABLE_IDS);
+        let registry = Registry::embedded();
+        let source = registry.source("woof").expect("woof");
+        let levels = registry.volume_components("cloud3d").expect("a volume");
+        assert_eq!(levels.len(), 24);
+        assert_eq!((levels[0].as_str(), levels[23].as_str()), ("clw250", "clw12000"));
+        assert_eq!(registry.bundle_input_ids(source, "cloud3d"), levels);
         assert_eq!(
-            bundle_input_ids(source, "cloud3d"),
-            CLOUD_WATER_VARIABLE_IDS
-        );
-        let published = published_bundle_ids(source);
-        assert_eq!(
-            published,
+            registry.published_bundle_ids(source),
             [
                 "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl",
                 "dswrf", "orog", "prmsl", "wind10m", "wind80m", "cloud3d",
             ]
         );
-        for variable_id in CLOUD_WATER_VARIABLE_IDS {
-            assert!(!is_raw_variable(variable_id), "{variable_id}");
-        }
         for model in ["gfs", "ecmwf", "hrrr", "ifshres", "mrms3d", "himawari"] {
             assert!(
-                !published_bundle_ids(source_spec(model).expect(model)).contains(&"cloud3d"),
+                !registry.published_bundle_ids(registry.source(model).expect(model)).contains(&"cloud3d"),
                 "{model}"
             );
         }
@@ -3967,17 +3527,19 @@ mod tests {
 #[cfg(test)]
 mod cat_tests {
     use super::{
-        bundle_input_ids, cat_level, derive_cat, derive_cat_plane, derived_scalar_inputs, ellrod_ti1,
-        is_raw_variable, nil_below_threshold, numpy_maximum, published_bundle_ids, uncropped_latitudes,
-        CatPlanes, CAT_EDR_LOG_MEAN, CAT_TI1_FLOOR,
-        CAT_EDR_LOG_STD, CAT_EDR_NIL, CAT_SHEAR_LAYERS, EARTH_RADIUS_M,
+        derive_cat, derive_cat_plane, ellrod_ti1, nil_below_threshold, numpy_maximum, uncropped_latitudes,
+        CatPlanes, CAT_EDR_LOG_MEAN, CAT_TI1_FLOOR, CAT_EDR_LOG_STD, CAT_EDR_NIL, CAT_SHEAR_LAYERS,
+        EARTH_RADIUS_M,
     };
     use crate::encode::errors::{EncodeError, Result};
     use crate::encode::grid::{CropWindow, GridInfo};
-    use crate::encode::quantize::codebook;
-    use crate::encode::sources::source_spec;
-    use crate::encode::variables::{variable_spec, CAT_LEVELS_HPA};
+    use crate::encode::registry::{DerivationKind, Registry};
     use serde_json::json;
+
+    /// The inputs the document lists for one turbulence bundle.
+    fn cat_inputs(bundle_id: &str) -> Vec<String> {
+        Registry::embedded().scalar_derivation(bundle_id).unwrap().inputs.clone()
+    }
 
     const RAD: f64 = std::f64::consts::PI / 180.0;
 
@@ -4168,7 +3730,7 @@ mod cat_tests {
         let std = 1.2;
         // Two standard deviations above the fit's mean: moderate, kept.
         let mean = ti1_cell.ln() - 2.0 * std;
-        let edr = derive_cat(&grid, "cat300", (mean, std)).unwrap();
+        let edr = derive_cat(&grid, 300, (mean, std)).unwrap();
         let b = CAT_EDR_LOG_STD / std;
         let a = CAT_EDR_LOG_MEAN - b * mean;
         assert_eq!(edr[PROJECTION_CELL], (a + b * ti1_cell.ln()).exp());
@@ -4178,7 +3740,7 @@ mod cat_tests {
         // floors to nothing.
         let cells = PROJECTION_ROWS * PROJECTION_COLUMNS;
         let calm_planes = self::planes(300, cells, &vec![0.0; cells], &vec![0.0; cells]);
-        let calm = derive_cat(&projection_input(&calm_planes), "cat300", (mean, std)).unwrap();
+        let calm = derive_cat(&projection_input(&calm_planes), 300, (mean, std)).unwrap();
         assert!(calm.iter().all(|value| *value == 0.0));
     }
 
@@ -4189,7 +3751,7 @@ mod cat_tests {
         let (ti1, _) = ellrod_ti1(&grid, 300).unwrap();
         // At the fit's mean the EDR is the climatological median, 0.076: nil.
         assert!(CAT_EDR_LOG_MEAN.exp() < CAT_EDR_NIL);
-        let at_mean = derive_cat(&grid, "cat300", (ti1[PROJECTION_CELL].ln(), 1.2)).unwrap();
+        let at_mean = derive_cat(&grid, 300, (ti1[PROJECTION_CELL].ln(), 1.2)).unwrap();
         assert!(at_mean.iter().all(|value| *value == 0.0));
         // The threshold itself, as `tests/test_cat.py` holds it: with
         // std = CAT_EDR_LOG_STD and mean = CAT_EDR_LOG_MEAN the projection is
@@ -4217,12 +3779,13 @@ mod cat_tests {
         assert_eq!(project(lowest_kept), projected(lowest_kept));
         assert!((project(0.3) - 0.3).abs() < 1e-12);
         let mut codes = [0u8; 1];
-        codebook("quality", "cat300").unwrap().quantize(&[project(lowest_kept)], &mut codes).unwrap();
+        let book = Registry::embedded().codebook("quality", "cat300").unwrap();
+        book.quantize(&[project(lowest_kept)], &mut codes).unwrap();
         assert_eq!(codes[0], 20);
         // 0.10 itself, had it come out of exp, keeps its value and code 20.
         assert_eq!(nil_below_threshold(CAT_EDR_NIL), CAT_EDR_NIL);
         assert_eq!(nil_below_threshold(CAT_EDR_NIL.next_down()), 0.0);
-        codebook("quality", "cat300").unwrap().quantize(&[nil_below_threshold(CAT_EDR_NIL)], &mut codes).unwrap();
+        book.quantize(&[nil_below_threshold(CAT_EDR_NIL)], &mut codes).unwrap();
         assert_eq!(codes[0], 20);
         assert!(nil_below_threshold(f64::NAN).is_nan());
     }
@@ -4235,7 +3798,7 @@ mod cat_tests {
         let mut z = vec![10000.0; PROJECTION_ROWS * PROJECTION_COLUMNS];
         z[PROJECTION_CELL] = f64::NAN;
         set(&mut field, "hgt250", z);
-        let edr = derive_cat(&projection_input(&field), "cat300", (-16.0, 1.2)).unwrap();
+        let edr = derive_cat(&projection_input(&field), 300, (-16.0, 1.2)).unwrap();
         assert!(edr[PROJECTION_CELL].is_nan());
         assert!(!edr[PROJECTION_CELL + 1].is_nan());
     }
@@ -4244,9 +3807,10 @@ mod cat_tests {
     fn a_crop_is_cut_after_the_derivation() {
         let (rows, columns) = (13, 24);
         let grid = GridInfo::new(columns, rows, -180.0, 60.0, 15.0, -10.0);
-        let mut planes: Vec<(String, Vec<f64>)> = derived_scalar_inputs("cat250")
-            .unwrap()
-            .into_iter()
+        let inputs = cat_inputs("cat250");
+        let mut planes: Vec<(String, Vec<f64>)> = inputs
+            .iter()
+            .cloned()
             .enumerate()
             .map(|(index, id)| (id, noise(7 + index as u64, rows * columns).iter().map(|x| x * 20.0).collect()))
             .collect();
@@ -4258,7 +3822,7 @@ mod cat_tests {
         let lookup = |name: &str| -> Result<&[f64]> {
             Ok(planes.iter().find(|(id, _)| id == name).map(|(_, plane)| plane.as_slice()).unwrap())
         };
-        let whole = derive_cat_plane(lookup, "cat250", &grid, &calibration).unwrap();
+        let whole = derive_cat_plane(lookup, "cat250", 250, &inputs, &grid, &calibration).unwrap();
         // A window across the antimeridian, touching the grid's first row.
         let crop = CropWindow {
             source_width: columns,
@@ -4271,50 +3835,65 @@ mod cat_tests {
         let mut cropped_grid = GridInfo::new(8, 5, 120.0, 60.0, 15.0, -10.0);
         cropped_grid.crop = Some(crop);
         assert_eq!(uncropped_latitudes(&cropped_grid), uncropped_latitudes(&grid));
-        let cut = derive_cat_plane(lookup, "cat250", &cropped_grid, &calibration).unwrap();
+        let cut = derive_cat_plane(lookup, "cat250", 250, &inputs, &cropped_grid, &calibration).unwrap();
         assert_eq!(cut, crop.take(&whole));
-        assert!(derive_cat_plane(lookup, "cat250", &grid, &[(300, -17.0, 1.1)]).is_err());
+        assert!(derive_cat_plane(lookup, "cat250", 250, &inputs, &grid, &[(300, -17.0, 1.1)]).is_err());
     }
 
+    /// The document's inputs are the shear layer's: the wind and height
+    /// above, then below, then the surface's own wind where that is not
+    /// one end of the layer — the order `ellrod_ti1` reads them in.
     #[test]
     fn the_bundles_and_their_inputs() {
-        assert_eq!(CAT_LEVELS_HPA, [300, 250, 200]);
+        let registry = Registry::embedded();
         assert_eq!(
-            derived_scalar_inputs("cat250").unwrap(),
+            cat_inputs("cat250"),
             ["ugrd200", "vgrd200", "hgt200", "ugrd300", "vgrd300", "hgt300", "ugrd250", "vgrd250"]
         );
         assert_eq!(
-            derived_scalar_inputs("cat300").unwrap(),
+            cat_inputs("cat300"),
             ["ugrd250", "vgrd250", "hgt250", "ugrd300", "vgrd300", "hgt300"]
         );
-        assert_eq!(cat_level("cat200"), Some(200));
-        assert_eq!(cat_level("cape"), None);
-        assert_eq!(cat_level("cat850"), None);
-        let spec = variable_spec("cat300").unwrap();
+        for &(level, above, below) in &CAT_SHEAR_LAYERS {
+            let derivation = registry.scalar_derivation(&format!("cat{level}")).unwrap();
+            assert_eq!((derivation.kind, derivation.level_hpa), (DerivationKind::ClearAirTurbulence, Some(level)));
+            for surface in [above, below, level] {
+                for family in ["ugrd", "vgrd"] {
+                    assert!(derivation.inputs.contains(&format!("{family}{surface}")), "cat{level} {family}{surface}");
+                }
+            }
+        }
+        assert!(registry.scalar_derivation("cape").is_none());
+        assert!(registry.scalar_derivation("cat850").is_none());
+        let spec = registry.variable("cat300").unwrap();
         assert_eq!(spec.parameter_metadata()["parameterCategory"], json!(19));
         assert_eq!(spec.parameter_metadata()["parameterNumber"], json!(29));
-        assert_eq!(codebook("quality", "cat300").unwrap().metadata()["maximumCode"], json!(127));
+        assert_eq!(registry.codebook("quality", "cat300").unwrap().metadata()["maximumCode"], json!(127));
         for id in ["cat300", "cat250", "cat200"] {
-            assert!(is_raw_variable(id), "{id}");
+            assert!(registry.is_raw(id).unwrap(), "{id}");
         }
     }
 
     #[test]
     fn gfs_and_ecmwf_publish_and_calibrate_all_three() {
+        let registry = Registry::embedded();
         for model in ["gfs", "ecmwf", "ifs"] {
-            let source = source_spec(model).unwrap();
-            let published: Vec<&str> =
-                published_bundle_ids(source).into_iter().filter(|id| id.starts_with("cat")).collect();
+            let source = registry.source(model).unwrap();
+            let published: Vec<&str> = registry
+                .published_bundle_ids(source)
+                .into_iter()
+                .filter(|id| id.starts_with("cat"))
+                .collect();
             assert_eq!(published, ["cat300", "cat250", "cat200"], "{model}");
             let levels: Vec<u32> = source.cat_calibration.iter().map(|(level, _, _)| *level).collect();
-            assert_eq!(levels, CAT_LEVELS_HPA, "{model}");
+            assert_eq!(levels, [300, 250, 200], "{model}");
             for bundle_id in ["cat300", "cat250", "cat200"] {
-                for input_id in bundle_input_ids(source, bundle_id) {
-                    assert!(source.input_variable_ids.contains(&input_id.as_str()), "{model} {bundle_id} {input_id}");
+                for input_id in registry.bundle_input_ids(source, bundle_id) {
+                    assert!(source.has_input(&input_id), "{model} {bundle_id} {input_id}");
                 }
             }
         }
-        let aifs = source_spec("aifs").unwrap();
-        assert!(!published_bundle_ids(aifs).iter().any(|id| id.starts_with("cat")));
+        let aifs = registry.source("aifs").unwrap();
+        assert!(!registry.published_bundle_ids(aifs).iter().any(|id| id.starts_with("cat")));
     }
 }

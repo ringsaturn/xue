@@ -1,4 +1,6 @@
-//! Per-model source registry — the port of `xuebuild/sources.py`.
+//! One source as the registry document describes it (`docs/registry.md`
+//! §Sources): every field of `SourceSpec` in `xuebuild/sources.py`, under
+//! its camelCase name.
 //!
 //! The models share one output contract: whatever the source, the bundles
 //! carry the same data variable ids, so the decoder and frontend never care
@@ -7,26 +9,23 @@
 //! and an axis that is whatever times the observations carry — the NOAA
 //! MRMS mosaic one fetched GRIB per two-minute frame, thinned onto a
 //! coarser grid (`Downsample`), the JMA precipitation nowcast and the CMA
-//! radar mosaic one fetched NetCDF series per window (`series_file`),
-//! assembled from the agency's tiles by the jma-radar tool and read back
-//! out of a daily Zarr archive of the mosaics respectively. A `series_file`
-//! source need not be an observation: ECMWF's IFS HRES on its native 9 km
-//! grid (`ifshres`) arrives as one NetCDF series per variable too, resampled
-//! off the Open-Meteo bucket by the `om2nc` tool, and is an ordinary
-//! forecast cycle in every other respect.
+//! radar mosaic one fetched NetCDF series per window (`series_file`). A
+//! `series_file` source need not be an observation: ECMWF's IFS HRES on its
+//! native 9 km grid (`ifshres`) arrives as one NetCDF series per variable
+//! too, and is an ordinary forecast cycle in every other respect.
 
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
+
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::reproject::Regrid;
-use crate::encode::variables::{AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, RIVER_VARIABLE_IDS};
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
 /// `oper`. The fetcher (`xuebuild/fetch.py`) appends its records to the
 /// frame's GRIB after the primary file's, so the converter still sees one
-/// file per frame; the native encoder carries the table so the two
-/// registries stay one. Mirrors `CompanionFile` in `xuebuild/sources.py`.
+/// file per frame.
 ///
 /// A family that declares a [`CompanionFile::production_grid`] is a *grid
 /// family* instead: its records are on another grid than the primary
@@ -38,27 +37,33 @@ use crate::encode::variables::{AEROSOL_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, 
 /// named by the family id (`<run dir>/<id>/<frame file name>`,
 /// [`family_frame_path`]), and the converter reads them from there with a
 /// `GridInfo` of the family's own.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanionFile {
     /// The family: `wave` for GFS-Wave and for the `wave` stream of ECMWF
     /// open data, `pgb` for the CFSv2 pressure-level series.
-    pub id: &'static str,
+    pub id: String,
     /// Which of the source's `input_variable_ids` come from this family, in
     /// assembly order.
-    pub variable_ids: &'static [&'static str],
+    pub variable_ids: Vec<String>,
+    /// True when the fetch repacks the family's records; read by the fetch
+    /// stage alone.
+    #[serde(default)]
+    pub repack: bool,
     /// Set when the family is on a grid of its own (CFSv2's 1° pressure-level
     /// series beside its T126 Gaussian surface series): the grid a complete
     /// build must find its records on, the way `SourceSpec::production_grid`
     /// is for the primary file. Setting it makes the family a grid family —
     /// its records live in their own frame file (above) and every bundle
     /// built from them carries this grid. `None` for a family on the
-    /// source's own grid, which is the shape the wave families have and
-    /// which is unchanged in every respect.
+    /// source's own grid, which is the shape the wave families have.
+    #[serde(default)]
     pub production_grid: Option<(usize, usize)>,
     /// The container v2 tile size the family's bundles are cut with, as
     /// `(width, height)` in cells of *its* grid. Set together with
     /// [`CompanionFile::production_grid`]; `None` on a family that shares the
     /// source's grid and therefore its `SourceSpec::tile`.
+    #[serde(default)]
     pub tile: Option<(usize, usize)>,
 }
 
@@ -94,13 +99,13 @@ pub fn family_frame_path(frame: &Path, family: Option<&str>) -> PathBuf {
     }
 }
 
-/// The spectral band a satellite image variable was measured in, in the
-/// fields of GRIB2 product definition template 4.31: the spacecraft and
-/// instrument by their WMO common code table numbers (C-5 and C-8) and the
-/// band's central wave number in m⁻¹. Written verbatim as the variable's
-/// `band` block (docs/format.md §"Band and Producer"). Mirrors
-/// `SatelliteBand` in `xuebuild/sources.py`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The spectral band a satellite image variable was measured in — GRIB2
+/// template 4.31's identification of the instrument's channel: the
+/// satellite series and number, the instrument type (BUFR code table
+/// 0 02 019) and the band's central wave number in m⁻¹. Written verbatim as
+/// the variable's `band` block (docs/format.md §"Band and Producer").
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SatelliteBand {
     pub satellite_series: u16,
     pub satellite_number: u16,
@@ -126,191 +131,172 @@ impl SatelliteBand {
 /// composite reflectivity is already the column maximum, and keeping the
 /// strongest return of each block is how a radar product is thinned. Runs
 /// after the fill rules and before any crop; `production_grid` and `tile`
-/// describe the thinned grid. Mirrors `Downsample` in `xuebuild/sources.py`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// describe the thinned grid.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct Downsample {
     /// Cells per block along each axis; the source dimensions must divide
     /// by it.
     pub factor: usize,
 }
 
-/// Mirrors `SourceSpec` in `xuebuild/sources.py`, field for field but
-/// three: its `video` switch is read where ffmpeg runs, and the native
-/// encoder writes no video; its `platform` and `grid_step` name the
-/// satellite registry the Python fetch stage warps a window through, and
-/// the native encoder reads the series that stage wrote.
-#[derive(Debug, Clone, Copy)]
+/// Mirrors `SourceSpec` in `xuebuild/sources.py`, field for field. Some
+/// fields are the fetch stage's alone (`platform`, `grid_step`,
+/// `fetch_concurrency`, `object_cadence_seconds`, `cycle_hours`, `video`):
+/// this encoder carries them and reads none of them.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SourceSpec {
     /// CLI / URL / directory id.
-    pub id: &'static str,
+    pub id: String,
     /// The manifest and bundle-metadata `model` string.
-    pub manifest_model: &'static str,
+    pub manifest_model: String,
     /// The manifest `product` string.
-    pub product: &'static str,
+    pub product: String,
     /// Per-model mutable live pointer at the data root; `None` for a source
     /// with no live feed (the WOOF nest, a forecast that exists only as
     /// showcase cases built from a local dataset).
-    pub latest_filename: Option<&'static str>,
+    pub latest_filename: Option<String>,
     /// The published time axis as `(last_hour, step_hours)` segments.
-    pub steps: &'static [(i64, i64)],
-    /// The UTC cycle hours that run past the end of `steps` (HRRR's
-    /// synoptic cycles run to F48, the others to F18). Only a build that
-    /// names one of these cycles may ask for those hours; the published
-    /// axis is still `steps`. Mirrors `long_cycles` in `xuebuild/sources.py`.
-    pub long_cycles: &'static [u32],
-    /// The axis segments, in `steps`'s form, that continue `steps` on a
-    /// `long_cycles` cycle. Mirrors `long_cycle_steps`.
-    pub long_cycle_steps: &'static [(i64, i64)],
+    pub steps: Vec<(i64, i64)>,
     /// Variables fetched from the source, in GRIB assembly order: the primary
     /// file's records first, then each companion family's.
-    pub input_variable_ids: &'static [&'static str],
-    /// Further file families of the same cycle some inputs come from.
-    pub companion_files: &'static [CompanionFile],
+    pub input_variable_ids: Vec<String>,
     /// True when precipitation arrives as a run-total accumulation (ECMWF
     /// `tp`, metres) and must be de-accumulated into a rate.
     pub accumulated_precipitation: bool,
+    /// Further file families of the same cycle some inputs come from.
+    #[serde(default)]
+    pub companion_files: Vec<CompanionFile>,
     /// True when precipitation arrives as an interval-averaged rate whose
     /// window resets every `average_window_hours` (GFS sflux `PRATE ave`).
+    #[serde(default)]
     pub averaged_precipitation: bool,
     /// True when precipitation arrives as the total that fell over the
     /// interval since the previous frame (Open-Meteo's `precipitation`, in
     /// millimetres) and becomes a rate by one division
-    /// (`convert::interval_rate`). The third arrival shape beside
-    /// `accumulated_precipitation` (a run total, differenced) and
-    /// `averaged_precipitation` (a window average, de-averaged); a source
-    /// declares at most one. Mirrors `interval_precipitation` in
-    /// `xuebuild/sources.py`.
+    /// (`convert::interval_rate`). A source declares at most one of the
+    /// three arrival shapes.
+    #[serde(default)]
     pub interval_precipitation: bool,
+    #[serde(default = "default_average_window_hours")]
     pub average_window_hours: i64,
-    /// The first forecast hour the source publishes.
-    ///
-    /// Zero for every source whose cycle ships an analysis file: the series
-    /// starts at the run time. CFSv2 is the exception — its per-variable
-    /// time series begin at the first six-hour step and the cycle's
-    /// analysis lives in another file family, encoded as an instantaneous
-    /// analysis where every published frame is a six-hour mean, so the
-    /// source declares its axis to start at hour 6 and no f000 is fetched
-    /// at all. The WOOF nest starts at hour 1: its hour 0 is the driving
-    /// GFS analysis on the nest, not a WRF forecast, and the `wrf-series`
-    /// tool drops it. [`SourceSpec::forecast_hours`] counts from here,
-    /// which is what every axis check reads. Mirrors `first_hour` in
-    /// `xuebuild/sources.py`.
+    /// The first forecast hour the source publishes: zero for every source
+    /// whose cycle ships an analysis file, 6 for CFSv2, 1 for the WOOF nest.
+    /// [`SourceSpec::forecast_hours`] counts from here.
+    #[serde(default)]
     pub first_hour: i64,
     /// Input variables absent from the analysis (f000) file.
-    pub optional_at_analysis: &'static [&'static str],
+    #[serde(default)]
+    pub optional_at_analysis: Vec<String>,
     /// Published scalars whose values are a statistic over the step ending
     /// at the frame rather than the instantaneous field their identity
     /// names, with the code table 4.10 process (0 mean, 2 maximum); written
-    /// as `typeOfStatisticalProcessing`. Mirrors `statistical_processes` in
-    /// `xuebuild/sources.py`.
-    pub statistical_processes: &'static [(&'static str, u8)],
+    /// as `typeOfStatisticalProcessing`.
+    #[serde(default)]
+    pub statistical_processes: Vec<(String, u8)>,
     /// Published variables that are satellite image channels, each with the
-    /// band it was measured in, written as the variable's `band` block
-    /// beside `parameter`. Mirrors `bands` in `xuebuild/sources.py`.
-    pub bands: &'static [(&'static str, SatelliteBand)],
+    /// band it was measured in, written as the variable's `band` block.
+    #[serde(default)]
+    pub bands: Vec<(String, SatelliteBand)>,
+    #[serde(default)]
+    pub platform: Option<String>,
+    /// For a source fetched from the Open-Meteo open data bucket, the model
+    /// directory its runs live in (`ecmwf_ifs`): the series are then read by
+    /// the registry's Open-Meteo names (`observation::series_variable_name`).
+    #[serde(default)]
+    pub open_meteo: Option<String>,
+    #[serde(default)]
+    pub grid_step: Option<f64>,
+    /// For a satellite source that publishes a box smaller than its
+    /// platform's disk, the box as `(west, south, east, north)` in degrees.
+    #[serde(default)]
+    pub region: Option<(f64, f64, f64, f64)>,
     /// Scalar variables published as single-variable bundles, in manifest
     /// order.
-    pub bundle_scalar_ids: &'static [&'static str],
+    pub bundle_scalar_ids: Vec<String>,
     /// The bundles a complete run of this source must publish — what a
-    /// live manifest is refused without (`manifest.rs`): the temperature
-    /// and precipitation pair on a forecast, the composite reflectivity on
-    /// a radar mosaic. Mirrors `core_bundle_ids` in `xuebuild/sources.py`.
-    pub core_bundle_ids: &'static [&'static str],
-    /// Two-variable bundles published, in manifest order: `wind10m` for the
-    /// 10 m pair, `wind<level>` for an isobaric pair, `qflux<level>` for the
-    /// water vapour flux the converter derives on that surface. One ships
-    /// only when every input it is built from is in `input_variable_ids`.
-    pub bundle_vector_ids: &'static [&'static str],
-    /// Composite bundles published after the vectors, in manifest order: a
-    /// bundle of the variables an algorithm derived from the source's
-    /// channels in the fetch stage — `dustrgb`, the Dust RGB's three guns,
-    /// then `dustcf` and `zhouye`, the DEBRA and ZHOUYE confidences, a
-    /// bundle of one variable each (`convert::composite_components`).
-    /// Listing one publishes it
-    /// only when every channel its producer reads is in
-    /// `input_variable_ids`; the converter reads the produced components
-    /// off the series the fetch stage wrote and never derives them itself.
-    /// Mirrors `bundle_composite_ids` in `xuebuild/sources.py`.
-    pub bundle_composite_ids: &'static [&'static str],
-    /// Volume bundles published after the composites, in manifest order: a
-    /// bundle of many variables each read directly from its own record — the
-    /// MRMS 3D mosaic's `refl3d`, one reflectivity per constant-altitude
-    /// level (`convert::volume_components`). Listing one publishes it only
-    /// when every member is in `input_variable_ids`. Mirrors
-    /// `bundle_volume_ids` in `xuebuild/sources.py`.
-    pub bundle_volume_ids: &'static [&'static str],
+    /// live manifest is refused without (`manifest.rs`).
+    pub core_bundle_ids: Vec<String>,
+    /// Two-variable bundles published, in manifest order. One ships only
+    /// when every input it is built from is in `input_variable_ids`.
+    #[serde(default)]
+    pub bundle_vector_ids: Vec<String>,
+    /// Composite bundles published after the vectors, in manifest order:
+    /// the variables an algorithm derived from the source's channels in the
+    /// fetch stage, read off the series and never derived here.
+    #[serde(default)]
+    pub bundle_composite_ids: Vec<String>,
+    /// Volume bundles published after the composites, in manifest order:
+    /// many variables each read directly from its own record.
+    #[serde(default)]
+    pub bundle_volume_ids: Vec<String>,
     /// Grid a complete (`require_complete`) build must arrive on.
     pub production_grid: (usize, usize),
-    /// Container v2 tile size as `(width, height)` in grid cells. Mirrors
-    /// `SourceSpec.tile` in `xuebuild/sources.py`; the two tables must agree
-    /// or the encoders stop being byte-identical.
+    /// Container v2 tile size as `(width, height)` in grid cells.
     pub tile: (usize, usize),
     /// The resolution ladder below the full tier: one reduced variant per
     /// factor, the grid decimated log2(factor) times and named `half` (2),
-    /// `quarter` (4) or `eighth` (8). Ascending powers of two, 2 or more;
-    /// every forecast and radar source publishes the half tier alone, the
-    /// 3000 x 3000 satellite disks three rungs. Mirrors
-    /// `SourceSpec.variant_factors` in `xuebuild/sources.py`.
-    pub variant_factors: &'static [usize],
+    /// `quarter` (4) or `eighth` (8). Ascending powers of two, 2 or more.
+    #[serde(default)]
+    pub variant_factors: Vec<usize>,
+    /// The full-resolution bundles that also ship a series store.
+    #[serde(default)]
+    pub series_bundle_ids: Vec<String>,
+    #[serde(default)]
+    pub fetch_concurrency: usize,
     /// True for a source that is not a forecast at all: a series of
-    /// observed analyses with no cycle and no lead time. Read from one local
-    /// file through `observation.rs` when `window_hours` is `None`, fetched
-    /// from a bucket frame by frame otherwise.
+    /// observed analyses with no cycle and no lead time.
+    #[serde(default)]
     pub observation: bool,
     /// Set for an observation source whose frames are fetched rather than
     /// read from a local file: the length of the window one build takes, in
-    /// hours. A run of such a source is the window starting at the run's
-    /// hour; the run time is that hour. Mirrors `window_hours` in
-    /// `xuebuild/sources.py`.
+    /// hours.
+    #[serde(default)]
     pub window_hours: Option<i64>,
     /// For a fetched observation: the product's nominal interval, which
     /// every frame's observation time is snapped *down* to before it becomes
-    /// a frame offset (MRMS stamps each two-minute composite some forty
-    /// seconds past the mark). Mirrors `cadence_seconds` in
-    /// `xuebuild/sources.py`.
+    /// a frame offset.
+    #[serde(default)]
     pub cadence_seconds: Option<i64>,
+    #[serde(default)]
+    pub object_cadence_seconds: Option<i64>,
     /// True when a run of the source is one NetCDF file holding the whole
-    /// series, one band per time, read through `observation.rs` (the CMA
-    /// mosaic's local file; the JMA window the fetch writes), rather than
-    /// one GRIB per frame. Orthogonal to `observation`: `ifshres` is a
-    /// forecast whose frames arrive this way, so its series carry a run time
-    /// and lead times like any cycle's. Orthogonal to `fetched` too. Mirrors
-    /// `series_file` in `xuebuild/sources.py`.
+    /// series, one band per time, read through `observation.rs`, rather
+    /// than one GRIB per frame. Orthogonal to `observation`.
+    #[serde(default)]
     pub series_file: bool,
-    /// For a source fetched from the Open-Meteo open data bucket, the model
-    /// directory under `data_spatial/` its runs live in (`ecmwf_ifs`). The
-    /// Python fetch stage dispatches on it and asks the `om2nc` tool for one
-    /// CF NetCDF series per variable, each named with the registry's
-    /// `VariableSpec::open_meteo`, which is what this encoder reads the
-    /// series by (`observation::series_variable_name`). None for every other
-    /// source. Mirrors `open_meteo` in `xuebuild/sources.py`.
-    pub open_meteo: Option<&'static str>,
     /// Set when the source is published on a grid coarser than it arrives
-    /// on ([`Downsample`]). Mirrors `downsample` in `xuebuild/sources.py`.
+    /// on ([`Downsample`]).
+    #[serde(default)]
     pub downsample: Option<Downsample>,
-    /// For a satellite source that publishes a box smaller than its
-    /// platform's disk (`himawarijp`), the box as `(west, south, east,
-    /// north)` in degrees: the Python fetch stage warps the frames onto it
-    /// and fetches only the tiles reaching into it, and this encoder reads
-    /// the series that stage wrote, whose grid is `production_grid` cells
-    /// over this box. `None` for every other source. Mirrors
-    /// `SourceSpec.region` in `xuebuild/sources.py`.
-    pub region: Option<(f64, f64, f64, f64)>,
+    #[serde(default)]
+    pub cycle_hours: i64,
+    /// The UTC cycle hours that run past the end of `steps` (HRRR's
+    /// synoptic cycles run to F48, the others to F18).
+    #[serde(default)]
+    pub long_cycles: Vec<u32>,
+    /// The axis segments, in `steps`'s form, that continue `steps` on a
+    /// `long_cycles` cycle.
+    #[serde(default)]
+    pub long_cycle_steps: Vec<(i64, i64)>,
     /// Set when the source's records are on a map projection rather than a
     /// regular latitude/longitude grid, and must be resampled onto one of
-    /// this step before anything else reads them (`reproject.rs`). The grid
-    /// the bundles carry is then the regular one; `production_grid` and
-    /// `tile` describe it. Mirrors `SourceSpec.regrid` in
-    /// `xuebuild/sources.py`.
+    /// this step before anything else reads them (`reproject.rs`).
+    #[serde(default)]
     pub regrid: Option<Regrid>,
+    /// Whether the H.264 companions are built; read where ffmpeg runs.
+    #[serde(default)]
+    pub video: bool,
     /// `(level_hpa, mean, standard deviation)` of ln TI1 (s^-2) on each
-    /// surface the source publishes a `cat<level>` bundle for: the lognormal
-    /// fit the clear-air turbulence index is projected onto the
-    /// climatological EDR distribution through (`convert::derive_cat`). Per
-    /// source because the deformation a model resolves depends on its
-    /// effective resolution. Mirrors `SourceSpec.cat_calibration` in
-    /// `xuebuild/sources.py`, literal for literal.
-    pub cat_calibration: &'static [(u32, f64, f64)],
+    /// surface the source publishes a clear-air turbulence bundle for: the
+    /// lognormal fit the index is projected onto the climatological EDR
+    /// distribution through (`convert::derive_cat`).
+    #[serde(default)]
+    pub cat_calibration: Vec<(u32, f64, f64)>,
+}
+
+fn default_average_window_hours() -> i64 {
+    6
 }
 
 impl SourceSpec {
@@ -331,18 +317,28 @@ impl SourceSpec {
         }
     }
 
+    /// Whether `variable_id` is one of the source's inputs.
+    pub fn has_input(&self, variable_id: &str) -> bool {
+        self.input_variable_ids.iter().any(|id| id == variable_id)
+    }
+
+    /// Whether `variable_id` may be absent from the analysis file.
+    pub fn is_optional_at_analysis(&self, variable_id: &str) -> bool {
+        self.optional_at_analysis.iter().any(|id| id == variable_id)
+    }
+
     /// The companion family `variable_id` is read from, or `None` for an
     /// input of the primary file.
-    pub fn companion_of(&self, variable_id: &str) -> Option<&'static CompanionFile> {
+    pub fn companion_of(&self, variable_id: &str) -> Option<&CompanionFile> {
         self.companion_files
             .iter()
-            .find(|companion| companion.variable_ids.contains(&variable_id))
+            .find(|companion| companion.variable_ids.iter().any(|id| id == variable_id))
     }
 
     /// The companion families on a grid of their own
     /// ([`CompanionFile::production_grid`]), in declaration order. Empty for
     /// every source but CFSv2. Mirrors `SourceSpec.grid_families`.
-    pub fn grid_families(&self) -> impl Iterator<Item = &'static CompanionFile> {
+    pub fn grid_families(&self) -> impl Iterator<Item = &CompanionFile> {
         self.companion_files
             .iter()
             .filter(|companion| companion.own_grid())
@@ -352,7 +348,7 @@ impl SourceSpec {
     /// the source's own grid — which is every input of every source whose
     /// families share its grid, the wave families included. Mirrors
     /// `SourceSpec.grid_family_of`.
-    pub fn grid_family_of(&self, variable_id: &str) -> Option<&'static CompanionFile> {
+    pub fn grid_family_of(&self, variable_id: &str) -> Option<&CompanionFile> {
         self.companion_of(variable_id)
             .filter(|companion| companion.own_grid())
     }
@@ -396,7 +392,7 @@ impl SourceSpec {
         let long = cycle.is_some_and(|cycle| self.long_cycles.contains(&cycle))
             && self.steps.last().is_some_and(|&(boundary, _)| last_hour > boundary);
         let mut hours = vec![self.first_hour];
-        let extension: &[(i64, i64)] = if long { self.long_cycle_steps } else { &[] };
+        let extension: &[(i64, i64)] = if long { &self.long_cycle_steps } else { &[] };
         for &(boundary, step) in self.steps.iter().chain(extension) {
             while *hours.last().expect("non-empty") < boundary.min(last_hour) {
                 hours.push(hours.last().expect("non-empty") + step);
@@ -413,7 +409,7 @@ impl SourceSpec {
                     .collect::<Vec<_>>()
                     .join(", then ")
             };
-            let mut published = segments(self.steps);
+            let mut published = segments(&self.steps);
             if self.first_hour != 0 {
                 published = format!("from f{:03}, {published}", self.first_hour);
             }
@@ -426,7 +422,7 @@ impl SourceSpec {
                     .join("/");
                 published = format!(
                     "{published}; {} from the {cycles} UTC cycles",
-                    segments(self.long_cycle_steps)
+                    segments(&self.long_cycle_steps)
                 );
             }
             return Err(EncodeError::conversion(format!(
@@ -438,1778 +434,58 @@ impl SourceSpec {
     }
 }
 
-/// The CFSv2 inputs that arrive on the 1° pressure-level grid rather than the
-/// T126 Gaussian surface grid — the `pgb` grid family of the `cfs` source
-/// below, in the order its sibling frame file carries them. NCEP writes a
-/// time-series object per quantity and surface (`z500`, `t850`, `wnd850`,
-/// `q850`, `vvel500`, `prmsl`), and not every quantity is on every surface:
-/// there is no 925 hPa or 300 hPa height, no 300 hPa temperature, and the
-/// humidity stops at 500 hPa. The specific humidities feed the vapour flux
-/// alone. Mirrors `CFS_PGB_IDS` in `xuebuild/sources.py`.
-pub const CFS_PGB_IDS: &[&str] = &[
-    "prmsl",
-    "hgt1000",
-    "hgt850",
-    "hgt700",
-    "hgt500",
-    "hgt200",
-    "tmp1000",
-    "tmp850",
-    "tmp700",
-    "tmp500",
-    "tmp250",
-    "tmp200",
-    "ugrd1000",
-    "vgrd1000",
-    "ugrd925",
-    "vgrd925",
-    "ugrd850",
-    "vgrd850",
-    "ugrd700",
-    "vgrd700",
-    "ugrd500",
-    "vgrd500",
-    "ugrd250",
-    "vgrd250",
-    "ugrd200",
-    "vgrd200",
-    "spfh925",
-    "spfh850",
-    "spfh700",
-    "spfh500",
-    "vvel500",
-];
-
-pub const SOURCES: &[SourceSpec] = &[
-    SourceSpec {
-        id: "gfs",
-        manifest_model: "GFS",
-        product: "pgrb2.0p25",
-        latest_filename: Some("latest.json"),
-        // Hourly through f120, then three-hourly through f240.
-        steps: &[(120, 1), (240, 3)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The pressure family ships mean sea level pressure and the height
-        // on all eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
-        // 500 / 300 / 250 / 200 hPa); the upper-air fills the temperature,
-        // relative humidity and wind on the same eight — the mandatory
-        // levels of a radiosonde ascent, so the skew-T's model column is
-        // complete — with the vapour flux derived from the 850 hPa wind and
-        // the specific humidity there (fetched as an input only — it also
-        // feeds the 850 hPa equivalent potential temperature) and the 100 m
-        // wind pair beside the 10 m one; then the surface diagnostics,
-        // including the precipitable water and boundary layer height and the
-        // four categorical precipitation-type flags the `ptype` bundle is
-        // derived from (input-only, like `spfh850`), and the vertical
-        // velocity on three surfaces; then the ocean — the skin temperature
-        // and the sea ice fields from pgrb2, the wave fields from the cycle's
-        // GFS-Wave file; then the land — the soil temperature and water in
-        // the Noah model's four layers. Seventy-nine pgrb2 records (the
-        // static orography among them) and nine wave records per frame: the
-        // combined sea, the wind sea and the first swell partition, each a
-        // height, a period and a direction, every direction an input only.
-        // Mirrors `xuebuild/sources.py`.
-        input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850",
-            "hgt700", "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850",
-            "tmp700", "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700",
-            "rh500", "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925",
-            "vgrd925", "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300",
-            "vgrd300", "ugrd250", "vgrd250", "ugrd200", "vgrd200", "ugrd100m", "vgrd100m", "gust",
-            "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "pwat",
-            "hpbl", "crain", "cfrzr", "cicep", "csnow", "vvel850", "vvel700", "vvel500", "tmpsfc",
-            "icec", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2",
-            "soilw3", "soilw4", "htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt",
-            "swper", "swdir",
-        ],
-        companion_files: &[CompanionFile {
-            id: "wave",
-            variable_ids: &["htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir"],
-            production_grid: None,
-            tile: None,
-        }],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "ptype", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500",
-            "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500",
-            "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300",
-            "rh250", "rh200", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "cin", "vis",
-            "dpt2m", "aptmp2m", "pwat", "hpbl", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icec", "icetk", "htsgw", "perpw", "wvhgt",
-            "wvper", "swhgt", "swper", "tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2",
-            "soilw3", "soilw4", "orog",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &[
-            "wind10m", "wind100m", "wind1000", "wind925", "wind850", "wind700", "wind500",
-            "wind300", "wind250", "wind200", "qflux850", "wave", "windwave", "swell",
-        ],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (1440, 721),
-        tile: (48, 52),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        // ln TI1 over |lat| <= 85°, cos(lat)-weighted: ten 00Z/12Z runs
-        // 2024-03 to 2026-06, F000/F024/F048, 29.4 million cells per level.
-        cat_calibration: &[(300, -15.5314, 1.1545), (250, -15.8164, 1.1271), (200, -15.6885, 1.1422)],
-    },
-    SourceSpec {
-        id: "ecmwf",
-        manifest_model: "ECMWF",
-        product: "ifs-0p25",
-        latest_filename: Some("latest-ecmwf.json"),
-        // Three-hourly through 144 hours, then six-hourly through 240.
-        steps: &[(144, 3), (240, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The same pressure family and upper-air fills as GFS, from the open
-        // data pressure-level records, so the two models offer one set of
-        // layers. ECMWF `msl` is matched through the registry's 0/3/0 alias.
-        // Then as much of the GFS surface, vertical-velocity and ocean set
-        // as the open data carries, each under its GFS identity through the
-        // registry's alternates: the interval-maximum gust (all zeros at the
-        // analysis, hence optional there), the total cloud cover as a
-        // fraction, the most-unstable CAPE, the 2 m dew point, the vertical
-        // velocity on three surfaces, the skin temperature and the sea ice
-        // thickness, and from the cycle's `wave` stream the wave height,
-        // peak period and mean direction — the direction an input only,
-        // carried by the derived wave vector — and the soil temperature and
-        // water in HTESSEL's four layers under the GFS layer ids. Mirrors
-        // `xuebuild/sources.py`.
-        input_variable_ids: &[
-            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700",
-            "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700",
-            "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500",
-            "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
-            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
-            "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
-            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4",
-            "soilw1", "soilw2", "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
-        ],
-        companion_files: &[CompanionFile {
-            id: "wave",
-            variable_ids: &["htsgw", "perpw", "dirpw"],
-            production_grid: None,
-            tile: None,
-        }],
-        accumulated_precipitation: true,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &["gust"],
-        statistical_processes: &[("prate", 0), ("gust", 2)],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300",
-            "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
-            "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
-            "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "tsoil1", "tsoil2",
-            "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &[
-            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
-            "wind200", "qflux850", "wave",
-        ],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (1440, 721),
-        tile: (48, 52),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        // The GFS fit's runs, leads and cells, from the open data records.
-        cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
-    },
-    // The same records as `ecmwf`, from the same cycle, on the model's full
-    // 0.1° regular grid: ECMWF's 0p1 open data, published since the
-    // 2026-10-20 06z cycle. Its `oper` stream is split into `sfc` and `pl`
-    // objects that the Python fetch stage reassembles, so this encoder sees
-    // one GRIB per frame exactly as for `ecmwf`. Grid, tile and ladder as
-    // `ifshres`. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "ifs",
-        manifest_model: "IFS",
-        product: "ifs-0p1",
-        latest_filename: Some("latest-ifs.json"),
-        steps: &[(144, 3), (240, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &[
-            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700",
-            "hgt500", "hgt300", "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700",
-            "tmp500", "tmp300", "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500",
-            "rh300", "rh250", "rh200", "spfh850", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
-            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd300", "vgrd300",
-            "ugrd250", "vgrd250", "ugrd200", "vgrd200", "gust", "tcdc", "cape", "dpt2m", "vvel850",
-            "vvel700", "vvel500", "tmpsfc", "icetk", "orog", "tsoil1", "tsoil2", "tsoil3", "tsoil4",
-            "soilw1", "soilw2", "soilw3", "soilw4", "htsgw", "perpw", "dirpw",
-        ],
-        companion_files: &[CompanionFile {
-            id: "wave",
-            variable_ids: &["htsgw", "perpw", "dirpw"],
-            production_grid: None,
-            tile: None,
-        }],
-        accumulated_precipitation: true,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &["gust"],
-        statistical_processes: &[("prate", 0), ("gust", 2)],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt1000", "hgt925", "hgt850", "hgt700", "hgt500", "hgt300",
-            "hgt250", "hgt200", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300",
-            "tmp250", "tmp200", "rh1000", "rh925", "rh850", "rh700", "rh500", "rh300", "rh250",
-            "rh200", "gust", "tcdc", "cape", "dpt2m", "vvel850", "vvel700", "vvel500", "thetae850",
-            "cat300", "cat250", "cat200", "tmpsfc", "icetk", "htsgw", "perpw", "tsoil1", "tsoil2",
-            "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4", "orog",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &[
-            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind300", "wind250",
-            "wind200", "qflux850", "wave",
-        ],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (3600, 1801),
-        tile: (90, 95),
-        variant_factors: &[2, 4],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        // The 0.25° `ecmwf` fit, pending a refit on 0.1° runs.
-        cat_calibration: &[(300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)],
-    },
-    // ECMWF's data-driven model, AIFS Single, from the same open data
-    // service: an `oper` and a `wave` stream on the same 0.25° grid, every
-    // cycle six-hourly to 360 hours. What the IFS source publishes less what
-    // AIFS does not carry (no isobaric relative humidity, gust, CAPE, sea
-    // ice thickness or peak wave period) plus the three layer cloud covers;
-    // its `tp`, `tcc` and cloud layers arrive under identities of their own
-    // that the registry's alternates accept. Its soil is the IFS's top two
-    // layers, all AIFS open data carries. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "aifs",
-        manifest_model: "AIFS",
-        product: "aifs-single-0p25",
-        latest_filename: Some("latest-aifs.json"),
-        steps: &[(360, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &[
-            "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250",
-            "tmp925", "tmp850", "tmp500", "spfh850", "ugrd925", "vgrd925", "ugrd850", "vgrd850",
-            "ugrd250", "vgrd250", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700",
-            "vvel500", "tmpsfc", "orog", "tsoil1", "tsoil2", "soilw1", "soilw2", "htsgw", "dirpw",
-        ],
-        companion_files: &[CompanionFile {
-            id: "wave",
-            variable_ids: &["htsgw", "dirpw"],
-            production_grid: None,
-            tile: None,
-        }],
-        accumulated_precipitation: true,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[("prate", 0)],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "hgt250", "tmp925", "tmp850",
-            "tmp500", "tcdc", "lcdc", "mcdc", "hcdc", "dpt2m", "vvel850", "vvel700", "vvel500",
-            "thetae850", "tmpsfc", "htsgw", "tsoil1", "tsoil2", "soilw1", "soilw2", "orog",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (1440, 721),
-        tile: (48, 52),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // ECMWF IFS HRES, the deterministic high-resolution forecast on its
-    // native O1280 grid (~9 km), as Open-Meteo redistributes it: one `.om`
-    // file per time step on `s3://openmeteo/data_spatial/ecmwf_ifs/`, every
-    // variable of a step in one file. The Python fetch stage's `om2nc` tool
-    // reads the byte ranges of the variables asked for, resamples the
-    // reduced Gaussian grid onto a regular 0.1° one by nearest neighbour and
-    // writes one CF NetCDF series per variable, so this is a `series_file`
-    // source (the first that is not an observation) and neither encoder ever
-    // learns the Gaussian arithmetic. Two cycles a day (00Z and 12Z,
-    // `cycle_hours` 12 on the Python side: the 06/18Z cycles reach only 144
-    // hours, which one horizon cannot express). The variable set is the GFS
-    // surface diagnostics and the sflux radiation, so a layer survives a
-    // switch between the models; Open-Meteo carries no pressure levels, no
-    // waves and no ice cover, which is what the 0.25° `ecmwf` source keeps
-    // providing. Precipitation arrives as the total over the interval since
-    // the previous native step (`interval_precipitation`, the registry's
-    // `apcp`), the radiation as that interval's mean and the gust as its
-    // maximum, which is what `statistical_processes` declares; none of the
-    // three exists at the analysis. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "ifshres",
-        manifest_model: "ECMWF-HRES",
-        product: "ifs-hres-0p1",
-        latest_filename: Some("latest-ifshres.json"),
-        // Hourly through 90 hours, three-hourly to 144, six-hourly to 360:
-        // 145 frames, the run's own native output cadence.
-        steps: &[(90, 1), (144, 3), (360, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &[
-            "tmp2m", "apcp", "ugrd10m", "vgrd10m", "dswrf", "prmsl", "gust", "tcdc", "lcdc",
-            "mcdc", "hcdc", "cape", "dpt2m", "vis", "tmpsfc", "icetk",
-        ],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: true,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &["apcp", "dswrf", "gust"],
-        statistical_processes: &[("prate", 0), ("dswrf", 0), ("gust", 2)],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "dswrf", "prmsl", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape",
-            "vis", "dpt2m", "tmpsfc", "icetk",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m"],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The 0.1° global grid om2nc resamples onto: −180 to 179.9 and both
-        // poles, the 0.25° grid's shape at two and a half times its step.
-        production_grid: (3600, 1801),
-        // 90 x 95 cells is 9° x 9.5° — 40 x 19 = 760 tiles, the last row 91
-        // cells high (1801 = 18 x 95 + 91). The tidy divisors of 1800 leave a
-        // one-row tile at the south pole instead, which is why the height is
-        // not one of them.
-        tile: (90, 95),
-        // Two rungs: a full plane is 6.5 M cells, past the shell's frame
-        // budget, so a view of the whole world plays the half (1800 x 901,
-        // about a full GFS plane) or the quarter on a small device.
-        variant_factors: &[2, 4],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: true,
-        open_meteo: Some("ecmwf_ifs"),
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // GFS surface flux files on the native ~13 km T1534 Gaussian grid. Adds
-    // the dswrf layer; prate is de-averaged from window-cumulative averages.
-    SourceSpec {
-        id: "sflux",
-        manifest_model: "GFS-SFLUX",
-        product: "sfluxgrb",
-        latest_filename: Some("latest-sflux.json"),
-        steps: &[(120, 1), (240, 3)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["tmp2m", "prate_ave", "ugrd10m", "vgrd10m", "dswrf", "orog"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: true,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &["prate_ave"],
-        statistical_processes: &[("prate", 0)],
-        bands: &[],
-        bundle_scalar_ids: &["tmp2m", "prate", "dswrf", "orog"],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m"],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (3072, 1536),
-        tile: (96, 96),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // NOAA HRRR: the 3 km convection-allowing model over the contiguous
-    // United States, a cycle every hour, hourly to F18. Computed on a
-    // Lambert conformal conic grid (1799 x 1059), so every plane is
-    // resampled onto a regular 0.03° grid over the domain's footprint and
-    // the bundles carry that grid. Read from the 2-D surface file, which
-    // carries no 250 hPa height and no isobaric humidity; its sea level
-    // pressure is the MAPS reduction (`MSLMA`, the registry's 0/3/198
-    // alias) and its composite reflectivity is published under the radar
-    // mosaic's `cref`. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "hrrr",
-        manifest_model: "HRRR",
-        product: "wrfsfc",
-        latest_filename: Some("latest-hrrr.json"),
-        steps: &[(18, 1)],
-        long_cycles: &[0, 6, 12, 18],
-        long_cycle_steps: &[(48, 1)],
-        input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m", "prmsl", "hgt850",
-            "hgt700", "hgt500", "tmp925", "tmp850", "tmp500", "ugrd925", "vgrd925", "ugrd850",
-            "vgrd850", "ugrd250", "vgrd250", "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis",
-            "dpt2m", "cref", "orog",
-        ],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "prmsl", "hgt850", "hgt700", "hgt500", "tmp925", "tmp850", "tmp500",
-            "gust", "tcdc", "lcdc", "mcdc", "hcdc", "cape", "vis", "dpt2m", "cref", "orog",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &["wind10m", "wind80m", "wind925", "wind850", "wind250"],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The 0.03° grid over the footprint of the 1799 x 1059 domain, from
-        // 134.10 W, 52.62 N to 60.90 W, 21.12 N.
-        production_grid: (2441, 1051),
-        tile: (64, 64),
-        variant_factors: &[2],
-        regrid: Some(Regrid { step: 0.03 }),
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // CMA weather radar level-3 mosaic composite reflectivity: the national
-    // composite every six minutes, kept as one Zarr store per UTC day in a
-    // private archive and read back a window at a time as one NetCDF
-    // series (xuebuild/cmaarchive.py). An observation
-    // source, live like MRMS and JMA: the window's first hour is the run
-    // and the six-minute slots the axis (`cadence_seconds`); a showcase case
-    // may still be built from a local file; the id changed from `radar`
-    // with the shape, so a wheel that knows one is never taken for the
-    // other. Mirrors `xuebuild/sources.py`.
-    // GEFS-Aerosols: the GEFS cycle's `chem` member, the GOCART aerosol
-    // model coupled to the GFS, whose two-dimensional output sits beside the
-    // ensemble on NOAA's GEFS bucket at 0.25° (`chem/pgrb2ap25/`,
-    // `a2d_0p25`: the only product of the member at that resolution),
-    // three-hourly to 120 hours from every cycle, complete some six hours
-    // after it. Every record is GRIB2 template 4.48, an aerosol product
-    // whose identity is the parameter block plus the aerosol block beside
-    // it (`variables::AerosolIdentity`). The aerosol optical depth at 550
-    // nm, total and by species, and the surface concentrations of fine and
-    // coarse particulate matter — the forecast that pairs with the
-    // satellite sources' Dust RGB and DEBRA confidence. No temperature and
-    // no rain, so the core set is the total optical depth alone. Mirrors
-    // `gefsaero` in `xuebuild/sources.py`.
-    SourceSpec {
-        id: "gefsaero",
-        manifest_model: "GEFS-AEROSOLS",
-        product: "chem-a2d-0p25",
-        latest_filename: Some("latest-gefsaero.json"),
-        steps: &[(120, 3)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: AEROSOL_VARIABLE_IDS,
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: AEROSOL_VARIABLE_IDS,
-        core_bundle_ids: &["aod"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (1440, 721),
-        tile: (48, 52),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // NCEP CFSv2: the operational coupled climate forecast, nine months of
-    // six-hourly output from every cycle. Its surface fields arrive not as
-    // one file per frame but as one file per variable holding that
-    // variable's whole run (`time_grib_01/<name>.01.<run>.daily.grb2`, with
-    // an `.idx` beside it) — series-major input, which the Python fetch
-    // stage cuts into the frames this encoder reads, so nothing here knows
-    // the difference. Ensemble member 01 alone runs the full nine months,
-    // and only the 00Z and 12Z cycles are published (`cycle_hours` 12, as
-    // on IFS HRES).
-    //
-    // The horizon is a calendar, not a count: a run ends at the first 00Z
-    // of the tenth calendar month after its cycle, 6564 to 6888 hours
-    // depending on the date. A source carries one axis, so the published
-    // one is the length every 00Z / 12Z cycle reaches: 6552 hours,
-    // thirty-nine weeks, 1092 frames of six hours.
-    //
-    // The series begin at the first step and the cycle's analysis sits in
-    // another file family, where the flux fields are instantaneous analysis
-    // values rather than the six-hour means every forecast frame carries.
-    // Rather than publish one frame of a different quantity, the source
-    // declares `first_hour` 6 and never fetches the analysis — so nothing
-    // is analysis-optional either.
-    //
-    // The grid is the T126 Gaussian one (384 x 190, a 0.9375° step and
-    // GDAL's uniform latitude spacing), the same shape of grid as the sflux
-    // source's: the global-longitude snap and the column roll in `grid.rs`
-    // already describe it. Mirrors `cfs` in `xuebuild/sources.py`.
-    SourceSpec {
-        id: "cfs",
-        manifest_model: "CFSv2",
-        product: "time-grib-01",
-        latest_filename: Some("latest-cfs.json"),
-        steps: &[(6552, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The nine surface inputs of the primary (flx) file, then the
-        // pressure-level family's on its own 1° grid (`CFS_PGB_IDS`).
-        input_variable_ids: &[
-            "tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk",
-            "prmsl", "hgt1000", "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850",
-            "tmp700", "tmp500", "tmp250", "tmp200", "ugrd1000", "vgrd1000", "ugrd925", "vgrd925",
-            "ugrd850", "vgrd850", "ugrd700", "vgrd700", "ugrd500", "vgrd500", "ugrd250", "vgrd250",
-            "ugrd200", "vgrd200", "spfh925", "spfh850", "spfh700", "spfh500", "vvel500",
-        ],
-        // The pressure-level and sea level pressure series are published on
-        // a regular 1° grid rather than the T126 Gaussian grid the surface
-        // series use, so they are a grid family: their records are fetched
-        // into a sibling frame file of their own and every bundle built from
-        // them carries the 1° grid. 90 x 91 cells cuts it into 4 x 2 = 8
-        // tiles, the same shape as the surface grid's, with the last tile
-        // row one cell short of the pole row (181 = 91 + 90).
-        companion_files: &[CompanionFile {
-            id: "pgb",
-            variable_ids: CFS_PGB_IDS,
-            production_grid: Some((360, 181)),
-            tile: Some((90, 91)),
-        }],
-        // PRATE is already a rate; nothing is de-accumulated or de-averaged.
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 6,
-        optional_at_analysis: &[],
-        // NCEP encodes every CFSv2 record as product definition template 4.0
-        // (an instantaneous field), but the three flux quantities are means
-        // over the six hours ending at the frame. The metadata says what the
-        // values are, not what the template claims.
-        statistical_processes: &[("prate", 0), ("dswrf", 0), ("tcdc", 0)],
-        bands: &[],
-        // The seven surface scalars on the Gaussian grid, then the thirteen
-        // the 1° family publishes: sea level pressure, the geopotential
-        // height and temperature on the surfaces CFSv2 writes a series for,
-        // and the 500 hPa vertical velocity. The specific humidities are
-        // read and never published — they ship inside the vapour flux the
-        // converter derives from them and the wind on their surface.
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "prmsl", "hgt1000",
-            "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850", "tmp700", "tmp500",
-            "tmp250", "tmp200", "vvel500",
-        ],
-        core_bundle_ids: &["tmp2m", "prate"],
-        bundle_vector_ids: &[
-            "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind250",
-            "wind200", "qflux925", "qflux850", "qflux700", "qflux500",
-        ],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (384, 190),
-        // 96 x 95 cells cuts the grid into 4 x 2 = 8 tiles with no clipped
-        // edge: a whole plane is 73 000 cells, so a tile is what keeps one
-        // cell's nine-month series to a few hundred kilobytes rather than
-        // the whole grid's.
-        tile: (96, 95),
-        variant_factors: &[2],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: false,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
-    // Fuji showcase, nested 12 → 3 → 1 → 0.5 km from the GFS analysis, read
-    // on its innermost 500 m domain. There is no feed to fetch, so
-    // `latest_filename` is `None` and the source is reached only through
-    // showcase cases naming a dataset directory — the first forecast that is
-    // not `fetched()`. The `xue wrf-series` tool owns every WRF particular
-    // (destaggering, the earth-relative wind, the dewpoint, the layered cloud
-    // maxima, the precipitation differencing, the 80 m wind off the model
-    // levels, the sea level reduction, the bilinear regrid from the Lambert
-    // conformal nest onto a regular 0.005° grid) and writes one CF
-    // NetCDF series per variable, so this is a `series_file` forecast like
-    // `ifshres` and the encoder learns no WRF arithmetic. Hourly to 72 hours
-    // — WOOF's usual cap — from f001: f000 is the GFS analysis on the nest,
-    // not a WRF forecast, and the tool drops it (`first_hour`).
-    // Precipitation arrives as the hour's total (`interval_precipitation`,
-    // the registry's `apcp`) at every frame, so nothing is analysis-optional.
-    // The nominal grid is d04 inscribed in the regular grid, 79 x 61 cells:
-    // under 5000 cells a plane, so no ladder. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "woof",
-        manifest_model: "WOOF-WRF",
-        product: "nest",
-        latest_filename: None,
-        steps: &[(72, 1)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The 24 cloud water levels follow, bottom to top
-        // (`CLOUD_WATER_VARIABLE_IDS`): every one is an input of `cloud3d`.
-        input_variable_ids: &[
-            "tmp2m", "dpt2m", "tmpsfc", "ugrd10m", "vgrd10m", "apcp", "tcdc", "lcdc", "mcdc",
-            "hcdc", "hpbl", "dswrf", "orog", "ugrd80m", "vgrd80m", "prmsl", "clw250", "clw500",
-            "clw750", "clw1000", "clw1250", "clw1500", "clw1750", "clw2000", "clw2250", "clw2500",
-            "clw2750", "clw3000", "clw3500", "clw4000", "clw4500", "clw5000", "clw5500", "clw6000",
-            "clw7000", "clw8000", "clw9000", "clw10000", "clw11000", "clw12000",
-        ],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: true,
-        average_window_hours: 6,
-        first_hour: 1,
-        optional_at_analysis: &[],
-        statistical_processes: &[("prate", 0)],
-        bands: &[],
-        bundle_scalar_ids: &[
-            "tmp2m", "prate", "tmpsfc", "dpt2m", "tcdc", "lcdc", "mcdc", "hcdc", "hpbl", "dswrf",
-            "orog", "prmsl",
-        ],
-        core_bundle_ids: &["tmp2m"],
-        bundle_vector_ids: &["wind10m", "wind80m"],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &["cloud3d"],
-        production_grid: (79, 61),
-        // One tile covers the whole nest.
-        tile: (64, 64),
-        variant_factors: &[],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // EFAS v5 (the Copernicus Emergency Management Service's European Flood
-    // Awareness System, run by ECMWF): LISFLOOD's river discharge on a
-    // regular 1/60° grid over Europe, 4530 x 2970 cells from 25.25°W to
-    // 50.25°E and 22.75°N to 72.25°N. The open data reach the public thirty
-    // days after the cycle, so there is no live feed (`latest_filename`
-    // `None`, like the WOOF nest): a run is converted locally by the Python
-    // `xue efas-series` tool, which reads the GRIB with eccodes, derives the
-    // return-period class and writes one CF series per variable
-    // (`efas.<run>.<variable>.nc`) — the `woof` series-file forecast path,
-    // so this encoder learns no EFAS rule. `dis06` is the mean over the six
-    // hours ending at the frame, so the axis starts at f006 (`first_hour`)
-    // and the value is declared a mean; the upstream area is the static map
-    // repeated on every frame. To 120 hours at the 6-hourly step. A plane is
-    // 13.5 M cells but a case is a box of a few thousand, so there is no
-    // ladder; 64 x 64 cells is about a degree. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "efas",
-        manifest_model: "EFAS-v5",
-        product: "hres",
-        latest_filename: None,
-        steps: &[(120, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: RIVER_VARIABLE_IDS,
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 6,
-        optional_at_analysis: &[],
-        statistical_processes: &[("dis06", 0)],
-        bands: &[],
-        bundle_scalar_ids: RIVER_VARIABLE_IDS,
-        core_bundle_ids: &["dis06"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (4530, 2970),
-        tile: (64, 64),
-        variant_factors: &[],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // The EFAS water balance: the same LISFLOOD forced by observed rain
-    // rather than a forecast, the analysis the forecasts start from. It has
-    // no cycle; the `efas-series` tool names a window's start as the run and
-    // the frames are the six-hour means ending 6 ... 120 hours after it, so
-    // the axis, the grid and everything else are the forecast's own.
-    // Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "efaswb",
-        manifest_model: "EFAS-v5-WB",
-        product: "water_balance",
-        latest_filename: None,
-        steps: &[(120, 6)],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: RIVER_VARIABLE_IDS,
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 6,
-        optional_at_analysis: &[],
-        statistical_processes: &[("dis06", 0)],
-        bands: &[],
-        bundle_scalar_ids: RIVER_VARIABLE_IDS,
-        core_bundle_ids: &["dis06"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        production_grid: (4530, 2970),
-        tile: (64, 64),
-        variant_factors: &[],
-        regrid: None,
-        observation: false,
-        window_hours: None,
-        cadence_seconds: None,
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    SourceSpec {
-        id: "cma",
-        manifest_model: "CMA-RADAR",
-        product: "l3-mst-cref",
-        latest_filename: Some("latest-cma.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["cref"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &["cref"],
-        core_bundle_ids: &["cref"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The zoom-5 tile grid over the archive's bbox: 0.0439° cells from
-        // 67.5E to 146.25E and 56.25N to 11.25N.
-        production_grid: (1792, 1024),
-        tile: (64, 64),
-        variant_factors: &[2],
-        regrid: None,
-        observation: true,
-        window_hours: Some(3),
-        cadence_seconds: Some(360),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // NOAA MRMS: the national radar mosaic over the contiguous United
-    // States, a composite every two minutes on a regular 0.01° grid, fetched
-    // from its bucket one whole GRIB per product per frame. The composite
-    // reflectivity is published under the mosaic's `cref` and the rate under
-    // `prate`, each through the registry's alternate for the MRMS-local
-    // identity (discipline 209), with the product's sentinels folded to the
-    // codebook bottom; the 7000 x 3500 grid is thinned two to one by block
-    // maximum onto 0.02°, and the jittered observation times are snapped to
-    // the two-minute mark. The pointer names the live window; a build may
-    // also name the window's first hour as its run. Mirrors
-    // `xuebuild/sources.py`.
-    SourceSpec {
-        id: "mrms",
-        manifest_model: "NOAA-MRMS",
-        product: "conus-cref",
-        latest_filename: Some("latest-mrms.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["cref", "prate"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &["cref", "prate"],
-        core_bundle_ids: &["cref"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The thinned 0.02° grid: 130W to 60W, 55N to 20N.
-        production_grid: (3500, 1750),
-        tile: (64, 64),
-        variant_factors: &[2],
-        regrid: None,
-        observation: true,
-        window_hours: Some(3),
-        cadence_seconds: Some(120),
-        series_file: false,
-        open_meteo: None,
-        downsample: Some(Downsample { factor: 2 }),
-        region: None,
-        cat_calibration: &[],
-    },
-    // NOAA MRMS 3D: the national mosaic's merged reflectivity on its 33
-    // constant-altitude levels, 0.5 to 19 km above mean sea level, one whole
-    // GRIB per level per two-minute scan in the same bucket as `mrms`. A
-    // published frame is every ten minutes, on the :x0 marks: the fetch keeps
-    // the scan stamped in the two minutes after each mark, all 33 levels from
-    // that one scan, and concatenates them in level order into one GRIB, so
-    // the observation times snap down to the ten-minute mark here
-    // (`cadence_seconds`). Each level is a variable of its own under the
-    // MRMS-local 209/9/0 on its altitude, published together as the `refl3d`
-    // volume bundle; the 7000 x 3500 grid is thinned five to one by block
-    // maximum onto 0.05°. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "mrms3d",
-        manifest_model: "NOAA-MRMS3D",
-        product: "conus-refl3d",
-        latest_filename: Some("latest-mrms3d.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &REFLECTIVITY_VARIABLE_IDS,
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &[],
-        core_bundle_ids: &["refl3d"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &["refl3d"],
-        // The thinned 0.05° grid: 130W to 60W, 55N to 20N, cut into
-        // 2.5° tiles (28 x 14).
-        production_grid: (1400, 700),
-        tile: (50, 50),
-        variant_factors: &[2],
-        regrid: None,
-        observation: true,
-        window_hours: Some(3),
-        cadence_seconds: Some(600),
-        series_file: false,
-        open_meteo: None,
-        downsample: Some(Downsample { factor: 5 }),
-        region: None,
-        cat_calibration: &[],
-    },
-    // JMA 高解像度降水ナウキャスト: the agency's precipitation intensity
-    // analysis over Japan, a frame every five minutes, published as map
-    // tiles whose palette encodes ten intensity classes. Not a
-    // reflectivity, so published under `prate` at each class's
-    // representative rate; the jma-radar tool decodes the zoom-8 tiles onto
-    // a regular 0.005° grid (the strongest class in each cell) over the
-    // radar coverage envelope and writes a window's frames as one NetCDF
-    // series, which is read the way the CMA file is, with the window's
-    // first hour as the run and the five-minute slots as the axis
-    // (`cadence_seconds`). Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "jma",
-        manifest_model: "JMA-HRPNS",
-        product: "japan-prate",
-        latest_filename: Some("latest-jma.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["prate"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &["prate"],
-        core_bundle_ids: &["prate"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The 0.005° grid over the coverage envelope: 121E to 149E, 45.5N to
-        // 20.5N.
-        production_grid: (5600, 5000),
-        tile: (128, 128),
-        variant_factors: &[2],
-        regrid: None,
-        observation: true,
-        window_hours: Some(3),
-        cadence_seconds: Some(300),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // Himawari-9 AHI at 140.7°E as NOAA redistributes it (the ISatSS
-    // tiles), warped by the Python fetch stage onto a 0.04° plate carrée
-    // grid over the disk's useful extent — 80.7°E to 200.7°E, ±60°, which
-    // crosses the antimeridian — and stacked into one NetCDF series per
-    // window (`xuebuild/satellite/`), so a satellite source is a
-    // `series_file` observation like the JMA nowcast here. The source id is
-    // the orbital role; the spacecraft and channel are the `band` block on
-    // the variable (`bands`, docs/format.md): WMO C-5 174, C-8 297, AHI
-    // band 13 at 10.4073 µm.
-    SourceSpec {
-        id: "himawari",
-        manifest_model: "HIMAWARI",
-        product: "ahi-fldk-0p04",
-        latest_filename: Some("latest-himawari.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The six infrared windows first (the first is the one a listing
-        // walks), then the four visible and near-infrared bands the true
-        // colour composite reads (AHI bands 1–4).
-        input_variable_ids: &[
-            "ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086",
-        ],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        // The six infrared windows fetched (AHI bands 7, 8, 11, 13, 14, 15)
-        // and the four visible and near-infrared bands (1, 2, 3, 4), each
-        // with its band block; the central wave numbers are round(1e6 / µm)
-        // of the AHI's central wavelengths (3.8853, 6.2429, 8.5926, 10.4073,
-        // 11.2395, 12.3806; 0.47063, 0.51, 0.63914, 0.8567 µm), as
-        // `Platform::band` computes them.
-        bands: &[
-            (
-                "ir039",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 257380 },
-            ),
-            (
-                "wv062",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 160182 },
-            ),
-            (
-                "ir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
-            ),
-            (
-                "ir104",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
-            ),
-            (
-                "ir112",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 88972 },
-            ),
-            (
-                "ir123",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 80772 },
-            ),
-            (
-                "vis047",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 2124811 },
-            ),
-            (
-                "vis051",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1960784 },
-            ),
-            (
-                "vis064",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1564602 },
-            ),
-            (
-                "nir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1167270 },
-            ),
-        ],
-        bundle_scalar_ids: &["ir104", "ir039"],
-        core_bundle_ids: &["ir104"],
-        bundle_vector_ids: &[],
-        // The Dust RGB, composed per slot in the fetch stage from four of
-        // the windows, the DEBRA and ZHOUYE confidences from five, and the
-        // true colour from the four visible and near-infrared bands by day
-        // and the 3.9 and 10.4 µm windows by night, each read off the
-        // series like any channel.
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
-        bundle_volume_ids: &[],
-        // The platform's region at 0.04°: 120° x 120°.
-        production_grid: (3000, 3000),
-        tile: (64, 64),
-        // A 9 M cell disk: the half tier is still twice a GFS plane, so
-        // the ladder runs to the eighth (375 x 375).
-        variant_factors: &[2, 4, 8],
-        regrid: None,
-        observation: true,
-        window_hours: Some(6),
-        cadence_seconds: Some(600),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // Himawari-9 over Japan at 0.01°: the himawari platform and fetch stage
-    // on a box of its own, 24–46°N, 122–148°E, rather than the disk — a
-    // regional source like `hrrr` beside `gfs`. Nine channels fetched (the
-    // 3.9 µm window, the Dust RGB's four windows, the true colour's four
-    // solar bands, each with the himawari band block), the 10.4 µm window,
-    // the Dust RGB and the true colour published; no dust confidences.
-    SourceSpec {
-        id: "himawarijp",
-        manifest_model: "HIMAWARI-JP",
-        product: "ahi-japan-0p01",
-        latest_filename: Some("latest-himawarijp.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[
-            (
-                "ir039",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 257380 },
-            ),
-            (
-                "ir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 116379 },
-            ),
-            (
-                "ir104",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 96086 },
-            ),
-            (
-                "ir112",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 88972 },
-            ),
-            (
-                "ir123",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 80772 },
-            ),
-            (
-                "vis047",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 2124811 },
-            ),
-            (
-                "vis051",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1960784 },
-            ),
-            (
-                "vis064",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1564602 },
-            ),
-            (
-                "nir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 174, instrument_type: 297, central_wavenumber: 1167270 },
-            ),
-        ],
-        bundle_scalar_ids: &["ir104", "ir039"],
-        core_bundle_ids: &["ir104"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "truecolor"],
-        bundle_volume_ids: &[],
-        // The box at 0.01°: 26° x 22°.
-        production_grid: (2600, 2200),
-        tile: (64, 64),
-        variant_factors: &[2, 4, 8],
-        regrid: None,
-        observation: true,
-        window_hours: Some(3),
-        cadence_seconds: Some(600),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: Some((122.0, 24.0, 148.0, 46.0)),
-        cat_calibration: &[],
-    },
-    // The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
-    // 137.0°W (West), from NOAA's own buckets: the CMIPF product, each
-    // channel of each ten-minute full-disk scan as one calibrated netCDF
-    // on the geostationary projection (sweep x), read by the same Python
-    // stage through `CMIPFReader`. Each source is the himawari one on its
-    // own disk: the same six windows and the three ABI visible bands
-    // fetched; ir104, the Dust RGB (the GOES-R Quick Guide's ABI stretches,
-    // picked by the producer by instrument), the confidences and the true
-    // colour published, the same grid step and window. The East
-    // disk sits on negative longitudes (−135.2 … −15.2); the West disk
-    // crosses the antimeridian and is spelled 163 … 283, the shape
-    // Himawari's grid already takes. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "goeseast",
-        manifest_model: "GOES-EAST",
-        product: "abi-fldk-0p04",
-        latest_filename: Some("latest-goeseast.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The six windows, then the three ABI bands the true colour
-        // composite reads (channels 1–3; the ABI has no green band, so the
-        // producer synthesizes one).
-        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
-        // 11.2, 12.3 µm and channels 1, 2, 3 at 0.47, 0.64, 0.865 µm; WMO
-        // C-5 273, C-8 617.
-        bands: &[
-            (
-                "ir039",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 256410 },
-            ),
-            (
-                "wv062",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 161551 },
-            ),
-            (
-                "ir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 117647 },
-            ),
-            (
-                "ir104",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 96618 },
-            ),
-            (
-                "ir112",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 89286 },
-            ),
-            (
-                "ir123",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 81301 },
-            ),
-            (
-                "vis047",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 2127660 },
-            ),
-            (
-                "vis064",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 1562500 },
-            ),
-            (
-                "nir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 273, instrument_type: 617, central_wavenumber: 1156069 },
-            ),
-        ],
-        bundle_scalar_ids: &["ir104", "ir039"],
-        core_bundle_ids: &["ir104"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
-        bundle_volume_ids: &[],
-        production_grid: (3000, 3000),
-        tile: (64, 64),
-        variant_factors: &[2, 4, 8],
-        regrid: None,
-        observation: true,
-        window_hours: Some(6),
-        cadence_seconds: Some(600),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    SourceSpec {
-        id: "goeswest",
-        manifest_model: "GOES-WEST",
-        product: "abi-fldk-0p04",
-        latest_filename: Some("latest-goeswest.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The six windows, then the three ABI bands the true colour
-        // composite reads (channels 1–3; the ABI has no green band, so the
-        // producer synthesizes one).
-        input_variable_ids: &["ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis064", "nir086"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        // ABI channels 7, 8, 11, 13, 14, 15 at 3.90, 6.19, 8.50, 10.35,
-        // 11.2, 12.3 µm and channels 1, 2, 3 at 0.47, 0.64, 0.865 µm; WMO
-        // C-5 272, C-8 617.
-        bands: &[
-            (
-                "ir039",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 256410 },
-            ),
-            (
-                "wv062",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 161551 },
-            ),
-            (
-                "ir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 117647 },
-            ),
-            (
-                "ir104",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 96618 },
-            ),
-            (
-                "ir112",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 89286 },
-            ),
-            (
-                "ir123",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 81301 },
-            ),
-            (
-                "vis047",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 2127660 },
-            ),
-            (
-                "vis064",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 1562500 },
-            ),
-            (
-                "nir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 272, instrument_type: 617, central_wavenumber: 1156069 },
-            ),
-        ],
-        bundle_scalar_ids: &["ir104", "ir039"],
-        core_bundle_ids: &["ir104"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "dustcf", "zhouye", "truecolor"],
-        bundle_volume_ids: &[],
-        production_grid: (3000, 3000),
-        tile: (64, 64),
-        variant_factors: &[2, 4, 8],
-        regrid: None,
-        observation: true,
-        window_hours: Some(6),
-        cadence_seconds: Some(600),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    // Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
-    // from the EUMETSAT Data Store rather than a public bucket (the Python
-    // stage's `FCIReader` turns each chunk's radiances into brightness
-    // temperature or reflectance factor and georeferences the strips
-    // itself). FCI has no 11.2 µm window, so three channels feed the Dust
-    // RGB and the green gun reads 10.5 − 8.7 µm, the original SEVIRI recipe
-    // (`composite_input_ids`); its four solar channels feed the true colour
-    // composite's day side, the 0.51 µm one among them, and IR 3.8 and
-    // IR 10.5 its night side.
-    // The imager scans every ten minutes; this source publishes the cycle
-    // on the hour alone (`cadence_seconds` 3600 against the platform's
-    // 600), because the EUMETSAT data policy releases the hourly Level 1
-    // cycle as Core data under CC-BY-4.0 and keeps the sub-hourly cycles
-    // under a licence that forbids operational use within an hour of
-    // sensing and redistribution of the numbers after it. A 24-hour window
-    // at that cadence is 25 frames. Mirrors `xuebuild/sources.py`.
-    SourceSpec {
-        id: "meteosat",
-        manifest_model: "METEOSAT",
-        product: "fci-fldk-0p04",
-        latest_filename: Some("latest-meteosat.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        // The 3.8 µm window the true colour's night side reads (FCI ir_38 under
-        // the family id ir039), the three windows the Dust RGB reads, then
-        // the four solar channels the true colour composite reads (FCI
-        // vis_04, vis_05, vis_06, vis_08; vis_04 at 0.444 µm under the
-        // family id vis047).
-        input_variable_ids: &["ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        // FCI IR_38, IR_87, IR_105, IR_123 at 3.80, 8.70, 10.50, 12.30 µm
-        // and VIS_04, VIS_05, VIS_06, VIS_08 at 0.444, 0.510, 0.640,
-        // 0.865 µm; WMO C-5 71 (Meteosat-12), C-8 210 (FCI).
-        bands: &[
-            (
-                "ir039",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 263158 },
-            ),
-            (
-                "ir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 114943 },
-            ),
-            (
-                "ir104",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 95238 },
-            ),
-            (
-                "ir123",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 81301 },
-            ),
-            (
-                "vis047",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 2252252 },
-            ),
-            (
-                "vis051",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1960784 },
-            ),
-            (
-                "vis064",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1562500 },
-            ),
-            (
-                "nir086",
-                SatelliteBand { satellite_series: 0, satellite_number: 71, instrument_type: 210, central_wavenumber: 1156069 },
-            ),
-        ],
-        bundle_scalar_ids: &["ir104", "ir039"],
-        core_bundle_ids: &["ir104"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &["dustrgb", "truecolor"],
-        bundle_volume_ids: &[],
-        production_grid: (3000, 3000),
-        tile: (64, 64),
-        variant_factors: &[2, 4, 8],
-        regrid: None,
-        observation: true,
-        window_hours: Some(24),
-        cadence_seconds: Some(3600),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-    SourceSpec {
-        id: "aurora",
-        manifest_model: "SWPC-AURORA",
-        product: "ovation-aurora-1p00",
-        latest_filename: Some("latest-aurora.json"),
-        steps: &[],
-        long_cycles: &[],
-        long_cycle_steps: &[],
-        input_variable_ids: &["aurora"],
-        companion_files: &[],
-        accumulated_precipitation: false,
-        averaged_precipitation: false,
-        interval_precipitation: false,
-        average_window_hours: 6,
-        first_hour: 0,
-        optional_at_analysis: &[],
-        statistical_processes: &[],
-        bands: &[],
-        bundle_scalar_ids: &["aurora"],
-        core_bundle_ids: &["aurora"],
-        bundle_vector_ids: &[],
-        bundle_composite_ids: &[],
-        bundle_volume_ids: &[],
-        // The OVATION grid: 360 longitudes by 181 latitudes at 1 degree, cut
-        // into 12 x 13 degree tiles. Mirrors `xuebuild/sources.py`.
-        production_grid: (360, 181),
-        tile: (12, 13),
-        variant_factors: &[2],
-        regrid: None,
-        observation: true,
-        window_hours: Some(12),
-        cadence_seconds: Some(300),
-        series_file: true,
-        open_meteo: None,
-        downsample: None,
-        region: None,
-        cat_calibration: &[],
-    },
-];
-
-pub fn source_spec(model: &str) -> Result<&'static SourceSpec> {
-    SOURCES
-        .iter()
-        .find(|source| source.id == model)
-        .ok_or_else(|| EncodeError::conversion(format!("unsupported model: {model}")))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{family_frame_path, source_spec, Path, CFS_PGB_IDS, SOURCES};
-    use crate::encode::variables::{CLOUD_WATER_VARIABLE_IDS, RIVER_VARIABLE_IDS};
+    use super::{family_frame_path, Path};
+    use crate::encode::registry::Registry;
 
     #[test]
     fn a_cap_must_land_on_the_published_axis() {
-        let gfs = source_spec("gfs").expect("gfs");
-        assert_eq!(gfs.forecast_hours(3, None).expect("axis"), vec![0, 1, 2, 3]);
-        let long = gfs.forecast_hours(240, None).expect("axis");
-        assert_eq!(long.len(), 161);
-        assert_eq!(long[120], 120);
-        assert_eq!(long[121], 123);
-        // 121 is past the hourly segment and off the three-hourly one.
-        assert!(gfs.forecast_hours(121, None).is_err());
-        // An observation source publishes no forecast axis at all.
-        assert!(source_spec("cma").expect("cma").forecast_hours(1, None).is_err());
+        let registry = Registry::embedded();
+        let gfs = registry.source("gfs").unwrap();
+        assert_eq!(gfs.forecast_hours(3, None).unwrap(), [0, 1, 2, 3]);
+        let axis = gfs.forecast_hours(240, None).unwrap();
+        assert_eq!(axis.len(), 121 + 40);
+        assert_eq!(axis[120..123], [120, 123, 126]);
+        let error = gfs.forecast_hours(241, None).unwrap_err().to_string();
+        assert!(error.contains("241") && error.contains("GFS"), "{error}");
+        assert!(gfs.forecast_hours(122, None).is_err());
+        assert!(registry.source("mrms").unwrap().forecast_hours(1, None).is_err());
     }
 
     #[test]
     fn hrrr_reaches_f048_only_from_a_synoptic_cycle() {
-        let hrrr = source_spec("hrrr").expect("hrrr");
-        let long = hrrr.forecast_hours(48, Some(12)).expect("axis");
-        assert_eq!(long, (0..=48).collect::<Vec<_>>());
-        for cycle in [0, 6, 18] {
-            assert_eq!(hrrr.forecast_hours(48, Some(cycle)).expect("axis").len(), 49);
-        }
-        assert!(hrrr.forecast_hours(48, Some(3)).is_err());
-        assert!(hrrr.forecast_hours(48, None).is_err());
-        assert!(hrrr.forecast_hours(49, Some(12)).is_err());
-        for cycle in [None, Some(3), Some(12)] {
-            assert_eq!(hrrr.forecast_hours(18, cycle).expect("axis"), (0..=18).collect::<Vec<_>>());
-        }
-        // A source with no long cycles keeps its axis whatever the cycle.
-        assert!(source_spec("gfs").expect("gfs").forecast_hours(243, Some(0)).is_err());
+        let registry = Registry::embedded();
+        let hrrr = registry.source("hrrr").unwrap();
+        assert_eq!(hrrr.forecast_hours(18, Some(7)).unwrap().len(), 19);
+        assert_eq!(hrrr.forecast_hours(48, Some(6)).unwrap().len(), 49);
+        let error = hrrr.forecast_hours(48, Some(7)).unwrap_err().to_string();
+        assert!(error.contains("00/06/12/18"), "{error}");
     }
 
     #[test]
-    fn the_series_file_sources_are_the_two_netcdf_ones() {
-        // The CMA window is read out of its archive, the JMA window decoded
-        // from tiles; both are one NetCDF series per run, fetched and live,
-        // read through observation.rs with the window's hour as the run.
-        let radar = source_spec("cma").expect("cma");
-        let jma = source_spec("jma").expect("jma");
-        assert!(radar.series_file && radar.fetched() && radar.live());
-        assert!(jma.series_file && jma.fetched() && jma.live());
-        assert_eq!(radar.cadence_seconds, Some(360));
-        assert_eq!(radar.production_grid, (1792, 1024));
-        assert_eq!(radar.core_bundle_ids, &["cref"]);
-        assert_eq!(jma.cadence_seconds, Some(300));
-        assert_eq!(jma.core_bundle_ids, &["prate"]);
-        // The three satellite disks are the same shape on their own grids:
-        // the same six windows, the same bundles; the ABI has no 0.51 µm
-        // band, so the GOES disks fetch three visible bands to the AHI's
-        // four.
-        let himawari = source_spec("himawari").expect("himawari");
-        assert_eq!(himawari.bands.len(), 10);
-        for (model, number) in [("goeseast", 273), ("goeswest", 272)] {
-            let source = source_spec(model).expect(model);
-            assert!(source.series_file && source.fetched() && source.live(), "{model}");
-            assert_eq!(&source.input_variable_ids[..6], &himawari.input_variable_ids[..6], "{model}");
-            assert_eq!(&source.input_variable_ids[6..], &["vis047", "vis064", "nir086"], "{model}");
-            assert_eq!(source.bundle_scalar_ids, himawari.bundle_scalar_ids, "{model}");
-            assert_eq!(source.bundle_composite_ids, himawari.bundle_composite_ids, "{model}");
-            assert_eq!(source.production_grid, himawari.production_grid, "{model}");
-            assert_eq!(source.cadence_seconds, Some(600), "{model}");
-            assert_eq!(source.bands.len(), 9, "{model}");
-            for (_, band) in source.bands {
-                assert_eq!((band.satellite_number, band.instrument_type), (number, 617), "{model}");
-            }
-        }
-        // The Japan box is the himawari platform on a region of its own at
-        // 0.01°: its bands are the disk's, its grid the box in whole cells,
-        // and it is the one source that names a region. Mirrors
-        // `tests/test_satellite.py`.
-        let japan = source_spec("himawarijp").expect("himawarijp");
-        assert!(japan.series_file && japan.fetched() && japan.live());
-        assert_eq!((japan.cadence_seconds, japan.window_hours), (Some(600), Some(3)));
-        assert_eq!(japan.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(japan.bundle_composite_ids, &["dustrgb", "truecolor"]);
-        for (band_id, band) in japan.bands {
-            assert!(himawari.bands.contains(&(*band_id, *band)), "{band_id}");
-        }
-        let (west, south, east, north) = japan.region.expect("a region");
-        assert_eq!((west, south, east, north), (122.0, 24.0, 148.0, 46.0));
-        assert_eq!(japan.production_grid, (((east - west) / 0.01).round() as usize, ((north - south) / 0.01).round() as usize));
-        assert_eq!(SOURCES.iter().filter(|source| source.region.is_some()).map(|source| source.id).collect::<Vec<_>>(), ["himawarijp"]);
-        // Meteosat publishes the hourly cycle alone (the CC-BY-4.0 one) and
-        // has no 11.2 µm window: three windows, the Dust RGB still resolves
-        // to its three components, and the DEBRA confidence — five inputs,
-        // no stand-in — is not listed; the four solar channels feed the
-        // true colour composite's day side and the 3.8 and 10.5 µm windows
-        // its night side.
-        let meteosat = source_spec("meteosat").expect("meteosat");
-        assert!(meteosat.series_file && meteosat.fetched() && meteosat.live());
-        assert_eq!(meteosat.input_variable_ids, &["ir039", "ir086", "ir104", "ir123", "vis047", "vis051", "vis064", "nir086"]);
-        assert_eq!(meteosat.bundle_scalar_ids, himawari.bundle_scalar_ids);
-        assert_eq!(meteosat.bundle_composite_ids, &["dustrgb", "truecolor"]);
-        assert_eq!(meteosat.cadence_seconds, Some(3600));
-        assert_eq!(meteosat.window_hours, Some(24));
-        assert_eq!(meteosat.bands.len(), 8);
-        for (_, band) in meteosat.bands {
-            assert_eq!((band.satellite_number, band.instrument_type), (71, 210));
-        }
-        // The SWPC OVATION aurora probability is the same shape on its own
-        // 1-degree grid: a fetched NetCDF window, five minutes a frame. It
-        // has no bands, no companions and no GRIB record at all — the fetch
-        // writes the series from the model's JSON grid. Mirrors the aurora
-        // assertions in `tests/test_aurora.py`.
-        let aurora = source_spec("aurora").expect("aurora");
-        assert!(aurora.observation && aurora.series_file && aurora.fetched() && aurora.live());
-        assert_eq!(aurora.cadence_seconds, Some(300));
-        assert_eq!(aurora.window_hours, Some(12));
-        assert_eq!(aurora.production_grid, (360, 181));
-        assert_eq!(aurora.core_bundle_ids, &["aurora"]);
-        assert!(aurora.bands.is_empty() && aurora.companion_files.is_empty());
-        // The IFS HRES run om2nc resamples off the Open-Meteo bucket is the
-        // one series-file source that is not an observation: a cycle with a
-        // run time and lead times, whose frames happen to arrive as one
-        // NetCDF series per variable.
-        let ifshres = source_spec("ifshres").expect("ifshres");
-        assert!(ifshres.series_file && ifshres.fetched() && ifshres.live());
-        assert!(!ifshres.observation && ifshres.cadence_seconds.is_none());
-        assert_eq!(ifshres.open_meteo, Some("ecmwf_ifs"));
-        assert!(ifshres.interval_precipitation);
-        assert_eq!(ifshres.forecast_hours(3, None).expect("axis"), vec![0, 1, 2, 3]);
-        assert_eq!(ifshres.production_grid, (3600, 1801));
-        assert_eq!(ifshres.core_bundle_ids, &["tmp2m", "prate"]);
-        // The WOOF nest is the other series-file forecast, and the one
-        // source with no feed at all: a forecast is fetched only through a
-        // live pointer, so it is neither fetched nor live, and is built
-        // from a local dataset alone. Its axis starts at the first hour and
-        // its precipitation total is on every frame. Mirrors the registry
-        // assertions in `tests/test_woof.py`.
-        let woof = source_spec("woof").expect("woof");
-        assert_eq!((woof.manifest_model, woof.product), ("WOOF-WRF", "nest"));
-        assert!(woof.series_file && !woof.fetched() && !woof.live());
-        assert!(!woof.observation && woof.cadence_seconds.is_none() && woof.window_hours.is_none());
-        assert_eq!(woof.latest_filename, None);
-        assert!(woof.interval_precipitation && woof.optional_at_analysis.is_empty());
-        assert_eq!(woof.statistical_processes, &[("prate", 0)]);
-        assert_eq!(woof.steps, &[(72, 1)]);
-        assert_eq!(woof.first_hour, 1);
-        assert_eq!(woof.forecast_hours(3, None).expect("axis"), vec![1, 2, 3]);
-        assert_eq!(woof.forecast_hours(72, None).expect("axis").len(), 72);
-        assert!(woof.forecast_hours(0, None).is_err() && woof.forecast_hours(73, None).is_err());
-        assert_eq!(woof.input_variable_ids.len(), 40);
-        assert_eq!(&woof.input_variable_ids[16..], CLOUD_WATER_VARIABLE_IDS);
-        assert_eq!(&woof.input_variable_ids[13..16], &["ugrd80m", "vgrd80m", "prmsl"]);
-        assert_eq!(woof.bundle_volume_ids, &["cloud3d"]);
-        assert_eq!(woof.bundle_scalar_ids.len(), 12);
-        assert!(woof.input_variable_ids.contains(&"apcp") && !woof.bundle_scalar_ids.contains(&"apcp"));
-        assert_eq!(woof.bundle_vector_ids, &["wind10m", "wind80m"]);
-        assert_eq!(woof.core_bundle_ids, &["tmp2m"]);
-        assert_eq!((woof.production_grid, woof.tile), ((79, 61), (64, 64)));
-        assert!(woof.variant_factors.is_empty());
-        assert!(woof.regrid.is_none() && woof.downsample.is_none() && woof.open_meteo.is_none());
-        // Every other forecast source is read record by record, and every
-        // source but the nest is fetched and live.
-        for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "mrms", "mrms3d"] {
-            assert!(!source_spec(model).expect(model).series_file, "{model}");
-        }
-        for source in SOURCES {
-            assert_eq!(
-                source.fetched() && source.live(),
-                !["woof", "efas", "efaswb"].contains(&source.id),
-                "{}",
-                source.id
-            );
-            // A forecast is fetched through its pointer, an observation
-            // through its window.
-            let expected = if source.observation { source.window_hours.is_some() } else { source.live() };
-            assert_eq!(source.fetched(), expected, "{}", source.id);
-        }
-        // The aerosol source: nine scalar bundles, no vectors, no rain and
-        // no temperature, so its core set is the total optical depth.
-        let gefsaero = source_spec("gefsaero").expect("gefsaero");
-        assert_eq!(gefsaero.input_variable_ids, gefsaero.bundle_scalar_ids);
-        assert_eq!(gefsaero.input_variable_ids.len(), 9);
-        assert_eq!(gefsaero.core_bundle_ids, &["aod"]);
-        assert!(gefsaero.bundle_vector_ids.is_empty() && gefsaero.companion_files.is_empty());
-        assert_eq!(gefsaero.forecast_hours(120, None).expect("axis").len(), 41);
-        assert!(gefsaero.forecast_hours(121, None).is_err());
-        // One arrival shape for precipitation per source.
-        for source in SOURCES {
-            let shapes = u8::from(source.accumulated_precipitation)
-                + u8::from(source.averaged_precipitation)
-                + u8::from(source.interval_precipitation);
-            assert!(shapes <= 1, "{} declares {shapes} precipitation shapes", source.id);
-            assert_eq!(source.open_meteo.is_some(), source.id == "ifshres", "{}", source.id);
-        }
-    }
-
-    #[test]
-    fn the_wave_fields_come_from_the_companion_family() {
-        for model in ["gfs", "ecmwf", "ifs"] {
-            let source = source_spec(model).expect(model);
-            let [wave] = source.companion_files else { panic!("one companion family") };
-            assert_eq!(wave.id, "wave");
-            for variable_id in wave.variable_ids {
-                assert!(source.input_variable_ids.contains(variable_id), "{variable_id} is fetched");
-                // A direction is an input only: it ships inside the wave
-                // vector derived from it, not as a scalar of its own.
-                assert_eq!(
-                    source.bundle_scalar_ids.contains(variable_id),
-                    !matches!(*variable_id, "dirpw" | "wvdir" | "swdir"),
-                    "{model} {variable_id}"
-                );
-                assert_eq!(source.companion_of(variable_id).map(|c| c.id), Some("wave"));
-            }
-            assert!(source.bundle_vector_ids.contains(&"wave"));
-            assert!(source.companion_of("tmpsfc").is_none());
-            // Assembly order: the companion's records come last.
-            assert_eq!(
-                &source.input_variable_ids[source.input_variable_ids.len() - wave.variable_ids.len()..],
-                wave.variable_ids
-            );
-        }
-        for model in ["sflux", "hrrr", "cma"] {
-            assert!(source_spec(model).expect(model).companion_files.is_empty(), "{model}");
-        }
-        // The wave families share the source's grid: their records are
-        // appended to the frame and nothing about them is a grid family.
-        for model in ["gfs", "ecmwf", "ifs", "aifs"] {
-            let source = source_spec(model).expect(model);
-            assert_eq!(source.grid_families().count(), 0, "{model}");
-            for variable_id in source.input_variable_ids {
-                assert!(source.grid_family_of(variable_id).is_none(), "{model} {variable_id}");
-            }
-            assert_eq!(
-                source.family_grid(None).expect("the primary family"),
-                (source.production_grid, source.tile),
-                "{model}"
-            );
-        }
-    }
-
-    /// CFSv2's pressure-level series are on the 1° grid the surface series
-    /// are not, so they are a grid family: their records live in a sibling
-    /// frame file of their own and every bundle built from them carries
-    /// that grid and its tile. Mirrors the `GridFamilyTests` of the Python
-    /// suite.
-    #[test]
-    fn the_cfs_pressure_levels_are_a_grid_family_of_their_own() {
-        let cfs = source_spec("cfs").expect("cfs");
-        let [pgb] = cfs.companion_files else { panic!("one companion family") };
-        assert_eq!(pgb.id, "pgb");
-        assert!(pgb.own_grid());
-        assert_eq!(pgb.variable_ids, CFS_PGB_IDS);
-        assert_eq!(pgb.variable_ids.len(), 31);
-        assert_eq!(cfs.grid_families().count(), 1);
-        // Every family input is fetched, in the order the family file
-        // carries it, after the nine of the primary file.
-        assert_eq!(&cfs.input_variable_ids[9..], CFS_PGB_IDS);
-        for variable_id in CFS_PGB_IDS {
-            assert_eq!(cfs.grid_family_of(variable_id).map(|f| f.id), Some("pgb"), "{variable_id}");
-        }
-        for variable_id in &cfs.input_variable_ids[..9] {
-            assert!(cfs.grid_family_of(variable_id).is_none(), "{variable_id}");
-        }
-        assert_eq!(cfs.family_grid(None).expect("primary"), ((384, 190), (96, 95)));
-        assert_eq!(cfs.family_grid(Some("pgb")).expect("pgb"), ((360, 181), (90, 91)));
+    fn the_cfs_axis_starts_at_its_first_step() {
+        let registry = Registry::embedded();
+        let cfs = registry.source("cfs").unwrap();
+        assert_eq!(cfs.first_hour, 6);
+        assert_eq!(cfs.forecast_hours(18, None).unwrap(), [6, 12, 18]);
+        let error = cfs.forecast_hours(0, None).unwrap_err().to_string();
+        assert!(error.contains("from f006"), "{error}");
+        // The pressure levels are a grid family of their own; the wave
+        // records of GFS share its grid.
+        assert_eq!(cfs.grid_families().map(|family| family.id.as_str()).collect::<Vec<_>>(), ["pgb"]);
+        assert_eq!(cfs.family_grid(Some("pgb")).unwrap(), ((360, 181), (90, 91)));
+        assert_eq!(cfs.family_grid(None).unwrap(), (cfs.production_grid, cfs.tile));
         assert!(cfs.family_grid(Some("wave")).is_err());
-        // 4 x 2 tiles, the last row one cell short of the pole row.
-        assert_eq!((360_usize).div_ceil(90) * (181_usize).div_ceil(91), 8);
-        // The specific humidities are read and never published.
-        for level in [925, 850, 700, 500] {
-            let id = format!("spfh{level}");
-            assert!(cfs.input_variable_ids.contains(&id.as_str()), "{id}");
-            assert!(!cfs.bundle_scalar_ids.contains(&id.as_str()), "{id}");
-        }
+        assert_eq!(cfs.grid_family_of("hgt500").map(|family| family.id.as_str()), Some("pgb"));
+        assert_eq!(cfs.grid_family_of("tmp2m"), None);
+        let gfs = registry.source("gfs").unwrap();
+        assert_eq!(gfs.grid_families().count(), 0);
+        assert!(gfs.companion_of("htsgw").is_some() && gfs.grid_family_of("htsgw").is_none());
+        assert!(gfs.fetched() && !registry.source("woof").unwrap().fetched());
+        assert!(registry.source("mrms").unwrap().fetched() && !registry.source("cma").unwrap().fetched());
     }
 
-    /// A grid family's records are a sibling frame file of the same name;
-    /// the primary family is the frame itself.
     #[test]
     fn a_family_s_records_live_in_a_sibling_frame_file() {
         let frame = Path::new("data/raw/cfs.2026091912/cfs.2026091912.f006.grib2");
@@ -2220,244 +496,16 @@ mod tests {
         );
     }
 
-    /// CFSv2: nine months of six-hourly output of which the published axis
-    /// is the thirty-nine weeks every 00Z and 12Z cycle reaches, and the
-    /// one source whose axis begins at a step rather than at the analysis.
-    #[test]
-    fn the_cfs_axis_is_six_hourly_from_the_first_step_to_thirty_nine_weeks() {
-        let cfs = source_spec("cfs").expect("cfs");
-        assert_eq!((cfs.manifest_model, cfs.product), ("CFSv2", "time-grib-01"));
-        assert_eq!(cfs.latest_filename, Some("latest-cfs.json"));
-        assert_eq!(cfs.steps, &[(6552, 6)]);
-        assert_eq!(cfs.first_hour, 6);
-        let axis = cfs.forecast_hours(6552, None).expect("axis");
-        assert_eq!(axis.len(), 1092);
-        assert_eq!((axis[0], axis[1], axis[1091]), (6, 12, 6552));
-        assert_eq!(cfs.forecast_hours(6, None).expect("axis"), vec![6]);
-        // Neither the analysis nor an hour between the steps is on it.
-        for off_axis in [0, 3, 9, 6551, 6558] {
-            assert!(cfs.forecast_hours(off_axis, None).is_err(), "f{off_axis}");
-        }
-        // Every other source but the WOOF nest (from f001) still counts
-        // from the analysis.
-        for source in SOURCES {
-            let first_hour = match source.id {
-                "cfs" | "efas" | "efaswb" => 6,
-                "woof" => 1,
-                _ => 0,
-            };
-            assert_eq!(source.first_hour, first_hour, "{}", source.id);
-        }
-        // What it fetches and what it publishes: the surface set and the
-        // 10 m pair, no companion family, nothing analysis-optional
-        // (there is no analysis frame at all) and no video.
-        assert_eq!(
-            &cfs.input_variable_ids[..9],
-            &["tmp2m", "prate", "ugrd10m", "vgrd10m", "tcdc", "dswrf", "tmpsfc", "icec", "icetk"]
-        );
-        assert_eq!(cfs.input_variable_ids.len(), 9 + 31);
-        assert_eq!(
-            cfs.bundle_scalar_ids,
-            &[
-                "tmp2m", "prate", "tcdc", "dswrf", "tmpsfc", "icec", "icetk", "prmsl", "hgt1000",
-                "hgt850", "hgt700", "hgt500", "hgt200", "tmp1000", "tmp850", "tmp700", "tmp500",
-                "tmp250", "tmp200", "vvel500",
-            ]
-        );
-        assert_eq!(
-            cfs.bundle_vector_ids,
-            &[
-                "wind10m", "wind1000", "wind925", "wind850", "wind700", "wind500", "wind250",
-                "wind200", "qflux925", "qflux850", "qflux700", "qflux500",
-            ]
-        );
-        assert_eq!(cfs.core_bundle_ids, &["tmp2m", "prate"]);
-        assert_eq!(cfs.bundle_scalar_ids.len() + cfs.bundle_vector_ids.len(), 32);
-        assert!(cfs.bundle_composite_ids.is_empty());
-        assert!(cfs.optional_at_analysis.is_empty() && cfs.bands.is_empty());
-        // PRATE is already a rate, and the three flux fields are six-hour
-        // means NCEP encodes as instantaneous.
-        assert!(
-            !cfs.accumulated_precipitation && !cfs.averaged_precipitation && !cfs.interval_precipitation
-        );
-        assert_eq!(cfs.statistical_processes, &[("prate", 0), ("dswrf", 0), ("tcdc", 0)]);
-        // The T126 Gaussian grid, cut into eight whole tiles.
-        assert_eq!(cfs.production_grid, (384, 190));
-        assert_eq!(cfs.tile, (96, 95));
-        assert_eq!((384 / 96) * (190 / 95), 8);
-        assert_eq!(cfs.variant_factors, &[2]);
-        assert!(cfs.fetched() && cfs.live());
-        assert!(!cfs.observation && !cfs.series_file);
-        assert!(cfs.regrid.is_none() && cfs.downsample.is_none() && cfs.open_meteo.is_none());
-    }
-
-    /// The MRMS 3D mosaic: the 33 reflectivity levels read from one GRIB per
-    /// ten-minute frame and published as one volume bundle, thinned five to
-    /// one onto 0.05°. Mirrors the source assertions in
-    /// `tests/test_mrms3d.py`.
-    #[test]
-    fn the_mrms3d_volume_is_every_level_on_the_ten_minute_marks() {
-        let source = source_spec("mrms3d").expect("mrms3d");
-        assert_eq!((source.manifest_model, source.product), ("NOAA-MRMS3D", "conus-refl3d"));
-        assert_eq!(source.latest_filename, Some("latest-mrms3d.json"));
-        assert!(source.observation && source.fetched() && source.live() && !source.series_file);
-        assert_eq!((source.window_hours, source.cadence_seconds), (Some(3), Some(600)));
-        assert_eq!(source.input_variable_ids.len(), 33);
-        assert_eq!(source.input_variable_ids[0], "refl500");
-        assert_eq!(source.input_variable_ids[32], "refl19000");
-        assert!(source.bundle_scalar_ids.is_empty());
-        assert!(source.bundle_vector_ids.is_empty() && source.bundle_composite_ids.is_empty());
-        assert_eq!(source.bundle_volume_ids, &["refl3d"]);
-        assert_eq!(source.core_bundle_ids, &["refl3d"]);
-        assert_eq!(source.downsample.map(|downsample| downsample.factor), Some(5));
-        assert_eq!(source.production_grid, (1400, 700));
-        assert_eq!(source.tile, (50, 50));
-        assert_eq!((1400 / 50) * (700 / 50), 28 * 14);
-        assert_eq!(source.variant_factors, &[2]);
-        // Only the 3D mosaic and the WOOF nest ship a volume.
-        for other in SOURCES
-            .iter()
-            .filter(|other| !["mrms3d", "woof"].contains(&other.id))
-        {
-            assert!(other.bundle_volume_ids.is_empty(), "{}", other.id);
-        }
-    }
-
-    /// ECMWF's gust record is all zeros at the analysis and not fetched
-    /// there, so the series starts at the first step, the way its
-    /// de-accumulated rate does.
-    #[test]
-    fn the_ecmwf_gust_is_optional_at_the_analysis() {
-        let ecmwf = source_spec("ecmwf").expect("ecmwf");
-        assert_eq!(ecmwf.optional_at_analysis, &["gust"]);
-        assert!(ecmwf.bundle_scalar_ids.contains(&"gust"));
-    }
-
-    /// The 0.1° IFS source is the 0.25° one on the model's full grid: the
-    /// same inputs, companions, bundles, axis and (for now) turbulence
-    /// fit, differing in identity, grid, tile and ladder alone. Mirrors
-    /// the registry assertions in `tests/test_ifs.py`.
-    #[test]
-    fn ifs_is_ecmwf_on_the_full_0p1_grid() {
-        let ecmwf = source_spec("ecmwf").expect("ecmwf");
-        let ifs = source_spec("ifs").expect("ifs");
-        assert_eq!(ifs.input_variable_ids, ecmwf.input_variable_ids);
-        assert_eq!(ifs.bundle_scalar_ids, ecmwf.bundle_scalar_ids);
-        assert_eq!(ifs.bundle_vector_ids, ecmwf.bundle_vector_ids);
-        assert_eq!(ifs.core_bundle_ids, ecmwf.core_bundle_ids);
-        assert_eq!(ifs.bundle_composite_ids, ecmwf.bundle_composite_ids);
-        assert_eq!(ifs.bundle_volume_ids, ecmwf.bundle_volume_ids);
-        assert_eq!(ifs.companion_files.len(), ecmwf.companion_files.len());
-        for (mine, theirs) in ifs.companion_files.iter().zip(ecmwf.companion_files) {
-            assert_eq!((mine.id, mine.variable_ids), (theirs.id, theirs.variable_ids));
-        }
-        assert_eq!(ifs.optional_at_analysis, ecmwf.optional_at_analysis);
-        assert_eq!(ifs.statistical_processes, ecmwf.statistical_processes);
-        assert_eq!(ifs.steps, ecmwf.steps);
-        assert_eq!(ifs.first_hour, ecmwf.first_hour);
-        assert_eq!(ifs.cat_calibration, ecmwf.cat_calibration);
-        assert_eq!(
-            (ifs.accumulated_precipitation, ifs.averaged_precipitation, ifs.interval_precipitation),
-            (ecmwf.accumulated_precipitation, ecmwf.averaged_precipitation, ecmwf.interval_precipitation)
-        );
-        assert_eq!((ifs.manifest_model, ifs.product), ("IFS", "ifs-0p1"));
-        assert_eq!(ifs.latest_filename, Some("latest-ifs.json"));
-        assert_eq!(ifs.steps, &[(144, 3), (240, 6)]);
-        assert_eq!(ifs.production_grid, (3600, 1801));
-        assert_eq!(ifs.tile, (90, 95));
-        assert_eq!(ifs.variant_factors, &[2, 4]);
-        assert_ne!(ifs.manifest_model, ecmwf.manifest_model);
-        assert_ne!(ifs.product, ecmwf.product);
-        assert_ne!(ifs.latest_filename, ecmwf.latest_filename);
-        assert_ne!(ifs.production_grid, ecmwf.production_grid);
-        assert_ne!(ifs.tile, ecmwf.tile);
-        assert_ne!(ifs.variant_factors, ecmwf.variant_factors);
-        // Read record by record off a fetched cycle, like `ecmwf`, not as
-        // the `ifshres` series.
-        assert!(ifs.fetched() && ifs.live() && !ifs.observation && !ifs.series_file);
-        assert!(ifs.open_meteo.is_none() && ifs.regrid.is_none() && ifs.downsample.is_none());
-        assert!(ifs.region.is_none() && ifs.window_hours.is_none() && ifs.cadence_seconds.is_none());
-        let ifshres = source_spec("ifshres").expect("ifshres");
-        assert_eq!((ifs.production_grid, ifs.tile), (ifshres.production_grid, ifshres.tile));
-        assert_eq!(ifs.variant_factors, ifshres.variant_factors);
-    }
-
-    /// The resolution ladder is powers of two from the half tier down,
-    /// strictly ascending, so each rung is the one above decimated once more
-    /// and the tier names (`half`, `quarter`, `eighth`) are unambiguous.
-    /// Mirrors the test over `SourceSpec.variant_factors` in the Python
-    /// suite.
     #[test]
     fn every_ladder_is_ascending_powers_of_two_from_the_half_tier() {
-        for source in SOURCES {
-            // The WOOF nest is under 5000 cells a plane and publishes no
-            // reduced tier, nor do the EFAS sources, whose cases are boxes of
-            // a few thousand cells; every other grid has at least the half.
-            assert_eq!(
-                source.variant_factors.is_empty(),
-                ["woof", "efas", "efaswb"].contains(&source.id),
-                "{} publishes no ladder",
+        for source in Registry::embedded().sources() {
+            let factors = &source.variant_factors;
+            assert!(factors.windows(2).all(|pair| pair[0] < pair[1]), "{}", source.id);
+            assert!(
+                factors.iter().all(|factor| factor.is_power_of_two() && *factor >= 2),
+                "{}",
                 source.id
             );
-            let mut previous = 1;
-            for &factor in source.variant_factors {
-                assert!(factor >= 2 && factor.is_power_of_two(), "{} factor {factor}", source.id);
-                assert!(factor > previous, "{} ladder is not ascending", source.id);
-                previous = factor;
-            }
-        }
-        for model in ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"] {
-            assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4, 8], "{model}");
-        }
-        // A 6.5 M cell global plane takes two rungs, the way a 9 M cell
-        // satellite disk takes three.
-        for model in ["ifshres", "ifs"] {
-            assert_eq!(source_spec(model).expect(model).variant_factors, &[2, 4], "{model}");
-        }
-        for model in ["gfs", "ecmwf", "aifs", "sflux", "hrrr", "gefsaero", "cfs", "cma", "mrms", "mrms3d", "jma"] {
-            assert_eq!(source_spec(model).expect(model).variant_factors, &[2], "{model}");
-        }
-    }
-
-    /// The EFAS forecast and water balance: series-file forecasts with no
-    /// feed, six-hourly from the first six-hour mean to f120, three bundles
-    /// with the discharge declared a mean. Mirrors the source assertions in
-    /// `tests/test_efas.py`.
-    #[test]
-    fn the_efas_sources_are_series_file_forecasts_with_no_feed() {
-        let ids: Vec<&str> = SOURCES.iter().map(|source| source.id).collect();
-        let woof = ids.iter().position(|id| *id == "woof").expect("woof");
-        assert_eq!(&ids[woof + 1..woof + 3], &["efas", "efaswb"], "the Python table's order");
-        for (id, model, product) in [("efas", "EFAS-v5", "hres"), ("efaswb", "EFAS-v5-WB", "water_balance")] {
-            let source = source_spec(id).expect(id);
-            assert_eq!((source.manifest_model, source.product), (model, product), "{id}");
-            assert_eq!(source.latest_filename, None, "{id}");
-            assert!(source.series_file && !source.observation && !source.fetched() && !source.live(), "{id}");
-            assert!(source.window_hours.is_none() && source.cadence_seconds.is_none(), "{id}");
-            assert!(source.open_meteo.is_none() && source.regrid.is_none() && source.downsample.is_none(), "{id}");
-            assert_eq!(source.steps, &[(120, 6)], "{id}");
-            assert_eq!(source.first_hour, 6, "{id}");
-            let hours: Vec<i64> = (1..=20).map(|step| step * 6).collect();
-            assert_eq!(source.forecast_hours(120, None).expect("axis"), hours, "{id}");
-            assert_eq!(source.forecast_hours(12, None).expect("axis"), vec![6, 12], "{id}");
-            for off_axis in [0, 9, 126] {
-                assert!(source.forecast_hours(off_axis, None).is_err(), "{id} f{off_axis}");
-            }
-            assert_eq!(source.input_variable_ids, RIVER_VARIABLE_IDS, "{id}");
-            assert_eq!(source.bundle_scalar_ids, RIVER_VARIABLE_IDS, "{id}");
-            assert_eq!(source.core_bundle_ids, &["dis06"], "{id}");
-            assert_eq!(source.statistical_processes, &[("dis06", 0)], "{id}");
-            assert!(source.optional_at_analysis.is_empty() && source.companion_files.is_empty(), "{id}");
-            assert!(
-                !source.accumulated_precipitation
-                    && !source.averaged_precipitation
-                    && !source.interval_precipitation,
-                "{id}"
-            );
-            assert!(source.bundle_vector_ids.is_empty() && source.bundle_composite_ids.is_empty(), "{id}");
-            assert!(source.bundle_volume_ids.is_empty(), "{id}");
-            assert_eq!((source.production_grid, source.tile), ((4530, 2970), (64, 64)), "{id}");
-            assert!(source.variant_factors.is_empty(), "{id}");
         }
     }
 }

@@ -14,18 +14,24 @@ use xue::encode::convert::{
 use xue::Bundle;
 use xue::encode::grid::{crop_grid, GridInfo};
 use xue::encode::poster::{decode_poster, encode_poster};
-use xue::encode::quantize::codebook;
+use xue::encode::registry::Registry;
 use xue::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours, split_segments};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// The snapshot embedded in the crate, which the tests at the repository
+/// root hold to `tests/fixtures/registry.json`.
+fn registry() -> std::sync::Arc<Registry> {
+    Registry::embedded()
+}
+
 // -- quantization ------------------------------------------------------------
 
 #[test]
 fn linear_codebook_rounds_half_up() {
-    let book = codebook("quality", "tmp2m").expect("temperature codebook");
+    let book = registry().codebook("quality", "tmp2m").expect("temperature codebook");
     // -60 + 0.5 * 1 = -59.5 is exactly on a step; -59.75 sits exactly half way
     // and must round up, which round-half-even would not do.
     let values = [-60.0, -59.75, -59.5, 0.0, 50.0, 99.0, -99.0];
@@ -37,7 +43,7 @@ fn linear_codebook_rounds_half_up() {
 #[test]
 fn linear_codebook_declares_its_maximum_code() {
     for (variable, expected) in [("tmp2m", 220), ("ugrd10m", 254), ("dswrf", 254), ("cref", 160)] {
-        let book = codebook("quality", variable).expect("codebook");
+        let book = registry().codebook("quality", variable).expect("codebook");
         assert_eq!(
             book.as_linear().expect("linear").maximum_code(),
             expected,
@@ -48,7 +54,7 @@ fn linear_codebook_declares_its_maximum_code() {
 
 #[test]
 fn precipitation_codebook_marks_dry_and_overflow() {
-    let book = codebook("quality", "prate").expect("precipitation codebook");
+    let book = registry().codebook("quality", "prate").expect("precipitation codebook");
     let values = [0.0, 0.009, 0.01, 1.0, 128.0, 200.0];
     let mut codes = [0u8; 6];
     book.quantize(&values, &mut codes).expect("quantizes");
@@ -62,16 +68,17 @@ fn precipitation_codebook_marks_dry_and_overflow() {
 
 #[test]
 fn compact_and_balanced_profiles_differ_only_where_documented() {
-    let quality = codebook("quality", "tmp2m").expect("codebook");
-    let balanced = codebook("balanced", "tmp2m").expect("codebook");
-    let compact = codebook("compact", "tmp2m").expect("codebook");
+    let registry = registry();
+    let quality = registry.codebook("quality", "tmp2m").expect("codebook");
+    let balanced = registry.codebook("balanced", "tmp2m").expect("codebook");
+    let compact = registry.codebook("compact", "tmp2m").expect("codebook");
     assert_eq!(quality.metadata(), balanced.metadata());
     assert_ne!(quality.metadata(), compact.metadata());
     // Balanced keeps temperature at quality and drops precipitation to the
     // 128-level codebook.
     assert_eq!(
-        codebook("balanced", "prate").expect("codebook").metadata(),
-        codebook("compact", "prate").expect("codebook").metadata()
+        registry.codebook("balanced", "prate").expect("codebook").metadata(),
+        registry.codebook("compact", "prate").expect("codebook").metadata()
     );
 }
 
@@ -256,7 +263,7 @@ fn golden_encode_matches_the_python_reference() {
         zarr: false,
         ..ConvertOptions::default()
     };
-    convert_bin(&[fixture], &output, &options).expect("conversion");
+    convert_bin(&[fixture], &output, &options, &registry()).expect("conversion");
     for name in [
         "tmp2m.xue",
         "tmp2m.half.xue",
@@ -346,7 +353,7 @@ fn a_group_of_both_cfs_families_builds_each_on_its_own_grid() {
         zarr: false,
         ..ConvertOptions::default()
     };
-    convert_bin(&frames, &output, &options).expect("conversion");
+    convert_bin(&frames, &output, &options, &registry()).expect("conversion");
     assert_eq!(bundle_grid(&output.join("tmp2m.xue")), (48, 40));
     assert_eq!(bundle_grid(&output.join("tmp2m.half.xue")), (24, 20));
     for bundle_id in ["hgt500", "qflux850"] {
@@ -397,7 +404,7 @@ fn a_group_of_the_cfs_family_alone_builds_from_the_family_directory() {
         zarr: false,
         ..ConvertOptions::default()
     };
-    convert_bin(&[root.join("cfs.2026091900")], &output, &options).expect("conversion");
+    convert_bin(&[root.join("cfs.2026091900")], &output, &options, &registry()).expect("conversion");
     for bundle_id in ["hgt500", "qflux850"] {
         assert_eq!(bundle_grid(&output.join(format!("{bundle_id}.xue"))), (45, 38), "{bundle_id}");
     }
@@ -426,7 +433,7 @@ fn a_frame_whose_family_file_is_missing_is_refused() {
         zarr: false,
         ..ConvertOptions::default()
     };
-    let error = convert_bin(&frames, &root.join("out"), &options).expect_err("refused");
+    let error = convert_bin(&frames, &root.join("out"), &options, &registry()).expect_err("refused");
     assert!(error.to_string().contains("pgb"), "{error}");
     let _ = std::fs::remove_dir_all(&root);
 }
