@@ -21,8 +21,8 @@ fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The snapshot embedded in the crate, which the tests at the repository
-/// root hold to `tests/fixtures/registry.json`.
+/// The snapshot embedded in the crate, which `tests/test_registry.py` at
+/// the repository root holds to the Python tables.
 fn registry() -> std::sync::Arc<Registry> {
     Registry::embedded()
 }

@@ -43,7 +43,7 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 | Zarr shard reading | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
 
 Registries are held to one set of ids, codebooks and rules by committed
-fixtures: `tests/fixtures/registry.json` is the whole registry document
+fixtures: `rust/xue/registry.json` is the whole registry document
 (`docs/registry.md`: every variable's identity, codebooks, unit rule, GDAL
 rules, predictor, decimation and companions; every bundle; every source),
 printed by `xue registry` and read by the native encoder in place of a
@@ -54,7 +54,7 @@ The Python encoder never selects behaviour by a variable or bundle id: a
 rule is a field of `VariableSpec` / `BundleSpec`, named out of the closed
 sets of `xuebuild/rules.py`. When a test reports that a registry moved,
 regenerate the fixture deliberately (`xue registry --output
-tests/fixtures/registry.json`, said in the commit) and change every
+rust/xue/registry.json`, said in the commit) and change every
 implementation that reads it, never only the fixture.
 
 ## Invariants that are easy to break

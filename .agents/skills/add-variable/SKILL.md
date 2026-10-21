@@ -44,7 +44,7 @@ Read `.claude/rules/encoder.md` and
    - recut the source's crop GRIB if it needs new records
      (`tests/fixtures/README.md` has the exact `gdal_translate -srcwin`);
    - regenerate the registry snapshot
-     (`xue registry --output tests/fixtures/registry.json`, said in the
+     (`xue registry --output rust/xue/registry.json`, said in the
      commit) and the affected family fixture
      (`tests/fixtures/*-registry.json`); the failing registry test names it.
 5. Frontend (optional; an unknown id renders generically):

@@ -36,11 +36,13 @@ code: open access only, and record the attribution the licence requires.
    `resolve_run`. An external tool stays a subprocess (`*cli.py`). An
    optional dependency goes in its own `pyproject.toml` group. Add the model
    to the CLI help in `xuebuild/cli.py`.
-3. **Native mirror**: the same source, variables and codebooks in
-   `rust/xue/src/encode/sources.rs`, `variables.rs` and `quantize.rs` (plus
-   `grid.rs` / `inspect.rs` / `observation.rs` for a new rule), and a line in
-   `docs/encoder.md`. The Python side changes first and the native side
-   follows.
+3. **Registry**: the native encoder has no tables; it reads the registry
+   document (`docs/registry.md`). Regenerate the snapshot (`xue registry
+   --output rust/xue/registry.json`, said in the commit). Only a *rule* the
+   closed sets lack (a new `conversion`, `match.gdal` rule, derivation,
+   codebook type or ingest path) is Rust work: `xuebuild/rules.py` first,
+   then `rust/xue/src/encode/{units,inspect,convert}.rs`, then a line in
+   `docs/registry.md` and `docs/encoder.md`.
 4. **Tests**: a small crop fixture (`tests/fixtures/<id>.*`, documented in
    `tests/fixtures/README.md` with the exact cut command) and
    `tests/test_<id>.py`, which runs it through both encoders byte for byte.
@@ -77,10 +79,11 @@ npx vitest run tests/web
 1. Merge the frontend half (the `FORECAST_MODELS` row and any charts) to
    `main` and **let the Pages shell deploy**: an older shell rejects the
    model id.
-2. Release on a `release/0.N` branch with the encoder half (`release`
-   skill): the change, the release commit, the tag on the branch, PyPI,
-   the relock, then a fast-forward into `main`. `publish.yml` pins the
-   native encoder, so a forecast source publishes on schedule only once
-   the relocked wheel is on `main`.
+2. If the source needed a new rule (step 3), release on a `release/0.N`
+   branch (`release` skill): the change, the release commit, the tag on
+   the branch, PyPI, the relock, then a fast-forward into `main`.
+   `publish.yml` pins the native encoder, so such a source publishes on
+   schedule only once the relocked wheel is on `main`. A source built from
+   existing rules needs no release: merge to `main`.
 3. Dispatch the workflow once by hand and check the live pointer, then let
    the cron take over.

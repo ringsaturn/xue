@@ -32,8 +32,8 @@ working throughout the release window.
 A change to the registry tables alone (`xuebuild/variables.py`,
 `quantize.py`, `sources.py`, the bundle tables of `binconvert.py`) is not
 an encoder change and takes none of this: it is a commit to `main` with
-the regenerated `tests/fixtures/registry.json` and `rust/xue/registry.json`
-(`xue registry`), and the next build hands the new document to the wheel
+the regenerated `rust/xue/registry.json` (`xue registry --output
+rust/xue/registry.json`), and the next build hands the new document to the wheel
 already installed (see "Why the floor tracks the current release").
 
 1. **Branch**: `git checkout -b release/0.N main`. Commit the encoder

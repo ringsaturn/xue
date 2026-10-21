@@ -6,7 +6,7 @@ The Python tables (``variables.py``, ``bundles.py``, ``quantize.py`` and
 one serialization. The native encoder takes the document in place of a
 table of its own, so a change to a table is a change to the document and
 nothing has to be released for it; the committed snapshot
-``tests/fixtures/registry.json`` is held to :func:`document` by a test.
+``rust/xue/registry.json`` is held to :func:`document` by a test.
 
 The half of a variable entry that describes the published field (``label``,
 ``unit``, ``parameter``, ``producer``, ``aerosol``, ``quantization``) is the

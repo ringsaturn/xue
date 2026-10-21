@@ -52,7 +52,7 @@ a bundle's inputs and algorithm off the entry; the per-kind views
 
 **`registry.py`** — serialises the four tables as the registry document
 (`xue registry`), the one description the native encoder reads; the
-committed snapshot `tests/fixtures/registry.json` is held to the tables by
+committed snapshot `rust/xue/registry.json` is held to the tables by
 `tests/test_registry.py`.
 
 ## Registration is not publication
@@ -92,9 +92,9 @@ the first step.
 
 ## Registry fixtures
 
-`tests/fixtures/registry.json` is the whole registry document, held to the
+`rust/xue/registry.json` is the whole registry document, held to the
 tables by `tests/test_registry.py` (regenerate with
-`xue registry --output tests/fixtures/registry.json` and say so in the
+`xue registry --output rust/xue/registry.json` and say so in the
 commit); the per-family `tests/fixtures/*-registry.json` hold the native
 encoder and the frontend to the same ids and codebooks. Widening a source's
 inputs means recutting its crop fixture (`gfs.*.crop.grib2` with the same

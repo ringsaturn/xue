@@ -11,8 +11,9 @@
 //! implement, before any input is read. A key a reader does not know is
 //! ignored, so the document can gain keys without a release.
 //!
-//! The snapshot `rust/xue/registry.json` is embedded as the CLI's default
-//! and held byte-identical to `tests/fixtures/registry.json` by a test.
+//! The snapshot `rust/xue/registry.json` is embedded as the CLI's default;
+//! `xue registry --output rust/xue/registry.json` regenerates it and
+//! `tests/test_registry.py` holds it to the Python tables.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -718,25 +719,6 @@ impl Registry {
 mod tests {
     use super::{BundleKind, Companion, Conversion, Decimation, DerivationKind, GdalRule, Predictor, Registry};
     use serde_json::{json, Value};
-    use std::path::PathBuf;
-
-    fn fixture_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/registry.json")
-    }
-
-    /// The crate's embedded snapshot is the committed fixture, byte for
-    /// byte: `xue registry` writes both, and neither may drift.
-    #[test]
-    fn the_embedded_snapshot_is_the_committed_fixture() {
-        let Ok(fixture) = std::fs::read_to_string(fixture_path()) else {
-            eprintln!("skipping: tests/fixtures/registry.json is not beside this crate");
-            return;
-        };
-        assert!(
-            fixture == super::EMBEDDED_DOCUMENT,
-            "rust/xue/registry.json differs from tests/fixtures/registry.json"
-        );
-    }
 
     #[test]
     fn the_snapshot_parses_into_its_representative_entries() {

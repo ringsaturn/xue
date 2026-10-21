@@ -54,8 +54,12 @@ before publishing data** that:
   the satellites, `showcase.yml`) resolve the encoder with
   `native.knows_source`. The installed wheel may predate a source, so they
   fall back to the reference pipeline with a `::warning::`.
-- `pyproject.toml`'s `xuepy` floor tracks the current release, because the
-  wheel's source table must match `sources.py`. So a release is prepared
+- The wheel carries no tables: every call hands it the registry document
+  (`docs/registry.md`), so a variable, bundle or source change is a `main`
+  commit with the regenerated `rust/xue/registry.json` and no release.
+  `pyproject.toml`'s `xuepy` floor tracks the `registrySchema` and the rule
+  names the wheel implements; a new rule, derivation, codebook type or
+  ingest path is an encoder change, and a release is prepared for it
   on a `release/0.N` branch: the change, then the release commit, then the
   `v*` tag on the branch, then a wait for PyPI, then the relock commit
   (raise the floor, `uv lock --refresh-package xuepy`), and only then a

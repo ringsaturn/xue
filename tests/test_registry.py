@@ -9,7 +9,8 @@ import unittest
 from tests._support import FIXTURES
 from xuebuild.registry import REGISTRY_SCHEMA, document, document_json
 
-SNAPSHOT = FIXTURES / "registry.json"
+# Inside the crate, so the native encoder can embed it; one copy only.
+SNAPSHOT = FIXTURES.parents[1] / "rust" / "xue" / "registry.json"
 
 CONVERSION_RULES = {
     "none",
@@ -57,7 +58,7 @@ class RegistryDocumentTests(unittest.TestCase):
         self.assertEqual(
             SNAPSHOT.read_text(encoding="utf-8"),
             document_json(),
-            "the tables moved: regenerate with `xue registry --output tests/fixtures/registry.json` "
+            "the tables moved: regenerate with `xue registry --output rust/xue/registry.json` "
             "and say so in the commit",
         )
 

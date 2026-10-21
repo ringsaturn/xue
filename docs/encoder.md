@@ -122,8 +122,8 @@ The document reaches the encoder two ways:
   `registry=` keyword, since a codebook is a block of the document;
 - `xue-encode convert-bin` takes `--registry <path>`, and without one
   reads the snapshot embedded at build time, `rust/xue/registry.json`,
-  which a crate test holds byte-identical to `tests/fixtures/registry.json`
-  (`xue registry` should write both).
+  which `xue registry --output rust/xue/registry.json` regenerates and
+  `tests/test_registry.py` holds to the Python tables.
 
 The encoder validates the whole document before any input is read
 (`registry.md` §Validation) and refuses it with the field and value named

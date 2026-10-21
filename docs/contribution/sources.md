@@ -481,7 +481,7 @@ forecast).
    `gdal_rules`, `predictor`, `decimation` and `companions` fields — and
    their codebooks in `xuebuild/quantize.py` for every profile; a new
    bundle that is not a plain scalar in `xuebuild/bundles.py`. Regenerate
-   `tests/fixtures/registry.json`, and a new family's fixture under
+   `rust/xue/registry.json`, and a new family's fixture under
    `tests/fixtures/`.
 2. **Fetch.** The dispatch in `xuebuild/fetch.py`: frame URLs or the fetch
    tool, the completeness check, and for an observation the latest-slot

@@ -4,7 +4,7 @@ What an encoder needs to know about the variables, bundles and sources it
 builds, as one JSON document. The Python tables in `xuebuild/` author it
 (`xue registry` prints it); the native encoder reads it in place of a
 table of its own, so a table change is a document change and needs no
-release. The committed snapshot `tests/fixtures/registry.json` is held to
+release. The committed snapshot `rust/xue/registry.json` is held to
 the tables by a test.
 
 The document is not a published artifact and not part of the format. What
@@ -25,7 +25,8 @@ how to obtain the field and what to do with it.
 }
 ```
 
-Ids are the `^[a-z][a-z0-9]*$` strings the manifest admits. Keys are
+Bundle ids are the `^[a-z][a-z0-9]*$` strings the manifest admits; a
+variable that is read and never published may carry `_` (`prate_ave`). Keys are
 camelCase. Every key of an entry is written, even when empty, except where
 a key is marked *optional* below: an absent optional key means "none".
 
@@ -142,12 +143,15 @@ accepts it. Empty for a field no GRIB band carries (a derived field, a
 series-file variable). Each rule reads the band's `GRIB_ELEMENT`,
 `GRIB_SHORT_NAME`, `GRIB_COMMENT`, `GRIB_LEVEL`, description and, for the
 template rules, `GRIB_PDS_PDTN`, `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` and
-`GRIB_DISCIPLINE`; the "searchable" text is the short name, comment, level
-and description joined, lower-cased.
+`GRIB_DISCIPLINE`; the "text" is the short name, comment, level and
+description joined and lower-cased, except that `isobaric`, `phrase`,
+`local-parameter` and `total-precipitation` search the comment, level and
+description without the short name. Elements compare upper-cased; the
+`template-mrms` element compares as written.
 
 | Rule | Parameters | Accepts the band when |
 |---|---|---|
-| `surface` | `elements` | the element is one of `elements`, and the short name ends in `-SFC`, or the searchable text contains `sfc="` or `ground or water surface` |
+| `surface` | `elements` | the element is one of `elements`, and the short name ends in `-SFC`, or the text contains `sfc="` or `ground or water surface` |
 | `height` | `element`, `metres` | the element matches, and the short name is `<metres>-HTGL` or `<metres>-M-HTGL`, or the text matches `(^|[^0-9])<metres>(\.0+)?\s*m(eter)?s?\s+above\s+ground` |
 | `entire-atmosphere` | `element` | the element matches, and the short name is `0-EATM` or the text contains `entire atmosphere` |
 | `mean-sea-level` | `elements` | the element is one of `elements`, and the short name is `0-MSL` or the text contains `mean sea level` |
@@ -155,7 +159,7 @@ and description joined, lower-cased.
 | `cloud-layer` | `element`, `shortName`, `phrases` | the element matches, and the short name is `shortName` or the text contains one of `phrases` |
 | `template` | — | `GRIB_PDS_PDTN` is 0 and the assembled values' parameter category and number, surface type and surface value equal the entry's `parameter` or one of its `alternates` (a `null` level value accepts any) |
 | `template-aerosol` | — | `GRIB_PDS_PDTN` is 48 and the assembled values equal the entry's `parameter` and `aerosol` blocks whole |
-| `template-rank` | — | as `template` against the entry's own identity, the surface value being the rank; without an assembled template, the short name is `<rank>-RESERVED(<surface type>)` |
+| `template-rank` | — | the element is `match.gribElement`, then as `template` against the entry's own identity, the surface value being the rank; without an assembled template, the short name is `<rank>-RESERVED(<surface type>)` |
 | `template-mrms` | — | the element is the entry's `mrmsProduct` up to its first `_`, the discipline is 209, and the assembled template 4.0 values equal the entry's discipline-209 alternate (or its own identity); without an assembled template, a surface of type 102 must spell `<value>-GPML` in the short name |
 | `total-precipitation` | — | the element is `unknown`, `tp`, `apcp` or `tprate`; the short name is `0-SFC` or the text contains `surface`; and the comment contains `cat 1, subcat 193` or the text `total precipitation` |
 | `local-parameter` | `category`, `number` | the element is `unknown`, the short name is `0-SFC` or the text contains `ground or water surface`, and the comment contains `cat <category>, subcat <number>` |

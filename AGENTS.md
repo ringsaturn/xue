@@ -53,6 +53,9 @@ Single tests and the full matrix: [`.claude/rules/workflow.md`](.claude/rules/wo
 1. **Three implementations, one format.** The Python encoder is the
    reference. The native encoder must match it byte for byte. A format
    change updates spec + both encoders + all readers + fixtures together.
+   Tables are data: variables, bundles and sources live in the registry
+   document (`docs/registry.md`), never in Rust and never as an id
+   `match`; only a new rule name is encoder work.
 2. **Decoders never drop a version.** Published `.xue` (v1/v2) and older
    metadata schemas stay readable forever.
 3. **Pointer last, never overwrite under an unchanged `?v=`.**
