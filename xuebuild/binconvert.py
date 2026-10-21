@@ -703,8 +703,11 @@ def _snap_global_longitudes(grid: GridInfo) -> GridInfo:
     return replace(grid, longitude_step=step, first_longitude=first)
 
 
-# The steps a regional grid is snapped to: whole thousandths of a degree.
-_REGIONAL_STEP_UNIT = 1e-3
+# The steps a regional grid is snapped to, as (unit, divisor) in the order
+# they are tried: whole thousandths of a degree, then whole arc-minutes
+# (EFAS's 1/60°, which no decimal spells: the double GDAL derives for it
+# needs seventeen digits, more than some `gdalinfo` releases print).
+_REGIONAL_STEP_UNITS = ((1e-3, 1000.0), (1.0 / 60.0, 60.0))
 
 
 def _snap_regional_steps(grid: GridInfo) -> GridInfo:
@@ -716,16 +719,16 @@ def _snap_regional_steps(grid: GridInfo) -> GridInfo:
     grid two millionths of a degree short, which GDAL turns into a
     0.0099999997° step (and a crop of it, whose last coordinate the GRIB
     writer rounds again, into 0.0099999937°). A grid whose cells, at the
-    nearest whole thousandth of a degree, span its extent to within a
-    thousandth of a cell is on that step, on both axes independently, and
-    its first center is placed on the half-step grid (rounding half up) when
-    it lies within the same tolerance of it — a grid whose edges are on
-    whole steps has its centers half a step in. A step that is not near a
-    thousandth — the sflux Gaussian grid, the radar mosaic's power-of-two
-    tiles — passes through unchanged, as does a global grid, which
-    :func:`_snap_global_longitudes` has already described. The native
-    encoder applies the identical rule (``grid.rs``): the two must agree to
-    the bit."""
+    nearest whole thousandth of a degree or, failing that, the nearest
+    whole arc-minute (EFAS's 1/60°), span its extent to within a thousandth
+    of a cell is on that step, on both axes independently, and its first
+    center is placed on the half-step grid (rounding half up) when it lies
+    within the same tolerance of it — a grid whose edges are on whole steps
+    has its centers half a step in. A step that is near neither — the sflux
+    Gaussian grid, the radar mosaic's power-of-two tiles — passes through
+    unchanged, as does a global grid, which :func:`_snap_global_longitudes`
+    has already described. The native encoder applies the identical rule
+    (``grid.rs``): the two must agree to the bit."""
     if grid.wraps:
         return grid
     longitude_step, first_longitude = _snap_axis(grid.longitude_step, grid.first_longitude, grid.width)
@@ -741,20 +744,22 @@ def _snap_regional_steps(grid: GridInfo) -> GridInfo:
 
 def _snap_axis(step: float, first: float, count: int) -> tuple[float, float]:
     """One axis of :func:`_snap_regional_steps`: ``(step, first)`` snapped,
-    or as given. The snapped values are whole thousandths divided out at
-    the end — ``30 / 1000`` is the double nearest 0.03 where ``30 * 0.001``
-    is not — so a bundle says ``0.03``, not ``0.030000000000000002``."""
-    thousandths = math.floor(step / _REGIONAL_STEP_UNIT + 0.5)
-    rounded = thousandths / 1000.0
-    if thousandths == 0 or abs(count * step - count * rounded) > abs(step) * _GLOBAL_SPAN_TOLERANCE_CELLS:
-        return step, first
-    # The first *center* sits on the half-step grid: a grid whose edges are
-    # on whole steps (MRMS: 130.00 W) has its centers half a step in.
-    half_steps = math.floor(first / (rounded / 2.0) + 0.5)
-    snapped_first = (half_steps * thousandths) / 2000.0
-    if abs(snapped_first - first) > abs(rounded) * _GLOBAL_SPAN_TOLERANCE_CELLS:
-        snapped_first = first
-    return rounded, snapped_first
+    or as given. The snapped values are whole units divided out at the end
+    — ``30 / 1000`` is the double nearest 0.03 where ``30 * 0.001`` is not
+    — so a bundle says ``0.03``, not ``0.030000000000000002``."""
+    for unit, divisor in _REGIONAL_STEP_UNITS:
+        units = math.floor(step / unit + 0.5)
+        rounded = units / divisor
+        if units == 0 or abs(count * step - count * rounded) > abs(step) * _GLOBAL_SPAN_TOLERANCE_CELLS:
+            continue
+        # The first *center* sits on the half-step grid: a grid whose edges
+        # are on whole steps (MRMS: 130.00 W) has its centers half a step in.
+        half_steps = math.floor(first / (rounded / 2.0) + 0.5)
+        snapped_first = (half_steps * units) / (2.0 * divisor)
+        if abs(snapped_first - first) > abs(rounded) * _GLOBAL_SPAN_TOLERANCE_CELLS:
+            snapped_first = first
+        return rounded, snapped_first
+    return step, first
 
 
 def _normalize_longitudes(grid: GridInfo) -> GridInfo:
