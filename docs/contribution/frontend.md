@@ -157,7 +157,7 @@ and the window shrinks to fit it.
   `shaderData.variantName`, so the same Mercator-addressed field lies on
   the plane (a pole-to-pole mesh, three world copies) or the globe (one
   copy). With `map.setTerrain` on, MapLibre does not drape custom layers,
-  so the field and the particles draw once per terrain tile
+  so the field, the particles and the river reaches draw once per terrain tile
   (`Map.terrain`, internal but typed; read structurally, flat fallback)
   with that tile's DEM and the terrain's own mesh size and diagonal, so
   the depth test against the terrain is an equality (polygon offset breaks
@@ -440,7 +440,11 @@ a failed request is one console warning and the case plays its field alone.
   value is a faint 1 px grey (`river/palette.ts`, the same arithmetic in
   TypeScript for the tests). The layer is added before the first symbol
   layer: over the field and the coastline, under the labels and the
-  case's markers. It is not draped on the 3D relief.
+  case's markers. With the 3D relief on it draws once per terrain tile
+  (`projection.ts::surfaceTiles`): each segment is clipped to the tile in
+  the vertex stage, both ends are lifted onto the tile's mesh height, a
+  cut end carries no cap, and a segment end behind a ridge (the terrain's
+  packed depth) is left undrawn.
 - **Gauges** are one circle layer (hollow rings, inked per ground) over
   the reaches. A click pins the probe at the gauge (a grid gauge at its
   `sample` cell) with `river/gauge.ts`'s section under the meteogram rows:

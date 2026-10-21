@@ -13,14 +13,31 @@
  * `texelFetch`, so a frame step uploads 10 000 pairs and rebuilds nothing.
  *
  * Segments overlap by half a width at each end, which stands in for joins.
- * Nothing here drapes over the 3D relief: with the terrain on the lines are
- * drawn on the sea-level plane, like the radar overlay.
+ *
+ * With the 3D relief on, MapLibre does not drape a custom layer, and a line
+ * left on the sea-level plane shows under a pitched camera far from the
+ * valley it follows. So, as the field and the particles do
+ * (`projection.ts`), the segments are drawn once per terrain tile: each is
+ * clipped to the tile, both clipped ends are lifted onto the tile's DEM, and
+ * a segment whose end the terrain's depth says is behind a ridge is left
+ * undrawn.
  */
 
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { mercatorX, mercatorY } from "../mercator";
-import { isGlobe, projectionPrelude, PROJECTION_UNIFORM_NAMES, setProjectionUniforms } from "../projection";
+import {
+  bindSurfaceTile,
+  isGlobe,
+  projectionPrelude,
+  PROJECTION_UNIFORM_NAMES,
+  setProjectionUniforms,
+  surfaceTiles,
+  TERRAIN_DEPTH_GLSL,
+  TERRAIN_UNIFORM_NAMES,
+  TERRAIN_VERTEX_GLSL,
+  withDefines,
+} from "../projection";
 import {
   RIVER_BASEFLOW_FLOOR,
   RIVER_NODATA_COLOR,
@@ -44,6 +61,10 @@ const START_ATTRIBUTE = 1;
 const END_ATTRIBUTE = 2;
 const FEATURE_ATTRIBUTE = 3;
 
+/** Unit 0 carries the values; the terrain's DEM and depth ride above. */
+const DEM_TEXTURE_UNIT = 1;
+const DEPTH_TEXTURE_UNIT = 2;
+
 function vertexShader(prelude: string): string {
   return `#version 300 es
 precision highp float;
@@ -54,6 +75,8 @@ in vec2 a_end;
 in float a_feature;
 uniform highp sampler2D u_values;
 uniform vec2 u_viewport;
+// A world copy's offset in the flat pass; the tile's Mercator origin (wrap
+// included) and side on the terrain.
 uniform vec4 u_tile;
 uniform vec4 u_colors[4];
 uniform vec4 u_nodata;
@@ -63,6 +86,11 @@ uniform float u_floor;
 out vec4 v_color;
 out float v_dist;
 out float v_half;
+#ifdef XUE_TERRAIN
+${TERRAIN_VERTEX_GLSL}
+${TERRAIN_DEPTH_GLSL}
+out float v_hidden;
+#endif
 
 void main() {
   int feature = int(a_feature + 0.5);
@@ -79,8 +107,50 @@ void main() {
     int index = int(ratio >= u_breaks.x) + int(ratio >= u_breaks.y) + int(ratio >= u_breaks.z);
     v_color = u_colors[index];
   }
+#ifdef XUE_TERRAIN
+  // The segment in tile-local units, clipped to the tile (Liang-Barsky), so
+  // each end is lifted by the DEM that covers it and the pieces of a
+  // segment drawn by two tiles meet at the tile's edge.
+  vec2 origin = vec2(u_tile.x - floor(u_tile.x), u_tile.y);
+  vec2 l0 = (a_start - origin) / u_tile.z;
+  vec2 l1 = (a_end - origin) / u_tile.z;
+  vec2 delta = l1 - l0;
+  float t0 = 0.0;
+  float t1 = 1.0;
+  for (int axis = 0; axis < 2; axis++) {
+    if (abs(delta[axis]) < 1e-9) {
+      if (l0[axis] < 0.0 || l0[axis] > 1.0) t0 = 2.0;
+    } else {
+      float ta = -l0[axis] / delta[axis];
+      float tb = (1.0 - l0[axis]) / delta[axis];
+      t0 = max(t0, min(ta, tb));
+      t1 = min(t1, max(ta, tb));
+    }
+  }
+  if (t0 > t1) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    v_color = vec4(0.0);
+    v_dist = 0.0;
+    v_half = 0.0;
+    v_hidden = 1.0;
+    return;
+  }
+  vec2 c0 = clamp(l0 + delta * t0, 0.0, 1.0) * 8192.0;
+  vec2 c1 = clamp(l0 + delta * t1, 0.0, 1.0) * 8192.0;
+  // The far edge read from the last mesh cell, not the one past it.
+  vec4 p0 = projectTileFor3D(c0, surfaceMeshElevation(min(c0, vec2(8191.0))));
+  vec4 p1 = projectTileFor3D(c1, surfaceMeshElevation(min(c1, vec2(8191.0))));
+  v_hidden = surfaceOccluded(a_corner.x < 0.5 ? p0 : p1) ? 1.0 : 0.0;
+  // An end cut by the tile's edge carries no cap: the next tile's piece
+  // starts there, and two caps would double the alpha across the seam.
+  float cap0 = t0 > 0.0 ? 0.0 : 1.0;
+  float cap1 = t1 < 1.0 ? 0.0 : 1.0;
+#else
   vec4 p0 = projectTile(a_start + vec2(u_tile.x, 0.0));
   vec4 p1 = projectTile(a_end + vec2(u_tile.x, 0.0));
+  float cap0 = 1.0;
+  float cap1 = 1.0;
+#endif
   vec2 half_viewport = u_viewport * 0.5;
   vec2 s0 = p0.xy / p0.w * half_viewport;
   vec2 s1 = p1.xy / p1.w * half_viewport;
@@ -92,7 +162,7 @@ void main() {
   // Half a pixel of fringe for the antialiasing ramp.
   float reach = half_width + 0.5;
   vec4 position = a_corner.x < 0.5 ? p0 : p1;
-  vec2 offset = normal * a_corner.y * reach + dir * (a_corner.x < 0.5 ? -half_width : half_width);
+  vec2 offset = normal * a_corner.y * reach + dir * (a_corner.x < 0.5 ? -half_width * cap0 : half_width * cap1);
   position.xy += offset / half_viewport * position.w;
   gl_Position = position;
   v_dist = a_corner.y * reach;
@@ -105,8 +175,14 @@ precision mediump float;
 in vec4 v_color;
 in float v_dist;
 in float v_half;
+#ifdef XUE_TERRAIN
+in float v_hidden;
+#endif
 out vec4 fragColor;
 void main() {
+#ifdef XUE_TERRAIN
+  if (v_hidden > 0.5) discard;
+#endif
   float coverage = clamp(v_half + 0.5 - abs(v_dist), 0.0, 1.0);
   float alpha = v_color.a * coverage;
   fragColor = vec4(v_color.rgb * alpha, alpha);
@@ -122,6 +198,7 @@ const UNIFORM_NAMES = [
   "u_width",
   "u_floor",
   ...PROJECTION_UNIFORM_NAMES,
+  ...TERRAIN_UNIFORM_NAMES,
 ] as const;
 
 interface ProgramInfo {
@@ -136,6 +213,9 @@ interface GroupMesh {
   buffer: WebGLBuffer | null;
   vertexArray: WebGLVertexArrayObject | null;
   count: number;
+  /** The instances' Mercator bounds, `[minX, minY, maxX, maxY]`, so a
+   * terrain tile skips a row group nowhere near it. */
+  bounds: [number, number, number, number];
 }
 
 /** Every segment of a row group's reaches as instances: `lines[i]` is the
@@ -163,6 +243,33 @@ export function segmentInstances(rowStart: number, lines: readonly Float64Array[
     }
   });
   return out;
+}
+
+/** The Mercator bounds of a row group's segments, `[minX, minY, maxX,
+ * maxY]` (empty, min above max, when there are none). */
+export function instanceBounds(instances: Float32Array): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let at = 0; at < instances.length; at += INSTANCE_FLOATS) {
+    for (const offset of [0, 2]) {
+      const x = instances[at + offset]!;
+      const y = instances[at + offset + 1]!;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+/** Whether bounds meet a terrain tile, given as its Mercator origin (wrap
+ * included, as `SurfaceTile` carries it) and side. */
+export function boundsMeetTile(bounds: readonly number[], x: number, y: number, size: number): boolean {
+  const originX = x - Math.floor(x);
+  return bounds[0]! <= originX + size && bounds[2]! >= originX && bounds[1]! <= y + size && bounds[3]! >= y;
 }
 
 /** The value texture's texels: flow (negative for no value) and usual flow
@@ -243,7 +350,13 @@ export class RiverLayer implements CustomLayerInterface {
   /** Upload a row group's reaches once. */
   setGroup(index: number, rowStart: number, lines: readonly Float64Array[]): void {
     const instances = segmentInstances(rowStart, lines);
-    this.groups.set(index, { instances, buffer: null, vertexArray: null, count: instances.length / INSTANCE_FLOATS });
+    this.groups.set(index, {
+      instances,
+      buffer: null,
+      vertexArray: null,
+      count: instances.length / INSTANCE_FLOATS,
+      bounds: instanceBounds(instances),
+    });
     this.map?.triggerRepaint();
   }
 
@@ -263,14 +376,16 @@ export class RiverLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
-  private programFor(gl: WebGL2RenderingContext, args: CustomRenderMethodInput): ProgramInfo {
-    const key = args.shaderData.variantName;
+  /** The program per projection variant and terrain mode. */
+  private programFor(gl: WebGL2RenderingContext, args: CustomRenderMethodInput, terrain: boolean): ProgramInfo {
+    const key = `${args.shaderData.variantName}:${terrain ? "terrain" : "flat"}`;
     const cached = this.programs.get(key);
     if (cached) return cached;
+    const defines = terrain ? ["XUE_TERRAIN"] : [];
     const program = gl.createProgram();
     for (const [kind, source] of [
-      [gl.VERTEX_SHADER, vertexShader(projectionPrelude(args))],
-      [gl.FRAGMENT_SHADER, FRAGMENT_SHADER],
+      [gl.VERTEX_SHADER, withDefines(vertexShader(projectionPrelude(args)), defines)],
+      [gl.FRAGMENT_SHADER, withDefines(FRAGMENT_SHADER, defines)],
     ] as const) {
       const shader = gl.createShader(kind);
       if (!shader) throw new Error("river: failed to create shader");
@@ -357,8 +472,9 @@ export class RiverLayer implements CustomLayerInterface {
     const gl = this.gl;
     const input = args as CustomRenderMethodInput;
     if (!gl || glContext !== gl || !this.visible || this.groups.size === 0) return;
-    if (!input?.shaderData || !input.defaultProjectionData) return;
-    const info = this.programFor(gl, input);
+    if (!input?.shaderData || !input.defaultProjectionData || !this.map) return;
+    const tiles = surfaceTiles(this.map, input);
+    const info = this.programFor(gl, input, tiles !== null);
     gl.useProgram(info.program);
     gl.activeTexture(gl.TEXTURE0);
     this.ensureTexture(gl);
@@ -370,21 +486,33 @@ export class RiverLayer implements CustomLayerInterface {
     gl.uniform3f(u.u_breaks!, RIVER_RATIO_BREAKS[0], RIVER_RATIO_BREAKS[1], RIVER_RATIO_BREAKS[2]);
     gl.uniform2f(u.u_width!, RIVER_WIDTH_MIN_PX, RIVER_WIDTH_MAX_PX);
     gl.uniform1f(u.u_floor!, RIVER_BASEFLOW_FLOOR);
-    setProjectionUniforms(gl, u, input.defaultProjectionData);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
-    // Three world copies on the plane, one on the globe, as the field.
-    const offsets = isGlobe(input) ? [0] : [-1, 0, 1];
-    for (const mesh of this.groups.values()) {
-      if (mesh.count === 0) continue;
-      gl.bindVertexArray(this.ensureMesh(gl, mesh));
-      for (const offset of offsets) {
-        gl.uniform4f(u.u_tile!, offset, 0, 1, 0);
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, mesh.count);
+    if (tiles) {
+      for (const tile of tiles) {
+        bindSurfaceTile(gl, u, tile, DEM_TEXTURE_UNIT, null, DEPTH_TEXTURE_UNIT);
+        for (const mesh of this.groups.values()) {
+          if (mesh.count === 0 || !boundsMeetTile(mesh.bounds, tile.x, tile.y, tile.size)) continue;
+          gl.bindVertexArray(this.ensureMesh(gl, mesh));
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, mesh.count);
+        }
+      }
+    } else {
+      setProjectionUniforms(gl, u, input.defaultProjectionData);
+      // Three world copies on the plane, one on the globe, as the field.
+      const offsets = isGlobe(input) ? [0] : [-1, 0, 1];
+      for (const mesh of this.groups.values()) {
+        if (mesh.count === 0) continue;
+        gl.bindVertexArray(this.ensureMesh(gl, mesh));
+        for (const offset of offsets) {
+          gl.uniform4f(u.u_tile!, offset, 0, 1, 0);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, mesh.count);
+        }
       }
     }
     gl.bindVertexArray(null);
+    gl.activeTexture(gl.TEXTURE0);
   }
 }
