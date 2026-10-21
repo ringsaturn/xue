@@ -97,9 +97,16 @@ compaction: lower-cased, whitespace and `*()[]` removed, `²` written `^2`.
 | `geopotential-to-metres` | `gpm`, `m`; `m2/s2`, `m2s-2` (compacted further: `^` dropped too) | identity; ÷ 9.80665 for the geopotential |
 | `code-table` | `1`, `-`, empty, the entry's `table`, any spelling containing it or `0=no` (after dropping `codetable`) | identity |
 
+A GRIB record is accepted under the listed spellings alone. A series
+variable read out of a NetCDF file is accepted, in addition, under the
+variable's own `unit` and its udunits spelling, which take the identity:
+the scaling rules scale only under their listed input spellings, so a
+series already in the published unit is left as it is.
+
 The raster expression the two inspection paths compare (`gdal.py`,
 `inspect.rs`) is derived from the rule and the unit alone and is never
-written anywhere.
+written anywhere. A variable whose `gdal` list is empty matches no band;
+that is not an error.
 
 ### `match`
 
