@@ -1013,7 +1013,7 @@ def _catalog_river(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     extent matches what is beside it."""
     from .river.schema import read_index  # the river package imports nothing of the showcase's
 
-    block = _river_block(entry["river"], entry["id"], entry["variables"])
+    block = _river_block(entry["river"], entry["id"], entry.get("variables", ()))
     path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["index"]
     if not path.is_file():
         raise ShowcaseError(f"case {entry['id']} names a river index that is not built: {path}")
