@@ -124,7 +124,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, legendGradient, logCodebookLegend } from "./palettes";
+import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, hostPaletteCodes, hostPaletteLegend, hostPaletteSampling, legendGradient, logCodebookLegend } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   contourSmoothingCells,
@@ -6284,6 +6284,9 @@ function legendGradientFor(session: VariableSession): string {
   if (session.composite) return "";
   if (session.vector) return legendGradient(vectorPalette(session));
   const variable = session.variable;
+  // A palette the embedding page declared spans its own stops.
+  const declared = hostPaletteCodes(variable);
+  if (declared) return legendGradient(buildPalette(variable, session.identity), declared[0], declared[1]);
   // A registered field may read over less than its codebook — a windowed
   // temperature surface, a diagnostic whose ramp saturates before the
   // codebook ends; an unrecognized field's bar spans the codebook, which is
@@ -6333,6 +6336,7 @@ function variableUi(session: VariableSession): VariableUi {
       legendKey: spec.legendKey?.() ?? null,
     };
   }
+  const declared = session.vector ? null : hostPaletteLegend(session.variable);
   if (spec) {
     return {
       // A bundle that borrows a registered chart by its GRIB2 identity keeps
@@ -6342,8 +6346,8 @@ function variableUi(session: VariableSession): VariableUi {
       title: spec.title,
       bufferTitle: spec.bufferTitle,
       label: spec.label(),
-      legend: spec.legend(),
-      legendKey: spec.legendKey?.() ?? null,
+      legend: declared ?? spec.legend(),
+      legendKey: declared ? null : (spec.legendKey?.() ?? null),
     };
   }
   const variable = session.variable;
@@ -6351,7 +6355,9 @@ function variableUi(session: VariableSession): VariableUi {
   // A logarithmic codebook's bar is even in codes, not in values, so its
   // ticks are read off the codes.
   let legend: string[];
-  if (quantization.type === "linear") {
+  if (declared) {
+    legend = declared;
+  } else if (quantization.type === "linear") {
     const range: readonly [number, number] = [quantization.offset, quantization.offset + quantization.scale * quantization.maximumCode];
     legend = rangeLegend(range, niceStep(range[1] - range[0]));
   } else {
@@ -8420,8 +8426,11 @@ function floorIsNoData(chartId: KnownBundleId | null): boolean {
 
 /** How a chart is reconstructed between cells (`VariableSpec.sampling`):
  * bicubic for every field the table does not say otherwise of, an unknown
- * one included. */
-function samplingFor(chartId: KnownBundleId | null): Sampling {
+ * one included, unless the embedding page declared otherwise for the
+ * bundle (`hostPaletteSampling`). */
+function samplingFor(chartId: KnownBundleId | null, bundleId: string): Sampling {
+  const declared = hostPaletteSampling(bundleId);
+  if (declared) return declared;
   return chartId === null ? "smooth" : (variableSpec(chartId)?.sampling ?? "smooth");
 }
 
@@ -8478,7 +8487,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     );
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay, geoGrid(session.metadata).longitudeStep));
     layer.setFloorNoData(floorIsNoData(session.chartId));
-    layer.setSampling(samplingFor(session.chartId));
+    layer.setSampling(samplingFor(session.chartId, session.variable.id));
     // An overlay shows nothing until its first plane lands: the slot may
     // still hold another surface's plane, and lines of the wrong level over
     // the field would be worse than none.
@@ -8728,7 +8737,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     target.setPalette(buildPalette(variable));
     target.setContours(contourStyleFor(variable, undefined, false, geoGrid(posterMetadata).longitudeStep));
     target.setFloorNoData(floorIsNoData(registeredBundleId(identityForBundleId(variable.id))));
-    target.setSampling(samplingFor(registeredBundleId(identityForBundleId(variable.id))));
+    target.setSampling(samplingFor(registeredBundleId(identityForBundleId(variable.id)), variable.id));
     target.setFrame(plane);
     target.setVisible(true);
   } catch (error) {

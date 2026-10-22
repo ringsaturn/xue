@@ -27,6 +27,7 @@ import {
   thetaEPaletteDomain,
 } from "./levels";
 import type { BundleVariable, LinearQuantization, LogQuantization } from "./manifest";
+import type { Sampling } from "./variables";
 
 /**
  * Color ramps in physical units. The shader samples them per pixel, so the
@@ -761,14 +762,115 @@ export function decodeLog(quantization: LogQuantization, code: number): number |
 }
 
 /** Six legend ticks for a logarithmic codebook, largest first, at codes
- * evenly spaced from the last code down to the zero code — where the bar,
- * which spans the codes, actually shows them. Values print compactly, so a
- * codebook reaching 1e11 still fits the legend's column. */
-export function logCodebookLegend(quantization: LogQuantization): string[] {
+ * evenly spaced from `to` down to `from` (the last code and the zero code
+ * unless a bar spans less) — where the bar, which spans the codes, actually
+ * shows them. Values print compactly, so a codebook reaching 1e11 still
+ * fits the legend's column. */
+export function logCodebookLegend(
+  quantization: LogQuantization,
+  from: number = quantization.zeroCode,
+  to: number = quantization.maximumCode,
+): string[] {
   const ticks: string[] = [];
   for (let index = 0; index < 6; index += 1) {
-    const code = Math.round(quantization.maximumCode - (index * (quantization.maximumCode - quantization.zeroCode)) / 5);
+    const code = Math.round(to - (index * (to - from)) / 5);
     ticks.push(compactTick(decodeLog(quantization, code) ?? 0));
+  }
+  return ticks;
+}
+
+/** Palettes a page that builds this shell declares for its own bundles, by
+ * bundle id, in `window.xuePalettes` before the shell loads
+ * (`docs/contribution/frontend.md`, "Embedding"): each either an array of at
+ * least two `[value, r, g, b, a]` stops in increasing value, channels
+ * 0–255, or `{ stops, sampling }` to say how the field is reconstructed
+ * between cells as well (`nearest` for a field one cell wide, such as a
+ * river network, whose neighbours are no data). A declared palette replaces
+ * the one the field's identity would pick, on the map and in the legend; a
+ * malformed declaration is ignored whole, so the shell's own palette stands.
+ * Read once, on first use. */
+interface HostPalette {
+  stops: Stop[];
+  sampling: Sampling | null;
+}
+
+let hostPalettes: ReadonlyMap<string, HostPalette> | null = null;
+
+const HOST_SAMPLINGS: readonly Sampling[] = ["smooth", "nearest"];
+
+function readHostStops(stops: unknown): Stop[] | null {
+  if (!Array.isArray(stops) || stops.length < 2) return null;
+  const parsed: Stop[] = [];
+  for (const stop of stops) {
+    if (!Array.isArray(stop) || stop.length !== 5 || !stop.every((part) => typeof part === "number" && Number.isFinite(part))) return null;
+    const [value, r, g, b, a] = stop as number[];
+    if (![r, g, b, a].every((channel) => channel! >= 0 && channel! <= 255)) return null;
+    if (parsed.length > 0 && !(value! > parsed[parsed.length - 1]![0])) return null;
+    parsed.push([value!, Math.round(r!), Math.round(g!), Math.round(b!), Math.round(a!)]);
+  }
+  return parsed;
+}
+
+export function readHostPalettes(input: unknown): Map<string, HostPalette> {
+  const palettes = new Map<string, HostPalette>();
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return palettes;
+  for (const [id, declared] of Object.entries(input)) {
+    if (Array.isArray(declared)) {
+      const stops = readHostStops(declared);
+      if (stops) palettes.set(id, { stops, sampling: null });
+      continue;
+    }
+    if (typeof declared !== "object" || declared === null) continue;
+    const { stops: rawStops, sampling, ...rest } = declared as Record<string, unknown>;
+    if (Object.keys(rest).length > 0) continue;
+    if (sampling !== undefined && !HOST_SAMPLINGS.includes(sampling as Sampling)) continue;
+    const stops = readHostStops(rawStops);
+    if (stops) palettes.set(id, { stops, sampling: (sampling as Sampling | undefined) ?? null });
+  }
+  return palettes;
+}
+
+function hostPalette(id: string): HostPalette | null {
+  hostPalettes ??= readHostPalettes((globalThis as { xuePalettes?: unknown }).xuePalettes);
+  return hostPalettes.get(id) ?? null;
+}
+
+export function hostPaletteStops(id: string): Stop[] | null {
+  return hostPalette(id)?.stops ?? null;
+}
+
+/** The reconstruction a page declared for a bundle, or null to keep the
+ * chart's own. */
+export function hostPaletteSampling(id: string): Sampling | null {
+  return hostPalette(id)?.sampling ?? null;
+}
+
+/** The codes a declared palette's legend bar spans — its first stop's
+ * value to its last's — or null for a bundle with no declared palette. */
+export function hostPaletteCodes(variable: BundleVariable): [number, number] | null {
+  const stops = hostPaletteStops(variable.id);
+  if (!stops) return null;
+  const low = stops[0]![0];
+  const high = stops[stops.length - 1]![0];
+  const quantization = variable.quantization;
+  if (quantization.type === "log1p") {
+    return [encodeLog(quantization, low), Math.min(quantization.maximumCode, encodeLog(quantization, high))];
+  }
+  const code = (value: number) => Math.min(quantization.maximumCode, Math.max(0, Math.round((value - quantization.offset) / quantization.scale)));
+  return [code(low), code(high)];
+}
+
+/** Six ticks across a declared palette's bar, largest first, at the codes
+ * the bar shows them at; null for a bundle with no declared palette. */
+export function hostPaletteLegend(variable: BundleVariable): string[] | null {
+  const codes = hostPaletteCodes(variable);
+  if (!codes) return null;
+  const [from, to] = codes;
+  const quantization = variable.quantization;
+  if (quantization.type === "log1p") return logCodebookLegend(quantization, from, to);
+  const ticks: string[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    ticks.push(compactTick(decodeLinear(quantization, Math.round(to - (index * (to - from)) / 5)) ?? 0));
   }
   return ticks;
 }
@@ -916,6 +1018,8 @@ function codebookRange(quantization: LinearQuantization): readonly [number, numb
  * is at least legible — or, on a logarithmic codebook, the precipitation
  * ramp, the one ramp drawn in that shape before the aerosols. */
 function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): Stop[] {
+  const host = hostPaletteStops(variable.id);
+  if (host) return host;
   const linear = variable.quantization.type === "linear" ? variable.quantization : null;
   if (identity === null) {
     return linear ? remapStops(TEMPERATURE_STOPS, [-60, 50], codebookRange(linear)) : PRECIPITATION_STOPS;
