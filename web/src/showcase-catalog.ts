@@ -2,6 +2,7 @@ import { fetchImmutable } from "./fetchimmutable";
 import {
   FORECAST_MODELS,
   isBundleVariableId,
+  registerCaseDataset,
   validateManifest,
   VOLUME_BUNDLE_LEVELS,
   type ForecastBundleId,
@@ -402,13 +403,19 @@ function validateCase(input: unknown): ShowcaseCase {
   const value = object(input);
   const id = text(value.id, "id");
   if (!/^[a-z0-9-]+$/.test(id)) throw new Error("showcase case id must be a slug");
-  const modelId = modelIdForManifestString(text(value.model, "model"));
-  if (!modelId || value.product !== FORECAST_MODELS[modelId].product) {
-    throw new Error(`showcase case ${id} names an unsupported dataset`);
+  const model = text(value.model, "model");
+  const product = text(value.product, "product");
+  const knownModelId = modelIdForManifestString(model);
+  if (knownModelId) {
+    if (product !== FORECAST_MODELS[knownModelId].product) {
+      throw new Error(`showcase case ${id} names an unsupported dataset`);
+    }
+    // modelId is derived from the manifest strings, so a mismatching
+    // shorthand is a broken catalog rather than something to paper over.
+    if (value.modelId !== knownModelId) throw new Error(`showcase case ${id} has an inconsistent modelId`);
+  } else if (typeof value.modelId !== "string") {
+    throw new Error(`showcase case ${id} has an inconsistent modelId`);
   }
-  // modelId is derived from the manifest strings, so a mismatching shorthand
-  // is a broken catalog rather than something to paper over.
-  if (value.modelId !== modelId) throw new Error(`showcase case ${id} has an inconsistent modelId`);
   if (typeof value.run !== "string" || !/^\d{10}$/.test(value.run)) {
     throw new Error(`showcase case ${id} has an invalid run id`);
   }
@@ -457,13 +464,32 @@ function validateCase(input: unknown): ShowcaseCase {
   const river = riverBlock(value.river, id);
   const view = viewBlock(value.view, id);
   const bbox = bounds(value.bbox, "bbox");
+  const dataBbox = bounds(value.dataBbox, "dataBbox");
   const markers = markersBlock(value.markers, id, bbox);
+  const title = localized(value.title, "title");
+  const summary = localized(value.summary, "summary");
+  // A dataset this build has no entry for is admitted from the row itself,
+  // last, so a row refused for anything else admits nothing.
+  if (!knownModelId) {
+    try {
+      registerCaseDataset({
+        id: value.modelId as string,
+        label: model,
+        product,
+        defaultVariable: defaultVariable as ForecastBundleId,
+        variables: variables as ForecastBundleId[],
+        dataBbox,
+      });
+    } catch (error) {
+      throw new Error(`showcase case ${id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const entry: ShowcaseCase = {
     ...(value as unknown as ShowcaseCase),
-    title: localized(value.title, "title"),
-    summary: localized(value.summary, "summary"),
+    title,
+    summary,
     bbox,
-    dataBbox: bounds(value.dataBbox, "dataBbox"),
+    dataBbox,
   };
   if (markers) entry.markers = markers;
   else delete entry.markers;

@@ -592,6 +592,19 @@ hidden and pinned models are `localStorage`.
   is dropped from the view without a warning. A dataset reached only through cases (`woof`, `efas`, `efaswb`) has no
   pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
   model sheet, and `?model=` naming it falls back to the default.
+- A case may name a dataset this build has no `FORECAST_MODELS` entry for:
+  a catalog row whose `model` matches no label is admitted from the row
+  itself (`registerCaseDataset`, called last in `showcase-catalog.ts::validateCase`)
+  as a case-only dataset with the row's `modelId`, `model` as its label,
+  its `product`, `defaultVariable`, its `variables` as the rail core, no
+  core bundles, and its `dataBbox` as the region unless the grid goes
+  around the globe. Its manifest then validates like any case's, its fields draw
+  through the generic card and rail tile, and the eyebrow shows the
+  label. A row is still refused when its `modelId` is a built-in id or is
+  not a lowercase slug, when another row admitted the same id with a
+  different label or product, or when its label is already another
+  dataset's. Nothing about it reaches the model switch, `?model=` or the
+  comparison page.
 
 ## Embedding
 

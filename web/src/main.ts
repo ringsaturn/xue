@@ -1366,6 +1366,12 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gibs: "NASA GIBS / WORLDVIEW DAILY (300 M)",
 };
 
+/** The eyebrow of a dataset; one a case admitted (`registerCaseDataset`)
+ * has no line here and shows its own label. */
+function modelEyebrowText(model: ForecastModelId): string {
+  return (MODEL_EYEBROW as Partial<Record<string, string>>)[model] ?? FORECAST_MODELS[model].label;
+}
+
 /** The member to open when a family's one rail tile is picked: whichever
  * level was last on screen, else the first the run publishes — the surface
  * member where the family has one (2 m temperature, 10 m wind, sea level
@@ -6353,12 +6359,12 @@ function variableUi(session: VariableSession): VariableUi {
 
 function updateModelPresentation(): void {
   document.body.dataset.model = selectedModelId;
-  modelEyebrow.textContent = MODEL_EYEBROW[selectedModelId];
+  modelEyebrow.textContent = modelEyebrowText(selectedModelId);
   if (mosaic) {
     // The eyebrow names the disks actually on screen, and the credit line
     // carries each one's notice (`body[data-credits~=…]` in the stylesheet).
     const names = mosaic.members.map((member) => MOSAIC_MEMBER_NAMES[member.id] ?? FORECAST_MODELS[member.id].label);
-    modelEyebrow.textContent = `${MODEL_EYEBROW[selectedModelId]} / ${names.join(" · ")} (0.04°)`;
+    modelEyebrow.textContent = `${modelEyebrowText(selectedModelId)} / ${names.join(" · ")} (0.04°)`;
     const credits = new Set(mosaic.members.map((member) => MOSAIC_MEMBER_CREDITS[member.id]).filter((credit): credit is string => credit !== undefined));
     document.body.dataset.credits = [...credits].join(" ");
   } else {

@@ -448,6 +448,57 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
 };
 
+/** The ids the table above ships with: a case never replaces one. */
+const BUILT_IN_MODEL_IDS: ReadonlySet<string> = new Set(Object.keys(FORECAST_MODELS));
+
+/** What a showcase row says about a dataset this build has no entry for. */
+export interface CaseDataset {
+  id: string;
+  label: string;
+  product: string;
+  defaultVariable: ForecastBundleId;
+  variables: readonly ForecastBundleId[];
+  /** The cells' extent, [west, south, east, north]. */
+  dataBbox: readonly [number, number, number, number];
+}
+
+/** Admit a dataset a showcase case names that this build has no entry for,
+ * as a case-only one (no pointer, absent from the switch and `?model=`), so
+ * the case plays like any other and its fields draw generically: the
+ * catalog row says everything a case needs from the table. Returns its id.
+ * Throws when the id is not a slug, belongs to a built-in dataset, or was
+ * admitted before with another label or product, and when the label is
+ * already another dataset's: a manifest names its dataset by the label
+ * (`modelForManifestString`), so two entries may never share one. */
+export function registerCaseDataset(dataset: CaseDataset): ForecastModelId {
+  const { id, label, product } = dataset;
+  if (!/^[a-z][a-z0-9]*$/.test(id)) throw new Error(`case dataset id ${id} is not a slug`);
+  if (BUILT_IN_MODEL_IDS.has(id)) throw new Error(`case dataset ${id} collides with a built-in dataset`);
+  const table = FORECAST_MODELS as Record<string, ForecastModelInfo>;
+  const admitted = table[id];
+  if (admitted) {
+    if (admitted.label !== label || admitted.product !== product) {
+      throw new Error(`case dataset ${id} was admitted as ${admitted.label} ${admitted.product}`);
+    }
+    return admitted.id;
+  }
+  const owner = modelForManifestString(label);
+  if (owner) throw new Error(`case dataset ${id} reuses the label of ${owner.id}`);
+  const [west, south, east, north] = dataset.dataBbox;
+  // A grid around the whole globe has nowhere to send the camera to.
+  const global = east - west >= 359;
+  table[id] = {
+    id: id as ForecastModelId,
+    label,
+    product,
+    coreBundles: [],
+    defaultVariable: dataset.defaultVariable,
+    railCore: [...dataset.variables],
+    ...(global ? {} : { region: [west, south, east, north] as const }),
+  };
+  return id as ForecastModelId;
+}
+
 /** The layer a dataset opens on when nothing asked for one. */
 export function modelDefaultVariable(model: ForecastModelId, fallback: ForecastBundleId): ForecastBundleId {
   return FORECAST_MODELS[model].defaultVariable ?? fallback;
