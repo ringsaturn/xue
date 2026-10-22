@@ -614,7 +614,16 @@ always installed, at the end of the map's `load` callback, and announced by
 a `xue:ready` event on `window`; a script that runs later finds the object
 already there. A Protomaps key serves only the origins it is bound to, so
 such a page on its own host sets `VITE_PROTOMAPS_KEY` at build time; the
-shell's own key is the fallback.
+shell's own key is the fallback. Such a page may also colour its own bundles:
+`window.xuePalettes`, set before the shell's module runs, maps a bundle id
+to at least two `[value, r, g, b, a]` stops in increasing value (channels
+0–255, `palettes.ts::readHostPalettes`), or to `{ stops, sampling }` where
+`sampling` (`smooth` or `nearest`) overrides how the field is drawn between
+cells — `nearest` for a field one cell wide, whose bicubic would blend in
+the no-data neighbours. A declared palette replaces the one
+the field's identity picks, on the map and in the legend, whose bar spans
+the first stop's value to the last's with six ticks read off its codes; a
+malformed declaration is ignored and the shell's palette stands.
 
 ```ts
 interface XueViewer {
