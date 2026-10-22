@@ -176,6 +176,7 @@ export const tr: Record<MessageKey, string> = {
   caseTag: "VAKA",
   caseSummaryAria: "Vaka özeti",
   runCycle: "Model koşusu",
+  recordSpan: "Kayıt dönemi",
   latestObservation: "Son gözlem",
   latestNowcast: "Son anlık tahmin",
   awaitingData: "Veri bekleniyor",

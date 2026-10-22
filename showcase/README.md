@@ -55,7 +55,13 @@ retires a case.
      buttons for the rest. An HRRR case is cropped from the regular grid the
      encoder resamples the model onto, so its `bbox` works like any other.
    - Optional: `defaultVariable` (defaults to the first), `eventTime`, `tags`,
-     `credit`, `profile`.
+     `credit`, `profile`, `timeline`.
+   - `timeline: "daily"` marks a record of days — a model's simulated or
+     reanalysed days, one frame each, rather than a forecast run or an
+     observation window. The viewer then reads each frame by its UTC date
+     (`2010-05-01`, not a lead hour nor a clock in the viewer's zone), names
+     the case by the days it spans instead of a cycle, and labels the
+     track's ends with their dates. The row carries it on unchanged.
 
    An **observation case** on the CMA radar mosaic is the same file with one
    substitution: instead of a `run` to fetch it names the local `dataset`

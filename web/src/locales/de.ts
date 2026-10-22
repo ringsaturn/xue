@@ -173,6 +173,7 @@ export const de: Record<MessageKey, string> = {
   caseTag: "FALL",
   caseSummaryAria: "Fallbeschreibung",
   runCycle: "Modelllauf",
+  recordSpan: "Zeitraum der Reihe",
   latestObservation: "Letzte Beobachtung",
   latestNowcast: "Letzter Nowcast",
   awaitingData: "Warte auf Daten",

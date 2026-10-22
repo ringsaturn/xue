@@ -2184,6 +2184,24 @@ function showingObservations(): boolean {
   return isObservationModel(activeCase ? activeCase.modelId : selectedModelId);
 }
 
+/** Whether the case on screen is a record of days (`timeline: "daily"`):
+ * each frame is read by its UTC date, not by a lead from a cycle nor by a
+ * clock in the display zone — a day is not an instant. */
+function showingDailyRecord(): boolean {
+  return activeCase?.timeline === "daily";
+}
+
+/** The UTC day of the year, 1 to 366. */
+function dayOfYear(validTime: number): number {
+  const day = new Date(validTime);
+  return Math.floor((validTime - Date.UTC(day.getUTCFullYear(), 0, 1)) / 86_400_000) + 1;
+}
+
+/** A frame's UTC day, `2010-05-01`. */
+function formatUtcDay(validTime: number): string {
+  return new Date(validTime).toISOString().slice(0, 10);
+}
+
 /** Whether the observation window on screen runs ahead of the clock — a
  * nowcast whose newest frames are the near future (`leadsClock`). */
 function showingNowcast(): boolean {
@@ -2195,6 +2213,15 @@ function showingNowcast(): boolean {
  * every other one. A nowcast is still read by its clock, but its frames are
  * valid times, not observation times. */
 function applyDatasetWording(): void {
+  if (showingDailyRecord()) {
+    leadLabel.textContent = "DATE";
+    runTimeLabel.textContent = t("recordSpan");
+    validTimeLabel.textContent = t("validTimeLabel");
+    slider.setAttribute("aria-label", t("validTimeLabel"));
+    placeNowMark();
+    forecastDays.setAttribute("aria-label", t("observationDaysAria"));
+    return;
+  }
   const observations = showingObservations();
   const nowcast = showingNowcast();
   leadLabel.textContent = nowcast ? "NOWCAST" : observations ? "OBSERVED" : "FORECAST HOUR";
@@ -2307,6 +2334,7 @@ function embedSource(): EmbedSource | null {
 function formatLead(index: number): string {
   // A day's picture is named by its UTC day.
   if (imageryMode()) return formatGibsDay(index);
+  if (showingDailyRecord()) return formatUtcDay(frameValidTime(index));
   if (showingObservations()) return formatClockStamp(frameValidTime(index), displayZone);
   const seconds = frameLeadSeconds(index);
   const hours = Math.floor(seconds / HOUR_SECONDS);
@@ -2322,6 +2350,7 @@ function formatLead(index: number): string {
  * (its readout is already that stamp's clock). */
 function frameStampLine(index: number): string {
   if (imageryMode()) return `${formatGibsDay(index)} UTC`;
+  if (showingDailyRecord()) return `${formatUtcDay(frameValidTime(index))} UTC`;
   const stamp = formatCompactDate(frameValidTime(index));
   if (showingNowcast()) return `${stamp}${formatAheadOfClock(frameValidTime(index))}`;
   return showingObservations() ? stamp : `${formatLead(index)} · ${stamp}`;
@@ -4123,9 +4152,11 @@ const gifHost: GifHost = {
     code: variableCode.textContent ?? "",
     // The file travels without the capsule that names the zone, so the
     // stamp carries the offset itself.
-    stamp: showingObservations()
-      ? formatDate(frameValidTime(index))
-      : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`,
+    stamp: showingDailyRecord()
+      ? `${formatUtcDay(frameValidTime(index))} UTC`
+      : showingObservations()
+        ? formatDate(frameValidTime(index))
+        : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`,
   }),
   credit: gifCredit,
   holdMs: exportHoldMs,
@@ -4241,6 +4272,7 @@ function exportPixels(): { width: number; height: number } {
 }
 
 function frameReadout(index: number): string {
+  if (showingDailyRecord()) return `${formatUtcDay(frameValidTime(index))} UTC`;
   return showingObservations()
     ? formatDate(frameValidTime(index))
     : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`;
@@ -4602,10 +4634,18 @@ function updateFrameReadout(index: number): void {
   const lead = formatLead(index);
   const valid = frameValidTime(index);
   slider.value = String(index);
-  slider.setAttribute("aria-valuetext", showingObservations() ? formatDate(valid) : `${lead}, ${formatDate(valid)}`);
+  slider.setAttribute(
+    "aria-valuetext",
+    showingDailyRecord() ? lead : showingObservations() ? formatDate(valid) : `${lead}, ${formatDate(valid)}`,
+  );
   forecastLead.value = lead;
-  // A day's picture is a UTC day, not an instant in the display zone.
-  validTime.textContent = imageryMode() ? `${formatGibsDay(index)} UTC` : formatDate(valid);
+  // A day's picture is a UTC day, not an instant in the display zone; a
+  // record's day is named by the readout, and the line beside it counts it.
+  validTime.textContent = imageryMode()
+    ? `${formatGibsDay(index)} UTC`
+    : showingDailyRecord()
+      ? `UTC · DAY ${dayOfYear(valid)}`
+      : formatDate(valid);
   validTime.dateTime = new Date(valid).toISOString();
   frameTooltip.value = frameStampLine(index);
   // Read by the tooltip and by the track's playhead, so it is set on the
@@ -8781,6 +8821,16 @@ function syncTimeline(session: VariableSession): void {
   // starts: that is what a viewer of a live feed wants to know. Stamped in
   // UTC like a run cycle.
   if (showingObservations()) stampField(formatStamp(frameValidTime(frameCount() - 1), "UTC"));
+  // A record of days is named by the days it spans, and its track's ends by
+  // their dates; both before the same-axis return, since the next year of a
+  // record is the same axis on another run time.
+  if (showingDailyRecord()) {
+    const first = formatUtcDay(frameValidTime(0));
+    const last = formatUtcDay(frameValidTime(frameCount() - 1));
+    stampField(`${first} – ${last} UTC`);
+    trackStart.textContent = first.slice(5);
+    trackHorizon.textContent = last.slice(5);
+  }
   if (previous && sameTimeAxis(previous, time)) {
     return;
   }
@@ -8802,8 +8852,10 @@ function syncTimeline(session: VariableSession): void {
   // skips it (ECMWF prate, the gust), and the window's start on an
   // observation.
   const offsets = frameOffsets(time);
-  trackStart.textContent = formatTrackEnd(offsets[0]! * axisUnitSeconds(time));
-  trackHorizon.textContent = formatTrackEnd(offsets.at(-1)! * axisUnitSeconds(time));
+  if (!showingDailyRecord()) {
+    trackStart.textContent = formatTrackEnd(offsets[0]! * axisUnitSeconds(time));
+    trackHorizon.textContent = formatTrackEnd(offsets.at(-1)! * axisUnitSeconds(time));
+  }
   buildTimeline();
   dataCardIndex.textContent = `${time.frameCount}F`;
   buildPreloadSegments(time.frameCount);
@@ -10369,7 +10421,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // whatever zone the valid times below read in. An observation window's
     // runTime is only where it starts; its line is stamped with the newest
     // frame once the session's axis is known (syncTimeline).
-    if (!showingObservations()) stampField(formatStamp(loadedManifest.runTime, "UTC"));
+    if (!showingObservations() && !showingDailyRecord()) stampField(formatStamp(loadedManifest.runTime, "UTC"));
 
     // A slot this run does not ship empties; a case names its own default
     // for when that leaves nothing, and a live run always carries its core

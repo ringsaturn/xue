@@ -170,6 +170,7 @@ export const ja: Record<MessageKey, string> = {
   caseTag: "事例",
   caseSummaryAria: "事例の概要",
   runCycle: "初期時刻",
+  recordSpan: "記録期間",
   latestObservation: "最新の観測",
   latestNowcast: "最新のナウキャスト",
   awaitingData: "データ待機中",

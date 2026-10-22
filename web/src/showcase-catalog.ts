@@ -55,6 +55,11 @@ export interface ShowcaseCase {
   byteLength: number;
   /** When the event itself peaked, if the case names one. */
   eventTime?: string;
+  /** How the case's axis is read: absent, as a forecast run (leads from
+   * its cycle) or an observation window, by its dataset; `daily`, as a
+   * record of days — a model's simulated or reanalysed days — read by the
+   * UTC date of each frame. */
+  timeline?: "daily";
   tags?: string[];
   credit?: string;
   /** The single-site radar overlay the case plays over its axis
@@ -463,6 +468,9 @@ function validateCase(input: unknown): ShowcaseCase {
   const imagery = imageryBlock(value.imagery, id);
   const river = riverBlock(value.river, id);
   const view = viewBlock(value.view, id);
+  if (value.timeline !== undefined && value.timeline !== "daily") {
+    throw new Error(`showcase case ${id} has an unknown timeline`);
+  }
   const bbox = bounds(value.bbox, "bbox");
   const dataBbox = bounds(value.dataBbox, "dataBbox");
   const markers = markersBlock(value.markers, id, bbox);

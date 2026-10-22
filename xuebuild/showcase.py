@@ -97,6 +97,9 @@ onto English (Traditional Chinese onto Simplified first) for a catalog row
 that predates a locale, and a definition may carry more — any extra locale
 key is kept and published as it stands."""
 
+TIMELINES = ("daily",)
+"""The axis readings a case may name (``CaseSpec.timeline``)."""
+
 REQUIRED_LOCALES = ("zh", "en")
 """The two a catalog row is refused without: the languages every case was
 first authored in, which is what a row already on the bucket is held to."""
@@ -149,6 +152,10 @@ class CaseSpec:
     tags: tuple[str, ...]
     credit: str | None
     profile: str
+    timeline: str | None = None
+    """How the viewer reads the case's axis: absent, by its dataset (a
+    forecast's leads, an observation window's clock); ``daily``, as a record
+    of days, each frame named by its UTC date."""
     radar: dict[str, str] | None = None
     """The single-site radar overlay the case plays over its own axis
     (``docs/nexrad.md``): ``window``, the window manifest of a
@@ -329,6 +336,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if credit is not None and not isinstance(credit, str):
         raise ShowcaseError(f"case {case_id}: credit must be a string")
 
+    timeline = payload.get("timeline")
+    if timeline is not None and timeline not in TIMELINES:
+        raise ShowcaseError(f"case {case_id}: timeline must be one of {', '.join(TIMELINES)}")
+
     profile = payload.get("profile", "quality")
     if profile not in ("quality", "balanced", "compact"):
         raise ShowcaseError(f"case {case_id}: profile must be quality, balanced or compact")
@@ -371,6 +382,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         event_time=event_time,
         tags=tuple(tags),
         credit=credit,
+        timeline=timeline,
         profile=profile,
         radar=radar,
         fire=fire,
@@ -781,6 +793,8 @@ def build_catalog_entry(
         entry["tags"] = list(spec.tags)
     if spec.credit:
         entry["credit"] = spec.credit
+    if spec.timeline:
+        entry["timeline"] = spec.timeline
     if spec.radar:
         entry["radar"] = dict(spec.radar)
     if spec.fire:
@@ -821,6 +835,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} defaults to a variable it does not ship")
     if not isinstance(entry.get("forecastHours"), int) or entry["forecastHours"] <= 0:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
+    if "timeline" in entry and entry["timeline"] not in TIMELINES:
+        raise ShowcaseError(f"catalog entry {entry['id']} has an unknown timeline")
     if "radar" in entry:
         _radar_block(entry["radar"], entry["id"])
     if "fire" in entry:
@@ -879,6 +895,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("eventTime", spec.event_time),
         ("tags", list(spec.tags)),
         ("credit", spec.credit),
+        ("timeline", spec.timeline),
         ("radar", dict(spec.radar) if spec.radar else None),
         ("fire", dict(spec.fire) if spec.fire else None),
         ("river", dict(spec.river) if spec.river else None),
