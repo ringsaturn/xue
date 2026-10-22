@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { DISRP_CLASSES } from "../../web/src/levels";
 import { decadeLabel, logRange, valueNear } from "../../web/src/river/hydrograph";
 import { boundsMeetTile, instanceBounds, packValues, segmentInstances } from "../../web/src/river/layer";
-import { reachClass, reachRatio, reachWidthPx, riverClassColors, RIVER_NODATA_COLOR } from "../../web/src/river/palette";
+import type { LinearQuantization, LogQuantization } from "../../web/src/manifest";
+import { encodeLog } from "../../web/src/palettes";
+import { reachClass, reachCode, reachRatio, reachWidthPx, riverClassColors, RIVER_NODATA_COLOR } from "../../web/src/river/palette";
 
 describe("river classes", () => {
   it("take the ratio against the usual flow, floored at 1 m³/s", () => {
@@ -30,6 +32,35 @@ describe("river classes", () => {
     expect(colors.map((color) => color.slice(0, 3))).toEqual([hue(1), hue(3), hue(4), hue(5)]);
     expect(colors.every((color) => color[3]! > 0.5)).toBe(true);
     expect(RIVER_NODATA_COLOR[3]).toBeLessThan(colors[0]![3]!);
+  });
+});
+
+describe("reaches coloured through a bundle's palette", () => {
+  const log: LogQuantization = {
+    type: "log1p",
+    trace: 0.01,
+    scale: 1,
+    maximum: 1e6,
+    minimumCode: 1,
+    maximumCode: 253,
+    zeroCode: 0,
+    overflowCode: 254,
+    nodataCode: 255,
+  };
+  const linear: LinearQuantization = { type: "linear", offset: 0, scale: 10, minimumCode: 0, maximumCode: 254, nodataCode: 255 };
+
+  it("take the code the codebook holds the flow at", () => {
+    expect(reachCode(log, 2.012e5)).toBe(encodeLog(log, 2.012e5));
+    expect(reachCode(log, 0)).toBe(0);
+    expect(reachCode(log, -3)).toBe(0);
+    expect(reachCode(log, Number.NaN)).toBe(255);
+    expect(reachCode(linear, 123)).toBe(12);
+    expect(reachCode(linear, 1e9)).toBe(254);
+  });
+
+  it("pack the code in place of the usual flow", () => {
+    const out = packValues(Float32Array.from([5000, Number.NaN]), Float32Array.from([10, 10]), new Float32Array(4), log);
+    expect(Array.from(out)).toEqual([5000, encodeLog(log, 5000), -1, 255]);
   });
 });
 

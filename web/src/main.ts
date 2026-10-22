@@ -8096,6 +8096,7 @@ async function loadCaseRiver(showcaseCase: ShowcaseCase): Promise<void> {
     map,
     loaded,
     bbox: showcaseCase.bbox,
+    byRamp: river.color !== undefined,
     onChange: () => {
       syncRiverCredit();
       scheduleProbeRender();
@@ -8113,6 +8114,19 @@ async function loadCaseRiver(showcaseCase: ShowcaseCase): Promise<void> {
   riverCase.setTime(stationTime());
   riverCase.renderPanel(caseRiverPanel);
   syncRiverCredit();
+  syncRiverRamp();
+}
+
+/** Hand the reaches the palette of the bundle the row's `river.color`
+ * names, once a session has opened it: the field's own colours, the
+ * page's declared palette included. Until then a reach coloured that way
+ * is not drawn. */
+function syncRiverRamp(): void {
+  const color = activeCase?.river?.color;
+  if (!riverCase || color === undefined) return;
+  const session = sessions.get(color as ForecastBundleId);
+  if (!session) return;
+  riverCase.setRamp({ palette: buildPalette(session.variable, session.identity), quantization: session.variable.quantization });
 }
 
 /** The credit line's river notice: the index's credits and each extent
@@ -8500,6 +8514,7 @@ function samplingFor(chartId: KnownBundleId | null, bundleId: string): Sampling 
  * magnitude mode for wind. */
 function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay: boolean): void {
   slot.session = session;
+  if (session.id === activeCase?.river?.color) syncRiverRamp();
   const { layer } = slot;
   if (session.volume) {
     // The volume layer draws it; the plane layer would show one level flat.

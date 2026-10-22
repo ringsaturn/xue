@@ -1,7 +1,8 @@
 /**
  * The river reaches as lines: a MapLibre custom WebGL2 layer in the manner
  * of `layer.ts`, drawing a network case's reaches coloured by their flow
- * against their usual flow and wide by their flow (`palette.ts`).
+ * against their usual flow, or by their flow through a bundle's palette,
+ * and wide by their flow (`palette.ts`).
  *
  * Geometry is uploaded once per GeoParquet row group: every segment of
  * every reach is one instance of a four-vertex strip, carrying its two
@@ -9,8 +10,10 @@
  * projects both ends through MapLibre's projection prelude (`projectTile`,
  * so the plane and the globe both work), and pushes the strip out across
  * the segment in device pixels. The values change per frame and are one
- * RG32F texture of the reach's flow and usual flow, read by feature with
- * `texelFetch`, so a frame step uploads 10 000 pairs and rebuilds nothing.
+ * RG32F texture of the reach's flow and usual flow — or, coloured through a
+ * bundle's palette, the code the bundle's codebook holds the flow at — read
+ * by feature with `texelFetch`, so a frame step uploads 10 000 pairs and
+ * rebuilds nothing.
  *
  * Segments overlap by half a width at each end, which stands in for joins.
  *
@@ -23,6 +26,7 @@
  * undrawn.
  */
 
+import type { LinearQuantization, LogQuantization } from "../manifest";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { mercatorX, mercatorY } from "../mercator";
@@ -44,6 +48,7 @@ import {
   RIVER_RATIO_BREAKS,
   RIVER_WIDTH_MAX_PX,
   RIVER_WIDTH_MIN_PX,
+  reachCode,
   riverClassColors,
 } from "./palette";
 
@@ -61,9 +66,18 @@ const START_ATTRIBUTE = 1;
 const END_ATTRIBUTE = 2;
 const FEATURE_ATTRIBUTE = 3;
 
-/** Unit 0 carries the values; the terrain's DEM and depth ride above. */
+/** Unit 0 carries the values; the terrain's DEM and depth ride above, and
+ * the bundle palette a case colours by above them. */
 const DEM_TEXTURE_UNIT = 1;
 const DEPTH_TEXTURE_UNIT = 2;
+const RAMP_TEXTURE_UNIT = 3;
+
+/** A bundle's palette (256 RGBA texels, one per code) and the codebook that
+ * puts a flow on it. */
+export interface RiverRamp {
+  palette: Uint8Array;
+  quantization: LinearQuantization | LogQuantization;
+}
 
 function vertexShader(prelude: string): string {
   return `#version 300 es
@@ -83,6 +97,8 @@ uniform vec4 u_nodata;
 uniform vec3 u_breaks;
 uniform vec2 u_width;
 uniform float u_floor;
+uniform highp sampler2D u_ramp;
+uniform bool u_by_ramp;
 out vec4 v_color;
 out float v_dist;
 out float v_half;
@@ -102,6 +118,10 @@ void main() {
   float width = nodata ? u_width.x : clamp(u_width.x + log(max(flow, 1.0)) / log(10.0), u_width.x, u_width.y);
   if (nodata) {
     v_color = u_nodata;
+  } else if (u_by_ramp) {
+    // The palette's own zero code is clear, as on the field: a dry reach
+    // is not drawn.
+    v_color = texelFetch(u_ramp, ivec2(int(sample_.g + 0.5), 0), 0);
   } else {
     float ratio = flow / max(sample_.g, u_floor);
     int index = int(ratio >= u_breaks.x) + int(ratio >= u_breaks.y) + int(ratio >= u_breaks.z);
@@ -197,6 +217,8 @@ const UNIFORM_NAMES = [
   "u_breaks",
   "u_width",
   "u_floor",
+  "u_ramp",
+  "u_by_ramp",
   ...PROJECTION_UNIFORM_NAMES,
   ...TERRAIN_UNIFORM_NAMES,
 ] as const;
@@ -273,13 +295,23 @@ export function boundsMeetTile(bounds: readonly number[], x: number, y: number, 
 }
 
 /** The value texture's texels: flow (negative for no value) and usual flow
- * (0 where unknown, which the floor then stands in for). */
-export function packValues(flow: Float32Array, baseflow: Float32Array | null, out: Float32Array): Float32Array {
+ * (0 where unknown, which the floor then stands in for), or, given a
+ * codebook, the flow's code in it in place of the usual flow. */
+export function packValues(
+  flow: Float32Array,
+  baseflow: Float32Array | null,
+  out: Float32Array,
+  quantization: LinearQuantization | LogQuantization | null = null,
+): Float32Array {
   for (let feature = 0; feature < flow.length; feature += 1) {
     const value = flow[feature]!;
-    const usual = baseflow?.[feature] ?? Number.NaN;
     out[feature * 2] = Number.isFinite(value) ? value : -1;
-    out[feature * 2 + 1] = Number.isFinite(usual) ? usual : 0;
+    if (quantization) {
+      out[feature * 2 + 1] = reachCode(quantization, value);
+    } else {
+      const usual = baseflow?.[feature] ?? Number.NaN;
+      out[feature * 2 + 1] = Number.isFinite(usual) ? usual : 0;
+    }
   }
   return out;
 }
@@ -294,6 +326,11 @@ export class RiverLayer implements CustomLayerInterface {
   private programs = new Map<string, ProgramInfo>();
   private corners: WebGLBuffer | null = null;
   private texture: WebGLTexture | null = null;
+  private rampTexture: WebGLTexture | null = null;
+  private rampDirty = false;
+  private ramp: RiverRamp | null = null;
+  /** The flows last given, kept to repack when the ramp arrives. */
+  private flow: Float32Array | null = null;
   private readonly groups = new Map<number, GroupMesh>();
   private readonly texels: Float32Array;
   private readonly textureRows: number;
@@ -304,7 +341,12 @@ export class RiverLayer implements CustomLayerInterface {
   private visible = false;
   private readonly colors = new Float32Array(riverClassColors().flat());
 
-  constructor(private readonly featureCount: number) {
+  /** `byRamp`: the reaches wait for a bundle's palette (`setRamp`) and are
+   * coloured through it, rather than by their ratio to their usual flow. */
+  constructor(
+    private readonly featureCount: number,
+    private readonly byRamp = false,
+  ) {
     this.textureRows = Math.max(1, Math.ceil(featureCount / VALUE_TEXTURE_WIDTH));
     this.texels = new Float32Array(VALUE_TEXTURE_WIDTH * this.textureRows * 2).fill(-1);
   }
@@ -315,6 +357,8 @@ export class RiverLayer implements CustomLayerInterface {
     this.programs.clear();
     this.corners = null;
     this.texture = null;
+    this.rampTexture = null;
+    this.rampDirty = this.ramp !== null;
     for (const mesh of this.groups.values()) {
       mesh.buffer = null;
       mesh.vertexArray = null;
@@ -333,11 +377,13 @@ export class RiverLayer implements CustomLayerInterface {
       }
       if (this.corners) gl.deleteBuffer(this.corners);
       if (this.texture) gl.deleteTexture(this.texture);
+      if (this.rampTexture) gl.deleteTexture(this.rampTexture);
       for (const info of this.programs.values()) gl.deleteProgram(info.program);
     }
     this.programs.clear();
     this.corners = null;
     this.texture = null;
+    this.rampTexture = null;
     this.gl = null;
     this.map = null;
   }
@@ -369,11 +415,44 @@ export class RiverLayer implements CustomLayerInterface {
    * draw nothing (before the track's first frame). */
   setValues(flow: Float32Array | null): void {
     this.visible = flow !== null;
-    if (flow) {
-      packValues(flow.subarray(0, this.featureCount), this.baseflow, this.texels);
-      this.dirty = true;
-    }
+    this.flow = flow;
+    if (flow) this.pack();
     this.map?.triggerRepaint();
+  }
+
+  /** The bundle palette the reaches are coloured through, on a layer made
+   * `byRamp`. */
+  setRamp(ramp: RiverRamp): void {
+    this.ramp = ramp;
+    this.rampDirty = true;
+    if (this.flow) this.pack();
+    this.map?.triggerRepaint();
+  }
+
+  private pack(): void {
+    if (!this.flow) return;
+    const quantization = this.byRamp ? (this.ramp?.quantization ?? null) : null;
+    packValues(this.flow.subarray(0, this.featureCount), this.baseflow, this.texels, quantization);
+    this.dirty = true;
+  }
+
+  private ensureRamp(gl: WebGL2RenderingContext): void {
+    if (!this.rampTexture) {
+      this.rampTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.rampTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      this.rampDirty = this.ramp !== null;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.rampTexture);
+    if (this.rampDirty && this.ramp) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.ramp.palette);
+      this.rampDirty = false;
+    }
   }
 
   /** The program per projection variant and terrain mode. */
@@ -472,6 +551,7 @@ export class RiverLayer implements CustomLayerInterface {
     const gl = this.gl;
     const input = args as CustomRenderMethodInput;
     if (!gl || glContext !== gl || !this.visible || this.groups.size === 0) return;
+    if (this.byRamp && !this.ramp) return;
     if (!input?.shaderData || !input.defaultProjectionData || !this.map) return;
     const tiles = surfaceTiles(this.map, input);
     const info = this.programFor(gl, input, tiles !== null);
@@ -486,6 +566,11 @@ export class RiverLayer implements CustomLayerInterface {
     gl.uniform3f(u.u_breaks!, RIVER_RATIO_BREAKS[0], RIVER_RATIO_BREAKS[1], RIVER_RATIO_BREAKS[2]);
     gl.uniform2f(u.u_width!, RIVER_WIDTH_MIN_PX, RIVER_WIDTH_MAX_PX);
     gl.uniform1f(u.u_floor!, RIVER_BASEFLOW_FLOOR);
+    gl.uniform1i(u.u_by_ramp!, this.byRamp ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0 + RAMP_TEXTURE_UNIT);
+    this.ensureRamp(gl);
+    gl.uniform1i(u.u_ramp!, RAMP_TEXTURE_UNIT);
+    gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.DEPTH_TEST);

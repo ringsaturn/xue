@@ -168,7 +168,9 @@ class CaseSpec:
     river: dict[str, str] | None = None
     """The river flow the case plays beside its field (``docs/river.md``):
     ``index``, the ``river/index.json`` a ``python -m xuebuild.river
-    build`` wrote into the case's directory, relative to it."""
+    build`` wrote into the case's directory, relative to it; optionally
+    ``color``, one of the case's bundles, whose palette and codebook then
+    colour the reaches by their flow in place of the ratio classes."""
     imagery: dict[str, str] | None = None
     """The NASA GIBS daily picture the shell offers in place of the case's
     field and opens on (``web/src/gibs.ts``): ``layer``, one of
@@ -354,7 +356,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
 
     river = payload.get("river")
     if river is not None:
-        river = _river_block(river, case_id)
+        river = _river_block(river, case_id, ordered)
 
     imagery = payload.get("imagery")
     if imagery is not None:
@@ -434,11 +436,11 @@ def _fire_block(value: object, case_id: str) -> dict[str, str]:
     return {"window": window}
 
 
-def _river_block(value: object, case_id: str) -> dict[str, str]:
+def _river_block(value: object, case_id: str, variables: Sequence[str]) -> dict[str, str]:
     """A case's ``river`` block: the river index inside the case's own
-    directory (``docs/river.md``)."""
-    if not isinstance(value, dict) or set(value) - {"index", "byteLength", "crc32"}:
-        raise ShowcaseError(f"case {case_id}: river must be {{index}}")
+    directory (``docs/river.md``), and the bundle that colours its reaches."""
+    if not isinstance(value, dict) or set(value) - {"index", "byteLength", "crc32", "color"}:
+        raise ShowcaseError(f"case {case_id}: river must be {{index[, color]}}")
     index = value.get("index")
     if (
         not isinstance(index, str)
@@ -447,7 +449,14 @@ def _river_block(value: object, case_id: str) -> dict[str, str]:
         or ".." in index.split("/")
     ):
         raise ShowcaseError(f"case {case_id}: river.index must be an index.json inside the case directory")
-    return {"index": index}
+    color = value.get("color")
+    if color is None:
+        return {"index": index}
+    if not isinstance(color, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", color):
+        raise ShowcaseError(f"case {case_id}: river.color must be a bundle id")
+    if color not in variables:
+        raise ShowcaseError(f"case {case_id}: river.color names {color}, which is not among the case's variables")
+    return {"index": index, "color": color}
 
 
 GIBS_LAYERS = (
@@ -842,7 +851,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
     if "fire" in entry:
         _fire_block(entry["fire"], entry["id"])
     if "river" in entry:
-        _river_block(entry["river"], entry["id"])
+        _river_block(entry["river"], entry["id"], variables)
     if "imagery" in entry:
         _imagery_block(entry["imagery"], entry["id"])
     if "view" in entry:
@@ -1004,7 +1013,7 @@ def _catalog_river(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     extent matches what is beside it."""
     from .river.schema import read_index  # the river package imports nothing of the showcase's
 
-    block = _river_block(entry["river"], entry["id"])
+    block = _river_block(entry["river"], entry["id"], entry["variables"])
     path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["index"]
     if not path.is_file():
         raise ShowcaseError(f"case {entry['id']} names a river index that is not built: {path}")

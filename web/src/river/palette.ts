@@ -11,11 +11,17 @@
  * pixel at 1 m³/s to 5 at 10 000 m³/s, so a creek stays a hairline and a
  * river in flood a band. A reach with no value is a thin faint grey.
  *
+ * A case whose river block names a bundle (`color`) colours its reaches by
+ * flow instead, through that bundle's palette at the code its codebook
+ * holds the flow at, so a reach reads on the field's own legend.
+ *
  * These functions are the shader's arithmetic in TypeScript (`layer.ts`
  * computes the same per vertex); the tests hold the two to the table.
  */
 
 import { DISRP_CLASSES } from "../levels";
+import type { LinearQuantization, LogQuantization } from "../manifest";
+import { encodeLog } from "../palettes";
 
 /** Ratios at which the class steps up. */
 export const RIVER_RATIO_BREAKS = [2, 10, 100] as const;
@@ -69,4 +75,13 @@ export function reachClass(flow: number, baseflow: number): number {
 export function reachWidthPx(flow: number): number {
   if (!Number.isFinite(flow) || flow <= 1) return RIVER_WIDTH_MIN_PX;
   return Math.min(RIVER_WIDTH_MAX_PX, RIVER_WIDTH_MIN_PX + Math.log10(flow));
+}
+
+/** The code a bundle's codebook holds a flow at, which indexes the
+ * bundle's palette; the nodata code for no value. */
+export function reachCode(quantization: LinearQuantization | LogQuantization, flow: number): number {
+  if (!Number.isFinite(flow)) return quantization.nodataCode;
+  if (quantization.type === "log1p") return encodeLog(quantization, Math.max(flow, 0));
+  const code = Math.round((flow - quantization.offset) / quantization.scale);
+  return Math.min(quantization.maximumCode, Math.max(quantization.minimumCode, code));
 }

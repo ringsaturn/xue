@@ -508,6 +508,13 @@ class ShowcaseRiverBlockTests(unittest.TestCase):
             with self.subTest(river=river), self.assertRaises(ShowcaseError):
                 parse_case(self.payload(river=river))
 
+    def test_a_river_block_may_name_the_bundle_that_colours_it(self) -> None:
+        spec = parse_case(self.payload(river={"index": "river/index.json", "color": "prate"}))
+        self.assertEqual(spec.river, {"index": "river/index.json", "color": "prate"})
+        for color in ("tmp2m", "", "Prate", 7):
+            with self.subTest(color=color), self.assertRaises(ShowcaseError):
+                parse_case(self.payload(river={"index": "river/index.json", "color": color}))
+
     def test_a_catalog_row_carries_the_block(self) -> None:
         row = {
             "id": "river-case", "modelId": "hrrr", "model": "HRRR", "product": "p", "run": "2025070400",

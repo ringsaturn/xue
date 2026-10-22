@@ -179,6 +179,12 @@ retires a case.
    "river": {"index": "river/index.json"}
    ```
 
+   The reaches are coloured by their flow against their usual flow. A
+   block may instead name one of the case's variables as `color`
+   (`{"index": "river/index.json", "color": "dis"}`): the reaches are then
+   coloured by their flow through that bundle's palette and codebook, on
+   the field's own legend.
+
    Build the directory with `python -m xuebuild.river build
    showcase/river-cases/<id>.json` (writing
    `web/public/data/showcase/<id>/river/` from the work directory the

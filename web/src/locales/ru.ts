@@ -494,6 +494,7 @@ export const ru: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "Цвет по расходу, по шкале поля",
   riverExtents: "Зоны затопления",
   riverGaugeHint: "Круги — гидропосты: нажмите, чтобы увидеть гидрограф.",
   riverObserved: "измерено",
