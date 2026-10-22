@@ -612,7 +612,9 @@ A page that builds this shell from source can draw its own layers over the
 map in step with playback through `window.xueViewer` (`embed.ts`). It is
 always installed, at the end of the map's `load` callback, and announced by
 a `xue:ready` event on `window`; a script that runs later finds the object
-already there.
+already there. A Protomaps key serves only the origins it is bound to, so
+such a page on its own host sets `VITE_PROTOMAPS_KEY` at build time; the
+shell's own key is the fallback.
 
 ```ts
 interface XueViewer {

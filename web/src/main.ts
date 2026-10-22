@@ -821,7 +821,9 @@ const COASTLINE_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]
  * coastline, which sits just under the boundaries — keeping the coast, the
  * boundaries and the place labels legible above the data. */
 const FORECAST_ANCHOR_LAYER = COASTLINE_LAYER;
-const PROTOMAPS_KEY = "249bb192fefe0a77";
+// A Protomaps key is bound to the origins it serves, so a page that builds
+// this shell on its own host brings its own (`VITE_PROTOMAPS_KEY`).
+const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY || "249bb192fefe0a77";
 
 // maplibre-gl 6 does not re-export the style-spec types; take the style
 // object's type from the map options that consume it.
