@@ -634,6 +634,8 @@ interface XueViewer {
   source(): { model: string; run: string | null; runTime: string; variable: string;
               caseId: string | null; manifestCrc32: string | null } | null;
   on(event: "time" | "source", callback: () => void): () => void; // returns the unsubscribe
+  playing(): boolean;
+  openCase(id: string, options?: { time?: number; play?: boolean }): boolean;
 }
 ```
 
@@ -646,6 +648,15 @@ interface XueViewer {
   `updateFrameReadout`, once per valid time; a locale or zone change, which
   re-renders the same frame, stays silent. It fires on every frame during
   playback, so a listener must be cheap.
+- **`openCase(id, { time, play })`** opens another case of the catalog in
+  place — the open path a `?case=` link takes, without a reload — and
+  resumes at the frame nearest `time` (the first frame without one),
+  playing unless `play` is false. The view (layer, camera) stays, the
+  last frame stays drawn until the new case's first replaces it, and the
+  address bar follows the case. It returns false off a case or for an id
+  that is not a slug; an id the catalog lacks fails as its link would. A
+  page that splits a long record into consecutive cases plays through them
+  by opening the next on the last frame while `playing()`.
 - **`setTime(ms)`** stops playback and selects the frame nearest to `ms`: a
   time outside the axis lands on the first or the last frame. It returns the
   valid time it landed on, or null when the shell could not select the frame

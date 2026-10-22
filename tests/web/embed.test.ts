@@ -1,7 +1,7 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
-import { EMBED_READY_EVENT, EmbedHub, installEmbedApi, type EmbedHost, type EmbedSource } from "../../web/src/embed";
+import { EMBED_READY_EVENT, EmbedHub, installEmbedApi, type EmbedHost, type EmbedOpenCase, type EmbedSource } from "../../web/src/embed";
 
 const GFS: EmbedSource = {
   model: "gfs",
@@ -14,8 +14,9 @@ const GFS: EmbedSource = {
 
 /** A host whose answers the test sets, standing in for main.ts. */
 function host(initial: { time?: number | null; source?: EmbedSource | null } = {}) {
-  const state = { time: initial.time ?? null, source: initial.source ?? null };
+  const state = { time: initial.time ?? null, source: initial.source ?? null, playing: false };
   const seeks: number[] = [];
+  const opens: { id: string; options: EmbedOpenCase }[] = [];
   const h: EmbedHost = {
     map: {} as MaplibreMap,
     time: () => state.time,
@@ -24,8 +25,13 @@ function host(initial: { time?: number | null; source?: EmbedSource | null } = {
       return state.source === null ? null : ms;
     },
     source: () => state.source,
+    playing: () => state.playing,
+    openCase: (id, options) => {
+      opens.push({ id, options });
+      return state.source?.caseId != null;
+    },
   };
-  return { h, state, seeks };
+  return { h, state, seeks, opens };
 }
 
 describe("installEmbedApi", () => {
@@ -53,7 +59,14 @@ describe("EmbedHub", () => {
   });
 
   it("reports no landing when the shell refuses the frame", () => {
-    const h: EmbedHost = { map: {} as MaplibreMap, time: () => 1, seek: () => null, source: () => GFS };
+    const h: EmbedHost = {
+      map: {} as MaplibreMap,
+      time: () => 1,
+      seek: () => null,
+      source: () => GFS,
+      playing: () => false,
+      openCase: () => false,
+    };
     expect(new EmbedHub(h).viewer.setTime(1000)).toBeNull();
   });
 
@@ -143,5 +156,37 @@ describe("EmbedHub", () => {
     const viewer = new EmbedHub(h).viewer;
     const off = viewer.on("theme" as "time", () => {});
     expect(off()).toBeUndefined();
+  });
+});
+
+describe("openCase", () => {
+  const CASE: EmbedSource = { ...GFS, caseId: "year-2009", run: "2009010100", runTime: "2009-01-01T00:00:00Z" };
+
+  it("passes a slug through, playing by default", () => {
+    const { h, opens } = host({ source: CASE });
+    const viewer = new EmbedHub(h).viewer;
+    expect(viewer.openCase("year-2010")).toBe(true);
+    expect(viewer.openCase("year-2011", { time: Date.parse("2011-03-01T00:00:00Z"), play: false })).toBe(true);
+    expect(opens).toEqual([
+      { id: "year-2010", options: { time: undefined, play: true } },
+      { id: "year-2011", options: { time: Date.parse("2011-03-01T00:00:00Z"), play: false } },
+    ]);
+  });
+
+  it("refuses an id that is not a slug or a time that is not a number, without asking the shell", () => {
+    const { h, opens } = host({ source: CASE });
+    const viewer = new EmbedHub(h).viewer;
+    expect(viewer.openCase("Year 2010")).toBe(false);
+    expect(viewer.openCase("year-2010", { time: Number.NaN })).toBe(false);
+    expect(opens).toEqual([]);
+  });
+
+  it("answers the shell's refusal off a case, and reports playback", () => {
+    const { h, state } = host({ source: GFS });
+    const viewer = new EmbedHub(h).viewer;
+    expect(viewer.openCase("year-2010")).toBe(false);
+    expect(viewer.playing()).toBe(false);
+    state.playing = true;
+    expect(viewer.playing()).toBe(true);
   });
 });
