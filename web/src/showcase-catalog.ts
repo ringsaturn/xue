@@ -140,6 +140,10 @@ export interface ShowcaseRiver {
   indexPath: string;
   crc32: string;
   byteLength: number;
+  /** The bundle whose palette and codebook colour the reaches by their
+   * flow, as the field draws that bundle; absent, they are coloured by
+   * their flow against their usual flow. */
+  color?: string;
 }
 
 export interface ShowcaseImagery {
@@ -189,7 +193,8 @@ export function riverBlock(input: unknown, id: string): ShowcaseRiver | undefine
     /^[0-9a-f]{8}$/.test(value.crc32) &&
     typeof value?.byteLength === "number" &&
     Number.isInteger(value.byteLength) &&
-    value.byteLength > 0;
+    value.byteLength > 0 &&
+    (value.color === undefined || (typeof value.color === "string" && /^[a-z0-9][a-z0-9_.-]*$/.test(value.color)));
   if (!ok) {
     console.warn(`showcase: case ${id} carries a river block this shell cannot read; playing it without`);
     return undefined;
@@ -198,6 +203,7 @@ export function riverBlock(input: unknown, id: string): ShowcaseRiver | undefine
     indexPath: `showcase/${id}/${value!.index as string}`,
     crc32: value!.crc32 as string,
     byteLength: value!.byteLength as number,
+    ...(value!.color !== undefined ? { color: value!.color as string } : {}),
   };
 }
 

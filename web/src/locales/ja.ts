@@ -489,6 +489,7 @@ export const ja: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "流量で着色（色は図層の凡例と共通）",
   riverExtents: "浸水範囲",
   riverGaugeHint: "円は流量観測所です。クリックでハイドログラフを表示。",
   riverObserved: "観測",

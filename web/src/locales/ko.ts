@@ -494,6 +494,7 @@ export const ko: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "유량으로 색칠 (색은 레이어 범례와 같음)",
   riverExtents: "침수 범위",
   riverGaugeHint: "원은 유량 관측소입니다. 누르면 수문곡선을 봅니다.",
   riverObserved: "관측",

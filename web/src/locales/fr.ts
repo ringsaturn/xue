@@ -492,6 +492,7 @@ export const fr: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "Coloré selon le débit, sur l’échelle du champ",
   riverExtents: "Zones inondées",
   riverGaugeHint: "Les cercles sont des stations : cliquer pour l’hydrogramme.",
   riverObserved: "mesuré",

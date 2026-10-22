@@ -487,6 +487,7 @@ export const zh: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "按流量着色，色标与图层图例相同",
   riverExtents: "淹没范围",
   riverGaugeHint: "圆圈是水文站：点击查看流量过程线。",
   riverObserved: "实测",

@@ -495,6 +495,7 @@ export const tr: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "Debiye göre renklendirildi, alanın ölçeğinde",
   riverExtents: "Taşkın alanları",
   riverGaugeHint: "Daireler ölçüm istasyonlarıdır: hidrografı için birine tıklayın.",
   riverObserved: "ölçülen",

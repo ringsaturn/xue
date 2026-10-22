@@ -22,7 +22,7 @@ import { ZarrStore } from "../zarr/store";
 import { loadDecodeChunk } from "./decode";
 import type { TimedSeries } from "./hydrograph";
 import { riverFileUrl, riverPathUrl, type LoadedRiverIndex, type RiverGauge, type RiverTrack } from "./index";
-import { RiverLayer, RIVER_LAYER_ID } from "./layer";
+import { RiverLayer, RIVER_LAYER_ID, type RiverRamp } from "./layer";
 import { riverClassColors } from "./palette";
 import type { LonLatBox, ReachFile } from "./parquet";
 import { blendValues, framePair, NetworkStore } from "./store";
@@ -64,6 +64,10 @@ export interface RiverCaseOptions {
   loaded: LoadedRiverIndex;
   /** The case's `bbox`: a view holding it whole reads every row group. */
   bbox: LonLatBox;
+  /** Whether the reaches are coloured through a bundle's palette
+   * (`setRamp`), the catalog row's `river.color`, rather than by their
+   * ratio to their usual flow. */
+  byRamp?: boolean;
   /** Called when something the shell shows beside the map changed: the
    * credits (an extent came up), the track, a gauge's model series. */
   onChange: () => void;
@@ -74,6 +78,8 @@ export class RiverCase {
   private readonly map: MaplibreMap;
   private readonly bbox: LonLatBox;
   private readonly onChange: () => void;
+  private readonly byRamp: boolean;
+  private ramp: RiverRamp | null = null;
   private layer: RiverLayer | null = null;
   /** The GeoParquet's footer and the reader, which is loaded with it
    * (hyparquet is only needed on a network case). */
@@ -99,6 +105,7 @@ export class RiverCase {
     this.loaded = options.loaded;
     this.bbox = options.bbox;
     this.onChange = options.onChange;
+    this.byRamp = options.byRamp ?? false;
     this.trackId = defaultTrackId(options.loaded.index.tracks);
     this.extentState = options.loaded.index.extent.map(() => "idle");
   }
@@ -123,7 +130,8 @@ export class RiverCase {
   start(): void {
     const index = this.loaded.index;
     if (index.geometry) {
-      this.layer = new RiverLayer(index.geometry.featureCount);
+      this.layer = new RiverLayer(index.geometry.featureCount, this.byRamp);
+      if (this.ramp) this.layer.setRamp(this.ramp);
       this.map.addLayer(this.layer, this.firstSymbolLayer());
       const geometry = index.geometry;
       const url = riverFileUrl(this.loaded.indexUrl, geometry.path, geometry.crc32);
@@ -238,6 +246,13 @@ export class RiverCase {
       this.onChange();
     }, () => undefined);
     this.onChange();
+  }
+
+  /** The palette and codebook of the bundle the reaches are coloured
+   * through; the reaches are not drawn until it is given. */
+  setRamp(ramp: RiverRamp): void {
+    this.ramp = ramp;
+    this.layer?.setRamp(ramp);
   }
 
   /** Show or hide the flood extents. */
@@ -430,6 +445,13 @@ export class RiverCase {
         tracks.append(button);
       }
       children.push(tracks);
+    }
+    if (index.tracks.length > 0 && this.byRamp) {
+      const note = document.createElement("p");
+      note.className = "case-river-note";
+      note.textContent = t("riverKeyField");
+      children.push(note);
+    } else if (index.tracks.length > 0) {
       const key = document.createElement("ul");
       key.className = "case-river-key";
       key.setAttribute("aria-label", t("riverKeyAria"));

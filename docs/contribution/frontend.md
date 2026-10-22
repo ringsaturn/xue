@@ -438,7 +438,13 @@ a failed request is one console warning and the case plays its field alone.
   classes, < 2 grey, 2–10 yellow, 10–100 red, ≥ 100 purple, the
   `DISRP_CLASSES` hues; width `1 + log10(Q)` device pixels, 1 to 5; no
   value is a faint 1 px grey (`river/palette.ts`, the same arithmetic in
-  TypeScript for the tests). The layer is added before the first symbol
+  TypeScript for the tests). A row whose block names `color` colours by
+  flow instead: `main.ts::syncRiverRamp` hands the layer that bundle's
+  `buildPalette` (a page's declared palette included) and codebook once
+  its session is open, the texture's second channel carries the flow's code
+  (`reachCode`), and the vertex stage reads the 256-texel palette at it; the
+  reaches wait for the palette, the zero code is clear, and the case panel
+  shows a note in place of the ratio key. The layer is added before the first symbol
   layer: over the field and the coastline, under the labels and the
   case's markers. With the 3D relief on it draws once per terrain tile
   (`projection.ts::surfaceTiles`): each segment is clipped to the tile in

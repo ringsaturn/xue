@@ -492,6 +492,7 @@ export const de: Record<MessageKey, string> = {
   riverRatio10: "2–10×",
   riverRatio100: "10–100×",
   riverRatioMax: "≥ 100×",
+  riverKeyField: "Nach Abfluss gefärbt, auf der Skala des Felds",
   riverExtents: "Überflutungsflächen",
   riverGaugeHint: "Kreise sind Pegel: anklicken für die Ganglinie.",
   riverObserved: "gemessen",

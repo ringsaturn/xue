@@ -206,12 +206,18 @@ describe("the catalog's river block", () => {
     expect(riverBlock(undefined, "x")).toBeUndefined();
   });
 
+  it("carries the bundle that colours the reaches", () => {
+    expect(riverBlock({ index: "river/index.json", byteLength: 1784, crc32: "40af8390", color: "dis" }, "x")?.color).toBe("dis");
+    expect(riverBlock({ index: "river/index.json", byteLength: 1784, crc32: "40af8390" }, "x")).not.toHaveProperty("color");
+  });
+
   it("drops a block it cannot read with a warning", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(riverBlock({ index: "../river/index.json", byteLength: 1, crc32: "40af8390" }, "x")).toBeUndefined();
     expect(riverBlock({ index: "river/index.json", byteLength: 1, crc32: "nope" }, "x")).toBeUndefined();
     expect(riverBlock({ index: "river/index.json", crc32: "40af8390" }, "x")).toBeUndefined();
-    expect(warn).toHaveBeenCalledTimes(3);
+    expect(riverBlock({ index: "river/index.json", byteLength: 1, crc32: "40af8390", color: "../dis" }, "x")).toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(4);
     warn.mockRestore();
   });
 });

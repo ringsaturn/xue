@@ -141,7 +141,9 @@ notes say which.
    and the row groups whose `bbox` statistics meet the view — and open the
    chosen track's store ([`zarr-profile.md`](zarr-profile.md), "Network
    store"). A frame is one range of the shard; colour each reach by its
-   value, or by its ratio to `baseflow`.
+   ratio to `baseflow`, or, when the row's block names `color` (one of
+   the case's variables), by its value through that bundle's palette and
+   codebook, as the field draws it.
 3. A gauge: one range of `gauges.jsonl`. On a network case its modelled
    series is the store's column `feature`; on a grid case, the case's
    field sampled at `sample` (or at `lon`/`lat`).
