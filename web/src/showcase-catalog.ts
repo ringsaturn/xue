@@ -600,8 +600,11 @@ interface CaseCameraLimits {
   /** Zoom at which the region just fills the padded viewport — the point
    * past which zooming out would only add empty map. */
   minZoom: number;
-  /** The region the viewport covers at `minZoom`: what panning is held to. */
-  bounds: [[number, number], [number, number]];
+  /** The region the viewport covers at `minZoom`: what panning is held to.
+   * Null for a region around the whole globe, which there is no edge of to
+   * hold the camera to: MapLibre pins the centre of a bound wider than the
+   * world, so such a case pans freely and only the zoom is held. */
+  bounds: [[number, number], [number, number]] | null;
 }
 
 /**
@@ -670,10 +673,11 @@ export function caseCameraLimits(
   const pixels = worldPixels(minZoom);
   const halfWidth = viewport.width / pixels / 2;
   const halfHeight = viewport.height / pixels / 2;
+  const global = east - west >= 359;
   return {
     center: [longitudeOf(centerX), latitudeOf(centerY)],
     minZoom,
-    bounds: [
+    bounds: global ? null : [
       [longitudeOf(centerX - halfWidth), latitudeOf(Math.min(1, centerY + halfHeight))],
       [longitudeOf(centerX + halfWidth), latitudeOf(Math.max(0, centerY - halfHeight))],
     ],

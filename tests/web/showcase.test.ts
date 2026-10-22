@@ -506,7 +506,7 @@ describe("case camera limits", () => {
    * MapLibre's [south-west, north-east] order. */
   function coversBox(box: [number, number, number, number], viewport: { width: number; height: number }): boolean {
     const limits = caseCameraLimits(box, viewport);
-    const [[west, south], [east, north]] = limits.bounds;
+    const [[west, south], [east, north]] = limits.bounds!;
     return west <= box[0] && east >= box[2] && south <= box[1] && north >= box[3];
   }
 
@@ -569,7 +569,7 @@ describe("case camera limits", () => {
     const box: [number, number, number, number] = [170, -20, -170, 10];
     const limits = caseCameraLimits(box, DESKTOP);
     expect(limits.center[0]).toBeCloseTo(180, 6);
-    const [[west], [east]] = limits.bounds;
+    const [[west], [east]] = limits.bounds!;
     expect(west).toBeLessThanOrEqual(170);
     expect(east).toBeGreaterThanOrEqual(190);
   });
@@ -577,6 +577,12 @@ describe("case camera limits", () => {
   it("never asks to zoom out past the world", () => {
     const limits = caseCameraLimits([-180, -60, 180, 60], { width: 320, height: 200 });
     expect(limits.minZoom).toBe(0);
+  });
+
+  it("holds only the zoom of a region around the whole globe", () => {
+    const limits = caseCameraLimits([-180, -55, 180, 83], DESKTOP);
+    expect(limits.bounds).toBeNull();
+    expect(limits.minZoom).toBeGreaterThan(0);
   });
 
   it("survives a padding wider than the viewport", () => {
