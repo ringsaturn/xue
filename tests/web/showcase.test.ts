@@ -316,6 +316,13 @@ describe("showcase catalog", () => {
       ...overrides,
     });
 
+  it("carries a daily timeline and drops a case naming one it does not know", () => {
+    const catalog = validateCatalog(catalogFixture([caseFixture({ timeline: "daily" })]));
+    expect(catalog.cases[0]!.timeline).toBe("daily");
+    expect(validateCatalog(catalogFixture([caseFixture({})])).cases[0]!.timeline).toBeUndefined();
+    expect(dropped({ timeline: "hourly" })).toBe(true);
+  });
+
   it("admits a case on a dataset this build does not know, and its manifest", () => {
     const next = foreign({ id: "river-2011", manifestPath: "showcase/river-2011/manifest.json" });
     const catalog = validateCatalog(catalogFixture([foreign(), next]));

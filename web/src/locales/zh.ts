@@ -170,6 +170,7 @@ export const zh: Record<MessageKey, string> = {
   caseTag: "个例",
   caseSummaryAria: "个案摘要",
   runCycle: "模式周期",
+  recordSpan: "记录时段",
   latestObservation: "最新观测",
   latestNowcast: "最新临近预报",
   awaitingData: "等待数据",

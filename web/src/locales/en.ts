@@ -327,6 +327,9 @@ export const en = {
   caseTag: "CASE",
   caseSummaryAria: "Case summary",
   runCycle: "Model run",
+  // A record of days (a case whose timeline is `daily`) has no cycle:
+  // the line that names one names the days the record spans.
+  recordSpan: "Record span",
   // An observation dataset has no run cycle and no lead time: the line that
   // names a forecast's cycle names the window's newest observation instead,
   // and a frame is an observation, not a forecast.

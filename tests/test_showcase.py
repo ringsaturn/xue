@@ -270,6 +270,18 @@ class CaseDefinitionTest(unittest.TestCase):
         with self.assertRaises(ShowcaseError):
             validate_catalog_entry(entry)
 
+    def test_carries_a_daily_timeline_and_refuses_another(self) -> None:
+        self.assertEqual(parse_case(case_payload(timeline="daily")).timeline, "daily")
+        self.assertIsNone(parse_case(case_payload()).timeline)
+        with self.assertRaises(ShowcaseError):
+            parse_case(case_payload(timeline="hourly"))
+        entry, _ = build_entry()
+        entry["timeline"] = "daily"
+        validate_catalog_entry(entry)
+        entry["timeline"] = "weekly"
+        with self.assertRaises(ShowcaseError):
+            validate_catalog_entry(entry)
+
     def test_rejects_an_sflux_case_with_nothing_at_the_analysis_hour(self) -> None:
         # sflux publishes no PRATE record at f000, so a prate-only case has no
         # variable to key its frames by.

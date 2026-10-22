@@ -175,6 +175,7 @@ export const ru: Record<MessageKey, string> = {
   caseTag: "СЛУЧАЙ",
   caseSummaryAria: "Описание случая",
   runCycle: "Исходный срок",
+  recordSpan: "Период ряда",
   latestObservation: "Последнее наблюдение",
   latestNowcast: "Последний наукаст",
   awaitingData: "Ожидание данных",

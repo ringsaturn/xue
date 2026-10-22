@@ -605,6 +605,12 @@ hidden and pinned models are `localStorage`.
   different label or product, or when its label is already another
   dataset's. Nothing about it reaches the model switch, `?model=` or the
   comparison page.
+- A case may say how its axis is read (`timeline`, `showcase/README.md`).
+  `daily` is a record of days: `showingDailyRecord()` reads each frame by
+  its UTC date (the readout, the tooltip, the export stamp, `aria`), stamps
+  the run line with the days the case spans and the track's ends with
+  their dates, and leaves the lead hours and the display zone out. Every
+  other case is read by its dataset, as before.
 
 ## Embedding
 
