@@ -33,6 +33,20 @@ export interface XueViewer {
   setTime(ms: number): number | null;
   source(): EmbedSource | null;
   on(event: EmbedEvent, callback: () => void): () => void;
+  /** Whether the timeline is playing. */
+  playing(): boolean;
+  /** Open another showcase case of the catalog in place, without reloading
+   * the page: at `time` (epoch ms, the nearest frame) if given, else at the
+   * start, and playing if `play` is true (by default, as the case
+   * opened from a link would). False when the shell is not on a case or
+   * the id is not a case slug; a slug the catalog lacks fails as a link to
+   * it would. */
+  openCase(id: string, options?: EmbedOpenCase): boolean;
+}
+
+export interface EmbedOpenCase {
+  time?: number;
+  play?: boolean;
 }
 
 /** What main.ts answers. Each returns null until the shell is ready and a
@@ -42,6 +56,8 @@ export interface EmbedHost {
   time(): number | null;
   seek(ms: number): number | null;
   source(): EmbedSource | null;
+  playing(): boolean;
+  openCase(id: string, options: EmbedOpenCase): boolean;
 }
 
 /** What makes a dataset another one. `runTime` covers a rolling window,
@@ -64,6 +80,13 @@ export class EmbedHub {
       time: () => host.time(),
       setTime: (ms: number) => (Number.isFinite(ms) ? host.seek(ms) : null),
       source: () => host.source(),
+      playing: () => host.playing(),
+      openCase: (id: string, options: EmbedOpenCase = {}) => {
+        if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) return false;
+        const time = options.time;
+        if (time !== undefined && !Number.isFinite(time)) return false;
+        return host.openCase(id, { time, play: options.play ?? true });
+      },
       on(event: EmbedEvent, callback: () => void): () => void {
         const set = hub.listeners[event];
         if (!set || typeof callback !== "function") return () => {};

@@ -225,7 +225,7 @@ import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
 import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
 import { WindParticleLayer } from "./particles";
 import { domainContains, lambertCone, regionShareOfView, type LambertDomain } from "./domain";
-import { installEmbedApi, type EmbedHub, type EmbedSource } from "./embed";
+import { installEmbedApi, type EmbedHub, type EmbedOpenCase, type EmbedSource } from "./embed";
 import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
 import type { Feature, FeatureCollection } from "geojson";
 import { strideFor, type CellWindow, type LabelRequest } from "./isolines";
@@ -1915,7 +1915,9 @@ function resolveComposition(view: ViewComposition, run: ForecastManifest, fallba
  * event. A case pins its own dataset and run, so while one is open the model
  * switch is hidden, the live pointer is never read, and the new-run poll is
  * off — everything below the manifest is the ordinary viewer. */
-const requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
+/** The case to open: the link's, then whichever an embedding page switched
+ * to in place (`embedOpenCase`). */
+let requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
 /** Whether this session may take the H.264 video path at all. It is off by
  * default — the Xue decoder is the everyday path, and the video artifacts
  * ride along only for `?use_h264=true`. */
@@ -2267,6 +2269,22 @@ function embedSeek(validTime: number): number | null {
   // Nearest frame on the axis, so a time outside it lands on the first or last.
   const index = nearestFrameIndexForValidTime(validTime);
   return trySelectFrame(index) ? frameValidTime(index) : null;
+}
+
+/** Switch to another case of the catalog in place: the open path a link
+ * takes, with the playhead resumed where the page asked — the poll's
+ * resume, so the camera, the layer and the rest of the view stay. */
+function embedOpenCase(id: string, options: EmbedOpenCase): boolean {
+  if (activeCase === null) return false;
+  requestedCaseId = id;
+  resumeOnNewRun = {
+    validTime: options.time ?? Number.NEGATIVE_INFINITY,
+    atEnd: false,
+    playing: options.play !== false,
+    hold: true,
+  };
+  void initialize();
+  return true;
 }
 
 function embedSource(): EmbedSource | null {
@@ -8409,13 +8427,16 @@ function ensureLayers(): void {
 
 /** Empty a slot: nothing drawn, no session, and nothing waited on. The
  * session itself stays resident, like every session that leaves the screen. */
-function detachSlot(slot: RasterSlot): void {
+/** `keepPicture` leaves the last frame drawn until the next session's first
+ * one replaces it: a case opened in place, the same field a day on, never
+ * blanks the map between them. */
+function detachSlot(slot: RasterSlot, keepPicture = false): void {
   slot.session = null;
   slot.displayedReal = null;
   slot.shownKey = null;
   slot.shownGuns = [];
   slot.wantedKey = null;
-  slot.layer.setVisible(false);
+  if (!keepPicture) slot.layer.setVisible(false);
 }
 
 /** Whether a chart's bottom code is no data (`VariableSpec.floorIsNoData`):
@@ -10218,7 +10239,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   currentManifestCrc = null;
   metadata = null;
   for (const slot of [slots.fill, slots.lines]) {
-    detachSlot(slot);
+    detachSlot(slot, resume?.hold === true);
     slot.gridSource = null;
   }
   resetMosaic();
@@ -10813,7 +10834,9 @@ async function checkForNewRun(): Promise<void> {
 }
 /** Where the playhead goes once a new run of the same dataset has opened
  * from the pointer poll; null for every other open. */
-let resumeOnNewRun: { validTime: number; atEnd: boolean; playing: boolean } | null = null;
+/** Where the next open puts the playhead; `hold` keeps the map's picture
+ * through the open (`detachSlot`), for a case an embedding page steps on to. */
+let resumeOnNewRun: { validTime: number; atEnd: boolean; playing: boolean; hold?: boolean } | null = null;
 /** The pointer poll, rescheduled after each check so the interval follows
  * the dataset on screen. */
 function schedulePointerPoll(): void {
@@ -10866,7 +10889,7 @@ buildPlaceholderTicks();
 resetPreloadCard(FRAME_COUNT);
 map.once("load", () => {
   mapStyleReady = true;
-  embedHub = installEmbedApi({ map, time: embedTime, seek: embedSeek, source: embedSource });
+  embedHub = installEmbedApi({ map, time: embedTime, seek: embedSeek, source: embedSource, playing: () => playing, openCase: embedOpenCase });
   // A theme or language picked while the style was still loading was built
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
