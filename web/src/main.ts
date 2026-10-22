@@ -124,7 +124,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, legendGradient } from "./palettes";
+import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, decodeValue, encodeLog, legendGradient, logCodebookLegend } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   contourSmoothingCells,
@@ -6335,7 +6335,10 @@ function variableUi(session: VariableSession): VariableUi {
   }
   if (spec) {
     return {
-      code: spec.code,
+      // A bundle that borrows a registered chart by its GRIB2 identity keeps
+      // its own code: the chart's names the registered bundle's step (the
+      // EFAS "DIS 6H"), which a daily field of the same parameter is not.
+      code: session.id === spec.id ? spec.code : session.id.toUpperCase(),
       title: spec.title,
       bufferTitle: spec.bufferTitle,
       label: spec.label(),
@@ -6345,16 +6348,21 @@ function variableUi(session: VariableSession): VariableUi {
   }
   const variable = session.variable;
   const quantization = variable.quantization;
-  const range: readonly [number, number] =
-    quantization.type === "linear"
-      ? [quantization.offset, quantization.offset + quantization.scale * quantization.maximumCode]
-      : [0, quantization.maximum];
+  // A logarithmic codebook's bar is even in codes, not in values, so its
+  // ticks are read off the codes.
+  let legend: string[];
+  if (quantization.type === "linear") {
+    const range: readonly [number, number] = [quantization.offset, quantization.offset + quantization.scale * quantization.maximumCode];
+    legend = rangeLegend(range, niceStep(range[1] - range[0]));
+  } else {
+    legend = logCodebookLegend(quantization);
+  }
   return {
     code: session.id.toUpperCase(),
     title: [variable.label],
     bufferTitle: "Data buffer",
     label: variable.label,
-    legend: rangeLegend(range, niceStep(range[1] - range[0])),
+    legend,
     legendKey: null,
   };
 }

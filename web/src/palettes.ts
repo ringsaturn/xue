@@ -760,6 +760,31 @@ export function decodeLog(quantization: LogQuantization, code: number): number |
   return quantization.scale * Math.expm1(lo + unit * (hi - lo));
 }
 
+/** Six legend ticks for a logarithmic codebook, largest first, at codes
+ * evenly spaced from the last code down to the zero code — where the bar,
+ * which spans the codes, actually shows them. Values print compactly, so a
+ * codebook reaching 1e11 still fits the legend's column. */
+export function logCodebookLegend(quantization: LogQuantization): string[] {
+  const ticks: string[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    const code = Math.round(quantization.maximumCode - (index * (quantization.maximumCode - quantization.zeroCode)) / 5);
+    ticks.push(compactTick(decodeLog(quantization, code) ?? 0));
+  }
+  return ticks;
+}
+
+/** A tick's value in two significant figures, in exponent form outside
+ * 0.01–10000 (`2.4e10`, `5e-3`). */
+export function compactTick(value: number): string {
+  if (value === 0) return "0";
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1e4 || magnitude < 0.01) {
+    const [mantissa, exponent] = value.toExponential(1).split("e");
+    return `${mantissa!.replace(/\.0$/, "")}e${Number(exponent)}`;
+  }
+  return String(Number(value.toPrecision(2)));
+}
+
 /** The code a logarithmic codebook holds a value at — the encoder's
  * rounding, so a legend's range lands on the codes the bar spans. Zero and
  * anything under the trace take the zero code; a value that rounds past
