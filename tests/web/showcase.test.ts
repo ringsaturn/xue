@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { validateManifest } from "../../web/src/manifest";
+import { FORECAST_MODELS, isCaseOnlyModel, validateManifest, type ForecastModelId } from "../../web/src/manifest";
 import { spawnRectangle } from "../../web/src/particles";
 import {
   boundsWidth,
@@ -294,6 +294,81 @@ describe("showcase catalog", () => {
     expect(dropped({ model: "ICON" })).toBe(true);
     expect(dropped({ modelId: "ecmwf" })).toBe(true);
     expect(dropped({ product: "pgrb2.0p50" })).toBe(true);
+    warn.mockRestore();
+  });
+
+  // A dataset this build has no entry for, described by its rows alone.
+  const foreign = (overrides: Record<string, unknown> = {}) =>
+    caseFixture({
+      id: "river-2010",
+      modelId: "riverx",
+      model: "RIVER-X",
+      product: "daily",
+      run: "2010010100",
+      runTime: "2010-01-01T00:00:00Z",
+      forecastHours: 8736,
+      bbox: [-180, -55, 180, 83],
+      dataBbox: [-180, -55, 180, 83],
+      grid: { width: 1440, height: 551 },
+      variables: ["outflow", "depth"],
+      defaultVariable: "outflow",
+      manifestPath: "showcase/river-2010/manifest.json",
+      ...overrides,
+    });
+
+  it("admits a case on a dataset this build does not know, and its manifest", () => {
+    const next = foreign({ id: "river-2011", manifestPath: "showcase/river-2011/manifest.json" });
+    const catalog = validateCatalog(catalogFixture([foreign(), next]));
+    expect(catalog.cases.map((item) => item.modelId)).toEqual(["riverx", "riverx"]);
+    expect(FORECAST_MODELS["riverx" as ForecastModelId]).toMatchObject({
+      label: "RIVER-X",
+      product: "daily",
+      defaultVariable: "outflow",
+      railCore: ["outflow", "depth"],
+    });
+    expect(FORECAST_MODELS["riverx" as ForecastModelId].region).toBeUndefined();
+    expect(isCaseOnlyModel("riverx" as ForecastModelId)).toBe(true);
+    const manifest = validateManifest(
+      {
+        schemaVersion: 5,
+        model: "RIVER-X",
+        product: "daily",
+        runTime: "2010-01-01T00:00:00Z",
+        forecastHours: 8736,
+        bundles: [{ variable: "outflow", zarr: { path: "outflow.zarr", byteLength: 100, crc32: "0a1b2c3d" } }],
+      },
+      "riverx" as ForecastModelId,
+      { requireCoreVariables: false },
+    );
+    expect(manifest.bundles[0]!.variable).toBe("outflow");
+  });
+
+  it("frames a regional dataset this build does not know on its cells", () => {
+    const basin = foreign({
+      id: "basin-2010",
+      modelId: "basinx",
+      model: "BASIN-X",
+      manifestPath: "showcase/basin-2010/manifest.json",
+      dataBbox: [100, 20, 125, 45],
+    });
+    expect(validateCatalog(catalogFixture([basin])).cases).toHaveLength(1);
+    expect(FORECAST_MODELS["basinx" as ForecastModelId].region).toEqual([100, 20, 125, 45]);
+  });
+
+  it("refuses an unknown dataset that collides with another", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // A built-in id under another label.
+    expect(dropped(foreign({ modelId: "efas" }))).toBe(true);
+    // A built-in label under another id resolves to the built-in, so the id disagrees.
+    expect(dropped(foreign({ modelId: "lakex", model: "EFAS-v5", product: "hres" }))).toBe(true);
+    // An id another row admitted with another label or product.
+    validateCatalog(catalogFixture([foreign({ modelId: "lakey", model: "LAKE-Y" })]));
+    expect(dropped(foreign({ modelId: "lakey", model: "LAKE-Z" }))).toBe(true);
+    expect(dropped(foreign({ modelId: "lakey", model: "LAKE-Y", product: "hourly" }))).toBe(true);
+    // A label another admitted dataset carries resolves to that one, so the id disagrees.
+    expect(dropped(foreign({ modelId: "lakez", model: "LAKE-Y" }))).toBe(true);
+    // An id that is not a slug.
+    expect(dropped(foreign({ modelId: "Lake-Q", model: "LAKE-Q" }))).toBe(true);
     warn.mockRestore();
   });
 
