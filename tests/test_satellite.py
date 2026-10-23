@@ -41,6 +41,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -49,6 +50,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
+from xml.sax.saxutils import escape
 
 import numpy as np
 
@@ -228,6 +230,126 @@ def bucket(keys: dict[str, Path], *, sizes: dict[str, int] | None = None) -> tup
 
     return listing, download
 
+
+
+def strip_frame_record(frame: Path, out: Path) -> None:
+    """A copy of a frame as one cached before frames carried their record:
+    the same codes, band packing and grid, without the XUE_FRAME item."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    vrt = out.with_suffix(".vrt")
+    subprocess.run(["gdal_translate", "-q", "-of", "VRT", str(frame), str(vrt)], check=True)
+    text = vrt.read_text(encoding="utf-8")
+    stripped = re.sub(r'\s*<MDI key="%s">.*?</MDI>' % assemble.FRAME_RECORD_ITEM, "", text, flags=re.S)
+    if stripped == text:
+        raise AssertionError(f"{frame} carries no {assemble.FRAME_RECORD_ITEM} item")
+    vrt.write_text(stripped, encoding="utf-8")
+    subprocess.run(["gdal_translate", "-q", "-co", "COMPRESS=DEFLATE", "-co", "TILED=YES", str(vrt), str(out)], check=True)
+    vrt.unlink()
+
+
+def tiff_with_metadata(path: Path, xml: str | None, *, order: str = "<", magic: int = 42) -> Path:
+    """A minimal TIFF header and first IFD carrying ``xml`` as its
+    GDAL_METADATA tag (no tag when None): no image, which the record reader
+    never looks at."""
+    mark = b"II" if order == "<" else b"MM"
+    entries = []
+    data = b""
+    if xml is not None:
+        data = xml.encode("utf-8") + b"\0"
+        entries.append((assemble.GDAL_METADATA_TAG, 2, len(data), 8 + 2 + 12 * 2 + 4))
+    entries.append((256, 3, 1, 1))  # ImageWidth, inline, a tag before or after the one read
+    entries.sort()
+    ifd = struct.pack(order + "H", len(entries)) + b"".join(struct.pack(order + "HHII", *entry) for entry in entries)
+    ifd += b"\0" * (12 * (2 - len(entries))) + struct.pack(order + "I", 0)
+    path.write_bytes(mark + struct.pack(order + "HI", magic, 8) + ifd + data)
+    return path
+
+
+def gdal_metadata(record: object, *, name: str = "XUE_FRAME", attributes: str = "") -> str:
+    return f'<GDALMetadata>\n  <Item name="{name}"{attributes}>{escape(json.dumps(record))}</Item>\n</GDALMetadata>'
+
+
+class FrameRecordTests(TempRoot, unittest.TestCase):
+    """The record a frame carries is read off its TIFF tag in pure Python:
+    no gdalinfo for a frame that has one."""
+
+    record = {"scale": 0.5, "offset": 1.0, "unit": "K", "frameVersion": 3, "keys": ["a&b <c>"]}
+
+    def read(self, frame: Path) -> dict | None:
+        with mock.patch.object(assemble, "_dataset_info", side_effect=AssertionError("gdalinfo ran")):
+            return assemble.frame_record(frame)
+
+    def test_the_record_is_read_off_the_tag_in_either_byte_order(self) -> None:
+        for order in ("<", ">"):
+            with self.subTest(order=order):
+                frame = tiff_with_metadata(self.root / f"f{ord(order)}.tif", gdal_metadata(self.record), order=order)
+                self.assertEqual(self.read(frame), self.record)
+                with mock.patch.object(assemble, "_dataset_info", side_effect=AssertionError("gdalinfo ran")):
+                    self.assertEqual(assemble.frame_packing(frame), assemble.Packing(0.5, 1.0, "K"))
+
+    def test_only_the_dataset_item_of_the_default_domain_is_the_record(self) -> None:
+        xml = (
+            "<GDALMetadata>"
+            f'<Item name="XUE_FRAME" sample="0">{json.dumps({"scale": 9})}</Item>'
+            f'<Item name="XUE_FRAME" domain="OTHER">{json.dumps({"scale": 9})}</Item>'
+            '<Item name="OTHER">x</Item>'
+            "</GDALMetadata>"
+        )
+        self.assertIsNone(self.read(tiff_with_metadata(self.root / "band.tif", xml)))
+        self.assertEqual(self.read(tiff_with_metadata(self.root / "both.tif", xml.replace("</GDALMetadata>", gdal_metadata(self.record)[len("<GDALMetadata>"):]))), self.record)
+
+    def test_a_frame_without_the_tag_reads_its_sidecar_and_the_tag_wins_over_one(self) -> None:
+        bare = tiff_with_metadata(self.root / "bare.tif", None)
+        self.assertIsNone(self.read(bare))
+        assemble.packing_path(bare).write_text(json.dumps(self.record), encoding="utf-8")
+        self.assertEqual(self.read(bare), self.record)
+        tagged = tiff_with_metadata(self.root / "tagged.tif", gdal_metadata(self.record))
+        assemble.packing_path(tagged).write_text(json.dumps({"scale": 9, "offset": 0, "unit": "K"}), encoding="utf-8")
+        self.assertEqual(self.read(tagged), self.record)
+
+    def test_a_frame_with_neither_falls_back_to_gdalinfo(self) -> None:
+        bare = tiff_with_metadata(self.root / "bare.tif", None)
+        info = {"bands": [{"scale": 0.25, "offset": 2.0, "unit": "K"}]}
+        with mock.patch.object(assemble, "_dataset_info", return_value=info) as described:
+            self.assertEqual(assemble.frame_packing(bare), assemble.Packing(0.25, 2.0, "K"))
+        described.assert_called_once_with(bare)
+
+    def test_a_bigtiff_is_read_through_gdalinfo(self) -> None:
+        big = tiff_with_metadata(self.root / "big.tif", None, magic=43)
+        info = {"metadata": {"": {"XUE_FRAME": json.dumps(self.record)}}, "bands": [{}]}
+        with mock.patch.object(assemble, "_dataset_info", return_value=info) as described:
+            self.assertEqual(assemble.frame_record(big), self.record)
+        described.assert_called_once_with(big)
+
+    def test_a_malformed_frame_or_tag_is_an_error(self) -> None:
+        cases = {
+            "not a TIFF": b"GIF89a..",
+            "magic": b"II" + struct.pack("<HI", 41, 8),
+            "past the end": b"II" + struct.pack("<HI", 42, 4096),
+        }
+        for message, payload in cases.items():
+            with self.subTest(message=message):
+                path = self.root / "bad.tif"
+                path.write_bytes(payload)
+                with self.assertRaisesRegex(ConversionError, message):
+                    self.read(path)
+        truncated = tiff_with_metadata(self.root / "truncated.tif", gdal_metadata(self.record))
+        truncated.write_bytes(truncated.read_bytes()[:-10])
+        with self.assertRaisesRegex(ConversionError, "past the end"):
+            self.read(truncated)
+        with self.assertRaisesRegex(ConversionError, "not XML"):
+            self.read(tiff_with_metadata(self.root / "xml.tif", "<GDALMetadata><Item"))
+        with self.assertRaisesRegex(ConversionError, "not JSON"):
+            self.read(tiff_with_metadata(self.root / "json.tif", '<GDALMetadata><Item name="XUE_FRAME">{nope</Item></GDALMetadata>'))
+        with self.assertRaisesRegex(ConversionError, "not a JSON object"):
+            self.read(tiff_with_metadata(self.root / "list.tif", gdal_metadata([1, 2])))
+        typed = self.root / "typed.tif"
+        typed.write_bytes(b"II" + struct.pack("<HI", 42, 8) + struct.pack("<H", 1) + struct.pack("<HHII", assemble.GDAL_METADATA_TAG, 7, 4, 0) + struct.pack("<I", 0))
+        with self.assertRaisesRegex(ConversionError, "not ASCII"):
+            self.read(typed)
+        # A record that is no packing is refused when the packing is asked for.
+        with self.assertRaisesRegex(ConversionError, "not a packing record"):
+            assemble.frame_packing(tiff_with_metadata(self.root / "nopacking.tif", gdal_metadata({"scale": 1})))
 
 class RegistryTests(unittest.TestCase):
     def test_the_committed_registry_still_describes_this_encoder(self) -> None:
@@ -665,17 +787,13 @@ class FetchTests(TempRoot, unittest.TestCase):
         frames = sorted(path.name for path in (self.root / "himawari-frames" / "ir104").iterdir())
         self.assertEqual(
             frames,
-            [
-                "ir104_20260917030000.json",
-                "ir104_20260917030000.tif",
-                "ir104_20260917031000.json",
-                "ir104_20260917031000.tif",
-            ],
+            # One object per frame: the record is inside the GeoTIFF.
+            ["ir104_20260917030000.tif", "ir104_20260917031000.tif"],
         )
         self.assertFalse((self.root / "himawari.2026091703" / "tiles").exists())
-        # The packing beside each frame is the source's, so the series never
-        # depends on what a given GDAL's warp carries through to the band.
-        packing = json.loads((self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.json").read_text())
+        # The packing in each frame's record is the source's, so the series
+        # never depends on what a given GDAL's warp carries through to the band.
+        packing = assemble.frame_record(self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.tif")
         self.assertEqual((packing["scale"], packing["offset"], packing["unit"]), (0.064208984375, 69.0, "kelvin"))
         self.assertEqual((packing["tiles"], len(packing["keys"]), packing["projector"]), (2, 2, "gdalwarp"))
         self.assertEqual(assemble.frame_packing(window.slots[0].frames["ir104"]), assemble.Packing(0.064208984375, 69.0, "kelvin"))
@@ -711,7 +829,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertTrue(set(window.series) <= {path.name for path in (self.root / "himawari-frames").iterdir()})
         gun = window.slots[0].frames["dustg"]
         self.assertEqual(gun, self.root / "himawari-frames" / "dustg" / "dustg_20260917030000.tif")
-        packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
+        packing = assemble.frame_record(gun)
         self.assertEqual((packing["scale"], packing["offset"], packing["unit"]), (0.0001, 0.0, "1"))
         self.assertEqual(packing["producer"], {"id": "shachen", "version": DUST.version})
         self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in DUST.inputs])
@@ -759,19 +877,19 @@ class FetchTests(TempRoot, unittest.TestCase):
         data under the noon sun (the day weight is 1 there, so the
         infrared windows the night side reads change nothing). The solar
         bands' frames are block means (the bands are four and eight times
-        finer than the grid), which the sidecar records."""
+        finer than the grid), which the frame's record says."""
         self.from_seed()
         channels = tuple(HIMAWARI.channel(channel_id) for channel_id in TRUECOLOR.inputs)
         window = self.fetch_window(channels=channels, producers=(TRUECOLOR,))
         self.assertEqual(self.downloads, [])
         self.assertEqual(list(window.series), ["vis047", "vis051", "vis064", "nir086", "ir039", "ir104", "truer", "trueg", "trueb"])
         for channel in SOLAR:
-            sidecar = json.loads(assemble.packing_path(window.slots[0].frames[channel.id]).read_text(encoding="utf-8"))
-            self.assertEqual((sidecar["scale"], sidecar["offset"], sidecar["unit"], sidecar["resampling"]), (0.00048828125, 0.0, "1", "average"))
+            record = assemble.frame_record(window.slots[0].frames[channel.id])
+            self.assertEqual((record["scale"], record["offset"], record["unit"], record["resampling"]), (0.00048828125, 0.0, "1", "average"))
         infrared_frame = self.root / "himawari-frames" / "ir104" / "ir104_20260917030000.tif"
-        self.assertEqual(json.loads(assemble.packing_path(infrared_frame).read_text(encoding="utf-8"))["resampling"], "bilinear")
+        self.assertEqual(assemble.frame_record(infrared_frame)["resampling"], "bilinear")
         gun = window.slots[0].frames["trueg"]
-        packing = json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))
+        packing = assemble.frame_record(gun)
         self.assertEqual(TRUE_COLOR_VERSION, "3")
         self.assertEqual(packing["producer"], {"id": "xue", "version": "3"})
         self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in TRUECOLOR.inputs])
@@ -1067,20 +1185,55 @@ class FetchTests(TempRoot, unittest.TestCase):
         with self.assertRaisesRegex(DownloadError, "no complete ir104 slot"):
             self.fetch_window(listing=bucket({})[0], force=True)
 
-    def test_a_frame_cached_before_sidecars_is_read_off_its_band(self) -> None:
+    def test_a_frame_carries_its_record_and_an_older_one_is_read_off_its_sidecar_or_band(self) -> None:
         self.from_seed()
         window = self.fetch_window()
         frame = window.slots[0].frames["ir104"]
-        sidecar = assemble.packing_path(frame)
-        sidecar.unlink()
-        # With the sidecar gone the band's own scale and offset stand in
-        # (GDAL 3.13 carries them through the warp; the unit may be missing
-        # on another version, which is what the sidecar exists for).
-        packing = assemble.frame_packing(frame)
+        source_packing = assemble.Packing(0.064208984375, 69.0, "kelvin")
+        # The record is in the GeoTIFF, so a frame is one object.
+        self.assertFalse(assemble.packing_path(frame).exists())
+        # Read off GDAL's own GDAL_METADATA tag with no subprocess.
+        with mock.patch.object(assemble, "_dataset_info", side_effect=AssertionError("gdalinfo ran")):
+            record = assemble.frame_record(frame)
+            self.assertEqual(assemble.frame_packing(frame), source_packing)
+        self.assertEqual((record["scale"], record["offset"], record["unit"], record["frameVersion"]), (0.064208984375, 69.0, "kelvin", 1))
+        # A frame from before the record moved inside: the same codes and
+        # band, no XUE_FRAME item.
+        legacy = self.root / "legacy" / "ir104" / frame.name
+        strip_frame_record(frame, legacy)
+        self.assertIsNone(assemble.frame_record(legacy))
+        self.assertEqual(satellite_fetch.cached_frame_version(legacy), 1)
+        # With neither record nor sidecar the band's own scale and offset
+        # stand in (GDAL 3.13 carries them through the warp; the unit may
+        # be missing on another version, which is what the record is for).
+        packing = assemble.frame_packing(legacy)
         self.assertEqual((packing.scale, packing.offset), (0.064208984375, 69.0))
+        # With its sidecar, the sidecar is the record.
+        sidecar = assemble.packing_path(legacy)
+        sidecar.write_text(json.dumps({**source_packing.metadata(), "frameVersion": 7}), encoding="utf-8")
+        self.assertEqual(assemble.frame_packing(legacy), source_packing)
+        self.assertEqual(satellite_fetch.cached_frame_version(legacy), 7)
         sidecar.write_text('{"scale": 1}', encoding="utf-8")
-        with self.assertRaisesRegex(ConversionError, "not a packing sidecar"):
-            assemble.frame_packing(frame)
+        with self.assertRaisesRegex(ConversionError, "not a packing record"):
+            assemble.frame_packing(legacy)
+        # A frame's own record wins over a stale sidecar pulled beside it.
+        stale = assemble.packing_path(frame)
+        stale.write_text(json.dumps({"scale": 0.5, "offset": 1.0, "unit": "K", "frameVersion": 7}), encoding="utf-8")
+        try:
+            self.assertEqual(assemble.frame_packing(frame), source_packing)
+            self.assertEqual(satellite_fetch.cached_frame_version(frame), 1)
+        finally:
+            stale.unlink()
+        # Stamping a frame in place rewrites the record, the codes alone
+        # kept, and takes a legacy sidecar away.
+        sidecar.write_text(json.dumps(source_packing.metadata()), encoding="utf-8")
+        assemble.write_packing(legacy, assemble.Packing(0.0001, 0.0, "1"), frameVersion=2)
+        self.assertFalse(sidecar.exists())
+        self.assertEqual(assemble.frame_packing(legacy), assemble.Packing(0.0001, 0.0, "1"))
+        self.assertEqual(satellite_fetch.cached_frame_version(legacy), 2)
+        restamped = np.rint(assemble.read_frame(legacy, TILE_GRID) / 0.0001)
+        original = np.rint((assemble.read_frame(frame, TILE_GRID) - 69.0) / 0.064208984375)
+        np.testing.assert_array_equal(restamped, original)
 
     @requires_shachen
     def test_the_series_is_what_the_observation_ingest_reads(self) -> None:
@@ -1158,9 +1311,9 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(record["frames"][0]["frames"]["dustcf"], "dustcf_20260917030000.tif")
         # The confidence's frames name the ancillary they were computed
         # against: the month's staged emissivity and the slot's GFS record.
-        sidecar = json.loads(assemble.packing_path(self.root / "himawari-frames" / "dustcf" / "dustcf_20260917030000.tif").read_text(encoding="utf-8"))
-        self.assertEqual(sidecar["ancillary"], {"camel": "camel", "skin": "gfs_tmpsfc_2026091700_f003.grib2"})
-        self.assertEqual(sidecar["producer"], {"id": "shachen", "version": DEBRA.version})
+        record = assemble.frame_record(self.root / "himawari-frames" / "dustcf" / "dustcf_20260917030000.tif")
+        self.assertEqual(record["ancillary"], {"camel": "camel", "skin": "gfs_tmpsfc_2026091700_f003.grib2"})
+        self.assertEqual(record["producer"], {"id": "shachen", "version": DEBRA.version})
         summary = window_summary(run_dir)
         self.assertEqual((summary["frameCount"], summary["latestSlot"]), (2, "2026-09-17T03:10:00Z"))
         with self.assertRaisesRegex(DownloadError, "publishes"):
@@ -1643,7 +1796,7 @@ class JapanFetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(sorted(path.name for path in self.root.iterdir() if path.name.endswith("-frames")), ["himawarijp-frames"])
         frame = window.slots[0].frames["ir104"]
         self.assertEqual(frame.parent.parent, self.root / "himawarijp-frames")
-        self.assertEqual(json.loads(assemble.packing_path(frame).read_text(encoding="utf-8"))["tiles"], 1)
+        self.assertEqual(assemble.frame_record(frame)["tiles"], 1)
         info = json.loads(subprocess.run(["gdalinfo", "-json", str(frame)], check=True, capture_output=True, text=True).stdout)
         self.assertEqual(info["size"], [175, 175])
         self.assertEqual(info["geoTransform"][:2], [141.0, 0.04])

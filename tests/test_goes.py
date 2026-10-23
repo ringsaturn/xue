@@ -298,8 +298,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(len(self.downloads), 2)
         self.assertEqual(window.series["ir104"], self.root / "goeseast.2026091715" / "goeseast.2026091715.ir104.nc")
         frames = sorted(path.name for path in (self.root / "goeseast-frames" / "ir104").iterdir())
-        self.assertEqual(frames, ["ir104_20260917151000.json", "ir104_20260917151000.tif", "ir104_20260917152000.json", "ir104_20260917152000.tif"])
-        packing = json.loads((self.root / "goeseast-frames" / "ir104" / "ir104_20260917151000.json").read_text())
+        self.assertEqual(frames, ["ir104_20260917151000.tif", "ir104_20260917152000.tif"])
+        packing = assemble.frame_record(self.root / "goeseast-frames" / "ir104" / "ir104_20260917151000.tif")
         self.assertAlmostEqual(packing["scale"], 0.06145332, places=8)
         self.assertAlmostEqual(packing["offset"], 89.62, places=5)
         self.assertEqual((packing["unit"], packing["tiles"], len(packing["keys"])), ("K", 1, 1))
@@ -355,7 +355,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         # choice by instrument is not dead code.
         self.assertFalse(np.allclose(abi[covered], seviri[covered], atol=0.001))
         gun = window.slots[0].frames["dustr"]
-        self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "shachen", "version": DUST.version})
+        self.assertEqual(assemble.frame_record(gun)["producer"], {"id": "shachen", "version": DUST.version})
 
     def test_the_true_colour_blends_a_green_the_abi_does_not_have(self) -> None:
         """The ABI has no 0.51 µm band: the recipe reads blue, red and the
@@ -371,7 +371,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual([(item.slot, item.tiles) for item in window.slots], [(SLOT_1510, 5), (SLOT_1520, 5)])
         self.assertEqual(list(window.series), ["vis047", "vis064", "nir086", "ir039", "ir104", "truer", "trueg", "trueb"])
         for channel in SOLAR:
-            packing = json.loads(assemble.packing_path(window.slots[0].frames[channel.id]).read_text(encoding="utf-8"))
+            packing = assemble.frame_record(window.slots[0].frames[channel.id])
             self.assertEqual((packing["unit"], packing["resampling"], packing["offset"]), ("1", "average", 0.0))
         planes = {channel.id: assemble.read_frame(window.slots[0].frames[channel.id], TILE_GRID) for channel in SOLAR}
         covered = np.isfinite(planes["vis064"])
@@ -400,7 +400,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         for gun_id in TRUE_COLOR_COMPONENT_IDS:
             self.assertGreater(float(np.nanstd(assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID))), 0.05)
         gun = window.slots[0].frames["truer"]
-        self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "xue", "version": TRUE_COLOR_VERSION})
+        self.assertEqual(assemble.frame_record(gun)["producer"], {"id": "xue", "version": TRUE_COLOR_VERSION})
 
     @requires_shachen
     def test_the_source_fetch_writes_the_series_and_a_fetch_record(self) -> None:

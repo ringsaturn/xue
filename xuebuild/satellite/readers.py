@@ -117,7 +117,7 @@ class Reader(Protocol):
     (an FCI chunk), fetched once per slot and shared."""
 
     frame_version: ClassVar[int]
-    """How this reader places a frame, written into every frame's sidecar:
+    """How this reader places a frame, written into every frame's record:
     a cached frame of another version is warped again. Raised when a fix
     moves pixels, so the frame cache does not keep serving the old ones."""
 

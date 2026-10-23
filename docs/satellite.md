@@ -122,7 +122,7 @@ temperature bilinearly, a reflectance — delivered at 0.5 or 1 km, four
 to eight times finer than the grid — as the block mean, so a cloud edge
 is the mean the eye sees from orbit and not a speckle of the four source
 pixels a bilinear sample would pick out of sixty-four. The frame's
-sidecar records which.
+record says which.
 
 ### The 3.9 µm window
 
@@ -485,7 +485,7 @@ it (`{"id": "shachen", "version": …}`, the id registered on the
 variable, the version whatever ran), no band. Their codebook is the
 guns' (linear, offset −0.004, step 0.004, codes 0–251, code 0 no data,
 0.0 at code 1, 1.0 at code 251), the same ladder, no poster and no
-video. A produced frame's sidecar names, beside the
+video. A produced frame's record names, beside the
 producer and the input frames, the ancillary it was computed against
 (the staged directory and the GFS record by name, whose name is the
 cycle and forecast hour). Like every produced frame it is composed once:
@@ -705,7 +705,7 @@ files are opened, and the reader does them itself:
   an Int16 strip in steps of 1/4096 from zero (`FCI_REFL_SCALE`;
   −0.01 … 1.26 is codes −41 … 5161). Either way a raw file and a VRT
   that carries the packing and the unit (`K` or `1`), and the frame's
-  packing sidecar records the channel's `kind`. The steps are binary
+  record carries the channel's `kind`. The steps are binary
   fractions on purpose: a decimal one such as 0.01 K puts some values an
   ulp either side of a codebook half-step depending on whether a
   platform fuses `code × scale + offset`, and the two encoders then
@@ -727,7 +727,7 @@ files are opened, and the reader does them itself:
   Meteosat frame until reader version 3 did, Arabia over the Atlantic.
   North to south GDAL's row origin is the chunk's, its row step checked
   against the grid. The strip is written west to east and north to south
-  whichever way the file runs. A frame's sidecar names the reader version
+  whichever way the file runs. A frame's record names the reader version
   that placed it (`frameVersion`, 3 for FCI), and a cached frame of
   another version is warped again, its slot's composites recomposed. The
   infrared channels are on a 2 km grid (5568 columns, row step
@@ -802,10 +802,19 @@ A frame is one slot of one variable on the target grid, at
 slot onto two grids; a full-disk source's id is its platform's role): a
 channel's, warped by the projector, or a produced one, written by
 `assemble.write_frame` (Int16 at 1e-4 with the same fill, through an ENVI
-header and `gdal_translate`, no raster library). Beside every frame is a
-packing sidecar — the scale, offset and unit the frame's codes mean, read
-off the source tile before the warp for a channel, and for a produced
-frame also the producer's id and version. A slot is warped once and
+header and `gdal_translate`, no raster library). Inside every frame is its
+record, one JSON object in the GeoTIFF's `XUE_FRAME` metadata item (GDAL's
+default domain, the `GDAL_METADATA` tag) — the scale, offset and unit the
+frame's codes mean, read off the source tile before the warp for a
+channel, the tiles and reader version it came from, and for a produced
+frame also the producer's id and version and its inputs — so a frame is
+one object on the bucket. `gdalwarp` takes no metadata option, so the
+projector warps to an uncompressed scratch file and `gdal_translate`
+writes the frame from it with the item. Frames cached before the record
+moved inside carry it in a `<variable>_<YYYYMMDDHHMMSS>.json` sidecar;
+`assemble.frame_record` reads the embedded item first and the sidecar
+only when there is none, so both kinds meet in one window until the old
+ones are pruned. A slot is warped once and
 composed once: the rounds script pulls the window's hours of frames from
 the bucket before the first build and pushes new ones after every upload
 (`make pull-r2-frames` / `push-r2-frames` / `prune-r2-frames`, `MODEL=himawari`;
@@ -814,7 +823,7 @@ slot's tiles (26 MB per channel) and runs the producers on one slot
 whatever the window's length. A channel's frame is a pure function of its
 tiles and the GDAL version, a produced one of its input frames, its
 ancillary and the producer's version (`produce_frames` recomposes a
-cached slot whose sidecar names another version); a GDAL upgrade may
+cached slot whose record names another version); a GDAL upgrade may
 resample the next frame differently, and the cached older frames stay as
 they are, each under its own `?v=` once published. A producer's ancillary
 fields live beside the frames under `data/raw/ancillary/` (the staged
@@ -962,7 +971,7 @@ same tiles in bands 1–4 cut to their north-west corner
 (`tests/prepare_himawari_fixture.py`: a sixteenth of each, since a 1 km
 tile is 1.3 MB and the 0.5 km one 4.7) — and `tests/test_satellite.py`
 runs them through the whole stage — listing, completeness, download,
-mosaic, warp (the solar bands as block means, the sidecar saying so),
+mosaic, warp (the solar bands as block means, the record saying so),
 cache, the producers (the Dust RGB held cell for cell to
 `shachen.dustrgb.dust_rgb` called directly, the true colour's day side to
 its recipe written out step by step, its night side to the night recipe
@@ -978,7 +987,7 @@ and four crops of one cached GFS record, and `tests/test_debra.py` holds
 the ancillary readers, the regrid across 180°, the GFS candidate walk and
 byte-range fetch against fakes, the composed chain equal to
 `shachen.pipeline.run_debra` and `run_zhouye` on the same grid (and the
-two confidences one by day), the definition and gate rules, and the producer in the fetch stage (composed once, the sidecar
+two confidences one by day), the definition and gate rules, and the producer in the fetch stage (composed once, the record
 naming its ancillary); the satellite and GOES suites stage the same
 fixtures under the raw root (`stage_ancillary`) so no test reaches the
 GFS bucket.

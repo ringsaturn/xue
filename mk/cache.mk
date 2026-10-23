@@ -2,9 +2,13 @@
 # None of it is served to the viewer.
 
 # Decoded or warped frames of the window sources (JMA, the satellites, aurora)
-# under data/raw/<model>-frames/<dir>/<name>_<YYYYMMDDHHMMSS>.<ext>. A pull
-# takes the window's hours and the same span ahead, since a feed's valid times
-# may lead the clock (the OVATION aurora grids by some ninety minutes).
+# under data/raw/<model>-frames/<dir>/<name>_<YYYYMMDDHHMMSS>.<ext>, one
+# object per frame: a satellite frame's packing record is inside the GeoTIFF.
+# Frames cached before that carry a <name>_<YYYYMMDDHHMMSS>.json sidecar,
+# which the hour globs below pull and prune with the frame until it ages
+# out. A pull takes the window's hours and the same span ahead, since a
+# feed's valid times may lead the clock (the OVATION aurora grids by some
+# ninety minutes).
 # FRAMES_KEEP_HOURS: a week by default, because JMA's tiles expire at the
 # agency and a case can only be cut from what is kept.
 FRAMES_DIR = data/raw/$(MODEL)-frames
