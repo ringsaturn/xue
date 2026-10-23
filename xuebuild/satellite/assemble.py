@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape, unescape
 
 import numpy as np
 
@@ -239,17 +239,23 @@ def _gdal_metadata_xml(frame: Path) -> str | None:
         raise ConversionError(f"cannot read {frame}: {exc}") from exc
 
 
+_XML_ENTITIES = {"&quot;": '"', "&apos;": "'"}
+
+
 def _metadata_item(frame: Path, xml: str) -> str | None:
     """The dataset-level, default-domain :data:`FRAME_RECORD_ITEM` of a
     ``<GDALMetadata>`` document (a band's items carry ``sample``, another
-    domain's ``domain``); the parser unescapes the entities."""
+    domain's ``domain``). The GeoTIFF driver escapes a value once as it
+    stores it and once more as it serializes the document, so the text
+    ElementTree hands back is still escaped once, and GDAL's own reader
+    unescapes it a second time; so does this one."""
     try:
         root = ElementTree.fromstring(xml)
     except ElementTree.ParseError as exc:
         raise ConversionError(f"{frame}: its GDAL_METADATA tag is not XML: {exc}") from exc
     for item in root.iter("Item"):
         if item.get("name") == FRAME_RECORD_ITEM and item.get("sample") is None and not item.get("domain"):
-            return item.text or ""
+            return unescape(item.text or "", _XML_ENTITIES)
     return None
 
 
