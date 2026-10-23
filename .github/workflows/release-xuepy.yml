@@ -122,15 +122,20 @@ jobs:
           codes = xue.quantize("quality", "tmp2m", numpy.array([-60.0, -59.75, 0.0, 50.0]), registry=registry)
           assert list(codes) == [0, 1, 120, 220], list(codes)
 
-          # The default build writes the Zarr stores alone.
+          # The default build writes the run's shared Zarr store alone: the
+          # wheel writes the arrays and a partial group document, and the
+          # reference pipeline writes zarr.json from it (docs/zarr-profile.md).
           xue.convert_bin(["tests/fixtures/gfs.2026081406.f000.crop.grib2"], "/tmp/smoke-store",
                           registry=registry, model="gfs", skip_variants=True)
-          store = pathlib.Path("/tmp/smoke-store/tmp2m.zarr")
-          group = json.loads((store / "zarr.json").read_text())
-          assert group["attributes"]["xue"]["variables"][0]["id"] == "tmp2m", group["attributes"]
+          store = pathlib.Path("/tmp/smoke-store/bundles.zarr")
+          (part,) = store.glob("zarr.part.*.json")
+          group = json.loads(part.read_text())
+          assert group["attributes"]["xue_profile"] == 2, group["attributes"]
+          assert group["attributes"]["xue_bundles"]["tmp2m"]["variables"][0]["id"] == "tmp2m", group["attributes"]
           assert (store / "tmp2m" / "c" / "0" / "0" / "0").is_file()
+          assert not (store / "zarr.json").exists()
           assert not list(pathlib.Path("/tmp/smoke-store").glob("*.xue"))
-          print("wheel wrote the store of tmp2m")
+          print("wheel wrote tmp2m into the shared store")
 
           # The container on request, decoded by the wheel's own reader.
           xue.convert_bin(["tests/fixtures/gfs.2026081406.f000.crop.grib2"], "/tmp/smoke-out",
