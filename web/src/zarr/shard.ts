@@ -2,9 +2,13 @@
  * Reading the Xue Zarr profile: the two metadata documents, the shard index,
  * and the arithmetic that maps a frame and a tile to a byte span.
  *
- * A store is one Zarr v3 group per bundle whose `attributes.xue` is the
- * bundle's metadata JSON verbatim — so the same `parseBundleMetadata` the
- * `.xue` path uses reads it — and one `uint8` array per variable, sharded:
+ * A store is one Zarr v3 group carrying a bundle's metadata JSON verbatim —
+ * so the same `parseBundleMetadata` the `.xue` path uses reads it — and one
+ * `uint8` array per variable. Under profile 1 the group is one bundle's and
+ * `attributes.xue` is its metadata; under profile 2 the group is shared by
+ * every bundle of one resolution tier and `attributes.xue_bundles` holds
+ * each bundle's metadata by bundle id, so a store is opened by (path,
+ * bundle id). Either way an array is sharded:
  * the inner chunk is one six-frame time chunk of one of the bundle's tiles,
  * each one Zstandard frame, and the outer chunk — the shard, one object —
  * is a whole number of time chunks of the whole grid, which the exporter
@@ -44,12 +48,18 @@ const INDEX_CHECKSUM_BYTES = 4;
 type IndexLocation = "start" | "end";
 
 export interface ZarrGroup {
-  /** The bundle metadata, as the group's `attributes.xue` carries it. */
+  /** The bundle metadata, as the group's `attributes.xue` carries it, or
+   * the requested bundle's entry of `attributes.xue_bundles`. */
   metadata: BundleMetadata;
   /** That block re-serialized, for the `ready` message's `metadataJson`. */
   metadataJson: string;
   profile: number;
 }
+
+/** The profiles this reader implements: one bundle per store, and one
+ * store shared by every bundle of a tier. */
+const PROFILE_SINGLE = 1;
+const PROFILE_SHARED = 2;
 
 /** How one variable's array is cut. `frameCount`, `height` and `width` are
  * the array's shape; the tile and the time chunk are the inner chunk; the
@@ -79,6 +89,9 @@ export interface ZarrArrayLayout {
   /** The inner chain carries `xue.delta` in front of `bytes`: decode as
    * the PREVIOUS predictor rather than RAW. */
   delta: boolean;
+  /** The bundle the array declares it belongs to (`attributes.xue.bundle`,
+   * written on a shared store), or null where it declares none. */
+  bundle: string | null;
   indexLocation: IndexLocation;
   fillValue: number;
 }
@@ -135,19 +148,47 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
-/** The group's `zarr.json`. */
-export function parseGroupMetadata(text: string): ZarrGroup {
+/** The group's `zarr.json`, read as `bundle`'s. A profile-1 group is one
+ * bundle's whatever `bundle` says; a profile-2 group must name `bundle` in
+ * its `xue_bundles`, and is refused without one asked for, since nothing
+ * else in it says which bundle's metadata a session would be reading. */
+export function parseGroupMetadata(text: string, bundle?: string): ZarrGroup {
   const group = object(JSON.parse(text), "group metadata");
   if (group.zarr_format !== 3 || group.node_type !== "group") throw new Error("not a Zarr v3 group");
   const attributes = object(group.attributes, "group attributes");
-  const xue = attributes.xue;
-  if (typeof xue !== "object" || xue === null) throw new Error("group attributes carry no xue metadata block");
-  const metadataJson = JSON.stringify(xue);
   const profile = attributes.xue_profile;
   if (typeof profile !== "number" || !Number.isInteger(profile) || profile < 1) {
     throw new Error("group attributes carry no xue_profile version");
   }
+  let block: unknown;
+  if (profile === PROFILE_SINGLE) {
+    if (attributes.xue_bundles !== undefined) throw new Error("a profile-1 group carries no xue_bundles");
+    block = attributes.xue;
+    if (typeof block !== "object" || block === null) throw new Error("group attributes carry no xue metadata block");
+  } else if (profile === PROFILE_SHARED) {
+    if (attributes.xue !== undefined) throw new Error("a profile-2 group carries no xue block of its own");
+    const bundles = object(attributes.xue_bundles, "group attributes' xue_bundles");
+    if (Object.keys(bundles).length === 0) throw new Error("group attributes' xue_bundles is empty");
+    if (bundle === undefined) throw new Error("a shared store is opened by bundle id");
+    if (!Object.prototype.hasOwnProperty.call(bundles, bundle)) throw new Error(`shared store carries no bundle ${bundle}`);
+    block = object(bundles[bundle], `xue_bundles entry ${bundle}`);
+  } else {
+    throw new Error(`xue_profile ${profile} is not one this reader implements`);
+  }
+  const metadataJson = JSON.stringify(block);
   return { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
+}
+
+/** `attributes.xue.bundle`, where an array carries one. Anything else in
+ * the attributes is informational and left alone. */
+function arrayBundle(attributes: unknown): string | null {
+  if (typeof attributes !== "object" || attributes === null) return null;
+  const xue = (attributes as Record<string, unknown>).xue;
+  if (typeof xue !== "object" || xue === null) return null;
+  const bundle = (xue as Record<string, unknown>).bundle;
+  if (bundle === undefined) return null;
+  if (typeof bundle !== "string" || bundle.length === 0) throw new Error("array attributes name no bundle id");
+  return bundle;
 }
 
 /** One variable array's `zarr.json`, held to the profile: a `uint8` array of
@@ -205,6 +246,7 @@ export function parseArrayMetadata(text: string): ZarrArrayLayout {
   }
   const tileCount = tileRows * tileColumns;
   return {
+    bundle: arrayBundle(array.attributes),
     frameCount,
     height,
     width,

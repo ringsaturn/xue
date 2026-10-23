@@ -50,6 +50,9 @@ export interface StoreRouteHooks {
   onFull?: (relative: string) => void;
   /** False serves every object whole, as an origin without ranges. */
   ranges?: boolean;
+  /** Every store request, `zarr.json` and the probe included: its store
+   * path (the manifest's, up to `.zarr`) and its `?v=`. */
+  onRequest?: (store: string, version: string | null) => void;
 }
 
 /** Serve every object of the stores under `pattern` (a glob ending in
@@ -61,6 +64,7 @@ export async function routeStores(page: Page, pattern: string, fixtureRoot: stri
   await page.route(pattern, (route) => {
     const pathname = new URL(route.request().url()).pathname;
     const relative = pathname.slice(pathname.lastIndexOf("/", pathname.indexOf(".zarr/")) + 1);
+    hooks.onRequest?.(relative.slice(0, relative.indexOf(".zarr/") + ".zarr".length), new URL(route.request().url()).searchParams.get("v"));
     const path = `${fixtureRoot}${relative}`;
     if (!existsSync(path)) return route.fulfill({ status: 404, body: "missing" });
     const isDocument = relative.endsWith("zarr.json");

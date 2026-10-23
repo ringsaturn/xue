@@ -7,8 +7,10 @@
  * uploaded once and named by every later round's manifest under the same
  * URL and `?v=`, so a round costs the bucket and a viewer only what changed.
  *
- * This file joins the segments back into the one bundle the rest of the
- * shell expects: the metadata is the segments' shared document with the
+ * A segment may be a shared store holding every bundle of its tier, so
+ * each segment is opened as the one bundle being read and the rules below
+ * apply per bundle. This file joins the segments back into the one bundle
+ * the rest of the shell expects: the metadata is the segments' shared document with the
  * time axis rebuilt over every frame (`mergeSegmentMetadata`), and every
  * question the worker asks in the bundle's frame offsets is routed to the
  * segment that holds the frame, in that segment's own offsets.
@@ -110,19 +112,20 @@ export class SegmentedZarrSession implements ZarrReader {
     });
   }
 
-  /** Open every segment and join them. The payload budget is one pool over
-   * every segment (`PayloadPool`), so the segment being played may use all
-   * of it. */
+  /** Open every segment as `options.bundle`'s and join them. The payload
+   * budget is one pool over every segment (`PayloadPool`), so the segment
+   * being played may use all of it. */
   static async open(
     stores: readonly ZarrStore[],
     decodeChunk: DecodeChunkFn,
-    options: { payloadBudgetBytes?: number } = {},
+    options: { bundle?: string; payloadBudgetBytes?: number } = {},
   ): Promise<SegmentedZarrSession> {
     if (stores.length === 0) throw new Error("a segmented store has no segments");
+    const { bundle } = options;
     const budget = options.payloadBudgetBytes;
     const pool = budget !== undefined && budget > 0 ? new PayloadPool(budget) : undefined;
     const segments = await Promise.all(
-      stores.map((store) => ZarrSession.open(store, decodeChunk, pool ? { payloadPool: pool } : {})),
+      stores.map((store) => ZarrSession.open(store, decodeChunk, { bundle, ...(pool ? { payloadPool: pool } : {}) })),
     );
     const first = segments[0]!;
     const geometry = first.tileGeometry().join(",");

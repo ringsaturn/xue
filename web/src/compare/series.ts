@@ -148,7 +148,7 @@ export function readPointSeries(
       const message = event.data as Record<string, unknown>;
       switch (message.type) {
         case "booted":
-          worker.postMessage(zarrInitMessage(store, run.manifestUrl, `${bundleId}@compare`));
+          worker.postMessage(zarrInitMessage(store, bundleId, run.manifestUrl, `${bundleId}@compare`));
           break;
         case "ready": {
           try {

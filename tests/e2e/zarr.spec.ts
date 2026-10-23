@@ -15,6 +15,10 @@ import { fixtureJson, fixturePath, stubBasemap } from "./fixtures";
  * test watches that the channel reads it in ranges alone, that a frame
  * renders through it, and that the data card names the format.
  *
+ * The fixture's stores are shared (profile 2): every bundle of a tier
+ * names one `bundles.zarr` (or `bundles.half.zarr`) under one `?v=`, and a
+ * session reads its own bundle out of it.
+ *
  * Two shapes of manifest the bucket does not hold yet are driven here too:
  * a run that ships only its stores (what the encoder writes once the
  * container is retired — the shell has to accept it before any encoder
@@ -40,6 +44,57 @@ interface StoreCounters {
   bundleRanged: number;
   /** Whole downloads of .xue bundles. */
   bundleFull: number;
+  /** Every store request's store path and `?v=`, in order. */
+  stores: { store: string; version: string | null }[];
+}
+
+interface ManifestStores {
+  bundles: {
+    variable: string;
+    zarr?: { path?: string; crc32?: string };
+    series?: { path: string; crc32: string };
+    variants?: { zarr?: { path?: string; crc32?: string } }[];
+  }[];
+}
+
+/** Every store path the manifest names, with the `?v=` of each entry naming it. */
+function manifestStores(manifest: ManifestStores): Map<string, { versions: Set<string>; bundles: string[] }> {
+  const stores = new Map<string, { versions: Set<string>; bundles: string[] }>();
+  for (const bundle of manifest.bundles) {
+    for (const zarr of [bundle.zarr, ...(bundle.variants ?? []).map((variant) => variant.zarr)]) {
+      if (zarr?.path === undefined || zarr.crc32 === undefined) continue;
+      const entry = stores.get(zarr.path) ?? { versions: new Set<string>(), bundles: [] };
+      entry.versions.add(zarr.crc32);
+      entry.bundles.push(bundle.variable);
+      stores.set(zarr.path, entry);
+    }
+  }
+  return stores;
+}
+
+/** The fixture names one shared store per tier, each under one `?v=` on
+ * every entry, and the channel read nothing but those, under those. */
+function expectSharedStoreReads(counters: StoreCounters): void {
+  const stores = manifestStores(MANIFEST_FIXTURE);
+  expect([...stores.keys()].sort()).toEqual(["bundles.half.zarr", "bundles.zarr"]);
+  for (const path of ["bundles.zarr", "bundles.half.zarr"]) {
+    expect(stores.get(path)!.versions.size).toBe(1);
+    expect(stores.get(path)!.bundles).toEqual(["tmp2m", "prate", "wind10m"]);
+  }
+  // A probe session reads a bundle's own series store, which stays one
+  // bundle's; anything else read is a shared map store.
+  const series = new Map(MANIFEST_FIXTURE.bundles.flatMap((bundle: ManifestStores["bundles"][number]) =>
+    bundle.series ? [[bundle.series.path, bundle.series.crc32] as const] : [],
+  ));
+  expect(counters.stores.length).toBeGreaterThan(0);
+  for (const { store, version } of counters.stores) {
+    if (series.has(store)) {
+      expect(version).toBe(series.get(store));
+      continue;
+    }
+    expect(stores.has(store)).toBe(true);
+    expect(version).toBe([...stores.get(store)!.versions][0]);
+  }
 }
 
 /** Serves the pointer, the manifest and the posters. */
@@ -60,6 +115,9 @@ async function routeManifest(page: Page, manifest: unknown = MANIFEST_FIXTURE): 
 async function routeArtifacts(page: Page, counters: StoreCounters, ranges = true): Promise<void> {
   await routeStores(page, "**/data/gfs.*/*.zarr/**", FIXTURE_ROOT, {
     ranges,
+    onRequest: (store, version) => {
+      counters.stores.push({ store, version });
+    },
     onRange: (_relative, length) => {
       counters.ranged += 1;
       counters.lengths.push(length);
@@ -89,7 +147,7 @@ async function routeArtifacts(page: Page, counters: StoreCounters, ranges = true
 }
 
 function newCounters(): StoreCounters {
-  return { ranged: 0, lengths: [], full: 0, bundleRanged: 0, bundleFull: 0 };
+  return { ranged: 0, lengths: [], full: 0, bundleRanged: 0, bundleFull: 0, stores: [] };
 }
 
 async function expectReadyOnStore(page: Page, format = "Zarr"): Promise<void> {
@@ -128,6 +186,7 @@ test("the default layer plays from its store without being asked", async ({ page
   // The default layer has a store, so the container was never opened for it.
   expect(counters.bundleRanged).toBe(0);
   expect(counters.bundleFull).toBe(0);
+  expectSharedStoreReads(counters);
 });
 
 test("?backend=xue takes the container of a bundle that ships both", async ({ page }) => {
@@ -191,6 +250,9 @@ test("the wind pair decodes both components through the store", async ({ page },
   await scrubOneFrame(page);
   expect(counters.full).toBe(0);
   expect(counters.ranged).toBeGreaterThan(0);
+  // Both components are the wind bundle's arrays in the tier's shared store.
+  expectSharedStoreReads(counters);
+  expect(counters.stores.some(({ store }) => store === "bundles.zarr" || store === "bundles.half.zarr")).toBe(true);
 });
 
 test("a run that ships only stores is accepted and streamed", async ({ page }) => {

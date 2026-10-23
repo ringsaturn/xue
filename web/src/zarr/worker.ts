@@ -118,7 +118,7 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   totalBytes = message.byteLength;
   const started = performance.now();
   const ranges = message.ranges ?? true;
-  const options = { payloadBudgetBytes: message.payloadBudgetBytes };
+  const options = { bundle: message.bundle, payloadBudgetBytes: message.payloadBudgetBytes };
   const opened: ZarrReader = message.segments
     ? await SegmentedZarrSession.open(
         message.segments.map((segment) => new ZarrStore(segment.url, segment.crc32, { ranges })),

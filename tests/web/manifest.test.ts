@@ -16,6 +16,7 @@ import {
   isCoarseGrid,
   isCaseOnlyModel,
   isNowcastModel,
+  isSharedStorePath,
   isObservationModel,
   overlayResolutionPreference,
   parseBundleMetadata,
@@ -383,6 +384,100 @@ describe("validateManifest", () => {
     const notAnObject = manifestFixture();
     storeBearing(notAnObject).zarr = "gfs.2026081506/tmp2m.zarr";
     expect(() => validateManifest(notAnObject)).toThrow("object");
+  });
+
+  it("accepts one shared store named by every bundle of a tier, and nothing else shared", () => {
+    const shared = manifestFixture();
+    const [tmp2m, prate] = shared.bundles as unknown as Record<string, unknown>[];
+    const store = (path: string, byteLength: number): ZarrStoreDescriptor => ({ path, byteLength, crc32: "0badf00d" });
+    tmp2m!.zarr = store("gfs.2026081506/bundles.zarr", 1_000);
+    (tmp2m!.variants as Record<string, unknown>[])[0]!.zarr = store("gfs.2026081506/bundles.half.zarr", 300);
+    prate!.zarr = store("gfs.2026081506/bundles.zarr", 2_000);
+    prate!.variants = [{ width: 720, height: 361, bandwidth: 1_000_000, zarr: store("gfs.2026081506/bundles.half.zarr", 600) }];
+    const manifest = validateManifest(shared);
+    expect(manifest.bundles.map((bundle) => zarrSegments(bundle.zarr!)[0]!.path)).toEqual([
+      "gfs.2026081506/bundles.zarr",
+      "gfs.2026081506/bundles.zarr",
+    ]);
+    // Each entry weighs what its own bundle reads, not the shared store.
+    expect(manifest.bundles.map((bundle) => deliveryBytes({ zarr: bundle.zarr }))).toEqual([1_000, 2_000]);
+    for (const path of [
+      "bundles.zarr",
+      "a/b/bundles.quarter.zarr",
+      "bundles.eighth.zarr",
+      "bundles.sixteenth.zarr",
+      "../../himawari.segments/202610120200/1a2b3c4d/bundles.half.zarr",
+    ]) {
+      expect(isSharedStorePath(path)).toBe(true);
+    }
+    for (const path of [
+      "tmp2m.zarr",
+      "tmp2m.half.zarr",
+      "bundles.xue",
+      "mybundles.zarr",
+      "bundles/tmp2m.zarr",
+      "bundles.Half.zarr",
+      "bundles..zarr",
+      "bundles.half2.zarr",
+      "bundles.half.quarter.zarr",
+      "bundles.series.zarr",
+      "../../himawari.segments/202610120200/1a2b3c4d/bundles.series.zarr",
+    ]) {
+      expect(isSharedStorePath(path)).toBe(false);
+    }
+
+    // A one-bundle store, a container, a poster and a series store stay
+    // unique whatever their neighbours share.
+    const oneBundle = structuredClone(shared) as unknown as { bundles: Record<string, unknown>[] };
+    oneBundle.bundles[0]!.zarr = store("gfs.2026081506/tmp2m.zarr", 1_000);
+    oneBundle.bundles[1]!.zarr = store("gfs.2026081506/tmp2m.zarr", 2_000);
+    expect(() => validateManifest(oneBundle)).toThrow("duplicate");
+    const container = structuredClone(shared) as unknown as { bundles: Record<string, unknown>[] };
+    container.bundles[1]!.path = container.bundles[0]!.path;
+    expect(() => validateManifest(container)).toThrow("duplicate");
+    const series = structuredClone(shared) as unknown as { bundles: Record<string, unknown>[] };
+    series.bundles[0]!.series = store("gfs.2026081506/tmp2m.series.zarr", 10);
+    series.bundles[1]!.series = store("gfs.2026081506/tmp2m.series.zarr", 10);
+    expect(() => validateManifest(series)).toThrow("duplicate");
+    // A map store named bundles.series.zarr is not shared either.
+    const seriesNamed = structuredClone(shared) as unknown as { bundles: Record<string, unknown>[] };
+    seriesNamed.bundles[0]!.zarr = store("gfs.2026081506/bundles.series.zarr", 1_000);
+    seriesNamed.bundles[1]!.zarr = store("gfs.2026081506/bundles.series.zarr", 2_000);
+    expect(() => validateManifest(seriesNamed)).toThrow("duplicate");
+    // A series store is never the shared one, whatever its name.
+    const sharedSeries = structuredClone(shared) as unknown as { bundles: Record<string, unknown>[] };
+    sharedSeries.bundles[0]!.series = store("gfs.2026081506/bundles.series.zarr", 10);
+    sharedSeries.bundles[1]!.series = store("gfs.2026081506/bundles.series.zarr", 10);
+    expect(() => validateManifest(sharedSeries)).toThrow("duplicate");
+  });
+
+  it("accepts shared window segments across bundles, never one twice in a list", () => {
+    const segment = (start: string, byteLength: number): ZarrStoreDescriptor => ({
+      path: `../../himawari.segments/${start}/1a2b3c4d/bundles.half.zarr`,
+      byteLength,
+      crc32: "760cef95",
+    });
+    const segmented = (a: number, b: number) => ({ byteLength: a + b, segments: [segment("202610120200", a), segment("202610120300", b)] });
+    const shared = manifestFixture();
+    const [tmp2m, prate] = shared.bundles as unknown as Record<string, unknown>[];
+    tmp2m!.zarr = segmented(10, 20);
+    prate!.zarr = segmented(5, 7);
+    const manifest = validateManifest(shared);
+    expect(zarrSegments(manifest.bundles[1]!.zarr!).map((store) => store.path)).toEqual(
+      zarrSegments(manifest.bundles[0]!.zarr!).map((store) => store.path),
+    );
+    const twice = manifestFixture();
+    storeBearing(twice).zarr = { byteLength: 20, segments: [segment("202610120200", 10), segment("202610120200", 10)] };
+    expect(() => validateManifest(twice)).toThrow("duplicate");
+    // A one-bundle segment is still named once in the whole manifest.
+    const own = (byteLength: number) => ({
+      byteLength,
+      segments: [{ path: "../../himawari.segments/202610120200/1a2b3c4d/ir104.half.zarr", byteLength, crc32: "760cef95" }],
+    });
+    const notShared = manifestFixture();
+    (notShared.bundles[0] as unknown as Record<string, unknown>).zarr = own(10);
+    (notShared.bundles[1] as unknown as Record<string, unknown>).zarr = own(10);
+    expect(() => validateManifest(notShared)).toThrow("duplicate");
   });
 
   it("accepts a segmented store and holds its segments to their own path rules", () => {

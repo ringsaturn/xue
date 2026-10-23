@@ -1007,9 +1007,12 @@ export function deliveryBytes(entry: { byteLength?: number; zarr?: ZarrDescripto
 }
 
 /** The same bundle as a Zarr v3 store (docs/zarr-profile.md): `path` is the
- * store's root directory (relative, `.zarr`), `byteLength` the sum of every
- * object in it, and `crc32` the CRC-32 of its root `zarr.json` — the one
- * value a client appends as `?v=` to every object it fetches from the store.
+ * store's root directory (relative, `.zarr`), `byteLength` the bytes of what
+ * this bundle reads in it (every object of a one-bundle store; its own
+ * arrays and the coordinates they use in a shared `bundles[.<tier>].zarr`,
+ * which every bundle of the tier names), and `crc32` the CRC-32 of its root
+ * `zarr.json` — the one value a client appends as `?v=` to every object it
+ * fetches from the store, the same on every entry naming a shared store.
  * Optional on a bundle and on each of its variants; a run that ships none is
  * complete without it. */
 export interface ZarrStoreDescriptor {
@@ -1088,7 +1091,23 @@ function timestamp(value: unknown, label: string): number {
 
 const BUNDLE_SUFFIX = ".xue";
 
-function relativePath(value: unknown, suffix: string | string[], paths: Set<string>, label: string): string {
+/** The final path component of a shared store (docs/zarr-profile.md,
+ * profile 2): `bundles.zarr`, or `bundles.<tier>.zarr` for a reduced
+ * tier. Every bundle of one tier names the same store, so the path repeats
+ * across entries by design. */
+const SHARED_STORE_NAME = /^bundles(?:\.([a-z]+))?\.zarr$/;
+
+/** Whether a map-store path names a shared store, wherever it sits (a run's
+ * directory, a round's, a window segment's). `bundles.series.zarr` is not
+ * one: a series store is always one bundle's. */
+export function isSharedStorePath(path: string): boolean {
+  const match = SHARED_STORE_NAME.exec(path.slice(path.lastIndexOf("/") + 1));
+  return match !== null && match[1] !== "series";
+}
+
+/** `shared` admits a path that `isSharedStorePath` names even when another
+ * entry already named it; every other artifact path is unique. */
+function relativePath(value: unknown, suffix: string | string[], paths: Set<string>, label: string, shared = false): string {
   const suffixes = Array.isArray(suffix) ? suffix : [suffix];
   if (
     typeof value !== "string" ||
@@ -1100,6 +1119,7 @@ function relativePath(value: unknown, suffix: string | string[], paths: Set<stri
   ) {
     throw new Error(`invalid ${label} path`);
   }
+  if (shared && isSharedStorePath(value)) return value;
   if (paths.has(value)) throw new Error("duplicate bundle path");
   paths.add(value);
   return value;
@@ -1145,9 +1165,12 @@ function validateStoreFields(store: Record<string, unknown>): void {
   }
 }
 
+/** A map store (`suffix` `.zarr`, which may be shared) or a series store
+ * (`.series.zarr`, one bundle's own, never shared). */
 function validateStoreDescriptor(input: unknown, paths: Set<string>, suffix: string): ZarrStoreDescriptor {
   const store = object(input);
-  relativePath(store.path, suffix, paths, suffix === ".zarr" ? "zarr store" : "series store");
+  const map = suffix === ".zarr";
+  relativePath(store.path, suffix, paths, map ? "zarr store" : "series store", map);
   validateStoreFields(store);
   return store as unknown as ZarrStoreDescriptor;
 }
@@ -1160,14 +1183,19 @@ const SEGMENT_MAX_CLIMB = 2;
 
 /** A segment's store path: a relative `.zarr` path that may climb out of
  * the manifest's directory with leading `..` components only, never one
- * after a named component. */
-function segmentPath(value: unknown, paths: Set<string>): string {
+ * after a named component. A shared segment is named by every bundle of its
+ * tier, so it repeats across entries, but never within one segment list
+ * (`own`). */
+function segmentPath(value: unknown, paths: Set<string>, own: Set<string>): string {
   if (typeof value !== "string") throw new Error("invalid zarr segment path");
   const parts = value.split("/");
   let climb = 0;
   while (parts[climb] === "..") climb += 1;
   if (climb > SEGMENT_MAX_CLIMB) throw new Error("invalid zarr segment path");
   relativePath(parts.slice(climb).join("/"), ".zarr", new Set<string>(), "zarr segment");
+  if (own.has(value)) throw new Error("duplicate bundle path");
+  own.add(value);
+  if (isSharedStorePath(value)) return value;
   if (paths.has(value)) throw new Error("duplicate bundle path");
   paths.add(value);
   return value;
@@ -1183,9 +1211,10 @@ function validateSegmentedDescriptor(store: Record<string, unknown>, paths: Set<
   }
   if (!Array.isArray(store.segments) || store.segments.length === 0) throw new Error("invalid zarr segment list");
   let sum = 0;
+  const own = new Set<string>();
   for (const item of store.segments) {
     const segment = object(item);
-    segmentPath(segment.path, paths);
+    segmentPath(segment.path, paths, own);
     validateStoreFields(segment);
     sum += segment.byteLength as number;
   }

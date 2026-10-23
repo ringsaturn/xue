@@ -7077,7 +7077,7 @@ function loadVariable(
         streaming = true;
         channel = spawnZarrWorker();
         channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(store, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
+        initMessage = zarrInitMessage(store, descriptor.variable, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
         downloadedBytes = 0;
         format = "Zarr";
         totalBytes = store.byteLength;

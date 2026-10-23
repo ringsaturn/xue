@@ -1,8 +1,13 @@
 /**
- * One open store: residency, decoding and assembly, with no worker in it.
+ * One open bundle of a store: residency, decoding and assembly, with no
+ * worker in it.
  *
  * The session is what the Zarr worker drives and what the unit tests and
- * the measurement harness drive directly. It holds the group's metadata,
+ * the measurement harness drive directly. A store is opened as one bundle's:
+ * a profile-1 store is one bundle's anyway, and a shared (profile-2) store
+ * holds every bundle of a tier, of which the session reads only the one it
+ * was opened for — that bundle's metadata out of the group and that bundle's
+ * variable arrays, by id. It holds the bundle's metadata,
  * one array layout per variable, the shard indices and compressed inner
  * chunks it has fetched (kept for the session's life, as the streaming
  * `.xue` reader keeps its payloads, so a chunk is fetched once), and one
@@ -143,6 +148,14 @@ export interface ZarrReader {
   decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array>;
 }
 
+export interface ZarrSessionOptions {
+  /** The bundle to read out of the store: the manifest entry's `variable`.
+   * Required on a shared store, which holds every bundle of its tier. */
+  bundle?: string;
+  payloadBudgetBytes?: number;
+  payloadPool?: PayloadPool;
+}
+
 function chunkKey(key: ChunkKey): string {
   return `${key.variableId}:${key.timeChunk}:${key.tile}`;
 }
@@ -172,6 +185,8 @@ export class ZarrSession implements ZarrReader, PoolMember {
    * its own `payloadBudgetBytes`, and its prefix in the pool's order. */
   private pool: PayloadPool | null = null;
   poolKey = "";
+  /** Bytes of `store.stats` that `fetchedBytes` does not report. */
+  private uncountedBytes = 0;
 
   private readonly arrays = new Map<number, VariableArray>();
   private readonly indices = new Map<string, (ShardIndexEntry | null)[]>();
@@ -199,24 +214,32 @@ export class ZarrSession implements ZarrReader, PoolMember {
     }
   }
 
-  /** Read the group and every variable array's metadata. Every array must
-   * describe the grid and axis the group's metadata declares, cut the same
-   * way — one tiling per bundle, as the container has. */
+  /** Read the group as `options.bundle`'s and every one of that bundle's
+   * variable arrays. Every array must describe the grid and axis the
+   * bundle's metadata declares — not the store's other bundles', which may
+   * have their own — and be cut the same way: one tiling per bundle, as the
+   * container has. `bundle` is required on a shared store and checked
+   * against what an array declares wherever both are known. */
   static async open(
     store: ZarrStore,
     decodeChunk: DecodeChunkFn,
-    options: { payloadBudgetBytes?: number; payloadPool?: PayloadPool } = {},
+    options: ZarrSessionOptions = {},
   ): Promise<ZarrSession> {
-    const group = parseGroupMetadata(new TextDecoder().decode(await store.get("zarr.json")));
+    const { bundle } = options;
+    const groupBytes = await store.get("zarr.json");
+    const group = parseGroupMetadata(new TextDecoder().decode(groupBytes), bundle);
     const { metadata } = group;
     const arrays = await Promise.all(
       metadata.variables.map(async (variable) => {
         const layout = parseArrayMetadata(new TextDecoder().decode(await store.get(`${variable.id}/zarr.json`)));
+        if (bundle !== undefined && layout.bundle !== null && layout.bundle !== bundle) {
+          throw new Error(`array ${variable.id} belongs to bundle ${layout.bundle}, not ${bundle}`);
+        }
         if (layout.height !== metadata.grid.height || layout.width !== metadata.grid.width) {
-          throw new Error(`array ${variable.id} does not match the group's grid`);
+          throw new Error(`array ${variable.id} does not match the bundle's grid`);
         }
         if (layout.frameCount !== metadata.time.frameCount) {
-          throw new Error(`array ${variable.id} does not match the group's time axis`);
+          throw new Error(`array ${variable.id} does not match the bundle's time axis`);
         }
         return { numericId: variable.numericId, id: variable.id, layout };
       }),
@@ -230,10 +253,14 @@ export class ZarrSession implements ZarrReader, PoolMember {
         layout.timeChunk !== first.timeChunk ||
         layout.shardFrames !== first.shardFrames
       ) {
-        throw new Error("every array of a store must be cut the same way");
+        throw new Error("every array of a bundle must be cut the same way");
       }
     }
     const session = new ZarrSession(store, decodeChunk, group, arrays);
+    // A shared store's descriptor sizes this bundle's arrays and coordinates
+    // but not the group, which carries every bundle of the tier; progress
+    // is reported against that size, so the group is left out of it too.
+    if (group.profile !== 1) session.uncountedBytes = groupBytes.byteLength;
     if (options.payloadBudgetBytes !== undefined && options.payloadBudgetBytes > 0) {
       session.payloadBudgetBytes = options.payloadBudgetBytes;
     }
@@ -249,7 +276,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
   }
 
   get fetchedBytes(): number {
-    return this.store.stats.bytes;
+    return this.store.stats.bytes - this.uncountedBytes;
   }
 
   get planeLength(): number {

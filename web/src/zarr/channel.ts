@@ -49,10 +49,12 @@ export function zarrProbeUrl(store: ZarrDescriptor, manifestUrl: string): string
   return zarrObjectUrl(zarrRootUrl(first.path, manifestUrl), "zarr.json", first.crc32);
 }
 
-/** Open a store, or a window's segments, with every root resolved against
- * the manifest. */
+/** Open `bundle` out of a store, or out of a window's segments, with every
+ * root resolved against the manifest. The bundle id travels with the store
+ * because a shared store's path names every bundle of its tier. */
 export function zarrInitMessage(
   store: ZarrDescriptor,
+  bundle: string,
   manifestUrl: string,
   variableKey: string,
   ranges = true,
@@ -67,6 +69,7 @@ export function zarrInitMessage(
     kind: "zarr",
     url: roots[0]!.url,
     crc32: roots[0]!.crc32,
+    bundle,
     byteLength: store.byteLength,
     variableKey,
     ...("segments" in store ? { segments: roots } : {}),

@@ -24,7 +24,12 @@ export interface ZarrInitStreamMessage {
   kind: "zarr";
   url: string;
   crc32: string;
-  /** The sum of every object in the store, which `progress` reports against. */
+  /** The bundle to read: the manifest entry's `variable`. A shared store
+   * (profile 2) holds every bundle of its tier and is opened as this one's;
+   * a one-bundle store is that bundle's anyway. */
+  bundle: string;
+  /** The manifest descriptor's `byteLength` — what this bundle reads from
+   * the store — which `progress` reports against. */
   byteLength: number;
   /** A rolling window's segments (docs/zarr-profile.md, "Segmented
    * store"), in time order, each opened as its own store under its own
