@@ -192,6 +192,10 @@ prune-r2-rounds: ## Delete a rolling window's old rounds, in clock order
 # shared by its rounds, so they go when no round left on the bucket names them:
 # every run directory's rounds are read, and every segment directory none of
 # their manifests names is deleted. Runs after prune-r2-rounds and prune-r2.
+# The segment directories, <model>.segments/<start>/<digest>, come out of one
+# recursive listing of <model>.segments/ (a page per thousand objects) rather
+# than a listing per <start>: the bucket root, each run directory and that
+# listing are all the ListObjects a round spends here.
 define segments_stale
 import json, posixpath, sys
 named = set()
@@ -221,14 +225,9 @@ prune-r2-segments: ## Delete a rolling window's segments that no remaining round
 		done; \
 	done; \
 	[ -n "$$manifests" ] || { echo "no round of $(MODEL) left to read, refusing to prune its segments"; exit 1; }; \
-	held=""; \
-	starts=$$($(S3) ls $(R2_ROOT)/$(MODEL).segments/) || { echo "listing the segments failed, refusing to prune"; exit 1; }; \
-	for start in $$(printf '%s\n' "$$starts" | awk '/ PRE /{print $$2}' | sed 's:/$$::'); do \
-		digests=$$($(S3) ls $(R2_ROOT)/$(MODEL).segments/$$start/) || { echo "listing $$start failed, refusing to prune"; exit 1; }; \
-		for digest in $$(printf '%s\n' "$$digests" | awk '/ PRE /{print $$2}' | sed 's:/$$::'); do \
-			held="$$held $(MODEL).segments/$$start/$$digest"; \
-		done; \
-	done; \
+	objects=$$($(S3) ls $(R2_ROOT)/$(MODEL).segments/ --recursive) || { echo "listing the segments failed, refusing to prune"; exit 1; }; \
+	held=$$(printf '%s\n' "$$objects" | awk '{print $$4}' \
+		| sed -n -E 's:^$(if $(R2_PREFIX),$(R2_PREFIX)/)($(MODEL)\.segments/[^/]+/[^/]+)/.+$$:\1:p' | sort -u); \
 	for stale in $$(printf '%s\n' $$held | $(PYTHON) -c "$$segments_stale" $$manifests); do \
 		echo "Deleting $$stale..."; \
 		$(S3) rm $(R2_ROOT)/$$stale/ --recursive --only-show-errors $(DRY_RUN); \
