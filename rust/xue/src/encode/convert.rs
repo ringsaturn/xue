@@ -241,6 +241,38 @@ pub fn bundle_grid_family<'a>(
     Ok(families.first().copied().flatten())
 }
 
+/// The dimension names a bundle's arrays carry in its run's shared store
+/// (`docs/zarr-profile.md`, "Coordinates"), and so the coordinate arrays the
+/// bundle uses there. Mirrors `store_dimensions` in `xuebuild/binconvert.py`.
+///
+/// `time_<bundle id>` for a published scalar whose series has no analysis
+/// frame (`Registry::analysis_optional_ids`) and for a static field;
+/// `latitude_<family>` / `longitude_<family>` for a bundle on a grid family
+/// of its own, `<family>` being exactly what [`bundle_grid_family`] returns.
+/// The decision is the rule, not a comparison of axes, so it is a pure
+/// function of the source and the bundle id: a fan-out job building a subset
+/// of the bundles and a whole build write the same objects.
+pub fn store_dimensions(registry: &Registry, source: &SourceSpec, bundle_id: &str) -> Result<[String; 3]> {
+    let variable_ids = registry.bundle_variable_ids(bundle_id);
+    let own_axis = (source.bundle_scalar_ids.iter().any(|id| id == bundle_id)
+        && !registry.analysis_optional_ids(source, &[bundle_id]).is_empty())
+        || registry.is_static(&variable_ids[0]);
+    let family = bundle_grid_family(registry, source, bundle_id)?;
+    if let Some(family) = family {
+        if !zarrstore::is_coordinate_suffix(family) {
+            return Err(EncodeError::conversion(format!(
+                "grid family {family:?} of {} cannot name a coordinate array",
+                source.manifest_model
+            )));
+        }
+    }
+    Ok([
+        if own_axis { format!("time_{bundle_id}") } else { "time".to_owned() },
+        family.map_or_else(|| "latitude".to_owned(), |family| format!("latitude_{family}")),
+        family.map_or_else(|| "longitude".to_owned(), |family| format!("longitude_{family}")),
+    ])
+}
+
 /// The frames a conversion reads, named by the primary file of each.
 ///
 /// A frame of a source with a grid family is more than one file under one run
@@ -2486,8 +2518,34 @@ pub fn convert_bin(
             });
         }
     }
+    // The shared stores this build writes into, one per tier. A fanned-out
+    // job shares them with the run's other jobs, so nothing already in them
+    // is removed but the group document, which this build's arrays make
+    // stale until the reference's `finalize_store` writes it from the parts.
+    let mut shared_stores: Vec<(usize, PathBuf)> = Vec::new();
+    if options.zarr {
+        let mut tiers_in_play: Vec<(usize, &str)> = vec![(1, "")];
+        tiers_in_play.extend(ladder.iter().map(|rung| (rung.factor, rung.suffix.as_str())));
+        for (factor, suffix) in tiers_in_play {
+            let store = output_dir.join(format!("{}{suffix}.zarr", zarrstore::SHARED_STORE_STEM));
+            let group = store.join("zarr.json");
+            if group.is_file() {
+                std::fs::remove_file(&group).map_err(|error| {
+                    EncodeError::conversion(format!("cannot remove {}: {error}", group.display()))
+                })?;
+            }
+            shared_stores.push((factor, store));
+        }
+    }
+    let shared_store = |factor: usize| -> &Path {
+        &shared_stores
+            .iter()
+            .find(|(held, _)| *held == factor)
+            .expect("every tier has a shared store")
+            .1
+    };
     let pool = zarrstore::compression_pool(options.compress_workers)?;
-    let write_tier = |tier: &Tier<'_>| -> Result<Value> {
+    let write_tier = |tier: &Tier<'_>| -> Result<(Value, Option<zarrstore::BundleWrite>)> {
         let bundle_variables: Vec<String> = registry.bundle_variable_ids(tier.bundle_id);
         let variables: Vec<&str> = bundle_variables.iter().map(String::as_str).collect();
         let bundle_offsets: &[i64] = &variable_offsets[variables[0]];
@@ -2527,10 +2585,12 @@ pub fn convert_bin(
         } else {
             json!({"variable": tier.bundle_id, "container": false})
         };
+        let mut bundle_write = None;
         if options.zarr {
-            // Written from the codes in memory; a store is a function of
-            // the metadata, the codes, the tile and the predictors alone,
-            // so it never waits on a container.
+            // Written from the codes in memory: a bundle's arrays are a
+            // function of the metadata, the codes, the tile, the predictors
+            // and its dimension names alone, so they never wait on a
+            // container. The part comes after every bundle of the tier.
             let mut store_variables = Vec::with_capacity(variables.len());
             for variable_id in &variables {
                 let planes = bundle_offsets
@@ -2558,15 +2618,23 @@ pub fn convert_bin(
                 variables: store_variables,
                 tile,
             };
-            let store_path = output_dir.join(format!("{}{}.zarr", tier.bundle_id, tier.suffix));
-            let store = zarrstore::write_store(&codes, &store_path, false, None, &pool)?;
+            let store_path = shared_store(tier.factor);
+            let store = zarrstore::write_bundle_arrays(
+                &codes,
+                store_path,
+                tier.bundle_id,
+                &store_dimensions(registry, source, tier.bundle_id)?,
+                &pool,
+            )?;
             log!(
                 options,
-                "wrote {} ({:.2} MB)",
+                "wrote {} into {} ({:.2} MB)",
+                tier.bundle_id,
                 store_path.display(),
                 store.byte_length as f64 / 1e6
             );
             report["zarr"] = store.to_value();
+            bundle_write = Some(store);
             if tier.factor == 1 && options.series_bundle_ids.iter().any(|id| id == tier.bundle_id) {
                 // The series companion is a full-resolution artifact: a
                 // pinned point reads the canonical bundle, never a tier. Its
@@ -2605,17 +2673,48 @@ pub fn convert_bin(
                 json!(playback_bandwidth(byte_length, bundle_offsets.len())),
             );
         }
-        Ok(report)
+        Ok((report, bundle_write))
     };
     let written = for_each_ordered(tiers.len(), BUNDLE_WRITERS, |index| write_tier(&tiers[index]))?;
 
     let mut full_reports: BTreeMap<&str, Value> = BTreeMap::new();
     let mut variant_reports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
-    for (tier, report) in tiers.iter().zip(written) {
+    let mut store_writes: Vec<((usize, &str), zarrstore::BundleWrite)> = Vec::new();
+    for (tier, (report, bundle_write)) in tiers.iter().zip(written) {
+        if let Some(bundle_write) = bundle_write {
+            store_writes.push(((tier.factor, tier.bundle_id), bundle_write));
+        }
         if tier.factor == 1 {
             full_reports.insert(tier.bundle_id, report);
         } else {
             variant_reports.entry(tier.bundle_id).or_default().push(report);
+        }
+    }
+
+    // Each tier's partial group document, last: over this build's bundles in
+    // manifest order. Every entry naming the store carries its CRC-32 until
+    // the group document is written from the parts.
+    for (factor, store) in &shared_stores {
+        let writes = report_order
+            .iter()
+            .map(|bundle_id| {
+                store_writes
+                    .iter()
+                    .find(|((held_factor, held_id), _)| held_factor == factor && held_id == bundle_id)
+                    .map(|(_, bundle_write)| bundle_write)
+                    .ok_or_else(|| EncodeError::bundle(format!("{bundle_id} was not written into {}", store.display())))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let (part, crc32) = zarrstore::write_part(store, &writes)?;
+        log!(options, "wrote {}", part.display());
+        let rung = ladder.iter().position(|rung| rung.factor == *factor);
+        for bundle_id in &report_order {
+            let report = match rung {
+                None => full_reports.get_mut(bundle_id),
+                Some(index) => variant_reports.get_mut(bundle_id).and_then(|reports| reports.get_mut(index)),
+            }
+            .expect("every bundle has a report on every tier");
+            report["zarr"]["crc32"] = json!(crc32);
         }
     }
 
@@ -3895,5 +3994,35 @@ mod cat_tests {
         }
         let aifs = registry.source("aifs").unwrap();
         assert!(!registry.published_bundle_ids(aifs).iter().any(|id| id.starts_with("cat")));
+    }
+}
+
+#[cfg(test)]
+mod store_dimension_tests {
+    use super::store_dimensions;
+    use crate::encode::registry::Registry;
+
+    fn names(model: &str, bundle_id: &str) -> [String; 3] {
+        let registry = Registry::embedded();
+        let source = registry.source(model).expect("source");
+        store_dimensions(&registry, source, bundle_id).expect("dimensions")
+    }
+
+    /// The reference's `store_dimensions` over the same registry: the run's
+    /// axis and grid for most bundles, a time of its own where a rule cuts
+    /// the axis (a rate without its analysis frame, an interval maximum, a
+    /// static field), and a grid family's pair for the CFSv2 pressure levels.
+    #[test]
+    fn a_bundle_takes_its_own_names_only_where_a_rule_cuts_it() {
+        assert_eq!(names("gfs", "tmp2m"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("gfs", "wind10m"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("gfs", "prate"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("gfs", "orog"), ["time_orog", "latitude", "longitude"]);
+        assert_eq!(names("ecmwf", "prate"), ["time_prate", "latitude", "longitude"]);
+        assert_eq!(names("ecmwf", "gust"), ["time_gust", "latitude", "longitude"]);
+        assert_eq!(names("ifshres", "dswrf"), ["time_dswrf", "latitude", "longitude"]);
+        assert_eq!(names("cfs", "tmp2m"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("cfs", "hgt500"), ["time", "latitude_pgb", "longitude_pgb"]);
+        assert_eq!(names("cfs", "wind850"), ["time", "latitude_pgb", "longitude_pgb"]);
     }
 }

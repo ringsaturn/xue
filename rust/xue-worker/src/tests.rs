@@ -115,12 +115,31 @@ fn err(data: &Data, query: &str) -> HttpError {
     }
 }
 
+/// The map store a bundle's manifest entry names: its own store, or the
+/// shared one every bundle of the tier names.
+fn map_store(bundle: &str) -> String {
+    let manifest: Value = serde_json::from_slice(
+        &std::fs::read(fixture_root().join("manifest.json")).expect("manifest"),
+    )
+    .expect("manifest json");
+    manifest["bundles"]
+        .as_array()
+        .expect("bundles")
+        .iter()
+        .find(|entry| entry["variable"] == bundle)
+        .and_then(|entry| entry["zarr"]["path"].as_str())
+        .unwrap_or_else(|| panic!("{bundle} names no map store"))
+        .to_owned()
+}
+
 /// One variable's values at the probed cell, decoded from the container with
 /// the store's own codebook.
 fn reference(bundle: &str, variable: &str, column: u32, row: u32) -> Vec<Option<f64>> {
     let root = fixture_root();
-    let group = zarr::parse_group_metadata(
-        &std::fs::read_to_string(root.join(format!("{bundle}.zarr/zarr.json"))).expect("group"),
+    let group = zarr::parse_group_metadata_for(
+        &std::fs::read_to_string(root.join(format!("{}/zarr.json", map_store(bundle))))
+            .expect("group"),
+        bundle,
     )
     .expect("group metadata");
     let (position, metadata) = group
@@ -195,7 +214,7 @@ fn a_linear_series_reads_one_chunk_of_the_companion_and_matches_the_container() 
     );
     assert_eq!(body["variables"]["tmp2m"]["bundle"], "tmp2m");
     assert_eq!(chunk_reads(&data, "tmp2m.series.zarr"), 1);
-    assert_eq!(chunk_reads(&data, "tmp2m.zarr"), 0);
+    assert_eq!(chunk_reads(&data, &map_store("tmp2m")), 0);
 }
 
 #[test]
@@ -212,7 +231,108 @@ fn without_a_companion_the_map_store_gives_the_same_series_one_chunk_per_time_ch
     );
     assert_eq!(chunk_reads(&data, "tmp2m.series.zarr"), 0);
     // Six frames to a time chunk: 121 frames span 21 of them.
-    assert_eq!(chunk_reads(&data, "tmp2m.zarr"), FRAMES.div_ceil(6));
+    assert_eq!(chunk_reads(&data, &map_store("tmp2m")), FRAMES.div_ceil(6));
+}
+
+/// Where [`shared`] puts the run's one shared store.
+const SHARED: &str = "repacked/bundles.zarr";
+
+/// The run with every bundle's map store folded into one shared (profile 2)
+/// store: each bundle's metadata under `xue_bundles`, its arrays and
+/// coordinates copied in, and every entry naming the one store. Series
+/// companions are dropped so the map store is what a query reads.
+fn shared(objects: HashMap<String, Vec<u8>>) -> HashMap<String, Vec<u8>> {
+    let mut objects = without_series(objects);
+    let key = format!("{RUN}/manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&objects[&key]).expect("manifest");
+    let mut held = serde_json::Map::new();
+    let mut copies = Vec::new();
+    for entry in manifest["bundles"].as_array_mut().expect("bundles") {
+        let Some(path) = entry["zarr"]["path"].as_str().map(str::to_owned) else {
+            continue;
+        };
+        let id = entry["variable"].as_str().expect("variable").to_owned();
+        let base = format!("{RUN}/{path}/");
+        let group = zarr::parse_group_metadata_for(
+            std::str::from_utf8(&objects[&format!("{base}zarr.json")]).expect("UTF-8"),
+            &id,
+        )
+        .expect("group");
+        held.insert(
+            id,
+            serde_json::from_str(&group.metadata_json).expect("metadata"),
+        );
+        for (name, bytes) in &objects {
+            if let Some(rest) = name.strip_prefix(&base) {
+                if rest != "zarr.json" {
+                    copies.push((format!("{RUN}/{SHARED}/{rest}"), bytes.clone()));
+                }
+            }
+        }
+        // One crc on every entry, as the group document's is.
+        entry["zarr"] = json!({ "path": SHARED, "byteLength": 1, "crc32": "5ba7ed00" });
+    }
+    objects.extend(copies);
+    put_json(
+        &mut objects,
+        &format!("{RUN}/{SHARED}/zarr.json"),
+        &json!({
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": { "xue_profile": 2, "xue_bundles": held },
+        }),
+    );
+    put_json(&mut objects, &key, &manifest);
+    objects
+}
+
+#[test]
+fn a_shared_store_answers_as_the_per_bundle_stores_do_and_reads_its_group_once() {
+    let query = format!("source=gfs&run={RUN}&lat={LAT}&lon={LON}&variables=tmp2m,prate,wind10m");
+    let plain = ok(&Data::in_memory(without_series(bucket())), &query);
+    let data = Data::in_memory(shared(bucket()));
+    let body = ok(&data, &query);
+    assert_eq!(body["variables"], plain["variables"]);
+    assert_eq!(body["time"], plain["time"]);
+    assert_eq!(body["cell"], plain["cell"]);
+    assert_eq!(body["variables"]["ugrd10m"]["bundle"], "wind10m");
+    let group_reads = data
+        .reads()
+        .iter()
+        .filter(|(path, _)| *path == format!("{RUN}/{SHARED}/zarr.json"))
+        .count();
+    assert_eq!(group_reads, 1, "the shared group is read once for every bundle");
+    // Every bundle's frames come out of the one store.
+    assert!(chunk_reads(&data, SHARED) >= 3 * FRAMES.div_ceil(6));
+}
+
+#[test]
+fn a_bundle_a_shared_store_does_not_hold_is_502_upstream_failed() {
+    let mut objects = shared(bucket());
+    let key = format!("{RUN}/{SHARED}/zarr.json");
+    let mut group: Value = serde_json::from_slice(&objects[&key]).expect("group");
+    group["attributes"]["xue_bundles"]
+        .as_object_mut()
+        .expect("xue_bundles")
+        .remove("prate");
+    put_json(&mut objects, &key, &group);
+    // A crc of its own, so the isolate cache cannot answer with the whole group.
+    let manifest_key = format!("{RUN}/manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&objects[&manifest_key]).expect("manifest");
+    for entry in manifest["bundles"].as_array_mut().expect("bundles") {
+        if entry["zarr"]["path"] == SHARED {
+            entry["zarr"]["crc32"] = json!("0dd5e700");
+        }
+    }
+    put_json(&mut objects, &manifest_key, &manifest);
+    let error = err(
+        &Data::in_memory(objects),
+        &format!("source=gfs&run={RUN}&lat={LAT}&lon={LON}&variables=prate"),
+    );
+    assert_eq!(
+        (error.status, error.code.as_str()),
+        (502, "upstream_failed")
+    );
 }
 
 #[test]

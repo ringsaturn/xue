@@ -401,10 +401,13 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
                 )
             })?;
         let store_base = format!("{dir}/{}", store.path);
-        let group = zarr::parse_group_metadata(
+        // A shared store holds every bundle of its tier, so the group is
+        // opened for this entry's bundle; a single-bundle store ignores it.
+        let group = zarr::parse_group_metadata_for(
             &data
                 .text_cached(&format!("{store_base}/zarr.json"), &store.crc32)
                 .await?,
+            bundle_id,
         )
         .map_err(storage_error)?;
         let metadata = group.metadata;

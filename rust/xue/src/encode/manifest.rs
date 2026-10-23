@@ -63,7 +63,7 @@ fn is_relative_artifact_path(path: &str, suffix: &str) -> bool {
 /// `byteLength` and `crc32`, one unit. Since the Zarr store the unit may be
 /// absent as a whole: an entry names the container, the store, or both,
 /// never neither. A `path` that is present is still held to `.xue`.
-fn validate_container_fields(entry: &Value, variable: &str, label: &str) -> Result<()> {
+fn validate_container_fields(entry: &Value, variable: &str, label: &str, paths: &mut Vec<String>) -> Result<()> {
     if entry["path"].is_null() {
         if !entry["byteLength"].is_null() || !entry["crc32"].is_null() {
             return Err(EncodeError::manifest(format!(
@@ -83,6 +83,7 @@ fn validate_container_fields(entry: &Value, variable: &str, label: &str) -> Resu
             "manifest bundle{label} path must be a relative .xue path for {variable}"
         )));
     }
+    claim_path(path, paths)?;
     if !entry["byteLength"].as_i64().is_some_and(|length| length > 0) {
         return Err(EncodeError::manifest(format!(
             "manifest bundle{label} byteLength must be a positive integer for {variable}"
@@ -97,6 +98,41 @@ fn validate_container_fields(entry: &Value, variable: &str, label: &str) -> Resu
     Ok(())
 }
 
+/// The store stem every bundle of one resolution tier shares (a profile 2
+/// store, `docs/zarr-profile.md`); no bundle id may take it.
+const SHARED_STORE_STEM: &str = "bundles";
+
+/// Whether a store path names a shared store: its final component is
+/// `bundles.zarr` or `bundles.<tier>.zarr`, whether in the run's directory
+/// or as a segment under `<model>.segments/<start>/<digest>/`. Several
+/// entries, a bundle's and its variants' alike, name the same one.
+fn is_shared_store_path(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or_default();
+    let Some(stem) = name.strip_suffix(".zarr") else {
+        return false;
+    };
+    match stem.split_once('.') {
+        None => stem == SHARED_STORE_STEM,
+        Some((head, tier)) => {
+            head == SHARED_STORE_STEM
+                && !tier.is_empty()
+                && tier != "series"
+                && tier.bytes().all(|byte| byte.is_ascii_lowercase())
+        }
+    }
+}
+
+/// Record a path an entry names, refusing one an earlier entry already named:
+/// two bundles never share an object, except a shared store, which every
+/// bundle of its tier names.
+fn claim_path(path: &str, paths: &mut Vec<String>) -> Result<()> {
+    if paths.iter().any(|held| held == path) {
+        return Err(EncodeError::manifest("manifest contains duplicate bundle paths"));
+    }
+    paths.push(path.to_owned());
+    Ok(())
+}
+
 /// A segment's store path: a relative `.zarr` path that may climb out of
 /// the manifest's directory by at most two leading `..` components (the
 /// model's shared segment directory sits beside the run directories) and
@@ -108,12 +144,15 @@ fn is_segment_path(path: &str) -> bool {
 }
 
 /// One store's `path`, `byteLength` and `crc32`, the path judged by `path_ok`.
-fn validate_store(store: &Value, variable: &str, path_ok: fn(&str) -> bool) -> Result<u64> {
+fn validate_store(store: &Value, variable: &str, path_ok: fn(&str) -> bool, paths: &mut Vec<String>) -> Result<u64> {
     let path = store["path"].as_str().unwrap_or_default();
     if !store.is_object() || !path_ok(path) {
         return Err(EncodeError::manifest(format!(
             "manifest bundle zarr path must be a relative .zarr path for {variable}"
         )));
+    }
+    if !is_shared_store_path(path) {
+        claim_path(path, paths)?;
     }
     let Some(length) = store["byteLength"].as_u64().filter(|length| *length > 0) else {
         return Err(EncodeError::manifest(format!(
@@ -138,12 +177,12 @@ fn validate_store(store: &Value, variable: &str, path_ok: fn(&str) -> bool) -> R
 /// window is cut into segments on the Python side after the build — but
 /// the validator mirrors `xuebuild/manifest.py` so a manifest that carries
 /// one is judged the same way everywhere.
-fn validate_zarr_descriptor(store: &Value, variable: &str) -> Result<()> {
+fn validate_zarr_descriptor(store: &Value, variable: &str, paths: &mut Vec<String>) -> Result<()> {
     if store.is_null() {
         return Ok(());
     }
     if store.get("segments").is_none() {
-        return validate_store(store, variable, |path| is_relative_artifact_path(path, ".zarr")).map(|_| ());
+        return validate_store(store, variable, |path| is_relative_artifact_path(path, ".zarr"), paths).map(|_| ());
     }
     if !store["path"].is_null() || !store["crc32"].is_null() {
         return Err(EncodeError::manifest(format!(
@@ -155,7 +194,7 @@ fn validate_zarr_descriptor(store: &Value, variable: &str) -> Result<()> {
     })?;
     let mut total = 0u64;
     for segment in segments {
-        total = total.saturating_add(validate_store(segment, variable, is_segment_path)?);
+        total = total.saturating_add(validate_store(segment, variable, is_segment_path, paths)?);
     }
     if store["byteLength"].as_u64() != Some(total) {
         return Err(EncodeError::manifest(format!(
@@ -194,13 +233,15 @@ pub fn build_bin_manifest(
 }
 
 /// The structural rules a reader depends on. Deliberately a subset of the
-/// Python validator — the bundle paths, the shape of a bundle name, and the
-/// core set — since the Python side stays the contract's reference.
+/// Python validator — the bundle paths and their uniqueness (a shared store
+/// excepted), the shape of a bundle name, and the core set — since the Python
+/// side stays the contract's reference.
 fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry: &Registry) -> Result<()> {
     let bundles = payload["bundles"]
         .as_array()
         .ok_or_else(|| EncodeError::manifest("manifest bundles must be a list"))?;
     let mut seen = Vec::new();
+    let mut paths = Vec::new();
     for bundle in bundles {
         let variable = bundle["variable"].as_str().unwrap_or_default();
         if !is_bundle_variable_name(variable) {
@@ -208,14 +249,14 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry
                 "manifest bundle variable is not a bundle name: {variable:?}"
             )));
         }
-        validate_container_fields(bundle, variable, "")?;
-        validate_zarr_descriptor(&bundle["zarr"], variable)?;
+        validate_container_fields(bundle, variable, "", &mut paths)?;
         if let Some(variants) = bundle["variants"].as_array() {
             for variant in variants {
-                validate_container_fields(variant, variable, " variant")?;
-                validate_zarr_descriptor(&variant["zarr"], variable)?;
+                validate_container_fields(variant, variable, " variant", &mut paths)?;
+                validate_zarr_descriptor(&variant["zarr"], variable, &mut paths)?;
             }
         }
+        validate_zarr_descriptor(&bundle["zarr"], variable, &mut paths)?;
         if seen.contains(&variable) {
             return Err(EncodeError::manifest(
                 "manifest contains duplicate bundle variables",
@@ -301,6 +342,29 @@ mod tests {
     use super::*;
     use time::macros::datetime;
 
+    /// The same descriptor one tier down: every store path's `.zarr` becomes
+    /// `.half.zarr`, so a variant names a store of its own.
+    fn half(store: &Value) -> Value {
+        match store {
+            Value::Object(fields) => Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, value)| {
+                        let value = match (key.as_str(), value.as_str()) {
+                            ("path", Some(path)) if path.ends_with(".zarr") => {
+                                json!(format!("{}.half.zarr", path.trim_end_matches(".zarr")))
+                            }
+                            _ => half(value),
+                        };
+                        (key.clone(), value)
+                    })
+                    .collect(),
+            ),
+            Value::Array(items) => Value::Array(items.iter().map(half).collect()),
+            other => other.clone(),
+        }
+    }
+
     fn bundle(zarr: Option<Value>) -> Value {
         let mut entry = json!({
             "variable": "tmp2m",
@@ -317,8 +381,8 @@ mod tests {
             }],
         });
         if let Some(store) = zarr {
-            entry["zarr"] = store.clone();
-            entry["variants"][0]["zarr"] = store;
+            entry["variants"][0]["zarr"] = half(&store);
+            entry["zarr"] = store;
         }
         entry
     }
@@ -340,7 +404,7 @@ mod tests {
         let store = json!({"path": "tmp2m.zarr", "byteLength": 12, "crc32": "deadbeef"});
         let payload = manifest(vec![bundle(Some(store))]).expect("valid manifest");
         assert_eq!(payload["bundles"][0]["zarr"]["path"], "tmp2m.zarr");
-        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.zarr");
+        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.half.zarr");
     }
 
     #[test]
@@ -353,7 +417,7 @@ mod tests {
         }
         let payload = manifest(vec![entry.clone()]).expect("a store-only entry is valid");
         assert!(payload["bundles"][0]["path"].is_null());
-        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.zarr");
+        assert_eq!(payload["bundles"][0]["variants"][0]["zarr"]["path"], "tmp2m.half.zarr");
 
         let mut neither = entry.clone();
         neither.as_object_mut().unwrap().remove("zarr");
@@ -425,6 +489,131 @@ mod tests {
             json!({"path": "../tmp2m.zarr", "byteLength": 10, "crc32": "deadbeef"}),
         ] {
             assert!(manifest(vec![bundle(Some(store.clone()))]).is_err(), "{store} was accepted");
+        }
+    }
+
+    /// A store-only entry for `variable` on the shared stores of a run:
+    /// `bundles.zarr` and its half tier, as profile 2 writes them.
+    fn shared_entry(variable: &str, zarr: Value, half_zarr: Value) -> Value {
+        json!({
+            "variable": variable,
+            "zarr": zarr,
+            "variants": [{"width": 720, "height": 361, "bandwidth": 1, "zarr": half_zarr}],
+        })
+    }
+
+    fn store(path: &str) -> Value {
+        json!({"path": path, "byteLength": 12, "crc32": "deadbeef"})
+    }
+
+    fn manifest_of(bundles: Vec<Value>) -> Result<Value> {
+        let registry = crate::encode::registry::Registry::embedded();
+        build_bin_manifest(datetime!(2026-08-15 06:00 UTC), bundles, 120, "GFS", "pgrb2.0p25", true, &registry)
+    }
+
+    #[test]
+    fn every_bundle_of_a_tier_names_the_one_shared_store() {
+        let payload = manifest_of(vec![
+            shared_entry("tmp2m", store("bundles.zarr"), store("bundles.half.zarr")),
+            shared_entry("prate", store("bundles.zarr"), store("bundles.half.zarr")),
+            shared_entry("wind10m", store("bundles.zarr"), store("bundles.half.zarr")),
+        ])
+        .expect("entries sharing a store are valid");
+        assert_eq!(payload["bundles"][2]["zarr"]["path"], "bundles.zarr");
+        // The satellite disks' lower tiers share theirs the same way.
+        assert!(manifest_of(vec![
+            shared_entry("tmp2m", store("bundles.quarter.zarr"), store("bundles.eighth.zarr")),
+            shared_entry("prate", store("bundles.quarter.zarr"), store("bundles.eighth.zarr")),
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn segments_of_a_shared_store_are_shared_too() {
+        let segmented = |tier: &str| {
+            json!({
+                "byteLength": 30,
+                "segments": [
+                    segment(&format!("../../himawari.segments/202610120200/0123abcd/bundles{tier}.zarr"), 10),
+                    segment(&format!("../../himawari.segments/202610120300/89abcdef/bundles{tier}.zarr"), 20),
+                ],
+            })
+        };
+        assert!(manifest_of(vec![
+            shared_entry("tmp2m", segmented(""), segmented(".half")),
+            shared_entry("prate", segmented(""), segmented(".half")),
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn a_duplicated_path_outside_a_shared_store_is_rejected() {
+        let duplicated = [
+            // Two bundles naming one profile 1 store.
+            vec![
+                shared_entry("tmp2m", store("tmp2m.zarr"), store("tmp2m.half.zarr")),
+                shared_entry("prate", store("tmp2m.zarr"), store("prate.half.zarr")),
+            ],
+            // A bundle's store named again by its own variant.
+            vec![
+                shared_entry("tmp2m", store("tmp2m.zarr"), store("tmp2m.zarr")),
+                shared_entry("prate", store("bundles.zarr"), store("bundles.half.zarr")),
+            ],
+            // A store whose name only resembles the shared one.
+            vec![
+                shared_entry("tmp2m", store("mybundles.zarr"), store("bundles.half.zarr")),
+                shared_entry("prate", store("mybundles.zarr"), store("bundles.half.zarr")),
+            ],
+            vec![
+                shared_entry("tmp2m", store("bundles.series.zarr"), store("bundles.half.zarr")),
+                shared_entry("prate", store("bundles.series.zarr"), store("bundles.half.zarr")),
+            ],
+            // One segment named by two profile 1 bundles.
+            vec![
+                shared_entry(
+                    "tmp2m",
+                    json!({"byteLength": 10, "segments": [segment("../../m.segments/202610120200/0123abcd/tmp2m.zarr", 10)]}),
+                    store("bundles.half.zarr"),
+                ),
+                shared_entry(
+                    "prate",
+                    json!({"byteLength": 10, "segments": [segment("../../m.segments/202610120200/0123abcd/tmp2m.zarr", 10)]}),
+                    store("bundles.half.zarr"),
+                ),
+            ],
+        ];
+        for bundles in duplicated {
+            let shown = serde_json::to_string(&bundles).unwrap();
+            assert!(manifest_of(bundles).is_err(), "{shown} was accepted");
+        }
+        // Containers stay one per entry.
+        let mut first = bundle(None);
+        first["variants"][0]["path"] = json!("tmp2m.xue");
+        assert!(manifest(vec![first]).is_err(), "a container named twice was accepted");
+    }
+
+    #[test]
+    fn the_shared_store_stem_is_matched_on_the_final_component() {
+        for path in [
+            "bundles.zarr",
+            "bundles.half.zarr",
+            "bundles.quarter.zarr",
+            "bundles.eighth.zarr",
+            "../../goeswest.segments/202610120200/0123abcd/bundles.half.zarr",
+        ] {
+            assert!(is_shared_store_path(path), "{path}");
+        }
+        for path in [
+            "tmp2m.zarr",
+            "tmp2m.half.zarr",
+            "bundles.series.zarr",
+            "bundles.xue",
+            "bundles..zarr",
+            "mybundles.zarr",
+            "bundles.zarr/tmp2m.zarr",
+            "bundles.Half.zarr",
+        ] {
+            assert!(!is_shared_store_path(path), "{path}");
         }
     }
 }

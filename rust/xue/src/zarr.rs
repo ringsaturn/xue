@@ -1,8 +1,10 @@
 //! Reading the Xue Zarr profile.
 //!
-//! `docs/zarr-profile.md` is normative. A bundle is one Zarr v3 group whose
-//! `attributes.xue` is the bundle metadata verbatim, with one sharded `uint8`
-//! array per variable. This module is the format's read side in Rust: the two
+//! `docs/zarr-profile.md` is normative. A store is one Zarr v3 group with one
+//! sharded `uint8` array per variable: on profile 1 it holds one bundle, its
+//! `attributes.xue` the bundle metadata verbatim; on profile 2 (a shared
+//! store) it holds every bundle of one resolution tier, each one's metadata
+//! verbatim under `attributes.xue_bundles[<bundle id>]`. This module is the format's read side in Rust: the two
 //! metadata documents, the shard index, the arithmetic that maps a frame and a
 //! tile to a byte span, the geographic cell a point probes, and the codebook
 //! that turns a stored code into a physical value.
@@ -316,13 +318,24 @@ pub fn parse_bundle_metadata(text: &str) -> Result<BundleMetadata, DecodeError> 
     })
 }
 
-/// A parsed group document: the metadata, its compact re-serialization and the
-/// profile version.
+/// The `xue_profile` of a store holding one bundle, its metadata in
+/// `attributes.xue`.
+pub const PROFILE_SINGLE: u32 = 1;
+/// The `xue_profile` of a shared store: every bundle of one resolution tier
+/// in one group, each bundle's metadata under `attributes.xue_bundles[id]`.
+pub const PROFILE_SHARED: u32 = 2;
+
+/// A parsed group document, reduced to one bundle: the metadata, its compact
+/// re-serialization, the profile version and, on a shared store, the id the
+/// bundle was selected by.
 #[derive(Debug, Clone)]
 pub struct ZarrGroup {
     pub metadata: BundleMetadata,
     pub metadata_json: String,
     pub profile: u32,
+    /// The bundle id selected out of a shared (profile 2) group; `None` on a
+    /// single-bundle store, whose group does not name its bundle.
+    pub bundle: Option<String>,
 }
 
 /// The profile's three branches (`docs/zarr-profile.md`): a bundle's grid
@@ -334,16 +347,18 @@ pub enum StoreKind {
     Network,
 }
 
-/// The group attribute that names each branch.
-const BRANCH_BLOCKS: [(&str, StoreKind); 3] = [
+/// The group attribute that names each branch. A grid store names it with
+/// `xue` (one bundle) or `xue_bundles` (a shared store), never both.
+const BRANCH_BLOCKS: [(&str, StoreKind); 4] = [
     ("xue", StoreKind::Grid),
+    ("xue_bundles", StoreKind::Grid),
     ("xue_polar", StoreKind::Polar),
     ("xue_network", StoreKind::Network),
 ];
 
 /// A Zarr v3 group document's attributes, and the branch they declare: exactly
-/// one of `xue`, `xue_polar` and `xue_network` is present, or the group is
-/// none of the profile's.
+/// one of `xue`, `xue_bundles`, `xue_polar` and `xue_network` is present, or
+/// the group is none of the profile's.
 pub(crate) fn group_branch(
     text: &str,
 ) -> Result<(StoreKind, serde_json::Map<String, Value>), DecodeError> {
@@ -365,7 +380,7 @@ pub(crate) fn group_branch(
         (Some(kind), None) => Ok((kind, attributes)),
         (None, _) => Err(err("group attributes carry no xue metadata block")),
         (Some(_), Some(_)) => Err(err(
-            "group attributes carry more than one of xue, xue_polar and xue_network",
+            "group attributes carry more than one of xue, xue_bundles, xue_polar and xue_network",
         )),
     }
 }
@@ -375,29 +390,98 @@ pub fn store_kind(text: &str) -> Result<StoreKind, DecodeError> {
     group_branch(text).map(|(kind, _)| kind)
 }
 
-/// The store root's `zarr.json` (`docs/zarr-profile.md`, "Attributes").
-pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
+/// A grid store's attributes and its profile, held to the block that profile
+/// carries: `xue` on profile 1, a non-empty `xue_bundles` object on profile 2.
+/// Any other version is one this reader does not implement.
+fn grid_group(text: &str) -> Result<(u32, serde_json::Map<String, Value>), DecodeError> {
     let (kind, attributes) = group_branch(text)?;
     if kind != StoreKind::Grid {
         return Err(err("group is not a grid store"));
     }
-    let xue = attributes
-        .get("xue")
-        .filter(|v| v.is_object())
-        .ok_or_else(|| err("group attributes carry no xue metadata block"))?;
     let profile = attributes
         .get("xue_profile")
         .and_then(|v| v.as_u64())
-        .filter(|&profile| profile >= 1)
         .ok_or_else(|| err("group attributes carry no xue_profile version"))?;
+    match profile {
+        1 => {
+            if !attributes.get("xue").is_some_and(Value::is_object) {
+                return Err(err("group attributes carry no xue metadata block"));
+            }
+            Ok((PROFILE_SINGLE, attributes))
+        }
+        2 => {
+            let held = attributes
+                .get("xue_bundles")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| err("a profile 2 group carries no xue_bundles object"))?;
+            if held.is_empty() {
+                return Err(err("a profile 2 group's xue_bundles holds no bundle"));
+            }
+            Ok((PROFILE_SHARED, attributes))
+        }
+        other => Err(err(format!("xue_profile {other} is not implemented"))),
+    }
+}
+
+fn group_of(metadata: &Value, profile: u32, bundle: Option<&str>) -> Result<ZarrGroup, DecodeError> {
     let metadata_json =
-        serde_json::to_string(xue).map_err(|_| err("xue metadata is not serializable"))?;
-    let metadata = parse_bundle_metadata(&metadata_json)?;
+        serde_json::to_string(metadata).map_err(|_| err("xue metadata is not serializable"))?;
+    let parsed = parse_bundle_metadata(&metadata_json)?;
     Ok(ZarrGroup {
-        metadata,
+        metadata: parsed,
         metadata_json,
-        profile: profile as u32,
+        profile,
+        bundle: bundle.map(str::to_owned),
     })
+}
+
+/// The root `zarr.json` of a single-bundle (profile 1) store
+/// (`docs/zarr-profile.md`, "Attributes"). A shared store holds several
+/// bundles and is refused here: open it with [`parse_group_metadata_for`].
+pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
+    let (profile, attributes) = grid_group(text)?;
+    if profile != PROFILE_SINGLE {
+        return Err(err(
+            "a shared (profile 2) group holds several bundles; select one by id",
+        ));
+    }
+    group_of(&attributes["xue"], profile, None)
+}
+
+/// One bundle's view of a store's root `zarr.json`, whichever profile wrote
+/// it: on a shared (profile 2) store, `attributes.xue_bundles[bundle]`; on a
+/// single-bundle (profile 1) store, `attributes.xue`, with `bundle` ignored,
+/// since that group holds one bundle and does not name it. A reader opens a
+/// store by `(path, bundle id)` and the manifest entry gives it both.
+pub fn parse_group_metadata_for(text: &str, bundle: &str) -> Result<ZarrGroup, DecodeError> {
+    let (profile, attributes) = grid_group(text)?;
+    if profile == PROFILE_SINGLE {
+        return group_of(&attributes["xue"], profile, None);
+    }
+    let metadata = attributes["xue_bundles"]
+        .get(bundle)
+        .ok_or_else(|| err(format!("shared group holds no bundle {bundle:?}")))?;
+    if !metadata.is_object() {
+        return Err(err(format!("shared group's bundle {bundle:?} is not an object")));
+    }
+    group_of(metadata, profile, Some(bundle))
+}
+
+/// The bundle ids a store's group holds: every key of `xue_bundles` on a
+/// shared store, `None` on a single-bundle store, whose group does not name
+/// its bundle. They come in the group's order only where `serde_json` keeps
+/// insertion order (the `encoder` feature turns that on); otherwise sorted.
+pub fn group_bundle_ids(text: &str) -> Result<Option<Vec<String>>, DecodeError> {
+    let (profile, attributes) = grid_group(text)?;
+    if profile == PROFILE_SINGLE {
+        return Ok(None);
+    }
+    Ok(Some(
+        attributes["xue_bundles"]
+            .as_object()
+            .map(|held| held.keys().cloned().collect())
+            .unwrap_or_default(),
+    ))
 }
 
 // -- array metadata ------------------------------------------------------------

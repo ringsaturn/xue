@@ -1,22 +1,31 @@
-//! The Zarr v3 store of one bundle, written straight from its codes.
+//! Xue bundles as Zarr v3 stores, written straight from their codes.
 //!
-//! Mirrors `write_store` over a `CodesSource` in `xuebuild/zarrstore.py`, the
-//! reference, byte for byte: the same array and group documents (serialized
-//! the way Python's `json.dumps(..., indent=2, ensure_ascii=False)` does, plus
-//! a trailing newline), the same padded inner chunks compressed by the same
-//! one-shot zstd call, the same shard index and CRC-32C, the same coordinate
-//! arrays. `docs/zarr-profile.md` is normative for the layout.
+//! Two layouts, both normative in `docs/zarr-profile.md`, and both mirroring
+//! `xuebuild/zarrstore.py`, the reference, byte for byte. A **shared store**
+//! (profile 2, `bundles[.<tier>].zarr`) holds every bundle of one resolution
+//! tier: [`write_bundle_arrays`] writes one bundle's arrays and the
+//! coordinates its dimension names name into it, [`write_part`] the partial
+//! group document over the bundles one build wrote. The store's `zarr.json`
+//! itself is never written here: the reference's `finalize_store` merges the
+//! parts into it, so the group document has one implementation. A
+//! **one-bundle store** (profile 1, [`write_store`]) is what a series store
+//! is.
 //!
-//! A store is a function of the bundle's metadata, its codes, its tile and
-//! each variable's predictor, so nothing here reads a container. Every chunk
-//! is decompressed again right after it is compressed and compared with what
-//! went in, and every document written is parsed back by the decoder's own
-//! store validators (`crate::zarr`), the store's counterpart of the
-//! container's full read-back.
+//! Documents are serialized the way Python's `json.dumps(..., indent=2,
+//! ensure_ascii=False)` does, plus a trailing newline; inner chunks are
+//! padded and compressed by the same one-shot zstd call, with the same shard
+//! index and CRC-32C. A bundle's arrays are a function of its metadata, its
+//! codes, its tile, each variable's predictor and its dimension names, so
+//! nothing here reads a container. Every chunk is decompressed again right
+//! after it is compressed and compared with what went in, and every document
+//! written is parsed back by the decoder's own store validators
+//! (`crate::zarr`), the store's counterpart of the container's full
+//! read-back.
 
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rayon::prelude::*;
 use serde_json::{json, Map, Value};
@@ -33,8 +42,17 @@ pub const SERIES_BLOCK: (usize, usize) = (8, 8);
 /// The inner chunks' zstd level, which the array documents declare.
 pub const ZSTD_LEVEL: i32 = 15;
 const PROFILE_VERSION: u64 = 1;
+/// The `xue_profile` of a shared store (`bundles[.<tier>].zarr`).
+pub const SHARED_PROFILE_VERSION: u64 = 2;
+/// The reserved stem of a shared store; no bundle may be named it.
+pub const SHARED_STORE_STEM: &str = "bundles";
+/// File name prefix of a partial group document inside a shared store
+/// (`zarr.part.<first bundle id>.json`).
+pub const PART_PREFIX: &str = "zarr.part.";
 const DELTA_CODEC: &str = "xue.delta";
-const DIMENSIONS: [&str; 3] = ["time", "latitude", "longitude"];
+/// The primary dimension names, which are also the store's primary
+/// coordinate arrays.
+pub const DIMENSIONS: [&str; 3] = ["time", "latitude", "longitude"];
 
 /// One variable's codes: its planes in axis order, each `width * height`.
 pub struct StoreVariable<'a> {
@@ -168,9 +186,22 @@ fn io_error(path: &Path, error: &std::io::Error) -> EncodeError {
 
 // -- documents -----------------------------------------------------------------
 
-fn array_metadata(geometry: &Geometry, variable: &Value, predictor: &str, delta: bool) -> Value {
+/// One variable array's document. `bundle` is set in a shared store only,
+/// where it leads the `xue` block so an array opened alone knows which
+/// bundle's metadata describes it.
+fn array_metadata(
+    geometry: &Geometry,
+    variable: &Value,
+    predictor: &str,
+    delta: bool,
+    bundle: Option<&str>,
+    dimensions: &[String; 3],
+) -> Value {
     let quantization = &variable["quantization"];
     let mut xue = Map::new();
+    if let Some(bundle) = bundle {
+        xue.insert("bundle".into(), json!(bundle));
+    }
     xue.insert("variable".into(), variable.clone());
     xue.insert("predictor".into(), json!(predictor));
     let mut attributes = Map::new();
@@ -211,7 +242,7 @@ fn array_metadata(geometry: &Geometry, variable: &Value, predictor: &str, delta:
             },
         }],
         "attributes": Value::Object(attributes),
-        "dimension_names": DIMENSIONS,
+        "dimension_names": dimensions,
     })
 }
 
@@ -236,12 +267,41 @@ fn number(value: &Value, what: &str) -> Result<f64> {
         .ok_or_else(|| EncodeError::conversion(format!("metadata grid {what} is not a number")))
 }
 
-/// The time, latitude and longitude arrays, each one chunk: for xarray and
-/// its kind, never read by the viewer.
+/// Write by rename: in a shared store several bundles write the same
+/// coordinate array concurrently, always the same bytes, and a rename never
+/// leaves a reader (or the last writer) a torn file.
+fn write_file_atomic(path: &Path, data: &[u8]) -> Result<u64> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let parent = path.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(parent).map_err(|error| io_error(parent, &error))?;
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let temporary = parent.join(format!(
+        ".{name}.{}.{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    if let Err(error) = fs::write(&temporary, data) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io_error(&temporary, &error));
+    }
+    if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io_error(path, &error));
+    }
+    Ok(data.len() as u64)
+}
+
+/// The three one-dimensional coordinate arrays, each one chunk: for xarray
+/// and its kind, never read by the viewer. `names` are the bundle's
+/// dimension names (`time` or `time_<bundle>`, and so on): a coordinate array
+/// is named by the dimension it labels, and its encoding does not depend on
+/// the name. `atomic` writes by rename, for a shared store.
 fn write_coordinates(
     metadata: &Value,
     geometry: &Geometry,
     store: &Path,
+    names: &[String; 3],
+    atomic: bool,
     documents: &mut Vec<(String, Value)>,
 ) -> Result<Vec<(String, u64)>> {
     let text = serde_json::to_string(metadata).expect("serializable metadata");
@@ -277,7 +337,7 @@ fn write_coordinates(
     );
     let coordinates = [
         (
-            "time",
+            names[0].as_str(),
             time,
             parsed.offsets.len(),
             "int32",
@@ -289,7 +349,7 @@ fn write_coordinates(
             }),
         ),
         (
-            "latitude",
+            names[1].as_str(),
             latitude,
             geometry.height,
             "float64",
@@ -297,7 +357,7 @@ fn write_coordinates(
             json!({"units": "degrees_north", "standard_name": "latitude"}),
         ),
         (
-            "longitude",
+            names[2].as_str(),
             longitude,
             geometry.width,
             "float64",
@@ -305,12 +365,13 @@ fn write_coordinates(
             json!({"units": "degrees_east", "standard_name": "longitude"}),
         ),
     ];
+    let write = if atomic { write_file_atomic } else { write_file };
     let mut sizes = Vec::new();
     for (name, values, length, data_type, fill_value, attributes) in coordinates {
         let document = coordinate_metadata(length, data_type, fill_value, attributes, name);
         let directory = store.join(name);
-        let written = write_file(&directory.join("zarr.json"), &dump_json(&document))?
-            + write_file(&directory.join("c").join("0"), &values)?;
+        let written = write(&directory.join("zarr.json"), &dump_json(&document))?
+            + write(&directory.join("c").join("0"), &values)?;
         documents.push((name.to_owned(), document));
         sizes.push((name.to_owned(), written));
     }
@@ -365,7 +426,9 @@ fn compress_chunk(block: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// One variable's array: its document and its one shard, the inner chunks in
-/// row-major order (time chunk, then tile) followed by the index.
+/// row-major order (time chunk, then tile) followed by the index. `bundle`
+/// and `dimensions` are a shared store's ([`write_bundle_arrays`]).
+#[allow(clippy::too_many_arguments)]
 fn write_array(
     variable: &StoreVariable<'_>,
     document_variable: &Value,
@@ -373,6 +436,8 @@ fn write_array(
     directory: &Path,
     delta: bool,
     pool: &rayon::ThreadPool,
+    bundle: Option<&str>,
+    dimensions: &[String; 3],
 ) -> Result<(u64, u64, Value)> {
     let predictor = if variable.previous { "previous" } else { "raw" };
     let use_delta = delta && variable.previous;
@@ -397,7 +462,7 @@ fn write_array(
             geometry.height
         )));
     }
-    let document = array_metadata(geometry, document_variable, predictor, use_delta);
+    let document = array_metadata(geometry, document_variable, predictor, use_delta, bundle, dimensions);
     let text = dump_json(&document);
     zarr::parse_array_metadata(std::str::from_utf8(&text).expect("UTF-8 JSON"))
         .map_err(|error| EncodeError::bundle(format!("{}: array document is invalid: {}", variable.id, error.0)))?;
@@ -492,16 +557,16 @@ pub fn compression_pool(workers: usize) -> Result<rayon::ThreadPool> {
         .map_err(|error| EncodeError::conversion(format!("cannot start zstd pool: {error}")))
 }
 
-/// Write one bundle's store at `store` (replaced whole). `series` cuts the
-/// series layout over that block instead of the map layout; `delta` puts
-/// `xue.delta` in front of `bytes` on every previous-predicted variable.
-pub fn write_store(
-    codes: &StoreCodes<'_>,
-    store: &Path,
-    delta: bool,
+fn primary_dimensions() -> [String; 3] {
+    DIMENSIONS.map(str::to_owned)
+}
+
+/// The geometry a bundle's codes are cut with, and the metadata's variable
+/// documents, which must name the codes' variables in order.
+fn store_geometry<'m>(
+    codes: &StoreCodes<'m>,
     series: Option<(usize, usize)>,
-    pool: &rayon::ThreadPool,
-) -> Result<StoreReport> {
+) -> Result<(Geometry, &'m Vec<Value>)> {
     let metadata = codes.metadata;
     let grid = &metadata["grid"];
     let dimension = |key: &str| -> Result<usize> {
@@ -538,6 +603,22 @@ pub fn write_store(
     if names != given {
         return Err(EncodeError::bundle("the codes do not name the metadata's variables in order"));
     }
+    Ok((geometry, document_variables))
+}
+
+/// Write one bundle's store at `store` (replaced whole). `series` cuts the
+/// series layout over that block instead of the map layout; `delta` puts
+/// `xue.delta` in front of `bytes` on every previous-predicted variable.
+pub fn write_store(
+    codes: &StoreCodes<'_>,
+    store: &Path,
+    delta: bool,
+    series: Option<(usize, usize)>,
+    pool: &rayon::ThreadPool,
+) -> Result<StoreReport> {
+    let metadata = codes.metadata;
+    let (geometry, document_variables) = store_geometry(codes, series)?;
+    let dimensions = primary_dimensions();
 
     if store.exists() {
         if !store.is_dir() {
@@ -557,14 +638,22 @@ pub fn write_store(
     };
     let mut documents: Vec<(String, Value)> = Vec::new();
     for (variable, document_variable) in codes.variables.iter().zip(document_variables) {
-        let (written, chunks, document) =
-            write_array(variable, document_variable, &geometry, &store.join(&variable.id), delta, pool)?;
+        let (written, chunks, document) = write_array(
+            variable,
+            document_variable,
+            &geometry,
+            &store.join(&variable.id),
+            delta,
+            pool,
+            None,
+            &dimensions,
+        )?;
         report.arrays.push((variable.id.clone(), written));
         report.byte_length += written;
         report.chunk_count += chunks;
         documents.push((variable.id.clone(), document));
     }
-    for (name, written) in write_coordinates(metadata, &geometry, store, &mut documents)? {
+    for (name, written) in write_coordinates(metadata, &geometry, store, &dimensions, false, &mut documents)? {
         report.arrays.push((name, written));
         report.byte_length += written;
     }
@@ -590,6 +679,294 @@ pub fn write_store(
     report.byte_length += write_file(&store.join("zarr.json"), &text)?;
     report.crc32 = format!("{:08x}", crc32_plane(&text));
     Ok(report)
+}
+
+// -- the shared store (profile 2) ----------------------------------------------
+
+/// `bundles.zarr` for the full tier, `bundles.<tier>.zarr` for a rung of the
+/// resolution ladder.
+pub fn shared_store_name(tier: Option<&str>) -> String {
+    match tier {
+        Some(tier) => format!("{SHARED_STORE_STEM}.{tier}.zarr"),
+        None => format!("{SHARED_STORE_STEM}.zarr"),
+    }
+}
+
+/// `<store>/zarr.part.<first bundle id>.json`: a build's bundles are disjoint
+/// from every other build's of the same run, so the first one names the part
+/// uniquely.
+pub fn part_path(store: &Path, first_bundle_id: &str) -> PathBuf {
+    store.join(format!("{PART_PREFIX}{first_bundle_id}.json"))
+}
+
+/// `^[a-z][a-z0-9]*$`: a bundle id, and the suffix of a coordinate named
+/// for a grid family.
+pub fn is_coordinate_suffix(text: &str) -> bool {
+    let mut bytes = text.bytes();
+    bytes.next().is_some_and(|first| first.is_ascii_lowercase())
+        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+/// `Some("")` for the primary name, `Some(family)` for `<primary>_<family>`,
+/// `None` for anything else.
+fn grid_suffix<'a>(name: &'a str, primary: &str) -> Option<&'a str> {
+    if name == primary {
+        return Some("");
+    }
+    name.strip_prefix(primary)
+        .and_then(|rest| rest.strip_prefix('_'))
+        .filter(|family| is_coordinate_suffix(family))
+}
+
+/// A bundle's dimension names (`docs/zarr-profile.md`, "Coordinates"): `time`
+/// or `time_<bundle id>`, and `latitude` / `longitude` or `latitude_<family>`
+/// / `longitude_<family>` of one family id.
+fn check_dimensions(bundle_id: &str, dimensions: &[String]) -> Result<()> {
+    let valid = dimensions.len() == 3
+        && (dimensions[0] == "time" || dimensions[0] == format!("time_{bundle_id}"))
+        && grid_suffix(&dimensions[1], "latitude")
+            .is_some_and(|latitude| grid_suffix(&dimensions[2], "longitude") == Some(latitude));
+    if valid {
+        Ok(())
+    } else {
+        Err(EncodeError::bundle(format!(
+            "{bundle_id}: dimension names {dimensions:?} are not the profile's"
+        )))
+    }
+}
+
+/// One bundle written into a shared store (`BundleWrite` in the reference).
+///
+/// `documents` holds every array document the bundle uses, its variable
+/// arrays in the metadata's order and then the coordinate arrays its
+/// dimensions name; `byte_length` is those arrays' objects (each `zarr.json`
+/// plus shard or chunk), which is what a viewer downloads for the bundle
+/// alone and what its manifest entry reports. `crc32` is the CRC-32 of the
+/// group document naming the bundle, stamped once that is written: here the
+/// part's.
+#[derive(Debug, Clone)]
+pub struct BundleWrite {
+    pub bundle_id: String,
+    pub path: PathBuf,
+    pub metadata: Value,
+    pub dimensions: [String; 3],
+    pub documents: Vec<(String, Value)>,
+    pub byte_length: u64,
+    pub arrays: Vec<(String, u64)>,
+    pub chunk_count: u64,
+    pub crc32: String,
+}
+
+impl BundleWrite {
+    /// The report block, keyed as the reference's `BundleWrite.to_dict`.
+    pub fn to_value(&self) -> Value {
+        let mut arrays = Map::new();
+        for (name, written) in &self.arrays {
+            arrays.insert(name.clone(), json!(written));
+        }
+        json!({
+            "path": self.path.display().to_string(),
+            "bundle": self.bundle_id,
+            "byteLength": self.byte_length,
+            "crc32": self.crc32,
+            "delta": false,
+            "indexLocation": "end",
+            "dimensions": self.dimensions,
+            "arrays": Value::Object(arrays),
+            "chunkCount": self.chunk_count,
+            "comparableChunks": 0,
+            "identicalChunks": 0,
+        })
+    }
+}
+
+/// Write one bundle's variable arrays and the coordinate arrays its
+/// `dimensions` name into the shared store `store`, which is created if
+/// absent and otherwise left as it is: other bundles' arrays, written before
+/// or concurrently, stay. The group document is not touched.
+///
+/// `dimensions` is what the encoder decided for the bundle
+/// (`convert::store_dimensions`); a coordinate shared with another bundle is
+/// the same bytes from either, and is written by rename so two concurrent
+/// writers never tear it. Arrays, codecs and chunking are exactly a
+/// one-bundle store's, with `attributes.xue.bundle` added.
+pub fn write_bundle_arrays(
+    codes: &StoreCodes<'_>,
+    store: &Path,
+    bundle_id: &str,
+    dimensions: &[String; 3],
+    pool: &rayon::ThreadPool,
+) -> Result<BundleWrite> {
+    if !is_coordinate_suffix(bundle_id) || bundle_id == SHARED_STORE_STEM {
+        return Err(EncodeError::bundle(format!(
+            "{bundle_id:?} cannot name a bundle of a shared store"
+        )));
+    }
+    check_dimensions(bundle_id, dimensions)?;
+    let metadata = codes.metadata;
+    let (geometry, document_variables) = store_geometry(codes, None)?;
+    if store.exists() && !store.is_dir() {
+        return Err(EncodeError::conversion(format!("{} exists and is not a directory", store.display())));
+    }
+    fs::create_dir_all(store).map_err(|error| io_error(store, &error))?;
+
+    let mut report = BundleWrite {
+        bundle_id: bundle_id.to_owned(),
+        path: store.to_path_buf(),
+        metadata: metadata.clone(),
+        dimensions: dimensions.clone(),
+        documents: Vec::new(),
+        byte_length: 0,
+        arrays: Vec::new(),
+        chunk_count: 0,
+        crc32: String::new(),
+    };
+    for (variable, document_variable) in codes.variables.iter().zip(document_variables) {
+        if dimensions.contains(&variable.id) {
+            return Err(EncodeError::bundle(format!(
+                "{bundle_id}: variable {} is named like a coordinate",
+                variable.id
+            )));
+        }
+        let (written, chunks, document) = write_array(
+            variable,
+            document_variable,
+            &geometry,
+            &store.join(&variable.id),
+            false,
+            pool,
+            Some(bundle_id),
+            dimensions,
+        )?;
+        report.arrays.push((variable.id.clone(), written));
+        report.chunk_count += chunks;
+        report.documents.push((variable.id.clone(), document));
+    }
+    let sizes = write_coordinates(metadata, &geometry, store, dimensions, true, &mut report.documents)?;
+    report.arrays.extend(sizes);
+    report.byte_length = report.arrays.iter().map(|(_, written)| written).sum();
+    Ok(report)
+}
+
+/// A shared store's group document over `bundles`, in manifest order
+/// (`group_document` in the reference).
+///
+/// Key order is part of the bytes (`docs/zarr-profile.md`, "Group
+/// document"): `attributes` holds `xue_profile` then `xue_bundles`, the
+/// bundles in the given order; `consolidated_metadata.metadata` holds every
+/// variable array, bundle by bundle and in each bundle's `variables` order,
+/// then the primary coordinates `time`, `latitude`, `longitude` that some
+/// bundle uses, then every other coordinate in the order its first bundle
+/// names it. Two bundles naming one coordinate must carry the same document
+/// for it.
+pub fn group_document(bundles: &[&BundleWrite]) -> Result<Value> {
+    if bundles.is_empty() {
+        return Err(EncodeError::bundle("a shared store holds at least one bundle"));
+    }
+    let mut metadata_by_bundle = Map::new();
+    let mut variable_arrays = Map::new();
+    let mut coordinates = Map::new();
+    for bundle in bundles {
+        let bundle_id = bundle.bundle_id.as_str();
+        if metadata_by_bundle.contains_key(bundle_id) {
+            return Err(EncodeError::bundle(format!("bundle {bundle_id} appears twice in one shared store")));
+        }
+        metadata_by_bundle.insert(bundle_id.to_owned(), bundle.metadata.clone());
+        let document_of = |name: &str| bundle.documents.iter().find(|(held, _)| held == name).map(|(_, document)| document);
+        let variables = bundle.metadata["variables"]
+            .as_array()
+            .ok_or_else(|| EncodeError::bundle(format!("{bundle_id}: metadata variables missing")))?;
+        let mut dimensions: Option<Vec<String>> = None;
+        for variable in variables {
+            let name = variable["id"].as_str().unwrap_or_default();
+            let document = document_of(name)
+                .ok_or_else(|| EncodeError::bundle(format!("{bundle_id}: no array document for {name}")))?;
+            if variable_arrays.contains_key(name) || coordinates.contains_key(name) {
+                return Err(EncodeError::bundle(format!("array {name} appears twice in one shared store")));
+            }
+            let names: Vec<String> = document["dimension_names"]
+                .as_array()
+                .map(|names| names.iter().map(|name| name.as_str().unwrap_or_default().to_owned()).collect())
+                .unwrap_or_default();
+            match &dimensions {
+                None => dimensions = Some(names),
+                Some(held) if *held != names => {
+                    return Err(EncodeError::bundle(format!(
+                        "{bundle_id}: its arrays do not share one set of dimension names"
+                    )))
+                }
+                Some(_) => {}
+            }
+            variable_arrays.insert(name.to_owned(), document.clone());
+        }
+        let dimensions = dimensions.unwrap_or_default();
+        check_dimensions(bundle_id, &dimensions)?;
+        for name in &dimensions {
+            let document = document_of(name).ok_or_else(|| {
+                EncodeError::bundle(format!("{bundle_id}: no array document for its coordinate {name}"))
+            })?;
+            if variable_arrays.contains_key(name) {
+                return Err(EncodeError::bundle(format!("coordinate {name} is named like a variable")));
+            }
+            match coordinates.get(name) {
+                Some(held) if held != document => {
+                    return Err(EncodeError::bundle(format!(
+                        "coordinate {name} differs between the bundles that use it"
+                    )))
+                }
+                Some(_) => {}
+                None => {
+                    coordinates.insert(name.clone(), document.clone());
+                }
+            }
+        }
+    }
+    let mut ordered = variable_arrays;
+    for name in DIMENSIONS {
+        if let Some(document) = coordinates.get(name) {
+            ordered.insert(name.to_owned(), document.clone());
+        }
+    }
+    for (name, document) in &coordinates {
+        if !DIMENSIONS.contains(&name.as_str()) {
+            ordered.insert(name.clone(), document.clone());
+        }
+    }
+    Ok(json!({
+        "zarr_format": 3,
+        "node_type": "group",
+        "attributes": {
+            "xue_profile": SHARED_PROFILE_VERSION,
+            "xue_bundles": Value::Object(metadata_by_bundle),
+        },
+        "consolidated_metadata": {
+            "kind": "inline",
+            "must_understand": false,
+            "metadata": Value::Object(ordered),
+        },
+    }))
+}
+
+/// The partial group document over the bundles one build wrote into `store`,
+/// in manifest order: [`group_document`] over them alone, at
+/// [`part_path`] of the first. Returns its path and its CRC-32, which the
+/// build's entries carry until the reference's `finalize_store` writes the
+/// store's group document from the parts.
+///
+/// The part is parsed back as every bundle's view of a profile-2 group, the
+/// decoder's own check (`zarr::parse_group_metadata_for`), so a part the
+/// readers would refuse once merged never leaves the encoder.
+pub fn write_part(store: &Path, bundles: &[&BundleWrite]) -> Result<(PathBuf, String)> {
+    let text = dump_json(&group_document(bundles)?);
+    let utf8 = std::str::from_utf8(&text).expect("UTF-8 JSON");
+    for bundle in bundles {
+        zarr::parse_group_metadata_for(utf8, &bundle.bundle_id).map_err(|error| {
+            EncodeError::bundle(format!("{}: partial group document is invalid: {}", bundle.bundle_id, error.0))
+        })?;
+    }
+    let path = part_path(store, &bundles[0].bundle_id);
+    write_file(&path, &text)?;
+    Ok((path, format!("{:08x}", crc32_plane(&text))))
 }
 
 #[cfg(test)]
@@ -666,6 +1043,101 @@ mod tests {
             .sum();
         assert_eq!(on_disk, report.byte_length);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    fn bundle_metadata(variables: &[&str], frame_count: u64) -> Value {
+        json!({
+            "schemaVersion": 1,
+            "model": "TEST",
+            "product": "test",
+            "runTime": "2026-08-14T06:00:00Z",
+            "profile": "quality",
+            "time": {"firstForecastHour": 0, "stepHours": 1, "frameCount": frame_count},
+            "grid": {"width": 5, "height": 3, "firstLongitude": -180.0, "firstLatitude": 90.0,
+                     "longitudeStep": 72.0, "latitudeStep": -90.0, "wrapLongitude": true},
+            "variables": variables.iter().enumerate().map(|(index, id)| json!({
+                "numericId": index + 1, "id": id, "label": id, "unit": "1",
+                "quantization": {"type": "linear", "offset": 0.0, "scale": 1.0,
+                                 "minimumCode": 0, "maximumCode": 250, "nodataCode": 255},
+            })).collect::<Vec<_>>(),
+        })
+    }
+
+    fn dimensions(names: [&str; 3]) -> [String; 3] {
+        names.map(str::to_owned)
+    }
+
+    /// The part's key order is the reference's: `xue_profile` before
+    /// `xue_bundles`, bundles in the order given, then every variable array
+    /// bundle by bundle, the primary coordinates, and the other coordinates
+    /// in first-appearance order; arrays lead their `xue` block with the
+    /// bundle and carry the bundle's dimension names.
+    #[test]
+    fn a_part_orders_bundles_arrays_and_coordinates_like_the_reference() {
+        let root = std::env::temp_dir().join(format!("xue-shared-store-{}", std::process::id()));
+        let store = root.join(shared_store_name(None));
+        let wind = bundle_metadata(&["ugrd10m", "vgrd10m"], 3);
+        let rate = bundle_metadata(&["prate"], 2);
+        let height = bundle_metadata(&["hgt500"], 3);
+        let planes: Vec<Vec<u8>> = (0..3u8).map(|frame| vec![frame; 15]).collect();
+        let variable = |id: &str, count: usize| StoreVariable {
+            id: id.into(),
+            previous: true,
+            planes: planes[..count].iter().map(Vec::as_slice).collect(),
+        };
+        let write = |metadata: &Value, variables: Vec<StoreVariable<'_>>, bundle_id: &str, names: [&str; 3]| {
+            let codes = StoreCodes { metadata, variables, tile: (2, 2) };
+            write_bundle_arrays(&codes, &store, bundle_id, &dimensions(names), &pool()).expect("bundle")
+        };
+        let prate = write(&rate, vec![variable("prate", 2)], "prate", ["time_prate", "latitude", "longitude"]);
+        let wind10m = write(
+            &wind,
+            vec![variable("ugrd10m", 3), variable("vgrd10m", 3)],
+            "wind10m",
+            ["time", "latitude", "longitude"],
+        );
+        let hgt500 = write(&height, vec![variable("hgt500", 3)], "hgt500", ["time", "latitude_pgb", "longitude_pgb"]);
+
+        let (path, crc32) = write_part(&store, &[&prate, &wind10m, &hgt500]).expect("part");
+        assert_eq!(path, store.join("zarr.part.prate.json"));
+        assert!(!store.join("zarr.json").exists(), "the group document is the reference's to write");
+        let text = fs::read(&path).expect("part");
+        assert_eq!(crc32, format!("{:08x}", crc32_plane(&text)));
+        let part: Value = serde_json::from_slice(&text).expect("JSON");
+        let keys = |value: &Value| value.as_object().expect("object").keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys(&part), ["zarr_format", "node_type", "attributes", "consolidated_metadata"]);
+        assert_eq!(keys(&part["attributes"]), ["xue_profile", "xue_bundles"]);
+        assert_eq!(keys(&part["attributes"]["xue_bundles"]), ["prate", "wind10m", "hgt500"]);
+        assert_eq!(
+            keys(&part["consolidated_metadata"]["metadata"]),
+            [
+                "prate", "ugrd10m", "vgrd10m", "hgt500", "time", "latitude", "longitude", "time_prate",
+                "latitude_pgb", "longitude_pgb",
+            ]
+        );
+        let array = &part["consolidated_metadata"]["metadata"]["hgt500"];
+        assert_eq!(keys(&array["attributes"]["xue"]), ["bundle", "variable", "predictor"]);
+        assert_eq!(array["attributes"]["xue"]["bundle"], "hgt500");
+        assert_eq!(array["dimension_names"], json!(["time", "latitude_pgb", "longitude_pgb"]));
+        assert_eq!(keys(&wind10m.to_value())[..3], ["path", "bundle", "byteLength"]);
+        // A bundle's size is its arrays and the coordinates it uses.
+        let used: u64 = ["ugrd10m", "vgrd10m", "time", "latitude", "longitude"]
+            .iter()
+            .map(|name| walk(&store.join(name)))
+            .sum();
+        assert_eq!(wind10m.byte_length, used);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn names_outside_the_profile_are_refused() {
+        assert!(check_dimensions("prate", &dimensions(["time_prate", "latitude", "longitude"])).is_ok());
+        assert!(check_dimensions("prate", &dimensions(["time_gust", "latitude", "longitude"])).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude_pgb"])).is_ok());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude"])).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_", "longitude_"])).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_Pgb", "longitude_Pgb"])).is_err());
+        assert_eq!(shared_store_name(Some("half")), "bundles.half.zarr");
     }
 
     fn walk(path: &Path) -> u64 {
