@@ -266,7 +266,10 @@ def tiff_with_metadata(path: Path, xml: str | None, *, order: str = "<", magic: 
 
 
 def gdal_metadata(record: object, *, name: str = "XUE_FRAME", attributes: str = "") -> str:
-    return f'<GDALMetadata>\n  <Item name="{name}"{attributes}>{escape(json.dumps(record))}</Item>\n</GDALMetadata>'
+    """The document the GeoTIFF driver writes: the value escaped twice,
+    once into the item and once more with the document."""
+    text = escape(escape(json.dumps(record), {'"': "&quot;"}))
+    return f'<GDALMetadata>\n  <Item name="{name}"{attributes}>{text}</Item>\n</GDALMetadata>'
 
 
 class FrameRecordTests(TempRoot, unittest.TestCase):
