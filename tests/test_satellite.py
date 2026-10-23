@@ -1400,16 +1400,18 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for name in ("ir104.half.xue", "ir104.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
-    def test_the_ladder_is_half_quarter_and_eighth_in_that_order(self) -> None:
-        """A satellite source publishes three rungs (``variant_factors`` 2,
-        4, 8): each bundle's ``variants`` run half, quarter, eighth — the
-        manifest's ascending-factor, descending-width order — every rung
-        decimated from the full plane (so the eighth is every eighth row
-        and column, and equally the quarter's every second), cut with the
-        source tile over its factor, and reported per bundle in the same
-        order; the GFS-shaped sources still publish the half alone."""
+    def test_the_ladder_is_half_and_quarter_in_that_order(self) -> None:
+        """A satellite source publishes two rungs (``variant_factors`` 2,
+        4): each bundle's ``variants`` run half, quarter — the manifest's
+        ascending-factor, descending-width order — every rung decimated
+        from the full plane (so the quarter is every fourth row and
+        column, and equally the half's every second), cut with the source
+        tile over its factor, and reported per bundle in the same order;
+        the GFS-shaped sources still publish the half alone. No eighth:
+        the decimation to it stays covered by tests/test_srv.py, and a
+        published eighth stays readable from the manifest."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16), ("eighth", 8, 375, 8)]
+        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16)]
         for entry in manifest["bundles"]:
             bundle_id = entry["variable"]
             with self.subTest(bundle=bundle_id):
@@ -1417,7 +1419,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual([(variant["width"], variant["height"]) for variant in entry["variants"]], [(side, side) for _, _, side, _ in rungs])
                 self.assertTrue(all(variant["bandwidth"] > 0 for variant in entry["variants"]))
                 self.assertGreater(entry["variants"][0]["byteLength"], entry["variants"][1]["byteLength"])
-                self.assertGreater(entry["variants"][1]["byteLength"], entry["variants"][2]["byteLength"])
                 full = read_bundle(self.root / "out" / f"{bundle_id}.xue")
                 for tier, factor, side, tile in rungs:
                     rung = read_bundle(self.root / "out" / f"{bundle_id}.{tier}.xue")
@@ -1426,9 +1427,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.04 * factor, -0.04 * factor))
                     self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (80.72, 59.98))
                     self.assertEqual((rung.tiles.tile_width, rung.tiles.tile_height), (tile, tile))
-                    # 1500 / 32, 750 / 16 and 375 / 8 are all 46.875: the
-                    # same 47 x 47 tiles as the full tier, so tile n covers
-                    # the same ground at every rung.
+                    # 1500 / 32 and 750 / 16 are both 46.875: the same
+                    # 47 x 47 tiles as the full tier, so tile n covers the
+                    # same ground at every rung.
                     self.assertEqual(rung.tiles.count, full.tiles.count)
                     self.assertEqual(rung.metadata["time"], full.metadata["time"])
                     self.assertEqual(rung.metadata["variables"], full.metadata["variables"])
@@ -1442,7 +1443,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             [Path(variant["output"]).name for variant in self.report["variants"]],
             [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter", ".eighth")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter")))
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -1505,7 +1506,7 @@ class JapanSourceTests(unittest.TestCase):
         self.assertTrue(JAPAN.observation and JAPAN.series_file and JAPAN.fetched and JAPAN.live)
         self.assertEqual((JAPAN.manifest_model, JAPAN.product, JAPAN.latest_filename), ("HIMAWARI-JP", "ahi-japan-0p01", "latest-himawarijp.json"))
         self.assertEqual((JAPAN.platform, JAPAN.grid_step, JAPAN.region, JAPAN.cadence_seconds, JAPAN.window_hours), ("himawari", 0.01, JAPAN_REGION, 600, 3))
-        self.assertEqual((JAPAN.production_grid, JAPAN.tile, JAPAN.variant_factors), ((2600, 2200), (64, 64), (2, 4, 8)))
+        self.assertEqual((JAPAN.production_grid, JAPAN.tile, JAPAN.variant_factors), ((2600, 2200), (64, 64), (2, 4)))
         # The Dust RGB's windows, the true colour's bands and night
         # windows, no confidence.
         self.assertEqual(binconvert.published_bundle_ids(JAPAN), ("ir104", "ir039", "dustrgb", "truecolor"))

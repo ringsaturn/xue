@@ -153,8 +153,7 @@ named by `XUE_CMA_ARCHIVE`.
 The disks are on a 0.04° plate carrée grid, 60°S–60°N; `himawarijp` is
 Himawari-9 over a box around Japan at 0.01° (about 1.1 km, where the
 visible bands' 0.5–1 km sampling shows), built from the six of the disk's
-88 tiles that reach the box. All have half, quarter and eighth reduced
-tiers. Each publishes:
+88 tiles that reach the box. All have half and quarter reduced tiers. Each publishes:
 
 - `ir104`: 10.4 µm brightness temperature (180–332 K at 0.6 K; shown in
   °C).

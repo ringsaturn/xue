@@ -205,7 +205,7 @@ def parser() -> argparse.ArgumentParser:
     convert_bin_parser.add_argument(
         "--skip-variants",
         action="store_true",
-        help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter and .eighth tiers too)",
+        help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter tier too)",
     )
     convert_bin_parser.add_argument(
         "--xue",
@@ -268,7 +268,7 @@ def parser() -> argparse.ArgumentParser:
     build_bin_parser.add_argument(
         "--skip-variants",
         action="store_true",
-        help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter and .eighth tiers too)",
+        help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter tier too)",
     )
     build_bin_parser.add_argument(
         "--xue",

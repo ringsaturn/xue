@@ -165,7 +165,8 @@ class PosterTests(unittest.TestCase):
 
 class ResolutionLadderTests(unittest.TestCase):
     """Reduced-resolution variant bundles: the half rung every source
-    publishes, and the quarter and eighth the satellite disks add."""
+    publishes, the quarter the satellite disks and 0.1° grids add, and the
+    eighth that a run published with it still names."""
 
     def test_a_tier_is_named_by_its_factor_and_nothing_else_has_a_name(self) -> None:
         self.assertEqual(VARIANT_TIERS, {2: "half", 4: "quarter", 8: "eighth"})

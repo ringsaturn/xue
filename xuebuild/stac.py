@@ -1359,7 +1359,7 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
     """Every artifact a manifest names, as STAC assets keyed by bundle:
     ``<bundle>`` (and ``<bundle>-xue``) for the full tier, ``<bundle>-<tier>``
     for each reduced one (``-half``; on the satellite disks ``-quarter``
-    and ``-eighth`` too), ``<bundle>-poster``, ``<bundle>-video`` with its
+    too, and ``-eighth`` on what was published with it), ``<bundle>-poster, ``<bundle>-video`` with its
     ``-video-index``, and ``manifest`` for the manifest itself under the
     ``?v=`` a viewer fetches it with. Hrefs are relative to the Item, which
     sits beside the manifest."""

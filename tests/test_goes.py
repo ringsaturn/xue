@@ -486,12 +486,12 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             self.assertGreaterEqual(int(gun[codes > 0].min()), 1)
             self.assertLessEqual(int(gun[codes > 0].max()), 251)
 
-    def test_the_ladder_is_three_rungs_in_ascending_factor_order(self) -> None:
-        """The satellite ladder: half, quarter and eighth per bundle, in
-        that order, each decimated from the full plane and cut with the
-        source tile over its factor."""
+    def test_the_ladder_is_two_rungs_in_ascending_factor_order(self) -> None:
+        """The satellite ladder: half and quarter per bundle, in that
+        order, each decimated from the full plane and cut with the source
+        tile over its factor."""
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
-        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16), ("eighth", 8, 375, 8)]
+        rungs = [("half", 2, 1500, 32), ("quarter", 4, 750, 16)]
         for entry in manifest["bundles"]:
             bundle_id = entry["variable"]
             with self.subTest(bundle=bundle_id):

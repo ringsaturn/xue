@@ -973,10 +973,10 @@ class SourceLadderTests(unittest.TestCase):
         for source_id, factors in ladders.items():
             with self.subTest(source=source_id):
                 # A 0.1° plane (IFS HRES, the IFS open data at 0.1°) is 6.5 M
-                # cells, past the shell's frame budget, so it takes two rungs;
-                # every other grid the half.
+                # cells and a satellite disk 9 M, past the shell's frame
+                # budget, so they take two rungs; every other grid the half.
                 expected = (
-                    (2, 4, 8) if source_id in satellites else (2, 4) if source_id in ("ifshres", "ifs") else () if source_id in ("woof", "efas", "efaswb") else (2,)
+                    (2, 4) if source_id in satellites | {"ifshres", "ifs"} else () if source_id in ("woof", "efas", "efaswb") else (2,)
                 )
                 self.assertEqual(factors, expected)
 

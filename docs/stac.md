@@ -120,7 +120,7 @@ Assets. One per artifact, keyed by bundle:
 | `<bundle>` | the Zarr store (`<bundle>.zarr`), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
 | `<bundle>-series` | the series companion (`<bundle>.series.zarr`) when the run publishes one, marked `xue:series: true` (`docs/zarr-profile.md`, "Series store") | `application/vnd.zarr` | `data` |
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
-| `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` and `-eighth` too on the satellite disks (`SourceSpec.variant_factors`) | | `data`, `overview` |
+| `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` too on the satellite disks and the 0.1° grids (`SourceSpec.variant_factors`), `-eighth` on a run published with it | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |
 | `<bundle>-video`, `-video-index` | the H.264 companion and its index | `video/H264`, `application/json` | `data`, `metadata` |
 

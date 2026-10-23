@@ -20201,8 +20201,7 @@
       ],
       "variantFactors": [
         2,
-        4,
-        8
+        4
       ],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
@@ -20359,8 +20358,7 @@
       ],
       "variantFactors": [
         2,
-        4,
-        8
+        4
       ],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
@@ -20514,8 +20512,7 @@
       ],
       "variantFactors": [
         2,
-        4,
-        8
+        4
       ],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
@@ -20669,8 +20666,7 @@
       ],
       "variantFactors": [
         2,
-        4,
-        8
+        4
       ],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
@@ -20812,8 +20808,7 @@
       ],
       "variantFactors": [
         2,
-        4,
-        8
+        4
       ],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
