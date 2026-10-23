@@ -90,9 +90,10 @@
     <dd>The catalog's contract: the layout, what each Catalog, Collection and
       Item carries, and how every document is derived from a run's manifest.</dd>
     <dt><a href="$docs_url/zarr-profile.md">docs/zarr-profile.md</a></dt>
-    <dd>The Zarr v3 profile of a store (<code>&lt;bundle&gt;.zarr/</code>): one
-      <code>uint8</code> array per variable, one shard, six-frame time chunks,
-      CF scaling attributes, so <code>xarray.open_zarr</code> reads it.</dd>
+    <dd>The Zarr v3 profile of a store (<code>bundles.zarr/</code>, every
+      bundle of one resolution tier of a run): one <code>uint8</code> array
+      per variable, one shard, six-frame time chunks, CF scaling attributes,
+      so <code>xarray.open_zarr</code> reads it.</dd>
     <dt><a href="$docs_url/format.md">docs/format.md</a></dt>
     <dd>The quantization, codebooks and temporal residual coding behind the
       stores (the <code>.xue</code> container they are derived from).</dd>
@@ -141,9 +142,10 @@ $collection_rows
       reads (<code>no-cache</code>); its STAC face is
       <code>&lt;source&gt;/collection.json</code>.</dd>
     <dt><code>&lt;source&gt;.&lt;run&gt;/</code></dt>
-    <dd>One immutable run: <code>manifest.json</code>, one
-      <code>&lt;bundle&gt;.zarr/</code> store per variable with its reduced
-      tiers, posters, and <code>item.json</code>. A rolling window (radar,
+    <dd>One immutable run: <code>manifest.json</code>, the shared store
+      <code>bundles.zarr/</code> holding every bundle and one more per
+      reduced tier (<code>bundles.half.zarr/</code>), posters, and
+      <code>item.json</code>. A rolling window (radar,
       satellite) adds a round directory, <code>&lt;HHMM&gt;/</code>.</dd>
     <dt><code>&lt;product&gt;.&lt;issue&gt;/</code></dt>
     <dd>One issue of a point product: <code>index.json</code>, the NDJSON file

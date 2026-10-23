@@ -500,6 +500,11 @@ class StoreReaderTests(unittest.TestCase):
             cls.bundles[variable_id] = binformat.read_bundle(path)
             zarrstore.export_bundle(path, cls.scratch / f"{variable_id}.zarr")
             zarrstore.export_bundle(path, cls.scratch / f"{variable_id}.delta.zarr", delta=True, index_location="start")
+        # The run's shared store (profile 2): every bundle in one, opened by
+        # (store, bundle id).
+        zarrstore.export_shared_bundles(
+            [(variable_id, cls.scratch / f"{variable_id}.xue") for variable_id in PLANES], cls.scratch / "bundles.zarr"
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -534,7 +539,7 @@ class StoreReaderTests(unittest.TestCase):
         with serve(self.scratch.parent) as (base_url, _requests):
             base = f"{base_url}{self.scratch.name}/"
             for variable_id in PLANES:
-                for store_name in (f"{variable_id}.zarr", f"{variable_id}.delta.zarr"):
+                for store_name in (f"{variable_id}.zarr", f"{variable_id}.delta.zarr", "bundles.zarr"):
                     with self.subTest(store=store_name):
                         array = self.open(base, variable_id, store_name)
                         codes = store.read_codes(array, windows)

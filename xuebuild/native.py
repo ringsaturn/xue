@@ -7,7 +7,17 @@ with GDAL, grib-rs and zstd linked in, and is held to the Python encoder by
 byte-for-byte identical output (`docs/encoder.md`). Installing it is what
 lets a build skip the per-plane `gdal_translate` and `zstd` subprocesses.
 
-Two things the native encoder does not do, and this module supplies:
+Three things the native encoder does not do, and this module supplies:
+
+* the shared stores' group documents. The wheel writes every bundle's
+  arrays and coordinates into ``bundles[.<tier>].zarr`` and one partial
+  group document per store (``zarr.part.<first bundle>.json``), exactly the
+  bytes the reference writes there, and its manifest entries carry that
+  part's CRC-32. Unless the build is one job of a fanned-out publish,
+  :func:`zarrstore.finalize_store` then writes each store's ``zarr.json``
+  from its part — the reference's own code, so the group document has one
+  implementation — and the entries are stamped with its CRC-32
+  (``docs/encoder.md``, "Shared stores").
 
 * the optional H.264 companions. The codes the native encoder wrote are read
   straight back out of the store (or the container, where only that was
@@ -27,6 +37,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -145,7 +156,7 @@ def _bundle_codes(bundle: dict[str, Any], module: Any) -> tuple[dict[str, Any], 
     either way. ``None`` for a multi-variable bundle."""
     if "zarr" in bundle:
         store = Path(bundle["zarr"]["path"])
-        metadata = zarrstore.read_json(store / "zarr.json")["attributes"]["xue"]
+        metadata = zarrstore.bundle_metadata(store, bundle["variable"])
         if len(metadata["variables"]) != 1:
             return None
         _unit_seconds, offsets = binformat.time_axis(metadata)
@@ -281,20 +292,55 @@ def _manifest_entry(entry: dict[str, Any], video: dict[str, Any] | None, manifes
     return ordered
 
 
+def _stamp_store_crcs(entry: dict[str, Any], stamps: dict[str, str]) -> None:
+    """Set the ``crc32`` of every store descriptor of one manifest entry or
+    build report that names a finalized shared store (``stamps``: store
+    directory name → its group document's CRC-32)."""
+    for node in (entry, *entry.get("variants", [])):
+        store = node.get("zarr")
+        if isinstance(store, dict) and "path" in store and Path(store["path"]).name in stamps:
+            store["crc32"] = stamps[Path(store["path"]).name]
+
+
+def _finalize_shared_stores(output_dir: Path, bundle_order: list[str]) -> dict[str, str]:
+    """Write the group document of every shared store the wheel left parts
+    in, and return each store's CRC-32 by its directory name."""
+    stamps: dict[str, str] = {}
+    for store in sorted(output_dir.glob("bundles*.zarr")):
+        if store.is_dir() and zarrstore.is_shared_store_path(store.name) and zarrstore.find_parts(store):
+            stamps[store.name] = zarrstore.finalize_store(store, bundle_order, remove_parts=True)
+    return stamps
+
+
+def _wheel_manifest_path(manifest_path: Path) -> Path:
+    """Where the wheel writes its manifest: beside the real one, so its
+    paths resolve the same, but under a name no reader or glob takes, since
+    the real one is written from it here (with the group documents' CRCs
+    and the videos) under the caller's own ``force``."""
+    return manifest_path.with_name(f".{manifest_path.name}.native")
+
+
 def _rewrite_manifest(
+    wheel_manifest: Path,
     manifest_path: Path,
     videos: dict[str, dict[str, Any]],
+    stamps: dict[str, str],
     *,
     require_core: bool,
+    force: bool,
 ) -> dict[str, Any]:
-    """Fold the video descriptors into the manifest the native encoder wrote.
+    """The manifest from the one the native encoder wrote: the video
+    descriptors folded in and the shared stores' CRCs stamped.
 
     Rebuilt through `build_bin_manifest` rather than edited in place, so the
     result is validated and its keys land in the order the reference writes
     them. The run time and forecast hours come back off the manifest itself:
     the native encoder already derived them from the run's own axis.
     """
-    existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+    existing = json.loads(wheel_manifest.read_text(encoding="utf-8"))
+    wheel_manifest.unlink()
+    for entry in existing["bundles"]:
+        _stamp_store_crcs(entry, stamps)
     expected_hours = existing["forecastHours"]
     payload = build_bin_manifest(
         _run_time(existing),
@@ -310,7 +356,7 @@ def _rewrite_manifest(
     write_bin_manifest(
         manifest_path,
         payload,
-        force=True,
+        force=force,
         expected_hours=expected_hours,
         require_core_variables=require_core,
     )
@@ -339,6 +385,7 @@ def convert_bin(
     zarr: bool = True,
     container: bool = False,
     series: bool = True,
+    partial: bool = False,
 ) -> dict[str, Any]:
     """`binconvert.convert_bin`, run through the native encoder.
 
@@ -355,6 +402,14 @@ def convert_bin(
         if isinstance(input_path, (str, Path))
         else [Path(item) for item in input_path]
     )
+    # A whole build owns the run's shared stores and starts them empty, as
+    # the reference does; the wheel cannot tell a whole build from a
+    # fanned-out job (which shares the stores with the run's other jobs),
+    # so it only ever drops the group document, and the clearing is here.
+    if zarr and not partial:
+        for store in Path(output_dir).glob("bundles*.zarr"):
+            if store.is_dir() and zarrstore.is_shared_store_path(store.name):
+                shutil.rmtree(store)
     LOG.info("converting with the native encoder (%s %s)", DISTRIBUTION, version() or "dev")
     report = module.convert_bin(
         inputs,
@@ -368,12 +423,12 @@ def convert_bin(
         zstd_level=zstd_level,
         require_complete=require_complete,
         expected_hours=expected_hours,
-        manifest_path=manifest_path,
+        manifest_path=_wheel_manifest_path(Path(manifest_path)) if manifest_path is not None else None,
         # The pointer is written below, once the manifest is final: it
         # carries the manifest's CRC32 and the video descriptors change it.
         latest_path=None,
         run_id=None,
-        force=force,
+        force=True,
         skip_variants=skip_variants,
         bbox=bbox,
         bundle_ids=list(bundle_ids) if bundle_ids is not None else None,
@@ -405,6 +460,14 @@ def convert_bin(
             "it — release or upgrade the wheel, or set XUE_ENCODER=python"
         )
 
+    stamps: dict[str, str] = {}
+    if zarr and not partial:
+        stamps = _finalize_shared_stores(Path(output_dir), list(written))
+        for bundle in report["bundles"]:
+            _stamp_store_crcs(bundle, stamps)
+        for variant in report.get("variants", []):
+            _stamp_store_crcs(variant, stamps)
+
     videos: dict[str, dict[str, Any]] = {}
     if not skip_video:
         videos = _video_reports(source, report["bundles"], Path(output_dir), module)
@@ -412,7 +475,14 @@ def convert_bin(
 
     if manifest_path is not None:
         require_core = bundle_ids is None
-        payload = _rewrite_manifest(Path(manifest_path), videos, require_core=require_core)
+        payload = _rewrite_manifest(
+            _wheel_manifest_path(Path(manifest_path)),
+            Path(manifest_path),
+            videos,
+            stamps,
+            require_core=require_core,
+            force=force,
+        )
         LOG.info("wrote manifest %s", manifest_path)
         if latest_path is not None and run_id is not None:
             write_pointer_to_manifest(

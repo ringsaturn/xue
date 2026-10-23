@@ -4,7 +4,8 @@ requests, the way any outside reader does (``docs/zarr-profile.md``,
 
 The path: the live pointer (``latest*.json``) → the run's manifest → a
 bundle's ``zarr`` descriptor → the store's group ``zarr.json`` (its
-``attributes.xue`` is the bundle metadata, parsed by :mod:`binformat`'s own
+``attributes.xue``, or ``attributes.xue_bundles[<bundle>]`` of a shared store,
+is the bundle metadata, parsed by :mod:`binformat`'s own
 validator) → the array's ``zarr.json`` → the shard index, once per array, as
 the suffix range ``bytes=-N`` and CRC-32C checked → only the inner chunks of
 the tiles a set of windows covers, the ranges of one time chunk sorted and
@@ -268,10 +269,23 @@ def open_array(run: RunRef, bundle_id: str, fetch: Fetch = http_fetch) -> StoreA
     root = urllib.parse.urljoin(run.directory_url, descriptor["path"].rstrip("/") + "/")
     group = _json(fetch, _versioned(root + "zarr.json", crc32))
     attributes = group.get("attributes") or {}
-    if attributes.get("xue_profile") != zarrstore.PROFILE_VERSION or "xue" not in attributes:
-        raise StoreError(f"{root}: not a Xue profile {zarrstore.PROFILE_VERSION} store")
-    metadata = parse_bundle_metadata(attributes["xue"])
-    variables = attributes["xue"]["variables"]
+    # A run's shared store (profile 2) carries every bundle of its tier and
+    # is opened by (store, bundle id); a one-bundle store (profile 1) is
+    # what runs published before it carry.
+    if attributes.get("xue_profile") == zarrstore.SHARED_PROFILE_VERSION:
+        try:
+            zarrstore.parse_shared_group(group, root)
+        except XueError as exc:
+            raise StoreError(str(exc)) from exc
+        block = attributes["xue_bundles"].get(bundle_id)
+        if not isinstance(block, dict):
+            raise StoreError(f"{root}: the shared store carries no bundle {bundle_id}")
+    elif attributes.get("xue_profile") == zarrstore.PROFILE_VERSION and isinstance(attributes.get("xue"), dict):
+        block = attributes["xue"]
+    else:
+        raise StoreError(f"{root}: not a Xue store of a profile this reader implements")
+    metadata = parse_bundle_metadata(block)
+    variables = block["variables"]
     if len(variables) != 1:
         raise StoreError(f"{root}: {bundle_id} is not a scalar bundle")
     variable = variables[0]
@@ -294,9 +308,9 @@ def open_array(run: RunRef, bundle_id: str, fetch: Fetch = http_fetch) -> StoreA
         crc32=crc32,
         variable_id=variable_id,
         unit=str(variable.get("unit", "")),
-        run_time=datetime.fromisoformat(attributes["xue"]["runTime"]).astimezone(UTC),
+        run_time=datetime.fromisoformat(block["runTime"]).astimezone(UTC),
         offsets_seconds=[offset * metadata.unit_seconds for offset in metadata.frame_offsets],
-        grid=attributes["xue"]["grid"],
+        grid=block["grid"],
         geometry=geometry,
         delta=delta,
         index_location=index_location,

@@ -34,7 +34,7 @@ def _load(source: str, bundle: str, cache: dict):
     if bundle not in cache:
         item = cache["_item"]
         stores = X.store_assets(item)
-        cache[bundle] = X.open_store(stores[bundle]) if bundle in stores else None
+        cache[bundle] = X.open_store(stores[bundle], bundle) if bundle in stores else None
     return cache[bundle]
 
 

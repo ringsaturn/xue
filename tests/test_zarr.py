@@ -635,8 +635,9 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("gdal_translate"), "the reference encoder needs a system GDAL")
 class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
-    """`convert_bin(..., zarr=True, container=True)`: one store beside every bundle and
-    variant, named in the manifest, and the bundles unchanged by it."""
+    """`convert_bin(..., zarr=True, container=True)`: every bundle and variant
+    in its tier's shared store, named in the manifest, and the bundles
+    unchanged by it."""
 
     root_prefix = "xue-zarr-build-"
 
@@ -664,12 +665,20 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
             for artifact in (bundle, *bundle.get("variants", [])):
                 with self.subTest(path=artifact["path"]):
                     store = artifact["zarr"]
-                    self.assertEqual(store["path"], artifact["path"].removesuffix(".xue") + ".zarr")
-                    self.assertEqual(store["byteLength"], zarrstore.store_byte_length(self.with_zarr / store["path"]))
-                    root = (self.with_zarr / store["path"] / "zarr.json").read_bytes()
-                    self.assertEqual(store["crc32"], f"{binformat.crc32_plane(root):08x}")
+                    tier = artifact["path"].removesuffix(".xue").split(".")[1:]
+                    self.assertEqual(store["path"], ".".join(["bundles", *tier, "zarr"]))
+                    root_dir = self.with_zarr / store["path"]
                     bundle_file = binformat.read_bundle(self.with_zarr / artifact["path"])
-                    self.assertEqual(json.loads(root)["attributes"]["xue"], bundle_file.metadata)
+                    names = list(bundle_file.variable_ids.values())
+                    used = [*names, *zarrstore.array_dimensions(root_dir, names[0])]
+                    self.assertEqual(
+                        store["byteLength"],
+                        sum(path.stat().st_size for name in used for path in (root_dir / name).rglob("*") if path.is_file()),
+                        "a bundle's share: its arrays and the coordinates it uses",
+                    )
+                    root = (root_dir / "zarr.json").read_bytes()
+                    self.assertEqual(store["crc32"], f"{binformat.crc32_plane(root):08x}")
+                    self.assertEqual(zarrstore.bundle_metadata(root_dir, bundle["variable"]), bundle_file.metadata)
                     for numeric_id, name in bundle_file.variable_ids.items():
                         np.testing.assert_array_equal(
                             zarrstore.read_plane(self.with_zarr / store["path"], name, 0),

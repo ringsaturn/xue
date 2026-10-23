@@ -3,8 +3,9 @@
 The same encoder as the live feed, pointed at a past cycle and written into
 a directory of its own, so an archived run can be replayed (backtesting, a
 case study) without touching the bucket. The output is an ordinary schema v5
-manifest and the bundles' Zarr stores — the map store and, for the source's
-``series_bundle_ids``, the series companion — and nothing else: no ``.xue``
+manifest and the bundles' Zarr stores — the shared map store ``bundles.zarr``
+and, for the source's ``series_bundle_ids``, each one's series companion —
+and nothing else: no ``.xue``
 container, no video, no reduced-resolution variants, no live pointer, no
 STAC. :func:`xuebuild.showcase.build_case` is this plus a catalog row.
 """

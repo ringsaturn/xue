@@ -69,10 +69,11 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
   (fail without it) or `python` (the reference pipeline). Both produce
   identical bytes.
 - `--hours` may be any hour on the model's axis.
-- `build-bin` (and `convert-bin`, `showcase build`) writes per bundle a
-  `<bundle>.zarr/` store straight from the codes, with `--xue` the `.xue`
-  container beside it from the same codes; the reduced tiers (`.half`, plus
-  `.quarter` on satellites and the 0.1° grids), a first-frame poster and, where
+- `build-bin` (and `convert-bin`, `showcase build`) writes every bundle
+  into the run's shared store `bundles.zarr/` straight from the codes, with
+  `--xue` each bundle's `.xue` container beside it from the same codes; the
+  reduced tiers (`bundles.half.zarr/`, plus `.quarter` on satellites and the
+  0.1° grids), a first-frame poster and, where
   the source enables it, H.264 companions. `--skip-variants` /
   `--skip-video` turn those off. The pressure family gets no poster or
   companion: contours need exact codes.

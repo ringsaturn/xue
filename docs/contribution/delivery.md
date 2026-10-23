@@ -6,9 +6,19 @@ The pointer/manifest contract is in
 
 ## Zarr store
 
-Each bundle is published as `<bundle>.zarr/`; [zarr-profile.md](../zarr-profile.md)
-is normative. Choices the spec does not explain:
+Every bundle of one resolution tier of a run or round is published in one
+shared store, `bundles.zarr/` / `bundles.<tier>.zarr/` (profile 2; a series
+store and every run published earlier are one store per bundle, profile 1);
+[zarr-profile.md](../zarr-profile.md) is normative. Choices the spec does
+not explain:
 
+- **One store per tier, not per bundle.** A per-bundle store repeated its
+  group document and three coordinate arrays (seven objects) beside every
+  bundle's few shards: 88 % of the objects a run wrote, at a Class A
+  operation each. Shared, they are written once per tier; the group
+  document is then the one object several bundles share, so it is a merge
+  of per-bundle parts written last (`assemble-run` in a fan-out) and its
+  CRC-32 is every entry's `?v=`.
 - **One shard per array** (whole axis, whole grid). A bucket bills per
   object: per-time-chunk shards made a GFS run ~5 000 objects. The shard
   index, one suffix range, is the whole index. Readers take the shard length
@@ -20,12 +30,15 @@ is normative. Choices the spec does not explain:
 
 Writing:
 
-- A build writes each store straight from its codes: `binconvert` per
-  bundle job through `zarrstore.write_store` over a `CodesSource` (NumPy
-  only), the native encoder through `encode/zarrstore.rs`, both with up to
-  four tiers in flight over one compression pool. A store is a function of
-  the metadata, the codes, the tile and the predictors, so no container is
-  read; `tests/test_native.py` and `tests/test_zarr.py` hold the two
+- A build writes each bundle's arrays straight from its codes: `binconvert`
+  per bundle job through `zarrstore.write_bundle_arrays` over a
+  `CodesSource` (NumPy only), the native encoder through
+  `encode/zarrstore.rs`, both with up to four tiers in flight over one
+  compression pool, then the store's part and group document
+  (`write_part`, `finalize_store`; the native path's group document is
+  written by `xuebuild/native.py`, [encoder.md](../encoder.md)). A
+  bundle's arrays are a function of the metadata, the codes, the tile, the
+  predictors and its dimension names, so no container is read; `tests/test_native.py` and `tests/test_zarr.py` hold the two
   writers byte-identical. Every chunk is decompressed again and compared
   after compression, and the native writer parses each document and index
   back with the decoder's own validators.
@@ -42,8 +55,10 @@ Writing:
 
 Manifest: a bundle entry and each variant may carry `zarr: {path,
 byteLength, crc32}` (`crc32` of the group `zarr.json`, also the store's
-`?v=`), validated by all three validators and carried through
-`assemble-run`. The container fields are present whole or absent whole; an
+`?v=`, the same on every entry naming a shared store; `byteLength` the
+bundle's share), validated by all three validators and stamped by
+`assemble-run`. Entries of one tier share the store's path, the one
+exception to the validators' unique-path rule. The container fields are present whole or absent whole; an
 entry with neither delivery is refused.
 
 Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):

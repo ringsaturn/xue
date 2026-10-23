@@ -81,8 +81,10 @@ python scripts/xue_stac.py box mrms cref 30 45 -100 -80 --time 2026-09-19T05:00Z
 ```
 
 Anything else is a few lines of xarray through `xue_stac.open_bundle`,
-`sel_box`, `sel_time`, `sel_point` (`references/stac-access.md` has the
-store facts: latitude runs north→south, `prate` needs the log codebook,
+`sel_box`, `sel_time`, `sel_point`. A run's bundles share one store per
+tier (`bundles.zarr`), so open a bundle by its id (`open_store(url,
+bundle)`), never the store's whole dataset as one bundle
+(`references/stac-access.md` has the store facts: latitude runs north→south, `prate` needs the log codebook,
 disks past the antimeridian, cost per read). Read the `full` tier for
 numbers.
 

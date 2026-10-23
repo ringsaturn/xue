@@ -136,16 +136,35 @@ regenerating the registry fixtures ([testing.md](testing.md)).
   fetched window (`run` = first hour); a window the archive cannot fill is
   refused. `showcase refresh` rewrites a sidecar without a rebuild. A
   fetched case is built by `localrun.build_local_run` plus a catalog row.
+- **`zarrstore.py`**: the store writers and NumPy readers. A run's map
+  stores are shared ([`zarr-profile.md`](../zarr-profile.md), profile 2):
+  `convert_bin` writes each bundle's arrays and the coordinates its
+  dimension names call for into `bundles[.<tier>].zarr`
+  (`write_bundle_arrays`, concurrently), then the part over the build's
+  bundles (`write_part`, `zarr.part.<first bundle>.json`) and, unless
+  `partial`, the group document from it (`finalize_store`), whose CRC-32
+  every entry naming the store carries. The dimension names are
+  `binconvert.store_dimensions`, a function of the source registry alone
+  (`time_<bundle id>` for an analysis-optional scalar or a static field,
+  `latitude_<family>` / `longitude_<family>` off the primary grid), so a
+  subset build writes the objects a whole build does. Series stores stay
+  one-bundle (profile 1, `write_store`); the readers open both profiles,
+  a shared one by bundle id (`bundle_metadata`).
 - **`assemble.py`**: `publish.yml` fans a run out: `bundle-groups` packs
   bundles into at most `max_jobs` jobs of similar cost; each job runs
-  `build-bin --bundles …` into `data/raw/partial/<group>/` and writes
-  `manifest.part.<group>.json` (never uploaded, no STAC); finalize runs
-  `assemble-run` (each bundle once, core set required) and writes the
-  pointer. A top-up of a live cycle builds only missing bundles
-  (`--base-manifest` against `make live-manifest`); `force` rebuilds all.
-  `tests/test_assemble.py` holds split and top-up builds byte-identical to a
-  whole one, so **nothing cross-variable may enter a bundle or its manifest
-  entry**.
+  `build-bin --bundles …` (`partial=True`) into `data/raw/partial/<group>/`
+  and writes `manifest.part.<group>.json` and each shared store's part
+  (never uploaded, no STAC); finalize runs `assemble-run` (each bundle once,
+  core set required), which merges the parts into the manifest and each
+  store's group document and stamps its CRC-32 on every entry naming it,
+  and writes the pointer. A top-up of a live cycle builds only missing
+  bundles (`--base-manifest` against `make live-manifest`, `--base-stores`
+  against `make live-store-groups`), rewriting the group documents under a
+  new `?v=`; `force` rebuilds all. `tests/test_assemble.py` holds split and
+  top-up builds byte-identical to a whole one, store and group documents
+  included, so **nothing cross-variable may enter a bundle's arrays or its
+  manifest entry**: the group document is the one object several bundles
+  share, and it is a merge of per-bundle parts.
 
 ## Local and archived runs
 
@@ -163,9 +182,9 @@ make run-local MODEL=hrrr RUN=2025011512 HOURS=48 BBOX=-107,25.5,-93,37 BUNDLES=
   `--bbox W,S,E,N` (write it `--bbox=…` when west is negative) to the whole
   domain, and `--bundles` to every bundle the source publishes. Only those
   bundles' inputs are fetched.
-- The output, `data/local/<model>.<run>/`, is the manifest and one Zarr
-  store per bundle, plus `<bundle>.series.zarr` for the source's
-  `series_bundle_ids` (`--no-series` drops them) and the posters the
+- The output, `data/local/<model>.<run>/`, is the manifest and the shared
+  Zarr store `bundles.zarr` holding every bundle, plus
+  `<bundle>.series.zarr` for the source's `series_bundle_ids` (`--no-series` drops them) and the posters the
   manifest names. There is no `.xue`, video, reduced-resolution variant,
   live pointer or STAC.
 - Raw GRIB goes to `data/raw/local/<model>.<run>/`, apart from the live

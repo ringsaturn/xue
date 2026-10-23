@@ -36,7 +36,14 @@ export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM
 # Prints the CRC32 of the file it is given, as the pointers carry it.
 CRC32 = $(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')"
 
-.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-window
+.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-store-groups live-window
+
+# A shared store's group document (docs/zarr-profile.md): named by every
+# entry of its tier and rewritten by a top-up under a new ?v=, so it goes up
+# with the manifest, never with a fanned-out job's arrays.
+SHARED_GROUPS = bundles*.zarr/zarr.json
+# A partial group document, merged by assemble-run; never uploaded.
+STORE_PARTS = *zarr.part.*.json
 
 # Run assets are immutable (?v=<crc32>); the pointer goes last and is what takes
 # the run live. `cp`, not `sync`: a fresh directory has nothing to skip, so a
@@ -48,17 +55,19 @@ upload-r2: ## Upload one built run (RUN, ROUND), warm the edge, take it live
 	segments=web/public/data/$(MODEL).segments; \
 	if [ -n "$(ROUND)" ] && [ -d "$$segments" ]; then \
 		$(S3) cp $$segments $(R2_ROOT)/$(MODEL).segments/ --recursive --no-progress $(DRY_RUN) \
-			--cache-control "public, max-age=31536000, immutable"; \
+			--exclude "$(STORE_PARTS)" --cache-control "public, max-age=31536000, immutable"; \
 	fi; \
 	$(S3) cp $$dir $(R2_ROOT)/$(RUN_DIR)/ --recursive --no-progress $(DRY_RUN) \
-		--exclude "manifest.part.*.json" --exclude "$(STAC_ITEM)" \
+		--exclude "manifest.part.*.json" --exclude "$(STORE_PARTS)" --exclude "$(STAC_ITEM)" \
 		--cache-control "public, max-age=31536000, immutable"; \
 	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) DRY_RUN=$(DRY_RUN); \
 	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || $(MAKE) --no-print-directory warm-r2 MODEL=$(MODEL) RUN=$(RUN) ROUND=$(ROUND) \
 		|| echo "warming the edge cache failed; the run goes live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 
-# One piece of a fanned-out publish (no manifest; parts stay local). `cp`, not
+# One piece of a fanned-out publish (no manifest; parts stay local). Its
+# shared stores' arrays are warmed by upload-r2-manifest once their group
+# documents, and so their ?v=, exist. `cp`, not
 # `sync`: concurrent pieces each listing the prefix drew ServiceUnavailable
 # from R2. Three attempts, since one refused object should not fail a publish.
 upload-r2-bundles: ## Upload this machine's bundle groups of a fanned-out run
@@ -68,6 +77,7 @@ upload-r2-bundles: ## Upload this machine's bundle groups of a fanned-out run
 	for attempt in 1 2 3; do \
 		$(S3) cp $$dir $(R2_ROOT)/$(MODEL).$(RUN)/ --recursive --no-progress $(DRY_RUN) \
 			--exclude "manifest.json" --exclude "manifest.part.*.json" \
+			--exclude "$(STORE_PARTS)" --exclude "$(SHARED_GROUPS)" \
 			--cache-control "public, max-age=31536000, immutable" && break; \
 		[ "$$attempt" -lt 3 ] || { echo "uploading the bundles failed three times"; exit 1; }; \
 		echo "upload attempt $$attempt failed; retrying in $$((attempt * 20)) s"; sleep $$((attempt * 20)); \
@@ -81,11 +91,14 @@ upload-r2-manifest: ## Upload an assembled manifest, then take the run live
 	@set -e; dir=web/public/data/$(MODEL).$(RUN); \
 	[ -f "$$dir/manifest.json" ] || { echo "no manifest at $$dir/manifest.json: run assemble-run first"; exit 1; }; \
 	$(MAKE) --no-print-directory check-pointer MODEL=$(MODEL) RUN=$(RUN); \
+	$(S3) cp $$dir $(R2_ROOT)/$(MODEL).$(RUN)/ --recursive --no-progress $(DRY_RUN) \
+		--exclude "*" --include "$(SHARED_GROUPS)" \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	$(S3) cp $$dir/manifest.json $(R2_ROOT)/$(MODEL).$(RUN)/manifest.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN); \
-	[ -n "$(DRY_RUN)" ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --manifest-only \
-		|| echo "warming the manifest failed; the run goes live cold"; \
+	[ -n "$(DRY_RUN)" ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --assembled \
+		|| echo "warming the manifest and the shared stores failed; they go live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 
 # Not ?v=-addressed (a top-up rewrites it in place), so served no-cache.
@@ -244,6 +257,19 @@ live-manifest: ## Print the live run's manifest
 	@set -e; path=$$($(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors 2>/dev/null | jq -r .manifestPath || true); \
 	[ -n "$$path" ] || exit 0; \
 	$(S3) cp $(R2_ROOT)/$$path - --only-show-errors
+
+# The live run's shared group documents, the base a top-up merges its parts
+# onto (`assemble-run --base-stores`): every shared store LIVE_MANIFEST (the
+# file `make live-manifest` printed) names, fetched to OUT/<store>/zarr.json.
+# A live run published before shared stores names none, and OUT stays empty.
+live-store-groups: ## Fetch the shared group documents LIVE_MANIFEST names into OUT
+	@set -e; [ -n "$(OUT)" ] && [ -f "$(LIVE_MANIFEST)" ] || { echo "pass LIVE_MANIFEST=<file> OUT=<directory>"; exit 1; }; \
+	mkdir -p $(OUT); \
+	for store in $$(jq -r '.bundles[] | ., (.variants // [])[] | .zarr.path // empty' $(LIVE_MANIFEST) \
+			| grep -E '(^|/)bundles(\.[a-z]+)?\.zarr$$' | grep -v 'bundles\.series\.zarr$$' | sort -u); do \
+		mkdir -p $(OUT)/$$store; \
+		$(S3) cp $(R2_ROOT)/$(MODEL).$(RUN)/$$store/zarr.json $(OUT)/$$store/zarr.json --only-show-errors; \
+	done
 
 live-window: ## Print the live rolling window's window.json
 	@set -e; path=$$($(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors 2>/dev/null | jq -r .manifestPath || true); \

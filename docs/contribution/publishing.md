@@ -47,31 +47,45 @@ passing unnoticed.
 `publish.yml` builds a run in pieces: `xuebuild bundle-groups` packs the
 bundles into at most `max_jobs` groups of roughly equal cost, each group
 builds in its own job (`build-bin --bundles …`, fetching only its inputs),
-uploads its bundles (`make upload-r2-bundles`) and hands on
-`manifest.part.<group>.json`; a final job merges the parts
-(`xuebuild assemble-run`), uploads the manifest and the pointer
-(`make upload-r2-manifest`) and prunes. By hand:
+writes its bundles' arrays into the run's shared stores (`bundles.zarr`,
+`bundles.half.zarr`; [`zarr-profile.md`](../zarr-profile.md#manifest)),
+uploads them (`make upload-r2-bundles`, which never uploads a part or a
+group document) and hands on `manifest.part.<group>.json` with each store's
+`zarr.part.<first bundle>.json`; a final job merges the parts into the
+manifest and each store's group document (`xuebuild assemble-run`), uploads
+the group documents, then the manifest, warms both with the shared stores'
+arrays (whose `?v=` exists only now; a job warms its posters and series
+stores), then the pointer (`make upload-r2-manifest`) and prunes. By hand:
 
 ```sh
 .venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --profile balanced --bundles tmp2m prate
 make upload-r2-bundles MODEL=gfs RUN=2026081600
-# with every manifest.part.*.json gathered into web/public/data/gfs.2026081600/
+# with every manifest.part.*.json and bundles*.zarr/zarr.part.*.json gathered into web/public/data/gfs.2026081600/
 .venv/bin/python -m xuebuild assemble-run --model gfs --run 2026081600
 make upload-r2-manifest MODEL=gfs RUN=2026081600
 ```
 
 **Top-up.** When the live cycle is still the newest but lacks bundles the
 source now publishes, only those are built and merged onto the live
-manifest; `force` rebuilds everything:
+manifest and the live group documents (`make live-store-groups`); the
+group documents are rewritten under a new `?v=`, which every entry naming
+them then carries, and the live arrays are not touched. `force` rebuilds
+everything:
 
 ```sh
 make live-manifest MODEL=gfs > live-manifest.json
+make live-store-groups MODEL=gfs RUN=2026081600 LIVE_MANIFEST=live-manifest.json OUT=live-stores
 .venv/bin/python -m xuebuild bundle-groups --model gfs --base-manifest live-manifest.json
 .venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --bundles htsgw perpw
 make upload-r2-bundles MODEL=gfs RUN=2026081600
-.venv/bin/python -m xuebuild assemble-run --model gfs --run 2026081600 --base-manifest live-manifest.json
+.venv/bin/python -m xuebuild assemble-run --model gfs --run 2026081600 \
+  --base-manifest live-manifest.json --base-stores live-stores
 make upload-r2-manifest MODEL=gfs RUN=2026081600
 ```
+
+A live run published before shared stores names none, so `live-stores`
+stays empty and the top-up's bundles start the run's shared store beside
+the live one-bundle stores.
 
 ## Rolling windows
 
@@ -96,7 +110,9 @@ With `SEGMENTS=true` a round's stores are cut into clock-aligned segments
 ([`zarr-profile.md`](../zarr-profile.md#segmented-stores)) before upload:
 the build reads the live pointer and manifest (`make live-pointer`,
 `make live-manifest`), names again every segment the live round already
-published, and writes only the rest under `<model>.segments/`.
+published, and writes only the rest under `<model>.segments/` — one shared
+segment per tier and interval, `bundles[.<tier>].zarr`, holding every
+bundle with frames there.
 `upload-r2` copies those before the round's directory, so a round uploads
 the hour in progress and whatever hour just closed, not the window.
 `make prune-r2-segments` then reads every round left on the bucket and

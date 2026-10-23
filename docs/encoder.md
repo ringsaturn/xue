@@ -138,12 +138,14 @@ cannot say: a new rule name under `conversion` or `match.gdal`, a new
 converter does not read), or a `registrySchema` bump, each of which the
 installed wheel refuses until the wheel that implements it ships.
 
-The native encoder writes the Zarr stores itself, straight from its codes
-(`rust/xue/src/encode/zarrstore.rs`, the counterpart of
-`zarrstore.write_store` over a `CodesSource`), with the series stores for
-the bundles the caller names (`SourceSpec.series_bundle_ids`, passed in by
-`native.py`). It does not write two artifacts, and `xuebuild/native.py`
-supplies them:
+The native encoder writes the Zarr stores' arrays itself, straight from its
+codes (`rust/xue/src/encode/zarrstore.rs`, the counterpart of
+`zarrstore.write_bundle_arrays` over a `CodesSource`), with the series
+stores for the bundles the caller names (`SourceSpec.series_bundle_ids`,
+passed in by `native.py`). It does not write three artifacts, and
+`xuebuild/native.py` supplies them:
+
+- The shared stores' group documents. See "Shared stores" below.
 
 - The H.264 companions. The codes are read back out of the stores the
   native encoder wrote (`zarrstore.read_frames`; out of the container with
@@ -161,8 +163,48 @@ supplies them:
 encoder into identically shaped directories, then every artifact compared
 byte for byte (stores, containers where written, reduced-resolution
 variants, posters, H.264 streams and their indexes and playlists,
-`manifest.json`, and the live pointer). `tests/test_zarr.py` also holds the
-two store writers to the same bytes directly (`xue.write_store`).
+`manifest.json`, and the live pointer), and one fanned-out job's arrays,
+parts and partial manifest the same way. `tests/test_zarr.py` also holds the
+two one-bundle store writers to the same bytes directly (`xue.write_store`).
+
+### Shared stores
+
+A run's map stores are shared ([`zarr-profile.md`](zarr-profile.md),
+profile 2): every bundle of one tier in `bundles[.<tier>].zarr`. The call
+boundary is the partial group document. For every build, whole or one job
+of a fan-out, the wheel writes into each tier's shared store:
+
+- every bundle's variable arrays, as a one-bundle store's but with
+  `attributes.xue.bundle` leading the block and the bundle's dimension
+  names (`binconvert.store_dimensions`: `time_<bundle id>` for a published
+  scalar in `analysis_optional_ids` or a static first variable,
+  `latitude_<family>` / `longitude_<family>`, `<family>` the id
+  `bundle_grid_family` returns, for a bundle off the primary grid);
+- every coordinate array those names call for, the same bytes whichever
+  bundle writes it;
+- one partial group document, `zarr.part.<first bundle id>.json` — the
+  profile's group document (`zarrstore.group_document`, same key orders,
+  same serializer as `zarrstore._dump_json`) over the bundles this build
+  wrote, in manifest order — and no `zarr.json`;
+
+and names each store in its manifest entries with the entry's `byteLength`
+(its arrays and the coordinates it uses) and the **part's** CRC-32 as
+`crc32`, writing the manifest where `native.py` asks
+(`.<manifest>.native`, beside the real one). `native.py` then, unless the
+build is a fan-out job (`partial=True`), calls
+`zarrstore.finalize_store` on each store — the reference's own merge, which
+writes `zarr.json` and removes the part — and stamps the group document's
+CRC-32 on every entry naming the store as it writes the real manifest. A
+fan-out job keeps the part and the part's CRC; `assemble-run` does the
+rest, as for the reference.
+
+This keeps byte identity to what the native side writes anyway (arrays,
+coordinates, and one JSON document per store in the profile's serializer)
+and gives the group document, the merge with parts and live documents and
+the CRC stamping one implementation, the reference's. The wheel's own
+store reader opens a profile-2 group by bundle id
+(`zarr::parse_group_metadata_for(text, bundle_id)`), which the encoder's
+read-back self-check uses.
 
 ## Python bindings
 
@@ -187,18 +229,19 @@ returns the same report dictionary the Python pipeline returns, plus
 `quantize` / `encode_residual` / `decimate` / `encode_poster`, which take
 and return NumPy arrays so individual stages can be compared against
 `xuebuild/quantize.py` and `xuebuild/temporal.py` without running a build,
-and `write_store`, which writes one bundle's Zarr store from codes handed
-in as NumPy arrays:
+and `write_store`, which writes one bundle's one-bundle (profile 1) Zarr
+store from codes handed in as NumPy arrays:
 
 ```python
 report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
-# out/tmp2m.zarr, out/tmp2m.half.zarr, …; and the .xue containers too:
+# out/bundles.zarr, out/bundles.half.zarr with their parts (native.py writes
+# the group documents); and the .xue containers too:
 report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs", container=True)
 ```
 
 `convert_bin` writes the Zarr stores alone by default (`zarr=True`,
 `container=False`), as every live run publishes; `container=True` adds
-each bundle's `.xue` beside its store, from the same codes, and
+each bundle's `.xue` beside the stores, from the same codes, and
 `zarr=False, container=True` writes the containers alone.
 
 ### Installing

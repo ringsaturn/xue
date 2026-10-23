@@ -11,13 +11,19 @@ name: publish run
 #             it short of some (a variable that landed between cycles) ->
 #             split the bundles to build into groups (`xuebuild bundle-groups`)
 #   build     one job per group, in parallel: fetch only that group's GRIB
-#             records -> write its bundles' Zarr stores -> upload them to the run
-#             directory on R2 and warm them at the edge -> hand the partial
-#             manifest on as a workflow artifact
-#   finalize  merge the parts into the run's manifest (`xuebuild
-#             assemble-run`; onto the live manifest for a top-up), and derive
+#             records -> write its bundles' arrays into the run's shared Zarr
+#             stores (bundles.zarr, bundles.half.zarr) -> upload them to the
+#             run directory on R2 and warm its posters and series stores at
+#             the edge -> hand the
+#             partial manifest and the stores' partial group documents
+#             (zarr.part.*.json) on as a workflow artifact
+#   finalize  merge the parts into the run's manifest and the stores' group
+#             documents (`xuebuild assemble-run`; onto the live manifest and
+#             the live group documents for a top-up), and derive
 #             the run's STAC Item, the source's Collection and the root
-#             catalog from it (docs/stac.md) -> upload and warm the manifest,
+#             catalog from it (docs/stac.md) -> upload the group documents,
+#             then the manifest, and warm both with the shared stores' arrays
+#             (their ?v= exists only now),
 #             the Item beside it -> flip the live pointer, the Collection and
 #             catalog with it -> delete the runs it superseded
 #
@@ -183,6 +189,9 @@ jobs:
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
             make -s live-manifest MODEL="$MODEL" > live-manifest.json
+            # The shared stores' group documents of the same live run: a
+            # top-up merges its parts onto them (docs/zarr-profile.md).
+            make -s live-store-groups MODEL="$MODEL" RUN="$run" LIVE_MANIFEST=live-manifest.json OUT=live-stores
             missing=$(uv run python -m xuebuild bundle-groups --model "$MODEL" --max-jobs "$MAX_JOBS" \
               --base-manifest live-manifest.json | jq -r '[.[].group] | join(" ")')
             if [ -z "$missing" ]; then
@@ -200,14 +209,16 @@ jobs:
             echo "Publishing $MODEL run $run (live: ${live:-none})." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # The live manifest travels to the finalize job as it was read here,
-      # so the top-up merges onto exactly the run the missing set was
-      # computed against.
+      # The live manifest and group documents travel to the finalize job as
+      # they were read here, so the top-up merges onto exactly the run the
+      # missing set was computed against.
       - uses: actions/upload-artifact@v4
         if: ${{ steps.target.outputs.topup == 'true' }}
         with:
           name: base-${{ inputs.model }}
-          path: live-manifest.json
+          path: |
+            live-manifest.json
+            live-stores/
           retention-days: 3
           if-no-files-found: error
 
@@ -313,8 +324,10 @@ jobs:
           sha256: df285889d5b703894ba365929a316d2c692fda2ea962c8a512de4f65dbbfd9d1 # x86_64-unknown-linux-gnu
 
       # Only this group's GRIB records come down, and only its bundles are
-      # packed; the manifest written is a part (manifest.part.<slug>.json)
-      # for the finalize job to merge.
+      # packed; the manifest written is a part (manifest.part.<slug>.json),
+      # and so is each shared store's group document
+      # (bundles*.zarr/zarr.part.<first bundle>.json), for the finalize job
+      # to merge.
       - name: Build ${{ matrix.group }}
         run: |
           set -euo pipefail
@@ -334,7 +347,9 @@ jobs:
       # `aws s3 sync` of what this job built into the run directory
       # (immutable, ?v=<crc32>-addressed, unreferenced until the pointer
       # flips), then one pass over those objects through the CDN so the
-      # edge holds them before anyone asks (scripts/warm_edge_cache.sh).
+      # edge holds them before anyone asks (scripts/warm_edge_cache.sh) —
+      # all but the shared stores' arrays, whose ?v= is the group document
+      # the finalize job writes, so that job warms them.
       - name: Upload the bundles to R2
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -345,7 +360,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: part-${{ inputs.model }}-${{ matrix.slug }}
-          path: web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}/manifest.part.*.json
+          path: |
+            web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}/manifest.part.*.json
+            web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}/bundles*.zarr/zarr.part.*.json
           retention-days: 3
           if-no-files-found: error
 
@@ -394,17 +411,19 @@ jobs:
           name: base-${{ inputs.model }}
 
       # The parts merge into the run's manifest in publication order, every
-      # published bundle present exactly once, and the pointer is written
-      # with the finished manifest's CRC32. For a top-up they merge onto the
-      # live manifest the resolve job saved, so the result is the manifest a
-      # whole build would have written today. Nothing is on this runner but
-      # the parts: the bundles are already in the bucket.
+      # published bundle present exactly once, and into each shared store's
+      # group document, whose CRC32 every entry naming the store carries; the
+      # pointer is written with the finished manifest's CRC32. For a top-up
+      # they merge onto the live manifest and group documents the resolve
+      # job saved, so the result is what a whole build would have written
+      # today. Nothing is on this runner but the parts: the arrays are
+      # already in the bucket.
       - name: Assemble the manifest
         run: |
           set -euo pipefail
           base=""
-          [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json"
-          # shellcheck disable=SC2086 # the base flag is deliberately unquoted
+          [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json --base-stores live-stores"
+          # shellcheck disable=SC2086 # the base flags are deliberately unquoted
           uv run python -m xuebuild -v assemble-run \
             --model "$MODEL" --run "$RUN" $base > assemble-report.json
           {
@@ -415,9 +434,11 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The manifest goes up immutable like the bundles it names and is
-      # warmed on its own; then the mutable per-model live pointer, which
-      # takes the run live.
+      # The shared stores' group documents go up first, then the manifest,
+      # immutable like the bundles it names; the edge is warmed with both
+      # and the shared stores' arrays under their new ?v= (a failed warm-up
+      # never holds the pointer back); then the mutable per-model live
+      # pointer, which takes the run live.
       - name: Upload the manifest and take the run live
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

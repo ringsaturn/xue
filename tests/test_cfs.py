@@ -796,6 +796,36 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             grid = read_bundle(output / f"{bundle_id}.xue").metadata["grid"]
             self.assertEqual((grid["width"], grid["height"]), window, bundle_id)
 
+    def test_a_family_bundle_carries_its_own_grid_in_the_shared_store(self) -> None:
+        # One store holds both grids: the surface bundle on the primary
+        # coordinates, the pressure-level bundles on the family's
+        # `latitude_pgb` / `longitude_pgb`, its 1-degree grid.
+        root = self.root / "shared"
+        frames = stage_run(root)
+        output = root / "out"
+        binconvert.convert_bin(
+            frames,
+            output,
+            work_root=root / "work",
+            manifest_path=output / "manifest.json",
+            model="cfs",
+            bundle_ids=("tmp2m", "hgt500", "qflux850"),
+            skip_variants=True,
+        )
+        store = output / "bundles.zarr"
+        group = json.loads((store / "zarr.json").read_text())
+        self.assertEqual(list(group["attributes"]["xue_bundles"]), ["tmp2m", "hgt500", "qflux850"])
+        metadata = group["consolidated_metadata"]["metadata"]
+        self.assertEqual(
+            [name for name in metadata if name not in ("tmp2m", "hgt500")][-5:],
+            ["time", "latitude", "longitude", "latitude_pgb", "longitude_pgb"],
+        )
+        for bundle_id in ("hgt500", "qflux850"):
+            variable_id = group["attributes"]["xue_bundles"][bundle_id]["variables"][0]["id"]
+            self.assertEqual(metadata[variable_id]["dimension_names"], ["time", "latitude_pgb", "longitude_pgb"])
+        self.assertEqual(metadata["latitude_pgb"]["shape"], [PGB_WINDOW[1]])
+        self.assertEqual(group["consolidated_metadata"]["metadata"]["latitude"]["shape"], [SURFACE_WINDOW[1]])
+
     def test_a_frame_whose_family_file_is_missing_is_refused(self) -> None:
         root = self.root / "short"
         frames = stage_run(root)

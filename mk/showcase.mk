@@ -32,7 +32,7 @@ upload-r2-showcase: ## Upload built cases, then showcase.json
 	@set -e; \
 	[ -d web/public/data/showcase ] || { echo "no built cases at web/public/data/showcase"; exit 1; }; \
 	$(S3) sync web/public/data/showcase $(R2_ROOT)/showcase/ --no-progress $(DRY_RUN) \
-		--exclude "$(STAC_COLLECTION)" --exclude "*/$(STAC_ITEM)" \
+		--exclude "$(STAC_COLLECTION)" --exclude "*/$(STAC_ITEM)" --exclude "$(STORE_PARTS)" \
 		--cache-control "public, max-age=31536000, immutable"; \
 	for item in web/public/data/showcase/*/$(STAC_ITEM); do \
 		[ -f "$$item" ] || continue; \

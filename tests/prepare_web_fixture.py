@@ -49,10 +49,12 @@ FIXTURE_TILE = (16, 16)
 # then every vector. The manifest no longer validates an order, so the fixture
 # states its own.
 FIXTURE_BUNDLE_ORDER = ("tmp2m", "prate", "gust", "hgt500", "tmp850", "wind10m")
-# The bundles that also ship as Zarr stores (docs/zarr-profile.md), so the
-# manifest carries `zarr` descriptors for the `?backend=zarr` channel to
-# take and leaves the rest on the container path — both are exercised. The
-# upper-air and pressure bundles stay container-only.
+# The bundles that also ship in the run's shared Zarr stores
+# (docs/zarr-profile.md: `bundles.zarr` and `bundles.half.zarr`, in this
+# order, which is the manifest's), so the manifest carries `zarr`
+# descriptors for the `?backend=zarr` channel to take and leaves the rest on
+# the container path — both are exercised. The upper-air and pressure
+# bundles stay container-only.
 FIXTURE_ZARR_BUNDLES = ("tmp2m", "prate", "wind10m")
 # The bundles that also ship a series companion (`<bundle>.series.zarr`, the
 # point-read layout) — the full-resolution ones only, matching the GFS source's
@@ -113,11 +115,24 @@ def write_v2_bundle(
     binformat.read_bundle(path).verify_all()
     return path.read_bytes()
 
-def _export_store(bundle_path: Path) -> dict:
-    """The bundle's Zarr store beside it, and the manifest descriptor that
-    names it — derived from the finished file the way a build derives it."""
-    report = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path))
-    return report.descriptor(WEB_FIXTURE_ROOT)
+def _export_shared_stores(bundles: list[dict]) -> None:
+    """The run's shared stores, ``bundles.zarr`` and ``bundles.half.zarr``,
+    holding the store bundles in manifest order, derived from their finished
+    files the way a build derives them; every entry of a tier names its
+    store, under the store's one CRC-32."""
+    by_id = {bundle["variable"]: bundle for bundle in bundles}
+    order = [bundle_id for bundle_id in FIXTURE_BUNDLE_ORDER if bundle_id in FIXTURE_ZARR_BUNDLES]
+    full = zarrstore.export_shared_bundles(
+        [(bundle_id, WEB_FIXTURE_ROOT / f"{bundle_id}.xue") for bundle_id in order],
+        WEB_FIXTURE_ROOT / zarrstore.shared_store_name(),
+    )
+    half = zarrstore.export_shared_bundles(
+        [(bundle_id, WEB_FIXTURE_ROOT / f"{bundle_id}.half.xue") for bundle_id in order],
+        WEB_FIXTURE_ROOT / zarrstore.shared_store_name("half"),
+    )
+    for bundle_id in order:
+        by_id[bundle_id]["zarr"] = full[bundle_id].descriptor(WEB_FIXTURE_ROOT)
+        by_id[bundle_id]["variants"][0]["zarr"] = half[bundle_id].descriptor(WEB_FIXTURE_ROOT)
 
 
 def _export_series(bundle_path: Path) -> dict:
@@ -298,9 +313,6 @@ def prepare_web_fixture() -> Path:
             "byteLength": len(data),
             "crc32": f"{zlib.crc32(data) & 0xFFFFFFFF:08x}",
         }
-        if variable_id in FIXTURE_ZARR_BUNDLES:
-            entry["zarr"] = _export_store(bundle_path)
-            variant["zarr"] = _export_store(half_path)
         if variable_id in FIXTURE_SERIES_BUNDLES:
             entry["series"] = _export_series(bundle_path)
         bundles.append(
@@ -411,15 +423,15 @@ def prepare_web_fixture() -> Path:
                     "byteLength": len(wind_half_data),
                     "crc32": f"{zlib.crc32(wind_half_data) & 0xFFFFFFFF:08x}",
                     "bandwidth": _playback_bandwidth(len(wind_half_data), len(HOURS)),
-                    "zarr": _export_store(wind_half_path),
                 }
             ],
-            "zarr": _export_store(wind_path),
             "series": _export_series(wind_path),
         }
     )
+    _export_shared_stores(bundles)
     # A delta-chain store with its index at the start of each shard, for the
-    # unit tests alone — the manifest never names it. The two options the
+    # unit tests alone — the manifest never names it. A one-bundle (profile
+    # 1) store, so the readers' older path stays exercised too. The two options the
     # profile leaves open are what it exercises: the reader must accept
     # either index location and decode `xue.delta` as the PREVIOUS predictor.
     zarrstore.export_bundle(

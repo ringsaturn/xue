@@ -36,30 +36,64 @@ def plane(offset: int, salt: int) -> np.ndarray:
     return ((np.arange(GRID.width * GRID.height) * (salt + 3) + offset * 7) % 200).astype(np.uint8)
 
 
-def write_round(data_root: Path, round_path: str, offsets: list[int], *, salt: int = 0) -> Path:
+def _source(variable_id: str, predictor: str, offsets: list[int], salt: int) -> zarrstore.CodesSource:
+    metadata = build_metadata(START, offsets, GRID, "balanced", (variable_id,), unit_seconds=600)
+    planes = {variable_id: [plane(offset, salt) for offset in offsets]}
+    return zarrstore.CodesSource(metadata, planes, {variable_id: predictor}, TILE)
+
+
+def write_round(
+    data_root: Path,
+    round_path: str,
+    offsets: list[int],
+    *,
+    salt: int = 0,
+    prate_offsets: list[int] | None = None,
+    shared: bool = True,
+) -> Path:
     """A round directory as `build-bin --round` leaves it: a manifest naming
-    one plain store per bundle."""
+    the round's shared store from both bundles (``prate_offsets`` gives the
+    rate an axis of its own, ``time_prate``), or, with ``shared`` off, one
+    plain store per bundle as rounds built before shared stores did."""
     round_directory = data_root / round_path
     round_directory.mkdir(parents=True)
+    layout = (("tmp2m", "previous", offsets), ("prate", "raw", prate_offsets or offsets))
     bundles = []
-    for variable_id, predictor in (("tmp2m", "previous"), ("prate", "raw")):
-        metadata = build_metadata(START, offsets, GRID, "balanced", (variable_id,), unit_seconds=600)
-        planes = {variable_id: [plane(offset, salt) for offset in offsets]}
-        source = zarrstore.CodesSource(metadata, planes, {variable_id: predictor}, TILE)
-        written = zarrstore.write_store(source, round_directory / f"{variable_id}.zarr", delta=True)
-        bundles.append(
-            {
-                "variable": variable_id,
-                "zarr": {"path": f"{variable_id}.zarr", "byteLength": written.byte_length, "crc32": written.crc32},
-            }
+    if shared:
+        written = zarrstore.write_shared_store(
+            round_directory / "bundles.zarr",
+            [
+                zarrstore.SharedMember(
+                    variable_id,
+                    _source(variable_id, predictor, axis, salt),
+                    (f"time_{variable_id}" if prate_offsets and variable_id == "prate" else "time", "latitude", "longitude"),
+                    delta=True,
+                )
+                for variable_id, predictor, axis in layout
+            ],
         )
+        bundles = [
+            {"variable": variable_id, "zarr": written[variable_id].descriptor(round_directory)}
+            for variable_id, _, _ in layout
+        ]
+    else:
+        for variable_id, predictor, axis in layout:
+            single = zarrstore.write_store(
+                _source(variable_id, predictor, axis, salt), round_directory / f"{variable_id}.zarr", delta=True
+            )
+            bundles.append(
+                {
+                    "variable": variable_id,
+                    "zarr": {"path": f"{variable_id}.zarr", "byteLength": single.byte_length, "crc32": single.crc32},
+                }
+            )
     manifest = build_bin_manifest(START, bundles=bundles, expected_hours=4)
     (round_directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return round_directory
 
 
-def frame_times(store: Path) -> list[datetime]:
-    metadata = zarrstore.read_json(store / "zarr.json")["attributes"]["xue"]
+def frame_times(store: Path, bundle_id: str) -> list[datetime]:
+    metadata = zarrstore.bundle_metadata(store, bundle_id)
     unit_seconds, offsets = binformat.time_axis(metadata)
     run_time = datetime.fromisoformat(metadata["runTime"].replace("Z", "+00:00"))
     return [run_time + timedelta(seconds=offset * unit_seconds) for offset in offsets]
@@ -68,17 +102,24 @@ def frame_times(store: Path) -> list[datetime]:
 class SegmentRoundTest(TempRoot, unittest.TestCase):
     def test_a_round_is_cut_by_the_clock_and_its_codes_survive(self) -> None:
         round_directory = write_round(self.root, "gfs.2026101122/0130", OFFSETS)
-        original = {
-            name: zarrstore.read_frames(round_directory / f"{name}.zarr", name) for name in ("tmp2m", "prate")
-        }
+        original = {name: zarrstore.read_frames(round_directory / "bundles.zarr", name) for name in ("tmp2m", "prate")}
         report = segments.segment_round(round_directory, data_root=self.root, source_id="gfs")
         manifest = json.loads((round_directory / "manifest.json").read_text(encoding="utf-8"))
         validate_bin_manifest(manifest, expected_hours=4)
-        self.assertEqual(len(report.written), 8)
+        # One shared segment per hour, both bundles in each.
+        self.assertEqual(len(report.written), 4)
         self.assertEqual(report.reused, 0)
+        self.assertFalse((round_directory / "bundles.zarr").exists())
+        self.assertEqual(
+            [part["path"] for part in manifest["bundles"][0]["zarr"]["segments"]],
+            [part["path"] for part in manifest["bundles"][1]["zarr"]["segments"]],
+        )
+        self.assertEqual(
+            [part["crc32"] for part in manifest["bundles"][0]["zarr"]["segments"]],
+            [part["crc32"] for part in manifest["bundles"][1]["zarr"]["segments"]],
+        )
         for bundle in manifest["bundles"]:
             name = bundle["variable"]
-            self.assertFalse((round_directory / f"{name}.zarr").exists())
             descriptor = bundle["zarr"]
             self.assertNotIn("path", descriptor)
             self.assertEqual(descriptor["byteLength"], sum(part["byteLength"] for part in descriptor["segments"]))
@@ -88,11 +129,13 @@ class SegmentRoundTest(TempRoot, unittest.TestCase):
             times: list[datetime] = []
             for part in descriptor["segments"]:
                 self.assertTrue(part["path"].startswith("../../gfs.segments/"))
+                self.assertTrue(part["path"].endswith("/bundles.zarr"))
                 store = round_directory / part["path"]
                 frames.extend(zarrstore.read_frames(store, name))
-                times.extend(frame_times(store))
-                metadata = zarrstore.read_json(store / "zarr.json")["attributes"]["xue"]
+                times.extend(frame_times(store, name))
+                metadata = zarrstore.bundle_metadata(store, name)
                 self.assertEqual(metadata["time"]["firstFrameOffset"], 0)
+                self.assertEqual(zarrstore.read_group(store)["attributes"]["xue_profile"], 2)
             self.assertEqual(times, [START + timedelta(minutes=10 * offset) for offset in OFFSETS])
             self.assertEqual(len(frames), len(original[name]))
             for got, want in zip(frames, original[name]):
@@ -113,9 +156,9 @@ class SegmentRoundTest(TempRoot, unittest.TestCase):
             live_manifest=live_manifest,
             live_manifest_path="gfs.2026101122/0120/manifest.json",
         )
-        # Three whole hours carried over per bundle; the hour in progress grew.
-        self.assertEqual(report.reused, 6)
-        self.assertEqual(len(report.written), 2)
+        # Three whole hours carried over; the hour in progress grew.
+        self.assertEqual(report.reused, 3)
+        self.assertEqual(len(report.written), 1)
         self.assertTrue(all("/202610120100/" in path.as_posix() for path in report.written))
         manifest = json.loads((current / "manifest.json").read_text(encoding="utf-8"))
         for bundle, held in zip(manifest["bundles"], live_manifest["bundles"]):
@@ -136,6 +179,37 @@ class SegmentRoundTest(TempRoot, unittest.TestCase):
             for directory in (first, second)
         ]
         self.assertFalse(paths[0] & paths[1])
+
+    def test_a_bundle_on_its_own_axis_joins_the_segments_it_has_frames_in(self) -> None:
+        # The rate starts at 23:00: the first hour's segment holds the
+        # temperature alone, every later one both bundles.
+        round_directory = write_round(self.root, "gfs.2026101122/0130", OFFSETS, prate_offsets=OFFSETS[6:])
+        segments.segment_round(round_directory, data_root=self.root, source_id="gfs")
+        manifest = json.loads((round_directory / "manifest.json").read_text(encoding="utf-8"))
+        validate_bin_manifest(manifest, expected_hours=4)
+        tmp2m, prate = (bundle["zarr"]["segments"] for bundle in manifest["bundles"])
+        self.assertEqual(len(tmp2m), 4)
+        self.assertEqual(len(prate), 3)
+        self.assertEqual([part["path"] for part in tmp2m[1:]], [part["path"] for part in prate])
+        first = round_directory / tmp2m[0]["path"]
+        self.assertEqual(list(zarrstore.read_group(first)["attributes"]["xue_bundles"]), ["tmp2m"])
+        second = round_directory / prate[0]["path"]
+        self.assertEqual(list(zarrstore.read_group(second)["attributes"]["xue_bundles"]), ["tmp2m", "prate"])
+        self.assertEqual(zarrstore.array_dimensions(second, "prate"), ("time_prate", "latitude", "longitude"))
+        self.assertEqual(
+            frame_times(second, "prate")[0], START + timedelta(minutes=10 * OFFSETS[6]), "its own first frame"
+        )
+
+    def test_a_one_bundle_round_is_still_cut_per_bundle(self) -> None:
+        round_directory = write_round(self.root, "gfs.2026101122/0130", OFFSETS, shared=False)
+        report = segments.segment_round(round_directory, data_root=self.root, source_id="gfs")
+        manifest = json.loads((round_directory / "manifest.json").read_text(encoding="utf-8"))
+        validate_bin_manifest(manifest, expected_hours=4)
+        self.assertEqual(len(report.written), 8)
+        for bundle in manifest["bundles"]:
+            name = bundle["variable"]
+            self.assertFalse((round_directory / f"{name}.zarr").exists())
+            self.assertTrue(all(part["path"].endswith(f"/{name}.zarr") for part in bundle["zarr"]["segments"]))
 
     def test_an_hourly_feed_is_cut_in_six_hours(self) -> None:
         hourly = [START + timedelta(hours=hour) for hour in range(8)]

@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -27,7 +28,7 @@ from tests._support import (
     require_comparable_compression,
     requires_native,
 )
-from xuebuild import binconvert, binformat, encoder, native, registry
+from xuebuild import binconvert, binformat, encoder, native, registry, zarrstore
 from xuebuild.errors import ConversionError
 from xuebuild.sources import source_spec
 
@@ -202,10 +203,12 @@ class NativeParityTests(ClassTempRoot, unittest.TestCase):
 
 @requires_native
 class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
-    """Store and container on both paths: each encoder writes its stores
-    from its own codes with its own writer (`zarrstore.write_store`, the
-    wheel's `encode/zarrstore.rs`), and every object of both deliveries
-    agrees — and the manifest names every one of them the same way."""
+    """Store and container on both paths: each encoder writes the shared
+    stores' arrays, coordinates and parts from its own codes with its own
+    writer (`zarrstore.write_bundle_arrays`, the wheel's
+    `encode/zarrstore.rs`), the group documents come from the parts, and
+    every object of both deliveries agrees — and the manifest names every one
+    of them the same way."""
 
     root_prefix = "xue-native-zarr-"
 
@@ -237,7 +240,8 @@ class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
         for bundle in manifest["bundles"]:
             for artifact in (bundle, *bundle.get("variants", [])):
                 with self.subTest(path=artifact["path"]):
-                    self.assertEqual(artifact["zarr"]["path"], artifact["path"].removesuffix(".xue") + ".zarr")
+                    tier = artifact["path"].removesuffix(".xue").split(".")[1:]
+                    self.assertEqual(artifact["zarr"]["path"], ".".join(["bundles", *tier, "zarr"]))
                     self.assertTrue((self.subject / "gfs.2026081406" / artifact["zarr"]["path"] / "zarr.json").is_file())
         self.assertTrue(all("zarr" in bundle for bundle in self.subject_report["bundles"]))
         self.assertTrue(all("zarr" in variant for variant in self.subject_report["variants"]))
@@ -289,8 +293,9 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
                         self.assertNotIn("byteLength", artifact)
                         self.assertNotIn("crc32", artifact)
                         self.assertTrue((root / "gfs.2026081406" / artifact["zarr"]["path"] / "zarr.json").is_file())
-                    self.assertEqual(bundle["zarr"]["path"], f"{bundle['variable']}.zarr")
-                    self.assertEqual(bundle["variants"][0]["zarr"]["path"], f"{bundle['variable']}.half.zarr")
+                    self.assertEqual(bundle["zarr"]["path"], "bundles.zarr")
+                    self.assertEqual(bundle["variants"][0]["zarr"]["path"], "bundles.half.zarr")
+                self.assertEqual(list(root.rglob(f"{zarrstore.PART_PREFIX}*")), [], "a whole build leaves no part")
                 self.assertTrue(all(artifact["container"] is False for artifact in [*report["bundles"], *report["variants"]]))
 
     def test_a_tier_hints_the_bandwidth_of_its_store(self) -> None:
@@ -301,8 +306,8 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
         for bundle in manifest["bundles"]:
             for variant in bundle["variants"]:
                 with self.subTest(store=variant["zarr"]["path"]):
-                    root = json.loads((run_directory / variant["zarr"]["path"] / "zarr.json").read_text(encoding="utf-8"))
-                    frames = root["attributes"]["xue"]["time"]["frameCount"]
+                    metadata = zarrstore.bundle_metadata(run_directory / variant["zarr"]["path"], bundle["variable"])
+                    frames = metadata["time"]["frameCount"]
                     self.assertEqual(
                         variant["bandwidth"], binconvert._playback_bandwidth(variant["zarr"]["byteLength"], frames)
                     )
@@ -313,6 +318,63 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
                 implementation.convert_bin(
                     FIXTURE_GRIB, self.root / "refused", model="gfs", skip_video=True, zarr=False, container=False
                 )
+
+    def test_every_object_is_byte_identical(self) -> None:
+        require_comparable_compression(self, self.reference_report, self.subject_report)
+        assert_trees_identical(self, self.reference, self.subject)
+
+
+@requires_native
+class NativePartialParityTests(ClassTempRoot, unittest.TestCase):
+    """One job of a fanned-out publish on both paths: the arrays, the
+    coordinates, each shared store's partial group document
+    (`zarr.part.<first bundle>.json`) and the partial manifest, whose entries
+    carry the part's CRC-32, agree byte for byte, and no group document is
+    written."""
+
+    root_prefix = "xue-native-partial-"
+    group = ("tmp2m", "wind10m")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
+        cls.subject, cls.subject_report = cls._build(native, "subject")
+
+    @classmethod
+    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
+        run_directory = cls.root / name / "gfs.2026081406"
+        report = implementation.convert_bin(
+            FIXTURE_GRIB,
+            run_directory,
+            work_root=cls.root / f"{name}-work",
+            manifest_path=run_directory / "manifest.part.tmp2m-wind10m.json",
+            model="gfs",
+            skip_video=True,
+            bundle_ids=cls.group,
+            partial=True,
+        )
+        return cls.root / name, report
+
+    def test_a_part_and_no_group_document(self) -> None:
+        for root in (self.reference, self.subject):
+            for store in ("bundles.zarr", "bundles.half.zarr"):
+                with self.subTest(root=root.name, store=store):
+                    directory = root / "gfs.2026081406" / store
+                    self.assertFalse((directory / "zarr.json").exists())
+                    part = directory / f"{zarrstore.PART_PREFIX}tmp2m.json"
+                    self.assertTrue(part.is_file())
+                    manifest = json.loads(
+                        (root / "gfs.2026081406" / "manifest.part.tmp2m-wind10m.json").read_text(encoding="utf-8")
+                    )
+                    crc32 = f"{zlib.crc32(part.read_bytes()) & 0xFFFFFFFF:08x}"
+                    named = {
+                        node["zarr"]["crc32"]
+                        for bundle in manifest["bundles"]
+                        for node in (bundle, *bundle.get("variants", []))
+                        if node["zarr"]["path"] == store
+                    }
+                    self.assertEqual(named, {crc32})
 
     def test_every_object_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)

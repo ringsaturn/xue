@@ -1,12 +1,20 @@
-"""A Xue bundle as a Zarr v3 store.
+"""Xue bundles as Zarr v3 stores.
 
-One writer, :func:`write_store`, packs a bundle's quantized codes into a
-store from whatever holds them (a :class:`ChunkSource`): the planes a build
-holds in memory (:class:`CodesSource`) or a finished ``.xue``
-(:func:`export_bundle`). The metadata, shard bytes, index and CRC-32C are
-assembled with NumPy alone, so the build gains no dependency.
-``docs/zarr-profile.md`` is normative for the layout and gives the reasons for
-its regular time chunks, padded edge tiles and one shard per array.
+Two layouts, both normative in ``docs/zarr-profile.md``. A **shared store**
+(profile 2, ``bundles[.<tier>].zarr``) holds every bundle of one resolution
+tier of a run, round or segment: :func:`write_bundle_arrays` writes one
+bundle's arrays and coordinates into it, :func:`write_part` the partial group
+document over the bundles one build wrote, and :func:`finalize_store` the
+store's group document from its parts (and, on a top-up, the live group
+document). A **one-bundle store** (profile 1, :func:`write_store`) is what a
+series store still is, and what every map store was before shared stores;
+the readers here open both.
+
+Either writer packs a bundle's quantized codes from whatever holds them (a
+:class:`ChunkSource`): the planes a build holds in memory
+(:class:`CodesSource`) or a finished ``.xue`` (:func:`export_bundle`). The
+metadata, shard bytes, index and CRC-32C are assembled with NumPy alone, so
+the build gains no dependency.
 """
 
 from __future__ import annotations
@@ -14,8 +22,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import posixpath
+import re
 import shutil
 import struct
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,7 +38,25 @@ from . import binformat, zstdcli
 from .errors import BundleError, ConversionError
 
 PROFILE_VERSION = 1
-"""The ``xue_profile`` attribute a store's root group declares."""
+"""The ``xue_profile`` of a one-bundle store: every series store, and every
+map store written before shared stores."""
+
+SHARED_PROFILE_VERSION = 2
+"""The ``xue_profile`` of a shared store (``bundles[.<tier>].zarr``)."""
+
+PROFILE_VERSIONS = (PROFILE_VERSION, SHARED_PROFILE_VERSION)
+
+SHARED_STORE_STEM = "bundles"
+"""The reserved stem of a shared store; no bundle may be named it."""
+
+PART_PREFIX = "zarr.part."
+"""File name prefix of a partial group document inside a shared store
+(``zarr.part.<first bundle id>.json``). Local only: the upload targets
+exclude the pattern, and :func:`finalize_store` merges the parts into the
+group document."""
+
+_SHARED_STORE_NAME = re.compile(r"^bundles(?:\.([a-z]+))?\.zarr$")
+_BUNDLE_ID = re.compile(r"^[a-z][a-z0-9]*$")
 
 TIME_CHUNK = 6
 """Frames per Zarr time chunk. The bundle's own group length, on a regular
@@ -491,10 +520,22 @@ def _compress_block(block: np.ndarray) -> bytes:
 
 
 def _array_metadata(
-    geometry: ArrayGeometry, variable: dict[str, Any], predictor: str, *, delta: bool, index_location: str
+    geometry: ArrayGeometry,
+    variable: dict[str, Any],
+    predictor: str,
+    *,
+    delta: bool,
+    index_location: str,
+    bundle: str | None = None,
+    dimensions: tuple[str, str, str] = _DIMENSIONS,
 ) -> dict[str, Any]:
+    """One variable array's document. ``bundle`` is set in a shared store
+    only, where it leads the ``xue`` block so an array opened alone knows
+    which bundle's metadata describes it."""
     quantization = variable["quantization"]
-    attributes: dict[str, Any] = {"xue": {"variable": variable, "predictor": predictor}}
+    block: dict[str, Any] = {"bundle": bundle} if bundle is not None else {}
+    block.update({"variable": variable, "predictor": predictor})
+    attributes: dict[str, Any] = {"xue": block}
     if quantization.get("type") == "linear":
         # CF packing, so a generic client dequantizes on its own; the
         # logarithmic codebook has no CF spelling and is left to the
@@ -523,7 +564,7 @@ def _array_metadata(
             }
         ],
         "attributes": attributes,
-        "dimension_names": list(_DIMENSIONS),
+        "dimension_names": list(dimensions),
     }
 
 
@@ -570,9 +611,30 @@ def _comparable_chunk(
     return None
 
 
-def _write_coordinates(source: ChunkSource, zarr_dir: Path) -> dict[str, int]:
+def _write_atomic(path: Path, data: bytes) -> int:
+    """Write by rename: in a shared store several bundles write the same
+    coordinate array concurrently, always the same bytes, and a rename never
+    leaves a reader (or the last writer) a torn file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return len(data)
+
+
+def _write_coordinates(
+    source: ChunkSource, zarr_dir: Path, names: tuple[str, str, str] = _DIMENSIONS, *, atomic: bool = False
+) -> dict[str, int]:
     """The three one-dimensional coordinate arrays: for xarray and its kind,
-    never read by the viewer, which reads the root group's ``xue`` block."""
+    never read by the viewer, which reads the group's metadata block.
+    ``names`` are the bundle's dimension names (``time`` or ``time_<bundle>``,
+    and so on): a coordinate array is named by the dimension it labels, and
+    its encoding does not depend on the name."""
     grid = source.metadata["grid"]
     run_time = source.metadata["runTime"]
     unit_seconds = source.unit_seconds
@@ -580,32 +642,33 @@ def _write_coordinates(source: ChunkSource, zarr_dir: Path) -> dict[str, int]:
     latitude = grid["firstLatitude"] + np.arange(source.height, dtype=np.float64) * grid["latitudeStep"]
     longitude = grid["firstLongitude"] + np.arange(source.width, dtype=np.float64) * grid["longitudeStep"]
     coordinates = {
-        "time": (
+        names[0]: (
             time_values,
             "int32",
             0,
             {"units": f"seconds since {run_time}", "calendar": "proleptic_gregorian", "standard_name": "time"},
         ),
-        "latitude": (
+        names[1]: (
             latitude.astype("<f8"),
             "float64",
             "NaN",
             {"units": "degrees_north", "standard_name": "latitude"},
         ),
-        "longitude": (
+        names[2]: (
             longitude.astype("<f8"),
             "float64",
             "NaN",
             {"units": "degrees_east", "standard_name": "longitude"},
         ),
     }
+    write = _write_atomic if atomic else _write
     sizes = {}
     for name, (values, data_type, fill_value, attributes) in coordinates.items():
         directory = zarr_dir / name
-        sizes[name] = _write(
+        sizes[name] = write(
             directory / "zarr.json",
             _dump_json(_coordinate_metadata(len(values), data_type, fill_value, attributes, name)),
-        ) + _write(directory / "c" / "0", values.tobytes())
+        ) + write(directory / "c" / "0", values.tobytes())
     return sizes
 
 
@@ -760,17 +823,30 @@ def _write_array(
     index_location: str,
     executor: ThreadPoolExecutor,
     series: bool = False,
+    bundle: str | None = None,
+    dimensions: tuple[str, str, str] = _DIMENSIONS,
 ) -> tuple[int, int, int, int]:
     """One variable's array: its metadata and its one shard. Returns bytes
     written, inner chunks written, comparable and identical chunks (see
     :class:`ExportReport`). ``series`` reads the source a plane at a time,
-    the way a series geometry's thousands of tiny blocks want."""
+    the way a series geometry's thousands of tiny blocks want. ``bundle``
+    and ``dimensions`` are a shared store's (:func:`write_bundle_arrays`)."""
     predictor = source.predictor(name)
     use_delta = delta and predictor == "previous"
     nodata = variable["quantization"]["nodataCode"]
     written = _write(
         array_dir / "zarr.json",
-        _dump_json(_array_metadata(geometry, variable, predictor, delta=use_delta, index_location=index_location)),
+        _dump_json(
+            _array_metadata(
+                geometry,
+                variable,
+                predictor,
+                delta=use_delta,
+                index_location=index_location,
+                bundle=bundle,
+                dimensions=dimensions,
+            )
+        ),
     )
     if geometry.shard_count != 1:
         raise AssertionError("the exporter writes one shard per array")
@@ -983,6 +1059,415 @@ def series_store_path_for(xue_path: Path) -> Path:
     return xue_path.with_suffix(".series.zarr")
 
 
+# -- the shared store (profile 2) ----------------------------------------------
+
+def shared_store_name(tier: str | None = None) -> str:
+    """``bundles.zarr`` for the full tier, ``bundles.<tier>.zarr`` for a rung
+    of the resolution ladder."""
+    return f"{SHARED_STORE_STEM}.{tier}.zarr" if tier else f"{SHARED_STORE_STEM}.zarr"
+
+
+def is_shared_store_path(path: str) -> bool:
+    """Whether a store path names a shared store: its final component is
+    exactly ``bundles.zarr`` or ``bundles.<tier>.zarr``, ``<tier>`` a
+    non-empty run of lowercase ASCII letters other than ``series``. The rule
+    the three manifest validators apply to let several entries name one
+    store (docs/zarr-profile.md, "Manifest"); ``bundles.series.zarr`` is not
+    one, so a series store keeps its own path."""
+    match = _SHARED_STORE_NAME.fullmatch(posixpath.basename(path))
+    return match is not None and match.group(1) != "series"
+
+
+def _grid_suffix(name: str, primary: str) -> str | None:
+    """``""`` for the primary name, the family id of ``<primary>_<family>``,
+    ``None`` for anything else."""
+    if name == primary:
+        return ""
+    family = name.removeprefix(f"{primary}_")
+    return family if family != name and _BUNDLE_ID.fullmatch(family) else None
+
+
+def _check_dimensions(bundle_id: str, dimensions: tuple[str, str, str]) -> tuple[str, str, str]:
+    """A bundle's dimension names (docs/zarr-profile.md, "Coordinates"):
+    ``time`` or ``time_<bundle id>``, and ``latitude`` / ``longitude`` or
+    ``latitude_<family>`` / ``longitude_<family>`` of one family id."""
+    dimensions = tuple(dimensions)  # type: ignore[assignment]
+    if len(dimensions) == 3 and dimensions[0] in ("time", f"time_{bundle_id}"):
+        latitude, longitude = _grid_suffix(dimensions[1], "latitude"), _grid_suffix(dimensions[2], "longitude")
+        if latitude is not None and latitude == longitude:
+            return dimensions
+    raise BundleError(f"{bundle_id}: dimension names {list(dimensions)} are not the profile's")
+
+
+@dataclass
+class BundleWrite:
+    """One bundle written into a shared store.
+
+    ``documents`` holds every array document the bundle uses, its variable
+    arrays in the metadata's order and then the coordinate arrays its
+    dimensions name; ``byte_length`` is those arrays' objects (each
+    ``zarr.json`` plus shard or chunk), which is what a viewer downloads for
+    the bundle alone and what its manifest entry reports. ``crc32`` is the
+    store's group document's, stamped once that is written."""
+
+    bundle_id: str
+    path: Path
+    metadata: dict[str, Any]
+    dimensions: tuple[str, str, str]
+    documents: dict[str, dict[str, Any]]
+    byte_length: int
+    delta: bool
+    index_location: str
+    arrays: dict[str, int] = field(default_factory=dict)
+    chunk_count: int = 0
+    comparable_chunks: int = 0
+    identical_chunks: int = 0
+    crc32: str = ""
+
+    def entry(self) -> tuple[str, dict[str, Any], dict[str, dict[str, Any]]]:
+        """What :func:`group_document` takes for this bundle."""
+        return self.bundle_id, self.metadata, self.documents
+
+    def descriptor(self, manifest_dir: Path) -> dict[str, Any]:
+        return {
+            "path": self.path.relative_to(manifest_dir).as_posix(),
+            "byteLength": self.byte_length,
+            "crc32": self.crc32,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": str(self.path),
+            "bundle": self.bundle_id,
+            "byteLength": self.byte_length,
+            "crc32": self.crc32,
+            "delta": self.delta,
+            "indexLocation": self.index_location,
+            "dimensions": list(self.dimensions),
+            "arrays": dict(self.arrays),
+            "chunkCount": self.chunk_count,
+            "comparableChunks": self.comparable_chunks,
+            "identicalChunks": self.identical_chunks,
+        }
+
+
+def write_bundle_arrays(
+    source: ChunkSource,
+    zarr_dir: Path,
+    bundle_id: str,
+    dimensions: tuple[str, str, str] = _DIMENSIONS,
+    *,
+    delta: bool = False,
+    index_location: str = DEFAULT_INDEX_LOCATION,
+    executor: ThreadPoolExecutor | None = None,
+) -> BundleWrite:
+    """Write one bundle's variable arrays and the coordinate arrays its
+    ``dimensions`` name into the shared store ``zarr_dir``, which is created
+    if absent and otherwise left as it is: other bundles' arrays, written
+    before or concurrently, stay. The group document is not touched; it is
+    :func:`write_part` / :func:`finalize_store`'s.
+
+    ``dimensions`` is what the encoder decided for the bundle
+    (``binconvert.store_dimensions``); a coordinate shared with another
+    bundle is the same bytes from either, and is written by rename so two
+    concurrent writers never tear it. Arrays, codecs and chunking are exactly
+    a one-bundle store's, with ``attributes.xue.bundle`` added."""
+    if index_location not in INDEX_LOCATIONS:
+        raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
+    if not _BUNDLE_ID.fullmatch(bundle_id) or bundle_id == SHARED_STORE_STEM:
+        raise BundleError(f"{bundle_id!r} cannot name a bundle of a shared store")
+    dimensions = _check_dimensions(bundle_id, dimensions)
+    geometry = _store_geometry(source, False, None)
+    variables = {variable["id"]: variable for variable in source.metadata["variables"]}
+    if zarr_dir.exists() and not zarr_dir.is_dir():
+        raise ConversionError(f"{zarr_dir} exists and is not a directory")
+    zarr_dir.mkdir(parents=True, exist_ok=True)
+
+    own_executor = executor is None
+    pool = executor or ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
+    try:
+        report = BundleWrite(
+            bundle_id=bundle_id,
+            path=zarr_dir,
+            metadata=source.metadata,
+            dimensions=dimensions,
+            documents={},
+            byte_length=0,
+            delta=delta,
+            index_location=index_location,
+        )
+        for name in source.array_names:
+            if name in dimensions:
+                raise BundleError(f"{bundle_id}: variable {name} is named like a coordinate")
+            written, chunks, comparable, identical = _write_array(
+                source,
+                name,
+                variables[name],
+                geometry,
+                zarr_dir / name,
+                delta=delta,
+                index_location=index_location,
+                executor=pool,
+                bundle=bundle_id,
+                dimensions=dimensions,
+            )
+            report.arrays[name] = written
+            report.chunk_count += chunks
+            report.comparable_chunks += comparable
+            report.identical_chunks += identical
+        report.arrays.update(_write_coordinates(source, zarr_dir, dimensions, atomic=True))
+        report.byte_length = sum(report.arrays.values())
+        report.documents = {name: read_json(zarr_dir / name / "zarr.json") for name in report.arrays}
+    finally:
+        if own_executor:
+            pool.shutdown()
+    return report
+
+
+def group_document(
+    bundles: list[tuple[str, dict[str, Any], dict[str, dict[str, Any]]]],
+) -> dict[str, Any]:
+    """A shared store's group document over ``bundles`` — each ``(bundle
+    id, metadata, array documents)`` in manifest order.
+
+    Key order is part of the bytes (docs/zarr-profile.md, "Group document"):
+    ``attributes`` holds ``xue_profile`` then ``xue_bundles``, the bundles in
+    the given order; ``consolidated_metadata.metadata`` holds every variable
+    array, bundle by bundle and in each bundle's ``variables`` order, then
+    the primary coordinates ``time``, ``latitude``, ``longitude`` that some
+    bundle uses, then every other coordinate in the order its first bundle
+    names it. A bundle's coordinates are the ``dimension_names`` of its
+    variable arrays, so the document alone says which arrays a bundle uses.
+    Two bundles naming one coordinate must carry the same document for it."""
+    if not bundles:
+        raise BundleError("a shared store holds at least one bundle")
+    metadata_by_bundle: dict[str, dict[str, Any]] = {}
+    variable_arrays: dict[str, dict[str, Any]] = {}
+    coordinates: dict[str, dict[str, Any]] = {}
+    for bundle_id, metadata, documents in bundles:
+        if bundle_id in metadata_by_bundle:
+            raise BundleError(f"bundle {bundle_id} appears twice in one shared store")
+        metadata_by_bundle[bundle_id] = metadata
+        dimensions: tuple[str, ...] | None = None
+        for variable in metadata["variables"]:
+            name = variable["id"]
+            document = documents.get(name)
+            if document is None:
+                raise BundleError(f"{bundle_id}: no array document for {name}")
+            if name in variable_arrays or name in coordinates:
+                raise BundleError(f"array {name} appears twice in one shared store")
+            names = tuple(document.get("dimension_names") or ())
+            if dimensions is None:
+                dimensions = names
+            elif names != dimensions:
+                raise BundleError(f"{bundle_id}: its arrays do not share one set of dimension names")
+            variable_arrays[name] = document
+        assert dimensions is not None
+        _check_dimensions(bundle_id, dimensions)  # type: ignore[arg-type]
+        for name in dimensions:
+            document = documents.get(name)
+            if document is None:
+                raise BundleError(f"{bundle_id}: no array document for its coordinate {name}")
+            if name in variable_arrays:
+                raise BundleError(f"coordinate {name} is named like a variable")
+            if name in coordinates and coordinates[name] != document:
+                raise BundleError(f"coordinate {name} differs between the bundles that use it")
+            coordinates.setdefault(name, document)
+    ordered = dict(variable_arrays)
+    ordered.update({name: coordinates[name] for name in _DIMENSIONS if name in coordinates})
+    ordered.update({name: document for name, document in coordinates.items() if name not in _DIMENSIONS})
+    return {
+        "zarr_format": 3,
+        "node_type": "group",
+        "attributes": {"xue_profile": SHARED_PROFILE_VERSION, "xue_bundles": metadata_by_bundle},
+        "consolidated_metadata": {"kind": "inline", "must_understand": False, "metadata": ordered},
+    }
+
+
+def part_path(zarr_dir: Path, first_bundle_id: str) -> Path:
+    """``<store>/zarr.part.<first bundle id>.json``: a build's bundles are
+    disjoint from every other build's of the same run, so the first one names
+    the part uniquely."""
+    return zarr_dir / f"{PART_PREFIX}{first_bundle_id}.json"
+
+
+def write_part(zarr_dir: Path, bundles: list[BundleWrite]) -> tuple[Path, str]:
+    """The partial group document over the bundles one build wrote into
+    ``zarr_dir``, in manifest order: :func:`group_document` over them alone.
+    Returns its path and its CRC-32, which a partial manifest's entries carry
+    until :func:`finalize_store` writes the store's group document."""
+    data = _dump_json(group_document([bundle.entry() for bundle in bundles]))
+    path = part_path(zarr_dir, bundles[0].bundle_id)
+    _write(path, data)
+    return path, f"{binformat.crc32_plane(data):08x}"
+
+
+def find_parts(zarr_dir: Path) -> list[Path]:
+    return sorted(zarr_dir.glob(f"{PART_PREFIX}*.json"))
+
+
+def parse_shared_group(document: object, where: str = "group") -> dict[str, Any]:
+    """Validate a profile-2 group (or part) document's shape: a group whose
+    ``xue_profile`` is 2 and whose ``xue_bundles`` is a non-empty object, and
+    no ``xue`` block of a one-bundle store beside it."""
+    if not isinstance(document, dict) or document.get("node_type") != "group":
+        raise BundleError(f"{where} is not a Zarr group document")
+    attributes = document.get("attributes")
+    if not isinstance(attributes, dict) or attributes.get("xue_profile") != SHARED_PROFILE_VERSION:
+        raise BundleError(f"{where} is not a shared (profile {SHARED_PROFILE_VERSION}) store")
+    bundles = attributes.get("xue_bundles")
+    if not isinstance(bundles, dict) or not bundles or "xue" in attributes:
+        raise BundleError(f"{where}: xue_bundles must be a non-empty object")
+    metadata = (document.get("consolidated_metadata") or {}).get("metadata")
+    if not isinstance(metadata, dict):
+        raise BundleError(f"{where} carries no consolidated metadata")
+    return document
+
+
+def _document_bundles(document: dict[str, Any]) -> dict[str, tuple[str, dict[str, Any], dict[str, dict[str, Any]]]]:
+    """Each bundle of a shared group document with the array documents it
+    uses, as :func:`group_document` takes them."""
+    arrays = document["consolidated_metadata"]["metadata"]
+    found = {}
+    for bundle_id, metadata in document["attributes"]["xue_bundles"].items():
+        names = [variable["id"] for variable in metadata["variables"]]
+        missing = [name for name in names if name not in arrays]
+        if missing:
+            raise BundleError(f"{bundle_id}: the group document carries no array {missing[0]}")
+        dimensions = arrays[names[0]].get("dimension_names") or []
+        documents = {name: arrays[name] for name in [*names, *dimensions] if name in arrays}
+        found[bundle_id] = (bundle_id, metadata, documents)
+    return found
+
+
+def merge_group_documents(
+    bundle_order: list[str],
+    parts: list[dict[str, Any]],
+    base: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The group document of a store whose bundles are ``bundle_order`` (the
+    manifest's bundles that name the store, in manifest order), from the
+    partial documents of the builds that wrote them and, for a top-up,
+    ``base``, the group document the bucket serves now. A part's bundle
+    wins over the base's; a bundle in two parts, a part's bundle the order
+    does not name, or a bundle neither names is an error. The result is
+    exactly :func:`group_document` over the same bundles, so a split build
+    and a top-up write the bytes a whole build writes."""
+    fresh: dict[str, tuple[str, dict[str, Any], dict[str, dict[str, Any]]]] = {}
+    for number, part in enumerate(parts):
+        for bundle_id, entry in _document_bundles(parse_shared_group(part, f"part {number}")).items():
+            if bundle_id in fresh:
+                raise BundleError(f"bundle {bundle_id} appears in more than one partial group document")
+            fresh[bundle_id] = entry
+    held = _document_bundles(parse_shared_group(base, "the live group")) if base is not None else {}
+    stray = [bundle_id for bundle_id in fresh if bundle_id not in bundle_order]
+    if stray:
+        raise BundleError(f"partial group documents carry bundles the manifest does not name here: {stray}")
+    entries = []
+    for bundle_id in bundle_order:
+        entry = fresh.get(bundle_id) or held.get(bundle_id)
+        if entry is None:
+            raise BundleError(f"no partial or live group document carries bundle {bundle_id}")
+        entries.append(entry)
+    return group_document(entries)
+
+
+def finalize_store(
+    zarr_dir: Path,
+    bundle_order: list[str],
+    *,
+    base: dict[str, Any] | None = None,
+    remove_parts: bool = False,
+) -> str:
+    """Write a shared store's group document, ``zarr.json``, from the parts
+    in it (and ``base`` on a top-up), and return its CRC-32 — the ``crc32``
+    of every manifest entry naming the store. Written last, after every
+    array, and rewritten only when its bytes change, so assembling twice is
+    a no-op. ``remove_parts`` drops the parts afterwards (a whole build);
+    ``assemble-run`` keeps them, so it can run again."""
+    parts = find_parts(zarr_dir)
+    if not parts and base is None:
+        raise BundleError(f"no {PART_PREFIX}*.json in {zarr_dir}")
+    data = _dump_json(merge_group_documents(bundle_order, [read_json(path) for path in parts], base))
+    path = zarr_dir / "zarr.json"
+    if not path.is_file() or path.read_bytes() != data:
+        _write(path, data)
+    if remove_parts:
+        for part in parts:
+            part.unlink()
+    return f"{binformat.crc32_plane(data):08x}"
+
+
+@dataclass(frozen=True)
+class SharedMember:
+    """One bundle of a shared store written whole by :func:`write_shared_store`."""
+
+    bundle_id: str
+    source: ChunkSource
+    dimensions: tuple[str, str, str] = _DIMENSIONS
+    delta: bool = False
+
+
+def write_shared_store(
+    zarr_dir: Path,
+    members: list[SharedMember],
+    *,
+    index_location: str = DEFAULT_INDEX_LOCATION,
+    executor: ThreadPoolExecutor | None = None,
+) -> dict[str, BundleWrite]:
+    """A whole shared store in one go: ``zarr_dir`` replaced, every member
+    written in order, the part, then the group document, every report
+    stamped with its CRC-32. What a segment, a fixture or a test writes; a
+    build writes its bundles concurrently through the same three steps."""
+    if zarr_dir.exists():
+        if not zarr_dir.is_dir():
+            raise ConversionError(f"{zarr_dir} exists and is not a directory")
+        shutil.rmtree(zarr_dir)
+    reports = [
+        write_bundle_arrays(
+            member.source,
+            zarr_dir,
+            member.bundle_id,
+            member.dimensions,
+            delta=member.delta,
+            index_location=index_location,
+            executor=executor,
+        )
+        for member in members
+    ]
+    write_part(zarr_dir, reports)
+    crc32 = finalize_store(zarr_dir, [report.bundle_id for report in reports], remove_parts=True)
+    for report in reports:
+        report.crc32 = crc32
+    return {report.bundle_id: report for report in reports}
+
+
+def export_shared_bundles(
+    bundles: list[tuple[str, Path]],
+    zarr_dir: Path,
+    *,
+    dimensions: dict[str, tuple[str, str, str]] | None = None,
+    delta: bool = False,
+    index_location: str = DEFAULT_INDEX_LOCATION,
+) -> dict[str, BundleWrite]:
+    """The shared store of finished ``.xue`` bundles, ``(bundle id, path)``
+    in manifest order: :func:`write_shared_store` over their
+    :class:`ContainerSource`\\ s."""
+    return write_shared_store(
+        zarr_dir,
+        [
+            SharedMember(
+                bundle_id,
+                ContainerSource(binformat.read_bundle(path)),
+                (dimensions or {}).get(bundle_id, _DIMENSIONS),
+                delta,
+            )
+            for bundle_id, path in bundles
+        ],
+        index_location=index_location,
+    )
+
+
 # -- reading (NumPy only, for tests and inspection) -----------------------------
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -993,6 +1478,53 @@ def read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise BundleError(f"{path} is not a JSON object")
     return payload
+
+
+def read_group(zarr_dir: Path) -> dict[str, Any]:
+    """A store's group document, either profile, its ``xue_profile`` checked:
+    1 (one bundle in ``attributes.xue``) or 2 (``attributes.xue_bundles``);
+    any other is refused."""
+    group = read_json(zarr_dir / "zarr.json")
+    attributes = group.get("attributes") if isinstance(group.get("attributes"), dict) else {}
+    profile = attributes.get("xue_profile")
+    if profile == SHARED_PROFILE_VERSION:
+        return parse_shared_group(group, str(zarr_dir))
+    if profile == PROFILE_VERSION and isinstance(attributes.get("xue"), dict) and "xue_bundles" not in attributes:
+        return group
+    raise BundleError(f"{zarr_dir}: xue_profile {profile!r} is not one this reader implements")
+
+
+def bundle_metadata(zarr_dir: Path, bundle_id: str | None = None) -> dict[str, Any]:
+    """One bundle's metadata out of a store of either profile: a one-bundle
+    store's ``attributes.xue``, or ``attributes.xue_bundles[bundle_id]`` of a
+    shared one, which a shared store needs the bundle's id to find. A shared
+    store whose group document is not written yet (a fanned-out job's) is
+    read through the part that carries the bundle."""
+    if not (zarr_dir / "zarr.json").is_file() and bundle_id is not None:
+        for path in find_parts(zarr_dir):
+            bundles = parse_shared_group(read_json(path), str(path))["attributes"]["xue_bundles"]
+            if bundle_id in bundles:
+                return bundles[bundle_id]
+        raise BundleError(f"{zarr_dir} has no group document and no part carrying {bundle_id}")
+    group = read_group(zarr_dir)
+    attributes = group["attributes"]
+    if attributes["xue_profile"] == PROFILE_VERSION:
+        return attributes["xue"]
+    if bundle_id is None:
+        raise BundleError(f"{zarr_dir} is a shared store: name the bundle to read")
+    metadata = attributes["xue_bundles"].get(bundle_id)
+    if not isinstance(metadata, dict):
+        raise BundleError(f"{zarr_dir} carries no bundle {bundle_id}")
+    return metadata
+
+
+def array_dimensions(zarr_dir: Path, variable_id: str) -> tuple[str, str, str]:
+    """The dimension names one array declares: ``time`` / ``latitude`` /
+    ``longitude``, or a shared store's bundle-suffixed ones."""
+    names = read_json(zarr_dir / variable_id / "zarr.json").get("dimension_names")
+    if not isinstance(names, list) or len(names) != 3 or not all(isinstance(name, str) for name in names):
+        raise BundleError(f"{zarr_dir / variable_id}: dimension_names must be three names")
+    return names[0], names[1], names[2]
 
 
 def _array_layout(zarr_dir: Path, variable_id: str) -> tuple[ArrayGeometry, bool, str, int]:

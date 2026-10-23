@@ -43,7 +43,7 @@ pointers:
 Mutable documents are served `no-cache`, like the pointer; an Item is too,
 since a STAC client fetches it by its plain name rather than under a `?v=`
 and a top-up rewrites it. Links are relative (`../catalog.json`,
-`../gfs/collection.json`, `tmp2m.zarr`), so a client resolves them against
+`../gfs/collection.json`, `bundles.zarr`), so a client resolves them against
 whichever origin it read the document from, and no document names a host.
 There are no `self` links for the same reason.
 
@@ -56,7 +56,7 @@ stops resolving when the run is pruned, and a client that bookmarked one,
 or held a Collection in its cache, would get a 404. The Collection
 therefore lists one Item at a stable path: `<source>/item.json`, the run's
 Item with every relative href rewritten to reach into the run directory
-(`../gfs.2026091512/tmp2m.zarr`) and nothing else changed
+(`../gfs.2026091512/bundles.zarr`) and nothing else changed
 (`relocate_item`). Its `item` and `latest-version` links both name it; an
 `alternate` link names the run's own copy beside its manifest. A client
 that wants the live run follows `item`; one that wants the pointer's own
@@ -117,7 +117,7 @@ Assets. One per artifact, keyed by bundle:
 | Key | What | `type` | `roles` |
 |---|---|---|---|
 | `manifest` | `manifest.json?v=<crc32>`, the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
-| `<bundle>` | the Zarr store (`<bundle>.zarr`), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
+| `<bundle>` | the Zarr store the bundle is in (the run's shared `bundles.zarr`, `<bundle>.zarr` on a run published before shared stores), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
 | `<bundle>-series` | the series companion (`<bundle>.series.zarr`) when the run publishes one, marked `xue:series: true` (`docs/zarr-profile.md`, "Series store") | `application/vnd.zarr` | `data` |
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
 | `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` too on the satellite disks and the 0.1° grids (`SourceSpec.variant_factors`), `-eighth` on a run published with it | | `data`, `overview` |
@@ -131,14 +131,19 @@ own. Every asset carries `xue:kind` (`store`, `container`, `poster`,
 `video`, `video-index`, `manifest`), data assets `xue:tier` (`full`, or
 the rung's name `half` / `quarter` / `eighth`, read off the variant's
 file suffix; the manifest lists a bundle's rungs in ascending factor
-order), and reduced ones `xue:grid` (`width`, `height`). Sizes and
-checksums use the file extension: `file:size` is the manifest's
-`byteLength` (for a store, the sum of its objects), and `file:checksum` is
+order), and reduced ones `xue:grid` (`width`, `height`). A shared store
+(`bundles[.<tier>].zarr`, or a segment of one) is the href of every bundle's
+asset of its tier, one asset per bundle as before; each such asset carries
+`xue:bundle`, the bundle id a reader selects in the group's `xue_bundles`
+(`docs/zarr-profile.md`, "Reading"). Sizes and checksums use the file
+extension: `file:size` is the manifest's `byteLength` (for a store, the
+bundle's share of its objects: its arrays and the coordinates it uses), and
+`file:checksum` is
 the manifest's `crc32` as a multihash: the multicodec table gives CRC-32
 the code `0x0132`, so the value is `b20204` + the eight hex digits. A store
-is many objects and its `crc32` is that of its root `zarr.json`, so it gets
-no `file:checksum`; the bare `xue:crc32` on every asset is the artifact's
-`?v=`.
+is many objects and its `crc32` is that of its root `zarr.json` (the same
+on every asset naming a shared store), so it gets no `file:checksum`; the
+bare `xue:crc32` on every asset is the artifact's `?v=`.
 
 `application/vnd.zarr` is the media type pystac 1.14 registers for a Zarr
 store (`MediaType.VND_ZARR`); the `application/vnd+zarr` spelling older
@@ -324,8 +329,10 @@ import pystac, xarray as xr
 catalog = pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json")
 gfs = catalog.get_child("gfs")
 run = next(gfs.get_items())                       # the live Item, …/gfs/item.json
-store = run.assets["tmp2m"].get_absolute_href()   # …/gfs.<run>/tmp2m.zarr
+asset = run.assets["tmp2m"]
+store = asset.get_absolute_href()                 # …/gfs.<run>/bundles.zarr, every bundle of the run
 ds = xr.open_zarr(store)                          # the profile in docs/zarr-profile.md
+tmp2m = ds["tmp2m"]                               # arrays are named by variable; xue:bundle names the bundle
 ```
 
 `run.properties["cube:variables"]` says what else the run carries and in

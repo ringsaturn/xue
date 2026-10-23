@@ -33,12 +33,19 @@ for a whole-hemisphere overview at a quarter of the bytes.
 
 ## Stores
 
-A bundle is a Zarr v3 group `<bundle>.zarr/` with inline consolidated
-metadata, so `xarray.open_zarr(url, consolidated=True)` opens it over HTTP
-with no listing. Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
+A run's bundles of one tier share one Zarr v3 group, `bundles.zarr/`
+(`bundles.half.zarr/`, …), with inline consolidated metadata, so
+`xarray.open_zarr(url, consolidated=True)` opens it over HTTP with no
+listing; every bundle's asset has that href and names itself in
+`xue:bundle`, and the arrays are named by variable (`tmp2m`, `ugrd10m`).
+Runs published earlier have one group per bundle, `<bundle>.zarr/`.
+Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
 
 - dims `(time, latitude, longitude)`; latitude runs **north to south**, so a
-  latitude slice is `slice(north, south)`.
+  latitude slice is `slice(north, south)`. A bundle off the run's axis or
+  grid has dims of its own in a shared store (`time_prate` for a rate with
+  no analysis frame, `latitude_pgb` / `longitude_pgb` on the CFSv2
+  pressure levels); `xue_stac.open_store` renames them.
 - `time` is a datetime64 coordinate (seconds since the run). Forecast
   frames are the valid times; `.sel(time=T, method="nearest")` after
   parsing T to `numpy.datetime64` (a bare string fails on a nearest lookup).
@@ -52,7 +59,8 @@ with no listing. Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
   per 6-frame time chunk (27 for GFS). Reading one frame over a region
   costs one request per tile row. Reading the whole globe for every frame
   of a bundle is 40 MB; do not do it for more than a couple of bundles.
-- The group's `attributes.xue` is the bundle metadata: `grid`, `time`
+- The group's `attributes.xue_bundles[<bundle>]` (one-bundle stores:
+  `attributes.xue`) is the bundle metadata: `grid`, `time`
   (`unitSeconds`, `frameOffsets`), `variables[]` with `parameter` (GRIB2
   discipline/category/number/surface) and `quantization`.
 - Satellite disks that cross the antimeridian carry longitudes above 180
@@ -65,7 +73,7 @@ With pystac:
 import pystac, xarray as xr
 cat = pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json")
 item = next(cat.get_child("ecmwf").get_items())
-ds = xr.open_zarr(item.assets["hgt500"].get_absolute_href(), consolidated=True)
+ds = xr.open_zarr(item.assets["hgt500"].get_absolute_href(), consolidated=True)["hgt500"]
 ```
 
 ## Point products by Range

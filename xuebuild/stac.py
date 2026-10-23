@@ -23,7 +23,7 @@ from typing import Any
 
 from .binconvert import VARIANT_TIERS, VECTOR_BUNDLES, bundle_variable_ids
 from .errors import ManifestError, XueError
-from .manifest import iso_z
+from .manifest import is_shared_store_path, iso_z
 from .sources import SOURCES, SourceSpec, source_spec
 from .variables import VARIABLES
 
@@ -1261,14 +1261,25 @@ def _file_fields(byte_length: int, crc32: str, *, single_file: bool) -> dict[str
     return fields
 
 
-def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, roles: list[str]) -> dict[str, Any]:
+def _data_assets(
+    entry: dict[str, Any], key: str, *, bundle_id: str, tier: str, title: str, roles: list[str]
+) -> dict[str, Any]:
     """The delivery assets of one bundle entry or one variant: the store
     under ``key`` when the entry ships one, the container under ``key`` when
     it is the only delivery and under ``key-xue`` beside a store. They are
     not alternates of one another in the alternate-assets sense — different
-    bytes — so each is an asset of its own."""
+    bytes — so each is an asset of its own.
+
+    A shared store (``bundles[.<tier>].zarr``, or a segment of one) is the
+    href of every bundle's asset of its tier; such an asset says which
+    bundle it stands for in ``xue:bundle``, the id a reader selects in the
+    group's ``xue_bundles``, and its ``file:size`` is that bundle's share."""
     assets: dict[str, Any] = {}
     store = entry.get("zarr")
+
+    def bundle_field(path: str) -> dict[str, Any]:
+        return {"xue:bundle": bundle_id} if is_shared_store_path(path) else {}
+
     if store is not None and "segments" in store:
         # A rolling window's store cut by the clock (docs/zarr-profile.md,
         # "Segmented stores"): one asset per segment, keyed and marked by
@@ -1284,6 +1295,7 @@ def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, role
                 "xue:kind": "store",
                 "xue:tier": tier,
                 "xue:segment": start,
+                **bundle_field(segment["path"]),
                 **_file_fields(segment["byteLength"], segment["crc32"], single_file=False),
             }
     elif store is not None:
@@ -1294,6 +1306,7 @@ def _data_assets(entry: dict[str, Any], key: str, *, tier: str, title: str, role
             "roles": roles,
             "xue:kind": "store",
             "xue:tier": tier,
+            **bundle_field(store["path"]),
             **_file_fields(store["byteLength"], store["crc32"], single_file=False),
         }
     if "path" in entry:
@@ -1320,8 +1333,9 @@ def _segment_start(path: str) -> str:
 
 def _variant_tier(variant: dict[str, Any], bundle_id: str) -> str:
     """The tier name of one variant descriptor, read off the suffix of its
-    path (``<bundle>.<tier>.xue``, or the store's ``<bundle>.<tier>.zarr``
-    when the container was retired): ``half``, ``quarter`` or ``eighth``.
+    path (``<bundle>.<tier>.xue``, or, when the container was retired, the
+    store's ``bundles.<tier>.zarr``, ``<bundle>.<tier>.zarr`` on a run
+    published before shared stores): ``half``, ``quarter`` or ``eighth``.
     The manifest does not spell the tier — the descriptors are in ascending
     factor order and carry the grid — and the writer names every file it
     writes by its tier, so a suffix that is not one is the writer's own
@@ -1376,7 +1390,7 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
     for bundle in manifest["bundles"]:
         bundle_id = bundle["variable"]
         title = _bundle_title(bundle_id)
-        assets.update(_data_assets(bundle, bundle_id, tier="full", title=title, roles=["data"]))
+        assets.update(_data_assets(bundle, bundle_id, bundle_id=bundle_id, tier="full", title=title, roles=["data"]))
         series = bundle.get("series")
         if series is not None:
             # The series companion (`docs/zarr-profile.md`, "Series store"):
@@ -1394,7 +1408,7 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
             }
         for variant in bundle.get("variants", []):
             tier = _variant_tier(variant, bundle_id)
-            reduced = _data_assets(variant, f"{bundle_id}-{tier}", tier=tier, title=f"{title} ({tier} resolution)", roles=["data", "overview"])
+            reduced = _data_assets(variant, f"{bundle_id}-{tier}", bundle_id=bundle_id, tier=tier, title=f"{title} ({tier} resolution)", roles=["data", "overview"])
             for asset in reduced.values():
                 asset["xue:grid"] = {"width": variant["width"], "height": variant["height"]}
             assets.update(reduced)
@@ -2091,7 +2105,8 @@ def root_catalog() -> dict[str, Any]:
         "title": "Xue",
         "description": (
             "Global and regional weather forecast runs and radar observations, packed by Xue into "
-            "Zarr v3 stores (docs/zarr-profile.md) for playback in a browser and reading with xarray, "
+            "Zarr v3 stores (docs/zarr-profile.md: every bundle of one resolution tier of a run in one "
+            "bundles.zarr store) for playback in a browser and reading with xarray, "
             "beside four point products in plain JSON — radiosonde soundings, airport reports, surface "
             "station observations and tropical cyclone tracks — and single-site radar sweeps as polar Zarr "
             "stores. One Collection per source or product, whose Item is the newest "

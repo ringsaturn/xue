@@ -6,10 +6,13 @@ every round would re-upload the window. Instead each store is cut into
 segments aligned to the clock — an hour for an imager or a radar, six hours
 for an hourly feed — and each segment is a profile store of its own, put
 under ``<model>.segments/<YYYYMMDDHHMM>/<digest>/`` beside the run
-directories (docs/zarr-profile.md, "Segmented stores"). The digest is over
-what the segment holds, so a completed hour comes out under the same path
-round after round: the round's manifest names it again instead of writing
-it again, and a viewer's cache keeps serving it.
+directories (docs/zarr-profile.md, "Segmented stores"). A round's shared
+store (``bundles[.<tier>].zarr``) is cut into shared segments, every bundle
+of the tier that has frames in the interval in one segment store; a
+one-bundle store of an older layout is cut into one-bundle segments. The
+digest is over what the segment holds, so a completed hour comes out under
+the same path round after round: the round's manifest names it again
+instead of writing it again, and a viewer's cache keeps serving it.
 
 This is a publishing step over finished stores, whichever encoder wrote
 them; it decodes the codes and writes them back with the reference writer.
@@ -111,16 +114,42 @@ def _content_digest(metadata: dict[str, Any], layout: tuple[bool, str], planes: 
     return digest.hexdigest()[:DIGEST_LENGTH]
 
 
-def _live_segments(live_manifest: dict[str, Any] | None, live_round: str | None) -> dict[str, dict[str, Any]]:
+def _shared_digest(members: list[tuple[str, tuple[str, str, str], dict[str, Any], tuple[bool, str], dict[str, list[np.ndarray]]]]) -> str:
+    """A shared segment's digest: SHA-256 over, bundle by bundle in the
+    store's ``xue_bundles`` order, the bundle id and a newline, its
+    dimension names (``json.dumps`` of the list), and then exactly what
+    :func:`_content_digest` takes for a one-bundle segment — its segment
+    metadata (``binformat.metadata_json_bytes``), ``json.dumps([delta,
+    index_location])``, and each variable id in sorted order followed by its
+    planes' bytes in frame order. Every bundle of the segment, its rules and
+    its codes are in it, so different contents never share a path."""
+    digest = hashlib.sha256()
+    for bundle_id, dimensions, metadata, layout, planes in members:
+        digest.update(bundle_id.encode("utf-8") + b"\n")
+        digest.update(json.dumps(list(dimensions)).encode("utf-8"))
+        digest.update(binformat.metadata_json_bytes(metadata))
+        digest.update(json.dumps(list(layout)).encode("utf-8"))
+        for name in sorted(planes):
+            digest.update(name.encode("utf-8"))
+            for plane in planes[name]:
+                digest.update(np.ascontiguousarray(plane, dtype=np.uint8).tobytes())
+    return digest.hexdigest()[:DIGEST_LENGTH]
+
+
+def _live_segments(
+    live_manifest: dict[str, Any] | None, live_round: str | None
+) -> dict[tuple[str, str], dict[str, Any]]:
     """The live round's segment descriptors by their path from the data
-    root, which is what makes a segment the same one in two rounds."""
+    root and the bundle naming them — a shared segment is named by several
+    bundles, each with its own ``byteLength`` — which is what makes a
+    segment the same one in two rounds."""
     if live_manifest is None or live_round is None:
         return {}
-    found: dict[str, dict[str, Any]] = {}
+    found: dict[tuple[str, str], dict[str, Any]] = {}
     for bundle in live_manifest.get("bundles", []):
         for entry in (bundle, *bundle.get("variants", [])):
             for segment in (entry.get("zarr") or {}).get("segments", []):
-                found[posixpath.normpath(posixpath.join(live_round, segment["path"]))] = segment
+                found[(posixpath.normpath(posixpath.join(live_round, segment["path"])), bundle["variable"])] = segment
     return found
 
 
@@ -130,11 +159,13 @@ def cut_store(
     round_directory: Path,
     data_root: Path,
     source_id: str,
-    live: dict[str, dict[str, Any]],
+    live: dict[tuple[str, str], dict[str, Any]],
     report: SegmentReport,
+    bundle_id: str,
 ) -> dict[str, Any]:
-    """Cut one finished store into segments and return the segmented
-    descriptor that replaces its own. The store itself is left in place."""
+    """Cut one finished one-bundle (profile 1) store into segments and
+    return the segmented descriptor that replaces its own. The store itself
+    is left in place."""
     group = zarrstore.read_json(store / "zarr.json")
     metadata = group["attributes"]["xue"]
     names = [variable["id"] for variable in metadata["variables"]]
@@ -159,7 +190,7 @@ def cut_store(
         digest = _content_digest(segment_metadata, (delta, index_location), segment_planes)
         destination = data_root / segments_directory_name(source_id) / f"{start:%Y%m%d%H%M}" / digest / store.name
         path = posixpath.relpath(destination.relative_to(data_root).as_posix(), round_key)
-        held = live.get(posixpath.normpath(posixpath.join(round_key, path)))
+        held = live.get((posixpath.normpath(posixpath.join(round_key, path)), bundle_id))
         if held is not None:
             descriptor = {"path": path, "byteLength": held["byteLength"], "crc32": held["crc32"]}
             report.reused += 1
@@ -174,6 +205,131 @@ def cut_store(
             report.written_bytes += written.byte_length
         segments.append(descriptor)
     return {"byteLength": sum(segment["byteLength"] for segment in segments), "segments": segments}
+
+
+@dataclass
+class _Cut:
+    """One bundle of a shared store, read back for cutting."""
+
+    bundle_id: str
+    metadata: dict[str, Any]
+    names: list[str]
+    times: list[datetime]
+    dimensions: tuple[str, str, str]
+    delta: bool
+    index_location: str
+    tile: tuple[int, int]
+    planes: dict[str, list[np.ndarray]]
+    predictors: dict[str, str]
+
+
+def cut_shared_store(
+    store: Path,
+    bundle_ids: list[str],
+    *,
+    round_directory: Path,
+    data_root: Path,
+    source_id: str,
+    live: dict[tuple[str, str], dict[str, Any]],
+    report: SegmentReport,
+) -> dict[str, dict[str, Any]]:
+    """Cut one finished shared store into shared segments and return, per
+    bundle of ``bundle_ids`` (the bundles the manifest names it with, in its
+    order), the segmented descriptor that replaces its own.
+
+    The segment length is the store's, from every bundle's frames together,
+    so the bundles of one tier are cut at the same boundaries; a segment
+    holds every bundle with a frame in its interval, each over its own
+    frames there (its own ``runTime`` and ``time``), keeping its dimension
+    names, codec choices and tile. A bundle's segment ``byteLength`` is its
+    own arrays and coordinates in the segment; every bundle of a segment
+    carries the segment's group CRC-32. The store itself is left in place."""
+    cuts: list[_Cut] = []
+    for bundle_id in bundle_ids:
+        metadata = zarrstore.bundle_metadata(store, bundle_id)
+        names = [variable["id"] for variable in metadata["variables"]]
+        layouts = {name: zarrstore._array_layout(store, name) for name in names}
+        geometry = layouts[names[0]][0]
+        cuts.append(
+            _Cut(
+                bundle_id=bundle_id,
+                metadata=metadata,
+                names=names,
+                times=_frame_times(metadata),
+                dimensions=zarrstore.array_dimensions(store, names[0]),
+                delta=any(layout[1] for layout in layouts.values()),
+                index_location=layouts[names[0]][2],
+                tile=(geometry.tile_width, geometry.tile_height),
+                planes={name: zarrstore.read_frames(store, name) for name in names},
+                predictors={name: "previous" if layouts[name][1] else "raw" for name in names},
+            )
+        )
+    index_locations = {cut.index_location for cut in cuts}
+    if len(index_locations) != 1:
+        raise ConversionError(f"{store}: its arrays keep their shard index in different places")
+    (index_location,) = index_locations
+    seconds = segment_seconds(sorted({time for cut in cuts for time in cut.times}))
+
+    runs: dict[datetime, dict[str, list[int]]] = {}
+    for cut in cuts:
+        for index, time in enumerate(cut.times):
+            runs.setdefault(segment_start(time, seconds), {}).setdefault(cut.bundle_id, []).append(index)
+
+    round_key = round_directory.relative_to(data_root).as_posix()
+    descriptors: dict[str, list[dict[str, Any]]] = {cut.bundle_id: [] for cut in cuts}
+    for start in sorted(runs):
+        members = []
+        for cut in cuts:
+            indices = runs[start].get(cut.bundle_id)
+            if not indices:
+                continue
+            members.append(
+                (
+                    cut,
+                    _segment_metadata(cut.metadata, [cut.times[index] for index in indices]),
+                    {name: [cut.planes[name][index] for index in indices] for name in cut.names},
+                )
+            )
+        digest = _shared_digest(
+            [
+                (cut.bundle_id, cut.dimensions, metadata, (cut.delta, index_location), planes)
+                for cut, metadata, planes in members
+            ]
+        )
+        destination = data_root / segments_directory_name(source_id) / f"{start:%Y%m%d%H%M}" / digest / store.name
+        path = posixpath.relpath(destination.relative_to(data_root).as_posix(), round_key)
+        key = posixpath.normpath(posixpath.join(round_key, path))
+        held = {cut.bundle_id: live.get((key, cut.bundle_id)) for cut, _, _ in members}
+        if all(segment is not None for segment in held.values()):
+            for bundle_id, segment in held.items():
+                assert segment is not None
+                descriptors[bundle_id].append(
+                    {"path": path, "byteLength": segment["byteLength"], "crc32": segment["crc32"]}
+                )
+                report.reused_bytes += segment["byteLength"]
+            report.reused += 1
+            continue
+        written = zarrstore.write_shared_store(
+            destination,
+            [
+                zarrstore.SharedMember(
+                    cut.bundle_id,
+                    zarrstore.CodesSource(metadata, planes, cut.predictors, cut.tile),
+                    cut.dimensions,
+                    cut.delta,
+                )
+                for cut, metadata, planes in members
+            ],
+            index_location=index_location,
+        )
+        for bundle_id, bundle in written.items():
+            descriptors[bundle_id].append({"path": path, "byteLength": bundle.byte_length, "crc32": bundle.crc32})
+        report.written.append(destination)
+        report.written_bytes += zarrstore.store_byte_length(destination)
+    return {
+        bundle_id: {"byteLength": sum(segment["byteLength"] for segment in segments), "segments": segments}
+        for bundle_id, segments in descriptors.items()
+    }
 
 
 def segment_round(
@@ -196,6 +352,9 @@ def segment_round(
     live = _live_segments(live_manifest, live_round)
     report = SegmentReport()
     cut: list[Path] = []
+    # Every entry naming a store, by store path in manifest order; a shared
+    # store is named by every bundle (or variant) of its tier.
+    named: dict[str, list[tuple[str, dict[str, Any]]]] = {}
     for bundle in manifest["bundles"]:
         for entry in (bundle, *bundle.get("variants", [])):
             store = entry.get("zarr")
@@ -203,16 +362,18 @@ def segment_round(
                 continue
             if "path" in entry:
                 raise ConversionError("a window round ships its stores alone; segmenting it would orphan its containers")
-            store_directory = round_directory / store["path"]
-            entry["zarr"] = cut_store(
-                store_directory,
-                round_directory=round_directory,
-                data_root=data_root,
-                source_id=source_id,
-                live=live,
-                report=report,
-            )
-            cut.append(store_directory)
+            named.setdefault(store["path"], []).append((bundle["variable"], entry))
+    for path, entries in named.items():
+        store_directory = round_directory / path
+        options = dict(round_directory=round_directory, data_root=data_root, source_id=source_id, live=live, report=report)
+        if zarrstore.is_shared_store_path(path):
+            descriptors = cut_shared_store(store_directory, [bundle_id for bundle_id, _ in entries], **options)
+            for bundle_id, entry in entries:
+                entry["zarr"] = descriptors[bundle_id]
+        else:
+            ((bundle_id, entry),) = entries
+            entry["zarr"] = cut_store(store_directory, bundle_id=bundle_id, **options)
+        cut.append(store_directory)
     write_bin_manifest(manifest_path, manifest, force=True, expected_hours=manifest["forecastHours"])
     for store_directory in cut:
         shutil.rmtree(store_directory)

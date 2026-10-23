@@ -24,21 +24,28 @@
 # full bundle) is a handful of objects: the group and array documents, each
 # array's one shard — the whole array, read by range the way a bundle is,
 # and warmed whole the way a bundle is — and the coordinate arrays, which a
-# viewer never reads. The objects are named off the local group document
-# (`xue.variables[].id`), since a chunk key is deterministic. The series
-# store is warmed too: a pinned point reads it, and its shard is warmed whole
-# so the first pin does not pay the fill from R2. A rolling window's
-# segmented store warms the segments this round wrote; the ones it names
-# from an earlier round are not on disk and were warmed by that round.
+# viewer never reads. The objects are named off the local group document,
+# since a chunk key is deterministic: every variable of every bundle in a
+# shared store's `xue_bundles` (`bundles[.<tier>].zarr`,
+# docs/zarr-profile.md), or of a one-bundle store's `xue`. A shared store
+# is named by every entry of its tier and warmed once. The series store is
+# warmed too: a pinned point reads it, and its shard is warmed whole so the
+# first pin does not pay the fill from R2. A rolling window's segmented store
+# warms the segments this round wrote; the ones it names from an earlier
+# round are not on disk and were warmed by that round.
 #
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
+#                                                [--assembled]
 # Without a flag: reads web/public/data/<model>.<run>/manifest.json and the
 # model's pointer file for the manifest's own ?v=, and warms everything —
 # the whole-run publish. The scheduled publish builds a run in pieces and
-# warms in pieces: `--artifacts-of` warms the artifacts one partial manifest
-# (manifest.part.<group>.json) names and nothing else, and `--manifest-only`
-# warms the assembled manifest alone, once it is uploaded. ROUND names one
+# warms in pieces: `--artifacts-of` warms what one partial manifest
+# (manifest.part.<group>.json) names except the shared stores, whose ?v= is
+# not known until assembly writes their group documents; `--assembled`
+# warms the assembled manifest and the shared stores it names, once both
+# are uploaded (only their group documents need be on disk); and
+# `--manifest-only` warms the manifest alone. ROUND names one
 # round of a rolling window (`build-bin --round`): the run's artifacts and
 # manifest then sit in <model>.<run>/<ROUND>/, locally and on the CDN.
 # DATA_DIR, DATA_URL, SITE_ORIGIN and WARM_JOBS override the local data
@@ -59,6 +66,7 @@ case ${3:-} in
   "") ;;
   --artifacts-of) scope=artifacts; source=${4:?--artifacts-of needs a manifest file} ;;
   --manifest-only) scope=manifest ;;
+  --assembled) scope=assembled ;;
   *) echo "unknown option: $3" >&2; exit 2 ;;
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -79,13 +87,24 @@ jobs=${WARM_JOBS:-6}
 
 # One `<path>?v=<crc32>` per line, the manifest first: it is the first thing
 # a viewer fetches, and the pointer is where its crc32 lives.
-# The stores the manifest names, one `<path> <crc32>` per line, each
-# checked to be on disk before anything is listed off it.
+# Whether a store path names a shared store: its last component is
+# bundles.zarr or bundles.<tier>.zarr, and not bundles.series.zarr.
+shared() {
+  printf '%s\n' "${1##*/}" | grep -Eq '^bundles(\.[a-z]+)?\.zarr$' && [ "${1##*/}" != bundles.series.zarr ]
+}
+
+# The stores the manifest names, one `<path> <crc32>` per line and each once,
+# each checked to be on disk before anything is listed off it: a fanned-out
+# piece's leave out the shared stores, the assembled step's are only those.
 stores=
 if [ "$scope" != manifest ]; then
   stores=$(jq -r '.bundles[] | ., .variants[] | (.zarr // empty), (.series // empty)
     | if .segments then .segments[] else . end
-    | "\(.path) \(.crc32)"' "$source" | while read -r store crc; do
+    | "\(.path) \(.crc32)"' "$source" | sort -u | while read -r store crc; do
+      case $scope in
+        (artifacts) ! shared "$store" || continue ;;
+        (assembled) { shared "$store" && [ -f "$dir/$store/zarr.json" ]; } || continue ;;
+      esac
       case $store in (../*) [ -f "$dir/$store/zarr.json" ] || continue ;; esac
       printf '%s %s\n' "$store" "$crc"
     done)
@@ -98,14 +117,14 @@ fi
 
 artifacts=$(
   [ "$scope" = artifacts ] || printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
-  [ "$scope" = manifest ] || jq -r '.bundles[]
+  [ "$scope" = manifest ] || [ "$scope" = assembled ] || jq -r '.bundles[]
          | ., .variants[], (.poster // empty)
          | select(.path != null)
          | "\(.path)?v=\(.crc32)"' "$source"
   while read -r store crc; do
     [ -n "$store" ] || continue
     printf '%s/zarr.json?v=%s\n' "$store" "$crc"
-    jq -r '.attributes.xue.variables[].id' "$dir/$store/zarr.json" | while read -r array; do
+    jq -r '.attributes | (.xue_bundles // {"": .xue}) | .[] | .variables[].id' "$dir/$store/zarr.json" | while read -r array; do
       printf '%s/%s/zarr.json?v=%s\n%s/%s/c/0/0/0?v=%s\n' "$store" "$array" "$crc" "$store" "$array" "$crc"
     done
   done <<STORES

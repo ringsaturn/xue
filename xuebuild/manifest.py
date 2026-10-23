@@ -36,6 +36,19 @@ from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 
 _BUNDLE_VARIABLE_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
 
+# A shared store (docs/zarr-profile.md, profile 2) is named by every entry of
+# its tier, bundles and variants alike, so its path is the one exception to
+# the duplicate-path rule: a map store (or segment) whose final component is
+# exactly `bundles.zarr` or `bundles.<tier>.zarr`, `<tier>` a non-empty run
+# of lowercase ASCII letters other than `series`. Mirrored by
+# `zarrstore.is_shared_store_path`, `encode/manifest.rs` and `manifest.ts`.
+_SHARED_STORE_NAME = re.compile(r"^bundles(?:\.([a-z]+))?\.zarr$")
+
+
+def is_shared_store_path(path: str) -> bool:
+    match = _SHARED_STORE_NAME.fullmatch(path.rsplit("/", 1)[-1])
+    return match is not None and match.group(1) != "series"
+
 
 def _parse_time(value: object, label: str) -> datetime:
     if not isinstance(value, str):
@@ -190,7 +203,8 @@ def _validate_store_fields(store: dict[str, Any], variable: str, paths: set[str]
         or (not _segment_path_is_relative(path) if segment else ".." in Path(path).parts)
     ):
         raise ManifestError(f"manifest bundle zarr path must be a relative {suffix} path for {variable}")
-    if path in paths:
+    shared = suffix == ".zarr" and is_shared_store_path(path)
+    if path in paths and not shared:
         raise ManifestError("manifest contains duplicate bundle paths")
     paths.add(path)
     byte_length = store.get("byteLength")

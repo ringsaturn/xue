@@ -92,14 +92,15 @@ class _LocalRunCase(ClassTempRoot):
                         # by it; nothing else (no .xue, no pointer, no STAC).
                         self.assertIn(entry.name, {"manifest.json", *posters})
 
-    def test_manifest_names_one_store_per_bundle_and_the_requested_hours(self) -> None:
+    def test_manifest_names_the_shared_store_and_the_requested_hours(self) -> None:
         for directory in (self.whole_dir, self.cropped_dir):
             manifest = self.manifest(directory)
             self.assertEqual(manifest["forecastHours"], 0)
             self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], list(self.bundles))
             for bundle in manifest["bundles"]:
                 self.assertNotIn("path", bundle)
-                self.assertTrue((directory / bundle["zarr"]["path"]).is_dir())
+                self.assertEqual(bundle["zarr"]["path"], "bundles.zarr")
+                self.assertTrue((directory / bundle["zarr"]["path"] / "zarr.json").is_file())
 
     def test_series_companions_follow_the_source_table(self) -> None:
         expected = [bundle_id for bundle_id in self.bundles if bundle_id in self.source.series_bundle_ids]

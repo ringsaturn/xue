@@ -491,8 +491,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   HRRR publish the companions for their surface fields, ECMWF and SFLUX
   publish none).
 - `?backend=xue` — read each bundle through its `.xue` container where
-  the run publishes a Zarr v3 store beside it (`<bundle>.zarr/`, the same
-  codes under standard codecs; docs/zarr-profile.md). The store is the
+  the run publishes a Zarr v3 store beside it (the run's shared
+  `bundles.zarr/`, the same codes under standard codecs;
+  docs/zarr-profile.md). The store is the
   default for every bundle whose manifest entry carries a `zarr`
   descriptor, and the container is what the rest, and every run published
   before stores, play from; the data card reads `Zarr` or `Xue` for the
@@ -562,11 +563,14 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `video`, and one or both of two deliveries of the same codes: the `.xue`
   container as `path` + `byteLength` + `crc32` (one unit, present whole or
   absent whole) and a `zarr` store descriptor). A `zarr` descriptor names
-  the bundle as a Zarr v3 store (`<bundle>.zarr/`, a directory of objects:
-  uint8, one shard per variable array holding the whole axis, its inner
-  chunks six-frame time chunks of the bundle's tiles, zstd —
-  `docs/zarr-profile.md`), readable with xarray or any Zarr v3
-  client; its `crc32` is the `?v=` for every object in the store. Every
+  the Zarr v3 store the bundle is in: every bundle of one tier shares one,
+  `bundles.zarr/` (`bundles.half.zarr/`, …; runs published earlier have
+  `<bundle>.zarr/`), a directory of objects — uint8, one shard per
+  variable array holding the whole axis, its inner chunks six-frame time
+  chunks of the bundle's tiles, zstd, the bundle's metadata under the
+  group's `xue_bundles[<bundle>]` (`docs/zarr-profile.md`) — readable with
+  xarray or any Zarr v3 client; its `crc32` is the `?v=` for every object
+  in the store, the same on every entry naming it. Every
   live run and every showcase case now ships the store alone; the `.xue`
   container is what runs published before the store carried, and every
   decoder keeps reading it.

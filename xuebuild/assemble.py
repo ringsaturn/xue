@@ -1,6 +1,8 @@
 """A run built in pieces: grouping its bundles into jobs, and merging the
 jobs' partial manifests (``manifest.part.<group>.json``) into the run's
-manifest, whole or as a top-up onto the live one, before the live pointer.
+manifest and their partial group documents (``bundles[.<tier>].zarr/
+zarr.part.<bundle>.json``) into each shared store's ``zarr.json``, whole or
+as a top-up onto the live ones, before the live pointer.
 
 The merged manifest is exactly the one a whole build writes, because a
 bundle's bytes do not depend on which other bundles were built beside it
@@ -14,8 +16,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from . import zarrstore
 from .binconvert import bundle_input_ids, published_bundle_ids, video_variable_ids
-from .errors import ManifestError
+from .errors import BundleError, ManifestError
 from .variables import variable_spec
 from .manifest import (
     _parse_time,
@@ -258,6 +261,55 @@ def merge_partial_manifests(
     )
 
 
+def shared_store_bundles(manifest: dict[str, Any]) -> dict[str, list[str]]:
+    """Every shared store a manifest names (a ``zarr`` path on a bundle or a
+    variant), with the bundles that name it in manifest order — which is the
+    order of its group document's ``xue_bundles``."""
+    stores: dict[str, list[str]] = {}
+    for bundle in manifest["bundles"]:
+        for node in (bundle, *bundle.get("variants", [])):
+            path = (node.get("zarr") or {}).get("path")
+            if isinstance(path, str) and zarrstore.is_shared_store_path(path):
+                stores.setdefault(path, []).append(bundle["variable"])
+    return stores
+
+
+def assemble_stores(
+    run_directory: Path, manifest: dict[str, Any], *, base_stores: Path | None = None
+) -> dict[str, str]:
+    """Write the group document of every shared store ``manifest`` names
+    that a part was built into, and stamp its CRC-32 on every entry naming
+    it, in place; return the CRCs by store path.
+
+    The parts in the store (one per job) carry their bundles' metadata and
+    array documents, so this needs no array on disk. On a top-up
+    ``base_stores`` holds the live group documents at their manifest paths
+    (``<base_stores>/bundles.zarr/zarr.json``): the bundles the live run
+    already carries come from there, and the new document — with every
+    entry's ``crc32`` — replaces it under a new ``?v=``. A store no part was
+    built into is the live one, untouched."""
+    stamps: dict[str, str] = {}
+    for path, bundle_ids in shared_store_bundles(manifest).items():
+        store = run_directory / path
+        live = base_stores / path / "zarr.json" if base_stores is not None else None
+        base = zarrstore.read_json(live) if live is not None and live.is_file() else None
+        if not store.is_dir() or not zarrstore.find_parts(store):
+            if base is None:
+                raise ManifestError(f"no {zarrstore.PART_PREFIX}*.json in {store} and no live group document for it")
+            continue
+        try:
+            stamps[path] = zarrstore.finalize_store(store, bundle_ids, base=base)
+        except BundleError as exc:
+            hint = "" if base is not None else " (a top-up needs the live group documents: --base-stores)"
+            raise ManifestError(f"{path}: {exc}{hint}") from exc
+    for bundle in manifest["bundles"]:
+        for node in (bundle, *bundle.get("variants", [])):
+            store = node.get("zarr")
+            if isinstance(store, dict) and store.get("path") in stamps:
+                store["crc32"] = stamps[store["path"]]
+    return stamps
+
+
 def read_manifest(path: Path, *, what: str = "manifest") -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -276,11 +328,14 @@ def assemble_run(
     expected_hours: int,
     force: bool = False,
     base_manifest: Path | None = None,
+    base_stores: Path | None = None,
 ) -> dict[str, Any]:
     """Write ``<output_dir>/<model>.<run>/manifest.json`` from the partial
     manifests in that directory — onto ``base_manifest``, the run's live
-    manifest, for a top-up — then the model's live pointer beside the run
-    directory, and return a small report."""
+    manifest, for a top-up — after the group document of each shared store
+    from its parts (onto the live group documents in ``base_stores`` for a
+    top-up), then the model's live pointer beside the run directory, and
+    return a small report."""
     source = source_spec(model)
     if not source.live:
         # The fan-out ends in the pointer, and a source without a live feed
@@ -294,6 +349,7 @@ def assemble_run(
     parts = [read_manifest(path, what="partial manifest") for path in part_paths]
     base = None if base_manifest is None else read_manifest(base_manifest, what="live manifest")
     payload = merge_partial_manifests(parts, source=source, expected_hours=expected_hours, base=base)
+    stores = assemble_stores(run_directory, payload, base_stores=base_stores)
     manifest_path = run_directory / "manifest.json"
     write_bin_manifest(manifest_path, payload, force=force, expected_hours=expected_hours)
     latest_path = output_dir / source.latest_filename
@@ -312,6 +368,7 @@ def assemble_run(
         "manifest": str(manifest_path),
         "latest": str(latest_path),
         "parts": [path.name for path in part_paths],
+        "stores": stores,
         "bundles": [bundle["variable"] for bundle in payload["bundles"]],
         # What the parts contributed: everything for a whole run; for a
         # top-up, the bundles added to the live manifest (or rebuilt over

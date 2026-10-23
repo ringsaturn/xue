@@ -17,6 +17,8 @@ import json
 import logging
 import math
 import os
+import re
+import shutil
 import tempfile
 import zlib
 from collections.abc import Mapping, Sequence
@@ -112,7 +114,7 @@ def _predictor(variable_id: str) -> int:
     return binformat.PREDICTOR_RAW if variable_spec(variable_id).predictor == "raw" else binformat.PREDICTOR_PREVIOUS
 
 # The resolution ladder's tier names by decimation factor: the suffix of
-# the rendition's files (`<bundle>.half.xue`, `<bundle>.half.zarr`) and its
+# the rendition's files (`<bundle>.half.xue`, the shared `bundles.half.zarr`) and its
 # STAC `xue:tier`. A source's `SourceSpec.variant_factors` picks its rungs
 # (the half alone for most grids, the half and the quarter on the
 # satellite disks and the 0.1° IFS grids); the eighth is named because a
@@ -382,6 +384,54 @@ def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tu
         if (variable_id == PRECIPITATION_RATE_BUNDLE_ID and precipitation_mode(source) in ("accumulated", "averaged"))
         or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
     )
+
+
+def store_dimensions(source: SourceSpec, bundle_id: str) -> tuple[str, str, str]:
+    """The dimension names a bundle's arrays carry in its run's shared store
+    (docs/zarr-profile.md, "Coordinates"), and so the coordinate arrays the
+    bundle uses there.
+
+    The store's primary coordinates — ``time``, ``latitude``, ``longitude``
+    — are the run's axis and the source's primary grid at the store's tier.
+    A bundle takes a dimension of its own, ``<primary>_<suffix>``, where a
+    rule of the source registry cuts it differently:
+
+    * ``time_<bundle id>`` for a published scalar whose series has no
+      analysis frame (:func:`analysis_optional_ids`: the de-accumulated or
+      de-averaged rate, an interval maximum such as gust) and for a static
+      field (its first variable's ``VariableSpec.static``: the terrain, one
+      frame at the analysis) — the two rules ``convert_bin`` shortens a
+      bundle's axis by;
+    * ``latitude_<family>`` and ``longitude_<family>`` for a bundle on a grid
+      family of its own, ``<family>`` being exactly the string
+      :func:`bundle_grid_family` returns for it — the ``CompanionFile.id`` of
+      the family its inputs are read from (``pgb``, the CFSv2 pressure
+      levels on their 1-degree grid). Every bundle of one family shares the
+      family's pair, as the bundles of the primary grid share ``latitude`` /
+      ``longitude``. The id must match ``^[a-z][a-z0-9]*$``, so the name is a
+      valid array name; one that does not is a registry bug, refused here.
+
+    The decision is the rule, not a comparison of axes: a rate gets
+    ``time_prate`` even on a build whose axis starts past the analysis and
+    so happens to equal the run's. That makes it a pure function of the
+    source and the bundle id, which a fan-out job building a subset of the
+    bundles, a whole build and the native encoder all compute alike, so
+    every job writes the same objects."""
+    variable_ids = bundle_variable_ids(bundle_id)
+    own_axis = (
+        bundle_id in source.bundle_scalar_ids and bool(analysis_optional_ids(source, (bundle_id,)))
+    ) or VARIABLES[variable_ids[0]].static
+    family = bundle_grid_family(source, bundle_id)
+    if family is not None and not _COORDINATE_SUFFIX.fullmatch(family):
+        raise ConversionError(f"grid family {family!r} of {source.manifest_model} cannot name a coordinate array")
+    return (
+        f"time_{bundle_id}" if own_axis else "time",
+        f"latitude_{family}" if family is not None else "latitude",
+        f"longitude_{family}" if family is not None else "longitude",
+    )
+
+
+_COORDINATE_SUFFIX = re.compile(r"^[a-z][a-z0-9]*$")
 
 
 def series_lead_seconds(frames: dict[str, SourceFrame]) -> int:
@@ -1989,16 +2039,18 @@ def convert_bin(
     zarr: bool = True,
     container: bool = False,
     series: bool = True,
+    partial: bool = False,
 ) -> dict[str, Any]:
-    """Convert a GRIB run (or a series file) into per-bundle Zarr stores.
+    """Convert a GRIB run (or a series file) into shared Zarr stores.
 
-    Writes ``<output_dir>/<bundle>.zarr`` for every scalar variable plus the
-    two-variable ``wind10m.zarr`` bundle when the input files carry the 10 m
-    wind components, the series store (``<bundle>.series.zarr``) of the
-    source's point-read bundles, per-variable posters, the
-    reduced-resolution variants of the source's ladder (``.half.zarr``, and
-    on the satellite disks ``.quarter.zarr`` too,
-    ``SourceSpec.variant_factors``), the optional per-variable video
+    Writes every bundle's arrays into the run's shared store
+    ``<output_dir>/bundles.zarr`` — every scalar variable, plus the
+    two-variable ``wind10m`` bundle when the input files carry the 10 m wind
+    components, and so on — and each rung of the source's ladder into
+    ``bundles.half.zarr`` (and on the satellite disks ``bundles.quarter.zarr``
+    too, ``SourceSpec.variant_factors``), the series store
+    (``<bundle>.series.zarr``) of the source's point-read bundles,
+    per-variable posters, the optional per-variable video
     artifacts and their debug playlists, and returns build statistics. The
     ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
     (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
@@ -2019,6 +2071,13 @@ def convert_bin(
     the container no ``.xue`` is written at all: the manifest names the
     store alone, so a run publishes one delivery. A build needs one of the
     two.
+
+    ``partial`` is one job of a fanned-out publish (``build-bin --bundles``):
+    each shared store gets a partial group document
+    (``zarr.part.<first bundle>.json``) instead of its ``zarr.json``, the
+    entries carry that part's CRC-32, and ``assemble-run`` writes the group
+    documents. Otherwise the group documents are written here, last, and
+    the parts removed.
     """
     if profile not in PROFILES:
         raise ConversionError(f"unknown profile: {profile}")
@@ -2580,6 +2639,20 @@ def convert_bin(
         for factor in variant_factors
     }
 
+    # The shared stores this build writes into, by factor. A whole build owns
+    # them and starts them empty; a fanned-out job shares them with the run's
+    # other jobs (on one machine, or merged afterwards), so it only drops the
+    # group document, which its arrays make stale until assembly.
+    shared_stores: dict[int, Path] = {}
+    if zarr:
+        for factor in (1, *variant_factors):
+            store = output_dir / zarrstore.shared_store_name(variant_tier(factor) if factor > 1 else None)
+            if not partial and store.exists():
+                shutil.rmtree(store)
+            (store / "zarr.json").unlink(missing_ok=True)
+            shared_stores[factor] = store
+    store_writes: dict[tuple[int, str], zarrstore.BundleWrite] = {}
+
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as compressor, ThreadPoolExecutor(
         max_workers=_BUNDLE_WRITERS
     ) as writers:
@@ -2631,16 +2704,23 @@ def convert_bin(
                 else:
                     report = {"variable": bundle_id, "container": False}
                 if zarr:
-                    # Written from the codes in memory: a store is a function
-                    # of the metadata, the codes, the tile and the predictors
-                    # alone (`zarrstore.write_store`), so it never waits on a
-                    # container, and where one is written too the two carry
-                    # the same codes by construction.
+                    # Written from the codes in memory: a bundle's arrays are a
+                    # function of the metadata, the codes, the tile, the
+                    # predictors and its dimension names alone
+                    # (`zarrstore.write_bundle_arrays`), so they never wait on
+                    # a container, and where one is written too the two carry
+                    # the same codes by construction. The group document comes
+                    # after every bundle of the tier.
                     store_source = _store_source(bundle_variables, bundle_offsets, codes, metadata, tile)
-                    export = zarrstore.write_store(
-                        store_source, output_dir / f"{bundle_id}{suffix}.zarr", executor=compressor
+                    export = zarrstore.write_bundle_arrays(
+                        store_source,
+                        shared_stores[factor],
+                        bundle_id,
+                        store_dimensions(source, bundle_id),
+                        executor=compressor,
                     )
-                    LOG.info("wrote %s (%.2f MB)", export.path, export.byte_length / 1e6)
+                    LOG.info("wrote %s into %s (%.2f MB)", bundle_id, export.path, export.byte_length / 1e6)
+                    store_writes[(factor, bundle_id)] = export
                     report["zarr"] = export.to_dict()
                     if series and factor == 1 and bundle_id in source.series_bundle_ids:
                         # The series companion is a full-resolution artifact:
@@ -2688,6 +2768,22 @@ def convert_bin(
             for bundle_id in report_order
             if variant_factors
         }
+
+    # Each tier's group document, last: the part over this build's bundles in
+    # manifest order, then — unless a fanned-out job's — the group document
+    # from it. Every entry naming the store carries its CRC-32.
+    for factor, store in shared_stores.items():
+        writes = [store_writes[(factor, bundle_id)] for bundle_id in report_order]
+        _part, crc32 = zarrstore.write_part(store, writes)
+        if not partial:
+            crc32 = zarrstore.finalize_store(store, list(report_order), remove_parts=True)
+        stamped = (
+            list(bundle_reports)
+            if factor == 1
+            else [variant_reports[bundle_id][variant_factors.index(factor)] for bundle_id in report_order]
+        )
+        for report in stamped:
+            report["zarr"]["crc32"] = crc32
 
     report = {
         "outputDir": str(output_dir),

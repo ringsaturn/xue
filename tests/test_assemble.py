@@ -14,11 +14,12 @@ from __future__ import annotations
 import filecmp
 import json
 import unittest
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 
 from tests._support import ClassTempRoot
-from xuebuild import assemble, binconvert, stac
+from xuebuild import assemble, binconvert, stac, zarrstore
 from xuebuild.binconvert import published_bundle_ids
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import build_bin_manifest
@@ -513,3 +514,196 @@ class TopUpIdentityTests(ClassTempRoot, unittest.TestCase):
                 continue
             with self.subTest(artifact=path.name):
                 self.assertTrue(filecmp.cmp(path, self.whole / self.run_directory / path.name, shallow=False), path.name)
+
+
+def _store_artifacts(root: Path) -> list[Path]:
+    """Every file a build left, but the local parts: a partial manifest and
+    a store's partial group document are never published."""
+    return sorted(
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file()
+        and not path.name.startswith(assemble.PARTIAL_MANIFEST_PREFIX)
+        and not path.name.startswith(zarrstore.PART_PREFIX)
+    )
+
+
+class SharedStoreSplitIdentityTests(ClassTempRoot, unittest.TestCase):
+    """The GRIB fixture built whole and in groups into the run's shared
+    stores: every array, coordinate and group document, the manifest (each
+    entry's shared ``crc32`` included) and the pointer come out the same."""
+
+    root: Path
+    root_prefix = "xue-assemble-stores-"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.source = source_spec("gfs")
+        cls.whole = cls.root / "whole"
+        cls.split = cls.root / "split"
+        run_id = "2026081406"
+        cls.run_directory = f"gfs.{run_id}"
+        binconvert.convert_bin(
+            FIXTURE_GRIB,
+            cls.whole / cls.run_directory,
+            work_root=cls.root / "whole-work",
+            manifest_path=cls.whole / cls.run_directory / "manifest.json",
+            latest_path=cls.whole / "latest.json",
+            run_id=run_id,
+            model="gfs",
+        )
+        cls.groups = assemble.bundle_groups(cls.source, 4)
+        for group in cls.groups:
+            binconvert.convert_bin(
+                FIXTURE_GRIB,
+                cls.split / cls.run_directory,
+                work_root=cls.root / f"split-work-{assemble.bundle_group_slug(group)}",
+                manifest_path=assemble.partial_manifest_path(cls.split / cls.run_directory, group),
+                model="gfs",
+                bundle_ids=group,
+                partial=True,
+            )
+        cls.parts_before = sorted(
+            path.relative_to(cls.split) for path in (cls.split / cls.run_directory).rglob(f"{zarrstore.PART_PREFIX}*")
+        )
+        cls.report = assemble.assemble_run(cls.split, model="gfs", run_id=run_id, expected_hours=120)
+
+    def test_a_job_leaves_parts_and_no_group_document(self) -> None:
+        self.assertEqual(
+            {path.parent.name for path in self.parts_before}, {"bundles.zarr", "bundles.half.zarr"}
+        )
+        self.assertEqual(
+            {path.name for path in self.parts_before if path.parent.name == "bundles.zarr"},
+            {f"{zarrstore.PART_PREFIX}{group[0]}.json" for group in self.groups},
+        )
+
+    def test_the_whole_build_names_one_store_per_tier(self) -> None:
+        manifest = json.loads((self.whole / self.run_directory / "manifest.json").read_text(encoding="utf-8"))
+        full = {bundle["zarr"]["path"] for bundle in manifest["bundles"]}
+        half = {variant["zarr"]["path"] for bundle in manifest["bundles"] for variant in bundle.get("variants", [])}
+        self.assertEqual(full, {"bundles.zarr"})
+        self.assertEqual(half, {"bundles.half.zarr"})
+        for path in ("bundles.zarr", "bundles.half.zarr"):
+            raw = (self.whole / self.run_directory / path / "zarr.json").read_bytes()
+            crc32 = f"{zlib.crc32(raw) & 0xFFFFFFFF:08x}"
+            named = {
+                node["zarr"]["crc32"]
+                for bundle in manifest["bundles"]
+                for node in (bundle, *bundle.get("variants", []))
+                if node["zarr"]["path"] == path
+            }
+            self.assertEqual(named, {crc32}, path)
+            group = json.loads(raw)
+            self.assertEqual(list(group["attributes"]["xue_bundles"]), [bundle["variable"] for bundle in manifest["bundles"]])
+        self.assertEqual(list((self.whole / self.run_directory / "bundles.zarr").glob(f"{zarrstore.PART_PREFIX}*")), [])
+
+    def test_every_artifact_is_byte_identical(self) -> None:
+        whole, split = _store_artifacts(self.whole), _store_artifacts(self.split)
+        self.assertEqual(whole, split)
+        for relative in whole:
+            with self.subTest(artifact=relative.as_posix()):
+                self.assertTrue(filecmp.cmp(self.whole / relative, self.split / relative, shallow=False), relative)
+
+    def test_assembling_again_is_a_no_op(self) -> None:
+        group = self.split / self.run_directory / "bundles.zarr" / "zarr.json"
+        before = (group.stat().st_mtime_ns, (self.split / self.run_directory / "manifest.json").stat().st_mtime_ns)
+        repeat = assemble.assemble_run(self.split, model="gfs", run_id="2026081406", expected_hours=120)
+        self.assertEqual(repeat, self.report)
+        after = (group.stat().st_mtime_ns, (self.split / self.run_directory / "manifest.json").stat().st_mtime_ns)
+        self.assertEqual(after, before)
+
+
+class SharedStoreTopUpIdentityTests(ClassTempRoot, unittest.TestCase):
+    """A run published into shared stores short of the ocean bundles, topped
+    up with only those onto the live manifest and group documents, is the
+    run built whole today: the group documents are rewritten under a new
+    CRC, which every entry — the live ones too — carries."""
+
+    root: Path
+    root_prefix = "xue-topup-stores-"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.source = source_spec("gfs")
+        run_id = "2026081406"
+        cls.run_directory = f"gfs.{run_id}"
+        cls.whole = cls.root / "whole"
+        cls.live = cls.root / "live"
+        cls.topped = cls.root / "topped"
+        binconvert.convert_bin(
+            FIXTURE_GRIB,
+            cls.whole / cls.run_directory,
+            work_root=cls.root / "whole-work",
+            manifest_path=cls.whole / cls.run_directory / "manifest.json",
+            latest_path=cls.whole / "latest.json",
+            run_id=run_id,
+            model="gfs",
+        )
+        cls.ocean = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "wave")
+        live_ids = tuple(bundle_id for bundle_id in published_bundle_ids(cls.source) if bundle_id not in cls.ocean)
+        binconvert.convert_bin(
+            FIXTURE_GRIB,
+            cls.live / cls.run_directory,
+            work_root=cls.root / "live-work",
+            manifest_path=cls.live / cls.run_directory / "manifest.json",
+            model="gfs",
+            bundle_ids=live_ids,
+        )
+        cls.live_manifest = json.loads((cls.live / cls.run_directory / "manifest.json").read_text(encoding="utf-8"))
+        cls.missing = assemble.missing_bundle_ids(cls.source, cls.live_manifest)
+        for group in assemble.bundle_groups(cls.source, 2, cls.missing):
+            binconvert.convert_bin(
+                FIXTURE_GRIB,
+                cls.topped / cls.run_directory,
+                work_root=cls.root / f"topped-work-{assemble.bundle_group_slug(group)}",
+                manifest_path=assemble.partial_manifest_path(cls.topped / cls.run_directory, group),
+                model="gfs",
+                bundle_ids=group,
+                partial=True,
+            )
+        cls.report = assemble.assemble_run(
+            cls.topped,
+            model="gfs",
+            run_id=run_id,
+            expected_hours=120,
+            base_manifest=cls.live / cls.run_directory / "manifest.json",
+            # What `make live-store-groups` fetches: the live group documents
+            # at their manifest paths.
+            base_stores=cls.live / cls.run_directory,
+        )
+
+    def test_only_the_missing_bundles_were_built(self) -> None:
+        self.assertEqual(self.missing, self.ocean)
+        self.assertEqual(sorted(self.report["built"]), sorted(self.ocean))
+
+    def test_the_manifest_and_group_documents_are_the_whole_builds(self) -> None:
+        for name in ("manifest.json", "bundles.zarr/zarr.json", "bundles.half.zarr/zarr.json"):
+            with self.subTest(file=name):
+                self.assertTrue(
+                    filecmp.cmp(self.whole / self.run_directory / name, self.topped / self.run_directory / name, shallow=False),
+                    name,
+                )
+        live_crc = self.live_manifest["bundles"][0]["zarr"]["crc32"]
+        topped = json.loads((self.topped / self.run_directory / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(topped["bundles"][0]["zarr"]["crc32"], live_crc, "a top-up is a new ?v=")
+
+    def test_the_built_arrays_are_byte_identical(self) -> None:
+        for relative in _store_artifacts(self.topped / self.run_directory):
+            with self.subTest(artifact=relative.as_posix()):
+                self.assertTrue(
+                    filecmp.cmp(self.topped / self.run_directory / relative, self.whole / self.run_directory / relative, shallow=False),
+                    relative,
+                )
+
+    def test_a_top_up_without_the_live_group_documents_is_refused(self) -> None:
+        with self.assertRaisesRegex(ManifestError, "--base-stores"):
+            assemble.assemble_run(
+                self.topped,
+                model="gfs",
+                run_id="2026081406",
+                expected_hours=120,
+                force=True,
+                base_manifest=self.live / self.run_directory / "manifest.json",
+            )

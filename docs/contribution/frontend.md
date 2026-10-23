@@ -57,8 +57,17 @@ whole objects (only when no container ships). H.264 only with
 `?use_h264=true`, a video artifact and browser support. Probe sessions are
 streamed or nothing.
 
-Store channel: `zarr/shard.ts` parses the CRC-32C-checked shard index once
-and maps frame and tile to a span (`shardOf`; a time chunk is six frames
+Store channel: a session opens a bundle by (store, bundle id),
+`ZarrSession.open(store, decode, { bundle })`: a run's map stores are shared
+([`zarr-profile.md`](../zarr-profile.md), profile 2: every bundle of a tier
+in `bundles[.<tier>].zarr`), so `zarr/shard.ts::parseGroupMetadata(text,
+bundle?)` takes the bundle's metadata out of the group's `xue_bundles`
+(or a one-bundle store's `xue`, profile 1, which published runs and cases
+still are) and checks grid and axis against that bundle alone. Caches keyed
+by store path (`PayloadPool`, the store) are shared by the tier's bundles,
+so the group and coordinates are fetched once per tier. `zarr/shard.ts`
+parses the CRC-32C-checked shard index once and maps frame and tile to a
+span (`shardOf`; a time chunk is six frames
 and may straddle container groups); `zarr/store.ts` appends `?v=` and
 merges one shard's ranges issued in one microtask (gap ≤ 64 KB). Chunks
 decode via `decodeChunk` from `rust/xue-wasm`. Compressed chunks are an LRU

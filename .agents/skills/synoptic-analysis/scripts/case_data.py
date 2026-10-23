@@ -89,7 +89,7 @@ def fetch_fields(sources, bundles, box, times, out: dict, meta: dict):
             if b not in stores:
                 print(f"  {src}: no {b}", file=sys.stderr)
                 continue
-            ds = X.open_store(stores[b])
+            ds = X.open_store(stores[b], b)
             for v in ds.data_vars:
                 da = X.sel_box(ds[v], *box)
                 for T in times:
@@ -111,7 +111,7 @@ def fetch_point(sources, bundles, lat, lon, out: dict, meta: dict):
         for b in bundles:
             if b not in stores:
                 continue
-            ds = X.open_store(stores[b])
+            ds = X.open_store(stores[b], b)
             for v in ds.data_vars:
                 s = X.sel_point(ds[v], lat, lon)
                 out[f"{src}:{b}:{v}"] = s.values.astype("float32")
@@ -166,7 +166,7 @@ def fetch_nowcast(sat: str | None, radar: str | None, box, out: dict, meta: dict
         src, _, var = sat.partition(":")
         var = var or "ir104"
         item = X.live_item(src)
-        ds = X.open_store(X.store_assets(item)[var])
+        ds = X.open_store(X.store_assets(item)[var], var)
         da = X.sel_box(ds[var], *box) if box else ds[var]
         fr = da.isel(time=-1)
         out["sat"] = fr.values.astype("float32"); out["sat:lat"] = da.latitude.values; out["sat:lon"] = da.longitude.values
@@ -176,7 +176,7 @@ def fetch_nowcast(sat: str | None, radar: str | None, box, out: dict, meta: dict
         src, _, var = radar.partition(":")
         var = var or ("cref" if src in ("mrms", "cma") else "prate")
         item = X.live_item(src)
-        ds = X.open_store(X.store_assets(item)[var])
+        ds = X.open_store(X.store_assets(item)[var], var)
         da = X.sel_box(ds[var], *box) if box else ds[var]
         fr = da.isel(time=-1)
         out["radar"] = fr.values.astype("float32"); out["radar:lat"] = da.latitude.values; out["radar:lon"] = da.longitude.values

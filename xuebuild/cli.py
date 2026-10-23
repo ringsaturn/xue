@@ -187,7 +187,7 @@ def parser() -> argparse.ArgumentParser:
     )
     convert_bin_parser.add_argument("input", type=Path)
     _model_argument(convert_bin_parser, fetched_only=False)
-    convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for the per-bundle Zarr stores")
+    convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for the shared Zarr stores (bundles.zarr, bundles.<tier>.zarr)")
     convert_bin_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
     convert_bin_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
     convert_bin_parser.add_argument("--manifest", type=Path, help="write a schema v3 manifest.json to this path")
@@ -289,7 +289,8 @@ def parser() -> argparse.ArgumentParser:
         nargs="+",
         metavar="BUNDLE",
         help="build only these bundles (one job of a fanned-out publish): fetch just their inputs, "
-        "write a manifest.part.<group>.json beside them instead of manifest.json, and no live pointer",
+        "write a manifest.part.<group>.json beside them instead of manifest.json and a zarr.part.<bundle>.json "
+        "in each shared store instead of its group document, and no live pointer",
     )
     build_bin_parser.add_argument(
         "--round",
@@ -321,7 +322,8 @@ def parser() -> argparse.ArgumentParser:
 
     assemble_parser = commands.add_parser(
         "assemble-run",
-        help="merge the manifest.part.*.json of a run built with --bundles into its manifest.json and the live pointer",
+        help="merge the manifest.part.*.json of a run built with --bundles into its manifest.json, the shared "
+        "stores' zarr.part.*.json into their group documents, and write the live pointer",
     )
     assemble_parser.add_argument("--run", required=True, help="the UTC cycle the parts were built from, YYYYMMDDHH")
     assemble_parser.add_argument(
@@ -337,6 +339,14 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "top up instead of assemble: the run's live manifest, whose entries the parts are merged onto "
             "(a part replaces the live entry for the same bundle)"
+        ),
+    )
+    assemble_parser.add_argument(
+        "--base-stores",
+        type=Path,
+        help=(
+            "with --base-manifest: a directory holding the live run's shared group documents at their manifest "
+            "paths (<dir>/bundles.zarr/zarr.json, …; make live-store-groups), merged under the parts"
         ),
     )
     _model_argument(assemble_parser)
@@ -991,6 +1001,7 @@ def main(argv: list[str] | None = None) -> int:
                 bundle_ids=bundle_ids,
                 container=arguments.container,
                 series=arguments.series,
+                partial=bundle_ids is not None,
             )
             if arguments.segments:
                 report["segments"] = cut_round_segments(
@@ -1025,6 +1036,7 @@ def main(argv: list[str] | None = None) -> int:
                 expected_hours=arguments.hours,
                 force=arguments.force,
                 base_manifest=arguments.base_manifest,
+                base_stores=arguments.base_stores,
             )
             report["stac"] = write_run_documents(
                 arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])

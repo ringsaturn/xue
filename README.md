@@ -83,15 +83,16 @@ with HTTP Range requests.
 - **STAC catalog**: `catalog.json` at the data root, one Collection per
   source with a stable live Item, an Item per run, and the showcase cases
   ([`docs/stac.md`](docs/stac.md)). The root's `index.html` lists them.
-- **Zarr stores**: each bundle is `<bundle>.zarr/`, a standard Zarr v3
-  store with CF `scale_factor` / `add_offset` / `_FillValue` and
-  `time` / `latitude` / `longitude` coordinates, so `xarray.open_zarr`
-  reads physical values ([`docs/zarr-profile.md`](docs/zarr-profile.md)).
+- **Zarr stores**: every bundle of a run is in one shared `bundles.zarr/`
+  (and `bundles.half.zarr/`, …), a standard Zarr v3 store with CF
+  `scale_factor` / `add_offset` / `_FillValue` and `time` / `latitude` /
+  `longitude` coordinates, so `xarray.open_zarr` reads physical values
+  ([`docs/zarr-profile.md`](docs/zarr-profile.md)).
 
   ```python
   import pystac, xarray as xr
   run = next(pystac.Catalog.from_file("https://dataset.ringsaturn.me/xue/catalog.json").get_child("gfs").get_items())
-  ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())
+  ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())["tmp2m"]
   ```
 
 - **Data API** (experimental: no compatibility, reliability or freshness

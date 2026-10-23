@@ -95,21 +95,48 @@ def variables(item: dict) -> dict:
 
 # --- stores ------------------------------------------------------------------
 
-def open_store(url: str | list[str]):
-    """xarray Dataset of one bundle store, or of a window's segments joined
-    along time. Every array is dequantized to its physical unit (float32,
-    NaN where nodata), including the log1p codebook that xarray's CF
-    decoding cannot express."""
+def _open_one(url: str, bundle: str | None):
+    """One store (or segment) as (Dataset of the bundle's arrays, metadata).
+    A run's store is shared — every bundle of a tier in `bundles.zarr`, the
+    metadata under `xue_bundles[<bundle>]` — and a bundle off the run's axis
+    or grid has dims of its own (`time_prate`, `latitude_pgb`), renamed here
+    to `time` / `latitude` / `longitude`. A run published before shared
+    stores has one store per bundle, its metadata under `xue`."""
+    import xarray as xr
+
+    ds = xr.open_zarr(url, consolidated=True)
+    attrs = ds.attrs
+    if "xue_bundles" in attrs:
+        bundles = attrs["xue_bundles"]
+        if isinstance(bundles, str):
+            bundles = json.loads(bundles)
+        if bundle is None or bundle not in bundles:
+            raise KeyError(f"{url} is a shared store; name one of its bundles: {sorted(bundles)}")
+        meta = bundles[bundle]
+        names = [var["id"] for var in meta["variables"]]
+        ds = ds[names]
+        dims = ds[names[0]].dims
+        ds = ds.rename({dim: primary for dim, primary in zip(dims, ("time", "latitude", "longitude")) if dim != primary})
+        return ds, meta
+    meta = attrs["xue"]
+    return ds, json.loads(meta) if isinstance(meta, str) else meta
+
+
+def open_store(url: str | list[str], bundle: str | None = None):
+    """xarray Dataset of one bundle of a store, or of a window's segments
+    joined along time; `bundle` is the asset key (`store_assets`), which a
+    shared store needs. Every array is dequantized to its physical unit
+    (float32, NaN where nodata), including the log1p codebook that xarray's
+    CF decoding cannot express."""
     import xarray as xr
 
     if isinstance(url, list):
-        parts = [xr.open_zarr(u, consolidated=True) for u in url]
+        opened = [_open_one(u, bundle) for u in url]
+        parts = [part for part, _ in opened]
         ds = xr.concat(parts, dim="time", combine_attrs="override") if len(parts) > 1 else parts[0]
+        meta = opened[0][1]
     else:
-        ds = xr.open_zarr(url, consolidated=True)
-    meta = ds.attrs["xue"]
-    if isinstance(meta, str):
-        meta = json.loads(meta)
+        ds, meta = _open_one(url, bundle)
     out = {}
     for var in meta["variables"]:
         da = ds[var["id"]]
@@ -141,7 +168,7 @@ def _dequantize(da, var: dict):
 
 def open_bundle(source: str, bundle: str):
     item = live_item(source)
-    return open_store(store_assets(item)[bundle]), item
+    return open_store(store_assets(item)[bundle], bundle), item
 
 
 def sel_box(da, south: float, north: float, west: float, east: float):
