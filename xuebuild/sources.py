@@ -288,12 +288,15 @@ class SourceSpec:
     (every ``f``-th row and column from the origin, the same sample sites
     as the poster) and its tile the source tile divided by it (``ceil``).
     One rung, the half, for every grid a full plane of which is a million
-    cells; three for the satellite disks, whose 3000 x 3000 grid is nine
+    cells; two for the satellite disks, whose 3000 x 3000 grid is nine
     million a plane and whose half is still twice a full GFS plane, so a
-    shell with a frame budget can land on a quarter or an eighth.
+    shell with a frame budget can land on the quarter.
 
-    Every existing rendition is unchanged by a longer ladder; a source
-    only ever gains files. Mirrored in the native encoder's source table."""
+    Every other rendition is unchanged by a longer or shorter ladder: a
+    change adds or drops the coarsest files only, and readers take the
+    tiers from the manifest, so a run published with another ladder (a
+    satellite window with an ``.eighth``) still plays. Mirrored in
+    the native encoder's source table."""
     series_bundle_ids: tuple[str, ...] = ()
     """Bundles that also ship a series companion store
     (``<bundle>.series.zarr``, docs/zarr-profile.md "Series store"): one inner
@@ -1900,11 +1903,12 @@ SOURCES: dict[str, SourceSpec] = {
         # a series of thirty-seven 4 KB planes over a six-hour window; a
         # phone over Tokyo takes thirty of them.
         tile=(64, 64),
-        # Three rungs (1500, 750 and 375 cells a side): the half is still
-        # twice the cells of a full GFS plane, and a full Dust RGB frame
-        # is three 9 MB planes, so a shell zoomed out to the whole disk
-        # needs a quarter or an eighth to keep its frame budget.
-        variant_factors=(2, 4, 8),
+        # Two rungs (1500 and 750 cells a side): the half is still twice
+        # the cells of a full GFS plane, and a full Dust RGB frame is
+        # three 9 MB planes, so a shell zoomed out to the whole disk needs
+        # the quarter to keep its frame budget. No eighth: it would be a
+        # quarter of the disk's bucket objects for the coarsest zoom alone.
+        variant_factors=(2, 4),
         observation=True,
         series_file=True,
         platform="himawari",
@@ -1951,8 +1955,8 @@ SOURCES: dict[str, SourceSpec] = {
         production_grid=(2600, 2200),
         # 0.64° tiles, 41 x 35 = 1435 a plane.
         tile=(64, 64),
-        # 0.02°, 0.04° (the disk's own step) and 0.08°.
-        variant_factors=(2, 4, 8),
+        # 0.02° and 0.04° (the disk's own step).
+        variant_factors=(2, 4),
         observation=True,
         series_file=True,
         platform="himawari",
@@ -1998,7 +2002,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
-        variant_factors=(2, 4, 8),
+        variant_factors=(2, 4),
         observation=True,
         series_file=True,
         platform="goeseast",
@@ -2025,7 +2029,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
-        variant_factors=(2, 4, 8),
+        variant_factors=(2, 4),
         observation=True,
         series_file=True,
         platform="goeswest",
@@ -2073,7 +2077,7 @@ SOURCES: dict[str, SourceSpec] = {
         core_bundle_ids=("ir104",),
         production_grid=(3000, 3000),
         tile=(64, 64),
-        variant_factors=(2, 4, 8),
+        variant_factors=(2, 4),
         observation=True,
         series_file=True,
         platform="meteosat",

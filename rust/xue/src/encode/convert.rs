@@ -1699,8 +1699,8 @@ fn verify_bundle_bytes(bytes: &[u8]) -> Result<()> {
 /// Writes `<output_dir>/<variable>.xue` for every scalar variable plus the
 /// two-variable `wind10m.xue` bundle when the input files carry the 10 m wind
 /// components, per-variable posters, the reduced `<bundle>.<tier>.xue`
-/// variants of the source's resolution ladder (`.half.xue`, and `.quarter` /
-/// `.eighth` on the satellite disks), and returns build statistics. When `latest_path` and `run_id` are given, also
+/// variants of the source's resolution ladder (`.half.xue`, and `.quarter`
+/// on the satellite disks), and returns build statistics. When `latest_path` and `run_id` are given, also
 /// (re)writes the mutable live pointer aimed at the freshly written manifest.
 ///
 /// `bbox` crops every plane to a region and `bundle_ids` restricts which

@@ -111,8 +111,8 @@ regenerating the registry fixtures ([testing.md](testing.md)).
   Rules mirrored in `rust/xue/src/encode/`:
   - a global grid snaps to `360 / width` (WAVEWATCH III's last longitude is
     off, and wave bundles must share the pgrb2 grid; `grid.rs`);
-  - ladder `SourceSpec.variant_factors` (`(2,)` default, `(2, 4, 8)` on
-    satellites): every f-th row and column of the codes, tile divided by f
+  - ladder `SourceSpec.variant_factors` (`(2,)` default, `(2, 4)` on
+    satellites and the 0.1° IFS grids): every f-th row and column of the codes, tile divided by f
     (`variant_tier`, `_variant_grid`, `_bundle_tile`); `variants` are in
     ascending factor order and nothing keys on the suffix;
   - a video companion only for the variables whose `companions` name it,

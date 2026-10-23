@@ -315,8 +315,9 @@ class RunItemTests(unittest.TestCase):
             stac.run_item(self.manifest, "dbf3a790", source=self.source, manifest_relative_path="manifest.json")
 
     def test_a_ladder_of_three_is_three_assets_named_by_tier(self) -> None:
-        """A satellite bundle's variants — half, quarter, eighth, in the
-        manifest's ascending-factor order — are one asset each, keyed and
+        """A bundle's variants — half, quarter, eighth, as a satellite run
+        published with an eighth carries them, in the manifest's
+        ascending-factor order — are one asset each, keyed and
         tiered by the name read off the file's suffix, whether the tier
         ships its container, its store or both."""
         rungs = [("half", 1500, "ce1cd9ce"), ("quarter", 750, "8b5eb9d7"), ("eighth", 375, "56f4ea0b")]

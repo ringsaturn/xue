@@ -1439,7 +1439,7 @@ stores named the same way with `.zarr` by default,
 reduced-resolution renditions named `<variable>.half.xue`,
 `<variable>.quarter.xue` and `<variable>.eighth.xue` (decimated by 2, 4 and
 8; which rungs a source ships is a registry value, every source at least the
-half), structurally identical bundles whose metadata declares the decimated
+half, none the eighth today, though published ones stay valid), structurally identical bundles whose metadata declares the decimated
 grid. A run directory also carries a `manifest.json` describing every
 bundle (its store, and its container's path, byte length and whole-file
 CRC-32 where one was written, resolution variants, optional poster and

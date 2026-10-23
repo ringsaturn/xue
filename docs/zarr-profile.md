@@ -65,9 +65,12 @@ A reduced-resolution rendition is its own store, `<bundle>.<tier>.zarr`,
 written from the tier's decimated codes exactly as the full one is from the
 full codes. The ladder is per source (`SourceSpec.variant_factors`):
 every source has the half (`tmp2m.half.zarr`, the grid decimated by two),
-and the satellite disks add the quarter and the eighth (`ir104.quarter.zarr`,
-`ir104.eighth.zarr`; 3000 → 1500 → 750 → 375 cells a side, the tile 64 →
-32 → 16 → 8), each decimated from the full plane: every f-th row and
+and the satellite disks add the quarter (`ir104.quarter.zarr`; 3000 → 1500
+→ 750 cells a side, the tile 64 → 32 → 16), each decimated from the full
+plane. The eighth (`<bundle>.eighth.zarr`, decimation by eight) is still a
+valid tier that no source builds: a reader takes the tiers a bundle has
+from its manifest entry, so a store published with one still plays. Every
+rung is every f-th row and
 column, except that the 3.9 µm window (`ir039`) keeps the largest code
 within f/2 cells of each site, so a one-cell hot spot is not dropped
 (`docs/satellite.md`, "The 3.9 µm window").

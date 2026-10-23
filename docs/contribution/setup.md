@@ -72,7 +72,7 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
 - `build-bin` (and `convert-bin`, `showcase build`) writes per bundle a
   `<bundle>.zarr/` store straight from the codes, with `--xue` the `.xue`
   container beside it from the same codes; the reduced tiers (`.half`, plus
-  `.quarter` / `.eighth` on satellites), a first-frame poster and, where
+  `.quarter` on satellites and the 0.1° grids), a first-frame poster and, where
   the source enables it, H.264 companions. `--skip-variants` /
   `--skip-video` turn those off. The pressure family gets no poster or
   companion: contours need exact codes.

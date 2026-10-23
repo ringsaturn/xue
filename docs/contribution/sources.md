@@ -464,8 +464,10 @@ the rest of the repo must keep in mind:
   still gets both frames cached; the converter reads what is listed.
 - Frames are kept `FRAMES_KEEP_HOURS` (8; 26 on Meteosat): a day of
   twenty variables on a NOAA disk is ~10.5 GB.
-- They ship three lower rungs (`variant_factors` `(2, 4, 8)`): a
-  3000 × 3000 plane does not fit the shell's cell budget zoomed out.
+- They ship two lower rungs (`variant_factors` `(2, 4)`): a 3000 × 3000
+  plane does not fit the shell's cell budget zoomed out. No eighth: it
+  cost a quarter of a disk's bucket objects; the coarsest zoom plays the
+  quarter.
 - `tests/fixtures/satellite-registry.json` pins variables and bundles across
   the three implementations (`tests/prepare_satellite_registry.py`).
 

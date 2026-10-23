@@ -114,8 +114,10 @@ def _predictor(variable_id: str) -> int:
 # The resolution ladder's tier names by decimation factor: the suffix of
 # the rendition's files (`<bundle>.half.xue`, `<bundle>.half.zarr`) and its
 # STAC `xue:tier`. A source's `SourceSpec.variant_factors` picks its rungs
-# (the half alone for every grid but the satellite disks, which take all
-# three); any other factor is a registry bug, not a runtime case.
+# (the half alone for most grids, the half and the quarter on the
+# satellite disks and the 0.1° IFS grids); the eighth is named because a
+# run published with it stays readable. Any other factor is a registry bug,
+# not a runtime case.
 VARIANT_TIERS: dict[int, str] = {2: "half", 4: "quarter", 8: "eighth"}
 
 # gdal_translate decodes GRIB packing on the CPU: one worker per core.
@@ -1995,7 +1997,7 @@ def convert_bin(
     wind components, the series store (``<bundle>.series.zarr``) of the
     source's point-read bundles, per-variable posters, the
     reduced-resolution variants of the source's ladder (``.half.zarr``, and
-    on the satellite disks ``.quarter.zarr`` and ``.eighth.zarr``,
+    on the satellite disks ``.quarter.zarr`` too,
     ``SourceSpec.variant_factors``), the optional per-variable video
     artifacts and their debug playlists, and returns build statistics. The
     ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
@@ -2547,7 +2549,7 @@ def convert_bin(
     # Full-resolution canonical bundles (one per scalar variable plus one per
     # two-variable vector bundle) and the resolution ladder: one rendition
     # per factor of the source's `variant_factors` (the half alone for most
-    # sources; half, quarter and eighth on the satellite disks), each
+    # sources; half and quarter on the satellite disks), each
     # decimated from the already-quantized full codes exactly like the
     # posters, same temporal structure; the rung's grid is embedded in the
     # variant bundle's own metadata, the manifest carries the tier list in
