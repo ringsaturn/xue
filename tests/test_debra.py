@@ -27,7 +27,6 @@ leaves of the real files.
 
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 import unittest
@@ -445,11 +444,11 @@ class WindowTests(TempRoot, unittest.TestCase):
         self.assertEqual(list(window.series)[-2:], ["dustcf", "zhouye"])
         frame = window.slots[0].frames["dustcf"]
         self.assertEqual(frame, self.root / "himawari-frames" / "dustcf" / "dustcf_20260917030000.tif")
-        sidecar = json.loads(assemble.packing_path(frame).read_text(encoding="utf-8"))
-        self.assertEqual((sidecar["scale"], sidecar["offset"], sidecar["unit"]), (0.0001, 0.0, "1"))
-        self.assertEqual(sidecar["producer"], {"id": "shachen", "version": DEBRA.version})
-        self.assertEqual(sidecar["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in DEBRA.inputs])
-        self.assertEqual(sidecar["ancillary"], {"camel": "camel", "skin": "gfs_tmpsfc_2026091700_f003.grib2"})
+        record = assemble.frame_record(frame)
+        self.assertEqual((record["scale"], record["offset"], record["unit"]), (0.0001, 0.0, "1"))
+        self.assertEqual(record["producer"], {"id": "shachen", "version": DEBRA.version})
+        self.assertEqual(record["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in DEBRA.inputs])
+        self.assertEqual(record["ancillary"], {"camel": "camel", "skin": "gfs_tmpsfc_2026091700_f003.grib2"})
         plane = assemble.read_frame(frame, TILE_GRID)
         ir104 = assemble.read_frame(window.slots[0].frames["ir104"], TILE_GRID)
         covered = np.isfinite(ir104)

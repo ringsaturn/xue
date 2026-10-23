@@ -271,7 +271,7 @@ def _bilinear(lats: np.ndarray, lons: np.ndarray, values: np.ndarray, target_lat
 @dataclass(frozen=True)
 class SkinTemperatureSource:
     """Which GFS field a slot's skin temperature is, for the log and the
-    frame's sidecar."""
+    frame's record."""
 
     path: Path
     cycle: datetime

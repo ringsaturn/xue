@@ -79,6 +79,10 @@ pull-r2-frames` / `push-r2-frames` / `prune-r2-frames` (`FRAME_CACHE=true`
 in the rounds script). The Makefile globs key on
 `<variable>/<name>_<YYYYMMDDHHMMSS>.<ext>`, and the pull spans as far ahead
 of the clock as behind it (aurora frames are named for future valid times).
+A frame is one object: whatever a frame needs said about it (a satellite
+frame's packing and provenance) goes inside the file, never in a sidecar
+beside it, since every object costs a write on push and a delete on
+prune.
 A showcase case can only be cut from what the cache keeps.
 
 **The series-file path.** `SourceSpec.series_file` sources arrive as CF

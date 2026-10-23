@@ -28,9 +28,11 @@ from __future__ import annotations
 
 import json
 import logging
+import struct
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
 import numpy as np
@@ -38,15 +40,23 @@ import numpy as np
 from ..errors import ConversionError
 from ..gdal import require_command, run_command
 from .platforms import Channel, Platform
-from .projector import TargetGrid
+from .projector import FRAME_CREATION_OPTIONS, TargetGrid, metadata_arguments
 
 LOG = logging.getLogger(__name__)
 
 FRAME_SUFFIX = ".tif"
-#: Beside every frame, the packing the projector read off the source: which
-#: GDAL carries a band's scale, offset and unit through a warp is a matter
-#: of version (3.13 does, Ubuntu 24.04's 3.8 drops the unit), and the
-#: series must not depend on it.
+#: In every frame, its record: the packing the projector read off the
+#: source (which GDAL carries a band's scale, offset and unit through a
+#: warp is a matter of version — 3.13 does, Ubuntu 24.04's 3.8 drops the
+#: unit — and the series must not depend on it) and whatever the fetch
+#: noted, as one JSON object in this item of the GeoTIFF's default metadata
+#: domain (GDAL's ``GDAL_METADATA`` tag). In the file, not beside it, so a
+#: frame is one object on the bucket.
+FRAME_RECORD_ITEM = "XUE_FRAME"
+#: The sidecar a frame cached before the record moved into the GeoTIFF
+#: carries it in, ``<variable>_<YYYYMMDDHHMMSS>.json``. Still read: the
+#: cache rolls over in days, and until then both kinds of frame meet in
+#: one window.
 PACKING_SUFFIX = ".json"
 #: The fill of every frame and of the series: ISatSS's own ``_FillValue``,
 #: kept so a frame's raw codes are the product's.
@@ -77,6 +87,7 @@ def frame_path(frames_dir: Path, variable: Channel | str, slot: datetime) -> Pat
 
 
 def packing_path(frame: Path) -> Path:
+    """The legacy sidecar of a frame (:data:`PACKING_SUFFIX`)."""
     return frame.with_suffix(PACKING_SUFFIX)
 
 
@@ -90,8 +101,8 @@ class Frame:
 class Packing:
     """How a frame's Int16 codes map to the quantity: the product's own
     scale and offset and its unit, read off the source before the warp and
-    written beside the frame (:func:`write_packing`); the first frame's is
-    required of the rest."""
+    written into the frame's record (:func:`frame_metadata`); the first
+    frame's is required of the rest."""
 
     scale: float
     offset: float
@@ -108,10 +119,7 @@ class Packing:
         return block
 
 
-def dataset_packing(name: Path) -> Packing:
-    """The one band's scale, offset and unit as the system GDAL reports
-    them for a dataset — the reader's VRT over the source tiles, or a frame
-    written before packing sidecars existed."""
+def _dataset_info(name: Path) -> dict:
     # The system GDAL's gdalinfo, not `gdal.dataset_info`: the fetch side
     # runs on the GDAL that warped the frame (the wheel's carries no GeoTIFF
     # driver), and which encoder converts the series is a separate choice.
@@ -120,6 +128,16 @@ def dataset_packing(name: Path) -> Packing:
         info = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ConversionError(f"GDAL returned invalid JSON for {name}") from exc
+    if not isinstance(info, dict):
+        raise ConversionError(f"GDAL returned no dataset description for {name}")
+    return info
+
+
+def dataset_packing(name: Path) -> Packing:
+    """The one band's scale, offset and unit as the system GDAL reports
+    them for a dataset — the reader's VRT over the source tiles, or a frame
+    written before frames carried a record."""
+    info = _dataset_info(name)
     bands = info.get("bands") or []
     if len(bands) != 1:
         raise ConversionError(f"{name} must carry exactly one band")
@@ -131,31 +149,181 @@ def dataset_packing(name: Path) -> Packing:
     )
 
 
+def frame_metadata(packing: Packing, **extra: object) -> dict[str, str]:
+    """The metadata item a frame is written with: its packing and whatever
+    the fetch wants to note (the tiles the frame came from, the reader
+    version that placed it, a producer's inputs), as one compact JSON
+    object under :data:`FRAME_RECORD_ITEM`."""
+    return {FRAME_RECORD_ITEM: json.dumps({**packing.metadata(), **extra}, separators=(",", ":"))}
+
+
 def write_packing(frame: Path, packing: Packing, **extra: object) -> Path:
-    """The packing sidecar beside a frame, with whatever the fetch wants
-    to note (the tiles the frame came from, the GDAL that warped it)."""
-    path = packing_path(frame)
-    path.write_text(json.dumps({**packing.metadata(), **extra}, indent=2) + "\n", encoding="utf-8")
-    return path
+    """Rewrite an existing frame with this record in place (the codes are
+    copied through unchanged), and drop a legacy sidecar beside it."""
+    temporary = frame.with_suffix(frame.suffix + ".part.tif")
+    try:
+        run_command(
+            [
+                require_command("gdal_translate"),
+                "-q",
+                *FRAME_CREATION_OPTIONS,
+                *metadata_arguments(frame_metadata(packing, **extra)),
+                str(frame),
+                str(temporary),
+            ],
+            description=f"stamp {frame.name}",
+        )
+        temporary.replace(frame)
+    finally:
+        temporary.unlink(missing_ok=True)
+    packing_path(frame).unlink(missing_ok=True)
+    return frame
+
+
+#: The TIFF tag GDAL keeps a dataset's metadata in, as ``<GDALMetadata>``
+#: XML: ASCII, in the first IFD.
+GDAL_METADATA_TAG = 42112
+_TIFF_ASCII = 2
+
+
+class _NotClassicTiff(Exception):
+    """A frame :func:`_gdal_metadata_xml` does not parse (BigTIFF): GDAL
+    reads it instead."""
+
+
+def _gdal_metadata_xml(frame: Path) -> str | None:
+    """The ``GDAL_METADATA`` tag of a classic TIFF's first IFD, read with
+    nothing but ``struct``: a frame's record is read once or twice per
+    frame per round, and a ``gdalinfo`` subprocess for each would cost
+    minutes on a window of hundreds of frames. None when the tag is absent;
+    :class:`_NotClassicTiff` for a BigTIFF."""
+    try:
+        with frame.open("rb") as handle:
+            header = handle.read(8)
+            if len(header) < 8 or header[:2] not in (b"II", b"MM"):
+                raise ConversionError(f"{frame} is not a TIFF")
+            order = "<" if header[:2] == b"II" else ">"
+            (magic,) = struct.unpack(order + "H", header[2:4])
+            if magic == 43:
+                raise _NotClassicTiff(str(frame))
+            if magic != 42:
+                raise ConversionError(f"{frame} is not a TIFF (magic {magic})")
+            (offset,) = struct.unpack(order + "I", header[4:8])
+            handle.seek(offset)
+            raw = handle.read(2)
+            if len(raw) < 2:
+                raise ConversionError(f"{frame}: its first IFD lies past the end of the file")
+            (count,) = struct.unpack(order + "H", raw)
+            entries = handle.read(12 * count)
+            if len(entries) < 12 * count:
+                raise ConversionError(f"{frame}: its first IFD is truncated")
+            for index in range(count):
+                tag, kind, length, value = struct.unpack(order + "HHII", entries[12 * index : 12 * index + 12])
+                if tag != GDAL_METADATA_TAG:
+                    continue
+                if kind != _TIFF_ASCII:
+                    raise ConversionError(f"{frame}: its GDAL_METADATA tag is of TIFF type {kind}, not ASCII")
+                if length <= 4:
+                    data = entries[12 * index + 8 : 12 * index + 8 + length]
+                else:
+                    handle.seek(value)
+                    data = handle.read(length)
+                    if len(data) < length:
+                        raise ConversionError(f"{frame}: its GDAL_METADATA tag runs past the end of the file")
+                try:
+                    return data.rstrip(b"\0").decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise ConversionError(f"{frame}: its GDAL_METADATA tag is not UTF-8: {exc}") from exc
+            return None
+    except OSError as exc:
+        raise ConversionError(f"cannot read {frame}: {exc}") from exc
+
+
+def _metadata_item(frame: Path, xml: str) -> str | None:
+    """The dataset-level, default-domain :data:`FRAME_RECORD_ITEM` of a
+    ``<GDALMetadata>`` document (a band's items carry ``sample``, another
+    domain's ``domain``); the parser unescapes the entities."""
+    try:
+        root = ElementTree.fromstring(xml)
+    except ElementTree.ParseError as exc:
+        raise ConversionError(f"{frame}: its GDAL_METADATA tag is not XML: {exc}") from exc
+    for item in root.iter("Item"):
+        if item.get("name") == FRAME_RECORD_ITEM and item.get("sample") is None and not item.get("domain"):
+            return item.text or ""
+    return None
+
+
+def _parse_record(frame: Path, item: str) -> dict:
+    try:
+        record = json.loads(item)
+    except ValueError as exc:
+        raise ConversionError(f"{frame}'s {FRAME_RECORD_ITEM} item is not JSON: {exc}") from exc
+    if not isinstance(record, dict):
+        raise ConversionError(f"{frame}'s {FRAME_RECORD_ITEM} item is not a JSON object")
+    return record
+
+
+def _embedded_record(frame: Path) -> dict | None:
+    """The record in the frame itself: off the TIFF tag in pure Python,
+    or through ``gdalinfo`` for a BigTIFF."""
+    try:
+        xml = _gdal_metadata_xml(frame)
+        item = _metadata_item(frame, xml) if xml is not None else None
+    except _NotClassicTiff:
+        metadata = _dataset_info(frame).get("metadata")
+        item = metadata.get("", {}).get(FRAME_RECORD_ITEM) if isinstance(metadata, dict) else None
+    return _parse_record(frame, item) if item is not None else None
+
+
+def _sidecar_record(sidecar: Path) -> dict | None:
+    if not sidecar.is_file():
+        return None
+    try:
+        record = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ConversionError(f"{sidecar} is not a packing record: {exc}") from exc
+    if not isinstance(record, dict):
+        raise ConversionError(f"{sidecar} is not a packing record: not a JSON object")
+    return record
+
+
+def _frame_record(frame: Path) -> tuple[dict | None, str]:
+    """A frame's record and where it was read from, with no subprocess
+    for a frame that carries one. The GeoTIFF's own item wins over a
+    sidecar: a frame re-warped for a newer reader may meet its
+    predecessor's sidecar, pulled from the bucket, which no longer
+    describes it."""
+    record = _embedded_record(frame)
+    if record is not None:
+        return record, f"{frame}'s {FRAME_RECORD_ITEM} item"
+    sidecar = packing_path(frame)
+    return _sidecar_record(sidecar), str(sidecar)
+
+
+def frame_record(frame: Path) -> dict | None:
+    """Everything a frame was written with — its packing and the fetch's
+    notes — from the GeoTIFF's :data:`FRAME_RECORD_ITEM`, else from the
+    legacy sidecar beside it; None for a frame that carries neither."""
+    return _frame_record(frame)[0]
 
 
 def frame_packing(frame: Path) -> Packing:
-    """A frame's packing: the sidecar written with it, else — for a frame
-    cached before sidecars — what the GeoTIFF band itself carries."""
-    sidecar = packing_path(frame)
-    if sidecar.is_file():
-        try:
-            payload = json.loads(sidecar.read_text(encoding="utf-8"))
-            producer = payload.get("producer")
-            return Packing(
-                scale=float(payload["scale"]),
-                offset=float(payload["offset"]),
-                unit=str(payload["unit"]),
-                producer=(str(producer["id"]), str(producer["version"])) if producer is not None else None,
-            )
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise ConversionError(f"{sidecar} is not a packing sidecar: {exc}") from exc
-    return dataset_packing(frame)
+    """A frame's packing: its record (embedded, else a legacy sidecar),
+    else — for a frame cached before records, and only then through
+    ``gdalinfo`` — what the GeoTIFF band itself carries."""
+    record, origin = _frame_record(frame)
+    if record is None:
+        return dataset_packing(frame)
+    try:
+        producer = record.get("producer")
+        return Packing(
+            scale=float(record["scale"]),
+            offset=float(record["offset"]),
+            unit=str(record["unit"]),
+            producer=(str(producer["id"]), str(producer["version"])) if producer is not None else None,
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ConversionError(f"{origin} is not a packing record: {exc}") from exc
 
 
 def read_frame(frame: Path, grid: TargetGrid) -> np.ndarray:
@@ -186,8 +354,8 @@ def write_frame(values: np.ndarray, grid: TargetGrid, packing: Packing, out: Pat
     floats in the packing's unit, NaN where no data, packed to Int16 as
     ``floor(value / scale + 0.5)`` (round half up; the packing's offset is
     0 for every producer today) with :data:`NODATA` for NaN, written as
-    the GeoTIFF the projector writes and the packing sidecar beside it.
-    No raster library: the codes go through an ENVI header and
+    the GeoTIFF the projector writes, its record (:func:`frame_metadata`)
+    inside. No raster library: the codes go through an ENVI header and
     ``gdal_translate``."""
     if values.shape != (grid.height, grid.width):
         raise ConversionError(f"{out.name}: a {values.shape} plane is not the {grid.width} x {grid.height} target grid")
@@ -230,12 +398,8 @@ def write_frame(values: np.ndarray, grid: TargetGrid, packing: Packing, out: Pat
                 repr(grid.south),
                 "-a_nodata",
                 str(NODATA),
-                "-co",
-                "COMPRESS=DEFLATE",
-                "-co",
-                "PREDICTOR=2",
-                "-co",
-                "TILED=YES",
+                *FRAME_CREATION_OPTIONS,
+                *metadata_arguments(frame_metadata(packing, **extra)),
                 str(raw),
                 str(temporary),
             ],
@@ -245,7 +409,7 @@ def write_frame(values: np.ndarray, grid: TargetGrid, packing: Packing, out: Pat
     finally:
         for leftover in (raw, header, raw.with_suffix(".bin.aux.xml")):
             leftover.unlink(missing_ok=True)
-    write_packing(out, packing, **extra)
+    packing_path(out).unlink(missing_ok=True)
     return out
 
 

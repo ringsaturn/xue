@@ -639,11 +639,11 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(len(self.downloads), 2)
         self.assertEqual(sorted(window.series), sorted(SPEC.input_variable_ids))
         frames = sorted(path.name for path in (self.root / "meteosat-frames" / "ir104").iterdir())
-        self.assertEqual(frames, ["ir104_20260917120000.json", "ir104_20260917120000.tif", "ir104_20260917130000.json", "ir104_20260917130000.tif"])
-        packing = json.loads((self.root / "meteosat-frames" / "ir104" / "ir104_20260917120000.json").read_text())
+        self.assertEqual(frames, ["ir104_20260917120000.tif", "ir104_20260917130000.tif"])
+        packing = assemble.frame_record(self.root / "meteosat-frames" / "ir104" / "ir104_20260917120000.tif")
         self.assertEqual((packing["scale"], packing["offset"], packing["unit"], packing["tiles"], len(packing["keys"])), (FCI_BT_SCALE, 100.0, "K", 40, 40))
         self.assertEqual((packing["kind"], packing["resampling"]), ("bt", "bilinear"))
-        packing = json.loads((self.root / "meteosat-frames" / "vis064" / "vis064_20260917120000.json").read_text())
+        packing = assemble.frame_record(self.root / "meteosat-frames" / "vis064" / "vis064_20260917120000.tif")
         self.assertEqual((packing["scale"], packing["offset"], packing["unit"], packing["kind"], packing["resampling"]), (FCI_REFL_SCALE, 0.0, "1", "reflectance", "average"))
         self.assertFalse((self.root / "meteosat.2026091712" / "tiles").exists())
         again = self.fetch_window(channels=CHANNELS)
@@ -709,11 +709,11 @@ class FetchTests(TempRoot, unittest.TestCase):
             gun = assemble.read_frame(window.slots[0].frames[gun_id], TILE_GRID)
             self.assertEqual(np.isfinite(gun).tolist(), covered.tolist())
             np.testing.assert_allclose(gun[covered], noon[gun_id][covered], atol=0.00005 + 1e-12)
-        self.assertEqual(json.loads(assemble.packing_path(window.slots[0].frames["truer"]).read_text(encoding="utf-8"))["producer"], {"id": "xue", "version": "3"})
+        self.assertEqual(assemble.frame_record(window.slots[0].frames["truer"])["producer"], {"id": "xue", "version": "3"})
         # IR 3.8 is a window like IR 10.5: the same strip of the 2 km grid,
         # converted to kelvin with its own Planck coefficients and packed
         # the same way.
-        packing = json.loads(assemble.packing_path(window.slots[0].frames["ir039"]).read_text(encoding="utf-8"))
+        packing = assemble.frame_record(window.slots[0].frames["ir039"])
         self.assertEqual((packing["scale"], packing["unit"], packing["kind"]), (FCI_BT_SCALE, "K", "bt"))
         ir039 = planes["ir039"]
         rows = np.where(np.isfinite(ir039).any(axis=1))[0]
@@ -752,7 +752,7 @@ class FetchTests(TempRoot, unittest.TestCase):
         # The three windows differ, so the green gun is not flat.
         self.assertGreater(float(np.nanstd(assemble.read_frame(window.slots[0].frames["dustg"], TILE_GRID))), 0.01)
         gun = window.slots[0].frames["dustr"]
-        self.assertEqual(json.loads(assemble.packing_path(gun).read_text(encoding="utf-8"))["producer"], {"id": "shachen", "version": DUST.version})
+        self.assertEqual(assemble.frame_record(gun)["producer"], {"id": "shachen", "version": DUST.version})
 
     @requires_shachen
     def test_the_source_fetch_writes_hourly_series_and_a_fetch_record(self) -> None:

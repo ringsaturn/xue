@@ -21,7 +21,6 @@ agency's data policy releases openly.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
@@ -255,9 +254,7 @@ def fetch_frame(
     for out, resampling in ((frame, resampling_for(channel)), (peak_frame, PEAK_RESAMPLING)):
         if out is None:
             continue
-        PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=resampling, out=out)
-        assemble.write_packing(
-            out,
+        metadata = assemble.frame_metadata(
             packing,
             slot=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
             tiles=len(objects),
@@ -267,6 +264,9 @@ def fetch_frame(
             kind=channel.kind,
             frameVersion=reader.frame_version,
         )
+        PROJECTORS[projector].to_grid(source, grid, nodata=assemble.NODATA, resampling=resampling, out=out, metadata=metadata)
+        # A legacy sidecar pulled with the frame this one replaces.
+        assemble.packing_path(out).unlink(missing_ok=True)
     if reader.files_per_channel:
         shutil.rmtree(slot_dir, ignore_errors=True)
     LOG.info("%s %s: warped %s from %d tiles", platform.spacecraft, channel.id, frame.name, len(objects))
@@ -279,11 +279,12 @@ def slot_directory(tiles_dir: Path, slot: datetime) -> Path:
 
 
 def cached_frame_version(frame: Path) -> int:
-    """The reader version a cached frame's sidecar names; 1 for a frame
-    written before frames carried one."""
+    """The reader version a cached frame's record names; 1 for a frame
+    written before frames carried one, or whose record cannot be read."""
     try:
-        return int(json.loads(assemble.packing_path(frame).read_text(encoding="utf-8")).get("frameVersion", 1))
-    except (OSError, ValueError, TypeError):
+        record = assemble.frame_record(frame)
+        return int(record.get("frameVersion", 1)) if record is not None else 1
+    except (ConversionError, ValueError, TypeError):
         return 1
 
 
@@ -304,7 +305,7 @@ def produce_frames(
     inputs must be every channel the producer reads; a producer that
     reads ancillary fields resolves them under ``ancillary_root`` first
     (:meth:`Producer.ancillary_for`), and what it read is named in the
-    frames' sidecars. A cached frame is never recomputed for a newer
+    frames' records. A cached frame is never recomputed for a newer
     ancillary: the first computation of a slot is the slot's."""
     outputs = {output_id: assemble.frame_path(frames_dir, output_id, slot) for output_id in producer.outputs}
     version = producer.version
