@@ -498,6 +498,11 @@ export class WindParticleLayer implements CustomLayerInterface {
   private windUploaded = false;
 
   private lastFrameTime = 0;
+  /** An export's clock: the seconds one captured picture advances, and
+   * whether the next render is that picture. Off it, the renders between
+   * captures (waiting on decodes and tiles) neither advect nor fade, so the
+   * file's particles move at the file's rate rather than the wall's. */
+  private fixedStep: { seconds: number; armed: boolean } | null = null;
   private trailsStale = true;
   private readonly requestTrailClear = (): void => {
     this.trailsStale = true;
@@ -583,6 +588,19 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.domain = domain;
     this.trailsStale = true;
     this.map?.triggerRepaint();
+  }
+
+  /** Run on a fixed step per `armStep` instead of the wall clock, or back
+   * on the wall clock with null. */
+  setFixedStep(seconds: number | null): void {
+    this.fixedStep = seconds === null ? null : { seconds, armed: false };
+    this.lastFrameTime = 0;
+    this.map?.triggerRepaint();
+  }
+
+  /** Let the next render advance one fixed step. */
+  armStep(): void {
+    if (this.fixedStep) this.fixedStep.armed = true;
   }
 
   setVisible(visible: boolean): void {
@@ -978,14 +996,25 @@ export class WindParticleLayer implements CustomLayerInterface {
     const tiles = surfaceTiles(this.map, input);
     this.drawProgram = this.drawProgramFor(gl, input, tiles !== null);
 
-    const now = performance.now();
-    const elapsed = this.lastFrameTime === 0 ? 0 : Math.min((now - this.lastFrameTime) / 1000, 0.1);
-    this.lastFrameTime = now;
-
     const previousFramebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
     const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
 
     this.ensureScreenTextures(gl);
+    const fixed = this.fixedStep;
+    if (fixed && !fixed.armed && !this.trailsStale) {
+      // Held between an export's captures: the last trails as they were.
+      this.compositeTrails(gl, this.screenTextures![0], previousFramebuffer, previousViewport);
+      return;
+    }
+    let elapsed: number;
+    if (fixed) {
+      elapsed = fixed.armed ? fixed.seconds : 0;
+      fixed.armed = false;
+    } else {
+      const now = performance.now();
+      elapsed = this.lastFrameTime === 0 ? 0 : Math.min((now - this.lastFrameTime) / 1000, 0.1);
+      this.lastFrameTime = now;
+    }
     const [previousScreen, targetScreen] = this.screenTextures!;
     const [currentState, nextState] = this.stateTextures;
     const [screenWidth, screenHeight] = this.screenSize;
@@ -1070,13 +1099,22 @@ export class WindParticleLayer implements CustomLayerInterface {
     }
 
     // 3. Composite the fresh trail texture onto the map.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
-    gl.viewport(previousViewport[0]!, previousViewport[1]!, previousViewport[2]!, previousViewport[3]!);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    this.drawQuadTexture(gl, this.screenProgram, targetScreen, this.options.opacity, "u_opacity");
+    this.compositeTrails(gl, targetScreen, previousFramebuffer, previousViewport);
     this.screenTextures = [targetScreen, previousScreen];
 
-    if (this.animate) this.map?.triggerRepaint();
+    if (this.animate && !fixed) this.map?.triggerRepaint();
+  }
+
+  private compositeTrails(
+    gl: WebGL2RenderingContext,
+    trails: WebGLTexture,
+    framebuffer: WebGLFramebuffer | null,
+    viewport: Int32Array,
+  ): void {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.viewport(viewport[0]!, viewport[1]!, viewport[2]!, viewport[3]!);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    this.drawQuadTexture(gl, this.screenProgram!, trails, this.options.opacity, "u_opacity");
   }
 }

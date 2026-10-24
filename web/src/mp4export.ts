@@ -223,6 +223,9 @@ export async function exportMp4(
   });
   encoder.configure(config);
   const tickUs = Math.round(1e6 / MP4_FPS);
+  // The particles advance one tick of the file per picture, however long
+  // the capture of that picture takes.
+  host.holdMotion?.(1 / MP4_FPS);
   try {
     for (const [position, step] of schedule.entries()) {
       if (signal.aborted) throw exportCancelled("MP4");
@@ -247,6 +250,7 @@ export async function exportMp4(
     onProgress({ phase: "encode", done: 1, total: 1 });
     return new Blob([muxer.target.buffer], { type: "video/mp4" });
   } finally {
+    host.holdMotion?.(null);
     if (encoder.state !== "closed") encoder.close();
   }
 }

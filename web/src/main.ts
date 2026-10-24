@@ -4161,6 +4161,8 @@ const gifHost: GifHost = {
   credit: gifCredit,
   holdMs: exportHoldMs,
   mp4Size: () => mp4SizeChoice,
+  holdMotion: (stepSeconds) => windLayer?.setFixedStep(stepSeconds),
+  stepMotion: () => windLayer?.armStep(),
 };
 
 type ExportFormat = "gif" | "mp4";
@@ -4654,14 +4656,21 @@ function updateFrameReadout(index: number): void {
   updateTicks(index);
   updateForecastDay(index);
   scheduleProbeRender();
-  syncTcTime();
-  syncStationTime();
+  syncFrameMarks();
   // The reaches follow the frame asked for, as the readout does, not the
   // one still on screen while it decodes.
   riverCase?.setTime(valid);
   syncShadowTime(index);
-  syncGibs();
   embedHub?.emitTime();
+}
+
+/** The storms, stations, fires and the imagery day, on the frame on screen
+ * (`stationTime`). Called with the readout, before a decoded frame lands,
+ * and again once it has, or they would trail the field by a step. */
+function syncFrameMarks(): void {
+  syncTcTime();
+  syncStationTime();
+  syncGibs();
 }
 
 /** Reconfigure a slot's layer for its session's own bundle grid (poster
@@ -5026,6 +5035,7 @@ function trySelectFrame(index: number): boolean {
     slot.shownGuns = [];
     activeFrameIndex = index;
     desiredKey = null;
+    syncFrameMarks();
     // The overlays follow the frame that is actually on screen, not the one
     // asked for: a line chart of one hour over a field of another would be
     // the wrong picture, whichever of the two were ahead.

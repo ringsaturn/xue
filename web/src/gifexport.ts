@@ -19,6 +19,10 @@ export const GIF_MAX_FRAMES = 48;
 export const GIF_MAX_WIDTH = 720;
 /** How long one frame may take to arrive before the export gives up. */
 const FRAME_TIMEOUT_MS = 30_000;
+/** How long a frame waits on the map's own sources (the imagery's tiles for
+ * a new day, the fire marks' features for a new hour) before it is taken
+ * as it stands. */
+const SOURCES_TIMEOUT_MS = 10_000;
 
 export interface GifCaption {
   /** The variable's name, `Precipitation Rate`. */
@@ -45,6 +49,11 @@ export interface GifHost {
   blend?(index: number, weight: number): boolean;
   /** The size the MP4 is cut to (`mp4export.ts`); 1080p when absent. */
   mp4Size?(): Mp4SizeId;
+  /** Put the animated marks (the wind particles) on a fixed step per
+   * captured picture, or back on the wall clock with null. */
+  holdMotion?(stepSeconds: number | null): void;
+  /** Let the next render advance one step of the held clock. */
+  stepMotion?(): void;
 }
 
 /** What the frames are drawn onto, once the basemap is in. */
@@ -111,6 +120,19 @@ async function frameShown(host: GifHost, index: number, signal: AbortSignal, kin
 async function mapSettled(map: MaplibreMap): Promise<void> {
   if (map.areTilesLoaded()) return;
   await Promise.race([new Promise<void>((resolve) => map.once("idle", () => resolve())), sleep(10_000)]);
+}
+
+/** The map's sources caught up with the frame just shown: a step can move
+ * the imagery to another day (new tiles) and the fire marks to another hour
+ * (a GeoJSON rebuild in MapLibre's worker), and a capture taken before they
+ * land shows them a step behind the field. Polled rather than awaited on
+ * `idle`, which a continuously repainting layer never lets fire. */
+async function sourcesSettled(map: MaplibreMap, signal: AbortSignal, kind: string): Promise<void> {
+  const deadline = performance.now() + SOURCES_TIMEOUT_MS;
+  while (!map.loaded() && performance.now() < deadline) {
+    if (signal.aborted) throw exportCancelled(kind);
+    await sleep(20);
+  }
 }
 
 /** Draw the frame the map is about to render into `context`: the drawing
@@ -193,6 +215,8 @@ export async function captureFrame(
     await frameShown(host, index, signal, target.kind);
     host.blend(index, weight);
   }
+  await sourcesSettled(host.map, signal, target.kind);
+  host.stepMotion?.();
   await captureNextRender(host.map, target.context);
   drawCaption(target.context, host.caption(index), target.credit);
 }
