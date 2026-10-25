@@ -97,7 +97,7 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_series_file_sources_are_the_netcdf_ones(self) -> None:
         self.assertEqual(
             [spec.id for spec in SOURCES.values() if spec.series_file],
-            ["ifshres", "woof", "efas", "efaswb", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
+            ["ifshres", "woof", "efas", "efaswb", "era5", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
         )
         # All fetched but the WOOF nest and the EFAS runs (tests/test_woof.py,
         # tests/test_efas.py): the CMA window

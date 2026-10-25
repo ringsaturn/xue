@@ -33,6 +33,7 @@ IDENTITIES = {
     "woof": ("WOOF-WRF", "nest", None, ("tmp2m",)),
     "efas": ("EFAS-v5", "hres", None, ("dis06",)),
     "efaswb": ("EFAS-v5-WB", "water_balance", None, ("dis06",)),
+    "era5": ("ERA5", "reanalysis-single-levels", None, ("tmp2m",)),
     # The manifest identity outlived the source id's change from `radar`.
     "cma": ("CMA-RADAR", "l3-mst-cref", "latest-cma.json", ("cref",)),
     "mrms": ("NOAA-MRMS", "conus-cref", "latest-mrms.json", ("cref",)),
@@ -76,8 +77,8 @@ class SourceIdentityTests(unittest.TestCase):
         # The WOOF nest and the two EFAS runs are the sources nothing
         # fetches: forecasts with no pointer, built from a local dataset by
         # a showcase case (tests/test_efas.py).
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof", "efas", "efaswb"])
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof", "efas", "efaswb"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof", "efas", "efaswb", "era5"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof", "efas", "efaswb", "era5"])
         woof = source_spec("woof")
         self.assertTrue(woof.series_file and not woof.observation)
         self.assertEqual((woof.first_hour, woof.steps, woof.horizon_hours), (1, ((72, 1),), 72))

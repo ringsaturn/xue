@@ -121,7 +121,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "iconeu", "arpege", "woof", "efas", "efaswb", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -1756,6 +1756,38 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=6,
+        video=False,
+    ),
+    # ERA5, the Copernicus Climate Change Service's global reanalysis from
+    # ECMWF: hourly fields on the 0.25° regular grid, what the weather was
+    # rather than what a model expected. A reanalysis has no cycle and no
+    # feed (the Climate Data Store releases a day about five days behind
+    # real time), so like the EFAS water balance it is reached through
+    # showcase cases alone: ``xue era5-series --start`` names a window's
+    # first hour as the run, asks the Data Store for it (xuebuild/era5/) and
+    # writes one CF series per variable (``era5.<run>.<variable>.nc``), the
+    # ``woof`` series-file path, so neither encoder learns anything ERA5.
+    # Every hour is an analysis, so the axis starts at the run (f000) and
+    # steps hourly; a window may start at any hour (``cycle_hours`` 1). The
+    # gust is ``fg10``, the maximum over the hour ending at the frame,
+    # declared a maximum like ECMWF's. A case is a box of a few hundred
+    # cells, so there is no ladder and no video.
+    "era5": SourceSpec(
+        id="era5",
+        manifest_model="ERA5",
+        product="reanalysis-single-levels",
+        latest_filename=None,
+        steps=((240, 1),),
+        input_variable_ids=("tmp2m", "dpt2m", "ugrd10m", "vgrd10m", "gust"),
+        accumulated_precipitation=False,
+        statistical_processes=(("gust", 2),),
+        bundle_scalar_ids=("tmp2m", "dpt2m", "gust"),
+        bundle_vector_ids=("wind10m",),
+        core_bundle_ids=("tmp2m",),
+        production_grid=(1440, 721),
+        variant_factors=(),
+        series_file=True,
+        cycle_hours=1,
         video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity

@@ -101,6 +101,21 @@ _CEMS_FLOODS_LICENSE_LINK = {
     "type": "text/html",
     "title": "CEMS-FLOODS datasets licence",
 }
+# ERA5 is produced by ECMWF for the Copernicus Climate Change Service and
+# licensed CC-BY-4.0 on the Climate Data Store, which asks for the "contains
+# modified" credit and a citation of the dataset.
+_ECMWF_C3S_PROVIDER = {
+    "name": "ECMWF / Copernicus Climate Change Service",
+    "description": "ERA5, produced by ECMWF for the Copernicus Climate Change Service, from the Climate Data Store.",
+    "roles": ["producer", "licensor"],
+    "url": "https://cds.climate.copernicus.eu/",
+}
+_ERA5_CITATION_LINK = {
+    "rel": "cite-as",
+    "href": "https://doi.org/10.24381/cds.adbb2d47",
+    "type": "text/html",
+    "title": "Hersbach et al. (2023): ERA5 hourly data on single levels from 1940 to present",
+}
 _XUE_PROVIDER = {
     "name": "Xue",
     "roles": ["processor", "host"],
@@ -764,6 +779,29 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "license": "other",
             "providers": [_ECMWF_CEMS_PROVIDER, _XUE_PROVIDER],
             "links": [_CEMS_FLOODS_LICENSE_LINK],
+        },
+        "era5": {
+            "title": "ECMWF ERA5 hourly reanalysis",
+            "description": (
+                "ERA5, the fifth-generation ECMWF reanalysis of the global climate for the Copernicus "
+                "Climate Change Service: hourly 2 m temperature and dew point, the 10 m wind and the "
+                "10 m gust maximum over the hour ending at each frame, on the 0.25° regular grid, over a "
+                "window of up to 240 hours named by its first hour. Retrieved from the Climate Data "
+                "Store (reanalysis-era5-single-levels) and converted by the era5-series tool; there is "
+                "no live feed, and the windows exist as showcase cases only. Contains modified "
+                "Copernicus Climate Change Service information {year}."
+            ),
+            "license": "CC-BY-4.0",
+            "providers": [_ECMWF_C3S_PROVIDER, _XUE_PROVIDER],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "Creative Commons Attribution 4.0",
+                },
+                _ERA5_CITATION_LINK,
+            ],
         },
         "cma": {
             "title": "CMA radar mosaic",

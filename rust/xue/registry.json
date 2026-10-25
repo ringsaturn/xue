@@ -20197,6 +20197,79 @@
       "video": false,
       "catCalibration": []
     },
+    "era5": {
+      "id": "era5",
+      "manifestModel": "ERA5",
+      "product": "reanalysis-single-levels",
+      "latestFilename": null,
+      "steps": [
+        [
+          240,
+          1
+        ]
+      ],
+      "inputVariableIds": [
+        "tmp2m",
+        "dpt2m",
+        "ugrd10m",
+        "vgrd10m",
+        "gust"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [
+        [
+          "gust",
+          2
+        ]
+      ],
+      "bands": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "tmp2m",
+        "dpt2m",
+        "gust"
+      ],
+      "coreBundleIds": [
+        "tmp2m"
+      ],
+      "bundleVectorIds": [
+        "wind10m"
+      ],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        1440,
+        721
+      ],
+      "tile": [
+        48,
+        52
+      ],
+      "variantFactors": [],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 1,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "regrid": null,
+      "video": false,
+      "catCalibration": []
+    },
     "cma": {
       "id": "cma",
       "manifestModel": "CMA-RADAR",
