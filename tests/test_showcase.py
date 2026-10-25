@@ -764,6 +764,7 @@ class ContextTest(unittest.TestCase):
             {"file": "../other/context.geojson", "credit": "OSM"},
             {"file": "context.geojson"},
             {"file": "context.geojson", "credit": " "},
+            {"file": "context.geojson", "credit": "OSM\nODbL"},
             {"file": "context.geojson", "credit": "OSM", "extra": 1},
             "context.geojson",
         ):

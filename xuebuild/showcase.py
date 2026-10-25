@@ -529,7 +529,8 @@ def _context_block(value: object, case_id: str) -> dict[str, str]:
     ):
         raise ShowcaseError(f"case {case_id}: context.file must be a .geojson inside the case directory")
     credit = value.get("credit")
-    if not isinstance(credit, str) or not credit.strip() or len(credit) > 200:
+    # One line on the shell's credit line.
+    if not isinstance(credit, str) or not credit.strip() or len(credit) > 200 or not credit.isprintable():
         raise ShowcaseError(f"case {case_id}: context.credit must be a line of at most 200 characters")
     return {"file": file, "credit": credit.strip()}
 
