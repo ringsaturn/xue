@@ -48,6 +48,8 @@ efas = ["eccodes>=2.39", "eccodeslib>=2.39", "netcdf4>=1.7"]
 river = ["pyarrow>=26.0"]
 # The satellite fetch: the Dust RGB and dust confidence producers (shachen) and the FCI JPEG-LS filter.
 satellite = ["shachen>=0.4.0", "xarray>=2025.1", "hdf5plugin>=5.0"]
+# A showcase case's context file: OSM lines and areas clipped and simplified (xuebuild/context.py).
+context = ["shapely>=2"]
 # The offline soybean area weights (scripts/indicators_weights.py); xuebuild never imports them.
 indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
 # Staging the CAMEL emissivity months the dust confidence reads (xuebuild/satellite/staging.py): earthaccess behind shachen[data].

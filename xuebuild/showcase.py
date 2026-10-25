@@ -49,7 +49,11 @@ crossing, an ignition), each with a note and its sources, carried onto the
 row the same way; a shell that does not know them draws none. Its
 ``river`` names the river index built into its directory
 (``docs/river.md``): reach streamflow, gauges and flood extents the shell
-plays beside the field, and ignores when it does not know the block.
+plays beside the field, and ignores when it does not know the block. Its
+``context`` names a GeoJSON file of reference lines and areas built into its
+directory (:func:`read_context`): borders, a protected area's boundary,
+rivers, roads and the routes a case's story runs along, drawn under the
+markers; a shell that does not know the block draws none.
 """
 
 from __future__ import annotations
@@ -175,6 +179,11 @@ class CaseSpec:
     """The NASA GIBS daily picture the shell offers in place of the case's
     field and opens on (``web/src/gibs.ts``): ``layer``, one of
     :data:`GIBS_LAYERS`. Nothing is built for it: the tiles come from GIBS."""
+    context: dict[str, str] | None = None
+    """The reference lines and areas the shell draws over the case
+    (:func:`read_context`): ``file``, a GeoJSON file inside the case's
+    directory, and ``credit``, the line naming where its geometry comes
+    from, shown on the map's credit line while the case is open."""
     markers: tuple[dict[str, Any], ...] = ()
     """Labelled points of context the shell draws over the case
     (:func:`_markers_block`): a place or an event, each with a label and a
@@ -366,6 +375,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if view is not None:
         view = _view_block(view, case_id, ordered)
 
+    context = payload.get("context")
+    if context is not None:
+        context = _context_block(context, case_id)
+
     bounds = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
     markers = payload.get("markers")
     markers = _markers_block(markers, case_id, bounds) if markers is not None else []
@@ -390,6 +403,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         fire=fire,
         river=river,
         imagery=imagery,
+        context=context,
         markers=tuple(markers),
         view=view,
     )
@@ -480,6 +494,95 @@ def _imagery_block(value: object, case_id: str) -> dict[str, str]:
     if not isinstance(value, dict) or set(value) != {"layer"} or value["layer"] not in GIBS_LAYERS:
         raise ShowcaseError(f"case {case_id}: imagery must be {{layer}}, layer one of {GIBS_LAYERS}")
     return {"layer": value["layer"]}
+
+
+CONTEXT_KINDS = ("border", "protected-area", "river", "stream", "road", "track", "route", "trace")
+"""What a context feature is, which is all the shell styles it by: a
+national border, a protected area's boundary, a river and a smaller
+watercourse, a road and an unpaved track, the route a case's story follows,
+and a line read off imagery whose nature is not known."""
+
+_CONTEXT_GEOMETRIES = {
+    "LineString": 1,
+    "MultiLineString": 2,
+    "Polygon": 2,
+    "MultiPolygon": 3,
+}
+"""Each geometry type the context file may hold and how many arrays deep
+its positions sit."""
+
+MAX_CONTEXT_BYTES = 4 * 1024 * 1024
+"""A context file is read whole before the case draws it."""
+
+
+def _context_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``context`` block: a GeoJSON file inside the case's own
+    directory and the credit for its geometry."""
+    if not isinstance(value, dict) or set(value) - {"file", "credit", "byteLength", "crc32"}:
+        raise ShowcaseError(f"case {case_id}: context must be {{file, credit}}")
+    file = value.get("file")
+    if (
+        not isinstance(file, str)
+        or not file.endswith(".geojson")
+        or file.startswith("/")
+        or ".." in file.split("/")
+    ):
+        raise ShowcaseError(f"case {case_id}: context.file must be a .geojson inside the case directory")
+    credit = value.get("credit")
+    if not isinstance(credit, str) or not credit.strip() or len(credit) > 200:
+        raise ShowcaseError(f"case {case_id}: context.credit must be a line of at most 200 characters")
+    return {"file": file, "credit": credit.strip()}
+
+
+def _context_positions(coordinates: object, depth: int) -> list[Sequence[float]]:
+    """The positions of one geometry's ``coordinates``, an array of them
+    nested ``depth`` arrays deep; raises ``ValueError`` on any other shape."""
+    if not isinstance(coordinates, list) or not coordinates:
+        raise ValueError("empty or malformed coordinates")
+    if depth == 1:
+        return coordinates
+    return [position for part in coordinates for position in _context_positions(part, depth - 1)]
+
+
+def read_context(data: bytes, bbox: Sequence[float]) -> dict[str, Any]:
+    """A context file, checked the way the shell reads it: a GeoJSON
+    FeatureCollection of lines and polygons, each feature's ``kind`` one of
+    :data:`CONTEXT_KINDS`, every position finite and inside the case's
+    ``bbox``."""
+    if len(data) > MAX_CONTEXT_BYTES:
+        raise ValueError(f"is {len(data)} bytes, more than {MAX_CONTEXT_BYTES}")
+    collection = json.loads(data)
+    if not isinstance(collection, dict) or collection.get("type") != "FeatureCollection":
+        raise ValueError("is not a GeoJSON FeatureCollection")
+    features = collection.get("features")
+    if not isinstance(features, list) or not features:
+        raise ValueError("holds no features")
+    for index, feature in enumerate(features):
+        where = f"feature {index}"
+        if not isinstance(feature, dict) or feature.get("type") != "Feature":
+            raise ValueError(f"{where} is not a Feature")
+        properties = feature.get("properties")
+        kind = properties.get("kind") if isinstance(properties, dict) else None
+        if kind not in CONTEXT_KINDS:
+            raise ValueError(f"{where}: properties.kind must be one of {CONTEXT_KINDS}")
+        geometry = feature.get("geometry")
+        if not isinstance(geometry, dict) or geometry.get("type") not in _CONTEXT_GEOMETRIES:
+            raise ValueError(f"{where}: geometry must be one of {tuple(_CONTEXT_GEOMETRIES)}")
+        try:
+            positions = _context_positions(geometry.get("coordinates"), _CONTEXT_GEOMETRIES[geometry["type"]])
+        except ValueError as exc:
+            raise ValueError(f"{where}: {exc}") from exc
+        for position in positions:
+            if (
+                not isinstance(position, list)
+                or len(position) != 2
+                or any(isinstance(number, bool) or not isinstance(number, (int, float)) for number in position)
+                or not all(math.isfinite(number) for number in position)
+            ):
+                raise ValueError(f"{where}: a position must be [longitude, latitude]")
+            if not _in_bounds(position[0], position[1], bbox):
+                raise ValueError(f"{where}: {position} lies outside the case bbox")
+    return collection
 
 
 MARKER_KINDS = ("place", "event")
@@ -814,6 +917,8 @@ def build_catalog_entry(
         entry["imagery"] = dict(spec.imagery)
     if spec.markers:
         entry["markers"] = [dict(marker) for marker in spec.markers]
+    if spec.context:
+        entry["context"] = dict(spec.context)
     if spec.view:
         entry["view"] = dict(spec.view)
     validate_catalog_entry(entry)
@@ -858,12 +963,14 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _view_block(entry["view"], entry["id"], variables)
     if "markers" in entry:
         _markers_block(entry["markers"], entry["id"], entry["bbox"], REQUIRED_LOCALES)
+    if "context" in entry:
+        _context_block(entry["context"], entry["id"])
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit, the river, the markers and the view are the definition's to change — a
+    the tags, the credit, the river, the context, the markers and the view are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -910,6 +1017,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("river", dict(spec.river) if spec.river else None),
         ("imagery", dict(spec.imagery) if spec.imagery else None),
         ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
+        ("context", dict(spec.context) if spec.context else None),
         ("view", dict(spec.view) if spec.view else None),
     ):
         if value:
@@ -956,6 +1064,8 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
             entry["fire"] = _catalog_fire(output_root, entry)
         if "river" in entry:
             entry["river"] = _catalog_river(output_root, entry)
+        if "context" in entry:
+            entry["context"] = _catalog_context(output_root, entry)
         entries.append(entry)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
@@ -1022,6 +1132,22 @@ def _catalog_river(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
         read_index(path)
     except XueError as exc:
         raise ShowcaseError(f"case {entry['id']} has an invalid river index: {exc}") from exc
+    return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
+
+
+def _catalog_context(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """The context block as the catalog publishes it: the file's length and
+    CRC32 (its ``?v=``), measured from the file in the case's directory,
+    which must read as :func:`read_context` reads it."""
+    block = _context_block(entry["context"], entry["id"])
+    path = output_root / SHOWCASE_DIRECTORY / entry["id"] / block["file"]
+    if not path.is_file():
+        raise ShowcaseError(f"case {entry['id']} names a context file that is not built: {path}")
+    data = path.read_bytes()
+    try:
+        read_context(data, entry["bbox"])
+    except ValueError as exc:
+        raise ShowcaseError(f"case {entry['id']} has an invalid context file {block['file']}: {exc}") from exc
     return {**block, "byteLength": len(data), "crc32": crc32_hex(data)}
 
 

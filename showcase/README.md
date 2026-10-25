@@ -251,6 +251,35 @@ retires a case.
    summary: what a cited source says, nothing more. A shell that does not
    know the field draws none.
 
+   A case may carry **context**: reference lines and areas drawn under its
+   markers and its detections — a national border, a protected area, rivers,
+   roads and tracks, the route the story follows. The block names a GeoJSON
+   file in the case's directory and the credit for its geometry, which the
+   credit line shows while the case is open:
+
+   ```json
+   "context": {"file": "context/context.geojson", "credit": "ROADS, RIVERS, BORDER AND RESERVE © OPENSTREETMAP CONTRIBUTORS (ODbL)"}
+   ```
+
+   Each feature is a line or a polygon whose `properties.kind` is all the
+   shell styles it by: `border`, `protected-area`, `river`, `stream`,
+   `road`, `track`, `route`, or `trace` (a line read off imagery whose
+   nature is not known). Every position lies inside the case's `bbox`; the
+   file is at most 4 MB. Build it from OpenStreetMap with
+
+   ```sh
+   uv sync --all-groups   # shapely, in the context group
+   .venv/bin/python -m xuebuild.context showcase/cases-local/arxan-fire-2026.json \
+       --detail-area 7304690 --protected 21785019 --extra routes.geojson
+   ```
+
+   which clips borders and rivers to the box, roads, tracks and streams to
+   the OSM relation `--detail-area` names, takes each `--protected` relation
+   as an area, and merges `--extra` GeoJSON files whose features already
+   carry their `kind`. The catalog row gains the file's `byteLength` and
+   `crc32` when the catalog is written. A shell that does not know the block
+   draws none.
+
    Prose is the definition's to change after the fact: a translation added
    or a summary corrected reaches the catalog with
 
@@ -259,7 +288,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, river, imagery, markers, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, river, imagery, context, markers, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.

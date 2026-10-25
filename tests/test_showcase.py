@@ -733,6 +733,89 @@ class ImageryTest(unittest.TestCase):
                 parse_case(case_payload(imagery=imagery))
 
 
+class ContextTest(unittest.TestCase):
+    """A case's context lines and areas: the block checked in the
+    definition, the file when the catalog is written."""
+
+    CONTEXT = {"file": "context/context.geojson", "credit": "© OpenStreetMap contributors (ODbL)"}
+    BBOX = [105.0, 28.0, 122.0, 42.0]
+
+    @staticmethod
+    def collection(*features: dict[str, object]) -> bytes:
+        return json.dumps({"type": "FeatureCollection", "features": list(features)}).encode()
+
+    @staticmethod
+    def feature(kind: object, geometry: dict[str, object]) -> dict[str, object]:
+        return {"type": "Feature", "properties": {"kind": kind}, "geometry": geometry}
+
+    LINE = {"type": "LineString", "coordinates": [[110.0, 30.0], [111.0, 31.0]]}
+    AREA = {"type": "Polygon", "coordinates": [[[110.0, 30.0], [111.0, 30.0], [111.0, 31.0], [110.0, 30.0]]]}
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(case_payload(context=dict(self.CONTEXT)))
+        self.assertEqual(spec.context, self.CONTEXT)
+        entry, _ = build_entry(context=dict(self.CONTEXT))
+        self.assertEqual(entry["context"], self.CONTEXT)
+
+    def test_a_malformed_block_is_refused(self) -> None:
+        for context in (
+            {"file": "context/context.json", "credit": "OSM"},
+            {"file": "/context.geojson", "credit": "OSM"},
+            {"file": "../other/context.geojson", "credit": "OSM"},
+            {"file": "context.geojson"},
+            {"file": "context.geojson", "credit": " "},
+            {"file": "context.geojson", "credit": "OSM", "extra": 1},
+            "context.geojson",
+        ):
+            with self.subTest(context=context), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(context=context))
+
+    def test_lines_and_areas_of_known_kinds_are_read(self) -> None:
+        from xuebuild.showcase import read_context
+
+        data = self.collection(
+            self.feature("road", self.LINE),
+            self.feature("protected-area", self.AREA),
+            self.feature("border", {"type": "MultiLineString", "coordinates": [self.LINE["coordinates"]]}),
+        )
+        self.assertEqual(len(read_context(data, self.BBOX)["features"]), 3)
+
+    def test_a_malformed_file_is_refused(self) -> None:
+        from xuebuild.showcase import read_context
+
+        for data in (
+            b"not json",
+            json.dumps({"type": "Feature"}).encode(),
+            self.collection(),
+            self.collection(self.feature("fence", self.LINE)),
+            self.collection(self.feature("road", {"type": "Point", "coordinates": [110.0, 30.0]})),
+            self.collection(self.feature("road", {"type": "LineString", "coordinates": [[130.0, 30.0], [110.0, 30.0]]})),
+            self.collection(self.feature("road", {"type": "LineString", "coordinates": [[110.0, 30.0, 5.0]]})),
+            self.collection(self.feature("road", {"type": "LineString", "coordinates": []})),
+        ):
+            with self.subTest(data=data[:80]), self.assertRaises(ValueError):
+                read_context(data, self.BBOX)
+
+    def test_the_catalog_measures_the_built_file(self) -> None:
+        from xuebuild.common import crc32_hex
+        from xuebuild.showcase import _catalog_context
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            entry = {"id": "demo-case", "bbox": self.BBOX, "context": dict(self.CONTEXT)}
+            with self.assertRaises(ShowcaseError):
+                _catalog_context(root, entry)  # not built yet
+            target = root / "showcase" / "demo-case" / self.CONTEXT["file"]
+            target.parent.mkdir(parents=True)
+            data = self.collection(self.feature("river", self.LINE))
+            target.write_bytes(data)
+            block = _catalog_context(root, entry)
+            self.assertEqual(block, {**self.CONTEXT, "byteLength": len(data), "crc32": crc32_hex(data)})
+            target.write_bytes(self.collection(self.feature("canal", self.LINE)))
+            with self.assertRaises(ShowcaseError):
+                _catalog_context(root, entry)
+
+
 class MarkersTest(unittest.TestCase):
     """A case's markers: labelled points checked in the definition and
     carried onto the row as written."""

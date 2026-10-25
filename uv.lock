@@ -1850,6 +1850,9 @@ cma = [
     { name = "xarray" },
     { name = "zarr" },
 ]
+context = [
+    { name = "shapely" },
+]
 efas = [
     { name = "eccodes" },
     { name = "eccodeslib" },
@@ -1902,6 +1905,7 @@ cma = [
     { name = "xarray", specifier = ">=2025.1" },
     { name = "zarr", specifier = ">=3.1" },
 ]
+context = [{ name = "shapely", specifier = ">=2" }]
 efas = [
     { name = "eccodes", specifier = ">=2.39" },
     { name = "eccodeslib", specifier = ">=2.39" },
