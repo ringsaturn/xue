@@ -230,6 +230,8 @@ export const ja: Record<MessageKey, string> = {
   viewResetPitchAria: "傾きをリセット",
   viewBoxAria: "嵐のクローズアップ：範囲をドラッグ",
   viewSectionAria: "鉛直断面：線をドラッグ",
+  viewDistanceAria: "距離を測る：地点をクリック、最後の点をもう一度クリックで終了",
+  viewAreaAria: "面積を測る：頂点をクリック、最初か最後の点をもう一度クリックで終了",
   particlesToggle: "粒子アニメーション",
   particlesToggleAria: "風の粒子アニメーションを切り替え",
 

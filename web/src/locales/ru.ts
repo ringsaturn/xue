@@ -235,6 +235,8 @@ export const ru: Record<MessageKey, string> = {
   viewResetPitchAria: "Сбросить наклон",
   viewBoxAria: "Шторм крупным планом: выделите рамкой",
   viewSectionAria: "Вертикальный разрез: проведите линию",
+  viewDistanceAria: "Измерить расстояние: щёлкайте точки, повторный щелчок по последней — конец",
+  viewAreaAria: "Измерить площадь: щёлкайте вершины, повторный щелчок по первой или последней — конец",
   particlesToggle: "Частицы",
   particlesToggleAria: "Включить или выключить анимацию частиц ветра",
 

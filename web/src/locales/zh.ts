@@ -230,6 +230,8 @@ export const zh: Record<MessageKey, string> = {
   viewResetPitchAria: "重置俯仰",
   viewBoxAria: "风暴特写：框选一块区域",
   viewSectionAria: "垂直剖面：拖一条线",
+  viewDistanceAria: "测距：依次点击各点，再点最后一点结束",
+  viewAreaAria: "测面积：依次点击各顶点，再点首点或末点结束",
   particlesToggle: "粒子动画",
   particlesToggleAria: "切换风场粒子动画",
 

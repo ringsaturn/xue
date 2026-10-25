@@ -346,6 +346,7 @@ import {
 } from "./mp4export";
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels, type VolumeLevels } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
+import { MeasureTool, type MeasureKind } from "./measure";
 
 // Rewrite the static shell into the detected locale and appearance before
 // anything renders.
@@ -758,6 +759,7 @@ function applyBasemapTheme(): void {
   caseMarkers?.setInk(darkGround);
   caseContext?.setInk(darkGround);
   riverCase?.setInk(darkGround);
+  measureTool?.setInk(darkGround);
   if (radarOverlay) {
     const style = getComputedStyle(document.body);
     radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
@@ -1080,8 +1082,22 @@ const viewControl = new ViewControl({
   onResize: syncControlColumn,
   onVolumeTool: (kind) => pressVolumeTool(kind),
   onContours: () => terrainContours?.setEnabled(!terrainContours.enabled),
+  onMeasure: (kind) => pressMeasureTool(kind),
 });
 map.addControl(viewControl, "top-right");
+
+/** The ruler and the area tool (`measure.ts`), made on first press. */
+let measureTool: MeasureTool | null = null;
+
+function pressMeasureTool(kind: MeasureKind): void {
+  if (!measureTool) {
+    measureTool = new MeasureTool(map, (armed) => viewControl.setMeasure(armed));
+    measureTool.setInk(document.body.dataset.ground === "dark");
+  }
+  // The volume tools' sheet would take the clicks the measure needs.
+  if (volumeTool?.armed) volumeTool.arm(null);
+  measureTool.arm(measureTool.armed === kind ? null : kind);
+}
 
 /** The rail's box starts under the map's controls, whose column grows and
  * shrinks with the view tile's reset buttons: the stylesheet reads where it
@@ -8791,6 +8807,7 @@ function pressVolumeTool(kind: VolumeToolKind): void {
     syncVolumeTools();
     return;
   }
+  if (volumeTool.armed !== kind) measureTool?.arm(null);
   volumeTool.arm(volumeTool.armed === kind ? null : kind);
 }
 
@@ -10786,6 +10803,8 @@ map.on("contextmenu", (event) => {
 // clicks on the panels above it.
 map.on("click", (event) => {
   hideContextMenu();
+  // While a measuring tool is out, every click is its vertex.
+  if (measureTool?.click(event)) return;
   // A storm point under the pointer opens its card; the probe pin is for
   // the field.
   const hit = tcPointAt(event.point);
@@ -10836,6 +10855,7 @@ map.on("click", (event) => {
   if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
 });
 map.on("mousemove", (event) => {
+  if (measureTool?.armed) return;
   if (!tcLayers && !stationLayers && !radarOverlay && !fireLayers && !caseMarkers && !riverCase) return;
   const station = stationPointAt(event.point);
   // The mark under the pointer grows by a pixel, which is the only feature

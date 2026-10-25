@@ -5,12 +5,14 @@ import { globeProjection, isGlobeProjection } from "./projection";
 
 /**
  * The view tile under the zoom tile: the globe, the 3D relief and the
- * relief's contour lines as switches, then a way back to north and a way back to a flat camera. The last two are there only while the camera has
- * turned or tilted, so the column is as short as the view lets it be; the
- * north button's needle turns with the map so it says which way north is
- * before it is pressed.
+ * relief's contour lines as switches, then a way back to north and a way
+ * back to a flat camera, then the ruler and the area tool (`measure.ts`).
+ * The two ways back are there only while the camera has turned or tilted,
+ * so the column is as short as the view lets it be; the north button's
+ * needle turns with the map so it says which way north is before it is
+ * pressed.
  *
- * One MapLibre control group for all four, styled like the zoom tile: the
+ * One MapLibre control group for all of them, styled like the zoom tile: the
  * library's own globe and terrain controls are a group each, and the column
  * then reads as a stack of unrelated tiles.
  */
@@ -31,6 +33,9 @@ export interface ViewControlOptions {
   onVolumeTool?: (kind: "box" | "section") => void;
   /** The contour-lines switch was pressed; `setContours` reports the state. */
   onContours?: () => void;
+  /** The ruler or the area tool was pressed (`main.ts` arms it or puts it
+   * away); `setMeasure` reports which is armed. */
+  onMeasure?: (kind: "distance" | "area") => void;
 }
 
 /** What the volume tools show: whether they are offered at all (only over
@@ -57,6 +62,17 @@ const CONTOURS_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidd
   <path d="M12.5 19.5c1.2-2 2.8-3.5 4.5-3.8s3 .9 3.8 2.8" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
 </svg>`;
 
+const DISTANCE_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
+  <path d="M6 18.5 18.5 6 23 10.5 10.5 23z" fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M10 14.5l2 2M13 11.5l1.4 1.4M16 8.5l2 2M11.5 13l1.4 1.4M14.5 10l1.4 1.4" fill="none" stroke="#333" stroke-width="1.2" stroke-linecap="round"/>
+</svg>`;
+
+const AREA_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
+  <path d="M8 19.5 10 8.5l11 3-1.5 9.5z" fill="#333" fill-opacity="0.14" stroke="#333" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="2.6 1.8"/>
+  <circle cx="8" cy="19.5" r="1.6" fill="#333"/><circle cx="10" cy="8.5" r="1.6" fill="#333"/>
+  <circle cx="21" cy="11.5" r="1.6" fill="#333"/><circle cx="19.5" cy="21" r="1.6" fill="#333"/>
+</svg>`;
+
 const PITCH_ICON = `<svg viewBox="0 0 29 29" width="29" height="29" aria-hidden="true">
   <path d="M7 19.5h15" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>
   <path d="M8.5 15.5 20.5 9.5" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2.2"/>
@@ -74,6 +90,8 @@ export class ViewControl implements IControl {
   private flat: HTMLButtonElement | null = null;
   private box: HTMLButtonElement | null = null;
   private section: HTMLButtonElement | null = null;
+  private distance: HTMLButtonElement | null = null;
+  private area: HTMLButtonElement | null = null;
   /** Locale listeners cannot be removed; one is enough for the page. */
   private listening = false;
 
@@ -106,6 +124,13 @@ export class ViewControl implements IControl {
       this.options.onVolumeTool?.("section"),
     );
     this.section.querySelector(".maplibregl-ctrl-icon")!.innerHTML = SECTION_ICON;
+    this.distance = this.button(container, "view-control-distance", "viewDistanceAria", () =>
+      this.options.onMeasure?.("distance"),
+    );
+    this.distance.querySelector(".maplibregl-ctrl-icon")!.innerHTML = DISTANCE_ICON;
+    this.area = this.button(container, "view-control-area", "viewAreaAria", () => this.options.onMeasure?.("area"));
+    this.area.querySelector(".maplibregl-ctrl-icon")!.innerHTML = AREA_ICON;
+    this.setMeasure(null);
     this.box.hidden = true;
     this.section.hidden = true;
     this.container = container;
@@ -151,7 +176,7 @@ export class ViewControl implements IControl {
   }
 
   private readonly label = (): void => {
-    for (const button of [this.globe, this.terrain, this.contours, this.north, this.flat, this.box, this.section]) {
+    for (const button of [this.globe, this.terrain, this.contours, this.north, this.flat, this.box, this.section, this.distance, this.area]) {
       if (!button) continue;
       const text = t(button.dataset.label as MessageKey);
       button.title = text;
@@ -162,6 +187,12 @@ export class ViewControl implements IControl {
   /** Show whether the contour lines are drawn. */
   setContours(on: boolean): void {
     this.contours?.setAttribute("aria-pressed", String(on));
+  }
+
+  /** Show which measuring tool is armed, if any. */
+  setMeasure(kind: "distance" | "area" | null): void {
+    this.distance?.setAttribute("aria-pressed", String(kind === "distance"));
+    this.area?.setAttribute("aria-pressed", String(kind === "area"));
   }
 
   /** Offer the volume tools, or not, and show which is armed or active. */

@@ -3820,6 +3820,12 @@ body[data-context] .source-credit[data-credit-context] {
   }
 }
 
+/* The ruler and the area tool (measure.ts): clicks place vertices, so the
+   pointer is a crosshair over everything the map would otherwise point at. */
+.measuring .maplibregl-canvas {
+  cursor: crosshair !important;
+}
+
 /* The radar volume's drag tools (volumetool.ts): while one is armed, a
    clear sheet over the canvas takes the drag instead of the map, finger
    or mouse alike, and draws the box or the line in the ink. */

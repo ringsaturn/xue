@@ -233,6 +233,8 @@ export const de: Record<MessageKey, string> = {
   viewResetPitchAria: "Neigung zurücksetzen",
   viewBoxAria: "Sturm-Nahansicht: Rechteck aufziehen",
   viewSectionAria: "Vertikalschnitt: Linie ziehen",
+  viewDistanceAria: "Strecke messen: Punkte anklicken, letzten erneut anklicken zum Beenden",
+  viewAreaAria: "Fläche messen: Ecken anklicken, ersten oder letzten erneut anklicken zum Beenden",
   particlesToggle: "Partikel",
   particlesToggleAria: "Windpartikel-Animation umschalten",
 

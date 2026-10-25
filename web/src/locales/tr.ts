@@ -236,6 +236,8 @@ export const tr: Record<MessageKey, string> = {
   viewResetPitchAria: "Eğimi sıfırla",
   viewBoxAria: "Fırtına yakın planı: bir kutu sürükleyin",
   viewSectionAria: "Düşey kesit: bir çizgi sürükleyin",
+  viewDistanceAria: "Mesafe ölç: noktalara tıklayın, bitirmek için sonuncuya yeniden tıklayın",
+  viewAreaAria: "Alan ölç: köşelere tıklayın, bitirmek için ilk ya da son köşeye yeniden tıklayın",
   particlesToggle: "Parçacıklar",
   particlesToggleAria: "Rüzgar parçacık animasyonunu aç/kapat",
 

@@ -409,8 +409,9 @@ export const en = {
   themeToggleAria: "Toggle light / dark",
   /** The view tile under the zoom buttons (viewcontrol.ts): the globe, the
    * 3D relief and its cast shadows as switches, then back to north and back to a flat camera —
-   * the last two shown only while the map is turned or tilted. Tooltips
-   * and accessible names. */
+   * the last two shown only while the map is turned or tilted — and the
+   * ruler and the area tool (measure.ts), whose names say how to end a
+   * shape. Tooltips and accessible names. */
   viewGlobeAria: "Globe",
   viewTerrainAria: "3D terrain",
   viewContoursAria: "Contour lines",
@@ -418,6 +419,8 @@ export const en = {
   viewResetPitchAria: "Reset tilt",
   viewBoxAria: "Storm close-up: drag a box over it",
   viewSectionAria: "Vertical section: drag a line",
+  viewDistanceAria: "Measure distance: click points, click the last again to finish",
+  viewAreaAria: "Measure area: click corners, click the first or last again to finish",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

@@ -233,6 +233,8 @@ export const es: Record<MessageKey, string> = {
   viewResetPitchAria: "Restablecer inclinación",
   viewBoxAria: "Primer plano de la tormenta: arrastra un recuadro",
   viewSectionAria: "Corte vertical: arrastra una línea",
+  viewDistanceAria: "Medir distancia: haz clic en los puntos y otra vez en el último para terminar",
+  viewAreaAria: "Medir área: haz clic en los vértices y otra vez en el primero o el último para terminar",
   particlesToggle: "Partículas",
   particlesToggleAria: "Alternar la animación de partículas de viento",
 

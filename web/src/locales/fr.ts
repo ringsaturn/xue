@@ -233,6 +233,8 @@ export const fr: Record<MessageKey, string> = {
   viewResetPitchAria: "Réinitialiser l’inclinaison",
   viewBoxAria: "Gros plan d’un orage : tracer un cadre",
   viewSectionAria: "Coupe verticale : tracer une ligne",
+  viewDistanceAria: "Mesurer une distance : cliquer les points, recliquer le dernier pour finir",
+  viewAreaAria: "Mesurer une surface : cliquer les sommets, recliquer le premier ou le dernier pour finir",
   particlesToggle: "Particules",
   particlesToggleAria: "Activer ou désactiver l'animation des particules de vent",
 
