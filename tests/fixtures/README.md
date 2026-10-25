@@ -198,6 +198,44 @@ for h in 000 006; do
 done
 ```
 
+`iconeu.2026102512.f000.crop.grib2` and `iconeu.2026102512.f001.crop.grib2`
+are an 80 by 80 cell window of the analysis and the first step of the
+2026-10-25 12:00 UTC DWD ICON-EU cycle on its 0.0625° grid, 6.5°E to
+11.4375°E and 43.0625°N to 48°N (the western Alps, the Po valley and the
+Ligurian Sea, raining that afternoon), every record the source fetches in
+`xuebuild/sources.py` order: six at the analysis (`VMAX_10M` is not
+fetched there) and seven at the step. The fetcher had decompressed the
+per-field `.bz2` objects, joined them and repacked the CCSDS records to
+grid_simple. Cut with:
+
+```sh
+python -m xuebuild fetch --model iconeu --run 2026102512 --hours 1 --raw-dir /tmp/raw
+for h in 000 001; do
+  gdal_translate -srcwin 480 360 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/iconeu.2026102512/iconeu.2026102512.f$h.grib2 \
+    tests/fixtures/iconeu.2026102512.f$h.crop.grib2
+done
+```
+
+`arpege.2026102512.f000.crop.grib2` and `arpege.2026102512.f001.crop.grib2`
+are an 80 by 80 cell window of the analysis and the first step of the
+2026-10-25 12:00 UTC Météo-France ARPEGE cycle on its 0.25° grid, 2°E to
+21.75°E and 30.25°N to 50°N, every record the source fetches in source
+order, cut by the fetcher out of the cycle's `000H024H` surface package:
+six at the analysis — the run-total precipitation among them as the zero
+record the fetcher writes there, since the package has none — and seven at
+the step. GDAL reads the global grid from 180°W, hence the column offset.
+Cut with:
+
+```sh
+python -m xuebuild fetch --model arpege --run 2026102512 --hours 1 --raw-dir /tmp/raw
+for h in 000 001; do
+  gdal_translate -srcwin 728 160 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/arpege.2026102512/arpege.2026102512.f$h.grib2 \
+    tests/fixtures/arpege.2026102512.f$h.crop.grib2
+done
+```
+
 The soil records of both ECMWF sources were added later the way the GFS
 ones were: fetched alone by byte range off each frame's `.index` (the
 Google mirror still served the September cycles), repacked to grid_simple
