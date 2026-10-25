@@ -2,12 +2,13 @@
 
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
 > forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES,
-> NOAA HRRR, NOAA GEFS-Aerosols and NCEP CFSv2
-> runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
+> NOAA HRRR, NOAA GEFS-Aerosols, NCEP CFSv2, DWD ICON-EU and Météo-France
+> ARPEGE runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
 > level pressure, isobaric geopotential height, temperature, humidity and
 > water vapour flux, aerosol optical depth and particulate matter, out to
 > 240 hours (360 for AIFS and IFS HRES, 18 for HRRR, 120 for
-> GEFS-Aerosols, 6552 — thirty-nine weeks — for CFSv2) — as
+> GEFS-Aerosols and ICON-EU, 102 for ARPEGE, 6552 — thirty-nine weeks —
+> for CFSv2) — as
 > smooth animations over a
 > MapLibre basemap, decoding per-variable Zarr v3 stores laid out for
 > playback (quantized uint8, small tiles × six-frame chunks; the custom
@@ -67,7 +68,14 @@ Facts worth getting right:
   means over the six hours ending at each frame, not instantaneous values
   (the bundle metadata says so, `typeOfStatisticalProcessing` 0). At nine
   months of lead time the useful signal is a seasonal anomaly, not a
-  day's weather. Three more sources are
+  day's weather. `iconeu`: DWD ICON-EU, the European nest of ICON on
+  its regular 0.0625° grid (1377 × 657, 23.5°W–62.5°E, 29.5°N–70.5°N;
+  regional, nothing resampled), hourly to F078 then 3-hourly to F120 (93
+  frames) from the 00/06/12/18Z cycles, complete about three and a half
+  hours after the cycle. `arpege`: Météo-France ARPEGE, the global model
+  at 0.25° (1440 × 721), hourly to F048 then 3-hourly to F102 (67 frames)
+  from the 00/06/12/18Z cycles, complete three to five hours after the
+  cycle. Both publish a basic surface set (below). Three more sources are
   observations rather than forecasts: `radar` (the CMA level-3 radar mosaic
   composite reflectivity over China, six-minute frames on the data portal's
   0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
@@ -268,7 +276,11 @@ Facts worth getting right:
   `wind250` / `wind200` and `qflux925` / `qflux850` / `qflux700` /
   `qflux500` — thirty-two in all, every series starting at F6 rather than
   at the analysis; its `prate`, `dswrf` and `tcdc` are means over the six
-  hours ending at the frame. CMA:
+  hours ending at the frame. ICON-EU (`iconeu`) and ARPEGE (`arpege`):
+  `tmp2m`, `prate`, `prmsl`, `gust`, `tcdc` and the vector pair `wind10m`,
+  six each; `prate` is de-accumulated from the run total and, like `gust`
+  (the maximum over the step, or the hour on ARPEGE, ending at the frame),
+  has no analysis frame. CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
   (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
   alone). MRMS3D: `refl3d` (the 33-level volume above). WOOF-WRF
@@ -317,7 +329,9 @@ Facts worth getting right:
   (credit the source as it asks and add "via Xue").
 - Data licensing: NOAA GFS, GEFS-Aerosols, HRRR and NCEP CFSv2 are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
-  data"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
+  data"); `iconeu` is DWD open data under CC BY 4.0 ("Source: Deutscher
+  Wetterdienst", quantized); `arpege` is Météo-France data from data.gouv.fr
+  under the Licence Ouverte / Etalab 2.0 ("Source: Météo-France"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
@@ -372,9 +386,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|iconeu|arpege|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
@@ -549,7 +563,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),
