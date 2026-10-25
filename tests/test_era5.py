@@ -297,7 +297,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 values = np.asarray(dataset[name][:], dtype=np.float64)[:, ::-1]  # north first in the bundle
             for hour in (0, 2):
                 with self.subTest(bundle=name, hour=hour):
-                    decoded = codebook.decode(np.asarray(self.bundle(name).decode_plane(hour, 1)).reshape(HEIGHT, WIDTH))
+                    decoded = codebook.decode(np.asarray(self.bundle(name).decode_plane(1, hour)).reshape(HEIGHT, WIDTH))
                     source = np.clip(values[hour], codebook.minimum, codebook.maximum)
                     self.assertLessEqual(float(np.abs(decoded - source).max()), codebook.metadata()["scale"] / 2 + 1e-6)
 
