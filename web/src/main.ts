@@ -1374,6 +1374,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   woof: "RECAST / WOOF WRF-ARW NEST FUJI",
   efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
   efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",
+  era5: "COPERNICUS C3S / ECMWF ERA5 REANALYSIS (0.25°)",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",

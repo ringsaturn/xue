@@ -1220,6 +1220,34 @@ describe("dataset kinds", () => {
     expect(identifyBundle(whole.variables)?.identity).toEqual({ family: "dis06", level: null, vector: false });
   });
 
+  it("knows ERA5 as a reanalysis reached through its cases alone", () => {
+    // Mirrors the `era5` entry of SOURCES: hourly on the 0.25° grid from
+    // the window's first hour, every frame an analysis; no live pointer.
+    expect(FORECAST_MODELS.era5).toMatchObject({
+      id: "era5",
+      label: "ERA5",
+      product: "reanalysis-single-levels",
+      coreBundles: ["tmp2m"],
+      railCore: ["tmp2m", "wind10m", "gust", "dpt2m"],
+    });
+    expect(FORECAST_MODELS.era5.latestFilename).toBeUndefined();
+    expect(isCaseOnlyModel("era5")).toBe(true);
+    expect(isObservationModel("era5")).toBe(false);
+    expect(FORECAST_MODEL_IDS).not.toContain("era5");
+    const store = (id: string) => ({ zarr: { path: `${id}.zarr`, byteLength: 1, crc32: "00000000" } });
+    const reanalysis = {
+      schemaVersion: 5,
+      model: "ERA5",
+      product: "reanalysis-single-levels",
+      runTime: "2026-10-08T00:00:00Z",
+      forecastHours: 192,
+      bundles: ["wind10m", "gust", "tmp2m", "dpt2m"].map((id) => ({ variable: id, ...store(id) })),
+    };
+    expect(validateManifest(reanalysis, "era5").bundles).toHaveLength(4);
+    expect(() => validateManifest(reanalysis, "gfs")).toThrow();
+    expect(() => validateManifest({ ...reanalysis, product: "pgrb2.0p25" }, "era5")).toThrow(/unsupported manifest product/);
+  });
+
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {
     // Mirrors the `mrms3d` entry of SOURCES: the MRMS 3D reflectivity is a
     // dataset of its own beside the composite, one `refl3d` bundle that
