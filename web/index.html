@@ -115,6 +115,8 @@
               "ECMWF IFS HRES 0.1° surface runs from the centre's ~9 km operational forecast as Open-Meteo forwards it, hourly to 90 h and out to 360 h",
               "NOAA HRRR 3 km runs over the contiguous United States, a new cycle every hour, hourly to 18 h, with the model's forecast radar reflectivity",
               "NOAA CFSv2 seasonal runs on the coupled model's 0.9375° grid, 6-hourly out to 39 weeks from the 00Z and 12Z cycles",
+              "DWD ICON-EU 0.0625° runs over Europe, hourly to 78 h and 3-hourly to 120 h",
+              "Météo-France ARPEGE 0.25° global runs, hourly to 48 h and 3-hourly to 102 h",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
@@ -141,7 +143,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1° and NOAA HRRR runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -191,6 +193,8 @@
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "CFSv2 seasonal live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cfs.json" },
+              { "@type": "DataDownload", "name": "DWD ICON-EU live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-iconeu.json" },
+              { "@type": "DataDownload", "name": "Météo-France ARPEGE live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-arpege.json" },
               { "@type": "DataDownload", "name": "GEFS-Aerosols live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-gefsaero.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
@@ -923,6 +927,16 @@
               <small>CONUS 3KM</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="iconeu" aria-pressed="false">
+              <span class="model-name">ICON-EU</span>
+              <small>DWD EUROPE 7KM</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" data-model="arpege" aria-pressed="false">
+              <span class="model-name">ARPEGE</span>
+              <small>MÉTÉO-FRANCE 0.25°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <p class="field-group-heading" data-i18n="fieldGroupAerosol">AEROSOLS &amp; AIR QUALITY</p>
             <button type="button" data-model="gefsaero" aria-pressed="false">
               <span class="model-name">GEFS-AEROSOLS</span>
@@ -1104,6 +1118,8 @@
         <span class="source-line">
           <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
           <span class="source-credit" data-credit-model="ifshres">ADAPTED FROM <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF IFS</a> BY ECMWF, LICENSED UNDER <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> · VIA <a href="https://open-meteo.com" target="_blank" rel="noreferrer">OPEN-METEO</a> ·</span>
+          <span class="source-credit" data-credit-model="iconeu">SOURCE: <a href="https://opendata.dwd.de/" target="_blank" rel="noreferrer">DEUTSCHER WETTERDIENST</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, QUANTIZED) ·</span>
+          <span class="source-credit" data-credit-model="arpege">SOURCE: <a href="https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/" target="_blank" rel="noreferrer">MÉTÉO-FRANCE</a> (<a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noreferrer">LICENCE OUVERTE 2.0</a>, QUANTIZED) ·</span>
           <span class="source-credit" data-credit-model="cma">RADAR <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
           <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
           <span class="source-credit" data-credit-model="nexrad">RADAR <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA / NWS NEXRAD LEVEL III</a> VIA <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">UNIDATA</a> ·</span>

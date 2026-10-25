@@ -111,6 +111,10 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   sflux: "sflux",
   "gfs-sflux": "sflux",
   hrrr: "hrrr",
+  iconeu: "iconeu",
+  "icon-eu": "iconeu",
+  icon: "iconeu",
+  arpege: "arpege",
   // The WOOF nest is cases only; its spellings are known so a link naming
   // it beside `?case=` reads as the case, not as a bad model.
   woof: "woof",

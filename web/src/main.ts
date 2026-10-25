@@ -1369,6 +1369,8 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
+  iconeu: "DWD / ICON-EU EUROPE (0.0625°)",
+  arpege: "MÉTÉO-FRANCE / ARPEGE (0.25°)",
   woof: "RECAST / WOOF WRF-ARW NEST FUJI",
   efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
   efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",

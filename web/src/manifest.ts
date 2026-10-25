@@ -23,6 +23,8 @@ export type ForecastModelId =
   | "cfs"
   | "sflux"
   | "hrrr"
+  | "iconeu"
+  | "arpege"
   | "woof"
   | "efas"
   | "efaswb"
@@ -165,6 +167,20 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
   },
+  // DWD ICON-EU, the European nest of ICON at 0.0625°: a regional model
+  // already on a regular latitude/longitude grid (1377 × 657 cells, centres
+  // 23.5°W–62.5°E, 29.5°N–70.5°N), so the rectangle is the model's own
+  // domain and nothing is clipped. Hourly to F078, three-hourly to F120.
+  iconeu: {
+    id: "iconeu",
+    label: "ICON-EU",
+    product: "iconeu",
+    latestFilename: "latest-iconeu.json",
+    region: [-23.5, 29.5, 62.5, 70.5],
+  },
+  // Météo-France ARPEGE, the global model on its 0.25° grid: hourly to F048,
+  // three-hourly to F102.
+  arpege: { id: "arpege", label: "ARPEGE", product: "arpege", latestFilename: "latest-arpege.json" },
   // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
   // Not a live feed: the run is a fixed archive published as showcase
@@ -527,7 +543,7 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
   return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
-/** The datasets in the model switch's order: the nine live forecasts, the
+/** The datasets in the model switch's order: the eleven live forecasts, the
  * ten rolling observation windows (MRMS and its 3D volume, the JMA
  * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
  * Japan box, and the SWPC aurora probability) and the geostationary
@@ -544,6 +560,8 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "ifshres",
   "cfs",
   "hrrr",
+  "iconeu",
+  "arpege",
   "gefsaero",
   "mrms",
   "mrms3d",

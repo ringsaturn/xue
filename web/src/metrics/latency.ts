@@ -188,6 +188,8 @@ export const TYPICAL_UPSTREAM_MINUTES: Readonly<Record<string, number>> = {
   ecmwf: 420,
   hrrr: 50,
   aifs: 330,
+  iconeu: 215,
+  arpege: 240,
 };
 
 /** Source ids in display order: those `known` lists in its order, then any
