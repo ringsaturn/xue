@@ -1,9 +1,10 @@
 """eccodes CLI subprocess wrapper (same pattern as gdal.py / zstdcli.py).
 
-Two callers. The ECMWF GRIB path: open data GRIB2 messages are CCSDS/AEC
-packed (DRS template 5.42), which many GDAL builds cannot decode, so
-``grib_set`` repacks the downloaded messages to ``grid_simple`` before GDAL
-reads them. And the tropical cyclone product (``xuebuild.tc``): ECMWF's
+Two callers. The CCSDS GRIB path: ECMWF open data, DWD ICON-EU and
+Météo-France ARPEGE messages are CCSDS/AEC packed (DRS template 5.42),
+which many GDAL builds cannot decode, so ``grib_set`` repacks the
+downloaded messages to ``grid_simple`` before GDAL reads them (and writes
+the zero accumulation ARPEGE lacks at the analysis). And the tropical cyclone product (``xuebuild.tc``): ECMWF's
 track files are BUFR, and ``bufr_dump`` is how they become JSON.
 """
 
@@ -21,6 +22,20 @@ def repack_grid_simple(source: Path, destination: Path) -> None:
     run_command(
         [require_command("grib_set"), "-r", "-s", "packingType=grid_simple", str(source), str(destination)],
         description=f"repack {source} to grid_simple",
+    )
+
+
+def zero_accumulation_at_analysis(source: Path, destination: Path) -> None:
+    """The run-total accumulation records of ``source`` restamped to the
+    analysis (an empty interval ending at the run time) with every value
+    zero: the record a source that writes no accumulation at step 0 (the
+    ARPEGE packages) would have written, the same shape ICON-EU's
+    ``TOT_PREC`` takes at step 0. A run total at the run time is zero by
+    definition, and it is what the converter differences the first step
+    against."""
+    run_command(
+        [require_command("grib_set"), "-d", "0", "-s", "endStep=0", str(source), str(destination)],
+        description=f"restamp {source} as a zero accumulation at the analysis",
     )
 
 

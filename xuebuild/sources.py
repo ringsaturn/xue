@@ -121,7 +121,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "woof", "efas", "efaswb", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "woof", "efas", "efaswb", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -1551,6 +1551,70 @@ SOURCES: dict[str, SourceSpec] = {
         # a tile is what keeps one cell's nine-month series to a few
         # hundred kilobytes rather than the whole grid's.
         tile=(96, 95),
+        video=False,
+    ),
+    # DWD ICON-EU: the European nest of DWD's ICON model at 0.0625° (about
+    # 7 km), already on a regular latitude/longitude grid, so nothing is
+    # resampled: 1377 x 657 cells, centres from 23.5°W to 62.5°E and 29.5°N
+    # to 70.5°N. DWD's open data server writes one bzip2-compressed GRIB2
+    # field per parameter and step (``icon-eu/grib/<HH>/<param>/``, no
+    # index), CCSDS packed, and keeps only about a day of cycles; the fetch
+    # decompresses, joins and repacks each frame. The 00/06/12/18Z cycles
+    # run to 120 hours, hourly to 78 and three-hourly after; the cycles
+    # between stop at 30 hours and are not published. A basic set: the
+    # temperature, the run-total ``TOT_PREC`` (the WMO 0/1/52 in kg/m² that
+    # AIFS writes, under the same alternate) de-accumulated into the rate,
+    # the 10 m wind pair, the sea level pressure, ``VMAX_10M`` (the maximum
+    # gust over the hour or three hours ending at the step, ECMWF's gust
+    # alternate; an empty interval at the analysis) and ``CLCT`` (the total
+    # cloud cover on the ground surface in percent, AIFS's alternate).
+    "iconeu": SourceSpec(
+        id="iconeu",
+        manifest_model="ICON-EU",
+        product="iconeu",
+        latest_filename="latest-iconeu.json",
+        # Hourly through 78 hours, three-hourly to 120: 93 frames.
+        steps=((78, 1), (120, 3)),
+        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"),
+        accumulated_precipitation=True,
+        optional_at_analysis=("gust",),
+        statistical_processes=(("prate", 0), ("gust", 2)),
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc"),
+        bundle_vector_ids=("wind10m",),
+        production_grid=(1377, 657),
+        # 81 x 73 cells (about 5° x 4.6°) divides the grid exactly into
+        # 17 x 9 = 153 tiles with no clipped edge.
+        tile=(81, 73),
+        # Each frame is one request per parameter to DWD's server.
+        fetch_concurrency=8,
+        video=False,
+    ),
+    # Météo-France ARPEGE, the global model, on its 0.25° GLOB025 grid —
+    # the GFS grid, 0°E to 359.75°E and pole to pole. Météo-France publishes
+    # it on data.gouv.fr as packages: the surface package ``SP1`` of a cycle
+    # is four multi-field GRIB2 objects on an S3 bucket, one per range of
+    # steps (0–24, 25–48, 49–72, 73–102 hours), CCSDS packed, no index. The
+    # fetch downloads the packages the axis reaches and cuts one frame per
+    # step out of them by the records' GRIB2 identities. Every cycle runs to
+    # 102 hours, hourly to 48 and three-hourly after. The same basic set as
+    # ``iconeu``: the run-total ``tp`` (WMO 0/1/52 in kg/m²) has no record
+    # at the analysis, where a run total is zero by definition, so the fetch
+    # writes that zero record for the converter to difference the first step
+    # against; the gust is the maximum over the hour ending at each step, and
+    # the total cloud cover is the WMO 0/6/1 on the ground surface.
+    "arpege": SourceSpec(
+        id="arpege",
+        manifest_model="ARPEGE",
+        product="arpege",
+        latest_filename="latest-arpege.json",
+        # Hourly through 48 hours, three-hourly to 102: 67 frames.
+        steps=((48, 1), (102, 3)),
+        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"),
+        accumulated_precipitation=True,
+        optional_at_analysis=("gust",),
+        statistical_processes=(("prate", 0), ("gust", 2)),
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc"),
+        bundle_vector_ids=("wind10m",),
         video=False,
     ),
     # Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount

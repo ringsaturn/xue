@@ -178,6 +178,12 @@ class VariableSpec:
     named by the Xue id (:func:`xuebuild.observation.series_files`).
     Mirrored in the native encoder's ``variables.rs``, which reads the
     series too."""
+    dwd_param: str = ""
+    """The parameter name DWD's open data server files this quantity under
+    (``T_2M``, ``TOT_PREC``): the directory (lower case) and the file name
+    of one field per step under ``icon-eu/grib/<HH>/``. Empty when the
+    variable is not fetched from DWD. Another centre's spelling, read by
+    the fetch alone, like :attr:`ecmwf_param`."""
     mrms_product: str = ""
     """The MRMS product directory the variable is fetched from
     (``CONUS/<product>/<day>/`` on the ``noaa-mrms-pds`` bucket, one whole
@@ -379,6 +385,7 @@ VARIABLES: dict[str, VariableSpec] = {
         conversion=rules.CELSIUS,
         companions=("poster", "video"),
         label="2 meter temperature",
+        dwd_param="T_2M",
         output_unit="°C",
         value_range=(-60, 50),
         grib_element="TMP",
@@ -433,6 +440,7 @@ VARIABLES: dict[str, VariableSpec] = {
         conversion=rules.PRECIPITATION_ACCUMULATION,
         gdal_rules=(rules.total_precipitation(),),
         label="Total precipitation",
+        dwd_param="TOT_PREC",
         output_unit="m",
         value_range=(0, 1),
         grib_element="unknown",
@@ -518,6 +526,7 @@ VARIABLES: dict[str, VariableSpec] = {
         id="ugrd10m",
         conversion=rules.SPEED,
         label="10 meter U wind component",
+        dwd_param="U_10M",
         output_unit="m/s",
         value_range=(-64, 64),
         grib_element="UGRD",
@@ -534,6 +543,7 @@ VARIABLES: dict[str, VariableSpec] = {
         id="vgrd10m",
         conversion=rules.SPEED,
         label="10 meter V wind component",
+        dwd_param="V_10M",
         output_unit="m/s",
         value_range=(-64, 64),
         grib_element="VGRD",
@@ -629,6 +639,7 @@ VARIABLES: dict[str, VariableSpec] = {
         gdal_rules=(rules.mean_sea_level("PRMSL", "PRES", "MSLMA"),),
         companions=(),
         label="Mean sea level pressure",
+        dwd_param="PMSL",
         output_unit="hPa",
         value_range=(870, 1125),
         grib_element="PRMSL",
@@ -706,6 +717,7 @@ VARIABLES: dict[str, VariableSpec] = {
         # maximum on the 10 m surface.
         gdal_rules=(rules.surface("GUST"), rules.height("GUST", 10)),
         label="Wind gust",
+        dwd_param="VMAX_10M",
         output_unit="m/s",
         value_range=(0, 127),
         grib_element="GUST",
@@ -749,6 +761,7 @@ VARIABLES: dict[str, VariableSpec] = {
             rules.surface("TCDC"),
         ),
         label="Total cloud cover",
+        dwd_param="CLCT",
         output_unit="%",
         value_range=(0, 100),
         grib_element="TCDC",

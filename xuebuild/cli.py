@@ -144,6 +144,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "depth by species and the surface PM2.5 / PM10), "
             "cfs, NCEP CFSv2 seasonal on its T126 Gaussian grid (6-hourly from 6 to 6552 hours, "
             "thirty-nine weeks; 00Z and 12Z), "
+            "iconeu, DWD ICON-EU over Europe at 0.0625 degree (hourly to 78, 3-hourly to 120), "
+            "arpege, Meteo-France ARPEGE at 0.25 degree (hourly to 48, 3-hourly to 102), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
             "mrms3d, its reflectivity volume on 33 levels from 0.5 to 19 km (a frame every ten "

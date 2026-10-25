@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bz2
 import gzip
 import json
 import logging
@@ -118,6 +119,25 @@ CFS_BASE_URL = os.environ.get("XUE_CFS_BASE_URL", "https://noaa-cfs-pds.s3.amazo
 # directory listing can tell.
 MRMS_BASE_URL = os.environ.get("XUE_MRMS_BASE_URL", "https://noaa-mrms-pds.s3.amazonaws.com").rstrip("/")
 MRMS_DOMAIN = "CONUS"
+# DWD's open data server (opendata.dwd.de): ICON-EU writes one bzip2-
+# compressed GRIB2 field per parameter and step, no index, and keeps about
+# a day of cycles. Override with XUE_DWD_BASE_URL.
+DWD_BASE_URL = os.environ.get("XUE_DWD_BASE_URL", "https://opendata.dwd.de/weather/nwp").rstrip("/")
+# Météo-France's model packages on data.gouv.fr sit on an OVH S3 bucket that
+# answers HEAD and Range. Override with XUE_METEOFRANCE_BASE_URL.
+METEOFRANCE_BASE_URL = os.environ.get(
+    "XUE_METEOFRANCE_BASE_URL", "https://meteofrance-pnt.s3.rbx.io.cloud.ovh.net"
+).rstrip("/")
+# The step ranges ARPEGE's 0.25° surface package (``SP1``) is cut into, one
+# object each, bounds inclusive. The third holds 51 to 72 (three-hourly
+# steps) though its name says 49.
+ARPEGE_PACKAGES: tuple[tuple[int, int], ...] = ((0, 24), (25, 48), (49, 72), (73, 102))
+# The packages are kept under the run's raw directory in a directory of
+# their own, which the converter's listing of the frames does not descend.
+ARPEGE_PACKAGE_DIRNAME = "SP1"
+# Sources whose records arrive CCSDS packed besides the ECMWF open data:
+# every frame is repacked to grid_simple before GDAL reads it.
+CCSDS_SOURCES = frozenset({"iconeu", "arpege"})
 MRMS_FETCH_FILENAME = "fetch.json"
 # What a built window holds, written beside its manifest by `build-bin` for
 # an observation source (`xuebuild.cli`), from the fetch record below.
@@ -225,6 +245,40 @@ def gefsaero_object_url(run: GfsRun, forecast_hour: int) -> str:
     frame in one object with an ``.idx`` beside it — the NOAA layout, so
     the pgrb2 record path reads it."""
     return f"{GEFS_BASE_URL}/gefs.{run.date}/{run.cycle}/chem/pgrb2ap25/gefs.chem.t{run.cycle}z.a2d_0p25.f{forecast_hour:03d}.grib2"
+
+
+def icon_eu_object_url(run: GfsRun, forecast_hour: int, variable_id: str) -> str:
+    """The bzip2-compressed GRIB2 field one ICON-EU input is for one step on
+    DWD's server: a directory per cycle hour and parameter, the parameter
+    in its DWD spelling (:attr:`~xuebuild.variables.VariableSpec.dwd_param`),
+    single-level fields on the regular latitude/longitude grid."""
+    name = VARIABLES[variable_id].dwd_param
+    if not name:
+        raise DownloadError(f"{variable_id} has no DWD parameter name")
+    return (
+        f"{DWD_BASE_URL}/icon-eu/grib/{run.cycle}/{name.lower()}/"
+        f"icon-eu_europe_regular-lat-lon_single-level_{run.id}_{forecast_hour:03d}_{name}.grib2.bz2"
+    )
+
+
+def arpege_package(forecast_hour: int) -> tuple[int, int]:
+    """The step range of the ARPEGE package that carries one forecast hour."""
+    for first, last in ARPEGE_PACKAGES:
+        if first <= forecast_hour <= last:
+            return first, last
+    raise DownloadError(f"ARPEGE publishes no step {forecast_hour}")
+
+
+def arpege_package_name(run: GfsRun, package: tuple[int, int]) -> str:
+    first, last = package
+    stamp = run.time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"arpege__025__SP1__{first:03d}H{last:03d}H__{stamp}.grib2"
+
+
+def arpege_package_url(run: GfsRun, package: tuple[int, int]) -> str:
+    """The ARPEGE 0.25° surface package object of one step range."""
+    stamp = run.time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"{METEOFRANCE_BASE_URL}/pnt/{stamp}/arpege/025/SP1/{arpege_package_name(run, package)}"
 
 
 def wave_object_url(run: GfsRun, forecast_hour: int) -> str:
@@ -1855,6 +1909,11 @@ def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
         return hrrr_object_url(run, forecast_hour)
     if model == "gefsaero":
         return gefsaero_object_url(run, forecast_hour)
+    if model == "iconeu":
+        # One object per field: the temperature's names the frame.
+        return icon_eu_object_url(run, forecast_hour, "tmp2m")
+    if model == "arpege":
+        return arpege_package_url(run, arpege_package(forecast_hour))
     return object_url(run, forecast_hour)
 
 
@@ -2025,6 +2084,20 @@ def _run_is_complete(
             except DownloadError as exc:
                 LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
         return False
+    if model == "iconeu":
+        # One object per field and step, written field by field: both ends
+        # of every input (the gust has no analysis record to probe).
+        spec = source_spec(model)
+        return all(
+            exists(icon_eu_object_url(run, hour, variable_id))
+            for hour in (0, hours)
+            for variable_id in _frame_variable_ids(spec, hour)
+        )
+    if model == "arpege":
+        # A package object appears whole once written: every package the
+        # axis reaches must be there.
+        packages = dict.fromkeys(arpege_package(hour) for hour in source_spec(model).forecast_hours(hours))
+        return all(exists(arpege_package_url(run, package)) for package in packages)
     if model not in ECMWF_OPEN_DATA_MODELS:
         urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
         for companion in source_spec(model).companion_files:
@@ -2340,6 +2413,122 @@ def _download_ecmwf_payload(
     )
 
 
+def _download_icon_eu_payload(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
+) -> bytes:
+    """One ICON-EU frame: each input's field of the step, decompressed, in
+    the source's input order."""
+    payload = b""
+    for variable_id in _frame_variable_ids(spec, forecast_hour, input_ids):
+        url = icon_eu_object_url(run, forecast_hour, variable_id)
+        try:
+            payload += bz2.decompress(get_ok(url, timeout=60))
+        except (OSError, ValueError) as exc:
+            raise DownloadError(f"could not decompress {url}: {exc}") from exc
+    return payload
+
+
+def _download_arpege_package(run: GfsRun, package: tuple[int, int], destination: Path, *, force: bool) -> Path:
+    """One ARPEGE package on disk, streamed to a ``.part`` file and renamed
+    once its length is the object's: a package is a few hundred megabytes,
+    every field of a range of steps, with no index to read a record by."""
+    url = arpege_package_url(run, package)
+    path = destination / ARPEGE_PACKAGE_DIRNAME / arpege_package_name(run, package)
+    expected = remote_length(url)
+    if expected is None:
+        raise DownloadError(f"ARPEGE package is not on the bucket: {url}")
+    if path.exists() and not force and path.stat().st_size == expected:
+        LOG.info("reusing ARPEGE package %s", path)
+        return path
+    LOG.info("downloading ARPEGE package %s (%d MB)", url, expected // 1_000_000)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".part")
+    response = _request(url, timeout=120)
+    with response, temporary.open("wb") as handle:
+        if getattr(response, "status", None) != 200:
+            raise DownloadError(f"expected HTTP 200 for {url}, received {getattr(response, 'status', None)}")
+        shutil.copyfileobj(response, handle, 1 << 22)  # type: ignore[arg-type]
+    if temporary.stat().st_size != expected:
+        size = temporary.stat().st_size
+        temporary.unlink()
+        raise DownloadError(f"ARPEGE package {url} arrived {size} bytes long, not {expected}")
+    temporary.replace(path)
+    return path
+
+
+def _arpege_records(
+    run: GfsRun, forecast_hour: int, spec: SourceSpec, variable_ids: tuple[str, ...], package: Path
+) -> list[bytes]:
+    """The records of ``variable_ids`` valid at one step, cut out of the
+    package that carries the step by their GRIB2 identities, in the order
+    given: exactly one record each."""
+    from . import grib2
+
+    valid = run.time + timedelta(hours=forecast_hour)
+    messages = list(zip(grib2.index_messages(package), grib2.message_spans(package)))
+    records: list[bytes] = []
+    with package.open("rb") as handle:
+        for variable_id in variable_ids:
+            variable = VARIABLES[variable_id]
+            found = [
+                span
+                for message, span in messages
+                if message.valid_time == valid and grib2.matches_variable(variable, message)
+            ]
+            if len(found) != 1:
+                raise DownloadError(
+                    f"expected one {variable_id} record at f{forecast_hour:03d} in {package.name}, found {len(found)}"
+                )
+            offset, length = found[0]
+            handle.seek(offset)
+            records.append(handle.read(length))
+    return records
+
+
+def _download_arpege_payload(
+    run: GfsRun,
+    forecast_hour: int,
+    spec: SourceSpec,
+    destination: Path,
+    input_ids: tuple[str, ...] | None = None,
+) -> bytes:
+    """One ARPEGE frame from the packages :func:`_fetch_arpege_packages`
+    left in ``destination``, in the source's input order. The package
+    writes no precipitation total at the analysis; the run total there is
+    zero by definition, so the frame takes the first step's record
+    restamped to the analysis with every value zero
+    (:func:`~xuebuild.eccodescli.zero_accumulation_at_analysis`), the record
+    the converter differences the first step against."""
+    from .eccodescli import zero_accumulation_at_analysis
+
+    wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
+    package = destination / ARPEGE_PACKAGE_DIRNAME / arpege_package_name(run, arpege_package(forecast_hour))
+    accumulated = {"tp"} if forecast_hour == 0 and spec.accumulated_precipitation else set()
+    present = tuple(variable_id for variable_id in wanted if variable_id not in accumulated)
+    by_id = dict(zip(present, _arpege_records(run, forecast_hour, spec, present, package)))
+    for variable_id in accumulated & set(wanted):
+        (first_step,) = _arpege_records(run, 1, spec, (variable_id,), package)
+        with tempfile.TemporaryDirectory(prefix="xue-arpege-") as scratch:
+            source = Path(scratch) / "step.grib2"
+            zeroed = Path(scratch) / "analysis.grib2"
+            source.write_bytes(first_step)
+            try:
+                zero_accumulation_at_analysis(source, zeroed)
+            except Exception as exc:
+                raise DownloadError(f"could not write the ARPEGE {variable_id} analysis record: {exc}") from exc
+            by_id[variable_id] = zeroed.read_bytes()
+    return b"".join(by_id[variable_id] for variable_id in wanted)
+
+
+def _fetch_arpege_packages(
+    run: GfsRun, forecast_hours: list[int], destination: Path, *, force: bool
+) -> None:
+    """Every package the frames to cut reach, downloaded side by side."""
+    packages = list(dict.fromkeys(arpege_package(hour) for hour in forecast_hours))
+    with ThreadPoolExecutor(max_workers=len(packages)) as executor:
+        list(executor.map(lambda package: _download_arpege_package(run, package, destination, force=force), packages))
+
+
 def fetch_frame(
     run: GfsRun,
     forecast_hour: int,
@@ -2385,12 +2574,16 @@ def fetch_frame(
         payload = _download_ecmwf_payload(run, forecast_hour, spec, input_ids)
     elif spec.id == "hrrr":
         payload = _download_hrrr_payload(run, forecast_hour, spec, input_ids)
+    elif spec.id == "iconeu":
+        payload = _download_icon_eu_payload(run, forecast_hour, spec, input_ids)
+    elif spec.id == "arpege":
+        payload = _download_arpege_payload(run, forecast_hour, spec, destination, input_ids)
     else:
         payload = _download_noaa_payload(run, forecast_hour, spec, input_ids)
-    if spec.id in ECMWF_OPEN_DATA_MODELS:
+    if spec.id in ECMWF_OPEN_DATA_MODELS or spec.id in CCSDS_SOURCES:
         # Open data messages are CCSDS/AEC packed (DRS 5.42), the IFS's and
-        # the AIFS's alike; repack to grid_simple so any GDAL build can read
-        # the stored file.
+        # the AIFS's alike, and so are DWD's and Météo-France's; repack to
+        # grid_simple so any GDAL build can read the stored file.
         raw = output.with_suffix(".ccsds.grib2")
         repacked = output.with_suffix(".repack.grib2")
         write_bytes_atomic(raw, payload)
@@ -2448,6 +2641,16 @@ def fetch_run(
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours, cycle=run.time.hour)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1
+    if spec.id == "arpege":
+        # The frames are cut out of whole packages: fetch the packages the
+        # frames not on disk yet reach, then cut them as any frame is made.
+        missing = [
+            hour
+            for hour in forecast_hours
+            if force or not (destination / f"{spec.id}.{run.id}.f{hour:03d}.grib2").exists()
+        ]
+        if missing:
+            _fetch_arpege_packages(run, missing, destination, force=force)
 
     def fetch_with_retries(hour: int) -> Path:
         for attempt in range(frame_attempts):
