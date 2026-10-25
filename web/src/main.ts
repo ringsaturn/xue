@@ -2211,6 +2211,13 @@ function showingNowcast(): boolean {
   return isNowcastModel(activeCase ? activeCase.modelId : selectedModelId);
 }
 
+/** Whether the case on screen replays a forecast run. Its frames are read
+ * by their valid time, the event's own clock, the lead left to the
+ * tooltip: a reader follows the event, not the run. */
+function showingCaseForecast(): boolean {
+  return activeCase !== null && !showingObservations() && !showingDailyRecord();
+}
+
 /** Retitle the timeline and station panel for the kind of dataset on screen.
  * The instrument-panel control label stays English in both locales, like
  * every other one. A nowcast is still read by its clock, but its frames are
@@ -2223,6 +2230,15 @@ function applyDatasetWording(): void {
     slider.setAttribute("aria-label", t("validTimeLabel"));
     placeNowMark();
     forecastDays.setAttribute("aria-label", t("observationDaysAria"));
+    return;
+  }
+  if (showingCaseForecast()) {
+    leadLabel.textContent = "VALID TIME";
+    runTimeLabel.textContent = t("runCycle");
+    validTimeLabel.textContent = t("validTimeLabel");
+    slider.setAttribute("aria-label", t("validTimeLabel"));
+    placeNowMark();
+    forecastDays.setAttribute("aria-label", t("forecastDaysAria"));
     return;
   }
   const observations = showingObservations();
@@ -4638,12 +4654,21 @@ function startPlayback(): void {
 function updateFrameReadout(index: number): void {
   const lead = formatLead(index);
   const valid = frameValidTime(index);
+  const caseForecast = showingCaseForecast() && !imageryMode();
   slider.value = String(index);
   slider.setAttribute(
     "aria-valuetext",
-    showingDailyRecord() ? lead : showingObservations() ? formatDate(valid) : `${lead}, ${formatDate(valid)}`,
+    showingDailyRecord()
+      ? lead
+      : showingObservations()
+        ? formatDate(valid)
+        : caseForecast
+          ? `${formatDate(valid)}, ${lead}`
+          : `${lead}, ${formatDate(valid)}`,
   );
-  forecastLead.value = lead;
+  // A case's forecast reads by its valid time, as an observation window
+  // does; the lead stays in the tooltip and the accessible value.
+  forecastLead.value = caseForecast ? formatClockStamp(valid, displayZone) : lead;
   // A day's picture is a UTC day, not an instant in the display zone; a
   // record's day is named by the readout, and the line beside it counts it.
   validTime.textContent = imageryMode()

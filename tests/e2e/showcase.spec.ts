@@ -71,7 +71,8 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   await routeShowcase(page);
   await page.goto("/?case=demo-typhoon");
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
-  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  // A case replays its event: the timeline reads by valid time.
+  const slider = page.getByRole("slider", { name: "Valid time" });
   await expect(slider).toBeEnabled({ timeout: 20_000 });
 
   // The banner names the event and offers the way back to the list.
@@ -95,14 +96,15 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
   // 25 hourly frames, f000 through f024.
   await expect(slider).toHaveAttribute("max", "24");
-  await expect(page.locator("#forecast-hour")).toHaveText("F000");
+  await expect(page.locator("#lead-label")).toHaveText("VALID TIME");
+  await expect(slider).toHaveAttribute("aria-valuetext", /F000$/);
 });
 
 test("a short case axis opens at a slower frame rate", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);
   await page.goto("/?case=demo-typhoon");
-  await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  await expect(page.getByRole("slider", { name: "Valid time" })).toBeEnabled({ timeout: 20_000 });
   // 25 frames flash past in two seconds at 12 fps, so the case opens a rung
   // down — a four-second loop.
   await expect(page.getByRole("button", { name: "Playback speed" })).toHaveText("6 FPS");
