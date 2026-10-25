@@ -1,0 +1,68 @@
+name: publish iconeu
+
+# DWD ICON-EU (0.0625°, Europe), hourly to F078 and three-hourly to F120
+# from the 00/06/12/18Z cycles, one bzip2 GRIB2 field per parameter and
+# step on opendata.dwd.de. The pipeline lives in the reusable publish.yml;
+# this file only owns the schedule and the manual knobs.
+
+on:
+  schedule:
+    # A cycle's last fields land about three and a half hours after it
+    # (measured 2026-10-24/25: 18z 21:36Z, 00z 03:32Z, 06z 09:35Z, 12z
+    # 15:36Z). `--run latest` walks back over the cycle grid, so a late
+    # cycle is skipped rather than half-published and picked up by the next
+    # pass. DWD keeps only about a day of cycles, so a missed cycle is not
+    # recoverable later.
+    - cron: "50 3,9,15,21 * * *"
+    # A second idempotent pass recovers from a temporary upstream outage.
+    # publish.yml exits early when the first pass already made the run live.
+    - cron: "50 4,10,16,22 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-iconeu-dry-{0}', github.run_id) || 'publish-iconeu' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: iconeu
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # Seven small fields per frame on a 0.9 M cell grid: a few jobs are
+      # plenty, and each frame is seven requests to DWD's server.
+      max_jobs: 4
+    secrets: inherit
