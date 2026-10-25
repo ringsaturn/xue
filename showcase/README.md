@@ -263,9 +263,11 @@ retires a case.
 
    Each feature is a line or a polygon whose `properties.kind` is all the
    shell styles it by: `border`, `protected-area`, `river`, `stream`,
-   `road`, `track`, `route`, or `trace` (a line read off imagery whose
-   nature is not known). Every position lies inside the case's `bbox`; the
-   file is at most 4 MB. Build it from OpenStreetMap with
+   `road`, `track`, `route`, `trace` (a line read off imagery whose nature
+   is not known), or `measure` (a distance between two points). A feature
+   may carry a `label`, one line of at most 40 characters drawn midway along
+   it — a measure's distance, `"49.4 km"`. Every position lies inside the
+   case's `bbox`; the file is at most 4 MB. Build it from OpenStreetMap with
 
    ```sh
    uv sync --all-groups   # shapely, in the context group

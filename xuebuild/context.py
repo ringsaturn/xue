@@ -8,8 +8,9 @@ one OSM area (``--detail-area``, an administrative relation), since across a
 box of several degrees they outweigh everything else and the case is about
 one side of it. Protected areas are named relation by relation: a box holds
 many, and the case is about one. Features drawn by hand or computed (a
-route, a line read off imagery) are merged in from GeoJSON files that
-already carry their ``kind``.
+route, a line read off imagery, a measured distance) are merged in from
+GeoJSON files that already carry their ``kind`` and, optionally, a
+``label``.
 
 Needs shapely (``uv sync --group context``)::
 
@@ -178,7 +179,10 @@ def build_collection(
             geometry = shape(feature["geometry"]).intersection(clip)
             if geometry.is_empty:
                 continue
-            out.append({"type": "Feature", "properties": {"kind": kind}, "geometry": _rounded(mapping(geometry))})
+            properties = {"kind": kind}
+            if "label" in feature["properties"]:
+                properties["label"] = feature["properties"]["label"]
+            out.append({"type": "Feature", "properties": properties, "geometry": _rounded(mapping(geometry))})
     return {"type": "FeatureCollection", "features": out}
 
 

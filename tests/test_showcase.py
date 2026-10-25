@@ -778,8 +778,9 @@ class ContextTest(unittest.TestCase):
             self.feature("road", self.LINE),
             self.feature("protected-area", self.AREA),
             self.feature("border", {"type": "MultiLineString", "coordinates": [self.LINE["coordinates"]]}),
+            {**self.feature("measure", self.LINE), "properties": {"kind": "measure", "label": "49.4 km"}},
         )
-        self.assertEqual(len(read_context(data, self.BBOX)["features"]), 3)
+        self.assertEqual(len(read_context(data, self.BBOX)["features"]), 4)
 
     def test_a_malformed_file_is_refused(self) -> None:
         from xuebuild.showcase import read_context
@@ -793,6 +794,9 @@ class ContextTest(unittest.TestCase):
             self.collection(self.feature("road", {"type": "LineString", "coordinates": [[130.0, 30.0], [110.0, 30.0]]})),
             self.collection(self.feature("road", {"type": "LineString", "coordinates": [[110.0, 30.0, 5.0]]})),
             self.collection(self.feature("road", {"type": "LineString", "coordinates": []})),
+            self.collection({**self.feature("measure", self.LINE), "properties": {"kind": "measure", "label": "x" * 41}}),
+            self.collection({**self.feature("measure", self.LINE), "properties": {"kind": "measure", "label": "49 km\n"}}),
+            self.collection({**self.feature("measure", self.LINE), "properties": {"kind": "measure", "label": 49.4}}),
         ):
             with self.subTest(data=data[:80]), self.assertRaises(ValueError):
                 read_context(data, self.BBOX)

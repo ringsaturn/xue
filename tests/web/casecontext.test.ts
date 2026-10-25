@@ -182,6 +182,26 @@ describe("context features", () => {
     warn.mockRestore();
   });
 
+  it("keeps a feature's label to one short line, and the line without one it cannot draw", () => {
+    const measure = (label: unknown) => ({
+      ...line("measure", [
+        [119.395, 46.883],
+        [119.4644, 47.3251],
+      ]),
+      properties: { kind: "measure", label },
+    });
+    const collection = contextFeatures({
+      type: "FeatureCollection",
+      features: [measure("49.4  km"), measure("x".repeat(41)), measure(49.4), measure(" ")],
+    });
+    expect(collection.features.map((feature) => feature.properties)).toEqual([
+      { kind: "measure", label: "49.4 km" },
+      { kind: "measure" },
+      { kind: "measure" },
+      { kind: "measure" },
+    ]);
+  });
+
   it("refuses a file that is no FeatureCollection", () => {
     expect(() => contextFeatures({ type: "Feature" })).toThrow();
     expect(() => contextFeatures({ type: "FeatureCollection" })).toThrow();
@@ -198,11 +218,17 @@ function filterKinds(filter: unknown): string[] {
 }
 
 describe("context layers", () => {
-  it("draws every kind, the route last over its casing", () => {
+  it("draws every kind, the route over its casing and the labels on top", () => {
     const layers = contextLayerSpecs(false);
-    const drawn = new Set(layers.flatMap((layer) => filterKinds(layer.filter)));
+    const lines = layers.filter((layer) => layer.type !== "symbol");
+    const drawn = new Set(lines.flatMap((layer) => filterKinds(layer.filter)));
     expect([...drawn].sort()).toEqual([...CONTEXT_KINDS].sort());
-    expect(layers.map((layer) => layer.id).slice(-2)).toEqual(["case-context-route-casing", "case-context-route"]);
+    expect(layers.map((layer) => layer.id).slice(-3)).toEqual([
+      "case-context-route-casing",
+      "case-context-route",
+      "case-context-label",
+    ]);
+    expect(layers.at(-1)!.filter).toEqual(["has", "label"]);
     expect(layers[0]!.type).toBe("fill");
     expect(filterKinds(layers[0]!.filter)).toEqual(["protected-area"]);
   });

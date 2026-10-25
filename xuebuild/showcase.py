@@ -496,11 +496,15 @@ def _imagery_block(value: object, case_id: str) -> dict[str, str]:
     return {"layer": value["layer"]}
 
 
-CONTEXT_KINDS = ("border", "protected-area", "river", "stream", "road", "track", "route", "trace")
+CONTEXT_KINDS = ("border", "protected-area", "river", "stream", "road", "track", "route", "trace", "measure")
 """What a context feature is, which is all the shell styles it by: a
 national border, a protected area's boundary, a river and a smaller
 watercourse, a road and an unpaved track, the route a case's story follows,
-and a line read off imagery whose nature is not known."""
+a line read off imagery whose nature is not known, and a measured distance
+between two points, labelled with it."""
+
+MAX_CONTEXT_LABEL = 40
+"""A feature's ``label`` is drawn along it: a distance, a short name."""
 
 _CONTEXT_GEOMETRIES = {
     "LineString": 1,
@@ -548,7 +552,7 @@ def _context_positions(coordinates: object, depth: int) -> list[Sequence[float]]
 def read_context(data: bytes, bbox: Sequence[float]) -> dict[str, Any]:
     """A context file, checked the way the shell reads it: a GeoJSON
     FeatureCollection of lines and polygons, each feature's ``kind`` one of
-    :data:`CONTEXT_KINDS`, every position finite and inside the case's
+    :data:`CONTEXT_KINDS` and its optional ``label`` one short line, every position finite and inside the case's
     ``bbox``."""
     if len(data) > MAX_CONTEXT_BYTES:
         raise ValueError(f"is {len(data)} bytes, more than {MAX_CONTEXT_BYTES}")
@@ -566,6 +570,11 @@ def read_context(data: bytes, bbox: Sequence[float]) -> dict[str, Any]:
         kind = properties.get("kind") if isinstance(properties, dict) else None
         if kind not in CONTEXT_KINDS:
             raise ValueError(f"{where}: properties.kind must be one of {CONTEXT_KINDS}")
+        label = properties.get("label")
+        if label is not None and (
+            not isinstance(label, str) or not label.strip() or len(label) > MAX_CONTEXT_LABEL or not label.isprintable()
+        ):
+            raise ValueError(f"{where}: properties.label must be one line of at most {MAX_CONTEXT_LABEL} characters")
         geometry = feature.get("geometry")
         if not isinstance(geometry, dict) or geometry.get("type") not in _CONTEXT_GEOMETRIES:
             raise ValueError(f"{where}: geometry must be one of {tuple(_CONTEXT_GEOMETRIES)}")

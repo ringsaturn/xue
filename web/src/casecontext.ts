@@ -1,7 +1,8 @@
 /** A showcase case's context lines (`showcase-catalog.ts` `ShowcaseContext`):
  * a border, a protected area, the watercourses and roads around an event,
- * the route its story follows and lines read off imagery — one GeoJSON
- * file, one MapLibre source, a layer per way of drawing a line.
+ * the route its story follows, lines read off imagery and measured
+ * distances — one GeoJSON file, one MapLibre source, a layer per way of
+ * drawing a line.
  *
  * Every feature is styled by its `kind` alone, through expressions, so the
  * file carries no paint of its own. The lines are the ground the event sits
@@ -17,6 +18,7 @@ import type {
   FillLayerSpecification,
   LineLayerSpecification,
   Map as MaplibreMap,
+  SymbolLayerSpecification,
 } from "maplibre-gl";
 
 import { fetchImmutable } from "./fetchimmutable";
@@ -27,12 +29,27 @@ type PaintValue = Parameters<MaplibreMap["setPaintProperty"]>[2];
 
 /** What a feature is, which is all it is drawn by (`xuebuild/showcase.py`
  * `CONTEXT_KINDS`). */
-export const CONTEXT_KINDS = ["border", "protected-area", "river", "stream", "road", "track", "route", "trace"] as const;
+export const CONTEXT_KINDS = [
+  "border",
+  "protected-area",
+  "river",
+  "stream",
+  "road",
+  "track",
+  "route",
+  "trace",
+  "measure",
+] as const;
 export type ContextKind = (typeof CONTEXT_KINDS)[number];
 
 type ContextGeometry = LineString | MultiLineString | Polygon | MultiPolygon;
-export type ContextFeature = Feature<ContextGeometry, { kind: ContextKind }>;
-export type ContextCollection = FeatureCollection<ContextGeometry, { kind: ContextKind }>;
+/** A feature's label is drawn along it (a measured distance); the builder
+ * holds it to one short line. */
+type ContextProperties = { kind: ContextKind; label?: string };
+export type ContextFeature = Feature<ContextGeometry, ContextProperties>;
+export type ContextCollection = FeatureCollection<ContextGeometry, ContextProperties>;
+
+const MAX_LABEL = 40;
 
 /** How many arrays deep each geometry's positions sit, the innermost
  * being a line (a polygon's rings are lines too), and how many positions
@@ -51,8 +68,10 @@ const LAYERS = {
   track: "case-context-track",
   trace: "case-context-trace",
   border: "case-context-border",
+  measure: "case-context-measure",
   routeCasing: "case-context-route-casing",
   route: "case-context-route",
+  label: "case-context-label",
 } as const;
 
 function isKind(value: unknown): value is ContextKind {
@@ -77,7 +96,7 @@ function coordinatesOk(value: unknown, depth: number, minimum: number): boolean 
 }
 
 /** The drawable features of a fetched context file, each carrying only its
- * kind. A file that is no FeatureCollection throws; a feature of a kind
+ * kind and its label. A file that is no FeatureCollection throws; a feature of a kind
  * this shell does not know, or whose geometry it cannot draw, is dropped
  * with one warning for the lot, and the rest still draw — a kind added
  * after this shell was deployed leaves the others standing. */
@@ -89,7 +108,9 @@ export function contextFeatures(input: unknown): ContextCollection {
   const features: ContextFeature[] = [];
   let dropped = 0;
   for (const entry of value.features as unknown[]) {
-    const feature = entry as { type?: unknown; properties?: { kind?: unknown } | null; geometry?: unknown } | null;
+    const feature = entry as
+      | { type?: unknown; properties?: { kind?: unknown; label?: unknown } | null; geometry?: unknown }
+      | null;
     const kind = feature?.properties?.kind;
     const geometry = feature?.geometry as { type?: unknown; coordinates?: unknown } | null | undefined;
     const shape = typeof geometry?.type === "string" ? GEOMETRIES.get(geometry.type) : undefined;
@@ -98,7 +119,11 @@ export function contextFeatures(input: unknown): ContextCollection {
       continue;
     }
     const drawn = { type: geometry!.type, coordinates: geometry!.coordinates } as ContextGeometry;
-    features.push({ type: "Feature", geometry: drawn, properties: { kind } });
+    const properties: ContextProperties = { kind };
+    // A label this shell cannot draw on one line is dropped; the line stays.
+    const label = feature!.properties?.label;
+    if (typeof label === "string" && label.trim() && label.length <= MAX_LABEL) properties.label = label.replace(/\s+/g, " ").trim();
+    features.push({ type: "Feature", geometry: drawn, properties });
   }
   if (dropped > 0) console.warn(`context: skipped ${dropped} feature(s) this shell cannot draw`);
   return { type: "FeatureCollection", features };
@@ -128,6 +153,8 @@ export function contextInk(darkGround: boolean): {
   route: string;
   casing: string;
   trace: string;
+  measure: string;
+  halo: string;
 } {
   return darkGround
     ? {
@@ -138,6 +165,8 @@ export function contextInk(darkGround: boolean): {
         route: "#ff5a2a",
         casing: "rgba(0, 0, 0, 0.7)",
         trace: "#f27ad6",
+        measure: "#ffe08a",
+        halo: "rgba(0, 0, 0, 0.8)",
       }
     : {
         border: "#36332d",
@@ -147,6 +176,8 @@ export function contextInk(darkGround: boolean): {
         route: "#e0401a",
         casing: "rgba(255, 255, 255, 0.92)",
         trace: "#c0279a",
+        measure: "#1f2b3a",
+        halo: "rgba(255, 255, 255, 0.92)",
       };
 }
 
@@ -177,10 +208,13 @@ const ROUND = { "line-join": "round", "line-cap": "round" } as const;
 
 /** The layers, bottom to top: the reserve's tint; the solid lines (the
  * reserve's outline, water, roads), roads over water; the dashed tracks,
- * the dotted traces and the dash-dot border, each a layer of its own since
- * a dash pattern is not per feature; and the route over everything, on a
- * casing that lifts it off whatever field is under it. */
-export function contextLayerSpecs(darkGround: boolean): (FillLayerSpecification | LineLayerSpecification)[] {
+ * the dotted traces, the dash-dot border and the dashed measures, each a
+ * layer of its own since a dash pattern is not per feature; the route over
+ * them, on a casing that lifts it off whatever field is under it; and the
+ * labels on top. */
+export function contextLayerSpecs(
+  darkGround: boolean,
+): (FillLayerSpecification | LineLayerSpecification | SymbolLayerSpecification)[] {
   const ink = contextInk(darkGround);
   return [
     {
@@ -241,6 +275,19 @@ export function contextLayerSpecs(darkGround: boolean): (FillLayerSpecification 
       },
     },
     {
+      id: LAYERS.measure,
+      type: "line",
+      source: SOURCE,
+      filter: isKindFilter("measure"),
+      layout: { "line-join": "round", "line-cap": "butt" },
+      paint: {
+        "line-color": ink.measure,
+        "line-width": zoomWidth(px(1.1)),
+        "line-opacity": 0.85,
+        "line-dasharray": [4, 3],
+      },
+    },
+    {
       id: LAYERS.routeCasing,
       type: "line",
       source: SOURCE,
@@ -255,6 +302,27 @@ export function contextLayerSpecs(darkGround: boolean): (FillLayerSpecification 
       filter: isKindFilter("route"),
       layout: ROUND,
       paint: { "line-color": ink.route, "line-width": zoomWidth(px(3)) },
+    },
+    {
+      id: LAYERS.label,
+      type: "symbol",
+      source: SOURCE,
+      filter: ["has", "label"],
+      layout: {
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 11.5,
+        // Midway along the line, so a distance reads as that line's.
+        "symbol-placement": "line-center",
+        "text-keep-upright": true,
+        "text-offset": [0, -0.7],
+      },
+      paint: {
+        "text-color": ink.measure,
+        "text-halo-color": ink.halo,
+        "text-halo-width": 1.6,
+        "text-halo-blur": 0.4,
+      },
     },
   ];
 }
