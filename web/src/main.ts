@@ -306,6 +306,7 @@ import {
   type ShowcaseMarker,
 } from "./showcase-catalog";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
+import { CaseContextLayers, fetchCaseContext, type ContextCollection } from "./casecontext";
 import { RiverCase } from "./river/case";
 import { createGaugeSection } from "./river/gauge";
 import type { TimedSeries } from "./river/hydrograph";
@@ -755,6 +756,7 @@ function applyBasemapTheme(): void {
   stationLayers?.setInk(darkGround);
   fireLayers?.setInk(darkGround);
   caseMarkers?.setInk(darkGround);
+  caseContext?.setInk(darkGround);
   riverCase?.setInk(darkGround);
   if (radarOverlay) {
     const style = getComputedStyle(document.body);
@@ -1340,6 +1342,7 @@ const caseRegion = required<HTMLElement>("case-region");
 const caseMarkerList = required<HTMLUListElement>("case-markers");
 const caseRiverPanel = required<HTMLElement>("case-river");
 const riverCredit = required<HTMLElement>("river-credit");
+const contextCredit = required<HTMLElement>("context-credit");
 
 const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   gfs: "NOAA / GFS (0.25°)",
@@ -8151,6 +8154,59 @@ function syncRiverCredit(): void {
   riverCredit.textContent = `${riverCase.credits().join(" · ")} ·`;
 }
 
+/** The case's context lines (`casecontext.ts`), read once per case. A case
+ * opened in place of another takes the last one's lines and credit off
+ * first; a file this shell cannot read is a warning, and the case plays
+ * without them. */
+let caseContext: CaseContextLayers | null = null;
+let contextCaseLoadedFor: string | null = null;
+let contextCreditText: string | null = null;
+
+async function loadCaseContext(showcaseCase: ShowcaseCase): Promise<void> {
+  if (contextCaseLoadedFor === showcaseCase.id || !mapStyleReady) return;
+  contextCaseLoadedFor = showcaseCase.id;
+  caseContext?.remove();
+  contextCreditText = null;
+  syncContextCredit();
+  const context = showcaseCase.context;
+  if (!context) return;
+  let features: ContextCollection;
+  try {
+    features = await fetchCaseContext(dataBaseUrl(), context);
+  } catch (error) {
+    console.warn(`context: case ${showcaseCase.id} lines not read:`, error instanceof Error ? error.message : error);
+    return;
+  }
+  // Another case opened while this one's file was in flight.
+  if (activeCase?.id !== showcaseCase.id || contextCaseLoadedFor !== showcaseCase.id) return;
+  caseContext ??= new CaseContextLayers(map, {
+    anchorLayer: FORECAST_ANCHOR_LAYER,
+    isBasemapLayer: (id) => appliedBasemapStyle.layers.some((layer) => layer.id === id),
+  });
+  caseContext.setInk(document.body.dataset.ground === "dark");
+  try {
+    caseContext.show(features);
+  } catch (error) {
+    console.warn("context: layers not added:", error instanceof Error ? error.message : error);
+    caseContext.remove();
+    return;
+  }
+  contextCreditText = context.credit;
+  syncContextCredit();
+}
+
+/** The credit line's notice for the case's context lines, while they are
+ * on the map. */
+function syncContextCredit(): void {
+  if (contextCreditText === null) {
+    delete document.body.dataset.context;
+    contextCredit.textContent = "";
+    return;
+  }
+  document.body.dataset.context = "";
+  contextCredit.textContent = `${contextCreditText} ·`;
+}
+
 async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {
   const radar = showcaseCase.radar;
   if (!radar || radarCaseLoadedFor === showcaseCase.id) return;
@@ -10389,6 +10445,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       void loadCaseRadar(found);
       void loadCaseFire(found);
       void loadCaseRiver(found);
+      void loadCaseContext(found);
       // A case with a picture opens on it unless the link names one (or
       // the case was entered before); one without drops any it was handed.
       if (!found.imagery) view.imagery = null;

@@ -80,6 +80,10 @@ export interface ShowcaseCase {
   /** The river directory the case plays beside its field
    * (`docs/river.md`), when it carries one. */
   river?: ShowcaseRiver;
+  /** Lines of context the case draws under its marks — a border, a
+   * reserve, the route its story follows (`casecontext.ts`) — when it
+   * carries them. */
+  context?: ShowcaseContext;
 }
 
 export interface ShowcaseMarkerSource {
@@ -146,6 +150,15 @@ export interface ShowcaseRiver {
   color?: string;
 }
 
+export interface ShowcaseContext {
+  /** The GeoJSON file, from the data root, and its `?v=`. */
+  filePath: string;
+  crc32: string;
+  byteLength: number;
+  /** Who drew the geometry, for the credit line while the case is open. */
+  credit: string;
+}
+
 export interface ShowcaseImagery {
   /** The GIBS layer (`gibs.ts` id, a `?gibs=` spelling) the case opens on. */
   layer: string;
@@ -204,6 +217,43 @@ export function riverBlock(input: unknown, id: string): ShowcaseRiver | undefine
     crc32: value!.crc32 as string,
     byteLength: value!.byteLength as number,
     ...(value!.color !== undefined ? { color: value!.color as string } : {}),
+  };
+}
+
+/** A context file is read whole before anything is drawn; the builder
+ * refuses a larger one, so a row naming one is not this shell's to read. */
+export const MAX_CONTEXT_BYTES = 4 * 1024 * 1024;
+
+/** A case's context block, or undefined when it has none or carries one
+ * this shell cannot read: the case then plays without the lines. */
+export function contextBlock(input: unknown, id: string): ShowcaseContext | undefined {
+  if (input === undefined) return undefined;
+  const value = input as Record<string, unknown> | null;
+  const file = value?.file;
+  const credit = typeof value?.credit === "string" ? value.credit.trim() : "";
+  const ok =
+    typeof file === "string" &&
+    file.endsWith(".geojson") &&
+    !file.startsWith("/") &&
+    !file.split("/").includes("..") &&
+    credit.length > 0 &&
+    credit.length <= 200 &&
+    typeof value?.crc32 === "string" &&
+    /^[0-9a-f]{8}$/.test(value.crc32) &&
+    typeof value?.byteLength === "number" &&
+    Number.isInteger(value.byteLength) &&
+    value.byteLength > 0 &&
+    value.byteLength <= MAX_CONTEXT_BYTES;
+  if (!ok) {
+    console.warn(`showcase: case ${id} carries a context block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return {
+    filePath: `showcase/${id}/${file}`,
+    crc32: value!.crc32 as string,
+    byteLength: value!.byteLength as number,
+    // One line on the credit line, whatever whitespace the row carries.
+    credit: credit.replace(/\s+/g, " "),
   };
 }
 
@@ -473,6 +523,7 @@ function validateCase(input: unknown): ShowcaseCase {
   const fire = fireBlock(value.fire, id);
   const imagery = imageryBlock(value.imagery, id);
   const river = riverBlock(value.river, id);
+  const context = contextBlock(value.context, id);
   const view = viewBlock(value.view, id);
   if (value.timeline !== undefined && value.timeline !== "daily") {
     throw new Error(`showcase case ${id} has an unknown timeline`);
@@ -515,6 +566,8 @@ function validateCase(input: unknown): ShowcaseCase {
   else delete entry.imagery;
   if (river) entry.river = river;
   else delete entry.river;
+  if (context) entry.context = context;
+  else delete entry.context;
   if (view) entry.view = view;
   else delete entry.view;
   return entry;

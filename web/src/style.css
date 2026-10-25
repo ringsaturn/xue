@@ -3652,6 +3652,11 @@ body[data-river] .source-credit[data-credit-river] {
   display: inline;
 }
 
+/* A case's context lines' credit, while they are on the map. */
+body[data-context] .source-credit[data-credit-context] {
+  display: inline;
+}
+
 .credits-trigger {
   display: flex;
   flex: none;
