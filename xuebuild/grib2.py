@@ -220,6 +220,39 @@ def index_messages(path: Path) -> list[MessageInfo]:
     return messages
 
 
+def message_spans(path: Path) -> list[tuple[int, int]]:
+    """``(offset, length)`` of every GRIB2 message in a file, in band order
+    — the same order :func:`index_messages` reports their identities in, so
+    the two zip into a record index of a multi-field file that has no
+    sidecar (Météo-France's ARPEGE packages), from which the fetch cuts one
+    frame's records."""
+    spans: list[tuple[int, int]] = []
+    try:
+        size = path.stat().st_size
+        handle = path.open("rb")
+    except OSError as exc:
+        raise ConversionError(f"cannot read GRIB input {path}: {exc}") from exc
+    with handle:
+        offset = 0
+        while offset < size:
+            indicator = _read_exact(handle, 16, path, "indicator section")
+            if indicator[:4] != b"GRIB" or indicator[7] != 2:
+                raise ConversionError(f"no GRIB2 message at offset {offset} in {path}")
+            total_length = struct.unpack_from(">Q", indicator, 8)[0]
+            if total_length < 16 + 4 or offset + total_length > size:
+                raise ConversionError(f"GRIB2 message length is out of bounds in {path}")
+            spans.append((offset, total_length))
+            offset += total_length
+            handle.seek(offset)
+    return spans
+
+
+def matches_variable(spec: VariableSpec, message: MessageInfo) -> bool:
+    """Whether ``message`` carries ``spec``'s quantity under its identity,
+    an alias or an alternate — the header matcher's own test."""
+    return _matches(spec, message)
+
+
 def _matching_unit(spec: VariableSpec, message: MessageInfo) -> str | None:
     """The GDAL unit of ``message`` when it carries ``spec``'s quantity —
     under the registered identity or one of its alias triples (the same

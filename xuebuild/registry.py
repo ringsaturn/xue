@@ -42,6 +42,7 @@ def _match(spec: VariableSpec) -> dict[str, Any]:
         "ecmwfParam": spec.ecmwf_param,
         "ecmwfAlternateParams": list(spec.ecmwf_alternate_params),
         "openMeteo": spec.open_meteo,
+        "dwdParam": spec.dwd_param,
         "mrmsProduct": spec.mrms_product,
         "gdalUnit": spec.gdal_unit,
         "statistical": spec.grib2_statistical,

@@ -121,6 +121,7 @@ that is not an error.
   "ecmwfParam": "2t",
   "ecmwfAlternateParams": [],
   "openMeteo": "temperature_2m",
+  "dwdParam": "T_2M",
   "mrmsProduct": "",
   "gdalUnit": "C",
   "statistical": null,
@@ -131,7 +132,7 @@ that is not an error.
 }
 ```
 
-The first ten keys are the fetch-side spellings of `VariableSpec`
+The first eleven keys are the fetch-side spellings of `VariableSpec`
 (`xuebuild/variables.py`), one for one. `statistical` is the code table
 4.10 process the record must carry (`null`: instantaneous). `aliases` are
 other parameter triples on the same surface, `alternates` whole other
