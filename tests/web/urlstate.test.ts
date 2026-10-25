@@ -236,6 +236,10 @@ describe("parseModelFromSearch", () => {
     expect(parseModelFromSearch("?model=sflux")).toBe("sflux");
     expect(parseModelFromSearch("?model=GFS-SFLUX")).toBe("sflux");
     expect(parseModelFromSearch("?model=hrrr")).toBe("hrrr");
+    expect(parseModelFromSearch("?model=iconeu")).toBe("iconeu");
+    expect(parseModelFromSearch("?model=ICON-EU")).toBe("iconeu");
+    expect(parseModelFromSearch("?model=arpege")).toBe("arpege");
+    expect(parseModelFromSearch("?model=ARPEGE")).toBe("arpege");
     expect(parseModelFromSearch("?model=MRMS")).toBe("mrms");
     expect(parseModelFromSearch("?model=mrms3d")).toBe("mrms3d");
     // The WOOF nest has no live feed: a bare link to it opens the default,
