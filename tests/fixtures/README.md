@@ -573,6 +573,26 @@ xue efas-series efas-historical/2024102600-2024103118_v5_dis06.grib --model efas
 tool writes means regenerating them the same way and saying so in the
 commit.
 
+`era5.2026100800/` is ERA5 as `xue era5-series` writes it
+(`xuebuild/era5/`): one CF NetCDF per variable, `era5.2026100800.<xue
+id>.nc` for `tmp2m` and `dpt2m` (`degC`, from ERA5's kelvin), `ugrd10m`,
+`vgrd10m` and `gust` (`m s-1`), latitudes ascending, `time` in hours since
+the window's first hour, a NaN fill. Hours 0–2 of the window from
+2026-10-08 00Z over a 5 by 4 cell box (119.0–120.0°E, 46.5–47.25°N) at the
+Mongolia–China border west of Arxan, cut by the tool from a Climate Data
+Store download of `reanalysis-era5-single-levels` (hourly, 2026-10-08 to
+10-16, area 49°N 116.5°E 45°N 122.5°E, the five variables, NetCDF; the
+store's zip of `…stepType-instant.nc` and `…stepType-max.nc`):
+
+```sh
+xue era5-series --input era5-raw.zip --start 2026-10-08T00Z --hours 2 \
+    --bbox 119,46.5,120,47.25 --out <repo>/tests/fixtures/era5.2026100800
+```
+
+(`xue` is `.venv/bin/python -m xuebuild` after `uv sync --group era5
+--inexact`.) The five files are 176 KB. A change to what the tool writes
+means regenerating them the same way and saying so in the commit.
+
 `volume-registry.json` is the registry golden for the volume bundles'
 levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
 `clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter

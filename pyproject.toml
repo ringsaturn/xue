@@ -44,6 +44,8 @@ aurora = ["xarray>=2025.1", "netcdf4>=1.7"]
 wrf = ["netcdf4>=1.7"]
 # The EFAS series tool: reads the EWDS GRIB2 (template 4.72, which GDAL reads without metadata) and writes the CF series (xuebuild/efas/).
 efas = ["eccodes>=2.39", "eccodeslib>=2.39", "netcdf4>=1.7"]
+# The ERA5 series tool: asks the Climate Data Store and writes the CF series (xuebuild/era5/).
+era5 = ["cdsapi>=0.7.7", "netcdf4>=1.7"]
 # The river case product: the GeoParquet reach geometry (xuebuild/river/geoparquet.py imports pyarrow lazily).
 river = ["pyarrow>=26.0"]
 # The satellite fetch: the Dust RGB and dust confidence producers (shachen) and the FCI JPEG-LS filter.

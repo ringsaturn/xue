@@ -26,6 +26,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
 | `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | 6 h from F6 to F120 | `dis06` |
+| `era5` | series-file reanalysis, no feed (cases only) | `xue era5-series` over a CDS NetCDF | 1 h from F0 to F240; a window from any hour | `tmp2m` |
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
 | `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
@@ -378,6 +379,36 @@ licence, the credit "Contains modified Copernicus Emergency Management
 Service information 2024" and the licence's caveat that EFAS data are for
 information only and do not constitute a flood warning.
 `tests/test_efas.py`.
+
+**era5.** ECMWF's ERA5 reanalysis for the Copernicus Climate Change
+Service (`ERA5` / `reanalysis-single-levels`): what the weather was, hourly
+on the 0.25° regular grid, for a case that should show the observed
+situation rather than one forecast run. A reanalysis has no cycle and the
+Climate Data Store releases a day about five days late (ERA5T, replaced by
+the final ERA5 two to three months later), so there is **no live feed**:
+as for `efaswb`, a window is named by its first hour (`--start`, any hour,
+`cycle_hours` 1), and the axis is hourly from F0, every hour an analysis,
+to at most 240 hours. The `xue era5-series` tool (`xuebuild/era5/`, the
+`era5` dependency group: cdsapi and netCDF4, `uv sync --group era5
+--inexact`) asks the store for `reanalysis-era5-single-levels` in NetCDF
+over the `--bbox` padded by a cell (whole days; the key is `CDSAPI_KEY` or
+the `key:` line of `~/.cdsapirc`, which one Copernicus account shares
+across the CDS and EWDS) and saves the answer beside the series, or reads
+one given with `--input`. The store sends a zip of one file per step type
+when a request mixes them: `data_stream-oper_stepType-instant.nc` (`t2m`,
+`d2m`, `u10`, `v10`) and `…-max.nc` (`fg10`), all on `valid_time` in
+seconds since 1970 with latitudes north first. The tool holds every field
+to the 0.25° grid, keeps the hours of the window and the cells whose
+centres lie in the box, turns the two temperatures from kelvin into degrees
+Celsius and writes `era5.<start>.<variable>.nc` in `write_series`'s shape,
+so both encoders take the series-file path unchanged and learn nothing
+ERA5. `fg10` is the 3 s gust maximum over the hour ending at the frame
+("since previous post-processing", hourly in ERA5): published as `gust`
+with `typeOfStatisticalProcessing: 2`, the way ECMWF's open-data gust is.
+No ladder and no video: a case is a box of a few hundred cells. The STAC
+prose carries CC-BY-4.0, the credit "Contains modified Copernicus Climate
+Change Service information" and the dataset's DOI as `cite-as`.
+`tests/test_era5.py`.
 
 ## Observations
 
