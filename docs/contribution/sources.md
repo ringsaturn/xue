@@ -21,6 +21,8 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | 1 h to F18; hourly cycles | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | 3 h to F120 | `aod` |
 | `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
+| `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | 1 h to F78, 3 h to F120 | `tmp2m`, `prate` |
+| `arpege` | forecast | Météo-France packages, whole objects cut by identity | 1 h to F48, 3 h to F102 | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
 | `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | 6 h from F6 to F120 | `dis06` |
@@ -214,6 +216,49 @@ instantaneous. The pressure
 family (`CFS_PGB_IDS`) is a companion file on its own 1° grid (360 × 181).
 The shell's manifest ceiling on `forecastHours` is 8760 for this axis.
 `tests/test_cfs.py`.
+
+**iconeu.** DWD's ICON-EU, the European nest of ICON, on its regular 0.0625°
+grid (1377 × 657, centres 23.5°W to 62.5°E and 29.5°N to 70.5°N), so
+nothing is resampled and the power-of-two step passes the regional snap
+unchanged; the shell has a `region` for it and no `domain`. DWD's open data
+server (`XUE_DWD_BASE_URL`) writes one bzip2-compressed, CCSDS-packed GRIB2
+field per parameter and step under `icon-eu/grib/<HH>/<param>/`, with no
+index, and keeps only about a day of cycles. The fetch names each field by
+the registry's `dwd_param` (`VariableSpec.dwd_param`, the document's
+`dwdParam`), decompresses and joins a frame's fields in source order and
+repacks the frame to grid_simple with eccodes, as for the ECMWF open data;
+a run is complete when every input is there at both ends. The 00/06/12/18Z
+cycles run to F120 and land about 3.5 h after the cycle (the 03/09/15/21Z
+ones stop at F30 and are not published). A basic set: `TOT_PREC` is the
+run total as the WMO 0/1/52 in kg/m² (AIFS's `tp` alternate), `VMAX_10M`
+the maximum gust over the step on the 10 m surface (ECMWF's gust
+alternate; an empty interval at the analysis, so optional there) and
+`CLCT` the WMO 0/6/1 in percent on the ground surface (AIFS's `tcdc`
+alternate). `tests/test_iconeu.py`.
+
+**arpege.** Météo-France's ARPEGE on its 0.25° GLOB025 grid, the GFS grid,
+from the data.gouv.fr dataset "Paquets Arpège - Résolution 0,25°"
+(Licence Ouverte 2.0). A cycle's surface package `SP1` is four multi-field
+GRIB2 objects on an OVH S3 bucket (`XUE_METEOFRANCE_BASE_URL`), one per
+range of steps (`000H024H`, `025H048H`, `049H072H`, `073H102H`, about
+740 MB together), CCSDS packed, parameter-major, with no index. The fetch
+downloads the packages the frames still to cut reach into `SP1/` under the
+run's raw directory (which the converter's frame listing does not
+descend), indexes each package's records (`grib2.index_messages` zipped
+with `grib2.message_spans`) and cuts each frame by the records' identities
+(the header matcher's own test) and valid time, then repacks it like any
+CCSDS frame; a run is complete when every package its axis reaches is on
+the bucket, since an object appears whole. Every build job downloads the
+whole packages, so `publish-arpege.yml` asks for two jobs. Every cycle runs
+to F102, hourly to 48 and three-hourly after; the 00/12Z packages land about
+3–4 h after the cycle, the 06/18Z ones about 5 h. The packages carry no
+precipitation total at the analysis, and an accumulated source differences
+its first step against the analysis plane, so the fetch writes that record:
+the first step's `tp` restamped to an empty interval at the run time with
+every value zero (`eccodescli.zero_accumulation_at_analysis`, `grib_set -d
+0 -s endStep=0`) — the shape ICON-EU's `TOT_PREC` has at step 0. Same
+encodings and basic set as `iconeu`; the gust is the maximum over the hour
+ending at each step, three-hourly steps included. `tests/test_arpege.py`.
 
 **ifshres.** ECMWF IFS HRES (~9 km) as Open-Meteo forwards the real-time
 archive. The fetch stage is om2nc (`xuebuild/om2nccli.py`, `XUE_OM2NC`): it

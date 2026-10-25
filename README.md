@@ -8,7 +8,7 @@
 **Live weather models, radar and satellite, played back in the browser:
 <https://xue.ringsaturn.me>**
 
-- Forecasts from GFS, ECMWF IFS and AIFS, HRRR and CFSv2: temperature,
+- Forecasts from GFS, ECMWF IFS and AIFS, HRRR, ICON-EU, ARPEGE and CFSv2: temperature,
   precipitation, wind particles, isobars, upper-air charts, clear-air
   turbulence; skew-T soundings and point meteograms anywhere.
 - Observations: MRMS, NEXRAD, JMA and CMA radar; Himawari, GOES and
@@ -40,6 +40,8 @@ is no longer published and every decoder still reads it.
 | ECMWF AIFS Single (`aifs`) | 0.25° global · 6-hourly to F360 | <a href="https://dataset.ringsaturn.me/xue/latest-aifs.json"><img alt="the newest aifs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-aifs.json&query=%24.runTime&label=&color=3c7a89&style=flat-square&cacheSeconds=600" width="170"></a> |
 | ECMWF IFS HRES via Open-Meteo (`ifshres`) | 0.1° global · hourly to F090, then 3- and 6-hourly to F360; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-ifshres.json"><img alt="the newest ifshres run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.runTime&label=&color=2a9d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA HRRR (`hrrr`) | 0.03° contiguous US · hourly to F18, hourly cycles | <a href="https://dataset.ringsaturn.me/xue/latest-hrrr.json"><img alt="the newest hrrr run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.runTime&label=&color=7b4ea3&style=flat-square&cacheSeconds=600" width="170"></a> |
+| DWD ICON-EU (`iconeu`) | 0.0625° Europe · hourly to F78, 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-iconeu.json"><img alt="the newest iconeu run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-iconeu.json&query=%24.runTime&label=&color=5a6b8c&style=flat-square&cacheSeconds=600" width="170"></a> |
+| Météo-France ARPEGE (`arpege`) | 0.25° global · hourly to F48, 3-hourly to F102 | <a href="https://dataset.ringsaturn.me/xue/latest-arpege.json"><img alt="the newest arpege run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-arpege.json&query=%24.runTime&label=&color=3d5a98&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Recast WOOF-WRF (`woof`) | 0.005° (500 m) nest over Mount Fuji · hourly from F1 | showcase cases only, no live run |
 | NOAA GEFS-Aerosols (`gefsaero`) | 0.25° global · 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-gefsaero.json"><img alt="the newest gefsaero run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-gefsaero.json&query=%24.runTime&label=&color=8a6d3b&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NCEP CFSv2 (`cfs`) | T126 Gaussian / 1° global · 6-hourly F6–F6552 (39 weeks); 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -69,7 +71,7 @@ driver. Some sources need more (eccodes, om2nc, ffmpeg, credentials); see
 uv sync                   # creates .venv with NumPy and the xuepy wheel
 make check                # verifies tool versions
 make mvp                  # builds the latest GFS run and the frontend
-make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, gefsaero, cfs
+make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, gefsaero, cfs, iconeu, arpege
 make serve                # serves the result on 127.0.0.1
 ```
 
@@ -199,6 +201,13 @@ under CC BY 4.0", via Open-Meteo. Neither ECMWF nor Open-Meteo endorses
 this use.
 
 The other sources:
+
+- ICON-EU (`iconeu`): Source: [Deutscher Wetterdienst](https://opendata.dwd.de/)
+  open data, under CC BY 4.0; based on data from Deutscher Wetterdienst,
+  gridded data quantized and reproduced graphically.
+- ARPEGE (`arpege`): Source: Météo-France, the
+  [data.gouv.fr ARPEGE 0.25° packages](https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/),
+  under the Licence Ouverte / Etalab 2.0; quantized derivative.
 
 - HRRR, MRMS, GOES-East / GOES-West imagery and the SWPC OVATION aurora
   model are NOAA products, works of the United States government in the

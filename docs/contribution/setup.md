@@ -43,7 +43,7 @@ frontend typechecks or builds.
 
 ```sh
 make mvp                  # NOAA GFS (default)
-make mvp MODEL=ecmwf      # aifs, ifshres, sflux, hrrr, gefsaero, cfs likewise
+make mvp MODEL=ecmwf      # aifs, ifshres, sflux, hrrr, gefsaero, cfs, iconeu, arpege likewise
 make mvp MODEL=cfs HOURS=240   # CFSv2's full run is 1092 frames; slow
 make serve
 ```
