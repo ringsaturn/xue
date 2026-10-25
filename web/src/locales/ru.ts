@@ -597,4 +597,5 @@ export const ru: Record<MessageKey, string> = {
   varLabelUpstream: "Площадь водосбора выше по течению",
   creditsAurora: "КОСМИЧЕСКАЯ ПОГОДА · ВЕРОЯТНОСТЬ ПОЛЯРНОГО СИЯНИЯ · МОДЕЛЬ OVATION NOAA SWPC",
   creditsEfas: "РАСХОД РЕК · COPERNICUS EMS EFAS v5, ЕВРОПА 1′ · ТОЛЬКО КЕЙСЫ",
+  creditsEra5: "РЕАНАЛИЗ · COPERNICUS C3S ERA5 (ECMWF), ГЛОБАЛЬНО 0,25°, ЕЖЕЧАСНО, CC-BY-4.0 · ТОЛЬКО КЕЙСЫ",
 };

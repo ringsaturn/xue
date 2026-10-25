@@ -595,4 +595,5 @@ export const fr: Record<MessageKey, string> = {
   varLabelUpstream: "Surface drainée en amont",
   creditsAurora: "MÉTÉO SPATIALE · PROBABILITÉ D'AURORES · MODÈLE OVATION DU NOAA SWPC",
   creditsEfas: "DÉBIT DES COURS D'EAU · COPERNICUS EMS EFAS v5, EUROPE 1′ · CAS UNIQUEMENT",
+  creditsEra5: "RÉANALYSE · COPERNICUS C3S ERA5 (ECMWF), MONDE 0,25°, HORAIRE, CC-BY-4.0 · CAS UNIQUEMENT",
 };

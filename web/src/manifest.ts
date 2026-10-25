@@ -28,6 +28,7 @@ export type ForecastModelId =
   | "woof"
   | "efas"
   | "efaswb"
+  | "era5"
   | "gefsaero"
   | "cma"
   | "mrms"
@@ -228,6 +229,18 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     defaultVariable: "disrp",
     railCore: ["disrp", "dis06", "upstream"],
     region: [-25.25, 22.75, 50.25, 72.25],
+  },
+  // ECMWF ERA5 for the Copernicus Climate Change Service: the reanalysis,
+  // hourly on the 0.25° grid, every frame an analysis. Cases only, like
+  // EFAS: a window of up to 240 hours named by its first hour, cropped to
+  // the case, with the 2 m temperature and dew point, the 10 m wind and
+  // the hourly gust maximum. No pointer, no place in the model switch.
+  era5: {
+    id: "era5",
+    label: "ERA5",
+    product: "reanalysis-single-levels",
+    coreBundles: ["tmp2m"],
+    railCore: ["tmp2m", "wind10m", "gust", "dpt2m"],
   },
   // NOAA GEFS-Aerosols, the global aerosol member of the GEFS: aerosol
   // optical depth at 550 nm for the whole column and by species, and the

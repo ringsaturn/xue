@@ -312,6 +312,10 @@ export const en = {
    * government work needs no licence but asks for the source. */
   creditsAurora: "SPACE WEATHER · AURORA PROBABILITY · NOAA SWPC OVATION MODEL",
   creditsEfas: "RIVER DISCHARGE · COPERNICUS EMS EFAS v5, EUROPE 1′ · CASES ONLY",
+  /** ERA5 is CC-BY-4.0 on the Climate Data Store, which asks for the
+   * service to be named; the map line carries the "contains modified"
+   * credit itself. */
+  creditsEra5: "REANALYSIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0.25°, HOURLY, CC-BY-4.0 · CASES ONLY",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsFirms: "ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS",

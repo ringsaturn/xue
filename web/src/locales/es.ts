@@ -595,4 +595,5 @@ export const es: Record<MessageKey, string> = {
   varLabelUpstream: "Área de cuenca aguas arriba",
   creditsAurora: "METEOROLOGÍA ESPACIAL · PROBABILIDAD DE AURORAS · MODELO OVATION DE NOAA SWPC",
   creditsEfas: "CAUDAL FLUVIAL · COPERNICUS EMS EFAS v5, EUROPA 1′ · SOLO CASOS",
+  creditsEra5: "REANÁLISIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0,25°, HORARIO, CC-BY-4.0 · SOLO CASOS",
 };

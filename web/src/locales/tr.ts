@@ -598,4 +598,5 @@ export const tr: Record<MessageKey, string> = {
   varLabelUpstream: "Yukarı havza alanı",
   creditsAurora: "UZAY HAVASI · AURORA OLASILIĞI · NOAA SWPC OVATION MODELİ",
   creditsEfas: "NEHİR DEBİSİ · COPERNICUS EMS EFAS v5, AVRUPA 1′ · YALNIZCA VAKALAR",
+  creditsEra5: "YENİDEN ANALİZ · COPERNICUS C3S ERA5 (ECMWF), KÜRESEL 0,25°, SAATLİK, CC-BY-4.0 · YALNIZCA VAKALAR",
 };

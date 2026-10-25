@@ -590,4 +590,5 @@ export const zh: Record<MessageKey, string> = {
   varLabelUpstream: "上游集水面积",
   creditsAurora: "空间天气 · 极光可见概率 · NOAA SWPC OVATION 模式",
   creditsEfas: "河流流量 · COPERNICUS EMS EFAS v5，欧洲 1′ · 仅限案例",
+  creditsEra5: "再分析 · COPERNICUS C3S ERA5（ECMWF），全球 0.25°，逐小时，CC-BY-4.0 · 仅限案例",
 };

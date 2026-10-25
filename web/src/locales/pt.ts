@@ -595,4 +595,5 @@ export const pt: Record<MessageKey, string> = {
   varLabelUpstream: "Área drenada a montante",
   creditsAurora: "CLIMA ESPACIAL · PROBABILIDADE DE AURORAS · MODELO OVATION DA NOAA SWPC",
   creditsEfas: "CAUDAL FLUVIAL · COPERNICUS EMS EFAS v5, EUROPA 1′ · SÓ CASOS",
+  creditsEra5: "REANÁLISE · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0,25°, HORÁRIO, CC-BY-4.0 · SÓ CASOS",
 };

@@ -116,7 +116,13 @@ Facts worth getting right:
   `water_balance`) is the water-balance run forced by observations, the
   analysis the forecast starts from, on the same grid and axis. Neither
   has a live pointer or a place in the model switch; a case opens them on
-  the return-period class. `jma` is the seventh
+  the return-period class. `era5` is cases only too: ECMWF's ERA5
+  reanalysis for the Copernicus Climate Change Service (manifest model
+  `ERA5`, product `reanalysis-single-levels`), hourly on the 0.25° grid
+  over a window of up to 240 hours from any hour, every frame an analysis
+  — the observed situation rather than a forecast; a case ships a crop of
+  the 2 m temperature and dew point, the 10 m wind and the hourly gust
+  maximum. `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -351,7 +357,10 @@ Facts worth getting right:
   ECMWF nor Open-Meteo endorses this use); `efas` and `efaswb` are
   Copernicus Emergency Management Service information from the Early
   Warning Data Store, under its terms ("Contains modified Copernicus
-  Emergency Management Service information"); the basemap
+  Emergency Management Service information"); `era5` is Copernicus
+  Climate Change Service information from the Climate Data Store,
+  CC-BY-4.0 ("Contains modified Copernicus Climate Change Service
+  information"; cite Hersbach et al., doi:10.24381/cds.adbb2d47); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -392,8 +401,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
-  mosaic of every geostationary disk). `woof` (`wrf`), `efas` and
-  `efaswb` are known but have no live run, so alone they open the
+  mosaic of every geostationary disk). `woof` (`wrf`), `efas`,
+  `efaswb` and `era5` are known but have no live run, so alone they open the
   default; a case pins its own dataset.
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
