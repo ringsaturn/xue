@@ -289,6 +289,68 @@
         }
       ]
     },
+    "iconeu": {
+      "title": "DWD ICON-EU 0.0625°",
+      "description": "The European nest of the Deutscher Wetterdienst's ICON model on its regular 0.0625° grid (23.5°W to 62.5°E, 29.5°N to 70.5°N), hourly to 78 hours and three-hourly to 120, from the 00/06/12/18Z cycles; only the newest is kept. The precipitation rate is the mean over the step ending at each frame and the gust the maximum over it. Source: Deutscher Wetterdienst; based on data from Deutscher Wetterdienst, gridded data quantized and reproduced graphically.",
+      "license": "CC-BY-4.0",
+      "providers": [
+        {
+          "name": "Deutscher Wetterdienst",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://opendata.dwd.de/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.dwd.de/EN/service/legal_notice/legal_notice_node.html",
+          "type": "text/html",
+          "title": "DWD legal notice: open data under Creative Commons Attribution 4.0"
+        }
+      ]
+    },
+    "arpege": {
+      "title": "Météo-France ARPEGE 0.25°",
+      "description": "Météo-France's global model ARPEGE on its 0.25° GLOB025 grid, hourly to 48 hours and three-hourly to 102, from the 00/06/12/18Z cycles, read from the surface package of the data.gouv.fr dataset 'Paquets Arpège - Résolution 0,25°'; only the newest is kept. The precipitation rate is the mean over the step ending at each frame and the gust the maximum over the hour ending at it. Source: Météo-France; the published bundles are a quantized derivative.",
+      "license": "etalab-2.0",
+      "providers": [
+        {
+          "name": "Météo-France",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+          "type": "text/html",
+          "title": "Licence Ouverte / Open Licence 2.0 (Etalab)"
+        }
+      ]
+    },
     "woof": {
       "title": "Recast WOOF (WRF-ARW) nested run",
       "description": "A WRF-ARW run commissioned by the author on Recast Systems' WOOF service (gpuwm), nested 12 → 3 → 1 → 0.5 km from the NOAA GFS analysis, with the model terrain from the Copernicus DEM GLO-30. Published is the innermost 500 m domain over Mount Fuji, resampled bilinearly from its Lambert conformal grid onto a regular 0.005° grid (79 × 61 cells, 138.54°E–138.93°E, 35.22°N–35.52°N) by the wrf-series tool, as an hourly forecast from the cycle's first hour. The cloud water volume carries the model's liquid cloud water interpolated onto 24 altitudes from 0.25 to 12 km above mean sea level. There is no live feed: the run exists as showcase cases only. Driving data: NOAA GFS; terrain: Copernicus DEM GLO-30, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",

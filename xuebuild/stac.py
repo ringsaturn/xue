@@ -587,6 +587,62 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "iconeu": {
+            "title": "DWD ICON-EU 0.0625°",
+            "description": (
+                "The European nest of the Deutscher Wetterdienst's ICON model on its regular "
+                "0.0625° grid (23.5°W to 62.5°E, 29.5°N to 70.5°N), hourly to 78 hours and "
+                "three-hourly to 120, from the 00/06/12/18Z cycles; only the newest is kept. "
+                "The precipitation rate is the mean over the step ending at each frame and the "
+                "gust the maximum over it. Source: Deutscher Wetterdienst; based on data from "
+                "Deutscher Wetterdienst, gridded data quantized and reproduced graphically."
+            ),
+            "license": "CC-BY-4.0",
+            "providers": [
+                {
+                    "name": "Deutscher Wetterdienst",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://opendata.dwd.de/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.dwd.de/EN/service/legal_notice/legal_notice_node.html",
+                    "type": "text/html",
+                    "title": "DWD legal notice: open data under Creative Commons Attribution 4.0",
+                },
+            ],
+        },
+        "arpege": {
+            "title": "Météo-France ARPEGE 0.25°",
+            "description": (
+                "Météo-France's global model ARPEGE on its 0.25° GLOB025 grid, hourly to 48 hours "
+                "and three-hourly to 102, from the 00/06/12/18Z cycles, read from the surface "
+                "package of the data.gouv.fr dataset 'Paquets Arpège - Résolution 0,25°'; only "
+                "the newest is kept. The precipitation rate is the mean over the step ending at "
+                "each frame and the gust the maximum over the hour ending at it. Source: "
+                "Météo-France; the published bundles are a quantized derivative."
+            ),
+            "license": "etalab-2.0",
+            "providers": [
+                {
+                    "name": "Météo-France",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+                    "type": "text/html",
+                    "title": "Licence Ouverte / Open Licence 2.0 (Etalab)",
+                },
+            ],
+        },
         "mrms": {
             "title": "NOAA MRMS radar mosaic",
             "description": (
