@@ -441,7 +441,7 @@ class DebraProducer:
 #: frames and the converters carry into the ``producer`` block. A cached
 #: slot is recomposed when it changes, so it changes exactly when a
 #: constant below does, never with the package.
-TRUE_COLOR_VERSION = "3"
+TRUE_COLOR_VERSION = "4"
 #: The solar zenith past which the sun-angle normalisation stops growing:
 #: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last
 #: degrees of a day fade instead of blowing up.
@@ -466,6 +466,13 @@ GEOSTATIONARY_ALTITUDE_KM = 35786.0
 #: the limb the picture falls back to the uncorrected reflectance instead
 #: of going black.
 TRUE_COLOR_RAYLEIGH_FADE_DEG: tuple[float, float] = (70.0, 88.0)
+#: The sun-normalised 0.64 µm reflectances between which the air the
+#: Rayleigh correction assumes above a cell shrinks from the whole column
+#: to none: a bright cell is cloud, and a cloud top hides the air beneath
+#: it. Taking the whole column's sky out of a cloud strips its blue and
+#: tints it yellow to green (pyspectral's red-band reduction, the same two
+#: knots).
+TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE: tuple[float, float] = (0.2, 1.0)
 #: The hybrid green on an imager with a 0.51 µm band (AHI, FCI): the band
 #: with a little of the 0.86 µm reflectance, which lifts vegetation to the
 #: green the eye expects (Miller et al. 2016, the Himawari correction).
@@ -552,26 +559,44 @@ def viewing_geometry(platform: Platform, slot: datetime, grid: TargetGrid) -> Vi
     )
 
 
-def rayleigh_corrected(reflectance: np.ndarray, wavelength_um: float, geometry: ViewingGeometry) -> np.ndarray:
+def rayleigh_column_fraction(red: np.ndarray) -> np.ndarray:
+    """The share of the air column the Rayleigh correction takes out above
+    a cell, from its sun-normalised 0.64 µm reflectance: 1 up to
+    ``TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE[0]``, 0 from the second,
+    linear between; a NaN reads as the whole column."""
+    low, high = TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE
+    red = np.nan_to_num(np.asarray(red, dtype=np.float64), nan=low)
+    return np.clip((high - red) / (high - low), 0.0, 1.0)
+
+
+def rayleigh_corrected(
+    reflectance: np.ndarray, wavelength_um: float, geometry: ViewingGeometry, column: np.ndarray | float = 1.0
+) -> np.ndarray:
     """A reflectance already divided by the cosine of the solar zenith,
     with the molecular sky taken out: ``(ρ − ρ_R) / T`` where the path
-    reflectance is single scattering,
-    ``ρ_R = τ × 0.75 (1 + cos² Θ) / (4 μs μv)``, Θ the scattering angle
+    reflectance is single scattering over a black surface,
+    ``ρ_R = 0.75 (1 + cos² Θ) / (4 (μs + μv)) × (1 − exp(−τ (1/μs + 1/μv)))``,
+    Θ the scattering angle
     (``cos Θ = −μs μv − sin θs sin θv cos(φs − φv)``) and the two-way
     transmittance ``T = exp(−τ/2 × (1/μs + 1/μv))`` (half the scattered
     light goes forward and still arrives), both cosines floored at
-    ``TRUE_COLOR_ZENITH_LIMIT_DEG``. Faded by
-    ``TRUE_COLOR_RAYLEIGH_FADE_DEG`` on the larger zenith, so a long slant
-    path keeps the reflectance it had."""
+    ``TRUE_COLOR_ZENITH_LIMIT_DEG``, and τ the band's optical depth times
+    the share of the column above the cell (``column``,
+    :func:`rayleigh_column_fraction`). The attenuated form saturates where
+    the slant path is optically thick; its thin limit ``τ P / (4 μs μv)``
+    takes out several times the sky near the terminator and the limb.
+    Faded by ``TRUE_COLOR_RAYLEIGH_FADE_DEG`` on the larger zenith, so a
+    long slant path keeps the reflectance it had."""
     limit = TRUE_COLOR_ZENITH_LIMIT_DEG
     sun = np.radians(np.minimum(geometry.sun_zenith, limit))
     view = np.radians(np.minimum(geometry.satellite_zenith, limit))
     mu_sun, mu_view = np.cos(sun), np.cos(view)
     relative = np.radians(geometry.sun_azimuth - geometry.satellite_azimuth)
     scattering = -mu_sun * mu_view - np.sin(sun) * np.sin(view) * np.cos(relative)
-    tau = rayleigh_optical_depth(wavelength_um)
-    path = tau * 0.75 * (1.0 + scattering**2) / (4.0 * mu_sun * mu_view)
-    transmittance = np.exp(-0.5 * tau * (1.0 / mu_sun + 1.0 / mu_view))
+    tau = rayleigh_optical_depth(wavelength_um) * np.asarray(column, dtype=np.float64)
+    airmass = 1.0 / mu_sun + 1.0 / mu_view
+    path = 0.75 * (1.0 + scattering**2) / (4.0 * (mu_sun + mu_view)) * -np.expm1(-tau * airmass)
+    transmittance = np.exp(-0.5 * tau * airmass)
     start, end = TRUE_COLOR_RAYLEIGH_FADE_DEG
     strength = np.clip((end - np.maximum(geometry.sun_zenith, geometry.satellite_zenith)) / (end - start), 0.0, 1.0)
     return (1.0 - strength) * reflectance + strength * (reflectance - path) / transmittance
@@ -618,8 +643,9 @@ class TrueColorProducer:
     3. each reflectance divided by ``max(cos θ, cos TRUE_COLOR_ZENITH_LIMIT_DEG)``;
     3a. each reflectance with the molecular sky taken out at its band's
        wavelength (:func:`rayleigh_corrected`, the satellite's zenith and
-       azimuth from the platform's sub-satellite longitude), faded out on
-       long slant paths;
+       azimuth from the platform's sub-satellite longitude), over the share
+       of the air column the cell's 0.64 µm reflectance leaves above it
+       (:func:`rayleigh_column_fraction`), faded out on long slant paths;
     4. the green: ``0.93 × 0.51 µm + 0.07 × 0.86 µm`` on AHI and FCI, or
        ``0.45 × 0.47 µm + 0.45 × 0.64 µm + 0.10 × 0.86 µm`` on ABI;
     5. the day guns: red (0.64 µm), green and blue (0.47 µm) through the
@@ -699,9 +725,11 @@ class TrueColorProducer:
         floor = math.cos(math.radians(TRUE_COLOR_ZENITH_LIMIT_DEG))
         divisor = np.maximum(cosine, floor)
         normalized = {channel_id: plane / divisor for channel_id, plane in planes.items()}
-        # 3a. The molecular sky taken out, band by band.
+        # 3a. The molecular sky taken out, band by band, over the air the
+        # red reflectance leaves above the cell.
+        column = rayleigh_column_fraction(normalized["vis064"])
         normalized = {
-            channel_id: rayleigh_corrected(plane, platform.channel(channel_id).wavelength_um, geometry)
+            channel_id: rayleigh_corrected(plane, platform.channel(channel_id).wavelength_um, geometry, column)
             for channel_id, plane in normalized.items()
         }
         # 4. The green.

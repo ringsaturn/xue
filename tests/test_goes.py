@@ -50,6 +50,7 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_SYNTHETIC_GREEN,
     TRUE_COLOR_VERSION,
     TRUE_COLOR_ZENITH_LIMIT_DEG,
+    rayleigh_column_fraction,
     rayleigh_corrected,
     viewing_geometry,
 )
@@ -385,8 +386,9 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertGreater(float(cosine[covered].min()), 0.7)
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
         geometry = viewing_geometry(GOES_EAST, SLOT_1510, TILE_GRID)
+        column = rayleigh_column_fraction(np.maximum(planes["vis064"], 0.0) / divisor)
         normalized = {
-            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, GOES_EAST.channel(channel_id).wavelength_um, geometry)
+            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, GOES_EAST.channel(channel_id).wavelength_um, geometry, column)
             for channel_id, plane in planes.items()
         }
         blue, red, nir = TRUE_COLOR_SYNTHETIC_GREEN
