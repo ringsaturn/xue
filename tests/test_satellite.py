@@ -1512,7 +1512,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for number, variable in zip((7, 8, 9), variables):
             parameter = variable["parameter"]
             self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
-            self.assertEqual(variable["producer"], {"id": "xue", "version": "3"})
+            self.assertEqual(variable["producer"], {"id": "xue", "version": "4"})
             self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
         empty = None
         for number in (1, 2, 3):
