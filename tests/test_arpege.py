@@ -148,7 +148,7 @@ class FetchTests(unittest.TestCase):
         package.write_bytes(b"".join(path.read_bytes() for path in FIXTURE_FRAMES))
         step = FIXTURE_FRAMES[1].read_bytes()
         spans = dict(zip((message.band for message in grib2.index_messages(FIXTURE_FRAMES[1])), grib2.message_spans(FIXTURE_FRAMES[1])))
-        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ARPEGE.input_variable_ids)
+        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ARPEGE.input_variable_ids, optional_ids=("orog",))
         records = fetch._arpege_records(RUN, 1, ARPEGE, ("gust", "tmp2m"), package)
         for variable_id, record in zip(("gust", "tmp2m"), records):
             offset, length = spans[frames[variable_id].band]
