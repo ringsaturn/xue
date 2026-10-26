@@ -162,6 +162,9 @@ export interface ShowcaseContext {
 export interface ShowcaseImagery {
   /** The GIBS layer (`gibs.ts` id, a `?gibs=` spelling) the case opens on. */
   layer: string;
+  /** UTC dates (`2026-10-13`) mapped to the layer whose platform is drawn
+   * on that day instead, in the colour on screen (`gibsLayerOnDay`). */
+  days?: Record<string, string>;
 }
 
 /** A case-relative `…/index.json` path that stays inside the case. */
@@ -266,7 +269,17 @@ function imageryBlock(input: unknown, id: string): ShowcaseImagery | undefined {
     console.warn(`showcase: case ${id} carries an imagery block this shell cannot read; playing it without`);
     return undefined;
   }
-  return { layer };
+  const block: ShowcaseImagery = { layer };
+  const days = (input as Record<string, unknown>).days;
+  if (days !== undefined && days !== null && typeof days === "object" && !Array.isArray(days)) {
+    // A day naming a picture this shell does not know keeps the case's own.
+    const known = Object.entries(days).filter(
+      (entry): entry is [string, string] =>
+        /^\d{4}-\d{2}-\d{2}$/.test(entry[0]) && typeof entry[1] === "string" && gibsLayer(entry[1]) !== null,
+    );
+    if (known.length > 0) block.days = Object.fromEntries(known);
+  }
+  return block;
 }
 
 /** Whether a point lies in a case box; `east < west` crosses the

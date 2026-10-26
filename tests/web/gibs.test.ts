@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { GIBS_LAYERS, GIBS_MAX_LEVEL, GIBS_PLATFORMS, gibsDate, gibsDays, gibsLayer, gibsLayerFor, gibsTileUrl } from "../../web/src/gibs";
+import { GIBS_LAYERS, GIBS_MAX_LEVEL, GIBS_PLATFORMS, gibsDate, gibsDays, gibsLayer, gibsLayerFor, gibsLayerOnDay, gibsTileUrl } from "../../web/src/gibs";
 import { parseGibsFromSearch, parseModelFromSearch, searchWithGibs } from "../../web/src/urlstate";
 import { parseView, searchForView } from "../../web/src/viewstate";
 
@@ -22,6 +22,15 @@ describe("the GIBS layers", () => {
     expect(gibsLayer("terra-721")?.layer).toBe("MODIS_Terra_CorrectedReflectance_Bands721");
     expect(gibsLayer("nonsense")).toBeNull();
     expect(gibsLayer(null)).toBeNull();
+  });
+
+  it("draws a case's stand-in platform on its named days, in the colour on screen", () => {
+    const days = { "2026-10-13": "terra-721", "2026-10-14": "nonsense" };
+    expect(gibsLayerOnDay(gibsLayer("noaa21-fc")!, "2026-10-13", days).id).toBe("terra-721");
+    expect(gibsLayerOnDay(gibsLayer("noaa21")!, "2026-10-13", days).id).toBe("terra");
+    expect(gibsLayerOnDay(gibsLayer("noaa21-fc")!, "2026-10-12", days).id).toBe("noaa21-fc");
+    expect(gibsLayerOnDay(gibsLayer("noaa21-fc")!, "2026-10-14", days).id).toBe("noaa21-fc");
+    expect(gibsLayerOnDay(gibsLayer("noaa21-fc")!, "2026-10-13", undefined).id).toBe("noaa21-fc");
   });
 
   it("builds the WMTS REST template for a day", () => {

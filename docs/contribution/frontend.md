@@ -396,7 +396,10 @@ and the window shrinks to fit it.
   layer sits under the coastline, outside the built style, so
   `syncBasemapStyle` leaves it alone. If GIBS is down the map is blank and
   nothing else is affected. The credit line names it while it is on
-  (`body[data-imagery]`).
+  (`body[data-imagery]`). A day an orbiter has no picture comes back
+  black, not as an error, so the shell cannot detect it; a case names
+  those days in `imagery.days` and `syncGibs` draws the stand-in's
+  platform there (`gibsLayerOnDay`).
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
