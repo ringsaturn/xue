@@ -727,8 +727,24 @@ class ImageryTest(unittest.TestCase):
         entry, _ = build_entry(imagery={"layer": "noaa21-fc"})
         self.assertEqual(entry["imagery"], {"layer": "noaa21-fc"})
 
+    def test_another_platform_stands_in_on_named_days(self) -> None:
+        imagery = {"layer": "noaa21-fc", "days": {"2026-10-13": "terra-721", "2026-10-09": "noaa20-fc"}}
+        spec = parse_case(case_payload(imagery=imagery))
+        self.assertEqual(list(spec.imagery["days"]), ["2026-10-09", "2026-10-13"])
+        entry, _ = build_entry(imagery=imagery)
+        self.assertEqual(entry["imagery"], imagery)
+
     def test_an_unknown_picture_is_refused(self) -> None:
-        for imagery in ({"layer": "goes"}, {"layer": "snpp", "date": "2026-10-10"}, "snpp"):
+        for imagery in (
+            {"layer": "goes"},
+            {"layer": "snpp", "date": "2026-10-10"},
+            "snpp",
+            {"days": {"2026-10-13": "terra"}},
+            {"layer": "snpp", "days": {}},
+            {"layer": "snpp", "days": {"2026-10-13": "goes"}},
+            {"layer": "snpp", "days": {"2026-13-01": "terra"}},
+            {"layer": "snpp", "days": {"20261013": "terra"}},
+        ):
             with self.subTest(imagery=imagery), self.assertRaises(ShowcaseError):
                 parse_case(case_payload(imagery=imagery))
 

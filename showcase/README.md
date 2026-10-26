@@ -201,8 +201,13 @@ retires a case.
    Nothing is built for it; the tiles come from GIBS.
 
    ```json
-   "imagery": {"layer": "noaa21-fc"}
+   "imagery": {"layer": "noaa21-fc", "days": {"2026-10-13": "terra-721"}}
    ```
+
+   GIBS serves a black picture for a day an orbiter has none, so the
+   optional `days` maps a UTC date to another layer whose platform is drawn
+   on that day instead, in whichever colour the viewer has up. A shell that
+   does not know `days` draws the case's own platform every day.
 
    A case may name the **camera** the viewer opens it on with an optional
    `view` block, carried onto the catalog row as written: `center` as
