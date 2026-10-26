@@ -441,7 +441,7 @@ class DebraProducer:
 #: frames and the converters carry into the ``producer`` block. A cached
 #: slot is recomposed when it changes, so it changes exactly when a
 #: constant below does, never with the package.
-TRUE_COLOR_VERSION = "4"
+TRUE_COLOR_VERSION = "5"
 #: The solar zenith past which the sun-angle normalisation stops growing:
 #: a reflectance is divided by ``max(cos θ, cos 85°)``, so the last
 #: degrees of a day fade instead of blowing up.
@@ -473,6 +473,13 @@ TRUE_COLOR_RAYLEIGH_FADE_DEG: tuple[float, float] = (70.0, 88.0)
 #: tints it yellow to green (pyspectral's red-band reduction, the same two
 #: knots).
 TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE: tuple[float, float] = (0.2, 1.0)
+#: The multiple-scattering lift on the single-scattering path reflectance,
+#: as ``1 + k τ m``: single scattering alone leaves the light scattered
+#: more than once in the picture, a blue haze over the whole disk that
+#: grows towards the limb. 0.25 keeps the sea navy and the cloud white from
+#: the sub-satellite point to the terminator on Meteosat frames inverted
+#: to reflectance (0.35 tints the limb teal, 0.5 olive).
+TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING = 0.25
 #: The hybrid green on an imager with a 0.51 µm band (AHI, FCI): the band
 #: with a little of the 0.86 µm reflectance, which lifts vegetation to the
 #: green the eye expects (Miller et al. 2016, the Himawari correction).
@@ -575,10 +582,12 @@ def rayleigh_corrected(
     """A reflectance already divided by the cosine of the solar zenith,
     with the molecular sky taken out: ``(ρ − ρ_R) / T`` where the path
     reflectance is single scattering over a black surface,
-    ``ρ_R = 0.75 (1 + cos² Θ) / (4 (μs + μv)) × (1 − exp(−τ (1/μs + 1/μv)))``,
-    Θ the scattering angle
+    lifted for the light scattered more than once,
+    ``ρ_R = 0.75 (1 + cos² Θ) / (4 (μs + μv)) × (1 − exp(−τ m)) × (1 + k τ m)``
+    with the air mass ``m = 1/μs + 1/μv`` and ``k``
+    ``TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING``, Θ the scattering angle
     (``cos Θ = −μs μv − sin θs sin θv cos(φs − φv)``) and the two-way
-    transmittance ``T = exp(−τ/2 × (1/μs + 1/μv))`` (half the scattered
+    transmittance ``T = exp(−τ m / 2)`` (half the scattered
     light goes forward and still arrives), both cosines floored at
     ``TRUE_COLOR_ZENITH_LIMIT_DEG``, and τ the band's optical depth times
     the share of the column above the cell (``column``,
@@ -595,7 +604,8 @@ def rayleigh_corrected(
     scattering = -mu_sun * mu_view - np.sin(sun) * np.sin(view) * np.cos(relative)
     tau = rayleigh_optical_depth(wavelength_um) * np.asarray(column, dtype=np.float64)
     airmass = 1.0 / mu_sun + 1.0 / mu_view
-    path = 0.75 * (1.0 + scattering**2) / (4.0 * (mu_sun + mu_view)) * -np.expm1(-tau * airmass)
+    depth = tau * airmass
+    path = 0.75 * (1.0 + scattering**2) / (4.0 * (mu_sun + mu_view)) * -np.expm1(-depth) * (1.0 + TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING * depth)
     transmittance = np.exp(-0.5 * tau * airmass)
     start, end = TRUE_COLOR_RAYLEIGH_FADE_DEG
     strength = np.clip((end - np.maximum(geometry.sun_zenith, geometry.satellite_zenith)) / (end - start), 0.0, 1.0)

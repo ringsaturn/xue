@@ -87,6 +87,7 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_NIGHT_GROUND,
     TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE,
     TRUE_COLOR_RAYLEIGH_FADE_DEG,
+    TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING,
     TRUE_COLOR_TERMINATOR_DEG,
     TRUE_COLOR_VERSION,
     TRUE_COLOR_ZENITH_LIMIT_DEG,
@@ -895,8 +896,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(assemble.frame_record(infrared_frame)["resampling"], "bilinear")
         gun = window.slots[0].frames["trueg"]
         packing = assemble.frame_record(gun)
-        self.assertEqual(TRUE_COLOR_VERSION, "4")
-        self.assertEqual(packing["producer"], {"id": "xue", "version": "4"})
+        self.assertEqual(TRUE_COLOR_VERSION, "5")
+        self.assertEqual(packing["producer"], {"id": "xue", "version": "5"})
         self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in TRUECOLOR.inputs])
         self.assertNotIn("ancillary", packing)
         # The recipe, step by step, against the producer's frames.
@@ -1128,7 +1129,8 @@ class FetchTests(TempRoot, unittest.TestCase):
             mu_sun, mu_view = np.cos(np.radians(sun)), np.cos(np.radians(view))
             tau = rayleigh_optical_depth(0.47) * column
             airmass = 1.0 / mu_sun + 1.0 / mu_view
-            path = 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * (mu_sun + mu_view)) * (1.0 - np.exp(-tau * airmass))
+            lift = 1.0 + TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING * tau * airmass
+            path = 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * (mu_sun + mu_view)) * (1.0 - np.exp(-tau * airmass)) * lift
             return (reflectance - path) / np.exp(-0.5 * tau * airmass)
 
         np.testing.assert_allclose(rayleigh_corrected(np.array([0.2]), 0.47, at(30.0, 40.0, 90.0)), [by_hand(0.2, 30.0, 40.0)], atol=1e-12)
@@ -1139,10 +1141,11 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertGreater(red, 0.0)
         # The path saturates: near the terminator it is well under the
         # thin limit τ P / (4 μs μv), which would strip a cloud's blue.
-        # A scene that is the thin-limit sky alone keeps over half of it.
+        # A scene that is the thin-limit sky alone keeps some of it.
         mu_sun, mu_view = np.cos(np.radians(69.9)), np.cos(np.radians(66.0))
         thin = rayleigh_optical_depth(0.444) * 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * mu_sun * mu_view)
-        self.assertGreater(float(rayleigh_corrected(np.array([thin]), 0.444, at(69.9, 66.0, 90.0))[0]), 0.5 * thin)
+        self.assertGreater(float(rayleigh_corrected(np.array([thin]), 0.444, at(69.9, 66.0, 90.0))[0]), 0.25 * thin)
+        self.assertEqual(TRUE_COLOR_RAYLEIGH_MULTIPLE_SCATTERING, 0.25)
         # Over a bright cell only the air above the cloud is taken out: the
         # whole column to 0.2 of red reflectance, none from 1.0.
         self.assertEqual(TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE, (0.2, 1.0))
@@ -1512,7 +1515,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for number, variable in zip((7, 8, 9), variables):
             parameter = variable["parameter"]
             self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, number, 8))
-            self.assertEqual(variable["producer"], {"id": "xue", "version": "4"})
+            self.assertEqual(variable["producer"], {"id": "xue", "version": "5"})
             self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
         empty = None
         for number in (1, 2, 3):
