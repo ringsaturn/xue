@@ -235,7 +235,10 @@ run total as the WMO 0/1/52 in kg/m² (AIFS's `tp` alternate), `VMAX_10M`
 the maximum gust over the step on the 10 m surface (ECMWF's gust
 alternate; an empty interval at the analysis, so optional there) and
 `CLCT` the WMO 0/6/1 in percent on the ground surface (AIFS's `tcdc`
-alternate). `tests/test_iconeu.py`.
+alternate) and the terrain `HSURF` the geometric height 0/3/6 in metres
+(the `orog` alternate beside ECMWF's geopotential), one time-invariant
+object per cycle (`icon-eu_europe_regular-lat-lon_time-invariant_<run>_HSURF`)
+fetched at the analysis alone. `tests/test_iconeu.py`.
 
 **arpege.** Météo-France's ARPEGE on its 0.25° GLOB025 grid, the GFS grid,
 from the data.gouv.fr dataset "Paquets Arpège - Résolution 0,25°"
@@ -259,7 +262,12 @@ the first step's `tp` restamped to an empty interval at the run time with
 every value zero (`eccodescli.zero_accumulation_at_analysis`, `grib_set -d
 0 -s endStep=0`) — the shape ICON-EU's `TOT_PREC` has at step 0. Same
 encodings and basic set as `iconeu`; the gust is the maximum over the hour
-ending at each step, three-hourly steps included. `tests/test_arpege.py`.
+ending at each step, three-hourly steps included. The terrain (0/3/6 in
+metres, as DWD's) is in no `SP1` package: the first `SP2` package
+(`000H024H`, about 430 MB) writes it once, at the analysis, so the fetch
+walks that object's messages over Range, a 512-byte head each
+(`grib2.message_head`), and reads the one matching record whole; a run is
+complete only once that package is on the bucket too. `tests/test_arpege.py`.
 
 **ifshres.** ECMWF IFS HRES (~9 km) as Open-Meteo forwards the real-time
 archive. The fetch stage is om2nc (`xuebuild/om2nccli.py`, `XUE_OM2NC`): it

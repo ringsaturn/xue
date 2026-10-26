@@ -120,14 +120,14 @@ metadata).
 to F78 and 3-hourly to F120 from the 00 / 06 / 12 / 18 UTC cycles, landing
 about 3.5 h after the cycle. A basic set: the core pair, sea level pressure,
 gust (the maximum over the step ending at the frame, from F001), total
-cloud cover and 10 m wind. Precipitation is de-accumulated from the run
+cloud cover, 10 m wind and the model terrain. Precipitation is de-accumulated from the run
 total, from F001. Data: Deutscher Wetterdienst, CC BY 4.0
 ("Source: Deutscher Wetterdienst").
 
 ### Météo-France ARPEGE (`arpege`)
 
 0.25° global, hourly to F48 and 3-hourly to F102 from the 00 / 06 / 12 /
-18 UTC cycles, from the surface package of the data.gouv.fr ARPEGE 0.25°
+18 UTC cycles, from the surface packages of the data.gouv.fr ARPEGE 0.25°
 dataset; the 00/12 UTC cycles land about 3–4 h after the cycle, the 06/18
 UTC ones about 5 h. The same basic set as `iconeu`; the gust is the
 maximum over the hour ending at the frame. Data: Météo-France, Licence

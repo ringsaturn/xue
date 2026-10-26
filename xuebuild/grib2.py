@@ -247,6 +247,50 @@ def message_spans(path: Path) -> list[tuple[int, int]]:
     return spans
 
 
+def message_head(head: bytes, source: str) -> tuple[int, MessageInfo]:
+    """The total length and the identity of the GRIB2 message whose first
+    bytes are ``head`` — enough of it to reach the product definition
+    section — so a multi-field object with no sidecar can be indexed by
+    Range reads of each message's head instead of a download of the whole
+    (the ARPEGE package that carries the terrain). ``source`` names the
+    object in errors."""
+    label = Path(source)
+    if len(head) < 16 or head[:4] != b"GRIB" or head[7] != 2:
+        raise ConversionError(f"no GRIB2 message head in {source}")
+    total_length = struct.unpack_from(">Q", head, 8)[0]
+    reference_time: datetime | None = None
+    position = 16
+    while position + 5 <= min(len(head), total_length - 4):
+        section_length, section_number = struct.unpack_from(">IB", head, position)
+        if section_length < 5:
+            raise ConversionError(f"GRIB2 section length is out of bounds in {source}")
+        body = head[position : position + section_length]
+        if section_number in (1, 4) and len(body) < section_length:
+            break
+        if section_number == 1:
+            reference_time = _parse_time(body, 12, label)
+        elif section_number == 4:
+            if reference_time is None:
+                raise ConversionError(f"GRIB2 product definition precedes identification in {source}")
+            category, number, level_type, level_value, valid_time, statistical, aerosol = _parse_product(
+                body, reference_time, label
+            )
+            return total_length, MessageInfo(
+                band=1,
+                discipline=head[6],
+                parameter_category=category,
+                parameter_number=number,
+                level_type=level_type,
+                level_value=level_value,
+                reference_time=reference_time,
+                valid_time=valid_time,
+                statistical_process=statistical,
+                aerosol=aerosol,
+            )
+        position += section_length
+    raise ConversionError(f"the first {len(head)} bytes of a message in {source} hold no product definition")
+
+
 def matches_variable(spec: VariableSpec, message: MessageInfo) -> bool:
     """Whether ``message`` carries ``spec``'s quantity under its identity,
     an alias or an alternate — the header matcher's own test."""

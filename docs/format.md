@@ -334,7 +334,7 @@ recognize; anything else it can still decode.
 | `aptmp2m` | 0 / 0 / 21 | 103, 2 m | NCEP's 2 m apparent temperature |
 | `pwat` | 0 / 1 / 3 | 200, no value | Precipitable water, the column mass in kg/m² (a millimetre of water); NCEP writes it on its local "entire atmosphere (considered as a single layer)" surface, type 200, which carries no value like the WMO type 10 |
 | `hpbl` | 0 / 3 / 196 | 1, 0 | Planetary boundary layer height in metres, NCEP's local number (the WMO table's 0 / 3 / 18 is not what pgrb2 carries) |
-| `orog` | 0 / 3 / 5 | 1, 0 | Orography in metres, a static one-frame bundle. ECMWF open data's surface geopotential, 0 / 3 / 4 on the same surface, is accepted on input and divided by g |
+| `orog` | 0 / 3 / 5 | 1, 0 | Orography in metres, a static one-frame bundle. ECMWF open data's surface geopotential, 0 / 3 / 4 on the same surface, is accepted on input and divided by g; DWD's and Météo-France's geometric height, 0 / 3 / 6 in metres, is accepted as it is |
 | `ptype` | 0 / 1 / 19 | 1, 0 | Precipitation type: one categorical field the encoder derives from the four flags below, in WMO code table 4.201's own values (1 rain, 3 freezing rain, 5 snow, 8 ice pellets, 0 none). Never fetched; the flags are inputs only and reach no bundle |
 | `crain` / `cfrzr` / `cicep` / `csnow` | 0 / 1 / 192–195 | 1, 0 | The four 0/1 categorical precipitation-type flags pgrb2 carries (rain, freezing rain, ice pellets, snow; NCEP-local numbers), input-only, combined into `ptype` |
 | `tmpsfc` | 0 / 0 / 0 | 1, 0 | Surface (skin) temperature, the SST over water. ECMWF's `skt`, its own parameter 0 / 0 / 17 with no surface value, is accepted on input and never written |

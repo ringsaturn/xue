@@ -849,16 +849,19 @@ VARIABLES: dict[str, VariableSpec] = {
     # HRRR and sflux write it as the geopotential height 0/3/5 on the ground
     # surface (``:HGT:surface:``, gpm); ECMWF open data (IFS and AIFS) writes
     # the geopotential itself, 0/3/4 on the same surface, which the alternate
-    # accepts and the converter divides by g to metres. The codebook's floor
-    # is the Dead Sea shore and its 37 m step lifts the top past Everest, so
-    # one global scale covers every model in the set. A reader draws it as a
-    # static relief layer and, later, a finer DEM beside it.
+    # accepts and the converter divides by g to metres; DWD (``HSURF``) and
+    # Météo-France write the geometric height 0/3/6 in metres, which a second
+    # alternate takes as it is. The codebook's floor is the Dead Sea shore
+    # and its 37 m step lifts the top past Everest, so one global scale
+    # covers every model in the set. A reader draws it as a static relief
+    # layer and, later, a finer DEM beside it.
     "orog": VariableSpec(
         id="orog",
         conversion=rules.GEOPOTENTIAL_TO_METRES,
         # NCEP's HGT on the surface; ECMWF's geopotential, which GDAL names
-        # GP and describes only in the comment.
-        gdal_rules=(rules.surface("HGT"), rules.geopotential_surface("GP", "Z")),
+        # GP and describes only in the comment; the geometric height, which
+        # GDAL names DIST.
+        gdal_rules=(rules.surface("HGT", "DIST"), rules.geopotential_surface("GP", "Z")),
         label="Orography",
         output_unit="m",
         value_range=(-430.0, 8968.0),
@@ -874,8 +877,12 @@ VARIABLES: dict[str, VariableSpec] = {
             # parameter one number down the table. The alternate's unit is
             # the geopotential spelling so the converter scales it.
             RecordAlternate(0, 3, 4, level_type=1, gdal_unit="(m^2)/(s^2)"),
+            # DWD's and Météo-France's geometric height of the surface, in
+            # metres: the parameter two numbers further on.
+            RecordAlternate(0, 3, 6, level_type=1, gdal_unit="m"),
         ),
         gdal_unit="gpm",
+        dwd_param="HSURF",
         static=True,
     ),
     # The four categorical precipitation-type flags pgrb2 carries, each a 0/1

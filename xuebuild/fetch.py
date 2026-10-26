@@ -35,7 +35,7 @@ from .common import (
 )
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
-from .errors import DownloadError
+from .errors import ConversionError, DownloadError
 from .idx import (
     ByteRange,
     coalesce_ranges,
@@ -135,6 +135,13 @@ ARPEGE_PACKAGES: tuple[tuple[int, int], ...] = ((0, 24), (25, 48), (49, 72), (73
 # The packages are kept under the run's raw directory in a directory of
 # their own, which the converter's listing of the frames does not descend.
 ARPEGE_PACKAGE_DIRNAME = "SP1"
+# The terrain is not in ``SP1``: the second surface package's first object
+# (``SP2``, 0–24 hours) writes it once, at the analysis. It is one record of
+# hundreds in a 400 MB object, so the fetch reads it by Range, walking the
+# messages' heads; a head this long reaches the product definition section
+# of a message on the regular latitude/longitude grid.
+ARPEGE_STATIC_PACKAGE = "SP2"
+ARPEGE_HEAD_BYTES = 512
 # Sources whose records arrive CCSDS packed besides the ECMWF open data:
 # every frame is repacked to grid_simple before GDAL reads it.
 CCSDS_SOURCES = frozenset({"iconeu", "arpege"})
@@ -251,10 +258,19 @@ def icon_eu_object_url(run: GfsRun, forecast_hour: int, variable_id: str) -> str
     """The bzip2-compressed GRIB2 field one ICON-EU input is for one step on
     DWD's server: a directory per cycle hour and parameter, the parameter
     in its DWD spelling (:attr:`~xuebuild.variables.VariableSpec.dwd_param`),
-    single-level fields on the regular latitude/longitude grid."""
-    name = VARIABLES[variable_id].dwd_param
+    single-level fields on the regular latitude/longitude grid. A static
+    field (the terrain, ``HSURF``) is written once per cycle as a
+    time-invariant object named by the run and no step, whatever the
+    hour."""
+    variable = VARIABLES[variable_id]
+    name = variable.dwd_param
     if not name:
         raise DownloadError(f"{variable_id} has no DWD parameter name")
+    if variable.static:
+        return (
+            f"{DWD_BASE_URL}/icon-eu/grib/{run.cycle}/{name.lower()}/"
+            f"icon-eu_europe_regular-lat-lon_time-invariant_{run.id}_{name}.grib2.bz2"
+        )
     return (
         f"{DWD_BASE_URL}/icon-eu/grib/{run.cycle}/{name.lower()}/"
         f"icon-eu_europe_regular-lat-lon_single-level_{run.id}_{forecast_hour:03d}_{name}.grib2.bz2"
@@ -269,16 +285,17 @@ def arpege_package(forecast_hour: int) -> tuple[int, int]:
     raise DownloadError(f"ARPEGE publishes no step {forecast_hour}")
 
 
-def arpege_package_name(run: GfsRun, package: tuple[int, int]) -> str:
+def arpege_package_name(run: GfsRun, package: tuple[int, int], kind: str = ARPEGE_PACKAGE_DIRNAME) -> str:
     first, last = package
     stamp = run.time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return f"arpege__025__SP1__{first:03d}H{last:03d}H__{stamp}.grib2"
+    return f"arpege__025__{kind}__{first:03d}H{last:03d}H__{stamp}.grib2"
 
 
-def arpege_package_url(run: GfsRun, package: tuple[int, int]) -> str:
-    """The ARPEGE 0.25° surface package object of one step range."""
+def arpege_package_url(run: GfsRun, package: tuple[int, int], kind: str = ARPEGE_PACKAGE_DIRNAME) -> str:
+    """The ARPEGE 0.25° surface package object of one step range, of the
+    package ``kind`` (``SP1``, or ``SP2`` for the terrain)."""
     stamp = run.time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return f"{METEOFRANCE_BASE_URL}/pnt/{stamp}/arpege/025/SP1/{arpege_package_name(run, package)}"
+    return f"{METEOFRANCE_BASE_URL}/pnt/{stamp}/arpege/025/{kind}/{arpege_package_name(run, package, kind)}"
 
 
 def wave_object_url(run: GfsRun, forecast_hour: int) -> str:
@@ -2095,9 +2112,13 @@ def _run_is_complete(
         )
     if model == "arpege":
         # A package object appears whole once written: every package the
-        # axis reaches must be there.
-        packages = dict.fromkeys(arpege_package(hour) for hour in source_spec(model).forecast_hours(hours))
-        return all(exists(arpege_package_url(run, package)) for package in packages)
+        # axis reaches must be there, and the one the terrain is read from.
+        spec = source_spec(model)
+        packages = dict.fromkeys(arpege_package(hour) for hour in spec.forecast_hours(hours))
+        urls = [arpege_package_url(run, package) for package in packages]
+        if any(VARIABLES[variable_id].static for variable_id in spec.input_variable_ids):
+            urls.append(arpege_package_url(run, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE))
+        return all(exists(url) for url in urls)
     if model not in ECMWF_OPEN_DATA_MODELS:
         urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
         for companion in source_spec(model).companion_files:
@@ -2485,6 +2506,33 @@ def _arpege_records(
     return records
 
 
+def _arpege_static_record(run: GfsRun, variable_id: str) -> bytes:
+    """The one record of a static field (the terrain) in the cycle's first
+    ``SP2`` package, found by walking the object's messages a head at a
+    time over Range and then read whole: the package is hundreds of
+    megabytes and the record well under one."""
+    from . import grib2
+
+    url = arpege_package_url(run, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE)
+    size = remote_length(url)
+    if size is None:
+        raise DownloadError(f"ARPEGE package is not on the bucket: {url}")
+    variable = VARIABLES[variable_id]
+    offset = 0
+    while offset < size:
+        head = fetch_range(url, ByteRange(offset, min(offset + ARPEGE_HEAD_BYTES, size) - 1))
+        try:
+            length, message = grib2.message_head(head, url)
+        except ConversionError as exc:
+            raise DownloadError(f"could not index the ARPEGE package {url}: {exc}") from exc
+        if length < 20 or offset + length > size:
+            raise DownloadError(f"GRIB2 message length is out of bounds at offset {offset} in {url}")
+        if grib2.matches_variable(variable, message):
+            return fetch_range(url, ByteRange(offset, offset + length - 1))
+        offset += length
+    raise DownloadError(f"no {variable_id} record in {url}")
+
+
 def _download_arpege_payload(
     run: GfsRun,
     forecast_hour: int,
@@ -2498,14 +2546,18 @@ def _download_arpege_payload(
     zero by definition, so the frame takes the first step's record
     restamped to the analysis with every value zero
     (:func:`~xuebuild.eccodescli.zero_accumulation_at_analysis`), the record
-    the converter differences the first step against."""
+    the converter differences the first step against. A static field is
+    not in the packages at all (:func:`_arpege_static_record`)."""
     from .eccodescli import zero_accumulation_at_analysis
 
     wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
     package = destination / ARPEGE_PACKAGE_DIRNAME / arpege_package_name(run, arpege_package(forecast_hour))
     accumulated = {"tp"} if forecast_hour == 0 and spec.accumulated_precipitation else set()
-    present = tuple(variable_id for variable_id in wanted if variable_id not in accumulated)
-    by_id = dict(zip(present, _arpege_records(run, forecast_hour, spec, present, package)))
+    static = {variable_id for variable_id in wanted if VARIABLES[variable_id].static}
+    present = tuple(variable_id for variable_id in wanted if variable_id not in accumulated | static)
+    by_id = dict(zip(present, _arpege_records(run, forecast_hour, spec, present, package))) if present else {}
+    for variable_id in static:
+        by_id[variable_id] = _arpege_static_record(run, variable_id)
     for variable_id in accumulated & set(wanted):
         (first_step,) = _arpege_records(run, 1, spec, (variable_id,), package)
         with tempfile.TemporaryDirectory(prefix="xue-arpege-") as scratch:
