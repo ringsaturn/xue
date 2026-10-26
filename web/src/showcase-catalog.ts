@@ -71,6 +71,9 @@ export interface ShowcaseCase {
   /** The NASA GIBS daily picture the case can show in place of its field
    * (`gibs.ts`), when it names one. */
   imagery?: ShowcaseImagery;
+  /** The case whose `wind10m` this one borrows for its particles and its
+   * fire marks' wind arrow, when it ships none of its own. */
+  wind?: ShowcaseWind;
   /** The camera the case opens on, when it names one: a mountain is looked
    * at from a side, not fitted from above. Absent, the region is framed. */
   view?: ShowcaseView;
@@ -84,6 +87,11 @@ export interface ShowcaseCase {
    * reserve, the route its story follows (`casecontext.ts`) — when it
    * carries them. */
   context?: ShowcaseContext;
+}
+
+export interface ShowcaseWind {
+  /** The lending case's id, looked up in the same catalog. */
+  case: string;
 }
 
 export interface ShowcaseMarkerSource {
@@ -280,6 +288,18 @@ function imageryBlock(input: unknown, id: string): ShowcaseImagery | undefined {
     if (known.length > 0) block.days = Object.fromEntries(known);
   }
   return block;
+}
+
+/** A case's wind block, or undefined when it has none or carries one this
+ * shell cannot read: the case then plays with no wind of its own. */
+function windBlock(input: unknown, id: string): ShowcaseWind | undefined {
+  if (input === undefined) return undefined;
+  const lender = (input as Record<string, unknown> | null)?.case;
+  if (typeof lender !== "string" || !/^[a-z0-9-]+$/.test(lender) || lender === id) {
+    console.warn(`showcase: case ${id} carries a wind block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  return { case: lender };
 }
 
 /** Whether a point lies in a case box; `east < west` crosses the
@@ -535,6 +555,7 @@ function validateCase(input: unknown): ShowcaseCase {
   const radar = radarBlock(value.radar, id);
   const fire = fireBlock(value.fire, id);
   const imagery = imageryBlock(value.imagery, id);
+  const wind = windBlock(value.wind, id);
   const river = riverBlock(value.river, id);
   const context = contextBlock(value.context, id);
   const view = viewBlock(value.view, id);
@@ -577,6 +598,8 @@ function validateCase(input: unknown): ShowcaseCase {
   else delete entry.fire;
   if (imagery) entry.imagery = imagery;
   else delete entry.imagery;
+  if (wind) entry.wind = wind;
+  else delete entry.wind;
   if (river) entry.river = river;
   else delete entry.river;
   if (context) entry.context = context;

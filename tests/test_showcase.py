@@ -17,6 +17,7 @@ from xuebuild.showcase import (
     LOCALES,
     OBSERVATION_ROOT_ENV,
     ShowcaseError,
+    _check_wind_references,
     _grid_extent,
     build_catalog_entry,
     collect_catalog,
@@ -747,6 +748,30 @@ class ImageryTest(unittest.TestCase):
         ):
             with self.subTest(imagery=imagery), self.assertRaises(ShowcaseError):
                 parse_case(case_payload(imagery=imagery))
+
+
+class WindTest(unittest.TestCase):
+    """A case's borrowed wind: another case's id, carried onto the row and
+    held against the catalog."""
+
+    def test_the_definition_carries_it(self) -> None:
+        spec = parse_case(case_payload(wind={"case": "other-case"}))
+        self.assertEqual(spec.wind, {"case": "other-case"})
+        entry, _ = build_entry(wind={"case": "other-case"})
+        self.assertEqual(entry["wind"], {"case": "other-case"})
+
+    def test_a_malformed_block_is_refused(self) -> None:
+        for wind in ({}, {"case": ""}, {"case": "Other Case"}, {"case": "demo-case"}, {"case": "x", "bundle": "u"}, "x"):
+            with self.subTest(wind=wind), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(wind=wind))
+
+    def test_the_named_case_must_ship_the_wind(self) -> None:
+        borrower = {"id": "satellite", "variables": ["ir039"], "wind": {"case": "reanalysis"}}
+        _check_wind_references([borrower, {"id": "reanalysis", "variables": ["tmp2m", "wind10m"]}])
+        with self.assertRaises(ShowcaseError):
+            _check_wind_references([borrower])  # not in the catalog
+        with self.assertRaises(ShowcaseError):
+            _check_wind_references([borrower, {"id": "reanalysis", "variables": ["tmp2m"]}])
 
 
 class ContextTest(unittest.TestCase):
