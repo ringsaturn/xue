@@ -175,10 +175,12 @@ class CaseSpec:
     build`` wrote into the case's directory, relative to it; optionally
     ``color``, one of the case's bundles, whose palette and codebook then
     colour the reaches by their flow in place of the ratio classes."""
-    imagery: dict[str, str] | None = None
+    imagery: dict[str, Any] | None = None
     """The NASA GIBS daily picture the shell offers in place of the case's
     field and opens on (``web/src/gibs.ts``): ``layer``, one of
-    :data:`GIBS_LAYERS`. Nothing is built for it: the tiles come from GIBS."""
+    :data:`GIBS_LAYERS`, and optionally ``days``, UTC dates mapped to the
+    layer whose platform is drawn on that day instead. Nothing is built for
+    it: the tiles come from GIBS."""
     context: dict[str, str] | None = None
     """The reference lines and areas the shell draws over the case
     (:func:`read_context`): ``file``, a GeoJSON file inside the case's
@@ -489,11 +491,37 @@ GIBS_LAYERS = (
 by their ``?gibs=`` spelling."""
 
 
-def _imagery_block(value: object, case_id: str) -> dict[str, str]:
-    """A case's ``imagery`` block: the GIBS picture it opens on."""
-    if not isinstance(value, dict) or set(value) != {"layer"} or value["layer"] not in GIBS_LAYERS:
-        raise ShowcaseError(f"case {case_id}: imagery must be {{layer}}, layer one of {GIBS_LAYERS}")
-    return {"layer": value["layer"]}
+def _imagery_block(value: object, case_id: str) -> dict[str, Any]:
+    """A case's ``imagery`` block: the GIBS picture it opens on, and the
+    UTC days another platform stands in for it (GIBS serves a black picture
+    for a day an orbiter has none)."""
+    if (
+        not isinstance(value, dict)
+        or "layer" not in value
+        or not set(value) <= {"layer", "days"}
+        or value["layer"] not in GIBS_LAYERS
+    ):
+        raise ShowcaseError(f"case {case_id}: imagery must be {{layer, days?}}, layer one of {GIBS_LAYERS}")
+    block: dict[str, Any] = {"layer": value["layer"]}
+    if "days" in value:
+        days = value["days"]
+        if not isinstance(days, dict) or not days:
+            raise ShowcaseError(f"case {case_id}: imagery days must map UTC dates to GIBS layers")
+        for day, layer in days.items():
+            if not isinstance(day, str) or not _is_utc_date(day) or layer not in GIBS_LAYERS:
+                raise ShowcaseError(f"case {case_id}: imagery day {day!r} must be YYYY-MM-DD naming one of {GIBS_LAYERS}")
+        block["days"] = dict(sorted(days.items()))
+    return block
+
+
+def _is_utc_date(value: str) -> bool:
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 
 
 CONTEXT_KINDS = ("border", "protected-area", "river", "stream", "road", "track", "route", "trace", "measure")
@@ -924,7 +952,7 @@ def build_catalog_entry(
     if spec.river:
         entry["river"] = dict(spec.river)
     if spec.imagery:
-        entry["imagery"] = dict(spec.imagery)
+        entry["imagery"] = _imagery_block(spec.imagery, spec.id)
     if spec.markers:
         entry["markers"] = [dict(marker) for marker in spec.markers]
     if spec.context:
@@ -1025,7 +1053,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("radar", dict(spec.radar) if spec.radar else None),
         ("fire", dict(spec.fire) if spec.fire else None),
         ("river", dict(spec.river) if spec.river else None),
-        ("imagery", dict(spec.imagery) if spec.imagery else None),
+        ("imagery", _imagery_block(spec.imagery, spec.id) if spec.imagery else None),
         ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
         ("context", dict(spec.context) if spec.context else None),
         ("view", dict(spec.view) if spec.view else None),
