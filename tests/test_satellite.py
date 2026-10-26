@@ -85,6 +85,7 @@ from xuebuild.satellite.producers import (
     TRUE_COLOR_LOW_CLOUD_DIFFERENCE_K,
     TRUE_COLOR_LOW_CLOUD_WHITE,
     TRUE_COLOR_NIGHT_GROUND,
+    TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE,
     TRUE_COLOR_RAYLEIGH_FADE_DEG,
     TRUE_COLOR_TERMINATOR_DEG,
     TRUE_COLOR_VERSION,
@@ -92,6 +93,7 @@ from xuebuild.satellite.producers import (
     DustRGBProducer,
     TrueColorProducer,
     ViewingGeometry,
+    rayleigh_column_fraction,
     rayleigh_corrected,
     rayleigh_optical_depth,
     true_color_day_weight,
@@ -893,8 +895,8 @@ class FetchTests(TempRoot, unittest.TestCase):
         self.assertEqual(assemble.frame_record(infrared_frame)["resampling"], "bilinear")
         gun = window.slots[0].frames["trueg"]
         packing = assemble.frame_record(gun)
-        self.assertEqual(TRUE_COLOR_VERSION, "3")
-        self.assertEqual(packing["producer"], {"id": "xue", "version": "3"})
+        self.assertEqual(TRUE_COLOR_VERSION, "4")
+        self.assertEqual(packing["producer"], {"id": "xue", "version": "4"})
         self.assertEqual(packing["inputs"], [f"{channel_id}_20260917030000.tif" for channel_id in TRUECOLOR.inputs])
         self.assertNotIn("ancillary", packing)
         # The recipe, step by step, against the producer's frames.
@@ -919,8 +921,9 @@ class FetchTests(TempRoot, unittest.TestCase):
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
         geometry = viewing_geometry(HIMAWARI, SLOT_0300, TILE_GRID)
         np.testing.assert_array_equal(geometry.sun_cosine, cosine)
+        column = rayleigh_column_fraction(np.maximum(planes["vis064"], 0.0) / divisor)
         normalized = {
-            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry)
+            channel_id: rayleigh_corrected(np.maximum(plane, 0.0) / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry, column)
             for channel_id, plane in planes.items()
         }
         green = TRUE_COLOR_HYBRID_GREEN[0] * normalized["vis051"] + TRUE_COLOR_HYBRID_GREEN[1] * normalized["nir086"]
@@ -1064,8 +1067,9 @@ class FetchTests(TempRoot, unittest.TestCase):
         cosine = cos_zen(dusk.replace(tzinfo=None), lon2d, lat2d)
         divisor = np.maximum(cosine, np.cos(np.radians(TRUE_COLOR_ZENITH_LIMIT_DEG)))
         geometry = viewing_geometry(HIMAWARI, dusk, TILE_GRID)
+        column = rayleigh_column_fraction(0.3 / divisor)
         normalized = {
-            channel_id: rayleigh_corrected(0.3 / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry)
+            channel_id: rayleigh_corrected(0.3 / divisor, HIMAWARI.channel(channel_id).wavelength_um, geometry, column)
             for channel_id in ("vis047", "vis051", "vis064", "nir086")
         }
         green = TRUE_COLOR_HYBRID_GREEN[0] * normalized["vis051"] + TRUE_COLOR_HYBRID_GREEN[1] * normalized["nir086"]
@@ -1099,10 +1103,12 @@ class FetchTests(TempRoot, unittest.TestCase):
     def test_the_rayleigh_correction_takes_out_the_molecular_sky(self) -> None:
         """The optical depth is Hansen and Travis's, steep in wavelength;
         the path reflectance is single scattering at the cell's own sun and
-        satellite angles, taken out and divided by the two-way
-        transmittance; on a long slant path the correction fades and is
-        gone from 88° of either zenith, and a cell the sun has left keeps
-        its reflectance exactly."""
+        satellite angles, saturating where the slant path is optically
+        thick, taken out and divided by the two-way transmittance, over the
+        share of the column a bright (cloudy) cell leaves above it; on a
+        long slant path the correction fades and is gone from 88° of either
+        zenith, and a cell the sun has left keeps its reflectance
+        exactly."""
         self.assertAlmostEqual(rayleigh_optical_depth(0.47), 0.1851, places=4)
         self.assertAlmostEqual(rayleigh_optical_depth(0.64), 0.0525, places=4)
         self.assertAlmostEqual(rayleigh_optical_depth(0.86), 0.0159, places=4)
@@ -1117,12 +1123,13 @@ class FetchTests(TempRoot, unittest.TestCase):
                 satellite_azimuth=np.array([0.0]),
             )
 
-        def by_hand(reflectance: float, sun: float, view: float) -> float:
+        def by_hand(reflectance: float, sun: float, view: float, column: float = 1.0) -> float:
             # The sun at right angles to the line of sight: cos Θ = −μs μv.
             mu_sun, mu_view = np.cos(np.radians(sun)), np.cos(np.radians(view))
-            tau = rayleigh_optical_depth(0.47)
-            path = tau * 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * mu_sun * mu_view)
-            return (reflectance - path) / np.exp(-0.5 * tau * (1.0 / mu_sun + 1.0 / mu_view))
+            tau = rayleigh_optical_depth(0.47) * column
+            airmass = 1.0 / mu_sun + 1.0 / mu_view
+            path = 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * (mu_sun + mu_view)) * (1.0 - np.exp(-tau * airmass))
+            return (reflectance - path) / np.exp(-0.5 * tau * airmass)
 
         np.testing.assert_allclose(rayleigh_corrected(np.array([0.2]), 0.47, at(30.0, 40.0, 90.0)), [by_hand(0.2, 30.0, 40.0)], atol=1e-12)
         # Blue loses more than red: the sky is blue.
@@ -1130,6 +1137,20 @@ class FetchTests(TempRoot, unittest.TestCase):
         red = float(0.2 - rayleigh_corrected(np.array([0.2]), 0.64, at(30.0, 40.0, 90.0))[0])
         self.assertGreater(blue, 3.0 * red)
         self.assertGreater(red, 0.0)
+        # The path saturates: near the terminator it is well under the
+        # thin limit τ P / (4 μs μv), which would strip a cloud's blue.
+        # A scene that is the thin-limit sky alone keeps over half of it.
+        mu_sun, mu_view = np.cos(np.radians(69.9)), np.cos(np.radians(66.0))
+        thin = rayleigh_optical_depth(0.444) * 0.75 * (1.0 + (mu_sun * mu_view) ** 2) / (4.0 * mu_sun * mu_view)
+        self.assertGreater(float(rayleigh_corrected(np.array([thin]), 0.444, at(69.9, 66.0, 90.0))[0]), 0.5 * thin)
+        # Over a bright cell only the air above the cloud is taken out: the
+        # whole column to 0.2 of red reflectance, none from 1.0.
+        self.assertEqual(TRUE_COLOR_RAYLEIGH_CLOUD_REFLECTANCE, (0.2, 1.0))
+        np.testing.assert_allclose(rayleigh_column_fraction(np.array([0.0, 0.2, 0.6, 1.0, 1.2, np.nan])), [1.0, 1.0, 0.5, 0.0, 0.0, 1.0])
+        np.testing.assert_allclose(
+            rayleigh_corrected(np.array([0.6]), 0.47, at(30.0, 40.0, 90.0), np.array([0.5])), [by_hand(0.6, 30.0, 40.0, 0.5)], atol=1e-12
+        )
+        np.testing.assert_array_equal(rayleigh_corrected(np.array([0.9]), 0.47, at(30.0, 40.0, 90.0), np.array([0.0])), [0.9])
         # Past 88° of either zenith nothing is taken out; half way through
         # the fade, half of it.
         for sun, view in ((88.0, 40.0), (40.0, 88.0), (95.0, 40.0)):

@@ -227,13 +227,22 @@ fixed order that the tests hold step by step:
    keeps the last degrees of a day from amplifying noise;
 3a. the molecular sky taken out of each reflectance at its band's own
    wavelength λ (`rayleigh_corrected`): `(ρ − ρ_R) / T`, with the single
-   scattering path reflectance `ρ_R = τ × 0.75 (1 + cos² Θ) / (4 μs μv)`,
-   the optical depth `τ = 0.008569 λ⁻⁴ (1 + 0.0113 λ⁻² + 0.00013 λ⁻⁴)`
-   (Hansen and Travis 1974; 0.19 at 0.47 µm, 0.05 at 0.64 µm), the
-   scattering angle `cos Θ = −μs μv − sin θs sin θv cos(φs − φv)` from the
+   scattering path reflectance over a black surface
+   `ρ_R = 0.75 (1 + cos² Θ) / (4 (μs + μv)) × (1 − exp(−τ m))`, the air
+   mass `m = 1/μs + 1/μv`, the optical depth
+   `τ = f × 0.008569 λ⁻⁴ (1 + 0.0113 λ⁻² + 0.00013 λ⁻⁴)`
+   (Hansen and Travis 1974; 0.19 at 0.47 µm, 0.05 at 0.64 µm) times the
+   share `f` of the column above the cell
+   (`rayleigh_column_fraction`): 1 up to a sun-normalised 0.64 µm
+   reflectance of 0.2, 0 from 1.0, linear between, since a cloud top
+   hides the air beneath it (pyspectral's red-band reduction). The
+   attenuated form saturates where the slant path is optically thick;
+   the thin limit `τ P / (4 μs μv)` takes out several times the sky near
+   the terminator and the limb and strips cloud of its blue. The
+   scattering angle is `cos Θ = −μs μv − sin θs sin θv cos(φs − φv)` from the
    sun and the satellite as seen from the cell (pyorbital; the satellite
    over the platform's sub-satellite longitude at 35 786 km), and the
-   two-way transmittance `T = exp(−τ/2 × (1/μs + 1/μv))`, both cosines
+   two-way transmittance is `T = exp(−τ m / 2)`, both cosines
    floored at 85°; faded out linearly between 70° and 88° of the larger of
    the two zeniths, where single scattering overestimates the sky and the
    picture falls back to the uncorrected reflectance;
@@ -311,7 +320,7 @@ The guns are the Dust RGB's shape: three variables of one composite
 bundle, local-use parameters 3 / 192 / **7, 8, 9** on surface 8, the
 guns' codebook (code 0 no data, 0.0 at code 1, 1.0 at code 251), no
 poster, no video, the three-rung ladder. The `producer` block beside each
-is `{"id": "xue", "version": "3"}`: the id names this pipeline, and the
+is `{"id": "xue", "version": "4"}`: the id names this pipeline, and the
 version is the recipe's (`producers.TRUE_COLOR_VERSION`), bumped when a
 constant above changes and never with the package, since a cached slot is
 recomposed when the version it was composed under differs. Numbers 10,
