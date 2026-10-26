@@ -472,7 +472,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
   ones from zoom 5, precipitation gauges from zoom 7), `fire` the NASA
   FIRMS active fires of the 24 h ending at the playhead (sized by fire
   radiative power, red when recent and brown a day old, clustered at low
-  zoom; `docs/fire.md`). Absent, or
+  zoom; `docs/fire.md`; a showcase case's own round instead keeps every
+  detection up to the playhead, the newest satellite pass yellow, the one
+  before red-orange, older ones a dark red stipple, with a white arrow for
+  the mean 10 m wind since the newest pass). Absent, or
   `?stations=off`, draws none — the default, since thousands of marks on a
   world view read as texture rather than data. `sounding`, `airport`,
   `synop`, `surface`, `fires`, `firms`, their plurals, `on` and `all` are accepted

@@ -52,8 +52,10 @@ import {
 } from "./layer";
 import {
   DERIVED_MAX_CODE,
+  decodeTable,
   frontPalette,
   inflowPalette,
+  nearestCell,
   steppedPrecipitationLegend,
   steppedPrecipitationPalette,
   thermalFrontZone,
@@ -183,6 +185,7 @@ import { buildAirportCard, buildSoundingCard, buildSynopCard } from "./stations/
 import { buildFireCard } from "./fire/card";
 import { fetchCaseFireIndex, fetchFireIndex, type LoadedFireIndex } from "./fire/fetch";
 import { FIRE_CLICKABLE_LAYERS, FireLayers, type FireDetection } from "./fire/layer";
+import { FireWindArrow, meanWind } from "./fire/windarrow";
 import {
   fetchAirportIndex,
   fetchAirportStation,
@@ -2088,7 +2091,18 @@ function setComposition(next: ViewComposition): void {
  * either way — the field underneath has to read through the trails, and the
  * particles are there for direction and pace, not for a value. */
 function particleInk(): readonly [number, number, number, number] {
+  // Over a picture — a case's satellite day, a geostationary channel — the
+  // theme's grey strokes vanish into the texture and the cloud; a cyan
+  // reads over green, scar, cloud and the grey IR ramp alike, and is
+  // neither of the fire marks' colours.
+  if (caseImageryOn() || FORECAST_MODELS[selectedModelId].subLongitude !== undefined) return [0.36, 0.86, 1, 0.7];
   return isDark ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
+}
+
+/** The particles' ink for what they run on: the experiment's flow over a
+ * scalar fill, the wind's own otherwise. */
+function refreshParticleInk(): void {
+  windLayer?.setInk(activeSession && !activeSession.vector && composite?.flow ? experimentFlowInk() : particleInk());
 }
 
 /** The ink of the experiment's flow particles over a scalar fill: the
@@ -4596,10 +4610,16 @@ function blendTowardNext(timestamp: number): void {
  * from frame `index` toward `next`; whether the primary's pair was there to
  * blend. The loop exports sample the sweep through this too. */
 function blendFrames(index: number, next: number, weight: number): boolean {
-  // The reaches sweep on the same clock, by valid time on their own axis.
-  if (riverCase && metadata) {
+  // The reaches and a case's fire marks sweep on the same clock, by valid
+  // time on their own axes: a detection appears at its acquisition time.
+  if (metadata && (riverCase || fireLayers)) {
     const from = frameValidTime(index);
-    riverCase.setTime(from + (frameValidTime(next) - from) * weight);
+    const at = from + (frameValidTime(next) - from) * weight;
+    riverCase?.setTime(at);
+    if (fireLayers?.sweep(at)) {
+      fireWind.time = at;
+      syncFireWindArrow();
+    }
   }
   const session = activeSession;
   const slot = primarySlot();
@@ -5090,6 +5110,7 @@ function trySelectFrame(index: number): boolean {
     trySelectVolumeOverlay(index);
     trySelectComposite(index);
     trySelectFireDerived(index);
+    trySelectFireWind(index);
     requestColumnFrame();
     prefetchNext(index);
     return true;
@@ -5366,6 +5387,7 @@ function handleDecodedFrame(
   }
   for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
   for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
+  for (const shown of fireWind.shownKeys) displayedKeys.add(shown);
   for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
   while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
     const oldest = planeCache.keys().next().value;
@@ -5412,6 +5434,7 @@ function handleDecodedFrame(
   if (volumeOverlay.wantedKeys.has(key) && activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
   if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
   if (fireDerived.wantedKeys.has(key) && activeFrameIndex !== null) trySelectFireDerived(activeFrameIndex);
+  if (fireWind.wantedKeys.has(key) && activeFrameIndex !== null) trySelectFireWind(activeFrameIndex);
 }
 
 /** The track's geometry for the axis on screen: which frames carry a tick
@@ -6075,6 +6098,7 @@ function caseImageryOn(): boolean {
 /** Put a case's picture up in place of its field, or take it down. */
 function setCaseImagery(id: string | null): void {
   setImagery(id);
+  refreshParticleInk();
   syncImageryRail();
   syncFillSuppressed();
   syncRail();
@@ -6590,7 +6614,7 @@ function updateVariablePresentation(session: VariableSession): void {
   renderLevelRow();
   // The particle overlay belongs to the vector fields, so its switch appears
   // with them.
-  particlesToggle.hidden = !session.vector && !compositeFlowPublished();
+  particlesToggle.hidden = !session.vector && !compositeFlowPublished() && !fireWind.borrowed;
   // The volume switch belongs to a 2D field on a run that ships a volume.
   syncVolumeTile();
   // The field section follows the field on screen: its tile shows beside
@@ -6943,6 +6967,7 @@ function bindChannel(session: VariableSession, sequence: number): void {
         handleDecodedFrame(session, message as unknown as Parameters<typeof handleDecodedFrame>[1]);
         break;
       case "series":
+        if (acceptFireWindSeries(session, message as unknown as Parameters<typeof acceptFireWindSeries>[1])) break;
         handleProbeSeries(session, message as unknown as Parameters<typeof handleProbeSeries>[1]);
         break;
       case "error": {
@@ -7878,6 +7903,38 @@ let synopLoaded: LoadedSynopIndex | null = null;
  * span rather than whole. */
 let fireLoaded: LoadedFireIndex | null = null;
 let fireLayers: FireLayers | null = null;
+
+/** The wind a case's fire marks are read against (`fire/windarrow.ts`):
+ * the case's own `wind10m`, or the one its `wind` block borrows from
+ * another case — which then also runs the particles over the case's own
+ * fields, on this case's clock. */
+const fireWind: {
+  session: VariableSession | null;
+  borrowed: boolean;
+  /** The case the session was asked for, so a repeat asks nothing. */
+  forCase: string | null;
+  /** Decoded u, v series by cell of the session's grid. */
+  series: Map<number, { u: Float32Array | null; v: Float32Array | null }>;
+  /** Series requests in flight: the cell and the component each fills. */
+  requests: Map<number, { cell: number; component: 0 | 1 }>;
+  /** A borrowed wind's planes not decoded yet for the frame on screen. */
+  wantedKeys: Set<string>;
+  /** Its planes on screen, held from eviction. */
+  shownKeys: string[];
+  arrow: FireWindArrow | null;
+  /** The marks' time: the playhead's, swept between frames on a case. */
+  time: number | null;
+} = {
+  session: null,
+  borrowed: false,
+  forCase: null,
+  series: new Map(),
+  requests: new Map(),
+  wantedKeys: new Set(),
+  shownKeys: [],
+  arrow: null,
+  time: null,
+};
 /** Whether a poll has run at all, so a tab that opened hidden still loads
  * the products once while a later poll on a hidden one does not. */
 let stationsPolled = false;
@@ -7976,8 +8033,196 @@ function applyFireView(draw: boolean): void {
   const before = (map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id;
   fireLayers.ensure(before);
   fireLayers.setInk(document.body.dataset.ground === "dark");
-  fireLayers.setTime(stationTime());
+  // A case's round tells its story: the whole window up to the playhead.
+  fireLayers.setHistory(activeCase !== null);
+  fireLayers.onPassChange = syncFireWindArrow;
+  fireLayers.setTime(fireWind.time ?? stationTime());
   fireLayers.setIndex(draw ? (activeCase !== null ? caseFireLoaded : fireLoaded) : null);
+  fireWind.arrow ??= new FireWindArrow(map);
+  // On top of the map, so its label is placed before the places' and the
+  // marks' and keeps its room.
+  fireWind.arrow.ensure();
+  syncFireWindArrow();
+}
+
+/** Ask for the wind the case's fire marks are read against, once per
+ * case: its own `wind10m`, else the bundle of the case its `wind` block
+ * names, opened beside the case's run like a mosaic member is. */
+function applyFireWind(): void {
+  const showcaseCase = activeCase;
+  const run = manifest;
+  if (!showcaseCase || !run || fireWind.forCase === showcaseCase.id) return;
+  fireWind.forCase = showcaseCase.id;
+  const own = hasBundle(run, "wind10m");
+  const lender = own ? undefined : showcaseCase.wind?.case;
+  if (!own && lender === undefined) return;
+  const sequence = initializeSequence;
+  void (async () => {
+    let member: MosaicMember | null = null;
+    if (lender !== undefined) {
+      const catalog = await fetchCatalog(dataBaseUrl());
+      const other = catalog.cases.find((item) => item.id === lender);
+      if (!other) throw new Error(`case ${lender} is not in the catalog`);
+      const loaded = await fetchCaseManifest(dataBaseUrl(), other);
+      if (sequence !== initializeSequence) return;
+      member = {
+        id: other.modelId,
+        manifest: loaded.manifest,
+        manifestUrl: loaded.manifestUrl,
+        run: other.run,
+        manifestCrc: other.manifestCrc32,
+        band: { start: 0, width: 360 },
+        slot: null,
+        wanted: null,
+      };
+    }
+    const session = await loadVariable("wind10m", sequence, "overlay", member);
+    if (sequence !== initializeSequence) return;
+    fireWind.session = session;
+    fireWind.borrowed = member !== null;
+    if (member) {
+      // The lender's notice joins the credit line (`data-wind-credit`).
+      document.body.dataset.windCredit = member.id;
+      if (activeSession && !activeSession.vector) {
+        particlesToggle.hidden = false;
+        syncRailDensity();
+      }
+      if (activeFrameIndex !== null) trySelectFireWind(activeFrameIndex);
+    }
+    syncFireWindArrow();
+  })().catch((error: unknown) => {
+    if (sequence !== initializeSequence) return;
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    console.warn("fire: case wind unavailable:", error instanceof Error ? error.message : error);
+  });
+}
+
+/** Forget the case's wind: a new dataset. Its session ends with the run's
+ * (or the mosaic members', for a borrowed one). */
+function resetFireWind(): void {
+  fireWind.session = null;
+  fireWind.borrowed = false;
+  fireWind.forCase = null;
+  fireWind.series.clear();
+  fireWind.requests.clear();
+  fireWind.wantedKeys.clear();
+  fireWind.shownKeys = [];
+  fireWind.time = null;
+  fireWind.arrow?.show(null);
+  delete document.body.dataset.windCredit;
+}
+
+/** Run the particles off a borrowed wind for the primary frame at `index`:
+ * the lender's latest frame not later than it, held while its planes
+ * decode. A vector primary runs them off its own planes instead. */
+function trySelectFireWind(index: number): void {
+  const session = fireWind.session;
+  if (!fireWind.borrowed || !session || !layersAdded) return;
+  if (!activeSession || activeSession.vector || !view.particles) {
+    fireWind.shownKeys = [];
+    return;
+  }
+  const offset = memberOffsetForFrame(session, index);
+  if (offset === null) {
+    windLayer?.setVisible(false);
+    fireWind.shownKeys = [];
+    return;
+  }
+  const variables = session.variables.slice(0, 2);
+  if (variables.length < 2) return;
+  const keys = variables.map((variable) => cacheKey(session, variable, offset));
+  const frames = keys.map((key) => planeCache.get(key));
+  let complete = true;
+  for (const [position, frame] of frames.entries()) {
+    if (frame && frame.tiles === null) continue;
+    complete = false;
+    fireWind.wantedKeys.add(keys[position]!);
+    requestDecode(session, variables[position]!, offset);
+  }
+  if (!complete) return;
+  for (const key of keys) fireWind.wantedKeys.delete(key);
+  fireWind.shownKeys = keys;
+  ensureWindLayer();
+  ensureWindGrid(session);
+  refreshParticleInk();
+  windLayer!.setWindPlanes(frames[0]!.plane, frames[1]!.plane);
+  windLayer!.setVisible(true);
+}
+
+/** The case wind's valid times, epoch ms, in the order its series come. */
+function fireWindTimes(session: VariableSession): number[] {
+  const time = session.metadata.time;
+  const unit = axisUnitSeconds(time) * 1000;
+  const base = Date.parse(session.metadata.runTime);
+  return frameOffsets(time).map((offset) => base + offset * unit);
+}
+
+/** The case wind's u, v series at a cell, asked for the first time it is
+ * wanted; null until both components have landed. */
+function fireWindSeries(session: VariableSession, cell: number): { u: Float32Array; v: Float32Array } | null {
+  const entry = fireWind.series.get(cell);
+  if (entry?.u && entry.v) return { u: entry.u, v: entry.v };
+  if (entry || !session.tiles || !ready) return null;
+  fireWind.series.set(cell, { u: null, v: null });
+  const width = session.metadata.grid.width;
+  for (const [component, variable] of session.variables.slice(0, 2).entries()) {
+    const requestId = nextRequestId++;
+    fireWind.requests.set(requestId, { cell, component: component as 0 | 1 });
+    session.worker.postMessage({
+      type: "series",
+      requestId,
+      generation,
+      variableId: variable.numericId,
+      column: cell % width,
+      row: Math.floor(cell / width),
+    });
+  }
+  return null;
+}
+
+/** A series the case wind asked for, decoded and filed; false for one it
+ * did not ask for (the probe's). */
+function acceptFireWindSeries(
+  session: VariableSession,
+  message: { requestId?: number; generation: number; variableId: number; buffer: ArrayBuffer },
+): boolean {
+  const request = typeof message.requestId === "number" ? fireWind.requests.get(message.requestId) : undefined;
+  if (!request) return false;
+  fireWind.requests.delete(message.requestId!);
+  const variable = session.variables.find((item) => item.numericId === message.variableId);
+  const entry = fireWind.series.get(request.cell);
+  if (session !== fireWind.session || message.generation !== generation || !variable || !entry) return true;
+  const table = decodeTable(variable);
+  const codes = new Uint8Array(message.buffer);
+  const values = new Float32Array(codes.length);
+  for (let i = 0; i < codes.length; i++) values[i] = table[codes[i]!]!;
+  if (request.component === 0) entry.u = values;
+  else entry.v = values;
+  syncFireWindArrow();
+  return true;
+}
+
+/** Draw the mean wind at the newest pass, from its start to the marks'
+ * time, or nothing without a pass, a wind or the fire marks. */
+function syncFireWindArrow(): void {
+  const arrow = fireWind.arrow;
+  if (!arrow) return;
+  const pass = fireLayers?.latestPass() ?? null;
+  const session = fireWind.session;
+  if (!pass || !session) {
+    arrow.show(null);
+    return;
+  }
+  const cell = nearestCell(geoGrid(session.metadata), pass.center[0], pass.center[1]);
+  if (cell < 0) {
+    arrow.show(null);
+    return;
+  }
+  const series = fireWindSeries(session, cell);
+  // Whatever is drawn stays until the series lands.
+  if (!series) return;
+  const mean = meanWind(fireWindTimes(session), series.u, series.v, pass.start, fireWind.time ?? stationTime());
+  arrow.show(mean ? { center: pass.center, u: mean.u, v: mean.v, from: pass.start } : null);
 }
 
 /** The valid time the marks are dimmed against: the playhead's, or now
@@ -7989,7 +8234,9 @@ function stationTime(): number {
 
 function syncStationTime(): void {
   syncRadarTime();
-  fireLayers?.setTime(stationTime());
+  fireWind.time = stationTime();
+  fireLayers?.setTime(fireWind.time);
+  syncFireWindArrow();
   caseMarkers?.setTime(stationTime());
   if (!stationLayers) return;
   stationLayers.setTime(stationTime());
@@ -8760,6 +9007,12 @@ function setParticlesEnabled(next: boolean): void {
   const session = activeSession;
   if (!session) return;
   if (!session.vector) {
+    // Over a case's own fields the particles run off the wind it borrows.
+    if (fireWind.borrowed) {
+      if (!next) windLayer?.setVisible(false);
+      else if (activeFrameIndex !== null) trySelectFireWind(activeFrameIndex);
+      return;
+    }
     // Over a scalar fill the particles are the experiment's flow, when it
     // has one: a visibility flip, and the frame's planes handed over again.
     if (!composite?.flow) return;
@@ -9030,6 +9283,7 @@ function applyVariable(session: VariableSession): void {
   applyMosaicMembers();
   applyComposite();
   applyFireDerived();
+  applyFireWind();
   applyRadarView();
   syncLapse();
   updateVariablePresentation(session);
@@ -9975,7 +10229,7 @@ function applyComposite(): void {
         if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
         else requestCompositeDecode(session, index);
         if (activeSession) {
-          particlesToggle.hidden = !activeSession.vector && !compositeFlowPublished();
+          particlesToggle.hidden = !activeSession.vector && !compositeFlowPublished() && !fireWind.borrowed;
           syncRailDensity();
         }
       })
@@ -10426,6 +10680,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   windLayer?.setVisible(false);
   resetComposite();
   resetFireDerived();
+  resetFireWind();
   detachVolumeOverlay();
   particlesToggle.hidden = true;
   volumeTile.hidden = true;
@@ -10498,6 +10753,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       else if (!requestedImageryFromUrl && !caseImageryApplied) view.imagery = found.imagery.layer;
       caseImageryApplied = true;
       syncGibs();
+      refreshParticleInk();
       syncImageryRail();
       syncFillSuppressed();
       // Frame the event before any byte lands, so the first painted plane
@@ -10731,7 +10987,7 @@ retryButton.addEventListener("click", () => void initialize());
  * its decoded frames, its playhead — is untouched. */
 function applyAppearance(): void {
   syncBasemapStyle();
-  windLayer?.setInk(activeSession && !activeSession.vector && composite?.flow ? experimentFlowInk() : particleInk());
+  refreshParticleInk();
   for (const slot of [slots.fill, slots.lines]) {
     const session = slot.session;
     if (!session || session.vector) continue;
