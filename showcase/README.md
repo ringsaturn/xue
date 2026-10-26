@@ -153,7 +153,10 @@ retires a case.
    A case may carry **active fires** over its axis: an optional `fire`
    block names a fire round built into the case's directory
    ([`docs/fire.md`](../docs/fire.md)), which the viewer draws in place of
-   the live product, switched on, the 24 hours before the playhead.
+   the live product, switched on: every detection from the round's start up
+   to the playhead, the newest overpass and the one before it set apart
+   from the older ground, with the mean wind since the newest pass drawn
+   from it when the case has a wind (its own `wind10m`, or a borrowed one).
 
    ```json
    "fire": {"window": "fire/index.json"}

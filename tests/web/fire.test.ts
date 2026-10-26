@@ -9,8 +9,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchFireLines, sensorSpan, splitLines, type LoadedFireIndex } from "../../web/src/fire/fetch";
 import {
   FIRE_SPAN_HOURS,
+  PASS_GAP_MS,
   fetchSpan,
   fireFeatures,
+  latestNotAfter,
+  passColorExpression,
+  passTimeline,
   shownSpan,
   spanCovers,
 } from "../../web/src/fire/layer";
@@ -182,6 +186,51 @@ describe("the span a playhead reads", () => {
     expect(all.features[0]!.geometry.coordinates).toEqual([119, 48]);
     expect(all.features[2]!.properties).toMatchObject({ sensor: 0, frp: 3, dn: "D", conf: "n" });
     expect(fireFeatures([{ sensor: 0, line: parsed }], (H0 + 60) * 1000, (H0 + HOUR) * 1000).features).toHaveLength(2);
+  });
+});
+
+describe("a case's passes", () => {
+  /** One detection line per time in `times` (epoch s, on whole minutes). */
+  function at(times: number[]) {
+    return times.map((time) => {
+      const hour = Math.floor(time / HOUR) * HOUR;
+      return { sensor: 0, line: parseFireLine({ ...line("viirs-snpp", hour, 1), t: [time - hour] }) };
+    });
+  }
+
+  it("groups detections minutes apart into one pass and half a day apart into the next", () => {
+    const day = [H0, H0 + 36 * 60, H0 + 2 * HOUR];
+    const night = [H0 + 13 * HOUR, H0 + 13 * HOUR + 40 * 60];
+    const timeline = passTimeline(at([...night, ...day, H0]));
+    expect(timeline.times).toEqual([...day, ...night].map((time) => time * 1000));
+    expect(timeline.passes).toEqual([0, 0, 0, 1, 1]);
+  });
+
+  it("splits at a gap just past the pass gap, not at one just under it", () => {
+    const gap = PASS_GAP_MS / 1000;
+    expect(passTimeline(at([H0, H0 + gap])).passes).toEqual([0, 0]);
+    expect(passTimeline(at([H0, H0 + gap + 60])).passes).toEqual([0, 1]);
+  });
+
+  it("finds the latest detection not after the playhead", () => {
+    const times = [10, 20, 30];
+    expect(latestNotAfter(times, 5)).toBe(-1);
+    expect(latestNotAfter(times, 20)).toBe(1);
+    expect(latestNotAfter(times, 29)).toBe(1);
+    expect(latestNotAfter(times, 99)).toBe(2);
+  });
+
+  it("tags each feature with its pass and colors the two newest apart from the scar", () => {
+    const features = fireFeatures(at([H0, H0 + 13 * HOUR]), 0, Number.MAX_SAFE_INTEGER, (time) =>
+      time < (H0 + HOUR) * 1000 ? 0 : 1,
+    );
+    expect(features.features.map((feature) => feature.properties!.pass)).toEqual([0, 1]);
+    expect(fireFeatures(at([H0]), 0, Number.MAX_SAFE_INTEGER).features[0]!.properties!.pass).toBe(-1);
+    const expression = passColorExpression(4, "pass", "#333333") as unknown[];
+    expect(expression[0]).toBe("case");
+    expect(expression.at(-1)).toBe("#333333");
+    expect(JSON.stringify(expression)).toContain(",4]");
+    expect(JSON.stringify(expression)).toContain(",3]");
   });
 });
 
