@@ -209,6 +209,17 @@ retires a case.
    on that day instead, in whichever colour the viewer has up. A shell that
    does not know `days` draws the case's own platform every day.
 
+   A case that ships no wind of its own may **borrow** another case's:
+   `wind` names that case, which must be in the same catalog and ship
+   `wind10m`. The viewer reads it on this case's clock (each frame takes the
+   other case's latest wind not later than it) for the particles and for
+   the wind arrow over the fire marks; a shell that does not know the block
+   plays the case without.
+
+   ```json
+   "wind": {"case": "arxan-fire-2026"}
+   ```
+
    A case may name the **camera** the viewer opens it on with an optional
    `view` block, carried onto the catalog row as written: `center` as
    `[lon, lat]` and `zoom` (0–22), optionally `pitch` (0–85), `bearing`
@@ -295,7 +306,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, river, imagery, context, markers, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, river, imagery, wind, context, markers, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.

@@ -181,6 +181,11 @@ class CaseSpec:
     :data:`GIBS_LAYERS`, and optionally ``days``, UTC dates mapped to the
     layer whose platform is drawn on that day instead. Nothing is built for
     it: the tiles come from GIBS."""
+    wind: dict[str, str] | None = None
+    """The wind the shell runs its particles and the fire marks' wind arrow
+    off when the case ships none of its own: ``case``, the id of another
+    case whose ``wind10m`` is read on this case's clock (a satellite window
+    borrowing the reanalysis of the same event)."""
     context: dict[str, str] | None = None
     """The reference lines and areas the shell draws over the case
     (:func:`read_context`): ``file``, a GeoJSON file inside the case's
@@ -377,6 +382,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     if view is not None:
         view = _view_block(view, case_id, ordered)
 
+    wind = payload.get("wind")
+    if wind is not None:
+        wind = _wind_block(wind, case_id)
+
     context = payload.get("context")
     if context is not None:
         context = _context_block(context, case_id)
@@ -405,6 +414,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         fire=fire,
         river=river,
         imagery=imagery,
+        wind=wind,
         context=context,
         markers=tuple(markers),
         view=view,
@@ -512,6 +522,23 @@ def _imagery_block(value: object, case_id: str) -> dict[str, Any]:
                 raise ShowcaseError(f"case {case_id}: imagery day {day!r} must be YYYY-MM-DD naming one of {GIBS_LAYERS}")
         block["days"] = dict(sorted(days.items()))
     return block
+
+
+WIND_BUNDLE = "wind10m"
+"""The bundle a case's ``wind`` block borrows from the case it names."""
+
+
+def _wind_block(value: object, case_id: str) -> dict[str, str]:
+    """A case's ``wind`` block: the other case whose ``wind10m`` it borrows.
+    That the case exists and ships the bundle is checked with the catalog."""
+    if not isinstance(value, dict) or set(value) != {"case"}:
+        raise ShowcaseError(f"case {case_id}: wind must be {{case}}")
+    other = value["case"]
+    if not isinstance(other, str) or not other or set(other) - _ID_CHARACTERS:
+        raise ShowcaseError(f"case {case_id}: wind.case must be a case id")
+    if other == case_id:
+        raise ShowcaseError(f"case {case_id}: wind.case names the case itself")
+    return {"case": other}
 
 
 def _is_utc_date(value: str) -> bool:
@@ -953,6 +980,8 @@ def build_catalog_entry(
         entry["river"] = dict(spec.river)
     if spec.imagery:
         entry["imagery"] = _imagery_block(spec.imagery, spec.id)
+    if spec.wind:
+        entry["wind"] = dict(spec.wind)
     if spec.markers:
         entry["markers"] = [dict(marker) for marker in spec.markers]
     if spec.context:
@@ -997,6 +1026,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _river_block(entry["river"], entry["id"], variables)
     if "imagery" in entry:
         _imagery_block(entry["imagery"], entry["id"])
+    if "wind" in entry:
+        _wind_block(entry["wind"], entry["id"])
     if "view" in entry:
         _view_block(entry["view"], entry["id"], variables)
     if "markers" in entry:
@@ -1054,6 +1085,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("fire", dict(spec.fire) if spec.fire else None),
         ("river", dict(spec.river) if spec.river else None),
         ("imagery", _imagery_block(spec.imagery, spec.id) if spec.imagery else None),
+        ("wind", dict(spec.wind) if spec.wind else None),
         ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
         ("context", dict(spec.context) if spec.context else None),
         ("view", dict(spec.view) if spec.view else None),
@@ -1105,12 +1137,27 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
         if "context" in entry:
             entry["context"] = _catalog_context(output_root, entry)
         entries.append(entry)
+    _check_wind_references(entries)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "generatedAt": iso_z(datetime.now(UTC)),
         "cases": entries,
     }
+
+
+def _check_wind_references(entries: Sequence[dict[str, Any]]) -> None:
+    """Every ``wind`` block names a case in the same catalog that ships the
+    bundle it borrows, so the shell never chases a row that is not there."""
+    variables = {entry["id"]: entry["variables"] for entry in entries}
+    for entry in entries:
+        other = entry.get("wind", {}).get("case")
+        if other is None:
+            continue
+        if other not in variables:
+            raise ShowcaseError(f"case {entry['id']} borrows its wind from {other}, which is not in the catalog")
+        if WIND_BUNDLE not in variables[other]:
+            raise ShowcaseError(f"case {entry['id']} borrows its wind from {other}, which ships no {WIND_BUNDLE}")
 
 
 def _catalog_radar(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:

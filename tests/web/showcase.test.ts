@@ -205,6 +205,22 @@ describe("showcase catalog", () => {
     warn.mockRestore();
   });
 
+  it("reads the case a case borrows its wind from, and drops a block it cannot read", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({ wind: { case: "arxan-fire-2026" } }),
+      ]),
+    );
+    expect(catalog.cases[0]!.wind).toEqual({ case: "arxan-fire-2026" });
+    for (const wind of [{ case: "Not A Slug" }, { case: "zhengzhou-2021" }, { bundle: "wind10m" }]) {
+      const refused = validateCatalog(catalogFixture([caseFixture({ wind })]));
+      expect(refused.cases).toHaveLength(1);
+      expect(refused.cases[0]!.wind).toBeUndefined();
+    }
+    warn.mockRestore();
+  });
+
   it("reads a case's markers, the time as epoch ms", () => {
     const marker = {
       id: "ignition",
