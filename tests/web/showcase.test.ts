@@ -181,6 +181,17 @@ describe("showcase catalog", () => {
     expect(catalog.cases[0]!.imagery).toEqual({ layer: "noaa21-fc" });
   });
 
+  it("reads a picture's stand-in days, dropping a day it cannot read", () => {
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          imagery: { layer: "noaa21-fc", days: { "2026-10-13": "terra-721", "2026-10-14": "goes", "13 Oct": "aqua" } },
+        }),
+      ]),
+    );
+    expect(catalog.cases[0]!.imagery).toEqual({ layer: "noaa21-fc", days: { "2026-10-13": "terra-721" } });
+  });
+
   it("ignores a fire or imagery block it cannot read, keeping the case", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const catalog = validateCatalog(

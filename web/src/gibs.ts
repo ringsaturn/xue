@@ -80,6 +80,19 @@ export function gibsDate(validMs: number, nowMs: number): string {
   return new Date(Math.min(validMs, nowMs)).toISOString().slice(0, 10);
 }
 
+/** The picture drawn on `date` for `layer`: the platform a case names for
+ * that day (GIBS serves a black picture for a day an orbiter has none), in
+ * the colour the viewer chose; `layer` itself on every other day. */
+export function gibsLayerOnDay(
+  layer: GibsLayer,
+  date: string,
+  days: Readonly<Record<string, string>> | undefined,
+): GibsLayer {
+  const standIn = gibsLayer(days?.[date] ?? null);
+  if (standIn === null) return layer;
+  return gibsLayerFor(standIn.platform, layer.falseColor) ?? layer;
+}
+
 /** The XYZ tile template of one layer on one day. */
 export function gibsTileUrl(layer: GibsLayer, date: string): string {
   return (

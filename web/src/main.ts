@@ -60,7 +60,7 @@ import {
   warmMoistInflow,
 } from "./composite";
 import { fireWeatherAlert, fireWeatherAlertPalette, fosbergPalette, fosbergPlane } from "./firewx";
-import { GIBS_PLATFORM_GLYPH, GIBS_PLATFORMS, GibsImagery, gibsDate, gibsDays, gibsLayer, gibsLayerFor } from "./gibs";
+import { GIBS_PLATFORM_GLYPH, GIBS_PLATFORMS, GibsImagery, gibsDate, gibsDays, gibsLayer, gibsLayerFor, gibsLayerOnDay } from "./gibs";
 import { hotspotPalette, hotspots } from "./hotspot";
 import {
   FORECAST_MODEL_IDS,
@@ -6238,7 +6238,8 @@ function syncGibs(): void {
   gibsImagery ??= new GibsImagery(map);
   const fill = slots.fill.layer.id;
   const before = map.getLayer(fill) ? fill : map.getLayer(FORECAST_ANCHOR_LAYER) ? FORECAST_ANCHOR_LAYER : undefined;
-  gibsImagery.show(layer, gibsDate(stationTime(), Date.now()), before);
+  const date = gibsDate(stationTime(), Date.now());
+  gibsImagery.show(layer && gibsLayerOnDay(layer, date, activeCase?.imagery?.days), date, before);
 }
 
 /** A rail section with nothing to show is hidden whole, and the rule
