@@ -1566,8 +1566,10 @@ SOURCES: dict[str, SourceSpec] = {
     # AIFS writes, under the same alternate) de-accumulated into the rate,
     # the 10 m wind pair, the sea level pressure, ``VMAX_10M`` (the maximum
     # gust over the hour or three hours ending at the step, ECMWF's gust
-    # alternate; an empty interval at the analysis) and ``CLCT`` (the total
-    # cloud cover on the ground surface in percent, AIFS's alternate).
+    # alternate; an empty interval at the analysis), ``CLCT`` (the total
+    # cloud cover on the ground surface in percent, AIFS's alternate) and the
+    # terrain ``HSURF`` (the geometric height 0/3/6 in metres, one
+    # time-invariant object per cycle).
     "iconeu": SourceSpec(
         id="iconeu",
         manifest_model="ICON-EU",
@@ -1575,11 +1577,11 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest-iconeu.json",
         # Hourly through 78 hours, three-hourly to 120: 93 frames.
         steps=((78, 1), (120, 3)),
-        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"),
+        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc", "orog"),
         accumulated_precipitation=True,
         optional_at_analysis=("gust",),
         statistical_processes=(("prate", 0), ("gust", 2)),
-        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc"),
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog"),
         bundle_vector_ids=("wind10m",),
         production_grid=(1377, 657),
         # 81 x 73 cells (about 5° x 4.6°) divides the grid exactly into
@@ -1601,7 +1603,9 @@ SOURCES: dict[str, SourceSpec] = {
     # at the analysis, where a run total is zero by definition, so the fetch
     # writes that zero record for the converter to difference the first step
     # against; the gust is the maximum over the hour ending at each step, and
-    # the total cloud cover is the WMO 0/6/1 on the ground surface.
+    # the total cloud cover is the WMO 0/6/1 on the ground surface. The
+    # terrain (the geometric height 0/3/6 in metres) is not in ``SP1``: the
+    # fetch reads its one record out of the first ``SP2`` package by Range.
     "arpege": SourceSpec(
         id="arpege",
         manifest_model="ARPEGE",
@@ -1609,11 +1613,11 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest-arpege.json",
         # Hourly through 48 hours, three-hourly to 102: 67 frames.
         steps=((48, 1), (102, 3)),
-        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"),
+        input_variable_ids=("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc", "orog"),
         accumulated_precipitation=True,
         optional_at_analysis=("gust",),
         statistical_processes=(("prate", 0), ("gust", 2)),
-        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc"),
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog"),
         bundle_vector_ids=("wind10m",),
         video=False,
     ),

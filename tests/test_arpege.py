@@ -8,17 +8,20 @@ GRIB2 identities and valid times.
 Nothing is new to the encoders: the records are matched under existing
 identities and alternates (the run total as AIFS's WMO 0/1/52 in kg/m²,
 the hourly maximum gust as ECMWF's 10 m alternate, the cloud cover as
-AIFS's 0/6/1 on the ground surface). The packages carry no precipitation
+AIFS's 0/6/1 on the ground surface, the terrain as the geometric height
+0/3/6 in metres under the orography's alternate). The packages carry no precipitation
 total at the analysis; the fetch writes the zero a run total is there, so
 the converter differences the first step against it and the first hour's
-rate is that hour's total rather than nothing.
+rate is that hour's total rather than nothing. The terrain is in none of
+the ``SP1`` packages: the fetch reads its one record out of the first
+``SP2`` package by Range, walking the messages' heads.
 
 ``tests/fixtures/arpege.2026102512.f000.crop.grib2`` and ``f001`` are an
 80 x 80 cell window from 2°E to 21.75°E and 30.25°N to 50°N (France's
 Mediterranean coast, the Alps, Italy and the central Mediterranean) of
 the analysis and the first step of the 2026-10-25 12Z cycle, every record
-the source fetches in source order: six at the analysis, the zero total
-among them and no gust, and seven at the step.
+the source fetches in source order: seven at the analysis, the zero total
+among them, the terrain last and no gust, and seven at the step.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest import mock
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
 from xuebuild import fetch, grib2, quantize
@@ -37,12 +41,14 @@ from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ARPEGE_PACKAGES,
+    ARPEGE_STATIC_PACKAGE,
     _run_is_complete,
     arpege_package,
     arpege_package_url,
     model_object_url,
     resolve_run,
 )
+from xuebuild.idx import ByteRange
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
 from xuebuild.stac import prose_document
@@ -62,8 +68,8 @@ def tearDownModule() -> None:
 
 class SourceRegistryTests(unittest.TestCase):
     def test_the_basic_set(self) -> None:
-        self.assertEqual(published_bundle_ids(ARPEGE), ("tmp2m", "prate", "prmsl", "gust", "tcdc", "wind10m"))
-        self.assertEqual(ARPEGE.input_variable_ids, ("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"))
+        self.assertEqual(published_bundle_ids(ARPEGE), ("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog", "wind10m"))
+        self.assertEqual(ARPEGE.input_variable_ids, ("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc", "orog"))
         self.assertTrue(ARPEGE.accumulated_precipitation)
         # The total is written at the analysis by the fetch; only the gust
         # is absent there.
@@ -106,6 +112,11 @@ class FetchTests(unittest.TestCase):
             "arpege__025__SP1__049H072H__2026-10-25T12:00:00Z.grib2",
         )
         self.assertEqual(model_object_url(RUN, 51, "arpege"), arpege_package_url(RUN, (49, 72)))
+        self.assertEqual(
+            arpege_package_url(RUN, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE),
+            "https://meteofrance-pnt.s3.rbx.io.cloud.ovh.net/pnt/2026-10-25T12:00:00Z/arpege/025/SP2/"
+            "arpege__025__SP2__000H024H__2026-10-25T12:00:00Z.grib2",
+        )
 
     def test_a_run_is_complete_with_every_package_its_axis_reaches(self) -> None:
         probed: list[str] = []
@@ -114,12 +125,14 @@ class FetchTests(unittest.TestCase):
             probed.append(url)
             return True
 
+        # The four SP1 packages and the SP2 package the terrain is read from.
         self.assertTrue(_run_is_complete(RUN, 102, "arpege", exists))
-        self.assertEqual(len(probed), 4)
+        self.assertEqual(len(probed), 5)
         probed.clear()
         self.assertTrue(_run_is_complete(RUN, 24, "arpege", exists))
-        self.assertEqual(len(probed), 1)
+        self.assertEqual(len(probed), 2)
         self.assertFalse(_run_is_complete(RUN, 102, "arpege", lambda url: "073H102H" not in url))
+        self.assertFalse(_run_is_complete(RUN, 102, "arpege", lambda url: "/SP2/" not in url))
 
     def test_latest_walks_back_to_a_complete_cycle(self) -> None:
         now = datetime(2026, 10, 25, 10, 30, tzinfo=UTC)
@@ -158,14 +171,44 @@ class FetchTests(unittest.TestCase):
         package.parent.mkdir()
         package.write_bytes(b"".join(path.read_bytes() for path in FIXTURE_FRAMES))
         frame = scratch / "frame.grib2"
-        frame.write_bytes(fetch._download_arpege_payload(RUN, 0, ARPEGE, scratch))
+        # The terrain is read off another package (the test below).
+        wanted = tuple(variable_id for variable_id in ARPEGE.input_variable_ids if variable_id != "orog")
+        frame.write_bytes(fetch._download_arpege_payload(RUN, 0, ARPEGE, scratch, wanted))
         messages = grib2.index_messages(frame)
-        frames = grib2.inspect_grib_fast(frame, ARPEGE.input_variable_ids, optional_ids=("gust",))
-        self.assertEqual(sorted(frames), sorted(ARPEGE.input_variable_ids[:-2] + ("tcdc",)))
+        frames = grib2.inspect_grib_fast(frame, wanted, optional_ids=("gust",))
+        self.assertEqual(sorted(frames), sorted(("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "tcdc")))
         self.assertEqual([frames[variable_id].band for variable_id in ("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "tcdc")], list(range(1, 7)))
         tp = messages[frames["tp"].band - 1]
         self.assertEqual((tp.parameter_number, tp.statistical_process), (52, 1))
         self.assertEqual(tp.valid_time, RUN.time, "restamped to the analysis")
+
+    def test_the_terrain_is_read_by_range_out_of_the_sp2_package(self) -> None:
+        # The analysis and the step joined, the terrain last, stand in for
+        # the SP2 object: the walk reads one head per message up to the
+        # terrain's, then that record whole.
+        analysis = FIXTURE_FRAMES[0].read_bytes()
+        offset, length = grib2.message_spans(FIXTURE_FRAMES[0])[-1]
+        terrain = analysis[offset : offset + length]
+        body = FIXTURE_FRAMES[1].read_bytes() + analysis
+        url = arpege_package_url(RUN, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE)
+        asked: list[ByteRange] = []
+
+        def fetch_range(requested: str, byte_range: ByteRange) -> bytes:
+            self.assertEqual(requested, url)
+            asked.append(byte_range)
+            return body[byte_range.start : byte_range.end + 1]
+
+        with (
+            mock.patch.object(fetch, "remote_length", lambda requested: len(body)),
+            mock.patch.object(fetch, "fetch_range", fetch_range),
+        ):
+            self.assertEqual(fetch._arpege_static_record(RUN, "orog"), terrain)
+            # A head per message before the terrain's, its own, and the record.
+            self.assertEqual(len(asked), len(grib2.message_spans(FIXTURE_FRAMES[1])) + len(grib2.message_spans(FIXTURE_FRAMES[0])) + 1)
+            self.assertEqual((asked[-1].start, asked[-1].length), (len(body) - length, length))
+            body = FIXTURE_FRAMES[1].read_bytes()
+            with self.assertRaises(DownloadError):
+                fetch._arpege_static_record(RUN, "orog")
 
     def test_message_spans_tile_the_file(self) -> None:
         spans = grib2.message_spans(FIXTURE_FRAMES[1])
@@ -178,8 +221,8 @@ class FetchTests(unittest.TestCase):
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path, expected in zip(FIXTURE_FRAMES, (6, 7)):
-            frames = grib2.inspect_grib_fast(path, ARPEGE.input_variable_ids, optional_ids=("gust",))
+        for path, expected in zip(FIXTURE_FRAMES, (7, 7)):
+            frames = grib2.inspect_grib_fast(path, ARPEGE.input_variable_ids, optional_ids=("gust", "orog"))
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in ARPEGE.input_variable_ids if variable_id in frames]
             self.assertEqual([frames[variable_id].band for variable_id in present], list(range(1, expected + 1)))
@@ -191,9 +234,16 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual((tp.parameter_number, tp.statistical_process), (52, 1))
         self.assertEqual(tp.valid_time, tp.reference_time)
 
+    def test_the_terrain_is_the_geometric_height_in_metres(self) -> None:
+        by_band = {message.band: message for message in grib2.index_messages(FIXTURE_FRAMES[0])}
+        terrain = grib2.inspect_grib_fast(FIXTURE_FRAMES[0], ("orog",))["orog"]
+        message = by_band[terrain.band]
+        self.assertEqual((message.parameter_category, message.parameter_number, message.level_type), (3, 6, 1))
+        self.assertEqual(terrain.unit, "m")
+
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        assert_gdalinfo_agrees(self, ((path, ARPEGE.input_variable_ids, ("gust",)) for path in FIXTURE_FRAMES))
+        assert_gdalinfo_agrees(self, ((path, ARPEGE.input_variable_ids, ("gust", "orog")) for path in FIXTURE_FRAMES))
 
 
 class ConversionTests(unittest.TestCase):
@@ -228,6 +278,16 @@ class ConversionTests(unittest.TestCase):
         metadata = read_bundle(self.output / "gust.xue").metadata
         self.assertEqual(metadata["time"]["firstFrameOffset"], 1)
         self.assertEqual(metadata["variables"][0]["parameter"]["typeOfStatisticalProcessing"], 2)
+
+    def test_the_terrain_is_one_frame_in_metres(self) -> None:
+        bundle = read_bundle(self.output / "orog.xue")
+        self.assertEqual(bundle.metadata["time"]["frameCount"], 1)
+        heights = quantize.PROFILES["quality"]["orog"].decode(bundle.decode_plane(1, 0))
+        # The window holds the Mediterranean and the Alps: sea level within
+        # a codebook step, and the model's Alps well above 2 km.
+        self.assertLess(float(heights.min()), 40.0)
+        self.assertGreater(float(heights.max()), 2000.0)
+        self.assertLess(float(heights.max()), 4810.0)
 
 
 class NativeParityTests(ParityCase, unittest.TestCase):

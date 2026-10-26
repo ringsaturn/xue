@@ -1643,7 +1643,7 @@
         "ecmwfParam": "z",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
-        "dwdParam": "",
+        "dwdParam": "HSURF",
         "mrmsProduct": "",
         "gdalUnit": "gpm",
         "statistical": null,
@@ -1657,13 +1657,23 @@
             "levelValue": null,
             "statistical": null,
             "gdalUnit": "(m^2)/(s^2)"
+          },
+          {
+            "discipline": 0,
+            "category": 3,
+            "number": 6,
+            "levelType": 1,
+            "levelValue": null,
+            "statistical": null,
+            "gdalUnit": "m"
           }
         ],
         "gdal": [
           {
             "rule": "surface",
             "elements": [
-              "HGT"
+              "HGT",
+              "DIST"
             ]
           },
           {
@@ -19781,7 +19791,8 @@
         "vgrd10m",
         "prmsl",
         "gust",
-        "tcdc"
+        "tcdc",
+        "orog"
       ],
       "accumulatedPrecipitation": true,
       "companionFiles": [],
@@ -19812,7 +19823,8 @@
         "prate",
         "prmsl",
         "gust",
-        "tcdc"
+        "tcdc",
+        "orog"
       ],
       "coreBundleIds": [
         "tmp2m",
@@ -19871,7 +19883,8 @@
         "vgrd10m",
         "prmsl",
         "gust",
-        "tcdc"
+        "tcdc",
+        "orog"
       ],
       "accumulatedPrecipitation": true,
       "companionFiles": [],
@@ -19902,7 +19915,8 @@
         "prate",
         "prmsl",
         "gust",
-        "tcdc"
+        "tcdc",
+        "orog"
       ],
       "coreBundleIds": [
         "tmp2m",

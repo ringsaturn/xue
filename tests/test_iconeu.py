@@ -9,14 +9,15 @@ Nothing is new to the encoders: every record is matched under an
 existing identity or alternate — the run-total ``TOT_PREC`` is AIFS's
 WMO 0/1/52 accumulation in kg/m², ``VMAX_10M`` ECMWF's interval-maximum
 gust on the 10 m surface, ``CLCT`` AIFS's 0/6/1 in percent on the ground
-surface — and the 0.0625° step is a power of two the regional snap
+surface, the terrain ``HSURF`` the geometric height 0/3/6 in metres under
+the orography's alternate — and the 0.0625° step is a power of two the regional snap
 passes through unchanged.
 
 ``tests/fixtures/iconeu.2026102512.f000.crop.grib2`` and ``f001`` are an
 80 x 80 cell window over the western Alps and the Ligurian Sea (6.5–11.4°E,
 43.1–48.0°N) of the analysis and the first step of the 2026-10-25 12Z
-cycle, every record the source fetches in source order: six at the
-analysis (no gust there) and seven at the step.
+cycle, every record the source fetches in source order: seven at the
+analysis (no gust there, the terrain only there) and seven at the step.
 """
 
 from __future__ import annotations
@@ -52,8 +53,8 @@ def tearDownModule() -> None:
 
 class SourceRegistryTests(unittest.TestCase):
     def test_the_basic_set(self) -> None:
-        self.assertEqual(published_bundle_ids(ICONEU), ("tmp2m", "prate", "prmsl", "gust", "tcdc", "wind10m"))
-        self.assertEqual(ICONEU.input_variable_ids, ("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc"))
+        self.assertEqual(published_bundle_ids(ICONEU), ("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog", "wind10m"))
+        self.assertEqual(ICONEU.input_variable_ids, ("tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "gust", "tcdc", "orog"))
         self.assertTrue(ICONEU.accumulated_precipitation)
         self.assertEqual(ICONEU.optional_at_analysis, ("gust",))
         self.assertEqual(analysis_optional_ids(ICONEU, published_bundle_ids(ICONEU)), ("prate", "gust"))
@@ -92,6 +93,7 @@ class SourceRegistryTests(unittest.TestCase):
                 "prmsl": "PMSL",
                 "gust": "VMAX_10M",
                 "tcdc": "CLCT",
+                "orog": "HSURF",
             },
         )
 
@@ -104,6 +106,12 @@ class FetchTests(unittest.TestCase):
             "icon-eu_europe_regular-lat-lon_single-level_2026102512_081_TOT_PREC.grib2.bz2",
         )
         self.assertEqual(model_object_url(RUN, 3, "iconeu"), icon_eu_object_url(RUN, 3, "tmp2m"))
+        # The terrain is one time-invariant object per cycle, named by no step.
+        self.assertEqual(
+            icon_eu_object_url(RUN, 0, "orog"),
+            "https://opendata.dwd.de/weather/nwp/icon-eu/grib/12/hsurf/"
+            "icon-eu_europe_regular-lat-lon_time-invariant_2026102512_HSURF.grib2.bz2",
+        )
         with self.assertRaises(DownloadError):
             icon_eu_object_url(RUN, 3, "cape")
 
@@ -115,8 +123,10 @@ class FetchTests(unittest.TestCase):
             return True
 
         self.assertTrue(_run_is_complete(RUN, 120, "iconeu", exists))
-        # Six inputs at the analysis (no gust record there), seven at the end.
-        self.assertEqual(len(probed), 13)
+        # Seven inputs at the analysis (no gust record there, the terrain
+        # only there), seven at the end.
+        self.assertEqual(len(probed), 14)
+        self.assertEqual(sum("time-invariant" in url for url in probed), 1)
         self.assertFalse(any("_000_VMAX_10M" in url for url in probed))
         self.assertTrue(any("_120_VMAX_10M" in url for url in probed))
         self.assertFalse(_run_is_complete(RUN, 120, "iconeu", lambda url: "CLCT" not in url))
@@ -140,36 +150,41 @@ class FetchTests(unittest.TestCase):
             analysis = fetch._download_icon_eu_payload(RUN, 0, ICONEU)
             step = fetch._download_icon_eu_payload(RUN, 1, ICONEU, ("tmp2m", "gust"))
         # No gust at the analysis: its interval is empty there.
-        self.assertEqual(analysis, fields(0, "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "tcdc"))
+        self.assertEqual(analysis, fields(0, "tmp2m", "tp", "ugrd10m", "vgrd10m", "prmsl", "tcdc", "orog"))
         self.assertEqual(step, fields(1, "tmp2m", "gust"))
-        self.assertEqual(len(requested), 8)
+        self.assertEqual(len(requested), 9)
 
 
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
-        for path, expected in zip(FIXTURE_FRAMES, (6, 7)):
-            frames = grib2.inspect_grib_fast(path, ICONEU.input_variable_ids, optional_ids=("gust",))
+        for path, expected in zip(FIXTURE_FRAMES, (7, 7)):
+            frames = grib2.inspect_grib_fast(path, ICONEU.input_variable_ids, optional_ids=("gust", "orog"))
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in ICONEU.input_variable_ids if variable_id in frames]
             self.assertEqual([frames[variable_id].band for variable_id in present], list(range(1, expected + 1)))
-        step = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ICONEU.input_variable_ids)
+        step = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ICONEU.input_variable_ids, optional_ids=("orog",))
         self.assertEqual(step["tp"].unit, "kg/(m^2*s)", "AIFS's millimetre accumulation")
         self.assertEqual(step["tcdc"].unit, "%")
         self.assertEqual(step["gust"].lead_seconds, 3600)
 
     def test_the_records_are_what_the_alternates_say(self) -> None:
         by_band = {message.band: message for message in grib2.index_messages(FIXTURE_FRAMES[1])}
-        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ICONEU.input_variable_ids)
+        frames = grib2.inspect_grib_fast(FIXTURE_FRAMES[1], ICONEU.input_variable_ids, optional_ids=("orog",))
         tp = by_band[frames["tp"].band]
         self.assertEqual((tp.parameter_category, tp.parameter_number, tp.level_type, tp.statistical_process), (1, 52, 1, 1))
         gust = by_band[frames["gust"].band]
         self.assertEqual((gust.parameter_number, gust.level_type, gust.level_value, gust.statistical_process), (22, 103, 10.0, 2))
         clct = by_band[frames["tcdc"].band]
         self.assertEqual((clct.parameter_category, clct.parameter_number, clct.level_type), (6, 1, 1))
+        analysis = {message.band: message for message in grib2.index_messages(FIXTURE_FRAMES[0])}
+        terrain = grib2.inspect_grib_fast(FIXTURE_FRAMES[0], ("orog",))["orog"]
+        hsurf = analysis[terrain.band]
+        self.assertEqual((hsurf.parameter_category, hsurf.parameter_number, hsurf.level_type), (3, 6, 1))
+        self.assertEqual(terrain.unit, "m", "metres as they are, not a geopotential")
 
     @requires_gdalinfo
     def test_gdalinfo_agrees_with_the_header_index(self) -> None:
-        assert_gdalinfo_agrees(self, ((path, ICONEU.input_variable_ids, ("gust",)) for path in FIXTURE_FRAMES))
+        assert_gdalinfo_agrees(self, ((path, ICONEU.input_variable_ids, ("gust", "orog")) for path in FIXTURE_FRAMES))
 
 
 class ConversionTests(unittest.TestCase):
@@ -211,6 +226,16 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(metadata["variables"][0]["parameter"]["typeOfStatisticalProcessing"], 2)
         tmp2m = read_bundle(self.output / "tmp2m.xue").metadata
         self.assertEqual(tmp2m["time"], {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
+
+    def test_the_terrain_is_one_frame_in_metres(self) -> None:
+        bundle = read_bundle(self.output / "orog.xue")
+        self.assertEqual(bundle.metadata["time"]["frameCount"], 1)
+        heights = quantize.PROFILES["quality"]["orog"].decode(bundle.decode_plane(1, 0))
+        # The window holds the Ligurian Sea and the western Alps: sea level
+        # within a codebook step, and the model's Alps well above 2 km.
+        self.assertLess(float(heights.min()), 40.0)
+        self.assertGreater(float(heights.max()), 2000.0)
+        self.assertLess(float(heights.max()), 4810.0)
 
 
 class NativeParityTests(ParityCase, unittest.TestCase):
