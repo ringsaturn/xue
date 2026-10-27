@@ -80,6 +80,10 @@ export interface ShowcaseCase {
   /** Labelled points of context the case draws over its map (a place, an
    * event), when it names any. */
   markers?: ShowcaseMarker[];
+  /** Lines of text timed on the case's clock, shown over the map while the
+   * playhead is inside each one's span (`casecaptions.ts`), when it names
+   * any. */
+  captions?: ShowcaseCaption[];
   /** The river directory the case plays beside its field
    * (`docs/river.md`), when it carries one. */
   river?: ShowcaseRiver;
@@ -92,6 +96,14 @@ export interface ShowcaseCase {
 export interface ShowcaseWind {
   /** The lending case's id, looked up in the same catalog. */
   case: string;
+}
+
+export interface ShowcaseCaption {
+  /** The span the caption is shown over, epoch ms: from inclusive, to
+   * exclusive. */
+  from: number;
+  to: number;
+  text: Record<string, string>;
 }
 
 export interface ShowcaseMarkerSource {
@@ -373,6 +385,31 @@ export function markersBlock(input: unknown, id: string, box: CaseBounds): Showc
   return markers.length > 0 ? markers : undefined;
 }
 
+/** A case's captions, keeping each one this shell can show, in time order:
+ * one it cannot read, or one overlapping the caption ahead of it, is dropped
+ * with a warning and the rest still show. */
+export function captionsBlock(input: unknown, id: string): ShowcaseCaption[] | undefined {
+  if (input === undefined) return undefined;
+  if (!Array.isArray(input)) {
+    console.warn(`showcase: case ${id} carries a captions block this shell cannot read; playing it without`);
+    return undefined;
+  }
+  const captions: ShowcaseCaption[] = [];
+  for (const item of input as unknown[]) {
+    const { from, to, text } = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
+    const start = typeof from === "string" ? Date.parse(from) : Number.NaN;
+    const end = typeof to === "string" ? Date.parse(to) : Number.NaN;
+    const strings = markerText(text);
+    const previous = captions[captions.length - 1];
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !strings || (previous && start < previous.to)) {
+      console.warn(`showcase: case ${id} carries a caption this shell cannot show; skipping it`);
+      continue;
+    }
+    captions.push({ from: start, to: end, text: strings });
+  }
+  return captions.length > 0 ? captions : undefined;
+}
+
 /** A case's radar block, or undefined when it has none or carries one this
  * shell cannot read: the case then plays without the overlay rather than
  * not at all. */
@@ -565,6 +602,7 @@ function validateCase(input: unknown): ShowcaseCase {
   const bbox = bounds(value.bbox, "bbox");
   const dataBbox = bounds(value.dataBbox, "dataBbox");
   const markers = markersBlock(value.markers, id, bbox);
+  const captions = captionsBlock(value.captions, id);
   const title = localized(value.title, "title");
   const summary = localized(value.summary, "summary");
   // A dataset this build has no entry for is admitted from the row itself,
@@ -592,6 +630,8 @@ function validateCase(input: unknown): ShowcaseCase {
   };
   if (markers) entry.markers = markers;
   else delete entry.markers;
+  if (captions) entry.captions = captions;
+  else delete entry.captions;
   if (radar) entry.radar = radar;
   else delete entry.radar;
   if (fire) entry.fire = fire;

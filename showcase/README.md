@@ -270,6 +270,28 @@ retires a case.
    summary: what a cited source says, nothing more. A shell that does not
    know the field draws none.
 
+   A case may carry **captions**: lines of text timed on its clock, shown
+   over the map like subtitles while the playhead is inside each one's span,
+   and drawn into the loop the export button saves.
+
+   ```json
+   "captions": [
+     {
+       "from": "2026-10-08T03:40:00Z",
+       "to": "2026-10-08T10:00:00Z",
+       "text": { "zh": "10 月 8 日北京时间 11:41–11:51 起火", "en": "8 Oct: the fire starts between 11:41 and 11:51 Beijing time", "…": "…" }
+     }
+   ]
+   ```
+
+   `from` and `to` carry their zone; a caption shows from `from` up to, not
+   including, `to`. The spans run forward and never overlap, though one may
+   start where the last ends. `text` carries every UI locale, one line of at
+   most 160 characters each. At most 64 captions. The viewer stamps frames
+   in the reader's own zone, so a clock time inside a caption names its
+   zone. Captions are held to the same rule as the summary. A shell that
+   does not know the field shows none.
+
    A case may carry **context**: reference lines and areas drawn under its
    markers and its detections — a national border, a protected area, rivers,
    roads and tracks, the route the story follows. The block names a GeoJSON
@@ -309,7 +331,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, river, imagery, wind, context, markers, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, river, imagery, wind, context, markers, captions, view) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.

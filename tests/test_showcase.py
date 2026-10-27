@@ -862,6 +862,66 @@ class ContextTest(unittest.TestCase):
                 _catalog_context(root, entry)
 
 
+class CaptionsTest(unittest.TestCase):
+    """A case's captions: timed lines checked in the definition and carried
+    onto the row as written."""
+
+    def caption(self, start: str, end: str, text: str = "Ignition") -> dict[str, object]:
+        return {"from": start, "to": end, "text": localized(text)}
+
+    def captions(self) -> list[dict[str, object]]:
+        return [
+            self.caption("2021-07-20T00:00:00Z", "2021-07-20T03:00:00Z"),
+            # Back to back: the next may start where the last one ends.
+            self.caption("2021-07-20T03:00:00Z", "2021-07-20T09:00:00+08:00", "Peak"),
+        ]
+
+    def test_the_definition_carries_them(self) -> None:
+        spec = parse_case(case_payload(captions=self.captions()))
+        self.assertEqual(spec.captions, tuple(self.captions()))
+        entry, _ = build_entry(captions=self.captions())
+        self.assertEqual(entry["captions"], self.captions())
+        validate_catalog_entry(entry)
+
+    def test_a_case_without_captions_has_none(self) -> None:
+        self.assertEqual(parse_case(case_payload()).captions, ())
+        entry, _ = build_entry()
+        self.assertNotIn("captions", entry)
+
+    def test_a_malformed_caption_is_refused(self) -> None:
+        good = self.caption("2021-07-20T00:00:00Z", "2021-07-20T03:00:00Z")
+        missing_ja = {locale: "x" for locale in LOCALES if locale != "ja"}
+        for captions in (
+            "Ignition",
+            [{**good, "text": missing_ja}],
+            [{**good, "text": "Ignition"}],
+            [{**good, "to": "2021-07-20T00:00:00Z"}],  # empty span
+            [{**good, "from": "2021-07-20T00:00:00"}],  # no zone
+            [{**good, "from": "20 July"}],
+            [{**good, "extra": 1}],
+            [good, self.caption("2021-07-20T02:00:00Z", "2021-07-20T05:00:00Z")],  # overlaps
+            [self.caption("2021-07-20T02:00:00Z", "2021-07-20T05:00:00Z"), good],  # out of order
+            [{**good, "text": localized("x" * 161)}],
+            [{**good, "text": localized("two\nlines")}],
+            [self.caption(f"2021-07-{1 + n // 24:02d}T{n % 24:02d}:00:00Z", f"2021-07-{1 + n // 24:02d}T{n % 24:02d}:30:00Z") for n in range(65)],
+        ):
+            with self.subTest(captions=captions), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(captions=captions))
+
+    def test_refresh_follows_the_definition(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            entry, manifest = build_entry()
+            case_dir = root / "showcase" / "demo-case"
+            case_dir.mkdir(parents=True)
+            (case_dir / "manifest.json").write_bytes(json.dumps(manifest).encode())
+            (case_dir / "case.json").write_text(json.dumps(entry), encoding="utf-8")
+            refreshed = refresh_sidecar(parse_case(case_payload(captions=self.captions())), root)
+            self.assertEqual(refreshed["captions"], self.captions())
+            refreshed = refresh_sidecar(parse_case(case_payload()), root)
+            self.assertNotIn("captions", refreshed)
+
+
 class MarkersTest(unittest.TestCase):
     """A case's markers: labelled points checked in the definition and
     carried onto the row as written."""

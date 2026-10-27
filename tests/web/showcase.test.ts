@@ -266,6 +266,36 @@ describe("showcase catalog", () => {
     warn.mockRestore();
   });
 
+  it("reads a case's captions as epoch ms, skipping one it cannot show", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const first = { from: "2021-07-20T00:00:00Z", to: "2021-07-20T03:00:00Z", text: { zh: "起火", en: "Ignition" } };
+    const second = { from: "2021-07-20T03:00:00Z", to: "2021-07-20T06:00:00Z", text: { en: "Peak" } };
+    const catalog = validateCatalog(
+      catalogFixture([
+        caseFixture({
+          captions: [
+            first,
+            { ...second, from: "2021-07-20T02:00:00Z" }, // overlaps the first
+            { ...second, to: "2021-07-20T03:00:00Z" }, // empty span
+            { ...second, text: { en: "" } },
+            { ...second, from: "someday" },
+            second,
+          ],
+        }),
+        caseFixture({ id: "other-case", manifestPath: "showcase/other-case/manifest.json", captions: "Ignition" }),
+      ]),
+    );
+    expect(catalog.cases).toHaveLength(2);
+    expect(catalog.cases[0]!.captions).toEqual([
+      { from: Date.parse(first.from), to: Date.parse(first.to), text: first.text },
+      { from: Date.parse(second.from), to: Date.parse(second.to), text: second.text },
+    ]);
+    expect(catalog.cases[1]!.captions).toBeUndefined();
+    // A case without captions carries none.
+    expect(validateCatalog(catalogFixture()).cases[0]!.captions).toBeUndefined();
+    warn.mockRestore();
+  });
+
   it("keeps only https source links", () => {
     const marker = {
       id: "port",

@@ -308,6 +308,7 @@ import {
   type ShowcaseCase,
   type ShowcaseMarker,
 } from "./showcase-catalog";
+import { captionText } from "./casecaptions";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
 import { CaseContextLayers, fetchCaseContext, type ContextCollection } from "./casecontext";
 import { RiverCase } from "./river/case";
@@ -1359,6 +1360,7 @@ const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
 const caseMarkerList = required<HTMLUListElement>("case-markers");
+const caseCaption = required<HTMLElement>("case-caption");
 const caseRiverPanel = required<HTMLElement>("case-river");
 const riverCredit = required<HTMLElement>("river-credit");
 const contextCredit = required<HTMLElement>("context-credit");
@@ -4209,6 +4211,7 @@ const gifHost: GifHost = {
       : showingObservations()
         ? formatDate(frameValidTime(index))
         : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`,
+    subtitle: activeCase?.captions ? captionText(activeCase.captions, frameValidTime(index), locale) : "",
   }),
   credit: gifCredit,
   holdMs: exportHoldMs,
@@ -6729,8 +6732,17 @@ function updateCasePresentation(showcaseCase: ShowcaseCase): void {
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
   caseRegion.textContent = formatRegion(showcaseCase.bbox);
   renderCaseMarkers(showcaseCase);
+  syncCaseCaption();
   if (riverCase) riverCase.renderPanel(caseRiverPanel);
   caseBanner.hidden = false;
+}
+
+/** The case's caption at the playhead, in the UI locale; hidden between
+ * captions and on a case that has none. */
+function syncCaseCaption(): void {
+  const text = activeCase?.captions ? captionText(activeCase.captions, stationTime(), locale) : "";
+  if (caseCaption.textContent !== text) caseCaption.textContent = text;
+  caseCaption.hidden = text === "";
 }
 
 /** The case's markers, on the map and as the row of buttons under the
@@ -8238,6 +8250,7 @@ function syncStationTime(): void {
   fireLayers?.setTime(fireWind.time);
   syncFireWindArrow();
   caseMarkers?.setTime(stationTime());
+  syncCaseCaption();
   if (!stationLayers) return;
   stationLayers.setTime(stationTime());
 }

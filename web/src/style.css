@@ -542,6 +542,44 @@ body.is-showcase .model-caret {
   letter-spacing: 0.06em;
 }
 
+/* The case's caption at the playhead: a subtitle over the capsule, white on
+   a dark scrim in either theme so it reads over cloud and over bare ground.
+   It never takes a click; the probe panel, docked in the same place, covers
+   it. */
+.case-caption {
+  position: absolute;
+  z-index: 1;
+  bottom: calc(28px + var(--capsule-height, 90px));
+  left: 50%;
+  width: max-content;
+  max-width: min(720px, calc(100% - 40px));
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: rgba(10, 12, 16, 0.72);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.case-caption[hidden] {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .case-caption {
+    bottom: calc(22px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
+    max-width: calc(100% - 96px);
+    font-size: 14px;
+  }
+}
+
 /* The case's markers as a row of chips under the region: the same points
    the map draws, for a reader who does not use the map. */
 .case-markers {

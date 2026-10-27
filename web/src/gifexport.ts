@@ -31,6 +31,9 @@ export interface GifCaption {
   code: string;
   /** The frame's stamp: lead and valid time. */
   stamp: string;
+  /** A showcase case's caption at the frame's valid time, drawn as a
+   * subtitle over the stamp; absent or empty, none. */
+  subtitle?: string;
 }
 
 export interface GifHost {
@@ -179,7 +182,52 @@ function drawCaption(context: CanvasRenderingContext2D, caption: GifCaption, cre
   let line = credit;
   while (line.length > 8 && context.measureText(line).width > room) line = `${line.slice(0, -2)}…`;
   context.fillText(line, width - pad, height - strip / 2);
+  if (caption.subtitle) drawSubtitle(context, caption.subtitle, unit, height - strip - pad);
   context.restore();
+}
+
+/** The subtitle, centred over the stamp strip with its foot at `bottom`:
+ * white on a dark scrim, as on screen, broken into at most two lines at
+ * spaces or, for text written without them, anywhere. */
+function drawSubtitle(context: CanvasRenderingContext2D, text: string, unit: number, bottom: number): void {
+  const { width } = context.canvas;
+  const size = Math.round(unit * 1.35);
+  context.font = `600 ${size}px system-ui, sans-serif`;
+  const room = width * 0.8;
+  const lines = wrapLines(context, text, room).slice(0, 2);
+  const lineHeight = Math.round(size * 1.35);
+  const padX = Math.round(size * 0.8);
+  const padY = Math.round(size * 0.35);
+  const boxWidth = Math.max(...lines.map((line) => context.measureText(line).width)) + padX * 2;
+  const boxHeight = lines.length * lineHeight + padY * 2;
+  const left = (width - boxWidth) / 2;
+  const top = bottom - boxHeight;
+  context.fillStyle = "rgba(10, 12, 16, 0.72)";
+  context.beginPath();
+  context.roundRect(left, top, boxWidth, boxHeight, Math.round(size * 0.6));
+  context.fill();
+  context.fillStyle = "#fff";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  lines.forEach((line, index) => context.fillText(line, width / 2, top + padY + lineHeight * (index + 0.5)));
+}
+
+/** `text` broken into lines no wider than `room`: at spaces where it has
+ * them, between characters where it does not (Chinese, Japanese). */
+export function wrapLines(context: Pick<CanvasRenderingContext2D, "measureText">, text: string, room: number): string[] {
+  const tokens = text.includes(" ") ? text.split(/(?<= )/) : [...text];
+  const lines: string[] = [];
+  let line = "";
+  for (const token of tokens) {
+    if (line && context.measureText(line + token).width > room) {
+      lines.push(line.trimEnd());
+      line = token.trimStart();
+    } else {
+      line += token;
+    }
+  }
+  if (line) lines.push(line.trimEnd());
+  return lines;
 }
 
 /** The canvas an export draws its frames onto, ready once the basemap's

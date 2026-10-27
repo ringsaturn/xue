@@ -53,7 +53,10 @@ plays beside the field, and ignores when it does not know the block. Its
 ``context`` names a GeoJSON file of reference lines and areas built into its
 directory (:func:`read_context`): borders, a protected area's boundary,
 rivers, roads and the routes a case's story runs along, drawn under the
-markers; a shell that does not know the block draws none.
+markers; a shell that does not know the block draws none. Its
+``captions`` are lines of text timed on the case's clock, each shown over
+the map while the playhead is inside its span — the story told as the
+picture plays; a shell that does not know them shows none.
 """
 
 from __future__ import annotations
@@ -196,6 +199,10 @@ class CaseSpec:
     (:func:`_markers_block`): a place or an event, each with a label and a
     note in every locale, an optional time and the sources it rests on.
     Carried onto the catalog row as given."""
+    captions: tuple[dict[str, Any], ...] = ()
+    """Lines of text the shell shows over the map while the playhead is
+    inside each one's span (:func:`_captions_block`): ``from``, ``to`` and
+    a ``text`` in every locale. Carried onto the catalog row as given."""
     view: dict[str, Any] | None = None
     """The camera the shell opens the case on (:func:`_view_block`):
     ``center`` as ``[lon, lat]``, ``zoom``, and optionally ``pitch``,
@@ -393,6 +400,8 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     bounds = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
     markers = payload.get("markers")
     markers = _markers_block(markers, case_id, bounds) if markers is not None else []
+    captions = payload.get("captions")
+    captions = _captions_block(captions, case_id) if captions is not None else []
 
     return CaseSpec(
         id=case_id,
@@ -417,6 +426,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         wind=wind,
         context=context,
         markers=tuple(markers),
+        captions=tuple(captions),
         view=view,
     )
 
@@ -703,17 +713,8 @@ def _markers_block(
             raise ShowcaseError(f"case {case_id}: {where} at {lon}, {lat} lies outside the case bbox")
         marker: dict[str, Any] = {"id": marker_id, "kind": kind, "lon": lon, "lat": lat}
         if "time" in item:
-            time = item["time"]
-            try:
-                if not isinstance(time, str):
-                    raise ValueError
-                parsed = datetime.fromisoformat(time.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ShowcaseError(f"case {case_id}: {where}.time must be an ISO timestamp") from exc
-            # A time without a zone means a different instant to every viewer.
-            if parsed.tzinfo is None:
-                raise ShowcaseError(f"case {case_id}: {where}.time must name its zone (end it in Z)")
-            marker["time"] = time
+            _instant(item["time"], f"{where}.time", case_id)
+            marker["time"] = item["time"]
         marker["label"] = _localized(item.get("label"), f"{where}.label", case_id, required)
         marker["note"] = _localized(item.get("note"), f"{where}.note", case_id, required)
         sources = item.get("sources", [])
@@ -735,6 +736,57 @@ def _markers_block(
             marker["sources"] = checked
         markers.append(marker)
     return markers
+
+
+MAX_CAPTIONS = 64
+MAX_CAPTION_CHARACTERS = 160
+
+
+def _instant(value: object, what: str, case_id: str) -> datetime:
+    """An ISO timestamp that names its zone."""
+    try:
+        if not isinstance(value, str):
+            raise ValueError
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ShowcaseError(f"case {case_id}: {what} must be an ISO timestamp") from exc
+    # A time without a zone means a different instant to every viewer.
+    if parsed.tzinfo is None:
+        raise ShowcaseError(f"case {case_id}: {what} must name its zone (end it in Z)")
+    return parsed
+
+
+def _captions_block(
+    value: object, case_id: str, required: tuple[str, ...] = LOCALES
+) -> list[dict[str, Any]]:
+    """A case's ``captions``: each a ``from`` and a ``to`` (ISO, with a
+    zone) and a ``text`` held to the same locales as the title, one short
+    line of at most :data:`MAX_CAPTION_CHARACTERS` characters. The spans run
+    forward in time and never overlap, so at any playhead at most one
+    caption is on screen. The values pass through as written."""
+    if not isinstance(value, list) or len(value) > MAX_CAPTIONS:
+        raise ShowcaseError(f"case {case_id}: captions must be a list of at most {MAX_CAPTIONS}")
+    captions: list[dict[str, Any]] = []
+    previous_end: datetime | None = None
+    for index, item in enumerate(value):
+        where = f"captions[{index}]"
+        if not isinstance(item, dict) or set(item) != {"from", "to", "text"}:
+            raise ShowcaseError(f"case {case_id}: {where} must be {{from, to, text}}")
+        start = _instant(item["from"], f"{where}.from", case_id)
+        end = _instant(item["to"], f"{where}.to", case_id)
+        if end <= start:
+            raise ShowcaseError(f"case {case_id}: {where} ends before it starts")
+        if previous_end is not None and start < previous_end:
+            raise ShowcaseError(f"case {case_id}: {where} starts before the caption ahead of it ends")
+        previous_end = end
+        text = _localized(item["text"], f"{where}.text", case_id, required)
+        for locale, line in text.items():
+            if len(line) > MAX_CAPTION_CHARACTERS or "\n" in line:
+                raise ShowcaseError(
+                    f"case {case_id}: {where}.text.{locale} must be one line of at most {MAX_CAPTION_CHARACTERS} characters"
+                )
+        captions.append({"from": item["from"], "to": item["to"], "text": text})
+    return captions
 
 
 _VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain", "volume")
@@ -984,6 +1036,8 @@ def build_catalog_entry(
         entry["wind"] = dict(spec.wind)
     if spec.markers:
         entry["markers"] = [dict(marker) for marker in spec.markers]
+    if spec.captions:
+        entry["captions"] = [dict(caption) for caption in spec.captions]
     if spec.context:
         entry["context"] = dict(spec.context)
     if spec.view:
@@ -1032,6 +1086,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _view_block(entry["view"], entry["id"], variables)
     if "markers" in entry:
         _markers_block(entry["markers"], entry["id"], entry["bbox"], REQUIRED_LOCALES)
+    if "captions" in entry:
+        _captions_block(entry["captions"], entry["id"], REQUIRED_LOCALES)
     if "context" in entry:
         _context_block(entry["context"], entry["id"])
 
@@ -1039,7 +1095,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit, the river, the context, the markers and the view are the definition's to change — a
+    the tags, the credit, the river, the context, the markers, the captions and the view are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -1087,6 +1143,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("imagery", _imagery_block(spec.imagery, spec.id) if spec.imagery else None),
         ("wind", dict(spec.wind) if spec.wind else None),
         ("markers", [dict(marker) for marker in spec.markers] if spec.markers else None),
+        ("captions", [dict(caption) for caption in spec.captions] if spec.captions else None),
         ("context", dict(spec.context) if spec.context else None),
         ("view", dict(spec.view) if spec.view else None),
     ):
