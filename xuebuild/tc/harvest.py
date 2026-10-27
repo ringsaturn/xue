@@ -24,7 +24,8 @@ from typing import Any
 from ..errors import DownloadError, TcProductError
 from ..fetch import _http_error_code, get_ok
 from . import ibtracs
-from .archive import Archive, make_best, make_record
+from .archive import Archive, BestMatcher, make_best, make_record, start_position
+from .build import ECMWF_OWN_NUMBERING
 from .fetch import IBTRACS_URL
 from .registry import canonical_basin, season_of
 from .identity import dominant_cluster
@@ -39,6 +40,7 @@ GENESIS_HOURS = 240
 ECMWF finds a system up to ten days before it is numbered. The hourly
 directories must be kept at least this long."""
 WORKERS = 8
+ECMWF_SOURCES = ("ecmwf", "ecmwfens")
 IBTRACS_LAST3_URL = IBTRACS_URL.replace("ACTIVE", "last3years")
 
 
@@ -184,7 +186,6 @@ def harvest_issues(
         records.extend(storm_records(storm, target))
         if storm.get("best") and entry["id"] == target:
             working[target] = storm
-    changed = archive.add_records(records)
     for target, storm in working.items():
         best = {
             key: track for key, track in storm["best"].items() if track.get("source") != "ibtracs" and track["points"]
@@ -193,6 +194,7 @@ def harvest_issues(
             last = max(track["points"][-1]["time"] for track in best.values())
             storm_id = canonical_storm(target, last)
             archive.add_best(make_best(storm_id, storm.get("name"), storm.get("sid"), [storm_id], best))
+    changed = archive.add_records(place_ecmwf(BestMatcher(archive), records))
     return {
         "issues": len(recent) + len(older),
         "renamed": sorted(renamed),
@@ -200,6 +202,22 @@ def harvest_issues(
         "changed": changed,
         "workingBest": sorted(working),
     }
+
+
+def place_ecmwf(matcher: BestMatcher, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Issues built while ECMWF's own western Pacific numbers were taken as
+    storm ids file its tracks under storms that do not exist (its ``36W``
+    for JTWC's ``WP29``): such a record moves to the storm its start lies
+    on, when the season's best tracks place one there."""
+    placed = []
+    for record in records:
+        if record["source"] in ECMWF_SOURCES and record["basin"] in ECMWF_OWN_NUMBERING:
+            start = start_position(record["kind"], record["forecast"])
+            target = None if start is None else matcher.match(record["basin"], *start)
+            if target is not None and target != record["storm"]:
+                record = {**record, "storm": target, "basin": target[:2]}
+        placed.append(record)
+    return placed
 
 
 def ibtracs_best(text: str, *, first_season: int | None = None) -> list[dict[str, Any]]:

@@ -270,6 +270,13 @@ def _parse_gefs(directory: Path, files: list[str]) -> list[Sighting]:
     return sightings
 
 
+ECMWF_OWN_NUMBERING = frozenset({"WP"})
+"""Basins where ECMWF's storm numbers are its own, not JTWC's (its
+``36W`` was JTWC's ``WP29`` in October 2026, its ``08W`` JTWC's ``WP06``
+in August 2023): a system there attaches by position, like an unnumbered
+one, instead of naming a storm."""
+
+
 def ecmwf_key(identifier: str, base: datetime) -> tuple[str, str] | None:
     """(identity key, basin) of a ``stormIdentifier``: ``14E`` is the
     numbered ``EP142026``, ``70W`` stays the model's own name."""
@@ -280,7 +287,7 @@ def ecmwf_key(identifier: str, base: datetime) -> tuple[str, str] | None:
     if basin is None or not digits.isdigit():
         return None
     number = int(digits)
-    if number <= 49:
+    if number <= 49 and basin not in ECMWF_OWN_NUMBERING:
         return _atcf_key(basin, number, season_of(basin, base)), basin
     return identifier, basin
 

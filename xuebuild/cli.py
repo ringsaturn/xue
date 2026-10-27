@@ -74,6 +74,9 @@ from .tc.fetch import fetch_sources as fetch_tc_sources
 from .tc.schema import parse_issue as parse_tc_issue
 from .tc.archive import MONTH as TC_MONTH
 from .tc.archive import Archive as TcArchive
+from .tc.archive import BestMatcher as TcBestMatcher
+from .tc.archive import rekey as tc_rekey
+from .tc.build import ECMWF_OWN_NUMBERING as TC_ECMWF_OWN_NUMBERING
 from .tc.backfill import SOURCES as TC_BACKFILL_SOURCES
 from .tc.backfill import backfill as tc_backfill
 from .tc.harvest import GENESIS_HOURS as TC_GENESIS_HOURS
@@ -567,6 +570,12 @@ def parser() -> argparse.ArgumentParser:
     tc_archive.add_argument(
         "--backfill",
         help=f"instead of harvesting, backfill from these comma-separated sources: {','.join(TC_BACKFILL_SOURCES)}",
+    )
+    tc_archive.add_argument(
+        "--rekey",
+        action="store_true",
+        help="instead of harvesting, move the archived ECMWF tracks of the basins where ECMWF numbers storms "
+        "itself onto the storm their start lies on, for the months --from to --to",
     )
     tc_archive.add_argument("--from", dest="first", help="first month to backfill, YYYY-MM")
     tc_archive.add_argument("--to", dest="last", help="last month to backfill, YYYY-MM (default: the current one)")
@@ -1215,7 +1224,17 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, indent=2))
         elif arguments.command == "tc-archive":
             archive = TcArchive.open(arguments.output_dir, None if arguments.offline else arguments.base_url)
-            if arguments.backfill:
+            if arguments.rekey:
+                last = arguments.last or datetime.now(UTC).strftime("%Y-%m")
+                if not arguments.first or not TC_MONTH.match(arguments.first) or not TC_MONTH.match(last):
+                    raise XueError("--rekey needs --from (and optionally --to) as YYYY-MM")
+                months = sorted(m["month"] for m in archive.catalog["months"] if arguments.first <= m["month"] <= last)
+                report = {
+                    "rekey": tc_rekey(
+                        archive, TcBestMatcher(archive), months, {"ecmwf", "ecmwfens"}, set(TC_ECMWF_OWN_NUMBERING)
+                    )
+                }
+            elif arguments.backfill:
                 sources = tuple(dict.fromkeys(item.strip() for item in arguments.backfill.split(",") if item.strip()))
                 unknown = [item for item in sources if item not in TC_BACKFILL_SOURCES]
                 if unknown:

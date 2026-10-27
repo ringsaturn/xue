@@ -32,7 +32,7 @@ from typing import Any
 from ..errors import DownloadError, TcProductError
 from ..fetch import _http_error_code, get_ok
 from . import atcf
-from .archive import Archive, make_record, month_of
+from .archive import Archive, BestMatcher, make_record, month_of, start_position
 from .build import ecmwf_tracks
 from .harvest import add_best_records, ibtracs_best
 from .registry import NUMBERED_MAX
@@ -226,13 +226,32 @@ def ecmwf_cycle_files(cycle: datetime) -> dict[str, str]:
     return files
 
 
-def ecmwf_records(path: Path, source: str) -> list[dict[str, Any]]:
+def ecmwf_tracks_json(path: Path, source: str) -> list[tuple[str, str, str | None, str, dict[str, Any]]]:
+    """(key, basin, name, kind, forecast JSON) of every system in one file."""
+    kind = "ensemble" if source == "ecmwfens" else "model"
+    return [
+        (key, basin, storm.name, kind, value.to_json())
+        for key, basin, storm, value in ecmwf_tracks(path, ensemble=source == "ecmwfens")
+    ]
+
+
+def ecmwf_records(
+    tracks: list[tuple[str, str, str | None, str, dict[str, Any]]], source: str, matcher: BestMatcher
+) -> list[dict[str, Any]]:
+    """Archive records of one file's systems. A system ECMWF numbered as
+    JTWC or NHC does keeps that id; one it numbered itself (the western
+    Pacific's, and every ``7x``) is placed on the season's best-track storm
+    its start lies on, or dropped — so a storm's forecasts from before it
+    was numbered are kept too."""
     records = []
-    for key, basin, storm, value in ecmwf_tracks(path, ensemble=source == "ecmwfens"):
-        if not ATCF_ID.match(key):
+    for key, basin, name, kind, forecast in tracks:
+        storm = key if ATCF_ID.match(key) else None
+        if storm is None:
+            start = start_position(kind, forecast)
+            storm = None if start is None else matcher.match(basin, *start)
+        if storm is None:
             continue
-        kind = "ensemble" if source == "ecmwfens" else "model"
-        records.append(make_record(key, basin, storm.name, source, kind, "ecmwf-aws", value.to_json()))
+        records.append(make_record(storm, storm[:2], name, source, kind, "ecmwf-aws", forecast))
     return records
 
 
@@ -250,8 +269,10 @@ def backfill_ecmwf(archive: Archive, first: str, last: str, *, workers: int = 2)
     scratch = Path(tempfile.mkdtemp(prefix="tc-ecmwf-"))
     skipped: list[str] = []
 
-    def one(cycle: datetime) -> list[dict[str, Any]]:
-        records = []
+    matcher = BestMatcher(archive)
+
+    def one(cycle: datetime) -> list[tuple[str, list[tuple[str, str, str | None, str, dict[str, Any]]]]]:
+        records: list[tuple[str, list[tuple[str, str, str | None, str, dict[str, Any]]]]] = []
         try:
             files = ecmwf_cycle_files(cycle)
         except DownloadError as exc:
@@ -262,7 +283,7 @@ def backfill_ecmwf(archive: Archive, first: str, last: str, *, workers: int = 2)
             path = scratch / key.replace("/", "_")
             try:
                 path.write_bytes(get_ok(f"{ECMWF_AWS_URL}/{key}", timeout=600, **S3_RETRY))
-                records.extend(ecmwf_records(path, source))
+                records.append((source, ecmwf_tracks_json(path, source)))
             except (DownloadError, TcProductError, ValueError) as exc:
                 LOG.warning("tc backfill ecmwf: %s skipped: %s", key, exc)
                 skipped.append(key)
@@ -277,9 +298,11 @@ def backfill_ecmwf(archive: Archive, first: str, last: str, *, workers: int = 2)
         for month in months:
             month_cycles = [c for c in _cycles(month, month)]
             with ThreadPoolExecutor(workers) as pool:
-                for found in pool.map(one, month_cycles):
-                    archive.add_records(found)
-                    records += len(found)
+                for files in pool.map(one, month_cycles):
+                    for source, tracks in files:
+                        found = ecmwf_records(tracks, source, matcher)
+                        archive.add_records(found)
+                        records += len(found)
             cycles += len(month_cycles)
             LOG.info("tc backfill ecmwf: %s, %d cycles, %d forecasts so far", month, len(month_cycles), records)
     finally:

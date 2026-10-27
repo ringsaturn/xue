@@ -16,8 +16,12 @@ on:
         description: "Backfill sources instead of the daily harvest: nhc,ucar,ecmwf,ibtracs (empty = harvest)"
         type: string
         default: ""
+      rekey:
+        description: "Move archived ECMWF western Pacific tracks onto the storm they start on, for from–to"
+        type: boolean
+        default: false
       from:
-        description: "First month to backfill, YYYY-MM"
+        description: "First month to backfill or rekey, YYYY-MM"
         type: string
         default: ""
       to:
@@ -53,6 +57,7 @@ jobs:
       FROM: ${{ inputs.from || '' }}
       TO: ${{ inputs.to || '' }}
       LOOKBACK: ${{ inputs.lookback || '48' }}
+      REKEY: ${{ inputs.rekey && 'true' || '' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -78,7 +83,10 @@ jobs:
         run: |
           set -euo pipefail
           args=(--lookback "$LOOKBACK")
-          if [ -n "$BACKFILL" ]; then
+          if [ -n "$REKEY" ]; then
+            args=(--rekey --from "$FROM")
+            [ -z "$TO" ] || args+=(--to "$TO")
+          elif [ -n "$BACKFILL" ]; then
             args=(--backfill "$BACKFILL" --from "$FROM")
             [ -z "$TO" ] || args+=(--to "$TO")
           fi
@@ -87,7 +95,7 @@ jobs:
             echo "### tc archive"
             echo
             echo '```json'
-            jq '{harvest, ibtracs, backfill, months, seasons, written: (.written | length)}' tc-archive-report.json
+            jq '{harvest, ibtracs, backfill, rekey, score, months, seasons, written: (.written | length)}' tc-archive-report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           skipped=$(jq '[.backfill[]?.skipped[]?] | length' tc-archive-report.json)

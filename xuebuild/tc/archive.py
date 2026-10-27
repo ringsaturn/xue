@@ -31,12 +31,14 @@ import re
 import urllib.parse
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from ..errors import DownloadError, TcProductError
 from ..fetch import _http_error_code, get_ok
+from .identity import MATCH_KM, distance_km
+from .registry import season_of
 from .schema import (
     ATCF_ID,
     PRODUCT,
@@ -48,6 +50,7 @@ from .schema import (
     validate_track,
     write_bytes_atomic,
 )
+from .track import MISSING, iso_z
 
 LOG = logging.getLogger(__name__)
 
@@ -526,6 +529,113 @@ class Archive:
 
 def _empty_catalog() -> dict[str, Any]:
     return {"archiveSchemaVersion": ARCHIVE_SCHEMA_VERSION, "product": PRODUCT, "months": [], "seasons": []}
+
+
+# --- placing a forecast on a best track ----------------------------------
+
+
+class BestMatcher:
+    """Which archived storm a forecast's starting position belongs to: the
+    season's best-track storm (any agency key, the US one first) whose
+    synoptic position at that time lies within ``MATCH_KM`` of it, the
+    nearest when two do. For sources whose own storm numbers cannot be
+    trusted (ECMWF's in the western Pacific)."""
+
+    def __init__(self, archive: Archive) -> None:
+        self.archive = archive
+        self._positions: dict[int, dict[str, dict[str, tuple[float, float]]]] = {}
+
+    def _season(self, season: int) -> dict[str, dict[str, tuple[float, float]]]:
+        if season not in self._positions:
+            storms: dict[str, dict[str, tuple[float, float]]] = {}
+            known = {entry["season"] for entry in self.archive.catalog.get("seasons", [])} | set(self.archive.seasons)
+            if season in known:
+                for storm, record in self.archive.season(season).items():
+                    positions: dict[str, tuple[float, float]] = {}
+                    for key in sorted(record["best"], key=lambda k: (k != "usa", k)):
+                        for point in record["best"][key]["points"]:
+                            positions.setdefault(point["time"], (point["lat"], point["lon"]))
+                    storms[storm] = positions
+            self._positions[season] = storms
+        return self._positions[season]
+
+    def forget(self) -> None:
+        """Drop what was read, after best tracks were added."""
+        self._positions.clear()
+
+    def match(self, basin: str, time: str, lat: float, lon: float) -> str | None:
+        found = self.nearest(basin, time, lat, lon)
+        return None if found is None else found[1]
+
+    def nearest(self, basin: str, time: str, lat: float, lon: float) -> tuple[float, str] | None:
+        """(distance in km, storm) of the match, or None."""
+        when = datetime.fromisoformat(time)
+        found: tuple[float, str] | None = None
+        for season in sorted({season_of(basin, when) + offset for offset in (-1, 0, 1)}):
+            for storm, positions in self._season(season).items():
+                if storm[:2] != basin or time not in positions:
+                    continue
+                at = positions[time]
+                distance = distance_km(lat, lon, at[0], at[1])
+                if distance <= MATCH_KM and (found is None or distance < found[0]):
+                    found = (distance, storm)
+        return found
+
+
+def start_position(kind: str, forecast: dict[str, Any]) -> tuple[str, float, float] | None:
+    """(time, lat, lon) a forecast starts from: its first point, or for an
+    ensemble the centroid of its members at their first shared lead."""
+    if kind != "ensemble":
+        if not forecast["points"]:
+            return None
+        point = forecast["points"][0]
+        return point["time"], point["lat"], point["lon"]
+    leads = len(forecast["leads"])
+    for position, lead in enumerate(forecast["leads"]):
+        lats, lons = [], []
+        for member in range(len(forecast["members"])):
+            index = member * leads + position
+            if forecast["lat"][index] != MISSING and forecast["lon"][index] != MISSING:
+                lats.append(forecast["lat"][index] / 100)
+                lons.append(forecast["lon"][index] / 100)
+        if lats:
+            anchor = lons[0]
+            lon = sum(anchor + ((x - anchor + 540.0) % 360.0 - 180.0) for x in lons) / len(lons)
+            lon = (lon + 540.0) % 360.0 - 180.0
+            base = datetime.fromisoformat(forecast["base"])
+            return iso_z(base + timedelta(seconds=lead)), sum(lats) / len(lats), 180.0 if lon == -180.0 else lon
+    return None
+
+
+def rekey(archive: Archive, matcher: BestMatcher, months: Iterable[str], sources: set[str], basins: set[str]) -> dict[str, int]:
+    """Move the archived forecasts of ``sources`` in ``basins`` to the storm
+    their start places them on (:class:`BestMatcher`); one that matches no
+    storm is dropped. On a collision the record starting nearer the best
+    track is kept. Returns how many moved and were dropped."""
+    moved = dropped = 0
+    for month in months:
+        if not any(e["month"] == month for e in archive.catalog.get("months", [])):
+            continue
+        records = archive.month(month)
+        kept: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+        for key, record in records.items():
+            distance = 0.0
+            if record["source"] in sources and record["basin"] in basins:
+                start = start_position(record["kind"], record["forecast"])
+                found = None if start is None else matcher.nearest(record["basin"], *start)
+                if found is None:
+                    dropped += 1
+                    continue
+                distance, target = found
+                if target != record["storm"]:
+                    record = {**record, "storm": target, "basin": target[:2]}
+                    moved += 1
+                    key = record_key(record)
+            current = kept.get(key)
+            if current is None or distance < current[0]:
+                kept[key] = (distance, record)
+        archive.months[month] = {key: record for key, (_, record) in kept.items()}
+    return {"moved": moved, "dropped": dropped}
 
 
 # --- validation of the indexes ------------------------------------------

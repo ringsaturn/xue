@@ -16,6 +16,9 @@ from xuebuild.tc import atcf
 from xuebuild.tc.archive import (
     ARCHIVE_DIRECTORY,
     Archive,
+    BestMatcher,
+    rekey,
+    start_position,
     choose_track,
     make_best,
     make_record,
@@ -26,7 +29,8 @@ from xuebuild.tc.archive import (
     validate_month_index,
     validate_season_index,
 )
-from xuebuild.tc.backfill import deck_records
+from xuebuild.tc.backfill import deck_records, ecmwf_records
+from xuebuild.tc.build import ecmwf_key
 from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, storm_records
 from xuebuild.tc.identity import dominant_cluster
 from xuebuild.tc.score import along_cross, forecast_positions, great_circle_km, mean_position, score_storm, summarise
@@ -347,6 +351,64 @@ class ScoreTest(unittest.TestCase):
         pair = [r for r in homogeneous if r["reference"] == "jtwc"]
         self.assertEqual(pair, [{"basin": "WP", "truth": "usa", "reference": "jtwc", "source": "gfs", "lead": 24,
                                  "n": 1, "track": 100.0, "referenceTrack": 50.0, "skill": -1.0}])
+
+
+class PlacementTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.archive = Archive.open(Path(self.directory.name))
+        for storm, lat in (("WP292026", 15.0), ("WP302026", 25.0)):
+            track = {"source": "jtwc", "provisional": True, "points": [
+                _point("2026-10-25T00:00:00Z", lat, 140.0), _point("2026-10-25T06:00:00Z", lat + 0.2, 140.0)]}
+            self.archive.add_best(make_best(storm, None, None, [], {"usa": track}))
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def test_ecmwf_numbers_its_own_storms_in_the_western_pacific(self) -> None:
+        base = datetime(2026, 10, 25, tzinfo=UTC)
+        self.assertEqual(ecmwf_key("36W", base), ("36W", "WP"))
+        self.assertEqual(ecmwf_key("14E", base), ("EP142026", "EP"))
+        self.assertEqual(ecmwf_key("03S", base), ("SH032027", "SH"))
+
+    def test_matcher_takes_the_nearest_storm_at_the_start(self) -> None:
+        matcher = BestMatcher(self.archive)
+        self.assertEqual(matcher.match("WP", "2026-10-25T00:00:00Z", 15.5, 140.5), "WP292026")
+        self.assertEqual(matcher.match("WP", "2026-10-25T06:00:00Z", 24.0, 140.0), "WP302026")
+        self.assertIsNone(matcher.match("WP", "2026-10-25T00:00:00Z", 20.0, 140.0))
+        self.assertIsNone(matcher.match("WP", "2026-10-25T12:00:00Z", 15.0, 140.0))
+        self.assertIsNone(matcher.match("EP", "2026-10-25T00:00:00Z", 15.0, 140.0))
+
+    def test_start_position_of_an_ensemble_is_its_centroid_at_the_first_lead_it_has(self) -> None:
+        forecast = {"base": "2026-10-25T00:00:00Z", "leads": [0, 21600], "members": [1, 2],
+                    "lat": [MISSING, 1500, MISSING, 1600], "lon": [MISSING, 17950, MISSING, -17950]}
+        self.assertEqual(start_position("ensemble", forecast), ("2026-10-25T06:00:00Z", 15.5, 180.0))
+
+    def test_ecmwf_records_keep_shared_numbers_and_place_their_own(self) -> None:
+        tracks = [
+            ("EP142026", "EP", None, "model", _forecast("2026-10-25T00:00:00Z")),
+            ("36W", "WP", "CHAMPI", "model", _forecast("2026-10-25T00:00:00Z", 15.2)),
+            ("70W", "WP", None, "model", _forecast("2026-10-25T00:00:00Z", 25.1)),
+            ("71W", "WP", None, "model", _forecast("2026-10-25T00:00:00Z", 40.0)),
+        ]
+        records = ecmwf_records(tracks, "ecmwf", BestMatcher(self.archive))
+        self.assertEqual([(r["storm"], r["origin"]) for r in records],
+                         [("EP142026", "ecmwf-aws"), ("WP292026", "ecmwf-aws"), ("WP302026", "ecmwf-aws")])
+
+    def test_rekey_moves_misfiled_records_and_keeps_the_nearer_on_a_collision(self) -> None:
+        base = "2026-10-25T00:00:00Z"
+        self.archive.add_records([
+            make_record("WP362026", "WP", None, "ecmwf", "model", "live", _forecast(base, 15.1)),
+            make_record("WP292026", "WP", None, "ecmwf", "model", "live", _forecast(base, 15.8)),
+            make_record("WP372026", "WP", None, "ecmwfens", "model", "live", _forecast(base, 33.0)),
+            make_record("WP292026", "WP", None, "gfs", "model", "live", _forecast(base, 40.0)),
+        ])
+        self.archive.write()
+        result = rekey(self.archive, BestMatcher(self.archive), ["2026-10"], {"ecmwf", "ecmwfens"}, {"WP"})
+        self.assertEqual(result, {"moved": 1, "dropped": 1})
+        records = self.archive.month("2026-10")
+        self.assertEqual(sorted((s, src) for s, src, _ in records), [("WP292026", "ecmwf"), ("WP292026", "gfs")])
+        self.assertEqual(records[("WP292026", "ecmwf", base)]["forecast"]["points"][0]["lat"], 15.1)
 
 
 if __name__ == "__main__":
