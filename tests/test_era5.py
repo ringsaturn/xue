@@ -133,7 +133,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual((SPEC.steps, SPEC.first_hour, SPEC.horizon_hours, SPEC.cycle_hours), (((1440, 1),), 0, 1440, 1))
         self.assertEqual(SPEC.forecast_hours(3), [0, 1, 2, 3])
         with self.assertRaises(DownloadError):
-            SPEC.forecast_hours(241)
+            SPEC.forecast_hours(1441)
 
     def test_four_bundles_the_gust_declared_a_maximum(self) -> None:
         self.assertEqual(SPEC.input_variable_ids, INPUTS)
