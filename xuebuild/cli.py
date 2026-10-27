@@ -828,7 +828,7 @@ def parser() -> argparse.ArgumentParser:
         "beside the series as era5.<start>.cds.zip",
     )
     era5_series.add_argument("--start", required=True, help="the window's first hour as ISO 8601 UTC; it names the run")
-    era5_series.add_argument("--hours", type=int, help="the window's last hour after --start (default: the whole 240 h axis)")
+    era5_series.add_argument("--hours", type=int, help="the window's last hour after --start (default: the whole 1440 h axis)")
     era5_series.add_argument(
         "--bbox", help="west,south,east,north: write only the cells whose centres lie inside (required to request a window)"
     )

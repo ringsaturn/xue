@@ -396,7 +396,8 @@ Climate Data Store releases a day about five days late (ERA5T, replaced by
 the final ERA5 two to three months later), so there is **no live feed**:
 as for `efaswb`, a window is named by its first hour (`--start`, any hour,
 `cycle_hours` 1), and the axis is hourly from F0, every hour an analysis,
-to at most 240 hours. The `xue era5-series` tool (`xuebuild/era5/`, the
+to at most 1,440 hours (sixty days), so one case can hold a whole
+episode that lasts weeks. The `xue era5-series` tool (`xuebuild/era5/`, the
 `era5` dependency group: cdsapi and netCDF4, `uv sync --group era5
 --inexact`) asks the store for `reanalysis-era5-single-levels` in NetCDF
 over the `--bbox` padded by a cell (whole days; the key is `CDSAPI_KEY` or

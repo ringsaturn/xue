@@ -130,7 +130,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(list(SOURCES).index("era5"), list(SOURCES).index("efaswb") + 1)
 
     def test_the_axis_is_hourly_from_the_window_s_first_hour(self) -> None:
-        self.assertEqual((SPEC.steps, SPEC.first_hour, SPEC.horizon_hours, SPEC.cycle_hours), (((240, 1),), 0, 240, 1))
+        self.assertEqual((SPEC.steps, SPEC.first_hour, SPEC.horizon_hours, SPEC.cycle_hours), (((1440, 1),), 0, 1440, 1))
         self.assertEqual(SPEC.forecast_hours(3), [0, 1, 2, 3])
         with self.assertRaises(DownloadError):
             SPEC.forecast_hours(241)
@@ -173,8 +173,8 @@ class CaseDefinitionTests(unittest.TestCase):
         with self.assertRaises(Exception):
             parse_case(self.payload(run="2026100800"))
         with self.assertRaises(Exception):
-            parse_case(self.payload(hours=241))
-        parse_case(self.payload(hours=240))
+            parse_case(self.payload(hours=1441))
+        parse_case(self.payload(hours=1440))
 
 
 class ToolTests(unittest.TestCase):
