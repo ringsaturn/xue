@@ -300,9 +300,14 @@ def backfill_ecmwf(archive: Archive, first: str, last: str, *, workers: int = 2)
             with ThreadPoolExecutor(workers) as pool:
                 for files in pool.map(one, month_cycles):
                     for source, tracks in files:
-                        found = ecmwf_records(tracks, source, matcher)
-                        archive.add_records(found)
-                        records += len(found)
+                        for record in ecmwf_records(tracks, source, matcher):
+                            try:
+                                archive.add_records([record])
+                            except TcProductError as exc:
+                                LOG.warning("tc backfill ecmwf: %s %s skipped: %s", record["storm"], source, exc)
+                                skipped.append(f"{record['storm']} {source} {record['forecast']['base']}")
+                                continue
+                            records += 1
             cycles += len(month_cycles)
             LOG.info("tc backfill ecmwf: %s, %d cycles, %d forecasts so far", month, len(month_cycles), records)
     finally:

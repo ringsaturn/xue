@@ -310,6 +310,10 @@ def ecmwf_tracks(path: Path, *, ensemble: bool) -> list[tuple[str, str, BufrStor
             if not storm.members:
                 continue
         if ensemble:
+            # A system written in more than one message can repeat a member;
+            # the first copy stands.
+            unique = {m.member: m for m in reversed(storm.members)}
+            storm = BufrStorm(storm.identifier, storm.name, storm.base, tuple(unique[k] for k in sorted(unique)))
             leads = tuple(sorted({lead_seconds(p, storm.base) for m in storm.members for p in m.forecast.points}))
             value: Forecast | Ensemble = Ensemble(
                 base=storm.base,
