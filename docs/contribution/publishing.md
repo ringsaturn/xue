@@ -169,6 +169,7 @@ withholds its pointer only when nothing contributed.
 | Product | Workflow | Cadence | Spec |
 |---|---|---|---|
 | Tropical cyclones | `publish-tc.yml` | twenty past every hour | [`docs/tc.md`](../tc.md) |
+| Tropical cyclone archive | `archive-tc.yml` | 00:50 UTC daily; backfill by dispatch | [`docs/tc.md`](../tc.md) §8 |
 | Airports | `publish-airport.yml` | every ten minutes | [`docs/airport.md`](../airport.md) |
 | Soundings | `publish-sounding.yml` | a quarter past every hour | [`docs/sounding.md`](../sounding.md) |
 | Surface stations | `publish-synop.yml` | three past every ten minutes | [`docs/synop.md`](../synop.md) |
@@ -176,7 +177,9 @@ withholds its pointer only when nothing contributed.
 
 ```sh
 make live-tc-index && make tc-build                  # previous index first, so ids carry over
-make upload-r2-tc ISSUE=2026091301 && make prune-r2-tc            # keeps seven days
+make upload-r2-tc ISSUE=2026091301 && make prune-r2-tc            # keeps TC_KEEP issues
+.venv/bin/python -m xuebuild tc-archive > tc-archive-report.json   # last 48 issues + IBTrACS → tc/archive/
+make upload-r2-tc-archive                            # the files it wrote, the catalog last
 make live-airport-index && make airport-build        # merges onto the live 24 h history
 make upload-r2-airport ROUND=202609161440 && make prune-r2-airport  # history → index → pointer; keeps three hours
 make live-sounding-index && make sounding-build      # watermark + carry-forward from the live issue

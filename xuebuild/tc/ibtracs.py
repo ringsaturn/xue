@@ -65,6 +65,13 @@ def _float(value: str) -> float | None:
         return None
 
 
+def _magnitude(value: str) -> float | None:
+    """A wind, pressure or radius: some agencies' columns (MetService's)
+    write a negative number for "not reported"."""
+    parsed = _float(value)
+    return parsed if parsed is not None and parsed >= 0 else None
+
+
 def _agency_key(prefix: str) -> str:
     if prefix == "USA":
         return "usa"
@@ -125,15 +132,15 @@ def parse_ibtracs(text: str) -> dict[str, IbtracsStorm]:
             radii: Radii = {}
             if prefix in _QUADRANT_PREFIXES:
                 for threshold in ("34", "50", "64"):
-                    quadrants = [_float(cell(row, f"{prefix}_R{threshold}_{q}")) for q in ("NE", "SE", "SW", "NW")]
+                    quadrants = [_magnitude(cell(row, f"{prefix}_R{threshold}_{q}")) for q in ("NE", "SE", "SW", "NW")]
                     if any(value is not None for value in quadrants):
                         radii[threshold] = [None if v is None else round(v * NAUTICAL_MILE, 1) for v in quadrants]
-            wind = _float(cell(row, f"{prefix}_WIND"))
-            pressure = _float(cell(row, f"{prefix}_PRES"))
+            wind = _magnitude(cell(row, f"{prefix}_WIND"))
+            pressure = _magnitude(cell(row, f"{prefix}_PRES"))
             class_column = _CLASS_COLUMN[prefix]
             cls = cell(row, f"{prefix}_{class_column}") if class_column else ""
-            rmw = _float(cell(row, f"{prefix}_RMW")) if f"{prefix}_RMW" in index else None
-            gust = _float(cell(row, f"{prefix}_GUST")) if f"{prefix}_GUST" in index else None
+            rmw = _magnitude(cell(row, f"{prefix}_RMW")) if f"{prefix}_RMW" in index else None
+            gust = _magnitude(cell(row, f"{prefix}_GUST")) if f"{prefix}_GUST" in index else None
             points.setdefault((sid, prefix), []).append(
                 Point(
                     time=time,

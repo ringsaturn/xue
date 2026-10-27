@@ -72,6 +72,14 @@ from .tc.build import load_previous_index as load_previous_tc_index
 from .tc.fetch import SOURCE_IDS as TC_SOURCE_IDS
 from .tc.fetch import fetch_sources as fetch_tc_sources
 from .tc.schema import parse_issue as parse_tc_issue
+from .tc.archive import MONTH as TC_MONTH
+from .tc.archive import Archive as TcArchive
+from .tc.backfill import SOURCES as TC_BACKFILL_SOURCES
+from .tc.backfill import backfill as tc_backfill
+from .tc.harvest import GENESIS_HOURS as TC_GENESIS_HOURS
+from .tc.harvest import LOOKBACK_HOURS as TC_LOOKBACK_HOURS
+from .tc.harvest import harvest_ibtracs as tc_harvest_ibtracs
+from .tc.harvest import harvest_issues as tc_harvest_issues
 
 
 # The longest axis any source publishes — CFSv2's thirty-nine weeks, against
@@ -521,6 +529,37 @@ def parser() -> argparse.ArgumentParser:
     tc_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     tc_build.add_argument("--force", action="store_true", help="rebuild an issue whose directory exists")
     tc_build.add_argument("--force-download", action="store_true", help="fetch every source again")
+
+    tc_archive = commands.add_parser(
+        "tc-archive",
+        help="fold the published hourly tc issues (or, with --backfill, the centres' own archives) into the "
+        "monthly tc/archive/ tree and its catalog",
+    )
+    tc_archive.add_argument(
+        "--base-url",
+        default="https://dataset.ringsaturn.me/xue/",
+        help="the data origin the hourly issues and the published archive are read from",
+    )
+    tc_archive.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    tc_archive.add_argument(
+        "--offline",
+        action="store_true",
+        help="work on the archive already under --output-dir; read nothing from --base-url",
+    )
+    tc_archive.add_argument("--lookback", type=int, default=TC_LOOKBACK_HOURS, help="hours of issues to harvest")
+    tc_archive.add_argument(
+        "--genesis",
+        type=int,
+        default=TC_GENESIS_HOURS,
+        help="hours to read back for a newly numbered system's earlier forecasts",
+    )
+    tc_archive.add_argument("--no-ibtracs", action="store_true", help="leave the season best tracks to the next run")
+    tc_archive.add_argument(
+        "--backfill",
+        help=f"instead of harvesting, backfill from these comma-separated sources: {','.join(TC_BACKFILL_SOURCES)}",
+    )
+    tc_archive.add_argument("--from", dest="first", help="first month to backfill, YYYY-MM")
+    tc_archive.add_argument("--to", dest="last", help="last month to backfill, YYYY-MM (default: the current one)")
 
     airport_build = commands.add_parser(
         "airport-build",
@@ -1163,6 +1202,38 @@ def main(argv: list[str] | None = None) -> int:
                 previous_index=previous,
                 force=arguments.force,
             )
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "tc-archive":
+            archive = TcArchive.open(arguments.output_dir, None if arguments.offline else arguments.base_url)
+            if arguments.backfill:
+                sources = tuple(dict.fromkeys(item.strip() for item in arguments.backfill.split(",") if item.strip()))
+                unknown = [item for item in sources if item not in TC_BACKFILL_SOURCES]
+                if unknown:
+                    raise XueError(f"unknown backfill sources {unknown}; choose from {', '.join(TC_BACKFILL_SOURCES)}")
+                last = arguments.last or datetime.now(UTC).strftime("%Y-%m")
+                if not arguments.first or not TC_MONTH.match(arguments.first) or not TC_MONTH.match(last):
+                    raise XueError("--backfill needs --from (and optionally --to) as YYYY-MM")
+                if arguments.first > last:
+                    raise XueError("--from is after --to")
+                report = {"backfill": tc_backfill(archive, sources, arguments.first, last)}
+            else:
+                if arguments.offline:
+                    raise XueError("harvesting reads the published issues; --offline is for --backfill only")
+                report = {
+                    "harvest": tc_harvest_issues(
+                        archive,
+                        arguments.base_url,
+                        datetime.now(UTC),
+                        lookback=arguments.lookback,
+                        genesis=arguments.genesis,
+                    )
+                }
+                if not arguments.no_ibtracs:
+                    report["ibtracs"] = tc_harvest_ibtracs(archive)
+            catalog = archive.write()
+            report["written"] = archive.written
+            report["months"] = len(catalog["months"])
+            report["seasons"] = len(catalog["seasons"])
             print(json.dumps(report, indent=2))
         elif arguments.command == "airport-build":
             if arguments.round == "now":

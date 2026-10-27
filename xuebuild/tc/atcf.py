@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from .registry import INVEST_MIN, KNOT, NAUTICAL_MILE, NUMBERED_MAX
+from .registry import INVEST_MIN, KNOT, NAUTICAL_MILE, NUMBERED_MAX, canonical_basin, season_of
 from .track import Forecast, Point, Radii, Track, wrap_longitude
 
 _FIELD_COUNT_MIN = 9
@@ -48,9 +48,9 @@ class AtcfRecord:
 
     @property
     def storm_id(self) -> str:
-        """``EP142026``: basin, two-digit number, the season from the
-        record's own year."""
-        return f"{self.basin}{self.number:02d}{self.time.year}"
+        """``EP142026``: basin, two-digit number, the season the record's
+        time falls in."""
+        return f"{self.basin}{self.number:02d}{season_of(self.basin, self.time)}"
 
     @property
     def short_id(self) -> str:
@@ -101,7 +101,7 @@ def parse_line(line: str) -> AtcfRecord | None:
     fields = [field.strip() for field in stripped.split(",")]
     if len(fields) < _FIELD_COUNT_MIN:
         return None
-    basin = fields[0].upper()
+    basin = canonical_basin(fields[0])
     number = _int(fields[1])
     if len(basin) != 2 or not basin.isalpha() or number is None or number < 0:
         return None
@@ -205,21 +205,38 @@ def storm_ids(records: list[AtcfRecord]) -> list[str]:
     return list(dict.fromkeys(record.storm_id for record in records))
 
 
-def forecasts(records: list[AtcfRecord], tech: str, *, storm_id: str | None = None) -> dict[str, Forecast]:
-    """The newest forecast of ``tech`` for each storm (or the one storm),
-    keyed by storm id. An a-deck is a season's accumulation; only the
-    latest base time of each storm is a current forecast."""
+def _by_base(records: list[AtcfRecord], tech: str, storm_id: str | None) -> dict[str, dict[datetime, list[AtcfRecord]]]:
     tech = tech.upper()
     selected: dict[str, dict[datetime, list[AtcfRecord]]] = {}
     for record in records:
         if record.tech != tech or (storm_id is not None and record.storm_id != storm_id):
             continue
         selected.setdefault(record.storm_id, {}).setdefault(record.time, []).append(record)
+    return selected
+
+
+def _forecast(records: list[AtcfRecord], base: datetime) -> Forecast:
+    return Forecast(base=base, points=_merge_points(records, base), run=base.strftime("%Y%m%d%H"))
+
+
+def forecasts(records: list[AtcfRecord], tech: str, *, storm_id: str | None = None) -> dict[str, Forecast]:
+    """The newest forecast of ``tech`` for each storm (or the one storm),
+    keyed by storm id. An a-deck is a season's accumulation; only the
+    latest base time of each storm is a current forecast."""
     result = {}
-    for sid, by_base in selected.items():
+    for sid, by_base in _by_base(records, tech, storm_id).items():
         base = max(by_base)
-        result[sid] = Forecast(base=base, points=_merge_points(by_base[base], base), run=base.strftime("%Y%m%d%H"))
+        result[sid] = _forecast(by_base[base], base)
     return result
+
+
+def all_forecasts(records: list[AtcfRecord], tech: str, *, storm_id: str | None = None) -> dict[str, list[Forecast]]:
+    """Every forecast of ``tech`` for each storm, oldest base first: the
+    whole season an archived a-deck holds."""
+    return {
+        sid: [_forecast(by_base[base], base) for base in sorted(by_base)]
+        for sid, by_base in _by_base(records, tech, storm_id).items()
+    }
 
 
 def best_track(records: list[AtcfRecord], storm_id: str) -> Track | None:

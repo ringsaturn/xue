@@ -25,9 +25,10 @@ from .. import pointproduct
 from ..errors import TcProductError, XueError
 from ..stac import write_point_product_documents
 from . import atcf, bufrtracks, ibtracs, tcw
+from .bufrtracks import BufrStorm
 from .fetch import SOURCE_IDS, FetchResult, issue_raw_directory, read_fetch_record
 from .identity import PreviousSystem, Sighting, System, resolve, sighting_kind
-from .registry import MODELS, basin_of_letter
+from .registry import MODELS, basin_of_letter, season_of
 from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
@@ -268,7 +269,7 @@ def _parse_gefs(directory: Path, files: list[str]) -> list[Sighting]:
     return sightings
 
 
-def _ecmwf_key(identifier: str, base: datetime) -> tuple[str, str] | None:
+def ecmwf_key(identifier: str, base: datetime) -> tuple[str, str] | None:
     """(identity key, basin) of a ``stormIdentifier``: ``14E`` is the
     numbered ``EP142026``, ``70W`` stays the model's own name."""
     if len(identifier) < 2:
@@ -279,38 +280,46 @@ def _ecmwf_key(identifier: str, base: datetime) -> tuple[str, str] | None:
         return None
     number = int(digits)
     if number <= 49:
-        return _atcf_key(basin, number, base.year), basin
+        return _atcf_key(basin, number, season_of(basin, base)), basin
     return identifier, basin
 
 
-def _parse_ecmwf(directory: Path, files: list[str], *, ensemble: bool) -> list[Sighting]:
+def ecmwf_tracks(path: Path, *, ensemble: bool) -> list[tuple[str, str, BufrStorm, Forecast | Ensemble]]:
+    """(identity key, basin, storm, forecast) of every system in one
+    ``tf`` BUFR: the HRES track, or the member set when ``ensemble``."""
     from ..eccodescli import bufr_dump_json  # eccodes is only needed on this path
 
+    tracks: list[tuple[str, str, BufrStorm, Forecast | Ensemble]] = []
+    for storm in bufrtracks.parse_bufr_tracks(bufr_dump_json(path)):
+        resolved = ecmwf_key(storm.identifier, storm.base)
+        if resolved is None or not storm.members:
+            continue
+        key, basin = resolved
+        if ensemble:
+            leads = tuple(sorted({lead_seconds(p, storm.base) for m in storm.members for p in m.forecast.points}))
+            value: Forecast | Ensemble = Ensemble(
+                base=storm.base,
+                leads=leads,
+                members=tuple(
+                    member_from_points(
+                        m.member, leads, storm.base, {lead_seconds(p, storm.base): p for p in m.forecast.points}
+                    )
+                    for m in sorted(storm.members, key=lambda m: m.member)
+                ),
+                run=storm.base.strftime("%Y%m%d%H"),
+            )
+        else:
+            value = storm.members[0].forecast
+        tracks.append((key, basin, storm, value))
+    return tracks
+
+
+def _parse_ecmwf(directory: Path, files: list[str], *, ensemble: bool) -> list[Sighting]:
     sightings = []
     source = "ecmwfens" if ensemble else "ecmwf"
+    kind = "ensemble" if ensemble else "model"
     for name in files:
-        for storm in bufrtracks.parse_bufr_tracks(bufr_dump_json(directory / name)):
-            resolved = _ecmwf_key(storm.identifier, storm.base)
-            if resolved is None or not storm.members:
-                continue
-            key, basin = resolved
-            if ensemble:
-                leads = tuple(sorted({lead_seconds(p, storm.base) for m in storm.members for p in m.forecast.points}))
-                value: Forecast | Ensemble = Ensemble(
-                    base=storm.base,
-                    leads=leads,
-                    members=tuple(
-                        member_from_points(
-                            m.member, leads, storm.base, {lead_seconds(p, storm.base): p for p in m.forecast.points}
-                        )
-                        for m in sorted(storm.members, key=lambda m: m.member)
-                    ),
-                    run=storm.base.strftime("%Y%m%d%H"),
-                )
-                kind = "ensemble"
-            else:
-                value = storm.members[0].forecast
-                kind = "model"
+        for key, basin, storm, value in ecmwf_tracks(directory / name, ensemble=ensemble):
             anchor = next((m.forecast.points[0] for m in storm.members if m.forecast.points), None)
             if anchor is None:
                 continue

@@ -1,0 +1,100 @@
+name: archive tc
+
+# The tropical cyclone archive (docs/tc.md §8): once a day the published
+# hourly issues of the last two days are folded into tc/archive/<YYYY>/<MM>/
+# and IBTrACS into the season best tracks. A dispatch with `backfill`
+# instead reads the centres' own archives (NHC and UCAR a-decks, ECMWF's
+# tf BUFR on AWS, IBTrACS since 1980) for a range of months. Reads the
+# data origin over HTTPS, writes R2; nothing here touches a raster.
+
+on:
+  schedule:
+    - cron: "50 0 * * *"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Backfill sources instead of the daily harvest: nhc,ucar,ecmwf,ibtracs (empty = harvest)"
+        type: string
+        default: ""
+      from:
+        description: "First month to backfill, YYYY-MM"
+        type: string
+        default: ""
+      to:
+        description: "Last month to backfill, YYYY-MM (empty = this month)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Build and report what would be uploaded, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One writer: every run rewrites the catalog from the one it read.
+concurrency:
+  group: ${{ inputs.dry_run && format('archive-tc-dry-{0}', github.run_id) || 'archive-tc' }}
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    # An ECMWF backfill is a few thousand BUFR files; dispatch it a year
+    # at a time.
+    timeout-minutes: 340
+    env:
+      BACKFILL: ${{ inputs.backfill || '' }}
+      FROM: ${{ inputs.from || '' }}
+      TO: ${{ inputs.to || '' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install eccodes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeccodes-tools
+          bufr_dump -V
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      - name: Build the archive
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$BACKFILL" ]; then
+            args=(--backfill "$BACKFILL" --from "$FROM")
+            [ -z "$TO" ] || args+=(--to "$TO")
+          fi
+          uv run python -m xuebuild -v tc-archive "${args[@]}" > tc-archive-report.json
+          {
+            echo "### tc archive"
+            echo
+            echo '```json'
+            jq '{harvest, ibtracs, backfill, months, seasons, written: (.written | length)}' tc-archive-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          skipped=$(jq '[.backfill[]?.skipped[]?] | length' tc-archive-report.json)
+          [ "$skipped" = 0 ] || echo "::warning::$skipped ECMWF files were skipped; dispatch the same months again to fill them"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: tc-archive-report-${{ github.run_id }}
+          path: tc-archive-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload the written files, the catalog last
+        run: make upload-r2-tc-archive TC_ARCHIVE_REPORT=tc-archive-report.json DRY_RUN="$DRY_RUN"

@@ -12,6 +12,7 @@ drift.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 
@@ -123,6 +124,12 @@ BASIN_LETTERS: dict[str, str] = {
     "U": "SH",
 }
 
+# Sub-basin codes the NCEP tracker writes in an ATCF line's basin field,
+# to the basin JTWC numbers the same system in: the Arabian Sea and the
+# Bay of Bengal are one north Indian sequence (``BB02`` is JTWC's
+# ``IO02``), the south Indian and south Pacific one southern sequence.
+BASIN_ALIASES: dict[str, str] = {"AA": "IO", "BB": "IO", "SI": "SH", "SP": "SH"}
+
 # ATCF cyclone numbers: 01–49 are the season's numbered systems, 90–99 the
 # investigation areas (reused within a season), 80–89 training, 50–79
 # test and internal. Only the first two reach the product.
@@ -136,8 +143,26 @@ NAUTICAL_MILE = 1.852
 """km per nautical mile."""
 
 
+def canonical_basin(code: str) -> str:
+    return BASIN_ALIASES.get(code.upper(), code.upper())
+
+
 def basin_of_letter(letter: str) -> str | None:
     return BASIN_LETTERS.get(letter.upper())
+
+
+SOUTHERN_SEASON_START = 7
+"""The month the southern hemisphere's ATCF season opens: ``SH012026`` is
+the first system after 1 July 2025."""
+
+
+def season_of(basin: str, time: datetime) -> int:
+    """The ATCF season year a system in ``basin`` at ``time`` is numbered
+    in: the calendar year, except that the southern hemisphere's season
+    runs July to June and is named after the year it ends in."""
+    if basin == "SH" and time.month >= SOUTHERN_SEASON_START:
+        return time.year + 1
+    return time.year
 
 
 def registry_document() -> dict[str, Any]:

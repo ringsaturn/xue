@@ -9,6 +9,7 @@ AIRPORT_ROUND = $(if $(ROUND),$(ROUND),now)
 SYNOP_ROUND = $(if $(ROUND),$(ROUND),now)
 FIRE_ROUND = $(if $(ROUND),$(ROUND),now)
 TC_KEEP ?= 168
+TC_ARCHIVE_REPORT ?= tc-archive-report.json
 AIRPORT_KEEP ?= 18
 SOUNDING_KEEP ?= 168
 SYNOP_KEEP ?= 18
@@ -17,7 +18,7 @@ NEXRAD_KEEP ?= 40
 NEXRAD_ROUND = $(if $(ROUND),$(ROUND),now)
 NEXRAD_SITES ?= all
 
-.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
+.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc upload-r2-tc-archive airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
 
 # $(call point_dir,product,id): an issue's directory under the data root.
 # The hourly products file it under its day, <product>/YYYY/MM/DD/<product>.<id>,
@@ -166,6 +167,22 @@ upload-r2-tc: ## Upload a tc issue, then take it live
 
 prune-r2-tc: ## Delete tc issues beyond the newest TC_KEEP
 	$(call point_prune,tc,$(TC_KEEP),issue)
+
+# The archive (docs/tc.md §8) rewrites its months and seasons in place under
+# new CRC32s; `written` in the tc-archive report lists them each before the
+# file naming it, the catalog last, so a reader following the catalog never
+# meets a CRC32 R2 does not have yet.
+upload-r2-tc-archive: ## Upload the tc archive files a tc-archive run wrote (TC_ARCHIVE_REPORT)
+	@set -e; [ -f "$(TC_ARCHIVE_REPORT)" ] || { echo "no $(TC_ARCHIVE_REPORT)"; exit 1; }; \
+	for relative in $$(jq -r '.written[]' "$(TC_ARCHIVE_REPORT)"); do \
+		case "$$relative" in \
+			*/catalog.json) type=application/json; cache="no-cache" ;; \
+			*.jsonl) type=application/x-ndjson; cache="public, max-age=3600" ;; \
+			*) type=application/json; cache="public, max-age=3600" ;; \
+		esac; \
+		$(S3) cp "web/public/data/$$relative" "$(R2_ROOT)/$$relative" --no-progress $(DRY_RUN) \
+			--content-type $$type --cache-control "$$cache"; \
+	done
 
 airport-build: ## Build the airport METAR / TAF product for ROUND
 	$(PYTHON) -m xuebuild airport-build --round $(AIRPORT_ROUND) $(FORCE)
