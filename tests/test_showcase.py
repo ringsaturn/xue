@@ -873,7 +873,7 @@ class CaptionsTest(unittest.TestCase):
         return [
             self.caption("2021-07-20T00:00:00Z", "2021-07-20T03:00:00Z"),
             # Back to back: the next may start where the last one ends.
-            self.caption("2021-07-20T03:00:00Z", "2021-07-20T09:00:00+08:00", "Peak"),
+            self.caption("2021-07-20T03:00:00Z", "2021-07-20T15:00:00+08:00", "Peak"),
         ]
 
     def test_the_definition_carries_them(self) -> None:
