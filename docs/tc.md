@@ -358,6 +358,73 @@ one it implements.
   centres' forecasts have no public archive: they exist from the day the
   live harvest kept them.
 
+## 9. Track-error scores
+
+Each season of the archive carries the errors of its forecasts against its
+best tracks, written by the same daily run (`xue tc-archive`, which scores
+every season whose inputs changed; `--rescore` forces one):
+
+```
+tc/archive/<YYYY>/scores.json    the season's summary, and each storm's span in errors.jsonl
+tc/archive/<YYYY>/errors.jsonl   one storm per line: every verified (forecast, lead)
+```
+
+`catalog.json` names them under `scores` (`season`, `path`, `byteLength`,
+`crc32`, `from`). `from` is what they were computed from — the season
+index's CRC32 and that of every month its storms appear in — so a reader
+can tell scores that lag the archive, and a run knows which to redo.
+
+### 9.1 Verification
+
+- Truth is a best track of the season record (§8.2), each key scored on its
+  own: `usa` in every basin, `jma` and `cma` in the western Pacific. They
+  are never mixed, and intensity errors against `jma` and `cma` compare a
+  source's winds with ten-minute ones.
+- Only the best track's synoptic points (00, 06, 12, 18 UTC) are truth.
+  A forecast is verified at a lead when the best track has a point both at
+  its `base` and at `base + lead`, and the system is a tropical or
+  subtropical cyclone at both: `usa` status `TD`, `TS`, `TY`, `ST`, `STY`,
+  `TC`, `HU`, `HR`, `MH`, `SD` or `SS`; JMA grade 2–5 or 9; CMA category
+  1–6; and where a point carries no class, a wind of at least 25 kt.
+- Leads are 0, 12, 24, 36, 48, 72, 96, 120, 144, 168, 192, 216 and 240 h;
+  a forecast point verifies only at exactly these.
+- An ensemble is verified by its mean position: the centroid of the members
+  that carry the system at that lead, only where they are at least half of
+  the members. Members not following the system the others follow (within
+  333 km at their first position) are left out.
+- Errors: `track`, the great-circle distance in km; `along` and `cross`,
+  its components along the best track's motion through the verifying time
+  (positive ahead) and across it (positive to the right); `vmax` and
+  `pmin`, forecast minus truth, `null` where either is missing.
+
+### 9.2 `scores.json`
+
+```json
+{"scoreSchemaVersion": 1, "product": "tc", "season": 2026,
+ "from": {"season": "…", "months": {"2026-10": "…"}},
+ "leads": [0, 12, …, 240],
+ "errors": {"path": "errors.jsonl", "byteLength": 123456, "crc32": "…"},
+ "storms": [{"id": "WP302026", "offset": 0, "length": 9876}],
+ "summary": [{"basin": "WP", "truth": "usa", "source": "jtwc", "lead": 48, "n": 31,
+              "track": 92.4, "trackMedian": 81.0, "along": -12.3, "cross": 8.1,
+              "nVmax": 31, "vmaxBias": 1.2, "vmaxMae": 5.6, "nPmin": 30, "pminBias": -2.1, "pminMae": 6.0}],
+ "homogeneous": [{"basin": "WP", "truth": "usa", "reference": "jtwc", "source": "ecmwf", "lead": 48,
+                  "n": 28, "track": 95.0, "referenceTrack": 90.1, "skill": -0.054}]}
+```
+
+`summary` is every source on its own sample; `homogeneous` compares each
+source with a basin's references — the official forecast (`nhc` in AL,
+EP, CP; `jtwc` in WP, IO, SH) and `ecmwf` — on exactly the (storm, base,
+lead) cases both verified, with `skill` = 1 − track ÷ reference track.
+A line of `errors.jsonl` is `{storm, basin, truths: {<truth>: {<source>:
+{base: [], lead: [], track: [], along: [], cross: [], vmax: [], pmin: []}}}}`,
+one column per field and one row per verified case, `lead` in hours.
+
+The official forecasts are compared with the models of the same `base`,
+which ran with the same data but finished after the official forecast
+was written; the centres' own verification compares them with the
+previous cycle's models instead, so these skills favour the models.
+
 ---
 
 Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

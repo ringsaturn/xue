@@ -123,6 +123,31 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * _EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 
+def dominant_cluster(
+    positions: list[tuple[float, float] | None], anchor: tuple[float, float] | None = None
+) -> list[int]:
+    """The indices of a group of positions within ``MATCH_KM`` of one of
+    them: the members of an ensemble that follow one system. ECMWF numbers
+    an unnamed system afresh in every member, so one ``70W`` message can
+    hold members on two or three systems. Without ``anchor`` the largest
+    group is taken (the first centre on a tie); with one, the largest
+    group whose centre lies within ``MATCH_KM`` of it, or none."""
+    best: list[int] = []
+    for centre in positions:
+        if centre is None:
+            continue
+        if anchor is not None and distance_km(anchor[0], anchor[1], centre[0], centre[1]) > MATCH_KM:
+            continue
+        group = [
+            index
+            for index, position in enumerate(positions)
+            if position is not None and distance_km(centre[0], centre[1], position[0], position[1]) <= MATCH_KM
+        ]
+        if len(group) > len(best):
+            best = group
+    return best
+
+
 def atcf_number(key: str) -> int | None:
     """The cyclone number of ``EP142026`` or ``EP14``."""
     digits = key[2:4]

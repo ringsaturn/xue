@@ -27,7 +27,7 @@ from ..stac import write_point_product_documents
 from . import atcf, bufrtracks, ibtracs, tcw
 from .bufrtracks import BufrStorm
 from .fetch import SOURCE_IDS, FetchResult, issue_raw_directory, read_fetch_record
-from .identity import PreviousSystem, Sighting, System, resolve, sighting_kind
+from .identity import PreviousSystem, Sighting, System, dominant_cluster, resolve, sighting_kind
 from .registry import MODELS, basin_of_letter, season_of
 from .schema import (
     INDEX_FILENAME,
@@ -57,6 +57,7 @@ the last advisory."""
 _BEST_PRIORITY = {"nhc": 0, "jtwc": 1, "ibtracs": 2}
 _TCW_NAME = re.compile(r"^([a-z]{2})(\d{2})(\d{2})\.tcw$")
 _NHC_DECK = re.compile(r"^([ab])([a-z]{2}\d{6})\.dat$")
+ATCF_KEY = re.compile(r"^[A-Z]{2}\d{6}$")
 _GEFS_MEMBER = re.compile(r"^(ac00|aemn|ap\d{2})\.t\d{2}z\.cyclone\.trackatcfunix$")
 
 
@@ -295,6 +296,12 @@ def ecmwf_tracks(path: Path, *, ensemble: bool) -> list[tuple[str, str, BufrStor
         if resolved is None or not storm.members:
             continue
         key, basin = resolved
+        if ensemble and not ATCF_KEY.match(key):
+            firsts = [(m.forecast.points[0].lat, m.forecast.points[0].lon) if m.forecast.points else None for m in storm.members]
+            keep = set(dominant_cluster(firsts))
+            storm = BufrStorm(storm.identifier, storm.name, storm.base, tuple(m for i, m in enumerate(storm.members) if i in keep))
+            if not storm.members:
+                continue
         if ensemble:
             leads = tuple(sorted({lead_seconds(p, storm.base) for m in storm.members for p in m.forecast.points}))
             value: Forecast | Ensemble = Ensemble(

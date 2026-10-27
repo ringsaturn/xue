@@ -57,6 +57,7 @@ CATALOG_FILENAME = "catalog.json"
 INDEX_FILENAME = "index.json"
 FORECASTS_FILENAME = "forecasts.jsonl"
 BEST_FILENAME = "best.jsonl"
+SCORES_FILENAME = "scores.json"
 
 KINDS = ("agency", "model", "ensemble")
 ORIGINS = ("live", "nhc-atcf", "ucar-atcf", "ecmwf-aws")
@@ -284,6 +285,11 @@ class Archive:
     def month_index(self, month: str) -> dict[str, Any]:
         return json.loads((self.root / month_directory(month) / INDEX_FILENAME).read_text(encoding="utf-8"))
 
+    def pull_month_lines(self, month: str) -> Path:
+        return self._pull(
+            f"{month_directory(month)}/{FORECASTS_FILENAME}", self.month_index(month)["forecasts"]["crc32"]
+        )
+
     def add_records(self, records: Iterable[dict[str, Any]]) -> int:
         """Merge records into their months (loading each on first touch)."""
         changed = 0
@@ -309,6 +315,9 @@ class Archive:
     def season_index(self, season: int) -> dict[str, Any]:
         return json.loads((self.root / season_directory(season) / INDEX_FILENAME).read_text(encoding="utf-8"))
 
+    def pull_best_lines(self, season: int) -> Path:
+        return self._pull(f"{season_directory(season)}/{BEST_FILENAME}", self.season_index(season)["best"]["crc32"])
+
     def add_best(self, record: dict[str, Any]) -> None:
         """Merge one storm's best tracks into its season, key by key."""
         validate_best(record, f"best {record.get('storm')}")
@@ -333,11 +342,40 @@ class Archive:
 
     # writing
 
+    def write_file(self, relative: str, payload: bytes) -> None:
+        """Write one file of the tree, listing it in ``written`` only when
+        its bytes changed."""
+        self._write(relative, payload)
+
+    def write_scores_catalog(self, seasons: list[int]) -> dict[str, Any]:
+        """Name the scores just written for ``seasons`` in the catalog
+        (``docs/tc.md`` §9) and write it."""
+        entries = {entry["season"]: entry for entry in self.catalog.get("scores", [])}
+        for season in seasons:
+            body = (self.root / season_directory(season) / SCORES_FILENAME).read_bytes()
+            entries[season] = {
+                "season": season,
+                "path": f"{season:04d}/{SCORES_FILENAME}",
+                "byteLength": len(body),
+                "crc32": crc32_hex(body),
+                "from": json.loads(body)["from"],
+            }
+        catalog = {**self.catalog, "scores": [entries[season] for season in sorted(entries)]}
+        validate_catalog(catalog)
+        self._write(f"{ARCHIVE_DIRECTORY}/{CATALOG_FILENAME}", encode_json(catalog))
+        self.catalog = catalog
+        return catalog
+
     def _write(self, relative: str, payload: bytes) -> None:
         path = self.root / relative
         if path.exists() and path.read_bytes() == payload:
             return
         write_bytes_atomic(path, payload)
+        # Listed at its last write, so a file written twice (the catalog,
+        # once for the archive and once for the scores) is uploaded once,
+        # after everything the second version names.
+        if relative in self.written:
+            self.written.remove(relative)
         self.written.append(relative)
 
     def write(self) -> dict[str, Any]:
@@ -467,12 +505,17 @@ class Archive:
                     "crc32": crc32_hex(body),
                     "storms": len(json.loads(body)["storms"]),
                 }
-        return {
+        catalog: dict[str, Any] = {
             "archiveSchemaVersion": ARCHIVE_SCHEMA_VERSION,
             "product": PRODUCT,
             "months": [months[m] for m in sorted(months)],
             "seasons": [seasons[s] for s in sorted(seasons)],
         }
+        # A season's scores stay named until they are recomputed; their
+        # ``from`` tells a reader (and the next run) whether they are current.
+        if self.catalog.get("scores"):
+            catalog["scores"] = self.catalog["scores"]
+        return catalog
 
     def _written_seasons(self) -> set[int]:
         seasons = set(self.seasons)
@@ -572,8 +615,8 @@ def validate_season_index(payload: object) -> None:
 
 def validate_catalog(payload: object) -> None:
     catalog = _check_head(payload, "tc archive catalog")
-    for section, key in (("months", "month"), ("seasons", "season")):
-        entries = catalog.get(section)
+    for section, key in (("months", "month"), ("seasons", "season"), ("scores", "season")):
+        entries = catalog.get(section, [] if section == "scores" else None)
         if not isinstance(entries, list):
             raise TcProductError(f"tc archive catalog {section} must be a list")
         previous: Any = None
@@ -585,7 +628,10 @@ def validate_catalog(payload: object) -> None:
             if previous is not None and value <= previous:
                 raise TcProductError(f"tc archive catalog {section} must be sorted, each once")
             previous = value
-            expected = (
-                f"{value[:4]}/{value[5:]}/{INDEX_FILENAME}" if section == "months" else f"{value:04d}/{INDEX_FILENAME}"
-            )
+            if section == "months":
+                expected = f"{value[:4]}/{value[5:]}/{INDEX_FILENAME}"
+            else:
+                expected = f"{value:04d}/{SCORES_FILENAME if section == 'scores' else INDEX_FILENAME}"
             _check_file(entry, label, expected)
+            if section == "scores" and not isinstance(entry.get("from"), dict):
+                raise TcProductError(f"{label}.from must say what the scores were computed from")

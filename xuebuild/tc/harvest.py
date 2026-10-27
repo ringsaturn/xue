@@ -27,7 +27,9 @@ from . import ibtracs
 from .archive import Archive, make_best, make_record
 from .fetch import IBTRACS_URL
 from .registry import canonical_basin, season_of
+from .identity import dominant_cluster
 from .schema import ATCF_ID, INDEX_FILENAME, issue_directory
+from .track import MISSING
 
 LOG = logging.getLogger(__name__)
 
@@ -72,12 +74,57 @@ def canonical_storm(storm: str, base: str) -> str:
     return f"{canonical}{number}{year}"
 
 
+def clustered_ensemble(forecast: dict[str, Any], anchor: tuple[float, float] | None = None) -> dict[str, Any]:
+    """An ensemble with only the members following one system at their
+    first position (:func:`.identity.dominant_cluster`, near ``anchor``
+    when given): issues built before the build filtered ECMWF's per-member
+    numbering can carry a ``7x`` member set spread over several systems."""
+    leads = len(forecast["leads"])
+    firsts: list[tuple[float, float] | None] = []
+    for member in range(len(forecast["members"])):
+        row = range(member * leads, (member + 1) * leads)
+        first = next((i for i in row if forecast["lat"][i] != MISSING and forecast["lon"][i] != MISSING), None)
+        firsts.append(None if first is None else (forecast["lat"][first] / 100, forecast["lon"][first] / 100))
+    keep = dominant_cluster(firsts, anchor)
+    if len(keep) == len(forecast["members"]):
+        return forecast
+    rows = [i for member in keep for i in range(member * leads, (member + 1) * leads)]
+    return {
+        **forecast,
+        "members": [forecast["members"][m] for m in keep],
+        **{key: [forecast[key][i] for i in rows] for key in ("lat", "lon", "vmax", "pmin")},
+    }
+
+
+def _anchor(storm: dict[str, Any], base: str) -> tuple[float, float] | None:
+    """Where the storm file places the system at ``base``: a best-track
+    point, else the start of a deterministic forecast, within six hours."""
+    when = datetime.fromisoformat(base)
+    candidates = [p for track in storm.get("best", {}).values() for p in track["points"]]
+    if not candidates:
+        candidates = [
+            f["points"][0]
+            for f in (*storm.get("agencies", {}).values(), *storm.get("models", {}).values())
+            if f.get("points")
+        ]
+    timed = [(abs((datetime.fromisoformat(p["time"]) - when).total_seconds()), p) for p in candidates]
+    timed = [(gap, p) for gap, p in timed if gap <= 6 * 3600]
+    if not timed:
+        return None
+    point = min(timed, key=lambda item: item[0])[1]
+    return point["lat"], point["lon"]
+
+
 def storm_records(storm: dict[str, Any], target: str) -> list[dict[str, Any]]:
     """A storm file's forecasts as archive records under ``target``."""
     records = []
     sections = [("agency", source, f) for source, f in storm.get("agencies", {}).items()]
     sections += [("ensemble" if "members" in f else "model", source, f) for source, f in storm.get("models", {}).items()]
     for kind, source, forecast in sections:
+        if kind == "ensemble":
+            forecast = clustered_ensemble(forecast, _anchor(storm, forecast["base"]))
+            if not forecast["members"]:
+                continue
         storm_id = canonical_storm(target, forecast["base"])
         records.append(make_record(storm_id, storm_id[:2], storm.get("name"), source, kind, "live", forecast))
     return records

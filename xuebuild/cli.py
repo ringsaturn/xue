@@ -80,6 +80,7 @@ from .tc.harvest import GENESIS_HOURS as TC_GENESIS_HOURS
 from .tc.harvest import LOOKBACK_HOURS as TC_LOOKBACK_HOURS
 from .tc.harvest import harvest_ibtracs as tc_harvest_ibtracs
 from .tc.harvest import harvest_issues as tc_harvest_issues
+from .tc.score import score_stale as tc_score_stale
 
 
 # The longest axis any source publishes — CFSv2's thirty-nine weeks, against
@@ -554,6 +555,15 @@ def parser() -> argparse.ArgumentParser:
         help="hours to read back for a newly numbered system's earlier forecasts",
     )
     tc_archive.add_argument("--no-ibtracs", action="store_true", help="leave the season best tracks to the next run")
+    tc_archive.add_argument(
+        "--no-score",
+        action="store_true",
+        help="leave the track-error scores of the seasons this run changed to the next run",
+    )
+    tc_archive.add_argument(
+        "--rescore",
+        help="comma-separated seasons to score again even when nothing they depend on changed",
+    )
     tc_archive.add_argument(
         "--backfill",
         help=f"instead of harvesting, backfill from these comma-separated sources: {','.join(TC_BACKFILL_SOURCES)}",
@@ -1231,6 +1241,10 @@ def main(argv: list[str] | None = None) -> int:
                 if not arguments.no_ibtracs:
                     report["ibtracs"] = tc_harvest_ibtracs(archive)
             catalog = archive.write()
+            if not arguments.no_score:
+                rescore = [int(item) for item in arguments.rescore.split(",")] if arguments.rescore else None
+                report["score"] = tc_score_stale(archive, seasons=rescore)
+                catalog = archive.catalog
             report["written"] = archive.written
             report["months"] = len(catalog["months"])
             report["seasons"] = len(catalog["seasons"])

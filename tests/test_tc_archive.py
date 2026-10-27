@@ -27,7 +27,10 @@ from xuebuild.tc.archive import (
     validate_season_index,
 )
 from xuebuild.tc.backfill import deck_records
-from xuebuild.tc.harvest import _follow, canonical_storm, storm_records
+from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, storm_records
+from xuebuild.tc.identity import dominant_cluster
+from xuebuild.tc.score import along_cross, forecast_positions, great_circle_km, mean_position, score_storm, summarise
+from xuebuild.tc.track import MISSING
 from xuebuild.tc.registry import season_of
 
 
@@ -245,6 +248,105 @@ class DeckTest(unittest.TestCase):
         self.assertEqual(ensemble["lat"], [1800, 1820, -32768, 1840])
         self.assertEqual(len(ensemble["mean"]["points"]), 1)
         self.assertTrue(all(record["storm"] == "WP222025" for record in records))
+
+
+def _point(time: str, lat: float, lon: float, *, cls: str | None = "TS", vmax: float | None = 25.0, lead: int | None = None) -> dict:
+    point = {"time": time}
+    if lead is not None:
+        point["lead"] = lead
+    point.update({"lat": lat, "lon": lon, "vmax": vmax, "pmin": 990.0, "radii": None, "class": cls,
+                  "rmw": None, "gust": None, "cone": None})
+    return point
+
+
+class ScoreTest(unittest.TestCase):
+    BASE = "2026-10-20T00:00:00Z"
+
+    def _best(self) -> dict:
+        # Due north at one degree a day, a storm from start to end.
+        return {"usa": {"source": "ibtracs", "provisional": False, "points": [
+            _point("2026-10-19T18:00:00Z", 14.75, 140.0),
+            _point("2026-10-20T00:00:00Z", 15.0, 140.0),
+            _point("2026-10-20T03:00:00Z", 15.1, 140.0),
+            _point("2026-10-20T06:00:00Z", 15.25, 140.0),
+            _point("2026-10-20T18:00:00Z", 15.75, 140.0),
+            _point("2026-10-21T00:00:00Z", 16.0, 140.0),
+            _point("2026-10-21T06:00:00Z", 16.25, 140.0),
+            _point("2026-10-22T00:00:00Z", 17.0, 140.0, cls="EX"),
+        ]}}
+
+    def _record(self, source: str, points: list[dict]) -> dict:
+        forecast = {"issued": self.BASE, "base": self.BASE, "points": points}
+        return make_record("WP302026", "WP", None, source, "model", "live", forecast)
+
+    def test_geometry(self) -> None:
+        self.assertAlmostEqual(great_circle_km(0, 0, 1, 0), 111.19, places=1)
+        self.assertAlmostEqual(great_circle_km(10, 179.5, 10, -179.5), great_circle_km(10, 0, 10, 1), places=6)
+        along, cross = along_cross((15.0, 140.0), (16.0, 140.0), (0.0, 100.0))
+        self.assertAlmostEqual(along, 111.19, places=1)
+        self.assertAlmostEqual(cross, 0.0, places=6)
+        along, cross = along_cross((15.0, 140.0), (15.0, 141.0), (0.0, 100.0))
+        self.assertGreater(cross, 100)  # east of a northward track is to its right
+        self.assertEqual(mean_position([10, 10], [179.0, -179.0]), (10.0, 180.0))
+
+    def test_score_storm_verifies_tropical_synoptic_points_only(self) -> None:
+        record = self._record("gfs", [
+            _point("2026-10-20T00:00:00Z", 15.0, 141.0, lead=0),
+            _point("2026-10-20T03:00:00Z", 15.0, 141.0, lead=10800),
+            _point("2026-10-21T00:00:00Z", 16.0, 140.0, vmax=30.0, lead=86400),
+            _point("2026-10-22T00:00:00Z", 17.0, 140.0, lead=172800),
+        ])
+        scored = score_storm([record], self._best(), "WP")
+        self.assertEqual(list(scored), ["usa"])
+        column = scored["usa"]["gfs"]
+        self.assertEqual(column["lead"], [0, 24])  # 3 h is no scored lead; 48 h verifies on an extratropical point
+        self.assertAlmostEqual(column["track"][0], 107.4, places=0)
+        self.assertEqual(column["track"][1], 0.0)
+        self.assertEqual(column["vmax"], [0.0, 5.0])
+        self.assertEqual(score_storm([record], self._best(), "AL")["usa"]["gfs"]["lead"], [0, 24])
+        self.assertEqual(score_storm([record], {"jma": self._best()["usa"]}, "AL"), {})
+
+    def test_forecast_starting_outside_the_tropical_life_is_not_verified(self) -> None:
+        best = self._best()
+        best["usa"]["points"][1]["class"] = "LO"
+        record = self._record("gfs", [_point("2026-10-21T00:00:00Z", 16.0, 140.0, lead=86400)])
+        self.assertEqual(score_storm([record], best, "WP"), {})
+
+    def test_ensemble_mean_needs_a_quorum_and_one_system(self) -> None:
+        forecast = {"issued": self.BASE, "base": self.BASE, "leads": [0, 86400], "members": [1, 2, 3, 4],
+                    "lat": [1500, 1600, 1500, MISSING, 3100, 3200, 1500, MISSING],
+                    "lon": [14000, 14000, 14000, MISSING, 12600, 12600, 14000, MISSING],
+                    "vmax": [250] * 8, "pmin": [9900] * 8, "mean": None}
+        record = make_record("WP302026", "WP", None, "ecmwfens", "ensemble", "live", forecast)
+        positions = forecast_positions(record)
+        self.assertEqual(positions[0]["lat"], 15.0)  # the member at 31°N follows another system
+        self.assertNotIn(24, positions)  # one of three members left at 24 h is no quorum
+
+    def test_clustered_ensemble_takes_the_group_near_the_anchor(self) -> None:
+        firsts = [(31.0, 126.0), (31.1, 126.1), (13.0, 164.0)]
+        self.assertEqual(dominant_cluster(firsts), [0, 1])
+        self.assertEqual(dominant_cluster(firsts, (13.2, 164.2)), [2])
+        self.assertEqual(dominant_cluster(firsts, (0.0, 0.0)), [])
+        forecast = {"leads": [0], "members": [1, 2, 3], "lat": [3100, 3110, 1300], "lon": [12600, 12610, 16400],
+                    "vmax": [1, 2, 3], "pmin": [9000, 9001, 9002]}
+        kept = clustered_ensemble(forecast, (13.2, 164.2))
+        self.assertEqual((kept["members"], kept["lat"], kept["pmin"]), ([3], [1300], [9002]))
+
+    def test_summary_and_homogeneous(self) -> None:
+        storms = {
+            "WP302026": ("WP", {"usa": {
+                "jtwc": {"base": [self.BASE, self.BASE], "lead": [24, 48], "track": [50.0, 100.0],
+                         "along": [1.0, 2.0], "cross": [0.0, 0.0], "vmax": [1.0, None], "pmin": [None, None]},
+                "gfs": {"base": [self.BASE, "2026-10-20T06:00:00Z"], "lead": [24, 24], "track": [100.0, 80.0],
+                        "along": [None, None], "cross": [None, None], "vmax": [-2.0, -4.0], "pmin": [3.0, 1.0]},
+            }}),
+        }
+        summary, homogeneous = summarise(storms)
+        gfs24 = next(r for r in summary if r["source"] == "gfs" and r["lead"] == 24)
+        self.assertEqual((gfs24["n"], gfs24["track"], gfs24["vmaxBias"], gfs24["vmaxMae"], gfs24["along"]), (2, 90.0, -3.0, 3.0, None))
+        pair = [r for r in homogeneous if r["reference"] == "jtwc"]
+        self.assertEqual(pair, [{"basin": "WP", "truth": "usa", "reference": "jtwc", "source": "gfs", "lead": 24,
+                                 "n": 1, "track": 100.0, "referenceTrack": 50.0, "skill": -1.0}])
 
 
 if __name__ == "__main__":
