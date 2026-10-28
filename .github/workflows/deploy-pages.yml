@@ -36,6 +36,11 @@ on:
       - mk/**
       - .github/workflows/deploy-pages.yml
   workflow_dispatch:
+  # The storm pages (web/tooling/stormpages.ts) are built from the published
+  # storm archive, which archive-tc.yml rewrites at 00:50 UTC: a daily
+  # deploy after it carries the day's storms into the pages and the sitemap.
+  schedule:
+    - cron: "40 1 * * *"
 
 permissions:
   contents: read

@@ -23,15 +23,18 @@ import { join, posix } from "node:path";
 import type { Plugin } from "vite";
 
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
+import { buildStormSite, loadStorms } from "./stormpages";
 
 /** Root-relative pages every deploy has, before the cases. */
-export const STATIC_PAGES: readonly string[] = ["/", "/showcase.html", "/compare.html", "/metrics.html"];
+export const STATIC_PAGES: readonly string[] = ["/", "/showcase.html", "/compare.html", "/metrics.html", "/typhoon.html"];
 
-/** The sitemap's URL set: the static pages plus one per case, absolute. */
-export function sitemapUrls(caseIds: readonly string[]): string[] {
+/** The sitemap's URL set: the static pages, one per case and the storm
+ * pages (`stormpages.ts`), absolute. */
+export function sitemapUrls(caseIds: readonly string[], stormUrls: readonly string[] = []): string[] {
   return [
     ...STATIC_PAGES.map((path) => new URL(path, SITE_ORIGIN).href),
     ...caseIds.map((id) => `${SITE_ORIGIN}/?case=${encodeURIComponent(id)}`),
+    ...stormUrls,
   ];
 }
 
@@ -164,10 +167,25 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
     apply: "build",
     async generateBundle() {
       const caseIds = await loadCatalogCaseIds(dataBaseUrl, join(repoRoot, "web", "public"));
+      // The storm pages need the published archive; a build without a data
+      // root (a local one) or with the archive unreachable ships the shell
+      // without them rather than failing.
+      let stormUrls: string[] = [];
+      if (dataBaseUrl && /^https?:/.test(dataBaseUrl)) {
+        try {
+          const { storms } = await loadStorms(dataBaseUrl);
+          const site = buildStormSite(storms);
+          for (const file of site.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
+          stormUrls = site.urls;
+          this.info(`storm pages: ${storms.length} storms, ${site.files.length - 1} pages`);
+        } catch (error) {
+          this.warn(`storm pages skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds)),
+        source: renderSitemap(sitemapUrls(caseIds, stormUrls)),
       });
       this.emitFile({
         type: "asset",

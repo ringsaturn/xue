@@ -75,13 +75,13 @@ export interface SeasonOverview {
   storms: { id: string; track: [number, number, number][] }[];
 }
 
-interface MonthStorm {
+export interface MonthStorm {
   id: string;
   offset: number;
   length: number;
 }
 
-interface MonthIndex {
+export interface MonthIndex {
   month: string;
   forecasts: FileRef;
   storms: MonthStorm[];
@@ -125,7 +125,7 @@ export interface StormErrors {
   truths: Record<string, Record<string, ErrorColumns>>;
 }
 
-interface ScoresDocument {
+export interface ScoresDocument {
   season: number;
   leads: number[];
   errors: FileRef;
@@ -248,7 +248,7 @@ export function validateSeasonOverview(input: unknown): SeasonOverview {
   };
 }
 
-function validateMonthIndex(input: unknown): MonthIndex {
+export function validateMonthIndex(input: unknown): MonthIndex {
   const index = head(input, "tc month index", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
   if (typeof index.month !== "string") throw new Error("month index month must be YYYY-MM");
   return {
@@ -262,7 +262,7 @@ function validateMonthIndex(input: unknown): MonthIndex {
   };
 }
 
-function validateScores(input: unknown): ScoresDocument {
+export function validateScores(input: unknown): ScoresDocument {
   const scores = head(input, "tc scores", "scoreSchemaVersion", SCORE_SCHEMA_VERSION);
   return {
     season: Number(scores.season),
@@ -276,7 +276,7 @@ function validateScores(input: unknown): ScoresDocument {
   };
 }
 
-function validateRecord(input: unknown): ArchiveRecord {
+export function validateRecord(input: unknown): ArchiveRecord {
   const record = object(input, "tc archive record");
   if (typeof record.storm !== "string" || typeof record.source !== "string")
     throw new Error("tc archive record names no storm or source");
@@ -298,7 +298,7 @@ function validateRecord(input: unknown): ArchiveRecord {
   };
 }
 
-function validateBest(input: unknown): BestRecord {
+export function validateBest(input: unknown): BestRecord {
   const record = object(input, "tc best record");
   if (typeof record.storm !== "string") throw new Error("tc best record names no storm");
   const best = object(record.best, "tc best record best");

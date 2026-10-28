@@ -570,6 +570,15 @@ synoptic time and every issue time (`storyTimes`); it plays at four
 steps a second, and the MP4 is that playback captured through
 `mp4export.ts` with a `GifHost` of the page's own.
 
+Storm pages: `web/tooling/stormpages.ts` writes one static page per
+archived storm, per season and for the archive (`/tc/…`), in English at the
+root and in `zh`, `zh-hant`, `ja` and `ko` under a prefix, the blog's
+layout: each names every translation with `hreflang` (English the
+`x-default`, whose page sends a reader to their site or browser language)
+and its Open Graph locales. Built in `discovery.ts`'s bundle step from the
+published archive, so `deploy-pages.yml` also runs daily after the archive
+job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
+
 Storm names: `tc/names.ts` holds the western Pacific list in the scripts
 the CMA, CWA, JMA and KMA write it in, and `localStormName` is what every
 storm label, list and card shows (`tests/web/tcnames.test.ts`). It was

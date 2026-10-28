@@ -390,6 +390,11 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
+- https://xue.ringsaturn.me/tc/ — one static page per archived tropical
+  cyclone (`/tc/<season>/<name>-<atcf id>`), per season (`/tc/<season>/`) and
+  for the archive, in English and under `/zh/`, `/zh-hant/`, `/ja/`, `/ko/`:
+  the storm's facts, its six-hourly best track, a track picture and the
+  forecast track errors by source and lead, each linking to the map below.
 - https://xue.ringsaturn.me/typhoon.html — past tropical cyclones on a map,
   picked by season, basin and storm in the panel beside it (`?storm=<ATCF
   id>`, e.g. `WP062023`; `?issue=YYYYMMDDHH` picks the issue time drawn;

@@ -42,14 +42,16 @@ const CATALOG = JSON.stringify({
 });
 
 describe("sitemap", () => {
-  it("lists the four pages and one URL per case", () => {
-    expect(sitemapUrls(["zhengzhou-2021", "shadel-2026"])).toEqual([
+  it("lists the five pages, one URL per case and the storm pages", () => {
+    expect(sitemapUrls(["zhengzhou-2021", "shadel-2026"], [`${SITE_ORIGIN}/tc/`])).toEqual([
       `${SITE_ORIGIN}/`,
       `${SITE_ORIGIN}/showcase.html`,
       `${SITE_ORIGIN}/compare.html`,
       `${SITE_ORIGIN}/metrics.html`,
+      `${SITE_ORIGIN}/typhoon.html`,
       `${SITE_ORIGIN}/?case=zhengzhou-2021`,
       `${SITE_ORIGIN}/?case=shadel-2026`,
+      `${SITE_ORIGIN}/tc/`,
     ]);
   });
 
