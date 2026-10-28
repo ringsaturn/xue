@@ -8,6 +8,7 @@
 import { t } from "../i18n";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./agencies";
 import type { TcIndex, TcIndexEntry } from "./schema";
+import { localStormName } from "./names";
 
 interface TcPanelState {
   index: TcIndex | null;
@@ -99,7 +100,7 @@ function stormRow(
   pressed: boolean,
   onClick: () => void,
 ): HTMLButtonElement {
-  const title = entry.name ?? (entry.level === "A" ? entry.id : t("tcUnnamed"));
+  const title = localStormName(entry.name, entry.basin) ?? (entry.level === "A" ? entry.id : t("tcUnnamed"));
   const detail =
     entry.level === "A" ? `${entry.basin} · ${entry.id}` : entry.basin;
   const tag = entry.class

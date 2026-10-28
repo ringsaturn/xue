@@ -439,6 +439,7 @@ export const ko: Record<MessageKey, string> = {
   tcHistoryAll: "전체",
   tcHistoryEmpty: "이 시즌과 해역에는 예보가 있는 폭풍이 없습니다",
   tcHistoryStormAria: "{name} 열기",
+  tcHistorySouthernNote: "남반구 시즌은 7월부터 이듬해 6월까지이며 끝나는 해로 부릅니다. {season} 시즌은 {from}부터 {to}까지입니다.",
   tcPageTitle: "지난 열대저기압",
   tcPageMetaDescription: "지난 열대저기압: 각 기관의 베스트 트랙, 아카이브된 모든 예보, 그리고 각각 얼마나 빗나갔는지.",
   tcPageLoading: "폭풍을 불러오는 중",
@@ -459,6 +460,8 @@ export const ko: Record<MessageKey, string> = {
   tcPageLife: "생애",
   tcPagePeak: "최대 풍속",
   tcPageForecasts: "예보 수",
+  tcPageRadii: "강풍 반경",
+  tcLegendIntensity: "강도 · 미국 베스트 트랙, 1분 평균풍",
 
   soundingTileTip: "라디오존데 관측",
   varSounding: "고층",

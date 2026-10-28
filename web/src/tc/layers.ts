@@ -21,6 +21,8 @@ import {
   NEUTRAL_LIGHT_GROUND,
   TC_BEST_AGENCY,
 } from "./agencies";
+import { RADII_COLORS, sshsClass } from "./intensity";
+import { localStormName } from "./names";
 import {
   isTcEnsemble,
   type TcPoint,
@@ -43,10 +45,13 @@ const TC_SOURCE = "tc-tracks";
 const LAYERS = {
   radii: "tc-radii",
   radiiLine: "tc-radii-line",
+  bestRadii: "tc-best-radii",
   member: "tc-member",
   modelSolid: "tc-model-solid",
   modelDotted: "tc-model-dotted",
   best: "tc-best",
+  intensityCasing: "tc-intensity-casing",
+  intensity: "tc-intensity",
   agencyFuture: "tc-agency-future",
   agencyPast: "tc-agency-past",
   bestPoint: "tc-best-point",
@@ -116,10 +121,19 @@ export interface StormView {
   members: boolean;
   /** Draw the best tracks. */
   best: boolean;
+  /** Draw the best track's wind radii: filled at the current time, and as
+   * outlines at every synoptic point before it — the area its winds swept.
+   * Off when absent (the live viewer). */
+  bestRadii?: boolean;
+  /** Draw the US best track thick and colored by Saffir–Simpson class,
+   * its points filled with it (`intensity.ts`). Off when absent. */
+  bestIntensity?: boolean;
 }
 
 interface Properties {
   kind: string;
+  /** A best-track point's fill: its intensity class's color. */
+  fill?: string;
   color: string;
   storm: string;
   code?: string;
@@ -140,7 +154,7 @@ function pointData(
 ): string {
   const data: TcPointData = {
     storm: storm.id,
-    name: storm.name ?? storm.id,
+    name: localStormName(storm.name, storm.basin) ?? storm.id,
     source,
     agency,
     code,
@@ -188,11 +202,41 @@ function empty(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
+/** The past radii's outlines: the 34-kt ring carries the swept area, the
+ * inner two only hint at it. */
+const BEST_RADII_OPACITY: Record<string, number> = { "34": 0.45, "50": 0.3, "64": 0.25 };
+
 const RADII_OPACITY: Record<string, number> = {
   "34": 0.22,
   "50": 0.3,
   "64": 0.4,
 };
+
+/** The best track drawn by intensity: the US one (one-minute winds, the
+ * Saffir–Simpson scale's own), else the first with a wind. */
+function intensityKey(storm: TcStorm): string | null {
+  const keys = Object.keys(storm.best).sort((a, b) => (a === "usa" ? -1 : b === "usa" ? 1 : a.localeCompare(b)));
+  return keys.find((key) => storm.best[key]!.points.some((point) => point.vmax !== null)) ?? null;
+}
+
+/** That track as a casing and one segment per step, each in the class of
+ * the point it starts from. */
+function intensityFeatures(storm: TcStorm, key: string): Feature[] {
+  const points = storm.best[key]!.points;
+  const features: Feature[] = [];
+  const casing = line(forecastLine(points), { kind: "intensity-casing", color: "", storm: storm.id });
+  if (casing) features.push(casing);
+  for (let index = 0; index + 1 < points.length; index += 1) {
+    const from = points[index]!;
+    const segment = line(forecastLine([from, points[index + 1]!]), {
+      kind: "intensity",
+      color: sshsClass(from.vmax)?.color ?? "#999999",
+      storm: storm.id,
+    });
+    if (segment) features.push(segment);
+  }
+  return features;
+}
 
 export class StormLayers {
   private views: StormView[] = [];
@@ -235,6 +279,20 @@ export class StormLayers {
       10,
       base * 1.6,
     ];
+    map.addLayer(
+      {
+        id: LAYERS.bestRadii,
+        type: "line",
+        source: TC_SOURCE,
+        filter: kind("best-radii"),
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 0.8,
+          "line-opacity": ["get", "opacity"],
+        },
+      },
+      before,
+    );
     map.addLayer(
       {
         id: LAYERS.radii,
@@ -325,6 +383,28 @@ export class StormLayers {
     );
     map.addLayer(
       {
+        id: LAYERS.intensityCasing,
+        type: "line",
+        source: TC_SOURCE,
+        filter: kind("intensity-casing"),
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": this.halo, "line-width": width(5.4), "line-opacity": 0.9 },
+      },
+      before,
+    );
+    map.addLayer(
+      {
+        id: LAYERS.intensity,
+        type: "line",
+        source: TC_SOURCE,
+        filter: kind("intensity"),
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": width(3.4) },
+      },
+      before,
+    );
+    map.addLayer(
+      {
         id: LAYERS.bestPoint,
         type: "circle",
         source: TC_SOURCE,
@@ -341,7 +421,7 @@ export class StormLayers {
             10,
             3.5,
           ],
-          "circle-color": this.halo,
+          "circle-color": ["coalesce", ["get", "fill"], this.halo],
           "circle-stroke-color": ["get", "color"],
           "circle-stroke-width": 1,
           "circle-opacity": 0.9,
@@ -537,7 +617,8 @@ export class StormLayers {
     if (!this.added) return;
     for (const id of [LAYERS.point, LAYERS.current])
       this.map.setPaintProperty(id, "circle-stroke-color", this.halo);
-    this.map.setPaintProperty(LAYERS.bestPoint, "circle-color", this.halo);
+    this.map.setPaintProperty(LAYERS.bestPoint, "circle-color", ["coalesce", ["get", "fill"], this.halo]);
+    this.map.setPaintProperty(LAYERS.intensityCasing, "line-color", this.halo);
     for (const id of [LAYERS.lineLabel, LAYERS.modelLabel, LAYERS.nameLabel])
       this.map.setPaintProperty(id, "text-halo-color", this.halo);
   }
@@ -568,6 +649,8 @@ export class StormLayers {
     for (const view of this.views) {
       const storm = view.storm;
       if (view.best) {
+        const graded = view.bestIntensity ? intensityKey(storm) : null;
+        if (graded !== null) features.push(...intensityFeatures(storm, graded));
         for (const [key, track] of Object.entries(storm.best)) {
           const agency = TC_BEST_AGENCY[key] ?? null;
           const color = agency ? this.colorOf(agency) : this.neutral;
@@ -585,7 +668,8 @@ export class StormLayers {
                 { type: "Point", coordinates: [point.lon, point.lat] },
                 {
                   kind: "bestpoint",
-                  color,
+                  color: key === graded ? this.neutral : color,
+                  fill: key === graded ? sshsClass(point.vmax)?.color : undefined,
                   storm: storm.id,
                   code,
                   data: pointData(storm, "best", key, code, point),
@@ -660,7 +744,7 @@ export class StormLayers {
     const storm = view.storm;
     const features: Feature[] = [];
     let named = false;
-    const name = storm.name ?? storm.id;
+    const name = localStormName(storm.name, storm.basin) ?? storm.id;
     for (const [agency, forecast] of Object.entries(storm.agencies)) {
       if (!view.agencies.has(agency)) continue;
       const points = forecast.points;
@@ -743,6 +827,7 @@ export class StormLayers {
         ),
       );
     }
+    if (view.best && view.bestRadii) features.push(...this.bestRadiiFeatures(storm, time));
     if (!named && view.best) {
       // Before any forecast starts the playhead is in the observed past:
       // the marker rides the best track instead.
@@ -775,6 +860,39 @@ export class StormLayers {
         break;
       }
     }
+    return features;
+  }
+
+  /** The wind radii of the first best track that reports them (the US
+   * one carries quadrants; the RSMCs' ellipses are not kept), each
+   * threshold in its own color (`intensity.ts`): outlines at each synoptic
+   * point up to `time`, and the radii at `time` itself filled. */
+  private bestRadiiFeatures(storm: TcStorm, time: number): Feature[] {
+    const keys = Object.keys(storm.best).sort((a, b) => (a === "usa" ? -1 : b === "usa" ? 1 : a.localeCompare(b)));
+    const key = keys.find((item) => storm.best[item]!.points.some((point) => point.radii));
+    if (key === undefined) return [];
+    const features: Feature[] = [];
+    const rings = (lat: number, lon: number, radii: TcRadii, kind: string, opacity: Record<string, number>) => {
+      for (const threshold of ["34", "50", "64"] as const) {
+        const quadrants = radii[threshold];
+        if (!quadrants) continue;
+        const ring = radiiRing(lat, lon, quadrants);
+        if (!ring) continue;
+        features.push(
+          feature(
+            { type: "Polygon", coordinates: [ring] },
+            { kind, color: RADII_COLORS[threshold], storm: storm.id, threshold, opacity: opacity[threshold] },
+          ),
+        );
+      }
+    };
+    for (const point of storm.best[key]!.points) {
+      if (pointTime(point) > time) break;
+      const hour = new Date(pointTime(point)).getUTCHours();
+      if (point.radii && hour % 6 === 0) rings(point.lat, point.lon, point.radii, "best-radii", BEST_RADII_OPACITY);
+    }
+    const position = positionAt(storm.best[key]!.points, time);
+    if (position?.radii) rings(position.lat, position.lon, position.radii, "radii", RADII_OPACITY);
     return features;
   }
 

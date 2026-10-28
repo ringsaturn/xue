@@ -85,6 +85,9 @@
              per storm with forecasts. -->
         <div class="field-chips typhoon-chips" role="group" id="typhoon-seasons" data-i18n-aria="tcHistorySeasonsAria" aria-label="Season"></div>
         <div class="field-chips typhoon-chips" role="group" id="typhoon-basins" data-i18n-aria="tcHistoryBasinsAria" aria-label="Basin"></div>
+        <!-- Shown when the season holds southern storms: their seasons run
+             July to June and are named after the year they end in. -->
+        <p class="typhoon-season-note" id="typhoon-season-note" hidden></p>
         <ul class="typhoon-list" id="typhoon-list" data-i18n-aria="tcHistoryHeading" aria-label="Past tropical cyclones"></ul>
 
         <p id="typhoon-status" class="showcase-status" role="status" aria-live="polite" data-i18n="tcPageLoading">Loading storm</p>
@@ -114,6 +117,7 @@
           </div>
 
           <div class="field-chips typhoon-chips" role="group" id="typhoon-sources" data-i18n-aria="tcPageSources" aria-label="Tracks shown"></div>
+          <div class="typhoon-legend" id="typhoon-legend"></div>
 
           <div class="typhoon-errors-head">
             <h3 data-i18n="tcPageErrorsHeading">Track error, km</h3>

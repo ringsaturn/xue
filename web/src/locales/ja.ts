@@ -434,6 +434,7 @@ export const ja: Record<MessageKey, string> = {
   tcHistoryAll: "すべて",
   tcHistoryEmpty: "このシーズンと海域には予報のある嵐がありません",
   tcHistoryStormAria: "{name} を開く",
+  tcHistorySouthernNote: "南半球のシーズンは7月から翌年6月までで、終わる年で呼びます。{season}年シーズンは{from}〜{to}です。",
   tcPageTitle: "過去の熱帯低気圧",
   tcPageMetaDescription: "過去の熱帯低気圧：各機関のベストトラック、アーカイブされたすべての予報、それぞれのずれ。",
   tcPageLoading: "嵐を読み込み中",
@@ -454,6 +455,8 @@ export const ja: Record<MessageKey, string> = {
   tcPageLife: "存続期間",
   tcPagePeak: "最大風速",
   tcPageForecasts: "予報数",
+  tcPageRadii: "強風域",
+  tcLegendIntensity: "強度 · 米国ベストトラック、1分間平均風速",
 
   soundingTileTip: "ラジオゾンデ観測",
   varSounding: "高層",

@@ -38,6 +38,8 @@ import {
 } from "./tc/archive";
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
+import { RADII_COLORS, SSHS_CLASSES } from "./tc/intensity";
+import { localStormName } from "./tc/names";
 
 /**
  * Past tropical cyclones, from the archive (`docs/tc.md` §8–9), on one map.
@@ -70,6 +72,8 @@ const stormSection = document.getElementById("typhoon-storm") as HTMLElement;
 const seasonsGroup = document.getElementById("typhoon-seasons") as HTMLDivElement;
 const basinsGroup = document.getElementById("typhoon-basins") as HTMLDivElement;
 const stormList = document.getElementById("typhoon-list") as HTMLUListElement;
+const seasonNote = document.getElementById("typhoon-season-note") as HTMLParagraphElement;
+const legend = document.getElementById("typhoon-legend") as HTMLDivElement;
 const titleNode = document.getElementById("typhoon-title") as HTMLSpanElement;
 const codeNode = document.getElementById("typhoon-code") as HTMLSpanElement;
 const facts = document.getElementById("typhoon-facts") as HTMLDListElement;
@@ -134,8 +138,10 @@ let issueIndex = 0;
 const hidden = new Set<string>(["members"]);
 let truth = "usa";
 
+/** The storm's name in the reader's language where its basin has local
+ * names (`tc/names.ts`), as issued otherwise. */
 function stormName(entry: SeasonStorm): string {
-  return entry.name ?? t("tcUnnamed");
+  return localStormName(entry.name, entry.basin) ?? t("tcUnnamed");
 }
 
 // --- the map ------------------------------------------------------------------
@@ -224,6 +230,8 @@ function draw(): void {
       models: on(Object.keys(storm.models)),
       members: !hidden.has("members"),
       best: !hidden.has("best"),
+      bestRadii: !hidden.has("radii"),
+      bestIntensity: true,
     },
   ]);
   storms.setTime(Date.parse(issue));
@@ -246,14 +254,47 @@ function renderSources(): void {
     if (hidden.has(key)) hidden.delete(key);
     else hidden.add(key);
     renderSources();
+    renderLegend();
     draw();
   };
   const chips = [...loaded.sources.agencies, ...loaded.sources.models].map((key) =>
     chip(agencyCode(key), !hidden.has(key), toggle(key), TC_AGENCIES[key]?.name ?? TC_MODELS[key]?.name),
   );
-  if (loaded.best && Object.keys(loaded.best.best).length > 0) chips.unshift(chip(t("tcBest"), !hidden.has("best"), toggle("best")));
+  const tracks = Object.values(loaded.best?.best ?? {});
+  if (tracks.some((track) => track.points.some((point) => point.radii)))
+    chips.unshift(chip(t("tcPageRadii"), !hidden.has("radii"), toggle("radii")));
+  if (tracks.length > 0) chips.unshift(chip(t("tcBest"), !hidden.has("best"), toggle("best")));
   if (loaded.sources.models.some((key) => TC_MODELS[key]?.ensemble)) chips.push(chip(t("tcMembers"), !hidden.has("members"), toggle("members")));
   sourcesGroup.replaceChildren(...chips);
+}
+
+/** What the colors on the map mean: the best track's intensity classes
+ * and, while they are drawn, the radii thresholds. */
+function renderLegend(): void {
+  if (!loaded) return;
+  const tracks = Object.values(loaded.best?.best ?? {});
+  const rows: HTMLElement[] = [];
+  const row = (label: string, items: { code: string; color: string; ring?: boolean }[]) => {
+    const line = element("div", "typhoon-legend-row");
+    line.append(element("span", "typhoon-legend-label", label));
+    for (const item of items) {
+      const key = element("span", "typhoon-legend-item");
+      const swatch = element("span", item.ring ? "typhoon-swatch is-ring" : "typhoon-swatch");
+      swatch.style.setProperty("--swatch", item.color);
+      key.append(swatch, item.code);
+      line.append(key);
+    }
+    rows.push(line);
+  };
+  if (!hidden.has("best") && tracks.some((track) => track.points.some((point) => point.vmax !== null)))
+    row(t("tcLegendIntensity"), SSHS_CLASSES.map((item) => ({ code: item.code, color: item.color })));
+  if (!hidden.has("best") && !hidden.has("radii") && tracks.some((track) => track.points.some((point) => point.radii)))
+    row(
+      t("tcPageRadii"),
+      (["34", "50", "64"] as const).map((threshold) => ({ code: `${threshold}KT`, color: RADII_COLORS[threshold], ring: true })),
+    );
+  legend.replaceChildren(...rows);
+  legend.hidden = rows.length === 0;
 }
 
 function renderIssue(): void {
@@ -349,7 +390,10 @@ function renderFacts(): void {
   if (!loaded) return;
   const { entry } = loaded;
   titleNode.textContent = stormName(entry);
-  codeNode.textContent = `${stormCode(entry.id)} · ${entry.id.slice(-4)}`;
+  // The name as the centres issue it stays beside a local one, so the
+  // storm can be found in their bulletins.
+  const issued = entry.name && stormName(entry) !== entry.name ? `${entry.name} · ` : "";
+  codeNode.textContent = `${issued}${stormCode(entry.id)} · ${entry.id.slice(-4)}`;
   const definition = (label: string, value: string) => {
     const item = element("div", "");
     item.append(element("dt", "", label), element("dd", "", value));
@@ -370,6 +414,7 @@ function renderFacts(): void {
 function renderAll(): void {
   renderFacts();
   renderSources();
+  renderLegend();
   renderTruths();
   renderIssue();
   renderErrors();
@@ -400,6 +445,13 @@ function seasonStorms(): SeasonStorm[] {
   return (seasonIndex?.storms ?? [])
     .filter((storm) => storm.months.length > 0)
     .sort((a, b) => (a.first ?? "9").localeCompare(b.first ?? "9") || a.id.localeCompare(b.id));
+}
+
+/** `25–26`: the July-to-June southern season a `SH..2026` storm is
+ * numbered in. */
+function southernSeason(id: string): string {
+  const year = seasonOfStorm(id);
+  return `${String(year - 1).slice(-2)}–${String(year).slice(-2)}`;
 }
 
 /** `07-27 → 08-10`, the year left to the season chip. */
@@ -434,6 +486,13 @@ function renderPicker(): void {
       }),
     ),
   );
+  // The southern hemisphere numbers its storms by a July-to-June season
+  // named after the year it ends in (ATCF, JTWC): say so wherever such a
+  // season is on screen, or "2027" reads as a storm from the future.
+  const southern = season !== null && storms.some((storm) => storm.basin === "SH");
+  seasonNote.hidden = !southern;
+  if (southern && season !== null)
+    seasonNote.textContent = t("tcHistorySouthernNote", { season, from: `${season - 1}-07`, to: `${season}-06` });
   const selected = loaded?.entry.id ?? pending;
   stormList.replaceChildren(
     ...storms
@@ -446,7 +505,7 @@ function renderPicker(): void {
         const name = stormName(storm);
         button.setAttribute("aria-label", t("tcHistoryStormAria", { name: `${name} (${storm.id})` }));
         button.append(
-          element("span", "typhoon-row-code", stormCode(storm.id)),
+          element("span", "typhoon-row-code", storm.basin === "SH" ? `${stormCode(storm.id)} ${southernSeason(storm.id)}` : stormCode(storm.id)),
           element("span", "typhoon-row-name", name),
           element("span", "typhoon-row-span", stormSpan(storm)),
           element("span", "typhoon-row-peak", storm.vmax === null ? "" : `${Math.round(storm.vmax / KNOT)} kt`),

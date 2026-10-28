@@ -562,7 +562,16 @@ the live product would have carried at one issue time, so the viewer's
 `StormLayers` draws it unchanged with the time held at the issue. Its own
 plain basemap; a theme or language switch swaps the style and makes the
 storm layers again on `style.load` (no WebGL layers to lose). The pure
-parts are in `tests/web/tcarchive.test.ts`.
+parts are in `tests/web/tcarchive.test.ts`. The best track is drawn by
+Saffir–Simpson class and with its wind radii (`tc/intensity.ts`, options
+of `StormView` the live viewer leaves off), and a southern season's
+July-to-June span is said beside its chip.
+
+Storm names: `tc/names.ts` holds the western Pacific list in the scripts
+the CMA, CWA, JMA and KMA write it in, and `localStormName` is what every
+storm label, list and card shows (`tests/web/tcnames.test.ts`). It was
+compiled from the agencies' tables as the Wikipedias cite them; a name the
+Typhoon Committee adds is added there by hand.
 
 ## Layout and theming
 

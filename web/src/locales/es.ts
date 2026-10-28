@@ -437,6 +437,7 @@ export const es: Record<MessageKey, string> = {
   tcHistoryAll: "Todas",
   tcHistoryEmpty: "No hay tormentas con pronósticos en esta temporada y cuenca",
   tcHistoryStormAria: "Abrir {name}",
+  tcHistorySouthernNote: "Las temporadas del hemisferio sur van de julio a junio y llevan el año en que terminan: la temporada {season} va de {from} a {to}.",
   tcPageTitle: "Ciclón tropical pasado",
   tcPageMetaDescription: "Un ciclón tropical pasado: las trayectorias finales de los centros, cada pronóstico archivado para él y cuánto se desvió cada uno.",
   tcPageLoading: "Cargando tormenta",
@@ -457,6 +458,8 @@ export const es: Record<MessageKey, string> = {
   tcPageLife: "Vida",
   tcPagePeak: "Viento máximo",
   tcPageForecasts: "Pronósticos",
+  tcPageRadii: "Radios de viento",
+  tcLegendIntensity: "Intensidad · trayectoria final de EE. UU., viento de 1 min",
 
   soundingTileTip: "Radiosondeos",
   varSounding: "ALTURA",

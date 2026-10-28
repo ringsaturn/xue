@@ -432,6 +432,7 @@ export const zhHant: Record<MessageKey, string> = {
   tcHistoryAll: "全部",
   tcHistoryEmpty: "這個季節和海域沒有帶預報的風暴",
   tcHistoryStormAria: "開啟 {name}",
+  tcHistorySouthernNote: "南半球的颱風季跨年，從 7 月到次年 6 月，按結束的年份命名：{season} 季即 {from} 至 {to}。",
   tcPageTitle: "歷史熱帶氣旋",
   tcPageMetaDescription: "一個歷史熱帶氣旋：各機構的最佳路徑、存檔中為它做過的每一次預報，以及每次偏了多遠。",
   tcPageLoading: "正在載入風暴",
@@ -452,6 +453,8 @@ export const zhHant: Record<MessageKey, string> = {
   tcPageLife: "生命史",
   tcPagePeak: "最大風速",
   tcPageForecasts: "預報數",
+  tcPageRadii: "暴風圈",
+  tcLegendIntensity: "強度 · 美國最佳路徑，1 分鐘平均風",
 
   soundingTileTip: "無線電探空",
   varSounding: "高空",

@@ -437,6 +437,7 @@ export const de: Record<MessageKey, string> = {
   tcHistoryAll: "Alle",
   tcHistoryEmpty: "Keine Stürme mit Vorhersagen in dieser Saison und diesem Becken",
   tcHistoryStormAria: "{name} öffnen",
+  tcHistorySouthernNote: "Saisons auf der Südhalbkugel laufen von Juli bis Juni und tragen das Jahr, in dem sie enden: Die Saison {season} reicht von {from} bis {to}.",
   tcPageTitle: "Vergangener tropischer Wirbelsturm",
   tcPageMetaDescription: "Ein vergangener tropischer Wirbelsturm: die Best Tracks der Zentren, jede archivierte Vorhersage dafür und wie weit sie danebenlag.",
   tcPageLoading: "Sturm wird geladen",
@@ -457,6 +458,8 @@ export const de: Record<MessageKey, string> = {
   tcPageLife: "Lebensdauer",
   tcPagePeak: "Spitzenwind",
   tcPageForecasts: "Vorhersagen",
+  tcPageRadii: "Windradien",
+  tcLegendIntensity: "Intensität · US-Best-Track, 1-Minuten-Wind",
 
   soundingTileTip: "Radiosondenaufstiege",
   varSounding: "HÖHENLUFT",

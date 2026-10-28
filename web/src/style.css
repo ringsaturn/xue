@@ -5006,6 +5006,69 @@ html:has(.showcase-page) {
   padding: 0;
 }
 
+.typhoon-legend {
+  display: grid;
+  gap: 4px;
+}
+
+.typhoon-legend[hidden] {
+  display: none;
+}
+
+.typhoon-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.typhoon-legend-label {
+  min-width: 100%;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.typhoon-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typhoon-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.typhoon-swatch.is-ring {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--swatch);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--swatch) 35%, transparent);
+  box-shadow: none;
+}
+
+.typhoon-season-note {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.typhoon-season-note[hidden] {
+  display: none;
+}
+
 .typhoon-list {
   flex: 0 0 auto;
   max-height: 34dvh;
@@ -5019,7 +5082,7 @@ html:has(.showcase-page) {
 
 .typhoon-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto 44px;
+  grid-template-columns: auto minmax(0, 1fr) auto 44px;
   gap: 8px;
   align-items: baseline;
   width: 100%;

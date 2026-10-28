@@ -440,6 +440,7 @@ export const tr: Record<MessageKey, string> = {
   tcHistoryAll: "Tümü",
   tcHistoryEmpty: "Bu sezon ve havzada tahmini olan fırtına yok",
   tcHistoryStormAria: "{name} aç",
+  tcHistorySouthernNote: "Güney yarımküre sezonları temmuzdan hazirana sürer ve bittikleri yılla anılır: {season} sezonu {from} ile {to} arasıdır.",
   tcPageTitle: "Geçmiş tropikal siklon",
   tcPageMetaDescription: "Geçmiş bir tropikal siklon: merkezlerin en iyi izleri, onun için arşivlenen her tahmin ve her birinin ne kadar saptığı.",
   tcPageLoading: "Fırtına yükleniyor",
@@ -460,6 +461,8 @@ export const tr: Record<MessageKey, string> = {
   tcPageLife: "Ömür",
   tcPagePeak: "En yüksek rüzgâr",
   tcPageForecasts: "Tahminler",
+  tcPageRadii: "Rüzgâr yarıçapları",
+  tcLegendIntensity: "Şiddet · ABD en iyi izi, 1 dk rüzgâr",
 
   soundingTileTip: "Radyosonda ölçümleri",
   varSounding: "YÜKSEK",

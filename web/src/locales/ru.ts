@@ -439,6 +439,7 @@ export const ru: Record<MessageKey, string> = {
   tcHistoryAll: "Все",
   tcHistoryEmpty: "В этом сезоне и бассейне нет штормов с прогнозами",
   tcHistoryStormAria: "Открыть {name}",
+  tcHistorySouthernNote: "Сезоны Южного полушария длятся с июля по июнь и называются по году окончания: сезон {season} — с {from} по {to}.",
   tcPageTitle: "Прошлый тропический циклон",
   tcPageMetaDescription: "Прошлый тропический циклон: лучшие треки центров, все архивные прогнозы для него и насколько каждый ошибся.",
   tcPageLoading: "Загрузка шторма",
@@ -459,6 +460,8 @@ export const ru: Record<MessageKey, string> = {
   tcPageLife: "Время жизни",
   tcPagePeak: "Пиковый ветер",
   tcPageForecasts: "Прогнозы",
+  tcPageRadii: "Радиусы ветра",
+  tcLegendIntensity: "Интенсивность · лучший трек США, ветер за 1 мин",
 
   soundingTileTip: "Радиозондирование",
   varSounding: "ВЫСОТА",

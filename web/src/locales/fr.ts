@@ -437,6 +437,7 @@ export const fr: Record<MessageKey, string> = {
   tcHistoryAll: "Tous",
   tcHistoryEmpty: "Aucune tempête avec prévisions pour cette saison et ce bassin",
   tcHistoryStormAria: "Ouvrir {name}",
+  tcHistorySouthernNote: "Les saisons de l'hémisphère sud vont de juillet à juin et portent l'année où elles finissent : la saison {season} court de {from} à {to}.",
   tcPageTitle: "Cyclone tropical passé",
   tcPageMetaDescription: "Un cyclone tropical passé : les trajectoires de référence des centres, chaque prévision archivée pour lui et l'écart de chacune.",
   tcPageLoading: "Chargement de la tempête",
@@ -457,6 +458,8 @@ export const fr: Record<MessageKey, string> = {
   tcPageLife: "Durée de vie",
   tcPagePeak: "Vent maximal",
   tcPageForecasts: "Prévisions",
+  tcPageRadii: "Rayons de vent",
+  tcLegendIntensity: "Intensité · trajectoire de référence américaine, vent sur 1 min",
 
   soundingTileTip: "Radiosondages",
   varSounding: "ALTITUDE",

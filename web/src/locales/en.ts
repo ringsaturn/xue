@@ -706,6 +706,7 @@ export const en = {
   tcHistoryAll: "All",
   tcHistoryEmpty: "No storms with forecasts in this season and basin",
   tcHistoryStormAria: "Open {name}",
+  tcHistorySouthernNote: "Southern hemisphere seasons run from July to June and are named after the year they end in: the {season} season is {from} to {to}.",
   tcPageTitle: "Past tropical cyclone",
   tcPageMetaDescription: "A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed.",
   tcPageLoading: "Loading storm",
@@ -726,6 +727,8 @@ export const en = {
   tcPageLife: "Life",
   tcPagePeak: "Peak wind",
   tcPageForecasts: "Forecasts",
+  tcPageRadii: "Wind radii",
+  tcLegendIntensity: "Intensity · US best track, 1-min wind",
 
   /** The point products drawn as station marks over whatever is on
    * screen (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`): the
