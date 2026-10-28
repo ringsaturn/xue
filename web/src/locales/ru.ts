@@ -461,6 +461,8 @@ export const ru: Record<MessageKey, string> = {
   tcPageLife: "Время жизни",
   tcPagePeak: "Пиковый ветер",
   tcPageForecasts: "Прогнозы",
+  tcCardSeasons: "Сезоны",
+  tcCardStorms: "Штормы",
   tcPageRadii: "Радиусы ветра",
   tcLegendIntensity: "Интенсивность · лучший трек США, ветер за 1 мин",
 

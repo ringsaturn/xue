@@ -462,6 +462,8 @@ export const tr: Record<MessageKey, string> = {
   tcPageLife: "Ömür",
   tcPagePeak: "En yüksek rüzgâr",
   tcPageForecasts: "Tahminler",
+  tcCardSeasons: "Sezonlar",
+  tcCardStorms: "Fırtınalar",
   tcPageRadii: "Rüzgâr yarıçapları",
   tcLegendIntensity: "Şiddet · ABD en iyi izi, 1 dk rüzgâr",
 

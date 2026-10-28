@@ -461,6 +461,8 @@ export const ko: Record<MessageKey, string> = {
   tcPageLife: "생애",
   tcPagePeak: "최대 풍속",
   tcPageForecasts: "예보 수",
+  tcCardSeasons: "시즌",
+  tcCardStorms: "폭풍",
   tcPageRadii: "강풍 반경",
   tcLegendIntensity: "강도 · 미국 베스트 트랙, 1분 평균풍",
 

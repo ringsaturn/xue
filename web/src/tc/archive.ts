@@ -62,7 +62,17 @@ export interface SeasonStorm {
 export interface SeasonIndex {
   season: number;
   best: FileRef;
+  /** The season's tracks for a picture of it; null in an index written
+   * before it. */
+  overview: FileRef | null;
   storms: SeasonStorm[];
+}
+
+/** A storm's track at its synoptic times, `[lon×10, lat×10, class]`
+ * (`docs/tc.md` §8.3): class 0 (TD) to 6 (H5), −1 for no wind. */
+export interface SeasonOverview {
+  season: number;
+  storms: { id: string; track: [number, number, number][] }[];
 }
 
 interface MonthStorm {
@@ -198,6 +208,7 @@ export function validateSeasonIndex(input: unknown): SeasonIndex {
   return {
     season: index.season as number,
     best: fileRef(index.best, "season index best"),
+    overview: index.overview === undefined ? null : fileRef(index.overview, "season index overview"),
     storms: list(index.storms, "season index storms").map((value, position) => {
       const label = `season index storms[${position}]`;
       const entry = object(value, label);
@@ -217,6 +228,22 @@ export function validateSeasonIndex(input: unknown): SeasonIndex {
         months: strings(entry.months),
         sources: strings(entry.sources),
       };
+    }),
+  };
+}
+
+export function validateSeasonOverview(input: unknown): SeasonOverview {
+  const overview = head(input, "tc season overview", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  return {
+    season: Number(overview.season),
+    storms: list(overview.storms, "overview storms").map((value, position) => {
+      const entry = object(value, `overview storms[${position}]`);
+      const track = list(entry.track, `overview storms[${position}].track`).map((point) => {
+        if (!Array.isArray(point) || point.length !== 3 || point.some((item) => !Number.isInteger(item)))
+          throw new Error(`overview storms[${position}].track holds a malformed point`);
+        return point as [number, number, number];
+      });
+      return { id: String(entry.id), track };
     }),
   };
 }
@@ -344,6 +371,14 @@ export class TcArchive {
   async season(season: number): Promise<SeasonIndex | null> {
     const entry = (await this.catalog()).seasons.find((item) => item.season === season);
     return entry ? this.json(entry, validateSeasonIndex) : null;
+  }
+
+  /** The season's tracks for a picture of it, or null when its index
+   * names none. */
+  async overview(season: number): Promise<SeasonOverview | null> {
+    const index = await this.season(season);
+    if (!index?.overview) return null;
+    return this.json({ ...index.overview, path: `${String(season).padStart(4, "0")}/${index.overview.path}` }, validateSeasonOverview);
   }
 
   /** The storm's best tracks, or null when the season has none for it. */

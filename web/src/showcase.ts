@@ -23,6 +23,8 @@ import { fetchCaseManifest, fetchCatalog, listedCases, localizedText, type Showc
 import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
+import { TcArchive, type ArchiveCatalog } from "./tc/archive";
+import { paintSeason } from "./tc/poster";
 
 /**
  * The historical showcase list.
@@ -146,6 +148,83 @@ function buildCard(
   return { item, canvas };
 }
 
+/** The storm archive's card: always the list's first, opening the storm
+ * map. Its thumbnail is the season running now, every track in its
+ * intensity colors (`tc/poster.ts`); its facts are the archive's own. */
+function buildStormCard(
+  catalog: ArchiveCatalog,
+  canvas: HTMLCanvasElement = document.createElement("canvas"),
+): { item: HTMLLIElement; canvas: HTMLCanvasElement } {
+  const item = document.createElement("li");
+  item.className = "showcase-card is-pinned";
+  const link = document.createElement("a");
+  link.href = "./typhoon.html";
+  link.setAttribute("aria-label", t("showcaseCaseAria", { title: t("tcHistoryHeading") }));
+  const seasons = catalog.seasons.map((entry) => entry.season);
+  const span = seasons.length ? `${Math.min(...seasons)}–${Math.max(...seasons)}` : "";
+
+  const figure = document.createElement("div");
+  figure.className = "showcase-thumb";
+  canvas.setAttribute("aria-hidden", "true");
+  const code = document.createElement("span");
+  code.className = "showcase-code";
+  code.textContent = `TC ARCHIVE · ${span}`;
+  figure.append(canvas, code);
+
+  const body = document.createElement("div");
+  body.className = "showcase-body";
+  const title = document.createElement("h2");
+  title.textContent = t("tcHistoryHeading");
+  const summary = document.createElement("p");
+  summary.className = "showcase-summary";
+  summary.textContent = t("tcHistoryIntro");
+  const facts = document.createElement("dl");
+  facts.className = "showcase-facts";
+  facts.append(
+    definition(t("tcCardSeasons"), span),
+    definition(t("tcCardStorms"), String(catalog.seasons.reduce((sum, entry) => sum + entry.storms, 0))),
+    definition(t("tcPageForecasts"), String(catalog.months.reduce((sum, entry) => sum + entry.records, 0))),
+  );
+  body.append(title, summary, facts);
+  const foot = document.createElement("div");
+  foot.className = "showcase-foot";
+  const tags = document.createElement("ul");
+  tags.className = "showcase-tags";
+  for (const tag of ["typhoon", "hurricane", "verification"]) {
+    const tagItem = document.createElement("li");
+    tagItem.textContent = tag;
+    tags.append(tagItem);
+  }
+  const play = document.createElement("span");
+  play.className = "showcase-play";
+  play.setAttribute("aria-hidden", "true");
+  foot.append(tags, play);
+  body.append(foot);
+  link.append(figure, body);
+  item.append(link);
+  return { item, canvas };
+}
+
+/** The archive, once its catalog has loaded, and the storm card's
+ * thumbnail, kept across a language switch like the cases'. */
+const stormArchive = new TcArchive(dataBaseUrl());
+let stormCatalog: ArchiveCatalog | null = null;
+let stormCanvas: HTMLCanvasElement | null = null;
+
+/** Paint the season running now (not the southern one already named after
+ * next year), else the latest; best effort, like the posters. */
+async function paintStormCard(canvas: HTMLCanvasElement, catalog: ArchiveCatalog): Promise<void> {
+  const year = new Date().getUTCFullYear();
+  const seasons = catalog.seasons.map((entry) => entry.season).sort((a, b) => b - a);
+  const season = seasons.find((item) => item <= year) ?? seasons[0];
+  if (season === undefined) return;
+  const overview = await stormArchive.overview(season);
+  if (!overview) return;
+  canvas.width = 640;
+  canvas.height = 360;
+  if (paintSeason(canvas, overview)) canvas.classList.add("is-painted");
+}
+
 /** Paint one case's first frame into its card. Best effort: a card without a
  * thumbnail is still a complete card, so any failure just leaves the
  * placeholder in place. */
@@ -223,7 +302,9 @@ function setStatus(key: MessageKey, params?: Record<string, string | number>): v
 function renderCards(): void {
   const cards = cases.map((showcaseCase) => ({ showcaseCase, ...buildCard(showcaseCase, thumbnails.get(showcaseCase.id)) }));
   for (const card of cards) thumbnails.set(card.showcaseCase.id, card.canvas);
-  list.replaceChildren(...cards.map((card) => card.item));
+  const pinned = stormCatalog ? buildStormCard(stormCatalog, stormCanvas ?? undefined) : null;
+  if (pinned) stormCanvas = pinned.canvas;
+  list.replaceChildren(...(pinned ? [pinned.item] : []), ...cards.map((card) => card.item));
   publishCaseList(cases);
 }
 
@@ -250,7 +331,17 @@ async function render(): Promise<void> {
 onLocaleChange(() => {
   applyPageMeta({ path: "/showcase.html" });
   if (statusMessage) setStatus(statusMessage.key, statusMessage.params);
-  if (cases.length > 0) renderCards();
+  if (cases.length > 0 || stormCatalog) renderCards();
 });
 
 void render();
+// The storm card stands apart from the case catalog: it is placed when the
+// archive answers, and a data root without one simply has no such card.
+stormArchive
+  .catalog()
+  .then(async (catalog) => {
+    stormCatalog = catalog;
+    renderCards();
+    await paintStormCard(stormCanvas!, catalog);
+  })
+  .catch((error: unknown) => console.warn("tc archive card not shown", error));

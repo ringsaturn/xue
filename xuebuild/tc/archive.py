@@ -62,6 +62,7 @@ CATALOG_FILENAME = "catalog.json"
 INDEX_FILENAME = "index.json"
 FORECASTS_FILENAME = "forecasts.jsonl"
 BEST_FILENAME = "best.jsonl"
+OVERVIEW_FILENAME = "overview.json"
 SCORES_FILENAME = "scores.json"
 
 PULL_ATTEMPTS = 4
@@ -172,6 +173,35 @@ def choose_track(candidates: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
         if chosen is None or track["points"][-1]["time"] > chosen["points"][-1]["time"]:
             chosen = track
     return chosen
+
+
+# The Saffir-Simpson class floors in knots, TD to H5, the storm map's own
+# (`web/src/tc/intensity.ts`): an overview point carries its class index.
+SSHS_FLOORS_KT = (0, 34, 64, 83, 96, 113, 137)
+KNOT = 0.514444
+
+
+def sshs_index(vmax: float | None) -> int:
+    """0 (TD) to 6 (H5) for a one-minute wind in m/s, -1 for none."""
+    if vmax is None:
+        return -1
+    kt = vmax / KNOT
+    return max(index for index, floor in enumerate(SSHS_FLOORS_KT) if kt >= floor - 0.5)
+
+
+def overview_track(record: dict[str, Any]) -> list[list[int]]:
+    """A storm's track for a season overview: the US best track (else the
+    first with points) at its synoptic times, as `[lon×10, lat×10, class]`."""
+    keys = sorted(record["best"], key=lambda key: (key != "usa", key))
+    for key in keys:
+        points = [
+            point
+            for point in record["best"][key]["points"]
+            if point["time"][11:13] in ("00", "06", "12", "18") and point["time"][14:16] == "00"
+        ]
+        if points:
+            return [[round(point["lon"] * 10), round(point["lat"] * 10), sshs_index(point["vmax"])] for point in points]
+    return []
 
 
 def best_summary(record: dict[str, Any]) -> dict[str, Any]:
@@ -509,15 +539,31 @@ class Archive:
         if not entries:
             return
         body = bytes(lines)
+        # Every storm's track in one small file, for a picture of the season
+        # (the showcase card) that needs no best-track spans.
+        overview = encode_json(
+            {
+                "archiveSchemaVersion": ARCHIVE_SCHEMA_VERSION,
+                "product": PRODUCT,
+                "season": season,
+                "storms": [
+                    {"id": storm, "track": track}
+                    for storm in sorted(storms)
+                    if (track := overview_track(storms[storm]))
+                ],
+            }
+        )
         index = {
             "archiveSchemaVersion": ARCHIVE_SCHEMA_VERSION,
             "product": PRODUCT,
             "season": season,
             "best": {"path": BEST_FILENAME, "byteLength": len(body), "crc32": crc32_hex(body)},
+            "overview": {"path": OVERVIEW_FILENAME, "byteLength": len(overview), "crc32": crc32_hex(overview)},
             "storms": [entries[storm] for storm in sorted(entries)],
         }
         validate_season_index(index)
         self._write(f"{season_directory(season)}/{BEST_FILENAME}", body)
+        self._write(f"{season_directory(season)}/{OVERVIEW_FILENAME}", overview)
         self._write(f"{season_directory(season)}/{INDEX_FILENAME}", encode_json(index))
 
     def _catalog(self) -> dict[str, Any]:
@@ -740,6 +786,8 @@ def validate_season_index(payload: object) -> None:
     if isinstance(season, bool) or not isinstance(season, int) or not 1800 <= season <= 2200:
         raise TcProductError("season index season must be a year")
     _check_file(index.get("best"), "season index best", BEST_FILENAME)
+    if "overview" in index:
+        _check_file(index["overview"], "season index overview", OVERVIEW_FILENAME)
     storms = index.get("storms")
     if not isinstance(storms, list):
         raise TcProductError("season index storms must be a list")

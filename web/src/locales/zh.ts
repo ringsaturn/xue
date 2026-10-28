@@ -454,6 +454,8 @@ export const zh: Record<MessageKey, string> = {
   tcPageLife: "生命史",
   tcPagePeak: "最大风速",
   tcPageForecasts: "预报数",
+  tcCardSeasons: "季节",
+  tcCardStorms: "风暴",
   tcPageRadii: "风圈",
   tcLegendIntensity: "强度 · 美国最佳路径，1 分钟平均风",
 

@@ -183,6 +183,10 @@ class TreeTest(unittest.TestCase):
         self.assertEqual((wp["first"], wp["last"], wp["vmax"]), ("2026-10-01T00:00:00Z", "2026-10-05T00:00:00Z", 25.0))
         self.assertEqual(wp["sources"], ["gfs", "jtwc"])
         self.assertEqual((by_id["EP222026"]["first"], by_id["EP222026"]["sources"]), (None, ["gfs"]))
+        overview = json.loads((self.root / ARCHIVE_DIRECTORY / "2026" / "overview.json").read_text())
+        self.assertEqual(season["overview"]["path"], "overview.json")
+        # 15 m/s is a depression (29 kt), 25 m/s a storm (49 kt).
+        self.assertEqual(overview["storms"], [{"id": "WP302026", "track": [[1400, 100, 0], [1390, 120, 1]]}])
 
     def test_reopening_and_rewriting_the_same_records_writes_nothing(self) -> None:
         archive = Archive.open(self.root)

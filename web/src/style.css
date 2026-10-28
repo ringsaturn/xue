@@ -4926,23 +4926,6 @@ html:has(.showcase-page) {
   letter-spacing: 0.04em;
 }
 
-/* The showcase header's way to the storm map. */
-.showcase-jump {
-  display: inline-flex;
-  gap: 6px;
-  margin-top: 12px;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.showcase-jump:hover {
-  text-decoration: underline;
-}
-
 /* Past tropical cyclones (typhoon.html): the map fills the page, the panel
    beside it — under it on a phone — picks the season, the basin and the
    storm, steps the issue time and holds the table of track errors. The

@@ -269,6 +269,7 @@ tc/archive/<YYYY>/<MM>/forecasts.jsonl    the month's forecasts, one per line
 tc/archive/<YYYY>/<MM>/index.json         each storm's byte span in that file
 tc/archive/<YYYY>/best.jsonl              the season's best tracks, one storm per line
 tc/archive/<YYYY>/index.json              each storm's byte span in that file, and its months
+tc/archive/<YYYY>/overview.json           every storm's track, small enough for a picture of the season
 ```
 
 - `catalog.json` is fetched with caching disabled. Each entry names an
@@ -343,7 +344,14 @@ track yet), the agency keys of its tracks (`best`), the first and last
 time any of them places it (`first`, `last`) and its peak wind (`vmax`,
 m/s, on the `usa` track when there is one, else on the first key that has
 a wind; all three `null` without a best track), the `months` it has
-forecasts in and the `sources` of those forecasts. `catalog.json` lists `months` (`month`, `path`, `byteLength`,
+forecasts in and the `sources` of those forecasts. It names `overview` (`path`,
+`byteLength`, `crc32`; absent from an index written before it):
+`{archiveSchemaVersion, product, season, storms: [{id, track: [[lon×10,
+lat×10, class], …]}]}`, each storm's US best track (else the first with
+points) at its synoptic times, longitudes and latitudes in tenths of a
+degree, `class` the Saffir–Simpson class of its wind from 0 (TD, below
+34 kt) through 1 (TS) and 2–6 (H1–H5, from 64, 83, 96, 113 and 137 kt),
+−1 where it has none. `catalog.json` lists `months` (`month`, `path`, `byteLength`,
 `crc32`, `storms`, `records`) and `seasons` (`season`, `path`, `byteLength`,
 `crc32`, `storms`). Storms and entries are sorted and unique; the spans tile
 their file exactly. A reader rejects an `archiveSchemaVersion` above the

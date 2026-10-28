@@ -459,6 +459,8 @@ export const es: Record<MessageKey, string> = {
   tcPageLife: "Vida",
   tcPagePeak: "Viento máximo",
   tcPageForecasts: "Pronósticos",
+  tcCardSeasons: "Temporadas",
+  tcCardStorms: "Tormentas",
   tcPageRadii: "Radios de viento",
   tcLegendIntensity: "Intensidad · trayectoria final de EE. UU., viento de 1 min",
 

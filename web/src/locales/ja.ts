@@ -456,6 +456,8 @@ export const ja: Record<MessageKey, string> = {
   tcPageLife: "存続期間",
   tcPagePeak: "最大風速",
   tcPageForecasts: "予報数",
+  tcCardSeasons: "シーズン",
+  tcCardStorms: "嵐",
   tcPageRadii: "強風域",
   tcLegendIntensity: "強度 · 米国ベストトラック、1分間平均風速",
 

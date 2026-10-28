@@ -728,6 +728,8 @@ export const en = {
   tcPageLife: "Life",
   tcPagePeak: "Peak wind",
   tcPageForecasts: "Forecasts",
+  tcCardSeasons: "Seasons",
+  tcCardStorms: "Storms",
   tcPageRadii: "Wind radii",
   tcLegendIntensity: "Intensity · US best track, 1-min wind",
 
