@@ -15,7 +15,7 @@ import { element } from "./dom";
 import type { GifHost } from "./gifexport";
 import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileName } from "./mp4export";
 import { formatUtcHour } from "./format";
-import { applyStaticMessages, basemapLang, onLocaleChange, t } from "./i18n";
+import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i18n";
 import { applyPageMeta } from "./pagemeta";
 import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
@@ -43,6 +43,7 @@ import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
 import { RADII_COLORS, SSHS_CLASSES } from "./tc/intensity";
 import { localStormName } from "./tc/names";
+import { seasonPagePath, stormPagePath } from "./tc/pages";
 
 /**
  * Past tropical cyclones, from the archive (`docs/tc.md` §8–9), on one map.
@@ -77,6 +78,8 @@ const basinsGroup = document.getElementById("typhoon-basins") as HTMLDivElement;
 const stormList = document.getElementById("typhoon-list") as HTMLUListElement;
 const seasonNote = document.getElementById("typhoon-season-note") as HTMLParagraphElement;
 const legend = document.getElementById("typhoon-legend") as HTMLDivElement;
+const seasonLink = document.getElementById("typhoon-season-link") as HTMLAnchorElement;
+const stormLink = document.getElementById("typhoon-storm-link") as HTMLAnchorElement;
 const titleNode = document.getElementById("typhoon-title") as HTMLSpanElement;
 const codeNode = document.getElementById("typhoon-code") as HTMLSpanElement;
 const facts = document.getElementById("typhoon-facts") as HTMLDListElement;
@@ -572,6 +575,10 @@ function renderFacts(): void {
   if (entry.vmax !== null) items.push(definition(t("tcPagePeak"), `${Math.round(entry.vmax / KNOT)} kt`));
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
+  // A storm with a best track has a static page of its own.
+  stormLink.hidden = loaded.best === null;
+  stormLink.href = stormPagePath(locale, seasonOfStorm(entry.id), entry);
+  stormLink.textContent = `${t("tcPageDetails")} →`;
   applyPageMeta({
     path: `/typhoon.html?storm=${entry.id}`,
     title: `${stormName(entry)} (${entry.id})`,
@@ -661,6 +668,11 @@ function renderPicker(): void {
   seasonNote.hidden = !southern;
   if (southern && season !== null)
     seasonNote.textContent = t("tcHistorySouthernNote", { season, from: `${season - 1}-07`, to: `${season}-06` });
+  seasonLink.hidden = season === null || storms.length === 0;
+  if (season !== null) {
+    seasonLink.href = seasonPagePath(locale, season);
+    seasonLink.textContent = `${t("tcPageSeasonList")} →`;
+  }
   const selected = loaded?.entry.id ?? pending;
   stormList.replaceChildren(
     ...storms

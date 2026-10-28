@@ -458,6 +458,9 @@ export const ja: Record<MessageKey, string> = {
   tcPageForecasts: "予報数",
   tcCardSeasons: "シーズン",
   tcCardStorms: "嵐",
+  tcPageDetails: "嵐の詳細ページ",
+  tcPageSeasonList: "このシーズンの嵐一覧",
+  tcCardBrowse: "シーズン別に見る",
   tcPageRadii: "強風域",
   tcLegendIntensity: "強度 · 米国ベストトラック、1分間平均風速",
 

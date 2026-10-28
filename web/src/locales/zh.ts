@@ -456,6 +456,9 @@ export const zh: Record<MessageKey, string> = {
   tcPageForecasts: "预报数",
   tcCardSeasons: "季节",
   tcCardStorms: "风暴",
+  tcPageDetails: "风暴详情页",
+  tcPageSeasonList: "本季全部风暴",
+  tcCardBrowse: "按季节浏览",
   tcPageRadii: "风圈",
   tcLegendIntensity: "强度 · 美国最佳路径，1 分钟平均风",
 

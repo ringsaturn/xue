@@ -461,6 +461,9 @@ export const pt: Record<MessageKey, string> = {
   tcPageForecasts: "Previsões",
   tcCardSeasons: "Temporadas",
   tcCardStorms: "Tempestades",
+  tcPageDetails: "Página da tempestade",
+  tcPageSeasonList: "Todas as tempestades da temporada",
+  tcCardBrowse: "Por temporada",
   tcPageRadii: "Raios de vento",
   tcLegendIntensity: "Intensidade · trajetória final dos EUA, vento de 1 min",
 

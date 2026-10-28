@@ -31,6 +31,7 @@ import {
 } from "../src/tc/archive";
 import { SSHS_CLASSES, sshsClass } from "../src/tc/intensity";
 import { stormNameIn } from "../src/tc/namestable";
+import { archivePagePath, PAGE_PREFIXES, pagePrefix, seasonPagePath, stormSlug } from "../src/tc/pages";
 import type { TcPoint, TcTrack } from "../src/tc/schema";
 
 // --- languages ---------------------------------------------------------------
@@ -48,11 +49,11 @@ interface LangSpec {
 }
 
 export const PAGE_LANGS: readonly LangSpec[] = [
-  { code: "en", prefix: "", htmlLang: "en", ogLocale: "en_US", endonym: "English" },
-  { code: "zh", prefix: "/zh", htmlLang: "zh-CN", ogLocale: "zh_CN", endonym: "简体中文" },
-  { code: "zh-Hant", prefix: "/zh-hant", htmlLang: "zh-TW", ogLocale: "zh_TW", endonym: "繁體中文" },
-  { code: "ja", prefix: "/ja", htmlLang: "ja", ogLocale: "ja_JP", endonym: "日本語" },
-  { code: "ko", prefix: "/ko", htmlLang: "ko", ogLocale: "ko_KR", endonym: "한국어" },
+  { code: "en", prefix: PAGE_PREFIXES.en!, htmlLang: "en", ogLocale: "en_US", endonym: "English" },
+  { code: "zh", prefix: PAGE_PREFIXES.zh!, htmlLang: "zh-CN", ogLocale: "zh_CN", endonym: "简体中文" },
+  { code: "zh-Hant", prefix: PAGE_PREFIXES["zh-Hant"]!, htmlLang: "zh-TW", ogLocale: "zh_TW", endonym: "繁體中文" },
+  { code: "ja", prefix: PAGE_PREFIXES.ja!, htmlLang: "ja", ogLocale: "ja_JP", endonym: "日本語" },
+  { code: "ko", prefix: PAGE_PREFIXES.ko!, htmlLang: "ko", ogLocale: "ko_KR", endonym: "한국어" },
 ];
 
 const KNOT = 0.514444;
@@ -264,21 +265,13 @@ const BASIN_ORDER = ["WP", "EP", "AL", "CP", "IO", "SH"];
 
 // --- naming and addressing --------------------------------------------------------
 
-/** `choi-wan-wp262026`: the name (a reused one, so the ATCF id after it). */
-export function stormSlug(storm: { id: string; name: string | null }): string {
-  const name = (storm.name ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  return `${name ? `${name}-` : ""}${storm.id.toLowerCase()}`;
-}
+export { stormSlug };
 
 /** The root-relative address of a page, as Pages serves it (no `.html`). */
 export function pagePath(lang: PageLang, kind: "archive" | "season" | "storm", season?: number, slug?: string): string {
-  const prefix = PAGE_LANGS.find((item) => item.code === lang)!.prefix;
-  if (kind === "archive") return `${prefix}/tc/`;
-  if (kind === "season") return `${prefix}/tc/${season}/`;
-  return `${prefix}/tc/${season}/${slug}`;
+  if (kind === "archive") return archivePagePath(lang);
+  if (kind === "season") return seasonPagePath(lang, season!);
+  return `${pagePrefix(lang)}/tc/${season}/${slug}`;
 }
 
 /** The file a page is written to under the build's output. */
@@ -495,7 +488,7 @@ const LANGUAGE_REDIRECT = `
     <script>
       (function () {
         try {
-          var prefixes = { zh: "/zh", "zh-Hant": "/zh-hant", ja: "/ja", ko: "/ko" };
+          var prefixes = ${JSON.stringify(Object.fromEntries(Object.entries(PAGE_PREFIXES).filter(([code]) => code !== "en")))};
           var chosen = localStorage.getItem("xue-locale");
           var wanted = chosen;
           if (!wanted) {

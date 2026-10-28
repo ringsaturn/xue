@@ -88,6 +88,8 @@
         <!-- Shown when the season holds southern storms: their seasons run
              July to June and are named after the year they end in. -->
         <p class="typhoon-season-note" id="typhoon-season-note" hidden></p>
+        <!-- The season's static index page (web/tooling/stormpages.ts). -->
+        <a class="typhoon-page-link" id="typhoon-season-link" hidden></a>
         <ul class="typhoon-list" id="typhoon-list" data-i18n-aria="tcHistoryHeading" aria-label="Past tropical cyclones"></ul>
 
         <p id="typhoon-status" class="showcase-status" role="status" aria-live="polite" data-i18n="tcPageLoading">Loading storm</p>
@@ -100,6 +102,8 @@
             <span id="typhoon-title"></span>
             <span class="showcase-eyebrow" id="typhoon-code"></span>
           </h2>
+          <!-- The storm's static page, for a storm with a best track. -->
+          <a class="typhoon-page-link" id="typhoon-storm-link" hidden></a>
           <dl class="showcase-facts typhoon-facts" id="typhoon-facts"></dl>
 
           <div class="typhoon-issue">

@@ -4364,6 +4364,35 @@ html:has(.showcase-page) {
   transition: border-color 160ms ease, transform 160ms ease;
 }
 
+/* The storm card's second link, over the place a case's tags take: not a
+   card itself, so none of the card link's box. */
+.showcase-card.is-pinned {
+  position: relative;
+}
+
+.showcase-card .showcase-card-link {
+  position: absolute;
+  bottom: 27px;
+  left: 17px;
+  display: inline-flex;
+  height: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+}
+
+.showcase-card .showcase-card-link:hover,
+.showcase-card .showcase-card-link:focus-visible {
+  border-color: var(--muted);
+  transform: none;
+}
+
 .showcase-card a:hover,
 .showcase-card a:focus-visible {
   border-color: var(--muted);
@@ -5050,6 +5079,23 @@ html:has(.showcase-page) {
   border-radius: 50%;
   background: color-mix(in srgb, var(--swatch) 35%, transparent);
   box-shadow: none;
+}
+
+.typhoon-page-link {
+  align-self: flex-start;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.typhoon-page-link:hover {
+  text-decoration: underline;
+}
+
+.typhoon-page-link[hidden] {
+  display: none;
 }
 
 .typhoon-season-note {

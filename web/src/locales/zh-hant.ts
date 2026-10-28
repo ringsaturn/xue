@@ -456,6 +456,9 @@ export const zhHant: Record<MessageKey, string> = {
   tcPageForecasts: "預報數",
   tcCardSeasons: "季節",
   tcCardStorms: "風暴",
+  tcPageDetails: "風暴詳情頁",
+  tcPageSeasonList: "本季全部風暴",
+  tcCardBrowse: "按季節瀏覽",
   tcPageRadii: "暴風圈",
   tcLegendIntensity: "強度 · 美國最佳路徑，1 分鐘平均風",
 

@@ -24,6 +24,7 @@ import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
 import { TcArchive, type ArchiveCatalog } from "./tc/archive";
+import { archivePagePath } from "./tc/pages";
 import { paintSeason } from "./tc/poster";
 
 /**
@@ -190,20 +191,20 @@ function buildStormCard(
   body.append(title, summary, facts);
   const foot = document.createElement("div");
   foot.className = "showcase-foot";
-  const tags = document.createElement("ul");
-  tags.className = "showcase-tags";
-  for (const tag of ["typhoon", "hurricane", "verification"]) {
-    const tagItem = document.createElement("li");
-    tagItem.textContent = tag;
-    tags.append(tagItem);
-  }
+  // The tags' place holds the link to the static season pages, a sibling
+  // of the card's own link (a link cannot hold another) laid over it.
+  const spacer = document.createElement("span");
   const play = document.createElement("span");
   play.className = "showcase-play";
   play.setAttribute("aria-hidden", "true");
-  foot.append(tags, play);
+  foot.append(spacer, play);
   body.append(foot);
   link.append(figure, body);
-  item.append(link);
+  const browse = document.createElement("a");
+  browse.className = "showcase-card-link";
+  browse.href = archivePagePath(locale);
+  browse.textContent = `${t("tcCardBrowse")} →`;
+  item.append(link, browse);
   return { item, canvas };
 }
 

@@ -463,6 +463,9 @@ export const ko: Record<MessageKey, string> = {
   tcPageForecasts: "예보 수",
   tcCardSeasons: "시즌",
   tcCardStorms: "폭풍",
+  tcPageDetails: "폭풍 상세 페이지",
+  tcPageSeasonList: "이번 시즌 폭풍 목록",
+  tcCardBrowse: "시즌별로 보기",
   tcPageRadii: "강풍 반경",
   tcLegendIntensity: "강도 · 미국 베스트 트랙, 1분 평균풍",
 
