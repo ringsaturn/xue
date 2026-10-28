@@ -193,7 +193,7 @@ class TreeTest(unittest.TestCase):
         again.write()
         self.assertEqual(again.written, [])
 
-    def test_a_record_reaching_an_old_month_rewrites_only_that_month(self) -> None:
+    def test_a_record_reaching_an_old_month_rewrites_that_month_and_what_it_changes(self) -> None:
         archive = Archive.open(self.root)
         self._fill(archive)
         archive.write()
@@ -205,6 +205,8 @@ class TreeTest(unittest.TestCase):
             [
                 f"{month_directory('2026-10')}/forecasts.jsonl",
                 f"{month_directory('2026-10')}/index.json",
+                # The season index lists each storm's sources: ecmwf joins WP30's.
+                f"{ARCHIVE_DIRECTORY}/2026/index.json",
                 f"{ARCHIVE_DIRECTORY}/catalog.json",
             ],
         )
