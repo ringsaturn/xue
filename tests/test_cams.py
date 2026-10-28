@@ -292,11 +292,12 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             codebook = PROFILES["quality"][name]
             with netcdf4.Dataset(SERIES_DIR / f"cams.2026100900.{name}.nc") as dataset:
                 values = np.asarray(dataset[name][:], dtype=np.float64)[:, ::-1]  # north first in the bundle
-            for frame in (0, 2):
-                with self.subTest(bundle=name, frame=frame):
+            # decode_plane is addressed by the frame's hour, three apart here.
+            for frame, hour in ((0, 0), (2, 6)):
+                with self.subTest(bundle=name, hour=hour):
                     # The aerosol codebooks are log1p steps, so the bound is
                     # the codebook's own round trip, not half a linear step.
-                    codes = np.asarray(self.bundle(name).decode_plane(1, frame)).reshape(HEIGHT, WIDTH)
+                    codes = np.asarray(self.bundle(name).decode_plane(1, hour)).reshape(HEIGHT, WIDTH)
                     np.testing.assert_array_equal(codes, codebook.quantize(values[frame]))
 
     @requires_native_source("cams")
