@@ -202,6 +202,11 @@ function empty(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
+/** The outline features of a best-track point's radii, by point: they
+ * depend on nothing but the point, and a slider drag asks for the same
+ * few dozen again on every step. */
+const PAST_RINGS = new WeakMap<TcPoint, Feature[]>();
+
 /** The past radii's outlines: the 34-kt ring carries the swept area, the
  * inner two only hint at it. */
 const BEST_RADII_OPACITY: Record<string, number> = { "34": 0.45, "50": 0.3, "64": 0.25 };
@@ -634,6 +639,15 @@ export class StormLayers {
     this.publish();
   }
 
+  /** The views and the time at once, published once (`setViews` then
+   * `setTime` would send the source twice). */
+  update(views: StormView[], time: number | null): void {
+    this.views = views;
+    this.time = time;
+    this.rebuildStatic();
+    this.publish();
+  }
+
   clear(): void {
     this.views = [];
     this.staticFeatures = [];
@@ -889,7 +903,15 @@ export class StormLayers {
     for (const point of storm.best[key]!.points) {
       if (pointTime(point) > time) break;
       const hour = new Date(pointTime(point)).getUTCHours();
-      if (point.radii && hour % 6 === 0) rings(point.lat, point.lon, point.radii, "best-radii", BEST_RADII_OPACITY);
+      if (!point.radii || hour % 6 !== 0) continue;
+      // A past point's rings never change: made once, kept with the point.
+      let cached = PAST_RINGS.get(point);
+      if (!cached) {
+        const before = features.length;
+        rings(point.lat, point.lon, point.radii, "best-radii", BEST_RADII_OPACITY);
+        cached = features.slice(before);
+        PAST_RINGS.set(point, cached);
+      } else features.push(...cached);
     }
     const position = positionAt(storm.best[key]!.points, time);
     if (position?.radii) rings(position.lat, position.lon, position.radii, "radii", RADII_OPACITY);

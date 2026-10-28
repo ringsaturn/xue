@@ -227,20 +227,40 @@ function draw(): void {
     return;
   }
   const storm = stormAt(loaded.entry.id, loaded.entry.name, loaded.records, loaded.best, issue);
+  // Between two times that draw the same forecasts only the time moves:
+  // the tracks are not sent to the map's worker again.
+  const signature = [
+    loaded.entry.id,
+    ...[...hidden].sort(),
+    ...Object.entries({ ...storm.agencies, ...storm.models }).map(([key, forecast]) => `${key}@${forecast.base}`).sort(),
+  ].join("|");
+  if (signature === drawnSignature && storms === drawnLayers) {
+    storms.setTime(Date.parse(issue));
+    return;
+  }
+  drawnSignature = signature;
+  drawnLayers = storms;
   const on = (keys: Iterable<string>) => new Set([...keys].filter((key) => !hidden.has(key)));
-  storms.setViews([
-    {
-      storm,
-      agencies: on(Object.keys(storm.agencies)),
-      models: on(Object.keys(storm.models)),
-      members: !hidden.has("members"),
-      best: !hidden.has("best"),
-      bestRadii: !hidden.has("radii"),
-      bestIntensity: true,
-    },
-  ]);
-  storms.setTime(Date.parse(issue));
+  storms.update(
+    [
+      {
+        storm,
+        agencies: on(Object.keys(storm.agencies)),
+        models: on(Object.keys(storm.models)),
+        members: !hidden.has("members"),
+        best: !hidden.has("best"),
+        bestRadii: !hidden.has("radii"),
+        bestIntensity: true,
+      },
+    ],
+    Date.parse(issue),
+  );
 }
+
+/** What the map was last sent, so a step that changes only the time
+ * moves only the time; the layers are new after a style swap. */
+let drawnSignature = "";
+let drawnLayers: StormLayers | null = null;
 
 // --- the controls ----------------------------------------------------------
 
@@ -318,15 +338,44 @@ function renderIssue(): void {
 function setIssue(index: number): void {
   if (!loaded || loaded.issues.length === 0) return;
   issueIndex = Math.max(0, Math.min(loaded.issues.length - 1, index));
-  writeState(loaded.entry.id, loaded.issues[issueIndex]!);
+  scheduleWrite();
   renderIssue();
   renderErrors();
   draw();
 }
 
+/** The address follows the time, but once the time has settled: browsers
+ * throttle `history.replaceState` (Safari throws past a hundred calls in
+ * thirty seconds), and a drag or playback would hit that in seconds. */
+let writeTimer: number | null = null;
+
+function scheduleWrite(): void {
+  if (writeTimer !== null) window.clearTimeout(writeTimer);
+  writeTimer = window.setTimeout(() => {
+    writeTimer = null;
+    if (!loaded) return;
+    try {
+      writeState(loaded.entry.id, loaded.issues[issueIndex] ?? null);
+    } catch {
+      // A refused write leaves the address one step behind, nothing more.
+    }
+  }, 400);
+}
+
+/** A drag fires `input` faster than the map draws; the latest position is
+ * applied once per frame. */
+let pendingSlide: number | null = null;
+
 slider.addEventListener("input", () => {
   setPlaying(false);
-  setIssue(Number(slider.value));
+  const first = pendingSlide === null;
+  pendingSlide = Number(slider.value);
+  if (!first) return;
+  requestAnimationFrame(() => {
+    const index = pendingSlide;
+    pendingSlide = null;
+    if (index !== null && index !== issueIndex) setIssue(index);
+  });
 });
 
 // --- playback and the MP4 --------------------------------------------------
