@@ -438,7 +438,6 @@ export const de: Record<MessageKey, string> = {
   tcHistoryEmpty: "Keine Stürme mit Vorhersagen in dieser Saison und diesem Becken",
   tcHistoryStormAria: "{name} öffnen",
   tcPageTitle: "Vergangener tropischer Wirbelsturm",
-  tcPageBack: "Alle vergangenen Stürme",
   tcPageMetaDescription: "Ein vergangener tropischer Wirbelsturm: die Best Tracks der Zentren, jede archivierte Vorhersage dafür und wie weit sie danebenlag.",
   tcPageLoading: "Sturm wird geladen",
   tcPageMissing: "Kein archivierter Sturm namens {id}",

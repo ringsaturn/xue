@@ -390,12 +390,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
-- https://xue.ringsaturn.me/typhoon.html — one past tropical cyclone from
-  the storm archive (`?storm=<ATCF id>`, e.g. `WP062023`; `?issue=YYYYMMDDHH`
-  picks the issue time drawn): the centres' best tracks, every archived
-  forecast started at that time (official, deterministic, ensemble), and the
-  storm's track errors in km by source and lead. The showcase page lists the
-  archive's storms by season and basin.
+- https://xue.ringsaturn.me/typhoon.html — past tropical cyclones on a map,
+  picked by season, basin and storm in the panel beside it (`?storm=<ATCF
+  id>`, e.g. `WP062023`; `?issue=YYYYMMDDHH` picks the issue time drawn;
+  without a storm, the latest of the season running now): the centres' best
+  tracks, every archived forecast started at that time (official,
+  deterministic, ensemble), and the storm's track errors in km by source and
+  lead.
 - https://xue.ringsaturn.me/compare.html — every live forecast model at
   one point on one clock (`?lat=<deg>&lon=<deg>`, `?span=120|360` hours,
   `?fields=tmp2m,prate,wind10m,...` among `tmp2m dpt2m prate wind10m gust

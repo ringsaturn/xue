@@ -104,6 +104,11 @@
           Each case is a slice of one past weather event — an archived forecast run, or observations —
           through the same encoder, cropped to the region and hours it happened in.
         </p>
+        <!-- Past tropical cyclones live on a map page of their own. -->
+        <a class="showcase-jump" href="./typhoon.html">
+          <span data-i18n="tcHistoryHeading">Past tropical cyclones</span>
+          <span aria-hidden="true">→</span>
+        </a>
       </header>
 
       <p id="showcase-status" class="showcase-status" role="status" aria-live="polite" data-i18n="showcaseLoading">
@@ -112,25 +117,6 @@
 
       <ul id="showcase-list" class="showcase-list" data-i18n-aria="showcaseListAria" aria-label="Showcase case list"></ul>
 
-      <!-- Past tropical cyclones, from the storm archive (docs/tc.md §8):
-           one row per numbered storm of the season picked, each opening
-           typhoon.html. showcase.ts fills it and unhides it once the
-           archive's catalog has loaded. -->
-      <section class="tc-history" id="tc-history" hidden aria-labelledby="tc-history-heading">
-        <header class="tc-history-header">
-          <h2 id="tc-history-heading" data-i18n="tcHistoryHeading">Past tropical cyclones</h2>
-          <p class="showcase-intro" data-i18n="tcHistoryIntro">
-            Every numbered storm in the archive: the centres' best tracks, each forecast made for it, and how far each
-            one missed.
-          </p>
-        </header>
-        <div class="tc-history-controls">
-          <div class="field-chips" role="group" id="tc-history-seasons" data-i18n-aria="tcHistorySeasonsAria" aria-label="Season"></div>
-          <div class="field-chips" role="group" id="tc-history-basins" data-i18n-aria="tcHistoryBasinsAria" aria-label="Basin"></div>
-        </div>
-        <p id="tc-history-status" class="showcase-status" role="status" aria-live="polite" hidden></p>
-        <ul id="tc-history-list" class="tc-history-list" data-i18n-aria="tcHistoryHeading" aria-label="Past tropical cyclones"></ul>
-      </section>
 
       <footer class="source-note">
         <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>

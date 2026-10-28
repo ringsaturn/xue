@@ -433,7 +433,6 @@ export const zh: Record<MessageKey, string> = {
   tcHistoryEmpty: "这个季节和海域没有带预报的风暴",
   tcHistoryStormAria: "打开 {name}",
   tcPageTitle: "历史热带气旋",
-  tcPageBack: "全部历史风暴",
   tcPageMetaDescription: "一个历史热带气旋：各机构的最佳路径、存档中为它做过的每一次预报，以及每次偏了多远。",
   tcPageLoading: "正在加载风暴",
   tcPageMissing: "存档里没有名为 {id} 的风暴",

@@ -440,7 +440,6 @@ export const ko: Record<MessageKey, string> = {
   tcHistoryEmpty: "이 시즌과 해역에는 예보가 있는 폭풍이 없습니다",
   tcHistoryStormAria: "{name} 열기",
   tcPageTitle: "지난 열대저기압",
-  tcPageBack: "지난 폭풍 전체",
   tcPageMetaDescription: "지난 열대저기압: 각 기관의 베스트 트랙, 아카이브된 모든 예보, 그리고 각각 얼마나 빗나갔는지.",
   tcPageLoading: "폭풍을 불러오는 중",
   tcPageMissing: "아카이브에 {id} 폭풍이 없습니다",

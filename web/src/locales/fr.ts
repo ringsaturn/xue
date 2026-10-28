@@ -438,7 +438,6 @@ export const fr: Record<MessageKey, string> = {
   tcHistoryEmpty: "Aucune tempête avec prévisions pour cette saison et ce bassin",
   tcHistoryStormAria: "Ouvrir {name}",
   tcPageTitle: "Cyclone tropical passé",
-  tcPageBack: "Toutes les tempêtes passées",
   tcPageMetaDescription: "Un cyclone tropical passé : les trajectoires de référence des centres, chaque prévision archivée pour lui et l'écart de chacune.",
   tcPageLoading: "Chargement de la tempête",
   tcPageMissing: "Aucune tempête archivée nommée {id}",

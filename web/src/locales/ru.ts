@@ -440,7 +440,6 @@ export const ru: Record<MessageKey, string> = {
   tcHistoryEmpty: "В этом сезоне и бассейне нет штормов с прогнозами",
   tcHistoryStormAria: "Открыть {name}",
   tcPageTitle: "Прошлый тропический циклон",
-  tcPageBack: "Все прошлые штормы",
   tcPageMetaDescription: "Прошлый тропический циклон: лучшие треки центров, все архивные прогнозы для него и насколько каждый ошибся.",
   tcPageLoading: "Загрузка шторма",
   tcPageMissing: "В архиве нет шторма {id}",

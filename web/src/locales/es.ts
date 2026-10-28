@@ -438,7 +438,6 @@ export const es: Record<MessageKey, string> = {
   tcHistoryEmpty: "No hay tormentas con pronósticos en esta temporada y cuenca",
   tcHistoryStormAria: "Abrir {name}",
   tcPageTitle: "Ciclón tropical pasado",
-  tcPageBack: "Todas las tormentas pasadas",
   tcPageMetaDescription: "Un ciclón tropical pasado: las trayectorias finales de los centros, cada pronóstico archivado para él y cuánto se desvió cada uno.",
   tcPageLoading: "Cargando tormenta",
   tcPageMissing: "No hay ninguna tormenta archivada llamada {id}",

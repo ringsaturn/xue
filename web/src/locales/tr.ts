@@ -441,7 +441,6 @@ export const tr: Record<MessageKey, string> = {
   tcHistoryEmpty: "Bu sezon ve havzada tahmini olan fırtına yok",
   tcHistoryStormAria: "{name} aç",
   tcPageTitle: "Geçmiş tropikal siklon",
-  tcPageBack: "Tüm geçmiş fırtınalar",
   tcPageMetaDescription: "Geçmiş bir tropikal siklon: merkezlerin en iyi izleri, onun için arşivlenen her tahmin ve her birinin ne kadar saptığı.",
   tcPageLoading: "Fırtına yükleniyor",
   tcPageMissing: "Arşivde {id} adlı fırtına yok",

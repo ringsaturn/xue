@@ -32,6 +32,7 @@ import {
   truthsOf,
   type ArchiveRecord,
   type BestRecord,
+  type SeasonIndex,
   type SeasonStorm,
   type StormErrors,
 } from "./tc/archive";
@@ -39,9 +40,11 @@ import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
 
 /**
- * One past tropical cyclone, from the archive (`docs/tc.md` §8–9).
+ * Past tropical cyclones, from the archive (`docs/tc.md` §8–9), on one map.
  *
- * The map draws the centres' best tracks and, for one issue time, the
+ * The panel picks the storm — the archive's seasons, the season's basins,
+ * one row per storm with forecasts — and the map draws it in place. The
+ * map draws the centres' best tracks and, for one issue time, the
  * forecast each source started from it — the live product's own layers,
  * fed a storm put together from the archive, with the playhead held at the
  * issue time so each forecast is drawn from its start. The slider steps
@@ -49,7 +52,8 @@ import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
  * missed, over the storm and for the forecast on the map.
  *
  * The address names the storm and the issue time (`?storm=WP062023&
- * issue=2023080100`); the page writes the issue back as it moves.
+ * issue=2023080100`); the page writes both back as they change. Without a
+ * storm it opens on the latest one of the season running now.
  */
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -62,7 +66,10 @@ const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY || "249bb192fefe0a77";
 const KNOT = 0.514444;
 
 const status = document.getElementById("typhoon-status") as HTMLParagraphElement;
-const body = document.getElementById("typhoon-body") as HTMLDivElement;
+const stormSection = document.getElementById("typhoon-storm") as HTMLElement;
+const seasonsGroup = document.getElementById("typhoon-seasons") as HTMLDivElement;
+const basinsGroup = document.getElementById("typhoon-basins") as HTMLDivElement;
+const stormList = document.getElementById("typhoon-list") as HTMLUListElement;
 const titleNode = document.getElementById("typhoon-title") as HTMLSpanElement;
 const codeNode = document.getElementById("typhoon-code") as HTMLSpanElement;
 const facts = document.getElementById("typhoon-facts") as HTMLDListElement;
@@ -100,9 +107,11 @@ function issueKey(iso: string): string {
   return iso.slice(0, 13).replace(/[-T]/g, "");
 }
 
-function writeIssue(iso: string): void {
+function writeState(storm: string, issue: string | null): void {
   const url = new URL(window.location.href);
-  url.searchParams.set("issue", issueKey(iso));
+  url.searchParams.set("storm", storm);
+  if (issue === null) url.searchParams.delete("issue");
+  else url.searchParams.set("issue", issueKey(issue));
   if (url.href !== window.location.href) history.replaceState(null, "", url);
 }
 
@@ -259,7 +268,7 @@ function renderIssue(): void {
 function setIssue(index: number): void {
   if (!loaded || loaded.issues.length === 0) return;
   issueIndex = Math.max(0, Math.min(loaded.issues.length - 1, index));
-  writeIssue(loaded.issues[issueIndex]!);
+  writeState(loaded.entry.id, loaded.issues[issueIndex]!);
   renderIssue();
   renderErrors();
   draw();
@@ -366,6 +375,93 @@ function renderAll(): void {
   renderErrors();
 }
 
+/** Where a link without an issue time opens: the first forecast that
+ * verified, since a storm's earliest ones often start before it was a
+ * tropical cyclone and have nothing in the table. */
+function firstVerifiedIssue(issues: readonly string[], errors: StormErrors | null, against: string): number {
+  const verified = new Set<number>();
+  for (const columns of Object.values(errors?.truths[against] ?? {})) for (const base of columns.base) verified.add(Date.parse(base));
+  const found = issues.findIndex((issue) => verified.has(Date.parse(issue)));
+  return found >= 0 ? found : 0;
+}
+
+// --- the picker ---------------------------------------------------------------
+
+const archive = new TcArchive(dataBaseUrl());
+const BASIN_ORDER = ["WP", "EP", "AL", "CP", "IO", "SH"];
+let seasons: number[] = [];
+let season: number | null = null;
+let basin: string | null = null;
+let seasonIndex: SeasonIndex | null = null;
+
+/** The season's storms with forecasts, in the order they formed (by id
+ * where an index predates the summary). */
+function seasonStorms(): SeasonStorm[] {
+  return (seasonIndex?.storms ?? [])
+    .filter((storm) => storm.months.length > 0)
+    .sort((a, b) => (a.first ?? "9").localeCompare(b.first ?? "9") || a.id.localeCompare(b.id));
+}
+
+/** `07-27 → 08-10`, the year left to the season chip. */
+function stormSpan(storm: SeasonStorm): string {
+  if (!storm.first || !storm.last) return "";
+  const day = (iso: string) => iso.slice(5, 10);
+  return `${day(storm.first)} → ${storm.first.slice(0, 4) === storm.last.slice(0, 4) ? day(storm.last) : storm.last.slice(0, 10)}`;
+}
+
+function renderPicker(): void {
+  seasonsGroup.replaceChildren(
+    ...seasons.map((year) =>
+      chip(String(year), year === season, () => {
+        if (year === season) return;
+        season = year;
+        basin = null;
+        void loadSeason(null);
+      }),
+    ),
+  );
+  const storms = seasonStorms();
+  const basins = BASIN_ORDER.filter((code) => storms.some((storm) => storm.basin === code));
+  basinsGroup.replaceChildren(
+    chip(t("tcHistoryAll"), basin === null, () => {
+      basin = null;
+      renderPicker();
+    }),
+    ...basins.map((code) =>
+      chip(`${code} ${storms.filter((storm) => storm.basin === code).length}`, code === basin, () => {
+        basin = code;
+        renderPicker();
+      }),
+    ),
+  );
+  const selected = loaded?.entry.id ?? pending;
+  stormList.replaceChildren(
+    ...storms
+      .filter((storm) => basin === null || storm.basin === basin)
+      .map((storm) => {
+        const item = element("li", "");
+        const button = element("button", "typhoon-row");
+        button.type = "button";
+        button.setAttribute("aria-current", String(storm.id === selected));
+        const name = stormName(storm);
+        button.setAttribute("aria-label", t("tcHistoryStormAria", { name: `${name} (${storm.id})` }));
+        button.append(
+          element("span", "typhoon-row-code", stormCode(storm.id)),
+          element("span", "typhoon-row-name", name),
+          element("span", "typhoon-row-span", stormSpan(storm)),
+          element("span", "typhoon-row-peak", storm.vmax === null ? "" : `${Math.round(storm.vmax / KNOT)} kt`),
+        );
+        button.addEventListener("click", () => void selectStorm(storm, null));
+        item.append(button);
+        return item;
+      }),
+  );
+  if (storms.length === 0 && seasonIndex) {
+    stormList.replaceChildren(element("li", "typhoon-empty", t("tcHistoryEmpty")));
+  }
+  stormList.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+}
+
 // --- loading -----------------------------------------------------------------
 
 function fail(message: string): void {
@@ -377,38 +473,88 @@ function fail(message: string): void {
   status.textContent = message;
 }
 
+/** The storm being loaded, so a second pick made before the first has
+ * arrived wins, and the list marks it at once. */
+let pending: string | null = null;
+
+async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<void> {
+  if (!seasonIndex || loaded?.entry.id === entry.id) return;
+  pending = entry.id;
+  renderPicker();
+  status.hidden = false;
+  status.classList.remove("is-error");
+  status.textContent = t("tcPageLoading");
+  const index = seasonIndex;
+  const [best, records, errors] = await Promise.all([
+    archive.best(index, entry),
+    archive.forecasts(entry),
+    archive.errors(index.season, entry.id).catch(() => null),
+  ]);
+  if (pending !== entry.id) return;
+  pending = null;
+  const issues = issueTimes(records);
+  loaded = { entry, best, records, errors, issues, sources: sourcesOf(records, SOURCE_ORDER) };
+  card?.remove();
+  if (truthsOf(errors).length > 0 && !truthsOf(errors).includes(truth)) truth = truthsOf(errors)[0]!;
+  const wanted = issue === null ? -1 : issues.findIndex((item) => issueKey(item) === issue);
+  issueIndex = wanted >= 0 ? wanted : firstVerifiedIssue(issues, errors, truth);
+  slider.max = String(Math.max(0, issues.length - 1));
+  writeState(entry.id, issues[issueIndex] ?? null);
+  status.hidden = true;
+  stormSection.hidden = false;
+  renderAll();
+  renderPicker();
+  const created = ensureMap();
+  const bounds = archiveBounds(best, records);
+  if (bounds) created.fitBounds(bounds, { padding: 48, maxZoom: 6, duration: 600 });
+  draw();
+}
+
+/** Show the season's storms; open `wanted` when given and listed, else the
+ * latest storm when nothing is open yet. */
+async function loadSeason(wanted: { id: string; issue: string | null } | null): Promise<void> {
+  if (season === null) return;
+  const year = season;
+  seasonIndex = null;
+  renderPicker();
+  const index = await archive.season(year);
+  if (year !== season) return;
+  seasonIndex = index;
+  renderPicker();
+  const storms = seasonStorms();
+  if (wanted) {
+    const entry = index?.storms.find((storm) => storm.id === wanted.id || storm.atcf.includes(wanted.id));
+    if (!entry) {
+      fail(t("tcPageMissing", { id: wanted.id }));
+      return;
+    }
+    await selectStorm(entry, wanted.issue);
+  } else if (!loaded && storms.length > 0) {
+    await selectStorm(storms[storms.length - 1]!, null);
+  }
+}
+
 async function load(): Promise<void> {
   const state = parseState(window.location.search);
   applyPageMeta({ path: state.storm ? `/typhoon.html?storm=${state.storm}` : "/typhoon.html" });
-  if (!state.storm) {
-    fail(t("tcPageMissing", { id: new URLSearchParams(window.location.search).get("storm") ?? "" }));
+  ensureMap();
+  const catalog = await archive.catalog();
+  seasons = catalog.seasons.map((entry) => entry.season).sort((a, b) => b - a);
+  if (seasons.length === 0) {
+    fail(t("tcHistoryEmpty"));
     return;
   }
-  const archive = new TcArchive(dataBaseUrl());
-  const season = await archive.season(seasonOfStorm(state.storm));
-  const entry = season?.storms.find((item) => item.id === state.storm || item.atcf.includes(state.storm!));
-  if (!season || !entry) {
-    fail(t("tcPageMissing", { id: state.storm }));
+  // The season running now, not the southern one already named after next
+  // year — unless the link names a storm of another.
+  const year = new Date().getUTCFullYear();
+  season = state.storm ? seasonOfStorm(state.storm) : (seasons.find((item) => item <= year) ?? seasons[0]!);
+  if (!seasons.includes(season)) {
+    fail(t("tcPageMissing", { id: state.storm ?? "" }));
+    season = seasons.find((item) => item <= year) ?? seasons[0]!;
+    await loadSeason(null);
     return;
   }
-  const [best, records, errors] = await Promise.all([
-    archive.best(season, entry),
-    archive.forecasts(entry),
-    archive.errors(season.season, entry.id).catch(() => null),
-  ]);
-  const issues = issueTimes(records);
-  loaded = { entry, best, records, errors, issues, sources: sourcesOf(records, SOURCE_ORDER) };
-  const wanted = state.issue === null ? -1 : issues.findIndex((issue) => issueKey(issue) === state.issue);
-  issueIndex = wanted >= 0 ? wanted : 0;
-  if (truthsOf(errors).length > 0 && !truthsOf(errors).includes(truth)) truth = truthsOf(errors)[0]!;
-  slider.max = String(Math.max(0, issues.length - 1));
-  status.hidden = true;
-  body.hidden = false;
-  renderAll();
-  const created = ensureMap();
-  const bounds = archiveBounds(best, records);
-  if (bounds) created.fitBounds(bounds, { padding: 48, maxZoom: 6, duration: 0 });
-  draw();
+  await loadSeason(state.storm ? { id: state.storm, issue: state.issue } : null);
 }
 
 onThemeChange(() => {
@@ -418,6 +564,7 @@ onThemeChange(() => {
 onLocaleChange(() => {
   map?.setStyle(basemapStyle());
   if (loaded) renderAll();
+  renderPicker();
 });
 
 load().catch((error: unknown) => fail(t("tcPageFailed", { message: error instanceof Error ? error.message : String(error) })));

@@ -693,10 +693,10 @@ export const en = {
   tcBest: "Best track",
   tcOptionsAria: "Storm options",
 
-  /** The past tropical cyclones: the showcase section listing the storm
-   * archive by season and basin, and the storm page (typhoon.html) it opens
-   * — the slider over the issue times, the track switches and the table of
-   * track errors in km. ATCF ids, basin codes (`WP`), agency and model
+  /** The past tropical cyclones (typhoon.html), linked from the showcase
+   * header: the map page's panel picking a storm from the archive by
+   * season and basin, the slider over its issue times, the track switches
+   * and the table of track errors in km. ATCF ids, basin codes (`WP`), agency and model
    * codes and the truth keys (`USA`, `JMA`) are instrument text and stay as
    * they are. `{name}` is a storm's name with its id, `{id}` an ATCF id. */
   tcHistoryHeading: "Past tropical cyclones",
@@ -707,7 +707,6 @@ export const en = {
   tcHistoryEmpty: "No storms with forecasts in this season and basin",
   tcHistoryStormAria: "Open {name}",
   tcPageTitle: "Past tropical cyclone",
-  tcPageBack: "All past storms",
   tcPageMetaDescription: "A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed.",
   tcPageLoading: "Loading storm",
   tcPageMissing: "No archived storm named {id}",

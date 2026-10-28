@@ -549,8 +549,12 @@ hidden and pinned models are `localStorage`.
 
 ## Past storms
 
-`typhoon.html?storm=<ATCF id>`: one storm from the archive (`docs/tc.md`
-§8–9), opened from the showcase page's season and basin list.
+`typhoon.html`: the storm archive (`docs/tc.md` §8–9) on one map, linked
+from the showcase header. A panel beside the map (under it on a phone)
+picks the season, the basin and the storm, and the map draws the storm in
+place; `?storm=<ATCF id>&issue=YYYYMMDDHH` is written back as either
+changes, and without a storm the page opens the latest of the season
+running now.
 `tc/archive.ts` reads the catalog, the season and month indexes and one
 storm's spans of `best.jsonl`, `forecasts.jsonl` and `errors.jsonl` by
 Range, and turns them into what the page draws: `stormAt` builds the storm

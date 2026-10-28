@@ -23,8 +23,6 @@ import { fetchCaseManifest, fetchCatalog, listedCases, localizedText, type Showc
 import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
-import { agencyCode } from "./tc/agencies";
-import { stormCode, TcArchive, type SeasonIndex, type SeasonStorm } from "./tc/archive";
 
 /**
  * The historical showcase list.
@@ -249,134 +247,10 @@ async function render(): Promise<void> {
   }
 }
 
-// --- Past tropical cyclones -------------------------------------------------
-//
-// The storm archive's seasons as chips, the season's basins as chips, and
-// one row per numbered storm with forecasts, opening typhoon.html. A data
-// root without an archive keeps the section hidden.
-
-const history = document.getElementById("tc-history") as HTMLElement;
-const historySeasons = document.getElementById("tc-history-seasons") as HTMLDivElement;
-const historyBasins = document.getElementById("tc-history-basins") as HTMLDivElement;
-const historyList = document.getElementById("tc-history-list") as HTMLUListElement;
-const historyStatus = document.getElementById("tc-history-status") as HTMLParagraphElement;
-const KNOT = 0.514444;
-const BASIN_ORDER = ["WP", "EP", "AL", "CP", "IO", "SH"];
-
-const archive = new TcArchive(dataBaseUrl());
-let archiveSeasons: number[] = [];
-let historySeason: number | null = null;
-let historyBasin: string | null = null;
-let historyIndex: SeasonIndex | null = null;
-
-function historyChip(label: string, pressed: boolean, onPress: () => void): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = label;
-  button.setAttribute("aria-pressed", String(pressed));
-  button.addEventListener("click", onPress);
-  return button;
-}
-
-/** `07-27 → 08-10`, the year left to the season chip; a storm that runs
- * into the next year keeps it on its last day. */
-function stormSpan(storm: SeasonStorm): string {
-  if (!storm.first || !storm.last) return "";
-  const day = (iso: string) => iso.slice(5, 10);
-  const last = storm.first.slice(0, 4) === storm.last.slice(0, 4) ? day(storm.last) : storm.last.slice(0, 10);
-  return `${day(storm.first)} → ${last}`;
-}
-
-function historyRow(storm: SeasonStorm): HTMLLIElement {
-  const item = document.createElement("li");
-  const link = document.createElement("a");
-  link.className = "tc-history-row";
-  link.href = `./typhoon.html?storm=${encodeURIComponent(storm.id)}`;
-  const name = storm.name ?? t("tcUnnamed");
-  link.setAttribute("aria-label", t("tcHistoryStormAria", { name: `${name} (${storm.id})` }));
-  const cell = (className: string, text: string) => {
-    const span = document.createElement("span");
-    span.className = className;
-    span.textContent = text;
-    return span;
-  };
-  link.append(
-    cell("tc-history-code", stormCode(storm.id)),
-    cell("tc-history-name", name),
-    cell("tc-history-span", stormSpan(storm)),
-    cell("tc-history-peak", storm.vmax === null ? "" : `${Math.round(storm.vmax / KNOT)} kt`),
-    cell("tc-history-sources", storm.sources.map((source) => agencyCode(source)).join(" · ")),
-  );
-  item.append(link);
-  return item;
-}
-
-function renderHistory(): void {
-  historySeasons.replaceChildren(
-    ...archiveSeasons.map((season) =>
-      historyChip(String(season), season === historySeason, () => {
-        historySeason = season;
-        historyBasin = null;
-        void loadHistorySeason();
-      }),
-    ),
-  );
-  const storms = (historyIndex?.storms ?? []).filter((storm) => storm.months.length > 0);
-  const basins = BASIN_ORDER.filter((basin) => storms.some((storm) => storm.basin === basin));
-  historyBasins.replaceChildren(
-    historyChip(t("tcHistoryAll"), historyBasin === null, () => {
-      historyBasin = null;
-      renderHistory();
-    }),
-    ...basins.map((basin) =>
-      historyChip(`${basin} ${storms.filter((storm) => storm.basin === basin).length}`, basin === historyBasin, () => {
-        historyBasin = basin;
-        renderHistory();
-      }),
-    ),
-  );
-  const shown = storms
-    .filter((storm) => historyBasin === null || storm.basin === historyBasin)
-    .sort((a, b) => (a.first ?? "9").localeCompare(b.first ?? "9") || a.id.localeCompare(b.id));
-  historyList.replaceChildren(...shown.map(historyRow));
-  historyStatus.hidden = shown.length > 0;
-  if (shown.length === 0) historyStatus.textContent = t("tcHistoryEmpty");
-}
-
-async function loadHistorySeason(): Promise<void> {
-  if (historySeason === null) return;
-  const season = historySeason;
-  historyIndex = await archive.season(season);
-  if (season !== historySeason) return;
-  renderHistory();
-}
-
-async function loadHistory(): Promise<void> {
-  const catalog = await archive.catalog();
-  archiveSeasons = catalog.seasons.map((entry) => entry.season).sort((a, b) => b - a);
-  if (archiveSeasons.length === 0) return;
-  // The season running now, not the southern one already named after
-  // next year.
-  const year = new Date().getUTCFullYear();
-  historySeason = archiveSeasons.find((season) => season <= year) ?? archiveSeasons[0]!;
-  history.hidden = false;
-  await loadHistorySeason();
-  // The storm page links back to this section; it was hidden when the
-  // browser looked for the anchor.
-  if (window.location.hash === "#tc-history") history.scrollIntoView();
-}
-
 onLocaleChange(() => {
   applyPageMeta({ path: "/showcase.html" });
   if (statusMessage) setStatus(statusMessage.key, statusMessage.params);
   if (cases.length > 0) renderCards();
-  if (historyIndex) renderHistory();
 });
 
 void render();
-// The archive is a section of its own: a failure there hides it and
-// leaves the cases alone.
-loadHistory().catch((error: unknown) => {
-  console.warn("tc archive not loaded", error);
-  history.hidden = true;
-});

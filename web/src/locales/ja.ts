@@ -435,7 +435,6 @@ export const ja: Record<MessageKey, string> = {
   tcHistoryEmpty: "このシーズンと海域には予報のある嵐がありません",
   tcHistoryStormAria: "{name} を開く",
   tcPageTitle: "過去の熱帯低気圧",
-  tcPageBack: "過去の嵐の一覧",
   tcPageMetaDescription: "過去の熱帯低気圧：各機関のベストトラック、アーカイブされたすべての予報、それぞれのずれ。",
   tcPageLoading: "嵐を読み込み中",
   tcPageMissing: "アーカイブに {id} という嵐はありません",
