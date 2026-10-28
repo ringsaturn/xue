@@ -600,6 +600,27 @@ xue era5-series --input era5-raw.zip --start 2026-10-08T00Z --hours 2 \
 --inexact`.) The five files are 176 KB. A change to what the tool writes
 means regenerating them the same way and saying so in the commit.
 
+`cams.2026100900/` is the CAMS global aerosol analyses as
+`xue cams-series` writes them (`xuebuild/cams/`): one CF NetCDF per
+variable, `cams.2026100900.<xue id>.nc` for `aod` and `aodorg` (`1`) and
+`pm25` (`µg/m³`, from CAMS's kg m**-3), latitudes ascending, `time` in
+hours since the window's first hour, a NaN fill. Hours 0, 3 and 6 of the
+window from 2026-10-09 00Z over a 4 by 3 cell box (103.6–104.8°E,
+1.2°S–0.4°S) over the smoke of southern Sumatra, cut by the tool from an
+Atmosphere Data Store download of `cams-global-atmospheric-composition-forecasts`
+(2026-10-09, the 00Z and 12Z cycles at +0/+3/+6/+9 h, area 8°N 95°E 8°S
+118°E, the three variables and total column CO, `netcdf_zip`):
+
+```sh
+xue cams-series --input cams-raw.zip --start 2026-10-09T00Z --hours 6 \
+    --bbox 103.6,-1.2,104.8,-0.4 --out cams.2026100900
+```
+
+run in the directory holding the download, then moved here (the files'
+`history` records the command). The three files are 108 KB. A change to
+what the tool writes means regenerating them the same way and saying so in
+the commit.
+
 `volume-registry.json` is the registry golden for the volume bundles'
 levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
 `clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter

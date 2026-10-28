@@ -204,13 +204,16 @@ class Window:
     longitudes: np.ndarray
 
     @classmethod
-    def of(cls, field: Field, bbox: tuple[float, float, float, float] | None) -> Window:
+    def of(cls, field: Field, bbox: tuple[float, float, float, float] | None, step: float = STEP) -> Window:
+        """The window of ``field`` over ``bbox``, on a regular grid of
+        ``step`` degrees centred on whole multiples of it (ERA5's own by
+        default)."""
         latitudes, longitudes = field.latitudes, np.where(field.longitudes >= 180.0, field.longitudes - 360.0, field.longitudes)
         for name, axis in (("latitudes", latitudes), ("longitudes", longitudes)):
-            if axis.size > 1 and not np.allclose(np.abs(np.diff(axis)), STEP, atol=1e-6):
-                raise Era5Error(f"the download's {name} are not on ERA5's {STEP}° grid")
-            if axis.size and abs(axis[0] / STEP - round(axis[0] / STEP)) > 1e-6:
-                raise Era5Error(f"the download's {name} are not centred on whole multiples of {STEP}°")
+            if axis.size > 1 and not np.allclose(np.abs(np.diff(axis)), step, atol=1e-6):
+                raise Era5Error(f"the download's {name} are not on a {step}° grid")
+            if axis.size and abs(axis[0] / step - round(axis[0] / step)) > 1e-6:
+                raise Era5Error(f"the download's {name} are not centred on whole multiples of {step}°")
         if longitudes.size > 1 and np.any(np.diff(longitudes) <= 0):
             raise Era5Error("the download's longitudes do not run west to east (a box across the antimeridian is not read)")
         rows = np.arange(latitudes.size)
@@ -257,7 +260,17 @@ class SeriesSummary:
 
 
 def write_series(
-    path: Path, variable_id: str, run: datetime, hours: list[int], window: Window, frames: np.ndarray, attributes: dict[str, str]
+    path: Path,
+    variable_id: str,
+    run: datetime,
+    hours: list[int],
+    window: Window,
+    frames: np.ndarray,
+    attributes: dict[str, str],
+    *,
+    long_name: str | None = None,
+    unit: str | None = None,
+    reference_name: str = "start of the reanalysis window",
 ) -> None:
     """One variable's CF series in the shape ``xuebuild.wrf.series.write_series``
     writes: ``time`` in hours from the run, ``step`` beside it, the run as
@@ -277,7 +290,7 @@ def write_series(
         step.setncatts({"standard_name": "forecast_period", "long_name": "time since forecast_reference_time", "units": "hours"})
         step[:] = np.asarray(hours, dtype=np.float64)
         reference = dataset.createVariable("forecast_reference_time", "f8", ())
-        reference.setncatts({"standard_name": "forecast_reference_time", "long_name": "start of the reanalysis window", "units": "seconds since 1970-01-01 00:00:00", "calendar": "standard"})
+        reference.setncatts({"standard_name": "forecast_reference_time", "long_name": reference_name, "units": "seconds since 1970-01-01 00:00:00", "calendar": "standard"})
         reference[...] = run.timestamp()
         latitude = dataset.createVariable("latitude", "f8", ("latitude",))
         latitude.setncatts({"standard_name": "latitude", "long_name": "latitude", "units": "degrees_north", "axis": "Y"})
@@ -286,8 +299,8 @@ def write_series(
         longitude.setncatts({"standard_name": "longitude", "long_name": "longitude", "units": "degrees_east", "axis": "X"})
         longitude[:] = window.longitudes
         data = dataset.createVariable(variable_id, "f4", ("time", "latitude", "longitude"), zlib=True, complevel=1, fill_value=np.float32(np.nan))
-        unit = SERIES_UNITS[variable_spec(variable_id).output_unit]
-        data.setncatts({"long_name": LONG_NAMES[variable_id], "units": unit, "coordinates": "forecast_reference_time step"})
+        unit = unit or SERIES_UNITS[variable_spec(variable_id).output_unit]
+        data.setncatts({"long_name": long_name or LONG_NAMES[variable_id], "units": unit, "coordinates": "forecast_reference_time step"})
         data[:] = frames.astype(np.float32)
 
 

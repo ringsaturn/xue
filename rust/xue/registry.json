@@ -20284,6 +20284,70 @@
       "video": false,
       "catCalibration": []
     },
+    "cams": {
+      "id": "cams",
+      "manifestModel": "CAMS",
+      "product": "global-composition-analysis",
+      "latestFilename": null,
+      "steps": [
+        [
+          1440,
+          3
+        ]
+      ],
+      "inputVariableIds": [
+        "aod",
+        "aodorg",
+        "pm25"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [],
+      "bands": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "aod",
+        "aodorg",
+        "pm25"
+      ],
+      "coreBundleIds": [
+        "aod"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        900,
+        451
+      ],
+      "tile": [
+        48,
+        52
+      ],
+      "variantFactors": [],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 3,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "regrid": null,
+      "video": false,
+      "catCalibration": []
+    },
     "cma": {
       "id": "cma",
       "manifestModel": "CMA-RADAR",

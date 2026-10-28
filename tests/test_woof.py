@@ -135,8 +135,8 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertFalse(SPEC.video)
         # Nothing fetches it, nor the two EFAS runs (tests/test_efas.py);
         # every other source is fetched and live.
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof", "efas", "efaswb", "era5"])
-        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof", "efas", "efaswb", "era5"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.fetched], ["woof", "efas", "efaswb", "era5", "cams"])
+        self.assertEqual([source_id for source_id, spec in SOURCES.items() if not spec.live], ["woof", "efas", "efaswb", "era5", "cams"])
 
     def test_the_axis_is_hourly_from_the_first_hour_to_seventy_two(self) -> None:
         self.assertEqual(SPEC.steps, ((72, 1),))

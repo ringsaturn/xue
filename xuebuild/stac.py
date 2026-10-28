@@ -116,6 +116,19 @@ _ERA5_CITATION_LINK = {
     "type": "text/html",
     "title": "Hersbach et al. (2023): ERA5 hourly data on single levels from 1940 to present",
 }
+_ECMWF_CAMS_PROVIDER = {
+    "name": "ECMWF / Copernicus Atmosphere Monitoring Service",
+    "description": "The CAMS global atmospheric composition analyses, produced by ECMWF for the Copernicus "
+    "Atmosphere Monitoring Service, from the Atmosphere Data Store.",
+    "roles": ["producer", "licensor"],
+    "url": "https://ads.atmosphere.copernicus.eu/",
+}
+_CAMS_CITATION_LINK = {
+    "rel": "cite-as",
+    "href": "https://doi.org/10.24381/04a0b097",
+    "type": "text/html",
+    "title": "CAMS global atmospheric composition forecasts",
+}
 _XUE_PROVIDER = {
     "name": "Xue",
     "roles": ["processor", "host"],
@@ -786,7 +799,7 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                 "ERA5, the fifth-generation ECMWF reanalysis of the global climate for the Copernicus "
                 "Climate Change Service: hourly 2 m temperature and dew point, the 10 m wind and the "
                 "10 m gust maximum over the hour ending at each frame, on the 0.25° regular grid, over a "
-                "window of up to 240 hours named by its first hour. Retrieved from the Climate Data "
+                "window of up to 1440 hours named by its first hour. Retrieved from the Climate Data "
                 "Store (reanalysis-era5-single-levels) and converted by the era5-series tool; there is "
                 "no live feed, and the windows exist as showcase cases only. Contains modified "
                 "Copernicus Climate Change Service information {year}."
@@ -801,6 +814,31 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
                     "title": "Creative Commons Attribution 4.0",
                 },
                 _ERA5_CITATION_LINK,
+            ],
+        },
+        "cams": {
+            "title": "CAMS global aerosol analyses",
+            "description": (
+                "The Copernicus Atmosphere Monitoring Service's global atmospheric composition system at "
+                "ECMWF, which assimilates satellite aerosol optical depth and takes its fire emissions from "
+                "GFAS: the total and the organic matter aerosol optical depth at 550 nm and the surface "
+                "PM2.5 concentration, every three hours on the 0.4° regular grid over a window of up to "
+                "1440 hours named by its first hour, each frame the 00Z or 12Z cycle's analysis or its "
+                "+3, +6 or +9 h step. Retrieved from the Atmosphere Data Store "
+                "(cams-global-atmospheric-composition-forecasts) and converted by the cams-series tool; "
+                "there is no live feed, and the windows exist as showcase cases only. Contains modified "
+                "Copernicus Atmosphere Monitoring Service information {year}."
+            ),
+            "license": "CC-BY-4.0",
+            "providers": [_ECMWF_CAMS_PROVIDER, _XUE_PROVIDER],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "Creative Commons Attribution 4.0",
+                },
+                _CAMS_CITATION_LINK,
             ],
         },
         "cma": {

@@ -182,7 +182,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
                 "nest (xue wrf-series), and efas / efaswb, the Copernicus EFAS v5 river discharge forecast "
                 "and water balance on its 1/60 degree grid (6-hourly from 6 to 120 hours, xue efas-series), and "
                 "era5, the ECMWF ERA5 reanalysis on its 0.25 degree grid (hourly from the window's first hour "
-                "to 240 hours, xue era5-series)"
+                "to 1440 hours, xue era5-series), and cams, the CAMS global aerosol analyses on their 0.4 degree "
+                "grid (3-hourly from the window's first hour to 1440 hours, xue cams-series)"
             )
         ),
     )
@@ -854,6 +855,26 @@ def parser() -> argparse.ArgumentParser:
     era5_series.add_argument("--out", type=Path, required=True, help="directory the series files are written into")
     era5_series.add_argument("--force", action="store_true", help="replace series files already in --out")
 
+    cams_series = commands.add_parser(
+        "cams-series",
+        help="turn a window of CAMS global aerosol analyses from the Copernicus Atmosphere Data Store into the "
+        "per-variable CF NetCDF series the cams source converts: cams.<start>.<variable>.nc for the total and "
+        "organic matter aerosol optical depth at 550 nm and the surface PM2.5, every 3 hours",
+    )
+    cams_series.add_argument(
+        "--input",
+        type=Path,
+        help="a Data Store download (the zip of NetCDF it sends); without it the window is requested with cdsapi "
+        "(the key from CDSAPI_KEY or ~/.cdsapirc) and saved beside the series as cams.<start>.ads.zip",
+    )
+    cams_series.add_argument("--start", required=True, help="the window's first hour as ISO 8601 UTC, a multiple of 3 h; it names the run")
+    cams_series.add_argument("--hours", type=int, help="the window's last hour after --start (default: the whole 1440 h axis)")
+    cams_series.add_argument(
+        "--bbox", help="west,south,east,north: write only the cells whose centres lie inside (required to request a window)"
+    )
+    cams_series.add_argument("--out", type=Path, required=True, help="directory the series files are written into")
+    cams_series.add_argument("--force", action="store_true", help="replace series files already in --out")
+
     river_case = commands.add_parser(
         "river-case",
         help="write one showcase case's river/ directory (docs/river.md: gauges, reaches, flood extents) "
@@ -953,6 +974,31 @@ def main(argv: list[str] | None = None) -> int:
                 hours = arguments.hours if arguments.hours is not None else source_spec("era5").horizon_hours
                 download = request_era5(start, hours, bbox, arguments.out / f"era5.{start:%Y%m%d%H}.cds.zip")
             for summary in convert_era5(
+                download,
+                arguments.out,
+                start=start,
+                hours=arguments.hours,
+                bbox=bbox,
+                force=arguments.force,
+                command=shlex.join(["xue", *(argv if argv is not None else sys.argv[1:])]),
+            ):
+                print(summary.line())
+        elif arguments.command == "cams-series":
+            from .cams import convert as convert_cams, request as request_cams  # noqa: PLC0415 - the era5 group
+
+            try:
+                start = datetime.fromisoformat(arguments.start.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise XueError(f"--start {arguments.start!r} is not an ISO 8601 time") from exc
+            start = (start if start.tzinfo else start.replace(tzinfo=UTC)).astimezone(UTC)
+            bbox = parse_bbox(arguments.bbox) if arguments.bbox else None
+            download = arguments.input
+            if download is None:
+                if bbox is None:
+                    raise XueError("requesting a CAMS window needs --bbox (or name a download with --input)")
+                hours = arguments.hours if arguments.hours is not None else source_spec("cams").horizon_hours
+                download = request_cams(start, hours, bbox, arguments.out / f"cams.{start:%Y%m%d%H}.ads.zip")
+            for summary in convert_cams(
                 download,
                 arguments.out,
                 start=start,

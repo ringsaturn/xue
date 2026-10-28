@@ -26,7 +26,8 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
 | `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | 6 h from F6 to F120 | `dis06` |
-| `era5` | series-file reanalysis, no feed (cases only) | `xue era5-series` over a CDS NetCDF | 1 h from F0 to F240; a window from any hour | `tmp2m` |
+| `era5` | series-file reanalysis, no feed (cases only) | `xue era5-series` over a CDS NetCDF | 1 h from F0 to F1440; a window from any hour | `tmp2m` |
+| `cams` | series-file aerosol analysis, no feed (cases only) | `xue cams-series` over an ADS NetCDF | 3 h from F0 to F1440; a window from any 3 h mark | `aod` |
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
 | `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
@@ -418,6 +419,37 @@ No ladder and no video: a case is a box of a few hundred cells. The STAC
 prose carries CC-BY-4.0, the credit "Contains modified Copernicus Climate
 Change Service information" and the dataset's DOI as `cite-as`.
 `tests/test_era5.py`.
+
+**cams.** The Copernicus Atmosphere Monitoring Service's global
+atmospheric composition system at ECMWF (`CAMS` /
+`global-composition-analysis`): the IFS with aerosol and chemistry,
+assimilating satellite aerosol optical depth and emitting fires from GFAS,
+on the 0.4° regular grid, for a case that should show where smoke or dust
+was rather than where one forecast run sent it. It publishes
+GEFS-Aerosols' own quantities (`aod`, `aodorg`, `pm25`), so the shell and
+both encoders know them already; CAMS's organic matter optical depth is
+the component `aodorg` names. The Atmosphere Data Store holds the system's
+analyses and forecasts from 2015 (`cams-global-atmospheric-composition-forecasts`)
+and no reanalysis reaches the present (EAC4 trails by a year or more), so
+the tool asks for every 00Z and 12Z cycle at +0, +3, +6 and +9 h: the
+frames run back to back every three hours, each the newest word the
+system had at its valid time, and where two cycles reach the same hour the
+shorter lead is kept. **No live feed**, as for `era5`: a window is named by
+its first hour (`--start`, any 3 h mark, `cycle_hours` 3) and runs to at
+most 1,440 hours. `xue cams-series` (`xuebuild/cams/`, the `era5`
+dependency group; the same account key as the CDS, but the ADS's own terms
+must be accepted once on its site) asks for the window as one date range
+over the `--bbox` padded by a cell, saves the store's `netcdf_zip` beside
+the series, or reads one given with `--input`. The store's `data_sfc.nc`
+lays every field out (forecast_period, forecast_reference_time, latitude,
+longitude), latitudes north first, coordinates with float noise the tool
+rounds off; PM2.5 comes in kg m**-3 and is written in µg/m³, the optical
+depths as `1`, and the series reuse ERA5's `Window` and `write_series`.
+The codebooks are GEFS-Aerosols' (optical depth to 5, PM2.5 to
+1000 µg/m³), so the core of a dense plume is drawn at the top of the scale.
+No ladder and no video. The STAC prose carries CC-BY-4.0, the credit
+"Contains modified Copernicus Atmosphere Monitoring Service information"
+and the dataset's DOI as `cite-as`. `tests/test_cams.py`.
 
 ## Observations
 

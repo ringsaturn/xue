@@ -18,6 +18,11 @@ from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, Satel
 from .reproject import Regrid
 from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, RIVER_VARIABLE_IDS, VARIABLES
 
+#: The aerosol quantities a CAMS window carries (xuebuild/cams/), in file
+#: order: GEFS-Aerosols' total and organic optical depth and its fine
+#: particulate matter.
+AEROSOL_SERIES_IDS = ("aod", "aodorg", "pm25")
+
 
 @dataclass(frozen=True)
 class CompanionFile:
@@ -1792,6 +1797,37 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=1,
+        video=False,
+    ),
+    # CAMS, the Copernicus Atmosphere Monitoring Service's global
+    # atmospheric composition system at ECMWF: the IFS with aerosol and
+    # chemistry, assimilating satellite aerosol optical depth, its fire
+    # emissions from GFAS's satellite fire radiative power, on a 0.4°
+    # regular grid. Like ERA5 it is reached through showcase cases alone:
+    # ``xue cams-series --start`` asks the Atmosphere Data Store for every
+    # 00Z and 12Z cycle's analysis and its +3, +6 and +9 h steps
+    # (xuebuild/cams/), so the frames run three-hourly, each the newest the
+    # system had at its valid time, and writes one CF series per variable
+    # (``cams.<run>.<variable>.nc``), the ``woof`` series-file path. The
+    # bundles are GEFS-Aerosols' own quantities, so neither encoder nor the
+    # shell learns a new one: the organic matter optical depth is CAMS's
+    # spelling of the component ``aodorg`` names. A window may start at any
+    # frame (``cycle_hours`` 3) and run up to sixty days; a case is a box of
+    # a few thousand cells, so there is no ladder and no video.
+    "cams": SourceSpec(
+        id="cams",
+        manifest_model="CAMS",
+        product="global-composition-analysis",
+        latest_filename=None,
+        steps=((1440, 3),),
+        input_variable_ids=AEROSOL_SERIES_IDS,
+        accumulated_precipitation=False,
+        bundle_scalar_ids=AEROSOL_SERIES_IDS,
+        core_bundle_ids=("aod",),
+        production_grid=(900, 451),
+        variant_factors=(),
+        series_file=True,
+        cycle_hours=3,
         video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity
