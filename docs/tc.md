@@ -402,6 +402,8 @@ can tell scores that lag the archive, and a run knows which to redo.
   1–6; and where a point carries no class, a wind of at least 25 kt.
 - Leads are 0, 12, 24, 36, 48, 72, 96, 120, 144, 168, 192, 216 and 240 h;
   a forecast point verifies only at exactly these.
+  A forecast with no point past its start — a system the model lost,
+  which ECMWF still writes, often at a stale position — is not verified.
 - An ensemble is verified by its mean position: the centroid of the members
   that carry the system at that lead, only where they are at least half of
   the members. Members not following the system the others follow (within

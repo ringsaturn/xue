@@ -158,6 +158,11 @@ def forecast_positions(record: dict[str, Any]) -> dict[int, dict[str, Any]]:
     forecast = record["forecast"]
     wanted = set(LEADS_HOURS)
     positions: dict[int, dict[str, Any]] = {}
+    # A track with nothing past its start is a system the model lost (ECMWF
+    # writes such a one, often at a stale position): not a forecast at all.
+    leads = [point["lead"] for point in forecast["points"]] if record["kind"] != "ensemble" else forecast["leads"]
+    if not any(lead > 0 for lead in leads):
+        return positions
     if record["kind"] != "ensemble":
         for point in forecast["points"]:
             hours, rest = divmod(point["lead"], 3600)

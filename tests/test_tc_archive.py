@@ -314,6 +314,10 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual(score_storm([record], self._best(), "AL")["usa"]["gfs"]["lead"], [0, 24])
         self.assertEqual(score_storm([record], {"jma": self._best()["usa"]}, "AL"), {})
 
+    def test_a_track_with_only_its_start_is_not_verified(self) -> None:
+        lost = self._record("ecmwf", [_point("2026-10-20T00:00:00Z", 13.5, 145.0, lead=0)])
+        self.assertEqual(score_storm([lost], self._best(), "WP"), {})
+
     def test_forecast_starting_outside_the_tropical_life_is_not_verified(self) -> None:
         best = self._best()
         best["usa"]["points"][1]["class"] = "LO"
