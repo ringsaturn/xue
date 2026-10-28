@@ -301,12 +301,14 @@ import { TerrainContours } from "./terraincontours";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
+  caseParts,
   radarReachBox,
   fetchCaseManifest,
   fetchCatalog,
   localizedText,
   type ShowcaseCase,
   type ShowcaseMarker,
+  type ShowcasePart,
 } from "./showcase-catalog";
 import { captionText } from "./casecaptions";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
@@ -1360,6 +1362,7 @@ const caseTitle = required<HTMLElement>("case-title");
 const caseSummary = required<HTMLElement>("case-summary");
 const caseRegion = required<HTMLElement>("case-region");
 const caseMarkerList = required<HTMLUListElement>("case-markers");
+const casePartList = required<HTMLElement>("case-parts");
 const caseCaption = required<HTMLElement>("case-caption");
 const caseRiverPanel = required<HTMLElement>("case-river");
 const riverCredit = required<HTMLElement>("river-credit");
@@ -1961,6 +1964,8 @@ const dataBackend = parseBackendFromSearch(window.location.search);
  * what the view needs. */
 const resolutionPreference = parseResolutionFromSearch(window.location.search);
 let activeCase: ShowcaseCase | null = null;
+/** The parts of the event the open case is one part of, when it is. */
+let activeCaseParts: ShowcasePart[] | null = null;
 /** A case's own default layer applies on the first load only; after that the
  * viewer keeps whatever the visitor picked, even across a retry. */
 let caseDefaultApplied = false;
@@ -6732,9 +6737,26 @@ function updateCasePresentation(showcaseCase: ShowcaseCase): void {
   caseSummary.textContent = localizedText(showcaseCase.summary, locale);
   caseRegion.textContent = formatRegion(showcaseCase.bbox);
   renderCaseMarkers(showcaseCase);
+  renderCaseParts(showcaseCase);
   syncCaseCaption();
   if (riverCase) riverCase.renderPanel(caseRiverPanel);
   caseBanner.hidden = false;
+}
+
+/** The event's parts as links, the open one marked: each part is a case of
+ * its own, so moving to one is opening that case. */
+function renderCaseParts(showcaseCase: ShowcaseCase): void {
+  const parts = activeCaseParts ?? [];
+  casePartList.hidden = parts.length === 0;
+  casePartList.replaceChildren(
+    ...parts.map((part) => {
+      const link = document.createElement("a");
+      link.href = `./?case=${encodeURIComponent(part.case)}`;
+      link.textContent = localizedText(part.label, locale);
+      if (part.case === showcaseCase.id) link.setAttribute("aria-current", "page");
+      return link;
+    }),
+  );
 }
 
 /** The case's caption at the playhead, in the UI locale; hidden between
@@ -10743,6 +10765,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       const found = catalog.cases.find((item) => item.id === requestedCaseId);
       if (!found) throw new Error(t("showcaseCaseMissing", { id: requestedCaseId }));
       activeCase = found;
+      activeCaseParts = caseParts(catalog.cases, found.id);
       selectedModelId = found.modelId;
       // The case names the layer its event is about — a heat dome opens on
       // temperature, not on the app's usual precipitation. Only an explicit

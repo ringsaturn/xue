@@ -210,6 +210,12 @@ class CaseSpec:
     explicitly flat view) and ``volume`` (one of the case's volume bundles,
     drawn over the field from the first frame). Carried onto the catalog
     row as given; a case without one opens on its bounding box."""
+    parts: tuple[dict[str, Any], ...] = ()
+    """The segments one event is told in when no single dataset spans it
+    (:func:`_parts_block`): each a ``case`` and a short ``label`` in every
+    locale, in the order the viewer offers them, this case among them. The
+    showcase lists this case alone for the whole set and the viewer
+    switches between its parts. Carried onto the catalog row as given."""
 
     @property
     def output_subdirectory(self) -> str:
@@ -402,6 +408,8 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     markers = _markers_block(markers, case_id, bounds) if markers is not None else []
     captions = payload.get("captions")
     captions = _captions_block(captions, case_id) if captions is not None else []
+    parts = payload.get("parts")
+    parts = _parts_block(parts, case_id) if parts is not None else []
 
     return CaseSpec(
         id=case_id,
@@ -428,6 +436,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         markers=tuple(markers),
         captions=tuple(captions),
         view=view,
+        parts=tuple(parts),
     )
 
 
@@ -789,6 +798,44 @@ def _captions_block(
     return captions
 
 
+MAX_PARTS = 16
+MAX_PART_LABEL_CHARACTERS = 32
+
+
+def _parts_block(
+    value: object, case_id: str, required: tuple[str, ...] = LOCALES
+) -> list[dict[str, Any]]:
+    """A case's ``parts``: the cases one event is split across, each a
+    ``case`` id and a ``label`` held to the same locales as the title, one
+    line of at most :data:`MAX_PART_LABEL_CHARACTERS` characters. The case
+    itself is one of them, so its place in the order is stated rather than
+    assumed. That the others exist is checked with the catalog."""
+    if not isinstance(value, list) or not 2 <= len(value) <= MAX_PARTS:
+        raise ShowcaseError(f"case {case_id}: parts must be a list of 2 to {MAX_PARTS}")
+    parts: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        where = f"parts[{index}]"
+        if not isinstance(item, dict) or set(item) != {"case", "label"}:
+            raise ShowcaseError(f"case {case_id}: {where} must be {{case, label}}")
+        other = item["case"]
+        if not isinstance(other, str) or not other or set(other) - _ID_CHARACTERS:
+            raise ShowcaseError(f"case {case_id}: {where}.case must be a case id")
+        label = _localized(item["label"], f"{where}.label", case_id, required)
+        for locale, line in label.items():
+            if len(line) > MAX_PART_LABEL_CHARACTERS or "\n" in line:
+                raise ShowcaseError(
+                    f"case {case_id}: {where}.label.{locale} must be one line of at most "
+                    f"{MAX_PART_LABEL_CHARACTERS} characters"
+                )
+        parts.append({"case": other, "label": label})
+    ids = [part["case"] for part in parts]
+    if len(set(ids)) != len(ids):
+        raise ShowcaseError(f"case {case_id}: parts names a case twice")
+    if case_id not in ids:
+        raise ShowcaseError(f"case {case_id}: parts must name the case itself among them")
+    return parts
+
+
 _VIEW_KEYS = ("center", "zoom", "pitch", "bearing", "terrain", "volume")
 
 
@@ -1042,6 +1089,8 @@ def build_catalog_entry(
         entry["context"] = dict(spec.context)
     if spec.view:
         entry["view"] = dict(spec.view)
+    if spec.parts:
+        entry["parts"] = [dict(part) for part in spec.parts]
     validate_catalog_entry(entry)
     return entry
 
@@ -1090,12 +1139,14 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         _captions_block(entry["captions"], entry["id"], REQUIRED_LOCALES)
     if "context" in entry:
         _context_block(entry["context"], entry["id"])
+    if "parts" in entry:
+        _parts_block(entry["parts"], entry["id"], REQUIRED_LOCALES)
 
 
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit, the river, the context, the markers, the captions and the view are the definition's to change — a
+    the tags, the credit, the river, the context, the markers, the captions, the view and the parts are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -1146,6 +1197,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
         ("captions", [dict(caption) for caption in spec.captions] if spec.captions else None),
         ("context", dict(spec.context) if spec.context else None),
         ("view", dict(spec.view) if spec.view else None),
+        ("parts", [dict(part) for part in spec.parts] if spec.parts else None),
     ):
         if value:
             entry[key] = value
@@ -1195,6 +1247,7 @@ def collect_catalog(output_root: Path) -> dict[str, Any]:
             entry["context"] = _catalog_context(output_root, entry)
         entries.append(entry)
     _check_wind_references(entries)
+    _check_part_references(entries)
     entries.sort(key=_catalog_sort_key, reverse=True)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
@@ -1215,6 +1268,25 @@ def _check_wind_references(entries: Sequence[dict[str, Any]]) -> None:
             raise ShowcaseError(f"case {entry['id']} borrows its wind from {other}, which is not in the catalog")
         if WIND_BUNDLE not in variables[other]:
             raise ShowcaseError(f"case {entry['id']} borrows its wind from {other}, which ships no {WIND_BUNDLE}")
+
+
+def _check_part_references(entries: Sequence[dict[str, Any]]) -> None:
+    """Every case a ``parts`` block names is in the same catalog, carries no
+    parts of its own, and belongs to no other case's parts: one event is one
+    set, listed once."""
+    ids = {entry["id"] for entry in entries}
+    owner: dict[str, str] = {}
+    for entry in entries:
+        for part in entry.get("parts", ()):
+            other = part["case"]
+            if other not in ids:
+                raise ShowcaseError(f"case {entry['id']} names part {other}, which is not in the catalog")
+            if other in owner:
+                raise ShowcaseError(f"case {other} is a part of both {owner[other]} and {entry['id']}")
+            owner[other] = entry["id"]
+    for entry in entries:
+        if "parts" in entry and owner.get(entry["id"]) != entry["id"]:
+            raise ShowcaseError(f"case {entry['id']} carries parts but is a part of {owner[entry['id']]}")
 
 
 def _catalog_radar(output_root: Path, entry: dict[str, Any]) -> dict[str, Any]:

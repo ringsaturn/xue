@@ -325,6 +325,10 @@
             <span class="sr-only" data-i18n="showcaseBack">All cases</span>
           </a>
         </div>
+        <!-- The other parts of the event this case is one part of, as links
+             (main.ts::renderCaseParts); kept when the card is folded, since
+             it is the way to the rest of the event. -->
+        <nav class="case-parts" id="case-parts" hidden data-i18n-aria="casePartsAria" aria-label="Parts of this event"></nav>
         <div class="case-detail" id="case-detail">
           <p id="case-summary"></p>
           <p class="case-region" id="case-region"></p>

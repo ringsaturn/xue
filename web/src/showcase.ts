@@ -19,7 +19,7 @@ import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type Po
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
-import { fetchCaseManifest, fetchCatalog, localizedText, type ShowcaseCase } from "./showcase-catalog";
+import { fetchCaseManifest, fetchCatalog, listedCases, localizedText, type ShowcaseCase } from "./showcase-catalog";
 import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
 import { variableSpec } from "./variables";
@@ -235,7 +235,7 @@ async function render(): Promise<void> {
       return;
     }
     status.hidden = true;
-    cases = catalog.cases;
+    cases = listedCases(catalog.cases);
     renderCards();
     // Thumbnails are posters — under a kilobyte each — so the handful a
     // catalog holds can all be fetched at once.

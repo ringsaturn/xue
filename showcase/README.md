@@ -292,6 +292,26 @@ retires a case.
    zone. Captions are held to the same rule as the summary. A shell that
    does not know the field shows none.
 
+   An event no single dataset spans — a haze season told by a reanalysis's
+   wind over weeks, a smoke forecast for each episode and a satellite's
+   peak days — is one case split into **parts**. Each part is built as a
+   case of its own; one of them, the lead, names them all, itself among
+   them, in the order the viewer offers them:
+
+   ```json
+   "parts": [
+     { "case": "sumatra-haze-2026-era5", "label": { "zh": "整季风场", "en": "Season wind", "…": "…" } },
+     { "case": "sumatra-haze-2026-0928", "label": { "zh": "9 月 28 日烟羽", "en": "Smoke from 28 Sep", "…": "…" } }
+   ]
+   ```
+
+   The showcase lists the lead alone for the whole set, and every part
+   opens with a row of the labels, the way to the others. Each `label`
+   carries every UI locale, one line of at most 32 characters. At most 16
+   parts, at least two. The catalog is refused unless every part is in it,
+   no part carries parts of its own and no case is in two sets. A shell
+   that does not know the field lists every part as a case of its own.
+
    A case may carry **context**: reference lines and areas drawn under its
    markers and its detections — a national border, a protected area, rivers,
    roads and tracks, the route the story follows. The block names a GeoJSON
@@ -331,7 +351,7 @@ retires a case.
    ```
 
    which rewrites each built case's `case.json` (title, summary, default
-   variable, event time, tags, credit, radar, fire, river, imagery, wind, context, markers, captions, view) from its definition and regenerates
+   variable, event time, tags, credit, radar, fire, river, imagery, wind, context, markers, captions, view, parts) from its definition and regenerates
    `showcase.json`, refetching nothing — the bundles are untouched, and a
    definition that now names a different run, box, range or variable set
    is refused and needs a rebuild.

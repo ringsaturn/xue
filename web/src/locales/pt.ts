@@ -485,6 +485,7 @@ export const pt: Record<MessageKey, string> = {
   markerEvent: "Evento",
   markerSources: "Fontes",
   caseMarkersAria: "Locais e eventos deste caso",
+  casePartsAria: "Partes deste evento",
   riverHeading: "Vazão dos rios",
   riverTracksAria: "Execução do modelo hidrológico",
   riverTrackAnalysis: "Análise",

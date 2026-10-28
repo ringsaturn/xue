@@ -17,6 +17,7 @@ from xuebuild.showcase import (
     LOCALES,
     OBSERVATION_ROOT_ENV,
     ShowcaseError,
+    _check_part_references,
     _check_wind_references,
     _grid_extent,
     build_catalog_entry,
@@ -860,6 +861,60 @@ class ContextTest(unittest.TestCase):
             target.write_bytes(self.collection(self.feature("canal", self.LINE)))
             with self.assertRaises(ShowcaseError):
                 _catalog_context(root, entry)
+
+
+class PartsTest(unittest.TestCase):
+    """A case's parts: the cases one event is split across, checked in the
+    definition and held against the catalog."""
+
+    def parts(self) -> list[dict[str, object]]:
+        return [
+            {"case": "demo-case", "label": localized("Season wind")},
+            {"case": "demo-smoke", "label": localized("Smoke 28 Sep")},
+        ]
+
+    def test_the_definition_carries_them(self) -> None:
+        spec = parse_case(case_payload(parts=self.parts()))
+        self.assertEqual(spec.parts, tuple(self.parts()))
+        entry, _ = build_entry(parts=self.parts())
+        self.assertEqual(entry["parts"], self.parts())
+        validate_catalog_entry(entry)
+
+    def test_a_case_without_parts_has_none(self) -> None:
+        self.assertEqual(parse_case(case_payload()).parts, ())
+        entry, _ = build_entry()
+        self.assertNotIn("parts", entry)
+
+    def test_a_malformed_block_is_refused(self) -> None:
+        own, other = self.parts()
+        for parts in (
+            "demo-smoke",
+            [own],  # one part is no split
+            [other, {"case": "demo-wind", "label": localized("Wind")}],  # not the case itself
+            [own, other, other],
+            [own, {**other, "case": "Demo Smoke"}],
+            [own, {**other, "label": "Smoke"}],
+            [own, {**other, "label": localized("x" * 33)}],
+            [own, {**other, "label": localized("two\nlines")}],
+            [own, {**other, "extra": 1}],
+            [own] + [{"case": f"part-{n}", "label": localized("x")} for n in range(16)],
+        ):
+            with self.subTest(parts=parts), self.assertRaises(ShowcaseError):
+                parse_case(case_payload(parts=parts))
+
+    def test_the_catalog_holds_one_set_per_event(self) -> None:
+        lead = {"id": "demo-case", "parts": self.parts()}
+        _check_part_references([lead, {"id": "demo-smoke"}])
+        with self.assertRaises(ShowcaseError):
+            _check_part_references([lead])  # the other part is not in the catalog
+        with self.assertRaises(ShowcaseError):
+            # A part that carries a set of its own.
+            _check_part_references(
+                [lead, {"id": "demo-smoke", "parts": [{"case": "demo-smoke"}, {"case": "demo-x"}]}, {"id": "demo-x"}]
+            )
+        with self.assertRaises(ShowcaseError):
+            # A case claimed by two sets.
+            _check_part_references([lead, {"id": "demo-smoke"}, {"id": "demo-x", "parts": [{"case": "demo-x"}, {"case": "demo-smoke"}]}])
 
 
 class CaptionsTest(unittest.TestCase):

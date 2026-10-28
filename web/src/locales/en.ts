@@ -772,6 +772,8 @@ export const en = {
   markerEvent: "Event",
   markerSources: "Sources",
   caseMarkersAria: "Places and events in this case",
+  /** The row of links to the other parts of an event split across cases. */
+  casePartsAria: "Parts of this event",
   /** A showcase case's river data (`river/`, docs/river.md): the block
    * in the case panel — `riverHeading`, the track switch (`riverTracksAria`;
    * the analysis, or a forecast named by its UTC cycle, which stays an

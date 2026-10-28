@@ -6,6 +6,8 @@ import {
   boundsWidth,
   caseCameraLimits,
   fitBoundsCorners,
+  caseParts,
+  listedCases,
   localizedText,
   radarReachBox,
   validateCatalog,
@@ -293,6 +295,38 @@ describe("showcase catalog", () => {
     expect(catalog.cases[1]!.captions).toBeUndefined();
     // A case without captions carries none.
     expect(validateCatalog(catalogFixture()).cases[0]!.captions).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it("lists an event split into parts once, and finds the set from any part", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const part = (id: string) => caseFixture({ id, manifestPath: `showcase/${id}/manifest.json` });
+    const parts = [
+      { case: "haze-wind", label: { zh: "整季风场", en: "Season wind" } },
+      { case: "haze-smoke", label: { en: "Smoke" } },
+      { case: "haze-gone", label: { en: "Not built" } },
+    ];
+    const catalog = validateCatalog(
+      catalogFixture([
+        { ...part("haze-wind"), parts },
+        part("haze-smoke"),
+        part("zhengzhou-2021"),
+        { ...part("bad-parts"), parts: [{ case: "bad-parts", label: { en: "Alone" } }] },
+      ]),
+    );
+    expect(catalog.cases.find((item) => item.id === "bad-parts")!.parts).toBeUndefined();
+    expect(listedCases(catalog.cases).map((item) => item.id)).toEqual(["haze-wind", "zhengzhou-2021", "bad-parts"]);
+    // Either part opens on the same row; a part not in the catalog is left out.
+    const expected = parts.slice(0, 2);
+    expect(caseParts(catalog.cases, "haze-wind")).toEqual(expected);
+    expect(caseParts(catalog.cases, "haze-smoke")).toEqual(expected);
+    expect(caseParts(catalog.cases, "zhengzhou-2021")).toBeNull();
+    // A lead whose other parts are all missing has nothing to switch to.
+    expect(caseParts(validateCatalog(catalogFixture([{ ...part("haze-wind"), parts }])).cases, "haze-wind")).toBeNull();
+    // A block naming neither the case itself nor two parts is not read.
+    for (const bad of ["haze-smoke", [parts[1]], [parts[1], parts[2]], [parts[0], { case: "Bad Id", label: { en: "x" } }]]) {
+      expect(validateCatalog(catalogFixture([{ ...part("haze-wind"), parts: bad }])).cases[0]!.parts).toBeUndefined();
+    }
     warn.mockRestore();
   });
 

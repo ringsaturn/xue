@@ -480,6 +480,7 @@ export const zh: Record<MessageKey, string> = {
   markerEvent: "事件",
   markerSources: "来源",
   caseMarkersAria: "本案例的地点和事件",
+  casePartsAria: "本事件的各段",
   riverHeading: "河流流量",
   riverTracksAria: "水文模式运行",
   riverTrackAnalysis: "分析",

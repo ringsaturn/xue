@@ -487,6 +487,7 @@ export const ko: Record<MessageKey, string> = {
   markerEvent: "사건",
   markerSources: "출처",
   caseMarkersAria: "이 사례의 장소와 사건",
+  casePartsAria: "이 사건의 구간",
   riverHeading: "하천 유량",
   riverTracksAria: "수문 모델 실행",
   riverTrackAnalysis: "분석",

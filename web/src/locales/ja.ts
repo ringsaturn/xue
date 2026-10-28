@@ -482,6 +482,7 @@ export const ja: Record<MessageKey, string> = {
   markerEvent: "出来事",
   markerSources: "出典",
   caseMarkersAria: "この事例の地点と出来事",
+  casePartsAria: "この事象の各部",
   riverHeading: "河川流量",
   riverTracksAria: "水文モデルの実行",
   riverTrackAnalysis: "解析",

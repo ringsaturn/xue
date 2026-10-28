@@ -91,6 +91,16 @@ export interface ShowcaseCase {
    * reserve, the route its story follows (`casecontext.ts`) — when it
    * carries them. */
   context?: ShowcaseContext;
+  /** The cases one event is split across, this one among them, in the
+   * order the viewer offers them, when it is the lead of such a set
+   * (`caseParts`). */
+  parts?: ShowcasePart[];
+}
+
+export interface ShowcasePart {
+  /** The part's case id, looked up in the same catalog. */
+  case: string;
+  label: Record<string, string>;
 }
 
 export interface ShowcaseWind {
@@ -410,6 +420,46 @@ export function captionsBlock(input: unknown, id: string): ShowcaseCaption[] | u
   return captions.length > 0 ? captions : undefined;
 }
 
+/** A case's parts, or undefined when it has none or carries a block this
+ * shell cannot read: the parts then list and play as cases of their own. */
+export function partsBlock(input: unknown, id: string): ShowcasePart[] | undefined {
+  if (input === undefined) return undefined;
+  const parts: ShowcasePart[] = [];
+  if (Array.isArray(input)) {
+    for (const item of input as unknown[]) {
+      const { case: other, label } = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
+      const strings = markerText(label);
+      if (typeof other !== "string" || !/^[a-z0-9-]+$/.test(other) || !strings) break;
+      parts.push({ case: other, label: strings });
+    }
+  }
+  const ids = new Set(parts.map((part) => part.case));
+  if (parts.length < 2 || parts.length !== (input as unknown[]).length || ids.size !== parts.length || !ids.has(id)) {
+    console.warn(`showcase: case ${id} carries a parts block this shell cannot read; listing its parts apart`);
+    return undefined;
+  }
+  return parts;
+}
+
+/** The set of parts the case `id` belongs to — its own, or its lead's —
+ * keeping only the parts this catalog holds; null when it is in none, or
+ * when no other part of its set is here to switch to. */
+export function caseParts(cases: readonly ShowcaseCase[], id: string): ShowcasePart[] | null {
+  const ids = new Set(cases.map((item) => item.id));
+  const lead = cases.find((item) => item.parts?.some((part) => part.case === id));
+  const parts = lead?.parts?.filter((part) => ids.has(part.case)) ?? [];
+  return parts.length > 1 ? parts : null;
+}
+
+/** The cases the showcase lists: every one but a part of another case's
+ * set, which its lead stands for. */
+export function listedCases(cases: readonly ShowcaseCase[]): ShowcaseCase[] {
+  const parts = new Set(
+    cases.flatMap((item) => (item.parts ?? []).filter((part) => part.case !== item.id).map((part) => part.case)),
+  );
+  return cases.filter((item) => !parts.has(item.id));
+}
+
 /** A case's radar block, or undefined when it has none or carries one this
  * shell cannot read: the case then plays without the overlay rather than
  * not at all. */
@@ -603,6 +653,7 @@ function validateCase(input: unknown): ShowcaseCase {
   const dataBbox = bounds(value.dataBbox, "dataBbox");
   const markers = markersBlock(value.markers, id, bbox);
   const captions = captionsBlock(value.captions, id);
+  const parts = partsBlock(value.parts, id);
   const title = localized(value.title, "title");
   const summary = localized(value.summary, "summary");
   // A dataset this build has no entry for is admitted from the row itself,
@@ -632,6 +683,8 @@ function validateCase(input: unknown): ShowcaseCase {
   else delete entry.markers;
   if (captions) entry.captions = captions;
   else delete entry.captions;
+  if (parts) entry.parts = parts;
+  else delete entry.parts;
   if (radar) entry.radar = radar;
   else delete entry.radar;
   if (fire) entry.fire = fire;

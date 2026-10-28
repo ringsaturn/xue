@@ -488,6 +488,7 @@ export const tr: Record<MessageKey, string> = {
   markerEvent: "Olay",
   markerSources: "Kaynaklar",
   caseMarkersAria: "Bu vakadaki yerler ve olaylar",
+  casePartsAria: "Bu olayın bölümleri",
   riverHeading: "Akarsu debisi",
   riverTracksAria: "Hidrolojik model çalıştırması",
   riverTrackAnalysis: "Analiz",

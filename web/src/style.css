@@ -614,6 +614,44 @@ body.is-showcase .model-caret {
   border-color: color-mix(in srgb, var(--text) 40%, transparent);
 }
 
+/* The parts of the event as a row of links under the pill, the open one
+   inked like the case tag; a long row scrolls rather than wraps. */
+.case-parts {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.case-parts[hidden] {
+  display: none;
+}
+
+.case-parts a {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.case-parts a:hover,
+.case-parts a:focus-visible {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
+.case-parts a[aria-current="page"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
 /* The case's river block: the track switch, the key, the extents' switch,
    then the disclaimer and the credits in the summary's muted ink. */
 .case-river {

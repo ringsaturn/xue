@@ -487,6 +487,7 @@ export const ru: Record<MessageKey, string> = {
   markerEvent: "Событие",
   markerSources: "Источники",
   caseMarkersAria: "Места и события этого случая",
+  casePartsAria: "Части этого события",
   riverHeading: "Расход рек",
   riverTracksAria: "Расчёт гидрологической модели",
   riverTrackAnalysis: "Анализ",
