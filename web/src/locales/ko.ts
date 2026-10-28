@@ -599,4 +599,5 @@ export const ko: Record<MessageKey, string> = {
   creditsAurora: "우주기상 · 오로라 확률 · NOAA SWPC OVATION 모델",
   creditsEfas: "하천 유량 · COPERNICUS EMS EFAS v5, 유럽 1′ · 사례 전용",
   creditsEra5: "재분석 · COPERNICUS C3S ERA5(ECMWF), 전 지구 0.25°, 매시, CC-BY-4.0 · 사례 전용",
+  creditsCams: "에어로졸 분석 · COPERNICUS CAMS(ECMWF), 전 지구 0.4°, 3시간 간격, CC-BY-4.0 · 사례 전용",
 };

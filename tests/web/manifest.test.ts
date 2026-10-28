@@ -1248,6 +1248,34 @@ describe("dataset kinds", () => {
     expect(() => validateManifest({ ...reanalysis, product: "pgrb2.0p25" }, "era5")).toThrow(/unsupported manifest product/);
   });
 
+  it("knows CAMS as an aerosol analysis reached through its cases alone", () => {
+    // Mirrors the `cams` entry of SOURCES: three-hourly on the 0.4° grid
+    // from the window's first hour, GEFS-Aerosols' own bundles; no pointer.
+    expect(FORECAST_MODELS.cams).toMatchObject({
+      id: "cams",
+      label: "CAMS",
+      product: "global-composition-analysis",
+      coreBundles: ["aod"],
+      defaultVariable: "aod",
+      railCore: ["aod", "pm25"],
+    });
+    expect(FORECAST_MODELS.cams.latestFilename).toBeUndefined();
+    expect(isCaseOnlyModel("cams")).toBe(true);
+    expect(isObservationModel("cams")).toBe(false);
+    expect(FORECAST_MODEL_IDS).not.toContain("cams");
+    const store = (id: string) => ({ zarr: { path: `${id}.zarr`, byteLength: 1, crc32: "00000000" } });
+    const analysis = {
+      schemaVersion: 5,
+      model: "CAMS",
+      product: "global-composition-analysis",
+      runTime: "2026-09-01T00:00:00Z",
+      forecastHours: 1365,
+      bundles: ["aod", "aodorg", "pm25"].map((id) => ({ variable: id, ...store(id) })),
+    };
+    expect(validateManifest(analysis, "cams").bundles).toHaveLength(3);
+    expect(() => validateManifest(analysis, "gefsaero")).toThrow();
+  });
+
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {
     // Mirrors the `mrms3d` entry of SOURCES: the MRMS 3D reflectivity is a
     // dataset of its own beside the composite, one `refl3d` bundle that

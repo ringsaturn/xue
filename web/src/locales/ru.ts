@@ -599,4 +599,5 @@ export const ru: Record<MessageKey, string> = {
   creditsAurora: "КОСМИЧЕСКАЯ ПОГОДА · ВЕРОЯТНОСТЬ ПОЛЯРНОГО СИЯНИЯ · МОДЕЛЬ OVATION NOAA SWPC",
   creditsEfas: "РАСХОД РЕК · COPERNICUS EMS EFAS v5, ЕВРОПА 1′ · ТОЛЬКО КЕЙСЫ",
   creditsEra5: "РЕАНАЛИЗ · COPERNICUS C3S ERA5 (ECMWF), ГЛОБАЛЬНО 0,25°, ЕЖЕЧАСНО, CC-BY-4.0 · ТОЛЬКО КЕЙСЫ",
+  creditsCams: "АНАЛИЗ АЭРОЗОЛЕЙ · COPERNICUS CAMS (ECMWF), ГЛОБАЛЬНО 0,4°, КАЖДЫЕ 3 ЧАСА, CC-BY-4.0 · ТОЛЬКО КЕЙСЫ",
 };

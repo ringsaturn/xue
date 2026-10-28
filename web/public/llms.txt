@@ -119,10 +119,16 @@ Facts worth getting right:
   the return-period class. `era5` is cases only too: ECMWF's ERA5
   reanalysis for the Copernicus Climate Change Service (manifest model
   `ERA5`, product `reanalysis-single-levels`), hourly on the 0.25° grid
-  over a window of up to 240 hours from any hour, every frame an analysis
+  over a window of up to 1440 hours from any hour, every frame an analysis
   — the observed situation rather than a forecast; a case ships a crop of
   the 2 m temperature and dew point, the 10 m wind and the hourly gust
-  maximum. `jma` is the seventh
+  maximum. `cams` is cases only as well: the Copernicus Atmosphere
+  Monitoring Service's global aerosol analyses at ECMWF (manifest model
+  `CAMS`, product `global-composition-analysis`), three-hourly on the 0.4°
+  grid over a window of up to 1440 hours, each frame a 00Z or 12Z cycle's
+  analysis or its +3/+6/+9 h step — where smoke and dust were, with the
+  total and organic optical depth (`aod`, `aodorg`) and surface PM2.5
+  (`pm25`). `jma` is the seventh
   live source and the third observation: the Japan Meteorological Agency's
   high-resolution precipitation nowcast analysis (高解像度降水ナウキャスト)
   over Japan, five-minute frames decoded from the agency's map tiles onto a
@@ -360,7 +366,10 @@ Facts worth getting right:
   Emergency Management Service information"); `era5` is Copernicus
   Climate Change Service information from the Climate Data Store,
   CC-BY-4.0 ("Contains modified Copernicus Climate Change Service
-  information"; cite Hersbach et al., doi:10.24381/cds.adbb2d47); the basemap
+  information"; cite Hersbach et al., doi:10.24381/cds.adbb2d47); `cams` is
+  Copernicus Atmosphere Monitoring Service information from the
+  Atmosphere Data Store, CC-BY-4.0 ("Contains modified Copernicus
+  Atmosphere Monitoring Service information"; doi:10.24381/04a0b097); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -402,7 +411,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
   mosaic of every geostationary disk). `woof` (`wrf`), `efas`,
-  `efaswb` and `era5` are known but have no live run, so alone they open the
+  `efaswb`, `era5` and `cams` are known but have no live run, so alone they open the
   default; a case pins its own dataset.
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),

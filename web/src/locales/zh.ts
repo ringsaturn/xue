@@ -592,4 +592,5 @@ export const zh: Record<MessageKey, string> = {
   creditsAurora: "空间天气 · 极光可见概率 · NOAA SWPC OVATION 模式",
   creditsEfas: "河流流量 · COPERNICUS EMS EFAS v5，欧洲 1′ · 仅限案例",
   creditsEra5: "再分析 · COPERNICUS C3S ERA5（ECMWF），全球 0.25°，逐小时，CC-BY-4.0 · 仅限案例",
+  creditsCams: "气溶胶分析 · COPERNICUS CAMS（ECMWF），全球 0.4°，每 3 小时，CC-BY-4.0 · 仅限案例",
 };

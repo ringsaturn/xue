@@ -153,6 +153,7 @@
               { "@type": "Dataset", "name": "Recast WOOF (WRF-ARW nested run at 500 m over Mount Fuji; showcase cases only, no live run)" },
               { "@type": "Dataset", "name": "Copernicus Emergency Management Service EFAS v5 river discharge, forecast and water balance (1 arcmin over Europe; showcase cases only, no live run)", "url": "https://ewds.climate.copernicus.eu/datasets/efas-forecast" },
               { "@type": "Dataset", "name": "Copernicus Climate Change Service ERA5 hourly reanalysis on single levels (0.25° global; showcase cases only, no live run)", "url": "https://doi.org/10.24381/cds.adbb2d47", "license": "https://creativecommons.org/licenses/by/4.0/" },
+              { "@type": "Dataset", "name": "Copernicus Atmosphere Monitoring Service global aerosol analyses (0.4° global, 3-hourly; showcase cases only, no live run)", "url": "https://doi.org/10.24381/04a0b097", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "NOAA Climate Forecast System version 2 (CFSv2)", "url": "https://registry.opendata.aws/noaa-cfs/" },
               { "@type": "Dataset", "name": "NOAA Multi-Radar/Multi-Sensor System (MRMS)", "url": "https://registry.opendata.aws/noaa-mrms-pds/" },
               { "@type": "Dataset", "name": "JMA High-resolution Precipitation Nowcast (気象庁 高解像度降水ナウキャスト)", "url": "https://www.jma.go.jp/bosai/en_nowc/", "license": "https://www.jma.go.jp/jma/kishou/info/coment.html" },
@@ -1137,6 +1138,7 @@
           <span class="source-credit" data-credit-model="goes">IMAGERY <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (REPROJECTED) ·</span>
           <span class="source-credit" data-credit-model="efas">CONTAINS MODIFIED <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS EMERGENCY MANAGEMENT SERVICE</a> INFORMATION (EFAS) ·</span>
           <span class="source-credit" data-credit-model="era5">CONTAINS MODIFIED <a href="https://climate.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS CLIMATE CHANGE SERVICE</a> INFORMATION (ERA5, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
+          <span class="source-credit" data-credit-model="cams">CONTAINS MODIFIED <a href="https://atmosphere.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS ATMOSPHERE MONITORING SERVICE</a> INFORMATION (CAMS, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
           <span class="source-credit" data-credit-model="meteosat">CONTAINS MODIFIED <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> METEOSAT DATA (REPROJECTED) ·</span>
           <!-- A river case's credits and its shown extents' (river/case.ts::credits). -->
           <span class="source-credit" id="river-credit" data-credit-river></span>
@@ -1215,6 +1217,13 @@
               <a href="https://doi.org/10.24381/cds.adbb2d47" target="_blank" rel="noreferrer">
                 <span class="credits-name">Copernicus C3S ERA5</span>
                 <small data-i18n="creditsEra5">REANALYSIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0.25°, HOURLY, CC-BY-4.0 · CASES ONLY</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://doi.org/10.24381/04a0b097" target="_blank" rel="noreferrer">
+                <span class="credits-name">Copernicus CAMS</span>
+                <small data-i18n="creditsCams">AEROSOL ANALYSIS · COPERNICUS CAMS (ECMWF), GLOBAL 0.4°, 3-HOURLY, CC-BY-4.0 · CASES ONLY</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

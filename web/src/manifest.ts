@@ -29,6 +29,7 @@ export type ForecastModelId =
   | "efas"
   | "efaswb"
   | "era5"
+  | "cams"
   | "gefsaero"
   | "cma"
   | "mrms"
@@ -232,7 +233,7 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   },
   // ECMWF ERA5 for the Copernicus Climate Change Service: the reanalysis,
   // hourly on the 0.25° grid, every frame an analysis. Cases only, like
-  // EFAS: a window of up to 240 hours named by its first hour, cropped to
+  // EFAS: a window of up to 1440 hours named by its first hour, cropped to
   // the case, with the 2 m temperature and dew point, the 10 m wind and
   // the hourly gust maximum. No pointer, no place in the model switch.
   era5: {
@@ -241,6 +242,19 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     product: "reanalysis-single-levels",
     coreBundles: ["tmp2m"],
     railCore: ["tmp2m", "wind10m", "gust", "dpt2m"],
+  },
+  // The CAMS global aerosol analyses (ECMWF for the Copernicus Atmosphere
+  // Monitoring Service): GEFS-Aerosols' total and organic optical depth
+  // and surface PM2.5, three-hourly on the 0.4° grid, each frame a cycle's
+  // analysis or a short step of it. Cases only, like ERA5: a window of up
+  // to 1440 hours named by its first hour.
+  cams: {
+    id: "cams",
+    label: "CAMS",
+    product: "global-composition-analysis",
+    coreBundles: ["aod"],
+    defaultVariable: "aod",
+    railCore: ["aod", "pm25"],
   },
   // NOAA GEFS-Aerosols, the global aerosol member of the GEFS: aerosol
   // optical depth at 550 nm for the whole column and by species, and the

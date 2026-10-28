@@ -594,4 +594,5 @@ export const ja: Record<MessageKey, string> = {
   creditsAurora: "宇宙天気 · オーロラ可視確率 · NOAA SWPC OVATION モデル",
   creditsEfas: "河川流量 · COPERNICUS EMS EFAS v5、ヨーロッパ 1′ · 事例のみ",
   creditsEra5: "再解析 · COPERNICUS C3S ERA5（ECMWF）、全球 0.25°、毎時、CC-BY-4.0 · 事例のみ",
+  creditsCams: "エアロゾル解析 · COPERNICUS CAMS（ECMWF）、全球 0.4°、3 時間ごと、CC-BY-4.0 · 事例のみ",
 };

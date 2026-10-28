@@ -316,6 +316,8 @@ export const en = {
    * service to be named; the map line carries the "contains modified"
    * credit itself. */
   creditsEra5: "REANALYSIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0.25°, HOURLY, CC-BY-4.0 · CASES ONLY",
+  /** CAMS is CC-BY-4.0 on the Atmosphere Data Store, credited like ERA5. */
+  creditsCams: "AEROSOL ANALYSIS · COPERNICUS CAMS (ECMWF), GLOBAL 0.4°, 3-HOURLY, CC-BY-4.0 · CASES ONLY",
   creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
   creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
   creditsFirms: "ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS",

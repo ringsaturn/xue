@@ -124,8 +124,9 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   efaswb: "efaswb",
   "efas-wb": "efaswb",
   "efas-v5-wb": "efaswb",
-  // And the ERA5 reanalysis.
+  // And the ERA5 reanalysis and the CAMS aerosol analyses.
   era5: "era5",
+  cams: "cams",
   gefsaero: "gefsaero",
   "gefs-aerosols": "gefsaero",
   gefsaerosols: "gefsaero",
