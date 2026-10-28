@@ -64,6 +64,7 @@ const GEOMETRIES = new Map<string, { depth: number; minimum: number }>([
 const SOURCE = "case-context";
 const LAYERS = {
   fill: "case-context-fill",
+  halo: "case-context-halo",
   solid: "case-context-solid",
   track: "case-context-track",
   trace: "case-context-trace",
@@ -172,7 +173,7 @@ export function contextInk(darkGround: boolean): {
         border: "#36332d",
         reserve: "#2c7a38",
         water: "#2b6cb3",
-        road: "#6b655b",
+        road: "#4f4a42",
         route: "#e0401a",
         casing: "rgba(255, 255, 255, 0.92)",
         trace: "#c0279a",
@@ -200,13 +201,26 @@ function solidWidth(factor: number): ExpressionSpecification {
   return ["match", KIND, "protected-area", w(1.4), "river", w(1.4), "stream", w(0.8), w(1)];
 }
 
+/** The halo under the solid, track and border lines: each kind's own width
+ * and a fixed margin either side. */
+const HALO_MARGIN = 0.9;
+
+function haloWidth(factor: number): ExpressionSpecification {
+  const w = (width: number) => Math.round((width * factor + 2 * HALO_MARGIN) * 100) / 100;
+  return ["match", KIND, "protected-area", w(1.4), "river", w(1.4), "stream", w(0.8), "track", w(0.8), "border", w(1.6), w(1)];
+}
+
 function isKindFilter(...kinds: ContextKind[]): ExpressionSpecification {
   return kinds.length === 1 ? ["==", KIND, kinds[0]!] : ["in", KIND, ["literal", kinds]];
 }
 
 const ROUND = { "line-join": "round", "line-cap": "round" } as const;
 
-/** The layers, bottom to top: the reserve's tint; the solid lines (the
+/** The layers, bottom to top: the reserve's tint; a halo in the ground's
+ * opposite tone under the solid, track and border lines, since the ink is
+ * picked for the base map while the field under them may be a photograph
+ * (the true colour picture is dark under the light theme's dark ink, and a
+ * pale cloud under the dark theme's light one); the solid lines (the
  * reserve's outline, water, roads), roads over water; the dashed tracks,
  * the dotted traces, the dash-dot border and the dashed measures, each a
  * layer of its own since a dash pattern is not per feature; the route over
@@ -225,6 +239,14 @@ export function contextLayerSpecs(
       // its outline.
       filter: isKindFilter("protected-area"),
       paint: { "fill-color": ink.reserve, "fill-opacity": 0.08 },
+    },
+    {
+      id: LAYERS.halo,
+      type: "line",
+      source: SOURCE,
+      filter: isKindFilter("protected-area", "river", "stream", "road", "track", "border"),
+      layout: ROUND,
+      paint: { "line-color": ink.halo, "line-width": zoomWidth(haloWidth), "line-opacity": 0.7, "line-blur": 0.6 },
     },
     {
       id: LAYERS.solid,

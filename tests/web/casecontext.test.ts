@@ -251,6 +251,18 @@ describe("context layers", () => {
     expect(border(false)["line-color"]).toBe(light.border);
     expect(border(true)["line-color"]).toBe(dark.border);
   });
+
+  it("haloes the plain lines in the ground's opposite tone, under them", () => {
+    for (const darkGround of [false, true]) {
+      const layers = contextLayerSpecs(darkGround);
+      const halo = layers.findIndex((layer) => layer.id === "case-context-halo");
+      expect((layers[halo]!.paint as Record<string, unknown>)["line-color"]).toBe(contextInk(darkGround).halo);
+      expect(filterKinds(layers[halo]!.filter).sort()).toEqual(["border", "protected-area", "river", "road", "stream", "track"]);
+      for (const id of ["case-context-solid", "case-context-track", "case-context-border"]) {
+        expect(layers.findIndex((layer) => layer.id === id)).toBeGreaterThan(halo);
+      }
+    }
+  });
 });
 
 describe("context placement", () => {
