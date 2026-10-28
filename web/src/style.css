@@ -4423,21 +4423,34 @@ html:has(.showcase-page) {
   padding: 14px 16px 16px;
 }
 
+/* A card is a teaser: the title holds two lines and the summary five, the
+   rest clipped (the whole summary is the card's tooltip, and the case's
+   own banner in the viewer), so a row of cards stays one height. */
 .showcase-body h2 {
+  display: -webkit-box;
   margin: 0 0 8px;
+  overflow: hidden;
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 400;
   line-height: 1.1;
   text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .showcase-summary {
+  display: -webkit-box;
   margin: 0 0 14px;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
   text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
 }
 
 /* Stacked label-over-value cells: these values are dates and coordinate

@@ -107,6 +107,8 @@ function buildCard(
   const summary = document.createElement("p");
   summary.className = "showcase-summary";
   summary.textContent = localizedText(showcaseCase.summary, locale);
+  // The card shows five lines of it; the whole of it on hover.
+  summary.title = summary.textContent;
 
   const facts = document.createElement("dl");
   facts.className = "showcase-facts";
