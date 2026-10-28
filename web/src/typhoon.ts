@@ -12,6 +12,8 @@ import { Map as MaplibreMap, NavigationControl, Popup, setWorkerUrl, type StyleS
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { element } from "./dom";
+import type { GifHost } from "./gifexport";
+import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileName } from "./mp4export";
 import { formatUtcHour } from "./format";
 import { applyStaticMessages, basemapLang, onLocaleChange, t } from "./i18n";
 import { applyPageMeta } from "./pagemeta";
@@ -322,9 +324,115 @@ function setIssue(index: number): void {
   draw();
 }
 
-slider.addEventListener("input", () => setIssue(Number(slider.value)));
-document.getElementById("typhoon-prev")?.addEventListener("click", () => setIssue(issueIndex - 1));
-document.getElementById("typhoon-next")?.addEventListener("click", () => setIssue(issueIndex + 1));
+slider.addEventListener("input", () => {
+  setPlaying(false);
+  setIssue(Number(slider.value));
+});
+
+// --- playback and the MP4 --------------------------------------------------
+
+/** How long each time holds, in playback and in the MP4: four steps a
+ * second, so a storm's fortnight of six-hourly times plays in about fifteen
+ * seconds. */
+const HOLD_MS = 250;
+const playButton = document.getElementById("typhoon-play") as HTMLButtonElement;
+const mp4Button = document.getElementById("typhoon-mp4") as HTMLButtonElement;
+const exportStatus = document.getElementById("typhoon-export-status") as HTMLSpanElement;
+let playTimer: number | null = null;
+let exporting: AbortController | null = null;
+
+function setPlaying(on: boolean): void {
+  if (playTimer !== null) window.clearInterval(playTimer);
+  playTimer = null;
+  if (on && loaded && loaded.issues.length > 1) {
+    // From the end, a press plays the storm again from its start.
+    if (issueIndex >= loaded.issues.length - 1) setIssue(0);
+    playTimer = window.setInterval(() => {
+      if (!loaded || issueIndex >= loaded.issues.length - 1) setPlaying(false);
+      else setIssue(issueIndex + 1);
+    }, HOLD_MS);
+  }
+  const playing = playTimer !== null;
+  playButton.setAttribute("aria-pressed", String(playing));
+  playButton.setAttribute("aria-label", t(playing ? "pauseAnimation" : "playAnimation"));
+}
+
+playButton.addEventListener("click", () => setPlaying(playTimer === null));
+
+/** The frames of the file: every time, or 240 spread evenly over them. */
+function exportFrames(count: number): number[] {
+  if (count <= MP4_MAX_FRAMES) return Array.from({ length: count }, (_, index) => index);
+  return Array.from({ length: MP4_MAX_FRAMES }, (_, index) => Math.round((index * (count - 1)) / (MP4_MAX_FRAMES - 1)));
+}
+
+async function exportStormMp4(): Promise<void> {
+  if (!loaded || !map) return;
+  if (exporting) {
+    exporting.abort();
+    return;
+  }
+  setPlaying(false);
+  const story = loaded;
+  const created = map;
+  const back = issueIndex;
+  const controller = new AbortController();
+  exporting = controller;
+  mp4Button.textContent = t("exportCancel");
+  const host: GifHost = {
+    map: created,
+    show(index) {
+      setIssue(index);
+      return true;
+    },
+    caption(index) {
+      const time = story.issues[index] ?? "";
+      const storm = stormAt(story.entry.id, story.entry.name, story.records, story.best, time);
+      const sources = [...Object.keys(storm.agencies), ...Object.keys(storm.models)].filter((key) => !hidden.has(key));
+      return {
+        title: stormName(story.entry),
+        code: [story.entry.id, ...sources.map((key) => agencyCode(key))].join(" · "),
+        stamp: formatUtcHour(time),
+      };
+    },
+    credit: () => "IBTRACS · NHC · JTWC · UCAR · ECMWF OPEN DATA CC BY 4.0 · © OSM",
+    holdMs: () => HOLD_MS,
+  };
+  try {
+    const blob = await exportMp4(
+      host,
+      exportFrames(story.issues.length),
+      (progress) => {
+        exportStatus.textContent =
+          progress.phase === "capture"
+            ? t("exportCapturing", { done: progress.done, total: progress.total })
+            : t("exportEncoding", { percent: Math.round((100 * progress.done) / Math.max(1, progress.total)) });
+      },
+      controller.signal,
+    );
+    exportStatus.textContent = "";
+    await deliverMp4(blob, mp4FileName(`${story.entry.id}-${story.entry.name ?? ""}`, Date.parse(story.issues[0] ?? "")));
+  } catch (error) {
+    exportStatus.textContent = error instanceof DOMException && error.name === "AbortError" ? "" : t("exportFailed");
+    if (exportStatus.textContent) console.warn("tc mp4 export failed", error);
+  } finally {
+    exporting = null;
+    mp4Button.textContent = "MP4";
+    if (loaded === story) setIssue(back);
+  }
+}
+
+mp4Button.addEventListener("click", () => void exportStormMp4());
+void isMp4ExportSupported().then((supported) => {
+  mp4Button.hidden = !supported;
+});
+document.getElementById("typhoon-prev")?.addEventListener("click", () => {
+  setPlaying(false);
+  setIssue(issueIndex - 1);
+});
+document.getElementById("typhoon-next")?.addEventListener("click", () => {
+  setPlaying(false);
+  setIssue(issueIndex + 1);
+});
 // The arrow keys step the issue time from anywhere on the page but a
 // field, which has its own use for them (the slider steps itself).
 window.addEventListener("keydown", (event) => {
@@ -544,7 +652,8 @@ function fail(message: string): void {
 let pending: string | null = null;
 
 async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<void> {
-  if (!seasonIndex || loaded?.entry.id === entry.id) return;
+  if (!seasonIndex || loaded?.entry.id === entry.id || exporting) return;
+  setPlaying(false);
   pending = entry.id;
   renderPicker();
   status.hidden = false;

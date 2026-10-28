@@ -5180,6 +5180,38 @@ html:has(.showcase-page) {
   color: var(--muted);
 }
 
+.typhoon-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typhoon-pause-icon,
+#typhoon-play[aria-pressed="true"] .typhoon-play-icon {
+  display: none;
+}
+
+#typhoon-play[aria-pressed="true"] .typhoon-pause-icon {
+  display: inline;
+}
+
+.typhoon-export {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.typhoon-export[hidden] {
+  display: none;
+}
+
 .typhoon-errors-head {
   display: flex;
   flex-wrap: wrap;

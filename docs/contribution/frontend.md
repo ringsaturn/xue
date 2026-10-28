@@ -565,7 +565,10 @@ storm layers again on `style.load` (no WebGL layers to lose). The pure
 parts are in `tests/web/tcarchive.test.ts`. The best track is drawn by
 Saffir–Simpson class and with its wind radii (`tc/intensity.ts`, options
 of `StormView` the live viewer leaves off), and a southern season's
-July-to-June span is said beside its chip.
+July-to-June span is said beside its chip. The slider stops at every best-track
+synoptic time and every issue time (`storyTimes`); it plays at four
+steps a second, and the MP4 is that playback captured through
+`mp4export.ts` with a `GifHost` of the page's own.
 
 Storm names: `tc/names.ts` holds the western Pacific list in the scripts
 the CMA, CWA, JMA and KMA write it in, and `localStormName` is what every
