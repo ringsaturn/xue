@@ -200,8 +200,9 @@ retires a case.
    A case may also name a **daily picture**: `imagery` is one of the NASA
    GIBS layers the shell draws (`web/src/gibs.ts`, the `?gibs=` spellings),
    which the viewer offers beside the case's fields in true and false
-   colour and opens on, in place of the field, on the playhead's UTC day.
-   Nothing is built for it; the tiles come from GIBS.
+   colour and opens on, in place of the field, on the playhead's UTC day,
+   unless the link names a field (`?type=`). Nothing is built for it; the
+   tiles come from GIBS.
 
    ```json
    "imagery": {"layer": "noaa21-fc", "days": {"2026-10-13": "terra-721"}}

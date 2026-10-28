@@ -10783,10 +10783,13 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       void loadCaseFire(found);
       void loadCaseRiver(found);
       void loadCaseContext(found);
-      // A case with a picture opens on it unless the link names one (or
-      // the case was entered before); one without drops any it was handed.
+      // A case with a picture opens on it unless the link names one or a
+      // field (or the case was entered before); one without drops any it
+      // was handed.
       if (!found.imagery) view.imagery = null;
-      else if (!requestedImageryFromUrl && !caseImageryApplied) view.imagery = found.imagery.layer;
+      else if (!requestedImageryFromUrl && !requestedView.fieldRequested && !caseImageryApplied) {
+        view.imagery = found.imagery.layer;
+      }
       caseImageryApplied = true;
       syncGibs();
       refreshParticleInk();
