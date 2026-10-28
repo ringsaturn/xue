@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from xuebuild.errors import TcProductError
@@ -29,7 +29,7 @@ from xuebuild.tc.archive import (
     validate_month_index,
     validate_season_index,
 )
-from xuebuild.tc.backfill import deck_records, ecmwf_records
+from xuebuild.tc.backfill import deck_records, ecmwf_records, released
 from xuebuild.tc.build import ecmwf_key
 from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, storm_records
 from xuebuild.tc.identity import dominant_cluster
@@ -230,6 +230,8 @@ WP, 22, 2025090600, 03, AP02,   6, 184N, 1164E,  33, 1000, XX
 WP, 22, 2025090600, 03, AEMN,   6, 183N, 1163E,  32, 1001, XX
 WP, 22, 2025090606, 03, AVNO,   0, 182N, 1164E,  30, 1002, XX
 WP, 22, 2025090606, 03, AVNX,   0, 179N, 1160E,  30, 1002, XX
+WP, 22, 2025090606, 03, GDMN,   0, 181N, 1163E,  30, 1003, XX
+WP, 22, 2025090606, 03, GDMN,  12, 186N, 1158E,  35, 1000, XX
 """
 
 
@@ -243,6 +245,7 @@ class DeckTest(unittest.TestCase):
                 ("nhc", "agency", "2025-09-06T00:00:00Z"),
                 ("gfs", "model", "2025-09-06T00:00:00Z"),
                 ("gfs", "model", "2025-09-06T06:00:00Z"),
+                ("gdm", "model", "2025-09-06T06:00:00Z"),
                 ("gefs", "ensemble", "2025-09-06T00:00:00Z"),
             ],
         )
@@ -250,12 +253,19 @@ class DeckTest(unittest.TestCase):
         self.assertEqual(records[2]["forecast"]["points"][0]["lat"], 18.2)
         self.assertNotIn("run", records[0]["forecast"])
         self.assertEqual(records[0]["forecast"]["points"][1]["radii"]["34"][0], 74.1)
-        ensemble = records[3]["forecast"]
+        ensemble = records[4]["forecast"]
         self.assertEqual(ensemble["members"], [1, 2])
         self.assertEqual(ensemble["leads"], [0, 21600])
         self.assertEqual(ensemble["lat"], [1800, 1820, -32768, 1840])
         self.assertEqual(len(ensemble["mean"]["points"]), 1)
         self.assertTrue(all(record["storm"] == "WP222025" for record in records))
+
+    def test_google_deepmind_tracks_wait_until_they_are_history(self) -> None:
+        record = next(r for r in deck_records(DECK, "WP222025", "nhc-atcf") if r["source"] == "gdm")
+        last = datetime(2025, 9, 6, 18, tzinfo=UTC)
+        self.assertFalse(released(record, last + timedelta(hours=47)))
+        self.assertTrue(released(record, last + timedelta(hours=48)))
+        self.assertTrue(released(next(r for r in deck_records(DECK, "WP222025", "nhc-atcf") if r["source"] == "gfs"), last))
 
 
 def _point(time: str, lat: float, lon: float, *, cls: str | None = "TS", vmax: float | None = 25.0, lead: int | None = None) -> dict:

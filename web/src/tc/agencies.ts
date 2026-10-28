@@ -133,6 +133,7 @@ export const TC_MODELS: Record<string, ModelInfo> = {
   gefs: { id: "gefs", code: "GEFS", name: "GEFS", ensemble: true },
   ecmwf: { id: "ecmwf", code: "ECMWF", name: "ECMWF IFS", ensemble: false },
   ecmwfens: { id: "ecmwfens", code: "ENS", name: "ECMWF ENS", ensemble: true },
+  gdm: { id: "gdm", code: "GDM", name: "Google DeepMind", ensemble: false },
 };
 
 /** The IBTrACS best-track keys and the centre each stands for; `usa` is

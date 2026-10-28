@@ -358,10 +358,21 @@ one it implements.
   IBTrACS' last three years into the seasons.
 - The backfill (`xue tc-archive --backfill <sources> --from YYYY-MM`)
   reads `nhc` (`OFCL` → `nhc`, `AVNO` → `gfs`, `AC00`/`AP01`–`AP30`/`AEMN`
-  → `gefs`, `EMX` → `ecmwf`, `EC00`/`EE01`–`EE50`/`EEMN` → `ecmwfens`;
-  AL, EP, CP), `ucar` (`AVNO`, or `AVNX` where it is alone, → `gfs`, and
+  → `gefs`, `EMX` → `ecmwf`, `EC00`/`EE01`–`EE50`/`EEMN` → `ecmwfens`,
+  `GDMN` → `gdm`; AL, EP, CP), `ucar` (`AVNO`, or `AVNX` where it is alone, → `gfs`, and
   the GEFS techs; WP, IO, SH), `ecmwf` (`oper`/`scda` and `enfo` `tf`
-  BUFR from 2023-01-18) and `ibtracs` (`since1980`). An ECMWF system
+  BUFR from 2023-01-18) and `ibtracs` (`since1980`). `gdm` is Google
+  DeepMind's experimental model (the ensemble mean NHC files from 2025).
+  Its data is CC BY 4.0 only for times past and under Google's real-time
+  terms for anything ahead, so it never enters the hourly product, and a
+  track is archived only once its last valid time is 48 hours past; a
+  weekly run of the `nhc` backfill over the last two months brings each
+  in. Wherever it is shown or distributed it carries: "Contains
+  experimental research data produced by © 2023-25 Google LLC, whose
+  machine learning models were used to create the experimental data,
+  under a Creative Commons Attribution 4.0 International (CC BY 4.0)
+  Licence. The data is intended for research modelling only and is not
+  intended, validated, or approved for real world use." An ECMWF system
   whose number is not JTWC's or NHC's (every western Pacific one, and
   every `7x`) is filed under the season's best-track storm whose synoptic
   position at the forecast's start lies within 333 km of the start — the

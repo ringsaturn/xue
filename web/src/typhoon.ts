@@ -394,7 +394,11 @@ async function exportStormMp4(): Promise<void> {
         stamp: formatUtcHour(time),
       };
     },
-    credit: () => "IBTRACS · NHC · JTWC · UCAR · ECMWF OPEN DATA CC BY 4.0 · © OSM",
+    // Google's tracks carry its citation wherever they are distributed.
+    credit: () =>
+      story.sources.models.includes("gdm") && !hidden.has("gdm")
+        ? "IBTRACS · NHC · ECMWF OPEN DATA CC BY 4.0 · GDM: © 2023-25 GOOGLE LLC CC BY 4.0, RESEARCH ONLY · © OSM"
+        : "IBTRACS · NHC · JTWC · UCAR · ECMWF OPEN DATA CC BY 4.0 · © OSM",
     holdMs: () => HOLD_MS,
   };
   try {

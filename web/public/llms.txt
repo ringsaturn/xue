@@ -678,7 +678,10 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   (`<YYYY>/<MM>/forecasts.jsonl` + `index.json` with each storm's byte span),
   each season's best tracks (`<YYYY>/best.jsonl` + `index.json`) and track
   errors (`<YYYY>/scores.json`, `errors.jsonl`); every file but the catalog
-  is `?v=<crc32>`-addressed and read by Range.
+  is `?v=<crc32>`-addressed and read by Range. Model `gdm` is Google DeepMind's
+  experimental track (CC BY 4.0, archived 48 h after its last valid time;
+  cite "Contains experimental research data produced by © 2023-25 Google
+  LLC ... (CC BY 4.0)").
 - Airport observations and forecasts are a separate, ten-minute JSON
   product under the same root (schema 1, `docs/airport.md`): the mutable
   pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,

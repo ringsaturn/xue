@@ -92,6 +92,10 @@ MODELS: dict[str, ModelSpec] = {
         ModelSpec("gefs", "GEFS", True, ("AC00",) + tuple(f"AP{n:02d}" for n in range(1, 31)), "#333333"),
         ModelSpec("ecmwf", "ECMWF IFS", False, (), "#555555"),
         ModelSpec("ecmwfens", "ECMWF ENS", True, (), "#555555"),
+        # Google DeepMind's experimental model (WeatherNext), as NHC files
+        # its ensemble mean in the a-decks from 2025: archive only, and only
+        # once a track is history (docs/tc.md §8.4).
+        ModelSpec("gdm", "Google DeepMind", False, ("GDMN",), "#555555"),
     )
 }
 

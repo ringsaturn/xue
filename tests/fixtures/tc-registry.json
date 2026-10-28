@@ -199,6 +199,15 @@
       "ensemble": true,
       "techs": [],
       "color": "#555555"
+    },
+    {
+      "id": "gdm",
+      "name": "Google DeepMind",
+      "ensemble": false,
+      "techs": [
+        "GDMN"
+      ],
+      "color": "#555555"
     }
   ],
   "basins": {

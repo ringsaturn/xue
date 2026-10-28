@@ -61,7 +61,29 @@ ECMWF_STREAMS = {"ecmwf": ("oper", "scda"), "ecmwfens": ("enfo",)}
 # An a-deck's techs → (source, kind). The ensembles are a member set per
 # base, the member number the tech's own (``AP07`` is member 7, the
 # control ``AC00`` / ``EC00`` member 0) and ``AEMN`` / ``EEMN`` the mean.
-SINGLE_TECHS = {"OFCL": ("nhc", "agency"), "AVNO": ("gfs", "model"), "EMX": ("ecmwf", "model")}
+SINGLE_TECHS = {
+    "OFCL": ("nhc", "agency"),
+    "AVNO": ("gfs", "model"),
+    "EMX": ("ecmwf", "model"),
+    "GDMN": ("gdm", "model"),
+}
+EMBARGOED_SOURCES = {"gdm": timedelta(hours=48)}
+"""Sources archived only once a forecast is history: Google DeepMind's
+tracks are CC BY 4.0 for times past and under Google's real-time terms
+(which the archive cannot meet, and which exclude some countries
+outright) for anything still ahead. A track is kept once its last valid
+time is this long past, the README's 48 hours rather than the terms' one."""
+
+
+def released(record: dict[str, Any], now: datetime) -> bool:
+    """Whether a record may be archived now (`EMBARGOED_SOURCES`)."""
+    embargo = EMBARGOED_SOURCES.get(record["source"])
+    if embargo is None:
+        return True
+    points = record["forecast"].get("points") or []
+    if not points:
+        return False
+    return datetime.fromisoformat(points[-1]["time"]) <= now - embargo
 FALLBACK_TECHS = {"AVNX": "AVNO"}
 """Used for a base only when the preferred tech has no forecast there: the
 RAL decks of the western basins carry GFS as ``AVNX`` alone."""
@@ -187,7 +209,12 @@ def backfill_decks(archive: Archive, source: str, first: str, last: str) -> dict
         for storm, url in _decks(source, season):
             body = get_ok(url, attempts=3, timeout=600)
             text = (gzip.decompress(body) if url.endswith(".gz") else body).decode("utf-8", "replace")
-            found = [r for r in deck_records(text, storm, origin) if month_of(r["forecast"]["base"]) in months]
+            now = datetime.now(UTC)
+            found = [
+                r
+                for r in deck_records(text, storm, origin)
+                if month_of(r["forecast"]["base"]) in months and released(r, now)
+            ]
             if found:
                 archive.add_records(found)
                 decks += 1
