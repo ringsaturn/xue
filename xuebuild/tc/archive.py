@@ -174,6 +174,20 @@ def choose_track(candidates: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
     return chosen
 
 
+def best_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """A season index's one-line summary of a storm's best tracks: the
+    first and last time any of them places it, and its peak wind on the
+    US track (one-minute), else on the first key that has one."""
+    times = [point["time"] for track in record["best"].values() for point in track["points"]]
+    vmax = None
+    for key in sorted(record["best"], key=lambda k: (k != "usa", k)):
+        winds = [point["vmax"] for point in record["best"][key]["points"] if point["vmax"] is not None]
+        if winds:
+            vmax = max(winds)
+            break
+    return {"first": min(times) if times else None, "last": max(times) if times else None, "vmax": vmax}
+
+
 def make_best(
     storm: str, name: str | None, sid: str | None, atcf: list[str], best: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
@@ -448,15 +462,18 @@ class Archive:
         self._write(f"{month_directory(month)}/{FORECASTS_FILENAME}", body)
         self._write(f"{month_directory(month)}/{INDEX_FILENAME}", encode_json(index))
 
-    def _storm_months(self, season: int) -> dict[str, list[str]]:
-        """Each storm of the season → the months it has forecasts in, from
-        every month index on disk (the catalog's, plus those just written)."""
+    def _storm_months(self, season: int) -> dict[str, tuple[list[str], set[str]]]:
+        """Each storm of the season → the months it has forecasts in and the
+        sources of those forecasts, from every month index on disk (the
+        catalog's, plus those just written)."""
         months = {e["month"] for e in self.catalog.get("months", [])} | {m for m in self.months if self.months[m]}
-        result: dict[str, list[str]] = {}
+        result: dict[str, tuple[list[str], set[str]]] = {}
         for month in sorted(months):
             for entry in self.month_index(month)["storms"]:
                 if season_of_id(entry["id"]) == season:
-                    result.setdefault(entry["id"], []).append(month)
+                    found = result.setdefault(entry["id"], ([], set()))
+                    found[0].append(month)
+                    found[1].update(entry["sources"])
         return result
 
     def _write_season(self, season: int) -> None:
@@ -467,6 +484,7 @@ class Archive:
         for storm in sorted(storms):
             record = storms[storm]
             line = encode_json(record) + b"\n"
+            in_months, sources = months.get(storm, ([], set()))
             entries[storm] = {
                 "id": storm,
                 "basin": record["basin"],
@@ -476,13 +494,17 @@ class Archive:
                 "offset": len(lines),
                 "length": len(line),
                 "best": sorted(record["best"]),
-                "months": months.get(storm, []),
+                **best_summary(record),
+                "months": in_months,
+                "sources": sorted(sources),
             }
             lines += line
         for storm in sorted(set(months) - set(entries)):
+            in_months, sources = months[storm]
             entries[storm] = {
                 "id": storm, "basin": storm[:2], "name": None, "sid": None, "atcf": [storm],
-                "offset": None, "length": None, "best": [], "months": months[storm],
+                "offset": None, "length": None, "best": [], "first": None, "last": None, "vmax": None,
+                "months": in_months, "sources": sorted(sources),
             }
         if not entries:
             return

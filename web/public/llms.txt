@@ -390,6 +390,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
+- https://xue.ringsaturn.me/typhoon.html — one past tropical cyclone from
+  the storm archive (`?storm=<ATCF id>`, e.g. `WP062023`; `?issue=YYYYMMDDHH`
+  picks the issue time drawn): the centres' best tracks, every archived
+  forecast started at that time (official, deterministic, ensemble), and the
+  storm's track errors in km by source and lead. The showcase page lists the
+  archive's storms by season and basin.
 - https://xue.ringsaturn.me/compare.html — every live forecast model at
   one point on one clock (`?lat=<deg>&lon=<deg>`, `?span=120|360` hours,
   `?fields=tmp2m,prate,wind10m,...` among `tmp2m dpt2m prate wind10m gust
@@ -666,6 +672,12 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `50` / `64` (knots, the centres' names) as `[ne, se, sw, nw]` in km.
   Sources: NHC, JTWC, the NCEP GFS/GEFS tracker, ECMWF open data `tf`
   BUFR, IBTrACS. The viewer draws it as tracks over any layer (`?tc=`).
+  The storm archive beside it, `tc/archive/catalog.json` (`docs/tc.md` §8–9):
+  every distinct forecast of a numbered storm since 2023 by month
+  (`<YYYY>/<MM>/forecasts.jsonl` + `index.json` with each storm's byte span),
+  each season's best tracks (`<YYYY>/best.jsonl` + `index.json`) and track
+  errors (`<YYYY>/scores.json`, `errors.jsonl`); every file but the catalog
+  is `?v=<crc32>`-addressed and read by Range.
 - Airport observations and forecasts are a separate, ten-minute JSON
   product under the same root (schema 1, `docs/airport.md`): the mutable
   pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,

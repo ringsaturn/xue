@@ -179,6 +179,10 @@ class TreeTest(unittest.TestCase):
         self.assertEqual(by_id["EP222026"]["months"], ["2026-10", "2026-11"])
         self.assertIsNone(by_id["EP222026"]["offset"])
         self.assertEqual(by_id["WP302026"]["best"], ["usa"])
+        wp = by_id["WP302026"]
+        self.assertEqual((wp["first"], wp["last"], wp["vmax"]), ("2026-10-01T00:00:00Z", "2026-10-05T00:00:00Z", 25.0))
+        self.assertEqual(wp["sources"], ["gfs", "jtwc"])
+        self.assertEqual((by_id["EP222026"]["first"], by_id["EP222026"]["sources"]), (None, ["gfs"]))
 
     def test_reopening_and_rewriting_the_same_records_writes_nothing(self) -> None:
         archive = Archive.open(self.root)

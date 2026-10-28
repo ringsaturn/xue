@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => ({
         showcase: resolve(import.meta.dirname, "web/showcase.html"),
         compare: resolve(import.meta.dirname, "web/compare.html"),
         metrics: resolve(import.meta.dirname, "web/metrics.html"),
+        typhoon: resolve(import.meta.dirname, "web/typhoon.html"),
       },
     },
   },

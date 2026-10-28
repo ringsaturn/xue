@@ -339,8 +339,11 @@ A month's `index.json`:
 A season's `index.json` carries `season`, `best` (the file) and `storms`,
 each with `id`, `basin`, `name`, `sid`, `atcf`, its span in `best.jsonl`
 (`offset` and `length`, both `null` for a storm with forecasts but no best
-track yet), the agency keys of its tracks (`best`) and the `months` it has
-forecasts in. `catalog.json` lists `months` (`month`, `path`, `byteLength`,
+track yet), the agency keys of its tracks (`best`), the first and last
+time any of them places it (`first`, `last`) and its peak wind (`vmax`,
+m/s, on the `usa` track when there is one, else on the first key that has
+a wind; all three `null` without a best track), the `months` it has
+forecasts in and the `sources` of those forecasts. `catalog.json` lists `months` (`month`, `path`, `byteLength`,
 `crc32`, `storms`, `records`) and `seasons` (`season`, `path`, `byteLength`,
 `crc32`, `storms`). Storms and entries are sorted and unique; the spans tile
 their file exactly. A reader rejects an `archiveSchemaVersion` above the

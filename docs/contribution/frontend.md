@@ -1,7 +1,7 @@
 # Frontend
 
 The shell is a static Vite build of `web/` (`index.html`, `showcase.html`,
-`compare.html`) over MapLibre and WebGL2. Data layout:
+`compare.html`, `typhoon.html`) over MapLibre and WebGL2. Data layout:
 [delivery.md](delivery.md), [../zarr-profile.md](../zarr-profile.md).
 Storms, soundings and airports: [point-products.md](point-products.md).
 `web/src/wasm/` comes from `make wasm`; nothing typechecks without it.
@@ -546,6 +546,19 @@ terminates it. `compare/axis.ts` is pure arithmetic
 it matches the viewer's probe; regional models appear only inside their
 domain (`modelCoversPoint`). State is `lat`, `lon`, `span`, `fields`;
 hidden and pinned models are `localStorage`.
+
+## Past storms
+
+`typhoon.html?storm=<ATCF id>`: one storm from the archive (`docs/tc.md`
+§8–9), opened from the showcase page's season and basin list.
+`tc/archive.ts` reads the catalog, the season and month indexes and one
+storm's spans of `best.jsonl`, `forecasts.jsonl` and `errors.jsonl` by
+Range, and turns them into what the page draws: `stormAt` builds the storm
+the live product would have carried at one issue time, so the viewer's
+`StormLayers` draws it unchanged with the time held at the issue. Its own
+plain basemap; a theme or language switch swaps the style and makes the
+storm layers again on `style.load` (no WebGL layers to lose). The pure
+parts are in `tests/web/tcarchive.test.ts`.
 
 ## Layout and theming
 

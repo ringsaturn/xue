@@ -4926,6 +4926,218 @@ html:has(.showcase-page) {
   letter-spacing: 0.04em;
 }
 
+/* Past tropical cyclones: the showcase section (season and basin chips over
+   one row per storm) and the storm page (typhoon.html) — a map, the issue
+   slider, the track switches and the table of track errors. The chips are
+   the viewer's, without its rail indent. */
+.tc-history {
+  margin: 48px 0 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.tc-history-header h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.tc-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 16px 0 12px;
+}
+
+.tc-history-controls .field-chips,
+.typhoon-sources.field-chips,
+.typhoon-truths.field-chips {
+  padding: 0;
+}
+
+.tc-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tc-history-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 120px 56px minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tc-history-row:hover {
+  background: var(--surface);
+}
+
+.tc-history-code,
+.tc-history-span,
+.tc-history-peak,
+.tc-history-sources {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.tc-history-code,
+.tc-history-span,
+.tc-history-sources {
+  color: var(--muted);
+}
+
+.tc-history-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-history-peak {
+  text-align: right;
+}
+
+.typhoon-facts {
+  margin-top: 16px;
+}
+
+.typhoon-body {
+  display: grid;
+  gap: 14px;
+}
+
+.typhoon-map-wrap {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.typhoon-map {
+  height: min(62vh, 560px);
+  min-height: 320px;
+}
+
+.typhoon-issue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typhoon-issue input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.typhoon-label,
+.typhoon-issue-time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.typhoon-issue-time {
+  min-width: 13ch;
+  color: var(--text);
+  text-align: right;
+}
+
+.typhoon-errors-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.typhoon-errors h2 {
+  margin: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.typhoon-table-scroll {
+  overflow-x: auto;
+}
+
+.typhoon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.typhoon-table th,
+.typhoon-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.typhoon-table th:first-child {
+  text-align: left;
+}
+
+.typhoon-table thead th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* The source's own line color, as a swatch beside its code. */
+.typhoon-table tbody th[scope="row"]::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--source-ink, var(--muted));
+  content: "";
+}
+
+.typhoon-group th {
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.typhoon-n {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.typhoon-empty {
+  color: var(--muted);
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .tc-history-row {
+    grid-template-columns: 44px minmax(0, 1fr) 48px;
+  }
+
+  .tc-history-span,
+  .tc-history-sources {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .cmp-block {
     --cmp-label: 96px;

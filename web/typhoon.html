@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" data-i18n-content="tcPageMetaDescription" content="A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed." />
+    <title>Past tropical cyclone · Xue</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- One storm per address (`?storm=<ATCF id>`): typhoon.ts pins the
+         canonical to it and completes the hreflang set. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/typhoon.html" />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/typhoon.html" />
+    <meta property="og:title" content="Past tropical cyclone · Xue" />
+    <meta property="og:description" content="A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed." />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Past tropical cyclone · Xue" />
+    <meta name="twitter:description" content="A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed." />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+  </head>
+  <body class="showcase-page typhoon-page">
+    <main class="showcase-shell typhoon-shell">
+      <div class="showcase-topbar">
+        <a class="showcase-back-link" href="./showcase.html#tc-history">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" />
+          </svg>
+          <span data-i18n="tcPageBack">All past storms</span>
+        </a>
+        <div class="showcase-actions">
+          <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
+              <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
+            </svg>
+          </button>
+          <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 0 0 16z" />
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <header class="showcase-header">
+        <h1>
+          <span id="typhoon-title" data-i18n="tcPageTitle">Past tropical cyclone</span>
+          <span class="showcase-eyebrow" id="typhoon-code"></span>
+        </h1>
+        <dl class="showcase-facts typhoon-facts" id="typhoon-facts"></dl>
+      </header>
+
+      <p id="typhoon-status" class="showcase-status" role="status" aria-live="polite" data-i18n="tcPageLoading">Loading storm</p>
+
+      <div class="typhoon-body" id="typhoon-body" hidden>
+        <div class="typhoon-map-wrap">
+          <div id="typhoon-map" class="typhoon-map"></div>
+        </div>
+
+        <!-- The issue time is the page's one moving part: every track drawn
+             is the forecast each source started from it. -->
+        <div class="typhoon-issue">
+          <span class="typhoon-label" data-i18n="tcPageIssue">Forecasts from</span>
+          <button id="typhoon-prev" class="icon-button" type="button" data-i18n-aria="tcPagePrev" aria-label="Earlier forecast">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+          </button>
+          <input id="typhoon-slider" type="range" min="0" max="0" step="1" value="0" data-i18n-aria="tcPageIssue" aria-label="Forecasts from" />
+          <button id="typhoon-next" class="icon-button" type="button" data-i18n-aria="tcPageNext" aria-label="Later forecast">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
+          </button>
+          <output id="typhoon-issue-time" class="typhoon-issue-time"></output>
+        </div>
+
+        <div class="field-chips typhoon-sources" role="group" id="typhoon-sources" data-i18n-aria="tcPageSources" aria-label="Tracks shown"></div>
+
+        <section class="typhoon-errors" aria-labelledby="typhoon-errors-heading">
+          <div class="typhoon-errors-head">
+            <h2 id="typhoon-errors-heading" data-i18n="tcPageErrorsHeading">Track error, km</h2>
+            <div class="field-chips typhoon-truths" role="group" id="typhoon-truths" data-i18n-aria="tcPageTruth" aria-label="Against the best track of"></div>
+          </div>
+          <div class="typhoon-table-scroll"><table class="typhoon-table" id="typhoon-errors"></table></div>
+          <p class="compare-note" data-i18n="tcPageNote">
+            Distance to the best track at the synoptic hours, counted only while the system is a tropical or subtropical
+            cyclone; an ensemble is scored by its mean. The official forecasts are set beside models started at the same
+            hour.
+          </p>
+        </section>
+      </div>
+
+      <footer class="source-note">
+        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GITHUB</a>
+        <span>·</span>
+        BEST TRACKS <a href="https://www.ncei.noaa.gov/products/international-best-track-archive" target="_blank" rel="noreferrer">IBTRACS</a>
+        · FORECASTS <a href="https://www.nhc.noaa.gov" target="_blank" rel="noreferrer">NHC</a>
+        · <a href="https://www.metoc.navy.mil/jtwc/jtwc.html" target="_blank" rel="noreferrer">JTWC</a>
+        · <a href="https://hurricanes.ral.ucar.edu" target="_blank" rel="noreferrer">UCAR RAL</a>
+        · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>)
+      </footer>
+
+      <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+        <div class="model-sheet-scrim" data-sheet-dismiss></div>
+        <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <div id="lang-list" class="lang-list" role="group"></div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/typhoon.ts"></script>
+  </body>
+</html>

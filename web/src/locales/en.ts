@@ -693,6 +693,41 @@ export const en = {
   tcBest: "Best track",
   tcOptionsAria: "Storm options",
 
+  /** The past tropical cyclones: the showcase section listing the storm
+   * archive by season and basin, and the storm page (typhoon.html) it opens
+   * — the slider over the issue times, the track switches and the table of
+   * track errors in km. ATCF ids, basin codes (`WP`), agency and model
+   * codes and the truth keys (`USA`, `JMA`) are instrument text and stay as
+   * they are. `{name}` is a storm's name with its id, `{id}` an ATCF id. */
+  tcHistoryHeading: "Past tropical cyclones",
+  tcHistoryIntro: "Every numbered storm in the archive: the centres' best tracks, each forecast made for it, and how far each one missed.",
+  tcHistorySeasonsAria: "Season",
+  tcHistoryBasinsAria: "Basin",
+  tcHistoryAll: "All",
+  tcHistoryEmpty: "No storms with forecasts in this season and basin",
+  tcHistoryStormAria: "Open {name}",
+  tcPageTitle: "Past tropical cyclone",
+  tcPageBack: "All past storms",
+  tcPageMetaDescription: "A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed.",
+  tcPageLoading: "Loading storm",
+  tcPageMissing: "No archived storm named {id}",
+  tcPageFailed: "Storm failed to load: {message}",
+  tcPageIssue: "Forecasts from",
+  tcPagePrev: "Earlier forecast",
+  tcPageNext: "Later forecast",
+  tcPageSources: "Tracks shown",
+  tcPageErrorsHeading: "Track error, km",
+  tcPageTruth: "Against the best track of",
+  tcPageSource: "Source",
+  tcPageErrorsMean: "Mean over the storm",
+  tcPageErrorsThis: "The forecast on the map",
+  tcPageErrorsNone: "No forecast of this storm has been verified against this best track yet",
+  tcPageNote: "Distance to the best track at the synoptic hours, counted only while the system is a tropical or subtropical cyclone; an ensemble is scored by its mean. The official forecasts are set beside models started at the same hour, which finished after the official forecast was written.",
+  tcPageId: "ATCF id",
+  tcPageLife: "Life",
+  tcPagePeak: "Peak wind",
+  tcPageForecasts: "Forecasts",
+
   /** The point products drawn as station marks over whatever is on
    * screen (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`): the
    * rail tiles —

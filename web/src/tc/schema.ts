@@ -84,7 +84,7 @@ export interface TcForecast {
   points: TcPoint[];
 }
 
-interface TcTrack {
+export interface TcTrack {
   source: string | null;
   provisional: boolean;
   points: TcPoint[];
