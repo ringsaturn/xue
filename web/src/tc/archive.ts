@@ -10,7 +10,7 @@
  * error means of the scores. Nothing here touches the map. */
 
 import { fetchImmutable } from "../fetchimmutable";
-import type { TcEnsemble, TcForecast, TcStorm, TcTrack } from "./schema";
+import type { TcEnsemble, TcForecast, TcPoint, TcStorm, TcTrack } from "./schema";
 
 export const TC_ARCHIVE_DIRECTORY = "tc/archive/";
 export const TC_ARCHIVE_CATALOG = `${TC_ARCHIVE_DIRECTORY}catalog.json`;
@@ -406,6 +406,33 @@ export function issueTimes(records: readonly ArchiveRecord[]): string[] {
   return [...new Set(records.map((record) => record.forecast.base))].sort();
 }
 
+function isoHour(value: string | number): string {
+  return new Date(typeof value === "number" ? value : Date.parse(value)).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/** The times a storm can be looked at: every synoptic time a best track
+ * places it (whether or not anyone forecast it then — a storm that leaves
+ * a centre's area is still tracked) and every time a forecast starts,
+ * ascending. */
+export function storyTimes(records: readonly ArchiveRecord[], best: BestRecord | null): string[] {
+  const times = new Set(records.map((record) => isoHour(record.forecast.base)));
+  for (const track of Object.values(best?.best ?? {}))
+    for (const point of track.points) {
+      const at = Date.parse(point.time);
+      if (at % (6 * 3600 * 1000) === 0) times.add(isoHour(at));
+    }
+  return [...times].sort();
+}
+
+/** Whether any forecast is drawn at `time` (`stormAt`'s window). */
+export function forecastsAt(records: readonly ArchiveRecord[], time: string): boolean {
+  const at = Date.parse(time);
+  return records.some((record) => {
+    const base = Date.parse(record.forecast.base);
+    return base <= at && at - base <= ISSUE_WINDOW_MS;
+  });
+}
+
 /** How far before an issue time a forecast still counts as current for
  * it: one synoptic step. */
 const ISSUE_WINDOW_MS = 6 * 3600 * 1000;
@@ -507,27 +534,42 @@ export function truthsOf(errors: StormErrors | null): string[] {
   return Object.keys(errors?.truths ?? {}).sort((a, b) => (a === "usa" ? -1 : b === "usa" ? 1 : a.localeCompare(b)));
 }
 
-/** The bounds `[[west, south], [east, north]]` of a storm's best tracks and
- * forecast starts, longitudes unwrapped about the first so a storm across
- * the antimeridian frames as one box; null for a storm with no position. */
+/** The widest wind radius a point reports, km, or 0. */
+function widestRadius(point: TcPoint): number {
+  let widest = 0;
+  for (const quadrants of Object.values(point.radii ?? {}))
+    for (const value of quadrants ?? []) if (value !== null && value > widest) widest = value;
+  return widest;
+}
+
+const KM_PER_DEGREE = 111.195;
+
+/** The bounds `[[west, south], [east, north]]` of a storm's best tracks,
+ * their wind radii included, and its forecast starts — longitudes
+ * unwrapped about the first so a storm across the antimeridian frames as
+ * one box; null for a storm with no position. */
 export function archiveBounds(best: BestRecord | null, records: readonly ArchiveRecord[]): [[number, number], [number, number]] | null {
-  const points: [number, number][] = [];
-  for (const track of Object.values(best?.best ?? {})) for (const point of track.points) points.push([point.lon, point.lat]);
+  const points: { lon: number; lat: number; km: number }[] = [];
+  for (const track of Object.values(best?.best ?? {}))
+    for (const point of track.points) points.push({ lon: point.lon, lat: point.lat, km: widestRadius(point) });
   if (points.length === 0)
     for (const record of records)
-      if (record.kind !== "ensemble") for (const point of (record.forecast as TcForecast).points) points.push([point.lon, point.lat]);
+      if (record.kind !== "ensemble")
+        for (const point of (record.forecast as TcForecast).points) points.push({ lon: point.lon, lat: point.lat, km: 0 });
   if (points.length === 0) return null;
-  const anchor = points[0]![0];
+  const anchor = points[0]!.lon;
   let west = Infinity;
   let east = -Infinity;
   let south = Infinity;
   let north = -Infinity;
-  for (const [lon, lat] of points) {
+  for (const { lon, lat, km } of points) {
     const unwrapped = anchor + ((((lon - anchor + 540) % 360) + 360) % 360) - 180;
-    west = Math.min(west, unwrapped);
-    east = Math.max(east, unwrapped);
-    south = Math.min(south, lat);
-    north = Math.max(north, lat);
+    const dLat = km / KM_PER_DEGREE;
+    const dLon = km / (KM_PER_DEGREE * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+    west = Math.min(west, unwrapped - dLon);
+    east = Math.max(east, unwrapped + dLon);
+    south = Math.max(-85, Math.min(south, lat - dLat));
+    north = Math.min(85, Math.max(north, lat + dLat));
   }
   return [
     [west, south],

@@ -22,7 +22,8 @@ import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
   archiveBounds,
   isArchiveStormId,
-  issueTimes,
+  forecastsAt,
+  storyTimes,
   seasonOfStorm,
   sourcesOf,
   stormAt,
@@ -126,6 +127,8 @@ interface Loaded {
   best: BestRecord | null;
   records: ArchiveRecord[];
   errors: StormErrors | null;
+  /** The slider's stops: every best-track synoptic time and every issue
+   * time (`storyTimes`), so a storm is followed past its last forecast. */
   issues: string[];
   sources: { agencies: string[]; models: string[] };
 }
@@ -301,6 +304,10 @@ function renderIssue(): void {
   if (!loaded) return;
   const issue = loaded.issues[issueIndex];
   issueLabel.textContent = issue ? formatUtcHour(issue) : "--";
+  // A time on the best track nobody forecast from (the storm left the
+  // centre's area, or was not yet named): only the track is drawn.
+  issueLabel.title = issue && !forecastsAt(loaded.records, issue) ? t("tcPageNoForecast") : "";
+  issueLabel.classList.toggle("is-quiet", Boolean(issue) && !forecastsAt(loaded.records, issue!));
   slider.value = String(issueIndex);
   (document.getElementById("typhoon-prev") as HTMLButtonElement).disabled = issueIndex <= 0;
   (document.getElementById("typhoon-next") as HTMLButtonElement).disabled = issueIndex >= loaded.issues.length - 1;
@@ -551,7 +558,7 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   ]);
   if (pending !== entry.id) return;
   pending = null;
-  const issues = issueTimes(records);
+  const issues = storyTimes(records, best);
   loaded = { entry, best, records, errors, issues, sources: sourcesOf(records, SOURCE_ORDER) };
   card?.remove();
   if (truthsOf(errors).length > 0 && !truthsOf(errors).includes(truth)) truth = truthsOf(errors)[0]!;
@@ -565,7 +572,9 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   renderPicker();
   const created = ensureMap();
   const bounds = archiveBounds(best, records);
-  if (bounds) created.fitBounds(bounds, { padding: 48, maxZoom: 6, duration: 600 });
+  // The track and its widest winds, with a narrow margin: the radii are
+  // in the bounds already, so the padding is only room to breathe.
+  if (bounds) created.fitBounds(bounds, { padding: 24, maxZoom: 6, duration: 600 });
   draw();
 }
 

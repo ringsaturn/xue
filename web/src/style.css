@@ -5174,6 +5174,12 @@ html:has(.showcase-page) {
   color: var(--text);
 }
 
+/* No forecast starts at this time: the track alone is drawn. */
+.typhoon-issue-time.is-quiet::after {
+  content: " · " attr(title);
+  color: var(--muted);
+}
+
 .typhoon-errors-head {
   display: flex;
   flex-wrap: wrap;

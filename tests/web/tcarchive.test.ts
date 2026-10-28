@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   archiveBounds,
+  forecastsAt,
   isArchiveStormId,
   issueTimes,
   seasonOfStorm,
   sourcesOf,
   stormAt,
   stormCode,
+  storyTimes,
   trackErrors,
   truthsOf,
   validateArchiveCatalog,
@@ -110,6 +112,36 @@ describe("a storm at one issue time", () => {
     expect(stormAt("WP062023", null, records, null, "2023-07-31T12:00:00Z").models).toHaveProperty("ecmwf");
   });
 
+  it("follows the storm past its last forecast, on the best track's synoptic times", () => {
+    const best: BestRecord = {
+      storm: "WP062023",
+      basin: "WP",
+      name: null,
+      sid: null,
+      atcf: [],
+      best: {
+        usa: {
+          source: "ibtracs",
+          provisional: false,
+          points: [
+            point("2023-08-01T00:00:00Z", undefined, 15, 140),
+            point("2023-08-01T03:00:00Z", undefined, 15, 140),
+            point("2023-08-02T12:00:00Z", undefined, 18, 138),
+          ],
+        },
+      },
+    };
+    expect(storyTimes(records, best)).toEqual([
+      "2023-07-31T12:00:00Z",
+      "2023-07-31T18:00:00Z",
+      "2023-08-01T00:00:00Z",
+      "2023-08-01T06:00:00Z",
+      "2023-08-02T12:00:00Z",
+    ]);
+    expect(forecastsAt(records, "2023-08-01T06:00:00Z")).toBe(true);
+    expect(forecastsAt(records, "2023-08-02T12:00:00Z")).toBe(false);
+  });
+
   it("orders the sources agencies first, by the registry", () => {
     expect(sourcesOf(records, ["nhc", "jtwc", "gfs", "gefs", "ecmwf", "ecmwfens"])).toEqual({
       agencies: ["jtwc"],
@@ -174,6 +206,12 @@ describe("framing", () => {
     const [[west, south], [east, north]] = archiveBounds(best, [])!;
     expect([west, south, east, north]).toEqual([178, 15, 184, 18]);
     expect(archiveBounds(null, [])).toBeNull();
+    const windy: BestRecord = {
+      ...best,
+      best: { usa: { source: "ibtracs", provisional: false, points: [{ ...point("2026-10-20T00:00:00Z", undefined, 0, 150), radii: { "34": [111.195, null, 0, 50] } }] } },
+    };
+    const [[w, s], [e, n]] = archiveBounds(windy, [])!;
+    expect([w, s, e, n].map((value) => Math.round(value * 1000) / 1000)).toEqual([149, -1, 151, 1]);
     expect(archiveBounds(null, [record("gfs", "model", "2023-08-01T00:00:00Z")])).toEqual([
       [140, 15],
       [140, 15],
