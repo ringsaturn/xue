@@ -25,9 +25,11 @@ This module owns the shapes, the merge and the local tree; what feeds it is
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import re
+import time
 import urllib.parse
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -62,6 +64,7 @@ FORECASTS_FILENAME = "forecasts.jsonl"
 BEST_FILENAME = "best.jsonl"
 SCORES_FILENAME = "scores.json"
 
+PULL_ATTEMPTS = 4
 KINDS = ("agency", "model", "ensemble")
 ORIGINS = ("live", "nhc-atcf", "ucar-atcf", "ecmwf-aws")
 """Where a record came from. ``live`` is the hourly product; the others
@@ -262,11 +265,25 @@ class Archive:
             return path
         if self.base_url is None:
             raise TcProductError(f"{path} is missing or is not CRC32 {crc}, and no --base-url to pull it from")
-        body = get_ok(self._url(relative, crc), attempts=3, timeout=300)
-        if crc32_hex(body) != crc:
-            raise TcProductError(f"{relative} arrived as CRC32 {crc32_hex(body)}, not the {crc} its index names")
-        write_bytes_atomic(path, body)
-        return path
+        # A month is tens of megabytes; a connection the edge drops midway
+        # (IncompleteRead) or a short body is fetched again, not fatal.
+        problem: Exception | None = None
+        for attempt in range(PULL_ATTEMPTS):
+            if attempt:
+                time.sleep(5 * attempt)
+            try:
+                body = get_ok(self._url(relative, crc), attempts=3, timeout=300)
+            except (DownloadError, http.client.HTTPException, OSError) as exc:
+                problem = exc
+                LOG.warning("tc archive: pulling %s failed (%s), attempt %d", relative, exc, attempt + 1)
+                continue
+            if crc32_hex(body) != crc:
+                problem = TcProductError(f"{relative} arrived as CRC32 {crc32_hex(body)}, not the {crc} its index names")
+                LOG.warning("tc archive: %s", problem)
+                continue
+            write_bytes_atomic(path, body)
+            return path
+        raise TcProductError(f"could not pull {relative}: {problem}")
 
     def _entry(self, section: str, key: str, value: Any) -> dict[str, Any] | None:
         return next((e for e in self.catalog.get(section, []) if e[key] == value), None)
