@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bz2
 import gzip
+import http.client
 import json
 import logging
 import os
@@ -1994,7 +1995,12 @@ def _request(
     timeout: float = 30,
     max_elapsed: float | None = None,
     opener: Callable[..., object] = urllib.request.urlopen,
-) -> object:
+    consume: Callable[[Any], Any] | None = None,
+) -> Any:
+    """Open ``url``, retrying transient failures, and return the response;
+    with ``consume``, return ``consume(response)`` instead. A body can stall
+    or be cut off long after the status line arrived, so a reader goes in
+    ``consume``: its read is retried with the open, on the same budget."""
     is_ecmwf = _is_ecmwf_url(url)
     attempts = attempts or (4 if is_ecmwf else 6)
     max_elapsed = max_elapsed or (180 if is_ecmwf else 60)
@@ -2009,8 +2015,12 @@ def _request(
             break
         try:
             _pace_ecmwf_request(url)
-            return opener(request, timeout=timeout)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+            response = opener(request, timeout=timeout)
+            if consume is None:
+                return response
+            with response:  # type: ignore[attr-defined]
+                return consume(response)
+        except (urllib.error.HTTPError, urllib.error.URLError, http.client.HTTPException, OSError) as exc:
             last_error = exc
             retryable = not isinstance(exc, urllib.error.HTTPError) or exc.code in {
                 408,
@@ -2229,12 +2239,13 @@ def get_ok(url: str, **request: Any) -> bytes:
     """GET through :func:`_request` (``request`` is its retry budget,
     headers and timeout) and return the body of an HTTP 200; any other
     status is a :class:`DownloadError`."""
-    response = _request(url, **request)
-    with response:
+    def consume(response: object) -> bytes:
         status = getattr(response, "status", None)
         if status != 200:
             raise DownloadError(f"expected HTTP 200 for {url}, received {status}")
         return _read_response(response)
+
+    return _request(url, consume=consume, **request)
 
 
 def fetch_text(url: str) -> str:
@@ -2247,12 +2258,15 @@ def fetch_text(url: str) -> str:
 
 def fetch_range(url: str, byte_range: ByteRange) -> bytes:
     expected_header = f"bytes={byte_range.start}-{byte_range.end}"
-    response = _request(url, headers={"Range": expected_header})
-    with response:
-        status = getattr(response, "status", None)
-        headers = getattr(response, "headers", {})
-        content_range = headers.get("Content-Range")
-        body = _read_response(response)
+    status, content_range, body = _request(
+        url,
+        headers={"Range": expected_header},
+        consume=lambda response: (
+            getattr(response, "status", None),
+            getattr(response, "headers", {}).get("Content-Range"),
+            _read_response(response),
+        ),
+    )
     if status != 206:
         raise DownloadError(f"expected HTTP 206 for Range request, received {status}")
     match = CONTENT_RANGE_RE.match(content_range or "")

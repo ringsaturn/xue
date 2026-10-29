@@ -24,6 +24,7 @@ from xuebuild.fetch import (
     fetch_range,
     fetch_run,
     floor_to_cycle,
+    get_ok,
     object_url,
     parse_run,
     remote_exists,
@@ -128,6 +129,33 @@ class FetchTests(unittest.TestCase):
 
         self.assertIs(result, response)
         sleep.assert_called_once_with(17.0)
+
+    def test_a_body_cut_off_midway_is_fetched_again(self) -> None:
+        def response(read: Mock) -> Mock:
+            opened = Mock(status=200, read=read)
+            opened.__enter__ = Mock(return_value=opened)
+            opened.__exit__ = Mock(return_value=False)
+            return opened
+
+        stalled = response(Mock(side_effect=TimeoutError("The read operation timed out")))
+        whole = response(Mock(return_value=b"payload"))
+        opener = Mock(side_effect=[stalled, whole])
+        with patch("xuebuild.fetch.time.sleep"):
+            body = get_ok("https://storage.googleapis.com/global-forecast-system/file", opener=opener)
+
+        self.assertEqual(body, b"payload")
+        self.assertEqual(opener.call_count, 2)
+        stalled.__exit__.assert_called_once()
+
+    def test_a_body_that_never_arrives_is_a_download_error(self) -> None:
+        def stalled(*args: object, **kwargs: object) -> Mock:
+            opened = Mock(status=200, read=Mock(side_effect=TimeoutError("The read operation timed out")))
+            opened.__enter__ = Mock(return_value=opened)
+            opened.__exit__ = Mock(return_value=False)
+            return opened
+
+        with patch("xuebuild.fetch.time.sleep"), self.assertRaises(DownloadError):
+            get_ok("https://example.test/file", attempts=3, opener=Mock(side_effect=stalled))
 
     def test_remote_exists_only_treats_404_as_missing(self) -> None:
         def failure(code: int) -> DownloadError:
