@@ -1,7 +1,3 @@
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
-import "@fontsource/manrope/500.css";
-import "@fontsource/manrope/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
@@ -2274,7 +2270,7 @@ function applyDatasetWording(): void {
     return;
   }
   if (showingCaseForecast()) {
-    leadLabel.textContent = "VALID TIME";
+    leadLabel.textContent = "Valid time";
     runTimeLabel.textContent = t("runCycle");
     validTimeLabel.textContent = t("validTimeLabel");
     slider.setAttribute("aria-label", t("validTimeLabel"));
@@ -2284,7 +2280,7 @@ function applyDatasetWording(): void {
   }
   const observations = showingObservations();
   const nowcast = showingNowcast();
-  leadLabel.textContent = nowcast ? "NOWCAST" : observations ? "OBSERVED" : "FORECAST HOUR";
+  leadLabel.textContent = nowcast ? "Nowcast" : observations ? "Observed" : "Forecast hour";
   runTimeLabel.textContent = t(nowcast ? "latestNowcast" : observations ? "latestObservation" : "runCycle");
   validTimeLabel.textContent = t(observations && !nowcast ? "observationTimeLabel" : "validTimeLabel");
   slider.setAttribute(
@@ -4273,8 +4269,8 @@ function remember(key: string, value: string): void {
 function gifCredit(): string {
   const notices = [...document.querySelectorAll<HTMLElement>(".source-credit")]
     .filter((credit) => getComputedStyle(credit).display !== "none")
-    .map((credit) => (credit.textContent ?? "").replace(/\s+/g, " ").replace(/\s*·\s*$/, "").trim());
-  return [window.location.host, ...notices, "© OPENSTREETMAP · PROTOMAPS"].join(" · ");
+    .map((credit) => (credit.textContent ?? "").replace(/\s+/g, " ").replace(/\s*;\s*$/, "").trim());
+  return [window.location.host, ...notices, "© OpenStreetMap, Protomaps"].join("; ");
 }
 
 /** One of the two files the loop is saved as. */
@@ -5740,7 +5736,7 @@ function renderLevelRow(): void {
       button.title = t("levelAloneTitle");
       const glyph = document.createElement("b");
       glyph.setAttribute("aria-hidden", "true");
-      glyph.textContent = "ALONE";
+      glyph.textContent = "Alone";
       const name = document.createElement("span");
       name.className = "rail-name";
       const codeSpan = document.createElement("span");
@@ -7853,7 +7849,7 @@ function renderTcLevelGroup(): void {
   }
   const focus = view.marks.tc.storm;
   const entry = focus === null ? null : tcLoaded?.index.storms.find((storm) => storm.id === focus);
-  tcLevelGroup.chip.textContent = focus === null ? "ALL" : (entry?.name?.toUpperCase() ?? focus);
+  tcLevelGroup.chip.textContent = focus === null ? "All" : (entry?.name?.toUpperCase() ?? focus);
   tcLevelGroup.chip.setAttribute("aria-label", t("tcOptionsAria"));
   if (!tcLevelGroup.root.isConnected) levelRow.append(tcLevelGroup.root);
   levelRow.hidden = false;
@@ -8532,7 +8528,7 @@ function syncContextCredit(): void {
     return;
   }
   document.body.dataset.context = "";
-  contextCredit.textContent = `${contextCreditText} ·`;
+  contextCredit.textContent = `${contextCreditText};`;
 }
 
 async function loadCaseRadar(showcaseCase: ShowcaseCase): Promise<void> {

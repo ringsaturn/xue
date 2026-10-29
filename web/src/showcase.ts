@@ -1,7 +1,3 @@
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
-import "@fontsource/manrope/500.css";
-import "@fontsource/manrope/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
@@ -15,14 +11,13 @@ import {
 } from "./i18n";
 import { mountLanguagePicker } from "./sheet";
 import { applyTheme, toggleTheme } from "./theme";
-import { isObservationModel, parseBundleMetadata, type ForecastBundleId, type PosterDescriptor } from "./manifest";
+import { isObservationModel, parseBundleMetadata, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
 import { fetchCaseManifest, fetchCatalog, listedCases, localizedText, type ShowcaseCase } from "./showcase-catalog";
 import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
-import { variableSpec } from "./variables";
 import { TcArchive, type ArchiveCatalog } from "./tc/archive";
 import { archivePagePath } from "./tc/pages";
 import { paintSeason } from "./tc/poster";
@@ -58,14 +53,6 @@ if (langTrigger && langSheet && langList) {
   onLocaleChange(mountLanguagePicker(langTrigger, langSheet, langList));
 }
 
-/** The contact-sheet code of one bundle (`VariableSpec.showcaseCode`,
- * matching the viewer's own switch labels): the surface fields have a
- * word, every isobaric field is its family and level ("HGT 500MB",
- * "T 850MB"); a bundle the table lacks is written under its own id. */
-function variableCode(id: ForecastBundleId): string {
-  return variableSpec(id)?.showcaseCode ?? id.toUpperCase();
-}
-
 function definition(label: string, value: string, wide = false): HTMLElement {
   const item = document.createElement("div");
   if (wide) item.className = "is-wide";
@@ -92,11 +79,11 @@ function buildCard(
   const figure = document.createElement("div");
   figure.className = "showcase-thumb";
   canvas.setAttribute("aria-hidden", "true");
-  // The dataset code rides on the thumbnail, the way a contact sheet is
-  // stamped rather than captioned.
+  // The dataset rides on the thumbnail, the way a contact sheet is stamped
+  // rather than captioned; the case page lists its variables.
   const code = document.createElement("span");
   code.className = "showcase-code";
-  code.textContent = `${showcaseCase.model} · ${showcaseCase.variables.map((id) => variableCode(id)).join(" / ")}`;
+  code.textContent = showcaseCase.model;
   figure.append(canvas, code);
 
   const body = document.createElement("div");
@@ -108,7 +95,7 @@ function buildCard(
   const summary = document.createElement("p");
   summary.className = "showcase-summary";
   summary.textContent = localizedText(showcaseCase.summary, locale);
-  // The card shows five lines of it; the whole of it on hover.
+  // The card shows two lines of it; the whole of it on hover.
   summary.title = summary.textContent;
 
   const facts = document.createElement("dl");
@@ -129,21 +116,14 @@ function buildCard(
   );
 
   body.append(title, summary, facts);
-  // The foot pins the tags and the play affordance to the card's bottom edge,
-  // so a row of cards ends on one line however long their summaries run.
+  // The foot pins the play affordance to the card's bottom edge, so a row of
+  // cards ends on one line however long their summaries run.
   const foot = document.createElement("div");
   foot.className = "showcase-foot";
-  const tags = document.createElement("ul");
-  tags.className = "showcase-tags";
-  for (const tag of showcaseCase.tags ?? []) {
-    const tagItem = document.createElement("li");
-    tagItem.textContent = tag;
-    tags.append(tagItem);
-  }
   const play = document.createElement("span");
   play.className = "showcase-play";
   play.setAttribute("aria-hidden", "true");
-  foot.append(tags, play);
+  foot.append(play);
   body.append(foot);
 
   link.append(figure, body);
@@ -171,7 +151,7 @@ function buildStormCard(
   canvas.setAttribute("aria-hidden", "true");
   const code = document.createElement("span");
   code.className = "showcase-code";
-  code.textContent = `TC ARCHIVE · ${span}`;
+  code.textContent = span;
   figure.append(canvas, code);
 
   const body = document.createElement("div");

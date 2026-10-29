@@ -255,10 +255,8 @@
           </span>
           <span class="model-stamp">
             <span id="model-eyebrow">NOAA / GFS (0.25°)</span>
-            <span class="stamp-sep" aria-hidden="true">·</span>
             <span id="run-time-label" class="sr-only" data-i18n="runCycle">Model run</span>
             <span id="run-time" data-i18n="awaitingData">Awaiting data</span>
-            <span class="model-caret" aria-hidden="true">▾</span>
           </span>
         </button>
       </h1>
@@ -278,7 +276,7 @@
             <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
             <path d="M5 17a3 3 0 0 1 3-3h11" />
           </svg>
-          <span class="sr-only" data-i18n="showcaseLink">CASES</span>
+          <span class="sr-only" data-i18n="showcaseLink">Cases</span>
         </a>
         <!-- The comparison page, at the point the map is centred on:
              main.ts keeps the href on the camera, and a pinned point has
@@ -288,7 +286,7 @@
             <path d="M4 7h16M4 12h10M4 17h13" />
             <path d="M18 10.5l2 1.5-2 1.5M19.5 15.5l1 1.5-1 1.5" />
           </svg>
-          <span class="sr-only" data-i18n="compareLink">COMPARE</span>
+          <span class="sr-only" data-i18n="compareLink">Compare</span>
         </a>
         <!-- The loop export: a tap opens its sheet, a long press saves
              again with the settings last used. While a file is being made
@@ -313,7 +311,7 @@
            the way back to the list. -->
       <div class="case-banner" id="case-banner" hidden>
         <div class="case-pill">
-          <span class="case-tag" data-i18n="caseTag">CASE</span>
+          <span class="case-tag" data-i18n="caseTag">Case</span>
           <h2 id="case-title"></h2>
           <!-- Folds the summary card away to leave the map; the viewer's
                last choice is kept (main.ts::setCaseSummaryOpen). Phones
@@ -323,7 +321,7 @@
           </button>
           <a class="case-back" href="./showcase.html">
             <span aria-hidden="true">←</span>
-            <span class="sr-only" data-i18n="showcaseBack">All cases</span>
+            <span class="sr-only" data-i18n="showcaseBack">← All cases</span>
           </a>
         </div>
         <!-- The other parts of the event this case is one part of, as links
@@ -363,7 +361,6 @@
         <p class="data-card-figure">
           <output id="preload-percent">0%</output>
           <output id="preload-frames" data-i18n-aria="bufferedFrames" aria-label="Buffered">0 / 121</output>
-          <span class="figure-sep" aria-hidden="true">·</span>
           <output id="preload-bytes" data-i18n-aria="downloadedBytes" aria-label="Downloaded">0 B</output>
         </p>
         <div
@@ -727,7 +724,7 @@
         <button id="field-more" type="button" data-dialog data-i18n-tip="tipMore" aria-haspopup="dialog" aria-expanded="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.8" /><path d="M17 14v6M14 17h6" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphMore">+</b>
-          <span class="rail-name"><span>MORE</span> <small data-i18n="varMore">LAYERS</small></span>
+          <span class="rail-name"><span>MORE</span> <small data-i18n="varMore">Layers</small></span>
         </button>
         </div>
         <div class="rail-section" data-section="overlay" role="group" data-i18n-aria="overlaySectionAria" aria-label="Overlays">
@@ -738,7 +735,7 @@
         <button type="button" data-variable="prmsl" data-i18n-tip="tipPressure" data-group="pressure" data-toggle aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="13" rx="3" ry="2" /><ellipse cx="12" cy="13" rx="6.5" ry="4.6" /><path d="M2.5 17.5C2.5 10.6 6.8 5.5 12 5.5s9.5 5.1 9.5 12" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
-          <span class="rail-name"><span>PRESSURE</span> <small data-i18n="linesCaption">LINES</small></span>
+          <span class="rail-name"><span>PRESSURE</span> <small data-i18n="linesCaption">Lines</small></span>
         </button>
         <!-- The particle animation over a vector field (and, under the
              experiment, the vapour flux's over a scalar one): the coloured
@@ -767,12 +764,12 @@
         <button type="button" data-derived="inflow" data-toggle data-i18n-tip="legendInflow" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19c3-6 6-9 12-10" /><path d="M12.5 7.5L17 9l-1.5 4.5" /><path d="M4 13c2-3 4-4.5 7-5.5" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphInflow">M</b>
-          <span class="rail-name"><span>QFLUX·θe</span> <small data-i18n="varInflow">INFLOW</small></span>
+          <span class="rail-name"><span>QFLUX·ΘE</span> <small data-i18n="varInflow">INFLOW</small></span>
         </button>
         <button type="button" data-derived="front" data-toggle data-i18n-tip="legendFront" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c3-2 5-4 8-4s5 2 10 0" /><path d="M7 12.5a2 2 0 0 1 4 0" /><path d="M14 11.5a2 2 0 0 1 4 0" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFront">F</b>
-          <span class="rail-name"><span>∇θe</span> <small data-i18n="varFront">FRONT</small></span>
+          <span class="rail-name"><span>∇ΘE</span> <small data-i18n="varFront">FRONT</small></span>
         </button>
         </div>
         <div class="rail-section" data-section="mark" role="group" data-i18n-aria="markSectionAria" aria-label="Marks">
@@ -839,7 +836,7 @@
              centred on the capsule: the caption, the frame, the valid time —
              the way a meteogram row reads code, value, unit. -->
         <div class="timeline-readout">
-          <span id="lead-label" class="control-label">FORECAST HOUR</span>
+          <span id="lead-label" class="control-label">Forecast hour</span>
           <output id="forecast-hour" for="frame-slider">F---</output>
           <div class="readout-meta">
             <span id="valid-time-label" class="sr-only" data-i18n="validTimeLabel">Valid time</span>
@@ -860,7 +857,7 @@
           </button>
           <button id="play-button" class="transport-button" type="button" data-i18n-aria="playAnimation" aria-label="Play animation" disabled>
             <span class="transport-icon" aria-hidden="true"></span>
-            <span id="play-label" class="sr-only">PLAY</span>
+            <span id="play-label" class="sr-only">Play</span>
           </button>
         </div>
 
@@ -891,12 +888,12 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel" role="dialog" aria-modal="true" data-i18n-aria="modelSwitchAria" aria-label="Dataset">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="modelHeading">DATASETS</p>
+          <p class="sheet-heading" data-i18n="modelHeading">Datasets</p>
           <!-- Grouped by kind of data, each heading the field sheet's look:
                the forecasts, the aerosol run, the radar mosaics, the
                imagers (the disks, their mosaic and NASA GIBS), the aurora. -->
           <div class="model-switch" role="group">
-            <p class="field-group-heading" data-i18n="modelGroupForecast">FORECAST MODELS</p>
+            <p class="field-group-heading" data-i18n="modelGroupForecast">Forecast models</p>
             <button type="button" data-model="gfs" aria-pressed="true">
               <span class="model-name">GFS</span>
               <small>NOAA 0.25°</small>
@@ -904,7 +901,7 @@
             </button>
             <button type="button" data-model="sflux" aria-pressed="false">
               <span class="model-name">GFS</span>
-              <small>SFLUX 13KM</small>
+              <small>sflux 13 km</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="ecmwf" aria-pressed="false">
@@ -929,85 +926,85 @@
             </button>
             <button type="button" data-model="cfs" aria-pressed="false">
               <span class="model-name">CFSv2</span>
-              <small>NOAA SEASONAL 9M</small>
+              <small>NOAA seasonal 9M</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="hrrr" aria-pressed="false">
               <span class="model-name">HRRR</span>
-              <small>CONUS 3KM</small>
+              <small>CONUS 3 km</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="iconeu" aria-pressed="false">
               <span class="model-name">ICON-EU</span>
-              <small>DWD EUROPE 7KM</small>
+              <small>DWD Europe 7 km</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="arpege" aria-pressed="false">
               <span class="model-name">ARPEGE</span>
-              <small>MÉTÉO-FRANCE 0.25°</small>
+              <small>Météo-France 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
-            <p class="field-group-heading" data-i18n="fieldGroupAerosol">AEROSOLS &amp; AIR QUALITY</p>
+            <p class="field-group-heading" data-i18n="fieldGroupAerosol">Aerosols &amp; air quality</p>
             <button type="button" data-model="gefsaero" aria-pressed="false">
-              <span class="model-name">GEFS-AEROSOLS</span>
-              <small>NOAA AEROSOL 0.25°</small>
+              <span class="model-name">GEFS-Aerosols</span>
+              <small>NOAA aerosol 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
-            <p class="field-group-heading" data-i18n="modelGroupRadar">RADAR</p>
+            <p class="field-group-heading" data-i18n="modelGroupRadar">Radar</p>
             <button type="button" data-model="mrms" aria-pressed="false">
               <span class="model-name">MRMS</span>
-              <small>CONUS RADAR</small>
+              <small>CONUS radar</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="jma" aria-pressed="false">
               <span class="model-name">JMA</span>
-              <small>JAPAN RADAR</small>
+              <small>Japan radar</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="cma" aria-pressed="false">
               <span class="model-name">CMA</span>
-              <small>CHINA RADAR</small>
+              <small>China radar</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
-            <p class="field-group-heading" data-i18n="fieldGroupSatellite">SATELLITE</p>
+            <p class="field-group-heading" data-i18n="fieldGroupSatellite">Satellite</p>
             <button type="button" data-model="himawari" aria-pressed="false">
-              <span class="model-name">HIMAWARI</span>
-              <small>SATELLITE IR</small>
+              <span class="model-name">Himawari</span>
+              <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="himawarijp" aria-pressed="false">
-              <span class="model-name">HIMAWARI-JP</span>
-              <small>SATELLITE JAPAN 0.01°</small>
+              <span class="model-name">Himawari-JP</span>
+              <small>Satellite Japan 0.01°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="goeseast" aria-pressed="false">
-              <span class="model-name">GOES-EAST</span>
-              <small>SATELLITE IR</small>
+              <span class="model-name">GOES-East</span>
+              <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="goeswest" aria-pressed="false">
-              <span class="model-name">GOES-WEST</span>
-              <small>SATELLITE IR</small>
+              <span class="model-name">GOES-West</span>
+              <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="meteosat" aria-pressed="false">
-              <span class="model-name">METEOSAT</span>
-              <small>SATELLITE IR</small>
+              <span class="model-name">Meteosat</span>
+              <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="geo" aria-pressed="false">
-              <span class="model-name">GEO MOSAIC</span>
-              <small>SATELLITE IR · ALL DISKS</small>
+              <span class="model-name">GEO mosaic</span>
+              <small>Satellite IR, all disks</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
             <button type="button" data-model="gibs" aria-pressed="false">
               <span class="model-name">NASA GIBS</span>
-              <small>DAILY IMAGERY · POLAR ORBITERS</small>
+              <small>Daily imagery, polar orbiters</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
-            <p class="field-group-heading" data-i18n="fieldGroupSpace">SPACE WEATHER</p>
+            <p class="field-group-heading" data-i18n="fieldGroupSpace">Space weather</p>
             <button type="button" data-model="aurora" aria-pressed="false">
-              <span class="model-name">AURORA</span>
+              <span class="model-name">Aurora</span>
               <small>SWPC OVATION 1°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
@@ -1023,7 +1020,7 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel field-panel" role="dialog" aria-modal="true" data-i18n-aria="fieldSheetAria" aria-label="Layers">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="fieldSheetHeading">LAYERS</p>
+          <p class="sheet-heading" data-i18n="fieldSheetHeading">Layers</p>
           <div id="field-list" class="field-list"></div>
         </div>
       </div>
@@ -1036,7 +1033,7 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="langPickerHeading">LANGUAGE</p>
+          <p class="sheet-heading" data-i18n="langPickerHeading">Language</p>
           <div id="lang-list" class="lang-list" role="group"></div>
         </div>
       </div>
@@ -1048,28 +1045,28 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel export-panel" role="dialog" aria-modal="true" data-i18n-aria="exportSheetAria" aria-label="Export the loop">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="exportHeading">EXPORT</p>
+          <p class="sheet-heading" data-i18n="exportHeading">Export</p>
           <div class="export-field">
-            <span class="export-caption" id="export-format-caption" data-i18n="exportFormat">FORMAT</span>
+            <span class="export-caption" id="export-format-caption" data-i18n="exportFormat">Format</span>
             <div id="export-format" class="export-choices" role="radiogroup" aria-labelledby="export-format-caption"></div>
           </div>
           <div class="export-field">
-            <span class="export-caption" id="export-size-caption" data-i18n="exportSize">SIZE</span>
+            <span class="export-caption" id="export-size-caption" data-i18n="exportSize">Size</span>
             <div id="export-size" class="export-choices" role="radiogroup" aria-labelledby="export-size-caption"></div>
           </div>
           <div class="export-field">
-            <span class="export-caption" id="export-fps-caption" data-i18n="exportFps">RATE</span>
+            <span class="export-caption" id="export-fps-caption" data-i18n="exportFps">Rate</span>
             <div id="export-fps" class="export-choices" role="radiogroup" aria-labelledby="export-fps-caption"></div>
           </div>
           <div class="export-field export-range">
-            <span class="export-caption" data-i18n="exportRange">FRAMES</span>
+            <span class="export-caption" data-i18n="exportRange">Frames</span>
             <label class="export-bound">
-              <span class="export-bound-name" data-i18n="exportFrom">FROM</span>
+              <span class="export-bound-name" data-i18n="exportFrom">From</span>
               <input id="export-start" type="range" min="0" max="0" step="1" value="0" />
               <output id="export-start-value" for="export-start">F000</output>
             </label>
             <label class="export-bound">
-              <span class="export-bound-name" data-i18n="exportTo">TO</span>
+              <span class="export-bound-name" data-i18n="exportTo">To</span>
               <input id="export-end" type="range" min="0" max="0" step="1" value="0" />
               <output id="export-end-value" for="export-end">F000</output>
             </label>
@@ -1087,7 +1084,7 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel tc-panel" role="dialog" aria-modal="true" data-i18n-aria="tcSheetAria" aria-label="Tropical cyclones">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="tcHeading">TROPICAL CYCLONES</p>
+          <p class="sheet-heading" data-i18n="tcHeading">Tropical cyclones</p>
           <div id="tc-list" class="tc-list" role="group"></div>
         </div>
       </div>
@@ -1100,7 +1097,7 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel skewt-panel" role="dialog" aria-modal="true" data-i18n-aria="soundingSheetAria" aria-label="Sounding chart">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading"><span data-i18n="soundingSheetHeading">SOUNDING</span> <span id="skewt-sheet-title"></span></p>
+          <p class="sheet-heading"><span data-i18n="soundingSheetHeading">Sounding</span> <span id="skewt-sheet-title"></span></p>
           <canvas id="skewt-sheet-chart" class="skewt-sheet-chart" aria-hidden="true"></canvas>
           <button type="button" class="skewt-sheet-close" data-sheet-dismiss data-i18n="soundingClose">Close</button>
         </div>
@@ -1126,29 +1123,29 @@
            already named under the title. -->
       <footer class="source-note">
         <span class="source-line">
-          <span class="source-credit" data-credit-model="ecmwf">CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
-          <span class="source-credit" data-credit-model="ifshres">ADAPTED FROM <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF IFS</a> BY ECMWF, LICENSED UNDER <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> · VIA <a href="https://open-meteo.com" target="_blank" rel="noreferrer">OPEN-METEO</a> ·</span>
-          <span class="source-credit" data-credit-model="iconeu">SOURCE: <a href="https://opendata.dwd.de/" target="_blank" rel="noreferrer">DEUTSCHER WETTERDIENST</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, QUANTIZED) ·</span>
-          <span class="source-credit" data-credit-model="arpege">SOURCE: <a href="https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/" target="_blank" rel="noreferrer">MÉTÉO-FRANCE</a> (<a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noreferrer">LICENCE OUVERTE 2.0</a>, QUANTIZED) ·</span>
-          <span class="source-credit" data-credit-model="cma">RADAR <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a> ·</span>
-          <span class="source-credit" data-credit-model="mrms">RADAR <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a> ·</span>
-          <span class="source-credit" data-credit-model="nexrad">RADAR <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA / NWS NEXRAD LEVEL III</a> VIA <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">UNIDATA</a> ·</span>
-          <span class="source-credit" data-credit-model="jma">SOURCE <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA WEBSITE</a> (REGRIDDED) ·</span>
-          <span class="source-credit" data-credit-model="himawari">IMAGERY <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA HIMAWARI-9</a> VIA <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (REPROJECTED) ·</span>
-          <span class="source-credit" data-credit-model="goes">IMAGERY <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (REPROJECTED) ·</span>
-          <span class="source-credit" data-credit-model="efas">CONTAINS MODIFIED <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS EMERGENCY MANAGEMENT SERVICE</a> INFORMATION (EFAS) ·</span>
-          <span class="source-credit" data-credit-model="era5">CONTAINS MODIFIED <a href="https://climate.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS CLIMATE CHANGE SERVICE</a> INFORMATION (ERA5, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
-          <span class="source-credit" data-credit-model="cams">CONTAINS MODIFIED <a href="https://atmosphere.copernicus.eu" target="_blank" rel="noreferrer">COPERNICUS ATMOSPHERE MONITORING SERVICE</a> INFORMATION (CAMS, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>) ·</span>
-          <span class="source-credit" data-credit-model="meteosat">CONTAINS MODIFIED <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> METEOSAT DATA (REPROJECTED) ·</span>
+          <span class="source-credit" data-credit-model="ecmwf">Contains modified <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF Open Data</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>);</span>
+          <span class="source-credit" data-credit-model="ifshres">Adapted from <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">ECMWF IFS</a> by ECMWF, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, via <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a>;</span>
+          <span class="source-credit" data-credit-model="iconeu">Source: <a href="https://opendata.dwd.de/" target="_blank" rel="noreferrer">Deutscher Wetterdienst</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, quantized);</span>
+          <span class="source-credit" data-credit-model="arpege">Source: <a href="https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/" target="_blank" rel="noreferrer">Météo-France</a> (<a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noreferrer">Licence Ouverte 2.0</a>, quantized);</span>
+          <span class="source-credit" data-credit-model="cma">Radar: <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a>;</span>
+          <span class="source-credit" data-credit-model="mrms">Radar: <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a>;</span>
+          <span class="source-credit" data-credit-model="nexrad">Radar: <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA/NWS NEXRAD Level III</a> via <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">Unidata</a>;</span>
+          <span class="source-credit" data-credit-model="jma">Source: <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA website</a> (regridded);</span>
+          <span class="source-credit" data-credit-model="himawari">Imagery: <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA Himawari-9</a> via <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (reprojected);</span>
+          <span class="source-credit" data-credit-model="goes">Imagery: <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (reprojected);</span>
+          <span class="source-credit" data-credit-model="efas">Contains modified <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">Copernicus Emergency Management Service</a> information (EFAS);</span>
+          <span class="source-credit" data-credit-model="era5">Contains modified <a href="https://climate.copernicus.eu" target="_blank" rel="noreferrer">Copernicus Climate Change Service</a> information (ERA5, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>);</span>
+          <span class="source-credit" data-credit-model="cams">Contains modified <a href="https://atmosphere.copernicus.eu" target="_blank" rel="noreferrer">Copernicus Atmosphere Monitoring Service</a> information (CAMS, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>);</span>
+          <span class="source-credit" data-credit-model="meteosat">Contains modified <a href="https://www.eumetsat.int" target="_blank" rel="noreferrer">EUMETSAT</a> Meteosat data (reprojected);</span>
           <!-- A river case's credits and its shown extents' (river/case.ts::credits). -->
           <span class="source-credit" id="river-credit" data-credit-river></span>
           <!-- A case's context lines' credit (casecontext.ts; main.ts::syncContextCredit). -->
           <span class="source-credit" id="context-credit" data-credit-context></span>
-          <span class="source-credit" data-credit-imagery="gibs">IMAGERY <a href="https://worldview.earthdata.nasa.gov" target="_blank" rel="noreferrer">NASA GIBS / WORLDVIEW</a> ·</span>
-          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OPENSTREETMAP</a>
-          · <a href="https://protomaps.com" target="_blank" rel="noreferrer">PROTOMAPS</a>
+          <span class="source-credit" data-credit-imagery="gibs">Imagery: <a href="https://worldview.earthdata.nasa.gov" target="_blank" rel="noreferrer">NASA GIBS/Worldview</a>;</span>
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>,
+          <a href="https://protomaps.com" target="_blank" rel="noreferrer">Protomaps</a>
         </span>
-        <button id="credits-trigger" class="credits-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="creditsTrigger" aria-label="SOURCES">
+        <button id="credits-trigger" class="credits-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="creditsTrigger" aria-label="Sources">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
             <circle cx="8" cy="8" r="6.6" />
             <path d="M8 7.2v4.2M8 4.6v.2" stroke-linecap="round" />
@@ -1162,173 +1159,173 @@
         <div class="model-sheet-scrim" data-sheet-dismiss></div>
         <div class="model-sheet-panel credits-panel" role="dialog" aria-modal="true" data-i18n-aria="creditsHeading" aria-label="Data & credits">
           <span class="sheet-grip" aria-hidden="true"></span>
-          <p class="sheet-heading" data-i18n="creditsHeading">DATA &amp; CREDITS</p>
+          <p class="sheet-heading" data-i18n="creditsHeading">Data &amp; credits</p>
           <ul class="credits-list">
             <li>
               <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA GFS</span>
-                <small data-i18n="creditsGfs">FORECAST DATA · GFS 0.25° AND SFLUX</small>
+                <small data-i18n="creditsGfs">Forecast data: GFS 0.25° and sflux</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-hrrr-pds/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA HRRR</span>
-                <small data-i18n="creditsHrrr">FORECAST DATA · HRRR 3 KM, CONTIGUOUS US</small>
+                <small data-i18n="creditsHrrr">Forecast data: HRRR 3 km, contiguous US</small>
                 <span class="credits-arrow" aria-hidden="true"></span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-cfs/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA CFSv2</span>
-                <small data-i18n="creditsCfs">SEASONAL FORECAST · CFSv2, 9 MONTHS, 6-HOURLY</small>
+                <small data-i18n="creditsCfs">Seasonal forecast: CFSv2, 9 months, 6-hourly</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-gefs/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA GEFS-Aerosols</span>
-                <small data-i18n="creditsGefsAero">AEROSOL FORECAST · GEFS-AEROSOLS 0.25°, AOD AND SURFACE PM</small>
+                <small data-i18n="creditsGefsAero">Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noreferrer">
                 <span class="credits-name">ECMWF Open Data</span>
-                <small data-i18n="creditsEcmwf">CONTAINS MODIFIED ECMWF DATA · CC BY 4.0</small>
+                <small data-i18n="creditsEcmwf">Contains modified ECMWF data, CC BY 4.0</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
                 <span class="credits-name">Open-Meteo</span>
-                <small data-i18n="creditsIfsHres">ADAPTED FROM ECMWF IFS BY ECMWF, LICENSED UNDER CC BY 4.0 · VIA OPEN-METEO · IFS HRES ~9 KM, RESAMPLED TO 0.1°</small>
+                <small data-i18n="creditsIfsHres">Adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0; via Open-Meteo; IFS HRES ~9 km, resampled to 0.1°</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://ewds.climate.copernicus.eu" target="_blank" rel="noreferrer">
                 <span class="credits-name">Copernicus EMS EFAS</span>
-                <small data-i18n="creditsEfas">RIVER DISCHARGE · COPERNICUS EMS EFAS v5, EUROPE 1′ · CASES ONLY</small>
+                <small data-i18n="creditsEfas">River discharge: Copernicus EMS EFAS v5, Europe 1′; cases only</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://doi.org/10.24381/cds.adbb2d47" target="_blank" rel="noreferrer">
                 <span class="credits-name">Copernicus C3S ERA5</span>
-                <small data-i18n="creditsEra5">REANALYSIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0.25°, HOURLY, CC-BY-4.0 · CASES ONLY</small>
+                <small data-i18n="creditsEra5">Reanalysis: Copernicus C3S ERA5 (ECMWF), global 0.25°, hourly, CC-BY-4.0; cases only</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://doi.org/10.24381/04a0b097" target="_blank" rel="noreferrer">
                 <span class="credits-name">Copernicus CAMS</span>
-                <small data-i18n="creditsCams">AEROSOL ANALYSIS · COPERNICUS CAMS (ECMWF), GLOBAL 0.4°, 3-HOURLY, CC-BY-4.0 · CASES ONLY</small>
+                <small data-i18n="creditsCams">Aerosol analysis: Copernicus CAMS (ECMWF), global 0.4°, 3-hourly, CC-BY-4.0; cases only</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA MRMS</span>
-                <small data-i18n="creditsMrms">RADAR OBSERVATIONS · MRMS, CONTIGUOUS US</small>
+                <small data-i18n="creditsMrms">Radar observations: MRMS, contiguous US</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA / NWS NEXRAD Level III via Unidata</span>
-                <small data-i18n="creditsNexrad">SINGLE-SITE RADAR · BASE REFLECTIVITY AND VELOCITY, US</small>
+                <small data-i18n="creditsNexrad">Single-site radar: base reflectivity and velocity, US</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">
                 <span class="credits-name">Japan Meteorological Agency website</span>
-                <small data-i18n="creditsJma">RADAR PRECIPITATION · JMA NOWCAST, JAPAN (REGRIDDED)</small>
+                <small data-i18n="creditsJma">Radar precipitation: JMA nowcast, Japan (regridded)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">
                 <span class="credits-name">CMA</span>
-                <small data-i18n="creditsRadar">RADAR MOSAIC</small>
+                <small data-i18n="creditsRadar">Radar mosaic</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">
                 <span class="credits-name">JMA Himawari-9 via NOAA</span>
-                <small data-i18n="creditsHimawari">SATELLITE IMAGERY · HIMAWARI-9 AHI, JMA, ON NOAA OPEN DATA (REPROJECTED)</small>
+                <small data-i18n="creditsHimawari">Satellite imagery: Himawari-9 AHI, JMA, on NOAA Open Data (reprojected)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA GOES-R</span>
-                <small data-i18n="creditsGoes">SATELLITE IMAGERY · GOES-19 EAST &amp; GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)</small>
+                <small data-i18n="creditsGoes">Satellite imagery: GOES-19 East &amp; GOES-18 West ABI, NOAA NESDIS, on NOAA Open Data (reprojected)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.eumetsat.int/legal-framework/data-policy" target="_blank" rel="noreferrer">
                 <span class="credits-name">EUMETSAT Meteosat</span>
-                <small data-i18n="creditsMeteosat">SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)</small>
+                <small data-i18n="creditsMeteosat">Satellite imagery · Contains modified EUMETSAT Meteosat data · Meteosat-12 FCI, hourly cycle, CC-BY-4.0 (reprojected)</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://wis2globalcache.s3.us-east-1.amazonaws.com/index.html" target="_blank" rel="noreferrer">
                 <span class="credits-name">WMO WIS2 Global Cache</span>
-                <small data-i18n="creditsSounding">RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES</small>
+                <small data-i18n="creditsSounding">Radiosonde soundings: GTS TEMP via WIS2, national met services</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://aviationweather.gov/data/cache/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA Aviation Weather Center</span>
-                <small data-i18n="creditsAirport">AIRPORT METAR &amp; TAF · WORLD MET SERVICES VIA NOAA/NWS AWC</small>
+                <small data-i18n="creditsAirport">Airport METAR &amp; TAF: world met services via NOAA/NWS AWC</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NASA FIRMS</span>
-                <small data-i18n="creditsFirms">ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS</small>
+                <small data-i18n="creditsFirms">Active fires: LANCE FIRMS NRT, VIIRS 375 m and MODIS, NASA ESDIS</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noreferrer">
                 <span class="credits-name">NASA GIBS / Worldview</span>
-                <small data-i18n="creditsGibs">DAILY IMAGERY · MODIS AND VIIRS CORRECTED REFLECTANCE, NASA ESDIS</small>
+                <small data-i18n="creditsGibs">Daily imagery: MODIS and VIIRS corrected reflectance, NASA ESDIS</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://protomaps.com" target="_blank" rel="noreferrer">
                 <span class="credits-name">Protomaps</span>
-                <small data-i18n="creditsBasemap">BASEMAP · © OPENSTREETMAP CONTRIBUTORS</small>
+                <small data-i18n="creditsBasemap">Basemap: © OpenStreetMap contributors</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://mapterhorn.com/attribution/" target="_blank" rel="noreferrer">
                 <span class="credits-name">Mapterhorn</span>
-                <small data-i18n="creditsTerrain">TERRAIN RELIEF · © MAPTERHORN · ELEVATION MODEL SOURCES</small>
+                <small data-i18n="creditsTerrain">Terrain relief: © Mapterhorn, elevation model sources</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://www.wikidata.org/" target="_blank" rel="noreferrer">
                 <span class="credits-name">Wikidata</span>
-                <small data-i18n="creditsPeaks">MOUNTAIN PEAK NAMES &amp; HEIGHTS · CC0</small>
+                <small data-i18n="creditsPeaks">Mountain peak names &amp; heights: CC0</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>
               <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">
                 <span class="credits-name">GitHub</span>
-                <small data-i18n="creditsCode">SOURCE CODE · RINGSATURN/XUE</small>
+                <small data-i18n="creditsCode">Source code: ringsaturn/xue</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

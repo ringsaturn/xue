@@ -96,7 +96,7 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
   // 25 hourly frames, f000 through f024.
   await expect(slider).toHaveAttribute("max", "24");
-  await expect(page.locator("#lead-label")).toHaveText("VALID TIME");
+  await expect(page.locator("#lead-label")).toHaveText("Valid time");
   await expect(slider).toHaveAttribute("aria-valuetext", /F000$/);
 });
 

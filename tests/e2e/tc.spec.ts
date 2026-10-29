@@ -128,7 +128,7 @@ test("the storm tile appears with the product and its sheet focuses a storm", as
   // The options hang from the storms' chip on the level row; the tile is
   // the tracks' switch.
   const chip = page.locator('.level-group[data-slot="tc"] button');
-  await expect(chip).toHaveText("ALL");
+  await expect(chip).toHaveText("All");
   await chip.click();
   const sheet = page.locator("#tc-sheet");
   await expect(sheet).toBeVisible();

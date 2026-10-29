@@ -493,7 +493,7 @@ export class RiverCase {
     if (index.credits.length > 0) {
       const credits = document.createElement("p");
       credits.className = "case-river-credits";
-      credits.textContent = index.credits.join(" · ");
+      credits.textContent = index.credits.join("; ");
       children.push(credits);
     }
     container.replaceChildren(...children);
