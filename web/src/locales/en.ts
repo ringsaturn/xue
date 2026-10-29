@@ -210,11 +210,11 @@ export const en = {
    * Dust RGB composite behind it. */
   tipSatellite: "Satellite imagery",
   levelSwitchAria: "Level",
-  levelCaption: "LEVEL",
+  levelCaption: "Level",
   /** The level row's caption for the lines' group when the fill has a level
    * row of its own beside it. */
-  linesCaption: "LINES",
-  modelHeading: "DATASETS",
+  linesCaption: "Lines",
+  modelHeading: "Datasets",
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */
   linesRemoveTitle: "Press again to remove the lines",
@@ -226,30 +226,29 @@ export const en = {
   markSectionAria: "Marks",
   /** The rail's MORE tile, which opens the field sheet: its tooltip, its
    * gloss (visually hidden after the code MORE) and its glyph, a plus in
-   * every script. The sheet's name and heading (a sheet heading, so the
-   * uppercase code-word style of the model sheet's); the group headings
-   * inside it, in the same style. */
+   * every script. The sheet's name and heading, in sentence case like the model
+   * sheet's; the group headings inside it, in the same style. */
   tipMore: "All layers of this run",
-  varMore: "LAYERS",
+  varMore: "Layers",
   glyphMore: "+",
   fieldSheetAria: "Layers",
-  fieldSheetHeading: "LAYERS",
-  fieldGroupTemperature: "TEMPERATURE",
-  fieldGroupMoisture: "MOISTURE",
-  fieldGroupSoil: "SOIL",
-  fieldGroupWind: "WIND",
-  fieldGroupDynamics: "DYNAMICS",
-  fieldGroupRadiation: "RADIATION & VISIBILITY",
-  fieldGroupAerosol: "AEROSOLS & AIR QUALITY",
-  fieldGroupOcean: "OCEAN",
-  fieldGroupHydrology: "RIVERS & FLOODS",
-  fieldGroupSatellite: "SATELLITE",
-  fieldGroupSpace: "SPACE WEATHER",
-  fieldGroupFire: "FIRE",
-  modelGroupForecast: "FORECAST MODELS",
-  modelGroupRadar: "RADAR",
-  fieldGroupOther: "OTHER",
-  fieldGroupImagery: "DAILY IMAGERY · NASA GIBS",
+  fieldSheetHeading: "Layers",
+  fieldGroupTemperature: "Temperature",
+  fieldGroupMoisture: "Moisture",
+  fieldGroupSoil: "Soil",
+  fieldGroupWind: "Wind",
+  fieldGroupDynamics: "Dynamics",
+  fieldGroupRadiation: "Radiation & visibility",
+  fieldGroupAerosol: "Aerosols & air quality",
+  fieldGroupOcean: "Ocean",
+  fieldGroupHydrology: "Rivers & floods",
+  fieldGroupSatellite: "Satellite",
+  fieldGroupSpace: "Space weather",
+  fieldGroupFire: "Fire",
+  modelGroupForecast: "Forecast models",
+  modelGroupRadar: "Radar",
+  fieldGroupOther: "Other",
+  fieldGroupImagery: "Daily imagery: NASA GIBS",
   gibsTrueColor: "TRUE",
   gibsFalseColor: "FIRE",
   gibsTipTrue: "True colour",
@@ -267,70 +266,70 @@ export const en = {
   /** The level row's ALONE member, a switch after the lines' surfaces:
    * its gloss (the visually hidden word after the instrument code ALONE,
    * which stays English) and its tooltip. */
-  levelAlone: "LINES ONLY",
+  levelAlone: "Lines only",
   levelAloneTitle: "Lines alone: the field goes; press again to put it back",
   /** The credits: a round mark at the foot of the right-hand column opening
    * a sheet with one row per source, with the map's own credit line beside
    * it where the screen has room. The trigger's string is the mark's
    * accessible name (the mark itself is a glyph); the row names are proper
-   * nouns and stay as they are; the glosses are translated. They are
-   * uppercase code words here, and stay uppercase wherever the script has
-   * case. */
-  creditsTrigger: "SOURCES",
-  creditsHeading: "DATA & CREDITS",
-  creditsGfs: "FORECAST DATA · GFS 0.25° AND SFLUX",
-  creditsHrrr: "FORECAST DATA · HRRR 3 KM, CONTIGUOUS US",
-  creditsGefsAero: "AEROSOL FORECAST · GEFS-AEROSOLS 0.25°, AOD AND SURFACE PM",
+   * nouns and stay as they are; the glosses are translated, in sentence case,
+   * with a colon after the kind of data and commas or semicolons after that
+   * (never a middle dot). */
+  creditsTrigger: "Sources",
+  creditsHeading: "Data & credits",
+  creditsGfs: "Forecast data: GFS 0.25° and sflux",
+  creditsHrrr: "Forecast data: HRRR 3 km, contiguous US",
+  creditsGefsAero: "Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM",
   /** The seasonal run: one forecast nine months deep, so the strip under
    * the track reads in months rather than in days. */
-  creditsCfs: "SEASONAL FORECAST · CFSv2, 9 MONTHS, 6-HOURLY",
-  creditsEcmwf: "CONTAINS MODIFIED ECMWF DATA · CC BY 4.0",
+  creditsCfs: "Seasonal forecast: CFSv2, 9 months, 6-hourly",
+  creditsEcmwf: "Contains modified ECMWF data, CC BY 4.0",
   /** The IFS HRES line carries the attribution ECMWF's licence asks for on
    * an adapted work, and names Open-Meteo, which forwards the centre's
    * real-time archive and is where the resampling to 0.1° happens. */
-  creditsIfsHres: "ADAPTED FROM ECMWF IFS BY ECMWF, LICENSED UNDER CC BY 4.0 · VIA OPEN-METEO · IFS HRES ~9 KM, RESAMPLED TO 0.1°",
-  creditsMrms: "RADAR OBSERVATIONS · MRMS, CONTIGUOUS US",
-  creditsNexrad: "SINGLE-SITE RADAR · BASE REFLECTIVITY AND VELOCITY, US",
+  creditsIfsHres: "Adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0; via Open-Meteo; IFS HRES ~9 km, resampled to 0.1°",
+  creditsMrms: "Radar observations: MRMS, contiguous US",
+  creditsNexrad: "Single-site radar: base reflectivity and velocity, US",
   /** The JMA line carries the attribution its terms of use ask for (a
    * source named and the processing noted); the sheet row's name is the
    * agency's website, as the terms spell it. */
-  creditsJma: "RADAR PRECIPITATION · JMA NOWCAST, JAPAN (REGRIDDED)",
+  creditsJma: "Radar precipitation: JMA nowcast, Japan (regridded)",
   /** The Himawari line names the agency, the spacecraft and the host, and
    * notes the processing, as NOAA's terms ask. */
-  creditsHimawari: "SATELLITE IMAGERY · HIMAWARI-9 AHI, JMA, ON NOAA OPEN DATA (REPROJECTED)",
+  creditsHimawari: "Satellite imagery: Himawari-9 AHI, JMA, on NOAA Open Data (reprojected)",
   /** The GOES line names the programme, the two spacecraft by slot and
    * the host; NOAA's open data asks for the source to be named. */
-  creditsGoes: "SATELLITE IMAGERY · GOES-19 EAST & GOES-18 WEST ABI, NOAA NESDIS, ON NOAA OPEN DATA (REPROJECTED)",
+  creditsGoes: "Satellite imagery: GOES-19 East & GOES-18 West ABI, NOAA NESDIS, on NOAA Open Data (reprojected)",
   /** The Meteosat line carries the attribution EUMETSAT's data policy
    * asks for on redistributed data ("Contains modified EUMETSAT Meteosat
    * data [year]"), the licence, and the hourly cadence that licence
    * allows. `{year}` is the year of distribution, the current one, which
    * `applyStaticMessages` stamps at render time so the copy never goes
    * stale. */
-  creditsMeteosat: "SATELLITE IMAGERY · CONTAINS MODIFIED EUMETSAT METEOSAT DATA {year} · METEOSAT-12 FCI, HOURLY CYCLE, CC-BY-4.0 (REPROJECTED)",
+  creditsMeteosat: "Satellite imagery: contains modified EUMETSAT Meteosat data {year}; Meteosat-12 FCI, hourly cycle, CC-BY-4.0 (reprojected)",
   /** The aurora line names the model and the agency; NOAA's US
    * government work needs no licence but asks for the source. */
-  creditsAurora: "SPACE WEATHER · AURORA PROBABILITY · NOAA SWPC OVATION MODEL",
-  creditsEfas: "RIVER DISCHARGE · COPERNICUS EMS EFAS v5, EUROPE 1′ · CASES ONLY",
+  creditsAurora: "Space weather: aurora probability, NOAA SWPC OVATION model",
+  creditsEfas: "River discharge: Copernicus EMS EFAS v5, Europe 1′; cases only",
   /** ERA5 is CC-BY-4.0 on the Climate Data Store, which asks for the
    * service to be named; the map line carries the "contains modified"
    * credit itself. */
-  creditsEra5: "REANALYSIS · COPERNICUS C3S ERA5 (ECMWF), GLOBAL 0.25°, HOURLY, CC-BY-4.0 · CASES ONLY",
+  creditsEra5: "Reanalysis: Copernicus C3S ERA5 (ECMWF), global 0.25°, hourly, CC-BY-4.0; cases only",
   /** CAMS is CC-BY-4.0 on the Atmosphere Data Store, credited like ERA5. */
-  creditsCams: "AEROSOL ANALYSIS · COPERNICUS CAMS (ECMWF), GLOBAL 0.4°, 3-HOURLY, CC-BY-4.0 · CASES ONLY",
-  creditsSounding: "RADIOSONDE SOUNDINGS · GTS TEMP VIA WIS2, NATIONAL MET SERVICES",
-  creditsAirport: "AIRPORT METAR & TAF · WORLD MET SERVICES VIA NOAA/NWS AWC",
-  creditsFirms: "ACTIVE FIRES · LANCE FIRMS NRT, VIIRS 375 M AND MODIS, NASA ESDIS",
-  creditsGibs: "DAILY IMAGERY · MODIS AND VIIRS CORRECTED REFLECTANCE, NASA ESDIS",
-  creditsRadar: "RADAR MOSAIC",
-  creditsBasemap: "BASEMAP · © OPENSTREETMAP CONTRIBUTORS",
+  creditsCams: "Aerosol analysis: Copernicus CAMS (ECMWF), global 0.4°, 3-hourly, CC-BY-4.0; cases only",
+  creditsSounding: "Radiosonde soundings: GTS TEMP via WIS2, national met services",
+  creditsAirport: "Airport METAR & TAF: world met services via NOAA/NWS AWC",
+  creditsFirms: "Active fires: LANCE FIRMS NRT, VIIRS 375 m and MODIS, NASA ESDIS",
+  creditsGibs: "Daily imagery: MODIS and VIIRS corrected reflectance, NASA ESDIS",
+  creditsRadar: "Radar mosaic",
+  creditsBasemap: "Basemap: © OpenStreetMap contributors",
   /** The relief under the fields. Mapterhorn asks for the project to be
    * named; the elevation models behind each region are far too many to list
    * here, so the row links to Mapterhorn's own attribution page, which does. */
-  creditsTerrain: "TERRAIN RELIEF · © MAPTERHORN · ELEVATION MODEL SOURCES",
-  creditsPeaks: "MOUNTAIN PEAK NAMES & HEIGHTS · CC0",
-  creditsCode: "SOURCE CODE · RINGSATURN/XUE",
-  caseTag: "CASE",
+  creditsTerrain: "Terrain relief: © Mapterhorn, elevation model sources",
+  creditsPeaks: "Mountain peak names & heights: CC0",
+  creditsCode: "Source code: ringsaturn/xue",
+  caseTag: "Case",
   caseSummaryAria: "Case summary",
   runCycle: "Model run",
   // A record of days (a case whose timeline is `daily`) has no cycle:
@@ -377,21 +376,21 @@ export const en = {
    * again with the last settings); while a file is being made it opens the
    * sheet again, where the export can be cancelled. The sheet's format, size and rate options
    * ("GIF", "1080P", "12 FPS") stay as the instrument reads them; its
-   * captions are short uppercase labels like the other sheet headings.
+   * captions are short sentence-case labels like the other sheet headings.
    * `exportSummary` says what the file will come to: `{size}` reads
    * `1920×1080`, `{bytes}` `14 MB`. */
   exportOpenAria: "Export the loop",
   exportSheetAria: "Export the loop",
-  exportHeading: "EXPORT",
-  exportFormat: "FORMAT",
-  exportSize: "SIZE",
-  exportFps: "RATE",
-  exportRange: "FRAMES",
-  exportFrom: "FROM",
-  exportTo: "TO",
+  exportHeading: "Export",
+  exportFormat: "Format",
+  exportSize: "Size",
+  exportFps: "Rate",
+  exportRange: "Frames",
+  exportFrom: "From",
+  exportTo: "To",
   exportRun: "Export",
   exportCancel: "Cancel",
-  exportSummary: "{size} · {frames} frames · {seconds} s · about {bytes}",
+  exportSummary: "{size}, {frames} frames, {seconds} s, about {bytes}",
   exportCapturing: "Capturing {done}/{total}",
   exportEncoding: "Encoding {percent}%",
   exportFailed: "Export failed",
@@ -408,10 +407,10 @@ export const en = {
    * panel of endonyms under it. The endonyms themselves are never
    * translated — each language names itself, in its own script — so the only
    * copy here is the word "Language" on the trigger and the panel heading.
-   * The heading is a sheet heading, so it keeps the uppercase code-word
-   * style the model sheet's does. */
+   * The heading is a sheet heading, in sentence case like the model
+   * sheet's. */
   langPickerAria: "Language",
-  langPickerHeading: "LANGUAGE",
+  langPickerHeading: "Language",
   themeToggleAria: "Toggle light / dark",
   /** The view tile under the zoom buttons (viewcontrol.ts): the globe, the
    * 3D relief and its cast shadows as switches, then back to north and back to a flat camera —
@@ -623,7 +622,7 @@ export const en = {
    * the two elevations the pin stands together, and the pair a terrain
    * correction is the difference of. Each names its source so neither is
    * mistaken for the other. */
-  probeModelElevationLabel: "MODEL",
+  probeModelElevationLabel: "Model",
   /** The relief the map draws, read beside the model's own terrain. An
    * acronym the field reads as itself in every language, so the dictionary
    * carries the same three letters throughout. */
@@ -640,9 +639,9 @@ export const en = {
 
   // Historical showcase: the list page and the viewer's case banner. The
   // footer link keeps the footer's code-word style in English.
-  showcaseLink: "CASES",
+  showcaseLink: "Cases",
   showcaseBack: "← All cases",
-  showcaseHome: "LIVE FORECAST",
+  showcaseHome: "Live forecast",
   showcaseTitle: "Showcase cases",
   showcaseHeading: "Weather events, replayed",
   /** The italic sub-title beside the heading. */
@@ -679,7 +678,7 @@ export const en = {
   varTc: "TRACKS",
   glyphTc: "C",
   tcSheetAria: "Tropical cyclones",
-  tcHeading: "TROPICAL CYCLONES",
+  tcHeading: "Tropical cyclones",
   tcAllSystems: "All named systems",
   tcNone: "No active systems",
   tcUnnamed: "Unnamed system",
@@ -734,7 +733,7 @@ export const en = {
   tcPageSeasonList: "All storms of the season",
   tcCardBrowse: "Browse by season",
   tcPageRadii: "Wind radii",
-  tcLegendIntensity: "Intensity · US best track, 1-min wind",
+  tcLegendIntensity: "Intensity: US best track, 1-min wind",
 
   /** The point products drawn as station marks over whatever is on
    * screen (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`): the
@@ -870,16 +869,15 @@ export const en = {
   soundingUnavailable: "Ascent unavailable",
   soundingExpand: "Full chart",
   soundingClose: "Close",
-  soundingSheetHeading: "SOUNDING",
+  soundingSheetHeading: "Sounding",
   soundingSheetAria: "Sounding chart",
 
   /* The comparison page (compare.html): every live forecast model at one
    * point on one clock, Windy's "compare" shape — one block per model,
    * hourly columns, a row per field — with the nearest airport's reports
-   * as a block of their own. The heading is display type and short; the
-   * eyebrow is one lowercase word beside it, as `showcaseArchive` is.
-   * `compareLink` is the probe panel's button into the page and reads as
-   * instrument text: keep it to one short uppercase word.
+   * as a block of their own. The heading is display type and short.
+   * `compareLink` is the probe panel's button into the page and keep it to one
+   * short word.
    *
    * `compareSpan5` / `compareSpan15` are the two horizons, a pair of
    * chips, and `compareLatitude` / `compareLongitude` label two numeric
@@ -890,7 +888,7 @@ export const en = {
    * the model's name. `compareObservationsFrom` heads the airport block
    * with the ICAO id (`RJTT`), which stays as it is. `compareCells` is the
    * one-line note under the blocks on what a value is. */
-  compareLink: "COMPARE",
+  compareLink: "Compare",
   compareTitle: "Compare forecasts",
   compareHeading: "Model comparison",
   compareEyebrow: "point",
@@ -923,10 +921,9 @@ export const en = {
   compareCells: "Each value is the model's own grid cell nearest the point, never an interpolation; times read in your zone.",
   /* The run-metrics page (metrics.html): when each forecast run went live,
    * measured from the publish workflows (docs/metrics.md). The heading is
-   * display type, the eyebrow one lowercase word beside it, as on the
-   * comparison page. `metricsNotSla` must say plainly that these are
+   * display type, as on the comparison page. `metricsNotSla` must say plainly that these are
    * measurements and no availability commitment. Fact labels
-   * (`metricsLatest` … `metricsRuns`) sit uppercase over a narrow mono
+   * (`metricsLatest` … `metricsRuns`) sit in sentence case over a narrow
    * value: keep them to two or three words. Values beside them — run codes
    * (`2026-10-12 06Z`), h:mm latencies, `P90` — are instrument text and
    * stay as they are. `metricsTypical` heads an experience value, not a
@@ -940,11 +937,11 @@ export const en = {
   metricsEyebrow: "measured",
   metricsIntro: "When each forecast run went live on this site, read from the publish workflows' own records: the moment the live pointer was written, and how long after the model's cycle time that was.",
   metricsNotSla: "These are measurements, not a service level: Xue makes no availability commitment.",
-  metricsGenerated: "Built {time} · last {days} days",
+  metricsGenerated: "Built {time}, last {days} days",
   metricsLoading: "Reading metrics…",
   metricsEmpty: "No metrics yet. They are built every six hours from the publish workflows; check back after the next build.",
   metricsFailed: "Metrics could not be read: {message}",
-  metricsSourcesHeading: "BY SOURCE",
+  metricsSourcesHeading: "By source",
   metricsLatencyNote: "Latency runs from the cycle time to the moment the run went live, so it includes the model's own production time. All times are UTC.",
   metricsTimelineNote: "Each strip is the window: one bar per cycle that went live, at its cycle time, its height the latency against the source's own longest; a mark under the line is a cycle that never arrived.",
   metricsTypicalNote: "* Typical upstream: an experience value for when the model's own data is usually complete after its cycle time, not a measurement. Blank where there is none.",
@@ -965,7 +962,7 @@ export const en = {
   metricsOutcomeDryRun: "dry run",
   metricsOutcomeFailed: "failed",
   metricsBacklog: "{count} workflow runs not read yet; the next build reads them.",
-  metricsDeadlinesHeading: "AT THE DEADLINE",
+  metricsDeadlinesHeading: "At the deadline",
   metricsDeadlineIntro: "For each local day, the newest run already live at the cutoff, and how old its cycle was then.",
   metricsSource: "Source",
   metricsCommonest: "Usually",
