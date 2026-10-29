@@ -20,7 +20,7 @@ Everything is a static file under `indicators/` at the data root.
 indicators/
   index.json                         the one mutable entry point (§5)
   features/<source>/<yyyy-mm>.jsonl  one line per run, append-only (§4.1)
-  season/<region>.<season>.json      in-season totals, rewritten per GFS run (§4.2)
+  season/<region>.<season>.json      in-season totals, rewritten per ECMWF run (§4.2)
   context/oni.json                   the Oceanic Niño Index (§6)
   weights/<grid>.zarr/               the crop-area weights, a Zarr v3 store (§7)
 ```
@@ -243,7 +243,7 @@ to the product's first day.
 |---|---|
 | `region`, `season`, `source` | the file's identity; `source` is `ecmwf` |
 | `calendar`, `weights`, `windows` | versions, and the region's `season` and `flowering` windows as `["MM-DD", "MM-DD"]` |
-| `throughRun` | the newest GFS run the file reflects |
+| `throughRun` | the newest ECMWF run the file reflects |
 | `days_counted`, `days_partial` | rows in `daily`, and how many are partial |
 | `precip_total` (mm), `gdd_total` (°C d), `hot35_days` | sums over `daily` (`hot35_days` sums `hot35_frac`) |
 | `cdd_current`, `cdd_max` | consecutive days with `precip` below 1 mm, at the last row and the longest; a date missing from `daily` ends a spell |
