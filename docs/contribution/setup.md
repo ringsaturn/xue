@@ -12,7 +12,8 @@
 - zstd ≥ 1.5 comes with the standard library (`compression.zstd`); no CLI.
 - Node.js ≥ 22.
 - A Rust toolchain and `wasm-pack` (the browser decoder, `make wasm`).
-- ffmpeg: the H.264 companions (GFS and HRRR).
+- ffmpeg (optional): the H.264 companions, built only for a source with
+  `SourceSpec.video` on; no source has it on.
 - eccodes: `grib_set` repacks ECMWF open data (CCSDS-packed) to
   `grid_simple` at fetch time; `bufr_dump` decodes the tropical cyclone and
   sounding BUFR.

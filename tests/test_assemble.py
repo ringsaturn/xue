@@ -15,6 +15,7 @@ import filecmp
 import json
 import unittest
 import zlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -63,15 +64,16 @@ class BundleGroupTests(unittest.TestCase):
         self.assertEqual(groups, [(b,) for b in mine[:anchor]] + [("prmsl", "orog")] + [(b,) for b in mine[anchor + 1 :] if b != "orog"])
 
     def test_the_matrix_flags_the_video_jobs(self) -> None:
-        matrix = assemble.bundle_group_matrix(source_spec("gfs"), 100)
+        # No source ships the companion; the flag is held on one that would.
+        matrix = assemble.bundle_group_matrix(replace(source_spec("gfs"), video=True), 100)
         flagged = {entry["group"]: entry["video"] for entry in matrix}
         self.assertEqual({group for group, video in flagged.items() if video}, {"tmp2m", "prate"})
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "GFS repacks nothing")
 
     def test_a_source_without_video_flags_no_job(self) -> None:
-        # sflux and ECMWF have switched the H.264 companion off, so no job of
-        # theirs installs ffmpeg, and the companion no longer weighs on the
-        # grouping: tmp2m, prate and dswrf each cost one plane.
+        # With the H.264 companion off no job installs ffmpeg, and the
+        # companion does not weigh on the grouping: tmp2m, prate and dswrf
+        # each cost one plane.
         for model in ("sflux", "ecmwf"):
             with self.subTest(model=model):
                 source = source_spec(model)
