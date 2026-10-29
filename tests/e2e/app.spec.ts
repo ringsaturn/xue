@@ -577,7 +577,7 @@ test("the rail is three sections, and MORE lists the fields the core tiles do no
   await expect(more).toHaveAttribute("aria-expanded", "true");
   await expect(sheet.locator("button[data-field]")).toHaveCount(4);
   await expect(sheet.locator('button[data-field="prate"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(sheet.locator(".field-group-heading")).toHaveText(["TEMPERATURE", "MOISTURE", "WIND"]);
+  await expect(sheet.locator(".field-group-heading")).toHaveText(["Temperature", "Moisture", "Wind"]);
   // A family's row carries a chip per surface the run publishes, the
   // second way onto a level; a chip opens its member and the tile's gloss
   // follows it.
@@ -683,7 +683,7 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await waitForReady(page);
   // GFS ships no dswrf bundle, so the SOLAR button stays hidden there.
   await expect(page.getByRole("button", { name: "SOLAR FLUX" })).toBeHidden();
-  await pickModel(page, "GFS SFLUX 13KM");
+  await pickModel(page, "GFS sflux 13 km");
   await expect(page.locator("body")).toHaveAttribute("data-model", "sflux");
   await waitForReady(page);
   await expect(page).toHaveURL(/model=sflux/);
