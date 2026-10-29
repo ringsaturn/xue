@@ -60,14 +60,35 @@
      menu, an error — not to the controls affixed to it, the probe panel now
      among them: the capsule and the data card sit on the map, and a shadow under them
      only smudges the ground they are meant to read against. */
-  --lift: 0 20px 60px rgba(27, 26, 23, 0.18);
-  --lift-small: 0 10px 30px rgba(27, 26, 23, 0.14);
+  --lift: 0 8px 24px rgba(27, 26, 23, 0.12);
+  --lift-small: 0 4px 12px rgba(27, 26, 23, 0.1);
 
-  --font-ui: Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* The platform's own face: its Latin and its CJK are drawn as one
+     family (SF Pro with PingFang, Segoe UI with Microsoft YaHei), so a
+     mixed line reads as one voice, and the page loads no font for it. */
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-  /* Instrument Serif carries no CJK, so a Chinese title falls through to the
-     system's own serif rather than to the UI sans. */
-  --font-display: "Instrument Serif", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+  /* Titles are the UI face at weight 600: one family for every word on the
+     page, monospace kept for columns of figures that must line up. */
+  --font-display: var(--font-ui);
+
+  /* Four sizes and no more; nothing on the page reads below 12px. */
+  --fs-1: 12px;
+  --fs-2: 14px;
+  --fs-3: 20px;
+  --fs-4: 32px;
+
+  /* One stroke weight for every rule and outline: a device pixel on a
+     HiDPI screen (see the media query below), a CSS pixel elsewhere. */
+  --hair: 1px;
+
+  /* Corner radii. A box nested in another takes the outer radius less the
+     padding between them, so the two curves share a centre. */
+  --r-xs: 4px;
+  --r-s: 8px;
+  --r-m: 12px;
+  --r-l: 16px;
+  --r-xl: 24px;
 
   /* The label column the capsule and the probe panel share, so the track
      and the meteogram traces run on one axis: wide enough for the widest
@@ -82,29 +103,16 @@
   --capsule-width: 960px;
 
   font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
 }
 
-/* The display fallbacks above are Simplified-Chinese faces, and the Han
-   scripts do not share them: a Traditional, Japanese or Korean page rendered
-   in Songti SC gets the wrong character forms. Instrument Serif still leads —
-   it carries the Latin — and the regional serif picks up everything after it.
-   `--font-ui` and `--font-mono` need nothing: both end in a system stack the
-   platform resolves per script, for Cyrillic as well as CJK. */
-:root:lang(zh-TW) {
-  --font-display: "Instrument Serif", "Songti TC", "Source Han Serif TC", "Noto Serif CJK TC", serif;
-}
-
-:root:lang(ja) {
-  --font-display: "Instrument Serif", "Hiragino Mincho ProN", "Yu Mincho", "Source Han Serif", "Noto Serif CJK JP",
-    serif;
-}
-
-:root:lang(ko) {
-  --font-display: "Instrument Serif", "Apple SD Gothic Neo", "Nanum Myeongjo", "Source Han Serif K", "Noto Serif CJK KR",
-    serif;
+@media (min-resolution: 2dppx) {
+  :root {
+    --hair: 0.5px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -134,8 +142,8 @@
     --skewt-temperature: #ff8a4c;
     --skewt-dew: #3fd6c4;
     --skewt-model-dew: #8de6da;
-    --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
-    --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --lift: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --lift-small: 0 4px 12px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -165,8 +173,8 @@
   --skewt-temperature: #ff8a4c;
   --skewt-dew: #3fd6c4;
   --skewt-model-dew: #8de6da;
-  --lift: 0 20px 60px rgba(0, 0, 0, 0.5);
-  --lift-small: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --lift: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --lift-small: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 /* Over-map ink. The chrome — capsule, rail, sheet, cards — always uses the
@@ -311,7 +319,7 @@ body.is-data-loading #map {
 #model-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 6px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
 }
 
 .title-line {
@@ -322,17 +330,16 @@ body.is-data-loading #map {
 #variable-title {
   color: var(--map-ink);
   font-family: var(--font-display);
-  font-size: 36px;
-  font-weight: 400;
-  line-height: 1;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .title-code {
   margin-left: 8px;
   color: var(--map-ink-muted);
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-style: italic;
+  font-weight: 400;
+  font-size: var(--fs-2);
   white-space: nowrap;
 }
 
@@ -340,40 +347,32 @@ body.is-data-loading #map {
   display: flex;
   max-width: 100%;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   color: var(--map-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-shadow: var(--label-shadow);
   white-space: nowrap;
 }
 
-/* The agency and the run cycle both give way before the caret does: the
-   stamp is also the affordance that says the title opens something. */
 #model-eyebrow,
 #run-time {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.stamp-sep,
-.model-caret {
-  flex: none;
-}
-
-.model-caret {
-  font-size: 10px;
+/* The stamp darkens under the pointer: that, not a caret, says the title
+   opens the dataset sheet. */
+#model-trigger:hover .model-stamp,
+#model-trigger[aria-expanded="true"] .model-stamp {
+  color: var(--map-ink);
 }
 
 /* A case is one fixed dataset and run: switching model would silently leave
    the event behind, so the title stops being a control. */
 body.is-showcase #model-trigger {
   cursor: default;
-}
-
-body.is-showcase .model-caret {
-  display: none;
 }
 
 /* ---------------------------------------------------------------------------
@@ -392,15 +391,14 @@ body.is-showcase .model-caret {
   height: 44px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: var(--hair) solid var(--line);
   border-radius: 50%;
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-decoration: none;
   backdrop-filter: blur(12px);
   transition: border-color 160ms ease, background-color 160ms ease;
@@ -438,8 +436,8 @@ body.is-showcase .model-caret {
   align-items: center;
   gap: 10px;
   padding: 0 6px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--surface);
   backdrop-filter: blur(12px);
 }
@@ -447,21 +445,20 @@ body.is-showcase .model-caret {
 .case-tag {
   flex: none;
   padding: 3px 7px;
-  border-radius: 6px;
+  border-radius: var(--r-s);
   background: var(--text);
   color: var(--bg);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .case-pill h2 {
   overflow: hidden;
   min-width: 0;
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -518,8 +515,8 @@ body.is-showcase .model-caret {
   max-height: calc(100vh - 144px - var(--capsule-height, 90px) - 32px);
   max-height: calc(100dvh - 144px - var(--capsule-height, 90px) - 32px);
   padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--surface);
   backdrop-filter: blur(12px);
   overflow-y: auto;
@@ -529,7 +526,7 @@ body.is-showcase .model-caret {
 .case-detail p {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.55;
   text-wrap: pretty;
 }
@@ -537,9 +534,8 @@ body.is-showcase .model-caret {
 .case-region {
   margin-top: 6px !important;
   color: var(--muted) !important;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 /* The case's caption at the playhead: a subtitle over the capsule, white on
@@ -555,11 +551,11 @@ body.is-showcase .model-caret {
   max-width: min(720px, calc(100% - 40px));
   margin: 0;
   padding: 6px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-m);
   background: rgba(10, 12, 16, 0.72);
   color: #fff;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: var(--fs-2);
   font-weight: 600;
   line-height: 1.4;
   text-align: center;
@@ -576,7 +572,7 @@ body.is-showcase .model-caret {
   .case-caption {
     bottom: calc(22px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
     max-width: calc(100% - 96px);
-    font-size: 14px;
+    font-size: var(--fs-2);
   }
 }
 
@@ -600,13 +596,13 @@ body.is-showcase .model-caret {
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--text);
   cursor: pointer;
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: var(--fs-1);
 }
 
 .case-markers button:hover,
@@ -630,13 +626,13 @@ body.is-showcase .model-caret {
 .case-parts a {
   flex: none;
   padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
   background: var(--surface);
   backdrop-filter: blur(12px);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-1);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -660,7 +656,7 @@ body.is-showcase .model-caret {
   gap: 6px;
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .case-river[hidden] {
@@ -670,11 +666,9 @@ body.is-showcase .model-caret {
 .case-river-heading {
   margin: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .case-river-tracks {
@@ -686,13 +680,13 @@ body.is-showcase .model-caret {
 .case-river-tracks button,
 .case-river-extents {
   padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--muted);
   cursor: pointer;
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: var(--fs-1);
 }
 
 .case-river-extents {
@@ -713,7 +707,7 @@ body.is-showcase .model-caret {
   padding: 0;
   list-style: none;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 
 .case-river-key li {
@@ -725,19 +719,19 @@ body.is-showcase .model-caret {
 .case-river-swatch {
   width: 14px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
 }
 
 .case-river-note,
 .case-river-credits {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 1.45;
 }
 
 .case-river-credits {
-  font-size: 10px;
+  font-size: var(--fs-1);
 }
 
 /* The map's two marks in tints that read on either theme's card. */
@@ -755,7 +749,7 @@ body.is-showcase .model-caret {
 
 .marker-card-note {
   margin: 2px 0;
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -767,7 +761,7 @@ body.is-showcase .model-caret {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 11.5px;
+  font-size: var(--fs-1);
   line-height: 1.35;
 }
 
@@ -792,8 +786,8 @@ body.is-showcase .model-caret {
   display: none;
   width: 250px;
   padding: 12px 14px 12px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--surface);
   backdrop-filter: blur(12px);
   transition: border-color 180ms ease;
@@ -823,17 +817,16 @@ body.stats-visible .data-card {
   border-color: rgba(var(--warning-rgb), 0.75);
 }
 
-/* One muted mono line: the axis length, what is being buffered, and the way
+/* One muted line: the axis length, what is being buffered, and the way
    out. Nothing here competes with the figure below it. */
 .data-card-heading {
   display: flex;
   align-items: baseline;
   gap: 8px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .data-card-index {
@@ -872,16 +865,16 @@ body.stats-visible .stats-close {
 }
 
 /* The residency figure: the percentage at display size, the frame count and
-   the bytes behind it as one mono aside. */
+   the bytes behind it as one aside. */
 .data-card-figure {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .data-card-figure output:not(#preload-percent) {
@@ -890,16 +883,13 @@ body.stats-visible .stats-close {
   white-space: nowrap;
 }
 
-.figure-sep {
-  flex: none;
-}
-
 #preload-percent {
   margin-right: 4px;
   flex: none;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 26px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   letter-spacing: 0;
   line-height: 1;
 }
@@ -910,10 +900,9 @@ body.stats-visible .stats-close {
 
 .preload-state {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 /* One cell per frame, filled as planes become resident. */
@@ -956,9 +945,9 @@ body.stats-visible .stats-grid {
 .stats-grid dt,
 .stats-grid dd {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .stats-grid dt {
@@ -983,7 +972,7 @@ body.stats-visible .stats-grid {
 .stat-graph-wrap {
   display: none;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 body.stats-visible .stat-graph-wrap {
@@ -994,7 +983,7 @@ body.stats-visible .stat-graph-wrap {
   display: block;
   width: 100%;
   height: 54px;
-  border-radius: 8px;
+  border-radius: var(--r-s);
   background: var(--row-hover);
 }
 
@@ -1031,9 +1020,9 @@ body.stats-visible .stat-graph-wrap {
 
 .legend-unit {
   color: var(--map-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-shadow: var(--label-shadow);
 }
 
@@ -1046,8 +1035,8 @@ body.stats-visible .stat-graph-wrap {
 
 .legend-bar {
   width: 10px;
-  border: 1px solid var(--map-ink-muted);
-  border-radius: 5px;
+  border: var(--hair) solid var(--map-ink-muted);
+  border-radius: var(--r-s);
   background: linear-gradient(to bottom, #701441, #b32037, #e65530, #fd9942, #fed976, #eeefb3, #b5e2ae, #6fc9b7, #419bc9, #3767be, #312f95, #271959);
 }
 
@@ -1078,9 +1067,9 @@ body.is-pressure .legend {
   flex-direction: column;
   justify-content: space-between;
   color: var(--map-ink);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1;
   text-shadow: var(--label-shadow);
 }
@@ -1104,9 +1093,9 @@ body.is-pressure .legend {
   align-self: flex-start;
   list-style: none;
   color: var(--map-ink);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1;
   white-space: nowrap;
   text-shadow: var(--label-shadow);
@@ -1134,9 +1123,9 @@ body.is-pressure .legend {
   align-self: flex-start;
   list-style: none;
   color: var(--map-ink);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1;
   white-space: nowrap;
   text-shadow: var(--label-shadow);
@@ -1158,8 +1147,8 @@ body.is-pressure .legend {
 .legend-swatch {
   width: 10px;
   height: 10px;
-  border: 1px solid var(--map-ink-muted);
-  border-radius: 3px;
+  border: var(--hair) solid var(--map-ink-muted);
+  border-radius: var(--r-xs);
 }
 
 /* An outlined region with a wash inside, like the layers themselves:
@@ -1281,8 +1270,8 @@ body.is-pressure .legend {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
@@ -1346,7 +1335,7 @@ body.is-pressure .legend {
   right: 5px;
   width: 5px;
   height: 5px;
-  border: 1px solid currentColor;
+  border: var(--hair) solid currentColor;
   border-radius: 50%;
   content: "";
   opacity: 0.55;
@@ -1383,7 +1372,7 @@ body.is-pressure .legend {
 .variable-rail[data-dense] button {
   height: 36px;
   gap: 1px;
-  border-radius: 12px;
+  border-radius: var(--r-m);
 }
 
 .variable-rail[data-dense] .rail-icon {
@@ -1391,8 +1380,7 @@ body.is-pressure .legend {
   height: 16px;
 }
 
-/* The icon carries the tile; the WMO letter sits under it as a caption,
-   in the instrument face's mono. */
+/* The icon carries the tile; the WMO letter sits under it as a caption. */
 .rail-icon {
   display: block;
   width: 20px;
@@ -1401,11 +1389,10 @@ body.is-pressure .legend {
 }
 
 .rail-glyph {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   font-weight: 600;
   line-height: 1;
-  letter-spacing: 0.08em;
 }
 
 /* The CJK glyphs are single characters and carry more ink than a Latin
@@ -1414,7 +1401,7 @@ body.is-pressure .legend {
 html[lang="zh-CN"] .rail-glyph,
 html[lang="zh-TW"] .rail-glyph,
 html[lang="ja"] .rail-glyph {
-  font-size: 10px;
+  font-size: var(--fs-1);
   letter-spacing: 0;
 }
 
@@ -1428,12 +1415,12 @@ html[lang="ja"] .rail-glyph {
   right: calc(100% + 10px);
   z-index: 4;
   padding: 5px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-s);
   background: var(--text);
   color: var(--bg);
   content: attr(data-tip);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1.2;
   white-space: nowrap;
   transform: translateY(-50%);
@@ -1486,8 +1473,8 @@ html[lang="ja"] .rail-glyph {
   align-items: center;
   row-gap: 4px;
   padding: 8px 12px 6px 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
   background: var(--surface);
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
@@ -1528,7 +1515,7 @@ html[lang="ja"] .rail-glyph {
 
 .level-group + .level-group {
   padding-left: 14px;
-  border-left: 1px solid var(--line);
+  border-left: var(--hair) solid var(--line);
 }
 
 .level-row[hidden] {
@@ -1543,10 +1530,9 @@ html[lang="ja"] .rail-glyph {
   flex: none;
   margin-right: 6px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -1554,14 +1540,14 @@ html[lang="ja"] .rail-glyph {
   height: 28px;
   flex: none;
   padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1580,7 +1566,7 @@ html[lang="ja"] .rail-glyph {
 .level-row button.is-removable::after {
   content: "✕";
   margin-left: 7px;
-  font-size: 9px;
+  font-size: var(--fs-1);
   opacity: 0.7;
 }
 
@@ -1597,7 +1583,7 @@ html[lang="ja"] .rail-glyph {
   width: 5px;
   height: 5px;
   margin-right: 6px;
-  border: 1px solid currentColor;
+  border: var(--hair) solid currentColor;
   border-radius: 50%;
   content: "";
   opacity: 0.6;
@@ -1634,10 +1620,9 @@ html[lang="ja"] .rail-glyph {
 
 .control-label {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -1655,7 +1640,8 @@ html[lang="ja"] .rail-glyph {
 
 #forecast-hour {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   line-height: 1;
   white-space: nowrap;
 }
@@ -1663,9 +1649,9 @@ html[lang="ja"] .rail-glyph {
 .readout-meta {
   min-width: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 12px;
 }
 
@@ -1680,9 +1666,9 @@ html[lang="ja"] .rail-glyph {
   overflow: hidden;
   margin-left: auto;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1714,14 +1700,14 @@ html[lang="ja"] .rail-glyph {
   height: 28px;
   flex: none;
   padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1790,7 +1776,7 @@ html[lang="ja"] .rail-glyph {
 .track-wrap:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
-  border-radius: 6px;
+  border-radius: var(--r-s);
 }
 
 .tick-marks {
@@ -1827,7 +1813,7 @@ html[lang="ja"] .rail-glyph {
   top: 0;
   width: 0;
   height: 18px;
-  border-left: 1px dashed var(--text);
+  border-left: var(--hair) dashed var(--text);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -1856,9 +1842,9 @@ html[lang="ja"] .rail-glyph {
   left: 0;
   height: 18px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   pointer-events: none;
 }
 
@@ -1913,12 +1899,12 @@ html[lang="ja"] .rail-glyph {
   left: clamp(52px, var(--frame-progress, 0%), calc(100% - 52px));
   z-index: 4;
   padding: 4px 7px;
-  border-radius: 8px;
+  border-radius: var(--r-s);
   background: var(--text);
   color: var(--bg);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1;
   transform: translate(-50%, -100%);
   opacity: 0;
@@ -1935,8 +1921,7 @@ html[lang="ja"] .rail-glyph {
   display: flex;
   justify-content: space-between;
   padding-top: 4px;
-  font-size: 9px;
-  letter-spacing: 0.1em;
+  font-size: var(--fs-1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1968,8 +1953,8 @@ html[lang="ja"] .rail-glyph {
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px 10px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
   background: var(--sheet);
   box-shadow: var(--lift);
 }
@@ -1980,7 +1965,7 @@ html[lang="ja"] .rail-glyph {
   height: 5px;
   align-self: center;
   margin-bottom: 8px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   background: var(--line);
 }
 
@@ -1988,10 +1973,9 @@ html[lang="ja"] .rail-glyph {
   margin: 0;
   padding: 0 8px 8px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 /* The dataset list scrolls inside the panel once the sources outgrow the
@@ -2016,7 +2000,7 @@ html[lang="ja"] .rail-glyph {
   grid-template: "name check" 1fr "detail check" 1fr / 1fr auto;
   padding: 0 14px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -2044,7 +2028,8 @@ html[lang="ja"] .rail-glyph {
 .model-name {
   align-self: end;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   grid-area: name;
   line-height: 1.1;
 }
@@ -2052,16 +2037,16 @@ html[lang="ja"] .rail-glyph {
 .model-switch button small {
   align-self: start;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   grid-area: detail;
 }
 
 .model-check {
   align-self: center;
   color: var(--accent);
-  font-size: 18px;
+  font-size: var(--fs-3);
   grid-area: check;
 }
 
@@ -2106,7 +2091,7 @@ html[lang="ja"] .rail-glyph {
   gap: 12px;
   padding: 0 14px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -2127,7 +2112,7 @@ html[lang="ja"] .rail-glyph {
    its own width and wraps rather than being clipped. */
 .lang-name {
   min-width: 0;
-  font-size: 15px;
+  font-size: var(--fs-2);
   line-height: 1.3;
 }
 
@@ -2198,10 +2183,9 @@ html[lang="ja"] .rail-glyph {
 .export-caption,
 .export-bound-name {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .export-choices {
@@ -2214,14 +2198,14 @@ html[lang="ja"] .rail-glyph {
   height: 32px;
   flex: 1 1 0;
   padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -2264,7 +2248,7 @@ html[lang="ja"] .rail-glyph {
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   grid-column: 2;
   text-overflow: ellipsis;
@@ -2276,8 +2260,8 @@ html[lang="ja"] .rail-glyph {
   margin: 0;
   padding: 0 8px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2285,7 +2269,7 @@ html[lang="ja"] .rail-glyph {
   height: 3px;
   margin: 0 8px;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   background: var(--line);
 }
 
@@ -2305,16 +2289,16 @@ html[lang="ja"] .rail-glyph {
   height: 44px;
   margin: 2px 8px 4px;
   border: 0;
-  border-radius: 22px;
+  border-radius: var(--r-xl);
   background: var(--text);
   color: var(--bg);
   cursor: pointer;
-  font-size: 15px;
+  font-size: var(--fs-2);
   font-weight: 600;
 }
 
 .export-run.is-busy {
-  border: 1px solid var(--line);
+  border: var(--hair) solid var(--line);
   background: transparent;
   color: var(--text);
 }
@@ -2364,10 +2348,9 @@ html[lang="ja"] .rail-glyph {
   margin: 10px 0 2px;
   padding: 0 12px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .field-group-heading:first-child {
@@ -2382,7 +2365,7 @@ html[lang="ja"] .rail-glyph {
   grid-template-columns: 24px minmax(0, 1fr) auto;
   padding: 4px 12px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -2422,22 +2405,21 @@ html[lang="ja"] .rail-glyph {
 }
 
 .field-row-code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .field-row-code small {
   margin-left: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--fs-1);
 }
 
 .field-row-label {
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2465,14 +2447,14 @@ html[lang="ja"] .rail-glyph {
   min-height: 0;
   align-items: center;
   padding: 0 9px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2506,9 +2488,8 @@ html[lang="ja"] .rail-glyph {
 .field-imagery-label {
   min-width: 64px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 /* The check has the model sheet's look but this grid's own cell: the
@@ -2539,7 +2520,7 @@ html[lang="ja"] .rail-glyph {
   grid-template: "name tag check" auto "detail tag check" auto / 1fr auto auto;
   padding: 6px 14px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -2557,24 +2538,23 @@ html[lang="ja"] .rail-glyph {
 }
 
 .tc-row-name {
-  font-size: 15px;
+  font-size: var(--fs-2);
   grid-area: name;
   line-height: 1.25;
 }
 
 .tc-row small {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   grid-area: detail;
 }
 
 .tc-row-tag {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   grid-area: tag;
-  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
@@ -2590,18 +2570,16 @@ html[lang="ja"] .rail-glyph {
   margin: 10px 0 2px;
   padding: 0 14px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .tc-empty {
   margin: 4px 0 8px;
   padding: 0 14px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-2);
 }
 
 .tc-chips {
@@ -2617,15 +2595,14 @@ html[lang="ja"] .rail-glyph {
   min-height: 30px;
   align-items: center;
   padding: 0 11px;
-  border: 1px solid var(--line);
+  border: var(--hair) solid var(--line);
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   font-weight: 600;
-  letter-spacing: 0.06em;
 }
 
 .tc-chip:hover {
@@ -2649,8 +2626,8 @@ html[lang="ja"] .rail-glyph {
 .tc-popup .maplibregl-popup-content,
 .station-popup .maplibregl-popup-content {
   padding: 10px 14px 9px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--sheet);
   box-shadow: var(--lift);
   color: var(--text);
@@ -2690,7 +2667,8 @@ html[lang="ja"] .rail-glyph {
 
 .tc-card-name {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   line-height: 1.1;
 }
 
@@ -2699,9 +2677,8 @@ html[lang="ja"] .rail-glyph {
 .tc-card-extra,
 .tc-card-position,
 .tc-card-radii {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .tc-card-code {
@@ -2713,7 +2690,7 @@ html[lang="ja"] .rail-glyph {
   display: flex;
   gap: 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
 }
 
 .tc-card-lead {
@@ -2725,18 +2702,17 @@ html[lang="ja"] .rail-glyph {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  font-size: 13px;
+  font-size: var(--fs-1);
 }
 
 .tc-card-class {
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--r-s);
   background: var(--card-ink);
   color: var(--sheet);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   font-weight: 600;
-  letter-spacing: 0.06em;
 }
 
 .tc-card-radii {
@@ -2748,7 +2724,7 @@ html[lang="ja"] .rail-glyph {
 .tc-card-radii td {
   padding: 1px 6px 1px 0;
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 400;
   text-align: right;
 }
 
@@ -2794,7 +2770,8 @@ html[lang="ja"] .rail-glyph {
 
 .station-card-name {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   line-height: 1.1;
 }
 
@@ -2803,17 +2780,16 @@ html[lang="ja"] .rail-glyph {
 .station-card-position,
 .station-card-rows dt {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 /* Range-folded under the single-site radar's scale: a gate with no value,
    in the quiet tint the sweep draws it in. */
 .legend-folded {
   color: var(--map-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .legend-folded::before {
@@ -2821,7 +2797,7 @@ html[lang="ja"] .rail-glyph {
   width: 10px;
   height: 10px;
   margin-right: 5px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   background: rgb(158 148 179 / 0.45);
   content: "";
   vertical-align: -1px;
@@ -2842,7 +2818,7 @@ html[lang="ja"] .rail-glyph {
 /* A network's credit line, which its terms ask to be shown with the data. */
 .station-card-credit {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--fs-1);
   line-height: 1.3;
 }
 
@@ -2851,7 +2827,7 @@ html[lang="ja"] .rail-glyph {
   justify-content: space-between;
   gap: 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
 }
 
 .station-card-headline {
@@ -2859,18 +2835,17 @@ html[lang="ja"] .rail-glyph {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  font-size: 13px;
+  font-size: var(--fs-1);
 }
 
 .station-card-category {
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--r-s);
   background: var(--card-ink);
   color: var(--sheet);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   font-weight: 600;
-  letter-spacing: 0.06em;
 }
 
 .station-card-dew,
@@ -2882,14 +2857,13 @@ html[lang="ja"] .rail-glyph {
 .station-card-action {
   margin-top: 4px;
   padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .station-card-action:hover {
@@ -2905,7 +2879,7 @@ html[lang="ja"] .rail-glyph {
 
 .station-card-rows dd {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -2920,8 +2894,8 @@ html[lang="ja"] .rail-glyph {
   min-width: 200px;
   flex-direction: column;
   padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--sheet);
   box-shadow: var(--lift-small);
 }
@@ -2939,13 +2913,13 @@ html[lang="ja"] .rail-glyph {
   gap: 10px;
   padding: 0 12px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--r-s);
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-align: left;
 }
 
@@ -2979,8 +2953,8 @@ html[lang="ja"] .rail-glyph {
   width: calc(100% - 28px);
   max-width: var(--capsule-width);
   padding: 8px 12px 8px 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
   background: var(--surface);
   color: var(--text);
   transform: translateX(-50%);
@@ -3028,16 +3002,16 @@ html[lang="ja"] .rail-glyph {
 
 .probe-code {
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .probe-value {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 22px;
+  font-weight: 600;
+  font-size: var(--fs-3);
   line-height: 1.05;
 }
 
@@ -3053,31 +3027,17 @@ html[lang="ja"] .rail-glyph {
   align-items: baseline;
   gap: 2px 12px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .probe-coords {
   margin-left: auto;
 }
 
-/* The pinned cell's terrain height, beside its coordinates: a number and a
-   unit, so the mono face and the same tracking as the rest of the line. */
-.probe-elevation {
-  letter-spacing: 0.02em;
-}
-
 .probe-elevation:empty {
   display: none;
-}
-
-/* The pinned point's zone — the one the capsule under this panel now reads
-   in — beside its coordinates; a zone id is an identifier, so it is not
-   tracked out like the rest of the line. */
-.probe-zone {
-  letter-spacing: 0.02em;
 }
 
 .probe-zone:empty {
@@ -3145,7 +3105,7 @@ html[lang="ja"] .rail-glyph {
   grid-template-columns: var(--probe-column) minmax(0, 1fr);
   margin-top: 4px;
   padding-top: 2px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .probe-rows[hidden] {
@@ -3157,7 +3117,7 @@ html[lang="ja"] .rail-glyph {
   flex-direction: column;
   min-width: 0;
   /* The closing separator, on the edge the canvas draws its own along. */
-  border-bottom: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
 /* Two lines a row: the code, then the readout with its unit beside it. A
@@ -3173,18 +3133,17 @@ html[lang="ja"] .rail-glyph {
   gap: 2px;
   box-sizing: border-box;
   padding-right: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
+  border-top: var(--hair) solid color-mix(in srgb, var(--muted) 22%, transparent);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: 400;
   white-space: nowrap;
 }
 
 .probe-row-code {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--fs-1);
   line-height: 11px;
-  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -3202,13 +3161,13 @@ html[lang="ja"] .rail-glyph {
 .probe-row-value {
   display: inline;
   color: var(--text);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
 }
 
 .probe-row-note {
   margin-left: 4px;
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: var(--fs-1);
   line-height: 13px;
 }
 
@@ -3248,10 +3207,9 @@ html[lang="ja"] .rail-glyph {
   gap: 4px;
   overflow: hidden;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -3261,12 +3219,12 @@ html[lang="ja"] .rail-glyph {
 
 .probe-airport-id {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .probe-airport-category {
   padding: 0 3px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--card-ink, var(--muted)) 22%, transparent);
   color: var(--card-ink, var(--muted));
 }
@@ -3286,7 +3244,7 @@ html[lang="ja"] .rail-glyph {
   grid-template-columns: var(--probe-column) minmax(0, 1fr);
   margin-top: 4px;
   padding-top: 4px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .gauge-section[hidden] {
@@ -3300,7 +3258,7 @@ html[lang="ja"] .rail-glyph {
   min-width: 0;
   padding-right: 8px;
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -3308,7 +3266,7 @@ html[lang="ja"] .rail-glyph {
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 14px;
   text-overflow: ellipsis;
 }
@@ -3316,7 +3274,7 @@ html[lang="ja"] .rail-glyph {
 .gauge-source {
   overflow: hidden;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--fs-1);
   line-height: 11px;
   text-overflow: ellipsis;
 }
@@ -3339,7 +3297,7 @@ html[lang="ja"] .rail-glyph {
   margin: 4px 0 2px;
   padding: 0;
   list-style: none;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   line-height: 1.35;
 }
 
@@ -3364,7 +3322,7 @@ html[lang="ja"] .rail-glyph {
 
 .sounding-section {
   margin-top: 4px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .sounding-section[hidden] {
@@ -3381,10 +3339,9 @@ html[lang="ja"] .rail-glyph {
   background: none;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-align: left;
 }
 
@@ -3439,15 +3396,14 @@ html[lang="ja"] .rail-glyph {
 
 .sounding-time {
   padding: 2px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .sounding-time[aria-current="true"] {
@@ -3463,7 +3419,7 @@ html[lang="ja"] .rail-glyph {
   display: block;
   width: min(100%, 540px);
   margin: 0 auto;
-  border-radius: 10px;
+  border-radius: var(--r-m);
   cursor: crosshair;
   touch-action: none;
 }
@@ -3475,8 +3431,7 @@ html[lang="ja"] .rail-glyph {
   overflow: hidden;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
+  font-size: var(--fs-1);
   white-space: nowrap;
 }
 
@@ -3498,24 +3453,22 @@ html[lang="ja"] .rail-glyph {
 .sounding-legend {
   overflow: hidden;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   white-space: nowrap;
 }
 
 .sounding-expand {
   flex: none;
   padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .sounding-expand:hover,
@@ -3538,21 +3491,20 @@ html[lang="ja"] .rail-glyph {
 .skewt-sheet-chart {
   display: block;
   width: 100%;
-  border-radius: 10px;
+  border-radius: var(--r-m);
 }
 
 .skewt-sheet-close {
   width: 100%;
   margin-top: 10px;
   padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: none;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -3564,8 +3516,8 @@ html[lang="ja"] .rail-glyph {
   z-index: 8;
   width: min(430px, calc(100vw - 36px));
   padding: 20px 22px;
-  border: 1px solid var(--warning);
-  border-radius: 22px;
+  border: var(--hair) solid var(--warning);
+  border-radius: var(--r-xl);
   background: var(--sheet);
   box-shadow: var(--lift);
   transform: translate(-50%, -60%);
@@ -3584,7 +3536,7 @@ html[lang="ja"] .rail-glyph {
   z-index: 9;
   width: min(480px, calc(100vw - 36px));
   padding: 20px 22px;
-  border-radius: 22px;
+  border-radius: var(--r-xl);
   background: var(--sheet);
   color: var(--text);
   box-shadow: var(--lift);
@@ -3607,13 +3559,13 @@ html[lang="ja"] .rail-glyph {
 .error-panel strong {
   color: var(--warning);
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 400;
+  font-size: var(--fs-3);
+  font-weight: 600;
 }
 
 .error-panel p {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.7;
 }
 
@@ -3621,13 +3573,13 @@ html[lang="ja"] .rail-glyph {
   height: 36px;
   padding: 0 16px;
   border: 0;
-  border-radius: 18px;
+  border-radius: var(--r-l);
   background: var(--text);
   color: var(--bg);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 /* The credit ends the right-hand column: a 32px mark centred on the 44px
@@ -3649,11 +3601,10 @@ html[lang="ja"] .rail-glyph {
 .source-line {
   max-width: calc(50vw - var(--capsule-width) / 2 - 86px);
   color: var(--map-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   line-height: 1.5;
-  letter-spacing: 0.06em;
   text-align: right;
   text-shadow: var(--label-shadow);
 }
@@ -3746,7 +3697,7 @@ body[data-context] .source-credit[data-credit-context] {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--line);
+  border: var(--hair) solid var(--line);
   border-radius: 50%;
   background: var(--surface);
   color: var(--text);
@@ -3786,7 +3737,7 @@ body[data-context] .source-credit[data-credit-context] {
   max-height: calc(100dvh - 24px);
   margin: 0 auto;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
-  border-radius: 28px 28px 0 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
 }
 
 .credits-panel .sheet-grip {
@@ -3811,7 +3762,7 @@ body[data-context] .source-credit[data-credit-context] {
   gap: 2px 12px;
   grid-template: "name arrow" auto "detail arrow" auto / 1fr auto;
   padding: 8px 14px;
-  border-radius: 14px;
+  border-radius: var(--r-l);
   color: var(--text);
   text-decoration: none;
 }
@@ -3825,7 +3776,8 @@ body[data-context] .source-credit[data-credit-context] {
 .credits-name {
   align-self: end;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-weight: 600;
+  font-size: var(--fs-2);
   grid-area: name;
   line-height: 1.1;
 }
@@ -3833,16 +3785,15 @@ body[data-context] .source-credit[data-credit-context] {
 .credits-list small {
   align-self: start;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   grid-area: detail;
 }
 
 .credits-arrow {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-2);
   grid-area: arrow;
 }
 
@@ -3936,8 +3887,8 @@ body[data-context] .source-credit[data-credit-context] {
    the 1px border the tile is 44px wide — the rail tile's and the round
    controls' width, on the same right offset. */
 .maplibregl-ctrl-group {
-  border: 1px solid var(--line);
-  border-radius: 14px !important;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l) !important;
   background: var(--surface) !important;
   backdrop-filter: blur(12px);
   box-shadow: none !important;
@@ -3953,11 +3904,11 @@ body[data-context] .source-credit[data-credit-context] {
 }
 
 .maplibregl-ctrl-group button:first-child {
-  border-radius: 13px 13px 0 0 !important;
+  border-radius: var(--r-l) var(--r-l) 0 0 !important;
 }
 
 .maplibregl-ctrl-group button:last-child {
-  border-radius: 0 0 13px 13px !important;
+  border-radius: 0 0 var(--r-l) var(--r-l) !important;
 }
 
 :root[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
@@ -4037,7 +3988,7 @@ body[data-context] .source-credit[data-credit-context] {
   }
 
   #variable-title {
-    font-size: 24px;
+    font-size: var(--fs-3);
   }
 
   /* Three round controls own the right half of the top strip, so the code
@@ -4045,11 +3996,11 @@ body[data-context] .source-credit[data-credit-context] {
   .title-code {
     display: block;
     margin-left: 0;
-    font-size: 15px;
+    font-size: var(--fs-2);
   }
 
   .model-stamp {
-    font-size: 10px;
+    font-size: var(--fs-1);
   }
 
   .top-actions {
@@ -4130,16 +4081,16 @@ body[data-context] .source-credit[data-credit-context] {
   }
 
   .probe-row-value {
-    font-size: 10px;
+    font-size: var(--fs-1);
   }
 
   #forecast-hour {
-    font-size: 20px;
+    font-size: var(--fs-3);
   }
 
   .probe-row-note {
     margin-left: 3px;
-    font-size: 8.5px;
+    font-size: var(--fs-1);
   }
 
   /* The capsule sits on the safe area; nothing is under it. */
@@ -4189,7 +4140,7 @@ body[data-context] .source-credit[data-credit-context] {
     left: 0;
     width: auto;
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
-    border-radius: 28px 28px 0 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
   }
 
   /* The language sheet does the same; its desktop rules are more specific
@@ -4260,13 +4211,12 @@ html:has(.showcase-page) {
   align-items: center;
   gap: 8px;
   padding: 0 16px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-decoration: none;
 }
 
@@ -4306,34 +4256,34 @@ html:has(.showcase-page) {
 .showcase-header h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(32px, 6vw, 40px);
-  font-weight: 400;
+  font-size: var(--fs-4);
+  font-weight: 600;
   line-height: 1;
 }
 
-.showcase-eyebrow {
-  margin-left: 8px;
-  color: var(--muted);
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-style: italic;
-}
-
+/* The compare and metrics pages' one paragraph under the heading. */
 .showcase-intro {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-2);
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+/* The storm's code beside its name. */
+.typhoon-code {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 400;
 }
 
 .showcase-status {
   margin: 28px 0 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .showcase-status.is-error {
@@ -4356,8 +4306,8 @@ html:has(.showcase-page) {
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
   background: var(--card);
   color: inherit;
   text-decoration: none;
@@ -4377,13 +4327,12 @@ html:has(.showcase-page) {
   display: inline-flex;
   height: auto;
   padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
   background: var(--card);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   text-decoration: none;
 }
 
@@ -4408,7 +4357,7 @@ html:has(.showcase-page) {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hair) solid var(--line);
   background:
     linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
@@ -4436,13 +4385,12 @@ html:has(.showcase-page) {
   top: 12px;
   left: 12px;
   padding: 3px 7px;
-  border-radius: 6px;
+  border-radius: var(--r-s);
   background: var(--text);
   color: var(--bg);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .showcase-body {
@@ -4460,8 +4408,8 @@ html:has(.showcase-page) {
   margin: 0 0 8px;
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 400;
+  font-size: var(--fs-3);
+  font-weight: 600;
   line-height: 1.1;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
@@ -4474,12 +4422,12 @@ html:has(.showcase-page) {
   margin: 0 0 14px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.55;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
-  line-clamp: 5;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* Stacked label-over-value cells: these values are dates and coordinate
@@ -4494,24 +4442,22 @@ html:has(.showcase-page) {
 .showcase-facts div {
   display: block;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .showcase-facts dt {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .showcase-facts dd {
   margin: 4px 0 0;
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 /* The region is a coordinate pair; it needs the whole row, not a column. */
@@ -4530,29 +4476,9 @@ html:has(.showcase-page) {
   padding-top: 14px;
 }
 
-.showcase-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.showcase-tags li {
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .showcase-play {
   display: flex;
+  margin-left: auto;
   width: 44px;
   height: 44px;
   flex: none;
@@ -4573,20 +4499,18 @@ html:has(.showcase-page) {
   border-left: 9px solid currentColor;
 }
 
+/* A sentence of credits, punctuated as prose, so it flows as text rather
+   than as a row of spaced items. */
 .showcase-page .source-note {
   position: static;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-start;
+  display: block;
   padding-top: 22px;
-  border-top: 1px solid var(--line);
+  line-height: 1.6;
+  border-top: var(--hair) solid var(--line);
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .showcase-page .source-note a {
@@ -4632,23 +4556,21 @@ html:has(.showcase-page) {
   flex-direction: column;
   gap: 4px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .compare-field input {
   width: 110px;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
   background: transparent;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4664,15 +4586,14 @@ html:has(.showcase-page) {
   height: 32px;
   align-items: center;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .compare-locate:hover,
@@ -4707,7 +4628,7 @@ html:has(.showcase-page) {
 .compare-page .field-chips button {
   height: 32px;
   padding: 0 12px;
-  border-radius: 16px;
+  border-radius: var(--r-l);
 }
 
 .compare-scroll {
@@ -4755,9 +4676,8 @@ html:has(.showcase-page) {
 .cmp-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: 0.01em;
+  font-size: var(--fs-3);
+  font-weight: 600;
   line-height: 1.1;
 }
 
@@ -4765,10 +4685,9 @@ html:has(.showcase-page) {
   display: inline-flex;
   gap: 12px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .cmp-actions {
@@ -4780,7 +4699,7 @@ html:has(.showcase-page) {
 .cmp-actions .cmp-action {
   height: 24px;
   padding: 0 9px;
-  border-radius: 12px;
+  border-radius: var(--r-m);
 }
 
 .cmp-note {
@@ -4789,9 +4708,8 @@ html:has(.showcase-page) {
   width: fit-content;
   margin: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .cmp-note.is-error {
@@ -4803,8 +4721,8 @@ html:has(.showcase-page) {
    never scrolls, instead of to the page's scroller. */
 .cmp-grid {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
   background: var(--card);
   overflow: clip;
 }
@@ -4817,7 +4735,7 @@ html:has(.showcase-page) {
   position: relative;
   display: flex;
   height: var(--cmp-row);
-  border-top: 1px solid var(--grid-line);
+  border-top: var(--hair) solid var(--grid-line);
 }
 
 .cmp-row:first-of-type {
@@ -4835,12 +4753,11 @@ html:has(.showcase-page) {
   gap: 6px;
   padding: 0 10px;
   background: var(--sheet);
-  border-right: 1px solid var(--line);
+  border-right: var(--hair) solid var(--line);
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -4870,10 +4787,10 @@ html:has(.showcase-page) {
   justify-content: center;
   gap: 3px;
   box-sizing: border-box;
-  border-right: 1px solid var(--grid-line);
+  border-right: var(--hair) solid var(--grid-line);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   white-space: nowrap;
@@ -4899,10 +4816,10 @@ html:has(.showcase-page) {
   align-items: center;
   box-sizing: border-box;
   padding-left: 8px;
-  border-right: 1px solid var(--line);
+  border-right: var(--hair) solid var(--line);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-1);
   font-weight: 600;
   overflow: hidden;
   white-space: nowrap;
@@ -4910,7 +4827,7 @@ html:has(.showcase-page) {
 
 .cmp-hours .cmp-cell {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 
 .cmp-arrow {
@@ -4963,9 +4880,8 @@ html:has(.showcase-page) {
 .compare-note {
   margin: 24px 0 32px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 /* Past tropical cyclones (typhoon.html): the map fills the page, the panel
@@ -4995,7 +4911,7 @@ html:has(.showcase-page) {
   min-height: 0;
   overflow-y: auto;
   padding: 16px 18px 20px;
-  border-left: 1px solid var(--line);
+  border-left: var(--hair) solid var(--line);
 }
 
 .typhoon-panel-top {
@@ -5008,8 +4924,8 @@ html:has(.showcase-page) {
 .typhoon-panel-head h1 {
   margin: 4px 0 4px;
   font-family: var(--font-display);
-  font-size: 30px;
-  font-weight: 400;
+  font-size: var(--fs-4);
+  font-weight: 600;
   line-height: 1.1;
 }
 
@@ -5017,14 +4933,13 @@ html:has(.showcase-page) {
 .typhoon-note {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.5;
 }
 
 .typhoon-note {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.02em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .typhoon-chips.field-chips {
@@ -5045,16 +4960,14 @@ html:has(.showcase-page) {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .typhoon-legend-label {
   min-width: 100%;
   color: var(--muted);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--fs-1);
 }
 
 .typhoon-legend-item {
@@ -5067,9 +4980,9 @@ html:has(.showcase-page) {
   display: inline-block;
   width: 14px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   background: var(--swatch);
-  box-shadow: 0 0 0 1px var(--line);
+  box-shadow: 0 0 0 var(--hair) var(--line);
 }
 
 .typhoon-swatch.is-ring {
@@ -5084,9 +4997,8 @@ html:has(.showcase-page) {
 .typhoon-page-link {
   align-self: flex-start;
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   text-decoration: none;
 }
 
@@ -5101,9 +5013,10 @@ html:has(.showcase-page) {
 .typhoon-season-note {
   margin: 0;
   padding: 6px 8px;
-  border-left: 2px solid var(--line);
+  border-radius: var(--r-s);
+  background: rgba(var(--accent-rgb), 0.05);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 1.45;
 }
 
@@ -5117,8 +5030,8 @@ html:has(.showcase-page) {
   margin: 0;
   overflow-y: auto;
   padding: 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
+  border-bottom: var(--hair) solid var(--line);
   list-style: none;
 }
 
@@ -5130,7 +5043,7 @@ html:has(.showcase-page) {
   width: 100%;
   padding: 7px 6px;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hair) solid var(--line);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -5150,14 +5063,14 @@ html:has(.showcase-page) {
 .typhoon-row-code,
 .typhoon-row-span,
 .typhoon-row-peak {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   opacity: 0.75;
 }
 
 .typhoon-row-name {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--fs-1);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5182,8 +5095,8 @@ html:has(.showcase-page) {
   gap: 8px;
   margin: 4px 0 0;
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 400;
+  font-size: var(--fs-3);
+  font-weight: 600;
 }
 
 .typhoon-facts {
@@ -5206,9 +5119,8 @@ html:has(.showcase-page) {
 .typhoon-label,
 .typhoon-issue-time {
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
   white-space: nowrap;
 }
 
@@ -5240,14 +5152,13 @@ html:has(.showcase-page) {
 .typhoon-export {
   height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .typhoon-export[hidden] {
@@ -5264,11 +5175,9 @@ html:has(.showcase-page) {
 
 .typhoon-errors-head h3 {
   margin: 6px 0 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .typhoon-table-scroll {
@@ -5279,14 +5188,14 @@ html:has(.showcase-page) {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
 }
 
 .typhoon-table th,
 .typhoon-table td {
   padding: 4px 5px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hair) solid var(--line);
   text-align: right;
   white-space: nowrap;
 }
@@ -5297,8 +5206,8 @@ html:has(.showcase-page) {
 
 .typhoon-table thead th {
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 /* The source's own line color, as a swatch beside its code. */
@@ -5315,23 +5224,21 @@ html:has(.showcase-page) {
 .typhoon-group th {
   padding-top: 10px;
   color: var(--muted);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-align: left;
-  text-transform: uppercase;
 }
 
 .typhoon-n {
   margin-left: 3px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--fs-1);
 }
 
 .typhoon-empty {
   padding: 8px 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
   text-align: left;
 }
 
@@ -5348,7 +5255,7 @@ html:has(.showcase-page) {
 
   .typhoon-panel {
     overflow: visible;
-    border-top: 1px solid var(--line);
+    border-top: var(--hair) solid var(--line);
     border-left: 0;
   }
 
@@ -5363,7 +5270,7 @@ html:has(.showcase-page) {
   }
 
   .cmp-name {
-    font-size: 20px;
+    font-size: var(--fs-3);
   }
 
   .cmp-actions {
@@ -5376,7 +5283,6 @@ html:has(.showcase-page) {
    text, underlined on hover only. */
 .probe-compare {
   color: var(--text);
-  letter-spacing: 0.06em;
   text-decoration: none;
 }
 
@@ -5399,10 +5305,9 @@ html:has(.showcase-page) {
 .metrics-generated {
   margin: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .metrics-not-sla {
@@ -5416,17 +5321,16 @@ html:has(.showcase-page) {
 .metrics-heading {
   margin: 0 0 8px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .metrics-note {
   max-width: 72ch;
   margin: 12px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-1);
   line-height: 1.6;
   text-wrap: pretty;
 }
@@ -5441,8 +5345,8 @@ html:has(.showcase-page) {
 .metrics-source {
   min-width: 0;
   padding: 16px 18px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
   background: var(--card);
 }
 
@@ -5457,8 +5361,8 @@ html:has(.showcase-page) {
 .metrics-source-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 400;
+  font-size: var(--fs-3);
+  font-weight: 600;
   line-height: 1.1;
 }
 
@@ -5467,10 +5371,9 @@ html:has(.showcase-page) {
   flex-wrap: wrap;
   gap: 4px 12px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .metrics-facts {
@@ -5489,27 +5392,25 @@ html:has(.showcase-page) {
 .metrics-facts div {
   min-width: 0;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hair) solid var(--line);
 }
 
 .metrics-facts dt {
   overflow: hidden;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .metrics-facts dd {
   margin: 4px 0 0;
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5521,7 +5422,6 @@ html:has(.showcase-page) {
 
 .metrics-facts .is-reference dd {
   color: var(--muted);
-  font-style: italic;
 }
 
 .metrics-facts .is-warning dd {
@@ -5535,9 +5435,8 @@ html:has(.showcase-page) {
 .metrics-backlog {
   margin: 10px 0 0;
   color: var(--warning);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .metrics-strip {
@@ -5581,21 +5480,19 @@ html:has(.showcase-page) {
   margin-top: 4px;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .metrics-missing {
   margin-top: 8px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .metrics-missing summary {
   cursor: pointer;
-  letter-spacing: 0.04em;
 }
 
 .metrics-missing ul {
@@ -5618,30 +5515,29 @@ html:has(.showcase-page) {
 .metrics-deadline-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 400;
+  font-size: var(--fs-3);
+  font-weight: 600;
   line-height: 1.15;
 }
 
 .metrics-deadline-meta {
   margin: 4px 0 10px;
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
 }
 
 .metrics-table-scroll {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
 }
 
 .metrics-table {
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -5649,16 +5545,15 @@ html:has(.showcase-page) {
 .metrics-table th,
 .metrics-table td {
   padding: 6px 10px;
-  border-bottom: 1px solid var(--grid-line);
+  border-bottom: var(--hair) solid var(--grid-line);
   text-align: left;
   vertical-align: top;
 }
 
 .metrics-table thead th {
   color: var(--muted);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-size: var(--fs-1);
+  font-weight: 400;
 }
 
 .metrics-table tbody tr:last-child > * {
@@ -5671,12 +5566,12 @@ html:has(.showcase-page) {
   left: 0;
   z-index: 1;
   background: var(--bg);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .metrics-table-common {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .metrics-table td.is-none {
@@ -5690,7 +5585,7 @@ html:has(.showcase-page) {
 
 .metrics-age {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--fs-1);
 }
 
 @media (max-width: 640px) {
@@ -5699,6 +5594,6 @@ html:has(.showcase-page) {
   }
 
   .metrics-source-name {
-    font-size: 20px;
+    font-size: var(--fs-3);
   }
 }
