@@ -60,8 +60,8 @@ class BundleGroupTests(unittest.TestCase):
         # analysis alone, so it cannot key a run axis and shares a group with
         # the lightest bundle present in every frame.
         mine = list(published_bundle_ids(source))
-        anchor = mine.index("prmsl")
-        self.assertEqual(groups, [(b,) for b in mine[:anchor]] + [("prmsl", "orog")] + [(b,) for b in mine[anchor + 1 :] if b != "orog"])
+        anchor = mine.index("tmp2m")
+        self.assertEqual(groups, [(b,) for b in mine[:anchor]] + [("tmp2m", "orog")] + [(b,) for b in mine[anchor + 1 :] if b != "orog"])
 
     def test_the_matrix_flags_the_video_jobs(self) -> None:
         # No source ships the companion; the flag is held on one that would.
@@ -123,11 +123,11 @@ class BundleGroupTests(unittest.TestCase):
                 self.assertEqual(len(groups), 1)
                 self.assertEqual(len(groups[0]), 2)
                 self.assertIn("orog", groups[0])
-        # The companion is the lightest anchored bundle of that source, not
-        # always the same one: the pressure family's sea level pressure is
-        # lightest on GFS and HRRR, the 2 m temperature on the rest.
-        self.assertEqual(assemble.bundle_groups(source_spec("gfs"), 100, ("orog",)), [("prmsl", "orog")])
-        self.assertEqual(assemble.bundle_groups(source_spec("hrrr"), 100, ("orog",)), [("prmsl", "orog")])
+        # The companion is the lightest anchored bundle of that source, the
+        # first in publication order on a tie: the 2 m temperature, which
+        # weighs what sea level pressure does on GFS and HRRR.
+        self.assertEqual(assemble.bundle_groups(source_spec("gfs"), 100, ("orog",)), [("tmp2m", "orog")])
+        self.assertEqual(assemble.bundle_groups(source_spec("hrrr"), 100, ("orog",)), [("tmp2m", "orog")])
         self.assertEqual(assemble.bundle_groups(source_spec("sflux"), 100, ("orog",)), [("tmp2m", "orog")])
 
     def test_no_groups_is_refused(self) -> None:

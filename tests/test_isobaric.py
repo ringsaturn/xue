@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
 
 import numpy as np
 
@@ -147,7 +148,8 @@ class VectorBundleTests(unittest.TestCase):
         )
 
     def test_only_the_surface_fields_get_a_video_companion(self) -> None:
-        self.assertEqual(set(video_variable_ids(source_spec("gfs"))), {"tmp2m", "prate", "dswrf", "cref"})
+        # No source ships the companion; the set is read off one that would.
+        self.assertEqual(set(video_variable_ids(replace(source_spec("gfs"), video=True))), {"tmp2m", "prate", "dswrf", "cref"})
 
     def test_the_vapour_flux_is_q_v_over_g(self) -> None:
         q = np.array([10.0, 0.0, 20.0])  # g/kg
