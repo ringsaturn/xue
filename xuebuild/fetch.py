@@ -2100,12 +2100,17 @@ def _run_is_complete(
     if model == "hrrr":
         # Every hour, on one mirror: the hours of a cycle land out of order
         # and the two copies disagree for a while, so the ends prove nothing.
+        # The ``.idx`` the build reads lands on its own, up to ten minutes
+        # after the GRIB it describes, so both are probed.
         # A mirror that cannot be probed is a mirror that cannot serve.
         for base_url in HRRR_BASE_URLS:
             try:
                 if all(
-                    exists(hrrr_object_url(run, hour, base_url=base_url))
-                    for hour in source_spec(model).forecast_hours(hours, cycle=run.time.hour)
+                    exists(url) and exists(url + ".idx")
+                    for url in (
+                        hrrr_object_url(run, hour, base_url=base_url)
+                        for hour in source_spec(model).forecast_hours(hours, cycle=run.time.hour)
+                    )
                 ):
                     return True
             except DownloadError as exc:
@@ -2361,8 +2366,9 @@ def _download_hrrr_payload(
     run: GfsRun, forecast_hour: int, spec: SourceSpec, input_ids: tuple[str, ...] | None = None
 ) -> bytes:
     """One HRRR frame from the first mirror that has it: a mirror still
-    missing the hour answers 404 for the ``.idx``, and the next is tried;
-    any other failure is the frame's."""
+    missing the hour answers 404 for the ``.idx``, and one holding a
+    truncated copy answers 416 for a record past its end; either way the
+    next is tried. Any other failure is the frame's."""
     wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
     missing: list[str] = []
     for base_url in HRRR_BASE_URLS:
@@ -2370,10 +2376,10 @@ def _download_hrrr_payload(
         try:
             return _download_noaa_records(url, wanted)
         except DownloadError as exc:
-            if _http_error_code(exc) != 404:
+            if _http_error_code(exc) not in {404, 416}:
                 raise
             missing.append(base_url)
-            LOG.warning("HRRR mirror has no f%02d of %s yet, trying the next: %s", forecast_hour, run.id, base_url)
+            LOG.warning("HRRR mirror cannot serve f%02d of %s (%s), trying the next: %s", forecast_hour, run.id, exc, base_url)
     raise DownloadError(f"no HRRR mirror has run {run.id} f{forecast_hour:02d}: " + ", ".join(missing))
 
 

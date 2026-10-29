@@ -231,6 +231,9 @@ class CycleTests(unittest.TestCase):
         self.assertTrue(_run_is_complete(run, 18, "hrrr", one_hour_short))
         self.assertTrue(any(HRRR_BASE_URLS[1] in url for url in probed))
         self.assertFalse(_run_is_complete(run, 18, "hrrr", lambda url: "wrfsfcf02" not in url))
+        # The GRIB of an hour can land minutes before the index the build
+        # reads: the hour is not there until both are.
+        self.assertFalse(_run_is_complete(run, 18, "hrrr", lambda url: not url.endswith("wrfsfcf06.grib2.idx")))
         with self.assertRaisesRegex(DownloadError, "not on the HRRR axis"):
             resolve_run("latest", hours=24, now=now, exists=exists, model="hrrr")
 
@@ -260,6 +263,28 @@ class MirrorFallbackTests(unittest.TestCase):
             mock.Mock(side_effect=DownloadError("request failed") ),
         ), self.assertRaises(DownloadError):
             _download_hrrr_payload(run, 1, HRRR, ("tmp2m",))
+
+
+    def test_a_truncated_copy_falls_through_to_the_next_mirror(self) -> None:
+        import urllib.error
+
+        run = GfsRun(datetime(2026, 10, 22, 17, tzinfo=UTC))
+        ranged: list[str] = []
+
+        def fetch_range(url: str, byte_range: object) -> bytes:
+            ranged.append(url)
+            if url.startswith(HRRR_BASE_URLS[0]):
+                raise DownloadError("request failed") from urllib.error.HTTPError(
+                    url, 416, "Requested range not satisfiable", None, None  # type: ignore[arg-type]
+                )
+            return b"x" * byte_range.length  # type: ignore[attr-defined]
+
+        with mock.patch("xuebuild.fetch.fetch_text", lambda url: HRRR_F01_IDX), mock.patch(
+            "xuebuild.fetch.fetch_range", fetch_range
+        ):
+            payload = _download_hrrr_payload(run, 1, HRRR, ("tmp2m",))
+        self.assertEqual(len(payload), 1000000)
+        self.assertTrue(ranged[-1].startswith(HRRR_BASE_URLS[1]))
 
 
 class RecordMatchingTests(unittest.TestCase):
