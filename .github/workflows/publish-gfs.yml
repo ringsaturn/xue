@@ -9,6 +9,10 @@ on:
     # Cycles run at 00/06/12/18 UTC and the F240 file lands roughly four to
     # five hours later.
     - cron: "20 5,11,17,23 * * *"
+    # A second idempotent pass: a mirror read that times out fails one
+    # bundle job and with it the whole run. publish.yml exits early when the
+    # first pass already made the run live.
+    - cron: "20 6,12,18,0 * * *"
   workflow_dispatch:
     inputs:
       run:

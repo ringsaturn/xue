@@ -13,6 +13,9 @@ on:
     # cycles, and staggering keeps the two builds off NOAA's bucket (and the
     # runner pool) at the same moment.
     - cron: "50 5,11,17,23 * * *"
+    # A second idempotent pass recovers a run the first lost to a failed
+    # bundle job; publish.yml exits early when the run is already live.
+    - cron: "50 6,12,18,0 * * *"
   workflow_dispatch:
     inputs:
       run:
