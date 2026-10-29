@@ -355,7 +355,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
             prate_key("20260913", "000200"): prate2,
         }
 
-    def request(self, url: str, **_: object) -> object:
+    def request(self, url: str, consume=None, **_: object) -> object:
         key = url.removeprefix(f"{MRMS_BASE_URL}/")
         body = gzip.compress(self.objects[key])
 
@@ -371,7 +371,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
             def read(self):
                 return body
 
-        return Response()
+        return consume(Response()) if consume else Response()
 
     def test_a_frame_is_the_products_gunzipped_in_input_order(self) -> None:
         slot = datetime(2026, 9, 13, 0, 2, tzinfo=UTC)

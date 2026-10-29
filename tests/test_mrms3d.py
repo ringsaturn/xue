@@ -341,7 +341,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
                 self.objects[level_key(level, DAY, stamp)] = message
         self.requested: list[str] = []
 
-    def request(self, url: str, **_: object) -> object:
+    def request(self, url: str, consume=None, **_: object) -> object:
         key = url.removeprefix(f"{MRMS_BASE_URL}/")
         self.requested.append(key)
         body = gzip.compress(self.objects[key])
@@ -358,7 +358,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
             def read(self):
                 return body
 
-        return Response()
+        return consume(Response()) if consume else Response()
 
     @requires_gdalinfo
     def test_a_window_is_fetched_one_scan_per_mark(self) -> None:
