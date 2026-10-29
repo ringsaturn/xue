@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import unittest
 import zlib
 from pathlib import Path
@@ -189,16 +188,6 @@ class NativeParityTests(ClassTempRoot, unittest.TestCase):
     def test_every_artifact_is_byte_identical(self) -> None:
         require_comparable_compression(self, self.reference_report, self.subject_report)
         assert_trees_identical(self, self.reference, self.subject)
-
-    def test_the_video_companions_were_actually_built(self) -> None:
-        """Parity is worth nothing if both sides skipped the same work."""
-        if shutil.which("ffmpeg") is None:
-            self.skipTest("ffmpeg is not installed, so neither encoder built a video")
-        run_directory = self.subject / "gfs.2026081406"
-        for variable_id in ("tmp2m", "prate"):
-            self.assertTrue((run_directory / f"{variable_id}.h264").is_file())
-            self.assertTrue((run_directory / f"{variable_id}.h264.index.json").is_file())
-            self.assertTrue((run_directory / f"{variable_id}.h264.m3u8").is_file())
 
 
 @requires_native

@@ -398,15 +398,14 @@ class SourceSpec:
     step before anything else reads them (:mod:`xuebuild.reproject`). The
     grid the bundles carry is then the regular one; ``production_grid`` and
     ``tile`` describe it, not the projected source."""
-    video: bool = True
+    video: bool = False
     """Whether the source's surface fields also ship their H.264 companion
-    (the variables whose ``companions`` name ``video``). The video path is an
-    opt-in the Xue decoder serves without, so a source turns it off where
-    the companion costs more than it is worth: ECMWF's is a quarter the
-    size of GFS's and never asked for, and a lossless encode of the sflux
-    Gaussian grid is a third of the run — 334 MB on top of 1.07 GB of
-    bundles — and the slowest step of its build. Read on the Python side
-    only, where ffmpeg runs; the native encoder writes no video."""
+    (the variables whose ``companions`` name ``video``). No source does: the
+    shell plays the Zarr stores, and the companion is an opt-in path
+    (``?use_h264=true``) that costs an ffmpeg pass per field — on the sflux
+    Gaussian grid a third of the run and the slowest step of its build. Read
+    on the Python side only, where ffmpeg runs; the native encoder writes no
+    video."""
     cat_calibration: tuple[tuple[int, float, float], ...] = ()
     """``(level_hpa, mean, standard deviation)`` of ln TI1 (s^-2) on each
     surface the source publishes a ``cat<level>`` bundle for: the
@@ -974,7 +973,6 @@ SOURCES: dict[str, SourceSpec] = {
             "qflux850",
             "wave",
         ),
-        video=False,
         # The GFS fit's runs, leads and cells, from the open data records.
         cat_calibration=((300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)),
     ),
@@ -1133,7 +1131,6 @@ SOURCES: dict[str, SourceSpec] = {
         production_grid=(3600, 1801),
         tile=(90, 95),
         variant_factors=(2, 4),
-        video=False,
         # The 0.25° fit of ``ecmwf``, pending a refit on 0.1° runs.
         cat_calibration=((300, -15.8093, 1.1601), (250, -16.0237, 1.1220), (200, -15.9364, 1.1154)),
     ),
@@ -1230,7 +1227,6 @@ SOURCES: dict[str, SourceSpec] = {
             "orog",
         ),
         bundle_vector_ids=("wind10m", "wind925", "wind850", "wind250", "qflux850", "wave"),
-        video=False,
     ),
     # ECMWF IFS HRES, the deterministic high-resolution forecast on its
     # native O1280 grid (~9 km), as Open-Meteo redistributes it: one ``.om``
@@ -1318,7 +1314,6 @@ SOURCES: dict[str, SourceSpec] = {
         series_file=True,
         open_meteo="ecmwf_ifs",
         cycle_hours=12,
-        video=False,
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid
     # (3072x1536; GDAL reports a uniform geoTransform whose tiny latitude
@@ -1340,7 +1335,6 @@ SOURCES: dict[str, SourceSpec] = {
         bundle_scalar_ids=("tmp2m", "prate", "dswrf", "orog"),
         bundle_vector_ids=("wind10m",),
         series_bundle_ids=("tmp2m", "prate", "dswrf", "wind10m"),
-        video=False,
         production_grid=(3072, 1536),
         # 3072 x 1536 divides exactly into 32 x 16 = 512 tiles with no
         # clipped edge, at about the same 11-degree ground scale as the
@@ -1461,7 +1455,6 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bundle_scalar_ids=AEROSOL_VARIABLE_IDS,
         core_bundle_ids=("aod",),
-        video=False,
     ),
     # NCEP CFSv2 member 01, nine months of six-hourly output from the 00Z
     # and 12Z cycles, fetched as one series-major object per variable
@@ -1556,7 +1549,6 @@ SOURCES: dict[str, SourceSpec] = {
         # a tile is what keeps one cell's nine-month series to a few
         # hundred kilobytes rather than the whole grid's.
         tile=(96, 95),
-        video=False,
     ),
     # DWD ICON-EU: the European nest of DWD's ICON model at 0.0625° (about
     # 7 km), already on a regular latitude/longitude grid, so nothing is
@@ -1594,7 +1586,6 @@ SOURCES: dict[str, SourceSpec] = {
         tile=(81, 73),
         # Each frame is one request per parameter to DWD's server.
         fetch_concurrency=8,
-        video=False,
     ),
     # Météo-France ARPEGE, the global model, on its 0.25° GLOB025 grid —
     # the GFS grid, 0°E to 359.75°E and pole to pole. Météo-France publishes
@@ -1624,7 +1615,6 @@ SOURCES: dict[str, SourceSpec] = {
         statistical_processes=(("prate", 0), ("gust", 2)),
         bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog"),
         bundle_vector_ids=("wind10m",),
-        video=False,
     ),
     # Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
     # Fuji showcase, nested 12 → 3 → 1 → 0.5 km from the GFS analysis, read
@@ -1702,7 +1692,6 @@ SOURCES: dict[str, SourceSpec] = {
         tile=(64, 64),
         variant_factors=(),
         series_file=True,
-        video=False,
     ),
     # EFAS v5 (the Copernicus Emergency Management Service's European Flood
     # Awareness System, run by ECMWF): LISFLOOD's river discharge on a
@@ -1739,7 +1728,6 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=12,
-        video=False,
     ),
     # The EFAS water balance: the same LISFLOOD forced by observed rain
     # rather than a forecast (the CEMS ``efas-historical`` dataset), the
@@ -1765,7 +1753,6 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=6,
-        video=False,
     ),
     # ERA5, the Copernicus Climate Change Service's global reanalysis from
     # ECMWF: hourly fields on the 0.25° regular grid, what the weather was
@@ -1797,7 +1784,6 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=1,
-        video=False,
     ),
     # CAMS, the Copernicus Atmosphere Monitoring Service's global
     # atmospheric composition system at ECMWF: the IFS with aerosol and
@@ -1828,7 +1814,6 @@ SOURCES: dict[str, SourceSpec] = {
         variant_factors=(),
         series_file=True,
         cycle_hours=3,
-        video=False,
     ),
     # CMA weather radar level-3 mosaic composite reflectivity
     # (RADAR_L3_MST_CREF): the China Meteorological Administration's national
@@ -1869,7 +1854,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=3,
         cadence_seconds=360,
-        video=False,
     ),
     # NOAA MRMS: the radar mosaic over the contiguous United States, a
     # composite every two minutes at 0.01°, fetched as a rolling window of
@@ -1899,7 +1883,6 @@ SOURCES: dict[str, SourceSpec] = {
         window_hours=3,
         cadence_seconds=120,
         downsample=Downsample(factor=2),
-        video=False,
     ),
     # NOAA MRMS, the reflectivity volume: the same mosaic as ``mrms`` as 33
     # constant-altitude planes, 500 m to 19 km above mean sea level, each a
@@ -1933,7 +1916,6 @@ SOURCES: dict[str, SourceSpec] = {
         cadence_seconds=600,
         object_cadence_seconds=120,
         downsample=Downsample(factor=5),
-        video=False,
     ),
     # JMA 高解像度降水ナウキャスト (high-resolution precipitation nowcast,
     # ``hrpns``): the Japan Meteorological Agency's radar-and-gauge analysis
@@ -1978,7 +1960,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=3,
         cadence_seconds=300,
-        video=False,
     ),
     # Himawari-9 AHI, the JMA geostationary imager at 140.7°E, as NOAA
     # redistributes it on its own bucket: the ISatSS product, each channel
@@ -2055,7 +2036,6 @@ SOURCES: dict[str, SourceSpec] = {
         # uploads in a minute.
         window_hours=6,
         cadence_seconds=600,
-        video=False,
     ),
     # Himawari-9 over Japan at 0.01° (about 1.1 km): the same platform,
     # reader and producers as the disk above on a box of its own,
@@ -2106,7 +2086,6 @@ SOURCES: dict[str, SourceSpec] = {
         # over a flat dark ground, costs less than its day.
         window_hours=3,
         cadence_seconds=600,
-        video=False,
     ),
     # The two GOES-R imagers, GOES-19 at 75.2°W (East) and GOES-18 at
     # 137.0°W (West), from NOAA's own buckets: the CMIPF product, each
@@ -2146,7 +2125,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=6,
         cadence_seconds=600,
-        video=False,
     ),
     "goeswest": SourceSpec(
         id="goeswest",
@@ -2173,7 +2151,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=6,
         cadence_seconds=600,
-        video=False,
     ),
     # Meteosat-12 (MTG-I1) FCI at 0°, EUMETSAT's prime full-disk service,
     # from the EUMETSAT Data Store rather than a public bucket: the search
@@ -2221,7 +2198,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=24,
         cadence_seconds=3600,
-        video=False,
     ),
     # NOAA SWPC's OVATION model aurora probability: the chance, in percent,
     # that aurora is visible overhead, on a regular 1° global grid
@@ -2262,7 +2238,6 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=12,
         cadence_seconds=300,
-        video=False,
     ),
 }
 

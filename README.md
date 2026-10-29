@@ -64,7 +64,7 @@ mosaic of the geostationary imagers, a view rather than a dataset.
 
 Requirements: Python ≥ 3.14 with [uv](https://docs.astral.sh/uv/), Node.js
 ≥ 22, a Rust toolchain with `wasm-pack`, and GDAL ≥ 3.8 with the GRIB
-driver. Some sources need more (eccodes, om2nc, ffmpeg, credentials); see
+driver. Some sources need more (eccodes, om2nc, credentials); see
 [`docs/contribution/setup.md`](docs/contribution/setup.md).
 
 ```sh
@@ -124,7 +124,7 @@ with HTTP Range requests.
 | `stations` | `snd`, `apt`, `snd,apt` or `off`: sounding and airport marks |
 | `tc`, `tcagency`, `tcmodel`, `tcmembers` | a tropical cyclone (`<id>` or `off`) and which tracks to draw |
 | `backend` | `xue` reads the `.xue` container where a run still ships one |
-| `use_h264` | `true` opts into the WebCodecs H.264 companions |
+| `use_h264` | `true` opts into the WebCodecs H.264 companions where a run ships them |
 | `lang`, `theme` | one of eleven locales; `light` or `dark` |
 
 Values are case-insensitive and unrecognized ones fall back to defaults.

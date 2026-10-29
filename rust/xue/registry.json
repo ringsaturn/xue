@@ -18524,7 +18524,7 @@
       "longCycles": [],
       "longCycleSteps": [],
       "regrid": null,
-      "video": true,
+      "video": false,
       "catCalibration": [
         [
           300,
@@ -19495,7 +19495,7 @@
       "regrid": {
         "step": 0.03
       },
-      "video": true,
+      "video": false,
       "catCalibration": []
     },
     "gefsaero": {

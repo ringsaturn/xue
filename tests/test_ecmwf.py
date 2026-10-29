@@ -95,13 +95,10 @@ class SourceRegistryTests(unittest.TestCase):
         sflux = source_spec("sflux")
         self.assertEqual(analysis_optional_ids(sflux, published_bundle_ids(sflux)), ("prate",))
 
-    def test_ecmwf_and_sflux_ship_no_video(self) -> None:
-        for model in ("ecmwf", "sflux"):
+    def test_no_source_ships_video(self) -> None:
+        for model in ("ecmwf", "sflux", "gfs", "hrrr"):
             self.assertFalse(source_spec(model).video, model)
             self.assertEqual(video_variable_ids(source_spec(model)), frozenset(), model)
-        for model in ("gfs", "hrrr"):
-            self.assertTrue(source_spec(model).video, model)
-            self.assertEqual(video_variable_ids(source_spec(model)), {"tmp2m", "prate", "dswrf", "cref"}, model)
 
 
 class FetchTests(unittest.TestCase):
