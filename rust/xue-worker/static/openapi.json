@@ -63,6 +63,7 @@
               }
             }
           },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -86,6 +87,7 @@
             }
           },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -122,6 +124,7 @@
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
           "422": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -158,6 +161,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -184,6 +188,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -213,6 +218,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -246,6 +252,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -275,6 +282,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -308,6 +316,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -337,6 +346,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -372,6 +382,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -408,6 +419,7 @@
           },
           "400": { "$ref": "#/components/responses/ErrorResponse" },
           "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
           "502": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }

@@ -14,6 +14,7 @@ or unavailable API, never a metered bill.
 | Response cache | `caches.default`, per data center | in process, for the answer's `max-age`; a hit answers with the remaining lifetime |
 | Object cache | per isolate (`cache.rs`) | the same module, one per process |
 | Overload | Workers limits | `XUE_API_INFLIGHT` requests computed at once, then `503 overloaded` with `Retry-After` |
+| Rate | the zone's per-IP rule | optionally a global budget, `XUE_API_RATE_PER_MIN` computed answers a minute, then `429 rate_limited`; Cloudflare's free rate-limit rules count per IP only, so a global cap has to live here |
 | Swagger UI | static assets from `public/` | the same files compiled into the binary |
 | Compression | Cloudflare's | gzip for a client that takes it (Cloudflare does), `Vary: accept-encoding`; a point answer goes out at about a sixth of its size |
 
@@ -23,7 +24,8 @@ route added to one runtime is in both.
 
 Configuration is the environment, read from `/etc/xue-api/env` when it
 exists: `XUE_API_LISTEN` (default `127.0.0.1:8787`), `DATA_ORIGIN`,
-`XUE_API_INFLIGHT` (32), `XUE_API_CACHE_MB` (64).
+`XUE_API_INFLIGHT` (32), `XUE_API_CACHE_MB` (64), `XUE_API_RATE_PER_MIN`
+(0, off).
 
 Measured on a 1-vCPU host (2026-10-30, single-variable GFS points, every
 request a miss): 96 req/s at 16 in flight (p50 0.14 s), 124 req/s at 32

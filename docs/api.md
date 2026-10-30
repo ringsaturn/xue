@@ -350,6 +350,7 @@ forecasts and best tracks are passed through as the product writes them.
 | 405 | `method_not_allowed` | anything but `GET`, `HEAD`, `OPTIONS` |
 | 422 | `point_off_grid` | the point is outside a regional grid (HRRR, a satellite disk) |
 | 502 | `upstream_failed` | a bucket read failed, or a document in it is not what the profile says |
+| 429 | `rate_limited` | a self-hosted origin's request budget is spent; retry after `Retry-After` seconds (also `detail.retryAfter`). Cached answers are not limited |
 | 503 | `overloaded` | too many requests are being computed at once; retry after `Retry-After` seconds |
 
 Errors are not cached.

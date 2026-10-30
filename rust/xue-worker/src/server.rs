@@ -22,7 +22,9 @@
 //! Configuration is the environment: `XUE_API_LISTEN` (default
 //! `127.0.0.1:8787`; keep it on loopback, the tunnel connects from the same
 //! machine), `DATA_ORIGIN` (default the public dataset), `XUE_API_INFLIGHT`
-//! (default 32) and `XUE_API_CACHE_MB` (default 64).
+//! (default 32), `XUE_API_CACHE_MB` (default 64) and `XUE_API_RATE_PER_MIN`
+//! (default 0, no limit): a global budget of computed answers per minute,
+//! above which the server answers `429 rate_limited`.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -94,6 +96,7 @@ struct Config {
     origin: String,
     inflight: usize,
     cache_bytes: usize,
+    rate_per_minute: usize,
 }
 
 impl Config {
@@ -117,6 +120,7 @@ impl Config {
             origin: var("DATA_ORIGIN").unwrap_or_else(|| DEFAULT_ORIGIN.to_owned()),
             inflight: number("XUE_API_INFLIGHT", 32)?.max(1),
             cache_bytes: number("XUE_API_CACHE_MB", 64)? * 1024 * 1024,
+            rate_per_minute: number("XUE_API_RATE_PER_MIN", 0)?,
         })
     }
 }
@@ -185,6 +189,40 @@ struct State {
     inflight: Cell<usize>,
     inflight_limit: usize,
     responses: RefCell<Responses>,
+    rate: Option<RefCell<Bucket>>,
+}
+
+/// A global token bucket over computed answers: `per_minute` tokens refill
+/// evenly and up to a minute's worth may be spent at once. Cache hits never
+/// draw on it, so it caps what misses cost, not what clients see.
+struct Bucket {
+    per_minute: f64,
+    tokens: f64,
+    refilled: Instant,
+}
+
+impl Bucket {
+    fn new(per_minute: usize) -> Bucket {
+        Bucket {
+            per_minute: per_minute as f64,
+            tokens: per_minute as f64,
+            refilled: Instant::now(),
+        }
+    }
+
+    /// Spend a token, or the whole seconds until one is available.
+    fn take(&mut self, now: Instant) -> Result<(), u64> {
+        let per_second = self.per_minute / 60.0;
+        let elapsed = now.duration_since(self.refilled).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * per_second).min(self.per_minute);
+        self.refilled = now;
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            Ok(())
+        } else {
+            Err(((1.0 - self.tokens) / per_second).ceil().max(1.0) as u64)
+        }
+    }
 }
 
 pub fn main() -> ExitCode {
@@ -220,6 +258,8 @@ async fn serve(config: Config) -> Result<(), String> {
         data: Data::from_origin(client, &config.origin),
         inflight: Cell::new(0),
         inflight_limit: config.inflight,
+        rate: (config.rate_per_minute > 0)
+            .then(|| RefCell::new(Bucket::new(config.rate_per_minute))),
         responses: RefCell::new(Responses {
             map: HashMap::new(),
             order: VecDeque::new(),
@@ -434,8 +474,18 @@ async fn handle(
             ));
         }
     }
-    // Only computing a response holds a slot; cache hits and assets never
-    // wait behind a slow upstream.
+    // Only computing a response holds a slot or draws on the rate; cache hits
+    // and assets never wait behind a slow upstream.
+    if let (Some(rate), true) = (&state.rate, path != "/health") {
+        if let Err(seconds) = rate.borrow_mut().take(Instant::now()) {
+            return Err(HttpError::new(
+                429,
+                "rate_limited",
+                "the origin's request budget is spent; retry after Retry-After seconds",
+            )
+            .with_detail(serde_json::json!({ "retryAfter": seconds })));
+        }
+    }
     if state.inflight.get() >= state.inflight_limit {
         return Err(HttpError::new(
             503,
@@ -511,6 +561,14 @@ fn error_response(error: &HttpError) -> Response<Body> {
     let mut response = json(Bytes::from(body), status, "no-store", &[]);
     if error.status == 503 {
         set(&mut response, "retry-after", "5");
+    }
+    if let Some(seconds) = error
+        .detail
+        .as_ref()
+        .and_then(|detail| detail.get("retryAfter"))
+        .and_then(serde_json::Value::as_u64)
+    {
+        set(&mut response, "retry-after", &seconds.to_string());
     }
     response
 }
