@@ -13,14 +13,13 @@
 //! every source.
 //!
 //! The Swagger UI itself (`public/`) is served as a Worker static asset, not
-//! compiled into the wasm.
+//! compiled into the wasm; the native server embeds it (`server.rs`).
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures_util::future::join_all;
 use serde_json::{json, Value};
-use worker::{Headers, Response};
 
 use crate::bucket::Data;
 use crate::error::HttpError;
@@ -34,34 +33,18 @@ thread_local! {
     static SPEC: RefCell<Option<(f64, String)>> = const { RefCell::new(None) };
 }
 
-fn json(body: &[u8], cache_control: &str) -> Result<Response, HttpError> {
-    let headers = Headers::new();
-    headers
-        .set("content-type", "application/json; charset=utf-8")
-        .map_err(HttpError::from)?;
-    headers
-        .set("access-control-allow-origin", "*")
-        .map_err(HttpError::from)?;
-    headers
-        .set("cache-control", cache_control)
-        .map_err(HttpError::from)?;
-    Ok(Response::from_bytes(body.to_vec())
-        .map_err(HttpError::from)?
-        .with_headers(headers))
-}
-
 /// The contract, with the live `source` enum and bundle vocabulary filled in.
 /// The embedded document is served as-is when the dataset cannot be read.
-pub async fn openapi(data: &Data) -> Result<Response, HttpError> {
-    let now = js_sys::Date::now();
+/// `now` is milliseconds since the epoch, from whichever runtime serves it.
+pub async fn openapi(data: &Data, now: f64) -> String {
     if let Some((generated, spec)) = SPEC.with(|cell| cell.borrow().clone()) {
         if now - generated < SPEC_TTL_MS {
-            return json(spec.as_bytes(), "public, max-age=60");
+            return spec;
         }
     }
     let spec = enrich(data).await.unwrap_or_else(|_| OPENAPI.to_owned());
     SPEC.with(|cell| *cell.borrow_mut() = Some((now, spec.clone())));
-    json(spec.as_bytes(), "public, max-age=60")
+    spec
 }
 
 async fn enrich(data: &Data) -> Result<String, HttpError> {

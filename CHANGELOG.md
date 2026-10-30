@@ -5,6 +5,12 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-10-30
+
+- The data API may answer `503 overloaded` with `Retry-After` when a
+  self-hosted origin is computing too many requests at once
+  (`docs/api.md`).
+
 ## 2026-10-15
 
 - New bundles on `gfs`, from the GFS-Wave file already read for the

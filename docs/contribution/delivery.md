@@ -118,7 +118,7 @@ nothing, and the shell does not depend on it. The endpoint contract
   `tests/fixtures/<product>/expected/` are their test bucket, so a change
   to a product's schema that regenerates a golden also runs these tests.
   Adding a product is a `PRODUCTS` row plus a module; the routes list is
-  in `runtime.rs`, the contract in `static/openapi.json` and `docs/api.md`
+  in `route.rs`, the contract in `static/openapi.json` and `docs/api.md`
   (a test holds the two to the same routes).
 - Read geometry lives IO-free in `rust/xue/src/zarr.rs`. The browser's
   `web/src/zarr/shard.ts` is a second implementation of it; both are held
@@ -132,9 +132,14 @@ nothing, and the shell does not depend on it. The endpoint contract
   64 MiB limit on every plan; only the uncompressed size counts). The
   finder opens on the first point request of an isolate, not at startup,
   so the 1 s startup limit is untouched.
-- Only `runtime.rs` and `docs.rs` touch the Workers runtime; the handlers
-  return plain values, so `cargo test -p xue-worker` runs them natively over
-  the web fixtures through an in-memory `Data` that logs every read.
+- Only `runtime.rs` and the framing half of `error.rs` touch the Workers
+  runtime; `route.rs` and the handlers return plain values, so `cargo test
+  -p xue-worker` runs them natively over the web fixtures through an
+  in-memory `Data` that logs every read.
+- The same routes build as a native binary, `xue-api-server` (`--features
+  server`), which reads the public origin over HTTP and runs on a
+  self-hosted machine behind a Cloudflare Tunnel:
+  [api-origin.md](api-origin.md).
 
 ## Uploads to R2 (`scripts/aws-config`)
 
