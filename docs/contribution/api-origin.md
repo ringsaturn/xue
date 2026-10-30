@@ -34,6 +34,17 @@ saturates and latency, not throughput, grows. A miss is mostly waiting on
 the range reads from the dataset origin, so a request for n bundles costs
 about n times one.
 
+## Another data source
+
+The binary reads the public origin. A program that keeps the objects
+elsewhere (a mirror on local disk, another store) depends on `xue-worker`
+with `features = ["server"]`, implements `xue_worker::ObjectSource` (read an
+object, or a byte range of it, by its path under the data root), and calls
+`server::serve(Config::from_env()?, Data::from_source(…))` inside a
+`LocalSet` on a current-thread runtime. Routes, caches, compression, limits
+and the watchdog are the same; work of its own (refreshing the source) runs
+as tasks on that `LocalSet`.
+
 ## Reaching it without exposing the host
 
 The origin is reached only through a Cloudflare Tunnel. `cloudflared` on

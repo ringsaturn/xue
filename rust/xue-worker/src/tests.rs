@@ -730,3 +730,36 @@ fn a_cell_refuses_bundles_on_different_grids() {
     assert_eq!((error.status, error.code.as_str()), (400, "grid_mismatch"));
     assert_eq!(error.detail, Some(json!({ "bundles": ["tmp2m", "prate"] })));
 }
+
+/// A caller's own object source answers through the same handlers.
+struct FixtureSource(HashMap<String, Vec<u8>>);
+
+impl crate::ObjectSource for FixtureSource {
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<crate::ReadRange>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, HttpError>> + 'a>>
+    {
+        Box::pin(async move {
+            let bytes = self
+                .0
+                .get(path)
+                .ok_or_else(|| HttpError::new(404, "not_found", format!("no object {path}")))?;
+            Ok(match range {
+                Some(range) => range.slice(bytes).to_vec(),
+                None => bytes.clone(),
+            })
+        })
+    }
+}
+
+#[test]
+fn an_object_source_answers_as_the_bucket_does() {
+    let query = format!("source=gfs&lat={LAT}&lon={LON}&variables=tmp2m,wind10m");
+    let from_bucket = ok(&Data::in_memory(bucket()), &query);
+    let source = Data::from_source(Box::new(FixtureSource(bucket())), "https://mirror.example/");
+    assert_eq!(ok(&source, &query), from_bucket);
+    let missing = err(&source, "source=nowhere&lat=0&lon=0");
+    assert_eq!((missing.status, missing.code.as_str()), (404, "unknown_source"));
+}
