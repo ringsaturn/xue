@@ -63,6 +63,11 @@ const ASSETS: &[(&str, &str, &[u8])] = &[
         include_bytes!("../public/docs/index.html"),
     ),
     (
+        "/docs/cell.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../public/docs/cell.js"),
+    ),
+    (
         "/docs/swagger-ui-bundle.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../public/docs/swagger-ui-bundle.js"),

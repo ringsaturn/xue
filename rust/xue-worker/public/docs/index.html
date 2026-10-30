@@ -6,9 +6,42 @@
     <title>Xue data API</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/docs/favicon-32x32.png" />
     <link rel="stylesheet" href="/docs/swagger-ui.css" />
+    <style>
+      #cell-finder { max-width: 1460px; margin: 0 auto; padding: 16px 20px 0; font-family: sans-serif; color: #3b4151; }
+      #cell-finder summary { font-size: 20px; font-weight: 700; cursor: pointer; }
+      #cell-finder p { margin: 6px 0; }
+      #cell-form { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; margin: 10px 0; }
+      #cell-form label.field { display: flex; flex-direction: column; font-size: 12px; font-weight: 700; }
+      #cell-form input[type="number"], #cell-form input[type="text"], #cell-form select { font-size: 14px; padding: 5px 8px; }
+      #cell-variables { display: flex; flex-wrap: wrap; gap: 4px 12px; max-height: 120px; overflow: auto; font-size: 13px; padding: 6px 0; flex-basis: 100%; }
+      .cell-group { border: 1px solid #d8dde7; border-radius: 4px; padding: 8px 12px; margin: 8px 0; }
+      .cell-group a { word-break: break-all; }
+      .cell-group pre { max-height: 320px; overflow: auto; background: #f7f7f7; padding: 8px; font-size: 12px; }
+      .cell-muted { color: #6b7385; font-size: 13px; }
+      .cell-error { color: #b42318; }
+    </style>
   </head>
   <body>
+    <details id="cell-finder" open>
+      <summary>Find a cell</summary>
+      <p>
+        A coordinate resolves to a grid cell of a run, computed here in the browser from the run manifest with the
+        server's rule. <code>GET /v1/cell</code> for that cell names the run, so its answer never changes and is
+        cached for a day: every coordinate inside the cell, from every client, shares it. Bundles on different grids
+        are one request per grid.
+      </p>
+      <form id="cell-form">
+        <label class="field">Source <select id="cell-source"></select></label>
+        <label class="field">Latitude <input id="cell-lat" type="number" step="any" min="-90" max="90" value="35.68" required /></label>
+        <label class="field">Longitude <input id="cell-lon" type="number" step="any" min="-180" max="360" value="139.77" required /></label>
+        <label class="field">Run (empty: live) <input id="cell-run" type="text" placeholder="gfs.2026103006" size="18" /></label>
+        <button class="btn execute" type="submit">Find cell</button>
+        <div id="cell-variables"></div>
+      </form>
+      <div id="cell-output"></div>
+    </details>
     <div id="swagger-ui"></div>
+    <script src="/docs/cell.js" defer></script>
     <script src="/docs/swagger-ui-bundle.js"></script>
     <script>
       SwaggerUIBundle({
