@@ -14,6 +14,7 @@ import {
   type CellGrid,
   type GridGroup,
 } from "./apiconsole/locate";
+import { FORECAST_MODEL_IDS } from "./manifest";
 import { DATA_ORIGIN } from "./site";
 import { applyTheme, toggleTheme } from "./theme";
 
@@ -549,6 +550,7 @@ async function copy(button: HTMLButtonElement, text: string): Promise<void> {
 routeSelect.addEventListener("change", () => {
   route = ROUTES.find((candidate) => candidate.path === routeSelect.value) ?? CELL_ROUTE;
   renderFields();
+  void fillSources();
   update();
 });
 apiInput.addEventListener("change", () => {
@@ -563,10 +565,15 @@ byId<HTMLFormElement>("api-form").addEventListener("submit", (event) => {
 copyUrlButton.addEventListener("click", () => void copy(copyUrlButton, buildRequest().url));
 copyCurlButton.addEventListener("click", () => void copy(copyCurlButton, curlCommand(buildRequest().url)));
 
+/** The source suggestions. `/v1/cell` reads grids only, so it is offered
+ * the gridded sources the viewer knows, not the point products (soundings,
+ * airports, stations, storms, fire detections); any id can still be typed. */
 async function fillSources(): Promise<void> {
   const list = byId<HTMLDataListElement>("api-source-list");
   const { sources } = await loadCatalog();
-  list.replaceChildren(...sources.map((source) => new Option(source.title, source.id)));
+  const grids = new Set<string>(FORECAST_MODEL_IDS);
+  const offered = route.locator ? sources.filter((source) => grids.has(source.id)) : sources;
+  list.replaceChildren(...offered.map((source) => new Option(source.title, source.id)));
 }
 
 readQuery();
