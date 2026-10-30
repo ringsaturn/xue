@@ -555,6 +555,11 @@ fn json(
         "application/json; charset=utf-8",
     );
     set(&mut response, "access-control-allow-origin", "*");
+    set(
+        &mut response,
+        "access-control-expose-headers",
+        error::EXPOSE_HEADERS,
+    );
     set(&mut response, "x-xue-api", env!("CARGO_PKG_VERSION"));
     set(&mut response, "cache-control", cache_control);
     for (name, value) in extra {

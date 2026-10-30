@@ -53,6 +53,12 @@ impl From<worker::Error> for HttpError {
     }
 }
 
+/// The response headers a cross-origin page may read beyond the CORS
+/// safelist: what the request resolved to, the diagnostics and the edge
+/// cache's own, so a browser client sees what `curl -i` shows.
+pub const EXPOSE_HEADERS: &str =
+    "x-xue-api, x-xue-ms, x-xue-run, x-xue-issue, retry-after, age, cf-cache-status";
+
 #[cfg(target_arch = "wasm32")]
 /// The CORS headers every response carries; the API is credential-free and
 /// cross-origin is the norm.
@@ -60,6 +66,9 @@ pub fn cors_headers() -> Result<Headers, HttpError> {
     let headers = Headers::new();
     headers
         .set("access-control-allow-origin", "*")
+        .map_err(HttpError::from)?;
+    headers
+        .set("access-control-expose-headers", EXPOSE_HEADERS)
         .map_err(HttpError::from)?;
     Ok(headers)
 }
@@ -124,6 +133,7 @@ pub fn error_response(error: HttpError) -> worker::Result<Response> {
     let headers = Headers::new();
     headers.set("content-type", "application/json; charset=utf-8")?;
     headers.set("access-control-allow-origin", "*")?;
+    headers.set("access-control-expose-headers", EXPOSE_HEADERS)?;
     headers.set("x-xue-api", env!("CARGO_PKG_VERSION"))?;
     Ok(Response::from_json(&body)?
         .with_status(error.status)
