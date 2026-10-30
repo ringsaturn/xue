@@ -39,6 +39,8 @@ mod bucket;
 mod cache;
 mod docs;
 mod error;
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+mod metrics;
 mod point;
 mod products;
 mod route;

@@ -25,6 +25,9 @@
 //! (default 32), `XUE_API_CACHE_MB` (default 64) and `XUE_API_RATE_PER_MIN`
 //! (default 0, no limit): a global budget of computed answers per minute,
 //! above which the server answers `429 rate_limited`.
+//! `XUE_API_METRICS_LISTEN` (default unset, off) serves Prometheus metrics
+//! (`metrics.rs`) at `/metrics` on an address of its own; never the API's,
+//! which the tunnel makes public.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -45,7 +48,7 @@ use tokio::net::TcpListener;
 
 use crate::bucket::Data;
 use crate::error::{self, HttpError};
-use crate::route;
+use crate::{metrics, route};
 
 const DEFAULT_ORIGIN: &str = "https://dataset.ringsaturn.me/xue/";
 
@@ -94,6 +97,7 @@ type Body = Full<Bytes>;
 /// The server's settings, from the environment (see the module docs).
 pub struct Config {
     listen: SocketAddr,
+    metrics: Option<SocketAddr>,
     origin: String,
     inflight: usize,
     cache_bytes: usize,
@@ -114,10 +118,21 @@ impl Config {
             }
         }
         let listen = var("XUE_API_LISTEN").unwrap_or_else(|| "127.0.0.1:8787".to_owned());
+        let metrics = var("XUE_API_METRICS_LISTEN")
+            .map(|address| {
+                address
+                    .parse()
+                    .map_err(|_| format!("XUE_API_METRICS_LISTEN={address} is not an address"))
+            })
+            .transpose()?;
+        if metrics == listen.parse().ok() {
+            return Err("XUE_API_METRICS_LISTEN must differ from XUE_API_LISTEN".to_owned());
+        }
         Ok(Config {
             listen: listen
                 .parse()
                 .map_err(|_| format!("XUE_API_LISTEN={listen} is not an address"))?,
+            metrics,
             origin: var("DATA_ORIGIN").unwrap_or_else(|| DEFAULT_ORIGIN.to_owned()),
             inflight: number("XUE_API_INFLIGHT", 32)?.max(1),
             cache_bytes: number("XUE_API_CACHE_MB", 64)? * 1024 * 1024,
@@ -187,6 +202,7 @@ impl Responses {
 
 struct State {
     data: Data,
+    started: SystemTime,
     inflight: Cell<usize>,
     inflight_limit: usize,
     responses: RefCell<Responses>,
@@ -211,12 +227,18 @@ impl Bucket {
         }
     }
 
+    /// The tokens available at `now`.
+    fn refill(&mut self, now: Instant) -> f64 {
+        let elapsed = now.duration_since(self.refilled).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * self.per_minute / 60.0).min(self.per_minute);
+        self.refilled = now;
+        self.tokens
+    }
+
     /// Spend a token, or the whole seconds until one is available.
     fn take(&mut self, now: Instant) -> Result<(), u64> {
         let per_second = self.per_minute / 60.0;
-        let elapsed = now.duration_since(self.refilled).as_secs_f64();
-        self.tokens = (self.tokens + elapsed * per_second).min(self.per_minute);
-        self.refilled = now;
+        self.refill(now);
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
             Ok(())
@@ -266,6 +288,7 @@ pub fn main() -> ExitCode {
 pub async fn serve(config: Config, data: Data) -> Result<(), String> {
     let state = Rc::new(State {
         data,
+        started: SystemTime::now(),
         inflight: Cell::new(0),
         inflight_limit: config.inflight,
         rate: (config.rate_per_minute > 0)
@@ -286,6 +309,13 @@ pub async fn serve(config: Config, data: Data) -> Result<(), String> {
         config.listen,
         state.data.origin
     );
+    if let Some(address) = config.metrics {
+        let listener = TcpListener::bind(address)
+            .await
+            .map_err(|error| format!("bind {address}: {error}"))?;
+        eprintln!("metrics on http://{address}/metrics");
+        tokio::task::spawn_local(serve_metrics(listener, state.clone()));
+    }
     tokio::task::spawn_local(watchdog());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|error| error.to_string())?;
@@ -314,6 +344,68 @@ pub async fn serve(config: Config, data: Data) -> Result<(), String> {
                 .await;
         });
     }
+}
+
+/// The metrics listener: `GET /metrics` and nothing else. Its own accept loop
+/// on the same thread, so a scrape reads the state between two requests.
+async fn serve_metrics(listener: TcpListener, state: Rc<State>) {
+    loop {
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(error) => {
+                eprintln!("metrics accept: {error}");
+                continue;
+            }
+        };
+        let state = state.clone();
+        tokio::task::spawn_local(async move {
+            let service = service_fn(move |request: Request<Incoming>| {
+                let state = state.clone();
+                async move {
+                    let mut response = if request.method() == Method::GET
+                        && request.uri().path() == "/metrics"
+                    {
+                        let mut response =
+                            Response::new(Full::new(Bytes::from(scrape(&state))));
+                        set(
+                            &mut response,
+                            "content-type",
+                            "text/plain; version=0.0.4; charset=utf-8",
+                        );
+                        response
+                    } else {
+                        let mut response = Response::new(Full::new(Bytes::new()));
+                        *response.status_mut() = StatusCode::NOT_FOUND;
+                        response
+                    };
+                    set(&mut response, "cache-control", "no-store");
+                    Ok::<_, Infallible>(response)
+                }
+            });
+            let _ = http1::Builder::new()
+                .timer(hyper_util::rt::TokioTimer::new())
+                .header_read_timeout(Duration::from_secs(10))
+                .serve_connection(TokioIo::new(stream), service)
+                .await;
+        });
+    }
+}
+
+fn scrape(state: &State) -> String {
+    let responses = state.responses.borrow();
+    let rate_tokens = state
+        .rate
+        .as_ref()
+        .map(|rate| rate.borrow_mut().refill(Instant::now()));
+    metrics::render(&metrics::Gauges {
+        inflight: state.inflight.get(),
+        inflight_limit: state.inflight_limit,
+        responses_entries: responses.map.len(),
+        responses_bytes: responses.bytes,
+        responses_limit_bytes: responses.limit,
+        rate_tokens,
+        started: state.started,
+    })
 }
 
 /// Tell systemd (`Type=notify`, `WatchdogSec=`) the server is ready, then
@@ -366,6 +458,18 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
         Err(error) => (error_response(&error), "error"),
     };
     response = compress(response, gzip).await;
+    let route = metrics::route_label(route::normalize(target.split('?').next().unwrap_or("/")));
+    let sent = {
+        use hyper::body::Body as _;
+        response.body().size_hint().exact().unwrap_or(0) as usize
+    };
+    metrics::request(
+        route,
+        outcome,
+        response.status().as_u16(),
+        started.elapsed(),
+        sent,
+    );
     let elapsed = started.elapsed().as_millis();
     set(&mut response, "x-xue-ms", &elapsed.to_string());
     eprintln!(

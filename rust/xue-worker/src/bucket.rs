@@ -293,14 +293,28 @@ impl Data {
             #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
             Backend::Http(client) => {
                 let url = self.url(path)?;
+                let kind = if range.is_some() { "range" } else { "whole" };
+                let started = std::time::Instant::now();
                 let mut request = client.get(url.clone());
                 if let Some(header) = range.as_ref().map(ReadRange::header) {
                     request = request.header("range", header);
                 }
-                let response = request.send().await.map_err(upstream)?;
-                let status = response.status().as_u16();
-                origin_status(path, &url, status)?;
-                let bytes = response.bytes().await.map_err(upstream)?;
+                let read = async {
+                    let response = request.send().await.map_err(upstream)?;
+                    let status = response.status().as_u16();
+                    origin_status(path, &url, status)?;
+                    let bytes = response.bytes().await.map_err(upstream)?;
+                    Ok::<_, HttpError>((bytes, status))
+                }
+                .await;
+                let result = match &read {
+                    Ok(_) => "ok",
+                    Err(error) if error.status == 404 => "not_found",
+                    Err(_) => "error",
+                };
+                let length = read.as_ref().map_or(0, |(bytes, _)| bytes.len());
+                crate::metrics::upstream(kind, result, started.elapsed(), length);
+                let (bytes, status) = read?;
                 Ok(origin_body(bytes.to_vec(), range, status))
             }
             #[cfg(not(target_arch = "wasm32"))]
