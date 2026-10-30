@@ -310,10 +310,12 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
         .path_and_query()
         .map(|target| target.as_str().to_owned())
         .unwrap_or_else(|| "/".to_owned());
+    let gzip = accepts_gzip(&request);
     let (mut response, outcome) = match handle(state, &method, &target).await {
         Ok(answered) => answered,
         Err(error) => (error_response(&error), "error"),
     };
+    response = compress(response, gzip).await;
     let elapsed = started.elapsed().as_millis();
     set(&mut response, "x-xue-ms", &elapsed.to_string());
     eprintln!(
@@ -321,6 +323,78 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
         response.status().as_u16()
     );
     response
+}
+
+/// Whether the client takes `gzip` (and has not refused it with `q=0`).
+/// Cloudflare asks the origin for it and recompresses for its own clients.
+fn accepts_gzip(request: &Request<Incoming>) -> bool {
+    request
+        .headers()
+        .get_all(hyper::header::ACCEPT_ENCODING)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|coding| {
+            let mut parts = coding.split(';').map(str::trim);
+            let name = parts.next().unwrap_or_default();
+            let refused = parts.any(|parameter| {
+                parameter
+                    .strip_prefix("q=")
+                    .and_then(|q| q.parse::<f32>().ok())
+                    == Some(0.0)
+            });
+            (name.eq_ignore_ascii_case("gzip") || name == "*") && !refused
+        })
+}
+
+/// Gzip a `200` text body. A point answer is ~5 KB of JSON that gzips to
+/// under 1 KB, and the tunnel's leg is this host's metered egress; bodies
+/// under a packet are not worth the header.
+async fn compress(response: Response<Body>, gzip: bool) -> Response<Body> {
+    use http_body_util::BodyExt;
+    use std::io::Write;
+
+    let compressible = response.status() == StatusCode::OK
+        && response
+            .headers()
+            .get(hyper::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| {
+                value.starts_with("application/json") || value.starts_with("text/")
+            });
+    if !compressible {
+        return response;
+    }
+    let (mut parts, body) = response.into_parts();
+    let bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(never) => match never {},
+    };
+    // Either form varies by the request's encoding, so a shared cache keeps
+    // them apart.
+    parts.headers.insert(
+        hyper::header::VARY,
+        HeaderValue::from_static("accept-encoding"),
+    );
+    if !gzip || bytes.len() < 1024 {
+        return Response::from_parts(parts, Full::new(bytes));
+    }
+    let mut encoder = flate2::write::GzEncoder::new(
+        Vec::with_capacity(bytes.len() / 4),
+        flate2::Compression::default(),
+    );
+    let gzipped = encoder.write_all(&bytes).and_then(|()| encoder.finish());
+    match gzipped {
+        Ok(gzipped) => {
+            parts.headers.insert(
+                hyper::header::CONTENT_ENCODING,
+                HeaderValue::from_static("gzip"),
+            );
+            parts.headers.remove(hyper::header::CONTENT_LENGTH);
+            Response::from_parts(parts, Full::new(Bytes::from(gzipped)))
+        }
+        Err(_) => Response::from_parts(parts, Full::new(bytes)),
+    }
 }
 
 async fn handle(
