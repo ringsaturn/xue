@@ -81,6 +81,11 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
             };
             Ok(Answer::json(&body, cache)?.with_header("x-xue-run", run))
         }
+        "/v1/cell" => {
+            // `run` is required, so the answer is immutable for its URL.
+            let (body, run) = point::read_cell(data, &point::parse_cell_query(url)).await?;
+            Ok(Answer::json(&body, "public, max-age=86400")?.with_header("x-xue-run", run))
+        }
         "/v1/soundings" => product_json(sounding::list(data, url).await?, url),
         "/v1/airports" => product_json(airport::list(data, url).await?, url),
         "/v1/synop" => product_json(synop::list(data, url).await?, url),
