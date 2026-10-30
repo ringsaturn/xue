@@ -20,7 +20,7 @@ use xue::Bundle;
 
 use crate::bucket::Data;
 use crate::error::HttpError;
-use crate::point::{parse_query, read_point};
+use crate::point::{parse_cell_query, parse_query, read_cell, read_point};
 use crate::source::{catalog, read_source};
 
 /// The run directory the fixture's pointer names; its objects sit flat in the
@@ -112,6 +112,41 @@ fn err(data: &Data, query: &str) -> HttpError {
     match get(data, query) {
         Ok(body) => panic!("{query}: expected an error, got {body}"),
         Err(error) => error,
+    }
+}
+
+fn get_cell(data: &Data, query: &str) -> Result<Value, HttpError> {
+    let url = Url::parse(&format!("https://api.example/v1/cell?{query}")).expect("url");
+    block_on(read_cell(data, &parse_cell_query(&url))).map(|(body, _)| body)
+}
+
+fn cell_ok(data: &Data, query: &str) -> Value {
+    get_cell(data, query).unwrap_or_else(|error| panic!("{query}: {} {}", error.code, error.message))
+}
+
+fn cell_err(data: &Data, query: &str) -> HttpError {
+    match get_cell(data, query) {
+        Ok(body) => panic!("{query}: expected an error, got {body}"),
+        Err(error) => error,
+    }
+}
+
+/// Apply `edit` to every `grid` object in a JSON document; how many it found.
+fn edit_grids(value: &mut Value, edit: &dyn Fn(&mut Value)) -> usize {
+    match value {
+        Value::Object(map) => map
+            .iter_mut()
+            .map(|(key, child)| {
+                if key == "grid" && child.is_object() {
+                    edit(child);
+                    1
+                } else {
+                    edit_grids(child, edit)
+                }
+            })
+            .sum(),
+        Value::Array(items) => items.iter_mut().map(|item| edit_grids(item, edit)).sum(),
+        _ => 0,
     }
 }
 
@@ -615,4 +650,83 @@ fn the_openapi_document_and_docs_api_md_list_the_same_routes() {
         .collect();
     described.sort();
     assert_eq!(documented, described);
+}
+
+#[test]
+fn a_cell_reads_what_the_point_inside_it_reads() {
+    let data = Data::in_memory(bucket());
+    let point = ok(
+        &data,
+        &format!("source=gfs&lat={LAT}&lon={LON}&variables=tmp2m,wind10m"),
+    );
+    let (row, column) = (&point["cell"]["row"], &point["cell"]["column"]);
+    let cell = cell_ok(
+        &data,
+        &format!("source=gfs&run={RUN}&row={row}&column={column}&variables=tmp2m,wind10m"),
+    );
+    assert_eq!(cell["run"], RUN);
+    assert_eq!(cell["cell"], point["cell"]);
+    assert_eq!(cell["time"], point["time"]);
+    assert_eq!(cell["variables"], point["variables"]);
+    assert_eq!(
+        cell["request"],
+        json!({ "row": row, "column": column, "variables": ["tmp2m", "wind10m"] })
+    );
+    assert_eq!(cell["timezone"], json!("Asia/Tokyo"));
+}
+
+#[test]
+fn a_cell_needs_a_run_and_indices_on_the_grid() {
+    let data = Data::in_memory(bucket());
+    let missing = cell_err(&data, "source=gfs&row=1&column=1");
+    assert_eq!((missing.status, missing.code.as_str()), (400, "invalid_parameter"));
+    assert!(missing.message.contains("run is required"));
+    // A cell never follows the live pointer.
+    assert!(data.reads().is_empty());
+
+    let negative = cell_err(&data, &format!("source=gfs&run={RUN}&row=-1&column=1"));
+    assert_eq!((negative.status, negative.code.as_str()), (400, "invalid_parameter"));
+
+    let outside = cell_err(
+        &data,
+        &format!("source=gfs&run={RUN}&row=73&column=0&variables=tmp2m"),
+    );
+    assert_eq!((outside.status, outside.code.as_str()), (400, "invalid_parameter"));
+    assert_eq!(outside.detail, Some(json!({ "rows": 73, "columns": 144 })));
+
+    let unknown = cell_err(&data, "source=gfs&run=gfs.1999010100&row=1&column=1");
+    assert_eq!((unknown.status, unknown.code.as_str()), (404, "unknown_run"));
+}
+
+#[test]
+fn a_cell_reads_a_repeated_bundle_once() {
+    let data = Data::in_memory(bucket());
+    let body = cell_ok(
+        &data,
+        &format!("source=gfs&run={RUN}&row=22&column=56&variables=tmp2m,tmp2m"),
+    );
+    assert_eq!(body["request"]["variables"], json!(["tmp2m"]));
+}
+
+#[test]
+fn a_cell_refuses_bundles_on_different_grids() {
+    let mut objects = bucket();
+    // prate is read through its series store; give that a coarser grid.
+    let key = format!("{RUN}/prate.series.zarr/zarr.json");
+    let mut group: Value =
+        serde_json::from_slice(objects.get(&key).expect("prate series group")).expect("json");
+    let edited = edit_grids(&mut group, &|grid| {
+        grid["width"] = json!(72);
+        grid["longitudeStep"] = json!(5.0);
+    });
+    assert!(edited > 0, "the group carries a grid");
+    put_json(&mut objects, &key, &group);
+    let data = Data::in_memory(objects);
+
+    let error = cell_err(
+        &data,
+        &format!("source=gfs&run={RUN}&row=22&column=56&variables=tmp2m,prate"),
+    );
+    assert_eq!((error.status, error.code.as_str()), (400, "grid_mismatch"));
+    assert_eq!(error.detail, Some(json!({ "bundles": ["tmp2m", "prate"] })));
 }

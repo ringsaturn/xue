@@ -327,30 +327,31 @@ async fn read_bundle_series(
     Ok(values)
 }
 
-/// One point's series across the requested bundles. Returns the response body
-/// and the run directory it resolved to (the `x-xue-run` header).
-pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, String), HttpError> {
-    let source = query
-        .source
-        .clone()
-        .ok_or_else(|| HttpError::new(400, "invalid_parameter", "source is required"))?;
-    let lat = query
-        .lat
-        .filter(|value| value.is_finite() && (-90.0..=90.0).contains(value))
-        .ok_or_else(|| HttpError::new(400, "invalid_parameter", "lat must be within [-90, 90]"))?;
-    let lon = query
-        .lon
-        .filter(|value| value.is_finite() && (-180.0..=360.0).contains(value))
-        .ok_or_else(|| {
-            HttpError::new(400, "invalid_parameter", "lon must be within [-180, 360]")
-        })?;
+/// Where a read lands on each bundle's grid.
+#[derive(Clone, Copy)]
+enum Target {
+    /// A coordinate, probed on each bundle's own grid.
+    Point { lon: f64, lat: f64 },
+    /// A cell by index, which only means one place when every requested
+    /// bundle shares a grid.
+    Cell { column: u32, row: u32 },
+}
 
-    let Run {
-        manifest,
-        dir,
-        run_time,
-    } = resolve_run(data, &source, query.run.as_deref()).await?;
-    let bundle_ids: Vec<String> = match &query.variables {
+/// The series of the requested bundles at a target.
+struct Series {
+    variables: Map<String, Value>,
+    cell: Option<ProbeCell>,
+    times: Option<Vec<String>>,
+    unit_seconds: Option<u32>,
+}
+
+/// The bundles to read: those asked for, or the run's first.
+fn bundle_ids(
+    source: &str,
+    manifest: &Manifest,
+    asked: &Option<Vec<String>>,
+) -> Result<Vec<String>, HttpError> {
+    let bundle_ids: Vec<String> = match asked {
         Some(variables) if !variables.is_empty() => variables.clone(),
         _ => manifest
             .bundles
@@ -365,13 +366,31 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
             format!("source {source} publishes no bundles"),
         ));
     }
+    Ok(bundle_ids)
+}
 
-    let mut variables = Map::new();
-    let mut cell: Option<ProbeCell> = None;
-    let mut times: Option<Vec<String>> = None;
-    let mut unit_seconds: Option<u32> = None;
+async fn read_series(
+    data: &Data,
+    source: &str,
+    run: &Run,
+    bundle_ids: &[String],
+    time: Option<&str>,
+    target: Target,
+) -> Result<Series, HttpError> {
+    let Run {
+        manifest,
+        dir,
+        run_time,
+    } = run;
+    let mut series = Series {
+        variables: Map::new(),
+        cell: None,
+        times: None,
+        unit_seconds: None,
+    };
+    let mut first_grid: Option<(&str, zarr::Grid)> = None;
 
-    for bundle_id in &bundle_ids {
+    for bundle_id in bundle_ids {
         let bundle = manifest
             .bundles
             .iter()
@@ -411,31 +430,59 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
         )
         .map_err(storage_error)?;
         let metadata = group.metadata;
-        let bundle_cell = zarr::probe_cell(&metadata.grid, lon, lat).ok_or_else(|| {
-            HttpError::new(
-                422,
-                "point_off_grid",
-                format!("point is outside the {source}/{bundle_id} grid"),
-            )
-        })?;
-        cell.get_or_insert(bundle_cell);
+        let bundle_cell = match target {
+            Target::Point { lon, lat } => {
+                zarr::probe_cell(&metadata.grid, lon, lat).ok_or_else(|| {
+                    HttpError::new(
+                        422,
+                        "point_off_grid",
+                        format!("point is outside the {source}/{bundle_id} grid"),
+                    )
+                })?
+            }
+            Target::Cell { column, row } => {
+                let grid = metadata.grid;
+                match first_grid {
+                    None => first_grid = Some((bundle_id, grid)),
+                    Some((first, held)) if held != grid => {
+                        return Err(HttpError::new(
+                            400,
+                            "grid_mismatch",
+                            format!(
+                                "{first} and {bundle_id} are on different grids; read them in separate requests"
+                            ),
+                        )
+                        .with_detail(json!({ "bundles": [first, bundle_id] })));
+                    }
+                    Some(_) => {}
+                }
+                zarr::grid_cell(&grid, column, row).ok_or_else(|| {
+                    HttpError::new(
+                        400,
+                        "invalid_parameter",
+                        format!(
+                            "cell ({row}, {column}) is outside the {source}/{bundle_id} grid of {} rows × {} columns",
+                            grid.height, grid.width
+                        ),
+                    )
+                    .with_detail(json!({ "rows": grid.height, "columns": grid.width }))
+                })?
+            }
+        };
+        series.cell.get_or_insert(bundle_cell);
         let run_time_ref = run_time.as_deref().or(metadata.run_time.as_deref());
-        let indices = zarr::frame_indices(
-            &metadata.offsets,
-            metadata.unit_seconds,
-            run_time_ref,
-            query.time.as_deref(),
-        )
-        .map_err(|error| HttpError::new(400, "invalid_parameter", error.to_string()))?;
-        if times.is_none() {
-            times = Some(zarr::axis_times(
+        let indices =
+            zarr::frame_indices(&metadata.offsets, metadata.unit_seconds, run_time_ref, time)
+                .map_err(|error| HttpError::new(400, "invalid_parameter", error.to_string()))?;
+        if series.times.is_none() {
+            series.times = Some(zarr::axis_times(
                 &metadata.offsets,
                 metadata.unit_seconds,
                 run_time_ref,
                 &indices,
             ));
         }
-        unit_seconds.get_or_insert(metadata.unit_seconds);
+        series.unit_seconds.get_or_insert(metadata.unit_seconds);
 
         for variable in &metadata.variables {
             let values = read_bundle_series(
@@ -447,29 +494,153 @@ pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, Strin
                 &indices,
             )
             .await?;
-            variables.insert(
+            series.variables.insert(
                 variable.id.clone(),
                 variable_json(variable, bundle_id, &values),
             );
         }
     }
+    Ok(series)
+}
 
-    let body = json!({
-        "source": source,
-        "run": dir,
-        "runTime": run_time,
-        "request": { "lat": lat, "lon": lon, "variables": bundle_ids },
-        // The requested point's zone, not the cell's: on a coarse grid the
-        // cell centre can sit across a border from the point.
-        "timezone": timezone::name(lon, lat),
-        "cell": cell.map(|cell| json!({
+fn cell_json(cell: Option<ProbeCell>) -> Value {
+    cell.map(|cell| {
+        json!({
             "column": cell.column,
             "row": cell.row,
             "longitude": cell.longitude,
             "latitude": cell.latitude,
-        })),
-        "time": { "unitSeconds": unit_seconds, "times": times },
-        "variables": variables,
+        })
+    })
+    .unwrap_or(Value::Null)
+}
+
+/// One point's series across the requested bundles. Returns the response body
+/// and the run directory it resolved to (the `x-xue-run` header).
+pub async fn read_point(data: &Data, query: &PointQuery) -> Result<(Value, String), HttpError> {
+    let source = query
+        .source
+        .clone()
+        .ok_or_else(|| HttpError::new(400, "invalid_parameter", "source is required"))?;
+    let lat = query
+        .lat
+        .filter(|value| value.is_finite() && (-90.0..=90.0).contains(value))
+        .ok_or_else(|| HttpError::new(400, "invalid_parameter", "lat must be within [-90, 90]"))?;
+    let lon = query
+        .lon
+        .filter(|value| value.is_finite() && (-180.0..=360.0).contains(value))
+        .ok_or_else(|| {
+            HttpError::new(400, "invalid_parameter", "lon must be within [-180, 360]")
+        })?;
+
+    let run = resolve_run(data, &source, query.run.as_deref()).await?;
+    let bundle_ids = bundle_ids(&source, &run.manifest, &query.variables)?;
+    let series = read_series(
+        data,
+        &source,
+        &run,
+        &bundle_ids,
+        query.time.as_deref(),
+        Target::Point { lon, lat },
+    )
+    .await?;
+
+    let body = json!({
+        "source": source,
+        "run": run.dir,
+        "runTime": run.run_time,
+        "request": { "lat": lat, "lon": lon, "variables": bundle_ids },
+        // The requested point's zone, not the cell's: on a coarse grid the
+        // cell centre can sit across a border from the point.
+        "timezone": timezone::name(lon, lat),
+        "cell": cell_json(series.cell),
+        "time": { "unitSeconds": series.unit_seconds, "times": series.times },
+        "variables": series.variables,
     });
-    Ok((body, dir))
+    Ok((body, run.dir))
+}
+
+/// The parsed `/v1/cell` query.
+pub struct CellQuery {
+    pub source: Option<String>,
+    pub run: Option<String>,
+    pub row: Option<String>,
+    pub column: Option<String>,
+    pub variables: Option<Vec<String>>,
+    pub time: Option<String>,
+}
+
+pub fn parse_cell_query(url: &Url) -> CellQuery {
+    let point = parse_query(url);
+    CellQuery {
+        source: point.source,
+        run: point.run,
+        row: param(url, "row"),
+        column: param(url, "column"),
+        variables: point.variables,
+        time: point.time,
+    }
+}
+
+fn index(name: &str, value: Option<&str>) -> Result<u32, HttpError> {
+    value
+        .ok_or_else(|| HttpError::new(400, "invalid_parameter", format!("{name} is required")))?
+        .parse()
+        .map_err(|_| {
+            HttpError::new(
+                400,
+                "invalid_parameter",
+                format!("{name} must be a non-negative integer"),
+            )
+        })
+}
+
+/// One grid cell's series in a named run: the cacheable form of a point read.
+/// `run` is required, so the answer never changes for its URL; every
+/// requested bundle must be on one grid, since `row`/`column` index it.
+pub async fn read_cell(data: &Data, query: &CellQuery) -> Result<(Value, String), HttpError> {
+    let source = query
+        .source
+        .clone()
+        .ok_or_else(|| HttpError::new(400, "invalid_parameter", "source is required"))?;
+    let run_name = query.run.as_deref().ok_or_else(|| {
+        HttpError::new(
+            400,
+            "invalid_parameter",
+            format!("run is required; /v1/sources/{source} names the live run"),
+        )
+    })?;
+    let row = index("row", query.row.as_deref())?;
+    let column = index("column", query.column.as_deref())?;
+
+    let run = resolve_run(data, &source, Some(run_name)).await?;
+    let mut bundle_ids = bundle_ids(&source, &run.manifest, &query.variables)?;
+    // Asking twice reads once; the order a client lists them in is echoed.
+    let mut seen = std::collections::HashSet::new();
+    bundle_ids.retain(|id| seen.insert(id.clone()));
+    let series = read_series(
+        data,
+        &source,
+        &run,
+        &bundle_ids,
+        query.time.as_deref(),
+        Target::Cell { column, row },
+    )
+    .await?;
+    // The cell's own zone: there is no requested point to prefer.
+    let timezone = series
+        .cell
+        .and_then(|cell| timezone::name(cell.longitude, cell.latitude));
+
+    let body = json!({
+        "source": source,
+        "run": run.dir,
+        "runTime": run.run_time,
+        "request": { "row": row, "column": column, "variables": bundle_ids },
+        "timezone": timezone,
+        "cell": cell_json(series.cell),
+        "time": { "unitSeconds": series.unit_seconds, "times": series.times },
+        "variables": series.variables,
+    });
+    Ok((body, run.dir))
 }

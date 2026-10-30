@@ -127,6 +127,42 @@
         }
       }
     },
+    "/v1/cell": {
+      "get": {
+        "tags": ["data"],
+        "operationId": "cell",
+        "summary": "One grid cell's series in a named run: the cacheable form of /v1/point.",
+        "description": "Read the cell a `/v1/point` answer reported (`run`, `cell.row`, `cell.column`). The run is required, so the answer never changes for its URL and caches for a day. Every requested bundle must be on one grid.",
+        "parameters": [
+          { "$ref": "#/components/parameters/sourceQuery" },
+          { "$ref": "#/components/parameters/runRequired" },
+          { "$ref": "#/components/parameters/row" },
+          { "$ref": "#/components/parameters/column" },
+          { "$ref": "#/components/parameters/variables" },
+          { "$ref": "#/components/parameters/time" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cell and one entry per returned variable.",
+            "headers": {
+              "x-xue-run": {
+                "description": "The run directory the response resolved to.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CellResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
     "/v1/soundings": {
       "get": {
         "tags": ["stations"],
@@ -436,6 +472,27 @@
         "description": "Pin the run instead of following the live pointer: a STAC Item id (`gfs.2026092506`, `mrms.2026092509.1455`), a run directory (`mrms.2026092509/1455`) or a plain run id. The answer is then stable and caches for a day.",
         "schema": { "type": "string" }
       },
+      "runRequired": {
+        "name": "run",
+        "in": "query",
+        "required": true,
+        "description": "The run the cell is read from: a STAC Item id (`gfs.2026092506`), a run directory or a plain run id, as `/v1/point`'s `run` or `/v1/sources/{source}` names it.",
+        "schema": { "type": "string" }
+      },
+      "row": {
+        "name": "row",
+        "in": "query",
+        "required": true,
+        "description": "The cell's row, 0 at the grid's first latitude.",
+        "schema": { "type": "integer", "minimum": 0 }
+      },
+      "column": {
+        "name": "column",
+        "in": "query",
+        "required": true,
+        "description": "The cell's column, 0 at the grid's first longitude.",
+        "schema": { "type": "integer", "minimum": 0 }
+      },
       "issue": {
         "name": "issue",
         "in": "query",
@@ -632,6 +689,40 @@
           "timezone": {
             "type": ["string", "null"],
             "description": "The IANA zone of the requested point (tzf-rs); the nautical Etc/GMT±N zone on open sea, null only where no polygon covers the point.",
+            "example": "Asia/Tokyo"
+          },
+          "cell": { "$ref": "#/components/schemas/Cell" },
+          "time": { "$ref": "#/components/schemas/TimeAxis" },
+          "variables": {
+            "type": "object",
+            "description": "The flat variable table, keyed by variable id.",
+            "additionalProperties": { "$ref": "#/components/schemas/Variable" }
+          }
+        }
+      },
+      "CellResponse": {
+        "type": "object",
+        "required": ["source", "run", "runTime", "request", "timezone", "cell", "time", "variables"],
+        "properties": {
+          "source": { "type": "string" },
+          "run": { "type": "string" },
+          "runTime": { "type": ["string", "null"], "format": "date-time" },
+          "request": {
+            "type": "object",
+            "required": ["row", "column", "variables"],
+            "properties": {
+              "row": { "type": "integer" },
+              "column": { "type": "integer" },
+              "variables": {
+                "type": "array",
+                "description": "The bundle ids requested (or the default), each once.",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "timezone": {
+            "type": ["string", "null"],
+            "description": "The IANA zone of the cell centre (tzf-rs).",
             "example": "Asia/Tokyo"
           },
           "cell": { "$ref": "#/components/schemas/Cell" },

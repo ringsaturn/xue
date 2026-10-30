@@ -40,6 +40,7 @@ preflight. Unknown query parameters are ignored.
 | `GET /v1/catalog` | `{dataOrigin, collections: [{id, title, href}]}`, one entry per child of the root catalog | `max-age=60` |
 | `GET /v1/sources/{source}` | one source's live run (§ Sources) | `max-age=60` |
 | `GET /v1/point` | one cell's series for one or more bundles (§ Point) | `max-age=30`, or a day with `run=` |
+| `GET /v1/cell` | one grid cell's series in a named run (§ Cell) | a day |
 | `GET /v1/soundings` | the radiosonde stations of the live issue (§ Soundings) | `max-age=60`, or a day with `issue=` |
 | `GET /v1/soundings/{station}` | one station's ascents | same |
 | `GET /v1/airports` | every airport's newest observation (§ Airports) | same |
@@ -51,7 +52,7 @@ preflight. Unknown query parameters are ignored.
 
 Every response carries `x-xue-api` (the build) and `x-xue-ms` (the
 server's own wall time, a diagnostic, not part of the contract). A point
-read carries `x-xue-run`, a product read `x-xue-issue`: what the request
+or cell read carries `x-xue-run`, a product read `x-xue-issue`: what the request
 resolved to.
 
 ## Point
@@ -107,6 +108,31 @@ The response:
   (`docs/zarr-profile.md`, "Series store") is read through it: one chunk
   for the whole axis. Otherwise its map store is read, one chunk per time
   chunk. The response is the same either way.
+
+## Cell
+
+The same read addressed by grid cell in a named run, for a client that
+repeats a place: ask `/v1/point` once, then read the `run`, `cell.row` and
+`cell.column` it answered. Every coordinate in a cell resolves to one URL,
+and with the run fixed the answer never changes, so it caches for a day.
+
+| Parameter | Required | Meaning |
+|---|---|---|
+| `source` | yes | a Collection id |
+| `run` | yes | the run, spelled as for `/v1/point`; `/v1/sources/{source}` names the live one |
+| `row`, `column` | yes | the cell's indices, 0 at the grid's first latitude and longitude |
+| `variables` | no | as for `/v1/point`; a bundle listed twice is read once |
+| `time` | no | as for `/v1/point` |
+
+The response is `/v1/point`'s, with two differences: `request` echoes
+`{row, column, variables}`, and `timezone` is the cell centre's.
+
+- Every requested bundle must be on one grid, since `row`/`column` index
+  it. A source's bundles usually share a grid; a reduced-resolution variant
+  or a wave field may not (`400 grid_mismatch`). Read those separately,
+  each with the cell `/v1/point` reports for it.
+- A `run` the prune jobs have deleted answers `404 unknown_run`: ask
+  `/v1/point` again for the live run and its cell.
 
 ## Sources
 
@@ -309,7 +335,8 @@ forecasts and best tracks are passed through as the product writes them.
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `invalid_parameter` | `source`, `lat` or `lon` missing or out of range; `time` not ISO 8601; `run` not a run name; `issue` not `<product>.<digits>`; `lat` without `lon`, `radius` without them, a malformed `bbox`, `limit` under 1; an `include` section that does not exist |
+| 400 | `invalid_parameter` | `source`, `lat` or `lon` missing or out of range; `time` not ISO 8601; `run` not a run name; `issue` not `<product>.<digits>`; `/v1/cell` without `run`, `row` or `column`, or a cell outside the grid (`detail` gives its `rows` and `columns`); `lat` without `lon`, `radius` without them, a malformed `bbox`, `limit` under 1; an `include` section that does not exist |
+| 400 | `grid_mismatch` | `/v1/cell` asked for bundles on different grids; `detail.bundles` names the first two |
 | 400 | `not_a_grid` | `/v1/point` asked for a point product; `detail.endpoint` is the route that reads it |
 | 404 | `unknown_source` | no such Collection |
 | 404 | `no_live_run` | the Collection names no live pointer, the run publishes no bundles, or a product publishes no live issue |
@@ -338,7 +365,7 @@ Errors are not cached.
   catalog, the source summaries and the point products), and two data
   centers can briefly answer from different runs. Pin `run=` or `issue=`
   for a stable answer; it caches for a day because a run's or an issue's
-  objects never change under it.
+  objects never change under it. `/v1/cell` always pins its run.
 - Inside an isolate (or the origin process), the manifest and a product's index are held by their
   pointer's crc, store documents and shard indices by `path#crc32`, and a
   station's byte span by `path#crc32:offset+length`. The Collection and

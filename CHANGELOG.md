@@ -7,6 +7,10 @@ changes are in `git log`.
 
 ## 2026-10-30
 
+- The data API has `GET /v1/cell?source&run&row&column`: one grid cell's
+  series in a named run, `run` required, cached for a day. `/v1/point`
+  already reports the `run` and `cell` to use. Bundles on different grids
+  answer `400 grid_mismatch` (`docs/api.md`).
 - The data API may answer `503 overloaded` with `Retry-After` when a
   self-hosted origin is computing too many requests at once
   (`docs/api.md`).

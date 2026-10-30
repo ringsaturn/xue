@@ -117,11 +117,22 @@ pub fn probe_cell(grid: &Grid, longitude: f64, latitude: f64) -> Option<ProbeCel
     if row < 0.0 || row >= f64::from(grid.height) {
         return None;
     }
+    grid_cell(grid, column as u32, row as u32)
+}
+
+/// A cell addressed by its indices, with its centre; `None` outside the grid.
+/// The inverse of [`probe_cell`]: probing the centre returns the same cell.
+pub fn grid_cell(grid: &Grid, column: u32, row: u32) -> Option<ProbeCell> {
+    if column >= grid.width || row >= grid.height {
+        return None;
+    }
     Some(ProbeCell {
-        column: column as u32,
-        row: row as u32,
-        longitude: normalize_longitude(grid.first_longitude + column * grid.longitude_step),
-        latitude: grid.first_latitude + row * grid.latitude_step,
+        column,
+        row,
+        longitude: normalize_longitude(
+            grid.first_longitude + f64::from(column) * grid.longitude_step,
+        ),
+        latitude: grid.first_latitude + f64::from(row) * grid.latitude_step,
     })
 }
 
@@ -1231,6 +1242,15 @@ mod tests {
         assert!((cell.longitude - 139.75).abs() < 1e-9);
         assert!((cell.latitude - 35.75).abs() < 1e-9);
         assert!(probe_cell(&grid, -180.1, 0.0).is_some());
+
+        let addressed = grid_cell(&grid, 1279, 217).unwrap();
+        assert_eq!(addressed, cell);
+        assert_eq!(
+            probe_cell(&grid, addressed.longitude, addressed.latitude),
+            Some(addressed)
+        );
+        assert!(grid_cell(&grid, 1440, 0).is_none());
+        assert!(grid_cell(&grid, 0, 721).is_none());
     }
 
     #[test]
