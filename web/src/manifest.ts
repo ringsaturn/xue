@@ -31,6 +31,7 @@ export type ForecastModelId =
   | "era5"
   | "cams"
   | "gefsaero"
+  | "cmadust"
   | "cma"
   | "mrms"
   | "mrms3d"
@@ -271,6 +272,24 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
     coreBundles: ["aod"],
     defaultVariable: "aod",
     railCore: ["aod", "pm25"],
+  },
+  // The CMA's CMA-CW v1.0/DUST sand-and-dust forecast, the WMO SDS-WAS Asian
+  // Center's model, as WMO WIS2 carries it: a regional model on a regular
+  // 0.15° grid (835 × 301 cells, centres 25.0°E–150.1°E, 15.0°N–60.0°N)
+  // over East and Central Asia, so like ICON-EU the rectangle is its own
+  // domain and nothing is clipped. Hourly to F072, three-hourly to F168,
+  // from the 00Z and 12Z cycles. Two fields: the surface dust
+  // concentration, its core and the field it opens on, and the dust
+  // optical depth, a variant of the optical depth family.
+  cmadust: {
+    id: "cmadust",
+    label: "CMA-CW-DUST",
+    product: "cma-cw-dust-0p15",
+    latestFilename: "latest-cmadust.json",
+    coreBundles: ["dustsfc"],
+    defaultVariable: "dustsfc",
+    railCore: ["dustsfc", "aod"],
+    region: [25.0, 15.0, 150.1, 60.0],
   },
   // CMA weather radar level-3 mosaic composite reflectivity: the national
   // composite every six minutes on the data portal's plate carrée tile grid
@@ -590,6 +609,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "iconeu",
   "arpege",
   "gefsaero",
+  "cmadust",
   "mrms",
   "mrms3d",
   "jma",
@@ -698,6 +718,7 @@ export type KnownBundleId =
   | SoilId
   | SatelliteId
   | AerosolId
+  | DustId
   | HydrologyId
   | PressureBundleId
   | IsobaricScalarBundleId
@@ -814,6 +835,14 @@ export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "ir039", "dustrgb
 type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
 export const AEROSOL_IDS: readonly AerosolId[] = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"];
 
+/** The dust model's own field: the surface dust concentration of every
+ * particle size (CMA-CW-DUST), the mass density (0,20,0) on the ground
+ * with a dust `aerosol` block and no size cut. An aerosol like the set
+ * above, but no GEFS-Aerosols field, so outside that set and its
+ * registry fixture. */
+type DustId = "dustsfc";
+export const DUST_IDS: readonly DustId[] = ["dustsfc"];
+
 /** The hydrology set — EFAS river discharge, the mean over each six-hour
  * step (`dis06`), the return-period class the encoder derives from it
  * against the EFAS thresholds (`disrp`), and the static upstream area of
@@ -868,6 +897,7 @@ type KnownDataVariableId =
   | OceanId
   | SoilId
   | AerosolId
+  | DustId
   | HydrologyId
   | PressureBundleId
   | IsobaricScalarBundleId
@@ -897,6 +927,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...SOIL_IDS,
   ...SATELLITE_IDS,
   ...AEROSOL_IDS,
+  ...DUST_IDS,
   ...HYDROLOGY_IDS,
   "prmsl",
   ...perLevel("hgt"),

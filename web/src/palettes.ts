@@ -683,6 +683,28 @@ const COARSE_PARTICULATE_STOPS: Stop[] = [
   [1000, 120, 20, 60, 255],
 ];
 
+// Surface dust concentration of every particle size in µg/m³, over the
+// four decades a dust model spans: the PM10 ramp's colours, spread over
+// 1-2-5 breakpoints, so a plume reads in the hues it does on the PM10 map
+// (green under 50, yellow by 200, orange, red at 1000), then the purple
+// and maroon PM10 ends on, then the browns of a dust storm's core,
+// darkest at the codebook's 50000, so a core past 20000 still stands out
+// from one at 10000. Clean air under 20 is the map.
+const DUST_CONCENTRATION_STOPS: Stop[] = [
+  [0, 80, 190, 80, 0],
+  [20, 80, 190, 80, 90],
+  [50, 120, 200, 70, 160],
+  [100, 190, 215, 65, 185],
+  [200, 240, 220, 60, 200],
+  [500, 245, 145, 40, 225],
+  [1000, 225, 50, 50, 245],
+  [2000, 140, 60, 160, 255],
+  [5000, 120, 20, 60, 255],
+  [10000, 130, 65, 35, 255],
+  [20000, 90, 40, 25, 255],
+  [50000, 50, 20, 12, 255],
+];
+
 // Soil temperature: the 2 m ramp at the same values, so frozen ground is
 // the blue frozen air is and 0 °C keeps its pale yellow, opaque like the
 // air's. The codebook's bottom, −61 °C, is no soil (open water) rather than
@@ -1029,6 +1051,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   if (aerosolChart(family)) {
     if (family === "pm25") return FINE_PARTICULATE_STOPS;
     if (family === "pm10" || family === "pm10dust") return COARSE_PARTICULATE_STOPS;
+    if (family === "dustsfc") return DUST_CONCENTRATION_STOPS;
     return AEROSOL_OPTICAL_DEPTH_STOPS;
   }
   if (family === "dswrf") return SOLAR_STOPS;

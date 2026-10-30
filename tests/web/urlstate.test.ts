@@ -157,6 +157,8 @@ describe("the fields' own ?type= spellings", () => {
     ["?type=airquality", "pm25"],
     ["?type=pm10", "pm10"],
     ["?type=pm10dust", "pm10dust"],
+    ["?type=dustsfc", "dustsfc"],
+    ["?type=duststorm", "dustsfc"],
     // Satellite. The Dust RGB keeps `dust`.
     ["?type=infrared", "ir104"],
     ["?type=ir", "ir104"],
@@ -240,6 +242,8 @@ describe("parseModelFromSearch", () => {
     expect(parseModelFromSearch("?model=ICON-EU")).toBe("iconeu");
     expect(parseModelFromSearch("?model=arpege")).toBe("arpege");
     expect(parseModelFromSearch("?model=ARPEGE")).toBe("arpege");
+    expect(parseModelFromSearch("?model=cmadust")).toBe("cmadust");
+    expect(parseModelFromSearch("?model=CMA-CW-DUST")).toBe("cmadust");
     expect(parseModelFromSearch("?model=MRMS")).toBe("mrms");
     expect(parseModelFromSearch("?model=mrms3d")).toBe("mrms3d");
     // The WOOF nest has no live feed: a bare link to it opens the default,
