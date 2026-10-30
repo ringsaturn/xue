@@ -21,11 +21,12 @@ import { applyTheme, toggleTheme } from "./theme";
  * The API console (api.html): build a request to the data API, send it from
  * the browser and read the answer, status and headers beside it.
  *
- * `/v1/cell` addresses a grid cell, so the console finds the cell for a
- * latitude and longitude itself (`apiconsole/locate.ts`), from the run's
- * manifest on the dataset origin; `/v1/point` gets the same lookup as a
- * check on the cell the server answers. Everything else is a form over the
- * route's parameters, kept in the page's query so a request is a link.
+ * Grid reads go through `/v1/cell`, which addresses a grid cell, so the
+ * console finds the cell for a latitude and longitude itself
+ * (`apiconsole/locate.ts`), from the run's manifest on the dataset origin.
+ * `/v1/point` is left out: a client that repeats a place asks by cell, and
+ * the console shows it doing so. Everything else is a form over the route's
+ * parameters, kept in the page's query so a request is a link.
  *
  * English only, like the API's own documentation: parameter names, codes
  * and JSON are the content here.
@@ -43,9 +44,8 @@ interface Param {
 interface Route {
   path: string;
   params: Param[];
-  /** Route-specific behaviour: a source picker, the bundle chips and the
-   * lat/lon → cell locator. */
-  kind?: "grid-point" | "grid-cell";
+  /** The bundle chips and the lat/lon → cell locator. */
+  locator?: boolean;
 }
 
 const SOURCE: Param = { name: "source", in: "query", required: true };
@@ -59,33 +59,21 @@ const SPATIAL: Param[] = [
   { name: "limit", in: "query" },
 ];
 
-const POINT_ROUTE: Route = {
-  path: "/v1/point",
-  kind: "grid-point",
+const CELL_ROUTE: Route = {
+  path: "/v1/cell",
+  locator: true,
   params: [
     SOURCE,
-    { name: "lat", in: "query", required: true },
-    { name: "lon", in: "query", required: true },
+    { name: "run", in: "query", required: true, placeholder: "latest" },
+    { name: "row", in: "query", required: true },
+    { name: "column", in: "query", required: true },
     { name: "variables", in: "query", placeholder: "the run's first bundle" },
     TIME,
-    { name: "run", in: "query", placeholder: "live" },
   ],
 };
 
 const ROUTES: readonly Route[] = [
-  POINT_ROUTE,
-  {
-    path: "/v1/cell",
-    kind: "grid-cell",
-    params: [
-      SOURCE,
-      { name: "run", in: "query", required: true, placeholder: "latest" },
-      { name: "row", in: "query", required: true },
-      { name: "column", in: "query", required: true },
-      { name: "variables", in: "query", placeholder: "the run's first bundle" },
-      TIME,
-    ],
-  },
+  CELL_ROUTE,
   { path: "/v1/sources/{source}", params: [{ ...SOURCE, in: "path" }] },
   { path: "/v1/catalog", params: [] },
   { path: "/v1/soundings", params: [...SPATIAL, ISSUE] },
@@ -136,12 +124,12 @@ for (const route of ROUTES) routeSelect.append(new Option(route.path, route.path
 // One value per parameter name across routes, so switching routes keeps
 // the source, the coordinate and the times already typed.
 const values = new Map<string, string>();
-let route: Route = POINT_ROUTE;
+let route: Route = CELL_ROUTE;
 
 function readQuery(): void {
   const params = new URLSearchParams(window.location.search);
   apiInput.value = params.get("api") || DEFAULT_API;
-  route = ROUTES.find((candidate) => candidate.path === params.get("route")) ?? POINT_ROUTE;
+  route = ROUTES.find((candidate) => candidate.path === params.get("route")) ?? CELL_ROUTE;
   for (const [key, value] of params) if (key !== "api" && key !== "route") values.set(key, value);
   if (!values.has("source")) values.set("source", "gfs");
   if (!values.has("lat") && !values.has("lon")) {
@@ -156,7 +144,7 @@ function writeQuery(): void {
   const pairs: [string, string][] = [["route", route.path]];
   if (apiInput.value.trim() !== DEFAULT_API) pairs.push(["api", apiInput.value.trim()]);
   const keys = new Set(route.params.map((param) => param.name));
-  if (route.kind === "grid-cell") for (const key of LOCATOR_KEYS) keys.add(key);
+  if (route.locator) for (const key of LOCATOR_KEYS) keys.add(key);
   for (const key of keys) {
     const value = values.get(key)?.trim();
     if (value) pairs.push([key, value]);
@@ -259,12 +247,12 @@ function renderFields(): void {
   // On `/v1/cell` the locator's lat/lon sit after the source, before the
   // row and column they fill.
   const params: Param[] =
-    route.kind === "grid-cell"
+    route.locator
       ? [SOURCE, { name: "lat", in: "query" }, { name: "lon", in: "query" }, ...route.params.slice(1)]
       : route.params;
   for (const param of params) {
     const label = element("label", "api-field");
-    const locator = route.kind === "grid-cell" && (LOCATOR_KEYS as readonly string[]).includes(param.name);
+    const locator = route.locator && (LOCATOR_KEYS as readonly string[]).includes(param.name);
     const name = element("span", undefined, param.name);
     if (param.required) name.append(element("span", "api-required", " *"));
     if (locator) name.append(element("span", "api-field-note", " → row, column"));
@@ -338,8 +326,8 @@ async function locate(): Promise<void> {
   const token = ++locateToken;
   located = null;
   locatorBox.replaceChildren();
-  locatorBox.hidden = route.kind === undefined;
-  if (route.kind === undefined) {
+  locatorBox.hidden = !route.locator;
+  if (!route.locator) {
     renderBundles(null);
     return;
   }
@@ -396,7 +384,7 @@ async function locate(): Promise<void> {
     item.append(element("span", "api-group-grid", gridLabel(group.grid)));
     if (cell) item.append(element("span", "api-group-cell", cellLabel(cell)));
     else if (hasCoordinate) item.append(element("span", "api-group-cell is-error", "point_off_grid"));
-    if (route.kind === "grid-cell" && cell && groups.length > 1) {
+    if (route.locator && cell && groups.length > 1) {
       const use = element("button", "api-chip", "use");
       use.type = "button";
       use.addEventListener("click", () => {
@@ -408,14 +396,14 @@ async function locate(): Promise<void> {
     list.append(item);
   }
   locatorBox.append(list);
-  if (route.kind === "grid-cell" && groups.length > 1) {
+  if (route.locator && groups.length > 1) {
     locatorBox.append(
       element("p", "api-locator-status is-error", "grid_mismatch: these bundles are on different grids, one /v1/cell request each"),
     );
   }
   // The cell follows the coordinate; one that is off this grid, or a lookup
   // that splits across grids, leaves no stale cell of another source behind.
-  if (route.kind === "grid-cell" && hasCoordinate) {
+  if (route.locator && hasCoordinate) {
     const cell = coordinate ? null : located.cell;
     setField("row", cell ? String(cell.row) : "");
     setField("column", cell ? String(cell.column) : "");
@@ -433,7 +421,7 @@ interface Built {
 
 function buildRequest(): Built {
   const base = apiBase();
-  if (route.kind === "grid-cell") {
+  if (route.locator) {
     const source = values.get("source")?.trim() ?? "";
     const typed = values.get("run")?.trim() ?? "";
     const live = typed === "" || typed === "latest";
@@ -490,21 +478,10 @@ const SHOWN_HEADERS = ["cache-control", "x-xue-run", "x-xue-issue", "x-xue-ms", 
 function checkCell(body: unknown, sent: Built): string | null {
   const cell = (body as { cell?: { row?: unknown; column?: unknown } } | null)?.cell;
   if (!cell || typeof cell.row !== "number" || typeof cell.column !== "number") return null;
-  if (route.kind === "grid-cell") {
-    const params = new URL(sent.url).searchParams;
-    const same = String(cell.row) === params.get("row") && String(cell.column) === params.get("column");
-    return same ? "cell matches the request" : `cell (${cell.row}, ${cell.column}) differs from the request`;
-  }
-  const first = located?.groups[0];
-  if (route.kind === "grid-point" && first) {
-    const local = first.cell;
-    if (!local) return "the page puts this point off the grid; the server answered a cell";
-    const same = local.row === cell.row && local.column === cell.column;
-    return same
-      ? `cell matches the page's lookup (row ${local.row}, column ${local.column})`
-      : `the page's lookup says row ${local.row}, column ${local.column}: report this`;
-  }
-  return null;
+  if (!route.locator) return null;
+  const params = new URL(sent.url).searchParams;
+  const same = String(cell.row) === params.get("row") && String(cell.column) === params.get("column");
+  return same ? "cell matches the request" : `cell (${cell.row}, ${cell.column}) differs from the request`;
 }
 
 async function send(): Promise<void> {
@@ -570,7 +547,7 @@ async function copy(button: HTMLButtonElement, text: string): Promise<void> {
 }
 
 routeSelect.addEventListener("change", () => {
-  route = ROUTES.find((candidate) => candidate.path === routeSelect.value) ?? POINT_ROUTE;
+  route = ROUTES.find((candidate) => candidate.path === routeSelect.value) ?? CELL_ROUTE;
   renderFields();
   update();
 });
