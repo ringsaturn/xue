@@ -90,7 +90,11 @@ The response:
 - `variables` is a flat map keyed by variable id, whatever was asked for.
   A vector bundle answers as its components, each naming its `bundle`. The
   API does not derive speed or direction.
-- `values` follows `time.times` one to one. `null` is a missing code (the
+- `values` follows `time.times` one to one. Bundles of one run need not
+  share an axis (ECMWF's de-accumulated `prate` has no analysis frame), so
+  `time.times` is the union of the requested bundles' axes and a variable
+  is `null` at a time its bundle has no frame for; the order the bundles
+  are listed in does not change the answer. `null` is a missing code (the
   variable's `nodataCode`, or a chunk the store never wrote). Values are
   the codebook's: a linear field is quantized to its step (0.5 °C for
   `tmp2m`), a log1p field (`prate`, the aerosol fields) to its scale.

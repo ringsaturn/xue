@@ -800,3 +800,47 @@ fn a_variable_carries_the_codebook_its_values_sit_on() {
     assert!(tmp2m["nodataCode"].is_u64());
     assert_eq!(body["variables"]["prate"]["quantization"]["type"], "log1p");
 }
+
+/// Bundles on different axes answer on the union of the two, each `null`
+/// where its own axis has no frame, in whichever order they are asked.
+#[test]
+fn bundles_on_different_axes_share_the_union_axis() {
+    let baseline = ok(
+        &Data::in_memory(bucket()),
+        &format!("source=gfs&run={RUN}&lat={LAT}&lon={LON}&variables=tmp2m,prate"),
+    );
+    let mut objects = bucket();
+    // prate one hour later throughout, as a de-accumulated rate with no
+    // analysis frame starts a step after the instantaneous fields.
+    let key = format!("{RUN}/prate.series.zarr/zarr.json");
+    let mut group: Value = serde_json::from_slice(&objects[&key]).expect("group");
+    group["attributes"]["xue"]["time"]["firstFrameOffset"] = json!(1);
+    put_json(&mut objects, &key, &group);
+    // A crc of its own, so the isolate cache cannot answer with the old group.
+    let manifest_key = format!("{RUN}/manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&objects[&manifest_key]).expect("manifest");
+    for entry in manifest["bundles"].as_array_mut().expect("bundles") {
+        if entry["variable"] == "prate" {
+            entry["series"]["crc32"] = json!("a1e5bf01");
+        }
+    }
+    put_json(&mut objects, &manifest_key, &manifest);
+    let data = Data::in_memory(objects);
+
+    for order in ["tmp2m,prate", "prate,tmp2m"] {
+        let body = ok(
+            &data,
+            &format!("source=gfs&run={RUN}&lat={LAT}&lon={LON}&variables={order}"),
+        );
+        let times = body["time"]["times"].as_array().expect("times");
+        assert_eq!(times.len(), FRAMES + 1, "{order}");
+        assert_eq!(times[0], baseline["time"]["times"][0], "{order}");
+        let tmp2m = values(&body, "tmp2m");
+        let prate = values(&body, "prate");
+        assert_eq!((tmp2m.len(), prate.len()), (FRAMES + 1, FRAMES + 1), "{order}");
+        assert_eq!(tmp2m[..FRAMES], values(&baseline, "tmp2m")[..], "{order}");
+        assert_eq!(tmp2m[FRAMES], None, "{order}");
+        assert_eq!(prate[0], None, "{order}");
+        assert_eq!(prate[1..], values(&baseline, "prate")[..], "{order}");
+    }
+}
