@@ -30,8 +30,11 @@ run needs no deploy of the API.
 ## Endpoints
 
 All are `GET` (and `HEAD`), answer `application/json; charset=utf-8` and
-carry `access-control-allow-origin: *`. `OPTIONS` answers the CORS
-preflight. Unknown query parameters are ignored.
+carry `access-control-allow-origin: *`, with
+`access-control-expose-headers` naming the headers below (and
+`retry-after`, `age`, `cf-cache-status`) so a page can read them.
+`OPTIONS` answers the CORS preflight. Unknown query parameters are
+ignored.
 
 | Route | Answers | `Cache-Control` |
 |---|---|---|
