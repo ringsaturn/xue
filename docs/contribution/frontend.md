@@ -584,8 +584,9 @@ because it reads the run's manifest from the bucket, whose CORS admits
 the site. For `/v1/cell` it turns a latitude and longitude into the row
 and column (`apiconsole/locate.ts`: the server's `probe_cell` rule, with
 `floor(x + 0.5)` where the viewer's `probeCell` uses `Math.round`, the
-canonical query and `run_directory`); for `/v1/point` the same lookup
-checks the cell the server answers. The live run is the Collection's
+canonical query and `run_directory`). Grid reads go only through
+`/v1/cell`: `/v1/point` is not offered, so the page shows the cell-addressed
+way a client should ask. The live run is the Collection's
 pointer on the API's `dataOrigin`. State is the page's query, spelled as
 the request's. English only, like the OpenAPI reference; `noindex` and
 out of the sitemap. Pure parts: `tests/web/apiconsole.test.ts`.
