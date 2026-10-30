@@ -93,8 +93,10 @@ the latter).
 Zone settings the API depends on, all in the dashboard:
 
 - A Cache Rule for the API hostname and `/v1/`: eligible for cache, edge
-  TTL from the origin's `Cache-Control`. Cloudflare does not cache JSON
-  without one, and then every request reaches the origin.
+  TTL from the origin's `Cache-Control`, query string sorted in the cache
+  key (so `lat=…&source=…` and `source=…&lat=…` share an entry).
+  Cloudflare does not cache JSON without one, and then every request
+  reaches the origin.
 - Tiered Cache (Smart Tiered Cache on the free plan), so an edge miss
   asks an upper tier before the origin.
 - The per-IP rate-limit rule [api.md](../api.md) mentions.
