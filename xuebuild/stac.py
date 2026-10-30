@@ -598,6 +598,46 @@ def _source_prose(source: SourceSpec) -> dict[str, Any]:
             "providers": [_NOAA_PROVIDER, _XUE_PROVIDER],
             "links": [_NOAA_LICENSE_LINK],
         },
+        "cmadust": {
+            "title": "CMA-CW/DUST sand and dust forecast 0.15°",
+            "description": (
+                "The China Meteorological Administration's CMA-CW v1.0/DUST sand and dust storm "
+                "forecast, run for the WMO SDS-WAS Asian Center, on its 0.15° regular grid over Asia "
+                "(25°E–150.1°E, 15°N–60°N): the surface dust concentration of every particle size and "
+                "the dust optical depth at 550 nm, hourly to 72 hours and three-hourly to 168. Two "
+                "cycles a day (00Z and 12Z); only the newest is kept. Obtained through the WMO "
+                "Information System (WIS2) global caches, where it is exchanged as core data under the "
+                "WMO Unified Data Policy, free and unrestricted. Source: China Meteorological "
+                "Administration."
+            ),
+            "license": "other",
+            "providers": [
+                {
+                    "name": "China Meteorological Administration",
+                    "description": "CMA-CW v1.0/DUST, the forecast of the WMO SDS-WAS Asian Center.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.cma.gov.cn/en/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://library.wmo.int/idurl/4/58009",
+                    "type": "text/html",
+                    "title": "WMO Unified Data Policy (Resolution 1, Cg-Ext(2021)): core data, free and unrestricted",
+                },
+                {
+                    "rel": "describedby",
+                    "href": (
+                        "https://wis2-gdc.weather.gc.ca/collections/wis2-discovery-metadata/items/"
+                        "urn:wmo:md:cn-cma:data.core.weather.prediction.forecast.medium-range.deterministic.limited-area"
+                    ),
+                    "type": "text/html",
+                    "title": "WIS2 discovery metadata record of the CMA-CW/SDS forecast",
+                },
+            ],
+        },
         "cfs": {
             "title": "NCEP CFSv2 seasonal",
             "description": (

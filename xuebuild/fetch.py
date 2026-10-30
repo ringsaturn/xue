@@ -24,7 +24,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from . import aurora, cmaarchive, jmacli, om2nccli
+from . import aurora, cmaarchive, cmadust, jmacli, om2nccli
 from . import satellite
 from .common import (
     S3_NAMESPACE,
@@ -2095,6 +2095,10 @@ def _run_is_complete(
         return _cfs_run_is_complete(source_spec(model), run, hours)
     if source_spec(model).open_meteo is not None:
         return _open_meteo_run_is_complete(source_spec(model), run)
+    if model == "cmadust":
+        # Neither WIS2 cache holds every file of a run; their listings
+        # together must name every lead time.
+        return cmadust.run_is_complete(source_spec(model), run, hours, fetch=fetch_text)
     if source_spec(model).platform is not None:
         return _satellite_run_is_complete(source_spec(model), run, hours, now=now)
     if model == "hrrr":
@@ -2710,6 +2714,17 @@ def fetch_run(
         return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids, bbox=bbox)
     if spec.open_meteo is not None:
         return _fetch_open_meteo_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
+    if spec.id == "cmadust":
+        return cmadust.fetch_run(
+            spec,
+            run,
+            hours,
+            raw_root,
+            force=force,
+            input_ids=input_ids,
+            fetch_text=fetch_text,
+            read_range=fetch_range,
+        )
     destination = raw_root / f"{spec.id}.{run.id}"
     forecast_hours = spec.forecast_hours(hours, cycle=run.time.hour)
     frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1

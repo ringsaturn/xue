@@ -126,7 +126,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "iconeu", "arpege", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "cmadust", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -1455,6 +1455,47 @@ SOURCES: dict[str, SourceSpec] = {
         accumulated_precipitation=False,
         bundle_scalar_ids=AEROSOL_VARIABLE_IDS,
         core_bundle_ids=("aod",),
+    ),
+    # CMA-CW v1.0/DUST, the China Meteorological Administration's sand and
+    # dust storm forecast for the WMO SDS-WAS Asian Center, exchanged
+    # through WMO WIS2 as ``core`` data. Every lead time is one uncompressed
+    # NetCDF classic file of some 112 MB, nearly all of it four
+    # pressure-level fields, on two WIS2 global caches that each miss a few
+    # files of a run but between them hold all of it; the fetch
+    # (xuebuild/cmadust.py) reads the header and the two surface fields of
+    # each file by byte range, a megabyte apiece, and writes one CF series
+    # per variable (``cmadust.<run>.<variable>.nc``), so this is a
+    # ``series_file`` forecast like ``ifshres`` and neither encoder learns
+    # the product. The grid is the model's own, 0.15° from 25°E to 150.1°E
+    # and 15°N to 60°N; the file runs south first, which GDAL turns
+    # north-up as it does every ascending series. Two cycles a day (00Z and
+    # 12Z), landing about seven and a quarter hours after the cycle. The
+    # surface concentration is the core: it is the field an air-quality
+    # reader looks for, the dust optical depth the one a satellite image
+    # is compared with. A plane is a quarter of a GFS plane, so there is no
+    # ladder and no video.
+    "cmadust": SourceSpec(
+        id="cmadust",
+        manifest_model="CMA-CW-DUST",
+        product="cma-cw-dust-0p15",
+        latest_filename="latest-cmadust.json",
+        # Hourly through 72 hours, three-hourly to 168: 105 frames, a file
+        # each.
+        steps=((72, 1), (168, 3)),
+        input_variable_ids=("dustsfc", "aoddust"),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("dustsfc", "aoddust"),
+        core_bundle_ids=("dustsfc",),
+        production_grid=(835, 301),
+        # 56 x 43 cells is 8.4° x 6.45°: 15 x 7 = 105 tiles, the rows exact
+        # (301 = 7 x 43) and the last column 51 cells wide, about the cell
+        # count of the GFS tile.
+        tile=(56, 43),
+        variant_factors=(),
+        # Each frame is two or three Range reads on a public S3 bucket.
+        fetch_concurrency=8,
+        series_file=True,
+        cycle_hours=12,
     ),
     # NCEP CFSv2 member 01, nine months of six-hourly output from the 00Z
     # and 12Z cycles, fetched as one series-major object per variable

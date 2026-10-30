@@ -6387,6 +6387,106 @@
         ]
       }
     },
+    "dustsfc": {
+      "label": "Surface dust concentration",
+      "unit": "µg/m³",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 20,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "aerosol": {
+        "aerosolType": 62001,
+        "typeOfSizeInterval": 255,
+        "scaleFactorOfFirstSize": null,
+        "scaledValueOfFirstSize": null,
+        "scaleFactorOfSecondSize": null,
+        "scaledValueOfSecondSize": null,
+        "typeOfWavelengthInterval": 255,
+        "scaleFactorOfFirstWavelength": null,
+        "scaledValueOfFirstWavelength": null,
+        "scaleFactorOfSecondWavelength": null,
+        "scaledValueOfSecondWavelength": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "log1p",
+          "trace": 1.0,
+          "scale": 10.0,
+          "maximum": 50000.0,
+          "minimumCode": 1,
+          "maximumCode": 253,
+          "zeroCode": 0,
+          "overflowCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "log1p",
+          "trace": 1.0,
+          "scale": 10.0,
+          "maximum": 50000.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        },
+        "balanced": {
+          "type": "log1p",
+          "trace": 1.0,
+          "scale": 10.0,
+          "maximum": 50000.0,
+          "minimumCode": 1,
+          "maximumCode": 253,
+          "zeroCode": 0,
+          "overflowCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        50000
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "10^-6g/m^3",
+          "10^-6g/m3",
+          "ug/m^3",
+          "ug/m3",
+          "µg/m^3",
+          "µg/m3",
+          "µg/m³"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": []
+      }
+    },
     "aurora": {
       "label": "Aurora probability",
       "unit": "%",
@@ -19570,6 +19670,72 @@
       "seriesFile": false,
       "downsample": null,
       "cycleHours": 6,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "regrid": null,
+      "video": false,
+      "catCalibration": []
+    },
+    "cmadust": {
+      "id": "cmadust",
+      "manifestModel": "CMA-CW-DUST",
+      "product": "cma-cw-dust-0p15",
+      "latestFilename": "latest-cmadust.json",
+      "steps": [
+        [
+          72,
+          1
+        ],
+        [
+          168,
+          3
+        ]
+      ],
+      "inputVariableIds": [
+        "dustsfc",
+        "aoddust"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [],
+      "bands": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "dustsfc",
+        "aoddust"
+      ],
+      "coreBundleIds": [
+        "dustsfc"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        835,
+        301
+      ],
+      "tile": [
+        56,
+        43
+      ],
+      "variantFactors": [],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 8,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
       "regrid": null,

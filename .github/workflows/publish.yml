@@ -2,8 +2,8 @@ name: publish run
 
 # Reusable publishing pipeline, one call per source. Callers
 # (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-ifs.yml, publish-aifs.yml,
-# publish-ifshres.yml, publish-hrrr.yml, publish-gefsaero.yml, publish-cfs.yml,
-# publish-iconeu.yml, publish-arpege.yml) own the schedule
+# publish-ifshres.yml, publish-hrrr.yml, publish-gefsaero.yml, publish-cmadust.yml,
+# publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml) own the schedule
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
@@ -46,7 +46,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, gefsaero, cfs, iconeu or arpege"
+        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, gefsaero, cmadust, cfs, iconeu or arpege"
         required: true
         type: string
       run:
@@ -144,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODEL" in
-            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cfs|iconeu|arpege) ;;
+            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cmadust|cfs|iconeu|arpege) ;;
             *) echo "::error::unknown source: $MODEL"; exit 1 ;;
           esac
           case "$PROFILE" in

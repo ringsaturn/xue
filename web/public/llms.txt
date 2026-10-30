@@ -75,7 +75,13 @@ Facts worth getting right:
   hours after the cycle. `arpege`: Météo-France ARPEGE, the global model
   at 0.25° (1440 × 721), hourly to F048 then 3-hourly to F102 (67 frames)
   from the 00/06/12/18Z cycles, complete three to five hours after the
-  cycle. Both publish a basic surface set (below). Three more sources are
+  cycle. Both publish a basic surface set (below). `cmadust`: CMA-CW
+  v1.0/DUST, the China Meteorological Administration's sand and dust
+  storm forecast for the WMO SDS-WAS Asian Center, on the model's own
+  regular 0.15° grid over Asia (835 × 301, 25°E–150.1°E, 15°N–60°N;
+  regional, nothing resampled), hourly to F072 then 3-hourly to F168 (105
+  frames) from the 00Z and 12Z cycles, complete about seven and a quarter
+  hours after the cycle; read from the WMO WIS2 global caches. Three more sources are
   observations rather than forecasts: `radar` (the CMA level-3 radar mosaic
   composite reflectivity over China, six-minute frames on the data portal's
   0.0439° plate carrée tile grid, 1792 × 1024 cells, 67.5°E–146.25°E and
@@ -279,7 +285,13 @@ Facts worth getting right:
   `pm25`, `pm10` (surface PM2.5 and PM10, µg/m³) and `pm10dust` (the PM10
   of dust alone); every one a GRIB2 aerosol product whose species and
   size / wavelength intervals are the `aerosol` block beside the
-  variable's `parameter` in the bundle metadata. CFSv2 (`cfs`): on the T126
+  variable's `parameter` in the bundle metadata. CMA-CW-DUST (`cmadust`):
+  `dustsfc` (the surface dust concentration of every particle size,
+  µg/m³, to 50,000 — not `pm10dust`, which is dust under 10 µm; WMO
+  0/20/0 on the ground with a dust `aerosol` block of no size interval)
+  and `aoddust` (the dust optical depth at 550 nm, GEFS-Aerosols'
+  identity and scale, so a storm core past 5 reads as the top of the
+  scale). CFSv2 (`cfs`): on the T126
   Gaussian grid `tmp2m`, `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`,
   `icetk` and the vector pair `wind10m`; on the 1° grid `prmsl`,
   `hgt1000` / `hgt850` / `hgt700` / `hgt500` / `hgt200`, `tmp1000` /
@@ -369,7 +381,11 @@ Facts worth getting right:
   information"; cite Hersbach et al., doi:10.24381/cds.adbb2d47); `cams` is
   Copernicus Atmosphere Monitoring Service information from the
   Atmosphere Data Store, CC-BY-4.0 ("Contains modified Copernicus
-  Atmosphere Monitoring Service information"; doi:10.24381/04a0b097); the basemap
+  Atmosphere Monitoring Service information"; doi:10.24381/04a0b097);
+  `cmadust` is the China Meteorological Administration's CMA-CW v1.0/DUST
+  forecast of the WMO SDS-WAS Asian Center, obtained through WMO WIS2,
+  where it is exchanged as core data under the WMO Unified Data Policy
+  (Resolution 1 (Cg-Ext(2021)): free and unrestricted); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -416,9 +432,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|iconeu|arpege|gefsaero|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|iconeu|arpege|gefsaero|cmadust|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
@@ -441,7 +457,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   `dustconfidence`), `zhouye` (`zhouyecf`), `truecolor` (`visible`,
   `rgb`, `color`, `colour`), the GEFS-Aerosols `aod` (`aod550`; `aoddust`,
   `aodsalt`, `aodsulf`, `aodorg`, `aodbc` by species), `pm25` (`pm2p5`),
-  `pm10` and `pm10dust`, the EFAS `returnperiod` (`disrp`, `floodclass`,
+  `pm10` and `pm10dust`, the CMA-CW-DUST `dustsfc` (`surfacedust`,
+  `sanddust`, `duststorm`), the EFAS `returnperiod` (`disrp`, `floodclass`,
   `rp`), `discharge` (`dis06`, `dis`, `riverdischarge`, `streamflow`) and
   `upstream` (`upstreamarea`, `uparea`, `catchment`), or a bundle name such as `tmp850`,
   `rh700`, `wind850`, `qflux850`, `hgt500`, `vvel700`, `thetae850`; `t850`,
@@ -596,7 +613,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`, `latest-cma.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),

@@ -44,6 +44,7 @@ is no longer published and every decoder still reads it.
 | Météo-France ARPEGE (`arpege`) | 0.25° global · hourly to F48, 3-hourly to F102 | <a href="https://dataset.ringsaturn.me/xue/latest-arpege.json"><img alt="the newest arpege run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-arpege.json&query=%24.runTime&label=&color=3d5a98&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Recast WOOF-WRF (`woof`) | 0.005° (500 m) nest over Mount Fuji · hourly from F1 | showcase cases only, no live run |
 | NOAA GEFS-Aerosols (`gefsaero`) | 0.25° global · 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-gefsaero.json"><img alt="the newest gefsaero run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-gefsaero.json&query=%24.runTime&label=&color=8a6d3b&style=flat-square&cacheSeconds=600" width="170"></a> |
+| CMA-CW/DUST sand and dust (`cmadust`) | 0.15° Asia · hourly to F72, 3-hourly to F168; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cmadust.json"><img alt="the newest cmadust run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cmadust.json&query=%24.runTime&label=&color=a0703c&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NCEP CFSv2 (`cfs`) | T126 Gaussian / 1° global · 6-hourly F6–F6552 (39 weeks); 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA MRMS radar (`mrms`) | 0.02° contiguous US · 2 min, rolling 4 h | <a href="https://dataset.ringsaturn.me/xue/latest-mrms.json"><img alt="the newest mrms run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.runTime&label=&color=b7472a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | JMA precipitation nowcast (`jma`) | 0.005° Japan · 5 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-jma.json"><img alt="the newest jma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.runTime&label=&color=c25b2c&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -71,7 +72,7 @@ driver. Some sources need more (eccodes, om2nc, credentials); see
 uv sync                   # creates .venv with NumPy and the xuepy wheel
 make check                # verifies tool versions
 make mvp                  # builds the latest GFS run and the frontend
-make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, gefsaero, cfs, iconeu, arpege
+make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, gefsaero, cmadust, cfs, iconeu, arpege
 make serve                # serves the result on 127.0.0.1
 ```
 
@@ -217,6 +218,10 @@ The other sources:
   [jma-radar](https://github.com/ringsaturn/jma-radar).
 - CMA radar mosaic: a product of the China Meteorological Administration
   (中国气象局国家气象中心, www.nmc.cn).
+- CMA-CW/DUST sand and dust forecast: the China Meteorological
+  Administration's CMA-CW v1.0/DUST, run for the WMO SDS-WAS Asian Center,
+  obtained through the WMO WIS2 global caches, where it is exchanged as
+  core data under the WMO Unified Data Policy (free and unrestricted).
 - Himawari-9 imagery is the Japan Meteorological Agency's, distributed by
   NOAA; reprojected here, no endorsement implied by either agency.
 - Meteosat: Contains modified EUMETSAT Meteosat data 2026 (the year of

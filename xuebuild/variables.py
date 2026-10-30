@@ -1963,6 +1963,29 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_aerosol=AerosolIdentity(62001, size_type=0, size_first=(6, 10), size_second=(0, 0)),
         gdal_unit="10^-6g/m^3",
     ),
+    # CMA-CW/DUST's surface dust concentration: the mass of mineral dust of
+    # every size the model carries in the air at the ground, not
+    # GEFS-Aerosols' ``pm10dust`` (the part under 10 µm), so it reads higher
+    # than that field in the same plume and is a quantity of its own. It
+    # arrives only as a series (xuebuild/cmadust.py), so no GRIB band is
+    # matched; the identity is WMO's own for what it is — the mass density
+    # (0/20/0) on the ground surface, an aerosol product of the dust type
+    # with no size or wavelength interval — written beside the parameter
+    # as the ``aerosol`` block like every other aerosol field. A dust storm
+    # core passes 30,000 µg/m³, so the scale runs to 50,000.
+    "dustsfc": VariableSpec(
+        id="dustsfc",
+        conversion=rules.PARTICULATE,
+        label="Surface dust concentration",
+        output_unit="µg/m³",
+        value_range=(0, 50000),
+        grib2_category=20,
+        grib2_number=0,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        grib2_aerosol=AerosolIdentity(62001),
+        gdal_rules=(),
+    ),
     # The NOAA SWPC OVATION model's aurora probability: the chance, in
     # percent, that aurora is visible overhead, on a regular 1° global grid
     # (360 × 181 cells, 0–359°E, 90°S–90°N). A space weather product rather

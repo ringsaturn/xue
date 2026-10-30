@@ -429,6 +429,15 @@ def _aerosol_codebooks(*, compact: bool) -> dict[str, PrecipitationCodebook]:
 QUALITY_AEROSOL = _aerosol_codebooks(compact=False)
 COMPACT_AEROSOL = _aerosol_codebooks(compact=True)
 assert tuple(QUALITY_AEROSOL) == AEROSOL_VARIABLE_IDS
+# CMA-CW/DUST's surface dust concentration, every particle size: the same
+# logarithmic shape run twenty-five times further, since a storm core
+# passes 30,000 µg/m³ where PM10 stops at 2000. A scale of 10 µg/m³ keeps a step of
+# a few µg/m³ through the air quality classes and some 3 % of the value in a
+# storm; anything under a microgram is clean air.
+QUALITY_DUST_SURFACE = PrecipitationCodebook(trace=1.0, scale=10.0, maximum=50000.0, name="dustsfc")
+COMPACT_DUST_SURFACE = PrecipitationCodebook(
+    trace=1.0, scale=10.0, maximum=50000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="dustsfc"
+)
 QUALITY_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_INFRARED_IDS},
     **{channel_id: _reflectance(channel_id)[0] for channel_id in SATELLITE_REFLECTANCE_IDS},
@@ -817,6 +826,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
+        "dustsfc": QUALITY_DUST_SURFACE,
         **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
@@ -852,6 +862,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_SOIL,
         **COMPACT_SATELLITE,
         **COMPACT_AEROSOL,
+        "dustsfc": COMPACT_DUST_SURFACE,
         **COMPACT_RIVER,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
@@ -899,6 +910,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SOIL,
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
+        "dustsfc": QUALITY_DUST_SURFACE,
         **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,

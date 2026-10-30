@@ -186,10 +186,12 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(identity.wavelength_type, AerosolIdentity.MISSING_TYPE)
             self.assertIsNone(identity.wavelength_first)
             self.assertIsNone(identity.wavelength_second)
-        # No other variable is an aerosol product.
+        # No other variable is an aerosol product but CMA-CW/DUST's surface
+        # dust concentration, which arrives as a series and is matched in
+        # no GRIB (tests/test_cmadust.py).
         self.assertEqual(
             [variable_id for variable_id, spec in VARIABLES.items() if spec.grib2_aerosol is not None],
-            list(AEROSOL_VARIABLE_IDS),
+            [*AEROSOL_VARIABLE_IDS, "dustsfc"],
         )
 
     def test_a_missing_interval_carries_no_limits(self) -> None:

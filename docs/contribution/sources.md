@@ -20,6 +20,7 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 | `aifs` | forecast | ECMWF open data (`aifs-single`) | 6 h to F360 | `tmp2m`, `prate` |
 | `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | 1 h to F18; hourly cycles | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | 3 h to F120 | `aod` |
+| `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | 1 h to F72, 3 h to F168; 00Z/12Z | `dustsfc` |
 | `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
 | `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | 1 h to F78, 3 h to F120 | `tmp2m`, `prate` |
 | `arpege` | forecast | Météo-France packages, whole objects cut by identity | 1 h to F48, 3 h to F102 | `tmp2m`, `prate` |
@@ -201,6 +202,48 @@ the species after the hour, so `VariableSpec.index_qualifier` is a second
 phrase, matched case-insensitively (Google capitalises `Dust Dry`).
 Codebooks are parameterised `log1p` (`PrecipitationCodebook`), pinned with
 the identities by `tests/fixtures/aerosol-registry.json`.
+
+**cmadust.** CMA-CW v1.0/DUST, the China Meteorological Administration's
+sand and dust storm forecast for the WMO SDS-WAS Asian Center, exchanged
+through WMO WIS2 as `core` data (WMO Unified Data Policy: free and
+unrestricted). One NetCDF per lead time,
+`Z_NAFP_C_BABJ_<YYYYMMDDHH>0000_P_CEMC-CMA-CW-DUST_15KM_ASIA-<HHH>00.nc`
+(the last five digits are hours × 100), 105 per run, about 112 MB each,
+landing about 07:15–07:30Z (00Z) and 19:15–19:20Z (12Z); the caches keep a
+few days. Two WIS2 global caches carry them and **neither is complete on
+its own**: the Met Office/NOAA cache (`XUE_CMADUST_NOAA_CACHE_URL`, the
+name under a fixed prefix) and JMA's (`XUE_CMADUST_JMA_CACHE_URL`, the name
+under a directory of the same name and an upload stamp, so a key is known
+only from a listing). `xuebuild/cmadust.py` lists the run's prefix on
+both, ignores keys that are not a whole `.nc` (partial uploads carry a
+numeric suffix), and reads each lead time from the first cache that lists
+it, NOAA first; a run is complete when the two listings together name
+every lead time (`fetch.py::_run_is_complete`), and a lead time neither
+names fails the fetch rather than leaving a gap. A file is NetCDF3
+classic, uncompressed: one Range read of 16 KB holds the header (about
+2 KB, parsed with `struct`; a longer one is read again at the length the
+parse asks for) and the `lon` / `lat` coordinates behind it, which are
+checked against the grid; then one Range read per wanted surface field
+(`sconc_dust` → `dustsfc`, `aod550_dust` → `aoddust`, big-endian float32,
+1 MB each). The four pressure-level fields, nearly all of the file, are
+never read. A file whose header describes another length than the listed
+size is a cut-off upload and falls back to the other cache. Each variable's
+run becomes one NetCDF classic series, `cmadust.<run>.<id>.nc`, written by
+the same module (no netCDF4): `time` in hours since the cycle,
+`forecast_reference_time` beside it, latitudes ascending as the file has
+them (GDAL turns them north-up), a NaN fill. The grid is the model's own,
+835 × 301 cells of 0.15° from 25°E to 150.1°E and 15°N to 60°N, published
+as is: a tile of 56 × 43 cells, no ladder, no video. `dustsfc` is a
+quantity of its own, every particle size the model carries (not
+`pm10dust`, GEFS-Aerosols' dust under 10 µm): WMO 0/20/0 on the ground with
+a dust `aerosol` block of no size or wavelength interval, a `log1p`
+codebook to 50,000 µg/m³ (a storm core passes 30,000). `aoddust` keeps
+the GEFS-Aerosols identity and codebook, maximum 5, although CMA-CW's dust
+optical depth exceeds 5 over strong dust events: 5–15 is common in a storm
+core, with occasional isolated single-cell spikes up to about 1500. Those
+cells take the overflow code, which the map draws at the top colour and a
+point read answers as null. Negative surface concentrations from the model
+are coded 0. `tests/test_cmadust.py`.
 
 **cfs.** NCEP CFSv2 member 01, nine-month runs on the T126 Gaussian grid
 (384 × 190), 1092 frames. The bucket (`noaa-cfs-pds`, `XUE_CFS_BASE_URL`) is
