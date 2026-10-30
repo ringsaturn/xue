@@ -78,9 +78,11 @@ The response:
   "cell": { "column": 1279, "row": 217, "longitude": 139.75, "latitude": 35.75 },
   "time": { "unitSeconds": 3600, "times": ["2026-10-04T00:00:00.000Z", "…"] },
   "variables": {
-    "tmp2m":   { "bundle": "tmp2m",   "label": "2 metre temperature", "unit": "°C",  "values": [21.5, "…"] },
-    "ugrd10m": { "bundle": "wind10m", "label": "10 metre u wind",     "unit": "m/s", "values": [3.1, "…"] },
-    "vgrd10m": { "bundle": "wind10m", "label": "10 metre v wind",     "unit": "m/s", "values": [-1.2, "…"] }
+    "tmp2m":   { "bundle": "tmp2m",   "label": "2 metre temperature", "unit": "°C",
+                 "quantization": { "type": "linear", "offset": -60.0, "scale": 0.5, "minimumCode": 0, "maximumCode": 220, "nodataCode": 255 },
+                 "values": [21.5, "…"] },
+    "ugrd10m": { "bundle": "wind10m", "label": "10 metre u wind",     "unit": "m/s", "quantization": { "…" }, "values": [3.1, "…"] },
+    "vgrd10m": { "bundle": "wind10m", "label": "10 metre v wind",     "unit": "m/s", "quantization": { "…" }, "values": [-1.2, "…"] }
   }
 }
 ```
@@ -92,6 +94,17 @@ The response:
   variable's `nodataCode`, or a chunk the store never wrote). Values are
   the codebook's: a linear field is quantized to its step (0.5 °C for
   `tmp2m`), a log1p field (`prate`, the aerosol fields) to its scale.
+- `quantization` is that codebook, as the STAC Item's `xue:quantization`
+  spells it (`docs/stac.md`). A `linear` value is `offset + k × scale`,
+  within `scale / 2` of the source field, and only in
+  `[offset, offset + maximumCode × scale]`: a field beyond that range is
+  clamped to it. A `log1p` codebook spaces its codes evenly in
+  `log1p(value / scale)` from `trace` to `maximum`, one step being
+  `(log1p(maximum / scale) − log1p(trace / scale)) / (maximumCode −
+  minimumCode)`: a value well above `scale` is within half a step relative
+  (about 3 % for `prate`), one well below it within `scale` × half a step
+  absolute. Below `trace` it is 0; above `maximum` it is `null` (the
+  `overflowCode`).
 - `times` are UTC with milliseconds. On an observation window they are the
   frames' own times; on the aurora window they are valid times about an
   hour ahead of the clock (`docs/sources.md`).
@@ -145,7 +158,7 @@ Item:
 | `run` | the Item id, else the Collection's `xue:live` |
 | `runTime` | the Item's `forecast:reference_datetime`, else its `datetime` |
 | `bbox`, `time` | the Item's `bbox` and `cube:dimensions.time` |
-| `variables` | the Item's `cube:variables` as a flat table: `{<variable id>: {bundle, label, unit}}` |
+| `variables` | the Item's `cube:variables` as a flat table: `{<variable id>: {bundle, label, unit, quantization}}`, `quantization` its `xue:quantization` (`null` where the Item has none) |
 
 The ids `/v1/point?variables=` accepts are the distinct `bundle` values of
 `variables`. A source with no live Item answers an empty table.

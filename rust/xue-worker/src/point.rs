@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use url::Url;
 
-use xue::zarr::{self, ArrayLayout, ProbeCell, VariableMetadata};
+use xue::zarr::{self, ArrayLayout, ProbeCell, Quantization, VariableMetadata};
 use xue::{decode_chunk, DecodeError, Predictor};
 
 use crate::bucket::Data;
@@ -201,6 +201,58 @@ fn storage_error(error: DecodeError) -> HttpError {
     HttpError::new(502, "upstream_failed", error.to_string())
 }
 
+/// A code index as JSON: an integer, as the STAC `xue:quantization` spells it.
+fn code(value: f64) -> Value {
+    if value.fract() == 0.0 && (0.0..=255.0).contains(&value) {
+        json!(value as u8)
+    } else {
+        json!(value)
+    }
+}
+
+/// The variable's codebook in the shape of the STAC Item's
+/// `xue:quantization`, so a client knows how fine `values` are: a linear
+/// codebook's values are within half its `scale` of the field, a log1p one's
+/// within half a step of its logarithmic grid (`docs/api.md`).
+fn quantization_json(quantization: &Quantization) -> Value {
+    match *quantization {
+        Quantization::Linear {
+            offset,
+            scale,
+            minimum_code,
+            maximum_code,
+            nodata_code,
+        } => json!({
+            "type": "linear",
+            "offset": offset,
+            "scale": scale,
+            "minimumCode": code(minimum_code),
+            "maximumCode": code(maximum_code),
+            "nodataCode": code(nodata_code),
+        }),
+        Quantization::Log1p {
+            trace,
+            scale,
+            maximum,
+            minimum_code,
+            maximum_code,
+            zero_code,
+            overflow_code,
+            nodata_code,
+        } => json!({
+            "type": "log1p",
+            "trace": trace,
+            "scale": scale,
+            "maximum": maximum,
+            "minimumCode": code(minimum_code),
+            "maximumCode": code(maximum_code),
+            "zeroCode": code(zero_code),
+            "overflowCode": code(overflow_code),
+            "nodataCode": code(nodata_code),
+        }),
+    }
+}
+
 /// One entry of the flat `variables` map: the variable's own id keys it, and
 /// `bundle` says which requested bundle it belongs to, so a vector bundle's
 /// components are separate entries rather than a nested `components` object.
@@ -211,6 +263,7 @@ fn variable_json(variable: &VariableMetadata, bundle: &str, values: &[Option<f64
         "bundle": bundle,
         "label": variable.label,
         "unit": variable.unit,
+        "quantization": quantization_json(&variable.quantization),
         "values": values,
     })
 }

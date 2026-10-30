@@ -639,20 +639,52 @@
       },
       "VariableMeta": {
         "type": "object",
-        "required": ["bundle", "label", "unit"],
-        "properties": {
-          "bundle": { "type": "string" },
-          "label": { "type": ["string", "null"] },
-          "unit": { "type": ["string", "null"] }
-        }
-      },
-      "Variable": {
-        "type": "object",
-        "required": ["bundle", "label", "unit", "values"],
+        "required": ["bundle", "label", "unit", "quantization"],
         "properties": {
           "bundle": { "type": "string" },
           "label": { "type": ["string", "null"] },
           "unit": { "type": ["string", "null"] },
+          "quantization": {
+            "type": ["object", "null"],
+            "description": "The codebook, as the STAC Item's `xue:quantization`: `linear` values are `offset + k × scale` (within scale/2 of the source field, clamped to the code range); `log1p` codes are evenly spaced in log1p(value/scale) from `trace` to `maximum` (see docs/api.md).",
+            "properties": {
+              "type": { "type": "string", "enum": ["linear", "log1p"] },
+              "offset": { "type": "number" },
+              "scale": { "type": "number" },
+              "trace": { "type": "number" },
+              "maximum": { "type": "number" },
+              "minimumCode": { "type": "integer" },
+              "maximumCode": { "type": "integer" },
+              "zeroCode": { "type": "integer" },
+              "overflowCode": { "type": "integer" },
+              "nodataCode": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Variable": {
+        "type": "object",
+        "required": ["bundle", "label", "unit", "quantization", "values"],
+        "properties": {
+          "bundle": { "type": "string" },
+          "label": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] },
+          "quantization": {
+            "type": ["object", "null"],
+            "description": "The codebook, as the STAC Item's `xue:quantization`: `linear` values are `offset + k × scale` (within scale/2 of the source field, clamped to the code range); `log1p` codes are evenly spaced in log1p(value/scale) from `trace` to `maximum` (see docs/api.md).",
+            "properties": {
+              "type": { "type": "string", "enum": ["linear", "log1p"] },
+              "offset": { "type": "number" },
+              "scale": { "type": "number" },
+              "trace": { "type": "number" },
+              "maximum": { "type": "number" },
+              "minimumCode": { "type": "integer" },
+              "maximumCode": { "type": "integer" },
+              "zeroCode": { "type": "integer" },
+              "overflowCode": { "type": "integer" },
+              "nodataCode": { "type": "integer" }
+            }
+          },
           "values": {
             "type": "array",
             "description": "One value per entry of `time.times`; `null` is a missing code.",
