@@ -55,7 +55,12 @@ required-features = ["encoder"]
 bzip2 = "0.6"
 crc32fast = "1"
 ruzstd = "0.8"
-serde_json = "1"
+# Correctly rounded float parsing. The default fast path can land one ulp off
+# a decimal the Python encoder wrote (CFS's T126 latitude step
+# -0.9473684210526315 reads as ...316), so a grid read here would differ from
+# the same grid read in Python, JavaScript or any client. Cargo unifies the
+# feature, so every crate built with this one parses the same way.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 # Encoder-only, every one optional so a decode-only build resolves none of them.
 flate2 = { version = "1", default-features = false, features = ["zlib"], optional = true }
