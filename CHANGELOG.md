@@ -7,6 +7,11 @@ changes are in `git log`.
 
 ## 2026-10-30
 
+- Fixed: a `/v1/point` or `/v1/cell` request for bundles on different axes
+  (ECMWF `tmp2m` with `prate`, which has no analysis frame) answered with
+  the first bundle's axis and values arrays of other lengths. `time.times`
+  is now the union of the bundles' axes, each variable `null` where its
+  own axis has no frame (`docs/api.md`).
 - The data API reports each variable's codebook: `quantization` on every
   entry of `/v1/point`, `/v1/cell` and `/v1/sources/{source}` `variables`,
   shaped as the STAC Item's `xue:quantization`, so a client knows how fine

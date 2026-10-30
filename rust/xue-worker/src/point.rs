@@ -9,6 +9,8 @@
 //! it as one `map<string, Variable>` whatever it asked for; `null` marks a
 //! missing code.
 
+use std::collections::HashMap;
+
 use futures_util::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -442,6 +444,9 @@ async fn read_series(
         unit_seconds: None,
     };
     let mut first_grid: Option<(&str, zarr::Grid)> = None;
+    // Each variable read, with its bundle and its own axis, before the axes
+    // are united.
+    let mut read: Vec<(VariableMetadata, String, Vec<String>, Vec<Option<f64>>)> = Vec::new();
 
     for bundle_id in bundle_ids {
         let bundle = manifest
@@ -527,14 +532,12 @@ async fn read_series(
         let indices =
             zarr::frame_indices(&metadata.offsets, metadata.unit_seconds, run_time_ref, time)
                 .map_err(|error| HttpError::new(400, "invalid_parameter", error.to_string()))?;
-        if series.times.is_none() {
-            series.times = Some(zarr::axis_times(
-                &metadata.offsets,
-                metadata.unit_seconds,
-                run_time_ref,
-                &indices,
-            ));
-        }
+        let times = zarr::axis_times(
+            &metadata.offsets,
+            metadata.unit_seconds,
+            run_time_ref,
+            &indices,
+        );
         series.unit_seconds.get_or_insert(metadata.unit_seconds);
 
         for variable in &metadata.variables {
@@ -547,12 +550,37 @@ async fn read_series(
                 &indices,
             )
             .await?;
-            series.variables.insert(
-                variable.id.clone(),
-                variable_json(variable, bundle_id, &values),
-            );
+            read.push((variable.clone(), bundle_id.clone(), times.clone(), values));
         }
     }
+
+    // Bundles of one run need not share an axis (a de-accumulated rate has
+    // no analysis frame), so the answer's axis is the union of theirs and
+    // each variable's values are laid on it, `null` where its own axis has
+    // no frame: every `values` array then matches `time.times` index for
+    // index, whatever order the bundles were asked in.
+    let mut union: Vec<String> = read
+        .iter()
+        .flat_map(|(_, _, times, _)| times.iter().cloned())
+        .collect();
+    union.sort();
+    union.dedup();
+    for (variable, bundle_id, times, values) in &read {
+        let at: HashMap<&str, Option<f64>> = times
+            .iter()
+            .map(String::as_str)
+            .zip(values.iter().copied())
+            .collect();
+        let aligned: Vec<Option<f64>> = union
+            .iter()
+            .map(|time| at.get(time.as_str()).copied().flatten())
+            .collect();
+        series.variables.insert(
+            variable.id.clone(),
+            variable_json(variable, bundle_id, &aligned),
+        );
+    }
+    series.times = Some(union);
     Ok(series)
 }
 
