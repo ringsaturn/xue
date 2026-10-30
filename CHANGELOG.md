@@ -7,6 +7,9 @@ changes are in `git log`.
 
 ## 2026-10-30
 
+- The data API may answer `429 rate_limited` with `Retry-After` when a
+  self-hosted origin's per-minute budget of computed answers is spent;
+  cached answers are not limited (`docs/api.md`).
 - The data API has `GET /v1/cell?source&run&row&column`: one grid cell's
   series in a named run, `run` required, cached for a day. `/v1/point`
   already reports the `run` and `cell` to use. Bundles on different grids
