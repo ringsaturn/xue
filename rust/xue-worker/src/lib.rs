@@ -52,6 +52,12 @@ mod synop;
 mod tc;
 mod timezone;
 
+// What a binary serving its own data source needs: `server::serve` takes a
+// `Data`, and `Data::from_source` wraps an `ObjectSource`.
+#[cfg(not(target_arch = "wasm32"))]
+pub use bucket::{Data, ObjectSource, ReadRange};
+pub use error::HttpError;
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

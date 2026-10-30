@@ -91,7 +91,8 @@ const ASSETS: &[(&str, &str, &[u8])] = &[
 
 type Body = Full<Bytes>;
 
-struct Config {
+/// The server's settings, from the environment (see the module docs).
+pub struct Config {
     listen: SocketAddr,
     origin: String,
     inflight: usize,
@@ -100,7 +101,7 @@ struct Config {
 }
 
 impl Config {
-    fn from_env() -> Result<Config, String> {
+    pub fn from_env() -> Result<Config, String> {
         fn var(name: &str) -> Option<String> {
             std::env::var(name).ok().filter(|value| !value.is_empty())
         }
@@ -238,7 +239,17 @@ pub fn main() -> ExitCode {
         .build()
         .expect("a tokio runtime");
     let local = tokio::task::LocalSet::new();
-    match local.block_on(&runtime, serve(config)) {
+    let served = local.block_on(&runtime, async {
+        let client = reqwest::Client::builder()
+            .user_agent(concat!("xue-api/", env!("CARGO_PKG_VERSION")))
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|error| error.to_string())?;
+        let data = Data::from_origin(client, &config.origin);
+        serve(config, data).await
+    });
+    match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("xue-api-server: {message}");
@@ -247,15 +258,14 @@ pub fn main() -> ExitCode {
     }
 }
 
-async fn serve(config: Config) -> Result<(), String> {
-    let client = reqwest::Client::builder()
-        .user_agent(concat!("xue-api/", env!("CARGO_PKG_VERSION")))
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|error| error.to_string())?;
+/// Serve `data` until SIGTERM or Ctrl-C. Must run inside a
+/// `tokio::task::LocalSet` on a current-thread runtime, as `main` sets up: the
+/// handlers and their caches are thread-local. A caller with its own
+/// [`crate::ObjectSource`] builds `Data::from_source` and spawns any work of
+/// its own on the same `LocalSet`.
+pub async fn serve(config: Config, data: Data) -> Result<(), String> {
     let state = Rc::new(State {
-        data: Data::from_origin(client, &config.origin),
+        data,
         inflight: Cell::new(0),
         inflight_limit: config.inflight,
         rate: (config.rate_per_minute > 0)
@@ -274,7 +284,7 @@ async fn serve(config: Config) -> Result<(), String> {
         "xue-api-server {} on http://{} reading {}",
         env!("CARGO_PKG_VERSION"),
         config.listen,
-        config.origin
+        state.data.origin
     );
     tokio::task::spawn_local(watchdog());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())

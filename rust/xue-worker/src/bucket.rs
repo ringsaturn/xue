@@ -11,15 +11,17 @@
 //!   edge cache than from the bucket's own region.
 //!
 //! Natively there is the same origin read over `reqwest` (the `server`
-//! feature, the `xue-api-server` binary), and one in memory, which is how the
-//! tests feed the handlers a fixture bucket and count the reads a query costs.
+//! feature, the `xue-api-server` binary), one in memory, which is how the
+//! tests feed the handlers a fixture bucket and count the reads a query costs,
+//! and any [`ObjectSource`] a caller supplies (a mirror on local disk, another
+//! store), served by the same routes through `server::serve`.
 //!
 //! The object layout and the resolution chain above this (`collection →
 //! pointer → manifest`) are the data contract, not the API's.
 
 use serde::de::DeserializeOwned;
 #[cfg(not(target_arch = "wasm32"))]
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, future::Future, pin::Pin};
 #[cfg(target_arch = "wasm32")]
 use worker::{Bucket, Env, Fetch, Headers, Method, Range, Request, RequestInit};
 
@@ -33,6 +35,9 @@ enum Backend {
     Cdn,
     #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
     Http(reqwest::Client),
+    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    Source(Box<dyn ObjectSource>),
     /// Objects by key (no prefix), and the log of every read as
     /// `(path, kind)`, kind one of `whole`, `range`, `suffix`.
     #[cfg(not(target_arch = "wasm32"))]
@@ -44,7 +49,7 @@ enum Backend {
 }
 
 /// An explicit byte range: a known length, or a suffix with no object length.
-enum ReadRange {
+pub enum ReadRange {
     Offset { offset: u64, length: u64 },
     Suffix { suffix: u64 },
 }
@@ -61,7 +66,7 @@ impl ReadRange {
     }
 
     /// This range of a whole object.
-    fn slice<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
+    pub fn slice<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
         match *self {
             ReadRange::Offset { offset, length } => {
                 let start = offset.min(bytes.len() as u64) as usize;
@@ -71,6 +76,22 @@ impl ReadRange {
             ReadRange::Suffix { suffix } => &bytes[bytes.len().saturating_sub(suffix as usize)..],
         }
     }
+}
+
+/// The objects of the published dataset, read from somewhere this crate does
+/// not know about. `path` is relative to the data root (`gfs/collection.json`,
+/// `gfs.2026103000/tmp2m.zarr/…`); `range`, when given, is the bytes to return.
+/// A missing object is `HttpError` 404 `not_found`; anything else a source
+/// cannot read is a 502 `upstream_failed`.
+///
+/// The returned future need not be `Send`: the server runs on one thread.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait ObjectSource {
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<ReadRange>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, HttpError>> + 'a>>;
 }
 
 /// An origin answer's status as the handlers see it: a missing object is
@@ -161,6 +182,17 @@ impl Data {
         }
     }
 
+    /// Objects from a caller's own source; `origin` is the public origin
+    /// `/v1/catalog` reports for clients to read the same objects directly.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn from_source(source: Box<dyn ObjectSource>, origin: &str) -> Data {
+        Data {
+            backend: Backend::Source(source),
+            prefix: String::new(),
+            origin: origin.to_owned(),
+        }
+    }
+
     /// A bucket held in memory, keyed by path under the data root.
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "server", allow(dead_code))]
@@ -183,6 +215,7 @@ impl Data {
             Backend::Memory { reads, .. } => reads.borrow().clone(),
             #[cfg(feature = "server")]
             Backend::Http(_) => Vec::new(),
+            Backend::Source(_) => Vec::new(),
         }
     }
 
@@ -270,6 +303,8 @@ impl Data {
                 let bytes = response.bytes().await.map_err(upstream)?;
                 Ok(origin_body(bytes.to_vec(), range, status))
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::Source(source) => source.read(path, range).await,
             #[cfg(not(target_arch = "wasm32"))]
             Backend::Memory { objects, reads } => {
                 let kind = match range {
