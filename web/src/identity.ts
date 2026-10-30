@@ -101,6 +101,7 @@ export type ChartFamily =
   | "pm25"
   | "pm10"
   | "pm10dust"
+  | "dustsfc"
   | "aurora"
   | "clw"
   | "dis06"
@@ -224,7 +225,8 @@ function isFirstSwell(parameter: BundleParameter): boolean {
  * @8 brightness temperature, a satellite channel told apart by the
  * `band` block's central wave number (10–11 µm is the infrared window,
  * `ir104`, 3.5–4.2 µm the shortwave window, `ir039`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
- * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers), each
+ * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers) and
+ * (0,20,0) @1 aerosol mass concentration, each
  * told apart by the `aerosol` block's species, size and wavelength
  * (`aerosolField`), (0,1,22) @102 cloud water mixing ratio at an altitude
  * above mean sea level — one level of a cloud volume, whose altitude is
@@ -252,6 +254,10 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   }
   if ((isTriple(parameter, 0, 13, 193) || isTriple(parameter, 0, 13, 192)) && surface === 1) {
     const field = aerosolField(parameter.parameterNumber === 193 ? FINE_PARTICULATES : COARSE_PARTICULATES, aerosol);
+    return field === null ? null : scalar(field, null);
+  }
+  if (isTriple(parameter, 0, 20, 0) && surface === 1) {
+    const field = aerosolField(MASS_CONCENTRATIONS, aerosol);
     return field === null ? null : scalar(field, null);
   }
   if (isTriple(parameter, 0, 3, 5) && level !== null) return scalar("hgt", level);
@@ -405,6 +411,12 @@ const FINE_PARTICULATES: readonly AerosolField[] = [
 const COARSE_PARTICULATES: readonly AerosolField[] = [
   { family: "pm10", aerosolType: 62000, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
   { family: "pm10dust", aerosolType: 62001, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
+];
+/** The mass concentrations, (0,20,0) on the ground: the dust of every
+ * particle size, so no size interval — what CMA-CW-DUST forecasts, and not
+ * the PM10 cut of it. */
+const MASS_CONCENTRATIONS: readonly AerosolField[] = [
+  { family: "dustsfc", aerosolType: 62001, size: NO_INTERVAL, wavelength: NO_INTERVAL },
 ];
 
 function sameLimit(a: readonly [number, number] | null, scale: number | null, value: number | null): boolean {

@@ -1381,6 +1381,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   era5: "COPERNICUS C3S / ECMWF ERA5 REANALYSIS (0.25°)",
   cams: "COPERNICUS CAMS / ECMWF AEROSOL ANALYSIS (0.4°)",
   gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
+  cmadust: "CMA / CMA-CW DUST ASIA (0.15°)",
   cma: "CMA / RADAR MOSAIC (0.044°)",
   mrms: "NOAA / MRMS CONUS (0.02°)",
   mrms3d: "NOAA / MRMS 3D REFLECTIVITY CONUS (0.05°)",

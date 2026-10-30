@@ -717,8 +717,11 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
  * dust storm, and the ramp runs the whole way; PM2.5 saturates at 500
  * µg/m³ (the top of the US AQI's hazardous band is 500) and the PM10
  * fields at 1000, past which the codebook keeps a plume distinct in a
- * probe. Because the codebook is logarithmic, the legend's evenly spaced
- * ticks fall on values that are not round (`logLegend`). */
+ * probe. The dust model's surface concentration of every size
+ * (`dustsfc`, no GEFS-Aerosols field, so not in that fixture) is coded to
+ * 50000 µg/m³ and read the whole way: a dust storm's core passes 30000
+ * at the surface. Because the codebook is logarithmic, the legend's
+ * evenly spaced ticks fall on values that are not round (`logLegend`). */
 export interface AerosolChart {
   trace: number;
   scale: number;
@@ -728,6 +731,7 @@ export interface AerosolChart {
 const AEROSOL_OPTICAL_DEPTH_CHART: AerosolChart = { trace: 0.005, scale: 0.05, maximum: 5, chartMax: 5 };
 const FINE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 1000, chartMax: 500 };
 const COARSE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 2000, chartMax: 1000 };
+const DUST_CONCENTRATION_CHART: AerosolChart = { trace: 1, scale: 10, maximum: 50000, chartMax: 50000 };
 export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> = {
   aod: AEROSOL_OPTICAL_DEPTH_CHART,
   aoddust: AEROSOL_OPTICAL_DEPTH_CHART,
@@ -738,8 +742,9 @@ export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> 
   pm25: FINE_PARTICULATE_CHART,
   pm10: COARSE_PARTICULATE_CHART,
   pm10dust: COARSE_PARTICULATE_CHART,
+  dustsfc: DUST_CONCENTRATION_CHART,
 };
-type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
+type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust" | "dustsfc";
 
 /** The aerosol chart of a family, or null for any other. */
 export function aerosolChart(family: ChartFamily): AerosolChart | null {

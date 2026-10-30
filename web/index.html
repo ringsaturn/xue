@@ -117,6 +117,7 @@
               "NOAA CFSv2 seasonal runs on the coupled model's 0.9375° grid, 6-hourly out to 39 weeks from the 00Z and 12Z cycles",
               "DWD ICON-EU 0.0625° runs over Europe, hourly to 78 h and 3-hourly to 120 h",
               "Météo-France ARPEGE 0.25° global runs, hourly to 48 h and 3-hourly to 102 h",
+              "CMA-CW v1.0/DUST 0.15° sand and dust runs over East and Central Asia from the WMO SDS-WAS Asian Center, hourly to 72 h and 3-hourly to 168 h",
               "2 m temperature, precipitation rate, 10 m wind with particle animation, downward shortwave radiation",
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
@@ -143,7 +144,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, the CMA-CW dust forecast over Asia, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan and of the CMA radar mosaic over China, the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -163,6 +164,7 @@
               { "@type": "Dataset", "name": "EUMETSAT Meteosat-12 (MTG-I1) FCI Level 1c full-disk imagery, hourly repeat cycle (EO:EUM:DAT:0662; contains modified EUMETSAT Meteosat data)", "url": "https://data.eumetsat.int/product/EO:EUM:DAT:0662", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "NOAA SWPC OVATION aurora visibility probability (1° global, five-minute model runs)", "url": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast" },
               { "@type": "Dataset", "name": "NOAA GEFS-Aerosols (Global Ensemble Forecast System aerosol member, 0.25°)", "url": "https://registry.opendata.aws/noaa-gefs/" },
+              { "@type": "Dataset", "name": "CMA-CW v1.0/DUST sand and dust forecast (China Meteorological Administration, WMO SDS-WAS Asian Center, 0.15° over East and Central Asia), via WMO WIS2", "url": "https://wis2.wmo.int/" },
               { "@type": "Dataset", "name": "ECMWF Open Data (real-time)", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "ECMWF IFS HRES surface fields forwarded by Open-Meteo (adapted from ECMWF IFS by ECMWF, licensed under CC BY 4.0, via Open-Meteo)", "url": "https://open-meteo.com", "license": "https://creativecommons.org/licenses/by/4.0/" }
             ],
@@ -178,6 +180,7 @@
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation, with the same height, period and vector for the wind sea and the first swell partition",
               "aerosol optical depth at 550 nm (total, dust, sea salt, sulphate, organic carbon, black carbon) and surface PM2.5, PM10 and dust PM10 concentrations (GEFS-Aerosols)",
+              "dust optical depth at 550 nm and surface dust concentration of every particle size (CMA-CW-DUST, over East and Central Asia)",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
               "10.4 µm infrared brightness temperature (Himawari-9 AHI band 13 over the western Pacific, GOES-19 and GOES-18 ABI channel 13 over the Americas and the Pacific, Meteosat-12 FCI IR 10.5 over Europe, Africa and the Atlantic; cloud-top temperature)",
@@ -198,6 +201,7 @@
               { "@type": "DataDownload", "name": "DWD ICON-EU live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-iconeu.json" },
               { "@type": "DataDownload", "name": "Météo-France ARPEGE live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-arpege.json" },
               { "@type": "DataDownload", "name": "GEFS-Aerosols live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-gefsaero.json" },
+              { "@type": "DataDownload", "name": "CMA-CW-DUST live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cmadust.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "CMA radar mosaic live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cma.json" },
@@ -633,6 +637,14 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPm">µ</b>
           <span class="rail-name"><span>PM</span> <small data-i18n="varPm">2.5</small></span>
         </button>
+        <!-- The surface dust concentration of every particle size, the
+             CMA-CW-DUST run's own field: a tile beside the particulates,
+             not one of their size cuts. Grains blown along the ground. -->
+        <button type="button" data-variable="dustsfc" data-i18n-tip="varLabelDustsfc" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5h9.5a2.5 2.5 0 1 0-2.5-2.5" /><path d="M3 13.5h12" /><circle cx="18.5" cy="13.5" r="1" fill="currentColor" stroke="none" /><circle cx="8" cy="17" r="1" fill="currentColor" stroke="none" /><circle cx="13" cy="18" r="1.2" fill="currentColor" stroke="none" /><circle cx="17" cy="9" r="0.9" fill="currentColor" stroke="none" /><path d="M2.5 21h19" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphDustsfc">D</b>
+          <span class="rail-name"><span>DUST</span> <small data-i18n="varDustsfc">SFC</small></span>
+        </button>
         <!-- The ocean, GFS-only for now: sea ice (a six-armed ice crystal;
              cover and thickness on the level row) and the waves (two
              swells; the wave vector — height as the fill, direction as
@@ -950,6 +962,11 @@
               <small>NOAA aerosol 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="cmadust" aria-pressed="false">
+              <span class="model-name">CMA-CW-DUST</span>
+              <small>CMA dust Asia 0.15°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <p class="field-group-heading" data-i18n="modelGroupRadar">Radar</p>
             <button type="button" data-model="mrms" aria-pressed="false">
               <span class="model-name">MRMS</span>
@@ -1128,6 +1145,7 @@
           <span class="source-credit" data-credit-model="iconeu">Source: <a href="https://opendata.dwd.de/" target="_blank" rel="noreferrer">Deutscher Wetterdienst</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, quantized);</span>
           <span class="source-credit" data-credit-model="arpege">Source: <a href="https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/" target="_blank" rel="noreferrer">Météo-France</a> (<a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noreferrer">Licence Ouverte 2.0</a>, quantized);</span>
           <span class="source-credit" data-credit-model="cma">Radar: <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a>;</span>
+          <span class="source-credit" data-credit-model="cmadust">Dust forecast: <a href="https://www.cma.gov.cn" target="_blank" rel="noreferrer">CMA</a> CMA-CW-DUST via <a href="https://wis2.wmo.int/" target="_blank" rel="noreferrer">WMO WIS2</a>;</span>
           <span class="source-credit" data-credit-model="mrms">Radar: <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a>;</span>
           <span class="source-credit" data-credit-model="nexrad">Radar: <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA/NWS NEXRAD Level III</a> via <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">Unidata</a>;</span>
           <span class="source-credit" data-credit-model="jma">Source: <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA website</a> (regridded);</span>
@@ -1186,6 +1204,13 @@
               <a href="https://registry.opendata.aws/noaa-gefs/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA GEFS-Aerosols</span>
                 <small data-i18n="creditsGefsAero">Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://wis2.wmo.int/" target="_blank" rel="noreferrer">
+                <span class="credits-name">CMA-CW-DUST</span>
+                <small data-i18n="creditsCmaDust">Dust forecast: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0.15° over Asia, via WMO WIS2</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

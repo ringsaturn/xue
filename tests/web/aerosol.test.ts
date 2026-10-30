@@ -317,3 +317,104 @@ describe("the aerosol charts", () => {
     expect(buildPalette(bundleVariable("pm10dust"))).toEqual(coarse);
   });
 });
+
+/** CMA-CW-DUST's surface dust concentration as xuebuild/variables.py
+ * registers it: the mass density (0,20,0) on the ground, a dust aerosol
+ * block with no size or wavelength interval, and a log1p codebook to
+ * 50000 µg/m³. No GEFS-Aerosols field, so not in the aerosol fixture. */
+const DUST_PARAMETER: BundleParameter = {
+  discipline: 0,
+  parameterCategory: 20,
+  parameterNumber: 0,
+  typeOfFirstFixedSurface: 1,
+  scaleFactorOfFirstFixedSurface: 0,
+  scaledValueOfFirstFixedSurface: 0,
+};
+const DUST_AEROSOL: BundleAerosol = {
+  aerosolType: 62001,
+  typeOfSizeInterval: 255,
+  scaleFactorOfFirstSize: null,
+  scaledValueOfFirstSize: null,
+  scaleFactorOfSecondSize: null,
+  scaledValueOfSecondSize: null,
+  typeOfWavelengthInterval: 255,
+  scaleFactorOfFirstWavelength: null,
+  scaledValueOfFirstWavelength: null,
+  scaleFactorOfSecondWavelength: null,
+  scaledValueOfSecondWavelength: null,
+};
+const DUST_CODEBOOK: LogQuantization = {
+  type: "log1p",
+  trace: 1,
+  scale: 10,
+  maximum: 50000,
+  minimumCode: 1,
+  maximumCode: 253,
+  zeroCode: 0,
+  overflowCode: 254,
+  nodataCode: 255,
+};
+const dustVariable = (): BundleVariable =>
+  registryVariable("dustsfc", { label: "Surface dust concentration", unit: "µg/m³", parameter: DUST_PARAMETER }, DUST_CODEBOOK, {
+    aerosol: DUST_AEROSOL,
+  });
+
+describe("the surface dust concentration", () => {
+  it("is the dust mass density with no size cut, not the dust PM10", () => {
+    const identity = identityForParameter(DUST_PARAMETER, undefined, DUST_AEROSOL);
+    expect(identity).toEqual({ family: "dustsfc", level: null, vector: false });
+    expect(registeredBundleId(identity)).toBe("dustsfc");
+    expect(identityForBundleId("dustsfc")).toEqual(identity);
+    expect(identifyBundle([dustVariable()])?.identity).toEqual(identity);
+    expect(identifyBundle(parseBundleMetadata(metadata(dustVariable())).variables)?.identity).toEqual(identity);
+    // The PM10 block on the mass density is no field, the dust block on
+    // the PM10 parameter is not the dust PM10, and another species is not
+    // dust.
+    expect(identityForParameter(DUST_PARAMETER, undefined, registry.pm10dust!.aerosol)).toBeNull();
+    expect(identityForParameter(registry.pm10dust!.parameter, undefined, DUST_AEROSOL)).toBeNull();
+    expect(identityForParameter(DUST_PARAMETER, undefined, { ...DUST_AEROSOL, aerosolType: 62008 })).toBeNull();
+    expect(identityForParameter(DUST_PARAMETER)).toBeNull();
+    expect(KNOWN_BUNDLE_IDS).toContain("dustsfc");
+    expect(AEROSOL_IDS).not.toContain("dustsfc");
+  });
+
+  it("has a tile of its own beside the particulates, and opens the dust run", () => {
+    expect(familyOf("dustsfc")).toBeNull();
+    expect(familyMembers("pm")).not.toContain("dustsfc");
+    const spec = variableSpec("dustsfc")!;
+    expect(spec.group).toBe("aerosol");
+    expect(spec.ground).toBe("slate");
+    expect(spec.code).toBe("DUST SFC");
+    expect(spec.label()).toBe("Surface dust concentration");
+    expect(spec.legendGradient).toBe("palette");
+    expect(FORECAST_MODELS.cmadust.railCore).toEqual(["dustsfc", "aod"]);
+    expect(FORECAST_MODELS.cmadust.defaultVariable).toBe("dustsfc");
+    expect(meteogramRows((id) => id === "dustsfc")).toEqual([]);
+  });
+
+  it("copies the encoders' codebook and reads it the whole way to 50000", () => {
+    const chart = aerosolChart("dustsfc")!;
+    expect(chart).toMatchObject({ trace: DUST_CODEBOOK.trace, scale: DUST_CODEBOOK.scale, maximum: DUST_CODEBOOK.maximum });
+    expect(scalarLegendRange({ family: "dustsfc", level: null, vector: false })).toEqual([0, 50000]);
+    expect(isobaricLegend({ family: "dustsfc", level: null, vector: false })).toEqual(["50000", "9300", "1700", "310", "50", "0"]);
+    expect(decodeValue(dustVariable(), 253)).toBeCloseTo(50000, 6);
+  });
+
+  it("paints PM10's hues over four decades, and a storm's core in brown", () => {
+    const dust = dustVariable();
+    const palette = buildPalette(dust);
+    const at = (value: number) => rgba(palette, encodeLog(DUST_CODEBOOK, value));
+    const hue = ([r, g, b]: number[]) => (g! > r! && g! > b! ? "green" : r! > 200 && g! > 200 ? "yellow" : r! > 200 && g! > 100 ? "orange" : r! > 200 ? "red" : "dark");
+    expect(rgba(palette, 0)[3]).toBe(0);
+    expect(at(5)[3]).toBeLessThan(60);
+    expect(hue(at(30))).toBe("green");
+    expect(hue(at(200))).toBe("yellow");
+    expect(hue(at(500))).toBe("orange");
+    expect(hue(at(1000))).toBe("red");
+    expect(at(20000)[3]).toBe(255);
+    expect(at(20000)[0]).toBeLessThan(at(1000)[0]);
+    // A core past 20000 is still a darker brown than one at 10000 or 20000.
+    expect(at(50000)[0]).toBeLessThan(at(20000)[0]);
+    expect(at(20000)[0]).toBeLessThan(at(10000)[0]);
+  });
+});

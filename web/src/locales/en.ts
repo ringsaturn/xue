@@ -93,6 +93,9 @@ export const en = {
    * with the 2.5 µm cut — a size, so the same in every language. */
   varAod: "TOTAL",
   varPm: "2.5",
+  /** The surface dust concentration's own tile: a surface field (SFC);
+   * CJK glosses name the quantity. */
+  varDustsfc: "SFC",
   /** The soil families' tiles: the top layer heads each, and the level
    * row picks the others by index (a layer is not a depth: the models
    * cut the soil differently). CJK glosses name the quantity. */
@@ -174,6 +177,8 @@ export const en = {
   // microgram per cubic metre a particulate concentration is read in.
   glyphAod: "τ",
   glyphPm: "µ",
+  // D for dust: the glyph of the tile, not a WMO letter.
+  glyphDustsfc: "D",
   // E is the station model's letter for the state of the ground; M the
   // initial of moisture.
   glyphTsoil: "E",
@@ -280,6 +285,9 @@ export const en = {
   creditsGfs: "Forecast data: GFS 0.25° and sflux",
   creditsHrrr: "Forecast data: HRRR 3 km, contiguous US",
   creditsGefsAero: "Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM",
+  /** The CMA's sand-and-dust model, the WMO SDS-WAS Asian Center's,
+   * carried by WMO WIS2; the model and programme names stay as written. */
+  creditsCmaDust: "Dust forecast: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0.15° over Asia, via WMO WIS2",
   /** The seasonal run: one forecast nine months deep, so the strip under
    * the track reads in months rather than in days. */
   creditsCfs: "Seasonal forecast: CFSv2, 9 months, 6-hourly",
@@ -569,6 +577,9 @@ export const en = {
   varLabelPm25: "PM2.5 surface concentration",
   varLabelPm10: "PM10 surface concentration",
   varLabelPm10dust: "Dust PM10 surface concentration",
+  // The surface dust concentration of every particle size, as a dust
+  // model forecasts it: not the PM10 cut above.
+  varLabelDustsfc: "Surface dust concentration",
   // The soil layers, by index from the surface down: the depths are the
   // source's (GFS 0–10/10–40/40–100/100–200 cm, IFS 0–7/7–28/28–100/
   // 100–289 cm), so no label names one.

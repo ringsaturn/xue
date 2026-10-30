@@ -865,7 +865,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero"] as const)
+    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
 
@@ -884,7 +884,7 @@ describe("dataset kinds", () => {
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -923,6 +923,20 @@ describe("dataset kinds", () => {
       defaultVariable: "aod",
       railCore: ["aod", "pm25"],
     });
+    // The CMA dust run (xuebuild/sources.py): regional on a regular 0.15°
+    // grid, so a region of cell centres and no projected domain; its core
+    // and opening field is the surface dust concentration, with the dust
+    // optical depth behind the optical depth family's tile.
+    expect(FORECAST_MODELS.cmadust).toMatchObject({
+      label: "CMA-CW-DUST",
+      product: "cma-cw-dust-0p15",
+      latestFilename: "latest-cmadust.json",
+      coreBundles: ["dustsfc"],
+      defaultVariable: "dustsfc",
+      railCore: ["dustsfc", "aod"],
+    });
+    expect(FORECAST_MODELS.cmadust.region).toEqual([25.0, 15.0, 150.1, 60.0]);
+    expect(FORECAST_MODELS.cmadust.domain).toBeUndefined();
     expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
     expect(FORECAST_MODELS.mrms3d.latestFilename).toBe("latest-mrms3d.json");
     expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
@@ -1274,6 +1288,26 @@ describe("dataset kinds", () => {
     };
     expect(validateManifest(analysis, "cams").bundles).toHaveLength(3);
     expect(() => validateManifest(analysis, "gefsaero")).toThrow();
+  });
+
+  it("admits a CMA-CW-DUST run on its surface dust concentration and refuses one without it", () => {
+    // Mirrors the `cmadust` entry of SOURCES: seven days, hourly to F072
+    // then three-hourly, two bundles, the dust concentration the core.
+    const store = (id: string) => ({ zarr: { path: `${id}.zarr`, byteLength: 1, crc32: "00000000" } });
+    const run = {
+      schemaVersion: 5,
+      model: "CMA-CW-DUST",
+      product: "cma-cw-dust-0p15",
+      runTime: "2026-10-30T00:00:00Z",
+      forecastHours: 168,
+      bundles: ["dustsfc", "aoddust"].map((id) => ({ variable: id, ...store(id) })),
+    };
+    expect(validateManifest(run, "cmadust").bundles.map((bundle) => bundle.variable)).toEqual(["dustsfc", "aoddust"]);
+    expect(() => validateManifest(run, "gefsaero")).toThrow();
+    expect(() => validateManifest({ ...run, bundles: run.bundles.slice(1) }, "cmadust")).toThrow(/dustsfc/);
+    expect(modelDefaultVariable("cmadust", "prate")).toBe("dustsfc");
+    expect(isObservationModel("cmadust")).toBe(false);
+    expect(isCaseOnlyModel("cmadust")).toBe(false);
   });
 
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {

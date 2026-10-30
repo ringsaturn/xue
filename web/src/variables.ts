@@ -922,6 +922,22 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["dustpm10", "dustconcentration"],
     showcaseCode: "PM10 DUST",
   }),
+  // The surface dust concentration of every particle size, as a dust model
+  // (CMA-CW-DUST) forecasts it: no size cut, so not a member of the
+  // particulates' family, a tile of its own instead.
+  surface({
+    id: "dustsfc",
+    chart: "dustsfc",
+    group: "aerosol",
+    code: "DUST SFC",
+    title: ["Surface Dust", "Concentration"],
+    bufferTitle: "Dust buffer",
+    labelKey: "varLabelDustsfc",
+    ground: "slate",
+    urlName: "dustsfc",
+    urlAliases: ["surfacedust", "sanddust", "duststorm"],
+    showcaseCode: "DUST SFC",
+  }),
   // The ocean. The ice and wave fields leave open water and land to the
   // map — the ice ramp starts pale and translucent, the wave ramps at
   // nothing — so they take the slate.
