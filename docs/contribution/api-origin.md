@@ -15,6 +15,7 @@ or unavailable API, never a metered bill.
 | Object cache | per isolate (`cache.rs`) | the same module, one per process |
 | Overload | Workers limits | `XUE_API_INFLIGHT` requests computed at once, then `503 overloaded` with `Retry-After` |
 | Swagger UI | static assets from `public/` | the same files compiled into the binary |
+| Compression | Cloudflare's | gzip for a client that takes it (Cloudflare does), `Vary: accept-encoding`; a point answer goes out at about a sixth of its size |
 
 `route.rs` decides which handler answers a path and its `Cache-Control`;
 `runtime.rs` (Worker) and `server.rs` (binary) only frame the answer. A

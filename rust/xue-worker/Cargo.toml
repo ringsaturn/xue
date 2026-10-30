@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 # The native HTTP server (`xue-api-server`): the same routes, read from the
 # public origin, for a self-hosted origin behind a Cloudflare Tunnel.
-server = ["dep:tokio", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:reqwest"]
+server = ["dep:tokio", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:reqwest", "dep:flate2"]
 
 [[bin]]
 name = "xue-api-server"
@@ -44,6 +44,7 @@ hyper = { version = "1", features = ["server", "http1"], optional = true }
 hyper-util = { version = "0.1", features = ["tokio"], optional = true }
 http-body-util = { version = "0.1", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"], optional = true }
+flate2 = { version = "1", optional = true }
 
 [dev-dependencies]
 futures-executor = "0.3"
