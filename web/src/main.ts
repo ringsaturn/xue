@@ -57,6 +57,19 @@ import {
   thermalFrontZone,
   warmMoistInflow,
 } from "./composite";
+import {
+  accumulationLegend,
+  accumulationPalette,
+  accumulationPlan,
+  accumulationVariable,
+  accumulationWindows,
+  rateKind,
+  seriesTotals,
+  windowCode,
+  WindowTotals,
+  type RateKind,
+  type TermPlane,
+} from "./accumulation";
 import { fireWeatherAlert, fireWeatherAlertPalette, fosbergPalette, fosbergPlane } from "./firewx";
 import { GIBS_PLATFORM_GLYPH, GIBS_PLATFORMS, GibsImagery, gibsDate, gibsDays, gibsLayer, gibsLayerFor, gibsLayerOnDay } from "./gibs";
 import { hotspotPalette, hotspots } from "./hotspot";
@@ -622,7 +635,14 @@ function planeCacheBudgetBytes(): number {
   const cap = (lowMemoryDevice() ? 128 : 256) * MEBIBYTE;
   const frame = primaryFrameBytes();
   if (frame === null) return floor;
-  return Math.min(cap, Math.max(floor, frame * (prefetchWindowWanted() + 2)));
+  return Math.min(cap, Math.max(floor, frame * (prefetchWindowWanted() + 2 + totalFrames())));
+}
+
+/** The plane cache's cap, whatever the session: what a total's window has
+ * to fit under (`offeredWindows`). */
+function planeCacheCapBytes(): number {
+  if (constrainedConnection()) return 24 * MEBIBYTE;
+  return (lowMemoryDevice() ? 128 : 256) * MEBIBYTE;
 }
 
 /** Compressed chunk bytes one Zarr worker may hold
@@ -647,12 +667,118 @@ function prefetchWindowFrames(): number {
   const wanted = prefetchWindowWanted();
   const frame = primaryFrameBytes();
   if (frame === null) return wanted;
-  const fits = Math.floor(planeCacheBudgetBytes() / frame) - 2;
+  const fits = Math.floor(planeCacheBudgetBytes() / frame) - 2 - totalFrames();
   return Math.max(2, Math.min(wanted, fits));
 }
 function prefetchConcurrency(): number {
   return constrainedConnection() ? 1 : 3;
 }
+
+/** The precipitation total on screen (`?accum=`, accumulation.ts): its
+ * window, how the session's frames are weighted, and about how many frames
+ * one window reads — or null while the primary is drawn as it is (another
+ * field, a fire field over it, a window this dataset does not offer). */
+interface TotalOn {
+  window: number;
+  kind: RateKind;
+  frames: number;
+}
+
+function accumulationOn(session: VariableSession | null = activeSession): TotalOn | null {
+  const window = view.accumulation;
+  if (window === null || !session || session !== activeSession || fireField() !== null) return null;
+  const offered = offeredWindows(session);
+  const frames = offered?.windows.get(window);
+  return offered && frames !== undefined ? { window, kind: offered.kind, frames } : null;
+}
+
+/** The windows the primary session offers a total over, each with the
+ * frames it reads, or null for a field no total is made of. A window
+ * whose frames would not fit in the plane cache beside the playback's own
+ * is not offered: gathering it would evict its own planes forever. */
+function offeredWindows(session: VariableSession): { kind: RateKind; windows: Map<number, number> } | null {
+  if (session.chartId !== "prate" || session.vector || session.composite || session.volume) return null;
+  const kind = rateKind(session.variable);
+  if (kind === null) return null;
+  const leads = frameLeads();
+  let step = Infinity;
+  for (let index = 1; index < leads.length; index += 1) step = Math.min(step, leads[index]! - leads[index - 1]!);
+  const grid = session.metadata.grid;
+  const frameBytes = grid.width * grid.height;
+  const windows = new Map<number, number>();
+  for (const window of accumulationWindows(leads, kind, showingObservations())) {
+    const frames = Math.ceil(window / step) + 1;
+    if ((frames + 4) * frameBytes <= planeCacheCapBytes()) windows.set(window, frames);
+  }
+  return { kind, windows };
+}
+
+/** Frames the total on screen keeps resident behind the playhead. */
+function totalFrames(): number {
+  return accumulationOn()?.frames ?? 0;
+}
+
+/** Every frame's lead seconds on the primary axis, kept per axis. */
+let frameLeadsMemo: { metadata: BundleMetadata; leads: number[] } | null = null;
+function frameLeads(): number[] {
+  if (!metadata) return [];
+  if (frameLeadsMemo?.metadata === metadata) return frameLeadsMemo.leads;
+  const leads: number[] = [];
+  for (let index = 0; index < frameCount(); index += 1) leads.push(frameLeadSeconds(index));
+  frameLeadsMemo = { metadata, leads };
+  return leads;
+}
+
+/** One frame of a total's window as the plane cache files it. */
+interface WindowTerm {
+  key: string;
+  hour: number;
+  hours: number;
+}
+
+function totalTerms(session: VariableSession, index: number, on: TotalOn): WindowTerm[] {
+  return accumulationPlan(frameLeads(), index, on.window, on.kind).terms.map((term) => {
+    const hour = frameOffset(term.index);
+    return { key: cacheKey(session, session.variable, hour), hour, hours: term.hours };
+  });
+}
+
+/** The running sums of each rate session that has drawn a total. */
+const windowTotals = new WeakMap<VariableSession, WindowTotals>();
+
+/** The total plane for frame `index`, or null while a plane of its window
+ * is not decoded for the view. */
+function totalPlane(session: VariableSession, index: number, on: TotalOn): Uint8Array | null {
+  const planes: TermPlane[] = [];
+  for (const term of totalTerms(session, index, on)) {
+    const frame = cachedFrame(term.key, session);
+    if (!frame) return null;
+    planes.push({ key: term.key, plane: frame.plane, hours: term.hours });
+  }
+  let totals = windowTotals.get(session);
+  if (!totals) {
+    totals = new WindowTotals(session.variable);
+    windowTotals.set(session, totals);
+  }
+  const grid = session.metadata.grid;
+  return totals.plane(String(index), planes, grid.width * grid.height);
+}
+
+/** The window the primary layer's palette is the total key for, or null
+ * while it holds the field's own: swapped with the plane it colours, so a
+ * rate plane is never drawn in the totals' colours, or a total in the
+ * rate's, while the other is still decoding. */
+let paletteWindow: number | null = null;
+
+function syncPrimaryPalette(slot: RasterSlot, session: VariableSession, window: number | null): void {
+  if (paletteWindow === window) return;
+  paletteWindow = window;
+  slot.layer.setPalette(window === null ? scalarPalette(session) : accumulationPalette());
+}
+
+/** The cache keys of the total on screen, kept from eviction like the
+ * planes a frame shows. */
+let totalShownKeys: string[] = [];
 
 /** Per-variable UI copy; the `code` is prefixed with the active model's label
  * ("GFS / TMP 2M", "ECMWF / TMP 2M"). A registered field's is read off the
@@ -3591,7 +3717,6 @@ function renderProbe(): void {
     soundingSection.render();
     return;
   }
-  const variable = session.variable;
   const cell = series.cellFor(session.metadata);
   probePanel.code.textContent = variableUi(session).code;
   renderProbeAirportChip();
@@ -3609,7 +3734,12 @@ function renderProbe(): void {
   const probed = probeVariables(session);
   // A composite's guns are unitless stretches with no magnitude between
   // them: the readout names the three as they are and draws no trace.
-  const values = cell ? (session.composite ? [] : probeSeriesValues(series, probed, offsets)) : [];
+  const rates = cell ? (session.composite ? [] : probeSeriesValues(series, probed, offsets)) : [];
+  // A total reads the same series summed over its window at every frame.
+  const total = member ? null : accumulationOn(session);
+  const values = total ? seriesTotals(rates, frameLeads(), total.window, total.kind) : rates;
+  const variable = total ? accumulationVariable(session.variable) : session.variable;
+  if (total) probePanel.code.textContent = `APCP ${windowCode(total.window)}`;
   const current = values[index];
 
   if (!cell) {
@@ -3633,6 +3763,11 @@ function renderProbe(): void {
       probePanel.meta.textContent = direction === null
         ? lead
         : `${lead} · ${String(Math.round(direction)).padStart(3, "0")}°`;
+      // A window the axis cannot fill yet says how much of it the total is.
+      const covered = total ? accumulationPlan(frameLeads(), index, total.window, total.kind).covered : null;
+      if (total && covered !== null && covered < total.window) {
+        probePanel.meta.textContent += ` · ${windowCode(covered)}/${windowCode(total.window)}`;
+      }
     }
   }
 
@@ -4637,7 +4772,16 @@ function blendFrames(index: number, next: number, weight: number): boolean {
   // One coverage box serves both slots, so a pair decoded for different views
   // (a pan mid-playback) holds the current image instead of blending a plane
   // against another frame's stale bytes.
-  if (current && upcoming && session.volume && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
+  const total = accumulationOn(session);
+  if (total) {
+    const from = totalPlane(session, index, total);
+    const to = from ? totalPlane(session, next, total) : null;
+    if (from && to && paletteWindow === total.window) {
+      ensureSlotGrid(slot, session);
+      slot.layer.setBlend(from, to, weight, sessionCoverage(session, session.viewTiles));
+      blended = true;
+    }
+  } else if (current && upcoming && session.volume && sameTileRects(current[0]!.tiles, upcoming[0]!.tiles)) {
     volumeLayer?.setRegion(volumeRegion(session));
     volumeLayer?.setBlend(
       current.map((frame) => frame.plane),
@@ -5036,8 +5180,13 @@ function sendPrefetchWindow(index: number): void {
         : frameOffset(frame);
       if (offset !== null && !hours.includes(offset)) hours.push(offset);
     }
+    // A total keeps its window behind the playhead resident too.
+    const shownTotal = overlay ? null : accumulationOn(session);
+    if (shownTotal) {
+      for (const term of totalTerms(session, index, shownTotal)) if (!hours.includes(term.hour)) hours.push(term.hour);
+    }
     if (hours.length === 0) continue;
-    const key = String(hours[0]);
+    const key = `${hours[0]}/${hours.length}`;
     if (lastPrefetchWindow.get(session.key) === key) continue;
     lastPrefetchWindow.set(session.key, key);
     session.worker.postMessage({
@@ -5067,6 +5216,9 @@ function trySelectFrame(index: number): boolean {
   requestedFrameIndex = index;
   updateFrameReadout(index);
   sendPrefetchWindow(index);
+  const total = accumulationOn(session);
+  if (total) return trySelectTotal(session, slot, index, total);
+  totalShownKeys = [];
   const keys = session.variables.map((variable) => cacheKey(session, variable, hour));
   const planes = keys.map((key) => cachedFrame(key, session));
   if (planes.every((plane) => plane !== undefined)) {
@@ -5100,25 +5252,14 @@ function trySelectFrame(index: number): boolean {
         windLayer.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
       }
     } else {
+      if (slot === primarySlot()) syncPrimaryPalette(slot, session, null);
       slot.layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
       if (slot === slots.lines) scheduleLabels(planes[0]!, false);
     }
     slot.displayedReal = session.id;
     slot.shownKey = keys[0]!;
     slot.shownGuns = [];
-    activeFrameIndex = index;
-    desiredKey = null;
-    syncFrameMarks();
-    // The overlays follow the frame that is actually on screen, not the one
-    // asked for: a line chart of one hour over a field of another would be
-    // the wrong picture, whichever of the two were ahead.
-    for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
-    trySelectVolumeOverlay(index);
-    trySelectComposite(index);
-    trySelectFireDerived(index);
-    trySelectFireWind(index);
-    requestColumnFrame();
-    prefetchNext(index);
+    frameShown(index);
     return true;
   }
   // Track the first missing plane; when it arrives the frame is retried,
@@ -5128,11 +5269,63 @@ function trySelectFrame(index: number): boolean {
     if (planes[position] !== undefined) continue;
     requestDecode(session, session.variables[position]!, hour);
   }
-  // The overlays' planes for this frame are asked for now too, after the
-  // primary's, so they are as likely to be there when it lands.
+  frameMissing(index);
+  return false;
+}
+
+/** Show the precipitation total for frame `index` if every frame of its
+ * window is decoded; otherwise ask for the missing ones, newest first, and
+ * keep the picture on screen meanwhile. */
+function trySelectTotal(session: VariableSession, slot: RasterSlot, index: number, on: TotalOn): boolean {
+  const terms = totalTerms(session, index, on);
+  totalShownKeys = terms.map((term) => term.key);
+  const plane = totalPlane(session, index, on);
+  if (plane) {
+    for (const term of terms) {
+      const frame = planeCache.get(term.key)!;
+      planeCache.delete(term.key);
+      planeCache.set(term.key, frame);
+    }
+    ensureSlotGrid(slot, session);
+    syncPrimaryPalette(slot, session, on.window);
+    slot.layer.setFrame(plane, sessionCoverage(session, session.viewTiles));
+    slot.displayedReal = session.id;
+    slot.shownKey = cacheKey(session, session.variable, frameOffset(index));
+    slot.shownGuns = [];
+    frameShown(index);
+    return true;
+  }
+  const missing = terms.filter((term) => !cachedFrame(term.key, session)).reverse();
+  desiredKey = missing[0]?.key ?? null;
+  for (const term of missing) requestDecode(session, session.variable, term.hour);
+  frameMissing(index);
+  return false;
+}
+
+/** What follows a primary frame going on screen: the overlays, derived
+ * layers and marks catch up to it, and the frames after it are asked for. */
+function frameShown(index: number): void {
+  activeFrameIndex = index;
+  desiredKey = null;
+  syncFrameMarks();
+  // The overlays follow the frame that is actually on screen, not the one
+  // asked for: a line chart of one hour over a field of another would be
+  // the wrong picture, whichever of the two were ahead.
+  for (const overlay of overlaySlots()) trySelectOverlayFrame(overlay, index);
+  trySelectVolumeOverlay(index);
+  trySelectComposite(index);
+  trySelectFireDerived(index);
+  trySelectFireWind(index);
+  requestColumnFrame();
+  prefetchNext(index);
+}
+
+/** While a primary frame is still decoding: the overlays' planes for it
+ * are asked for now too, after the primary's, so they are as likely to be
+ * there when it lands. */
+function frameMissing(index: number): void {
   for (const overlay of overlaySlots()) requestOverlayDecode(overlay, index);
   requestVolumeOverlayDecode(index);
-  return false;
 }
 
 /** The overlay's frame offset for a primary frame, or null when its axis has
@@ -5292,6 +5485,12 @@ function prefetchNext(index: number): void {
   for (let step = 1; step <= PLAYBACK_DECODE_AHEAD; step += 1) {
     const frame = (index + step) % frameCount();
     const hour = frameOffset(frame);
+    const total = accumulationOn(session);
+    if (total) {
+      for (const term of totalTerms(session, frame, total)) {
+        if (!cachedFrame(term.key, session)) requestDecode(session, session.variable, term.hour);
+      }
+    }
     for (const variable of session.variables) {
       const key = cacheKey(session, variable, hour);
       if (!cachedFrame(key, session)) requestDecode(session, variable, hour);
@@ -5342,6 +5541,8 @@ function requestDecode(
 function planesPerFrame(): number {
   let planes = 0;
   for (const session of slotSessions()) planes += session.variables.length;
+  // A total waits on every frame of its window, not one.
+  planes += totalFrames();
   return Math.max(1, planes);
 }
 
@@ -5391,6 +5592,7 @@ function handleDecodedFrame(
     if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
     for (const gun of overlay.shownGuns) displayedKeys.add(gun);
   }
+  for (const shown of totalShownKeys) displayedKeys.add(shown);
   for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
   for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
   for (const shown of fireWind.shownKeys) displayedKeys.add(shown);
@@ -5423,7 +5625,10 @@ function handleDecodedFrame(
   }
   // Display only the newest requested target; stale decodes stay cached.
   if (desiredKey === key && activeVariable) {
-    const index = frameIndexForOffset(message.frameOffset);
+    // A total's missing plane is another frame of the window than the one
+    // asked for.
+    const index =
+      accumulationOn() && requestedFrameIndex !== null ? requestedFrameIndex : frameIndexForOffset(message.frameOffset);
     if (index < 0) return;
     const shown = trySelectFrame(index);
     // A stalled playhead resumes here, off the decode completion, so restart
@@ -5754,6 +5959,7 @@ function renderLevelRow(): void {
     }
     levelRow.append(container);
   }
+  renderTotalGroup();
   // The radar's group is the overlay's, not the run's: kept across a
   // rebuild, after the run's own groups.
   if (radarLevelGroup) {
@@ -5769,6 +5975,61 @@ function renderLevelRow(): void {
     pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   syncLevelRowFade();
+}
+
+/** The precipitation's own group on the level row: the rate, then each
+ * window the dataset offers a total over (`?accum=`), the one on screen
+ * pressed. */
+function renderTotalGroup(): void {
+  const session = activeSession;
+  if (!session || view.field !== session.id || fireField() !== null) return;
+  const offered = offeredWindows(session);
+  if (!offered || offered.windows.size === 0) return;
+  const shown = accumulationOn(session)?.window ?? null;
+  const container = document.createElement("div");
+  container.className = "level-group";
+  container.dataset.slot = "fill";
+  container.dataset.accum = "";
+  const caption = document.createElement("span");
+  caption.className = "level-caption";
+  caption.textContent = t("accumCaption");
+  container.append(caption);
+  for (const window of [null, ...offered.windows.keys()]) {
+    const code = window === null ? "RATE" : windowCode(window);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.accum = window === null ? "" : String(window);
+    button.disabled = switchingVariable;
+    button.setAttribute("aria-pressed", String(window === shown));
+    const glyph = document.createElement("b");
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = code;
+    const name = document.createElement("span");
+    name.className = "rail-name";
+    const codeSpan = document.createElement("span");
+    codeSpan.textContent = code;
+    const glossSmall = document.createElement("small");
+    glossSmall.textContent = window === null ? t("accumRateGloss") : t("accumTotalGloss", { window: code });
+    name.append(codeSpan, " ", glossSmall);
+    button.append(glyph, name);
+    button.addEventListener("click", () => setAccumulation(window));
+    container.append(button);
+  }
+  levelRow.append(container);
+  levelRow.hidden = false;
+}
+
+/** Draw the precipitation as the rate or as the total over `window`. */
+function setAccumulation(window: number | null): void {
+  if (view.accumulation === window) return;
+  view.accumulation = window;
+  syncUrl();
+  const session = activeSession;
+  if (!session) return;
+  lastPrefetchWindow.delete(session.key);
+  updateVariablePresentation(session);
+  trySelectFrame(activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value));
+  if (probe) scheduleProbeRender();
 }
 
 /** How far the level row is clipped at each end, as the two lengths the
@@ -6599,6 +6860,21 @@ function updateVariablePresentation(session: VariableSession): void {
   }
   if (experimentEnabled && session.chartId === "prate") {
     const key = steppedPrecipitationLegend();
+    legendBar.style.background = key.gradient;
+    legendLabels.replaceChildren(...key.labels.map((label) => {
+      const span = document.createElement("span");
+      span.textContent = label;
+      return span;
+    }));
+  }
+  const total = accumulationOn(session);
+  if (total) {
+    const key = accumulationLegend();
+    const code = windowCode(total.window);
+    variableCode.textContent = `${model.label} / APCP ${code}`;
+    variableTitle.textContent = `Precipitation ${code} Total`;
+    legend.setAttribute("aria-label", t("legendAria", { label: t("accumTotalGloss", { window: code }) }));
+    legendUnit.textContent = "mm";
     legendBar.style.background = key.gradient;
     legendLabels.replaceChildren(...key.labels.map((label) => {
       const span = document.createElement("span");
@@ -8900,6 +9176,14 @@ function samplingFor(chartId: KnownBundleId | null, bundleId: string): Sampling 
   return chartId === null ? "smooth" : (variableSpec(chartId)?.sampling ?? "smooth");
 }
 
+/** A scalar field's own palette: the stepped key under the experiment for
+ * the precipitation, its ramp otherwise. */
+function scalarPalette(session: VariableSession): Uint8Array {
+  return experimentEnabled && session.chartId === "prate"
+    ? steppedPrecipitationPalette(session.variable)
+    : buildPalette(session.variable, session.identity);
+}
+
 /** Point a slot's layer at a session: its palette, its contour style (the
  * chart's own when the lines are the view, the overlay's over a field), and
  * magnitude mode for wind. */
@@ -8947,11 +9231,8 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
   } else {
     layer.setCompositeField(null);
     layer.setVectorField(null);
-    layer.setPalette(
-      experimentEnabled && session.chartId === "prate"
-        ? steppedPrecipitationPalette(session.variable)
-        : buildPalette(session.variable, session.identity),
-    );
+    layer.setPalette(scalarPalette(session));
+    if (!overlay) paletteWindow = null;
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay, geoGrid(session.metadata).longitudeStep));
     layer.setFloorNoData(floorIsNoData(session.chartId));
     layer.setSampling(samplingFor(session.chartId, session.variable.id));

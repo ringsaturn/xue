@@ -31,6 +31,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
+| `accumulation.ts` | Sliding-window precipitation totals (`?accum=`) from the published rate frames; see "Precipitation totals" below. |
 | `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`). |
 | `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
@@ -255,6 +256,32 @@ and the window shrinks to fit it.
   a typed array without an error, leaving the volume empty); a line stands a vertical section, a wall from
   sea level to the top painted from the same 3D textures, over the march
   veiled to a third. Pressing a tool again clears what it holds.
+- Precipitation totals (`accumulation.ts`, `?accum=`): the depth over the
+  window ending at the playhead, a weighted sum of `prate` frames the
+  session decodes anyway; no bundle carries a total. A rate whose
+  parameter block has `typeOfStatisticalProcessing` (de-accumulated or
+  de-averaged: ECMWF, GFS sflux) is the mean over the step ending at its
+  frame and is weighted by the part of that step inside the window; an
+  instantaneous one (GFS pgrb2, the radar windows) is integrated by the
+  trapezoid rule, with no line across a gap of more than four steps. A
+  forecast offers 3–72 h, an observation window 10 min–3 h, each only if
+  it is at least one step and at most the axis, and only if its frames fit
+  the plane cache's cap beside playback (`offeredWindows`): gathering a
+  window that does not fit would evict its own planes. The window's
+  planes are kept from eviction while shown (`totalShownKeys`), asked for
+  newest first, and named in the prefetch window behind the playhead; the
+  cache budget, the prefetch window and the in-flight cap all count them.
+  `WindowTotals` holds a running Float64 sum and applies only the change
+  in each frame's weight when the playhead steps (two to four frames of
+  any window), starting over on a re-decoded or recycled plane, a change
+  touching most terms, or every 64 updates. The sum is written into its
+  own log1p codebook (0.1 mm–1 m) and drawn through a banded key sampled
+  from the rate ramp; the palette swaps with the first plane it colours
+  (`syncPrimaryPalette`), so neither picture is ever drawn in the other's
+  colours. The level row carries RATE and the windows while the
+  precipitation is the field; the probe sums the same series over the
+  same plan (`seriesTotals`) and says how much of a window the axis could
+  fill (`6H/24H`).
 - Altitude correction (`layer.ts::lapseCodes`, formula in `lapse.ts`):
   with relief on, a 2 m temperature is moved from the model's ground (the
   run's `orog` plane, decoded whole once and uploaded on its own grid) to

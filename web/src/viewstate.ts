@@ -21,6 +21,7 @@
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
+  parseAccumulationFromSearch,
   parseGibsFromSearch,
   parseExperimentFromSearch,
   parseLinesFromSearch,
@@ -32,6 +33,7 @@ import {
   parseVolumeFromSearch,
   searchForCaseVariable,
   searchForVariable,
+  searchWithAccumulation,
   searchWithGibs,
   searchWithExperiment,
   searchWithLines,
@@ -70,6 +72,10 @@ export interface ViewState {
   field: ForecastBundleId | null;
   /** The pressure surface drawn as lines, over the field or alone. */
   lines: PressureBundleId | null;
+  /** The window, in seconds, the precipitation field is summed over
+   * (`?accum=`, accumulation.ts), or null for the rate. Kept while another
+   * field is on screen, so the way back to precipitation returns to it. */
+  accumulation: number | null;
   /** Whether the particle overlay is drawn where there is a flow to draw. */
   particles: boolean;
   /** The volume bundle drawn over the field (`?volume=`), or null. Only
@@ -148,6 +154,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
     view: {
       field: composition.fill,
       lines: composition.lines,
+      accumulation: parseAccumulationFromSearch(search),
       particles: requestedParticles ?? defaults.particles,
       volume: parseVolumeFromSearch(search),
       derived: { inflow: experiment.inflow, front: experiment.front, hotspot: false, ffwi: false, fwalert: false },
@@ -182,7 +189,8 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
       ? searchForCaseVariable(primary, search, context.caseId)
       : searchForVariable(primary, search, context.model);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
-  const withVolume = searchWithVolume(withLines, volumeOverField(view));
+  const withAccumulation = searchWithAccumulation(withLines, view.field === "prate" ? view.accumulation : null);
+  const withVolume = searchWithVolume(withAccumulation, volumeOverField(view));
   const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
   const withExperiment = searchWithExperiment(withParticles, {
     enabled: context.experimentEnabled,

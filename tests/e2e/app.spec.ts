@@ -494,9 +494,10 @@ test("the temperature tile opens a family whose level row picks the surface", as
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
-  // Precipitation is a single layer: the row carries only the lines group,
-  // offering the run's pressure surfaces with none pressed.
-  await expect(page.locator("#level-row .level-group")).toHaveCount(1);
+  // Precipitation is a single layer: the row carries its totals' windows
+  // and the lines group, offering the run's pressure surfaces with none
+  // pressed.
+  await expect(page.locator("#level-row .level-group")).toHaveCount(2);
   await expect(page.locator('#level-row .level-group[data-slot="lines"]')).toBeVisible();
   // The family tile opens its surface member, and the row lists the members
   // the run publishes with the surface pressed.
@@ -540,6 +541,35 @@ test("the temperature tile opens a family whose level row picks the surface", as
   await expect(page).toHaveURL(/lines=hgt500/);
   await expect(page.locator("#level-row .level-group")).toHaveCount(2);
   await expect(page.locator('#level-row button[data-variable="hgt500"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the precipitation's level row sums the rate over a window", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  const rate = page.locator('#level-row [data-accum] button[data-accum=""]');
+  const day = page.locator('#level-row button[data-accum="86400"]');
+  await expect(rate).toHaveAttribute("aria-pressed", "true");
+  await expect(day).toHaveAttribute("aria-pressed", "false");
+  await day.click();
+  await expect(day).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/accum=24h/);
+  await expect(page.locator("#legend-unit")).toHaveText("mm");
+  await expect(page.locator("#variable-title")).toHaveText("Precipitation 24H Total");
+  await expect(page.locator("#variable-code")).toContainText("APCP 24H");
+  // The window is the precipitation's: another field drops it from the link,
+  // and coming back draws the total again.
+  await page.locator('.variable-rail button[data-variable="tmp2m"]').click();
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "tmp2m");
+  await expect(page).not.toHaveURL(/accum=/);
+  await page.locator('.variable-rail button[data-variable="prate"]').click();
+  await expect(page).toHaveURL(/accum=24h/);
+  await rate.click();
+  await expect(page).not.toHaveURL(/accum=/);
+  await expect(page.locator("#legend-unit")).toHaveText("mm/h");
 });
 
 test("the rail is three sections, and MORE lists the fields the core tiles do not", async ({ page }, testInfo) => {
