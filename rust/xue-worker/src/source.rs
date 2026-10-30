@@ -144,6 +144,10 @@ fn variables_from_item(item: &Value) -> Map<String, Value> {
                         .cloned()
                         .unwrap_or(Value::Null),
                     "unit": variable.get("unit").cloned().unwrap_or(Value::Null),
+                    "quantization": variable
+                        .get("xue:quantization")
+                        .cloned()
+                        .unwrap_or(Value::Null),
                 }),
             );
         }

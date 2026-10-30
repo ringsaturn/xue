@@ -605,7 +605,11 @@ fn a_source_summary_flattens_the_items_variables() {
             "properties": {
                 "forecast:reference_datetime": "2026-08-15T06:00:00Z",
                 "cube:variables": {
-                    "tmp2m": { "description": "2 m temperature", "unit": "°C" },
+                    "tmp2m": {
+                        "description": "2 m temperature",
+                        "unit": "°C",
+                        "xue:quantization": { "type": "linear", "offset": -60.0, "scale": 0.5, "minimumCode": 0, "maximumCode": 220, "nodataCode": 255 },
+                    },
                     "ugrd10m": { "description": "10 m u wind", "unit": "m/s", "xue:bundle": "wind10m" },
                 }
             }
@@ -617,9 +621,19 @@ fn a_source_summary_flattens_the_items_variables() {
     assert_eq!(body["runTime"], "2026-08-15T06:00:00Z");
     assert_eq!(
         body["variables"]["tmp2m"],
-        json!({ "bundle": "tmp2m", "label": "2 m temperature", "unit": "°C" })
+        json!({
+            "bundle": "tmp2m",
+            "label": "2 m temperature",
+            "unit": "°C",
+            "quantization": { "type": "linear", "offset": -60.0, "scale": 0.5, "minimumCode": 0, "maximumCode": 220, "nodataCode": 255 },
+        })
     );
     assert_eq!(body["variables"]["ugrd10m"]["bundle"], "wind10m");
+    // An Item without a codebook answers `null`, not a missing field.
+    assert_eq!(body["variables"]["ugrd10m"]["quantization"], Value::Null);
+    assert!(body["variables"]["ugrd10m"]
+        .as_object()
+        .is_some_and(|entry| entry.contains_key("quantization")));
 
     let error = block_on(read_source(&data, "nowhere")).expect_err("unknown");
     assert_eq!((error.status, error.code.as_str()), (404, "unknown_source"));
@@ -762,4 +776,27 @@ fn an_object_source_answers_as_the_bucket_does() {
     assert_eq!(ok(&source, &query), from_bucket);
     let missing = err(&source, "source=nowhere&lat=0&lon=0");
     assert_eq!((missing.status, missing.code.as_str()), (404, "unknown_source"));
+}
+
+/// Each variable carries its codebook, and its values sit on it.
+#[test]
+fn a_variable_carries_the_codebook_its_values_sit_on() {
+    let data = Data::in_memory(bucket());
+    let body = ok(
+        &data,
+        &format!("source=gfs&lat={LAT}&lon={LON}&variables=tmp2m,prate"),
+    );
+    let tmp2m = &body["variables"]["tmp2m"]["quantization"];
+    assert_eq!(tmp2m["type"], "linear");
+    let (offset, scale) = (
+        tmp2m["offset"].as_f64().expect("offset"),
+        tmp2m["scale"].as_f64().expect("scale"),
+    );
+    assert!(scale > 0.0);
+    for value in values(&body, "tmp2m").into_iter().flatten() {
+        let steps = (value - offset) / scale;
+        assert!((steps - steps.round()).abs() < 1e-6, "{value} is off the {scale} grid");
+    }
+    assert!(tmp2m["nodataCode"].is_u64());
+    assert_eq!(body["variables"]["prate"]["quantization"]["type"], "log1p");
 }

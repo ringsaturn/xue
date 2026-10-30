@@ -7,6 +7,10 @@ changes are in `git log`.
 
 ## 2026-10-30
 
+- The data API reports each variable's codebook: `quantization` on every
+  entry of `/v1/point`, `/v1/cell` and `/v1/sources/{source}` `variables`,
+  shaped as the STAC Item's `xue:quantization`, so a client knows how fine
+  the values are (`docs/api.md`).
 - The data API may answer `429 rate_limited` with `Retry-After` when a
   self-hosted origin's per-minute budget of computed answers is spent;
   cached answers are not limited (`docs/api.md`).
