@@ -83,6 +83,8 @@ describe("searchForView", () => {
     "?case=ida-2021&type=radar&lines=pressure",
     "?model=hrrr&type=radar&res=half&backend=xue",
     "?case=fuji-woof-2026-10-10&type=sst&volume=cloud3d",
+    "?model=gfs&type=precip&accum=24h",
+    "?model=mrms&type=precip&accum=30m",
   ])("round-trips %s", (search) => {
     expect(roundTrip(search)).toBe(search);
   });
@@ -163,5 +165,23 @@ describe("an old day-night link", () => {
     expect(withBlend.view.field).toBe("truecolor");
     expect(withBlend.view).not.toHaveProperty("blend");
     expect(roundTrip("?model=himawari&type=truecolor")).toBe("?model=himawari&type=truecolor");
+  });
+});
+
+describe("the precipitation total", () => {
+  it("is parsed from ?accum=, a spelling that is no window reading as the rate", () => {
+    expect(parseView("?type=precip&accum=24h", DEFAULTS).view.accumulation).toBe(24 * 3600);
+    expect(parseView("?type=precip&accum=30m", DEFAULTS).view.accumulation).toBe(1800);
+    expect(parseView("?type=precip&accum=soon", DEFAULTS).view.accumulation).toBeNull();
+    expect(parseView("?type=precip", DEFAULTS).view.accumulation).toBeNull();
+  });
+
+  it("is written only while the precipitation is the field", () => {
+    const view = { ...parseView("?model=gfs&type=temp", DEFAULTS).view, accumulation: 6 * 3600 };
+    const context = { model: "gfs" as const, caseId: null, experimentEnabled: false, particlesChosen: false };
+    expect(searchForView(view, "?model=gfs&type=temp", context, "prate")).toBe("?model=gfs&type=temp");
+    expect(searchForView({ ...view, field: "prate" }, "?model=gfs&type=temp", context, "prate")).toBe(
+      "?model=gfs&type=precip&accum=6h",
+    );
   });
 });

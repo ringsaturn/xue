@@ -477,6 +477,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?case=<id>` — a historical case; ids come from the catalog below.
 - `?res=half|full` — pin the resolution tier instead of choosing it from the
   viewport and connection.
+- `?accum=<window>` — with `type=precip`, draw the precipitation total over
+  the window ending at the playhead instead of the rate, summed in the
+  browser from the rate frames: `3h`, `6h`, `12h`, `24h`, `48h` or `72h` on
+  a forecast, `10m`, `30m`, `1h` or `3h` on a radar or nowcast window
+  (each where the dataset's axis is long enough). A window the dataset does
+  not offer shows the rate.
 - `?particles=off` — hide the wind particle animation (default on, off under
   prefers-reduced-motion).
 - `?projection=globe` — draw the map as a globe (default: the flat Web

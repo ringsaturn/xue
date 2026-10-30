@@ -219,6 +219,13 @@ export const en = {
   /** The level row's caption for the lines' group when the fill has a level
    * row of its own beside it. */
   linesCaption: "Lines",
+  /** The level row's caption for the precipitation's own group: the rate,
+   * then the windows it is summed over (`?accum=`). */
+  accumCaption: "Total",
+  /** The rate button's gloss in that group. */
+  accumRateGloss: "rate",
+  /** A window button's gloss; `{window}` is its instrument code ("24H"). */
+  accumTotalGloss: "{window} total",
   modelHeading: "Datasets",
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */
