@@ -22,7 +22,7 @@
 //! Configuration is the environment: `XUE_API_LISTEN` (default
 //! `127.0.0.1:8787`; keep it on loopback, the tunnel connects from the same
 //! machine), `DATA_ORIGIN` (default the public dataset), `XUE_API_INFLIGHT`
-//! (default 16) and `XUE_API_CACHE_MB` (default 64).
+//! (default 32) and `XUE_API_CACHE_MB` (default 64).
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -115,7 +115,7 @@ impl Config {
                 .parse()
                 .map_err(|_| format!("XUE_API_LISTEN={listen} is not an address"))?,
             origin: var("DATA_ORIGIN").unwrap_or_else(|| DEFAULT_ORIGIN.to_owned()),
-            inflight: number("XUE_API_INFLIGHT", 16)?.max(1),
+            inflight: number("XUE_API_INFLIGHT", 32)?.max(1),
             cache_bytes: number("XUE_API_CACHE_MB", 64)? * 1024 * 1024,
         })
     }

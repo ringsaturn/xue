@@ -22,7 +22,14 @@ route added to one runtime is in both.
 
 Configuration is the environment, read from `/etc/xue-api/env` when it
 exists: `XUE_API_LISTEN` (default `127.0.0.1:8787`), `DATA_ORIGIN`,
-`XUE_API_INFLIGHT` (16), `XUE_API_CACHE_MB` (64).
+`XUE_API_INFLIGHT` (32), `XUE_API_CACHE_MB` (64).
+
+Measured on a 1-vCPU host (2026-10-30, single-variable GFS points, every
+request a miss): 96 req/s at 16 in flight (p50 0.14 s), 124 req/s at 32
+(p50 0.24 s, 71 % of the core); past that the single-threaded loop
+saturates and latency, not throughput, grows. A miss is mostly waiting on
+the range reads from the dataset origin, so a request for n bundles costs
+about n times one.
 
 ## Reaching it without exposing the host
 
