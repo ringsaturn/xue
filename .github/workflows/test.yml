@@ -154,7 +154,7 @@ jobs:
       # (the metrics) pass; the shared handlers ran in the step above.
       - name: Test the API origin server
         working-directory: rust
-        run: cargo test -p xue-worker --features server metrics::
+        run: cargo test -p xue-worker --features server -- metrics::tests
 
       # A broken or private intra-doc link is how a module silently drops out
       # of the rendered page — docs.rs publishes the gap without failing.
