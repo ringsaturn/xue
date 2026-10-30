@@ -82,8 +82,10 @@ the token on the host.
 
 ## Cloudflare side
 
-One remotely managed tunnel, public hostname → `http://127.0.0.1:8787`.
-More hosts run `deploy.sh` with the same token: each is another connector
+One tunnel; the connector sends every hostname routed to it to
+`http://127.0.0.1:8787` (`--url`), so the tunnel needs no ingress rules.
+A hostname is a proxied CNAME to the tunnel (`cloudflared tunnel route dns
+<tunnel> <hostname>`). More hosts run `deploy.sh` with the same token: each is another connector
 of the same tunnel, and Cloudflare sends a request to the nearest one that
 is up (no weights, no application health check; `BindsTo=` stands in for
 the latter).

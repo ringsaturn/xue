@@ -1,7 +1,7 @@
-# The Cloudflare Tunnel connector for xue-api. Outbound only; the tunnel's
-# public hostname and its origin (http://127.0.0.1:8787) are set on the
-# Cloudflare side. Bound to xue-api.service: when the API stops or its watchdog
-# fires, the connector goes too, so Cloudflare never forwards to a dead origin.
+# The Cloudflare Tunnel connector for xue-api. Outbound only; every hostname
+# routed to the tunnel reaches the API on loopback (--url). Bound to
+# xue-api.service: when the API stops or its watchdog fires, the connector
+# goes too, so Cloudflare never forwards to a dead origin.
 [Unit]
 Description=Cloudflare Tunnel for xue-api
 After=xue-api.service network-online.target
@@ -11,7 +11,7 @@ ConditionPathExists=/etc/xue-api/tunnel.env
 [Service]
 # TUNNEL_TOKEN=… (mode 600, root); read by systemd before dropping privileges.
 EnvironmentFile=/etc/xue-api/tunnel.env
-ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --metrics 127.0.0.1:20241 run
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --metrics 127.0.0.1:20241 --url http://127.0.0.1:8787 run
 Restart=always
 RestartSec=5
 DynamicUser=yes

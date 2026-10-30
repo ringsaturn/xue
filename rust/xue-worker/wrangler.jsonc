@@ -32,9 +32,13 @@
     "DATA_PREFIX": "xue",
     "DATA_ORIGIN": "https://dataset.ringsaturn.me/xue/"
   },
-  "routes": [
-    { "pattern": "xue-api.ringsaturn.me", "custom_domain": true }
-  ],
+  // `xue-api.ringsaturn.me` is served by `xue-api-server` behind a Cloudflare
+  // Tunnel (docs/contribution/api-origin.md). The Worker stays deployed with
+  // no route and no workers.dev URL, so nothing reaches its R2 binding;
+  // restoring the custom-domain route below is the rollback.
+  //   { "pattern": "xue-api.ringsaturn.me", "custom_domain": true }
+  "routes": [],
+  "workers_dev": false,
   // The dataset bucket is `location: APAC` (see the Cloudflare R2 API), so the
   // Worker runs next to it rather than next to the request's ingress data
   // center: a cold query is a chain of R2 reads, and keeping those local beats
