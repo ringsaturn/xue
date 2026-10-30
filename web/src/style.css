@@ -5598,3 +5598,281 @@ html:has(.showcase-page) {
     font-size: var(--fs-3);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   The API console (api.html): a request form over the data API's routes,
+   the lat/lon → cell locator, and the answer with its headers. Instrument
+   text throughout: parameter names, URLs and JSON are mono; the body
+   scrolls inside its own box, the page never sideways. */
+
+.api-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 28px 0 24px;
+}
+
+.api-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  align-items: flex-end;
+}
+
+.api-field {
+  display: flex;
+  flex: 1 1 150px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.api-field.is-wide {
+  flex: 3 1 300px;
+}
+
+.api-field input,
+.api-field select {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.api-field select {
+  min-width: 220px;
+}
+
+.api-field input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.api-field input:focus-visible,
+.api-field select:focus-visible,
+.api-chip:focus-visible,
+.api-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.api-required,
+.api-field-note {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.api-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.api-chip {
+  height: 26px;
+  padding: 0 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.api-chip:hover {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.api-chip[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.api-locator {
+  padding: 12px 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--card);
+}
+
+.api-locator-status {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+.api-locator-status + .api-locator-status {
+  margin-top: 4px;
+}
+
+.api-locator-status.is-error,
+.api-group-cell.is-error,
+.api-code.is-error {
+  color: var(--warning);
+}
+
+.api-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.api-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  align-items: baseline;
+  padding-top: 8px;
+  border-top: var(--hair) solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.api-group-bundles,
+.api-group-cell {
+  color: var(--text);
+}
+
+.api-group-grid {
+  color: var(--muted);
+}
+
+.api-request {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 10px 12px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.api-method {
+  color: var(--muted);
+}
+
+.api-url {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.api-url:hover {
+  text-decoration: underline;
+}
+
+.api-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.api-button {
+  height: 32px;
+  padding: 0 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--fs-1);
+}
+
+.api-button:hover:not(:disabled) {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.api-button.is-primary {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.api-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.api-response {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 40px;
+}
+
+.api-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.api-code {
+  color: var(--text);
+  font-size: var(--fs-2);
+  font-weight: 500;
+}
+
+.api-meta {
+  color: var(--muted);
+}
+
+.api-headers {
+  display: grid;
+  gap: 2px 14px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.api-headers dt {
+  color: var(--muted);
+}
+
+.api-headers dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.api-body {
+  max-height: 70vh;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--card);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+  tab-size: 2;
+}
