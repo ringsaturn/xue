@@ -21,7 +21,9 @@ catalog work when it is down.
 This document is the contract. `rust/xue-worker/static/openapi.json` is
 its machine copy, served at `/v1/openapi.json` with the live source list
 filled in and rendered at `/docs` (Swagger UI). A test holds the two to the
-same set of routes.
+same set of routes. `https://xue.ringsaturn.me/api.html` is a console
+that builds and sends requests from a browser, and finds a `/v1/cell`
+row and column from a latitude and longitude.
 
 Everything a response says comes from the bucket at request time: the
 sources, a run's variables, grids and codebooks. A new source, variable or

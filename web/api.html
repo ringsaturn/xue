@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" content="Build and send requests to the Xue data API, with the latitude and longitude to grid cell lookup for /v1/cell done in the page." />
+    <title>API console · Xue</title>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- A developer tool, not content: kept out of the index and the sitemap. -->
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://xue-api.ringsaturn.me" crossorigin />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
+  </head>
+  <body class="showcase-page api-page">
+    <main class="showcase-shell api-shell">
+      <div class="showcase-topbar">
+        <a class="showcase-back-link" href="./">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" />
+          </svg>
+          <span>Live forecast</span>
+        </a>
+        <div class="showcase-actions">
+          <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle light and dark">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 0 0 16z" />
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <header class="showcase-header">
+        <h1>API console</h1>
+        <p class="showcase-intro">
+          Build a request to the data API, send it from this page and read the answer. For <code>/v1/cell</code>, type a
+          latitude and longitude: the page reads the run's grids from the dataset and finds the row and column the same
+          way the server does.
+        </p>
+        <p class="metrics-not-sla">
+          The API is experimental, with no availability promise. The contract is
+          <a href="https://github.com/ringsaturn/xue/blob/main/docs/api.md" target="_blank" rel="noreferrer">docs/api.md</a>;
+          the OpenAPI reference is at <a id="api-docs-link" href="https://xue-api.ringsaturn.me/docs/" target="_blank" rel="noreferrer">/docs</a>.
+        </p>
+      </header>
+
+      <form class="api-form" id="api-form" autocomplete="off">
+        <div class="api-row">
+          <label class="api-field is-wide">
+            <span>API</span>
+            <input id="api-base" name="api" type="url" spellcheck="false" />
+          </label>
+          <label class="api-field">
+            <span>route</span>
+            <select id="api-route"></select>
+          </label>
+        </div>
+        <div class="api-row" id="api-fields"></div>
+        <datalist id="api-source-list"></datalist>
+        <div class="api-chips" id="api-bundles" role="group" aria-label="Bundles of the run" hidden></div>
+        <section class="api-locator" id="api-locator" aria-live="polite" hidden></section>
+
+        <div class="api-request">
+          <code class="api-method">GET</code>
+          <a id="api-request-url" class="api-url" target="_blank" rel="noreferrer"></a>
+        </div>
+        <p id="api-form-error" class="api-locator-status is-error" hidden></p>
+        <div class="api-actions">
+          <button id="api-send" class="api-button is-primary" type="submit">Send</button>
+          <button id="api-copy-url" class="api-button" type="button">Copy URL</button>
+          <button id="api-copy-curl" class="api-button" type="button">Copy curl</button>
+        </div>
+      </form>
+
+      <section class="api-response" id="api-response" aria-live="polite" hidden></section>
+
+      <footer class="source-note">
+        <a href="https://github.com/ringsaturn/xue" target="_blank" rel="noreferrer">GitHub</a>,
+        <a href="https://github.com/ringsaturn/xue/blob/main/docs/api.md" target="_blank" rel="noreferrer">API spec</a>
+      </footer>
+    </main>
+    <script type="module" src="/src/apiconsole.ts"></script>
+  </body>
+</html>

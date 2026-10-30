@@ -1,7 +1,8 @@
 # Frontend
 
 The shell is a static Vite build of `web/` (`index.html`, `showcase.html`,
-`compare.html`, `typhoon.html`) over MapLibre and WebGL2. Data layout:
+`compare.html`, `typhoon.html`, `metrics.html`, `api.html`) over MapLibre
+and WebGL2. Data layout:
 [delivery.md](delivery.md), [../zarr-profile.md](../zarr-profile.md).
 Storms, soundings and airports: [point-products.md](point-products.md).
 `web/src/wasm/` comes from `make wasm`; nothing typechecks without it.
@@ -573,6 +574,21 @@ terminates it. `compare/axis.ts` is pure arithmetic
 it matches the viewer's probe; regional models appear only inside their
 domain (`modelCoversPoint`). State is `lat`, `lon`, `span`, `fields`;
 hidden and pinned models are `localStorage`.
+
+## API console
+
+`api.html`: a form over the data API's routes (`docs/api.md`) that sends
+the request from the browser and shows the status, the headers the API
+exposes and the body. It is hosted on the site, not on the API's origin,
+because it reads the run's manifest from the bucket, whose CORS admits
+the site. For `/v1/cell` it turns a latitude and longitude into the row
+and column (`apiconsole/locate.ts`: the server's `probe_cell` rule, with
+`floor(x + 0.5)` where the viewer's `probeCell` uses `Math.round`, the
+canonical query and `run_directory`); for `/v1/point` the same lookup
+checks the cell the server answers. The live run is the Collection's
+pointer on the API's `dataOrigin`. State is the page's query, spelled as
+the request's. English only, like the OpenAPI reference; `noindex` and
+out of the sitemap. Pure parts: `tests/web/apiconsole.test.ts`.
 
 ## Past storms
 
