@@ -35,6 +35,17 @@ impl HttpError {
     }
 }
 
+/// The contract's error document for a failure.
+pub fn body(error: &HttpError) -> Value {
+    let mut body = serde_json::json!({
+        "error": { "code": error.code, "message": error.message }
+    });
+    if let Some(detail) = &error.detail {
+        body["error"]["detail"] = detail.clone();
+    }
+    body
+}
+
 #[cfg(target_arch = "wasm32")]
 impl From<worker::Error> for HttpError {
     fn from(error: worker::Error) -> HttpError {
@@ -69,20 +80,18 @@ fn base_headers(extra: &[(&str, &str)]) -> Result<Headers, HttpError> {
 }
 
 #[cfg(target_arch = "wasm32")]
-/// A JSON response, `Content-Type` and CORS included.
+/// A serialized JSON body as a response, `Content-Type` and CORS included.
 pub fn json(
-    value: &Value,
+    body: Vec<u8>,
     status: u16,
-    cache_control: Option<&str>,
+    cache_control: &str,
     extra: &[(&str, &str)],
 ) -> Result<Response, HttpError> {
     let headers = base_headers(extra)?;
-    if let Some(cache_control) = cache_control {
-        headers
-            .set("cache-control", cache_control)
-            .map_err(HttpError::from)?;
-    }
-    Ok(Response::from_json(value)
+    headers
+        .set("cache-control", cache_control)
+        .map_err(HttpError::from)?;
+    Ok(Response::from_bytes(body)
         .map_err(HttpError::from)?
         .with_status(status)
         .with_headers(headers))
@@ -111,12 +120,7 @@ pub fn preflight() -> Result<Response, HttpError> {
 /// Render any handler failure as the contract's error document. Built with
 /// `worker::Result` directly so it cannot itself need an error handler.
 pub fn error_response(error: HttpError) -> worker::Result<Response> {
-    let mut body = serde_json::json!({
-        "error": { "code": error.code, "message": error.message }
-    });
-    if let Some(detail) = error.detail {
-        body["error"]["detail"] = detail;
-    }
+    let body = body(&error);
     let headers = Headers::new();
     headers.set("content-type", "application/json; charset=utf-8")?;
     headers.set("access-control-allow-origin", "*")?;

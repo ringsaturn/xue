@@ -1,0 +1,28 @@
+# The data API origin. Listens on loopback only: the tunnel below is the one
+# way in, so the host opens no port for it. See docs/contribution/api-origin.md.
+[Unit]
+Description=Xue data API (xue-api-server)
+After=network-online.target
+Wants=network-online.target xue-api-tunnel.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/bin/xue-api-server
+EnvironmentFile=-/etc/xue-api/env
+Restart=always
+RestartSec=2
+WatchdogSec=30
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# The host is shared: cap what the API can take from the services beside it.
+MemoryMax=256M
+CPUWeight=50
+
+[Install]
+WantedBy=multi-user.target

@@ -10,8 +10,9 @@
 //!   is empty) and as a fallback when an object is served faster from the
 //!   edge cache than from the bucket's own region.
 //!
-//! Natively there is a third, in memory, which is how the tests feed the
-//! handlers a fixture bucket and count the reads a query costs.
+//! Natively there is the same origin read over `reqwest` (the `server`
+//! feature, the `xue-api-server` binary), and one in memory, which is how the
+//! tests feed the handlers a fixture bucket and count the reads a query costs.
 //!
 //! The object layout and the resolution chain above this (`collection →
 //! pointer → manifest`) are the data contract, not the API's.
@@ -20,7 +21,7 @@ use serde::de::DeserializeOwned;
 #[cfg(not(target_arch = "wasm32"))]
 use std::{cell::RefCell, collections::HashMap};
 #[cfg(target_arch = "wasm32")]
-use worker::{Bucket, Env, Fetch, Headers, Method, Range, Request, RequestInit, Url};
+use worker::{Bucket, Env, Fetch, Headers, Method, Range, Request, RequestInit};
 
 use crate::cache;
 use crate::error::HttpError;
@@ -30,9 +31,12 @@ enum Backend {
     R2(Bucket),
     #[cfg(target_arch = "wasm32")]
     Cdn,
+    #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+    Http(reqwest::Client),
     /// Objects by key (no prefix), and the log of every read as
     /// `(path, kind)`, kind one of `whole`, `range`, `suffix`.
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg_attr(feature = "server", allow(dead_code))]
     Memory {
         objects: HashMap<String, Vec<u8>>,
         reads: RefCell<Vec<(String, &'static str)>>,
@@ -43,6 +47,67 @@ enum Backend {
 enum ReadRange {
     Offset { offset: u64, length: u64 },
     Suffix { suffix: u64 },
+}
+
+impl ReadRange {
+    #[cfg_attr(not(any(target_arch = "wasm32", feature = "server")), allow(dead_code))]
+    fn header(&self) -> String {
+        match self {
+            ReadRange::Offset { offset, length } => {
+                format!("bytes={offset}-{}", offset + length - 1)
+            }
+            ReadRange::Suffix { suffix } => format!("bytes=-{suffix}"),
+        }
+    }
+
+    /// This range of a whole object.
+    fn slice<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
+        match *self {
+            ReadRange::Offset { offset, length } => {
+                let start = offset.min(bytes.len() as u64) as usize;
+                let end = (offset + length).min(bytes.len() as u64) as usize;
+                &bytes[start..end]
+            }
+            ReadRange::Suffix { suffix } => &bytes[bytes.len().saturating_sub(suffix as usize)..],
+        }
+    }
+}
+
+/// An origin answer's status as the handlers see it: a missing object is
+/// `404 not_found`, anything else outside 2xx an upstream failure.
+#[cfg(any(target_arch = "wasm32", feature = "server"))]
+fn origin_status(path: &str, url: &url::Url, status: u16) -> Result<(), HttpError> {
+    if status == 404 {
+        return Err(HttpError::new(
+            404,
+            "not_found",
+            format!("no object {path}"),
+        ));
+    }
+    if !(200..300).contains(&status) {
+        return Err(HttpError::new(
+            502,
+            "upstream_failed",
+            format!("GET {url} -> {status}"),
+        ));
+    }
+    Ok(())
+}
+
+/// The requested bytes of an origin answer. A `206` honoured the range; an
+/// origin that ignored `Range` sent the whole object, sliced here as the point
+/// products do.
+#[cfg(any(target_arch = "wasm32", feature = "server"))]
+fn origin_body(bytes: Vec<u8>, range: Option<ReadRange>, status: u16) -> Vec<u8> {
+    match range {
+        Some(range) if status != 206 => range.slice(&bytes).to_vec(),
+        _ => bytes,
+    }
+}
+
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+fn upstream(error: reqwest::Error) -> HttpError {
+    HttpError::new(502, "upstream_failed", error.to_string())
 }
 
 /// A handle on the public dataset, with the prefix every key shares.
@@ -86,8 +151,19 @@ impl Data {
         })
     }
 
+    /// The public origin over HTTP, for the native server.
+    #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+    pub fn from_origin(client: reqwest::Client, origin: &str) -> Data {
+        Data {
+            backend: Backend::Http(client),
+            prefix: String::new(),
+            origin: origin.to_owned(),
+        }
+    }
+
     /// A bucket held in memory, keyed by path under the data root.
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg_attr(feature = "server", allow(dead_code))]
     pub fn in_memory(objects: HashMap<String, Vec<u8>>) -> Data {
         Data {
             backend: Backend::Memory {
@@ -101,9 +177,12 @@ impl Data {
 
     /// Every read so far, `(path, kind)`, oldest first.
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg_attr(feature = "server", allow(dead_code))]
     pub fn reads(&self) -> Vec<(String, &'static str)> {
         match &self.backend {
             Backend::Memory { reads, .. } => reads.borrow().clone(),
+            #[cfg(feature = "server")]
+            Backend::Http(_) => Vec::new(),
         }
     }
 
@@ -116,14 +195,14 @@ impl Data {
         )
     }
 
-    #[cfg(target_arch = "wasm32")]
-    fn url(&self, path: &str) -> Result<Url, HttpError> {
+    #[cfg(any(target_arch = "wasm32", feature = "server"))]
+    fn url(&self, path: &str) -> Result<url::Url, HttpError> {
         let url = format!(
             "{}/{}",
             self.origin.trim_end_matches('/'),
             path.trim_start_matches('/')
         );
-        Url::parse(&url).map_err(|error| {
+        url::Url::parse(&url).map_err(|error| {
             HttpError::new(
                 502,
                 "upstream_failed",
@@ -162,14 +241,7 @@ impl Data {
                 let url = self.url(path)?;
                 let mut init = RequestInit::new();
                 init.with_method(Method::Get);
-                let header = match &range {
-                    Some(ReadRange::Offset { offset, length }) => {
-                        format!("bytes={offset}-{}", offset + length - 1)
-                    }
-                    Some(ReadRange::Suffix { suffix }) => format!("bytes=-{suffix}"),
-                    None => String::new(),
-                };
-                if !header.is_empty() {
+                if let Some(header) = range.as_ref().map(ReadRange::header) {
                     let headers = Headers::new();
                     headers.set("range", &header).map_err(HttpError::from)?;
                     init.with_headers(headers);
@@ -181,37 +253,22 @@ impl Data {
                     .await
                     .map_err(HttpError::from)?;
                 let status = response.status_code();
-                if status == 404 {
-                    return Err(HttpError::new(
-                        404,
-                        "not_found",
-                        format!("no object {path}"),
-                    ));
-                }
-                if !(200..300).contains(&status) {
-                    return Err(HttpError::new(
-                        502,
-                        "upstream_failed",
-                        format!("GET {url} -> {status}"),
-                    ));
-                }
+                origin_status(path, &url, status)?;
                 let bytes = response.bytes().await.map_err(HttpError::from)?;
-                match range {
-                    // The origin honoured the range.
-                    Some(_) if status == 206 => Ok(bytes),
-                    // An origin that ignored `Range`: slice it locally, as the
-                    // point products do.
-                    Some(ReadRange::Offset { offset, length }) => {
-                        let start = offset.min(bytes.len() as u64) as usize;
-                        let end = (offset + length).min(bytes.len() as u64) as usize;
-                        Ok(bytes[start..end].to_vec())
-                    }
-                    Some(ReadRange::Suffix { suffix }) => {
-                        let start = bytes.len().saturating_sub(suffix as usize);
-                        Ok(bytes[start..].to_vec())
-                    }
-                    None => Ok(bytes),
+                Ok(origin_body(bytes, range, status))
+            }
+            #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+            Backend::Http(client) => {
+                let url = self.url(path)?;
+                let mut request = client.get(url.clone());
+                if let Some(header) = range.as_ref().map(ReadRange::header) {
+                    request = request.header("range", header);
                 }
+                let response = request.send().await.map_err(upstream)?;
+                let status = response.status().as_u16();
+                origin_status(path, &url, status)?;
+                let bytes = response.bytes().await.map_err(upstream)?;
+                Ok(origin_body(bytes.to_vec(), range, status))
             }
             #[cfg(not(target_arch = "wasm32"))]
             Backend::Memory { objects, reads } => {
@@ -225,14 +282,7 @@ impl Data {
                     .get(path.trim_start_matches('/'))
                     .ok_or_else(|| HttpError::new(404, "not_found", format!("no object {path}")))?;
                 Ok(match range {
-                    Some(ReadRange::Offset { offset, length }) => {
-                        let start = offset.min(bytes.len() as u64) as usize;
-                        let end = (offset + length).min(bytes.len() as u64) as usize;
-                        bytes[start..end].to_vec()
-                    }
-                    Some(ReadRange::Suffix { suffix }) => {
-                        bytes[bytes.len().saturating_sub(suffix as usize)..].to_vec()
-                    }
+                    Some(range) => range.slice(bytes).to_vec(),
                     None => bytes.clone(),
                 })
             }

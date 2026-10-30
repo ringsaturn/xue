@@ -50,7 +50,7 @@ preflight. Unknown query parameters are ignored.
 | `GET /v1/storms/{storm}` | one storm's tracks | same |
 
 Every response carries `x-xue-api` (the build) and `x-xue-ms` (the
-Worker's own wall time, a diagnostic, not part of the contract). A point
+server's own wall time, a diagnostic, not part of the contract). A point
 read carries `x-xue-run`, a product read `x-xue-issue`: what the request
 resolved to.
 
@@ -323,6 +323,7 @@ forecasts and best tracks are passed through as the product writes them.
 | 405 | `method_not_allowed` | anything but `GET`, `HEAD`, `OPTIONS` |
 | 422 | `point_off_grid` | the point is outside a regional grid (HRRR, a satellite disk) |
 | 502 | `upstream_failed` | a bucket read failed, or a document in it is not what the profile says |
+| 503 | `overloaded` | too many requests are being computed at once; retry after `Retry-After` seconds |
 
 Errors are not cached.
 
@@ -330,12 +331,15 @@ Errors are not cached.
 
 - A `200` from any `/v1/` data route is stored in the edge cache of the
   data center that served it, keyed by the full URL, for its `max-age`.
+  A self-hosted origin also keeps it for that long and answers a repeat
+  with the remaining lifetime as `max-age`, so the two layers together
+  never hold an answer longer than one would.
 - A live answer can therefore lag a new run by up to 30 s (60 s for the
   catalog, the source summaries and the point products), and two data
   centers can briefly answer from different runs. Pin `run=` or `issue=`
   for a stable answer; it caches for a day because a run's or an issue's
   objects never change under it.
-- Inside an isolate, the manifest and a product's index are held by their
+- Inside an isolate (or the origin process), the manifest and a product's index are held by their
   pointer's crc, store documents and shard indices by `path#crc32`, and a
   station's byte span by `path#crc32:offset+length`. The Collection and
   the pointer are read on every uncached request, so the API never names a

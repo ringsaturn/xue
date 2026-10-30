@@ -17,25 +17,35 @@
 //! from the data center the request landed in, with no R2 round trip and
 //! almost no Worker execution.
 //!
+//! The same routes also run as a native binary, `xue-api-server` (the
+//! `server` feature, `server.rs`), for a self-hosted origin behind a
+//! Cloudflare Tunnel; `docs/contribution/api-origin.md` is how it is deployed.
+//!
 //! Placement is deliberately left to the request's own data center: a
 //! placement hint would forward every request — cached or not — to another
 //! region, which costs more on a cache hit than it saves on a miss. The R2
 //! binding and the `DATA_SOURCE=cdn` fallback both read the objects from
 //! wherever the Worker runs.
 
-// Natively only the tests call the handlers; on wasm32 `runtime` does.
-#![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+// Natively only the tests (and, with `server`, the binary) call the
+// handlers; on wasm32 `runtime` does.
+#![cfg_attr(
+    not(any(target_arch = "wasm32", feature = "server")),
+    allow(dead_code)
+)]
 
 mod airport;
 mod bucket;
 mod cache;
-#[cfg(target_arch = "wasm32")]
 mod docs;
 mod error;
 mod point;
 mod products;
+mod route;
 #[cfg(target_arch = "wasm32")]
 mod runtime;
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+pub mod server;
 mod sounding;
 mod source;
 mod synop;

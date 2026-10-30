@@ -11,6 +11,7 @@ at the [README](../../README.md); for contribution rules, at
 | [pipeline.md](pipeline.md) | The Python encoder (`xuebuild/`): registries, conversion, assembly |
 | [sources.md](sources.md) | Engineering notes per source: fetch stages, grids, quirks |
 | [delivery.md](delivery.md) | Zarr stores, the STAC catalog, the data API, R2 uploads |
+| [api-origin.md](api-origin.md) | The data API on a self-hosted origin behind a Cloudflare Tunnel |
 | [frontend.md](frontend.md) | The shell (`web/src/`): sessions, layers, rail, probe, compare page |
 | [point-products.md](point-products.md) | Tropical cyclones, airports, soundings and the station marks |
 | [setup.md](setup.md) | Requirements and building a run locally |
