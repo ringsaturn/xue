@@ -364,6 +364,7 @@ recognize; anything else it can still decode.
 | `aoddust` / `aodsalt` / `aodsulf` / `aodorg` / `aodbc` | 0 / 20 / 102 | 10, no value | The same optical thickness for dust, sea salt, sulphate, particulate organic matter and black carbon: the same parameter and intervals, `aerosolType` 62001 / 62008 / 62006 / 62010 / 62009 |
 | `pm25` | 0 / 13 / 193 | 1, 0 | PM2.5 surface concentration in µg/m³, NCEP's local PMTF number; `aerosol` type 62000, particles smaller than 2.5 µm, no wavelength interval |
 | `pm10` / `pm10dust` | 0 / 13 / 192 | 1, 0 | PM10 surface concentration in µg/m³ (NCEP's local PMTC), total aerosol and dust alone: one parameter, `aerosolType` 62000 / 62001, particles smaller than 10 µm, no wavelength interval |
+| `dustsfc` | 0 / 20 / 0 | 1, 0 | Surface dust concentration in µg/m³ (CMA-CW/DUST), the mass density of dust of every particle size the model carries: `aerosolType` 62001, no size interval and no wavelength interval (both type 255, limits null), which tells it from `pm10dust` |
 
 The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300,
 250 and 200 hPa, and every isobaric family but `cat` is registered on all

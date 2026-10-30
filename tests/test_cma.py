@@ -120,7 +120,7 @@ class SourceRegistryTests(unittest.TestCase):
         # a forecast rather than an observation (tests/test_ifshres.py).
         self.assertEqual(
             [spec.id for spec in SOURCES.values() if spec.series_file],
-            ["ifshres", "woof", "efas", "efaswb", "era5", "cams", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
+            ["ifshres", "cmadust", "woof", "efas", "efaswb", "era5", "cams", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
         )
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"])
         # Every source but the WOOF nest and the two EFAS runs, forecasts

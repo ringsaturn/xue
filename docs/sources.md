@@ -102,6 +102,23 @@ organic and black carbon (`aoddust`, `aodsalt`, `aodsulf`, `aodorg`,
 `pm10dust`). The aerosol type and size / wavelength intervals are written
 as the `aerosol` block of the bundle metadata.
 
+### CMA-CW/DUST sand and dust forecast (`cmadust`)
+
+0.15° over Asia (835 × 301 cells, 25°E–150.1°E, 15°N–60°N; the model's
+own grid, nothing resampled), hourly to F072 and 3-hourly to F168 from the
+00Z and 12Z cycles, complete about 7.25 h after the cycle. The China
+Meteorological Administration's CMA-CW v1.0/DUST forecast for the WMO
+SDS-WAS Asian Center, read from the WMO WIS2 global caches. Two bundles:
+the surface dust concentration (`dustsfc`, µg/m³ to 50,000, every particle
+size the model carries — not `pm10dust`, GEFS-Aerosols' dust under 10 µm;
+WMO 0/20/0 on the ground with a dust `aerosol` block of no size interval)
+and the dust optical depth at 550 nm (`aoddust`, GEFS-Aerosols' identity
+and codebook to 5; a storm core's optical depth often exceeds 5 and takes
+the overflow code, drawn at the top colour, null at a point). Negative
+model concentrations are coded 0. Data: China
+Meteorological Administration, WMO core data under the WMO Unified Data
+Policy (free and unrestricted).
+
 ### NCEP CFSv2 (`cfs`)
 
 Seasonal: ensemble member 01 of the 00Z and 12Z cycles, 6-hourly from F6 to

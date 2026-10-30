@@ -621,6 +621,44 @@ run in the directory holding the download, then moved here (the files'
 what the tool writes means regenerating them the same way and saying so in
 the commit.
 
+`cmadust.2026103000/` is CMA-CW v1.0/DUST as the `cmadust` fetch writes
+it (`xuebuild/cmadust.py`): one NetCDF classic series per variable,
+`cmadust.2026103000.<xue id>.nc` for `dustsfc` (`ug/m3`, the file's
+`sconc_dust`) and `aoddust` (`1`, its `aod550_dust`), latitudes ascending
+as the product has them, `time` in hours since the cycle, a NaN fill.
+Hours 0, 1 and 2 of the 2026-10-30 00Z run over a 5 by 4 cell box
+(97.3–97.9°E, 39.75–40.2°N) on the Hexi Corridor, where the analysis holds
+a dust core past 10,000 µg/m³ and optical depths past the codebook's 5.
+Fetched whole (`xue fetch --model cmadust --run 2026103000 --raw-dir
+raw`, from the WIS2 caches, which keep a run a few days), then cut with
+the module's own reader and writer:
+
+```python
+from pathlib import Path
+import numpy as np
+from xuebuild import cmadust
+from xuebuild.fetch import parse_run
+
+raw, out = Path("raw/cmadust.2026103000"), Path("tests/fixtures/cmadust.2026103000")
+run = parse_run("2026103000", "cmadust")
+latitudes, longitudes = cmadust.grid_coordinates()
+rows = np.flatnonzero((latitudes >= 39.75 - 1e-6) & (latitudes <= 40.2 + 1e-6))
+columns = np.flatnonzero((longitudes >= 97.3 - 1e-6) & (longitudes <= 97.9 + 1e-6))
+out.mkdir(parents=True, exist_ok=True)
+for variable_id in ("dustsfc", "aoddust"):
+    data = (raw / cmadust.series_name(run, variable_id)).read_bytes()
+    header = cmadust.parse_header(data)
+    series = cmadust.read_variable("series", header, variable_id, lambda _, span: data[span.start : span.end + 1])
+    cmadust.write_series(
+        out / cmadust.series_name(run, variable_id), variable_id, run.time, [0, 1, 2],
+        latitudes[rows], longitudes[columns], series[:3][:, rows][:, :, columns],
+        cmadust.series_attributes(run, "cut from xue fetch --model cmadust --run 2026103000 (tests/fixtures/README.md)"),
+    )
+```
+
+The two files are 3.3 KB. A change to what the fetch writes means
+regenerating them the same way and saying so in the commit.
+
 `volume-registry.json` is the registry golden for the volume bundles'
 levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
 `clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter

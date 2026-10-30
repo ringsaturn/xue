@@ -1,0 +1,74 @@
+name: publish cmadust
+
+# CMA-CW v1.0/DUST, the China Meteorological Administration's sand and dust
+# storm forecast for the WMO SDS-WAS Asian Center, on its 0.15° grid over
+# Asia, hourly to F072 and 3-hourly to F168 (105 frames) from the 00Z and
+# 12Z cycles: the surface dust concentration and the dust optical depth.
+# It is read from the two WMO WIS2 global caches (Met Office/NOAA and JMA),
+# whose listings together hold a whole run; the fetch reads each file's
+# header and its two surface fields by byte range and needs no tool of its
+# own. The pipeline lives in the reusable publish.yml; this file only owns
+# the schedule and the manual knobs.
+
+on:
+  schedule:
+    # A 00Z run is on the caches by about 07:15–07:30Z and a 12Z run by
+    # about 19:15–19:20Z (measured 2026-10-30), so these times leave a
+    # quarter of an hour of slack. `--run latest` walks back over the
+    # 12-hourly cycle grid and takes a run only once the two listings
+    # together name every lead time, so a late run is skipped rather than
+    # half-published and picked up by the next pass.
+    - cron: "45 7,19 * * *"
+    # A second idempotent pass recovers from a late cycle or a temporary
+    # cache outage. publish.yml exits early when the first pass already
+    # made the run live.
+    - cron: "45 9,21 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (00Z or 12Z)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-cmadust-dry-{0}', github.run_id) || 'publish-cmadust' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: cmadust
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # Two bundles, one job each: a job reads every file's header and its
+      # own field, a megabyte a frame.
+      max_jobs: 2
+    secrets: inherit
