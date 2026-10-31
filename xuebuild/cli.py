@@ -31,6 +31,7 @@ from .zarrstore import (
     export_bundle,
     store_path_for,
 )
+from .aq import cli as aq_cli
 from .airport.build import build_product as build_airport_product
 from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
@@ -666,6 +667,8 @@ def parser() -> argparse.ArgumentParser:
     synop_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     synop_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     synop_build.add_argument("--force-download", action="store_true", help="fetch every source again, station tables included")
+
+    aq_cli.add_parser(commands)
 
     fire_build = commands.add_parser(
         "fire-build",
@@ -1418,6 +1421,8 @@ def main(argv: list[str] | None = None) -> int:
                 force=arguments.force,
             )
             print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == aq_cli.COMMAND:
+            aq_cli.run(arguments)
         elif arguments.command == "fire-build":
             moment = floor_fire_round(datetime.now(UTC)) if arguments.round == "now" else parse_fire_round(arguments.round)
             fire_sources = None
