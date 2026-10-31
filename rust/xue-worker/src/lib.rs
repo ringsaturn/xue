@@ -59,9 +59,10 @@ mod timezone;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bucket::{Data, ObjectSource, ReadRange};
 pub use error::HttpError;
-// What a caller's own `server::Routes` answers with.
+// What a caller's own `server::Routes` answers with, and the API's own
+// routes for an answer built on them.
 #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
-pub use route::Answer;
+pub use route::{dispatch, normalize, Answer};
 
 #[cfg(test)]
 mod tests;
