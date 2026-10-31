@@ -1,0 +1,23 @@
+{
+ "source": "CSDI WFS csdi:AQMN (Air Quality Monitoring Network of Hong Kong, EPD), EPSG:4326, retrieved 2026-10-31",
+ "stations": [
+  {"name": "Central/Western", "slug": "central-western", "names": {"zh-Hant": "中西區"}, "lat": 22.2849, "lon": 114.1444, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 0},
+  {"name": "Southern", "slug": "southern", "names": {"zh-Hant": "南區"}, "lat": 22.2475, "lon": 114.1601, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 1},
+  {"name": "Eastern", "slug": "eastern", "names": {"zh-Hant": "東區"}, "lat": 22.2829, "lon": 114.2194, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 2},
+  {"name": "Kwun Tong", "slug": "kwun-tong", "names": {"zh-Hant": "觀塘"}, "lat": 22.3096, "lon": 114.2312, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 3},
+  {"name": "Sham Shui Po", "slug": "sham-shui-po", "names": {"zh-Hant": "深水埗"}, "lat": 22.3302, "lon": 114.1591, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 4},
+  {"name": "Kwai Chung", "slug": "kwai-chung", "names": {"zh-Hant": "葵涌"}, "lat": 22.3571, "lon": 114.1296, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 5},
+  {"name": "Tsuen Wan", "slug": "tsuen-wan", "names": {"zh-Hant": "荃灣"}, "lat": 22.3717, "lon": 114.1145, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 6},
+  {"name": "Tseung Kwan O", "slug": "tseung-kwan-o", "names": {"zh-Hant": "將軍澳"}, "lat": 22.3176, "lon": 114.2596, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 7},
+  {"name": "Yuen Long", "slug": "yuen-long", "names": {"zh-Hant": "元朗"}, "lat": 22.4452, "lon": 114.0226, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 8},
+  {"name": "Tuen Mun", "slug": "tuen-mun", "names": {"zh-Hant": "屯門"}, "lat": 22.3911, "lon": 113.9767, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 9},
+  {"name": "Tung Chung", "slug": "tung-chung", "names": {"zh-Hant": "東涌"}, "lat": 22.2889, "lon": 113.9437, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 10},
+  {"name": "Tai Po", "slug": "tai-po", "names": {"zh-Hant": "大埔"}, "lat": 22.451, "lon": 114.1646, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 11},
+  {"name": "Sha Tin", "slug": "sha-tin", "names": {"zh-Hant": "沙田"}, "lat": 22.3763, "lon": 114.1845, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 12},
+  {"name": "North", "slug": "north", "names": {"zh-Hant": "北區"}, "lat": 22.4967, "lon": 114.1282, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 13},
+  {"name": "Tap Mun", "slug": "tap-mun", "names": {"zh-Hant": "塔門"}, "lat": 22.4713, "lon": 114.3607, "elev": null, "rank": 1, "type": "general monitoring station", "mid": 14},
+  {"name": "Causeway Bay", "slug": "causeway-bay", "names": {"zh-Hant": "銅鑼灣"}, "lat": 22.2801, "lon": 114.1851, "elev": null, "rank": 2, "type": "roadside monitoring station", "mid": 15},
+  {"name": "Central", "slug": "central", "names": {"zh-Hant": "中環"}, "lat": 22.2818, "lon": 114.1581, "elev": null, "rank": 2, "type": "roadside monitoring station", "mid": 16},
+  {"name": "Mong Kok", "slug": "mong-kok", "names": {"zh-Hant": "旺角"}, "lat": 22.3226, "lon": 114.1683, "elev": null, "rank": 2, "type": "roadside monitoring station", "mid": 17}
+ ]
+}

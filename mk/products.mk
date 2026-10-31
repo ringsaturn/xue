@@ -341,3 +341,73 @@ nexrad-case: ## Replay a nexrad showcase case, CASE=showcase/nexrad-cases/<id>.j
 
 prune-r2-nexrad: ## Delete nexrad rounds beyond the newest NEXRAD_KEEP
 	$(call point_prune,nexrad,$(NEXRAD_KEEP),round)
+
+# The air-quality product (docs/aq.md): rounds of ROUND=YYYYMMDDHHMM (the
+# minute a multiple of five), a <network>.jsonl and a <network>.stations.json
+# per network beside the index.
+AQ_ROUND = $(if $(ROUND),$(ROUND),now)
+AQ_KEEP ?= 6
+
+.PHONY: aq-build live-aq-index upload-r2-aq prune-r2-aq
+
+aq-build: ## Build the air-quality station product for ROUND
+	$(PYTHON) -m xuebuild aq-build --round $(AQ_ROUND) $(FORCE)
+
+# The live pointer, index and both files of every network it names: the
+# network files are the next build's history and the stations files what a
+# reader pairs with them, so each CRC32 is checked rather than trusted, and a
+# missing one only restarts that network's window.
+live-aq-index: ## Pull the live aq pointer, index and network files
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp $(R2_ROOT)/latest-aq.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live aq pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "$(R2_ROOT)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-aq.json; \
+	for file in $$(jq -r '.networks[] | .file.path, .stations.path' "web/public/data/$$path"); do \
+		named=$$(jq -r --arg file "$$file" '.networks[] | (.file, .stations) | select(.path == $$file) | .crc32' "web/public/data/$$path"); \
+		if $(S3) cp "$(R2_ROOT)/$$directory/$$file" "web/public/data/$$directory/$$file" --only-show-errors; then \
+			crc=$$($(CRC32) "web/public/data/$$directory/$$file"); \
+			[ "$$crc" = "$$named" ] || { echo "the live $$file is CRC32 $$crc but its index says $$named"; exit 1; }; \
+			echo "live aq round: $$directory/$$file ($$(wc -c < "web/public/data/$$directory/$$file" | tr -d ' ') bytes)"; \
+		else \
+			rm -f "web/public/data/$$directory/$$file"; \
+			echo "warning: $$path names $$file but R2 has no such object; that network's window starts again"; \
+		fi; \
+	done
+
+# Every network file, then every stations file (whose spans address the
+# network files), then the index, then the pointer: each object before the
+# one that names it, and the pointer moves only once R2 reports every size.
+upload-r2-aq: ## Upload an aq round, then take it live
+	@set -e; \
+	$(call point_pointer_check,aq,$(AQ_ROUND),round,pass ROUND=YYYYMMDDHHMM,no network's observations arrived); \
+	files=$$(jq -r '.networks[].file.path' $$dir/index.json); \
+	tables=$$(jq -r '.networks[].stations.path' $$dir/index.json); \
+	for file in $$files; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	for file in $$tables index.json; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		for file in $$files $$tables index.json; do \
+			local_bytes=$$(wc -c < "$$dir/$$file" | tr -d ' '); \
+			remote_bytes=$$($(call r2_size,$$rel/$$file)); \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "$$rel/$$file is '$$remote_bytes' bytes on R2, not $$local_bytes; the pointer stays put"; exit 1; }; \
+			echo "verified $$file ($$local_bytes bytes) on R2"; \
+		done; \
+	}; \
+	echo "Uploading latest-aq.json (takes aq round $(AQ_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-aq.json $(R2_ROOT)/latest-aq.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=aq DRY_RUN=$(DRY_RUN)
+
+prune-r2-aq: ## Delete aq rounds beyond the newest AQ_KEEP
+	$(call point_prune,aq,$(AQ_KEEP),round)

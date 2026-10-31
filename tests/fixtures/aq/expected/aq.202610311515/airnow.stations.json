@@ -1,0 +1,15 @@
+{
+ "schemaVersion": 1,
+ "network": "airnow",
+ "issued": "2026-10-31T15:15:00Z",
+ "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "stations": [
+  ["airnow:000010601", 53.3047, -60.3644, 38.7, 1, "Goose Bay", "Canadian Air and Precipitation Monitoring Network", "2026-10-31T14:00:00Z", null, null, 34.0, null, null, null, 0, 224],
+  ["airnow:000020104", 46.2406, -63.1306, 19.8, 1, "CHARLOTTETOWN", "Canada-Prince Edward Island1", "2026-10-31T14:00:00Z", 2.5, null, 31.0, 0.8, 0.0, null, 225, 256],
+  ["airnow:000050308", 46.8214, -71.2208, 6.1, 1, "Québec - Vieux-Limoilou", "Canada-Quebec1", "2026-10-31T14:00:00Z", 1.1, null, 22.0, null, null, null, 482, 224],
+  ["airnow:000100134", 49.1864, -123.1522, 0.9, 1, "Vancouver Airport", "Metro Vancouver", "2026-10-31T14:00:00Z", 5.0, 8.0, 2.0, 17.2, 0.1, 0.2, 707, 279],
+  ["airnow:011250011", 33.0954, -87.4815, null, 1, "Duncanville Middle School", "Alabama Department of Environmental Management", "2026-10-31T14:00:00Z", -0.2, null, 29.0, null, null, null, 987, 255],
+  ["airnow:031AZE010001", 40.387, 49.8429, null, 1, "Baku", "U.S. Department of State Azerbaijan - Baku", "2026-10-31T14:00:00Z", 51.0, null, null, null, null, null, 1243, 215],
+  ["airnow:060371103", 34.0664, -118.2268, 30.5, 1, "Los Angeles - N. Main Street", "South Coast AQMD", "2026-10-31T14:00:00Z", 5.3, 14.0, 13.0, 11.0, 0.2, 0.3, 1459, 295]
+ ]
+}
