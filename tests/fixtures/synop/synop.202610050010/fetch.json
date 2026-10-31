@@ -17,6 +17,24 @@
       "url": "https://www.jma.go.jp/bosai/amedas/const/amedastable.json",
       "file": "amedas-stations.json",
       "cached": true
+    },
+    {
+      "id": "dwd-synop-bufr",
+      "ok": true,
+      "fetched": "2026-10-05T00:14:00Z",
+      "url": "https://opendata.dwd.de/weather/weather_reports/synoptic/germany/",
+      "file": "synop.202610050010/dwd",
+      "files": 2,
+      "missing": 0
+    },
+    {
+      "id": "hko-regional-weather",
+      "ok": true,
+      "fetched": "2026-10-05T00:14:00Z",
+      "url": "https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather",
+      "file": "synop.202610050010/hko",
+      "files": 5,
+      "missing": 0
     }
   ]
 }
