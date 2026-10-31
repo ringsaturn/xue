@@ -1,0 +1,141 @@
+name: publish alerts
+
+# The weather warnings product (docs/alerts.md): what the US National
+# Weather Service, the Japan Meteorological Agency and Environment and
+# Climate Change Canada have in force, read by one adapter each and
+# published every five minutes as one immutable alerts.<round>/ snapshot — a
+# file per network with a line per alert, and the index that spans them.
+# Independent of the raster publishes and cheap: four GETs of a few hundred
+# kilobytes, no GDAL, no wheel. The boundary sets the index names are built
+# and uploaded by hand (`xue alerts-areas`, `make upload-r2-alerts-areas`),
+# never here.
+#
+# Every request carries the User-Agent xue/<version>
+# (+https://github.com/ringsaturn/xue): api.weather.gov refuses requests
+# without one that says who is asking and how to reach them.
+#
+# One round per job, no loop: at five-minute cadence the schedule is the loop.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "Round to build: now or YYYYMMDDHHMM (the minute a multiple of five)"
+        type: string
+        default: now
+      keep:
+        description: "Round directories to keep on R2 (five-minute rounds)"
+        type: string
+        default: "36"
+      dry_run:
+        description: "Build and report what would be uploaded and pruned, but write nothing to R2"
+        type: boolean
+        default: false
+      force:
+        description: "Rebuild the round even when it is already live"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the pointer is the product's only mutable object, and the
+# previous round is what this one's ended[] and carry-over are measured
+# against.
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-alerts-dry-{0}', github.run_id) || 'publish-alerts' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ROUND: ${{ inputs.round || 'now' }}
+      ALERTS_KEEP: ${{ inputs.keep || '36' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # JSON over HTTPS and the stdlib: no GDAL, no wheel.
+      - name: Sync Python environment
+        run: uv sync
+
+      # The live index is what this round's ended[] is measured against, and
+      # its network files are what a network that fails this round carries
+      # over; JMA's change detection compares against its `latest`.
+      - name: Fetch the live index and its network files
+        run: make live-alerts-index
+
+      # A round is immutable once the pointer names it (docs/alerts.md), so
+      # a round that is already live — the schedule ran late into a round
+      # a previous run already took — is finished, not built again; `force`
+      # is the manual rebuild the spec allows. The round is this minute
+      # floored to five, so two runs in one round name one directory.
+      - name: Build the product
+        id: build
+        run: |
+          set -euo pipefail
+          round=$ROUND
+          if [ "$round" = "now" ]; then
+            round=$(date -u +%Y%m%d%H)$(printf '%02d' $(( 5 * (10#$(date -u +%M) / 5) )))
+          fi
+          live=""
+          if [ -f web/public/data/latest-alerts.json ]; then
+            live=$(jq -r .path web/public/data/latest-alerts.json | sed -n 's:^alerts\.\([0-9]\{12\}\)/index\.json$:\1:p')
+          fi
+          if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
+            echo "alerts $round is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python -m xuebuild -v alerts-build --round "$round" $FORCE > alerts-report.json
+          round=$(jq -r .round alerts-report.json)
+          echo "round=$round" >> "$GITHUB_ENV"
+          {
+            echo "### alerts $round"
+            echo
+            echo '```json'
+            jq '{alerts, ended, carried, networks, sources: [.sources[] | "\(.id): \(if .ok then "ok \(.reports // 0)" else .error end)"], pointer}' alerts-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: alerts-report-${{ github.run_id }}
+          path: alerts-report.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # The network files and the index go up immutable, then the pointer
+      # takes them live. A build that withheld the pointer (no network's
+      # state arrived) stops here with the previous round live.
+      - name: Upload and take the round live
+        if: steps.build.outputs.skipped != 'true'
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r .pointer alerts-report.json)" = "null" ]; then
+            echo "no network's state arrived; the previous round stays live" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make upload-r2-alerts ROUND="$round" DRY_RUN="$DRY_RUN"
+
+      - name: Delete rounds older than the retention
+        if: steps.build.outputs.skipped != 'true'
+        run: make prune-r2-alerts ALERTS_KEEP="$ALERTS_KEEP" DRY_RUN="$DRY_RUN"

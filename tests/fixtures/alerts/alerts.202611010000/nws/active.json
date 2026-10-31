@@ -1,0 +1,588 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cd49ef2cfa40fb70ff8b848ff6fcc55e10626dcf.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -111.18,
+       33.82
+      ],
+      [
+       -111.26,
+       33.76
+      ],
+      [
+       -111.32,
+       33.84
+      ],
+      [
+       -111.33,
+       33.87
+      ],
+      [
+       -111.32,
+       33.93
+      ],
+      [
+       -111.26,
+       33.9
+      ],
+      [
+       -111.18,
+       33.82
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cd49ef2cfa40fb70ff8b848ff6fcc55e10626dcf.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.cd49ef2cfa40fb70ff8b848ff6fcc55e10626dcf.001.1",
+    "areaDesc": "Gila, AZ",
+    "geocode": {
+     "SAME": [
+      "004007"
+     ],
+     "UGC": [
+      "AZC007"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/AZC007"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.7a03a51affa066bb29da3c0017294f2962c3807a.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.7a03a51affa066bb29da3c0017294f2962c3807a.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-10-31T02:57:00-07:00"
+     }
+    ],
+    "sent": "2026-10-31T16:30:00-07:00",
+    "effective": "2026-10-31T16:30:00-07:00",
+    "onset": "2026-10-31T16:30:00-07:00",
+    "expires": "2026-10-31T17:03:00-07:00",
+    "ends": "2026-10-31T17:03:00-07:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Phoenix AZ",
+    "headline": "Flood Warning issued October 31 at 6:07AM MST until October 31 at 12:15PM MST by NWS Phoenix AZ",
+    "description": "* WHAT...Flooding caused by excessive rainfall continues.\n\n* WHERE...Gila County in east central Arizona...\n\n* WHEN...Until 1215 PM MST Saturday.\n\n* IMPACTS...Flooding of Tonto Creek and flood-prone locations is\nimminent or occurring. Tonto Creek continues to rise due to excess\nrunoff from earlier rainfall. Low-water crossings are inundated\nwith water and may not be passable.\n\n* ADDITIONAL DETAILS...\n- At 607 AM MST, a streamflow gauge on Tonto Creek north of Tonto\nBasin rose above action stage, with a stage height of 5.12 feet\nand flow of 2422 cfs as of 515 AM MST. Flooding is ongoing or\nexpected to begin shortly along Tonto Creek in the warned area.\nPlease use the Tonto Creek Bridge for all travel across the\ncreek. Bar X Crossing, and any other low water crossings, will\nlikely become impassable.\n- Some locations that will experience flooding include...\nTonto Basin.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLSPSR"
+     ],
+     "WMOidentifier": [
+      "WGUS85 KPSR 311307"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING REMAINS IN EFFECT UNTIL 1215 PM MST THIS AFTERNOON"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.CON.KPSR.FA.W.0011.000000T0000Z-261031T1915Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-31T12:15:00-07:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FLS"
+     ],
+     "NationalWeatherService": [
+      "FAW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1",
+    "areaDesc": "James River from JRB to HRBT, Including the Elizabeth River",
+    "geocode": {
+     "SAME": [
+      "073639"
+     ],
+     "UGC": [
+      "ANZ639"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/ANZ639"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.1158b25968302e62d97d0b16f0dfeedf7cdce9e9.004.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.1158b25968302e62d97d0b16f0dfeedf7cdce9e9.004.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-10-31T02:23:00-04:00"
+     }
+    ],
+    "sent": "2026-10-31T19:40:00-04:00",
+    "effective": "2026-10-31T19:40:00-04:00",
+    "onset": "2026-10-31T20:00:00-04:00",
+    "expires": "2026-11-01T08:00:00-04:00",
+    "ends": "2026-11-01T08:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Minor",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Small Craft Advisory",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Wakefield VA",
+    "headline": "Small Craft Advisory issued October 31 at 9:53AM EDT until October 31 at 1:00PM EDT by NWS Wakefield VA",
+    "description": "* WHAT...Northeast winds 15 to 20 kt with gusts up to 25 kt and\nwaves 2 to 3 ft expected.\n\n* WHERE...James River from JRB to HRBT, Including the Elizabeth\nRiver.\n\n* WHEN...Until 1 PM EDT this afternoon.\n\n* IMPACTS...Conditions will be hazardous to small craft.",
+    "instruction": "Inexperienced mariners, especially those operating smaller\nvessels, should avoid navigating in hazardous conditions.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "MWWAKQ"
+     ],
+     "WMOidentifier": [
+      "WHUS71 KAKQ 311353"
+     ],
+     "NWSheadline": [
+      "SMALL CRAFT ADVISORY NOW IN EFFECT UNTIL 1 PM EDT THIS AFTERNOON"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "VTEC": [
+      "/O.EXT.KAKQ.SC.Y.0107.000000T0000Z-261031T1700Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-31T13:00:00-04:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.00ffd2c9e95282d2376ea4e96c48165b244441b0.004.1,2026-10-30T18:28:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.d8d62e238f0ec73d88a96bcc59366aaa29827797.005.1,2026-10-30T13:25:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.eaf5644bac84a2aecff5aa8858ee8b46ad6c6888.001.1,2026-10-30T02:00:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "SCY"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1",
+    "areaDesc": "Clarence Strait",
+    "geocode": {
+     "SAME": [
+      "058036"
+     ],
+     "UGC": [
+      "PKZ036"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/PKZ036"
+    ],
+    "references": [],
+    "sent": "2026-10-31T17:00:00-05:00",
+    "effective": "2026-10-31T17:00:00-05:00",
+    "onset": "2026-10-31T17:00:00-05:00",
+    "expires": "2026-11-01T06:00:00-05:00",
+    "ends": "2026-11-01T06:00:00-05:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Moderate",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Gale Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Juneau AK",
+    "headline": "Gale Warning issued October 31 at 3:48AM AKDT until November 1 at 4:00AM AKST by NWS Juneau AK",
+    "description": "Southeast Alaska Inside Waters from Dixon Entrance to Skagway\n\nWind forecasts reflect the predominant speed and direction\nexpected. Sea forecasts represent the average of the highest\none-third of the combined windwave and swell height.\n\n.TODAY...SE wind 20 kt increasing to 25 kt. Seas 4 ft increasing\nto 5 ft.\n.TONIGHT...SE wind 35 kt. Seas 11 ft. Rain late.\n.SUN...SE gale to 40 kt. Seas 14 ft. Rain.\n.SUN NIGHT...SE wind 25 kt. Gusts to 40 kt. Seas 12 ft. Rain.\n.MON...SE wind 20 kt. Seas 7 ft.\n.TUE...SE gale to 35 kt. Seas 10 ft.\n.WED...SE wind 25 kt. Seas 9 ft.",
+    "instruction": null,
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "CWFAJK"
+     ],
+     "WMOidentifier": [
+      "FZAK51 PAJK 311148"
+     ],
+     "NWSheadline": [
+      "GALE WARNING LATE TONIGHT"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "VTEC": [
+      "/O.NEW.PAJK.GL.W.6666.261101T0100Z-261101T1300Z/"
+     ],
+     "eventEndingTime": [
+      "2026-11-01T05:00:00-08:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "GLW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.001.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.001.1",
+    "areaDesc": "Noatak Valley; Kivalina and Red Dog Dock",
+    "geocode": {
+     "SAME": [
+      "002188"
+     ],
+     "UGC": [
+      "AKZ814",
+      "AKZ815"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/AKZ814",
+     "https://api.weather.gov/zones/forecast/AKZ815"
+    ],
+    "references": [],
+    "sent": "2026-10-31T15:20:00-08:00",
+    "effective": "2026-10-31T15:20:00-08:00",
+    "onset": "2026-10-31T15:20:00-08:00",
+    "expires": "2026-10-31T17:00:00-08:00",
+    "ends": null,
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Moderate",
+    "certainty": "Observed",
+    "urgency": "Expected",
+    "event": "Special Weather Statement",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Fairbanks AK",
+    "headline": "Special Weather Statement issued October 31 at 5:22AM AKDT by NWS Fairbanks AK",
+    "description": "* WHAT...Snow expected. Total snow accumulations between 3 and 6\ninches. Winds gusting 20 to 25 mph along the coast will\ngradually decrease through the weekend.\n\n* WHERE...Noatak Valley and Northwest Arctic Coast including\nKivalina.\n\n* WHEN...Through Sunday afternoon. Heaviest snow expected through\nSaturday morning.\n\n* IMPACTS...Travel could be difficult. Areas of blowing snow\ncould reduce visibility.",
+    "instruction": null,
+    "response": "Execute",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SPSWCZ"
+     ],
+     "WMOidentifier": [
+      "WWAK82 PAFG 311322"
+     ],
+     "NWSheadline": [
+      "SEVERAL INCHES OF SNOW EXPECTED IN THE NOATAK VALLEY AND NORTHWEST ARCTIC COAST"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SPS"
+     ],
+     "NationalWeatherService": [
+      "SPS"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.163a97442f0ed098453e3d2bc21d007daedff5f8.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -111.69,
+       33.51
+      ],
+      [
+       -111.73,
+       33.49
+      ],
+      [
+       -111.8,
+       33.48
+      ],
+      [
+       -111.86,
+       33.45
+      ],
+      [
+       -111.87,
+       33.44
+      ],
+      [
+       -111.89,
+       33.43
+      ],
+      [
+       -111.91,
+       33.43
+      ],
+      [
+       -111.91,
+       33.44
+      ],
+      [
+       -111.89,
+       33.44
+      ],
+      [
+       -111.86,
+       33.46
+      ],
+      [
+       -111.84,
+       33.47
+      ],
+      [
+       -111.81,
+       33.49
+      ],
+      [
+       -111.8,
+       33.5
+      ],
+      [
+       -111.78,
+       33.5
+      ],
+      [
+       -111.75,
+       33.49
+      ],
+      [
+       -111.7,
+       33.52
+      ],
+      [
+       -111.69,
+       33.52
+      ],
+      [
+       -111.69,
+       33.51
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.f00d163a97442f0ed098453e3d2bc21d007daedff5f8.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.f00d163a97442f0ed098453e3d2bc21d007daedff5f8.001.1",
+    "areaDesc": "Maricopa, AZ",
+    "geocode": {
+     "SAME": [
+      "004013"
+     ],
+     "UGC": [
+      "AZC013"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/AZC013"
+    ],
+    "references": [],
+    "sent": "2026-10-31T17:50:00-06:00",
+    "effective": "2026-10-31T17:50:00-06:00",
+    "onset": "2026-10-31T17:50:00-06:00",
+    "expires": "2026-10-31T18:30:00-06:00",
+    "ends": "2026-10-31T18:30:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Extreme",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Tornado Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Phoenix AZ",
+    "headline": "Tornado Warning issued October 31 at 5:50PM MST until October 31 at 6:30PM MST by NWS Phoenix AZ",
+    "description": "* WHAT...Flooding caused by excessive rainfall is expected.\n\n* WHERE...Maricopa County in south central Arizona...\n\n* WHEN...Until 200 PM MST Saturday.\n\n* IMPACTS...Flooding of the Salt River below Granite Reef Dam is\nimminent or occurring. Flooding of low water crossings across the\nSalt River upstream of Tempe Town Lake, including McKellips Road,\nis imminent or occurring.\n\n* ADDITIONAL DETAILS...\n- At 517 AM MST, SRP was releasing 1650 cfs from Granite Reef Dam.\nFlooding is ongoing or expected to begin shortly.\n- Some locations that will experience flooding include...\nSalt River between Granite Reef Dam and Tempe Town Lake.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLWPSR"
+     ],
+     "WMOidentifier": [
+      "WGUS45 KPSR 311217"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING IN EFFECT UNTIL 2 PM MST THIS AFTERNOON"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KPSR.TO.W.0001.261101T0050Z-261101T0130Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-31T14:00:00-07:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "TOR"
+     ],
+     "NationalWeatherService": [
+      "TOW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0-KEEPALIVE-2116",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0-KEEPALIVE-2116",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0-KEEPALIVE-2116",
+    "areaDesc": "Montgomery",
+    "geocode": {
+     "SAME": [
+      "024031"
+     ],
+     "UGC": [
+      "MDC031"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/MDC031"
+    ],
+    "references": [],
+    "sent": "2026-10-31T13:44:58+00:00",
+    "effective": "2026-10-31T13:44:58+00:00",
+    "onset": null,
+    "expires": "2026-10-31T13:54:58+00:00",
+    "ends": null,
+    "status": "Test",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Unknown",
+    "certainty": "Unknown",
+    "urgency": "Unknown",
+    "event": "Test Message",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS",
+    "headline": null,
+    "description": "Monitoring message only. Please disregard.",
+    "instruction": "Monitoring message only. Please disregard.",
+    "response": "None",
+    "note": "This is only a test for monitoring of vital dissemination systems.",
+    "parameters": {
+     "AWIPSidentifier": [
+      "KEPWBC"
+     ],
+     "WMOidentifier": [
+      "NZUS91 KWBC 311344"
+     ],
+     "BLOCKCHANNEL": [
+      "CMAS",
+      "EAS",
+      "NWEM"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "TST"
+     ]
+    }
+   }
+  }
+ ],
+ "title": "Current watches, warnings, and advisories",
+ "updated": "2026-11-01T00:01:00+00:00"
+}

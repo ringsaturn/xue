@@ -1,0 +1,97 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-11-01T00:05:00Z",
+ "generated": "2026-11-01T00:12:10Z",
+ "networks": [
+  {
+   "id": "nws",
+   "name": "US National Weather Service",
+   "attribution": "US National Weather Service",
+   "license": "public-domain",
+   "url": "https://www.weather.gov/",
+   "latest": "2026-11-01T00:06:00Z",
+   "file": {
+    "path": "nws.jsonl",
+    "byteLength": 4342,
+    "crc32": "53bfe83c"
+   },
+   "areas": {
+    "set": "nws-zones",
+    "version": "20260416",
+    "path": "../alerts-areas/nws-zones.20260416.pmtiles",
+    "byteLength": 8907673,
+    "crc32": "3f5d3096",
+    "layers": ["zone", "county", "marine", "offshore", "fire"]
+   }
+  },
+  {
+   "id": "jma",
+   "name": "Japan Meteorological Agency",
+   "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
+   "license": "PDL-1.0",
+   "url": "https://www.jma.go.jp/bosai/warning/",
+   "latest": "2026-10-31T23:40:00Z",
+   "file": {
+    "path": "jma.jsonl",
+    "byteLength": 1949,
+    "crc32": "dd77c062"
+   },
+   "areas": null
+  },
+  {
+   "id": "eccc",
+   "name": "Environment and Climate Change Canada",
+   "attribution": "Contains information licensed under the Open Government Licence – Canada (Environment and Climate Change Canada)",
+   "license": "OGL-Canada-2.0",
+   "url": "https://weather.gc.ca/",
+   "latest": "2026-11-01T00:01:10Z",
+   "file": {
+    "path": "eccc.jsonl",
+    "byteLength": 2340,
+    "crc32": "988a0b6f"
+   },
+   "areas": null
+  }
+ ],
+ "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold", "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
+ "alerts": [
+  ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 2339],
+  ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, null, null, null, null, 0, 642],
+  ["jma:011000-26", 1, "snow-ice", 2, "着雪注意報", "2026-10-31T06:20:00Z", null, null, null, null, null, null, 643, 651],
+  ["jma:150000-29", 1, "landslide", 2, "レベル２土砂災害注意報", "2026-10-31T11:31:00Z", null, null, null, null, null, null, 1295, 653],
+  ["nws:urn:oid:2.49.0.1.840.0.beefc58017b3da8b25350b5a3960a5dc0e77103f2dc1.001.1", 0, "snow-ice", 2, "Winter Storm Watch", "2026-11-01T00:04:00Z", "2026-11-01T12:00:00Z", "2026-11-02T06:00:00Z", null, null, null, null, 0, 1119],
+  ["nws:urn:oid:2.49.0.1.840.0.f00d163a97442f0ed098453e3d2bc21d007daedff5f8.001.1", 0, "thunderstorm", 4, "Tornado Warning", "2026-10-31T23:50:00Z", "2026-10-31T23:50:00Z", "2026-11-01T00:30:00Z", -111.91, 33.43, -111.69, 33.52, 1120, 1982],
+  ["nws:urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1", 0, "marine", 2, "Small Craft Advisory", "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z", null, null, null, null, 3103, 1238]
+ ],
+ "ended": [
+  ["eccc:700460001437647014202610310502_fea1-2388", 2, "expired"],
+  ["nws:urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1", 0, "cancelled"],
+  ["nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.001.1", 0, "gone"],
+  ["nws:urn:oid:2.49.0.1.840.0.cd49ef2cfa40fb70ff8b848ff6fcc55e10626dcf.001.1", 0, "expired"]
+ ],
+ "sources": [
+  {
+   "id": "nws-alerts",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:00Z",
+   "url": "https://api.weather.gov/alerts/active?status=actual",
+   "reports": 5,
+   "skipped": 1
+  },
+  {
+   "id": "jma-warning",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:01Z",
+   "url": "https://www.jma.go.jp/bosai/warning/data/r8/map.json",
+   "mapTime": "2026-10-31T23:40:00Z",
+   "unchanged": true
+  },
+  {
+   "id": "eccc-alerts",
+   "ok": false,
+   "fetched": "2026-11-01T00:12:03Z",
+   "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
+   "error": "HTTP Error 503: Service Unavailable"
+  }
+ ]
+}

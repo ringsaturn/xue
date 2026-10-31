@@ -1,0 +1,28 @@
+{
+ "round": "202611010000",
+ "sources": [
+  {
+   "id": "nws-alerts",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:30Z",
+   "url": "https://api.weather.gov/alerts/active?status=actual",
+   "file": "alerts.202611010000/nws/active.json"
+  },
+  {
+   "id": "jma-warning",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:31Z",
+   "url": "https://www.jma.go.jp/bosai/warning/data/r8/map.json",
+   "file": "alerts.202611010000/jma",
+   "mapTime": "2026-10-31T23:40:00Z"
+  },
+  {
+   "id": "eccc-alerts",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:33Z",
+   "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
+   "file": "alerts.202611010000/eccc",
+   "pages": 1
+  }
+ ]
+}

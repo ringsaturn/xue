@@ -1,0 +1,606 @@
+[
+ {
+  "controlDatetime": "2026-10-31T06:20:32Z",
+  "reportDatetime": "2026-10-31T15:20:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "稚内地方気象台",
+  "headlineText": "宗谷地方では、落雷や電線等への着雪に注意してください。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "011000",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "0121400",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151100",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151200",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151300",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW61"
+ },
+ {
+  "controlDatetime": "2026-10-31T11:31:13Z",
+  "reportDatetime": "2026-10-31T20:31:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "新潟地方気象台",
+  "headlineText": "中越、上越では、土砂災害に注意してください。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "150010",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "150020",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "危険警報から注意報"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1510000",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1520200",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "土砂災害危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "21"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1520500",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "危険警報から注意報",
+       "properties": [
+        {
+         "type": "土砂災害危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "21"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1521600",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "土砂災害危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "21"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1550400",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "危険警報から注意報",
+       "properties": [
+        {
+         "type": "土砂災害危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "21"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "offices": [
+   {
+    "type": "補足情報担当",
+    "name": "新潟県土木部砂防課"
+   },
+   {
+    "type": "気象関係",
+    "name": "新潟地方気象台"
+   }
+  ],
+  "dataTypeCode": "VPWW56"
+ },
+ {
+  "controlDatetime": "2026-08-12T01:44:13Z",
+  "reportDatetime": "2026-08-12T10:44:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "神戸地方気象台",
+  "headlineText": "危険警報を解除します。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "280010",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "280020",
+     "kinds": [
+      {
+       "code": "48",
+       "status": "解除"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "2820900",
+     "kinds": [
+      {
+       "code": "48",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "2858500",
+     "kinds": [
+      {
+       "code": "48",
+       "status": "解除"
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW57"
+ },
+ {
+  "controlDatetime": "2026-10-31T06:20:32Z",
+  "reportDatetime": "2026-10-31T15:20:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "架空地方気象台",
+  "headlineText": "宗谷地方では、落雷や電線等への着雪に注意してください。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "011000",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "0121400",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151100",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151200",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "0151300",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "継続",
+       "additions": [
+        "突風",
+        "ひょう"
+       ],
+       "properties": [
+        {
+         "type": "雷危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "突風",
+             "ひょう"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "code": "26",
+       "status": "発表",
+       "properties": [
+        {
+         "type": "着雪危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW61"
+ }
+]
