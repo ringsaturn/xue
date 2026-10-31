@@ -74,8 +74,13 @@ fn bucket() -> HashMap<String, Vec<u8>> {
     let synop = root.join("synop/expected");
     put(&mut objects, "latest-synop.json", &synop.join("latest-synop.json"));
     for round in ["synop.202610050000", "synop.202610050010"] {
-        for file in ["index.json", "amedas.jsonl"] {
-            put(&mut objects, &format!("{round}/{file}"), &synop.join(round).join(file));
+        // Every file of the round: a v1 round is the index and the network
+        // files, a v2 round adds a station table per network.
+        for entry in std::fs::read_dir(synop.join(round)).expect("synop round") {
+            let file = entry.expect("entry").file_name().into_string().expect("name");
+            if file.ends_with(".json") || file.ends_with(".jsonl") {
+                put(&mut objects, &format!("{round}/{file}"), &synop.join(round).join(&file));
+            }
         }
     }
 
@@ -370,12 +375,207 @@ fn a_synop_station_answers_in_the_point_shape() {
     assert_eq!(body["variables"]["vis"]["values"], json!([20000, 20000, 20000]));
     // An element the station never reported is present, all null.
     assert_eq!(body["variables"]["gust"]["values"], json!([null, null, null]));
-    assert_eq!(body["variables"].as_object().unwrap().len(), 12);
+    assert_eq!(
+        body["variables"].as_object().unwrap().len(),
+        ok(&data, "synop", "")["elements"].as_object().unwrap().len()
+    );
     assert_eq!(range_reads(&data, "amedas.jsonl"), 1);
 
     let one = ok(&data, "synop/amedas:11016", "time=2026-10-05T00:03:00Z");
     assert_eq!(one["time"]["times"], json!(["2026-10-05T00:00:00.000Z"]));
     assert_eq!(one["variables"]["t"]["values"], json!([15.4]));
+}
+
+/// The live synop round in both index versions, whichever one the golden
+/// was written in: `(v1 index, v2 index, v2 station tables by file name)`.
+/// A v1 row's network column decides its table and leaves the row; a v2
+/// table's rows get it back.
+fn synop_versions(objects: &HashMap<String, Vec<u8>>) -> (Value, Value, Vec<(String, Value)>) {
+    let dir = pointer_dir(objects, "latest-synop.json");
+    let index: Value =
+        serde_json::from_slice(&objects[&format!("{dir}/index.json")]).expect("index");
+    if index["schemaVersion"].as_u64() == Some(1) {
+        let mut v2 = index.clone();
+        let mut tables = Vec::new();
+        let networks = v2["networks"].as_array_mut().expect("networks");
+        for (position, network) in networks.iter_mut().enumerate() {
+            let id = network["id"].as_str().expect("id").to_owned();
+            let rows: Vec<Value> = index["stations"]
+                .as_array()
+                .expect("stations")
+                .iter()
+                .filter(|row| row[1].as_u64() == Some(position as u64))
+                .map(|row| {
+                    let mut row = row.as_array().expect("row").clone();
+                    row.remove(1);
+                    Value::Array(row)
+                })
+                .collect();
+            let name = format!("{id}.stations.json");
+            network["stations"] = json!({
+                "path": name, "byteLength": 1, "crc32": "00000000", "count": rows.len()
+            });
+            tables.push((
+                name,
+                json!({
+                    "schemaVersion": 2, "network": id, "issued": index["issued"],
+                    "elements": index["elements"], "stations": rows
+                }),
+            ));
+        }
+        v2["schemaVersion"] = json!(2);
+        v2.as_object_mut().expect("index").remove("stations");
+        return (index, v2, tables);
+    }
+    let mut v1 = index.clone();
+    let mut tables = Vec::new();
+    let mut rows = Vec::new();
+    let networks = v1["networks"].as_array_mut().expect("networks");
+    for (position, network) in networks.iter_mut().enumerate() {
+        let name = network["stations"]["path"].as_str().expect("path").to_owned();
+        let table: Value =
+            serde_json::from_slice(&objects[&format!("{dir}/{name}")]).expect("table");
+        for row in table["stations"].as_array().expect("stations") {
+            let mut row = row.as_array().expect("row").clone();
+            row.insert(1, json!(position));
+            rows.push(Value::Array(row));
+        }
+        network.as_object_mut().expect("network").remove("stations");
+        tables.push((name, table));
+    }
+    rows.sort_by(|a, b| a[0].as_str().cmp(&b[0].as_str()));
+    v1["schemaVersion"] = json!(1);
+    v1["stations"] = Value::Array(rows);
+    (v1, index, tables)
+}
+
+/// The bucket with its live synop round replaced by one in the given index
+/// version. `tag` keeps each test's round and crcs apart from every other
+/// test's: the isolate caches immutable files by path and crc.
+fn synop_bucket(version: u64, tag: u64) -> HashMap<String, Vec<u8>> {
+    let mut objects = bucket();
+    let live = pointer_dir(&objects, "latest-synop.json");
+    let (v1, mut v2, tables) = synop_versions(&objects);
+    let round = format!("synop.20261005{:02}{:02}", 10 + tag, version * 10);
+    let jsonl: Vec<(String, Vec<u8>)> = objects
+        .iter()
+        .filter(|(key, _)| key.starts_with(&format!("{live}/")) && key.ends_with(".jsonl"))
+        .map(|(key, bytes)| (key.rsplit('/').next().unwrap().to_owned(), bytes.clone()))
+        .collect();
+    for (name, bytes) in jsonl {
+        objects.insert(format!("{round}/{name}"), bytes);
+    }
+    if version == 1 {
+        put_json(&mut objects, &format!("{round}/index.json"), &v1);
+    } else {
+        for network in v2["networks"].as_array_mut().expect("networks") {
+            network["stations"]["crc32"] = json!(format!("{:04x}{:04x}", 0x100 + tag, version));
+        }
+        put_json(&mut objects, &format!("{round}/index.json"), &v2);
+        for (name, table) in &tables {
+            put_json(&mut objects, &format!("{round}/{name}"), table);
+        }
+    }
+    put_json(
+        &mut objects,
+        "latest-synop.json",
+        &json!({
+            "schemaVersion": 1, "product": "synop", "issued": v1["issued"],
+            "path": format!("{round}/index.json"), "byteLength": 1,
+            "crc32": format!("{tag:04x}{version:04x}")
+        }),
+    );
+    objects
+}
+
+#[test]
+fn a_v2_synop_round_answers_as_a_v1_one() {
+    let v1 = Data::in_memory(synop_bucket(1, 1));
+    let v2 = Data::in_memory(synop_bucket(2, 1));
+    for (route, query) in [
+        ("synop", ""),
+        ("synop", "network=amedas"),
+        ("synop", "lat=35.69&lon=139.75&limit=3"),
+        ("synop/amedas:11016", ""),
+        ("synop/amedas:50066", "time=2026-10-05T00:03:00Z"),
+    ] {
+        let mut one = ok(&v1, route, query);
+        let mut two = ok(&v2, route, query);
+        // The round names differ by construction; nothing else may.
+        one["issue"] = Value::Null;
+        two["issue"] = Value::Null;
+        assert_eq!(one, two, "{route}?{query}");
+    }
+    let body = ok(&v2, "synop", "");
+    assert!(body["networks"][0].get("stations").is_none());
+    assert!(body["networks"][0].get("file").is_none());
+    assert_eq!(body["stations"][0]["network"], "amedas");
+    assert_eq!(err(&v2, "synop/amedas:00000", "").code, "unknown_station");
+    assert_eq!(err(&v2, "synop/metar:RJTT", "").code, "unknown_station");
+    let paths: Vec<String> = v2.reads().into_iter().map(|(path, _)| path).collect();
+    assert!(paths.iter().any(|path| path.ends_with("/amedas.stations.json")));
+}
+
+#[test]
+fn the_element_table_knows_the_dew_point() {
+    let mut objects = synop_bucket(2, 2);
+    let round = pointer_dir(&objects, "latest-synop.json");
+    let mut index: Value =
+        serde_json::from_slice(&objects[&format!("{round}/index.json")]).expect("index");
+    let has_td = index["elements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|key| key.as_str() == Some("td"));
+    if !has_td {
+        // A golden from before `td`: widen it the way v2 does, second.
+        index["elements"].as_array_mut().unwrap().insert(1, json!("td"));
+        let elements = index["elements"].clone();
+        for network in index["networks"].as_array().unwrap().clone() {
+            let name = network["stations"]["path"].as_str().unwrap().to_owned();
+            let key = format!("{round}/{name}");
+            let mut table: Value = serde_json::from_slice(&objects[&key]).expect("table");
+            table["elements"] = elements.clone();
+            for row in table["stations"].as_array_mut().unwrap() {
+                row.as_array_mut().unwrap().insert(8, json!(-3.4));
+            }
+            put_json(&mut objects, &key, &table);
+        }
+        put_json(&mut objects, &format!("{round}/index.json"), &index);
+    }
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "synop", "");
+    assert_eq!(body["elements"]["td"]["label"], "dew point");
+    assert_eq!(body["elements"]["td"]["unit"], "°C");
+    assert!(body["stations"][0]["values"].get("td").is_some());
+    let station = ok(&data, "synop/amedas:11016", "");
+    assert_eq!(station["variables"]["td"]["unit"], "°C");
+}
+
+#[test]
+fn a_v2_network_whose_table_fails_is_left_out() {
+    let mut objects = synop_bucket(2, 3);
+    let round = pointer_dir(&objects, "latest-synop.json");
+    let key = format!("{round}/amedas.stations.json");
+    let mut table: Value = serde_json::from_slice(&objects[&key]).expect("table");
+    table["network"] = json!("other");
+    put_json(&mut objects, &key, &table);
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "synop", "");
+    let ids: Vec<&str> = body["networks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|network| network["id"].as_str().unwrap())
+        .collect();
+    assert!(!ids.contains(&"amedas"));
+    assert!(body["stations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|station| !station["id"].as_str().unwrap().starts_with("amedas:")));
+    let error = err(&data, "synop/amedas:11016", "");
+    assert_eq!((error.status, error.code.as_str()), (502, "upstream_failed"));
 }
 
 // ── storms ──────────────────────────────────────────────────────────────
