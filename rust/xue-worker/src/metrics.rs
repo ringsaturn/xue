@@ -15,6 +15,13 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// The commit the binary was built from, when the build said so
+/// (`XUE_API_REVISION`, set by the build-api-server workflow).
+pub const REVISION: &str = match option_env!("XUE_API_REVISION") {
+    Some(revision) => revision,
+    None => "unknown",
+};
+
 /// Upper bounds in seconds. A cache hit is under a millisecond; a cold
 /// multi-bundle cell or a long CFS series takes seconds.
 const BUCKETS: [f64; 12] = [
@@ -176,11 +183,11 @@ pub fn render(gauges: &Gauges) -> String {
         &mut out,
         "xue_api_build_info",
         "gauge",
-        "The running build.",
+        "The running build: crate version and source revision.",
     );
     let _ = writeln!(
         out,
-        "xue_api_build_info{{version=\"{}\"}} 1",
+        "xue_api_build_info{{version=\"{}\",revision=\"{REVISION}\"}} 1",
         env!("CARGO_PKG_VERSION")
     );
     help(
