@@ -1,0 +1,143 @@
+name: publish aq
+
+# The air-quality station product (docs/aq.md): national monitoring networks
+# (US EPA AirNow, Hong Kong EPD), each read by its adapter, merged twice an
+# hour onto the previous round's 24-hour history and published as one
+# immutable aq.<round>/ — per network a file with a line per station and a
+# stations table that spans it, and the index that names them. Independent of
+# the raster publishes — nothing here reads a run, and a red run does not hold
+# this back — and cheap: a handful of GETs of about a megabyte each, no GDAL,
+# no eccodes, no wheel. A first round, or one after a gap, reads back a day of
+# AirNow hours (24 files).
+#
+# One round per job, no loop: at half-hour cadence the schedule is the loop.
+
+on:
+  schedule:
+    # A quarter past and a quarter to: EPD posts an hour about ten minutes
+    # after it ends, AirNow about thirty-five, and rewrites it for a while
+    # after, so :15 catches EPD's newest hour and AirNow's revisions and :45
+    # AirNow's newest hour.
+    - cron: "15,45 * * * *"
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "Round to build: now or YYYYMMDDHHMM (the minute a multiple of five)"
+        type: string
+        default: now
+      keep:
+        description: "Round directories to keep on R2 (half-hourly rounds)"
+        type: string
+        default: "6"
+      dry_run:
+        description: "Build and report what would be uploaded and pruned, but write nothing to R2"
+        type: boolean
+        default: false
+      force:
+        description: "Rebuild the round even when it is already live"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time: the pointer is the product's only mutable object, and the
+# previous round's network files are what this round is merged onto.
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-aq-dry-{0}', github.run_id) || 'publish-aq' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ROUND: ${{ inputs.round || 'now' }}
+      AQ_KEEP: ${{ inputs.keep || '6' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # CSV and XML over HTTPS and the stdlib: no GDAL, no eccodes, no wheel.
+      - name: Sync Python environment
+        run: uv sync
+
+      # The live index and its network files are this round's history, and
+      # the index's per-network newest time is where this round's fetch
+      # starts: without them AirNow backfills its whole day again.
+      - name: Fetch the live index and its network files
+        run: make live-aq-index
+
+      # A round is immutable once the pointer names it (docs/aq.md), so a
+      # round that is already live — a dispatch landed in it, or the schedule
+      # ran late — is finished, not built again; `force` is the manual
+      # rebuild the spec allows. GitHub's cron drifts by a minute or several,
+      # so the round is this minute floored to five rather than whatever the
+      # clock says when the runner starts: two runs of the same round must
+      # name the same directory.
+      - name: Build the product
+        id: build
+        run: |
+          set -euo pipefail
+          round=$ROUND
+          if [ "$round" = "now" ]; then
+            round=$(date -u +%Y%m%d%H)$(printf '%02d' $(( 5 * (10#$(date -u +%M) / 5) )))
+          fi
+          live=""
+          if [ -f web/public/data/latest-aq.json ]; then
+            live=$(jq -r .path web/public/data/latest-aq.json | sed -n 's:^aq\.\([0-9]\{12\}\)/index\.json$:\1:p')
+          fi
+          if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
+            echo "aq $round is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python -m xuebuild -v aq-build --round "$round" $FORCE > aq-report.json
+          round=$(jq -r .round aq-report.json)
+          echo "round=$round" >> "$GITHUB_ENV"
+          {
+            echo "### aq $round"
+            echo
+            echo '```json'
+            jq '{stations, observations, networks, sources: [.sources[] | "\(.id): \(if .ok then "ok \(.reports // 0)" else .error end)"], pointer}' aq-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: aq-report-${{ github.run_id }}
+          path: aq-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # The network files, the stations files and the index go up immutable,
+      # then the pointer takes them live. A build that withheld the pointer
+      # (no network's observations arrived) stops here with the previous
+      # round live.
+      - name: Upload and take the round live
+        if: steps.build.outputs.skipped != 'true'
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r .pointer aq-report.json)" = "null" ]; then
+            echo "no network's observations arrived; the previous round stays live" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make upload-r2-aq ROUND="$round" DRY_RUN="$DRY_RUN"
+
+      - name: Delete rounds older than the retention
+        if: steps.build.outputs.skipped != 'true'
+        run: make prune-r2-aq AQ_KEEP="$AQ_KEEP" DRY_RUN="$DRY_RUN"

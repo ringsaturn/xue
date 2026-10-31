@@ -1,0 +1,21 @@
+{
+  "round": "202610311515",
+  "sources": [
+    {
+      "id": "airnow-hourly",
+      "ok": true,
+      "fetched": "2026-10-31T15:16:40Z",
+      "url": "https://files.airnowtech.org/airnow",
+      "file": "aq.202610311515/airnow",
+      "files": 2,
+      "missing": 1
+    },
+    {
+      "id": "epd-24pc",
+      "ok": true,
+      "fetched": "2026-10-31T15:16:41Z",
+      "url": "https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml",
+      "file": "aq.202610311515/hkepd/24pc_Eng.xml"
+    }
+  ]
+}
