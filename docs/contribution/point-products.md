@@ -1,11 +1,13 @@
 # Point products
 
-Five products sit beside the gridded runs: tropical cyclone tracks
+Seven products sit beside the gridded runs: tropical cyclone tracks
 (`xuebuild/tc/`), airport METAR/TAF (`xuebuild/airport/`), radiosonde
-soundings (`xuebuild/sounding/`), surface stations (`xuebuild/synop/`)
-and active fires (`xuebuild/fire/`). Schemas are normative in
-[../tc.md](../tc.md), [../airport.md](../airport.md),
-[../sounding.md](../sounding.md), [../synop.md](../synop.md) and
+soundings (`xuebuild/sounding/`), surface stations (`xuebuild/synop/`),
+air-quality stations (`xuebuild/aq/`), weather warnings
+(`xuebuild/alerts/`) and active fires (`xuebuild/fire/`). Schemas are
+normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
+[../sounding.md](../sounding.md), [../synop.md](../synop.md),
+[../aq.md](../aq.md), [../alerts.md](../alerts.md) and
 [../fire.md](../fire.md); STAC in [../stac.md](../stac.md).
 
 ## Shared contract
@@ -18,7 +20,10 @@ and active fires (`xuebuild/fire/`). Schemas are normative in
   station with one Range request and an analyst streams one file. The tc
   index names one `<storm id>.json` per system. A synop round has one
   JSONL and one stations file per network, so a network's files stay the
-  size of a network and a map loads only the networks it shows; a
+  size of a network and a map loads only the networks it shows (aq has
+  the same shape); an alerts round one JSONL per warning service, one
+  warning per line, with area codes resolved against boundary sets
+  published once per upstream release under `alerts-areas/`; a
   fire round one JSONL per sensor with one line per UTC hour, so the index
   addresses hours rather than stations.
 - **One object per issue, never per station**: many small files hurt bucket

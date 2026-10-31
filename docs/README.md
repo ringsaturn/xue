@@ -15,7 +15,7 @@ terms (see the [README](../README.md#data-and-licensing)).
 | [registry.md](registry.md) | The registry document: the variables, bundles and sources an encoder builds, the closed sets of rules it names |
 | [encoder.md](encoder.md) | The native encoder and its byte-for-byte parity rule with the reference encoder |
 | [sources.md](sources.md) | What each source publishes: variables, grids, axes, caveats |
-| [tc.md](tc.md), [airport.md](airport.md), [sounding.md](sounding.md), [synop.md](synop.md), [nexrad.md](nexrad.md) | The point and single-site radar products: pointer, index, files, `schemaVersion` |
+| [tc.md](tc.md), [airport.md](airport.md), [sounding.md](sounding.md), [synop.md](synop.md), [aq.md](aq.md), [alerts.md](alerts.md), [nexrad.md](nexrad.md) | The point and single-site radar products: pointer, index, files, `schemaVersion` |
 | [satellite.md](satellite.md) | Geostationary imagery and its composites |
 | [indicators.md](indicators.md) | The agriculture indicators: crop-area-weighted daily quantities per forecast run, appended to monthly files read by byte range |
 | [metrics.md](metrics.md) | The run metrics: when each forecast run went live, measured from the publish workflows |

@@ -33,7 +33,7 @@ pointers:
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
 | `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |
-| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`, `nexrad`, `fire`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
+| `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`, `nexrad`, `fire`, `aq`, `alerts`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
 | `<product>/item.json` | the live Item: the newest issue's Item relocated to a path that never changes | yes, replaced by every issue | same |
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
 | `showcase/collection.json` | the Collection of the historical cases | yes | `showcase build` / `refresh` / `catalog` |
@@ -164,12 +164,13 @@ repeats the Item id and `xue:pointer` the pointer's file name.
 
 ## Point products
 
-Six products beside the runs have no run manifest: the radiosonde
+Eight products beside the runs have no run manifest: the radiosonde
 soundings (`docs/sounding.md`), the airport reports (`docs/airport.md`),
 the surface station observations (`docs/synop.md`), the tropical cyclone
 tracks (`docs/tc.md`), the single-site radar (`docs/nexrad.md`), whose
 data are polar Zarr stores but whose index is a window manifest, and the
-active fire detections (`docs/fire.md`). Each
+active fire detections (`docs/fire.md`), the air-quality stations
+(`docs/aq.md`) and the weather warnings (`docs/alerts.md`). Each
 publishes a mutable `latest-<product>.json` naming an immutable
 `<product>.<issue>/index.json`, and each gets the same three documents a
 source does — a Collection, a live Item, an Item per issue — derived from
@@ -187,7 +188,10 @@ Dissemination (attribution requested, no endorsement) for the radar,
 NASA's Earth science data use guidance (no restriction, the FIRMS
 acknowledgement requested, which the description carries in full) for the
 fires, and both of the first two plus CC BY 4.0 for the tracks, whose sources are
-several agencies at once. `extent` is the whole world and
+several agencies at once; the AirNow Data Exchange Guidelines and the
+DATA.GOV.HK terms for the air-quality stations, and the NWS disclaimer,
+JMA's website terms and the Open Government Licence – Canada for the
+warnings. `extent` is the whole world and
 `[[null, null]]`: every issue is a rolling window whose start moves, so a
 Collection stating the live issue's bounds would be wrong as soon as the
 next one lands, and the description says so. Links: `root` and `parent` to
@@ -215,22 +219,27 @@ storms either side of the Pacific make a box the long way round rather
 than one across the antimeridian. A fire index carries no positions —
 the detections are wherever something burns — so a fire round with any
 detection is the whole world, `[-180, -90, 180, 90]`, and one without is
-`null`. An index whose storms have nothing
+`null`; so is a warnings round, whose warnings mostly name area codes
+rather than draw a polygon. The air-quality stations, like the surface
+stations from synop schema v2, keep their positions in the per-network
+stations files, which the Item is built from with the index. An index whose storms have nothing
 observed has no positions at all, and then `geometry` is `null` with no
 `bbox`, which STAC allows.
 
 Time. `datetime` is the issue (`issued`), what a client sorts on, and the
 period it covers is in the two bounds: for a sounding issue the oldest
 nominal time any station still carries to the newest ascent in it, for an
-airport or synop round the 24 hours of history it holds (`issued − 24 h`
-to the newest observation), for a nexrad round the first to the newest
+airport, synop or aq round the 24 hours of history it holds (`issued − 24 h`
+to the newest observation), for a warnings round the oldest `sent` of a
+warning still in force to the round, for a nexrad round the first to the newest
 sweep the window holds, for a fire round its `window.start` to the newest
 acquisition any sensor carries, for a tc issue the earliest and latest headline
 position. An empty index is the instant it was issued.
 
 Properties. `xue:product`, `xue:schemaVersion`, `xue:issued`,
 `xue:stations` (`xue:storms` for the tracks; the window's sites for the
-radar; `xue:detections`, the detections in the window, for the fires) and
+radar; `xue:detections`, the detections in the window, for the fires;
+`xue:alerts`, the warnings in force, for the warnings) and
 `xue:sources`, the
 index's own `sources[]` reduced to `{id, ok}` so a client sees which
 gateway or centre was down without reading the index. A sounding issue
@@ -245,7 +254,10 @@ a multihash, as a run's artifacts carry):
 |---|---|---|---|
 | `index` | `index.json?v=<crc32>`, under the CRC the pointer carries | `application/json` | `metadata` |
 | `soundings` / `history` | the product's one NDJSON file | `application/x-ndjson` | `data` |
-| `<network id>` | a synop round's NDJSON file per network, with `xue:network` | `application/x-ndjson` | `data` |
+| `<network id>` | a synop or aq round's NDJSON file per network, with `xue:network` | `application/x-ndjson` | `data` |
+| `<network id>.stations` | a synop (schema v2) or aq round's stations file per network, `xue:kind` `stations`, with `xue:network` and `xue:stations` | `application/json` | `data` |
+| `<network id>` | an alerts round's NDJSON file per network, one warning per line, `xue:kind` `alerts`, with `xue:network` | `application/x-ndjson` | `data` |
+| `<network id>.areas` | the boundary set an alerts network's area codes resolve against, outside the round (`../alerts-areas/<set>.<version>.pmtiles`), `xue:kind` `areas` | `application/vnd.pmtiles` | `data` |
 | `<sensor id>` | a fire round's NDJSON file per sensor, one UTC hour per line, with `xue:sensor` | `application/x-ndjson` | `data` |
 | `<storm id>` | one JSON file per system a tc issue lists | `application/json` | `data` |
 | `n0b` / `n0g` | a nexrad round's own polar store per product (`n0b.zarr`), `xue:kind` `store`; `file:size` is the root document and the shard, and the store carries `xue:crc32` (its root document's, the `?v=`) rather than `file:checksum`, as a run's stores do | `application/vnd.zarr` | `data` |

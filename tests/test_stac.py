@@ -29,6 +29,8 @@ from xuebuild.sources import SOURCES, source_spec
 from xuebuild.nexrad import schema as nexrad_schema
 from xuebuild.synop import schema as synop_schema
 from xuebuild.fire import schema as fire_schema
+from xuebuild.aq import schema as aq_schema
+from xuebuild.alerts import schema as alerts_schema
 from xuebuild.tc import schema as tc_schema
 
 
@@ -660,6 +662,24 @@ class PointProductTests(unittest.TestCase):
     def fire_item(self) -> dict:
         return self.item("fire", "fire.202610120500", "fire/expected/fire.202610120500/index.json")
 
+    def aq_item(self) -> dict:
+        index, encoded = self.index("aq/expected/aq.202610311545/index.json")
+        directory = FIXTURES / "aq/expected/aq.202610311545"
+        return stac.point_product_item(
+            index,
+            len(encoded),
+            crc32_hex(encoded),
+            product="aq",
+            index_relative_path="aq.202610311545/index.json",
+            stations_files={
+                network["id"]: json.loads((directory / network["stations"]["path"]).read_text(encoding="utf-8"))
+                for network in index["networks"]
+            },
+        )
+
+    def alerts_item(self) -> dict:
+        return self.item("alerts", "alerts.202611010005", "alerts/expected/alerts.202611010005/index.json")
+
     def nexrad_item(self) -> dict:
         return self.item("nexrad", "nexrad.202303250145", "nexrad/expected/nexrad.202303250145/index.json")
 
@@ -927,7 +947,7 @@ class PointProductTests(unittest.TestCase):
     def test_the_catalog_lists_every_product(self) -> None:
         children = [link["href"] for link in stac.root_catalog()["links"] if link["rel"] == "child"]
         self.assertEqual(
-            children[-7:],
+            children[-9:],
             [
                 "sounding/collection.json",
                 "airport/collection.json",
@@ -935,6 +955,8 @@ class PointProductTests(unittest.TestCase):
                 "tc/collection.json",
                 "nexrad/collection.json",
                 "fire/collection.json",
+                "aq/collection.json",
+                "alerts/collection.json",
                 "showcase/collection.json",
             ],
         )
@@ -943,7 +965,9 @@ class PointProductTests(unittest.TestCase):
         # The fixed list in stac.py against each product's own schema: an
         # id it does not spell the same way would leave a Collection
         # pointing at a pointer nobody writes.
-        schemas = (sounding_schema, airport_schema, synop_schema, tc_schema, nexrad_schema, fire_schema)
+        schemas = (
+            sounding_schema, airport_schema, synop_schema, tc_schema, nexrad_schema, fire_schema, aq_schema, alerts_schema
+        )
         self.assertEqual(sorted(stac.POINT_PRODUCTS), sorted(schema.PRODUCT for schema in schemas))
         items = {
             "sounding": self.sounding_item,
@@ -952,6 +976,8 @@ class PointProductTests(unittest.TestCase):
             "tc": self.tc_item,
             "nexrad": self.nexrad_item,
             "fire": self.fire_item,
+            "aq": self.aq_item,
+            "alerts": self.alerts_item,
         }
         for schema in schemas:
             with self.subTest(product=schema.PRODUCT):
