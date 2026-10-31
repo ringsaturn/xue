@@ -200,8 +200,22 @@ impl Responses {
     }
 }
 
+/// Routes a caller serves beside the API's own ([`serve_with`]), asked
+/// first. An answer from one is cached, rate-limited, compressed and framed
+/// like any other `200` or error.
+pub trait Routes {
+    /// The route template a normalized `path` answers on (the metrics
+    /// label), or `None` when the path is not one of these routes.
+    fn route(&self, path: &str) -> Option<&'static str>;
+
+    /// Answer a `GET` of `path`, one [`Routes::route`] claimed. `now` is
+    /// milliseconds since the epoch.
+    fn answer(&self, path: &str, url: &url::Url, now: f64) -> Result<route::Answer, HttpError>;
+}
+
 struct State {
     data: Data,
+    routes: Option<Box<dyn Routes>>,
     started: SystemTime,
     inflight: Cell<usize>,
     inflight_limit: usize,
@@ -286,8 +300,22 @@ pub fn main() -> ExitCode {
 /// [`crate::ObjectSource`] builds `Data::from_source` and spawns any work of
 /// its own on the same `LocalSet`.
 pub async fn serve(config: Config, data: Data) -> Result<(), String> {
+    serve_routes(config, data, None).await
+}
+
+/// [`serve`], with `routes` answered before the API's own.
+pub async fn serve_with(config: Config, data: Data, routes: Box<dyn Routes>) -> Result<(), String> {
+    serve_routes(config, data, Some(routes)).await
+}
+
+async fn serve_routes(
+    config: Config,
+    data: Data,
+    routes: Option<Box<dyn Routes>>,
+) -> Result<(), String> {
     let state = Rc::new(State {
         data,
+        routes,
         started: SystemTime::now(),
         inflight: Cell::new(0),
         inflight_limit: config.inflight,
@@ -459,7 +487,12 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
         Err(error) => (error_response(&error), "error"),
     };
     response = compress(response, gzip).await;
-    let route = metrics::route_label(route::normalize(target.split('?').next().unwrap_or("/")));
+    let path = route::normalize(target.split('?').next().unwrap_or("/"));
+    let route = state
+        .routes
+        .as_ref()
+        .and_then(|routes| routes.route(path))
+        .unwrap_or_else(|| metrics::route_label(path));
     let sent = {
         use hyper::body::Body as _;
         response.body().size_hint().exact().unwrap_or(0) as usize
@@ -609,7 +642,10 @@ async fn handle(
         ));
     }
     state.inflight.set(state.inflight.get() + 1);
-    let answer = route::dispatch(path, &url, &state.data, now_ms()).await;
+    let answer = match state.routes.as_ref().filter(|routes| routes.route(path).is_some()) {
+        Some(routes) => routes.answer(path, &url, now_ms()),
+        None => route::dispatch(path, &url, &state.data, now_ms()).await,
+    };
     state.inflight.set(state.inflight.get() - 1);
     let answer = answer?;
     let body = Bytes::from(answer.body);

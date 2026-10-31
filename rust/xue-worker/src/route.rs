@@ -20,7 +20,7 @@ pub struct Answer {
 }
 
 impl Answer {
-    fn json(value: &Value, cache_control: &'static str) -> Result<Answer, HttpError> {
+    pub fn json(value: &Value, cache_control: &'static str) -> Result<Answer, HttpError> {
         let body = serde_json::to_vec(value)
             .map_err(|error| HttpError::new(502, "internal", error.to_string()))?;
         Ok(Answer {
@@ -30,7 +30,7 @@ impl Answer {
         })
     }
 
-    fn with_header(mut self, name: &'static str, value: String) -> Answer {
+    pub fn with_header(mut self, name: &'static str, value: String) -> Answer {
         self.headers.push((name, value));
         self
     }
