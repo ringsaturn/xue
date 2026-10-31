@@ -31,7 +31,14 @@ xue = "xuebuild.cli:main"
 include = ["xuebuild*"]
 
 [tool.setuptools.package-data]
-xuebuild = ["palette.txt", "precipitation_palette.txt", "stacindex.html"]
+xuebuild = [
+    "palette.txt",
+    "precipitation_palette.txt",
+    "stacindex.html",
+    "synop/*.json",
+    "aq/*.json",
+    "alerts/*.json",
+]
 
 [dependency-groups]
 # Tests, and reading a delta-coded store or the STAC catalog the way a client would.
