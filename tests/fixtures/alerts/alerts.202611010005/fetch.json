@@ -1,0 +1,28 @@
+{
+ "round": "202611010005",
+ "sources": [
+  {
+   "id": "nws-alerts",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:00Z",
+   "url": "https://api.weather.gov/alerts/active?status=actual",
+   "file": "alerts.202611010005/nws/active.json"
+  },
+  {
+   "id": "jma-warning",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:01Z",
+   "url": "https://www.jma.go.jp/bosai/warning/data/r8/map.json",
+   "file": "alerts.202611010005/jma",
+   "mapTime": "2026-10-31T23:40:00Z",
+   "unchanged": true
+  },
+  {
+   "id": "eccc-alerts",
+   "ok": false,
+   "fetched": "2026-11-01T00:12:03Z",
+   "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
+   "error": "HTTP Error 503: Service Unavailable"
+  }
+ ]
+}
