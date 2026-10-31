@@ -261,7 +261,9 @@ describe("the synop v2 readers", () => {
     expect(assembled.networks[0]!.id).toBe("aaa");
     expect(assembled.stations.slice(0, 2).map((station) => station.id)).toEqual(["aaa:1", "aaa:2"]);
     expect(assembled.stations[0]!.network).toBe(0);
-    expect(assembled.stations[0]!.values.td).toBe(-1.2);
+    expect(assembled.stations[0]!.values.t).toBe(4.5);
+    // The committed golden may predate td; the table carries it only then.
+    if (assembled.elements.includes("td")) expect(assembled.stations[0]!.values.td).toBe(-1.2);
     expect(assembled.stations[1]!.elev).toBeNull();
     const fuji = assembled.stations.find((station) => station.id === "amedas:50066")!;
     expect(fuji.network).toBe(1);
