@@ -1,0 +1,750 @@
+{
+ "source": "https://www.hko.gov.hk/en/cis/stn.htm",
+ "namesSource": "https://www.hko.gov.hk/tc/cis/stn.htm",
+ "retrieved": "2026-10-31",
+ "aliases": {
+  "Chek Lap Kok": "HKA",
+  "HK Observatory": "HKO",
+  "HK Park": "HKP",
+  "Pak Tam Chung": "TYW",
+  "Star Ferry": "SF",
+  "Tai Po": "YCT",
+  "Tsuen Wan Ho Koon": "TWN"
+ },
+ "fileAliases": {
+  "temperature": {
+   "Tsing Yi": "TY1",
+   "Tuen Mun": "TU1"
+  },
+  "humidity": {
+   "Tsing Yi": "TY1",
+   "Tuen Mun": "TU1"
+  },
+  "pressure": {
+   "Tsing Yi": "TY1",
+   "Tuen Mun": "TU1"
+  },
+  "wind": {
+   "Tsing Yi": "SHL",
+   "Tuen Mun": "TUN",
+   "Tap Mun": "TME"
+  }
+ },
+ "stations": [
+  {
+   "code": "BHD",
+   "name": "Bluff Head",
+   "names": {
+    "zh-Hant": "黃麻角"
+   },
+   "lat": 22.1975,
+   "lon": 114.2119,
+   "elev": 94.0,
+   "rank": 1
+  },
+  {
+   "code": "BR1",
+   "name": "Beas River",
+   "names": {
+    "zh-Hant": "上水雙魚河"
+   },
+   "lat": 22.4933,
+   "lon": 114.105,
+   "elev": 11.0,
+   "rank": 1
+  },
+  {
+   "code": "CCB",
+   "name": "Cheung Chau Beach",
+   "names": {
+    "zh-Hant": "長洲泳灘"
+   },
+   "lat": 22.2108,
+   "lon": 114.0292,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "CCH",
+   "name": "Cheung Chau",
+   "names": {
+    "zh-Hant": "長洲"
+   },
+   "lat": 22.2011,
+   "lon": 114.0267,
+   "elev": 72.0,
+   "rank": 1
+  },
+  {
+   "code": "CP1",
+   "name": "Central Pier",
+   "names": {
+    "zh-Hant": "中環碼頭"
+   },
+   "lat": 22.2889,
+   "lon": 114.1558,
+   "elev": 19.0,
+   "rank": 1
+  },
+  {
+   "code": "CPH",
+   "name": "Ching Pak House(Tsing Yi)",
+   "names": {
+    "zh-Hant": "青衣(青柏樓)"
+   },
+   "lat": 22.3481,
+   "lon": 114.1092,
+   "elev": 122.0,
+   "rank": 1
+  },
+  {
+   "code": "CWB",
+   "name": "Clear Water Bay",
+   "names": {
+    "zh-Hant": "清水灣"
+   },
+   "lat": 22.2633,
+   "lon": 114.2997,
+   "elev": 66.0,
+   "rank": 1
+  },
+  {
+   "code": "EPC",
+   "name": "Ping Chau",
+   "names": {
+    "zh-Hant": "平洲"
+   },
+   "lat": 22.5467,
+   "lon": 114.4283,
+   "elev": 29.0,
+   "rank": 1
+  },
+  {
+   "code": "GI",
+   "name": "Green Island",
+   "names": {
+    "zh-Hant": "青洲"
+   },
+   "lat": 22.285,
+   "lon": 114.1128,
+   "elev": 88.0,
+   "rank": 1
+  },
+  {
+   "code": "HKA",
+   "name": "Hong Kong International Airport",
+   "names": {
+    "zh-Hant": "香港國際機場"
+   },
+   "lat": 22.3094,
+   "lon": 113.9219,
+   "elev": 6.0,
+   "rank": 0
+  },
+  {
+   "code": "HKO",
+   "name": "Hong Kong Observatory",
+   "names": {
+    "zh-Hant": "天文台"
+   },
+   "lat": 22.3019,
+   "lon": 114.1742,
+   "elev": 32.0,
+   "rank": 0
+  },
+  {
+   "code": "HKP",
+   "name": "Hong Kong Park",
+   "names": {
+    "zh-Hant": "香港公園"
+   },
+   "lat": 22.2783,
+   "lon": 114.1622,
+   "elev": 26.0,
+   "rank": 1
+  },
+  {
+   "code": "HKS",
+   "name": "Wong Chuk Hang",
+   "names": {
+    "zh-Hant": "黃竹坑"
+   },
+   "lat": 22.2478,
+   "lon": 114.1736,
+   "elev": 5.0,
+   "rank": 1
+  },
+  {
+   "code": "HPV",
+   "name": "Happy Valley",
+   "names": {
+    "zh-Hant": "跑馬地"
+   },
+   "lat": 22.2706,
+   "lon": 114.1836,
+   "elev": 5.0,
+   "rank": 1
+  },
+  {
+   "code": "JKB",
+   "name": "Tseung Kwan O",
+   "names": {
+    "zh-Hant": "將軍澳"
+   },
+   "lat": 22.3158,
+   "lon": 114.2556,
+   "elev": 38.0,
+   "rank": 1
+  },
+  {
+   "code": "KAT",
+   "name": "Kat O",
+   "names": {
+    "zh-Hant": "吉澳"
+   },
+   "lat": 22.5364,
+   "lon": 114.3019,
+   "elev": 10.0,
+   "rank": 1
+  },
+  {
+   "code": "KFB",
+   "name": "Kadoorie Farm and Botanic Garden",
+   "names": {
+    "zh-Hant": "嘉道理農場暨植物園"
+   },
+   "lat": 22.4328,
+   "lon": 114.1208,
+   "elev": 307.0,
+   "rank": 1
+  },
+  {
+   "code": "KLT",
+   "name": "Kowloon City",
+   "names": {
+    "zh-Hant": "九龍城"
+   },
+   "lat": 22.335,
+   "lon": 114.1847,
+   "elev": 92.0,
+   "rank": 1
+  },
+  {
+   "code": "KP",
+   "name": "King's Park",
+   "names": {
+    "zh-Hant": "京士柏"
+   },
+   "lat": 22.3119,
+   "lon": 114.1728,
+   "elev": 65.0,
+   "rank": 1
+  },
+  {
+   "code": "KSC",
+   "name": "Kau Sai Chau",
+   "names": {
+    "zh-Hant": "滘西洲"
+   },
+   "lat": 22.3703,
+   "lon": 114.3125,
+   "elev": 39.0,
+   "rank": 1
+  },
+  {
+   "code": "KTG",
+   "name": "Kwun Tong",
+   "names": {
+    "zh-Hant": "觀塘"
+   },
+   "lat": 22.3186,
+   "lon": 114.2247,
+   "elev": 90.0,
+   "rank": 1
+  },
+  {
+   "code": "LAM",
+   "name": "Lamma Island",
+   "names": {
+    "zh-Hant": "南丫島"
+   },
+   "lat": 22.2261,
+   "lon": 114.1086,
+   "elev": 7.0,
+   "rank": 1
+  },
+  {
+   "code": "LFS",
+   "name": "Lau Fau Shan",
+   "names": {
+    "zh-Hant": "流浮山"
+   },
+   "lat": 22.4689,
+   "lon": 113.9836,
+   "elev": 31.0,
+   "rank": 1
+  },
+  {
+   "code": "NGP",
+   "name": "Ngong Ping",
+   "names": {
+    "zh-Hant": "昂坪"
+   },
+   "lat": 22.2586,
+   "lon": 113.9128,
+   "elev": 593.0,
+   "rank": 1
+  },
+  {
+   "code": "NLS",
+   "name": "Nei Lak Shan",
+   "names": {
+    "zh-Hant": "彌勒山"
+   },
+   "lat": 22.2633,
+   "lon": 113.9111,
+   "elev": 747.0,
+   "rank": 1
+  },
+  {
+   "code": "NP",
+   "name": "North Point",
+   "names": {
+    "zh-Hant": "北角"
+   },
+   "lat": 22.2944,
+   "lon": 114.1997,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "PEN",
+   "name": "Peng Chau",
+   "names": {
+    "zh-Hant": "坪洲"
+   },
+   "lat": 22.2911,
+   "lon": 114.0433,
+   "elev": 34.0,
+   "rank": 1
+  },
+  {
+   "code": "PLC",
+   "name": "Tai Mei Tuk",
+   "names": {
+    "zh-Hant": "大美督"
+   },
+   "lat": 22.4753,
+   "lon": 114.2375,
+   "elev": 51.0,
+   "rank": 1
+  },
+  {
+   "code": "SC",
+   "name": "Sha Chau",
+   "names": {
+    "zh-Hant": "沙洲"
+   },
+   "lat": 22.3458,
+   "lon": 113.8911,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "SE",
+   "name": "Kai Tak",
+   "names": {
+    "zh-Hant": "啟德"
+   },
+   "lat": 22.3097,
+   "lon": 114.2133,
+   "elev": 3.0,
+   "rank": 1
+  },
+  {
+   "code": "SE1",
+   "name": "Kai Tak Runway Park",
+   "names": {
+    "zh-Hant": "啟德跑道公園"
+   },
+   "lat": 22.305,
+   "lon": 114.2169,
+   "elev": 4.0,
+   "rank": 1
+  },
+  {
+   "code": "SEK",
+   "name": "Shek Kong",
+   "names": {
+    "zh-Hant": "石崗"
+   },
+   "lat": 22.4361,
+   "lon": 114.0847,
+   "elev": 16.0,
+   "rank": 1
+  },
+  {
+   "code": "SF",
+   "name": "Star Ferry(Kowloon)",
+   "names": {
+    "zh-Hant": "九龍天星碼頭"
+   },
+   "lat": 22.2931,
+   "lon": 114.1686,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "SHA",
+   "name": "Sha Tin",
+   "names": {
+    "zh-Hant": "沙田"
+   },
+   "lat": 22.4025,
+   "lon": 114.21,
+   "elev": 6.0,
+   "rank": 1
+  },
+  {
+   "code": "SHL",
+   "name": "Shell Oil Depot",
+   "names": {
+    "zh-Hant": "青衣蜆殼油庫"
+   },
+   "lat": 22.3467,
+   "lon": 114.0864,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "SKG",
+   "name": "Sai Kung",
+   "names": {
+    "zh-Hant": "西貢"
+   },
+   "lat": 22.3756,
+   "lon": 114.2744,
+   "elev": 4.0,
+   "rank": 1
+  },
+  {
+   "code": "SKW",
+   "name": "Shau Kei Wan",
+   "names": {
+    "zh-Hant": "筲箕灣"
+   },
+   "lat": 22.2817,
+   "lon": 114.2361,
+   "elev": 53.0,
+   "rank": 1
+  },
+  {
+   "code": "SLW",
+   "name": "Sha Lo Wan",
+   "names": {
+    "zh-Hant": "沙螺灣"
+   },
+   "lat": 22.2911,
+   "lon": 113.9069,
+   "elev": 61.0,
+   "rank": 1
+  },
+  {
+   "code": "SSH",
+   "name": "Sheung Shui",
+   "names": {
+    "zh-Hant": "上水"
+   },
+   "lat": 22.5019,
+   "lon": 114.1111,
+   "elev": 10.0,
+   "rank": 1
+  },
+  {
+   "code": "SSP",
+   "name": "Sham Shui Po",
+   "names": {
+    "zh-Hant": "深水埗"
+   },
+   "lat": 22.3358,
+   "lon": 114.1369,
+   "elev": 11.0,
+   "rank": 1
+  },
+  {
+   "code": "STY",
+   "name": "Stanley",
+   "names": {
+    "zh-Hant": "赤柱"
+   },
+   "lat": 22.2142,
+   "lon": 114.2186,
+   "elev": 31.0,
+   "rank": 1
+  },
+  {
+   "code": "TAP",
+   "name": "Tap Mun",
+   "names": {
+    "zh-Hant": "塔門"
+   },
+   "lat": 22.4714,
+   "lon": 114.3606,
+   "elev": 15.0,
+   "rank": 1
+  },
+  {
+   "code": "TC",
+   "name": "Tate's Cairn",
+   "names": {
+    "zh-Hant": "大老山"
+   },
+   "lat": 22.3578,
+   "lon": 114.2178,
+   "elev": 572.0,
+   "rank": 1
+  },
+  {
+   "code": "TKL",
+   "name": "Ta Kwu Ling",
+   "names": {
+    "zh-Hant": "打鼓嶺"
+   },
+   "lat": 22.5286,
+   "lon": 114.1567,
+   "elev": 15.0,
+   "rank": 1
+  },
+  {
+   "code": "TLS",
+   "name": "Tai Lung",
+   "names": {
+    "zh-Hant": "大隴"
+   },
+   "lat": 22.4847,
+   "lon": 114.1175,
+   "elev": 21.0,
+   "rank": 1
+  },
+  {
+   "code": "TME",
+   "name": "Tap Mun East",
+   "names": {
+    "zh-Hant": "塔門東"
+   },
+   "lat": 22.4683,
+   "lon": 114.3631,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "TMS",
+   "name": "Tai Mo Shan",
+   "names": {
+    "zh-Hant": "大帽山"
+   },
+   "lat": 22.4106,
+   "lon": 114.1244,
+   "elev": 955.0,
+   "rank": 1
+  },
+  {
+   "code": "TMT",
+   "name": "Tai Mo To",
+   "names": {
+    "zh-Hant": "大磨刀"
+   },
+   "lat": 22.3297,
+   "lon": 113.9667,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "TO",
+   "name": "Tai O",
+   "names": {
+    "zh-Hant": "大澳"
+   },
+   "lat": 22.2561,
+   "lon": 113.8547,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "TPK",
+   "name": "Tai Po Kau",
+   "names": {
+    "zh-Hant": "大埔滘"
+   },
+   "lat": 22.4425,
+   "lon": 114.1839,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "TU1",
+   "name": "Tuen Mun Children and Juvenile Home",
+   "names": {
+    "zh-Hant": "屯門兒童及青少年院"
+   },
+   "lat": 22.3858,
+   "lon": 113.9642,
+   "elev": 28.0,
+   "rank": 1
+  },
+  {
+   "code": "TUN",
+   "name": "Tuen Mun Government Offices",
+   "names": {
+    "zh-Hant": "屯門政府合署"
+   },
+   "lat": 22.3906,
+   "lon": 113.9767,
+   "elev": null,
+   "rank": 1
+  },
+  {
+   "code": "TW",
+   "name": "Tsuen Wan Shing Mun Valley",
+   "names": {
+    "zh-Hant": "荃灣城門谷"
+   },
+   "lat": 22.3756,
+   "lon": 114.1267,
+   "elev": 35.0,
+   "rank": 1
+  },
+  {
+   "code": "TWN",
+   "name": "Tsuen Wan",
+   "names": {
+    "zh-Hant": "荃灣"
+   },
+   "lat": 22.3836,
+   "lon": 114.1078,
+   "elev": 142.0,
+   "rank": 1
+  },
+  {
+   "code": "TY1",
+   "name": "New Tsing Yi Station",
+   "names": {
+    "zh-Hant": "新青衣站"
+   },
+   "lat": 22.3442,
+   "lon": 114.11,
+   "elev": 8.0,
+   "rank": 1
+  },
+  {
+   "code": "TYW",
+   "name": "Pak Tam Chung (Tsak Yue Wu)",
+   "names": {
+    "zh-Hant": "北潭涌(鯽魚湖)"
+   },
+   "lat": 22.4028,
+   "lon": 114.3231,
+   "elev": 5.0,
+   "rank": 1
+  },
+  {
+   "code": "VP1",
+   "name": "The Peak",
+   "names": {
+    "zh-Hant": "山頂"
+   },
+   "lat": 22.2642,
+   "lon": 114.155,
+   "elev": 406.0,
+   "rank": 1
+  },
+  {
+   "code": "WB2",
+   "name": "Automatic Weather Buoy No.2 (Hong Kong International Airport, West)",
+   "names": {
+    "zh-Hant": "自動氣象浮標2號(香港國際機場西面)"
+   },
+   "lat": 22.2911,
+   "lon": 113.8822,
+   "elev": 9.0,
+   "rank": 1
+  },
+  {
+   "code": "WB8",
+   "name": "Automatic Weather Buoy No.8 (Hong Kong International Airport, East)",
+   "names": {
+    "zh-Hant": "自動氣象浮標8號(香港國際機場東面)"
+   },
+   "lat": 22.3058,
+   "lon": 113.9539,
+   "elev": 9.0,
+   "rank": 1
+  },
+  {
+   "code": "WGL",
+   "name": "Waglan Island",
+   "names": {
+    "zh-Hant": "橫瀾島"
+   },
+   "lat": 22.1822,
+   "lon": 114.3033,
+   "elev": 56.0,
+   "rank": 1
+  },
+  {
+   "code": "WLP",
+   "name": "Wetland Park",
+   "names": {
+    "zh-Hant": "濕地公園"
+   },
+   "lat": 22.4667,
+   "lon": 114.0089,
+   "elev": 4.0,
+   "rank": 1
+  },
+  {
+   "code": "WTS",
+   "name": "Wong Tai Sin",
+   "names": {
+    "zh-Hant": "黃大仙"
+   },
+   "lat": 22.3394,
+   "lon": 114.2053,
+   "elev": 21.0,
+   "rank": 1
+  },
+  {
+   "code": "YCT",
+   "name": "Tai Po(Yuen Chau Tsai Park)",
+   "names": {
+    "zh-Hant": "大埔(元洲仔公園)"
+   },
+   "lat": 22.4483,
+   "lon": 114.1772,
+   "elev": 6.0,
+   "rank": 1
+  },
+  {
+   "code": "YLP",
+   "name": "Yuen Long Park",
+   "names": {
+    "zh-Hant": "元朗公園"
+   },
+   "lat": 22.4408,
+   "lon": 114.0183,
+   "elev": 8.0,
+   "rank": 1
+  },
+  {
+   "code": "YTS",
+   "name": "Yi Tung Shan",
+   "names": {
+    "zh-Hant": "二東山"
+   },
+   "lat": 22.2592,
+   "lon": 113.9642,
+   "elev": null,
+   "rank": 1
+  }
+ ]
+}

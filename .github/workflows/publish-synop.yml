@@ -1,14 +1,16 @@
 name: publish synop
 
 # The surface station product (docs/synop.md): national observation networks
-# (JMA AMeDAS first), each read by its adapter, merged every ten minutes onto
-# the previous round's 24-hour history and published as one immutable
-# synop.<round>/ — a file per network with a line per station, and the index
-# that spans them. Independent of the raster publishes — nothing here reads a
+# (JMA AMeDAS, DWD, the Hong Kong Observatory), each read by its adapter,
+# merged every ten minutes onto the previous round's 24-hour history and
+# published as one immutable synop.<round>/ — per network a file with a line
+# per station and a stations file with their current values, and the index
+# that lists them. Independent of the raster publishes — nothing here reads a
 # run, and a red run does not hold this back — and cheap: a few GETs of a few
-# hundred kilobytes, no GDAL, no eccodes, no wheel. A first round, or one after
-# a gap, catches up as far back as each network keeps (AMeDAS: a week of
-# snapshots, of which the window takes a day).
+# hundred kilobytes to a megabyte, a few bufr_dump calls, no GDAL, no wheel. A
+# first round, or one after a gap, catches up as far back as each network
+# keeps (AMeDAS: a week of snapshots; DWD: two days of batches; of either the
+# window takes a day; HKO: only the latest).
 #
 # One round per job, no loop: at ten-minute cadence the schedule is the loop.
 
@@ -65,12 +67,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # DWD's reports are BUFR; bufr_dump turns them into JSON. No GDAL, no
+      # wheel: this pipeline touches no raster.
+      - name: Install eccodes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeccodes-tools
+          bufr_dump -V
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           python-version: "3.14"
 
-      # JSON over HTTPS and the stdlib: no GDAL, no eccodes, no wheel.
+      # JSON and CSV over HTTPS and the stdlib, plus bufr_dump above.
       - name: Sync Python environment
         run: uv sync
 

@@ -10,9 +10,11 @@ agency that revises a value is believed — and anything older than
 network that delivered nothing this round keeps its history; a station
 with nothing left in the window leaves.
 
-Each network gets its own file, one line per station, so the files stay
-the size of a network rather than of the world, and the index carries
-every station's newest values and the byte span of its line.
+Each network gets two files, a ``<network>.jsonl`` with one line per
+station and a ``<network>.stations.json`` with every station's newest
+values and the byte span of its line, so the files stay the size of a
+network rather than of the world and a map loads only the networks it
+shows. The index lists the networks and the files' lengths and CRC32s.
 
 The pointer is withheld only when no network's observation source
 arrived, in which case the previous round stays live.
@@ -47,8 +49,10 @@ from .schema import (
     read_index,
     round_directory,
     round_name,
+    stations_filename,
     validate_index,
     validate_station_line,
+    validate_stations_file,
     write_bytes_atomic,
 )
 from .station import NetworkRead
@@ -58,11 +62,11 @@ LOG = logging.getLogger(__name__)
 META_KEYS = ("name", "names", "lat", "lon", "elev", "wmo", "rank")
 
 CURRENT_SECONDS = 3600
-"""How far back from a station's newest time the index looks for each
-element's current value. Some elements arrive on a slower beat than the
-station reports — AMeDAS sends Mt. Fuji's humidity and pressure only on
-the hour — and a map that read the newest time alone would blank them
-for fifty minutes in every hour."""
+"""How far back from a station's newest time the stations file looks for
+each element's current value. Some elements arrive on a slower beat than
+the station reports — AMeDAS sends Mt. Fuji's humidity and pressure only on
+the hour — and a map that read the newest time alone would blank them for
+fifty minutes in every hour."""
 
 ACCUMULATED = frozenset({"pr", "pr1h", "sun"})
 """Elements that are totals over a period ending at their time: an older
@@ -80,8 +84,10 @@ def _read_previous_network(
     output_root: Path, previous_index: dict[str, Any], network_id: str
 ) -> dict[str, dict[str, Any]]:
     """The previous round's stations of one network, by id: their
-    metadata and their observations by epoch. A file that cannot be read
-    is not fatal — the network's window starts again."""
+    metadata and their observations by epoch. Read from the ``.jsonl``
+    alone, which schema v1 and v2 share, so the round after the switch
+    merges onto a v1 round like any other. A file that cannot be read is
+    not fatal — the network's window starts again."""
     entries: dict[str, dict[str, Any]] = {}
     described = next((network for network in previous_index.get("networks", []) if network.get("id") == network_id), None)
     if described is None:
@@ -148,6 +154,16 @@ def _station_line(station_id: str, meta: dict[str, Any], observations: dict[int,
     return {"id": station_id, **{key: meta.get(key) for key in META_KEYS}, "time": times, "obs": columns}
 
 
+def _lay_over(old: dict[str, Any] | None, new: dict[str, Any], partial: bool) -> dict[str, Any]:
+    """A new report at a time a station already has. Whole, for a network
+    that sends a time's elements together; element by element for one
+    that sends them in several messages (``Network.partial``), where a
+    later message leaving an element out says nothing about it."""
+    if old is None or not partial:
+        return new
+    return old | {key: value for key, value in new.items() if value is not None}
+
+
 def build_product(
     moment: datetime,
     raw_root: Path,
@@ -158,8 +174,9 @@ def build_product(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Read the round's fetched files and the previous round's network
-    files, write ``synop.<round>/`` — a file per network and the index over
-    them — and, unless no network's observations arrived, the pointer."""
+    files, write ``synop.<round>/`` — two files per network and the index
+    over them — and, unless no network's observations arrived, the
+    pointer."""
     now = now or datetime.now(UTC)
     directory = output_root / round_directory(moment)
     if (directory / INDEX_FILENAME).exists() and not force:
@@ -169,11 +186,13 @@ def build_product(
     record_statuses = {status.id: status for status in record.sources} if record is not None else {}
     horizon = int((moment - timedelta(hours=HISTORY_HOURS)).timestamp())
     end = int(moment.timestamp())
+    issued = iso_z(moment)
 
     published_networks: list[dict[str, Any]] = []
-    rows: list[list[Any]] = []
     sources: list[SourceStatus] = []
+    station_files: list[tuple[str, dict[str, Any]]] = []
     any_ok = False
+    station_count = 0
     observation_count = 0
     for network in NETWORKS:
         result, statuses = _read_network(network, raw_root, record_statuses)
@@ -188,13 +207,12 @@ def build_product(
             entry = entries.get(station_id)
             if entry is None:
                 continue  # the adapter places every station it reports; a stray is dropped
-            entry["obs"][epoch] = elements
+            entry["obs"][epoch] = _lay_over(entry["obs"].get(epoch), elements, network.partial)
 
         lines: list[bytes] = []
-        network_rows: list[list[Any]] = []
+        rows: list[list[Any]] = []
         offset = 0
         latest = 0
-        index = len(published_networks)
         for station_id in sorted(entries):
             entry = entries[station_id]
             kept = {
@@ -209,10 +227,9 @@ def build_product(
             line = encode_json(station)
             newest_epoch = station["time"][-1]
             latest = max(latest, newest_epoch)
-            network_rows.append(
+            rows.append(
                 [
                     station_id,
-                    index,
                     station["lat"],
                     station["lon"],
                     station["elev"],
@@ -231,28 +248,43 @@ def build_product(
             LOG.warning("synop %s: no station observed in the window; the network is left out", network.id)
             continue
         body = b"\n".join(lines) + b"\n"
-        filename = network_filename(network.id)
-        write_bytes_atomic(directory / filename, body)
+        stations_payload = {
+            "schemaVersion": SCHEMA_VERSION,
+            "network": network.id,
+            "issued": issued,
+            "elements": list(ELEMENTS),
+            "stations": rows,
+        }
+        stations_bytes = encode_json(stations_payload)
+        write_bytes_atomic(directory / network_filename(network.id), body)
+        write_bytes_atomic(directory / stations_filename(network.id), stations_bytes)
         published_networks.append(
             network.to_json()
             | {
                 "latest": iso_z(datetime.fromtimestamp(latest, UTC)),
-                "file": {"path": filename, "byteLength": len(body), "crc32": crc32_hex(body)},
+                "file": {"path": network_filename(network.id), "byteLength": len(body), "crc32": crc32_hex(body)},
+                "stations": {
+                    "path": stations_filename(network.id),
+                    "byteLength": len(stations_bytes),
+                    "crc32": crc32_hex(stations_bytes),
+                    "count": len(rows),
+                },
             }
         )
-        rows.extend(network_rows)
+        station_files.append((network.id, stations_payload))
+        station_count += len(rows)
 
-    rows.sort(key=lambda row: row[0])
     index_payload = {
         "schemaVersion": SCHEMA_VERSION,
-        "issued": iso_z(moment),
+        "issued": issued,
         "generated": iso_z(now),
         "networks": published_networks,
         "elements": list(ELEMENTS),
-        "stations": rows,
         "sources": [_published(status) for status in sources],
     }
     validate_index(index_payload)
+    for network_id, stations_payload in station_files:
+        validate_stations_file(stations_payload, index_payload, network_id)
     index_bytes = encode_json(index_payload)
     write_bytes_atomic(directory / INDEX_FILENAME, index_bytes)
 
@@ -269,10 +301,15 @@ def build_product(
     return {
         "round": round_name(moment),
         "directory": str(directory),
-        "stations": len(rows),
+        "stations": station_count,
         "observations": observation_count,
         "networks": [
-            {"id": network["id"], "latest": network["latest"], "byteLength": network["file"]["byteLength"]}
+            {
+                "id": network["id"],
+                "latest": network["latest"],
+                "stations": network["stations"]["count"],
+                "byteLength": network["file"]["byteLength"],
+            }
             for network in published_networks
         ],
         "sources": index_payload["sources"],
@@ -285,7 +322,8 @@ def load_previous_index(path: Path | None, output_root: Path) -> dict[str, Any] 
     """The previous round's index, whose network files are this round's
     history: the one given, else the one the local pointer names, else
     nothing (a first build — the window then starts from what the networks
-    still hold)."""
+    still hold). A v1 index is as good as a v2 one here: only its
+    ``networks`` are read."""
     return pointproduct.load_previous_index(
         path,
         output_root,

@@ -1,0 +1,71 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-10-31T15:45:00Z",
+ "generated": "2026-10-31T15:46:50Z",
+ "networks": [
+  {
+   "id": "airnow",
+   "name": "AirNow",
+   "cadence": 3600,
+   "avgPeriod": 3600,
+   "preliminary": true,
+   "attribution": "AirNow (U.S. EPA) and the reporting agencies; preliminary data",
+   "license": "AirNow-DEG",
+   "url": "https://www.airnow.gov/",
+   "latest": "2026-10-31T15:00:00Z",
+   "file": {
+    "path": "airnow.jsonl",
+    "byteLength": 1931,
+    "crc32": "e5d0c4f5"
+   },
+   "stations": {
+    "path": "airnow.stations.json",
+    "byteLength": 1240,
+    "crc32": "5cfe1d96",
+    "count": 7
+   }
+  },
+  {
+   "id": "hkepd",
+   "name": "Hong Kong EPD",
+   "cadence": 3600,
+   "avgPeriod": 3600,
+   "preliminary": true,
+   "attribution": "Environmental Protection Department, HKSAR Government (DATA.GOV.HK)",
+   "license": "DATA.GOV.HK",
+   "url": "https://www.aqhi.gov.hk/",
+   "latest": "2026-10-31T14:00:00Z",
+   "file": {
+    "path": "hkepd.jsonl",
+    "byteLength": 4377,
+    "crc32": "984da24e"
+   },
+   "stations": {
+    "path": "hkepd.stations.json",
+    "byteLength": 638,
+    "crc32": "b14b7472",
+    "count": 4
+   }
+  }
+ ],
+ "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "sources": [
+  {
+   "id": "airnow-hourly",
+   "ok": true,
+   "fetched": "2026-10-31T15:46:40Z",
+   "url": "https://files.airnowtech.org/airnow",
+   "files": 3,
+   "missing": 0,
+   "reports": 21,
+   "unplaced": 3
+  },
+  {
+   "id": "epd-24pc",
+   "ok": false,
+   "fetched": "2026-10-31T15:46:41Z",
+   "url": "https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml",
+   "error": "HTTP Error 503: Service Unavailable"
+  }
+ ]
+}

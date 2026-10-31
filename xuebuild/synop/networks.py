@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..airport.fetch import SourceStatus
-from . import amedas
+from . import amedas, dwd, hko
 from .station import NetworkRead
 
 
@@ -33,6 +33,11 @@ class Network:
     raw files and say how it went. ``since`` is the network's newest
     published time, or None."""
     read: Callable[[Path, dict[str, SourceStatus]], NetworkRead]
+    partial: bool = False
+    """Whether one station's report at one time can arrive in pieces —
+    several messages, several files, several rounds. The merge then lays a
+    new report over the old element by element, so a piece that leaves an
+    element out does not erase what an earlier piece said."""
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -59,7 +64,35 @@ AMEDAS = Network(
     read=amedas.read,
 )
 
-NETWORKS: tuple[Network, ...] = (AMEDAS,)
+DWD = Network(
+    id=dwd.NETWORK,
+    name="DWD SYNOP Germany",
+    cadence=600,
+    pr_period=600,
+    attribution="Source: Deutscher Wetterdienst",
+    license="CC-BY-4.0",
+    url="https://opendata.dwd.de/",
+    sources=(dwd.SOURCE,),
+    fetch=dwd.fetch,
+    read=dwd.read,
+    partial=True,
+)
+
+HKO = Network(
+    id=hko.NETWORK,
+    name="Hong Kong Observatory",
+    cadence=600,
+    pr_period=None,
+    attribution="Hong Kong Observatory (DATA.GOV.HK)",
+    license="DATA.GOV.HK",
+    url="https://data.gov.hk/",
+    sources=(hko.SOURCE,),
+    fetch=hko.fetch,
+    read=hko.read,
+    partial=True,
+)
+
+NETWORKS: tuple[Network, ...] = (AMEDAS, DWD, HKO)
 
 
 def network_by_id(network_id: str) -> Network | None:

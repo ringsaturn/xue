@@ -1,0 +1,857 @@
+{
+ "type": "FeatureCollection",
+ "numberMatched": 3,
+ "numberReturned": 3,
+ "links": [
+  {
+   "type": "application/geo+json",
+   "rel": "self",
+   "title": "This document as GeoJSON",
+   "href": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000"
+  },
+  {
+   "rel": "alternate",
+   "type": "application/ld+json",
+   "title": "This document as RDF (JSON-LD)",
+   "href": "https://api.weather.gc.ca/collections/weather-alerts/items?f=jsonld&limit=1000"
+  },
+  {
+   "type": "text/html",
+   "rel": "alternate",
+   "title": "This document as HTML",
+   "href": "https://api.weather.gc.ca/collections/weather-alerts/items?f=html&limit=1000"
+  },
+  {
+   "type": "application/json",
+   "title": "Weather Alerts",
+   "rel": "collection",
+   "href": "https://api.weather.gc.ca/collections/weather-alerts"
+  }
+ ],
+ "features": [
+  {
+   "id": "700460001437647014202610310502_fea1-2388",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -120.58000183,
+       51
+      ],
+      [
+       -120.58000183,
+       51.09999847
+      ],
+      [
+       -120.58000183,
+       51.20000076
+      ],
+      [
+       -120.58000183,
+       51.29999924
+      ],
+      [
+       -120.58000183,
+       51.40000153
+      ],
+      [
+       -120.58000183,
+       51.5
+      ],
+      [
+       -120.58000183,
+       51.59999847
+      ],
+      [
+       -120.58000183,
+       51.70000076
+      ],
+      [
+       -120.58000183,
+       51.79999924
+      ],
+      [
+       -120.58000183,
+       51.90000153
+      ],
+      [
+       -120.58000183,
+       52
+      ],
+      [
+       -120.67766571,
+       51.97851181
+      ],
+      [
+       -120.77532959,
+       51.95702744
+      ],
+      [
+       -120.87299347,
+       51.93554306
+      ],
+      [
+       -120.97065735,
+       51.91405487
+      ],
+      [
+       -121.06832123,
+       51.8925705
+      ],
+      [
+       -121.16598511,
+       51.87108231
+      ],
+      [
+       -121.26364899,
+       51.84959793
+      ],
+      [
+       -121.3613205,
+       51.82810974
+      ],
+      [
+       -121.45898438,
+       51.80662155
+      ],
+      [
+       -121.55664825,
+       51.78513718
+      ],
+      [
+       -121.65431213,
+       51.76364899
+      ],
+      [
+       -121.75197601,
+       51.74216461
+      ],
+      [
+       -121.84963989,
+       51.72067642
+      ],
+      [
+       -121.94730377,
+       51.69919205
+      ],
+      [
+       -122.04496765,
+       51.67770386
+      ],
+      [
+       -122.08000183,
+       51.66999817
+      ],
+      [
+       -122.02599335,
+       51.58583832
+      ],
+      [
+       -121.97197723,
+       51.50168228
+      ],
+      [
+       -121.91796112,
+       51.41752243
+      ],
+      [
+       -121.86395264,
+       51.33336258
+      ],
+      [
+       -121.80994415,
+       51.24920654
+      ],
+      [
+       -121.75592804,
+       51.16504669
+      ],
+      [
+       -121.70191193,
+       51.08088684
+      ],
+      [
+       -121.65000153,
+       51
+      ],
+      [
+       -121.58000183,
+       51
+      ],
+      [
+       -121.48000336,
+       51
+      ],
+      [
+       -121.38000488,
+       51
+      ],
+      [
+       -121.27999878,
+       51
+      ],
+      [
+       -121.18000031,
+       51
+      ],
+      [
+       -121.08000183,
+       51
+      ],
+      [
+       -120.98000336,
+       51
+      ],
+      [
+       -120.88000488,
+       51
+      ],
+      [
+       -120.77999878,
+       51
+      ],
+      [
+       -120.6800003,
+       51
+      ],
+      [
+       -120.58000183,
+       51
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "alert_code": "FGA",
+    "alert_type": "advisory",
+    "alert_name_en": "fog advisory",
+    "alert_name_fr": "avis de brouillard",
+    "alert_short_name_en": "Fog (advisory)",
+    "alert_short_name_fr": "Brouillard (avis)",
+    "publication_datetime": "2026-10-31T23:13:24.008Z",
+    "expiration_datetime": "2026-11-01T00:04:00.000Z",
+    "validity_datetime": "2026-10-31T23:09:00.000Z",
+    "event_end_datetime": "2026-11-01T00:04:00.000Z",
+    "alert_text_en": "Near-zero visibility in fog is expected.\n\nWhen:\nNow until later this morning.\n\nWhere:\n- East Columbia\n- 100 Mile House (near Clinton)\n\nVisibility will likely be suddenly reduced at times.\n\nBe prepared for areas of near-zero visibility and allow extra time to reach your destination.\n\nFog advisories are issued when widespread poor visibility in fog is expected.\n\nPlease continue to monitor alerts and forecasts issued by Environment Canada. To report severe weather, send an email to BCstorm@ec.gc.ca or post reports on social media using #BCStorm.",
+    "alert_text_fr": "La visibilité sera presque nulle dans le brouillard. \n\nQuand :\nDe maintenant jusqu'à plus tard en matinée.\n\nOù :\n- Columbia Est\n- 100 Mile House (près de Clinton)\n\nUne visibilité soudainement réduite par moments est à prévoir.\n\nSoyez prêts à composer avec des zones où la visibilité est quasi nulle et prévoyez plus de temps pour vous rendre à destination.\n\nUn avis de brouillard est émis lorsqu'une mauvaise visibilité généralisée due au brouillard est prévue.\n\nVeuillez continuer à surveiller les alertes et les prévisions émises par Environnement Canada. Pour signaler du temps violent, envoyez un courriel à meteoBC@ec.gc.ca ou publiez un message sur les réseaux sociaux en utilisant #BCMeteo.",
+    "risk_colour_en": "yellow",
+    "risk_colour_fr": "jaune",
+    "confidence_en": "High",
+    "confidence_fr": "élevée",
+    "impact_en": "Moderate",
+    "impact_fr": "modéré",
+    "feature_name_en": "100 Mile",
+    "feature_name_fr": "100 Mile",
+    "province": "BC",
+    "status_en": "issued",
+    "status_fr": "émis",
+    "feature_id": "fea1-2388"
+   }
+  },
+  {
+   "id": "125386601972808215202610310502_fea1-2437",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -141.00172532,
+       61.39983403
+      ],
+      [
+       -141.00172532,
+       61.39983396
+      ],
+      [
+       -141.0017254,
+       61.39983082
+      ],
+      [
+       -140.99344399,
+       61.39609761
+      ],
+      [
+       -140.95904541,
+       61.38087845
+      ],
+      [
+       -140.86741638,
+       61.34083557
+      ],
+      [
+       -140.77577209,
+       61.30079269
+      ],
+      [
+       -140.68412781,
+       61.260746
+      ],
+      [
+       -140.59248352,
+       61.22070313
+      ],
+      [
+       -140.50083923,
+       61.18066025
+      ],
+      [
+       -140.40919495,
+       61.14061356
+      ],
+      [
+       -140.31755066,
+       61.10057449
+      ],
+      [
+       -140.22590637,
+       61.0605278
+      ],
+      [
+       -140.13426209,
+       61.02048874
+      ],
+      [
+       -140.0426178,
+       60.98044586
+      ],
+      [
+       -139.95097351,
+       60.94040298
+      ],
+      [
+       -139.85932922,
+       60.90036011
+      ],
+      [
+       -139.76768493,
+       60.86031723
+      ],
+      [
+       -139.67604065,
+       60.82027435
+      ],
+      [
+       -139.58439636,
+       60.78023148
+      ],
+      [
+       -139.49275208,
+       60.7401886
+      ],
+      [
+       -139.40110779,
+       60.70014572
+      ],
+      [
+       -139.3094635,
+       60.66009903
+      ],
+      [
+       -139.21783447,
+       60.62005615
+      ],
+      [
+       -139.12619019,
+       60.58000946
+      ],
+      [
+       -139.0345459,
+       60.53996277
+      ],
+      [
+       -138.94291687,
+       60.49991608
+      ],
+      [
+       -138.85128784,
+       60.45986939
+      ],
+      [
+       -138.75964355,
+       60.41982269
+      ],
+      [
+       -138.66801453,
+       60.379776
+      ],
+      [
+       -138.5763855,
+       60.33972931
+      ],
+      [
+       -138.48475647,
+       60.29968262
+      ],
+      [
+       -138.47705078,
+       60.30916214
+      ],
+      [
+       -138.41398621,
+       60.38676453
+      ],
+      [
+       -138.35093689,
+       60.4643631
+      ],
+      [
+       -138.28787231,
+       60.54196167
+      ],
+      [
+       -138.22480774,
+       60.61956024
+      ],
+      [
+       -138.16174316,
+       60.69716263
+      ],
+      [
+       -138.09867859,
+       60.7747612
+      ],
+      [
+       -138.03561401,
+       60.85236359
+      ],
+      [
+       -137.9725647,
+       60.92996597
+      ],
+      [
+       -137.90950012,
+       61.00756836
+      ],
+      [
+       -137.84643555,
+       61.08517075
+      ],
+      [
+       -137.78337097,
+       61.16277313
+      ],
+      [
+       -137.7203064,
+       61.2403717
+      ],
+      [
+       -137.65724182,
+       61.31797791
+      ],
+      [
+       -137.59417725,
+       61.39558029
+      ],
+      [
+       -137.53112793,
+       61.47318268
+      ],
+      [
+       -137.46806335,
+       61.55078506
+      ],
+      [
+       -137.40499878,
+       61.62838745
+      ],
+      [
+       -137.3419342,
+       61.70598984
+      ],
+      [
+       -137.27886963,
+       61.78359604
+      ],
+      [
+       -137.25195312,
+       61.81670761
+      ],
+      [
+       -137.26829529,
+       61.81969833
+      ],
+      [
+       -137.36665344,
+       61.83769607
+      ],
+      [
+       -137.46502686,
+       61.85569763
+      ],
+      [
+       -137.56338501,
+       61.87369919
+      ],
+      [
+       -137.66175842,
+       61.89170074
+      ],
+      [
+       -137.76011658,
+       61.9097023
+      ],
+      [
+       -137.85848999,
+       61.92770386
+      ],
+      [
+       -137.9568634,
+       61.9457016
+      ],
+      [
+       -138.05522156,
+       61.96370316
+      ],
+      [
+       -138.15359497,
+       61.98170471
+      ],
+      [
+       -138.25196838,
+       61.99970627
+      ],
+      [
+       -138.26631165,
+       61.9965744
+      ],
+      [
+       -138.36401367,
+       61.97525787
+      ],
+      [
+       -138.4617157,
+       61.95394134
+      ],
+      [
+       -138.55941773,
+       61.932621
+      ],
+      [
+       -138.65711975,
+       61.91130447
+      ],
+      [
+       -138.75482178,
+       61.88998795
+      ],
+      [
+       -138.8525238,
+       61.86867142
+      ],
+      [
+       -138.95022583,
+       61.84735107
+      ],
+      [
+       -139.04792786,
+       61.82603455
+      ],
+      [
+       -139.14562988,
+       61.80471802
+      ],
+      [
+       -139.24333191,
+       61.78339768
+      ],
+      [
+       -139.34103394,
+       61.76208115
+      ],
+      [
+       -139.43873596,
+       61.74076462
+      ],
+      [
+       -139.53643799,
+       61.71944428
+      ],
+      [
+       -139.63415527,
+       61.69812775
+      ],
+      [
+       -139.7318573,
+       61.6768074
+      ],
+      [
+       -139.82955933,
+       61.65548706
+      ],
+      [
+       -139.92727661,
+       61.63417053
+      ],
+      [
+       -140.02497864,
+       61.61285019
+      ],
+      [
+       -140.12268066,
+       61.59153366
+      ],
+      [
+       -140.22039795,
+       61.57021332
+      ],
+      [
+       -140.31809998,
+       61.54889679
+      ],
+      [
+       -140.415802,
+       61.52757645
+      ],
+      [
+       -140.51351929,
+       61.50625992
+      ],
+      [
+       -140.61122131,
+       61.48494339
+      ],
+      [
+       -140.70890808,
+       61.46362305
+      ],
+      [
+       -140.80661011,
+       61.44229889
+      ],
+      [
+       -140.90429688,
+       61.42097473
+      ],
+      [
+       -141.00172532,
+       61.39983403
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "alert_code": "WDW",
+    "alert_type": "warning",
+    "alert_name_en": "wind warning",
+    "alert_name_fr": "avertissement de vent",
+    "alert_short_name_en": "Wind",
+    "alert_short_name_fr": "Vent",
+    "publication_datetime": "2026-10-31T21:30:39.363Z",
+    "expiration_datetime": "2026-11-01T13:30:39.363Z",
+    "validity_datetime": "2026-10-31T21:25:00.000Z",
+    "event_end_datetime": "2026-11-01T14:25:00.000Z",
+    "alert_text_en": "Damaging winds are expected.\n\nWhere: Burwash\n\nWhen: Tonight through Saturday morning\n\nAdditional information:\nA frontal system over the Gulf of Alaska is producing very strong winds near Burwash. Southeast winds gusting to 90 km/h will continue through Saturday morning. Winds will ease around midday Saturday as the front weakens slightly and moves southward.\n\nLocal utility outages are possible. Damage to roofs, fences, branches or soft shelters is possible.\n\nPlease continue to monitor alerts and forecasts issued by Environment Canada. To report severe weather, send an email to YTstorm@ec.gc.ca or post reports on social media using #YTStorm.",
+    "alert_text_fr": "Des vents destructeurs sont prévus.\n\nOù : Burwash\n\nQuand : ce soir, cette nuit et samedi matin.\n\nRenseignements supplémentaires :\nUn système frontal sur le golfe de l'Alaska produit des vents très forts près de Burwash. Les vents du sud-est soufflant en rafales à 90 km/h persisteront jusqu'à samedi matin. Les vents diminueront d'intensité vers le milieu de la journée samedi à mesure que le front faiblira légèrement et se déplacera vers le sud.\n\nDes pannes de courant sont possibles par endroits. Des dommages aux toits, aux clôtures, aux branches ou aux abris souples sont possibles.\n\nVeuillez continuer à surveiller les alertes et les prévisions émises par Environnement Canada. Pour signaler du temps violent, envoyez un courriel à meteoYT@ec.gc.ca ou publiez un message sur les réseaux sociaux en utilisant #YTMeteo.",
+    "risk_colour_en": "yellow",
+    "risk_colour_fr": "jaune",
+    "confidence_en": "High",
+    "confidence_fr": "élevée",
+    "impact_en": "Moderate",
+    "impact_fr": "modéré",
+    "feature_name_en": "Kluane Lake",
+    "feature_name_fr": "lac Klouane",
+    "province": "YT",
+    "status_en": "issued",
+    "status_fr": "émis",
+    "feature_id": "fea1-2437"
+   }
+  },
+  {
+   "id": "1957348081643283032202610300501_fea1-2521",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -65.17932935,
+       66.11387861
+      ],
+      [
+       -65.17581479,
+       66.15884843
+      ],
+      [
+       -65.19554058,
+       66.20314544
+      ],
+      [
+       -65.30020621,
+       66.28160007
+      ],
+      [
+       -65.30054075,
+       66.28176124
+      ],
+      [
+       -65.30166706,
+       66.28228606
+      ],
+      [
+       -65.50107918,
+       66.34087194
+      ],
+      [
+       -65.5020144,
+       66.34088381
+      ],
+      [
+       -65.50278615,
+       66.34101563
+      ],
+      [
+       -65.50292791,
+       66.34103853
+      ],
+      [
+       -65.68149913,
+       66.35701793
+      ],
+      [
+       -65.68492183,
+       66.35708453
+      ],
+      [
+       -65.68862705,
+       66.3571336
+      ],
+      [
+       -65.88232779,
+       66.34525112
+      ],
+      [
+       -66.04398726,
+       66.3087768
+      ],
+      [
+       -66.1665783,
+       66.25078574
+      ],
+      [
+       -66.16800535,
+       66.24979236
+      ],
+      [
+       -66.16800137,
+       66.24977432
+      ],
+      [
+       -66.1688214,
+       66.24916469
+      ],
+      [
+       -66.16802607,
+       66.24977665
+      ],
+      [
+       -66.18508161,
+       66.23684367
+      ],
+      [
+       -66.18550205,
+       66.23648028
+      ],
+      [
+       -66.1862567,
+       66.23583845
+      ],
+      [
+       -66.22090006,
+       66.19792478
+      ],
+      [
+       -66.22100562,
+       66.19776899
+      ],
+      [
+       -66.22167694,
+       66.19670632
+      ],
+      [
+       -66.22176486,
+       66.19656714
+      ],
+      [
+       -66.22145601,
+       66.19651185
+      ],
+      [
+       -66.22140172,
+       66.19618019
+      ],
+      [
+       -66.22138521,
+       66.19534624
+      ],
+      [
+       -66.21701169,
+       66.18326323
+      ],
+      [
+       -66.21968329,
+       66.10912626
+      ],
+      [
+       -66.09525693,
+       66.03859881
+      ],
+      [
+       -65.94560748,
+       65.95661764
+      ],
+      [
+       -65.88211517,
+       65.93294891
+      ],
+      [
+       -65.4561739,
+       65.93998248
+      ],
+      [
+       -65.25981111,
+       65.98406393
+      ],
+      [
+       -65.25277584,
+       66.03018338
+      ],
+      [
+       -65.17932935,
+       66.11387861
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "alert_code": "SFW",
+    "alert_type": "warning",
+    "alert_name_en": "snowfall warning",
+    "alert_name_fr": "avertissement de neige",
+    "alert_short_name_en": "Snowfall",
+    "alert_short_name_fr": "Neige",
+    "publication_datetime": "2026-10-31T23:45:51.493Z",
+    "expiration_datetime": "2026-11-01T00:45:51.493Z",
+    "validity_datetime": "2026-10-31T09:00:00.000Z",
+    "event_end_datetime": "2026-11-01T21:00:00.000Z",
+    "alert_text_en": "Snow at times heavy will continue through the weekend at Pangnirtung, with total accumulation in the 25-40 cm range by Sunday evening.\n\nVisibility will likely be reduced at times.\n\nPrepare for quickly changing and deteriorating travel conditions. Take frequent breaks and avoid strain when clearing snow.\n\nPlease continue to monitor alerts and forecasts issued by Environment Canada. To report severe weather, send an email to NUstorm@ec.gc.ca, call 1-800-239-0484 or post reports on social media using #NUStorm.",
+    "alert_text_fr": "De la neige parfois forte continuera de tomber au cours de la fin de semaine à Pangnirtung, et on prévoit une accumulation totale de 25 à 40 cm de neige d'ici dimanche soir.\n\nLa visibilité sera probablement réduite par moments.\n\nPréparez-vous à composer avec des conditions routières qui changent et se détériorent rapidement. Prenez des pauses fréquentes et évitez de trop forcer lorsque vous déblayez la neige.\n\nVeuillez continuer à surveiller les alertes et les prévisions émises par Environnement Canada. Pour signaler du temps violent, envoyez un courriel à meteoNU@ec.gc.ca, appelez au 1-800-239-0484 ou publiez un message sur les réseaux sociaux en utilisant #NUMeteo.",
+    "risk_colour_en": "yellow",
+    "risk_colour_fr": "jaune",
+    "confidence_en": "High",
+    "confidence_fr": "élevée",
+    "impact_en": "Moderate",
+    "impact_fr": "modéré",
+    "feature_name_en": "Pangnirtung",
+    "feature_name_fr": "Pangnirtung",
+    "province": "NU",
+    "status_en": "ended",
+    "status_fr": "terminé",
+    "feature_id": "fea1-2521"
+   }
+  }
+ ],
+ "timeStamp": "2026-11-01T00:01:10.000000Z"
+}

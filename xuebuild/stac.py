@@ -137,10 +137,11 @@ _XUE_PROVIDER = {
 
 
 # The point products published beside the runs (`docs/sounding.md`,
-# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`, `docs/fire.md`): a fixed list rather than a registry,
+# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`, `docs/fire.md`, `docs/aq.md`,
+# `docs/alerts.md`): a fixed list rather than a registry,
 # since each is its own pipeline under one delivery contract
 # (`xuebuild/pointproduct.py`). They are the root catalog's other children.
-POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad", "fire")
+POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad", "fire", "aq", "alerts")
 
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
@@ -157,7 +158,8 @@ def _point_product_prose(product: str) -> dict[str, Any]:
     than under CC0 (`CC0-1.0` would claim a waiver nobody granted), so
     that too is `other`, with the service's own terms linked. The surface
     stations are each network's own terms — JMA's site content is under
-    the Public Data License v1.0, which no SPDX id spells — so the
+    the Public Data License v1.0 and Hong Kong's under the DATA.GOV.HK
+    terms, which no SPDX id spells, beside DWD's CC BY 4.0 — so the
     Collection is `other` and links each network's terms. The single-site
     radar is NOAA open data with attribution requested, which no SPDX id
     spells either, and so are the FIRMS fire detections: NASA Earth
@@ -257,15 +259,17 @@ def _point_product_prose(product: str) -> dict[str, Any]:
         "synop": {
             "title": "Surface weather stations",
             "description": (
-                "National surface observation networks, aggregated every ten minutes: each station's "
-                "newest values in the index, and its last 24 hours as columns on one line of its "
-                "network's NDJSON file beside it, in one set of elements and SI units whatever the "
-                "network. The first network is the Japan Meteorological Agency's AMeDAS, about 1 300 "
-                "stations every ten minutes. A rolling window with no fixed start — only the newest "
-                "round is published, and each round carries the whole window."
+                "National surface observation networks, aggregated every ten minutes: per network, every "
+                "station's position and newest values in a stations file, and its last 24 hours as columns "
+                "on one line of an NDJSON file beside it, in one set of elements and SI units whatever the "
+                "network. The networks are the Japan Meteorological Agency's AMeDAS (about 1 300 stations), "
+                "Deutscher Wetterdienst's national SYNOP reports (about 1 000 German stations) and the Hong "
+                "Kong Observatory's regional weather (about 50 stations), each every ten minutes. A rolling "
+                "window with no fixed start — only the newest round is published, and each round carries "
+                "the whole window."
             ),
             "license": "other",
-            "keywords": ["weather", "observation", "surface", "station", "synop", "amedas"],
+            "keywords": ["weather", "observation", "surface", "station", "synop", "amedas", "dwd", "hko"],
             "providers": [
                 {
                     "name": "Japan Meteorological Agency",
@@ -276,6 +280,24 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "roles": ["producer", "licensor"],
                     "url": "https://www.jma.go.jp/bosai/amedas/",
                 },
+                {
+                    "name": "Deutscher Wetterdienst",
+                    "description": (
+                        "National ten-minute SYNOP reports from the DWD open data server. Source: Deutscher "
+                        "Wetterdienst; reused under CC BY 4.0."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://opendata.dwd.de/",
+                },
+                {
+                    "name": "Hong Kong Observatory",
+                    "description": (
+                        "Regional weather readings as published on DATA.GOV.HK, reused under its terms of use "
+                        "with the Observatory credited."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://data.gov.hk/",
+                },
                 _XUE_PROVIDER,
             ],
             "links": [
@@ -284,6 +306,130 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
                     "type": "text/html",
                     "title": "JMA website terms of use: Public Data License v1.0, source credit required",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/by/4.0/",
+                    "type": "text/html",
+                    "title": "DWD open data: CC BY 4.0, \"Source: Deutscher Wetterdienst\"",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://data.gov.hk/en/terms-and-conditions",
+                    "type": "text/html",
+                    "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged",
+                },
+            ],
+        },
+        "aq": {
+            "title": "Air-quality stations",
+            "description": (
+                "Hourly air-quality observations from national monitoring networks, aggregated every half "
+                "hour: per network, every station's position and newest values in a stations file, and its "
+                "last 24 hours as columns on one line of an NDJSON file beside it, in one set of pollutants "
+                "and units (particulates in µg/m³, gases in ppb, CO in ppm) whatever the network. The "
+                "networks are AirNow (US, Canada, Mexico and US missions abroad, about 2 000 monitors) and "
+                "Hong Kong's Environmental Protection Department (18 stations). The values are preliminary, "
+                "as the agencies publish them, and no air-quality index is computed. A rolling window with "
+                "no fixed start — only the newest round is published, and each round carries the whole window."
+            ),
+            "license": "other",
+            "keywords": ["air quality", "observation", "station", "pm2.5", "ozone", "airnow", "hong kong"],
+            "providers": [
+                {
+                    "name": "AirNow (U.S. EPA) and the reporting agencies",
+                    "description": (
+                        "Preliminary hourly observations from the AirNow file products; each station's own "
+                        "agency is credited with its data."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.airnow.gov/",
+                },
+                {
+                    "name": "Environmental Protection Department, HKSAR Government",
+                    "description": (
+                        "Pollutant concentrations as published on DATA.GOV.HK, reused under its terms of use "
+                        "with the department credited."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.aqhi.gov.hk/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
+                    "type": "application/pdf",
+                    "title": "AirNow Data Exchange Guidelines: preliminary data, agency credit, values unaltered",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://data.gov.hk/en/terms-and-conditions",
+                    "type": "text/html",
+                    "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged",
+                },
+            ],
+        },
+        "alerts": {
+            "title": "Weather warnings",
+            "description": (
+                "The weather warnings in force, as a snapshot every five minutes: one row per warning in the "
+                "index with a common category and a 1–5 level beside the issuing service's own event and "
+                "level, and per service one NDJSON file holding every warning's full text in every language "
+                "the service publishes it in, its area codes and its polygon where the service draws one. "
+                "Area codes resolve against versioned boundary sets published once per upstream release. "
+                "The services are the US National Weather Service, the Japan Meteorological Agency and "
+                "Environment and Climate Change Canada. Only the newest snapshot is published; it is not an "
+                "official warning service, and the issuing service's own channels take precedence."
+            ),
+            "license": "other",
+            "keywords": ["weather", "warning", "alert", "cap", "nws", "jma", "eccc"],
+            "providers": [
+                {
+                    "name": "US National Weather Service",
+                    "description": "Active alerts from api.weather.gov, a work of the US government.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.weather.gov/",
+                },
+                {
+                    "name": "Japan Meteorological Agency",
+                    "description": (
+                        "Warnings and advisories as the agency's website publishes them; 出典：気象庁ホームページ. "
+                        "Reused under the Public Data License v1.0."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.jma.go.jp/bosai/warning/",
+                },
+                {
+                    "name": "Environment and Climate Change Canada",
+                    "description": (
+                        "Public weather alerts from the MSC GeoMet API; contains information licensed under the "
+                        "Open Government Licence – Canada."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://weather.gc.ca/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.weather.gov/disclaimer",
+                    "type": "text/html",
+                    "title": "NWS disclaimer: US government work, free to use",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+                    "type": "text/html",
+                    "title": "JMA website terms of use: Public Data License v1.0, source credit required",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://open.canada.ca/en/open-government-licence-canada",
+                    "type": "text/html",
+                    "title": "Open Government Licence – Canada 2.0",
                 },
             ],
         },
@@ -1815,7 +1961,18 @@ def _point_product_directory(product: str, index_relative_path: str) -> str:
     return directory
 
 
-def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[float, float]]:
+def _network_stations_files(index: dict[str, Any], stations_files: dict[str, dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """A v2 synop round's stations files, one per network of the index:
+    the positions are in them, not in the index."""
+    networks = [network["id"] for network in index["networks"]]
+    if stations_files is None or any(network not in stations_files for network in networks):
+        raise StacError("a round with per-network stations files needs them to describe its stations")
+    return [stations_files[network] for network in networks]
+
+
+def _point_product_positions(
+    index: dict[str, Any], product: str, stations_files: dict[str, dict[str, Any]] | None = None
+) -> list[tuple[float, float]]:
     """Every station's (longitude, latitude): the soundings' and the
     airports' own, a storm's headline position. A storm with nothing
     observed has none, and an index of such storms alone has no geometry
@@ -1824,8 +1981,19 @@ def _point_product_positions(index: dict[str, Any], product: str) -> list[tuple[
         return [(float(station["lon"]), float(station["lat"])) for station in index["stations"]]
     if product == "airport":
         return [(float(row[2]), float(row[1])) for row in index["stations"]]
-    if product == "synop":
-        return [(float(row[3]), float(row[2])) for row in index["stations"]]
+    if product == "synop" or product == "aq":
+        if product == "synop" and index["schemaVersion"] == 1:
+            return [(float(row[3]), float(row[2])) for row in index["stations"]]
+        return [
+            (float(row[2]), float(row[1]))
+            for payload in _network_stations_files(index, stations_files)
+            for row in payload["stations"]
+        ]
+    if product == "alerts":
+        # Most warnings name area codes rather than drawing a polygon, and
+        # the services between them cover most of a hemisphere, so a round
+        # with any warning states the whole world, as a fire round does.
+        return [(-180.0, -90.0), (180.0, 90.0)] if index["alerts"] else []
     if product == "nexrad":
         return [(float(row[3]), float(row[2])) for row in index["sites"]]
     if product == "fire":
@@ -1857,11 +2025,17 @@ def _point_product_period(index: dict[str, Any], product: str, issued: datetime)
             iso_z(issued - timedelta(hours=24)),
             max((row[4] for row in index["stations"]), default=default),
         )
-    elif product == "synop":
-        bounds = (
-            iso_z(issued - timedelta(hours=24)),
-            max((row[7] for row in index["stations"]), default=default),
+    elif product == "synop" or product == "aq":
+        # A network's `latest` is its newest station's newest time.
+        newest = (
+            (row[7] for row in index["stations"])
+            if product == "synop" and index["schemaVersion"] == 1
+            else (network["latest"] for network in index["networks"] if network.get("latest"))
         )
+        bounds = (iso_z(issued - timedelta(hours=24)), max(newest, default=default))
+    elif product == "alerts":
+        # A snapshot: from the oldest warning still in force to the round.
+        bounds = (min((row[5] for row in index["alerts"]), default=default), default)
     elif product == "fire":
         bounds = (
             index["window"]["start"],
@@ -1892,8 +2066,9 @@ def _point_product_assets(
     index: dict[str, Any], product: str, index_byte_length: int, index_crc32: str
 ) -> dict[str, Any]:
     """The issue's files as assets: the index itself, then what it names —
-    the one NDJSON file the soundings and the airports publish, one per
-    network for the surface stations, or one JSON file per storm. Every href carries the ``?v=`` the reader fetches it
+    the one NDJSON file the soundings and the airports publish, an NDJSON
+    file and (from schema v2) a stations file per network for the surface
+    stations, or one JSON file per storm. Every href carries the ``?v=`` the reader fetches it
     under, which for the index is the pointer's own CRC32 (the index does
     not state its own length, so the caller, which has the bytes, does)."""
     assets: dict[str, Any] = {
@@ -1922,7 +2097,37 @@ def _point_product_assets(
             **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
         }
         return assets
-    if product == "synop":
+    if product == "alerts":
+        for network in index["networks"]:
+            descriptor = network["file"]
+            assets[network["id"]] = {
+                "href": f"{descriptor['path']}?v={descriptor['crc32']}",
+                "type": NDJSON_MEDIA_TYPE,
+                "title": f"{network['name']}: warnings in force",
+                "description": (
+                    "One warning per line, sorted by id: every language the service publishes, area codes "
+                    "and the polygon where there is one. A warning's `offset` and `length` in the index are "
+                    "the byte span of its line's JSON object, excluding the newline, so one warning is one "
+                    "`Range: bytes=<offset>-<offset+length-1>` request."
+                ),
+                "roles": ["data"],
+                "xue:kind": "alerts",
+                "xue:network": network["id"],
+                **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+            }
+            areas = network.get("areas")
+            if areas is not None:
+                assets[f"{network['id']}.areas"] = {
+                    "href": f"{areas['path']}?v={areas['crc32']}",
+                    "type": "application/vnd.pmtiles",
+                    "title": f"{network['name']}: warning area boundaries ({areas['set']} {areas['version']})",
+                    "roles": ["data"],
+                    "xue:kind": "areas",
+                    "xue:network": network["id"],
+                    **_file_fields(areas["byteLength"], areas["crc32"], single_file=True),
+                }
+        return assets
+    if product == "synop" or product == "aq":
         for network in index["networks"]:
             descriptor = network["file"]
             assets[network["id"]] = {
@@ -1939,6 +2144,23 @@ def _point_product_assets(
                 "xue:kind": "series",
                 "xue:network": network["id"],
                 **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+            }
+            stations = network.get("stations")
+            if stations is None:
+                continue  # schema v1: the stations are rows of the index itself
+            assets[f"{network['id']}.stations"] = {
+                "href": f"{stations['path']}?v={stations['crc32']}",
+                "type": JSON_MEDIA_TYPE,
+                "title": f"{network['name']}: stations and current values",
+                "description": (
+                    "One row per station, sorted by id: position, rank, name, newest time, the current value "
+                    "of each element and the byte span of the station's line in the network's NDJSON file."
+                ),
+                "roles": ["data"],
+                "xue:kind": "stations",
+                "xue:network": network["id"],
+                "xue:stations": stations["count"],
+                **_file_fields(stations["byteLength"], stations["crc32"], single_file=True),
             }
         return assets
     if product == "fire":
@@ -2010,11 +2232,15 @@ def _point_product_count(index: dict[str, Any], product: str) -> int:
         return len(index["sites"])
     if product == "fire":
         return sum(sensor["count"] for sensor in index["sensors"])
+    if product == "alerts":
+        return len(index["alerts"])
+    if (product == "synop" and index["schemaVersion"] >= 2) or product == "aq":
+        return sum(network["stations"]["count"] for network in index["networks"])
     return len(index["stations"])
 
 
 def _point_product_label(product: str, issued: datetime) -> str:
-    if product in ("airport", "synop", "nexrad", "fire"):
+    if product in ("airport", "synop", "nexrad", "fire", "aq", "alerts"):
         return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
     return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
 
@@ -2026,9 +2252,13 @@ def point_product_item(
     *,
     product: str,
     index_relative_path: str,
+    stations_files: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The Item for one issue of a point product, from its ``index.json``
-    alone (``docs/stac.md`` §"Point products").
+    alone (``docs/stac.md`` §"Point products") — and, for a synop round of
+    schema v2, the parsed stations files beside it by network id
+    (``stations_files``), which hold the positions the index no longer
+    carries.
 
     ``index_relative_path`` is the index's path from the data root
     (``tc/2026/09/13/tc.2026091301/index.json``) — what the product's pointer
@@ -2040,7 +2270,7 @@ def point_product_item(
     catalog_href = posixpath.relpath(CATALOG_FILENAME, directory)
     collection_href = posixpath.relpath(f"{product}/{COLLECTION_FILENAME}", directory)
     issued = _parse_time(index["issued"])
-    positions = _point_product_positions(index, product)
+    positions = _point_product_positions(index, product, stations_files)
     bbox = (
         [
             round(min(lon for lon, _ in positions), 6),
@@ -2053,7 +2283,7 @@ def point_product_item(
     )
     start, end = _point_product_period(index, product, issued)
     prose = _point_product_prose(product)
-    count_key = {"tc": "xue:storms", "fire": "xue:detections"}.get(product, "xue:stations")
+    count_key = {"tc": "xue:storms", "fire": "xue:detections", "alerts": "xue:alerts"}.get(product, "xue:stations")
     properties: dict[str, Any] = {
         "title": f"{prose['title']} · {_point_product_label(product, issued)}",
         # The issue is one instant a client sorts on; the period it covers
@@ -2531,12 +2761,19 @@ def write_point_product_documents(
     index_bytes = index_path.read_bytes()
     index = json.loads(index_bytes)
     relative = index_path.relative_to(output_dir).as_posix()
+    stations_files = None
+    if (product == "synop" and index.get("schemaVersion", 1) >= 2) or product == "aq":
+        stations_files = {
+            network["id"]: json.loads(index_path.with_name(network["stations"]["path"]).read_bytes())
+            for network in index["networks"]
+        }
     item = point_product_item(
         index,
         len(index_bytes),
         _crc32_of(index_bytes),
         product=product,
         index_relative_path=relative,
+        stations_files=stations_files,
     )
     item_path = index_path.with_name(ITEM_FILENAME)
     _write_json(item_path, item)

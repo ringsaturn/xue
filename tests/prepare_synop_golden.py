@@ -2,16 +2,25 @@
 directories.
 
 ``tests/fixtures/synop/synop.202610050000/`` and ``…0010/`` are two
-consecutive rounds' raw directories as ``xue synop-build`` fetches them —
-JMA AMeDAS map snapshots cut to fifteen stations (a summit, a remote
-island, a precipitation-only gauge, a station the trimmed table does not
-place, cells with quasi-normal and missing quality codes), each round's
-``latest_time.txt`` and ``fetch.json`` — beside the station table they
-share. This script builds the first round, then the second on top of it,
-offline and with fixed generation times, and writes both under
+consecutive rounds' raw directories as ``xue synop-build`` fetches them,
+each with its ``fetch.json``, beside the AMeDAS station table they share:
+
+- ``amedas/`` — JMA AMeDAS map snapshots cut to fifteen stations (a
+  summit, a remote island, a precipitation-only gauge, a station the
+  trimmed table does not place, cells with quasi-normal and missing
+  quality codes) and ``latest_time.txt``;
+- ``dwd/`` — DWD national SYNOP BUFR batches cut to seven stations and
+  re-dated (``tests/fixtures/README.md`` says how);
+- ``hko/`` — the Hong Kong Observatory's five regional-weather CSVs,
+  re-dated, the second round without Waglan Island.
+
+This script builds the first round, then the second on top of it, offline
+and with fixed generation times, and writes both under
 ``tests/fixtures/synop/expected/`` for ``tests/test_synop.py`` to hold the
-build to: the index and the STAC documents pretty-printed, and each
-network file exactly as published, one station per line.
+build to: the index, the stations files and the STAC documents
+pretty-printed, and each network file exactly as published, one station
+per line. The DWD batches decode through eccodes' ``bufr_dump``, so it
+must be on PATH.
 
 Run it after a deliberate change to an adapter, the merge or the schema,
 and commit the diff with the change::
@@ -91,6 +100,8 @@ def build_expected(destination: Path) -> list[dict[str, object]]:
             for network in index["networks"]:
                 path = network["file"]["path"]
                 (destination / directory / path).write_bytes((output / directory / path).read_bytes())
+                stations = network["stations"]["path"]
+                _copy(output / directory / stations, destination / directory / stations)
             _copy(output / directory / "item.json", destination / directory / "item.json")
         _copy(output / "synop" / "collection.json", destination / "synop" / "collection.json")
         _copy(output / "synop" / "item.json", destination / "synop" / "item.json")

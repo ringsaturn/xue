@@ -332,7 +332,8 @@ fn the_synop_list_keys_the_values_by_element() {
     let data = Data::in_memory(bucket());
     let body = ok(&data, "synop", "");
     assert_eq!(body["issue"], "synop.202610050010");
-    assert_eq!(body["count"], 14);
+    // amedas 14, dwd 6, hko 51 in the golden.
+    assert_eq!(body["count"], 71);
     assert_eq!(body["networks"][0]["id"], "amedas");
     assert!(body["networks"][0].get("file").is_none());
     assert_eq!(body["elements"]["t"]["unit"], "°C");
@@ -349,7 +350,7 @@ fn the_synop_list_keys_the_values_by_element() {
     assert_eq!(amedas["count"], 14);
     let error = err(&data, "synop", "network=metar");
     assert_eq!((error.status, error.code.as_str()), (404, "unknown_network"));
-    assert_eq!(error.detail.unwrap()["available"], json!(["amedas"]));
+    assert_eq!(error.detail.unwrap()["available"], json!(["amedas", "dwd", "hko"]));
 }
 
 #[test]

@@ -211,9 +211,11 @@ prune-r2-sounding: ## Delete sounding issues beyond the newest SOUNDING_KEEP
 synop-build: ## Build the surface station product for ROUND
 	$(PYTHON) -m xuebuild synop-build --round $(SYNOP_ROUND) $(FORCE)
 
-# The live pointer, index and every network file it spans: the files are the
-# next build's history, so each CRC32 is checked rather than trusted, and a
-# missing one only restarts that network's window.
+# The live pointer, index and both files of every network it lists: the
+# .jsonl files are the next build's history, so each CRC32 is checked rather
+# than trusted, and a missing one only restarts that network's window. A
+# schema v1 index (the live round at the switch to v2) lists no stations
+# files, and is pulled all the same.
 live-synop-index: ## Pull the live synop pointer, index and network files
 	@set -e; mkdir -p web/public/data; \
 	pointer=$$($(S3) cp $(R2_ROOT)/latest-synop.json - --only-show-errors 2>/dev/null || true); \
@@ -223,8 +225,9 @@ live-synop-index: ## Pull the live synop pointer, index and network files
 	mkdir -p "web/public/data/$$directory"; \
 	$(S3) cp "$(R2_ROOT)/$$path" "web/public/data/$$path" --only-show-errors; \
 	printf '%s' "$$pointer" > web/public/data/latest-synop.json; \
-	for file in $$(jq -r '.networks[].file.path' "web/public/data/$$path"); do \
-		named=$$(jq -r --arg file "$$file" '.networks[] | select(.file.path == $$file) | .file.crc32' "web/public/data/$$path"); \
+	files=$$(jq -r '.networks[] | .file, (.stations // empty) | "\(.path)=\(.crc32)"' "web/public/data/$$path"); \
+	for entry in $$files; do \
+		file=$${entry%=*}; named=$${entry##*=}; \
 		if $(S3) cp "$(R2_ROOT)/$$directory/$$file" "web/public/data/$$directory/$$file" --only-show-errors; then \
 			crc=$$($(CRC32) "web/public/data/$$directory/$$file"); \
 			[ "$$crc" = "$$named" ] || { echo "the live $$file is CRC32 $$crc but its index says $$named"; exit 1; }; \
@@ -235,23 +238,28 @@ live-synop-index: ## Pull the live synop pointer, index and network files
 		fi; \
 	done
 
-# Every network file, then the index, then the pointer: each object before
-# the one that names it, and the pointer moves only once R2 reports every
-# size.
+# Every network's .jsonl, then every stations file, then the index and the
+# round's Item, then the pointer: each object before the one that names it,
+# and the pointer moves only once R2 reports every size.
 upload-r2-synop: ## Upload a synop round, then take it live
 	@set -e; \
 	$(call point_pointer_check,synop,$(SYNOP_ROUND),round,pass ROUND=YYYYMMDDHHMM,no network's observations arrived); \
-	files=$$(jq -r '.networks[].file.path' $$dir/index.json); \
-	for file in $$files; do \
+	series=$$(jq -r '.networks[].file.path' $$dir/index.json); \
+	stations=$$(jq -r '.networks[].stations.path' $$dir/index.json); \
+	for file in $$series; do \
 		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
 			--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	for file in $$stations; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	done; \
 	$(S3) cp $$dir/index.json $(R2_ROOT)/$$rel/index.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
 		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
 	[ -n "$(DRY_RUN)" ] || { \
-		for file in $$files index.json; do \
+		for file in $$series $$stations index.json; do \
 			local_bytes=$$(wc -c < "$$dir/$$file" | tr -d ' '); \
 			remote_bytes=$$($(call r2_size,$$rel/$$file)); \
 			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "$$rel/$$file is '$$remote_bytes' bytes on R2, not $$local_bytes; the pointer stays put"; exit 1; }; \
@@ -333,3 +341,166 @@ nexrad-case: ## Replay a nexrad showcase case, CASE=showcase/nexrad-cases/<id>.j
 
 prune-r2-nexrad: ## Delete nexrad rounds beyond the newest NEXRAD_KEEP
 	$(call point_prune,nexrad,$(NEXRAD_KEEP),round)
+
+# The air-quality product (docs/aq.md): rounds of ROUND=YYYYMMDDHHMM (the
+# minute a multiple of five), a <network>.jsonl and a <network>.stations.json
+# per network beside the index.
+AQ_ROUND = $(if $(ROUND),$(ROUND),now)
+AQ_KEEP ?= 6
+
+.PHONY: aq-build live-aq-index upload-r2-aq prune-r2-aq
+
+aq-build: ## Build the air-quality station product for ROUND
+	$(PYTHON) -m xuebuild aq-build --round $(AQ_ROUND) $(FORCE)
+
+# The live pointer, index and both files of every network it names: the
+# network files are the next build's history and the stations files what a
+# reader pairs with them, so each CRC32 is checked rather than trusted, and a
+# missing one only restarts that network's window.
+live-aq-index: ## Pull the live aq pointer, index and network files
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp $(R2_ROOT)/latest-aq.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live aq pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "$(R2_ROOT)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-aq.json; \
+	for file in $$(jq -r '.networks[] | .file.path, .stations.path' "web/public/data/$$path"); do \
+		named=$$(jq -r --arg file "$$file" '.networks[] | (.file, .stations) | select(.path == $$file) | .crc32' "web/public/data/$$path"); \
+		if $(S3) cp "$(R2_ROOT)/$$directory/$$file" "web/public/data/$$directory/$$file" --only-show-errors; then \
+			crc=$$($(CRC32) "web/public/data/$$directory/$$file"); \
+			[ "$$crc" = "$$named" ] || { echo "the live $$file is CRC32 $$crc but its index says $$named"; exit 1; }; \
+			echo "live aq round: $$directory/$$file ($$(wc -c < "web/public/data/$$directory/$$file" | tr -d ' ') bytes)"; \
+		else \
+			rm -f "web/public/data/$$directory/$$file"; \
+			echo "warning: $$path names $$file but R2 has no such object; that network's window starts again"; \
+		fi; \
+	done
+
+# Every network file, then every stations file (whose spans address the
+# network files), then the index, then the pointer: each object before the
+# one that names it, and the pointer moves only once R2 reports every size.
+upload-r2-aq: ## Upload an aq round, then take it live
+	@set -e; \
+	$(call point_pointer_check,aq,$(AQ_ROUND),round,pass ROUND=YYYYMMDDHHMM,no network's observations arrived); \
+	files=$$(jq -r '.networks[].file.path' $$dir/index.json); \
+	tables=$$(jq -r '.networks[].stations.path' $$dir/index.json); \
+	for file in $$files; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	for file in $$tables index.json; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		for file in $$files $$tables index.json; do \
+			local_bytes=$$(wc -c < "$$dir/$$file" | tr -d ' '); \
+			remote_bytes=$$($(call r2_size,$$rel/$$file)); \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "$$rel/$$file is '$$remote_bytes' bytes on R2, not $$local_bytes; the pointer stays put"; exit 1; }; \
+			echo "verified $$file ($$local_bytes bytes) on R2"; \
+		done; \
+	}; \
+	echo "Uploading latest-aq.json (takes aq round $(AQ_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-aq.json $(R2_ROOT)/latest-aq.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=aq DRY_RUN=$(DRY_RUN)
+
+prune-r2-aq: ## Delete aq rounds beyond the newest AQ_KEEP
+	$(call point_prune,aq,$(AQ_KEEP),round)
+
+# The weather warnings (docs/alerts.md): five-minute snapshot rounds, ROUND=YYYYMMDDHHMM,
+# and the boundary sets they name, uploaded by hand.
+ALERTS_ROUND = $(if $(ROUND),$(ROUND),now)
+ALERTS_KEEP ?= 36
+ALERTS_AREAS_DIR ?= web/public/data/alerts-areas
+
+.PHONY: alerts-build live-alerts-index upload-r2-alerts prune-r2-alerts upload-r2-alerts-areas
+
+alerts-build: ## Build the weather warnings snapshot for ROUND (docs/alerts.md)
+	$(PYTHON) -m xuebuild alerts-build --round $(ALERTS_ROUND) $(FORCE)
+
+# The live pointer, index and every network file it spans: the index is what
+# the next round's ended[] is measured against and the files are what a
+# failed network carries over, so each CRC32 is checked rather than trusted,
+# and a missing file only leaves that network nothing to carry.
+live-alerts-index: ## Pull the live alerts pointer, index and network files
+	@set -e; mkdir -p web/public/data; \
+	pointer=$$($(S3) cp $(R2_ROOT)/latest-alerts.json - --only-show-errors 2>/dev/null || true); \
+	[ -n "$$pointer" ] || { echo "no live alerts pointer"; exit 0; }; \
+	path=$$(printf '%s' "$$pointer" | jq -r .path); \
+	directory=$$(dirname "$$path"); \
+	mkdir -p "web/public/data/$$directory"; \
+	$(S3) cp "$(R2_ROOT)/$$path" "web/public/data/$$path" --only-show-errors; \
+	printf '%s' "$$pointer" > web/public/data/latest-alerts.json; \
+	for file in $$(jq -r '.networks[].file.path' "web/public/data/$$path"); do \
+		named=$$(jq -r --arg file "$$file" '.networks[] | select(.file.path == $$file) | .file.crc32' "web/public/data/$$path"); \
+		if $(S3) cp "$(R2_ROOT)/$$directory/$$file" "web/public/data/$$directory/$$file" --only-show-errors; then \
+			crc=$$($(CRC32) "web/public/data/$$directory/$$file"); \
+			[ "$$crc" = "$$named" ] || { echo "the live $$file is CRC32 $$crc but its index says $$named"; exit 1; }; \
+			echo "live alerts round: $$directory/$$file ($$(wc -c < "web/public/data/$$directory/$$file" | tr -d ' ') bytes)"; \
+		else \
+			rm -f "web/public/data/$$directory/$$file"; \
+			echo "warning: $$path names $$file but R2 has no such object; that network has nothing to carry over"; \
+		fi; \
+	done
+
+# Every network file, then the index and the round's Item, then the
+# pointer: each object before the one that names it, and the pointer moves
+# only once R2 reports every size. The boundary sets an index names went up
+# by hand beforehand (upload-r2-alerts-areas).
+upload-r2-alerts: ## Upload an alerts round, then take it live
+	@set -e; \
+	$(call point_pointer_check,alerts,$(ALERTS_ROUND),round,pass ROUND=YYYYMMDDHHMM,no network's state arrived); \
+	files=$$(jq -r '.networks[].file.path' $$dir/index.json); \
+	for file in $$files; do \
+		$(S3) cp $$dir/$$file $(R2_ROOT)/$$rel/$$file --no-progress $(DRY_RUN) \
+			--content-type application/x-ndjson --cache-control "public, max-age=31536000, immutable"; \
+	done; \
+	$(S3) cp $$dir/index.json $(R2_ROOT)/$$rel/index.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
+	[ ! -f "$$dir/$(STAC_ITEM)" ] || $(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$$rel/$(STAC_ITEM) \
+		--no-progress $(DRY_RUN) --content-type application/geo+json --cache-control "no-cache"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		for file in $$files index.json; do \
+			local_bytes=$$(wc -c < "$$dir/$$file" | tr -d ' '); \
+			remote_bytes=$$($(call r2_size,$$rel/$$file)); \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "$$rel/$$file is '$$remote_bytes' bytes on R2, not $$local_bytes; the pointer stays put"; exit 1; }; \
+			echo "verified $$file ($$local_bytes bytes) on R2"; \
+		done; \
+	}; \
+	echo "Uploading latest-alerts.json (takes alerts round $(ALERTS_ROUND) live)..."; \
+	$(S3) cp web/public/data/latest-alerts.json $(R2_ROOT)/latest-alerts.json --no-progress $(DRY_RUN) \
+		--content-type application/json --cache-control "no-cache"; \
+	$(MAKE) --no-print-directory upload-r2-stac-collection STAC_DIR=alerts DRY_RUN=$(DRY_RUN)
+
+prune-r2-alerts: ## Delete alerts rounds beyond the newest ALERTS_KEEP
+	$(call point_prune,alerts,$(ALERTS_KEEP),round)
+
+# A boundary set is immutable under its versioned name and outlives every
+# round that names it, so it goes up once, by hand, after `xue alerts-areas`
+# built it; an object already there under the name must be the same length,
+# and is never replaced. Pin the length and CRC32 in
+# xuebuild/alerts/networks.py only after this succeeded.
+upload-r2-alerts-areas: ## Upload a warning boundary set by hand, SET=nws-zones VERSION=YYYYMMDD
+	@set -e; \
+	{ [ -n "$(SET)" ] && [ -n "$(VERSION)" ]; } || { echo "pass SET=<set> VERSION=YYYYMMDD"; exit 1; }; \
+	name="$(SET).$(VERSION).pmtiles"; \
+	file="$(ALERTS_AREAS_DIR)/$$name"; \
+	[ -f "$$file" ] || { echo "no $$file; build it with xue alerts-areas --set $(SET) --version $(VERSION)"; exit 1; }; \
+	local_bytes=$$(wc -c < "$$file" | tr -d ' '); \
+	remote_bytes=$$($(call r2_size,alerts-areas/$$name)); \
+	if [ -n "$$remote_bytes" ]; then \
+		[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is already on R2 at $$remote_bytes bytes, not $$local_bytes; a set is never replaced, give it a new VERSION"; exit 1; }; \
+		echo "alerts-areas/$$name is already on R2 ($$remote_bytes bytes)"; exit 0; \
+	fi; \
+	$(S3) cp "$$file" $(R2_ROOT)/alerts-areas/$$name --no-progress $(DRY_RUN) \
+		--content-type application/vnd.pmtiles --cache-control "public, max-age=31536000, immutable"; \
+	[ -n "$(DRY_RUN)" ] || { \
+		remote_bytes=$$($(call r2_size,alerts-areas/$$name)); \
+		[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is '$$remote_bytes' bytes on R2, not $$local_bytes"; exit 1; }; \
+		echo "verified alerts-areas/$$name ($$local_bytes bytes, CRC32 $$($(CRC32) "$$file")) on R2"; \
+	}

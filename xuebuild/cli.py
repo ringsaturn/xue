@@ -31,6 +31,7 @@ from .zarrstore import (
     export_bundle,
     store_path_for,
 )
+from .aq import cli as aq_cli
 from .airport.build import build_product as build_airport_product
 from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
@@ -55,6 +56,14 @@ from .fire.schema import floor_round as floor_fire_round
 from .fire.schema import parse_round as parse_fire_round
 from .fire.schema import WINDOW_HOURS as FIRE_WINDOW_HOURS
 from .fire.sensors import SOURCES as FIRE_SOURCES
+from .alerts.areas import SETS as ALERTS_AREA_SETS
+from .alerts.areas import build_area_set as build_alerts_area_set
+from .alerts.build import build_product as build_alerts_product
+from .alerts.build import load_previous_index as load_previous_alerts_index
+from .alerts.fetch import fetch_round as fetch_alerts_round
+from .alerts.networks import NETWORKS as ALERTS_NETWORKS
+from .alerts.schema import floor_round as floor_alerts_round
+from .alerts.schema import parse_round as parse_alerts_round
 from .synop.build import build_product as build_synop_product
 from .synop.build import load_previous_index as load_previous_synop_index
 from .synop.fetch import fetch_round as fetch_synop_round
@@ -666,6 +675,44 @@ def parser() -> argparse.ArgumentParser:
     synop_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     synop_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists")
     synop_build.add_argument("--force-download", action="store_true", help="fetch every source again, station tables included")
+
+    aq_cli.add_parser(commands)
+    alerts_build = commands.add_parser(
+        "alerts-build",
+        help="fetch the weather warning services and write one alerts.<round>/ snapshot, a <network>.jsonl per network "
+        "and the pointer (docs/alerts.md)",
+    )
+    alerts_build.add_argument(
+        "--round",
+        default="now",
+        help="the round, YYYYMMDDHHMM in UTC with the minute a multiple of five, or now (this minute floored to five)",
+    )
+    alerts_build.add_argument(
+        "--networks",
+        help=f"comma-separated networks to fetch (default: all of {', '.join(network.id for network in ALERTS_NETWORKS)}); "
+        "the others carry the previous round's alerts over",
+    )
+    alerts_build.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
+    alerts_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    alerts_build.add_argument(
+        "--previous-index",
+        type=Path,
+        help="the previous round's index.json, against which ended[] is measured and from whose network files a failed "
+        "network carries over (default: the one the local latest-alerts.json names, if any; `make live-alerts-index` "
+        "fetches the live one and its files)",
+    )
+    alerts_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
+    alerts_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists, and fetch it again")
+
+    alerts_areas = commands.add_parser(
+        "alerts-areas",
+        help="build a warning boundary set (one PMTiles file) from a downloaded upstream release with ogr2ogr and "
+        "tippecanoe (docs/alerts.md §9); prints the length and CRC32 the network table pins",
+    )
+    alerts_areas.add_argument("--set", required=True, choices=tuple(ALERTS_AREA_SETS), dest="area_set")
+    alerts_areas.add_argument("--source", type=Path, required=True, help="the directory holding the release's shapefiles or zips")
+    alerts_areas.add_argument("--version", required=True, help="the release's effective date, YYYYMMDD")
+    alerts_areas.add_argument("--output", type=Path, default=Path("web/public/data/alerts-areas"))
 
     fire_build = commands.add_parser(
         "fire-build",
@@ -1417,6 +1464,33 @@ def main(argv: list[str] | None = None) -> int:
                 previous_index=previous,
                 force=arguments.force,
             )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == aq_cli.COMMAND:
+            aq_cli.run(arguments)
+        elif arguments.command == "alerts-build":
+            moment = floor_alerts_round(datetime.now(UTC)) if arguments.round == "now" else parse_alerts_round(arguments.round)
+            alerts_networks = None
+            if arguments.networks:
+                known = tuple(network.id for network in ALERTS_NETWORKS)
+                alerts_networks = tuple(dict.fromkeys(item.strip() for item in arguments.networks.split(",") if item.strip()))
+                unknown = [item for item in alerts_networks if item not in known]
+                if unknown:
+                    raise XueError(f"unknown alerts networks {unknown}; choose from {', '.join(known)}")
+            previous = load_previous_alerts_index(arguments.previous_index, arguments.output_dir)
+            if not arguments.offline:
+                fetch_alerts_round(
+                    arguments.raw_dir, moment, previous_index=previous, networks=alerts_networks, force=arguments.force
+                )
+            report = build_alerts_product(
+                moment,
+                arguments.raw_dir,
+                arguments.output_dir,
+                previous_index=previous,
+                force=arguments.force,
+            )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == "alerts-areas":
+            report = build_alerts_area_set(arguments.area_set, arguments.source, arguments.version, arguments.output)
             print(json.dumps(report, indent=2, ensure_ascii=False))
         elif arguments.command == "fire-build":
             moment = floor_fire_round(datetime.now(UTC)) if arguments.round == "now" else parse_fire_round(arguments.round)
