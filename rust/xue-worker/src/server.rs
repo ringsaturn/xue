@@ -304,8 +304,9 @@ pub async fn serve(config: Config, data: Data) -> Result<(), String> {
         .await
         .map_err(|error| format!("bind {}: {error}", config.listen))?;
     eprintln!(
-        "xue-api-server {} on http://{} reading {}",
+        "xue-api-server {} ({}) on http://{} reading {}",
         env!("CARGO_PKG_VERSION"),
+        metrics::REVISION,
         config.listen,
         state.data.origin
     );

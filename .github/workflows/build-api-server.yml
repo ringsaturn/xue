@@ -1,0 +1,84 @@
+name: build api server
+
+# Build `xue-api-server` (the data API as a native binary, for a self-hosted
+# origin: docs/contribution/api-origin.md) on every change to the code it is
+# made of, and publish it as the rolling prerelease `api-server`: the binary,
+# its sha256 and a build provenance attestation. A host fetches it from there
+# and checks both (`gh attestation verify <file> --repo ringsaturn/xue`), so
+# nothing here names or reaches a host; installing stays the host's job.
+#
+# The binary targets glibc 2.35 (Ubuntu 22.04), the oldest host it has to
+# run on, the same as origin/deploy.sh.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - rust/xue-worker/**
+      - rust/xue/**
+      - rust/Cargo.toml
+      - rust/Cargo.lock
+      - .github/workflows/build-api-server.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  TRIPLE: x86_64-unknown-linux-gnu
+  ASSET: xue-api-server-x86_64-linux-gnu
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      # cargo-zigbuild brings zig (the ziglang wheel) with it.
+      - name: Install cargo-zigbuild
+        run: pip install --user cargo-zigbuild
+
+      - name: Build
+        working-directory: rust
+        env:
+          XUE_API_REVISION: ${{ github.sha }}
+        run: |
+          cargo zigbuild -p xue-worker --features server --bin xue-api-server \
+            --release --locked --target "$TRIPLE.2.35"
+          mkdir -p ../out
+          cp "target/$TRIPLE/release/xue-api-server" "../out/$ASSET"
+          cd ../out
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          cat "$ASSET.sha256"
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: out/${{ env.ASSET }}
+
+      # One release, replaced on every build: the tag moves to this commit.
+      # A host that reads it while it is being replaced finds no asset and
+      # tries again later.
+      - name: Publish the rolling prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete api-server --cleanup-tag --yes 2>/dev/null || true
+          gh release create api-server out/* \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --latest=false \
+            --title "xue-api-server (main)" \
+            --notes "xue-api-server for linux x86_64 (glibc 2.35+), built from $GITHUB_SHA. Rebuilt on every change to the server; verify with \`sha256sum -c\` and \`gh attestation verify $ASSET --repo $GITHUB_REPOSITORY\`."

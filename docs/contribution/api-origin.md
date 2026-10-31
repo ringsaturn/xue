@@ -27,6 +27,18 @@ exists: `XUE_API_LISTEN` (default `127.0.0.1:8787`), `DATA_ORIGIN`,
 `XUE_API_INFLIGHT` (32), `XUE_API_CACHE_MB` (64), `XUE_API_RATE_PER_MIN`
 (0, off), `XUE_API_METRICS_LISTEN` (unset, off).
 
+## Builds
+
+`.github/workflows/build-api-server.yml` builds the binary on every `main`
+change to the code it is made of (`rust/xue-worker`, `rust/xue`, the
+workspace manifest and lock) and publishes it as the rolling prerelease
+`api-server`: `xue-api-server-x86_64-linux-gnu` (glibc 2.35+), its
+`.sha256`, and a build provenance attestation. The release is replaced on
+each build, its tag moved to that commit; the binary reports the commit as
+`revision` (metrics, start-up line). A host installs from there after
+`sha256sum -c` and `gh attestation verify <file> --repo ringsaturn/xue`;
+the workflow names no host and reaches none.
+
 ## Metrics
 
 With `XUE_API_METRICS_LISTEN` set (e.g. `127.0.0.1:9787`) the binary serves
@@ -46,7 +58,7 @@ connects to it.
 | `xue_api_inflight`, `xue_api_inflight_limit` | requests computed now, and the `503` threshold |
 | `xue_api_response_cache_entries`, `_bytes`, `_limit_bytes` | the response cache |
 | `xue_api_rate_tokens` | the global budget left, when `XUE_API_RATE_PER_MIN` is set |
-| `xue_api_build_info{version}`, `xue_api_start_time_seconds` | the build, and when it started |
+| `xue_api_build_info{version,revision}`, `xue_api_start_time_seconds` | the build (crate version, source commit), and when it started |
 
 `hit` is this process's response cache; Cloudflare's edge hits never reach
 the origin, so they are not counted here.
