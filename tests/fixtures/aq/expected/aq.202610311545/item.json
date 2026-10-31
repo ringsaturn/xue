@@ -1,0 +1,119 @@
+{
+ "type": "Feature",
+ "stac_version": "1.1.0",
+ "stac_extensions": ["https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+ "id": "aq.202610311545",
+ "collection": "aq",
+ "geometry": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [-123.1522, 22.2801],
+    [114.3607, 22.2801],
+    [114.3607, 53.3047],
+    [-123.1522, 53.3047],
+    [-123.1522, 22.2801]
+   ]
+  ]
+ },
+ "bbox": [-123.1522, 22.2801, 114.3607, 53.3047],
+ "properties": {
+  "title": "Air-quality stations · 2026-10-31 15:45Z round",
+  "datetime": "2026-10-31T15:45:00Z",
+  "start_datetime": "2026-10-30T15:45:00Z",
+  "end_datetime": "2026-10-31T15:00:00Z",
+  "xue:product": "aq",
+  "xue:schemaVersion": 1,
+  "xue:issued": "2026-10-31T15:45:00Z",
+  "xue:stations": 11,
+  "xue:sources": [
+   {
+    "id": "airnow-hourly",
+    "ok": true
+   },
+   {
+    "id": "epd-24pc",
+    "ok": false
+   }
+  ]
+ },
+ "links": [
+  {
+   "rel": "root",
+   "href": "../catalog.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "parent",
+   "href": "../aq/collection.json",
+   "type": "application/json"
+  },
+  {
+   "rel": "collection",
+   "href": "../aq/collection.json",
+   "type": "application/json"
+  }
+ ],
+ "assets": {
+  "index": {
+   "href": "index.json?v=05074a69",
+   "type": "application/json",
+   "title": "aq index (schema v1)",
+   "roles": ["metadata"],
+   "xue:kind": "index",
+   "file:size": 1314,
+   "xue:crc32": "05074a69",
+   "file:checksum": "b2020405074a69"
+  },
+  "airnow": {
+   "href": "airnow.jsonl?v=e5d0c4f5",
+   "type": "application/x-ndjson",
+   "title": "AirNow: observations by station",
+   "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:network": "airnow",
+   "file:size": 1931,
+   "xue:crc32": "e5d0c4f5",
+   "file:checksum": "b20204e5d0c4f5"
+  },
+  "airnow.stations": {
+   "href": "airnow.stations.json?v=5cfe1d96",
+   "type": "application/json",
+   "title": "AirNow: stations and current values",
+   "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
+   "roles": ["data"],
+   "xue:kind": "stations",
+   "xue:network": "airnow",
+   "xue:stations": 7,
+   "file:size": 1240,
+   "xue:crc32": "5cfe1d96",
+   "file:checksum": "b202045cfe1d96"
+  },
+  "hkepd": {
+   "href": "hkepd.jsonl?v=984da24e",
+   "type": "application/x-ndjson",
+   "title": "Hong Kong EPD: observations by station",
+   "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:network": "hkepd",
+   "file:size": 4377,
+   "xue:crc32": "984da24e",
+   "file:checksum": "b20204984da24e"
+  },
+  "hkepd.stations": {
+   "href": "hkepd.stations.json?v=b14b7472",
+   "type": "application/json",
+   "title": "Hong Kong EPD: stations and current values",
+   "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
+   "roles": ["data"],
+   "xue:kind": "stations",
+   "xue:network": "hkepd",
+   "xue:stations": 4,
+   "file:size": 638,
+   "xue:crc32": "b14b7472",
+   "file:checksum": "b20204b14b7472"
+  }
+ }
+}

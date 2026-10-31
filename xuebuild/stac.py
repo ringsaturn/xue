@@ -137,10 +137,11 @@ _XUE_PROVIDER = {
 
 
 # The point products published beside the runs (`docs/sounding.md`,
-# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`, `docs/fire.md`): a fixed list rather than a registry,
+# `docs/airport.md`, `docs/synop.md`, `docs/tc.md`, `docs/nexrad.md`, `docs/fire.md`, `docs/aq.md`,
+# `docs/alerts.md`): a fixed list rather than a registry,
 # since each is its own pipeline under one delivery contract
 # (`xuebuild/pointproduct.py`). They are the root catalog's other children.
-POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad", "fire")
+POINT_PRODUCTS = ("sounding", "airport", "synop", "tc", "nexrad", "fire", "aq", "alerts")
 
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
@@ -317,6 +318,118 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://data.gov.hk/en/terms-and-conditions",
                     "type": "text/html",
                     "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged",
+                },
+            ],
+        },
+        "aq": {
+            "title": "Air-quality stations",
+            "description": (
+                "Hourly air-quality observations from national monitoring networks, aggregated every half "
+                "hour: per network, every station's position and newest values in a stations file, and its "
+                "last 24 hours as columns on one line of an NDJSON file beside it, in one set of pollutants "
+                "and units (particulates in µg/m³, gases in ppb, CO in ppm) whatever the network. The "
+                "networks are AirNow (US, Canada, Mexico and US missions abroad, about 2 000 monitors) and "
+                "Hong Kong's Environmental Protection Department (18 stations). The values are preliminary, "
+                "as the agencies publish them, and no air-quality index is computed. A rolling window with "
+                "no fixed start — only the newest round is published, and each round carries the whole window."
+            ),
+            "license": "other",
+            "keywords": ["air quality", "observation", "station", "pm2.5", "ozone", "airnow", "hong kong"],
+            "providers": [
+                {
+                    "name": "AirNow (U.S. EPA) and the reporting agencies",
+                    "description": (
+                        "Preliminary hourly observations from the AirNow file products; each station's own "
+                        "agency is credited with its data."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.airnow.gov/",
+                },
+                {
+                    "name": "Environmental Protection Department, HKSAR Government",
+                    "description": (
+                        "Pollutant concentrations as published on DATA.GOV.HK, reused under its terms of use "
+                        "with the department credited."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.aqhi.gov.hk/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
+                    "type": "application/pdf",
+                    "title": "AirNow Data Exchange Guidelines: preliminary data, agency credit, values unaltered",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://data.gov.hk/en/terms-and-conditions",
+                    "type": "text/html",
+                    "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged",
+                },
+            ],
+        },
+        "alerts": {
+            "title": "Weather warnings",
+            "description": (
+                "The weather warnings in force, as a snapshot every five minutes: one row per warning in the "
+                "index with a common category and a 1–5 level beside the issuing service's own event and "
+                "level, and per service one NDJSON file holding every warning's full text in every language "
+                "the service publishes it in, its area codes and its polygon where the service draws one. "
+                "Area codes resolve against versioned boundary sets published once per upstream release. "
+                "The services are the US National Weather Service, the Japan Meteorological Agency and "
+                "Environment and Climate Change Canada. Only the newest snapshot is published; it is not an "
+                "official warning service, and the issuing service's own channels take precedence."
+            ),
+            "license": "other",
+            "keywords": ["weather", "warning", "alert", "cap", "nws", "jma", "eccc"],
+            "providers": [
+                {
+                    "name": "US National Weather Service",
+                    "description": "Active alerts from api.weather.gov, a work of the US government.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.weather.gov/",
+                },
+                {
+                    "name": "Japan Meteorological Agency",
+                    "description": (
+                        "Warnings and advisories as the agency's website publishes them; 出典：気象庁ホームページ. "
+                        "Reused under the Public Data License v1.0."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://www.jma.go.jp/bosai/warning/",
+                },
+                {
+                    "name": "Environment and Climate Change Canada",
+                    "description": (
+                        "Public weather alerts from the MSC GeoMet API; contains information licensed under the "
+                        "Open Government Licence – Canada."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://weather.gc.ca/",
+                },
+                _XUE_PROVIDER,
+            ],
+            "links": [
+                {
+                    "rel": "license",
+                    "href": "https://www.weather.gov/disclaimer",
+                    "type": "text/html",
+                    "title": "NWS disclaimer: US government work, free to use",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+                    "type": "text/html",
+                    "title": "JMA website terms of use: Public Data License v1.0, source credit required",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://open.canada.ca/en/open-government-licence-canada",
+                    "type": "text/html",
+                    "title": "Open Government Licence – Canada 2.0",
                 },
             ],
         },
@@ -1848,12 +1961,12 @@ def _point_product_directory(product: str, index_relative_path: str) -> str:
     return directory
 
 
-def _synop_stations_files(index: dict[str, Any], stations_files: dict[str, dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _network_stations_files(index: dict[str, Any], stations_files: dict[str, dict[str, Any]] | None) -> list[dict[str, Any]]:
     """A v2 synop round's stations files, one per network of the index:
     the positions are in them, not in the index."""
     networks = [network["id"] for network in index["networks"]]
     if stations_files is None or any(network not in stations_files for network in networks):
-        raise StacError("a synop round of schema v2 needs its stations files to describe its stations")
+        raise StacError("a round with per-network stations files needs them to describe its stations")
     return [stations_files[network] for network in networks]
 
 
@@ -1868,14 +1981,19 @@ def _point_product_positions(
         return [(float(station["lon"]), float(station["lat"])) for station in index["stations"]]
     if product == "airport":
         return [(float(row[2]), float(row[1])) for row in index["stations"]]
-    if product == "synop":
-        if index["schemaVersion"] == 1:
+    if product == "synop" or product == "aq":
+        if product == "synop" and index["schemaVersion"] == 1:
             return [(float(row[3]), float(row[2])) for row in index["stations"]]
         return [
             (float(row[2]), float(row[1]))
-            for payload in _synop_stations_files(index, stations_files)
+            for payload in _network_stations_files(index, stations_files)
             for row in payload["stations"]
         ]
+    if product == "alerts":
+        # Most warnings name area codes rather than drawing a polygon, and
+        # the services between them cover most of a hemisphere, so a round
+        # with any warning states the whole world, as a fire round does.
+        return [(-180.0, -90.0), (180.0, 90.0)] if index["alerts"] else []
     if product == "nexrad":
         return [(float(row[3]), float(row[2])) for row in index["sites"]]
     if product == "fire":
@@ -1907,14 +2025,17 @@ def _point_product_period(index: dict[str, Any], product: str, issued: datetime)
             iso_z(issued - timedelta(hours=24)),
             max((row[4] for row in index["stations"]), default=default),
         )
-    elif product == "synop":
+    elif product == "synop" or product == "aq":
         # A network's `latest` is its newest station's newest time.
         newest = (
             (row[7] for row in index["stations"])
-            if index["schemaVersion"] == 1
-            else (network["latest"] for network in index["networks"])
+            if product == "synop" and index["schemaVersion"] == 1
+            else (network["latest"] for network in index["networks"] if network.get("latest"))
         )
         bounds = (iso_z(issued - timedelta(hours=24)), max(newest, default=default))
+    elif product == "alerts":
+        # A snapshot: from the oldest warning still in force to the round.
+        bounds = (min((row[5] for row in index["alerts"]), default=default), default)
     elif product == "fire":
         bounds = (
             index["window"]["start"],
@@ -1976,7 +2097,37 @@ def _point_product_assets(
             **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
         }
         return assets
-    if product == "synop":
+    if product == "alerts":
+        for network in index["networks"]:
+            descriptor = network["file"]
+            assets[network["id"]] = {
+                "href": f"{descriptor['path']}?v={descriptor['crc32']}",
+                "type": NDJSON_MEDIA_TYPE,
+                "title": f"{network['name']}: warnings in force",
+                "description": (
+                    "One warning per line, sorted by id: every language the service publishes, area codes "
+                    "and the polygon where there is one. A warning's `offset` and `length` in the index are "
+                    "the byte span of its line's JSON object, excluding the newline, so one warning is one "
+                    "`Range: bytes=<offset>-<offset+length-1>` request."
+                ),
+                "roles": ["data"],
+                "xue:kind": "alerts",
+                "xue:network": network["id"],
+                **_file_fields(descriptor["byteLength"], descriptor["crc32"], single_file=True),
+            }
+            areas = network.get("areas")
+            if areas is not None:
+                assets[f"{network['id']}.areas"] = {
+                    "href": f"{areas['path']}?v={areas['crc32']}",
+                    "type": "application/vnd.pmtiles",
+                    "title": f"{network['name']}: warning area boundaries ({areas['set']} {areas['version']})",
+                    "roles": ["data"],
+                    "xue:kind": "areas",
+                    "xue:network": network["id"],
+                    **_file_fields(areas["byteLength"], areas["crc32"], single_file=True),
+                }
+        return assets
+    if product == "synop" or product == "aq":
         for network in index["networks"]:
             descriptor = network["file"]
             assets[network["id"]] = {
@@ -2081,13 +2232,15 @@ def _point_product_count(index: dict[str, Any], product: str) -> int:
         return len(index["sites"])
     if product == "fire":
         return sum(sensor["count"] for sensor in index["sensors"])
-    if product == "synop" and index["schemaVersion"] >= 2:
+    if product == "alerts":
+        return len(index["alerts"])
+    if (product == "synop" and index["schemaVersion"] >= 2) or product == "aq":
         return sum(network["stations"]["count"] for network in index["networks"])
     return len(index["stations"])
 
 
 def _point_product_label(product: str, issued: datetime) -> str:
-    if product in ("airport", "synop", "nexrad", "fire"):
+    if product in ("airport", "synop", "nexrad", "fire", "aq", "alerts"):
         return f"{issued.strftime('%Y-%m-%d %H:%MZ')} round"
     return f"{issued.strftime('%Y-%m-%d %HZ')} issue"
 
@@ -2130,7 +2283,7 @@ def point_product_item(
     )
     start, end = _point_product_period(index, product, issued)
     prose = _point_product_prose(product)
-    count_key = {"tc": "xue:storms", "fire": "xue:detections"}.get(product, "xue:stations")
+    count_key = {"tc": "xue:storms", "fire": "xue:detections", "alerts": "xue:alerts"}.get(product, "xue:stations")
     properties: dict[str, Any] = {
         "title": f"{prose['title']} · {_point_product_label(product, issued)}",
         # The issue is one instant a client sorts on; the period it covers
@@ -2609,7 +2762,7 @@ def write_point_product_documents(
     index = json.loads(index_bytes)
     relative = index_path.relative_to(output_dir).as_posix()
     stations_files = None
-    if product == "synop" and index.get("schemaVersion", 1) >= 2:
+    if (product == "synop" and index.get("schemaVersion", 1) >= 2) or product == "aq":
         stations_files = {
             network["id"]: json.loads(index_path.with_name(network["stations"]["path"]).read_bytes())
             for network in index["networks"]
