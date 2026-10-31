@@ -639,8 +639,23 @@ class PointProductTests(unittest.TestCase):
     def airport_item(self) -> dict:
         return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
 
+    def synop_stations_files(self) -> dict[str, dict]:
+        index, _ = self.index("synop/expected/synop.202610050010/index.json")
+        return {
+            network["id"]: self.index(f"synop/expected/synop.202610050010/{network['stations']['path']}")[0]
+            for network in index["networks"]
+        }
+
     def synop_item(self) -> dict:
-        return self.item("synop", "synop.202610050010", "synop/expected/synop.202610050010/index.json")
+        index, encoded = self.index("synop/expected/synop.202610050010/index.json")
+        return stac.point_product_item(
+            index,
+            len(encoded),
+            crc32_hex(encoded),
+            product="synop",
+            index_relative_path="synop.202610050010/index.json",
+            stations_files=self.synop_stations_files(),
+        )
 
     def fire_item(self) -> dict:
         return self.item("fire", "fire.202610120500", "fire/expected/fire.202610120500/index.json")
@@ -772,24 +787,43 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(assets[first["id"]]["file:size"], first["byteLength"])
         self.assertEqual(len(encoded), pointer["byteLength"])
 
-    def test_a_synop_round_is_an_asset_per_network(self) -> None:
+    def test_a_synop_round_is_two_assets_per_network(self) -> None:
         index, _ = self.index("synop/expected/synop.202610050010/index.json")
         item = self.synop_item()
         self.assertEqual(item["id"], "synop.202610050010")
-        self.assertEqual(sorted(item["assets"]), ["amedas", "index"])
+        networks = [network["id"] for network in index["networks"]]
+        self.assertEqual(sorted(item["assets"]), sorted(["index", *networks, *(f"{network}.stations" for network in networks)]))
         network = index["networks"][0]
         asset = item["assets"]["amedas"]
         self.assertEqual(asset["href"], f"amedas.jsonl?v={network['file']['crc32']}")
         self.assertEqual(asset["type"], stac.NDJSON_MEDIA_TYPE)
         self.assertEqual(asset["xue:network"], "amedas")
         self.assertEqual(asset["file:size"], network["file"]["byteLength"])
+        stations = item["assets"]["amedas.stations"]
+        self.assertEqual(stations["href"], f"amedas.stations.json?v={network['stations']['crc32']}")
+        self.assertEqual(stations["type"], stac.JSON_MEDIA_TYPE)
+        self.assertEqual(stations["file:size"], network["stations"]["byteLength"])
         properties = item["properties"]
         self.assertEqual(properties["start_datetime"], "2026-10-04T00:10:00Z")
         self.assertEqual(properties["end_datetime"], "2026-10-05T00:10:00Z")
-        self.assertEqual(properties["xue:stations"], len(index["stations"]))
+        self.assertEqual(properties["xue:stations"], sum(network["stations"]["count"] for network in index["networks"]))
         self.assertTrue(properties["title"].endswith("2026-10-05 00:10Z round"))
-        self.assertEqual(item["bbox"][1], min(row[2] for row in index["stations"]))
-        self.assertEqual(item["bbox"][2], max(row[3] for row in index["stations"]))
+        rows = [row for payload in self.synop_stations_files().values() for row in payload["stations"]]
+        self.assertEqual(item["bbox"][1], min(row[1] for row in rows))
+        self.assertEqual(item["bbox"][2], max(row[2] for row in rows))
+        with self.assertRaises(stac.StacError):
+            stac.point_product_item(
+                index, 1, "00000000", product="synop", index_relative_path="synop.202610050010/index.json"
+            )
+
+    def test_a_synop_round_of_schema_v1_still_makes_an_item(self) -> None:
+        index, encoded = self.index("synop/v1/synop.202610050000/index.json")
+        item = stac.point_product_item(
+            index, len(encoded), crc32_hex(encoded), product="synop", index_relative_path="synop.202610050000/index.json"
+        )
+        self.assertEqual(sorted(item["assets"]), ["amedas", "index"])
+        self.assertEqual(item["properties"]["xue:stations"], len(index["stations"]))
+        self.assertEqual(item["properties"]["end_datetime"], "2026-10-05T00:00:00Z")
 
     def test_a_fire_round_is_an_asset_per_sensor_over_the_window(self) -> None:
         index, _ = self.index("fire/expected/fire.202610120500/index.json")

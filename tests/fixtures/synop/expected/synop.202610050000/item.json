@@ -8,24 +8,24 @@
   "type": "Polygon",
   "coordinates": [
    [
-    [127.6867, 24.2883],
-    [153.9833, 24.2883],
-    [153.9833, 45.52],
-    [127.6867, 45.52],
-    [127.6867, 24.2883]
+    [8.472, 22.1822],
+    [153.9833, 22.1822],
+    [153.9833, 54.6831],
+    [8.472, 54.6831],
+    [8.472, 22.1822]
    ]
   ]
  },
- "bbox": [127.6867, 24.2883, 153.9833, 45.52],
+ "bbox": [8.472, 22.1822, 153.9833, 54.6831],
  "properties": {
   "title": "Surface weather stations · 2026-10-05 00:00Z round",
   "datetime": "2026-10-05T00:00:00Z",
   "start_datetime": "2026-10-04T00:00:00Z",
   "end_datetime": "2026-10-05T00:00:00Z",
   "xue:product": "synop",
-  "xue:schemaVersion": 1,
+  "xue:schemaVersion": 2,
   "xue:issued": "2026-10-05T00:00:00Z",
-  "xue:stations": 14,
+  "xue:stations": 71,
   "xue:sources": [
    {
     "id": "jma-amedas-map",
@@ -33,6 +33,14 @@
    },
    {
     "id": "jma-amedas-table",
+    "ok": true
+   },
+   {
+    "id": "dwd-synop-bufr",
+    "ok": true
+   },
+   {
+    "id": "hko-regional-weather",
     "ok": true
    }
   ]
@@ -56,14 +64,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=b04e73d9",
+   "href": "index.json?v=12deb485",
    "type": "application/json",
-   "title": "synop index (schema v1)",
+   "title": "synop index (schema v2)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 2865,
-   "xue:crc32": "b04e73d9",
-   "file:checksum": "b20204b04e73d9"
+   "file:size": 2059,
+   "xue:crc32": "12deb485",
+   "file:checksum": "b2020412deb485"
   },
   "amedas": {
    "href": "amedas.jsonl?v=c98d1303",
@@ -76,6 +84,69 @@
    "file:size": 4852,
    "xue:crc32": "c98d1303",
    "file:checksum": "b20204c98d1303"
+  },
+  "amedas.stations": {
+   "href": "amedas.stations.json?v=3ac815b9",
+   "type": "application/json",
+   "title": "JMA AMeDAS: stations and current values",
+   "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
+   "roles": ["data"],
+   "xue:kind": "stations",
+   "xue:network": "amedas",
+   "xue:stations": 14,
+   "file:size": 2202,
+   "xue:crc32": "3ac815b9",
+   "file:checksum": "b202043ac815b9"
+  },
+  "dwd": {
+   "href": "dwd.jsonl?v=ba7bbad9",
+   "type": "application/x-ndjson",
+   "title": "DWD SYNOP Germany: observations by station",
+   "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:network": "dwd",
+   "file:size": 2112,
+   "xue:crc32": "ba7bbad9",
+   "file:checksum": "b20204ba7bbad9"
+  },
+  "dwd.stations": {
+   "href": "dwd.stations.json?v=7c26305c",
+   "type": "application/json",
+   "title": "DWD SYNOP Germany: stations and current values",
+   "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
+   "roles": ["data"],
+   "xue:kind": "stations",
+   "xue:network": "dwd",
+   "xue:stations": 6,
+   "file:size": 1028,
+   "xue:crc32": "7c26305c",
+   "file:checksum": "b202047c26305c"
+  },
+  "hko": {
+   "href": "hko.jsonl?v=c84f146d",
+   "type": "application/x-ndjson",
+   "title": "Hong Kong Observatory: observations by station",
+   "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
+   "roles": ["data"],
+   "xue:kind": "series",
+   "xue:network": "hko",
+   "file:size": 10676,
+   "xue:crc32": "c84f146d",
+   "file:checksum": "b20204c84f146d"
+  },
+  "hko.stations": {
+   "href": "hko.stations.json?v=fb97a678",
+   "type": "application/json",
+   "title": "Hong Kong Observatory: stations and current values",
+   "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
+   "roles": ["data"],
+   "xue:kind": "stations",
+   "xue:network": "hko",
+   "xue:stations": 51,
+   "file:size": 7667,
+   "xue:crc32": "fb97a678",
+   "file:checksum": "b20204fb97a678"
   }
  }
 }

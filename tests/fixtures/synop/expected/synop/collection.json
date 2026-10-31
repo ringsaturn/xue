@@ -4,15 +4,27 @@
  "stac_extensions": [],
  "id": "synop",
  "title": "Surface weather stations",
- "description": "National surface observation networks, aggregated every ten minutes: each station's newest values in the index, and its last 24 hours as columns on one line of its network's NDJSON file beside it, in one set of elements and SI units whatever the network. The first network is the Japan Meteorological Agency's AMeDAS, about 1 300 stations every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+ "description": "National surface observation networks, aggregated every ten minutes: per network, every station's position and newest values in a stations file, and its last 24 hours as columns on one line of an NDJSON file beside it, in one set of elements and SI units whatever the network. The networks are the Japan Meteorological Agency's AMeDAS (about 1 300 stations), Deutscher Wetterdienst's national SYNOP reports (about 1 000 German stations) and the Hong Kong Observatory's regional weather (about 50 stations), each every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
  "license": "other",
- "keywords": ["weather", "observation", "surface", "station", "synop", "amedas"],
+ "keywords": ["weather", "observation", "surface", "station", "synop", "amedas", "dwd", "hko"],
  "providers": [
   {
    "name": "Japan Meteorological Agency",
    "description": "AMeDAS observations as the agency's website publishes them; 出典：気象庁ホームページ. Reused under the Public Data License v1.0.",
    "roles": ["producer", "licensor"],
    "url": "https://www.jma.go.jp/bosai/amedas/"
+  },
+  {
+   "name": "Deutscher Wetterdienst",
+   "description": "National ten-minute SYNOP reports from the DWD open data server. Source: Deutscher Wetterdienst; reused under CC BY 4.0.",
+   "roles": ["producer", "licensor"],
+   "url": "https://opendata.dwd.de/"
+  },
+  {
+   "name": "Hong Kong Observatory",
+   "description": "Regional weather readings as published on DATA.GOV.HK, reused under its terms of use with the Observatory credited.",
+   "roles": ["producer", "licensor"],
+   "url": "https://data.gov.hk/"
   },
   {
    "name": "Xue",
@@ -73,13 +85,25 @@
    "rel": "describedby",
    "href": "https://github.com/ringsaturn/xue/blob/main/docs/synop.md",
    "type": "text/markdown",
-   "title": "The synop product, schema v1"
+   "title": "The synop product, schema v2"
   },
   {
    "rel": "license",
    "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
    "type": "text/html",
    "title": "JMA website terms of use: Public Data License v1.0, source credit required"
+  },
+  {
+   "rel": "license",
+   "href": "https://creativecommons.org/licenses/by/4.0/",
+   "type": "text/html",
+   "title": "DWD open data: CC BY 4.0, \"Source: Deutscher Wetterdienst\""
+  },
+  {
+   "rel": "license",
+   "href": "https://data.gov.hk/en/terms-and-conditions",
+   "type": "text/html",
+   "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged"
   }
  ]
 }

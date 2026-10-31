@@ -1,0 +1,58 @@
+{
+ "schemaVersion": 1,
+ "issued": "2026-10-05T00:00:00Z",
+ "generated": "2026-10-05T00:05:30Z",
+ "networks": [
+  {
+   "id": "amedas",
+   "name": "JMA AMeDAS",
+   "cadence": 600,
+   "prPeriod": 600,
+   "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
+   "license": "PDL-1.0",
+   "url": "https://www.jma.go.jp/bosai/amedas/",
+   "latest": "2026-10-05T00:00:00Z",
+   "file": {
+    "path": "amedas.jsonl",
+    "byteLength": 4852,
+    "crc32": "c98d1303"
+   }
+  }
+ ],
+ "elements": ["t", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "stations": [
+  ["amedas:11001", 0, 45.52, 141.935, 26.0, 1, "Cape Soya", "2026-10-05T00:00:00Z", 15.9, 63, null, null, 158, 3.5, null, 0.0, 0.0, 10.0, null, null, 0, 331],
+  ["amedas:11016", 0, 45.415, 141.6783, 3.0, 0, "Wakkanai", "2026-10-05T00:00:00Z", 15.4, 68, 1016.7, 1018.1, 135, 4.8, null, 0.0, 0.0, 10.0, null, 20000, 332, 381],
+  ["amedas:12217", 0, 44.295, 142.3583, 128.0, 2, "Nishi-Furen", "2026-10-05T00:00:00Z", null, null, null, null, null, null, null, 0.0, 0.0, null, null, null, 714, 259],
+  ["amedas:14163", 0, 43.06, 141.3283, 17.0, 0, "Sapporo", "2026-10-05T00:00:00Z", 15.4, 72, 1014.1, 1017.2, 158, 4.2, null, 0.0, 0.0, 0.0, null, 20000, 974, 372],
+  ["amedas:17341", 0, 44.0167, 144.2783, 38.0, 0, "Abashiri", "2026-10-05T00:00:00Z", 15.9, 67, 1014.7, 1019.9, 158, 3.7, null, 0.0, 0.0, 10.0, null, 20000, 1347, 377],
+  ["amedas:19191", 0, 43.2317, 144.325, 38.0, 1, "Tsurui", "2026-10-05T00:00:00Z", 15.2, 70, null, null, 180, 1.6, null, 0.0, 0.0, 10.0, null, null, 1725, 306],
+  ["amedas:31386", 0, 40.7333, 140.6883, 198.0, 1, "Aomori-Otani", "2026-10-05T00:00:00Z", 17.5, null, null, null, 45, 1.7, null, 0.0, 0.0, null, null, null, 2032, 353],
+  ["amedas:44132", 0, 35.6917, 139.75, 25.0, 0, "Tokyo", "2026-10-05T00:00:00Z", 19.2, 74, 1012.4, 1015.2, 338, 3.1, null, 0.0, 0.0, 0.0, null, null, 2386, 356],
+  ["amedas:44356", 0, 24.2883, 153.9833, 7.0, 0, "Minamitorishima Island", "2026-10-05T00:00:00Z", 29.2, 85, 1007.1, 1008.1, 158, 11.1, null, 0.0, 0.0, 0.0, null, null, 2743, 394],
+  ["amedas:50066", 0, 35.36, 138.7267, 3775.0, 0, "Mt. Fuji", "2026-10-05T00:00:00Z", 5.5, 98, 646.7, null, null, null, null, null, null, null, null, null, 3138, 258],
+  ["amedas:62078", 0, 34.6817, 135.5183, 23.0, 0, "Osaka", "2026-10-05T00:00:00Z", 20.4, 80, 1003.1, 1012.7, 23, 2.0, null, 0.0, 0.0, 0.0, null, null, 3397, 351],
+  ["amedas:74447", 0, 32.905, 132.7167, 21.0, 0, "Sukumo", "2026-10-05T00:00:00Z", 19.7, 100, 1008.6, 1011.3, 338, 1.1, null, 0.0, 5.5, 0.0, null, 4810, 3749, 367],
+  ["amedas:82182", 0, 33.5817, 130.375, 3.0, 0, "Fukuoka", "2026-10-05T00:00:00Z", 24.9, 71, 1011.2, 1012.9, 360, 3.2, null, 0.0, 0.0, 10.0, null, 20000, 4117, 374],
+  ["amedas:91197", 0, 26.2067, 127.6867, 28.0, 0, "Naha", "2026-10-05T00:00:00Z", 28.4, 73, 1008.0, 1011.1, 360, 2.1, null, 0.0, 0.0, 5.0, null, 20000, 4492, 359]
+ ],
+ "sources": [
+  {
+   "id": "jma-amedas-map",
+   "ok": true,
+   "fetched": "2026-10-05T00:04:00Z",
+   "url": "https://www.jma.go.jp/bosai/amedas/data/map",
+   "snapshots": 2,
+   "missing": 0,
+   "reports": 28
+  },
+  {
+   "id": "jma-amedas-table",
+   "ok": true,
+   "fetched": "2026-10-05T00:04:00Z",
+   "url": "https://www.jma.go.jp/bosai/amedas/const/amedastable.json",
+   "cached": false,
+   "reports": 14
+  }
+ ]
+}
