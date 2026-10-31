@@ -9,6 +9,7 @@ import {
   AIRPORT_POINTER_FILENAME,
   SOUNDING_POINTER_FILENAME,
   SYNOP_POINTER_FILENAME,
+  assembleSynopIndex,
   parseAirportIndex,
   parseAirportPointer,
   parseAirportStation,
@@ -18,6 +19,7 @@ import {
   parseSynopIndex,
   parseSynopPointer,
   parseSynopStation,
+  parseSynopStationTable,
   type AirportIndex,
   type AirportPointer,
   type AirportStation,
@@ -57,8 +59,34 @@ export function fetchAirportIndex(baseUrl: string): Promise<LoadedAirportIndex |
   );
 }
 
-export function fetchSynopIndex(baseUrl: string): Promise<LoadedSynopIndex | null> {
-  return loadPointerIndex(baseUrl, SYNOP_POINTER_FILENAME, parseSynopPointer, parseSynopIndex, "synop");
+/** The live synop index, v1-shaped whichever version the round wrote. A
+ * v2 index names one station table per network beside it; those are read
+ * in parallel, and a network whose table fails to load or validate is
+ * dropped from the index rather than taking the others down with it. */
+export async function fetchSynopIndex(baseUrl: string): Promise<LoadedSynopIndex | null> {
+  const loaded = await loadPointerIndex(
+    baseUrl,
+    SYNOP_POINTER_FILENAME,
+    parseSynopPointer,
+    parseSynopIndex,
+    "synop",
+  );
+  if (loaded === null || loaded.index.schemaVersion < 2) return loaded;
+  const { index, indexUrl } = loaded;
+  const tables = await Promise.all(
+    index.networks.map(async (network, position) => {
+      try {
+        if (!network.stations) throw new Error("the index names no station table");
+        const response = await fetchImmutable(stationFileUrl(indexUrl, network.stations));
+        if (!response.ok) throw new Error(`request failed: ${response.status}`);
+        return parseSynopStationTable(await response.json(), index, position);
+      } catch (error) {
+        console.warn(`synop: dropping network ${network.id}:`, error);
+        return null;
+      }
+    }),
+  );
+  return { ...loaded, index: assembleSynopIndex(index, tables) };
 }
 
 /** The URL of the file beside an index, under the `?v=` the index gives

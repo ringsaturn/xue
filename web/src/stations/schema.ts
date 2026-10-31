@@ -658,11 +658,19 @@ export function parseAirportStation(input: unknown): AirportStationHistory {
 // `<network>.jsonl` per network beside it, and every station's window as
 // columns on its line.
 
-/** The ranges v1 holds its elements to (`docs/synop.md` §2). An element
- * this build does not know is admitted as any number: a network added
- * after this build still reads. */
+/** The synop index versions this build reads: v1 carries every station's
+ * row itself, v2 moves them into one `<network>.stations.json` per network
+ * beside it. The pointer stays at `STATION_SCHEMA_VERSION`. */
+const SYNOP_INDEX_SCHEMA_VERSION = 2;
+/** A v2 station table's own version. */
+const SYNOP_STATIONS_SCHEMA_VERSION = 2;
+
+/** The ranges the contract holds its elements to (`docs/synop.md` §2). An
+ * element this build does not know is admitted as any number: a network
+ * added after this build still reads. */
 const SYNOP_BOUNDS: Record<string, [number, number]> = {
   t: TEMPERATURE,
+  td: [-100, 60],
   rh: [0, 100],
   p: [300, 1100],
   slp: PRESSURE,
@@ -693,6 +701,15 @@ export interface SynopNetwork {
   url: string;
   latest: string | null;
   file: StationFile;
+  /** v2 only: the network's station table beside the index. Absent from a
+   * v1 index, whose rows are in the index itself. */
+  stations?: SynopStationsFile;
+}
+
+/** `<network>.stations.json` as a v2 index names it. */
+export interface SynopStationsFile extends StationFile {
+  /** Rows in the table. */
+  count: number;
 }
 
 /** One index row, expanded. `values` are the station's current values by
@@ -713,6 +730,8 @@ export interface SynopStation {
 }
 
 export interface SynopIndex {
+  /** The index's version, 1 or 2. Whichever it is, an index the shell
+   * holds has its `stations` filled in (`assembleSynopIndex` for v2). */
   schemaVersion: number;
   issued: string;
   generated: string;
@@ -751,16 +770,63 @@ export function parseSynopPointer(input: unknown): SynopPointer {
   return pointer(input, "synop", SYNOP_PATH, STATION_SCHEMA_VERSION);
 }
 
-/** `synop.<round>/index.json`: the compact rows expanded, each checked
- * against its network's file the way the airport rows are against theirs. */
+/** One compact station row, v1's or a v2 table's, expanded. `lead` is the
+ * width of the columns before the elements (8 with v1's network column, 7
+ * without); `network` is the row's network position, read from the row in
+ * v1 and given by the table in v2. Checks the span against the network's
+ * file and returns where it ends. */
+function synopRow(
+  row: unknown[],
+  label: string,
+  lead: number,
+  network: number,
+  networkFile: StationFile,
+  elements: string[],
+  previousEnd: number,
+): SynopStation {
+  const width = lead + elements.length + 2;
+  if (row.length !== width) throw new Error(`${label} must be a row of ${width} values`);
+  const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
+  const { offset, length } = span(
+    { offset: row[width - 2], length: row[width - 1] },
+    label,
+    previousEnd,
+    networkFile.byteLength,
+  );
+  const values: Record<string, number | null> = {};
+  elements.forEach((key, position) => {
+    values[key] = elementValue(key, row[lead + position], `${label}.${key}`);
+  });
+  // The columns after the id sit one further right in v1, past `network`.
+  const at = lead - 7;
+  return {
+    id,
+    network,
+    lat: number(row[1 + at], `${label}.lat`, LATITUDE),
+    lon: number(row[2 + at], `${label}.lon`, LONGITUDE),
+    elev: optionalNumber(row[3 + at], `${label}.elev`, ELEVATION),
+    rank: rank(row[4 + at], `${label}.rank`),
+    name: optionalString(row[5 + at], `${label}.name`),
+    obsTime: timestamp(row[6 + at], `${label}.obsTime`),
+    values,
+    offset,
+    length,
+  };
+}
+
+/** `synop.<round>/index.json`, v1 or v2. A v1 index comes back whole, its
+ * compact rows expanded and each checked against its network's file the way
+ * the airport rows are against theirs. A v2 index carries no rows: it comes
+ * back with `stations` empty and each network's `stations` table named, for
+ * `parseSynopStationTable` and `assembleSynopIndex` to fill in. */
 export function parseSynopIndex(input: unknown): SynopIndex {
   const value = object(input, "synop index");
-  const version = schemaVersion(value.schemaVersion, "synop index", STATION_SCHEMA_VERSION);
+  const version = schemaVersion(value.schemaVersion, "synop index", SYNOP_INDEX_SCHEMA_VERSION);
   const networks = list(value.networks, "index.networks").map((item, index) => {
     const label = `index.networks[${index}]`;
     const entry = object(item, label);
     const id = string(entry.id, `${label}.id`, NETWORK_ID);
-    return {
+    const network: SynopNetwork = {
       id,
       name: string(entry.name, `${label}.name`),
       cadence: integer(entry.cadence, `${label}.cadence`, 60),
@@ -772,7 +838,15 @@ export function parseSynopIndex(input: unknown): SynopIndex {
       url: string(entry.url, `${label}.url`),
       latest: optionalTimestamp(entry.latest, `${label}.latest`),
       file: stationFile(entry.file, `${label}.file`, `${id}.jsonl`),
-    } satisfies SynopNetwork;
+    };
+    if (version >= 2) {
+      const table = stationFile(entry.stations, `${label}.stations`, `${id}.stations.json`);
+      network.stations = {
+        ...table,
+        count: integer(object(entry.stations, `${label}.stations`).count, `${label}.stations.count`),
+      };
+    }
+    return network;
   });
   if (new Set(networks.map((network) => network.id)).size !== networks.length)
     throw new Error("index.networks lists a network twice");
@@ -781,45 +855,25 @@ export function parseSynopIndex(input: unknown): SynopIndex {
   );
   if (new Set(elements).size !== elements.length)
     throw new Error("index.elements lists an element twice");
-  const width = 8 + elements.length + 2;
-  const ends = networks.map(() => 0);
-  let previous = "";
-  const stations = list(value.stations, "index.stations").map((item, index) => {
-    const label = `index.stations[${index}]`;
-    const row = list(item, label);
-    if (row.length !== width) throw new Error(`${label} must be a row of ${width} values`);
-    const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
-    if (id <= previous) throw new Error("index.stations must be sorted by id and unique");
-    previous = id;
-    const network = integer(row[1], `${label}.network`);
-    if (network >= networks.length) throw new Error(`${label}.network names no network`);
-    if (SYNOP_STATION_ID.exec(id)![1] !== networks[network]!.id)
-      throw new Error(`${label}.id does not belong to its network`);
-    const { offset, length } = span(
-      { offset: row[width - 2], length: row[width - 1] },
-      label,
-      ends[network]!,
-      networks[network]!.file.byteLength,
-    );
-    ends[network] = offset + length;
-    const values: Record<string, number | null> = {};
-    elements.forEach((key, position) => {
-      values[key] = elementValue(key, row[8 + position], `${label}.${key}`);
+  const stations: SynopStation[] = [];
+  if (version === 1) {
+    const ends = networks.map(() => 0);
+    let previous = "";
+    list(value.stations, "index.stations").forEach((item, index) => {
+      const label = `index.stations[${index}]`;
+      const row = list(item, label);
+      const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
+      if (id <= previous) throw new Error("index.stations must be sorted by id and unique");
+      previous = id;
+      const network = integer(row[1], `${label}.network`);
+      if (network >= networks.length) throw new Error(`${label}.network names no network`);
+      if (SYNOP_STATION_ID.exec(id)![1] !== networks[network]!.id)
+        throw new Error(`${label}.id does not belong to its network`);
+      const station = synopRow(row, label, 8, network, networks[network]!.file, elements, ends[network]!);
+      ends[network] = station.offset + station.length;
+      stations.push(station);
     });
-    return {
-      id,
-      network,
-      lat: number(row[2], `${label}.lat`, LATITUDE),
-      lon: number(row[3], `${label}.lon`, LONGITUDE),
-      elev: optionalNumber(row[4], `${label}.elev`, ELEVATION),
-      rank: rank(row[5], `${label}.rank`),
-      name: optionalString(row[6], `${label}.name`),
-      obsTime: timestamp(row[7], `${label}.obsTime`),
-      values,
-      offset,
-      length,
-    } satisfies SynopStation;
-  });
+  }
   return {
     schemaVersion: version,
     issued: timestamp(value.issued, "index.issued"),
@@ -829,6 +883,72 @@ export function parseSynopIndex(input: unknown): SynopIndex {
     stations,
     sources: sources(value.sources, "index.sources"),
   };
+}
+
+/** A v2 `<network>.stations.json`, checked against the index that names
+ * it: its own version, the network it says it is, the index's element list
+ * exactly, the row count the index gave, and v1's row rules (sorted,
+ * unique, the network's prefix, spans in row order inside its `.jsonl`).
+ * The rows come back as v1's, `network` set to `position`. */
+export function parseSynopStationTable(
+  input: unknown,
+  index: SynopIndex,
+  position: number,
+): SynopStation[] {
+  const network = index.networks[position];
+  if (!network) throw new Error(`synop index has no network ${position}`);
+  const what = network.stations?.path ?? `${network.id}.stations.json`;
+  const value = object(input, what);
+  const version = integer(value.schemaVersion, `${what}.schemaVersion`, 1);
+  if (version !== SYNOP_STATIONS_SCHEMA_VERSION)
+    throw new Error(`unsupported ${what} schema version ${version}`);
+  if (value.network !== network.id)
+    throw new Error(`${what}.network must be ${network.id}`);
+  timestamp(value.issued, `${what}.issued`);
+  const elements = list(value.elements, `${what}.elements`);
+  if (
+    elements.length !== index.elements.length ||
+    elements.some((key, at) => key !== index.elements[at])
+  )
+    throw new Error(`${what}.elements must equal the index's`);
+  const rows = list(value.stations, `${what}.stations`);
+  if (network.stations && rows.length !== network.stations.count)
+    throw new Error(`${what} has ${rows.length} rows, the index says ${network.stations.count}`);
+  let previous = "";
+  let end = 0;
+  return rows.map((item, at) => {
+    const label = `${what}.stations[${at}]`;
+    const row = list(item, label);
+    const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
+    if (id <= previous) throw new Error(`${what}.stations must be sorted by id and unique`);
+    previous = id;
+    if (SYNOP_STATION_ID.exec(id)![1] !== network.id)
+      throw new Error(`${label}.id does not belong to its network`);
+    const station = synopRow(row, label, 7, position, network.file, index.elements, end);
+    end = station.offset + station.length;
+    return station;
+  });
+}
+
+/** The v1-shaped index a v2 one and its station tables make: `tables[i]`
+ * is network `i`'s rows, or null when its table failed, which drops the
+ * network (and renumbers the rest) rather than the index. The stations are
+ * merged in id order, as a v1 index lists them. */
+export function assembleSynopIndex(
+  index: SynopIndex,
+  tables: readonly (SynopStation[] | null)[],
+): SynopIndex {
+  const networks: SynopNetwork[] = [];
+  const stations: SynopStation[] = [];
+  index.networks.forEach((network, position) => {
+    const rows = tables[position];
+    if (!rows) return;
+    const renumbered = networks.length;
+    networks.push(network);
+    for (const row of rows) stations.push({ ...row, network: renumbered });
+  });
+  stations.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { ...index, networks, stations };
 }
 
 /** One line of a network file, the slice an index row's span reads out. */
