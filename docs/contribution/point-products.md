@@ -17,7 +17,8 @@ and active fires (`xuebuild/fire/`). Schemas are normative in
   whose `offset` / `length` the index rows carry, so a browser reads one
   station with one Range request and an analyst streams one file. The tc
   index names one `<storm id>.json` per system. A synop round has one
-  JSONL per network, so a network's file stays the size of a network; a
+  JSONL and one stations file per network, so a network's files stay the
+  size of a network and a map loads only the networks it shows; a
   fire round one JSONL per sensor with one line per UTC hour, so the index
   addresses hours rather than stations.
 - **One object per issue, never per station**: many small files hurt bucket
@@ -68,15 +69,24 @@ failed. `AIRPORT_KEEP` rounds are kept.
   is an adapter module with `fetch(raw_root, round, since, …)` and
   `read(raw_root, statuses)` that converts its own format into the
   elements of `docs/synop.md` §2. Adding a network touches that tuple, a
-  new module, a `docs/synop.md` §8 subsection, a fixture and the STAC prose
+  new module, a `docs/synop.md` §9 subsection, a fixture and the STAC prose
   — not the schema and not the shell.
 - `since` is the network's `latest` in the previous index, so a round asks
   only for what is new and a gap refills as far as the network keeps data.
-- The index's element values are each element's newest non-null value
-  within the hour (accumulations only at the newest time): some elements
-  arrive less often than the station reports.
+- The stations files' element values are each element's newest non-null
+  value within the hour (accumulations only at the newest time): some
+  elements arrive less often than the station reports.
+- A network whose report for one time arrives in pieces (DWD's templates
+  and batches, HKO's one file per element) sets `Network.partial`, and the
+  merge lays new values over old element by element instead of replacing
+  the time whole.
 - AMeDAS reads the agency's map-page JSON (no API, no SLA); the quality
   rule and the 16-point wind code come from that page's own script.
+- DWD is BUFR through `bufr_dump -j f`; values are picked by key plus the
+  `timePeriod` / sensor height in force, never by template position, since
+  one batch mixes four templates. HKO's CSVs name stations only in
+  English, so `hko_stations.json` (built once from the Observatory's
+  station page, aliases by hand) places them.
 
 ## Active fires
 

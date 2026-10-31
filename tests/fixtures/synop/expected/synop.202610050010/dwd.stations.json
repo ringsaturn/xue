@@ -1,0 +1,14 @@
+{
+ "schemaVersion": 2,
+ "network": "dwd",
+ "issued": "2026-10-05T00:10:00Z",
+ "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "stations": [
+  ["dwd:10271", 52.9437, 12.8518, 49.8, 0, "Neuruppin-Alt Ruppin", "2026-10-04T23:40:00Z", 10.6, 6.5, 76, 1024.9, 1031.2, 330, 1.9, 4.7, null, 0.0, null, 0, 36116, 0, 495],
+  ["dwd:10393", 52.2085, 14.118, 97.7, 0, "Lindenberg", "2026-10-04T23:40:00Z", 9.7, 7.8, 88, 1017.2, 1030.0, 360, 1.9, 3.9, null, 0.2, null, 0, 32889, 496, 505],
+  ["dwd:10961", 47.421, 10.9848, 2956.0, 0, "Zugspitze", "2026-10-04T23:40:00Z", -3.5, -24.9, 17, 713.2, null, 360, 3.7, 6.8, null, null, null, null, 70509, 1002, 411],
+  ["dwd:A116", 54.6831, 8.472, 7.5, 1, "Foehr", "2026-10-04T23:50:00Z", null, null, null, null, null, 340, 2.0, 3.2, null, null, null, null, null, 1414, 211],
+  ["dwd:M031", 51.5835, 10.709, 240.0, 2, "Ellrich-Werna", "2026-10-04T23:40:00Z", null, null, null, null, null, null, null, null, null, 0.0, null, null, null, 1626, 226],
+  ["dwd:O598", 50.8992, 14.7456, 270.5, 1, "Bertsdorf-Hoernitz", "2026-10-04T23:50:00Z", 8.6, 6.2, 85, null, null, 320, 3.6, 7.6, 0.0, null, null, null, null, 1853, 323]
+ ]
+}
