@@ -260,7 +260,9 @@ class BuildTest(unittest.TestCase):
             self.assertEqual(eccc_first["latest"], eccc_second["latest"])
             sources = {status["id"]: status for status in second["sources"]}
             self.assertFalse(sources["eccc-alerts"]["ok"])
-            self.assertFalse(sources["jma-warning"]["ok"])
+            # JMA's map did not move: unchanged, so carried over, and not
+            # yet stale (docs/alerts.md, JMA health).
+            self.assertTrue(sources["jma-warning"]["ok"])
 
     def test_networks_and_areas(self) -> None:
         scratch, output = built()
