@@ -209,9 +209,14 @@ pub trait Routes {
     fn route(&self, path: &str) -> Option<&'static str>;
 
     /// Answer a `GET` of `path`, one [`Routes::route`] claimed. `now` is
-    /// milliseconds since the epoch.
-    fn answer(&self, path: &str, url: &url::Url, now: f64) -> Result<route::Answer, HttpError>;
+    /// milliseconds since the epoch. `data` is the server's own: an answer
+    /// built on the API's may ask it with [`crate::dispatch`].
+    fn answer<'a>(&'a self, path: &'a str, url: &'a url::Url, data: &'a Data, now: f64) -> Answering<'a>;
 }
+
+/// What [`Routes::answer`] returns: the handlers run on one thread, so the
+/// future need not be `Send`.
+pub type Answering<'a> = futures_util::future::LocalBoxFuture<'a, Result<route::Answer, HttpError>>;
 
 struct State {
     data: Data,
@@ -643,7 +648,7 @@ async fn handle(
     }
     state.inflight.set(state.inflight.get() + 1);
     let answer = match state.routes.as_ref().filter(|routes| routes.route(path).is_some()) {
-        Some(routes) => routes.answer(path, &url, now_ms()),
+        Some(routes) => routes.answer(path, &url, &state.data, now_ms()).await,
         None => route::dispatch(path, &url, &state.data, now_ms()).await,
     };
     state.inflight.set(state.inflight.get() - 1);
