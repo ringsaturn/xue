@@ -9,8 +9,10 @@
    "cadence": 3600,
    "avgPeriod": 3600,
    "preliminary": true,
+   "gasReference": null,
    "attribution": "AirNow (U.S. EPA) and the reporting agencies; preliminary data",
    "license": "AirNow-DEG",
+   "licenseUrl": "https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
    "url": "https://www.airnow.gov/",
    "latest": "2026-10-31T15:00:00Z",
    "file": {
@@ -31,24 +33,61 @@
    "cadence": 3600,
    "avgPeriod": 3600,
    "preliminary": true,
+   "gasReference": {
+    "temperature": 293,
+    "pressure": 101325
+   },
    "attribution": "Environmental Protection Department, HKSAR Government (DATA.GOV.HK)",
    "license": "DATA.GOV.HK",
+   "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
    "url": "https://www.aqhi.gov.hk/",
    "latest": "2026-10-31T14:00:00Z",
    "file": {
     "path": "hkepd.jsonl",
-    "byteLength": 4377,
-    "crc32": "984da24e"
+    "byteLength": 4340,
+    "crc32": "2a3c24e4"
    },
    "stations": {
     "path": "hkepd.stations.json",
-    "byteLength": 638,
-    "crc32": "b14b7472",
+    "byteLength": 601,
+    "crc32": "67fe1d34",
     "count": 4
    }
   }
  ],
  "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "elementTable": {
+  "pm25": {
+   "unit": "µg/m³",
+   "cell": "mean",
+   "period": "network"
+  },
+  "pm10": {
+   "unit": "µg/m³",
+   "cell": "mean",
+   "period": "network"
+  },
+  "o3": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "no2": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "so2": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "co": {
+   "unit": "ppm",
+   "cell": "mean",
+   "period": "network"
+  }
+ },
  "sources": [
   {
    "id": "airnow-hourly",
@@ -58,7 +97,8 @@
    "files": 3,
    "missing": 0,
    "reports": 21,
-   "unplaced": 3
+   "unplaced": 3,
+   "sha256": "c2040539ab5717d5df536e6446ecac472ecc878f5a345a25771156963308b82f"
   },
   {
    "id": "epd-24pc",
@@ -67,5 +107,9 @@
    "url": "https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml",
    "error": "HTTP Error 503: Service Unavailable"
   }
- ]
+ ],
+ "builder": {
+  "name": "xuebuild",
+  "revision": null
+ }
 }
