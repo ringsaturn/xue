@@ -11,6 +11,7 @@ import { element } from "./dom";
 import type { GifHost } from "./gifexport";
 import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileName } from "./mp4export";
 import { formatUtcHour } from "./format";
+import { guardContextLoss } from "./glguard";
 import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i18n";
 import { applyPageMeta } from "./pagemeta";
 import { mountLanguagePicker } from "./sheet";
@@ -184,6 +185,11 @@ function ensureMap(): MaplibreMap {
     style: basemapStyle(),
   });
   created.addControl(new NavigationControl({ showCompass: false }), "top-right");
+  // See main.ts: a context lost on every restore cannot draw the storm.
+  guardContextLoss(created.getContainer(), () => {
+    setPlaying(false);
+    fail(t("webglLost"));
+  });
   // A style swap (theme, basemap language) drops every layer added to the
   // map; the storm layers are made again on the style it loads. The page
   // has no WebGL layers of its own, which is what the viewer's never-
