@@ -153,8 +153,9 @@ fn ended(index: &Value, networks: &[Value]) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// `../alerts-areas/x.pmtiles` from `alerts.<round>/`, as a path under the
-/// data root.
+/// `../alerts-areas/x.pmtiles` from `alerts.<round>/` (or
+/// `../../../../../alerts-areas/x.pmtiles` from the round filed under its
+/// day), as a path under the data root.
 fn resolve_path(dir: &str, path: &str) -> String {
     let mut parts: Vec<&str> = dir.split('/').filter(|part| !part.is_empty()).collect();
     for part in path.split('/') {
@@ -510,6 +511,13 @@ mod tests {
             resolve_path(
                 "alerts.202611010005",
                 "../alerts-areas/nws-zones.20260416.pmtiles"
+            ),
+            "alerts-areas/nws-zones.20260416.pmtiles"
+        );
+        assert_eq!(
+            resolve_path(
+                "alerts/2026/11/01/alerts.202611010005",
+                "../../../../../alerts-areas/nws-zones.20260416.pmtiles"
             ),
             "alerts-areas/nws-zones.20260416.pmtiles"
         );
