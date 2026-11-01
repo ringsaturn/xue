@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,8 @@ class StationMeta:
     elev: float | None
     wmo: str | None
     rank: int
+    wigos: str | None = None
+    """The WIGOS station identifier, where the source gives one."""
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -28,11 +31,18 @@ class StationMeta:
             "elev": self.elev,
             "wmo": self.wmo,
             "rank": self.rank,
+            "wigos": self.wigos,
         }
 
 
-Observation = tuple[str, int, dict[str, float | int | None]]
-"""``(station id, epoch seconds, elements)``: one station at one time."""
+Observation = tuple[str, int, dict[str, Any]]
+"""``(station id, epoch seconds, elements)``: one station at one time.
+A network with quality codes adds them under :data:`QC_KEY`, element →
+code, beside the values."""
+
+QC_KEY = "_qc"
+"""Not an element key (those match ``^[a-z][a-z0-9]*$``), so the codes
+travel with the values through the merge without being taken for one."""
 
 
 @dataclass

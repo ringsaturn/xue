@@ -35,6 +35,7 @@ from ..stac import write_point_product_documents
 from .fetch import read_fetch_record
 from .networks import NETWORKS, Network
 from .schema import (
+    ELEMENT_TABLE,
     ELEMENTS,
     HISTORY_HOURS,
     INDEX_FILENAME,
@@ -55,11 +56,13 @@ from .schema import (
     validate_stations_file,
     write_bytes_atomic,
 )
-from .station import NetworkRead
+from .station import QC_KEY, NetworkRead
 
 LOG = logging.getLogger(__name__)
 
-META_KEYS = ("name", "names", "lat", "lon", "elev", "wmo", "rank")
+META_KEYS = ("name", "names", "lat", "lon", "elev", "wmo", "wigos", "rank")
+OPTIONAL_META = frozenset({"wigos"})
+"""Keys a line carries only where the network gives a value."""
 
 CURRENT_SECONDS = 3600
 """How far back from a station's newest time the stations file looks for
@@ -81,7 +84,7 @@ def _published(status: SourceStatus) -> dict[str, Any]:
 
 
 def _read_previous_network(
-    output_root: Path, previous_index: dict[str, Any], network_id: str
+    output_root: Path, previous_index: dict[str, Any], network_id: str, quality_codes: bool = False
 ) -> dict[str, dict[str, Any]]:
     """The previous round's stations of one network, by id: their
     metadata and their observations by epoch. Read from the ``.jsonl``
@@ -107,10 +110,21 @@ def _read_previous_network(
             station_id = station["id"]
             times = station["time"]
             columns = station.get("obs", {})
+            codes = station.get("qc") or {}
             observations = {
                 epoch: {key: values[position] for key, values in columns.items()}
                 for position, epoch in enumerate(times)
             }
+            if quality_codes:
+                # A column the line leaves out is the one the values imply.
+                for position, epoch in enumerate(times):
+                    qc = {
+                        key: codes[key][position] if key in codes else (None if values[position] is None else 0)
+                        for key, values in columns.items()
+                    } | {key: values[position] for key, values in codes.items() if key not in columns}
+                    qc = {key: code for key, code in qc.items() if code is not None}
+                    if qc:
+                        observations[epoch][QC_KEY] = qc
         except (json.JSONDecodeError, KeyError, TypeError, IndexError) as exc:
             LOG.warning("synop: %s line %d is not a station (%s); skipping it", path, number, exc)
             continue
@@ -144,14 +158,33 @@ def _current_values(observations: dict[int, dict[str, Any]], newest: int) -> lis
     return values
 
 
-def _station_line(station_id: str, meta: dict[str, Any], observations: dict[int, dict[str, Any]]) -> dict[str, Any]:
+def _station_line(
+    station_id: str, meta: dict[str, Any], observations: dict[int, dict[str, Any]], quality_codes: bool = False
+) -> dict[str, Any]:
     times = sorted(observations)
     columns: dict[str, list[Any]] = {}
+    codes: dict[str, list[Any]] = {}
     for key in ELEMENTS:
         values = [observations[epoch].get(key) for epoch in times]
         if any(value is not None for value in values):
             columns[key] = values
-    return {"id": station_id, **{key: meta.get(key) for key in META_KEYS}, "time": times, "obs": columns}
+        if not quality_codes:
+            continue
+        qc = [(observations[epoch].get(QC_KEY) or {}).get(key) for epoch in times]
+        # A column is written only where it says more than the values do:
+        # without one, a value had code 0 and a null had no code.
+        if any(code != (None if value is None else 0) for code, value in zip(qc, values)):
+            codes[key] = qc
+    head = {key: meta.get(key) for key in META_KEYS if key not in OPTIONAL_META or meta.get(key) is not None}
+    line = {"id": station_id, **head, "time": times, "obs": columns}
+    if codes:
+        line["qc"] = codes
+    return line
+
+
+def _observed(elements: dict[str, Any]) -> bool:
+    """Whether a report holds a value; quality codes alone are not one."""
+    return any(value is not None for key, value in elements.items() if key != QC_KEY)
 
 
 def _lay_over(old: dict[str, Any] | None, new: dict[str, Any], partial: bool) -> dict[str, Any]:
@@ -198,7 +231,7 @@ def build_product(
         result, statuses = _read_network(network, raw_root, record_statuses)
         sources.extend(statuses)
         any_ok = any_ok or result.ok
-        entries = _read_previous_network(output_root, previous_index, network.id) if previous_index else {}
+        entries = _read_previous_network(output_root, previous_index, network.id, network.quality_codes) if previous_index else {}
         for station_id, meta in result.stations.items():
             # The table wins over what the previous round carried: a moved
             # or renamed station is placed by today's table.
@@ -218,11 +251,11 @@ def build_product(
             kept = {
                 epoch: elements
                 for epoch, elements in entry["obs"].items()
-                if horizon <= epoch <= end and any(value is not None for value in elements.values())
+                if horizon <= epoch <= end and _observed(elements)
             }
             if not kept or entry["meta"].get("lat") is None:
                 continue  # nothing observed in the window: the station leaves
-            station = _station_line(station_id, entry["meta"], kept)
+            station = _station_line(station_id, entry["meta"], kept, network.quality_codes)
             validate_station_line(station, f"{network.id}[{station_id}]")
             line = encode_json(station)
             newest_epoch = station["time"][-1]
@@ -280,7 +313,9 @@ def build_product(
         "generated": iso_z(now),
         "networks": published_networks,
         "elements": list(ELEMENTS),
+        "elementTable": ELEMENT_TABLE,
         "sources": [_published(status) for status in sources],
+        "builder": pointproduct.builder_block(),
     }
     validate_index(index_payload)
     for network_id, stations_payload in station_files:

@@ -64,29 +64,29 @@
  ],
  "assets": {
   "index": {
-   "href": "../synop.202610050010/index.json?v=721f4f40",
+   "href": "../synop.202610050010/index.json?v=66727302",
    "type": "application/json",
    "title": "synop index (schema v2)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 2058,
-   "xue:crc32": "721f4f40",
-   "file:checksum": "b20204721f4f40"
+   "file:size": 3296,
+   "xue:crc32": "66727302",
+   "file:checksum": "b2020466727302"
   },
   "amedas": {
-   "href": "../synop.202610050010/amedas.jsonl?v=56dfb706",
+   "href": "../synop.202610050010/amedas.jsonl?v=9d6a7441",
    "type": "application/x-ndjson",
    "title": "JMA AMeDAS: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "amedas",
-   "file:size": 5531,
-   "xue:crc32": "56dfb706",
-   "file:checksum": "b2020456dfb706"
+   "file:size": 5931,
+   "xue:crc32": "9d6a7441",
+   "file:checksum": "b202049d6a7441"
   },
   "amedas.stations": {
-   "href": "../synop.202610050010/amedas.stations.json?v=085b96d4",
+   "href": "../synop.202610050010/amedas.stations.json?v=d66772e3",
    "type": "application/json",
    "title": "JMA AMeDAS: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -95,23 +95,23 @@
    "xue:network": "amedas",
    "xue:stations": 14,
    "file:size": 2207,
-   "xue:crc32": "085b96d4",
-   "file:checksum": "b20204085b96d4"
+   "xue:crc32": "d66772e3",
+   "file:checksum": "b20204d66772e3"
   },
   "dwd": {
-   "href": "../synop.202610050010/dwd.jsonl?v=79b0e337",
+   "href": "../synop.202610050010/dwd.jsonl?v=5ec96d61",
    "type": "application/x-ndjson",
    "title": "DWD SYNOP Germany: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "dwd",
-   "file:size": 2177,
-   "xue:crc32": "79b0e337",
-   "file:checksum": "b2020479b0e337"
+   "file:size": 2320,
+   "xue:crc32": "5ec96d61",
+   "file:checksum": "b202045ec96d61"
   },
   "dwd.stations": {
-   "href": "../synop.202610050010/dwd.stations.json?v=969f85dc",
+   "href": "../synop.202610050010/dwd.stations.json?v=049e13e3",
    "type": "application/json",
    "title": "DWD SYNOP Germany: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -120,8 +120,8 @@
    "xue:network": "dwd",
    "xue:stations": 6,
    "file:size": 1028,
-   "xue:crc32": "969f85dc",
-   "file:checksum": "b20204969f85dc"
+   "xue:crc32": "049e13e3",
+   "file:checksum": "b20204049e13e3"
   },
   "hko": {
    "href": "../synop.202610050010/hko.jsonl?v=1be41d17",

@@ -15,7 +15,8 @@ Every value arrives as ``[value, quality]``. The page's own rule
 (``isNormalData``) is the one kept here: a value is published when its
 quality code is 0 (normal) or 1 (quasi-normal) and it is not null; 2–4
 (insufficient data), 5 (suspended), 6 (missing) and anything else become
-null. Wind direction is a 16-point code, 0 being calm and 16 north.
+null. The codes themselves travel on as the line's ``qc`` (``docs/synop.md``
+§6). Wind direction is a 16-point code, 0 being calm and 16 north.
 
 Content of the agency's site is reusable under the Public Data License
 v1.0 with the source credited (出典：気象庁ホームページ).
@@ -32,10 +33,10 @@ from typing import Any
 
 from ..airport.fetch import SourceStatus
 from ..errors import DownloadError, SynopProductError, XueError
-from ..pointproduct import iso_z, write_bytes_atomic
+from ..pointproduct import iso_z, sha256_hex, write_bytes_atomic
 from .http import get
 from .schema import ELEMENT_BOUNDS, HISTORY_HOURS, ROUND_MINUTES, round_directory
-from .station import NetworkRead, StationMeta
+from .station import QC_KEY, NetworkRead, StationMeta
 
 LOG = logging.getLogger(__name__)
 
@@ -280,8 +281,39 @@ def wind_direction(code: float | None) -> int | None:
     return int(code * 22.5 + 0.5)
 
 
-def convert(cell: dict[str, Any]) -> dict[str, float | int | None]:
-    """One station's cells in one snapshot → the product's elements."""
+SOURCE_KEYS = {
+    "t": "temp",
+    "rh": "humidity",
+    "p": "pressure",
+    "slp": "normalPressure",
+    "wd": "windDirection",
+    "ws": "wind",
+    "pr": "precipitation10m",
+    "pr1h": "precipitation1h",
+    "sun": "sun10m",
+    "snow": "snow",
+    "vis": "visibility",
+}
+"""Each element's AMeDAS key, whose quality code the line's ``qc``
+carries."""
+
+
+def quality(cell: object) -> int | None:
+    """A cell's quality code as published: the agency's integer, or null
+    where there is no cell or no usable code."""
+    if not isinstance(cell, list) or len(cell) != 2:
+        return None
+    code = cell[1]
+    if isinstance(code, bool) or not isinstance(code, int) or not 0 <= code <= 255:
+        return None
+    return code
+
+
+def convert(cell: dict[str, Any]) -> dict[str, Any]:
+    """One station's cells in one snapshot → the product's elements, and
+    under :data:`~.station.QC_KEY` each element's quality code where the
+    snapshot has one."""
+    codes = {key: code for key, source in SOURCE_KEYS.items() if (code := quality(cell.get(source))) is not None}
     return {
         "t": _bounded("t", _good(cell.get("temp"))),
         "rh": _bounded("rh", _good(cell.get("humidity"))),
@@ -295,10 +327,11 @@ def convert(cell: dict[str, Any]) -> dict[str, float | int | None]:
         "sun": _bounded("sun", _good(cell.get("sun10m"))),
         "snow": _bounded("snow", _good(cell.get("snow"))),
         "vis": _bounded("vis", _good(cell.get("visibility"))),
+        QC_KEY: codes or None,
     }
 
 
-def parse_snapshot(text: str) -> dict[str, dict[str, float | int | None]]:
+def parse_snapshot(text: str) -> dict[str, dict[str, Any]]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -318,8 +351,10 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     by_code: dict[str, StationMeta] = {}
     if table_status is not None and table_status.ok and table_status.file:
         try:
-            by_code = parse_table((raw_root / table_status.file).read_text(encoding="utf-8"))
-        except (OSError, SynopProductError) as exc:
+            table_bytes = (raw_root / table_status.file).read_bytes()
+            table_status.detail["sha256"] = sha256_hex(table_bytes)
+            by_code = parse_table(table_bytes.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, SynopProductError) as exc:
             LOG.warning("amedas: station table: %s", exc)
             statuses[TABLE_SOURCE] = SourceStatus(TABLE_SOURCE, False, fetched=table_status.fetched, url=TABLE_URL, error=f"parse: {exc}")
         else:
@@ -327,18 +362,21 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     stations = {meta.id: meta for meta in by_code.values()}
 
     map_status = statuses.get(MAP_SOURCE)
-    observations: list[tuple[str, int, dict[str, float | int | None]]] = []
+    observations: list[tuple[str, int, dict[str, Any]]] = []
     if map_status is None or not map_status.ok or not map_status.file:
         return NetworkRead(stations, observations, False)
     unplaced: set[str] = set()
+    read_bytes: list[bytes] = []
     directory = raw_root / map_status.file / SNAPSHOT_DIRECTORY
     for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
         try:
             epoch = int(parse_stamp(path.stem).timestamp())
-            snapshot = parse_snapshot(path.read_text(encoding="utf-8"))
+            body = path.read_bytes()
+            snapshot = parse_snapshot(body.decode("utf-8"))
         except (OSError, ValueError, SynopProductError) as exc:
             LOG.warning("amedas: %s: %s; skipping it", path.name, exc)
             continue
+        read_bytes.append(body)
         for code, elements in snapshot.items():
             meta = by_code.get(code)
             if meta is None:
@@ -346,6 +384,8 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
                 continue
             observations.append((meta.id, epoch, elements))
     map_status.detail["reports"] = len(observations)
+    if read_bytes:
+        map_status.detail["sha256"] = sha256_hex(*read_bytes)
     if unplaced:
         LOG.warning("amedas: %d stations are not in the station table; their reports are dropped", len(unplaced))
     return NetworkRead(stations, observations, True)

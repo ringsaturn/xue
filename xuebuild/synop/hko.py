@@ -42,7 +42,7 @@ from typing import Any
 
 from ..airport.fetch import SourceStatus
 from ..errors import SynopProductError, XueError
-from ..pointproduct import write_bytes_atomic
+from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
 from .schema import ELEMENT_BOUNDS, ELEMENTS, round_directory
 from .station import NetworkRead, StationMeta
@@ -265,15 +265,18 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     directory = raw_root / status.file
     merged: dict[tuple[str, int], dict[str, float | int | None]] = {}
     unplaced = 0
+    read_bytes: list[bytes] = []
     for kind, name in FILES.items():
         path = directory / name
         if not path.exists():
             continue
         try:
-            text = path.read_text(encoding="utf-8-sig")
+            body = path.read_bytes()
+            text = body.decode("utf-8-sig")
         except (OSError, UnicodeDecodeError) as exc:
             LOG.warning("hko: %s: %s; skipping it", name, exc)
             continue
+        read_bytes.append(body)
         for station_name, epoch, elements in parse_csv(kind, text):
             code = resolve(kind, station_name)
             if code is None:
@@ -288,6 +291,8 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     ]
     status.detail["reports"] = len(observations)
     status.detail["unplaced"] = unplaced
+    if read_bytes:
+        status.detail["sha256"] = sha256_hex(*read_bytes)
     if unplaced:
         LOG.warning("hko: %d readings name a station the table does not place; they are dropped", unplaced)
     return NetworkRead(stations, observations, True)
