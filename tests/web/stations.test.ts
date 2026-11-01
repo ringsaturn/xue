@@ -70,7 +70,7 @@ function fixture(path: string): Uint8Array {
 }
 
 const SOUNDINGS_JSONL = fixture("sounding/expected/soundings.jsonl");
-const HISTORY_JSONL = fixture("airport/expected/airport.202609161440/history.jsonl");
+const HISTORY_JSONL = fixture("airport/expected/airport/2026/09/16/airport.202609161440/history.jsonl");
 
 const soundingIndex = parseSoundingIndex(soundingIndexJson);
 const airportIndex = parseAirportIndex(airportIndexJson);

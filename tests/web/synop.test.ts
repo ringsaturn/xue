@@ -154,7 +154,7 @@ function line(id: string): SynopStationSeries {
 
 describe("the synop readers", () => {
   it("read the golden index and pointer", () => {
-    expect(parseSynopPointer(synopPointerJson).path).toMatch(/^synop\.\d{12}\/index\.json$/);
+    expect(parseSynopPointer(synopPointerJson).path).toMatch(/^synop\/\d{4}\/\d{2}\/\d{2}\/synop\.\d{12}\/index\.json$/);
     expect(index.networks[0]!.id).toBe("amedas");
     expect(index.networks[0]!.file.path).toBe("amedas.jsonl");
     const fuji = index.stations.find((station) => station.id === "amedas:50066")!;
