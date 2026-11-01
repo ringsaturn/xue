@@ -16,6 +16,7 @@
     { "name": "catalog", "description": "What the dataset publishes." },
     { "name": "data", "description": "One cell's series." },
     { "name": "stations", "description": "The point products: radiosonde soundings, airport reports, surface and air-quality stations. Each is a list of stations and one station's record." },
+    { "name": "alerts", "description": "The weather warnings in force: the alerts of the live snapshot and one alert's full record." },
     { "name": "storms", "description": "The tropical cyclone product: the live systems and one storm's tracks." }
   ],
   "paths": {
@@ -416,6 +417,101 @@
         }
       }
     },
+    "/v1/alerts": {
+      "get": {
+        "tags": ["alerts"],
+        "operationId": "alerts",
+        "summary": "The weather alerts in force, filtered.",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": false,
+            "description": "Keep one network (`nws`, `jma`, `eccc`).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Keep one category of the index's `categories` (`docs/alerts.md` §2).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "description": "Keep the alerts at this level or above, 1 (statement) to 5 (exceptional).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 5 }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "description": "With `lon`: keep the alerts in force at this point — inside the alert's own polygon, or inside its box for an alert drawn only by area codes. An alert with neither is placed nowhere.",
+            "schema": { "type": "number", "minimum": -90, "maximum": 90 }
+          },
+          { "$ref": "#/components/parameters/nearLon" },
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": false,
+            "description": "`west,south,east,north` in degrees (west > east spans the antimeridian): keep the alerts whose box meets it.",
+            "schema": { "type": "string" },
+            "example": "-125,24,-66,50"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "At most this many alerts, the first in index order (by id).",
+            "schema": { "type": "integer", "minimum": 1 }
+          },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The networks, the categories, the alerts in force that pass the filters and the alerts that ended with this round.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/alerts/{id}": {
+      "get": {
+        "tags": ["alerts"],
+        "operationId": "alert",
+        "summary": "One alert's full record.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The alert id, `<network>:<the network's own identifier>` (`jma:130000-10`), percent-encoded.",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The alert's line of `docs/alerts.md` §6 with its box, and its network.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
     "/v1/storms": {
       "get": {
         "tags": ["storms"],
@@ -573,7 +669,7 @@
         "name": "issue",
         "in": "query",
         "required": false,
-        "description": "Pin a product issue instead of following its live pointer: the STAC Item id, `<product>.<YYYYMMDDHH>` for the hourly products (`sounding.2026091402`, `tc.2026091301`) or `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds (`airport.202609161440`, `synop.202610050010`, `aq.202610311545`). The answer is then stable and caches for a day; a pruned issue is `404 unknown_issue`.",
+        "description": "Pin a product issue instead of following its live pointer: the STAC Item id, `<product>.<YYYYMMDDHH>` for the hourly products (`sounding.2026091402`, `tc.2026091301`) or `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds (`airport.202609161440`, `synop.202610050010`, `aq.202610311545`, `alerts.202611010005`). The answer is then stable and caches for a day; a pruned issue is `404 unknown_issue`.",
         "schema": { "type": "string" }
       },
       "nearLat": {
@@ -847,7 +943,7 @@
         "description": "The fields every point-product answer opens with.",
         "required": ["product", "issue", "issued", "generated"],
         "properties": {
-          "product": { "type": "string", "enum": ["sounding", "airport", "synop", "aq", "tc"] },
+          "product": { "type": "string", "enum": ["sounding", "airport", "synop", "aq", "alerts", "tc"] },
           "issue": { "type": "string", "description": "The issue's STAC Item id." },
           "issued": { "type": ["string", "null"], "format": "date-time", "description": "The aggregation hour or ten-minute round." },
           "generated": { "type": ["string", "null"], "format": "date-time", "description": "When the build ran." }
@@ -1242,6 +1338,122 @@
               "network": { "$ref": "#/components/schemas/AqNetwork" },
               "time": { "$ref": "#/components/schemas/StationTime" },
               "variables": { "$ref": "#/components/schemas/StationVariables" }
+            }
+          }
+        ]
+      },
+      "AlertNetwork": {
+        "type": "object",
+        "description": "A network's entry of the index (`docs/alerts.md` §5) without its file descriptor; `areas.path` is resolved against the data root.",
+        "required": ["id", "name", "attribution", "license", "url", "latest", "areas"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "attribution": { "type": "string", "description": "The credit a display must show." },
+          "license": { "type": "string" },
+          "url": { "type": "string" },
+          "latest": { "type": ["string", "null"], "format": "date-time" },
+          "areas": {
+            "type": ["object", "null"],
+            "description": "The boundary set the network's area codes resolve against, or `null`.",
+            "properties": {
+              "set": { "type": "string" },
+              "version": { "type": "string" },
+              "path": { "type": "string", "description": "The PMTiles file's path under the data root (`/v1/catalog`'s `dataOrigin`)." },
+              "byteLength": { "type": "integer" },
+              "crc32": { "type": "string" },
+              "layers": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "AlertSummary": {
+        "type": "object",
+        "description": "An index row of `docs/alerts.md` §5, named.",
+        "required": ["id", "network", "category", "level", "event", "sent", "onset", "expires", "bbox"],
+        "properties": {
+          "id": { "type": "string" },
+          "network": { "type": "string" },
+          "category": { "type": "string" },
+          "level": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "event": { "type": "string", "description": "The network's event name in its primary language." },
+          "sent": { "type": ["string", "null"], "format": "date-time" },
+          "onset": { "type": ["string", "null"], "format": "date-time" },
+          "expires": { "type": ["string", "null"], "format": "date-time" },
+          "bbox": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 4, "maxItems": 4, "description": "`[west, south, east, north]`, or `null` when the alert has no box." }
+        }
+      },
+      "AlertEnded": {
+        "type": "object",
+        "description": "An alert in the previous round's index and not in this one.",
+        "required": ["id", "network", "reason", "by"],
+        "properties": {
+          "id": { "type": "string" },
+          "network": { "type": ["string", "null"] },
+          "reason": { "type": "string", "description": "`expired`, `cancelled`, `replaced` or `gone`." },
+          "by": { "type": ["string", "null"], "description": "For `replaced`: the id of the alert that replaced it, where the round names one." }
+        }
+      },
+      "AlertList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "networks", "categories", "count", "alerts", "ended", "sources"],
+            "properties": {
+              "request": {
+                "type": "object",
+                "properties": {
+                  "network": { "type": ["string", "null"] },
+                  "category": { "type": ["string", "null"] },
+                  "level": { "type": ["integer", "null"] },
+                  "lat": { "type": ["number", "null"] },
+                  "lon": { "type": ["number", "null"] },
+                  "bbox": { "type": ["array", "null"], "items": { "type": "number" } },
+                  "limit": { "type": ["integer", "null"] }
+                }
+              },
+              "networks": { "type": "array", "items": { "$ref": "#/components/schemas/AlertNetwork" } },
+              "categories": { "type": "array", "items": { "type": "string" } },
+              "count": { "type": "integer" },
+              "alerts": { "type": "array", "items": { "$ref": "#/components/schemas/AlertSummary" } },
+              "ended": { "type": "array", "items": { "$ref": "#/components/schemas/AlertEnded" } },
+              "sources": { "description": "The build's account of its sources (`docs/alerts.md` §8)." }
+            }
+          }
+        ]
+      },
+      "AlertResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["network", "alert"],
+            "properties": {
+              "network": { "$ref": "#/components/schemas/AlertNetwork" },
+              "alert": {
+                "type": "object",
+                "description": "The alert's line (`docs/alerts.md` §6) verbatim, with `bbox` from its index row.",
+                "required": ["id", "network", "category", "level", "native", "sent", "onset", "expires", "status", "texts", "areas", "geometry", "url", "sender", "bbox"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "network": { "type": "string" },
+                  "category": { "type": "string" },
+                  "level": { "type": "integer" },
+                  "native": { "type": "object", "description": "The network's own event, code, level and further fields, verbatim." },
+                  "sent": { "type": ["string", "null"], "format": "date-time" },
+                  "onset": { "type": ["string", "null"], "format": "date-time" },
+                  "expires": { "type": ["string", "null"], "format": "date-time" },
+                  "status": { "type": "string" },
+                  "texts": { "type": "object", "description": "BCP 47 tag to `{headline, description, instruction, area}`.", "additionalProperties": { "type": "object" } },
+                  "areas": { "type": "array", "items": { "type": "string" }, "description": "Area codes in the network's boundary set." },
+                  "geometry": { "type": ["object", "null"], "description": "The alert's own GeoJSON MultiPolygon, or `null`." },
+                  "url": { "type": ["string", "null"] },
+                  "sender": { "type": ["string", "null"] },
+                  "replaces": { "type": "array", "items": { "type": "string" }, "description": "Where the round gives it: the ids this alert replaced." },
+                  "bbox": { "type": ["array", "null"], "items": { "type": "number" } }
+                }
+              }
             }
           }
         ]

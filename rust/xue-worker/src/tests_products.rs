@@ -1,5 +1,5 @@
 //! The point-product handlers over the products' committed goldens
-//! (`tests/fixtures/{sounding,airport,synop,aq,tc}/expected/`), laid
+//! (`tests/fixtures/{sounding,airport,synop,aq,alerts,tc}/expected/`), laid
 //! out in an in-memory bucket the way the publishers lay them out on R2: the
 //! pointer at the root, the issue under the directory the pointer names.
 
@@ -15,7 +15,7 @@ use crate::error::HttpError;
 use crate::point::{parse_query, read_point};
 use crate::source::read_source;
 use crate::stations::{AQ, SYNOP};
-use crate::{airport, sounding, stations, tc};
+use crate::{airport, alerts, sounding, stations, tc};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
@@ -38,8 +38,8 @@ fn pointer_dir(objects: &HashMap<String, Vec<u8>>, pointer: &str) -> String {
     path.rsplit_once('/').map(|(dir, _)| dir.to_owned()).unwrap()
 }
 
-/// Every product, live, plus the previous airport, synop and aq rounds
-/// for the `issue=` pin, and a Collection per product as the catalog
+/// Every product, live, plus the previous airport, synop, aq and alerts
+/// rounds for the `issue=` pin, and a Collection per product as the catalog
 /// publishes.
 fn bucket() -> HashMap<String, Vec<u8>> {
     let root = fixtures();
@@ -86,8 +86,8 @@ fn bucket() -> HashMap<String, Vec<u8>> {
         }
     }
 
-    // The aq rounds, every file of each.
-    for product in ["aq"] {
+    // The two rounds of each of aq and alerts, every file of each.
+    for product in ["aq", "alerts"] {
         let expected = root.join(product).join("expected");
         let pointer = format!("latest-{product}.json");
         put(&mut objects, &pointer, &expected.join(&pointer));
@@ -106,7 +106,7 @@ fn bucket() -> HashMap<String, Vec<u8>> {
         }
     }
 
-    for product in ["sounding", "airport", "synop", "tc", "aq"] {
+    for product in ["sounding", "airport", "synop", "tc", "aq", "alerts"] {
         put_json(
             &mut objects,
             &format!("{product}/collection.json"),
@@ -124,6 +124,7 @@ fn list(product: &str) -> Handler {
         "airports" => |data, url| block_on(airport::list(data, url)),
         "synop" => |data, url| block_on(stations::list(&SYNOP, data, url)),
         "aq" => |data, url| block_on(stations::list(&AQ, data, url)),
+        "alerts" => |data, url| block_on(alerts::list(data, url)),
         _ => |data, url| block_on(tc::list(data, url)),
     }
 }
@@ -134,6 +135,7 @@ fn station(product: &str, id: &str, data: &Data, url: &Url) -> Result<(Value, St
         "airports" => block_on(airport::station(data, id, url)),
         "synop" => block_on(stations::station(&SYNOP, data, id, url)),
         "aq" => block_on(stations::station(&AQ, data, id, url)),
+        "alerts" => block_on(alerts::alert(data, id, url)),
         _ => block_on(tc::storm(data, id, url)),
     }
 }
@@ -821,6 +823,269 @@ fn an_aq_round_can_be_pinned() {
     assert_eq!(ok(&data, "aq", &format!("issue={round}"))["issue"], json!(round));
 }
 
+// ── alerts ──────────────────────────────────────────────────────────────
+
+/// The live alerts round's rows.
+fn alert_rows(objects: &HashMap<String, Vec<u8>>) -> (Value, Vec<Value>) {
+    let (_, index) = live_index(objects, "alerts");
+    let rows = index["alerts"].as_array().unwrap().clone();
+    (index, rows)
+}
+
+/// One alert's line, sliced out of its network's file by its row.
+fn alert_line(objects: &HashMap<String, Vec<u8>>, index: &Value, row: &Value) -> Value {
+    let dir = pointer_dir(objects, "latest-alerts.json");
+    let network = &index["networks"][row[1].as_u64().unwrap() as usize];
+    let file = &objects[&format!("{dir}/{}", network["file"]["path"].as_str().unwrap())];
+    let (offset, length) = (row[12].as_u64().unwrap() as usize, row[13].as_u64().unwrap() as usize);
+    serde_json::from_slice(&file[offset..offset + length]).expect("line")
+}
+
+#[test]
+fn the_alert_list_is_the_index_rows_named() {
+    let objects = bucket();
+    let (index, rows) = alert_rows(&objects);
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "alerts", "");
+    assert_eq!(body["product"], "alerts");
+    assert_eq!(body["count"], rows.len());
+    assert_eq!(body["categories"], index["categories"]);
+    let expected: Vec<String> = rows.iter().map(|row| row[0].as_str().unwrap().to_owned()).collect();
+    assert_eq!(ids(&body, "alerts", "id"), expected);
+    for (alert, row) in body["alerts"].as_array().unwrap().iter().zip(&rows) {
+        let network = &index["networks"][row[1].as_u64().unwrap() as usize];
+        assert_eq!(alert["network"], network["id"]);
+        assert_eq!(alert["category"], row[2]);
+        assert_eq!(alert["level"], row[3]);
+        assert_eq!(alert["event"], row[4]);
+        assert_eq!(alert["expires"], row[7]);
+        if row[8].is_null() {
+            assert_eq!(alert["bbox"], Value::Null);
+        } else {
+            assert_eq!(alert["bbox"], json!([row[8], row[9], row[10], row[11]]));
+        }
+        assert!(alert.get("offset").is_none());
+    }
+    for network in body["networks"].as_array().unwrap() {
+        assert!(network.get("file").is_none());
+        // A boundary set's path is under the data root, not the index.
+        if let Some(path) = network["areas"]["path"].as_str() {
+            assert!(path.starts_with("alerts-areas/") && path.ends_with(".pmtiles"), "{path}");
+        }
+    }
+    let ended = body["ended"].as_array().unwrap();
+    assert_eq!(ended.len(), index["ended"].as_array().unwrap().len());
+    for (item, raw) in ended.iter().zip(index["ended"].as_array().unwrap()) {
+        let raw_id = raw.get(0).or_else(|| raw.get("id")).unwrap();
+        assert_eq!(&item["id"], raw_id);
+        assert!(item["network"].is_string());
+        assert!(item["reason"].is_string());
+        assert!(item.get("by").is_some());
+    }
+    assert!(body["sources"].is_array());
+    // The pointer and the index: a list without a point reads no line.
+    assert_eq!(data.reads().len(), 2);
+}
+
+#[test]
+fn the_alert_list_filters_by_network_category_and_level() {
+    let objects = bucket();
+    let (index, rows) = alert_rows(&objects);
+    let data = Data::in_memory(objects);
+    let networks: Vec<&str> = index["networks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|network| network["id"].as_str().unwrap())
+        .collect();
+    for (position, network) in networks.iter().enumerate() {
+        let body = ok(&data, "alerts", &format!("network={network}"));
+        let expected = rows.iter().filter(|row| row[1].as_u64() == Some(position as u64)).count();
+        assert_eq!(body["count"], expected, "{network}");
+        assert!(body["ended"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["network"] == *network));
+        assert_eq!(body["networks"].as_array().unwrap().len(), 1);
+    }
+    let category = rows[0][2].as_str().unwrap();
+    let body = ok(&data, "alerts", &format!("category={category}"));
+    assert_eq!(body["count"], rows.iter().filter(|row| row[2] == category).count());
+    for level in 1..=5u64 {
+        let body = ok(&data, "alerts", &format!("level={level}"));
+        let expected = rows.iter().filter(|row| row[3].as_u64().unwrap() >= level).count();
+        assert_eq!(body["count"], expected, "level {level}");
+        assert_eq!(body["request"]["level"], level);
+    }
+    assert_eq!(ok(&data, "alerts", "limit=1")["count"], 1.min(rows.len()));
+
+    for query in ["level=0", "level=6", "level=high", "category=weather", "lat=35&lon=140&radius=10"] {
+        let error = err(&data, "alerts", query);
+        assert_eq!((error.status, error.code.as_str()), (400, "invalid_parameter"), "{query}");
+    }
+    let error = err(&data, "alerts", "network=metar");
+    assert_eq!((error.status, error.code.as_str()), (404, "unknown_network"));
+    assert_eq!(error.detail.unwrap()["available"], json!(networks));
+}
+
+#[test]
+fn a_bbox_keeps_the_alerts_whose_box_meets_it() {
+    let objects = bucket();
+    let (_, rows) = alert_rows(&objects);
+    let data = Data::in_memory(objects);
+    let boxed: Vec<&Value> = rows.iter().filter(|row| !row[8].is_null()).collect();
+    let row = boxed.first().expect("an alert with a box");
+    let query = format!("bbox={},{},{},{}", row[8], row[9], row[10], row[11]);
+    let body = ok(&data, "alerts", &query);
+    assert!(ids(&body, "alerts", "id").contains(&row[0].as_str().unwrap().to_owned()));
+    // An alert with no box is placed nowhere.
+    assert!(body["alerts"].as_array().unwrap().iter().all(|alert| !alert["bbox"].is_null()));
+    // The whole world holds every boxed alert.
+    let world = ok(&data, "alerts", "bbox=-180,-90,180,90");
+    assert_eq!(world["count"], boxed.len());
+    // Across the antimeridian (west > east) is a valid box.
+    assert!(ok(&data, "alerts", "bbox=170,-10,-170,10")["count"].is_u64());
+}
+
+#[test]
+fn a_point_is_tested_against_the_polygon_or_else_the_box() {
+    let objects = bucket();
+    let (index, rows) = alert_rows(&objects);
+    // An alert with its own polygon: find a point inside it and one in its
+    // box but outside it, on a grid over the box.
+    let drawn = rows
+        .iter()
+        .find(|row| !row[8].is_null() && !alert_line(&objects, &index, row)["geometry"].is_null())
+        .expect("an alert with a polygon");
+    let geometry = alert_line(&objects, &index, drawn)["geometry"].clone();
+    let [west, south, east, north] =
+        [8, 9, 10, 11].map(|item| drawn[item].as_f64().unwrap());
+    let mut inside = None;
+    let mut outside = None;
+    for i in 1..40 {
+        for j in 1..40 {
+            let lat = south + (north - south) * f64::from(i) / 40.0;
+            let lon = west + (east - west) * f64::from(j) / 40.0;
+            if alerts::geometry_contains(&geometry, lat, lon) {
+                inside.get_or_insert((lat, lon));
+            } else {
+                outside.get_or_insert((lat, lon));
+            }
+        }
+    }
+    let id = drawn[0].as_str().unwrap().to_owned();
+    let data = Data::in_memory(bucket());
+    let (lat, lon) = inside.expect("a point inside the polygon");
+    let body = ok(&data, "alerts", &format!("lat={lat}&lon={lon}"));
+    assert!(ids(&body, "alerts", "id").contains(&id));
+    assert_eq!(body["request"]["lat"], lat);
+    if let Some((lat, lon)) = outside {
+        let body = ok(&data, "alerts", &format!("lat={lat}&lon={lon}"));
+        assert!(!ids(&body, "alerts", "id").contains(&id));
+    }
+
+    // An alert drawn by area codes alone stands on its box: give one a box.
+    let mut objects = bucket();
+    let (_, mut index) = live_index(&objects, "alerts");
+    let position = rows
+        .iter()
+        .position(|row| alert_line(&objects, &index, row)["geometry"].is_null())
+        .expect("an area-coded alert");
+    let coded = rows[position][0].as_str().unwrap().to_owned();
+    for (item, value) in [(8, 10.0), (9, 10.0), (10, 11.0), (11, 11.0)] {
+        index["alerts"][position][item] = json!(value);
+    }
+    replace_index(&mut objects, "alerts", &index, "a1e00001");
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "alerts", "lat=10.5&lon=10.5");
+    assert_eq!(ids(&body, "alerts", "id"), vec![coded.clone()]);
+    assert_eq!(ok(&data, "alerts", "lat=12&lon=10.5")["count"], 0);
+}
+
+#[test]
+fn an_alert_is_its_line_with_its_box() {
+    let objects = bucket();
+    let (index, rows) = alert_rows(&objects);
+    let data = Data::in_memory(bucket());
+    for row in &rows {
+        let id = row[0].as_str().unwrap();
+        let body = ok(&data, &format!("alerts/{id}"), "");
+        let mut line = alert_line(&objects, &index, row);
+        line["bbox"] = if row[8].is_null() {
+            Value::Null
+        } else {
+            json!([row[8], row[9], row[10], row[11]])
+        };
+        assert_eq!(body["alert"], line, "{id}");
+        let network = &index["networks"][row[1].as_u64().unwrap() as usize];
+        assert_eq!(body["network"]["id"], network["id"]);
+        assert!(body["network"].get("file").is_none());
+    }
+    let reads = data.reads().iter().filter(|(_, kind)| *kind == "range").count();
+    assert_eq!(reads, rows.len());
+
+    let error = err(&data, "alerts/nws:urn:oid:0", "");
+    assert_eq!((error.status, error.code.as_str()), (404, "unknown_alert"));
+    assert!(error.detail.is_none());
+    // An alert that left with this round is still 404, and says how it left.
+    if let Some(ended) = index["ended"].as_array().and_then(|items| items.first()) {
+        let id = ended.get(0).or_else(|| ended.get("id")).unwrap().as_str().unwrap();
+        let error = err(&data, &format!("alerts/{id}"), "");
+        assert_eq!(error.code, "unknown_alert");
+        assert_eq!(error.detail.unwrap()["ended"]["id"], id);
+    }
+}
+
+#[test]
+fn an_alert_replaced_under_a_new_id_names_its_successor() {
+    let mut objects = bucket();
+    let (_, mut index) = live_index(&objects, "alerts");
+    let by = index["alerts"][0][0].clone();
+    index["ended"] = json!([
+        ["nws:old.1", 0, "replaced", by],
+        ["nws:old.2", 0, "gone"],
+        { "id": "nws:old.3", "network": 0, "reason": "replaced", "by": by }
+    ]);
+    replace_index(&mut objects, "alerts", &index, "a1e00002");
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "alerts", "");
+    let network = index["networks"][0]["id"].clone();
+    assert_eq!(
+        body["ended"],
+        json!([
+            { "id": "nws:old.1", "network": network, "reason": "replaced", "by": by },
+            { "id": "nws:old.2", "network": network, "reason": "gone", "by": null },
+            { "id": "nws:old.3", "network": network, "reason": "replaced", "by": by }
+        ])
+    );
+    let error = err(&data, "alerts/nws:old.1", "");
+    assert_eq!(error.detail.unwrap()["ended"]["by"], by);
+}
+
+#[test]
+fn an_alerts_round_can_be_pinned_and_a_newer_index_is_refused() {
+    let objects = bucket();
+    let live = pointer_dir(&objects, "latest-alerts.json");
+    let mut rounds: Vec<String> = objects
+        .keys()
+        .filter(|key| key.starts_with("alerts.") && key.ends_with("/index.json"))
+        .map(|key| key.trim_end_matches("/index.json").to_owned())
+        .filter(|round| *round != live)
+        .collect();
+    rounds.sort();
+    let round = rounds.last().expect("an earlier alerts round").clone();
+    let data = Data::in_memory(objects);
+    assert_eq!(ok(&data, "alerts", &format!("issue={round}"))["issue"], json!(round));
+
+    let mut objects = bucket();
+    let (_, mut index) = live_index(&objects, "alerts");
+    index["schemaVersion"] = json!(2);
+    replace_index(&mut objects, "alerts", &index, "a1e00003");
+    let error = err(&Data::in_memory(objects), "alerts", "");
+    assert_eq!((error.status, error.code.as_str()), (502, "upstream_failed"));
+}
+
 // ── storms ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -1019,7 +1284,7 @@ fn a_source_summary_says_which_route_reads_it() {
     let sounding = block_on(read_source(&data, "sounding")).expect("summary");
     assert_eq!(sounding["kind"], "point");
     assert_eq!(sounding["endpoint"], "/v1/soundings");
-    for (product, endpoint) in [("synop", "/v1/synop"), ("aq", "/v1/aq")] {
+    for (product, endpoint) in [("synop", "/v1/synop"), ("aq", "/v1/aq"), ("alerts", "/v1/alerts")] {
         let summary = block_on(read_source(&data, product)).expect("summary");
         assert_eq!(summary["kind"], "point", "{product}");
         assert_eq!(summary["endpoint"], endpoint, "{product}");

@@ -10,7 +10,7 @@ use url::Url;
 use crate::bucket::Data;
 use crate::error::HttpError;
 use crate::stations::{AQ, SYNOP};
-use crate::{airport, docs, point, products, sounding, source, stations, tc};
+use crate::{airport, alerts, docs, point, products, sounding, source, stations, tc};
 
 /// A `200` JSON answer: the serialized body, its `Cache-Control` and any
 /// further headers (`x-xue-run`, `x-xue-issue`).
@@ -91,6 +91,7 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
         "/v1/airports" => product_json(airport::list(data, url).await?, url),
         "/v1/synop" => product_json(stations::list(&SYNOP, data, url).await?, url),
         "/v1/aq" => product_json(stations::list(&AQ, data, url).await?, url),
+        "/v1/alerts" => product_json(alerts::list(data, url).await?, url),
         "/v1/storms" => product_json(tc::list(data, url).await?, url),
         _ => {
             if let Some(source_id) = path.strip_prefix("/v1/sources/") {
@@ -106,14 +107,16 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
                 ("/v1/airports/", "airport"),
                 ("/v1/synop/", "synop"),
                 ("/v1/aq/", "aq"),
+                ("/v1/alerts/", "alerts"),
                 ("/v1/storms/", "tc"),
             ] {
                 if let Some(id) = path.strip_prefix(prefix) {
                     if id.is_empty() || id.contains('/') {
                         break;
                     }
-                    // The path is percent-encoded; a station id may carry a
-                    // colon (`amedas:50066`) a client encoded.
+                    // The path is percent-encoded; a station or alert id may
+                    // carry a colon (`amedas:50066`, `nws:urn:oid:…`) a
+                    // client encoded.
                     let id = percent_encoding::percent_decode_str(id)
                         .decode_utf8()
                         .map_err(|_| {
@@ -124,6 +127,7 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
                         "airport" => airport::station(data, &id, url).await?,
                         "synop" => stations::station(&SYNOP, data, &id, url).await?,
                         "aq" => stations::station(&AQ, data, &id, url).await?,
+                        "alerts" => alerts::alert(data, &id, url).await?,
                         _ => tc::storm(data, &id, url).await?,
                     };
                     return product_json(answer, url);

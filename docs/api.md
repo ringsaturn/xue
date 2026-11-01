@@ -13,7 +13,8 @@ published dataset. It resolves a run the way the STAC catalog does
 (Collection → live pointer → manifest), reads the bundle's Zarr store with
 ranged requests and decodes the quantized codes with the same `xue` crate
 the viewer's wasm decoder uses. The point products — soundings, airports,
-surface stations, air-quality stations, tropical cyclones — it reads through their own pointer
+surface stations, air-quality stations, weather alerts, tropical
+cyclones — it reads through their own pointer
 and index, one station per ranged read, and answers in physical units. It
 writes nothing. The viewer does not depend on it, so the site and the
 catalog work when it is down.
@@ -54,6 +55,8 @@ ignored.
 | `GET /v1/synop/{station}` | one station's 24-hour window | same |
 | `GET /v1/aq` | every air-quality station's current values (§ Air-quality stations) | same |
 | `GET /v1/aq/{station}` | one air-quality station's 24-hour window | same |
+| `GET /v1/alerts` | the weather alerts in force (§ Alerts) | same |
+| `GET /v1/alerts/{id}` | one alert's full record | same |
 | `GET /v1/storms` | the tropical systems of the live issue (§ Storms) | same |
 | `GET /v1/storms/{storm}` | one storm's tracks | same |
 
@@ -177,15 +180,16 @@ The ids `/v1/point?variables=` accepts are the distinct `bundle` values of
 `kind` says what the source is and `endpoint` which route reads it:
 `grid` and `/v1/point` for a run or an observation window, `point` and the
 product's list route (`/v1/soundings`, `/v1/airports`, `/v1/synop`,
-`/v1/aq`, `/v1/storms`) for a point product; `null` for a point product the API only
+`/v1/aq`, `/v1/alerts`, `/v1/storms`) for a point product; `null` for a point product the API only
 names (`nexrad`). Asking `/v1/point` for a point product is `400
 not_a_grid`, whose `detail.endpoint` is the right route.
 
 ## Point products
 
 The soundings (`docs/sounding.md`), airports (`docs/airport.md`), surface
-stations (`docs/synop.md`), air-quality stations (`docs/aq.md`) and
-tropical cyclones (`docs/tc.md`) share one shape on the bucket — a mutable `latest-<product>.json` naming an immutable
+stations (`docs/synop.md`), air-quality stations (`docs/aq.md`), weather
+alerts (`docs/alerts.md`) and tropical cyclones (`docs/tc.md`) share one
+shape on the bucket — a mutable `latest-<product>.json` naming an immutable
 `<product>.<issue>/index.json`, the records beside it addressed by byte
 span — and one shape here: a **list** route that answers the index, and a
 **record** route that answers one station or storm. Each read costs the
@@ -196,7 +200,7 @@ Every product answer opens with the same four fields:
 
 | Field | Meaning |
 |---|---|
-| `product` | `sounding`, `airport`, `synop`, `aq`, `tc` |
+| `product` | `sounding`, `airport`, `synop`, `aq`, `alerts`, `tc` |
 | `issue` | the issue's STAC Item id: `sounding.2026091402`, `airport.202609161440` |
 | `issued` | the aggregation hour, or the ten-minute round |
 | `generated` | when the build ran |
@@ -342,6 +346,50 @@ same parameters, shapes and errors. The differences:
   `co` (ppm), hourly means timed at the end of the hour; a station id is
   `<network>:<the network's own id>` (`airnow:060371103`).
 
+### Alerts
+
+`GET /v1/alerts` answers the live snapshot (`docs/alerts.md` §5):
+`networks[]` (each network's entry of the index without its file
+descriptor: `id, name, attribution, license, url, latest, areas`, with
+`areas.path` resolved against the data root, `/v1/catalog`'s
+`dataOrigin`), `categories` (the index's list), `alerts[]` — `{id,
+network, category, level, event, sent, onset, expires, bbox}`, the index's
+rows named, in id order, `bbox` `[west, south, east, north]` or `null` —
+and `ended[]`, `{id, network, reason, by}` for each alert that left with
+this round (`reason` `expired`, `cancelled`, `replaced` or `gone`; `by`
+the id that replaced it, where the round names one, else `null`).
+
+| Parameter | Meaning |
+|---|---|
+| `network` | keep one network (`nws`, `jma`, `eccc`); `404 unknown_network` otherwise, `detail.available` listing them. Also filters `ended[]` |
+| `category` | keep one of the index's `categories`; any other is `400 invalid_parameter`, `detail.available` listing them |
+| `level` | keep the alerts at this level or above, an integer 1 … 5 |
+| `lat`, `lon` | together: keep the alerts in force at this point |
+| `bbox` | `west,south,east,north`; keep the alerts whose box meets it (`west > east` spans the antimeridian) |
+| `limit` | at most this many, the first in id order |
+
+`radius` is refused (`400 invalid_parameter`): a point either is in an
+alert's area or is not. The point test has two tiers. An alert with its
+own polygon (NWS storm-based warnings, every ECCC alert) is tested against
+that polygon, read from its line. An alert drawn only by area codes is
+tested against its box, which is the union of its areas' boxes and so
+wider than the areas themselves: a point near such an alert's edge can
+match it without being in any of its areas. An alert with neither a
+polygon nor a box (a network with no boundary set, such as `jma`, or a
+round written before area boxes) matches no point and no `bbox`. A client
+that needs the exact answer for coded alerts joins `areas` to the boundary
+set (`docs/alerts.md` §9) itself. A point query costs one ranged read per
+alert whose box holds the point.
+
+`GET /v1/alerts/{id}` takes an alert id, percent-encoded where it carries
+reserved characters (`nws:urn:oid:…`), and answers `network` and `alert`:
+the alert's line (`docs/alerts.md` §6) verbatim — `id, network, category,
+level, native, sent, onset, expires, status, texts, areas, geometry, url,
+sender`, and `replaces` where the round gives it — with `bbox` from its
+row added. An id not in force in the issue is `404 unknown_alert`; one
+that ended with this round says how in `detail.ended` (`{id, network,
+reason, by}`), so a client following an alert sees what replaced it.
+
 ### Storms
 
 `GET /v1/storms` answers `storms[]`, the index's rows (`docs/tc.md` §4)
@@ -387,7 +435,7 @@ forecasts and best tracks are passed through as the product writes them.
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `invalid_parameter` | `source`, `lat` or `lon` missing or out of range; `time` not ISO 8601; `run` not a run name; `issue` not `<product>.<digits>`; `/v1/cell` without `run`, `row` or `column`, or a cell outside the grid (`detail` gives its `rows` and `columns`); `lat` without `lon`, `radius` without them, a malformed `bbox`, `limit` under 1; an `include` section that does not exist |
+| 400 | `invalid_parameter` | `source`, `lat` or `lon` missing or out of range; `time` not ISO 8601; `run` not a run name; `issue` not `<product>.<digits>`; `/v1/cell` without `run`, `row` or `column`, or a cell outside the grid (`detail` gives its `rows` and `columns`); `lat` without `lon`, `radius` without them, a malformed `bbox`, `limit` under 1; an `include` section that does not exist; an alerts `level` outside 1 … 5, a `category` the issue does not list, or `radius` on `/v1/alerts` |
 | 400 | `grid_mismatch` | `/v1/cell` asked for bundles on different grids; `detail.bundles` names the first two |
 | 400 | `not_a_grid` | `/v1/point` asked for a point product; `detail.endpoint` is the route that reads it |
 | 404 | `unknown_source` | no such Collection |
@@ -397,6 +445,7 @@ forecasts and best tracks are passed through as the product writes them.
 | 404 | `unknown_variable` | the run has no such bundle (`detail.available` lists those it has), or the bundle ships no store |
 | 404 | `unknown_station` | the issue has no such sounding station, airport, surface station or air-quality station |
 | 404 | `unknown_network` | `network=` names no network of the issue (`detail.available` lists them) |
+| 404 | `unknown_alert` | the issue has no alert in force by that id (`detail.ended` says how it left, when it left with this round) |
 | 404 | `unknown_storm` | no storm, crosswalk entry or alias by that id (`detail.available` lists the storms) |
 | 404 | `not_found` | no such route |
 | 405 | `method_not_allowed` | anything but `GET`, `HEAD`, `OPTIONS` |
