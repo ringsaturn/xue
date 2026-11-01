@@ -365,8 +365,10 @@ class RoundsTest(unittest.TestCase):
 
     def test_amedas_lines_carry_the_quality_codes_the_values_do_not_imply(self) -> None:
         station = line_of(self.directories[1], self.rows[1]["amedas:82182"])
-        self.assertEqual(station["qc"], {"rh": [1, 6, 1]})
-        self.assertEqual(station["obs"]["rh"][1], None)  # code 6, missing
+        # The 09:00 report has no snow depth, coded 5; the other two times
+        # have neither a value nor a code, and every humidity code is 0.
+        self.assertEqual(station["qc"], {"snow": [None, 5, None]})
+        self.assertIsNone(station["obs"]["snow"][1])
         soya = line_of(self.directories[1], self.rows[1]["amedas:11001"])
         self.assertNotIn("qc", soya)  # every value code 0
         for network in ("dwd", "hko"):
