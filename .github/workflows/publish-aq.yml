@@ -99,7 +99,7 @@ jobs:
           fi
           live=""
           if [ -f web/public/data/latest-aq.json ]; then
-            live=$(jq -r .path web/public/data/latest-aq.json | sed -n 's:^aq\.\([0-9]\{12\}\)/index\.json$:\1:p')
+            live=$(jq -r .path web/public/data/latest-aq.json | sed -n 's:^\(aq/[0-9/]\{11\}\)\{0,1\}aq\.\([0-9]\{12\}\)/index\.json$:\2:p')
           fi
           if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
             echo "aq $round is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
