@@ -773,6 +773,127 @@ Sizes on a calm day (2026-10-31 15:20 UTC): `nws.jsonl` 380 alerts,
 31 KB (10 KB); `index.json` 89 KB (11 KB). A stormy day is five to ten
 times that, mostly NWS text and polygons.
 
+## 12. The archive
+
+A round is a snapshot that lives three hours. The archive is the record:
+every alert that was in force in some round of a UTC month, once, as the
+last version of it a round of that month published, with when it ended
+and why. It is a separate tree under the data root, written by the
+publisher (`xue alerts-archive`) and never pruned.
+
+### 12.1 Layout
+
+```
+alerts/archive/catalog.json               the one mutable name: every month
+alerts/archive/<YYYY>/<MM>/alerts.jsonl   the month's alerts, one per line, sorted by id
+alerts/archive/<YYYY>/<MM>/index.json     every alert's row and byte span in that file
+```
+
+- `catalog.json` is requested with `Cache-Control: no-cache`, as the
+  pointer is (§1). Each entry names a month's index by `path` (relative to
+  the catalog), `byteLength` and `crc32`; the index names its `.jsonl` the
+  same way. Every file but the catalog is requested as
+  `<path>?v=<crc32>`.
+- A month is the UTC month of a round. An alert in force across the turn
+  of a month is in both months' files, each holding the version that
+  month last published.
+- The month in progress is rewritten in place at most once an hour (the
+  first round of each hour folds in the rounds before it), and its CRC32
+  changes with it; a month is final once the first hour of the next has
+  been folded in. Nothing in the files records when they were built: the
+  same records give the same bytes.
+
+### 12.2 Records
+
+A line of `alerts.jsonl`:
+
+```json
+{"id": "nws:urn:oid:…", "network": "nws", "first": "2026-11-01T00:05:00Z",
+ "ended": {"time": "2026-11-01T03:10:00Z", "reason": "replaced", "by": "nws:urn:oid:…"},
+ "alert": { … }}
+```
+
+- `id` and `network` are the alert's (§4), repeated so a slice read by
+  range identifies itself.
+- `alert` is the alert's line (§6) as the month's last round that listed
+  it published it, byte for byte the same object: a later version under
+  the same id replaces an earlier one.
+- `first` is the first round of the month whose snapshot listed the alert
+  (its `issued`): for an alert carried in from the month before, the
+  month's first round.
+- `ended` is `null` while the alert was still in force at the month's
+  last round (or, for the month in progress, at the last round folded in);
+  else `time`, the round whose `ended[]` (§7) listed it, `reason`, and
+  `by` for `replaced`, as that entry gave them. An alert listed again
+  after it ended (a network carried over again) is in force once more and
+  its `ended` is `null`. An end found in the first round of a month is
+  recorded in the month the alert was last in force.
+
+### 12.3 Indexes
+
+A month's `index.json`:
+
+```json
+{"archiveSchemaVersion": 1, "product": "alerts", "month": "2026-11",
+ "alerts": {"path": "alerts.jsonl", "byteLength": 41234567, "crc32": "…"},
+ "networks": ["eccc", "jma", "nws"],
+ "rows": [["nws:urn:oid:…", 2, "marine", 2, "Small Craft Advisory",
+           "2026-11-01T00:05:00Z", "2026-11-01T03:10:00Z", "replaced", 0, 1450]]}
+```
+
+`networks` are the ids of the networks the month holds, sorted. A row is
+`[id, network, category, level, event, first, ended, reason, offset,
+length]`: `network` the position in `networks`, `category`, `level` and
+`event` the alert's (§5), `first` the record's, `ended` and `reason` its
+`ended.time` and `ended.reason` or two nulls, and `offset` and `length`
+the byte span of the record's JSON object in `alerts.jsonl`, without the
+newline. Rows are sorted by id and unique and their spans tile the file
+in order.
+
+`catalog.json`:
+
+```json
+{"archiveSchemaVersion": 1, "product": "alerts",
+ "months": [{"month": "2026-11", "path": "2026/11/index.json", "byteLength": 1234567, "crc32": "…", "alerts": 23456}]}
+```
+
+`months` are sorted and unique. A reader rejects an `archiveSchemaVersion`
+above the one it implements.
+
+### 12.4 The producer
+
+The rounds on the bucket last three hours, so the archive is fed by the
+publisher as it goes, from the state it keeps on its own disk:
+
+- After each round is published, `xue alerts-archive --round <round>`
+  compares the round with the one before it (the live round the build
+  measured `ended[]` against): every line that is new or whose bytes
+  changed, and every `ended[]` entry, is appended to a journal in the
+  publisher's state directory. A round with no round before it in the
+  same month journals every line.
+- When the journal holds a round of an earlier hour than the current one
+  (or with `--compact`), it is folded into the month files under the
+  state directory, in journal order: a line replaces the record's `alert`
+  and clears its `ended`, `first` stays the earliest, an end sets
+  `ended`. The month file is merged as a stream, so the journal, not the
+  month, bounds the memory it takes. The files that differ from what the
+  published catalog names are listed in the report, each before the file
+  naming it, the catalog last, and uploaded in that order
+  (`make upload-r2-alerts-archive`); a failed upload is listed again by
+  the next fold.
+- A month the state directory lacks but the published catalog names is
+  pulled from the data origin first (CRC32 checked), so a new host or a
+  lost disk continues the published record rather than restarting it. A
+  catalog the origin cannot serve (other than not existing) stops the
+  fold, and the journal waits for the next one.
+- Months before the previous one that the published catalog already
+  holds as they are on disk are removed from the state directory.
+
+What a reader cannot learn from the archive: the versions of an alert
+between the first and the last of a month (an NWS `Update` is a new id
+and so a new record; a change under the same id keeps only the last
+version), and anything that happened in a round the publisher missed.
+
 ---
 
 Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).
