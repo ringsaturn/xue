@@ -24,7 +24,9 @@ from ..errors import XueError
 from ..pointproduct import (  # noqa: F401 — re-exported: the aq modules import them from here
     CRC32,
     check_number,
+    check_builder,
     check_pointer,
+    check_sha256,
     check_sources,
     check_time,
     crc32_hex,
@@ -73,12 +75,30 @@ the round."""
 ELEMENTS = tuple(ELEMENT_BOUNDS)
 ELEMENT_DECIMALS = {"pm25": 1, "pm10": 1, "o3": 1, "no2": 1, "so2": 1, "co": 2}
 
-MOLAR_VOLUME = 24.04
-"""Litres per mole of an ideal gas at 20 °C and 1 atm, the reference the
-mass concentrations of a network that reports gases in µg/m³ are turned
-back into mixing ratios with."""
+GAS_REFERENCE = {"temperature": 293, "pressure": 101325}
+"""The reference conditions, kelvin and pascals, a network that reports
+gases in µg/m³ states them at, published as its ``gasReference``. Hong
+Kong's EPD adjusts every gas measurement to 293 K and 101.325 kPa (its Air
+Quality Objectives' note)."""
+
+MOLAR_VOLUME = round(8.314462618 * GAS_REFERENCE["temperature"] / GAS_REFERENCE["pressure"] * 1000, 2)
+"""Litres per mole of an ideal gas at :data:`GAS_REFERENCE`, 24.04: what
+the mass concentrations are turned back into mixing ratios with."""
 
 MOLAR_MASS = {"o3": 48.00, "no2": 46.01, "so2": 64.07, "co": 28.01}
+
+ELEMENT_TABLE: dict[str, dict[str, Any]] = {
+    "pm25": {"unit": "µg/m³", "cell": "mean", "period": "network"},
+    "pm10": {"unit": "µg/m³", "cell": "mean", "period": "network"},
+    "o3": {"unit": "ppb", "cell": "mean", "period": "network"},
+    "no2": {"unit": "ppb", "cell": "mean", "period": "network"},
+    "so2": {"unit": "ppb", "cell": "mean", "period": "network"},
+    "co": {"unit": "ppm", "cell": "mean", "period": "network"},
+}
+"""The index's ``elementTable``: every element a mean over the network's
+``avgPeriod``, ending at its time."""
+
+CELLS = ("point", "mean", "sum", "max", "min")
 
 ROW_HEAD = ("id", "lat", "lon", "elev", "rank", "name", "agency", "obsTime")
 ROW_TAIL = ("offset", "length")
@@ -142,7 +162,7 @@ def stations_filename(network: str) -> str:
 
 
 def to_mixing_ratio(key: str, micrograms: float) -> float:
-    """A gas's µg/m³ → ppb (``co``: ppm) at the 20 °C, 1 atm reference."""
+    """A gas's µg/m³ → ppb (``co``: ppm) at :data:`GAS_REFERENCE`."""
     ppb = micrograms * MOLAR_VOLUME / MOLAR_MASS[key]
     return ppb / 1000.0 if key == "co" else ppb
 
@@ -231,6 +251,7 @@ def validate_sources(sources: object, label: str) -> None:
         for key in ("reports", "files", "missing", "unplaced"):
             if key in status:
                 _integer(status[key], f"{where}.{key}", (0, None))
+        check_sha256(AqProductError, status.get("sha256"), f"{where}.sha256")
 
     check_sources(AqProductError, sources, label, SOURCE_KEY, extra)
 
@@ -253,6 +274,15 @@ def validate_network(payload: object, label: str) -> None:
         _integer(payload["avgPeriod"], f"{label}.avgPeriod", CADENCE_RANGE)
     if not isinstance(payload.get("preliminary"), bool):
         raise AqProductError(f"{label}.preliminary must be a boolean")
+    url = payload.get("licenseUrl")
+    if url is not None and (not isinstance(url, str) or not url.startswith("https://")):
+        raise AqProductError(f"{label}.licenseUrl must be an https URL or absent")
+    reference = payload.get("gasReference")
+    if reference is not None:
+        if not isinstance(reference, dict):
+            raise AqProductError(f"{label}.gasReference must be an object or null")
+        _number(reference.get("temperature"), f"{label}.gasReference.temperature", (200.0, 400.0))
+        _number(reference.get("pressure"), f"{label}.gasReference.pressure", (50000.0, 120000.0))
     if payload.get("latest") is not None:
         _time(payload["latest"], f"{label}.latest")
     _crc_file(payload.get("file"), f"{label}.file", network_filename(network))
@@ -278,8 +308,30 @@ def validate_index(payload: object) -> None:
         if network["id"] in seen:
             raise AqProductError(f"index.networks lists {network['id']} twice")
         seen.add(network["id"])
-    _elements(payload.get("elements"), "index.elements")
+    elements = _elements(payload.get("elements"), "index.elements")
+    validate_element_table(payload.get("elementTable"), elements, "index.elementTable")
     validate_sources(payload.get("sources"), "index.sources")
+    check_builder(AqProductError, payload.get("builder"), "index.builder")
+
+
+def validate_element_table(table: object, elements: list[str], label: str) -> None:
+    """The index's optional ``elementTable``: one entry per element of
+    ``elements``, in the same order."""
+    if table is None:
+        return
+    if not isinstance(table, dict) or list(table) != elements:
+        raise AqProductError(f"{label} must have one entry per element, in the elements' order")
+    for key, entry in table.items():
+        where = f"{label}.{key}"
+        if not isinstance(entry, dict):
+            raise AqProductError(f"{where} must be an object")
+        if not isinstance(entry.get("unit"), str) or not entry["unit"]:
+            raise AqProductError(f"{where}.unit must be a non-empty string")
+        if entry.get("cell") not in CELLS:
+            raise AqProductError(f"{where}.cell must be one of {CELLS}")
+        period = entry.get("period")
+        if period is not None and period != "network":
+            _integer(period, f"{where}.period", (1, None))
 
 
 def validate_stations_file(payload: object, network: dict[str, Any], elements: list[str], issued: str | None = None) -> None:

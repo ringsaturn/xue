@@ -14,19 +14,22 @@ end of the averaging hour and is published as it stands. ``lastBuildDate``
 runs half an hour ahead of the file and is not an observation time.
 
 Since every round reads the full day again, a missed round costs nothing.
-The gases are turned back into mixing ratios at the 20 °C, 1 atm reference
+The gases are turned back into mixing ratios at the 293 K, 101.325 kPa
+reference the department states its gas measurements at
 (:func:`~.schema.to_mixing_ratio`); the particles stay in µg/m³.
 
 The file carries no positions. They come from the committed table
 ``hkepd_stations.json``, recorded once from the network's CSDI WFS layer
-(``csdi:AQMN``) and keyed by the XML's station names; a name the table does
-not know is counted and dropped.
+(``csdi:AQMN``) and keyed by the XML's station names; a station's id is
+the department's own station number there (``mid``). A name the table
+does not know is counted and dropped.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.error
 import xml.etree.ElementTree as ElementTree
 from datetime import UTC, datetime
@@ -35,7 +38,7 @@ from pathlib import Path
 
 from ..airport.fetch import SourceStatus
 from ..errors import DownloadError, XueError
-from ..pointproduct import write_bytes_atomic
+from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
 from .schema import AqProductError, bounded, round_directory, to_mixing_ratio
 from .station import NetworkRead, Observation, StationMeta
@@ -62,7 +65,7 @@ def load_table(path: Path = TABLE) -> dict[str, StationMeta]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return {
         entry["name"]: StationMeta(
-            id=f"{NETWORK}:{entry['slug']}",
+            id=f"{NETWORK}:{entry['mid']}",
             name=entry["name"],
             names=entry.get("names") or None,
             lat=float(entry["lat"]),
@@ -71,6 +74,19 @@ def load_table(path: Path = TABLE) -> dict[str, StationMeta]:
             rank=int(entry["rank"]),
             agency=AGENCY,
         )
+        for entry in payload["stations"]
+    }
+
+
+def former_ids(path: Path = TABLE) -> dict[str, str]:
+    """Each station's id before it was the department's station number —
+    the English name lower-cased, other runs of characters a hyphen — to
+    its id now, so a round merging onto a live round of the old ids carries
+    the history over instead of keeping a second copy of each station for
+    a day."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        f"{NETWORK}:{re.sub(r'[^a-z0-9]+', '-', entry['name'].lower()).strip('-')}": f"{NETWORK}:{entry['mid']}"
         for entry in payload["stations"]
     }
 
@@ -143,7 +159,9 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     if status is None or not status.ok or not status.file:
         return NetworkRead({}, [], False)
     table = load_table()
-    rows = parse_file((raw_root / status.file).read_bytes())
+    body = (raw_root / status.file).read_bytes()
+    status.detail["sha256"] = sha256_hex(body)
+    rows = parse_file(body)
     observations: list[Observation] = []
     stations: dict[str, StationMeta] = {}
     unplaced: set[str] = set()

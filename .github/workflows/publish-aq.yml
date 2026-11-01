@@ -60,6 +60,7 @@ jobs:
       AQ_KEEP: ${{ inputs.keep || '6' }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
       FORCE: ${{ inputs.force && '--force' || '' }}
+      XUE_BUILD_REVISION: ${{ github.sha }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

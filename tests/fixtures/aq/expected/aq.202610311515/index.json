@@ -9,8 +9,10 @@
    "cadence": 3600,
    "avgPeriod": 3600,
    "preliminary": true,
+   "gasReference": null,
    "attribution": "AirNow (U.S. EPA) and the reporting agencies; preliminary data",
    "license": "AirNow-DEG",
+   "licenseUrl": "https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
    "url": "https://www.airnow.gov/",
    "latest": "2026-10-31T14:00:00Z",
    "file": {
@@ -31,24 +33,61 @@
    "cadence": 3600,
    "avgPeriod": 3600,
    "preliminary": true,
+   "gasReference": {
+    "temperature": 293,
+    "pressure": 101325
+   },
    "attribution": "Environmental Protection Department, HKSAR Government (DATA.GOV.HK)",
    "license": "DATA.GOV.HK",
+   "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
    "url": "https://www.aqhi.gov.hk/",
    "latest": "2026-10-31T14:00:00Z",
    "file": {
     "path": "hkepd.jsonl",
-    "byteLength": 4377,
-    "crc32": "984da24e"
+    "byteLength": 4340,
+    "crc32": "2a3c24e4"
    },
    "stations": {
     "path": "hkepd.stations.json",
-    "byteLength": 638,
-    "crc32": "fb95d3c1",
+    "byteLength": 601,
+    "crc32": "9d161432",
     "count": 4
    }
   }
  ],
  "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "elementTable": {
+  "pm25": {
+   "unit": "µg/m³",
+   "cell": "mean",
+   "period": "network"
+  },
+  "pm10": {
+   "unit": "µg/m³",
+   "cell": "mean",
+   "period": "network"
+  },
+  "o3": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "no2": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "so2": {
+   "unit": "ppb",
+   "cell": "mean",
+   "period": "network"
+  },
+  "co": {
+   "unit": "ppm",
+   "cell": "mean",
+   "period": "network"
+  }
+ },
  "sources": [
   {
    "id": "airnow-hourly",
@@ -58,15 +97,21 @@
    "files": 2,
    "missing": 1,
    "reports": 14,
-   "unplaced": 2
+   "unplaced": 2,
+   "sha256": "fdb3dcefa1dff69cb39d507ab176ab38a0ecedf39244d51772c41efe4da02a3c"
   },
   {
    "id": "epd-24pc",
    "ok": true,
    "fetched": "2026-10-31T15:16:41Z",
    "url": "https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml",
+   "sha256": "262266bb1cb51a2ac2b9bbd5f75d18a6044a7ee36cd8314a7662fe48df34cccc",
    "reports": 96,
    "unplaced": 1
   }
- ]
+ ],
+ "builder": {
+  "name": "xuebuild",
+  "revision": null
+ }
 }

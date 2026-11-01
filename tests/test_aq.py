@@ -149,9 +149,13 @@ class AdapterTest(unittest.TestCase):
     def test_epd_table(self) -> None:
         table = hkepd.load_table()
         self.assertEqual(len(table), 18)
-        self.assertEqual({meta.id for meta in table.values() if meta.rank == 2}, {"hkepd:causeway-bay", "hkepd:central", "hkepd:mong-kok"})
-        self.assertEqual(table["Central/Western"].id, "hkepd:central-western")
+        self.assertEqual({meta.id for meta in table.values() if meta.rank == 2}, {"hkepd:15", "hkepd:16", "hkepd:17"})
+        self.assertEqual(table["Central/Western"].id, "hkepd:0")
         self.assertEqual(table["Central/Western"].names, {"zh-Hant": "中西區"})
+        # The id is the department's station number; the name-derived ids
+        # it replaced map onto it for the merge.
+        self.assertEqual(hkepd.former_ids()["hkepd:central-western"], "hkepd:0")
+        self.assertEqual(hkepd.former_ids()["hkepd:tseung-kwan-o"], "hkepd:7")
         self.assertTrue(all(meta.agency == "EPD" for meta in table.values()))
 
 
@@ -236,7 +240,7 @@ class RoundsTest(unittest.TestCase):
         self.assertNotIn("airnow:001101010", airnow_ids)  # listed without data
         self.assertIn("airnow:031AZE010001", airnow_ids)
         hk_ids = {row[0] for row in self.table(0, "hkepd")["stations"]}
-        self.assertEqual(hk_ids, {"hkepd:causeway-bay", "hkepd:central-western", "hkepd:tap-mun", "hkepd:tung-chung"})
+        self.assertEqual(hk_ids, {"hkepd:15", "hkepd:0", "hkepd:14", "hkepd:10"})
         sources = {source["id"]: source for source in self.indexes[0]["sources"]}
         self.assertEqual(sources["epd-24pc"]["unplaced"], 1)
 
@@ -244,11 +248,11 @@ class RoundsTest(unittest.TestCase):
         baku = self.row(1, "airnow:031AZE010001")
         self.assertIsNone(baku[3])  # AirNow's 0.0
         self.assertEqual(baku[6], "U.S. Department of State Azerbaijan - Baku")
-        causeway = self.row(0, "hkepd:causeway-bay")
+        causeway = self.row(0, "hkepd:15")
         self.assertEqual(causeway[4], 2)
         self.assertEqual(causeway[6], "EPD")
         self.assertEqual(causeway[7], "2026-10-31T14:00:00Z")
-        self.assertEqual(self.line(0, "hkepd:causeway-bay")["names"], {"zh-Hant": "銅鑼灣"})
+        self.assertEqual(self.line(0, "hkepd:15")["names"], {"zh-Hant": "銅鑼灣"})
 
     def test_current_values_look_back_an_hour(self) -> None:
         for station in ("airnow:000020104", "airnow:060371103"):
@@ -260,6 +264,20 @@ class RoundsTest(unittest.TestCase):
                 values = line["obs"].get(key, [None] * len(line["time"]))
                 recent = [value for time, value in zip(line["time"], values) if time >= newest - 3600 and value is not None]
                 self.assertEqual(row[column(key)], recent[-1] if recent else None, (station, key))
+
+    def test_the_index_describes_its_elements_networks_and_build(self) -> None:
+        for index in self.indexes:
+            self.assertEqual(list(index["elementTable"]), index["elements"])
+            self.assertEqual(index["elementTable"]["co"], {"unit": "ppm", "cell": "mean", "period": "network"})
+            self.assertEqual(index["builder"], {"name": "xuebuild", "revision": None})
+            networks = {network["id"]: network for network in index["networks"]}
+            self.assertIsNone(networks["airnow"]["gasReference"])
+            self.assertEqual(networks["hkepd"]["gasReference"], {"temperature": 293, "pressure": 101325})
+            for network in networks.values():
+                self.assertTrue(network["licenseUrl"].startswith("https://"))
+            for source in index["sources"]:
+                if source["ok"]:
+                    self.assertRegex(source.get("sha256", ""), r"^[0-9a-f]{64}$", source["id"])
 
     def test_the_pointer_names_the_newest_round(self) -> None:
         pointer = json.loads((self.output / "latest-aq.json").read_bytes())
@@ -321,6 +339,21 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(index["networks"], [])
         self.assertIsNotNone(report["pointer"])  # AirNow answered, with nothing new
 
+    def test_a_previous_round_of_former_ids_merges_under_the_new_ones(self) -> None:
+        directory = self.output / round_directory(FIRST)
+        body = (directory / "hkepd.jsonl").read_bytes()
+        former = {new: old for old, new in hkepd.former_ids().items()}
+        lines = [json.loads(line) for line in body.splitlines()]
+        for line in lines:
+            line["id"] = former[line["id"]]
+        (directory / "hkepd.jsonl").write_bytes(b"".join(encode_json(line) + b"\n" for line in lines))
+        later = FIRST + timedelta(minutes=30)
+        self._record(later, airnow_ok=False)
+        previous = json.loads((directory / "index.json").read_bytes())
+        build_product(later, self.raw, self.output, previous_index=previous, now=later)
+        ids = [json.loads(line)["id"] for line in (self.output / round_directory(later) / "hkepd.jsonl").read_bytes().splitlines()]
+        self.assertEqual(sorted(ids), sorted(line["id"] for line in map(json.loads, body.splitlines())))
+
     def test_an_existing_round_is_not_rebuilt_without_force(self) -> None:
         with self.assertRaises(AqProductError):
             build_product(FIRST, self.raw, self.output, now=GENERATED[0])
@@ -350,6 +383,14 @@ class ValidatorTest(unittest.TestCase):
             "network twice": lambda index: index["networks"].append(index["networks"][0]),
             "duplicate element": lambda index: index["elements"].append("pm25"),
             "schema version": lambda index: index.__setitem__("schemaVersion", 2),
+            "element table out of order": lambda index: index.__setitem__(
+                "elementTable", dict(reversed(list(index["elementTable"].items())))
+            ),
+            "element table unit": lambda index: index["elementTable"]["o3"].__setitem__("unit", ""),
+            "gas reference": lambda index: index["networks"][-1].__setitem__("gasReference", {"temperature": 20}),
+            "licence url": lambda index: index["networks"][0].__setitem__("licenseUrl", "data.gov.hk"),
+            "source digest": lambda index: index["sources"][0].__setitem__("sha256", "0" * 63),
+            "builder": lambda index: index.__setitem__("builder", "xuebuild"),
         }
         for name, change in cases.items():
             index = copy.deepcopy(self.index)
@@ -362,7 +403,7 @@ class ValidatorTest(unittest.TestCase):
             "unsorted": lambda table, network: table["stations"].reverse(),
             "span past the file": lambda table, network: table["stations"][-1].__setitem__(-1, 10**7),
             "overlapping spans": lambda table, network: table["stations"][1].__setitem__(-2, 0),
-            "wrong network": lambda table, network: table["stations"][0].__setitem__(0, "hkepd:central"),
+            "wrong network": lambda table, network: table["stations"][0].__setitem__(0, "hkepd:16"),
             "short row": lambda table, network: table["stations"][0].pop(),
             "pm25 out of range": lambda table, network: table["stations"][0].__setitem__(column("pm25"), 20000.0),
             "elements differ": lambda table, network: table["elements"].reverse(),

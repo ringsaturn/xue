@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..airport.fetch import SourceStatus
 from . import airnow, hkepd
+from .schema import GAS_REFERENCE
 from .station import NetworkRead
 
 
@@ -26,8 +27,13 @@ class Network:
     preliminary: bool
     """Whether the network publishes unvalidated data, which a display
     must say."""
+    gas_reference: dict[str, int] | None
+    """The reference conditions the gases were converted from µg/m³ at,
+    or None for a network that publishes mixing ratios."""
     attribution: str
     license: str
+    license_url: str
+    """The terms page ``license`` names."""
     url: str
     sources: tuple[str, ...]
     """The adapter's source ids, in the order ``sources[]`` lists them."""
@@ -36,6 +42,9 @@ class Network:
     raw files and say how it went. ``since`` is the network's newest
     published time, or None."""
     read: Callable[[Path, dict[str, SourceStatus]], NetworkRead]
+    former_ids: Callable[[], dict[str, str]] | None = None
+    """Station ids the network used to publish, to the ids that replaced
+    them: the merge reads the previous round's lines under the new ids."""
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -44,8 +53,10 @@ class Network:
             "cadence": self.cadence,
             "avgPeriod": self.avg_period,
             "preliminary": self.preliminary,
+            "gasReference": self.gas_reference,
             "attribution": self.attribution,
             "license": self.license,
+            "licenseUrl": self.license_url,
             "url": self.url,
         }
 
@@ -56,8 +67,10 @@ AIRNOW = Network(
     cadence=3600,
     avg_period=3600,
     preliminary=True,
+    gas_reference=None,
     attribution="AirNow (U.S. EPA) and the reporting agencies; preliminary data",
     license="AirNow-DEG",
+    license_url="https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
     url="https://www.airnow.gov/",
     sources=(airnow.SOURCE,),
     fetch=airnow.fetch,
@@ -70,12 +83,15 @@ HKEPD = Network(
     cadence=3600,
     avg_period=3600,
     preliminary=True,
+    gas_reference=GAS_REFERENCE,
     attribution="Environmental Protection Department, HKSAR Government (DATA.GOV.HK)",
     license="DATA.GOV.HK",
+    license_url="https://data.gov.hk/en/terms-and-conditions",
     url="https://www.aqhi.gov.hk/",
     sources=(hkepd.SOURCE,),
     fetch=hkepd.fetch,
     read=hkepd.read,
+    former_ids=hkepd.former_ids,
 )
 
 NETWORKS: tuple[Network, ...] = (AIRNOW, HKEPD)

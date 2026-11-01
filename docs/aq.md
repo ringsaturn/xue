@@ -17,8 +17,10 @@ is the normative description of that product, schema v1.
 Everything is a static file under the data root, beside the run pointers
 and the other point products' pointers.
 
-- `latest-aq.json` is the one mutable object. Fetch it with caching
-  disabled. It names the newest round's directory and the index inside it:
+- `latest-aq.json` is the one mutable object. Request it with
+  `Cache-Control: no-cache` (in a browser, `fetch(url, {cache: "no-cache"})`):
+  without it a browser cache may answer with a pointer up to four hours
+  old. It names the newest round's directory and the index inside it:
 
   ```json
   {"schemaVersion": 1, "product": "aq", "issued": "2026-10-31T15:45:00Z",
@@ -87,8 +89,10 @@ adapter. The index lists them in this order (`elements`):
 | `co` | carbon monoxide | ppm, to a hundredth | number, −0.5 … 100 |
 
 - Gases are mixing ratios, particles mass concentrations. A network that
-  reports a gas as a mass concentration is converted with the molar volume
-  at 20 °C and 1 atm, 24.04 L/mol:
+  reports a gas as a mass concentration is converted at the reference
+  conditions it states its gases at — its `gasReference` (§4). Hong Kong's
+  EPD states 293 K and 101.325 kPa (§9.2), where the molar volume is
+  24.04 L/mol:
 
   ```
   ppb = µg/m³ × 24.04 / M          M: O3 48.00, NO2 46.01, SO2 64.07 g/mol
@@ -96,7 +100,8 @@ adapter. The index lists them in this order (`elements`):
   ```
 
   then rounded to the element's precision. A network that reports in the
-  product's units is published as reported.
+  product's units is published as reported, and its `gasReference` is
+  `null`.
 - Small negative values are kept. An analyser near zero drifts below it,
   and a network that publishes such an hour (AirNow does) is not
   corrected; below the range's floor a value is `null`.
@@ -111,17 +116,20 @@ adapter. The index lists them in this order (`elements`):
 - Positions are decimal degrees to four places; `elev` is metres above
   sea level, or `null` where the network does not give it.
 
+The index carries this table as `elementTable` (§4), so a reader need
+not hard-code it.
+
 The files are written compactly with ASCII escaping, and a file's identity
 is its bytes: the CRC32 in the index, and the pointer's, is of the file
 exactly as served. Given the same inputs a round is byte-identical; only
-the index's `generated` and the sources' `fetched` depend on when the
-build ran.
+the index's `generated`, the sources' `fetched` and the `builder`'s
+`revision` depend on when and from what the build ran.
 
 ## 3. Identity
 
 A station is `<network>:<the network's own station identifier>`
-(`airnow:060371103` is Los Angeles – N. Main Street, `hkepd:causeway-bay`
-the Causeway Bay roadside station). The network id is lowercase,
+(`airnow:060371103` is Los Angeles – N. Main Street, `hkepd:15` the
+Causeway Bay roadside station). The network id is lowercase,
 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`; the station part matches
 `[0-9A-Za-z_.-]+`. The id is the key everywhere: each stations file's rows
 are sorted by it, each network file's lines are sorted by it, and every
@@ -136,14 +144,19 @@ line repeats it as `id` so a slice read by range identifies itself.
   "generated": "2026-10-31T15:46:10Z",
   "networks": [
     {"id": "airnow", "name": "AirNow", "cadence": 3600, "avgPeriod": 3600, "preliminary": true,
+     "gasReference": null,
      "attribution": "AirNow (U.S. EPA) and the reporting agencies; preliminary data",
-     "license": "AirNow-DEG", "url": "https://www.airnow.gov/",
+     "license": "AirNow-DEG", "licenseUrl": "https://docs.airnowapi.org/docs/DataUseGuidelines.pdf",
+     "url": "https://www.airnow.gov/",
      "latest": "2026-10-31T15:00:00Z",
      "file":     {"path": "airnow.jsonl",         "byteLength": 1296859, "crc32": "9f060241"},
      "stations": {"path": "airnow.stations.json", "byteLength": 334561,  "crc32": "3a1401de", "count": 2028}}
   ],
   "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
-  "sources": [ … ]
+  "elementTable": {"pm25": {"unit": "µg/m³", "cell": "mean", "period": "network"}, …,
+                   "co": {"unit": "ppm", "cell": "mean", "period": "network"}},
+  "sources": [ … ],
+  "builder": {"name": "xuebuild", "revision": "56ea0e8"}
 }
 ```
 
@@ -152,16 +165,32 @@ line repeats it as `id` so a slice read by range identifies itself.
   in the publisher's order: its id and display `name`; `cadence`, the
   seconds between a station's reports; `avgPeriod`, the seconds each value
   averages over, ending at its time; `preliminary`, true when the network
-  publishes unvalidated data, which a display must then say; the
+  publishes unvalidated data, which a display must then say;
+  `gasReference` (optional), `{"temperature": <K>, "pressure": <Pa>}`, the
+  reference conditions the network's gases were converted from µg/m³ at
+  (§2), or `null` for a network published in its own mixing ratios; the
   `attribution` a display must show, the `license` the network's data is
-  reused under (§9 spells out each) and the network's `url`; `latest`, the
+  reused under (§9 spells out each), `licenseUrl` (optional), the terms
+  that licence string names, and the network's `url`; `latest`, the
   newest observation time in the network's file; `file`, the network file's
   name (always `<id>.jsonl`), length and CRC32; and `stations`, the
   stations file's name (always `<id>.stations.json`), length, CRC32 and
   row `count`.
 - `elements` is the element order of every stations file's rows, which
   repeats it. A reader indexes a row by position: `8 + elements.indexOf(key)`.
+- `elementTable` (optional) describes each of `elements`, one entry per
+  element in the same order: `unit`, the unit of §2's table; `cell`, how
+  the value stands for its time — `point`, `mean`, `sum`, `max` or `min`;
+  and `period`, the seconds the value covers, ending at its time — a
+  number, `"network"` where it is the network entry's `avgPeriod`, or
+  `null` for an instantaneous value. Every v1 element is a `mean` over
+  `"network"`. A reader that finds no entry for an element falls back to
+  §2.
 - `sources[]` is §7.
+- `builder` (optional) names the code that built the round:
+  `{"name": "xuebuild", "revision": <commit hash or null>}`. The
+  publisher sets the commit (`XUE_BUILD_REVISION`); an offline build
+  leaves it `null`.
 
 ## 5. `<network>.stations.json`
 
@@ -205,7 +234,7 @@ One line per station of that network, sorted by id, each the compact JSON
 object below followed by `\n`:
 
 ```
-{"id": "hkepd:causeway-bay", "name": "Causeway Bay" | null,
+{"id": "hkepd:15", "name": "Causeway Bay" | null,
  "names": {"zh-Hant": "銅鑼灣"} | null,
  "lat": 22.2801, "lon": 114.1851, "elev": null, "rank": 2, "agency": "EPD" | null,
  "time": [1793376000, 1793379600, …],     — epoch seconds UTC, the end of each hour, strictly increasing
@@ -242,8 +271,11 @@ One entry per source, every network's in turn, in build order:
  "url": "https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml", "error": "HTTP Error 503"}
 ```
 
-`ok: false` always carries `error`. `reports` is what the source
-contributed: station-hours with at least one value. `unplaced` is how many
+`sha256` (optional) is the SHA-256, lowercase hex, of the raw bytes the
+build read from the source, file after file in the order they were
+fetched, so a round can be traced to its input; it is absent when the
+source contributed no bytes. `ok: false` always carries `error`.
+`reports` is what the source contributed: station-hours with at least one value. `unplaced` is how many
 station-hours (AirNow) or station names (EPD) had no usable position or
 were not in the station table and were dropped. A network's own fields
 are described in its section.
@@ -269,7 +301,8 @@ The US Environmental Protection Agency's AirNow: about 2 000 stations a
 given hour across the United States, Canada and Mexico, run by federal,
 state, local and tribal agencies and their Canadian and Mexican
 counterparts, and a handful of US diplomatic posts abroad. `cadence` and
-`avgPeriod` are 3600; `preliminary` is true.
+`avgPeriod` are 3600; `preliminary` is true; `gasReference` is `null`:
+the gases arrive as mixing ratios.
 
 Source. `airnow-hourly` —
 `https://files.airnowtech.org/airnow/<YYYY>/<YYYYMMDD>/HourlyAQObs_<YYYYMMDDHH>.dat`,
@@ -313,8 +346,8 @@ Environment's stations without data) leave no station in the product.
 
 Terms. AirNow data carry no open licence; their use is governed by the
 EPA's *AirNow Data Exchange Guidelines* (August 2025,
-<https://docs.airnowapi.org/docs/DataUseGuidelines.pdf>), named by the
-`license` string `AirNow-DEG`. The conditions this product and any display
+<https://docs.airnowapi.org/docs/DataUseGuidelines.pdf>, the
+`licenseUrl`), named by the `license` string `AirNow-DEG`. The conditions this product and any display
 of it meet:
 
 - The observations are not fully verified or validated, are subject to
@@ -343,7 +376,8 @@ of it meet:
 The Hong Kong Environmental Protection Department's air quality
 monitoring network: 15 general and 3 roadside stations. `cadence` and
 `avgPeriod` are 3600; `preliminary` is true: this is the real-time feed,
-ahead of the department's validated records.
+ahead of the department's validated records. `gasReference` is
+`{"temperature": 293, "pressure": 101325}`.
 
 Source. `epd-24pc` — `https://www.aqhi.gov.hk/epd/ddata/html/out/24pc_Eng.xml`,
 the past 24 hours of every station's hourly concentrations, about 100 KB,
@@ -359,7 +393,16 @@ newest hour, which can only be the hour that has just ended (observed
 14:00 UTC). It is published as it stands, in UTC. `lastBuildDate` runs
 half an hour ahead of the file and is not an observation time.
 
-Reading. Every concentration is in µg/m³, CO included; `-` is no value:
+Reading. Every concentration is in µg/m³, CO included; `-` is no value.
+The feed does not state the conditions its gases are expressed at; the
+department's Air Quality Objectives do, for every gas measurement: "All
+measurements of the concentration of gaseous air pollutants, i.e.,
+sulphur dioxide, nitrogen dioxide, ozone and carbon monoxide, are to be
+adjusted to a reference temperature of 293 Kelvin and a reference
+pressure of 101.325 kilopascal"
+(<https://epd.gov.hk/epd/english/environmentinhk/air/air_quality_objectives/air_quality_objectives.html>,
+checked 2026-11-01). The gases are turned back into mixing ratios at that
+reference, 24.04 L/mol:
 
 | EPD element | element | conversion |
 |---|---|---|
@@ -370,23 +413,26 @@ Reading. Every concentration is in µg/m³, CO included; `-` is no value:
 | `SO2` | `so2` | × 24.04 / 64.07 |
 | `CO` | `co` | × 24.04 / 28 010 |
 
-Station identity: `hkepd:<slug>`, the English station name lower-cased
-with every run of other characters a hyphen (`Central/Western` →
-`hkepd:central-western`). The XML carries names only; positions come from
-the committed table `xuebuild/aq/hkepd_stations.json`, recorded once from
-the network's CSDI WFS layer (`csdi:AQMN`, *Air Quality Monitoring Network
-of Hong Kong*) with the English names, traditional Chinese names
-(`names["zh-Hant"]`), positions, station types and the department's own
-station number (`mid`). The layer gives no elevation, so `elev` is
-`null`. Causeway Bay, Central and Mong Kok are roadside stations, rank 2;
+Station identity: `hkepd:<mid>`, the department's own station number
+(`hkepd:0` is Central/Western, `hkepd:15` Causeway Bay). The XML carries
+names only; the number, like the position, comes from the committed
+table `xuebuild/aq/hkepd_stations.json`, keyed by those names and recorded
+once from the network's CSDI WFS layer (`csdi:AQMN`, *Air Quality
+Monitoring Network of Hong Kong*) with the English names, traditional
+Chinese names (`names["zh-Hant"]`), positions, station types and the
+department's station number (`mid`). Rounds of the first release named
+the stations by their English name, lower-cased with every run of other
+characters a hyphen (`hkepd:central-western`); the merge (§6) reads such
+a previous round under the numbers. The layer gives no elevation, so
+`elev` is `null`. Causeway Bay, Central and Mong Kok are roadside stations, rank 2;
 the others rank 1. `agency` is `EPD`. A station name the table does not
 know is dropped and counted as `unplaced`; a new station is a reviewed
 change to the table.
 
 Terms. The file is a DATA.GOV.HK resource, reusable free of charge for
 commercial and non-commercial purposes under the DATA.GOV.HK Terms and
-Conditions (<https://data.gov.hk/en/terms-and-conditions>), named by the
-`license` string `DATA.GOV.HK`, on condition that the source is identified
+Conditions (<https://data.gov.hk/en/terms-and-conditions>, the `licenseUrl`), named
+by the `license` string `DATA.GOV.HK`, on condition that the source is identified
 clearly, the Government's and the department's ownership of the
 intellectual property is acknowledged, and attribution is given to the
 Government, the department and DATA.GOV.HK — the `attribution` string

@@ -34,6 +34,7 @@ from ..errors import XueError
 from .fetch import read_fetch_record
 from .networks import NETWORKS, Network
 from .schema import (
+    ELEMENT_TABLE,
     ELEMENTS,
     HISTORY_HOURS,
     INDEX_FILENAME,
@@ -76,7 +77,7 @@ def _published(status: SourceStatus) -> dict[str, Any]:
 
 
 def _read_previous_network(
-    output_root: Path, previous_index: dict[str, Any], network_id: str
+    output_root: Path, previous_index: dict[str, Any], network_id: str, renamed: dict[str, str] | None = None
 ) -> dict[str, dict[str, Any]]:
     """The previous round's stations of one network, by id: their
     metadata and their observations by epoch. A file that cannot be read
@@ -97,7 +98,7 @@ def _read_previous_network(
             continue
         try:
             station = json.loads(line)
-            station_id = station["id"]
+            station_id = (renamed or {}).get(station["id"], station["id"])
             times = station["time"]
             columns = station.get("obs", {})
             observations = {
@@ -176,7 +177,8 @@ def build_product(
         result, statuses = _read_network(network, raw_root, record_statuses)
         sources.extend(statuses)
         any_ok = any_ok or result.ok
-        entries = _read_previous_network(output_root, previous_index, network.id) if previous_index else {}
+        renamed = network.former_ids() if network.former_ids is not None else None
+        entries = _read_previous_network(output_root, previous_index, network.id, renamed) if previous_index else {}
         for station_id, meta in result.stations.items():
             # This round's files win over what the previous round carried:
             # a moved or renamed station is placed by today's metadata.
@@ -257,7 +259,9 @@ def build_product(
         "generated": iso_z(now),
         "networks": published_networks,
         "elements": list(ELEMENTS),
+        "elementTable": ELEMENT_TABLE,
         "sources": [_published(status) for status in sources],
+        "builder": pointproduct.builder_block(),
     }
     validate_index(index_payload)
     index_bytes = encode_json(index_payload)

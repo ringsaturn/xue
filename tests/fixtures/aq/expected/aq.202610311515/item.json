@@ -56,14 +56,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=0291fd93",
+   "href": "index.json?v=ce8a0180",
    "type": "application/json",
    "title": "aq index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 1293,
-   "xue:crc32": "0291fd93",
-   "file:checksum": "b202040291fd93"
+   "file:size": 2057,
+   "xue:crc32": "ce8a0180",
+   "file:checksum": "b20204ce8a0180"
   },
   "airnow": {
    "href": "airnow.jsonl?v=07ddc1b6",
@@ -91,19 +91,19 @@
    "file:checksum": "b202040815366a"
   },
   "hkepd": {
-   "href": "hkepd.jsonl?v=984da24e",
+   "href": "hkepd.jsonl?v=2a3c24e4",
    "type": "application/x-ndjson",
    "title": "Hong Kong EPD: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "hkepd",
-   "file:size": 4377,
-   "xue:crc32": "984da24e",
-   "file:checksum": "b20204984da24e"
+   "file:size": 4340,
+   "xue:crc32": "2a3c24e4",
+   "file:checksum": "b202042a3c24e4"
   },
   "hkepd.stations": {
-   "href": "hkepd.stations.json?v=fb95d3c1",
+   "href": "hkepd.stations.json?v=9d161432",
    "type": "application/json",
    "title": "Hong Kong EPD: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -111,9 +111,9 @@
    "xue:kind": "stations",
    "xue:network": "hkepd",
    "xue:stations": 4,
-   "file:size": 638,
-   "xue:crc32": "fb95d3c1",
-   "file:checksum": "b20204fb95d3c1"
+   "file:size": 601,
+   "xue:crc32": "9d161432",
+   "file:checksum": "b202049d161432"
   }
  }
 }

@@ -33,7 +33,7 @@ from pathlib import Path
 
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
-from ..pointproduct import write_bytes_atomic
+from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
 from .schema import ELEVATION_RANGE, HISTORY_HOURS, STATION, AqProductError, bounded, round_directory
 from .station import NetworkRead, Observation, StationMeta
@@ -235,12 +235,15 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
         return NetworkRead(stations, observations, False)
     directory = raw_root / status.file
     unplaced = reports = 0
+    read_bytes: list[bytes] = []
     for path in sorted(directory.glob(f"{FILE_PREFIX}*.dat")) if directory.is_dir() else []:
         try:
-            rows, dropped = parse_file(path.read_bytes())
+            body = path.read_bytes()
+            rows, dropped = parse_file(body)
         except (OSError, csv.Error, AqProductError) as exc:
             LOG.warning("airnow: %s: %s; skipping it", path.name, exc)
             continue
+        read_bytes.append(body)
         unplaced += dropped
         # A row with no value is kept too: in a rewritten hour it says the
         # station's earlier values for that hour were withdrawn.
@@ -250,5 +253,7 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
             reports += any(value is not None for value in elements.values())
     status.detail["reports"] = reports
     status.detail["unplaced"] = unplaced
+    if read_bytes:
+        status.detail["sha256"] = sha256_hex(*read_bytes)
     return NetworkRead(stations, observations, True)
 
