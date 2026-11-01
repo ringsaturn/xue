@@ -23,6 +23,27 @@
    "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
    "file": "alerts.202611010000/eccc",
    "pages": 1
+  },
+  {
+   "id": "meteoalarm-france",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:40Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-france",
+   "file": "alerts.202611010000/meteoalarm/france.json"
+  },
+  {
+   "id": "meteoalarm-germany",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:40Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany",
+   "file": "alerts.202611010000/meteoalarm/germany.json"
+  },
+  {
+   "id": "meteoalarm-italy",
+   "ok": true,
+   "fetched": "2026-11-01T00:01:40Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-italy",
+   "file": "alerts.202611010000/meteoalarm/italy.json"
   }
  ]
 }

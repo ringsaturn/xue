@@ -109,13 +109,13 @@ repeats in this order (`categories`):
 and given one **level**, an integer 1 … 5 on a scale every network maps
 onto:
 
-| level | meaning | NWS | JMA | ECCC |
-|---|---|---|---|---|
-| 1 | statement, information | Statement, Outlook, Message, Forecast | — | statement (no colour) |
-| 2 | advisory, be aware | Advisory, Watch | 注意報 (レベル２) | yellow; advisory or watch (no colour) |
-| 3 | warning | Warning | 警報 (レベル３) | orange; warning (no colour) |
-| 4 | danger | Warning with CAP severity Extreme | 危険警報 (レベル４) | red |
-| 5 | exceptional | — | 特別警報 (レベル５) | — |
+| level | meaning | NWS | JMA | ECCC | MeteoAlarm |
+|---|---|---|---|---|---|
+| 1 | statement, information | Statement, Outlook, Message, Forecast | — | statement (no colour) | — |
+| 2 | advisory, be aware | Advisory, Watch | 注意報 (レベル２) | yellow; advisory or watch (no colour) | yellow |
+| 3 | warning | Warning | 警報 (レベル３) | orange; warning (no colour) | orange |
+| 4 | danger | Warning with CAP severity Extreme | 危険警報 (レベル４) | red | red |
+| 5 | exceptional | — | 特別警報 (レベル５) | — | — |
 
 Level 5 is JMA's 特別警報 alone: no other network has a tier above its
 danger level, and folding it into 4 would lose the distinction the agency
@@ -129,7 +129,8 @@ The mappings are data, in `xuebuild/alerts/tables.json`, and this section
 is that file in prose. An event name, subject or code a table does not
 list is not an error: it is filed under `other` and levelled by its last
 word (NWS) or its colour and type (ECCC); a JMA code the table does not
-know is skipped and counted (§8).
+know is skipped and counted (§8), and so is a MeteoAlarm awareness level
+it does not list.
 
 ### 3.1 NWS
 
@@ -254,10 +255,51 @@ states. Category by the subject of the alert's short English name
 | `tsunami` | tsunami |
 | `other` | weather |
 
+### 3.4 MeteoAlarm
+
+Level by the code that leads the MeteoAlarm CAP profile's
+`awareness_level` parameter, its colour:
+
+| `awareness_level` | level |
+|---|---|
+| `2; yellow; Moderate` | 2 |
+| `3; orange; Severe` | 3 |
+| `4; red; Extreme` | 4 |
+
+Green (`1; green; Minor`) means no particular awareness is required: the
+profile uses it to stand a warning down, and it is not published (the
+message is skipped and counted, and the warning it stood down leaves the
+snapshot). The colour is the level, as ECCC's is: MeteoAlarm's yellow is
+"be aware", orange "be prepared", red "take action", and none of the
+services has a tier above red.
+
+Category by the code that leads `awareness_type`:
+
+| code | awareness type | category |
+|---|---|---|
+| `1` | Wind | `wind` |
+| `2` | snow-ice | `snow-ice` |
+| `3` | Thunderstorm | `thunderstorm` |
+| `4` | Fog | `fog` |
+| `5` | high-temperature | `heat` |
+| `6` | low-temperature | `cold` |
+| `7` | coastalevent | `coastal` |
+| `8` | forest-fire | `fire` |
+| `9` | avalanches | `snow-ice` |
+| `10` | Rain | `rain` |
+| `12` | flooding | `flood` |
+| `13` | rain-flood | `flood` |
+| `14` | Marine-Hazard | `marine` |
+| `15` | Drought | `other` |
+
+The services spell the names in either case (`1; Wind`, `1; wind`); only
+the code is read. Any other code is `other`.
+
 ## 4. Identity
 
 An alert is `<network>:<the network's own identifier>`: the CAP
-identifier for NWS (`nws:urn:oid:2.49.0.1.840.0.…`), the feature id for
+identifier for NWS (`nws:urn:oid:2.49.0.1.840.0.…`) and MeteoAlarm
+(`meteoalarm:2.49.0.0.276.0.DWD.PVW.…`), the feature id for
 ECCC (`eccc:<CAP identifier>_<region>`), and `jma:<office>-<kind>` for
 JMA, whose map has no per-alert identifier (`jma:130000-10` is Tokyo's
 レベル２大雨注意報). The network id is lowercase,
@@ -312,12 +354,13 @@ chain an event's messages across rounds.
 
 - `issued` is the round, `generated` when the build ran.
 - `networks[]` is one entry per network that has a file this round
-  (§7), in the publisher's order (nws, jma, eccc): its id and display
+  (§7), in the publisher's order (nws, jma, eccc, meteoalarm): its id and display
   `name`; the `attribution` a display must show, the `license` the
   network's data is reused under, `licenseUrl`, the page stating those
   terms (optional), and the network's `url`; `latest`, the
   upstream's own time of the state the file holds (NWS `updated`, JMA
-  `latestControlDatetime`, ECCC `timeStamp`; on a carry-over, the previous
+  `latestControlDatetime`, ECCC `timeStamp`, MeteoAlarm the newest `sent`
+  of any message its feeds listed; on a carry-over, the previous
   round's); `file`, the network file's name (always `<id>.jsonl`), length
   and CRC32 — an empty file when nothing is in force; and `areas`, the
   boundary set the network's area codes resolve against (§9), or `null`.
@@ -353,7 +396,9 @@ chain an event's messages across rounds.
   the network's boundary set (§9); four nulls when it has neither — no
   polygon and no boundary set, or a code the set does not hold (a box
   that left part of the area out would hide the alert from a reader
-  asking about that part). Like any plain minimum and maximum, the box of
+  asking about that part). A MeteoAlarm line can carry both, each for
+  different parts of its area (§10.4): its box is the union of the
+  polygon's and the codes' boxes, and null when a code has none. Like any plain minimum and maximum, the box of
   an area that crosses the antimeridian spans every longitude. `offset` and `length` are the
   byte span of the alert's line in its network's file, the JSON object
   alone; the spans of one network's alerts are in row order, do not
@@ -405,15 +450,17 @@ compact JSON object below followed by `\n`:
   network's code space, which the network's boundary set (§9) draws;
   empty for a network whose alerts carry their own polygons.
 - `geometry` is the alert's own polygon where the network draws one
-  (NWS storm-based warnings, every ECCC alert), simplified (§9), else
-  `null`. Where both are given, the polygon is the warned area and
-  `areas` the zones it touches.
+  (NWS storm-based warnings, every ECCC alert, the MeteoAlarm areas a
+  service draws), simplified (§9), else `null`. Where both are given, the
+  polygon is the warned area and `areas` the zones it touches — except
+  for MeteoAlarm, whose `areas` are the parts of the warned area the
+  polygon does not draw (§10.4), so a display draws both.
 - `url` is the alert's own page or document at the network, `sender` the
   issuing office, each `null` where the network has none.
 - `replaces` (optional, after `sender`) lists, sorted, the ids of the
   same network's earlier alerts this one supersedes, where the network
-  says so: NWS CAP `references` on any message but a `Cancel`, JMA the
-  office's 危険警報 a 注意報 was lowered from. Absent when there are none
+  says so: NWS and MeteoAlarm CAP `references` on any message but a
+  `Cancel`, JMA the office's 危険警報 a 注意報 was lowered from. Absent when there are none
   (and for ECCC, whose collection carries no references). A replaced
   alert may already have left the snapshot rounds ago; only one that
   leaves in this round is listed in `ended[]` as `replaced`.
@@ -454,6 +501,12 @@ its last known warnings with an old `latest` and a failed source, rather
 than none. A network with nothing to carry over (no previous round, or a
 previous file that cannot be read) is left out of the round.
 
+A network read from several sources carries over **per source**:
+MeteoAlarm reads one feed per country, and a country whose feed failed
+keeps its previous round's lines (by `native.country`), byte for byte,
+less the expired, beside the lines of the countries that arrived. The
+network carries over as a whole only when no country arrived.
+
 ## 8. `sources[]`
 
 One entry per source, every network's in turn, in build order:
@@ -469,16 +522,22 @@ One entry per source, every network's in turn, in build order:
  "pages": 1, "reports": 5, "skipped": 0}
 ```
 
+```json
+{"id": "meteoalarm-germany", "ok": true, "fetched": "2026-11-01T00:06:00Z",
+ "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany", "reports": 62, "skipped": 59}
+```
+
 `ok: false` always carries `error`. An `ok` source carries `sha256`
 (optional), the SHA-256 of the raw bytes the network was read from, in
 the order they were fetched: NWS `active.json`; JMA `map_time.json`, then
-`map.json` when it was fetched; ECCC every page in turn. A reader holding
+`map.json` when it was fetched; ECCC every page in turn; a MeteoAlarm
+country its feed. A reader holding
 the upstream answer can tell whether a round was built from it.
 `reports` is how many upstream
 records the source held (features, JMA office reports); `skipped` how
 many of them were not published — a test or a cancel message, an ended
 ECCC feature, a JMA report from an office or a kind code the tables do
-not know. A network's own fields are described in its section.
+not know, an expired or green MeteoAlarm message. A network's own fields are described in its section.
 
 ## 9. Geometry and boundary sets
 
@@ -520,7 +579,7 @@ like the tiles. The build reads it from the raw directory's
 `?v=<crc32>` when it is missing there; a build that cannot have it (an
 offline build without it, the origin down) leaves the boxes of the rows
 that need it null and publishes anyway. How a network's codes resolve
-against the layers is in its section (§9.1, §9.2).
+against the layers is in its section (§9.1, §9.2, §9.3).
 
 Sets are built by hand, not by the five-minute build:
 
@@ -610,6 +669,58 @@ a map drawn from it is shown or redistributed it carries:
   Agency;
 - the agency's notice of the Geospatial Information Authority of Japan's
   approval, as its GIS page gives it: この地図の作成に当たっては、国土地理院長の承認を得て、同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）
+
+### 9.3 `meteoalarm-areas`
+
+The MeteoAlarm areas named by a code whose boundaries are published under
+open terms, each feature's `id` the code a line lists (`<valueName>:<value>`,
+§10.4). One set, several upstreams, versioned by the day they were
+fetched:
+
+| layer | upstream | id | features |
+|---|---|---|---|
+| `de_kreise` | DWD GeoServer WFS `dwd:Warngebiete_Kreise` (counties and county parts) | `WARNCELLID:` + `WARNCELLID` | 402 |
+| `de_kueste` | `dwd:Warngebiete_Kueste` (coasts) | `WARNCELLID:` + `WARNCELLID` | 8 |
+| `de_binnenseen` | `dwd:Warngebiete_Binnenseen` (lakes) | `WARNCELLID:` + `WARNCELLID` | 23 |
+| `fr_departement` | IGN Géoplateforme WFS `ADMINEXPRESS-COG-CARTO.LATEST:departement` | `NUTS3:` + the NUTS 2013 code of `code_insee` | 101 |
+
+The DWD layers are `https://maps.dwd.de/geoserver/dwd/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=dwd:Warngebiete_<Kreise|Kueste|Binnenseen>&outputFormat=application/json&srsName=EPSG:4326`
+and hold every warn cell Germany's MeteoAlarm warnings name (433 cells;
+the 11 214 municipality cells are not used by the feed). The IGN layer is
+`https://data.geopf.fr/wfs/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=ADMINEXPRESS-COG-CARTO.LATEST:departement&outputFormat=application/json&srsName=CRS:84`.
+Each is saved as `<layer's upstream name>.geojson` without its `crs`
+member (the coordinates are longitude, latitude) and passed to
+`xue alerts-areas --set meteoalarm-areas`, all zooms 0–9. Météo-France's
+warnings carry NUTS **2013** codes (`FR711` is Ain); the département
+codes are mapped to them by `xuebuild/alerts/fr_nuts2013.json`, the 101
+level-3 codes of the NUTS 2013 classification (Commission Regulation (EU)
+No 1319/2013) matched by name to the départements' INSEE codes.
+
+`meteoalarm-areas.20261101.pmtiles`: 896 011 bytes, CRC32 `0261074b`;
+`meteoalarm-areas.20261101.bbox.json`: 28 815 bytes, CRC32 `81cefa87`.
+Views: Germany and France at z4 (`-6,41,16,56`) 30 768 bytes, at z5
+43 202; Germany at z6 (`5,47,16,55`) 47 393; a 1° box around Munich at z9
+13 257.
+
+`EMMA_ID` codes are not in the set. MeteoAlarm's Redistribution Hub
+(<https://meteoalarm.org/en/live/page/redistribution-hub>) links an
+official geocodes file and shapefiles for redistributors, but its terms
+grant reuse only of the warnings ("Information"); its downloadable data
+is "Content", owned by EUMETNET and licensed to the Participants alone,
+so those boundaries are not redistributed here.
+
+Terms. Wherever the set or a map drawn from it is shown or redistributed
+it carries:
+
+- for the German layers: "Datenbasis: Deutscher Wetterdienst,
+  Warngebiete vereinfacht und als Vektorkacheln aufbereitet" and
+  "© GeoBasis-DE / BKG 2021 (Daten modifiziert)" — DWD geodata are
+  reusable under CC BY 4.0 with a source note
+  (<https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html>),
+  and the warn cells carry the BKG's notice as a feature property;
+- for the French layer: "IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte
+  2.0 (<https://www.etalab.gouv.fr/licence-ouverte-open-licence/>),
+  simplifié et tuilé par xue".
 
 ## 10. Networks
 
@@ -760,6 +871,101 @@ Terms. Open Government Licence – Canada
 `Contains information licensed under the Open Government Licence – Canada (Environment and Climate Change Canada)`,
 url `https://weather.gc.ca/`.
 
+### 10.4 `meteoalarm` — EUMETNET – MeteoAlarm
+
+The awareness warnings of Europe's national meteorological and
+hydrological services (the MeteoAlarm Participants) as MeteoAlarm
+aggregates them, one JSON feed per country:
+`https://feeds.meteoalarm.org/api/v1/warnings/feeds-<country>`, CAP 1.2
+under the MeteoAlarm CAP profile v2.0, one alert per warning and one
+`info` block per language. Each country is a source,
+`meteoalarm-<country>` (§8), for the 38 feeds of andorra, austria,
+belgium, bosnia-herzegovina, bulgaria, croatia, cyprus, czechia, denmark,
+estonia, finland, france, germany, greece, hungary, iceland, ireland,
+italy, latvia, lithuania, luxembourg, malta, moldova, montenegro,
+netherlands, norway, poland, portugal, republic-of-north-macedonia,
+romania, serbia, slovakia, slovenia, spain, sweden, switzerland, ukraine
+and united-kingdom. Israel's feed is not read.
+
+The feeds are uncompressed, carry no ETag or Last-Modified, and are slow
+(Germany's 1.5 MB takes 20–30 s), so every round fetches every feed, eight
+at a time, each within two minutes, retries included; a feed that fails
+or is late fails alone and its country carries over (§7). On 2026-11-01
+07:30 UTC the fetch took 10.0 MB in 54 s and under 90 MB resident.
+
+Reading:
+
+- A feed lists messages that have expired; a message is in force while
+  the latest `expires` of its `info` blocks is after the round. A
+  cancelled warning is not in the feed at all (the profile keeps `Cancel`
+  messages out of it), so it ends as `gone`; a message whose `status` is
+  not `Actual` or whose `msgType` is `Cancel` is skipped all the same.
+- Green messages (`awareness_level` `1`) are skipped (§3.4).
+- `event` and `native.event`: the first `info` block's `event`, in the
+  service's first language (`STURM`, `Avertissement vent`). `native`:
+  `code` the `awareness_type` and `level` the `awareness_level`, verbatim
+  (`7; coastalevent`, `3; orange; Severe`); CAP `severity`, `urgency`,
+  `certainty` and `msgType`; `country`, the feed's ISO 3166 code (`DE`).
+- `sent` the alert's `sent`; `onset` the first block's `onset`, else
+  `effective`; `expires` the latest `expires`.
+- `texts`: every language's block under its own `language` tag as the
+  service gives it (`de-DE`, `en`, `sr-Latn`), with `headline`,
+  `description`, `instruction` and `area` (the block's `areaDesc`s joined
+  by `; `), verbatim. A tag that is not BCP 47-shaped is dropped.
+- Areas. An area with a `polygon` is drawn by it (unless the message sets
+  `use_polygon_over_geocode` to `False`): `geometry` holds every such
+  area's polygon. An area without one is named by one of its geocodes as
+  `<valueName>:<value>`: its DWD warn cell where it has one
+  (`WARNCELLID:501000005`; Germany gives an `EMMA_ID` beside it), else
+  its `EMMA_ID` (`EMMA_ID:IT001`), else its first geocode (France,
+  Bulgaria, Romania and North Macedonia name NUTS 3 regions,
+  `NUTS3:FR711`; Belgium and Hungary NUTS 2; Ireland FIPS). `areas` lists
+  those codes. The two are disjoint parts of the warned area — a service
+  may draw some areas and name others — so a display draws both and the
+  row's box covers both (§5). The codes resolve against
+  `meteoalarm-areas` (§9.3), which holds Germany's warn cells and France's
+  départements; any other code has no box yet, and its line's row has
+  four nulls.
+- `url`: the issuing service's own warnings page, the first block's CAP
+  `web`; `sender`: its `senderName`, the issuing service.
+- `replaces`: CAP `references`, space-separated `sender,identifier,sent`
+  triples, as `meteoalarm:<identifier>`.
+
+`latest` is the newest `sent` of any message the feeds that arrived
+listed, expired ones included.
+
+Terms. MeteoAlarm Terms and Conditions §5
+(<https://meteoalarm.org/en/live/page/terms-and-conditions>): the
+warnings ("Information") may be used and redistributed under terms
+equivalent to CC BY 4.0, with these further requirements, and the product
+and any display of it meets them so:
+
+- modified Information must be redistributed with the same Information
+  unmodified — every line keeps every language's texts and the profile's
+  awareness parameters verbatim beside the derived category and level;
+- Information that spans more than one country is credited
+  "EUMETNET – MeteoAlarm" (the network's `attribution`); Information for
+  one country names its MeteoAlarm Participant — every line's `sender` is
+  the issuing service, and a display shows it with the warning;
+- the time of issue is included — every row and line carries `sent`, and
+  a display shows it;
+- an internet application links to www.meteoalarm.org
+  (<https://meteoalarm.org/en/live/>, the network's `url`);
+- operational redistribution is real time: on average under five minutes
+  and never more than ten behind MeteoAlarm. A round is built every five
+  minutes and takes about a minute to fetch and publish, so a warning
+  reaches the bucket about three and a half minutes after MeteoAlarm on
+  average and under seven at most, while the publisher runs;
+- every redistributor publishes this disclaimer, which this document, the
+  STAC Collection and the display carry: "Time delays between this
+  website and the www.meteoalarm.org website are possible. For the most
+  up-to-date awareness information as published by the participating
+  National Meteorological and Hydrological Services, please refer to
+  www.meteoalarm.org."
+
+`license` `MeteoAlarm-Terms`, `licenseUrl` the terms page, attribution
+`EUMETNET – MeteoAlarm`, url `https://meteoalarm.org/en/live/`.
+
 ## 11. Validation
 
 `xuebuild/alerts/schema.py` validates every file as it is written, and
@@ -769,8 +975,9 @@ raw rounds, which stay flat under the raw root, with
 the boundary sets' box files in `alerts-areas/`) to the
 committed golden (`tests/fixtures/alerts/expected/`), regenerated by
 `tests/prepare_alerts_golden.py`. The second round exercises every
-`ended[]` reason (an NWS `Update` for `replaced`), an NWS cancel, a stale JMA map carried over and a failed
-ECCC fetch carried over with an expiry; every index row's span is checked
+`ended[]` reason (an NWS `Update` for `replaced`), an NWS cancel, a stale JMA map carried over, a failed
+ECCC fetch carried over with an expiry, and a failed MeteoAlarm country
+carried over beside two that arrived; every index row's span is checked
 against the network file it addresses. Admission is structural: a
 network, an event or a native field a reader has never seen is not an
 error; the categories are the index's own list, the levels 1 … 5, the
@@ -781,7 +988,10 @@ one it implements.
 Sizes on a calm day (2026-10-31 15:20 UTC): `nws.jsonl` 380 alerts,
 578 KB (61 KB gzipped); `jma.jsonl` 46, 33 KB (3 KB); `eccc.jsonl` 5,
 31 KB (10 KB); `index.json` 89 KB (11 KB). A stormy day is five to ten
-times that, mostly NWS text and polygons.
+times that, mostly NWS text and polygons. MeteoAlarm on 2026-11-01 07:30
+UTC: 221 warnings in force (1 222 unexpired messages, 1 001 of them
+green), `meteoalarm.jsonl` about 450 KB (35 KB gzipped) — every language
+kept — and 38 source entries in the index.
 
 ## 12. The archive
 

@@ -1,0 +1,206 @@
+{
+ "warnings": [
+  {
+   "alert": {
+    "identifier": "2.49.0.0.380.3.IT.261027092316.001",
+    "incidents": "Update",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Piemonte",
+        "geocode": [
+         {
+          "value": "IT005",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "audience": "Private",
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "No Special Awareness Required\n (DISCLAIMER: \"Information provided on METEOALARM for Italy regard only the intensity and recurrence of the phenomena, further details can be found at www.meteoam.it. METEOALARM information do not provide the assessment of impact on the territory and they do not represent the Official Alerts messages that are issued by the National Civil Protection Service https://www.protezionecivile.gov.it\")",
+      "effective": "2026-10-27T09:23:00+01:00",
+      "event": "Green Fog Warning",
+      "expires": "2026-10-29T23:59:00+01:00",
+      "headline": "Green Fog Warning for Italy - Piemonte",
+      "instruction": "The weather is not expected to cause significant impacts but there may be some minor, localized issues",
+      "language": "en-GB",
+      "onset": "2026-10-27T09:23:00+01:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "4; Fog",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "None"
+      ],
+      "senderName": "Italian Air Force National Meteorological Service",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://meteoalarm.org/en/live/region/IT?s=piemonte"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Piemonte",
+        "geocode": [
+         {
+          "value": "IT005",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "audience": "Privato",
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Nessun Avviso\n (DISCLAIMER: \"Le informazioni fornite su METEOALARM per l'Italia riguardano esclusivamente l'intensità e la ricorrenza dei fenomeni, maggiori dettagli sono disponibili su www.meteoam.it. Le informazioni METEOALARM non forniscono la valutazione di impatto sul territorio e non rappresentano i messaggi di Allerta Ufficiali che vengono emessi dal Servizio Nazionale di Protezione Civile https://www.protezionecivile.gov.it\")",
+      "effective": "2026-10-27T09:23:00+01:00",
+      "event": "Verde Nebbia Allerta",
+      "expires": "2026-10-29T23:59:00+01:00",
+      "headline": "Allerta Nebbia Verde per l'Italia - Piemonte",
+      "instruction": "Non ci si aspetta che il tempo possa causare impatti significativi, ma potrebbero verificarsi alcuni locali, minori problemi.",
+      "language": "it-IT",
+      "onset": "2026-10-27T09:23:00+01:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "4; Fog",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "None"
+      ],
+      "senderName": "Servizio Meteorologico dell'Aeronautica Militare",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://meteoalarm.org/it/live/region/IT?s=piemonte"
+     }
+    ],
+    "msgType": "Update",
+    "references": "aerocnmca.1sv.prv1@aeronautica.difesa.it,2.49.0.0.380.3.IT.261026103757.011,2026-10-26T10:37:57+01:00",
+    "scope": "Public",
+    "sender": "aerocnmca.1sv.prv1@aeronautica.difesa.it",
+    "sent": "2026-10-27T09:23:16+01:00",
+    "status": "Actual"
+   },
+   "uuid": "9117b01a-6dcb-4245-b45d-f0ef5b8b7203"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.380.3.IT.261031105004.036",
+    "incidents": "Update",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Veneto",
+        "geocode": [
+         {
+          "value": "IT006",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "audience": "Private",
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Moderate intensity weather phenomena expected COASTS\n (DISCLAIMER: \"Information provided on METEOALARM for Italy regard only the intensity and recurrence of the phenomena, further details can be found at www.meteoam.it. METEOALARM information do not provide the assessment of impact on the territory and they do not represent the Official Alerts messages that are issued by the National Civil Protection Service https://www.protezionecivile.gov.it\")",
+      "effective": "2026-11-01T01:00:00+01:00",
+      "event": "Yellow Wind Warning",
+      "expires": "2026-11-02T23:59:00+01:00",
+      "headline": "Yellow Wind Warning for Italy - Veneto",
+      "instruction": "BE AWARE, keep up to date with the latest weather forecast. Expect some minor disruption to outdoor activities",
+      "language": "en-GB",
+      "onset": "2026-11-01T01:00:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "Italian Air Force National Meteorological Service",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://meteoalarm.org/en/live/region/IT?s=veneto"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Veneto",
+        "geocode": [
+         {
+          "value": "IT006",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "audience": "Privato",
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Sono previsti fenomeni meteorologici di moderata intensità COSTE\n (DISCLAIMER: \"Le informazioni fornite su METEOALARM per l'Italia riguardano esclusivamente l'intensità e la ricorrenza dei fenomeni, maggiori dettagli sono disponibili su www.meteoam.it. Le informazioni METEOALARM non forniscono la valutazione di impatto sul territorio e non rappresentano i messaggi di Allerta Ufficiali che vengono emessi dal Servizio Nazionale di Protezione Civile https://www.protezionecivile.gov.it\")",
+      "effective": "2026-11-01T01:00:00+01:00",
+      "event": "Giallo Vento Allerta",
+      "expires": "2026-11-02T23:59:00+01:00",
+      "headline": "Allerta Vento Giallo per l'Italia - Veneto",
+      "instruction": "STARE (RIMANERE) ATTENTI. Tenersi aggiornati con le previsioni del tempo più recenti. Aspettarsi alcuni disagi minori per le attività all'aria aperta.",
+      "language": "it-IT",
+      "onset": "2026-11-01T01:00:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "Servizio Meteorologico dell'Aeronautica Militare",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://meteoalarm.org/it/live/region/IT?s=veneto"
+     }
+    ],
+    "msgType": "Update",
+    "references": "aerocnmca.1sv.prv1@aeronautica.difesa.it,2.49.0.0.380.3.IT.261030105458.021,2026-10-30T10:54:58+01:00",
+    "scope": "Public",
+    "sender": "aerocnmca.1sv.prv1@aeronautica.difesa.it",
+    "sent": "2026-10-31T10:50:04+01:00",
+    "status": "Actual"
+   },
+   "uuid": "a0b05d69-51ba-4d55-906b-ac41eb07ccba"
+  }
+ ]
+}

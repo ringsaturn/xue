@@ -54,8 +54,9 @@ if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
   exit 0
 fi
 
-# A round's raw fetch (about 2 MB) is only read by that round: keep the
-# last few for inspection, never the cached boundary boxes beside them.
+# A round's raw fetch (about 12 MB, most of it MeteoAlarm's feeds) is only
+# read by that round: keep the last few for inspection, never the cached
+# boundary boxes beside them.
 ls -d data/raw/alerts.[0-9]* 2>/dev/null | sort | head -n -6 | xargs -r rm -rf
 
 report=$STATE/alerts-report.json

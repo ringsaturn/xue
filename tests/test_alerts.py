@@ -1,4 +1,4 @@
-"""The alerts product (``xuebuild/alerts``): the three adapters on the
+"""The alerts product (``xuebuild/alerts``): the four adapters on the
 fetched fixture and on constructed input, the category and level tables,
 polygon simplification, the snapshot with its ``ended[]`` and carry-over,
 the validators on malformed input, and two consecutive rounds held to a
@@ -16,11 +16,12 @@ from pathlib import Path
 
 from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
-from xuebuild.alerts import archive, areas, eccc, jma, nws
+from xuebuild.alerts import archive, areas, eccc, jma, meteoalarm, nws
 from xuebuild.alerts.build import build_product, load_previous_index
 from xuebuild.alerts.geometry import bbox, simplify
 from xuebuild.alerts.boxes import area_box, load_boxes
-from xuebuild.alerts.networks import JMA_CLASS20, NETWORKS, NWS_ZONES
+from xuebuild.alerts.build import _union
+from xuebuild.alerts.networks import JMA_CLASS20, METEOALARM_AREAS, NETWORKS, NWS_ZONES
 from xuebuild.alerts.schema import (
     CATEGORIES,
     ROW_FIELDS,
@@ -37,7 +38,17 @@ from xuebuild.alerts.schema import (
     validate_index,
     validate_pointer,
 )
-from xuebuild.alerts.tables import eccc_category, eccc_level, jma_kind, nws_category, nws_level, tables, tables_crc32
+from xuebuild.alerts.tables import (
+    eccc_category,
+    eccc_level,
+    jma_kind,
+    meteoalarm_category,
+    meteoalarm_level,
+    nws_category,
+    nws_level,
+    tables,
+    tables_crc32,
+)
 
 EXPECTED = FIXTURES / "expected"
 FIRST, SECOND = (parse_round(name) for name in ROUNDS)
@@ -258,7 +269,7 @@ class BuildTest(unittest.TestCase):
     def test_ended_reasons(self) -> None:
         scratch, output = built()
         with scratch:
-            rows = index_of(output, SECOND)["ended"]
+            rows = [row for row in index_of(output, SECOND)["ended"] if not row[0].startswith("meteoalarm:")]
         ended = {row[0].split(":", 1)[0] + ":" + row[2] for row in rows}
         reasons = {row[0]: row[2] for row in rows}
         self.assertEqual(sorted(reasons.values()), ["cancelled", "expired", "expired", "gone", "replaced"])
@@ -297,6 +308,8 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(index["networks"][0]["areas"]["path"], areas_path("nws-zones", NWS_ZONES.version))
         self.assertEqual(index["networks"][1]["areas"]["path"], areas_path("jma-class20", JMA_CLASS20.version))
         self.assertIsNone(index["networks"][2]["areas"])
+        self.assertEqual(index["networks"][3]["areas"]["path"], areas_path("meteoalarm-areas", METEOALARM_AREAS.version))
+        self.assertEqual(index["networks"][3]["attribution"], "EUMETNET – MeteoAlarm")
         self.assertEqual(index["categories"], list(CATEGORIES))
 
     def test_a_round_is_byte_identical_when_rebuilt(self) -> None:
@@ -450,6 +463,109 @@ class SchemaTest(unittest.TestCase):
                 validate_pointer(pointer | {"path": path})
 
 
+class MeteoAlarmTest(unittest.TestCase):
+    def feed(self, moment: datetime, country: str) -> list[dict]:
+        path = FIXTURES / f"alerts.{moment:%Y%m%d%H%M}" / "meteoalarm" / f"{country}.json"
+        return json.loads(path.read_text(encoding="utf-8"))["warnings"]
+
+    def test_levels_by_awareness_colour_and_categories_by_type(self) -> None:
+        self.assertIsNone(meteoalarm_level("1; green; Minor"))
+        self.assertEqual(meteoalarm_level("2; yellow; Moderate"), 2)
+        self.assertEqual(meteoalarm_level("3; Orange; Severe"), 3)
+        self.assertEqual(meteoalarm_level("4; red; Extreme"), 4)
+        self.assertIsNone(meteoalarm_level(None))
+        self.assertEqual(meteoalarm_category("1; Wind"), "wind")
+        self.assertEqual(meteoalarm_category("1; wind"), "wind")
+        self.assertEqual(meteoalarm_category("5; high-temperature"), "heat")
+        self.assertEqual(meteoalarm_category("7; coastalevent"), "coastal")
+        self.assertEqual(meteoalarm_category("13; rain-flood"), "flood")
+        self.assertEqual(meteoalarm_category("99; new"), "other")
+        used = set(tables()["meteoalarm"]["categoryByAwarenessType"].values())
+        self.assertLessEqual(used, set(CATEGORIES))
+
+    def test_each_country_names_its_areas_its_own_way(self) -> None:
+        germany, france, italy = (self.feed(FIRST, country) for country in ("germany", "france", "italy"))
+        warn_cells = meteoalarm.convert(germany[1], "germany", FIRST)
+        assert warn_cells is not None
+        self.assertTrue(warn_cells["areas"] and all(code.startswith("WARNCELLID:") for code in warn_cells["areas"]))
+        self.assertIsNone(warn_cells["geometry"])
+        self.assertEqual(set(warn_cells["texts"]), {"de-DE", "en", "fr"})
+        self.assertEqual(warn_cells["native"]["country"], "DE")
+        self.assertEqual(warn_cells["native"]["level"], "2; yellow; Moderate")
+        departements = meteoalarm.convert(france[1], "france", FIRST)
+        assert departements is not None
+        self.assertTrue(departements["areas"] and all(code.startswith("NUTS3:FR") for code in departements["areas"]))
+        polygon = meteoalarm.convert(france[2], "france", FIRST)
+        assert polygon is not None
+        self.assertEqual(polygon["areas"], [])
+        self.assertIsNotNone(polygon["geometry"])
+        validate_alert_line(polygon, "meteoalarm")
+        emma = meteoalarm.convert(italy[1], "italy", FIRST)
+        assert emma is not None
+        self.assertTrue(emma["areas"][0].startswith("EMMA_ID:IT"))
+        # An expired message and a green one are not published.
+        self.assertIsNone(meteoalarm.convert(germany[0], "germany", FIRST))
+        self.assertIsNone(meteoalarm.convert(france[0], "france", FIRST))
+        self.assertIsNone(meteoalarm.convert(italy[0], "italy", FIRST))
+
+    def test_cap_references_are_replaces(self) -> None:
+        update = meteoalarm.convert(self.feed(SECOND, "france")[1], "france", SECOND)
+        assert update is not None
+        self.assertEqual(update["replaces"], ["meteoalarm:2.49.0.0.250.0.FR.20261101060012.602021"])
+
+    def test_a_cap_polygon_is_latitude_first(self) -> None:
+        self.assertEqual(meteoalarm._ring("45.0,7.0 45.0,8.0 46.0,8.0 45.0,7.0"), [[7.0, 45.0], [8.0, 45.0], [8.0, 46.0], [7.0, 45.0]])
+        self.assertIsNone(meteoalarm._ring("45.0;7.0 45,8"))
+
+    def test_an_area_is_named_by_its_preferred_geocode(self) -> None:
+        both = {"geocode": [{"valueName": "EMMA_ID", "value": "DE801"}, {"valueName": "WARNCELLID", "value": "501000005"}]}
+        self.assertEqual(meteoalarm._area_code(both), "WARNCELLID:501000005")
+        self.assertEqual(meteoalarm._area_code({"geocode": [{"valueName": "NUTS3", "value": "FR711"}]}), "NUTS3:FR711")
+        self.assertIsNone(meteoalarm._area_code({"geocode": []}))
+
+    def test_a_failed_country_is_carried_and_the_others_read(self) -> None:
+        statuses = {
+            f"meteoalarm-{country}": SourceStatus(f"meteoalarm-{country}", True, file=f"alerts.{ROUNDS[1]}/meteoalarm/{country}.json")
+            for country in ("france", "italy")
+        }
+        result = meteoalarm.read(FIXTURES, SECOND, statuses)
+        self.assertTrue(result.ok)
+        assert result.carry is not None
+        self.assertTrue(result.carry({"native": {"country": "DE"}}))
+        self.assertFalse(result.carry({"native": {"country": "FR"}}))
+        self.assertEqual(statuses["meteoalarm-france"].detail["reports"], 2)
+        self.assertFalse(meteoalarm.read(FIXTURES, SECOND, {}).ok)
+
+    def test_the_rounds(self) -> None:
+        scratch, output = built()
+        with scratch:
+            first, second = index_of(output, FIRST), index_of(output, SECOND)
+            before = (output / round_directory(FIRST) / "meteoalarm.jsonl").read_bytes().splitlines()
+            after = (output / round_directory(SECOND) / "meteoalarm.jsonl").read_bytes().splitlines()
+        rows = {row[0]: row for row in second["alerts"] if row[0].startswith("meteoalarm:")}
+        # Germany's feed failed: its lines carry over byte for byte, less
+        # the one that expired between the rounds.
+        german = [line for line in before if b'"country":"DE"' in line]
+        self.assertEqual(len(german), 2)
+        self.assertIn(b"33aa44fa", german[0])  # the one made to expire at 00:03
+        self.assertEqual([line for line in after if b'"country":"DE"' in line], german[1:])
+        ended = {row[0]: row[2:] for row in second["ended"] if row[0].startswith("meteoalarm:")}
+        self.assertEqual(sorted(reason[0] for reason in ended.values()), ["expired", "gone", "replaced"])
+        self.assertEqual(ended["meteoalarm:2.49.0.0.250.0.FR.20261101060012.602021"][1], "meteoalarm:2.49.0.0.250.0.FR.20261101060012.999021")
+        # Warn cells and départements are boxed by the set; EMMA_ID is not.
+        italian = rows["meteoalarm:2.49.0.0.380.3.IT.261031105004.036"]
+        self.assertEqual(italian[8:12], [None, None, None, None])
+        self.assertTrue(all(row[8] is not None for alert, row in rows.items() if ".IT." not in alert))
+        sources = {status["id"]: status for status in second["sources"]}
+        self.assertFalse(sources["meteoalarm-germany"]["ok"])
+        self.assertEqual(sources["meteoalarm-andorra"]["error"], "not fetched")
+        self.assertEqual(len([status for status in first["sources"] if status["id"].startswith("meteoalarm-")]), len(meteoalarm.COUNTRIES))
+
+    def test_a_box_beside_a_polygon_is_the_union(self) -> None:
+        self.assertEqual(_union((0.0, 0.0, 1.0, 1.0), (2.0, -1.0, 3.0, 0.5)), (0.0, -1.0, 3.0, 1.0))
+        self.assertIsNone(_union((0.0, 0.0, 1.0, 1.0), None))
+
+
 class ArchiveTest(unittest.TestCase):
     def archived(self, archive_root: Path) -> tuple[dict, dict, list[dict]]:
         scratch, output = built()
@@ -522,8 +638,16 @@ class AreasTest(unittest.TestCase):
         self.assertEqual(areas._jma_code({"regioncode": "1310300"}), "1310300")
         self.assertIsNone(areas._jma_code({"regioncode": "13103"}))
 
+    def test_meteoalarm_codes_from_the_upstream_attributes(self) -> None:
+        self.assertEqual(tuple(layer.name for layer in areas.SETS["meteoalarm-areas"].layers), METEOALARM_AREAS.layers)
+        self.assertEqual(areas._warncell_code({"WARNCELLID": 501000005}), "WARNCELLID:501000005")
+        self.assertIsNone(areas._warncell_code({"WARNCELLID": None}))
+        self.assertEqual(areas._departement_code({"code_insee": "01"}), "NUTS3:FR711")  # Ain, NUTS 2013
+        self.assertEqual(areas._departement_code({"code_insee": "75"}), "NUTS3:FR101")
+        self.assertIsNone(areas._departement_code({"code_insee": "975"}))
+
     def test_the_pinned_box_files_are_the_fixture(self) -> None:
-        for area_set in (NWS_ZONES, JMA_CLASS20):
+        for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS):
             body = (FIXTURES / "alerts-areas" / area_set.bbox_filename).read_bytes()
             self.assertEqual((len(body), crc32_hex(body)), (area_set.bbox_byte_length, area_set.bbox_crc32))
             self.assertEqual(list(json.loads(body)["layers"]), list(area_set.layers))

@@ -53,8 +53,8 @@ class LayerSpec:
     lists it."""
     pattern: re.Pattern[str]
     """The upstream file stem (``z_16ap26``, ``mz16ap26`` …), matched
-    against ``.shp`` files under the source directory and ``.zip`` files
-    beside them."""
+    against ``.shp`` files under the source directory, then ``.geojson``
+    files, then ``.zip`` files beside them."""
     fields: tuple[str, ...]
     code: Callable[[dict[str, Any]], str | None]
     """The upstream attributes → the code a round's ``areas`` lists."""
@@ -99,6 +99,26 @@ def _jma_code(properties: dict[str, Any]) -> str | None:
     return code if re.fullmatch(r"\d{7}", code) else None
 
 
+def _warncell_code(properties: dict[str, Any]) -> str | None:
+    """A DWD warn cell as a MeteoAlarm line names it, the geocode's type
+    and value (``WARNCELLID:501000005``)."""
+    value = properties.get("WARNCELLID")
+    code = str(value) if isinstance(value, int) else _text(value)
+    return f"WARNCELLID:{code}" if re.fullmatch(r"\d{9}", code) else None
+
+
+FR_NUTS_PATH = Path(__file__).with_name("fr_nuts2013.json")
+
+
+def _departement_code(properties: dict[str, Any]) -> str | None:
+    """A French département as a MeteoAlarm line names it: Météo-France
+    gives the NUTS 2013 level-3 code (``NUTS3:FR711``, Ain), which
+    ``fr_nuts2013.json`` maps the département's INSEE code to."""
+    table = json.loads(FR_NUTS_PATH.read_text(encoding="utf-8"))["nuts3"]
+    nuts = table.get(_text(properties.get("code_insee")))
+    return f"NUTS3:{nuts}" if nuts else None
+
+
 SETS: dict[str, AreaSet] = {
     "nws-zones": AreaSet(
         id="nws-zones",
@@ -120,6 +140,18 @@ SETS: dict[str, AreaSet] = {
         source_srs="EPSG:6668",
         tippecanoe=("--simplification=10", "--low-detail=11", "--detect-shared-borders"),
     ),
+    "meteoalarm-areas": AreaSet(
+        id="meteoalarm-areas",
+        layers=(
+            LayerSpec("de_kreise", re.compile(r"^Warngebiete_Kreise$"), ("WARNCELLID",), _warncell_code),
+            LayerSpec("de_kueste", re.compile(r"^Warngebiete_Kueste$"), ("WARNCELLID",), _warncell_code),
+            LayerSpec("de_binnenseen", re.compile(r"^Warngebiete_Binnenseen$"), ("WARNCELLID",), _warncell_code),
+            LayerSpec("fr_departement", re.compile(r"^ADMINEXPRESS-COG-CARTO_departement$"), ("code_insee",), _departement_code),
+        ),
+        maxzoom=9,
+        source_srs="EPSG:4326",
+        tippecanoe=("--simplification=10", "--low-detail=11", "--detect-shared-borders"),
+    ),
 }
 
 
@@ -134,10 +166,14 @@ def _run(command: list[str], cwd: Path | None = None) -> None:
 
 
 def find_datasource(source: Path, layer: LayerSpec, area_set: AreaSet) -> str:
-    """The one shapefile under ``source`` the layer reads, or the one zip
-    holding it (read through ``/vsizip/``). Two candidates is an error:
-    the agencies post the current and the next release side by side."""
+    """The one shapefile under ``source`` the layer reads, else the one
+    ``.geojson`` file (a layer saved from a WFS), else the one
+    zip holding it (read through ``/vsizip/``). Two candidates is an
+    error: the agencies post the current and the next release side by
+    side."""
     shapefiles = [path for path in sorted(source.rglob("*.shp")) if layer.pattern.match(path.stem)]
+    if not shapefiles:
+        shapefiles = [path for path in sorted(source.rglob("*.geojson")) if layer.pattern.match(path.stem)]
     if not shapefiles:
         archives = [path for path in sorted(source.rglob("*.zip")) if layer.pattern.match(path.stem)]
         if len(archives) == 1:

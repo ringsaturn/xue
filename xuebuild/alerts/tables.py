@@ -1,7 +1,7 @@
 """The category and level mappings, read from ``tables.json`` beside this
-module. They are data, not code: a new NWS event name, ECCC subject or
-JMA kind code is a line in that file and a row in ``docs/alerts.md`` §3,
-and nothing else changes."""
+module. They are data, not code: a new NWS event name, ECCC subject, JMA
+kind code or MeteoAlarm awareness type is a line in that file and a row
+in ``docs/alerts.md`` §3, and nothing else changes."""
 
 from __future__ import annotations
 
@@ -19,13 +19,14 @@ TABLES_PATH = Path(__file__).with_name("tables.json")
 @cache
 def tables() -> dict[str, Any]:
     payload = json.loads(TABLES_PATH.read_text(encoding="utf-8"))
-    for network in ("nws", "jma", "eccc"):
+    for network in ("nws", "jma", "eccc", "meteoalarm"):
         if network not in payload:
             raise AlertsProductError(f"tables.json has no {network} table")
     categories = (
         list(payload["nws"]["categories"].values())
         + [kind["category"] for kind in payload["jma"]["kinds"].values()]
         + list(payload["eccc"]["subjects"].values())
+        + list(payload["meteoalarm"]["categoryByAwarenessType"].values())
     )
     unknown = sorted(set(categories) - set(CATEGORIES))
     if unknown:
@@ -36,6 +37,7 @@ def tables() -> dict[str, Any]:
         + [kind["level"] for kind in payload["jma"]["kinds"].values()]
         + list(payload["eccc"]["levelByColour"].values())
         + list(payload["eccc"]["levelByType"].values())
+        + list(payload["meteoalarm"]["levelByAwareness"].values())
     )
     if not set(levels) <= set(LEVELS):
         raise AlertsProductError("tables.json uses a level outside 1–5")
@@ -112,3 +114,25 @@ def eccc_level(colour: str | None, alert_type: str | None) -> int:
     if level is None:
         level = table["levelByType"].get((alert_type or "").lower(), table["defaultLevel"])
     return int(level)
+
+
+# --- meteoalarm --------------------------------------------------------
+
+
+def _leading_code(value: str | None) -> str:
+    """``3; orange; Severe`` → ``3``: the MeteoAlarm CAP profile's
+    awareness parameters lead with their code."""
+    return (value or "").split(";", 1)[0].strip()
+
+
+def meteoalarm_level(awareness_level: str | None) -> int | None:
+    """By the awareness level's code: yellow 2, orange 3, red 4; None for
+    green (``1; green; Minor``, no particular awareness required) and
+    anything the table does not list, which are not published."""
+    level = tables()["meteoalarm"]["levelByAwareness"].get(_leading_code(awareness_level))
+    return None if level is None else int(level)
+
+
+def meteoalarm_category(awareness_type: str | None) -> str:
+    """By the awareness type's code (``1; Wind`` → ``wind``)."""
+    return tables()["meteoalarm"]["categoryByAwarenessType"].get(_leading_code(awareness_type), "other")

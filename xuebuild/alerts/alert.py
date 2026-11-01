@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import urllib.error
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,10 @@ class NetworkRead:
     unchanged: bool = False
     """The upstream says nothing changed since the previous round: its
     lines carry over as they are, and the network is still ``ok``."""
+    carry: Callable[[dict[str, Any]], bool] | None = None
+    """For a network read from several sources of which some failed: the
+    previous round's lines this predicate holds for (those of the failed
+    sources) carry over beside the new ones, as a failed network's would."""
 
 
 def network_directory(raw_root: Path, moment: datetime, network: str) -> Path:
