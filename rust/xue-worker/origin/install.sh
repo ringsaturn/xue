@@ -1,12 +1,15 @@
 #!/bin/sh
 # Runs as root on the origin host, from deploy.sh: install the binary and the
-# units staged in /tmp/xue-api/, install cloudflared if missing, restart.
+# units staged in /tmp/xue-api/, install cloudflared if missing, restart,
+# and start the timer that keeps the binary on the api-server release.
 set -eu
 STAGE=/tmp/xue-api
 
 install -m 755 "$STAGE/xue-api-server" /usr/local/bin/xue-api-server.new
 mv /usr/local/bin/xue-api-server.new /usr/local/bin/xue-api-server
-install -m 644 "$STAGE/xue-api.service" "$STAGE/xue-api-tunnel.service" /etc/systemd/system/
+install -m 644 "$STAGE/xue-api.service" "$STAGE/xue-api-tunnel.service" \
+  "$STAGE/xue-api-update.service" "$STAGE/xue-api-update.timer" /etc/systemd/system/
+install -m 755 "$STAGE/xue-api-update.sh" /usr/local/sbin/xue-api-update
 install -d -m 755 /etc/xue-api
 if [ -s "$STAGE/tunnel.env" ]; then
   install -m 600 "$STAGE/tunnel.env" /etc/xue-api/tunnel.env
@@ -24,6 +27,8 @@ fi
 
 systemctl daemon-reload
 systemctl enable xue-api.service >/dev/null 2>&1
+# From here on the host follows the api-server release by itself.
+systemctl enable --now xue-api-update.timer >/dev/null 2>&1
 systemctl restart xue-api.service
 # xue-api pulls the tunnel in (Wants=); restart it explicitly so a new token
 # takes effect.

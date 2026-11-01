@@ -20,7 +20,8 @@ TRIPLE=x86_64-unknown-linux-gnu
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 cp "$RUST/target/$TRIPLE/release/xue-api-server" "$HERE/xue-api.service" \
-  "$HERE/xue-api-tunnel.service" "$STAGE/"
+  "$HERE/xue-api-tunnel.service" "$HERE/xue-api-update.sh" \
+  "$HERE/xue-api-update.service" "$HERE/xue-api-update.timer" "$STAGE/"
 if [ -n "${XUE_API_TUNNEL_TOKEN:-}" ]; then
   (umask 077 && printf 'TUNNEL_TOKEN=%s\n' "$XUE_API_TUNNEL_TOKEN" > "$STAGE/tunnel.env")
 fi

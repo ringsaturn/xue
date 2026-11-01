@@ -1,0 +1,12 @@
+# Check the api-server release every ten minutes. A run that finds the
+# installed binary current downloads only the 100-byte .sha256.
+[Unit]
+Description=Check the api-server release for a new xue-api-server
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
