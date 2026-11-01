@@ -184,14 +184,36 @@ per frame and never gate the playhead; a showcase case hides them, and
   playing run does not refetch; age colour and the after-playhead filter
   are expressions, and a clustered GeoJSON source keeps the world view
   cheap.
+- Air-quality stations (`web/src/aq/`) are station marks on the same
+  layers (`stations/layers.ts`), filled on fixed PM2.5 steps in µg/m³ —
+  never an index, which AirNow's terms forbid deriving — and hollow
+  without PM2.5; they fade 3 h from the playhead. Every network's stations
+  file loads with the index; the card reads the station's window by one
+  range request when it opens, for the day's range and the network's own
+  spelling of the name, and says "preliminary" for such networks.
+- Warnings (`web/src/alerts/`) are areas, not marks, and a snapshot of now:
+  the playhead never touches them. The index is polled with the rest; the
+  network files (one GET each) are read only while the tile is pressed,
+  once per round. A polygon warning is a feature of one GeoJSON source; an
+  area-coded one is drawn from its boundary set through the `pmtiles://`
+  protocol (`alerts/pmtiles.ts`, a small PMTiles v3 reader — the basemap
+  is not PMTiles), one vector source per set and a fill and an outline
+  layer per set layer, filtered to the codes in force and coloured by the
+  highest level on each code. NWS fire weather events go to the `fire`
+  layer, the rest to the others. A click inside an area still pins the
+  probe and opens the card of every warning there; JMA's card carries the
+  boundary set's 出典 and 加工 lines and folds the survey notice.
 - URL state: `?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`,
-  `?stations=snd,apt,syn,fire|off` (link only, never stored).
+  `?stations=snd,apt,syn,fire,aq,alerts|off` (link only, never stored).
 
 ### In the probe panel
 
 A pin reads the station products whether or not their tiles are pressed:
 `stations/nearest.ts` takes the nearest ascent within 150 km, airport
-within 40 km, and up to six surface stations within 20 km.
+within 40 km, up to six surface stations within 20 km, and the nearest
+air-quality station with PM2.5 within 20 km, whose value is a chip beside
+the airport's. The warnings are read off the rendered areas, so the
+highest one under the pin is a chip only while the warnings are drawn.
 
 - **Skew-T** (`sounding/`): behind a disclosure, open above phone width.
   Opening it fetches the station's line and opens probe sessions for the
