@@ -8,12 +8,14 @@ rounds:
 
 - ``nws/active.json`` — round one: a flood warning with a polygon that
   expires between the rounds, a small craft advisory (zones only), a gale
-  warning, a special weather statement, a tornado warning marked CAP
-  severity Extreme (a recorded flood warning's polygon under a tornado
+  warning, two special weather statements (the second a copy of the first
+  for another zone under a made-up identifier), a tornado warning marked
+  CAP severity Extreme (a recorded flood warning's polygon under a tornado
   warning's event, codes and VTEC) and a test message. Round two: the
   expired flood warning still listed, the advisory and the tornado
-  warning, a ``Cancel`` of the gale warning, a new winter storm watch, and
-  no special weather statement.
+  warning, a ``Cancel`` of the gale warning, a new winter storm watch, an
+  ``Update`` of the first statement under a new identifier that
+  references it (``replaced``), and no second statement (``gone``).
 - ``jma/`` — round one: ``map_time.json`` and four ``map.json`` reports
   cut to a few areas (Wakkanai's thunder and snow accretion advisories,
   Niigata's landslide 危険警報 lowered to 注意報, a lifted storm surge

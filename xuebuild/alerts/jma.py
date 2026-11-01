@@ -121,8 +121,11 @@ def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bo
 
 def convert(reports: list[Any]) -> tuple[list[dict[str, Any]], set[str], int]:
     """``map.json`` → the lines in force, the ids lifted, and the count of
-    reports or kinds this table cannot place (an unknown office or code)."""
+    reports or kinds this table cannot place (an unknown office or code).
+    A 危険警報 lowered to 注意報 is not lifted but replaced: the 注意報's line
+    names it in ``replaces``."""
     found: dict[str, dict[str, Any]] = {}
+    replaces: dict[str, set[str]] = {}
     lifted: set[str] = set()
     skipped = 0
     for report in reports:
@@ -157,9 +160,11 @@ def convert(reports: list[Any]) -> tuple[list[dict[str, Any]], set[str], int]:
                     lifted.add(identifier)
                     continue
                 if status == LOWERED:
+                    # The office's 危険警報 for the element became this
+                    # 注意報: the one kind code replaced the other.
                     urgent = jma_kind_of(kind["element"], 4)
                     if urgent is not None:
-                        lifted.add(f"{NETWORK}:{office}-{urgent}")
+                        replaces.setdefault(identifier, set()).add(f"{NETWORK}:{office}-{urgent}")
                 line = found.get(identifier)
                 if line is None or sent > line["sent"]:
                     previous_areas = line["areas"] if line is not None else []
@@ -182,8 +187,11 @@ def convert(reports: list[Any]) -> tuple[list[dict[str, Any]], set[str], int]:
                     found[identifier] = line
                 if area not in line["areas"]:
                     line["areas"].append(area)
-    for line in found.values():
+    for identifier, line in found.items():
         line["areas"].sort()
+        superseded = sorted(replaces.get(identifier, set()) - set(found))
+        if superseded:
+            line["replaces"] = superseded
     return list(found.values()), lifted - set(found), skipped
 
 

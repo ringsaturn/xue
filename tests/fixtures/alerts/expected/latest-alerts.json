@@ -3,6 +3,6 @@
  "product": "alerts",
  "issued": "2026-11-01T00:05:00Z",
  "path": "alerts.202611010005/index.json",
- "byteLength": 3958,
- "crc32": "ed351225"
+ "byteLength": 4342,
+ "crc32": "0f85ee4d"
 }

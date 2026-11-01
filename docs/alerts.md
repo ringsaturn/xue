@@ -259,9 +259,12 @@ index's rows are sorted by it, each network file's lines are sorted by
 it, and every line repeats it so a slice read by range identifies itself.
 
 An upstream that replaces an alert under a new identifier (an NWS
-`Update`; a JMA kind raised from 注意報 to 警報, which is a new kind code)
-produces a new id; the old one leaves the snapshot and is listed in
-`ended[]`.
+`Update`; a JMA kind raised from 注意報 to 警報, or a 危険警報 lowered to
+注意報, each a new kind code) produces a new id; the old one leaves the
+snapshot and is listed in `ended[]`. Where the network says which alert
+the new one replaces, the new line names it in `replaces` (§6) and the
+old one ends as `replaced`, naming its successor (§7), so a reader can
+chain an event's messages across rounds.
 
 ## 5. `index.json`
 
@@ -362,7 +365,8 @@ compact JSON object below followed by `\n`:
  "areas": ["ANZ639"] | [],
  "geometry": {"type": "MultiPolygon", "coordinates": …} | null,
  "url": "https://api.weather.gov/alerts/urn:oid:…" | null,
- "sender": "NWS Wakefield VA" | null}
+ "sender": "NWS Wakefield VA" | null,
+ "replaces": ["nws:urn:oid:…"]}
 ```
 
 - `network` is the network's id (the row carries its position instead).
@@ -388,22 +392,34 @@ compact JSON object below followed by `\n`:
   `areas` the zones it touches.
 - `url` is the alert's own page or document at the network, `sender` the
   issuing office, each `null` where the network has none.
+- `replaces` (optional, after `sender`) lists, sorted, the ids of the
+  same network's earlier alerts this one supersedes, where the network
+  says so: NWS CAP `references` on any message but a `Cancel`, JMA the
+  office's 危険警報 a 注意報 was lowered from. Absent when there are none
+  (and for ECCC, whose collection carries no references). A replaced
+  alert may already have left the snapshot rounds ago; only one that
+  leaves in this round is listed in `ended[]` as `replaced`.
 
 ## 7. `ended[]` and carry-over
 
 `ended[]` lists the alerts that were in the previous round's index and are
-not in this one, sorted by id: `[id, network, reason]`, `network` being the
-position in *this* round's `networks[]`. `reason` is:
+not in this one, sorted by id: `[id, network, reason]`, or
+`[id, network, "replaced", by]`, `network` being the position in *this*
+round's `networks[]`. `reason` is the first of these that holds:
 
 - `expired` — the alert's `expires` is at or before this round's
   `issued` (whether the network still listed it or not);
+- `replaced` — an alert in force this round names it in `replaces` (§6);
+  `by` is that alert's id (of several, the first by id), always one of
+  this round's rows;
 - `cancelled` — the network withdrew it in so many words this round: an
-  NWS `Cancel` message referencing it, a JMA kind whose status is 解除 (or
-  a 危険警報 lowered to 注意報, which lifts the element's 危険警報), an ECCC
-  feature whose status is `ended` or `cancelled`;
-- `gone` — anything else: it is simply no longer listed (an NWS `Update`
-  replaced it under a new id, a JMA kind was raised to another code, the
-  network dropped it without a word).
+  NWS `Cancel` message referencing it, a JMA kind whose status is 解除, an
+  ECCC feature whose status is `ended` or `cancelled`;
+- `gone` — anything else: it is simply no longer listed (a JMA kind
+  raised to another code, the network dropped it without a word).
+
+The four-element form is the only one with a fourth element; a reader
+that predates `replaced` reads the first three.
 
 `ended[]` is kept for one round. A reader that wants to animate a
 warning's end compares nothing; a reader that missed a round has missed
@@ -559,7 +575,8 @@ Reading:
 
 - A feature whose `status` is not `Actual`, or whose `messageType` is
   `Cancel`, is not in force. The alerts a `Cancel` references end as
-  `cancelled`.
+  `cancelled`; those any other message references (an `Update`'s
+  predecessor) are its `replaces` and end as `replaced`.
 - `expires` is CAP `ends` (when the event ends) where the alert states
   one, else CAP `expires`. The API keeps listing an alert until its event
   ends, long after its last message expired — a third of the alerts on
@@ -616,7 +633,10 @@ Reading. A report lists, for each municipality-level area (class20,
 seven digits) of its office, the kinds in it with a status: 発表
 (issued), 継続 (continued), 解除 (lifted), 危険警報から注意報 (a 危険警報
 lowered to 注意報) or 発表警報・注意報はなし (none). A kind is in force in
-an area when it has a code and its status is anything but 解除. One alert
+an area when it has a code and its status is anything but 解除; a kind
+whose status is 危険警報から注意報 is the 注意報 now in force, and its line
+`replaces` the office's 危険警報 for the element (unless that is still in
+force elsewhere in the office). One alert
 is one (office, kind) in force anywhere, with every area it is in force
 in:
 
@@ -676,7 +696,8 @@ Reading:
   (`alert_text_*`), `area` (`feature_name_*`).
 - `areas` is empty and `geometry` the region's polygon: every alert draws
   its own area, so the network has no boundary set (`areas: null`).
-- `url` and `sender`: `null`.
+- `url` and `sender`: `null`; no `replaces`, since the collection's
+  features carry no references to earlier alerts.
 
 `latest` is the collection's `timeStamp`.
 
@@ -693,7 +714,7 @@ url `https://weather.gc.ca/`.
 fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`) to the
 committed golden (`tests/fixtures/alerts/expected/`), regenerated by
 `tests/prepare_alerts_golden.py`. The second round exercises every
-`ended[]` reason, an NWS cancel, a stale JMA map carried over and a failed
+`ended[]` reason (an NWS `Update` for `replaced`), an NWS cancel, a stale JMA map carried over and a failed
 ECCC fetch carried over with an expiry; every index row's span is checked
 against the network file it addresses. Admission is structural: a
 network, an event or a native field a reader has never seen is not an

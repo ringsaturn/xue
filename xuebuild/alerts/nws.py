@@ -17,9 +17,11 @@ whose last message expired days ago (a third of the alerts on
 and the message's own expiry stays in ``native.expires``.
 
 A ``Cancel`` message is not in force: the alerts it references end as
-``cancelled``. An ``Update`` replaces the alert it references under a new
-identifier, so the old one simply leaves the snapshot. Test and exercise
-messages are filtered by the query and again here.
+``cancelled``. Any other message names the alerts it supersedes in its
+CAP ``references`` (an ``Update`` replaces the alert it references under a
+new identifier); the line keeps them as ``replaces``, and the old ones end
+as ``replaced``. Test and exercise messages are filtered by the query and
+again here.
 """
 
 from __future__ import annotations
@@ -79,7 +81,7 @@ def convert(feature: dict[str, Any]) -> dict[str, Any] | None:
     parameters = properties.get("parameters") if isinstance(properties.get("parameters"), dict) else {}
     geocode = properties.get("geocode") if isinstance(properties.get("geocode"), dict) else {}
     language = "en"
-    return {
+    line: dict[str, Any] = {
         "id": f"{NETWORK}:{identifier}",
         "network": NETWORK,
         "category": nws_category(event),
@@ -110,6 +112,21 @@ def convert(feature: dict[str, Any]) -> dict[str, Any] | None:
         "url": properties.get("@id") if isinstance(properties.get("@id"), str) else None,
         "sender": properties.get("senderName") if isinstance(properties.get("senderName"), str) else None,
     }
+    replaces = sorted(set(references(feature)) - {line["id"]})
+    if replaces:
+        line["replaces"] = replaces
+    return line
+
+
+def references(feature: dict[str, Any]) -> list[str]:
+    """The alerts a message's CAP ``references`` name, as product ids."""
+    properties = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}
+    found = properties.get("references") if isinstance(properties.get("references"), list) else []
+    return [
+        f"{NETWORK}:{reference['identifier']}"
+        for reference in found
+        if isinstance(reference, dict) and isinstance(reference.get("identifier"), str) and reference["identifier"]
+    ]
 
 
 def cancelled_by(feature: dict[str, Any]) -> list[str]:
@@ -117,12 +134,7 @@ def cancelled_by(feature: dict[str, Any]) -> list[str]:
     properties = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}
     if properties.get("messageType") != "Cancel":
         return []
-    references = properties.get("references") if isinstance(properties.get("references"), list) else []
-    return [
-        f"{NETWORK}:{reference['identifier']}"
-        for reference in references
-        if isinstance(reference, dict) and isinstance(reference.get("identifier"), str)
-    ]
+    return references(feature)
 
 
 def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) -> NetworkRead:
