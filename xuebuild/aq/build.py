@@ -48,6 +48,7 @@ from .schema import (
     iso_z,
     network_filename,
     read_index,
+    local_round_directory,
     round_directory,
     round_name,
     stations_filename,
@@ -87,7 +88,7 @@ def _read_previous_network(
     if described is None:
         return entries
     issued = datetime.fromisoformat(previous_index["issued"])
-    path = output_root / round_directory(issued) / described["file"]["path"]
+    path = local_round_directory(output_root, issued) / described["file"]["path"]
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:

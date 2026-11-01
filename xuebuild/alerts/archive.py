@@ -36,6 +36,7 @@ from typing import Any
 
 from ..errors import DownloadError
 from ..fetch import _http_error_code, _request
+from ..pointproduct import local_round_directories
 from .boxes import DATA_ORIGIN
 from .schema import (
     ALERT,
@@ -52,8 +53,8 @@ from .schema import (
     crc32_hex,
     encode_json,
     iso_z,
+    local_round_directory,
     parse_round,
-    round_directory,
     round_name,
     write_bytes_atomic,
 )
@@ -226,9 +227,10 @@ def _round_lines(directory: Path, index: dict[str, Any]) -> dict[str, dict[str, 
 
 def previous_round(output_root: Path, moment: datetime) -> datetime | None:
     """The newest round directory before ``moment`` under ``output_root``
-    whose index is there: the live round a publish pulled before building."""
+    whose index is there, flat or filed under its day: the live round a
+    publish pulled before building."""
     found: datetime | None = None
-    for path in output_root.glob("alerts.*"):
+    for path in local_round_directories(output_root, PRODUCT):
         name = path.name.split(".", 1)[1]
         if not ROUND.match(name) or not (path / INDEX_FILENAME).exists():
             continue
@@ -246,7 +248,7 @@ def journal_round(output_root: Path, moment: datetime) -> list[dict[str, Any]]:
     since the round before (every line, without one in the same month),
     then each ``ended[]`` entry, filed in the month the alert was last in
     force."""
-    directory = output_root / round_directory(moment)
+    directory = local_round_directory(output_root, moment)
     index = json.loads((directory / INDEX_FILENAME).read_bytes())
     current = _round_lines(directory, index)
     before = previous_round(output_root, moment)
@@ -255,7 +257,7 @@ def journal_round(output_root: Path, moment: datetime) -> list[dict[str, Any]]:
     if before is not None:
         previous_month = month_of(before)
         if previous_month == month_of(moment):
-            previous_directory = output_root / round_directory(before)
+            previous_directory = local_round_directory(output_root, before)
             previous = _round_lines(previous_directory, json.loads((previous_directory / INDEX_FILENAME).read_bytes()))
     issued = iso_z(moment)
     month = month_of(moment)

@@ -678,6 +678,11 @@ class ValidatorTest(unittest.TestCase):
         validate_pointer(pointer)
         with self.assertRaises(SynopProductError):
             validate_pointer(pointer | {"path": f"synop.{ROUNDS[0]}/index.json"})
+        for path in (f"synop/2026/10/05/synop.{ROUNDS[1]}/index.json", f"synop.{ROUNDS[1]}/index.json"):
+            validate_pointer(pointer | {"path": path})
+        for path in (f"synop/2026/10/04/synop.{ROUNDS[1]}/index.json", f"synop/2026/10/05/synop.{ROUNDS[0]}/index.json"):
+            with self.subTest(path=path), self.assertRaises(SynopProductError):
+                validate_pointer(pointer | {"path": path})
 
     def test_rounds(self) -> None:
         self.assertEqual(floor_round(datetime(2026, 10, 5, 0, 19, 59, tzinfo=UTC)), parse_round("202610050010"))

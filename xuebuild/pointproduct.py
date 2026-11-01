@@ -142,6 +142,51 @@ def flat_directory(product: str, issue: datetime) -> str:
     return f"{product}.{issue.astimezone(UTC):%Y%m%d%H}"
 
 
+def archive_round_directory(product: str, moment: datetime) -> str:
+    """``alerts/2026/11/01/alerts.202611010005``: a minute round's
+    directory under its product's UTC year, month and day, the minute
+    sibling of :func:`archive_directory`."""
+    minute = moment.astimezone(UTC)
+    return f"{product}/{minute:%Y}/{minute:%m}/{minute:%d}/{product}.{minute:%Y%m%d%H%M}"
+
+
+def flat_round_directory(product: str, moment: datetime) -> str:
+    """``alerts.202611010005``: the layout a minute round was published in
+    before the archive tree. Pointers and Items naming it stay readable."""
+    return f"{product}.{moment.astimezone(UTC):%Y%m%d%H%M}"
+
+
+def round_directories(product: str, moment: datetime) -> tuple[str, str]:
+    """Where a minute round may live: the archive tree, then flat."""
+    return (archive_round_directory(product, moment), flat_round_directory(product, moment))
+
+
+def existing_round_directory(output_root: Path, product: str, moment: datetime) -> Path | None:
+    """The round's directory under ``output_root`` in whichever layout it
+    was written (or pulled) in, the archive tree first; None when neither
+    holds it."""
+    for name in round_directories(product, moment):
+        directory = output_root / name
+        if directory.is_dir():
+            return directory
+    return None
+
+
+def local_round_directories(output_root: Path, product: str) -> list[Path]:
+    """Every ``<product>.<12 digits>`` directory under ``output_root``, flat
+    or filed under ``<product>/YYYY/MM/DD/``. Only four-digit years are
+    walked, so ``<product>/archive/`` and the Collection beside the days are
+    never taken for rounds."""
+    patterns = (f"{product}.*", f"{product}/[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/{product}.*")
+    found = []
+    for pattern in patterns:
+        for path in output_root.glob(pattern):
+            digits = path.name.split(".", 1)[1]
+            if path.is_dir() and len(digits) == 12 and digits.isdigit():
+                found.append(path)
+    return found
+
+
 def parse_issue_hour(error: ProductError, value: str) -> datetime:
     """``2026091206`` → that UTC hour: the issue id of the hourly products."""
     if not ISSUE_HOUR.match(value):

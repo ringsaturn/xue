@@ -25,6 +25,7 @@ from xuebuild.alerts.schema import (
     CATEGORIES,
     ROW_FIELDS,
     AlertsProductError,
+    areas_bbox_path,
     areas_path,
     build_pointer,
     crc32_hex,
@@ -327,6 +328,26 @@ class SchemaTest(unittest.TestCase):
     def test_the_golden_validates(self) -> None:
         validate_index(self.index)
 
+    def test_areas_paths_climb_from_either_layout(self) -> None:
+        """A round flat under the root climbs one directory to the boundary
+        sets, one filed under its day five; the bbox file climbs as far."""
+        for depth in (1, 5):
+            index = copy.deepcopy(self.index)
+            for network in index["networks"]:
+                if network.get("areas"):
+                    areas = network["areas"]
+                    areas["path"] = areas_path(areas["set"], areas["version"], depth)
+                    areas["bbox"]["path"] = areas_bbox_path(areas["set"], areas["version"], depth)
+            with self.subTest(depth=depth):
+                validate_index(index)
+        index = copy.deepcopy(self.index)
+        areas = next(network["areas"] for network in index["networks"] if network.get("areas"))
+        for depth, bbox_depth in ((5, 1), (1, 5), (2, 2)):
+            areas["path"] = areas_path(areas["set"], areas["version"], depth)
+            areas["bbox"]["path"] = areas_bbox_path(areas["set"], areas["version"], bbox_depth)
+            with self.subTest(depth=depth, bbox=bbox_depth), self.assertRaises(AlertsProductError):
+                validate_index(index)
+
     def test_rounds_are_five_minutes(self) -> None:
         self.assertEqual(parse_round("202611010005"), datetime(2026, 11, 1, 0, 5, tzinfo=UTC))
         with self.assertRaises(AlertsProductError):
@@ -422,6 +443,11 @@ class SchemaTest(unittest.TestCase):
         validate_pointer(pointer)
         with self.assertRaises(AlertsProductError):
             validate_pointer(pointer | {"path": f"{round_directory(FIRST)}/index.json"})
+        for path in (f"alerts/2026/11/01/alerts.{ROUNDS[1]}/index.json", f"alerts.{ROUNDS[1]}/index.json"):
+            validate_pointer(pointer | {"path": path})
+        for path in (f"alerts/2026/10/31/alerts.{ROUNDS[1]}/index.json", f"alerts/2026/11/01/alerts.{ROUNDS[0]}/index.json"):
+            with self.subTest(path=path), self.assertRaises(AlertsProductError):
+                validate_pointer(pointer | {"path": path})
 
 
 class ArchiveTest(unittest.TestCase):

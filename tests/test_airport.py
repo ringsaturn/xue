@@ -717,7 +717,14 @@ class SchemaTests(unittest.TestCase):
         pointer = build_pointer(parse_round(ROUNDS[0]), f"airport.{ROUNDS[0]}/index.json", index)
         self.assertEqual(pointer["crc32"], crc32_hex(index))
         self.assertEqual(pointer["product"], "airport")
-        for bad in (f"airport.{ROUNDS[1]}/index.json", f"/airport.{ROUNDS[0]}/index.json", "index.json"):
+        validate_pointer({**pointer, "path": f"airport/2026/09/16/airport.{ROUNDS[0]}/index.json"})
+        for bad in (
+            f"airport.{ROUNDS[1]}/index.json",
+            f"/airport.{ROUNDS[0]}/index.json",
+            "index.json",
+            f"airport/2026/09/15/airport.{ROUNDS[0]}/index.json",
+            f"airport/2026/09/16/airport.{ROUNDS[1]}/index.json",
+        ):
             with self.subTest(path=bad), self.assertRaises(AirportProductError):
                 validate_pointer({**pointer, "path": bad})
         with self.assertRaises(AirportProductError):

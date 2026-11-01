@@ -442,6 +442,11 @@ class ValidatorTest(unittest.TestCase):
         validate_pointer(pointer)
         with self.assertRaises(AqProductError):
             validate_pointer(pointer | {"path": f"aq.{ROUNDS[0]}/index.json"})
+        for path in (f"aq/2026/10/31/aq.{ROUNDS[1]}/index.json", f"aq.{ROUNDS[1]}/index.json"):
+            validate_pointer(pointer | {"path": path})
+        for path in (f"aq/2026/10/30/aq.{ROUNDS[1]}/index.json", f"aq/2026/10/31/aq.{ROUNDS[0]}/index.json"):
+            with self.subTest(path=path), self.assertRaises(AqProductError):
+                validate_pointer(pointer | {"path": path})
 
     def test_rounds(self) -> None:
         self.assertEqual(floor_round(datetime(2026, 10, 31, 15, 49, 59, tzinfo=UTC)), parse_round("202610311545"))
