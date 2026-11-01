@@ -39,6 +39,7 @@ from .schema import (
     SCHEMA_VERSION,
     AlertsProductError,
     build_pointer,
+    builder_block,
     crc32_hex,
     encode_json,
     iso_z,
@@ -50,6 +51,7 @@ from .schema import (
     validate_index,
     write_bytes_atomic,
 )
+from .tables import tables_crc32
 
 LOG = logging.getLogger(__name__)
 
@@ -239,9 +241,11 @@ def build_product(
         "generated": iso_z(now),
         "networks": published,
         "categories": list(CATEGORIES),
+        "mapping": {"tables": tables_crc32()},
         "alerts": rows,
         "ended": _ended(previous_index, {row[0] for row in rows}, positions, expired, cancelled, moment),
         "sources": [_published(status) for status in sources],
+        "builder": builder_block(),
     }
     validate_index(index_payload)
     index_bytes = encode_json(index_payload)

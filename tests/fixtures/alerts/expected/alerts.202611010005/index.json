@@ -8,6 +8,7 @@
    "name": "US National Weather Service",
    "attribution": "US National Weather Service",
    "license": "public-domain",
+   "licenseUrl": "https://www.weather.gov/disclaimer",
    "url": "https://www.weather.gov/",
    "latest": "2026-11-01T00:06:00Z",
    "file": {
@@ -29,6 +30,7 @@
    "name": "Japan Meteorological Agency",
    "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
    "license": "PDL-1.0",
+   "licenseUrl": "https://www.jma.go.jp/jma/kishou/info/coment.html",
    "url": "https://www.jma.go.jp/bosai/warning/",
    "latest": "2026-10-31T23:40:00Z",
    "file": {
@@ -43,6 +45,7 @@
    "name": "Environment and Climate Change Canada",
    "attribution": "Contains information licensed under the Open Government Licence – Canada (Environment and Climate Change Canada)",
    "license": "OGL-Canada-2.0",
+   "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
    "url": "https://weather.gc.ca/",
    "latest": "2026-11-01T00:01:10Z",
    "file": {
@@ -54,6 +57,9 @@
   }
  ],
  "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold", "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
+ "mapping": {
+  "tables": "ebaf5daa"
+ },
  "alerts": [
   ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 2339],
   ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, null, null, null, null, 0, 642],
@@ -76,7 +82,8 @@
    "fetched": "2026-11-01T00:12:00Z",
    "url": "https://api.weather.gov/alerts/active?status=actual",
    "reports": 5,
-   "skipped": 1
+   "skipped": 1,
+   "sha256": "28f754169d7fa4af33a621bc4e5f650f18fed419e121e77781a69d6fa7667347"
   },
   {
    "id": "jma-warning",
@@ -84,7 +91,8 @@
    "fetched": "2026-11-01T00:12:01Z",
    "url": "https://www.jma.go.jp/bosai/warning/data/r8/map.json",
    "mapTime": "2026-10-31T23:40:00Z",
-   "unchanged": true
+   "unchanged": true,
+   "sha256": "2d3a07f1e3a975e576d54dc2b04eedb739409c481ab7f0a245dd504c878c15e8"
   },
   {
    "id": "eccc-alerts",
@@ -93,5 +101,9 @@
    "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
    "error": "HTTP Error 503: Service Unavailable"
   }
- ]
+ ],
+ "builder": {
+  "name": "xuebuild",
+  "revision": null
+ }
 }

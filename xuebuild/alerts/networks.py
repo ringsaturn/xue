@@ -48,6 +48,8 @@ class Network:
     name: str
     attribution: str
     license: str
+    license_url: str
+    """The terms page the ``license`` names."""
     url: str
     sources: tuple[str, ...]
     fetch: Callable[..., list[SourceStatus]]
@@ -58,7 +60,14 @@ class Network:
     areas: AreaSet | None
 
     def to_json(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name, "attribution": self.attribution, "license": self.license, "url": self.url}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "attribution": self.attribution,
+            "license": self.license,
+            "licenseUrl": self.license_url,
+            "url": self.url,
+        }
 
 
 NWS_ZONES = AreaSet(
@@ -89,6 +98,7 @@ NWS = Network(
     name="US National Weather Service",
     attribution="US National Weather Service",
     license="public-domain",
+    license_url="https://www.weather.gov/disclaimer",
     url="https://www.weather.gov/",
     sources=(nws.SOURCE,),
     fetch=nws.fetch,
@@ -101,6 +111,7 @@ JMA = Network(
     name="Japan Meteorological Agency",
     attribution="出典：気象庁ホームページ (Japan Meteorological Agency)",
     license="PDL-1.0",
+    license_url="https://www.jma.go.jp/jma/kishou/info/coment.html",
     url="https://www.jma.go.jp/bosai/warning/",
     sources=(jma.SOURCE,),
     fetch=jma.fetch,
@@ -113,6 +124,7 @@ ECCC = Network(
     name="Environment and Climate Change Canada",
     attribution="Contains information licensed under the Open Government Licence – Canada (Environment and Climate Change Canada)",
     license="OGL-Canada-2.0",
+    license_url="https://open.canada.ca/en/open-government-licence-canada",
     url="https://weather.gc.ca/",
     sources=(eccc.SOURCE,),
     fetch=eccc.fetch,

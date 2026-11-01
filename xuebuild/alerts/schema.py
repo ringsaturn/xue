@@ -23,8 +23,11 @@ from typing import Any
 from ..errors import XueError
 from ..pointproduct import (  # noqa: F401 — re-exported: the alerts modules import them from here
     CRC32,
+    builder_block,
+    check_builder,
     check_number,
     check_pointer,
+    check_sha256,
     check_sources,
     check_time,
     crc32_hex,
@@ -32,6 +35,7 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the alerts modules i
     iso_z,
     pointer_payload,
     read_index_file,
+    sha256_hex,
     write_bytes_atomic,
 )
 
@@ -262,6 +266,7 @@ def validate_sources(sources: object, label: str) -> None:
         for key in ("reports", "alerts", "skipped", "pages"):
             if key in status:
                 _integer(status[key], f"{where}.{key}", 0)
+        check_sha256(AlertsProductError, status.get("sha256"), f"{where}.sha256")
 
     check_sources(AlertsProductError, sources, label, SOURCE_KEY, extra)
 
@@ -278,6 +283,9 @@ def validate_network(payload: object, label: str) -> int:
         raise AlertsProductError(f"{label}.id is not a network id")
     for key in ("name", "attribution", "license", "url"):
         _string(payload.get(key), f"{label}.{key}")
+    terms = payload.get("licenseUrl")
+    if terms is not None and (not isinstance(terms, str) or not terms.startswith("https://")):
+        raise AlertsProductError(f"{label}.licenseUrl must be an https URL")
     _optional_time(payload.get("latest"), f"{label}.latest")
     validate_areas(payload.get("areas"), f"{label}.areas")
     return _crc_file(payload.get("file"), f"{label}.file", network_filename(network))
@@ -429,6 +437,12 @@ def validate_index(payload: object) -> None:
         if reason not in ENDED_REASONS:
             raise AlertsProductError(f"{label}.reason must be one of {', '.join(ENDED_REASONS)}")
     validate_sources(payload.get("sources"), "index.sources")
+    check_builder(AlertsProductError, payload.get("builder"), "index.builder")
+    mapping = payload.get("mapping")
+    if mapping is not None and (
+        not isinstance(mapping, dict) or not isinstance(mapping.get("tables"), str) or not CRC32.match(mapping["tables"])
+    ):
+        raise AlertsProductError("index.mapping.tables must be the CRC32 of tables.json, 8 lowercase hex characters")
 
 
 def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:

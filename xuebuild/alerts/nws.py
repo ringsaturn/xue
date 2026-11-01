@@ -32,7 +32,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from .alert import NetworkRead, fetch_document, network_directory, parse_utc, read_json, texts, utc
 from .geometry import simplify
-from .schema import round_directory
+from .schema import round_directory, sha256_hex
 from .tables import nws_category, nws_level
 
 LOG = logging.getLogger(__name__)
@@ -147,5 +147,5 @@ def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) ->
             skipped += 1
             continue
         alerts.setdefault(line["id"], line)
-    status.detail.update({"reports": len(features), "skipped": skipped})
+    status.detail.update({"reports": len(features), "skipped": skipped, "sha256": sha256_hex((raw_root / status.file).read_bytes())})
     return NetworkRead(list(alerts.values()), True, latest=parse_utc(payload.get("updated")), cancelled=cancelled)

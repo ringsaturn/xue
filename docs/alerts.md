@@ -273,6 +273,7 @@ produces a new id; the old one leaves the snapshot and is listed in
   "networks": [
     {"id": "nws", "name": "US National Weather Service",
      "attribution": "US National Weather Service", "license": "public-domain",
+     "licenseUrl": "https://www.weather.gov/disclaimer",
      "url": "https://www.weather.gov/", "latest": "2026-11-01T00:06:00Z",
      "file": {"path": "nws.jsonl", "byteLength": 578054, "crc32": "0a1b2c3d"},
      "areas": {"set": "nws-zones", "version": "20260416",
@@ -284,13 +285,15 @@ produces a new id; the old one leaves the snapshot and is listed in
   ],
   "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold",
                  "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
+  "mapping": {"tables": "ebaf5daa"},
   "alerts": [
     ["nws:urn:oid:2.49.0.1.840.0.f65e…002.1", 0, "marine", 2, "Small Craft Advisory",
      "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z",
      null, null, null, null, 2671, 1662]
   ],
   "ended": [["nws:urn:oid:2.49.0.1.840.0.cad4…001.1", 0, "gone"]],
-  "sources": [ … ]
+  "sources": [ … ],
+  "builder": {"name": "xuebuild", "revision": "3dae963…"}
 }
 ```
 
@@ -298,7 +301,8 @@ produces a new id; the old one leaves the snapshot and is listed in
 - `networks[]` is one entry per network that has a file this round
   (§7), in the publisher's order (nws, jma, eccc): its id and display
   `name`; the `attribution` a display must show, the `license` the
-  network's data is reused under and the network's `url`; `latest`, the
+  network's data is reused under, `licenseUrl`, the page stating those
+  terms (optional), and the network's `url`; `latest`, the
   upstream's own time of the state the file holds (NWS `updated`, JMA
   `latestControlDatetime`, ECCC `timeStamp`; on a carry-over, the previous
   round's); `file`, the network file's name (always `<id>.jsonl`), length
@@ -308,6 +312,11 @@ produces a new id; the old one leaves the snapshot and is listed in
   `../alerts-areas/<set>.<version>.pmtiles`; `layers` are the layer names
   in that file.
 - `categories` is §2's list, in that order.
+- `mapping` (optional) is `{"tables": <crc32>}`, the CRC32 of the bytes of
+  `xuebuild/alerts/tables.json`, the mapping (§3) that filed this round's
+  categories and levels: two rounds with the same value were mapped
+  alike, and a reader that wants the table itself reads it at the commit
+  `builder` names.
 - `alerts[]` is one compact row per alert in force, sorted by id and
   unique:
 
@@ -330,6 +339,10 @@ produces a new id; the old one leaves the snapshot and is listed in
   overlap, and lie inside that file's `byteLength`.
 - `ended[]` is §7.
 - `sources[]` is §8.
+- `builder` (optional) is `{"name": "xuebuild", "revision": <commit>}`,
+  the commit the round was built from (`XUE_BUILD_REVISION`, which the
+  publisher sets), or `null` for a build that was not told (an offline
+  build or the golden, which stays reproducible that way).
 
 The index is what a map layer reads: every alert's category, level, times
 and box, about 90 KB (11 KB gzipped) for the 431 alerts in force on
@@ -422,7 +435,12 @@ One entry per source, every network's in turn, in build order:
  "pages": 1, "reports": 5, "skipped": 0}
 ```
 
-`ok: false` always carries `error`. `reports` is how many upstream
+`ok: false` always carries `error`. An `ok` source carries `sha256`
+(optional), the SHA-256 of the raw bytes the network was read from, in
+the order they were fetched: NWS `active.json`; JMA `map_time.json`, then
+`map.json` when it was fetched; ECCC every page in turn. A reader holding
+the upstream answer can tell whether a round was built from it.
+`reports` is how many upstream
 records the source held (features, JMA office reports); `skipped` how
 many of them were not published — a test or a cancel message, an ended
 ECCC feature, a JMA report from an office or a kind code the tables do
@@ -564,8 +582,8 @@ Reading:
 
 Terms. Works of the US federal government; the API's documentation
 describes its data as open data, free to use for any purpose. `license`
-`public-domain`, attribution `US National Weather Service`, url
-`https://www.weather.gov/`.
+`public-domain`, `licenseUrl` `https://www.weather.gov/disclaimer`,
+attribution `US National Weather Service`, url `https://www.weather.gov/`.
 
 ### 10.2 `jma` — Japan Meteorological Agency
 
@@ -628,7 +646,8 @@ under the Public Data License v1.0 with the source credited —
 was edited; it must not be presented as the agency's own publication
 (<https://www.jma.go.jp/jma/kishou/info/coment.html>). The lines are
 edited content (the agency's map reorganised by office and kind).
-`license` `PDL-1.0`, attribution
+`license` `PDL-1.0`, `licenseUrl`
+`https://www.jma.go.jp/jma/kishou/info/coment.html`, attribution
 `出典：気象庁ホームページ (Japan Meteorological Agency)`, url
 `https://www.jma.go.jp/bosai/warning/`.
 
@@ -663,7 +682,7 @@ Reading:
 
 Terms. Open Government Licence – Canada
 (<https://open.canada.ca/en/open-government-licence-canada>). `license`
-`OGL-Canada-2.0`, attribution
+`OGL-Canada-2.0`, `licenseUrl` the same page, attribution
 `Contains information licensed under the Open Government Licence – Canada (Environment and Climate Change Canada)`,
 url `https://weather.gc.ca/`.
 

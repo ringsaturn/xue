@@ -30,7 +30,7 @@ from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .geometry import simplify
 from .http import get
-from .schema import round_directory, write_bytes_atomic
+from .schema import round_directory, sha256_hex, write_bytes_atomic
 from .tables import eccc_category, eccc_level
 
 LOG = logging.getLogger(__name__)
@@ -141,8 +141,10 @@ def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) ->
     cancelled: set[str] = set()
     latest: datetime | None = None
     reports = skipped = 0
+    pages: list[bytes] = []
     for path in sorted(directory.glob("page-*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        pages.append(path.read_bytes())
+        payload = json.loads(pages[-1])
         features = payload.get("features") if isinstance(payload, dict) else None
         if not isinstance(features, list):
             raise ValueError(f"{path.name} is not a FeatureCollection")
@@ -162,5 +164,5 @@ def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) ->
                 skipped += 1
                 continue
             alerts.setdefault(line["id"], line)
-    status.detail.update({"reports": reports, "skipped": skipped})
+    status.detail.update({"reports": reports, "skipped": skipped, "sha256": sha256_hex(*pages)})
     return NetworkRead(list(alerts.values()), True, latest=latest, cancelled=cancelled - set(alerts))
