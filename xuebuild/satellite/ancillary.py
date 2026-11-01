@@ -16,7 +16,7 @@ DEBRA pipeline settled on, in the same shape:
   analysis, so the walk back over earlier cycles is the normal path).
   Cached under ``<ancillary root>/gfs/`` by cycle and forecast hour.
 - **Emissivity** is the CAMEL monthly climatology (CAM5K30EM V003) as
-  the operational pipeline stages it: one NetCDF per region and
+  ``xuebuild/satellite/staging.py`` stages it: one NetCDF per region and
   operational month, already interpolated to the DEBRA band centres
   (``emis_tir_86`` … ``emis_tir_123``), cropped to the region's box with
   a degree of margin, and named for the month it serves (the record ends
