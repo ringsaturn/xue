@@ -158,7 +158,7 @@ def build_product(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Read the round's fetched files and the previous round's history,
-    write ``airport.<round>/`` — the history file and the index over it —
+    write ``airport/YYYY/MM/DD/airport.<round>/`` — the history file and the index over it —
     and, unless both observation sources failed, the pointer."""
     now = now or datetime.now(UTC)
     directory = output_root / round_directory(moment)

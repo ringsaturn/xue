@@ -30,6 +30,8 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules 
     check_number,
     check_pointer,
     existing_round_directory,
+    archive_round_directory,
+    flat_round_directory,
     round_directories,
     check_sources,
     check_time,
@@ -126,9 +128,16 @@ def round_name(moment: datetime) -> str:
 
 
 def round_directory(moment: datetime) -> str:
-    """``airport.202609161430``: one immutable directory per round, the
-    index and the history file in it."""
-    return f"airport.{round_name(moment)}"
+    """``airport/2026/09/16/airport.202609161430``: one immutable directory
+    per round, the index and the history file in it, filed under its UTC
+    day so the data root does not carry a prefix per round."""
+    return archive_round_directory(PRODUCT, moment)
+
+
+def raw_directory(moment: datetime) -> str:
+    """``airport.202609161430``: where a round's fetched files sit under
+    the raw root, flat: a raw round is read once, by its own build."""
+    return flat_round_directory(PRODUCT, moment)
 
 
 def pointer_directories(moment: datetime) -> tuple[str, ...]:

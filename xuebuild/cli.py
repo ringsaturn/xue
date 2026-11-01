@@ -596,7 +596,7 @@ def parser() -> argparse.ArgumentParser:
 
     airport_build = commands.add_parser(
         "airport-build",
-        help="fetch the airport METAR and TAF caches and write one airport.<round>/ index, its history.jsonl and the pointer",
+        help="fetch the airport METAR and TAF caches and write one airport/YYYY/MM/DD/airport.<round>/ index, its history.jsonl and the pointer",
     )
     airport_build.add_argument(
         "--round",

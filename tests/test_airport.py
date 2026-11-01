@@ -23,6 +23,7 @@ from xuebuild.airport.schema import (
     encode_json,
     floor_round,
     parse_round,
+    raw_directory,
     read_index,
     round_directory,
     validate_history_station,
@@ -336,7 +337,8 @@ def slice_station(directory: Path, index: dict, icao: str) -> dict:
 class RoundTests(unittest.TestCase):
     def test_rounds_are_ten_minute_minutes(self) -> None:
         self.assertEqual(parse_round("202609161430"), datetime(2026, 9, 16, 14, 30, tzinfo=UTC))
-        self.assertEqual(round_directory(parse_round("202609161430")), "airport.202609161430")
+        self.assertEqual(round_directory(parse_round("202609161430")), "airport/2026/09/16/airport.202609161430")
+        self.assertEqual(raw_directory(parse_round("202609161430")), "airport.202609161430")
         self.assertEqual(floor_round(datetime(2026, 9, 16, 14, 39, 51, tzinfo=UTC)), parse_round("202609161430"))
         for bad in ("202609161435", "2026091614", "20260916143z"):
             with self.subTest(round=bad), self.assertRaises(AirportProductError):
@@ -377,7 +379,7 @@ class BuildTests(unittest.TestCase):
             ),
         )
         report = self.build(raw, output, "202609161440")
-        directory = output / "airport.202609161440"
+        directory = output / round_directory(parse_round("202609161440"))
         index = read_index(directory / "index.json")
         haneda = slice_station(directory, index, "RJTT")
         times = [metar["time"] for metar in haneda["metars"]]
@@ -401,7 +403,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(first["history"]["stations"], 2)
         write_round(raw, "202609161440", csv_document(metar_row("ZBAA", "2026-09-16T14:40:00.000Z")))
         self.build(raw, output, "202609161440")
-        directory = output / "airport.202609161440"
+        directory = output / round_directory(parse_round("202609161440"))
         index = read_index(directory / "index.json")
         self.assertEqual([row[0] for row in index["stations"]], ["RJTT", "ZBAA"])
         untouched = slice_station(directory, index, "RJTT")
@@ -424,7 +426,7 @@ class BuildTests(unittest.TestCase):
             ),
         )
         self.build(raw, output, "202609161430")
-        directory = output / "airport.202609161430"
+        directory = output / round_directory(parse_round("202609161430"))
         index = read_index(directory / "index.json")
         history, stations = history_of(directory)
         self.assertEqual((len(history), crc32_hex(history)), (index["history"]["byteLength"], index["history"]["crc32"]))
@@ -449,7 +451,7 @@ class BuildTests(unittest.TestCase):
         name = later.strftime("%Y%m%d%H%M")
         write_round(raw, name, csv_document(metar_row("RJTT", f"{later:%Y-%m-%dT%H:%M}:00.000Z")))
         self.build(raw, output, name)
-        directory = output / f"airport.{name}"
+        directory = output / round_directory(parse_round(name))
         index = read_index(directory / "index.json")
         haneda = slice_station(directory, index, "RJTT")
         self.assertEqual([metar["time"] for metar in haneda["metars"]], [f"{later:%Y-%m-%dT%H:%M}:00Z"])
@@ -478,7 +480,7 @@ class BuildTests(unittest.TestCase):
             ),
         )
         report = self.build(raw, output, name)
-        directory = output / f"airport.{name}"
+        directory = output / round_directory(parse_round(name))
         index = read_index(directory / "index.json")
         self.assertEqual([row[0] for row in index["stations"]], ["RJAA", "ZBAA"])
         self.assertEqual(report["stations"], 2)
@@ -503,7 +505,7 @@ class BuildTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.build(raw, output, "202609161430")
-        directory = output / "airport.202609161430"
+        directory = output / round_directory(parse_round("202609161430"))
         index = read_index(directory / "index.json")
         haneda = slice_station(directory, index, "RJTT")
         self.assertEqual(haneda["name"], "Tokyo/Haneda Intl")
@@ -526,9 +528,9 @@ class BuildTests(unittest.TestCase):
         write_round(raw, "202609161440", csv_document(metar_row("RJTT", "2026-09-16T14:40:00.000Z")), ok=("awc-stations",))
         failed = self.build(raw, output, "202609161440")
         self.assertIsNone(failed["pointer"])
-        self.assertTrue((output / "airport.202609161440" / "index.json").exists())
+        self.assertTrue((output / round_directory(parse_round("202609161440")) / "index.json").exists())
         pointer = json.loads((output / "latest-airport.json").read_bytes())
-        self.assertEqual(pointer["path"], "airport.202609161430/index.json")  # the previous round stays live
+        self.assertEqual(pointer["path"], f"{round_directory(parse_round('202609161430'))}/index.json")  # the previous round stays live
         statuses = {status["id"]: status for status in failed["sources"]}
         self.assertEqual(statuses["awc-metars"]["error"], "HTTP 503")
         self.assertFalse(statuses["awc-tafs"]["ok"])
@@ -554,7 +556,7 @@ class BuildTests(unittest.TestCase):
         )
         second = self.build(raw, output, "202609161440")
         self.assertEqual(second["tafs"], 1)
-        index = read_index(output / "airport.202609161440" / "index.json")
+        index = read_index(output / round_directory(parse_round("202609161440")) / "index.json")
         self.assertEqual(index["stations"][0][13], 1)
         write_round(raw, "202609161450", csv_document(metar_row("RJTT", "2026-09-16T14:50:00.000Z")))
         third = self.build(raw, output, "202609161450")
@@ -612,7 +614,7 @@ class GoldenTests(unittest.TestCase):
                         )
             self.assertGreater(reports[1]["reports"], reports[0]["reports"])
             self.assertGreater(reports[1]["history"]["byteLength"], reports[0]["history"]["byteLength"])
-            index_bytes = (output / f"airport.{ROUNDS[1]}" / "index.json").read_bytes()
+            index_bytes = (output / round_directory(parse_round(ROUNDS[1])) / "index.json").read_bytes()
             pointer = json.loads((output / "latest-airport.json").read_bytes())
             self.assertEqual((pointer["byteLength"], pointer["crc32"]), (len(index_bytes), crc32_hex(index_bytes)))
 
@@ -627,10 +629,10 @@ class GoldenTests(unittest.TestCase):
 
 class SchemaTests(unittest.TestCase):
     def index(self) -> dict[str, object]:
-        return json.loads((EXPECTED / f"airport.{ROUNDS[1]}" / "index.json").read_text(encoding="utf-8"))
+        return json.loads((EXPECTED / round_directory(parse_round(ROUNDS[1])) / "index.json").read_text(encoding="utf-8"))
 
     def station(self, icao: str = "RJTT") -> dict[str, object]:
-        directory = EXPECTED / f"airport.{ROUNDS[1]}"
+        directory = EXPECTED / round_directory(parse_round(ROUNDS[1]))
         return slice_station(directory, self.index(), icao)
 
     def test_the_golden_validates(self) -> None:

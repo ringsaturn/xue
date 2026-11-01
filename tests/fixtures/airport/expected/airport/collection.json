@@ -65,7 +65,7 @@
   },
   {
    "rel": "alternate",
-   "href": "../airport.202609161440/item.json",
+   "href": "../airport/2026/09/16/airport.202609161440/item.json",
    "type": "application/geo+json",
    "title": "Airport observations and forecasts (METAR / TAF) · 2026-09-16 14:40Z round (beside its index; gone when the issue is)"
   },

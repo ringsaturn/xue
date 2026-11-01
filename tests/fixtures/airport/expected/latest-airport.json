@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "product": "airport",
  "issued": "2026-09-16T14:40:00Z",
- "path": "airport.202609161440/index.json",
+ "path": "airport/2026/09/16/airport.202609161440/index.json",
  "byteLength": 25261,
  "crc32": "ca823538"
 }

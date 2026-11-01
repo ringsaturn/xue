@@ -639,7 +639,11 @@ class PointProductTests(unittest.TestCase):
         return self.item("sounding", "sounding/2026/09/14/sounding.2026091402", "sounding/expected/index.json")
 
     def airport_item(self) -> dict:
-        return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
+        return self.item(
+            "airport",
+            "airport/2026/09/16/airport.202609161440",
+            "airport/expected/airport/2026/09/16/airport.202609161440/index.json",
+        )
 
     def synop_stations_files(self) -> dict[str, dict]:
         index, _ = self.index("synop/expected/synop/2026/10/05/synop.202610050010/index.json")
@@ -729,7 +733,7 @@ class PointProductTests(unittest.TestCase):
         )
         self.assertEqual(item["geometry"]["type"], "Polygon")
         airport = self.airport_item()
-        rows = json.loads((FIXTURES / "airport/expected/airport.202609161440/index.json").read_text(encoding="utf-8"))
+        rows = json.loads((FIXTURES / "airport/expected/airport/2026/09/16/airport.202609161440/index.json").read_text(encoding="utf-8"))
         self.assertEqual(airport["bbox"][1], min(row[1] for row in rows["stations"]))
         self.assertEqual(airport["bbox"][2], max(row[2] for row in rows["stations"]))
         # A storm's headline position is its point; the box is the plain
@@ -770,7 +774,7 @@ class PointProductTests(unittest.TestCase):
         # ascent in the issue.
         self.assertEqual(properties["start_datetime"], min(s["times"][-1] for s in index["stations"]))
         self.assertEqual(properties["end_datetime"], max(s["latest"] for s in index["stations"]))
-        rows = json.loads((FIXTURES / "airport/expected/airport.202609161440/index.json").read_text(encoding="utf-8"))
+        rows = json.loads((FIXTURES / "airport/expected/airport/2026/09/16/airport.202609161440/index.json").read_text(encoding="utf-8"))
         airport = self.airport_item()["properties"]
         # A round carries 24 hours of history behind it.
         self.assertEqual(airport["start_datetime"], "2026-09-15T14:40:00Z")
