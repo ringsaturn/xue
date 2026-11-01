@@ -208,8 +208,9 @@ times skipped) cannot promise. So `alerts` runs on a host:
 - Each run updates a sparse checkout of `main` (`xuebuild`, `mk`,
   `scripts`), `uv sync --frozen`s it, exports `XUE_BUILD_REVISION` (the
   checkout's commit, the index's `builder`) and takes the same steps as
-  the workflow: live index, build, upload, prune. The host follows `main`
-  with no deploy of its own.
+  the workflow: live index, build, upload, prune. The installed script
+  only bootstraps: after the checkout it runs `main`'s copy of itself, so
+  the host follows `main`, this script included, with no deploy of its own.
 - Then it journals the round into the monthly archive
   (`xue alerts-archive`, `docs/alerts.md` §12) under
   `$STATE/alerts-archive/`, which must survive restarts: the journal and
