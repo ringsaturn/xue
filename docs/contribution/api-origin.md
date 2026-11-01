@@ -15,6 +15,7 @@ or unavailable API, never a metered bill.
 | Object cache | per isolate (`cache.rs`) | the same module, one per process |
 | Overload | Workers limits | `XUE_API_INFLIGHT` requests computed at once, then `503 overloaded` with `Retry-After` |
 | Rate | the zone's per-IP rule | optionally a global budget, `XUE_API_RATE_PER_MIN` computed answers a minute, then `429 rate_limited`; Cloudflare's free rate-limit rules count per IP only, so a global cap has to live here |
+| Behind an authenticating proxy | — | optionally `XUE_API_REQUIRE_HEADER` (`name: value`): every request but `/health` without it is `403 forbidden`, so only the proxy is served even if the hostname is reached around it; `XUE_API_CLIENT_HEADER` + `XUE_API_INFLIGHT_PER_CLIENT` cap the requests computed at once per value of a header the proxy sets (a client id), above which that client alone gets `503 overloaded` |
 | Swagger UI | static assets from `public/` | the same files compiled into the binary |
 | Compression | Cloudflare's | gzip for a client that takes it (Cloudflare does), `Vary: accept-encoding`; a point answer goes out at about a sixth of its size |
 
@@ -25,7 +26,9 @@ route added to one runtime is in both.
 Configuration is the environment, read from `/etc/xue-api/env` when it
 exists: `XUE_API_LISTEN` (default `127.0.0.1:8787`), `DATA_ORIGIN`,
 `XUE_API_INFLIGHT` (32), `XUE_API_CACHE_MB` (64), `XUE_API_RATE_PER_MIN`
-(0, off), `XUE_API_METRICS_LISTEN` (unset, off).
+(0, off), `XUE_API_METRICS_LISTEN` (unset, off), `XUE_API_REQUIRE_HEADER`
+(unset, off), `XUE_API_CLIENT_HEADER` (unset) and
+`XUE_API_INFLIGHT_PER_CLIENT` (0, off; needs the client header).
 
 ## Builds
 

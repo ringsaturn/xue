@@ -448,11 +448,12 @@ forecasts and best tracks are passed through as the product writes them.
 | 404 | `unknown_alert` | the issue has no alert in force by that id (`detail.ended` says how it left, when it left with this round) |
 | 404 | `unknown_storm` | no storm, crosswalk entry or alias by that id (`detail.available` lists the storms) |
 | 404 | `not_found` | no such route |
+| 403 | `forbidden` | a self-hosted origin set to answer only its proxy (`XUE_API_REQUIRE_HEADER`) was reached without it |
 | 405 | `method_not_allowed` | anything but `GET`, `HEAD`, `OPTIONS` |
 | 422 | `point_off_grid` | the point is outside a regional grid (HRRR, a satellite disk) |
 | 502 | `upstream_failed` | a bucket read failed, or a document in it is not what the profile says |
 | 429 | `rate_limited` | a self-hosted origin's request budget is spent; retry after `Retry-After` seconds (also `detail.retryAfter`). Cached answers are not limited |
-| 503 | `overloaded` | too many requests are being computed at once; retry after `Retry-After` seconds |
+| 503 | `overloaded` | too many requests are being computed at once (on a self-hosted origin, possibly only this client's, `XUE_API_INFLIGHT_PER_CLIENT`); retry after `Retry-After` seconds |
 
 Errors are not cached.
 

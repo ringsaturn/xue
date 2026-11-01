@@ -28,6 +28,13 @@
 //! `XUE_API_METRICS_LISTEN` (default unset, off) serves Prometheus metrics
 //! (`metrics.rs`) at `/metrics` on an address of its own; never the API's,
 //! which the tunnel makes public.
+//!
+//! Behind a proxy that authenticates clients: `XUE_API_REQUIRE_HEADER`
+//! (`name: value`, default unset) answers `403 forbidden` to every request
+//! but `/health` that lacks that header, so only the proxy is served; and
+//! `XUE_API_CLIENT_HEADER` with `XUE_API_INFLIGHT_PER_CLIENT` (default 0, off)
+//! caps the requests computed at once per value of a header the proxy sets,
+//! above which that client alone gets `503 overloaded`.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -39,7 +46,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
-use hyper::header::{HeaderValue, CACHE_CONTROL};
+use hyper::header::{HeaderName, HeaderValue, CACHE_CONTROL};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -102,6 +109,23 @@ pub struct Config {
     inflight: usize,
     cache_bytes: usize,
     rate_per_minute: usize,
+    require_header: Option<(HeaderName, HeaderValue)>,
+    client_header: Option<HeaderName>,
+    inflight_per_client: usize,
+}
+
+/// `name: value` of `XUE_API_REQUIRE_HEADER`.
+fn parse_required(text: &str) -> Result<(HeaderName, HeaderValue), String> {
+    let invalid = || "XUE_API_REQUIRE_HEADER is not `name: value`".to_owned();
+    let (name, value) = text.split_once(':').ok_or_else(invalid)?;
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(invalid());
+    }
+    Ok((
+        HeaderName::from_bytes(name.trim().as_bytes()).map_err(|_| invalid())?,
+        HeaderValue::from_str(value).map_err(|_| invalid())?,
+    ))
 }
 
 impl Config {
@@ -128,6 +152,16 @@ impl Config {
         if metrics == listen.parse().ok() {
             return Err("XUE_API_METRICS_LISTEN must differ from XUE_API_LISTEN".to_owned());
         }
+        let client_header = var("XUE_API_CLIENT_HEADER")
+            .map(|name| {
+                HeaderName::from_bytes(name.as_bytes())
+                    .map_err(|_| format!("XUE_API_CLIENT_HEADER={name} is not a header name"))
+            })
+            .transpose()?;
+        let inflight_per_client = number("XUE_API_INFLIGHT_PER_CLIENT", 0)?;
+        if inflight_per_client > 0 && client_header.is_none() {
+            return Err("XUE_API_INFLIGHT_PER_CLIENT needs XUE_API_CLIENT_HEADER".to_owned());
+        }
         Ok(Config {
             listen: listen
                 .parse()
@@ -137,6 +171,11 @@ impl Config {
             inflight: number("XUE_API_INFLIGHT", 32)?.max(1),
             cache_bytes: number("XUE_API_CACHE_MB", 64)? * 1024 * 1024,
             rate_per_minute: number("XUE_API_RATE_PER_MIN", 0)?,
+            require_header: var("XUE_API_REQUIRE_HEADER")
+                .map(|text| parse_required(&text))
+                .transpose()?,
+            client_header,
+            inflight_per_client,
         })
     }
 }
@@ -230,10 +269,103 @@ struct State {
     data: Data,
     routes: Option<Box<dyn Routes>>,
     started: SystemTime,
-    inflight: Cell<usize>,
-    inflight_limit: usize,
+    slots: Slots,
     responses: RefCell<Responses>,
     rate: Option<RefCell<Bucket>>,
+    require_header: Option<(HeaderName, HeaderValue)>,
+    client_header: Option<HeaderName>,
+}
+
+/// Requests being computed: at most `limit` at once, and at most
+/// `per_client` (0: off) for one client.
+struct Slots {
+    inflight: Cell<usize>,
+    limit: usize,
+    per_client: usize,
+    /// Only clients with a request being computed.
+    clients: RefCell<HashMap<String, usize>>,
+}
+
+impl Slots {
+    fn new(limit: usize, per_client: usize) -> Slots {
+        Slots {
+            inflight: Cell::new(0),
+            limit,
+            per_client,
+            clients: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+/// A computing slot: taken before a handler runs and given back when dropped,
+/// so a request whose client goes away mid-answer (hyper drops its future)
+/// still frees it.
+struct Slot<'a> {
+    slots: &'a Slots,
+    client: Option<String>,
+}
+
+impl<'a> Slot<'a> {
+    fn take(slots: &'a Slots, client: Option<&str>) -> Result<Slot<'a>, HttpError> {
+        if slots.inflight.get() >= slots.limit {
+            return Err(HttpError::new(
+                503,
+                "overloaded",
+                "too many requests are being computed; retry shortly",
+            ));
+        }
+        let client = match client.filter(|_| slots.per_client > 0) {
+            Some(client) => {
+                let mut clients = slots.clients.borrow_mut();
+                let held = clients.entry(client.to_owned()).or_insert(0);
+                if *held >= slots.per_client {
+                    return Err(HttpError::new(
+                        503,
+                        "overloaded",
+                        "too many of this client's requests are being computed; retry shortly",
+                    ));
+                }
+                *held += 1;
+                Some(client.to_owned())
+            }
+            None => None,
+        };
+        slots.inflight.set(slots.inflight.get() + 1);
+        Ok(Slot { slots, client })
+    }
+}
+
+impl Drop for Slot<'_> {
+    fn drop(&mut self) {
+        self.slots.inflight.set(self.slots.inflight.get() - 1);
+        if let Some(client) = &self.client {
+            let mut clients = self.slots.clients.borrow_mut();
+            if let Some(held) = clients.get_mut(client) {
+                *held -= 1;
+                if *held == 0 {
+                    clients.remove(client);
+                }
+            }
+        }
+    }
+}
+
+/// Compares in time independent of where the inputs first differ.
+fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |difference, (x, y)| difference | (x ^ y)) == 0
+}
+
+/// Whether `XUE_API_REQUIRE_HEADER`, when set, is satisfied. `/health` is
+/// always served, for the machine's own probes.
+fn admitted(state: &State, request: &Request<Incoming>) -> bool {
+    let Some((name, value)) = &state.require_header else {
+        return true;
+    };
+    request.uri().path() == "/health"
+        || request
+            .headers()
+            .get(name)
+            .is_some_and(|sent| same_bytes(sent.as_bytes(), value.as_bytes()))
 }
 
 /// A global token bucket over computed answers: `per_minute` tokens refill
@@ -330,10 +462,12 @@ async fn serve_routes(
         data,
         routes,
         started: SystemTime::now(),
-        inflight: Cell::new(0),
-        inflight_limit: config.inflight,
+        slots: Slots::new(config.inflight, config.inflight_per_client),
         rate: (config.rate_per_minute > 0)
             .then(|| RefCell::new(Bucket::new(config.rate_per_minute))),
+        require_header: config.require_header,
+        client_header: config.client_header,
+
         responses: RefCell::new(Responses {
             map: HashMap::new(),
             order: VecDeque::new(),
@@ -440,8 +574,8 @@ fn scrape(state: &State) -> String {
         .as_ref()
         .map(|rate| rate.borrow_mut().refill(Instant::now()));
     metrics::render(&metrics::Gauges {
-        inflight: state.inflight.get(),
-        inflight_limit: state.inflight_limit,
+        inflight: state.slots.inflight.get(),
+        inflight_limit: state.slots.limit,
         responses_entries: responses.map.len(),
         responses_bytes: responses.bytes,
         responses_limit_bytes: responses.limit,
@@ -495,7 +629,18 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
         .map(|target| target.as_str().to_owned())
         .unwrap_or_else(|| "/".to_owned());
     let gzip = accepts_gzip(&request);
-    let (mut response, outcome) = match handle(state, &method, &target).await {
+    let client = state
+        .client_header
+        .as_ref()
+        .and_then(|name| request.headers().get(name))
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let handled = if admitted(state, &request) {
+        handle(state, &method, &target, client.as_deref()).await
+    } else {
+        Err(HttpError::new(403, "forbidden", "this origin answers only its proxy"))
+    };
+    let (mut response, outcome) = match handled {
         Ok(answered) => answered,
         Err(error) => (error_response(&error), "error"),
     };
@@ -602,6 +747,7 @@ async fn handle(
     state: &State,
     method: &Method,
     target: &str,
+    client: Option<&str>,
 ) -> Result<(Response<Body>, &'static str), HttpError> {
     if method == Method::OPTIONS {
         return Ok((preflight(), "preflight"));
@@ -647,19 +793,12 @@ async fn handle(
             .with_detail(serde_json::json!({ "retryAfter": seconds })));
         }
     }
-    if state.inflight.get() >= state.inflight_limit {
-        return Err(HttpError::new(
-            503,
-            "overloaded",
-            "too many requests are being computed; retry shortly",
-        ));
-    }
-    state.inflight.set(state.inflight.get() + 1);
+    let slot = Slot::take(&state.slots, client)?;
     let answer = match state.routes.as_ref().filter(|routes| routes.route(path).is_some()) {
         Some(routes) => routes.answer(path, &url, &state.data, now_ms()).await,
         None => route::dispatch(path, &url, &state.data, now_ms()).await,
     };
-    state.inflight.set(state.inflight.get() - 1);
+    drop(slot);
     let mut answer = answer?;
     if let (Some(routes), "/openapi.json" | "/v1/openapi.json") = (&state.routes, path) {
         let extra = routes.openapi();
@@ -784,4 +923,54 @@ fn asset(path: &str) -> Option<Response<Body>> {
         HeaderValue::from_static("public, max-age=3600"),
     );
     Some(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn required_header() {
+        let (name, value) = parse_required("X-Proxy-Secret: a:b c").unwrap();
+        assert_eq!(name.as_str(), "x-proxy-secret");
+        assert_eq!(value, "a:b c");
+        assert!(parse_required("x-proxy-secret").is_err());
+        assert!(parse_required("x-proxy-secret:  ").is_err());
+        assert!(parse_required("bad name: v").is_err());
+    }
+
+    #[test]
+    fn same_bytes_compares_whole_values() {
+        assert!(same_bytes(b"secret", b"secret"));
+        assert!(!same_bytes(b"secret", b"secreT"));
+        assert!(!same_bytes(b"secret", b"secret2"));
+    }
+
+    #[test]
+    fn slots_cap_all_and_each_client() {
+        let slots = Slots::new(3, 2);
+        let a1 = Slot::take(&slots, Some("a")).unwrap();
+        let _a2 = Slot::take(&slots, Some("a")).unwrap();
+        assert_eq!(Slot::take(&slots, Some("a")).err().unwrap().status, 503);
+        let _b = Slot::take(&slots, Some("b")).unwrap();
+        // The global cap holds whoever asks.
+        assert_eq!(Slot::take(&slots, None).err().unwrap().status, 503);
+        drop(a1);
+        assert_eq!(slots.inflight.get(), 2);
+        assert_eq!(slots.clients.borrow()["a"], 1);
+        let _a3 = Slot::take(&slots, Some("a")).unwrap();
+    }
+
+    #[test]
+    fn slots_forget_idle_clients_and_ignore_them_when_off() {
+        let slots = Slots::new(8, 1);
+        drop(Slot::take(&slots, Some("a")).unwrap());
+        assert!(slots.clients.borrow().is_empty());
+        assert_eq!(slots.inflight.get(), 0);
+
+        let off = Slots::new(8, 0);
+        let _x = Slot::take(&off, Some("a")).unwrap();
+        let _y = Slot::take(&off, Some("a")).unwrap();
+        assert!(off.clients.borrow().is_empty());
+    }
 }
