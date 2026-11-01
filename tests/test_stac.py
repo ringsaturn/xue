@@ -865,6 +865,20 @@ class PointProductTests(unittest.TestCase):
         # Detections carry no positions in the index: a round states the world.
         self.assertEqual(item["bbox"], [-180.0, -90.0, 180.0, 90.0])
 
+    def test_an_alerts_round_is_the_union_of_its_rows_boxes(self) -> None:
+        index, _ = self.index("alerts/expected/alerts.202611010005/index.json")
+        boxed = [row for row in index["alerts"] if row[8] is not None]
+        self.assertTrue(boxed)
+        self.assertEqual(
+            self.alerts_item()["bbox"],
+            [
+                min(row[8] for row in boxed),
+                min(row[9] for row in boxed),
+                max(row[10] for row in boxed),
+                max(row[11] for row in boxed),
+            ],
+        )
+
     def test_a_nexrad_round_is_its_own_stores_over_the_window(self) -> None:
         index, _ = self.index("nexrad/expected/nexrad.202303250145/index.json")
         item = self.nexrad_item()
