@@ -379,12 +379,16 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                 "level, and per service one NDJSON file holding every warning's full text in every language "
                 "the service publishes it in, its area codes and its polygon where the service draws one. "
                 "Area codes resolve against versioned boundary sets published once per upstream release. "
-                "The services are the US National Weather Service, the Japan Meteorological Agency and "
-                "Environment and Climate Change Canada. Only the newest snapshot is published; it is not an "
-                "official warning service, and the issuing service's own channels take precedence."
+                "The services are the US National Weather Service, the Japan Meteorological Agency, "
+                "Environment and Climate Change Canada and Europe's national services through EUMETNET – "
+                "MeteoAlarm. Only the newest snapshot is published; it is not an official warning service, and "
+                "the issuing service's own channels take precedence. Time delays between this website and the "
+                "www.meteoalarm.org website are possible. For the most up-to-date awareness information as "
+                "published by the participating National Meteorological and Hydrological Services, please "
+                "refer to www.meteoalarm.org."
             ),
             "license": "other",
-            "keywords": ["weather", "warning", "alert", "cap", "nws", "jma", "eccc"],
+            "keywords": ["weather", "warning", "alert", "cap", "nws", "jma", "eccc", "meteoalarm"],
             "providers": [
                 {
                     "name": "US National Weather Service",
@@ -414,6 +418,21 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     ),
                     "roles": ["producer", "licensor"],
                     "url": "https://weather.gc.ca/",
+                },
+                {
+                    "name": "EUMETNET – MeteoAlarm",
+                    "description": (
+                        "Awareness warnings of the MeteoAlarm Participants (Europe's national meteorological and "
+                        "hydrological services, each warning naming its issuing service) from the MeteoAlarm "
+                        "feeds, every language's text kept verbatim beside the categories and levels derived from "
+                        "it. Reused under the MeteoAlarm Terms and Conditions §5: CC BY 4.0 terms with its further "
+                        "requirements. The area boundaries: for Germany, Datenbasis: Deutscher Wetterdienst, "
+                        "Warngebiete vereinfacht und als Vektorkacheln aufbereitet; © GeoBasis-DE / BKG 2021 "
+                        "(Daten modifiziert); for France, IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte 2.0, "
+                        "simplifié et tuilé par xue."
+                    ),
+                    "roles": ["producer", "licensor"],
+                    "url": "https://meteoalarm.org/en/live/",
                 },
                 _XUE_PROVIDER,
             ],
@@ -447,6 +466,24 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://open.canada.ca/en/open-government-licence-canada",
                     "type": "text/html",
                     "title": "Open Government Licence – Canada 2.0",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+                    "type": "text/html",
+                    "title": "MeteoAlarm Terms and Conditions §5: CC BY 4.0 terms with further requirements",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html",
+                    "type": "text/html",
+                    "title": "DWD legal notes: geodata reusable under CC BY 4.0 with a source note (the warn cell boundaries)",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+                    "type": "text/html",
+                    "title": "Licence Ouverte / Open Licence 2.0 (IGN ADMIN EXPRESS, the département boundaries)",
                 },
             ],
         },
