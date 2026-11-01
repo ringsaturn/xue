@@ -681,7 +681,7 @@ def parser() -> argparse.ArgumentParser:
     aq_cli.add_parser(commands)
     alerts_build = commands.add_parser(
         "alerts-build",
-        help="fetch the weather warning services and write one alerts.<round>/ snapshot, a <network>.jsonl per network "
+        help="fetch the weather warning services and write one alerts/YYYY/MM/DD/alerts.<round>/ snapshot, a <network>.jsonl per network "
         "and the pointer (docs/alerts.md)",
     )
     alerts_build.add_argument(

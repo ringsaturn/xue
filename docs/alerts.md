@@ -25,20 +25,26 @@ and the other point products' pointers.
 
   ```json
   {"schemaVersion": 1, "product": "alerts", "issued": "2026-11-01T00:05:00Z",
-   "path": "alerts.202611010005/index.json", "byteLength": 89205, "crc32": "1c0ffee5"}
+   "path": "alerts/2026/11/01/alerts.202611010005/index.json", "byteLength": 89205, "crc32": "1c0ffee5"}
   ```
 
   `path` is relative to the pointer and always
-  `alerts.<round>/index.json`; `byteLength` and `crc32` (zlib CRC32 of the
+  `alerts/<YYYY>/<MM>/<DD>/alerts.<round>/index.json`, the date being the
+  round's. A pointer written before that layout names the flat
+  `alerts.<round>/index.json`, and a reader accepts both. `byteLength` and `crc32` (zlib CRC32 of the
   file's bytes, eight lowercase hex digits) are the index's, so it can be
   requested as `<path>?v=<crc32>` through an immutable cache.
-- `alerts.<YYYYMMDDHHMM>/` is one immutable directory per round: the UTC
-  minute the snapshot was taken at, always a multiple of five. It holds
+- `alerts/<YYYY>/<MM>/<DD>/alerts.<YYYYMMDDHHMM>/` is one immutable
+  directory per round, filed under its UTC day so the data root does not
+  carry a prefix per round: the UTC minute the snapshot was taken at,
+  always a multiple of five. It holds
   `index.json` (§5), one `<network>.jsonl` per network (§6) and
   `item.json`, the round's STAC Item (`docs/stac.md` §"Point products").
-  Nothing in it changes once the pointer names it. The rounds sit flat
-  under the root: a round is a snapshot, not a history, and lives three
-  hours (`make prune-r2-alerts`, `ALERTS_KEEP=36`).
+  Nothing in it changes once the pointer names it. A round is a
+  snapshot, not a history, and lives three hours (`make prune-r2-alerts`,
+  `ALERTS_KEEP=36`). The day directories sit beside `alerts/archive/`
+  (§12) and the product's STAC Collection; only a four-digit year is a
+  day tree.
 - `alerts-areas/<set>.<version>.pmtiles` are the boundary sets (§9): one
   file per upstream release, immutable under its versioned name and kept
   for as long as any round may name it, each with its codes' boxes beside
@@ -57,7 +63,7 @@ Two ways to read an alert's full record:
 
 - **One alert.** Take its row in the index, which ends in the byte
   `offset` and `length` of its line in its network's file, and issue
-  `GET alerts.<round>/<network>.jsonl?v=<crc32>` with
+  `GET <round directory>/<network>.jsonl?v=<crc32>` with
   `Range: bytes=<offset>-<offset + length - 1>`. The bytes are that
   alert's JSON object exactly, without the newline, so they parse on their
   own.
@@ -282,10 +288,10 @@ chain an event's messages across rounds.
      "url": "https://www.weather.gov/", "latest": "2026-11-01T00:06:00Z",
      "file": {"path": "nws.jsonl", "byteLength": 578054, "crc32": "0a1b2c3d"},
      "areas": {"set": "nws-zones", "version": "20260416",
-               "path": "../alerts-areas/nws-zones.20260416.pmtiles",
+               "path": "../../../../../alerts-areas/nws-zones.20260416.pmtiles",
                "byteLength": 8907673, "crc32": "3f5d3096",
                "layers": ["zone", "county", "marine", "offshore", "fire"],
-               "bbox": {"path": "../alerts-areas/nws-zones.20260416.bbox.json",
+               "bbox": {"path": "../../../../../alerts-areas/nws-zones.20260416.bbox.json",
                         "byteLength": 524181, "crc32": "e6ac20a5"}}},
     {"id": "jma", …, "areas": {"set": "jma-class20", "version": "20260226", …}},
     {"id": "eccc", …, "areas": null}
@@ -315,10 +321,12 @@ chain an event's messages across rounds.
   round's); `file`, the network file's name (always `<id>.jsonl`), length
   and CRC32 — an empty file when nothing is in force; and `areas`, the
   boundary set the network's area codes resolve against (§9), or `null`.
-  `areas.path` is relative to the index and always
-  `../alerts-areas/<set>.<version>.pmtiles`; `layers` are the layer names
+  `areas.path` is relative to the index and climbs to the data root:
+  `../../../../../alerts-areas/<set>.<version>.pmtiles` from a round filed
+  under its day, `../alerts-areas/…` from a flat one published before that
+  layout (a reader accepts both); `layers` are the layer names
   in that file; `bbox` (optional) is the set's box file (§9),
-  `../alerts-areas/<set>.<version>.bbox.json`, with its length and CRC32.
+  `<the same climb>alerts-areas/<set>.<version>.bbox.json`, with its length and CRC32.
 - `categories` is §2's list, in that order.
 - `mapping` (optional) is `{"tables": <crc32>}`, the CRC32 of the bytes of
   `xuebuild/alerts/tables.json`, the mapping (§3) that filed this round's
@@ -756,7 +764,8 @@ url `https://weather.gc.ca/`.
 
 `xuebuild/alerts/schema.py` validates every file as it is written, and
 `tests/test_alerts.py` holds two consecutive rounds built from the fetched
-fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`, with
+fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`, the
+raw rounds, which stay flat under the raw root, with
 the boundary sets' box files in `alerts-areas/`) to the
 committed golden (`tests/fixtures/alerts/expected/`), regenerated by
 `tests/prepare_alerts_golden.py`. The second round exercises every

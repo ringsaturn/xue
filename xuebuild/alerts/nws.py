@@ -34,7 +34,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from .alert import NetworkRead, fetch_document, network_directory, parse_utc, read_json, texts, utc
 from .geometry import simplify
-from .schema import round_directory, sha256_hex
+from .schema import raw_directory, sha256_hex
 from .tables import nws_category, nws_level
 
 LOG = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ FILENAME = "active.json"
 
 def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bool = False, now: datetime) -> list[SourceStatus]:
     destination = network_directory(raw_root, moment, NETWORK) / FILENAME
-    relative = f"{round_directory(moment)}/{NETWORK}/{FILENAME}"
+    relative = f"{raw_directory(moment)}/{NETWORK}/{FILENAME}"
     return [fetch_document(SOURCE, URL, destination, relative, now=now, accept="application/geo+json")]
 
 

@@ -21,10 +21,10 @@ NEXRAD_SITES ?= all
 .PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc upload-r2-tc-archive airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
 
 # $(call point_dir,product,id): an issue's directory under the data root.
-# tc, sounding and aq file it under its UTC day,
+# tc, sounding, aq and alerts file it under its UTC day,
 # <product>/YYYY/MM/DD/<product>.<id>, so the root does not carry a prefix
-# per issue; the airport's, synop's and alerts' rounds stay flat.
-point_dir = $(if $(filter tc sounding aq,$(1)),$(1)/$(shell printf '%s' '$(2)' | cut -c1-4)/$(shell printf '%s' '$(2)' | cut -c5-6)/$(shell printf '%s' '$(2)' | cut -c7-8)/$(1).$(2),$(1).$(2))
+# per issue; the airport's and synop's rounds stay flat.
+point_dir = $(if $(filter tc sounding aq alerts,$(1)),$(1)/$(shell printf '%s' '$(2)' | cut -c1-4)/$(shell printf '%s' '$(2)' | cut -c5-6)/$(shell printf '%s' '$(2)' | cut -c7-8)/$(1).$(2),$(1).$(2))
 
 # $(call point_pointer_check,product,id,noun,pass hint,why no pointer): the
 # pointer on disk must name this issue and carry its index's CRC32.

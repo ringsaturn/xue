@@ -13,7 +13,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .http import get
-from .schema import iso_z, round_directory, write_bytes_atomic
+from .schema import iso_z, raw_directory, write_bytes_atomic
 
 LOG = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class NetworkRead:
 
 
 def network_directory(raw_root: Path, moment: datetime, network: str) -> Path:
-    return raw_root / round_directory(moment) / network
+    return raw_root / raw_directory(moment) / network
 
 
 def utc(value: object) -> str | None:

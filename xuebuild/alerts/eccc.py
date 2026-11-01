@@ -30,7 +30,7 @@ from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .geometry import simplify
 from .http import get
-from .schema import round_directory, sha256_hex, write_bytes_atomic
+from .schema import raw_directory, sha256_hex, write_bytes_atomic
 from .tables import eccc_category, eccc_level
 
 LOG = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def _next_link(payload: Any) -> str | None:
 
 def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bool = False, now: datetime) -> list[SourceStatus]:
     directory = network_directory(raw_root, moment, NETWORK)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     url: str | None = URL
     pages: list[bytes] = []
     try:
