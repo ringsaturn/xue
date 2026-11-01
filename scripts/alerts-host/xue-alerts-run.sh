@@ -29,6 +29,11 @@ fi
 cd "$SRC"
 git fetch --quiet origin main
 git checkout --quiet --force --detach FETCH_HEAD
+# The installed copy only bootstraps: once main is checked out, run main's
+# copy of this script, so a change to it ships with main like the rest.
+if [ -z "${XUE_ALERTS_REEXEC:-}" ] && ! cmp -s "$0" scripts/alerts-host/xue-alerts-run.sh; then
+  XUE_ALERTS_REEXEC=1 exec sh scripts/alerts-host/xue-alerts-run.sh
+fi
 uv sync --frozen --quiet
 # The index's builder block names the commit the round was built from.
 XUE_BUILD_REVISION=$(git rev-parse HEAD)
