@@ -25,8 +25,10 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the aq modules impor
     CRC32,
     check_number,
     check_builder,
+    archive_round_directory,
     check_pointer,
     existing_round_directory,
+    flat_round_directory,
     round_directories,
     check_sha256,
     check_sources,
@@ -149,10 +151,16 @@ def round_name(moment: datetime) -> str:
 
 
 def round_directory(moment: datetime) -> str:
-    """``aq.202610311545``: one immutable directory per round, flat under
-    the data root. A round carries the whole 24-hour window and lives three
-    hours, so there is no archive to file by day."""
-    return f"aq.{round_name(moment)}"
+    """``aq/2026/10/31/aq.202610311545``: one immutable directory per
+    round, filed under its UTC day so the data root does not carry a
+    prefix per round."""
+    return archive_round_directory(PRODUCT, moment)
+
+
+def raw_directory(moment: datetime) -> str:
+    """``aq.202610311545``: where a round's fetched files sit under the raw
+    root, flat: a raw round is read once, by its own build."""
+    return flat_round_directory(PRODUCT, moment)
 
 
 def pointer_directories(moment: datetime) -> tuple[str, ...]:

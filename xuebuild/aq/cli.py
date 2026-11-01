@@ -19,7 +19,7 @@ COMMAND = "aq-build"
 def add_parser(commands: argparse._SubParsersAction) -> None:
     parser = commands.add_parser(
         COMMAND,
-        help="fetch the air-quality station networks and write one aq.<round>/ index, a <network>.jsonl and a "
+        help="fetch the air-quality station networks and write one aq/YYYY/MM/DD/aq.<round>/ index, a <network>.jsonl and a "
         "<network>.stations.json per network, and the pointer (docs/aq.md)",
     )
     parser.add_argument(

@@ -40,17 +40,17 @@
  "links": [
   {
    "rel": "root",
-   "href": "../catalog.json",
+   "href": "../../../../../catalog.json",
    "type": "application/json"
   },
   {
    "rel": "parent",
-   "href": "../aq/collection.json",
+   "href": "../../../../collection.json",
    "type": "application/json"
   },
   {
    "rel": "collection",
-   "href": "../aq/collection.json",
+   "href": "../../../../collection.json",
    "type": "application/json"
   }
  ],

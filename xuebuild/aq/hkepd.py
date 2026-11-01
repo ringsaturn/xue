@@ -40,7 +40,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import DownloadError, XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import AqProductError, bounded, round_directory, to_mixing_ratio
+from .schema import AqProductError, bounded, raw_directory, to_mixing_ratio
 from .station import NetworkRead, Observation, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ GASES = frozenset({"o3", "no2", "so2", "co"})
 
 
 def network_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment) / NETWORK
+    return raw_root / raw_directory(moment) / NETWORK
 
 
 def load_table(path: Path = TABLE) -> dict[str, StationMeta]:
@@ -102,7 +102,7 @@ def fetch(
     del since
     now = now or datetime.now(UTC)
     path = network_directory(raw_root, moment) / FILENAME
-    relative = f"{round_directory(moment)}/{NETWORK}/{FILENAME}"
+    relative = f"{raw_directory(moment)}/{NETWORK}/{FILENAME}"
     if path.exists() and not force:
         return [SourceStatus(SOURCE, True, fetched=now, url=URL, file=relative)]
     try:

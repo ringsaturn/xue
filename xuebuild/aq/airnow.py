@@ -35,7 +35,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import ELEVATION_RANGE, HISTORY_HOURS, STATION, AqProductError, bounded, round_directory
+from .schema import ELEVATION_RANGE, HISTORY_HOURS, STATION, AqProductError, bounded, raw_directory
 from .station import NetworkRead, Observation, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ REQUIRED = ("AQSID", "SiteName", "Latitude", "Longitude", "Elevation", "ValidDat
 
 
 def network_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment) / NETWORK
+    return raw_root / raw_directory(moment) / NETWORK
 
 
 def file_name(start: datetime) -> str:
@@ -104,7 +104,7 @@ def fetch(
     round was built from."""
     now = now or datetime.now(UTC)
     directory = network_directory(raw_root, moment)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     fetched = missing = 0
     error: str | None = None
     for start in file_hours(moment, since):
