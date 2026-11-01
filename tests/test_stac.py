@@ -678,7 +678,11 @@ class PointProductTests(unittest.TestCase):
         )
 
     def alerts_item(self) -> dict:
-        return self.item("alerts", "alerts.202611010005", "alerts/expected/alerts.202611010005/index.json")
+        return self.item(
+            "alerts",
+            "alerts/2026/11/01/alerts.202611010005",
+            "alerts/expected/alerts/2026/11/01/alerts.202611010005/index.json",
+        )
 
     def nexrad_item(self) -> dict:
         return self.item("nexrad", "nexrad.202303250145", "nexrad/expected/nexrad.202303250145/index.json")
@@ -866,7 +870,7 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(item["bbox"], [-180.0, -90.0, 180.0, 90.0])
 
     def test_an_alerts_round_is_the_union_of_its_rows_boxes(self) -> None:
-        index, _ = self.index("alerts/expected/alerts.202611010005/index.json")
+        index, _ = self.index("alerts/expected/alerts/2026/11/01/alerts.202611010005/index.json")
         boxed = [row for row in index["alerts"] if row[8] is not None]
         self.assertTrue(boxed)
         self.assertEqual(

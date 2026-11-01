@@ -171,7 +171,7 @@ def build_product(
     now: datetime | None = None,
     areas_base_url: str | None = None,
 ) -> dict[str, Any]:
-    """Read the round's fetched files, write ``alerts.<round>/`` — a file
+    """Read the round's fetched files, write ``alerts/YYYY/MM/DD/alerts.<round>/`` — a file
     per network and the index over them — and, unless no network's state
     arrived, the pointer. The boundary sets' boxes are read from
     ``raw_root/alerts-areas/``, fetched from ``areas_base_url`` into it when

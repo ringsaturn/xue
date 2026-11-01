@@ -34,8 +34,9 @@ uv sync --frozen --quiet
 XUE_BUILD_REVISION=$(git rev-parse HEAD)
 export XUE_BUILD_REVISION
 
-# Every round starts from the live state on R2, never from local leftovers.
-rm -rf web/public/data/alerts.* web/public/data/latest-alerts.json
+# Every round starts from the live state on R2, never from local leftovers:
+# the flat rounds and those filed under their day (alerts/YYYY/...).
+rm -rf web/public/data/alerts.* web/public/data/alerts/[0-9][0-9][0-9][0-9] web/public/data/latest-alerts.json
 make --no-print-directory live-alerts-index AWS="$AWS"
 
 round=$(date -u +%Y%m%d%H)$(printf '%02d' $(( 5 * ($(date -u +%M | sed 's/^0//') / 5) )))

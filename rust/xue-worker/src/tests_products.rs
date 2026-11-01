@@ -1073,15 +1073,7 @@ fn an_alert_replaced_under_a_new_id_names_its_successor() {
 #[test]
 fn an_alerts_round_can_be_pinned_and_a_newer_index_is_refused() {
     let objects = bucket();
-    let live = pointer_dir(&objects, "latest-alerts.json");
-    let mut rounds: Vec<String> = objects
-        .keys()
-        .filter(|key| key.starts_with("alerts.") && key.ends_with("/index.json"))
-        .map(|key| key.trim_end_matches("/index.json").to_owned())
-        .filter(|round| *round != live)
-        .collect();
-    rounds.sort();
-    let round = rounds.last().expect("an earlier alerts round").clone();
+    let round = earlier_round(&objects, "alerts");
     let data = Data::in_memory(objects);
     assert_eq!(ok(&data, "alerts", &format!("issue={round}"))["issue"], json!(round));
 

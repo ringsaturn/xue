@@ -45,7 +45,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .http import get
-from .schema import iso_z, round_directory, sha256_hex, write_bytes_atomic
+from .schema import iso_z, raw_directory, sha256_hex, write_bytes_atomic
 from .tables import jma_kind, jma_kind_of
 
 LOG = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bo
     """``map_time.json``, then ``map.json`` unless the time is the one the
     previous round published (``since``)."""
     directory = network_directory(raw_root, moment, NETWORK)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     try:
         response = get(MAP_TIME_URL)
         if response.body is None:

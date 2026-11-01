@@ -26,8 +26,10 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the alerts modules i
     builder_block,
     check_builder,
     check_number,
+    archive_round_directory,
     check_pointer,
     existing_round_directory,
+    flat_round_directory,
     round_directories,
     check_sha256,
     check_sources,
@@ -133,10 +135,16 @@ def round_name(moment: datetime) -> str:
 
 
 def round_directory(moment: datetime) -> str:
-    """``alerts.202611010005``: one immutable directory per round, flat
-    under the data root. A round is a snapshot that lives three hours, so
-    there is no archive to file by day."""
-    return f"alerts.{round_name(moment)}"
+    """``alerts/2026/11/01/alerts.202611010005``: one immutable directory per
+    round, filed under its UTC day so the data root does not carry a
+    prefix per round."""
+    return archive_round_directory(PRODUCT, moment)
+
+
+def raw_directory(moment: datetime) -> str:
+    """``alerts.202611010005``: where a round's fetched files sit under the raw
+    root, flat: a raw round is read once, by its own build."""
+    return flat_round_directory(PRODUCT, moment)
 
 
 def pointer_directories(moment: datetime) -> tuple[str, ...]:
@@ -164,9 +172,10 @@ def areas_bbox_filename(set_id: str, version: str) -> str:
     return f"{set_id}.{version}.bbox.json"
 
 
-ROUND_DEPTH = 1
+ROUND_DEPTH = 5
 """How many directories deep this build writes a round under the data root
-(``alerts.<round>``): how far a path in its index climbs to reach the root."""
+(``alerts/YYYY/MM/DD/alerts.<round>``): how far a path in its index climbs
+to reach the root."""
 
 ROUND_DEPTHS = (5, 1)
 """The depths a published round may sit at: ``alerts/YYYY/MM/DD/alerts.<round>``

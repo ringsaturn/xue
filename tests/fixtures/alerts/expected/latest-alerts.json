@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "product": "alerts",
  "issued": "2026-11-01T00:05:00Z",
- "path": "alerts.202611010005/index.json",
- "byteLength": 4788,
- "crc32": "2d58e5fc"
+ "path": "alerts/2026/11/01/alerts.202611010005/index.json",
+ "byteLength": 4836,
+ "crc32": "cd1fc152"
 }
