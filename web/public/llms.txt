@@ -712,7 +712,9 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   LLC ... (CC BY 4.0)").
 - Airport observations and forecasts are a separate, ten-minute JSON
   product under the same root (schema 1, `docs/airport.md`): the mutable
-  pointer `latest-airport.json` names `airport.<YYYYMMDDHHMM>/index.json`,
+  pointer `latest-airport.json` names
+  `airport/<YYYY>/<MM>/<DD>/airport.<YYYYMMDDHHMM>/index.json` (the flat
+  `airport.<YYYYMMDDHHMM>/index.json` before that layout),
   which carries every station's position and newest observation as a
   compact row (`icao`, `lat`, `lon`, `elev`, `obsTime`, `t`, `td`, `wd`,
   `ws`, `gust`, `vis`, `qnh`, `category`, `tafPresent`, `offset`,

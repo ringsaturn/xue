@@ -34,7 +34,7 @@ from .. import __version__
 from ..errors import DownloadError, XueError
 from ..fetch import _http_error_code, _request
 from ..pointproduct import iso_z, write_bytes_atomic
-from .schema import round_directory, round_name
+from .schema import raw_directory, round_name
 
 LOG = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class FetchRecord:
 
 
 def round_raw_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment)
+    return raw_root / raw_directory(moment)
 
 
 def _pace() -> None:
@@ -262,7 +262,7 @@ def fetch_round(
         ("awc-metars", METARS_URL, METARS_FILENAME),
         ("awc-tafs", TAFS_URL, TAFS_FILENAME),
     ):
-        relative = f"{round_directory(moment)}/{filename}"
+        relative = f"{raw_directory(moment)}/{filename}"
         try:
             status = _fetch_file(url, directory / filename, relative, source_id)
             LOG.info("airport %s: fetched %s (%d bytes)", source_id, filename, status.detail["bytes"])

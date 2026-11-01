@@ -60,7 +60,7 @@
  ],
  "assets": {
   "index": {
-   "href": "../airport.202609161440/index.json?v=ca823538",
+   "href": "2026/09/16/airport.202609161440/index.json?v=ca823538",
    "type": "application/json",
    "title": "airport index (schema v1)",
    "roles": ["metadata"],
@@ -70,7 +70,7 @@
    "file:checksum": "b20204ca823538"
   },
   "history": {
-   "href": "../airport.202609161440/history.jsonl?v=c34fab6d",
+   "href": "2026/09/16/airport.202609161440/history.jsonl?v=c34fab6d",
    "type": "application/x-ndjson",
    "title": "Observations and forecasts by station",
    "description": "One station per line, sorted by id. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",

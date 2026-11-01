@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import airportIndexJson from "../fixtures/airport/expected/airport.202609161440/index.json";
+import airportIndexJson from "../fixtures/airport/expected/airport/2026/09/16/airport.202609161440/index.json";
 import airportPointerJson from "../fixtures/airport/expected/latest-airport.json";
 import soundingIndexJson from "../fixtures/sounding/expected/index.json";
 import soundingPointerJson from "../fixtures/sounding/expected/latest-sounding.json";

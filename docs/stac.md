@@ -203,10 +203,10 @@ the catalog, `item` and `latest-version` to the live Item beside it,
 `xue:live` repeats the Item id and `xue:pointer` the pointer's file name.
 
 the issue directory's `item.json`: `sounding/2026/09/14/sounding.2026091402/`,
-`tc/2026/09/13/tc.2026091301/`, `synop/2026/10/05/synop.202610050010/`,
-`aq/2026/10/31/aq.202610311545/`, `alerts/2026/11/01/alerts.202611010005/`,
-`airport.202609161430/`, `nexrad.202610050805/`, `fire.202610120500/` (the
-airport, NEXRAD and fire rounds stay flat; an issue published
+`tc/2026/09/13/tc.2026091301/`, `airport/2026/09/16/airport.202609161430/`,
+`synop/2026/10/05/synop.202610050010/`, `aq/2026/10/31/aq.202610311545/`,
+`alerts/2026/11/01/alerts.202611010005/`, `nexrad.202610050805/`,
+`fire.202610120500/` (the NEXRAD and fire rounds stay flat; an issue published
 before its product's archive tree sits flat too). Id: the directory's own name
 (`sounding.2026091402`, `aq.202610311545`, `alerts.202611010005`,
 `airport.202609161430`, `synop.202610050010`,
