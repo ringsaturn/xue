@@ -30,7 +30,9 @@ from ..errors import SynopProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the synop modules import them from here
     CRC32,
     check_number,
+    check_builder,
     check_pointer,
+    check_sha256,
     check_sources,
     check_time,
     crc32_hex,
@@ -80,6 +82,33 @@ write null for a value outside its range rather than lose the round."""
 
 ELEMENTS = tuple(ELEMENT_BOUNDS)
 INTEGER_ELEMENTS = frozenset({"rh", "wd", "snow", "vis"})
+
+ELEMENT_TABLE: dict[str, dict[str, Any]] = {
+    "t": {"unit": "°C", "cell": "point", "period": None},
+    "td": {"unit": "°C", "cell": "point", "period": None},
+    "rh": {"unit": "%", "cell": "point", "period": None},
+    "p": {"unit": "hPa", "cell": "point", "period": None},
+    "slp": {"unit": "hPa", "cell": "point", "period": None},
+    "wd": {"unit": "°", "cell": "mean", "period": "network"},
+    "ws": {"unit": "m/s", "cell": "mean", "period": "network"},
+    "gust": {"unit": "m/s", "cell": "max", "period": None},
+    "pr": {"unit": "mm", "cell": "sum", "period": "network"},
+    "pr1h": {"unit": "mm", "cell": "sum", "period": 3600},
+    "sun": {"unit": "min", "cell": "sum", "period": "network"},
+    "snow": {"unit": "cm", "cell": "point", "period": None},
+    "vis": {"unit": "m", "cell": "point", "period": None},
+}
+"""The index's ``elementTable``: each element's unit, how its value
+stands for its time (``cell``) and the seconds it covers, ending at its
+time — ``"network"`` where the network entry says (``wsPeriod`` for the
+wind, ``prPeriod`` for ``pr`` and ``sun``), null for an instantaneous
+value or, for ``gust``, a window that varies by network and report."""
+
+CELLS = ("point", "mean", "sum", "max", "min")
+WIGOS = re.compile(r"^\d{1,2}-\d{1,5}-\d{1,5}-[0-9A-Za-z_.-]{1,16}$")
+"""A WIGOS station identifier: series, issuer, issue number and local
+identifier."""
+QC_RANGE = (0, 255)
 
 ROW_HEAD = ("id", "lat", "lon", "elev", "rank", "name", "obsTime")
 ROW_TAIL = ("offset", "length")
@@ -183,6 +212,31 @@ def _optional_string(value: object, label: str) -> None:
         raise SynopProductError(f"{label} must be a string or null")
 
 
+def _optional_url(value: object, label: str) -> None:
+    if value is not None and (not isinstance(value, str) or not value.startswith("https://")):
+        raise SynopProductError(f"{label} must be an https URL or absent")
+
+
+def validate_element_table(table: object, elements: list[str], label: str) -> None:
+    """The index's optional ``elementTable``: one entry per element of
+    ``elements``, in the same order."""
+    if table is None:
+        return
+    if not isinstance(table, dict) or list(table) != elements:
+        raise SynopProductError(f"{label} must have one entry per element, in the elements' order")
+    for key, entry in table.items():
+        where = f"{label}.{key}"
+        if not isinstance(entry, dict):
+            raise SynopProductError(f"{where} must be an object")
+        if not isinstance(entry.get("unit"), str) or not entry["unit"]:
+            raise SynopProductError(f"{where}.unit must be a non-empty string")
+        if entry.get("cell") not in CELLS:
+            raise SynopProductError(f"{where}.cell must be one of {CELLS}")
+        period = entry.get("period")
+        if period is not None and period != "network":
+            _integer(period, f"{where}.period", (1, None))
+
+
 def _element_value(key: str, value: object, label: str) -> None:
     """One observed value: null, or a number inside the element's range
     (an integer where §2 says so). An element §2 does not define is only
@@ -215,6 +269,7 @@ def validate_sources(sources: object, label: str) -> None:
         for key in ("reports", "snapshots", "missing", "files", "unplaced"):
             if key in status:
                 _integer(status[key], f"{where}.{key}", (0, None))
+        check_sha256(SynopProductError, status.get("sha256"), f"{where}.sha256")
 
     check_sources(SynopProductError, sources, label, SOURCE_KEY, extra)
 
@@ -234,8 +289,10 @@ def validate_network(payload: object, label: str, version: int = SCHEMA_VERSION)
         if not isinstance(payload.get(key), str) or not payload[key]:
             raise SynopProductError(f"{label}.{key} must be a non-empty string")
     _integer(payload.get("cadence"), f"{label}.cadence", CADENCE_RANGE)
-    if payload.get("prPeriod") is not None:
-        _integer(payload["prPeriod"], f"{label}.prPeriod", CADENCE_RANGE)
+    for key in ("prPeriod", "wsPeriod"):
+        if payload.get(key) is not None:
+            _integer(payload[key], f"{label}.{key}", CADENCE_RANGE)
+    _optional_url(payload.get("licenseUrl"), f"{label}.licenseUrl")
     if payload.get("latest") is not None:
         _time(payload["latest"], f"{label}.latest")
     length = _crc_file(payload.get("file"), f"{label}.file", network_filename(network))
@@ -266,6 +323,9 @@ def validate_station_line(payload: object, label: str) -> None:
     _number(payload.get("lon"), f"{label}.lon", LONGITUDE_RANGE)
     _optional_number(payload.get("elev"), f"{label}.elev", ELEVATION_RANGE)
     _optional_string(payload.get("wmo"), f"{label}.wmo")
+    wigos = payload.get("wigos")
+    if wigos is not None and (not isinstance(wigos, str) or not WIGOS.match(wigos)):
+        raise SynopProductError(f"{label}.wigos is not a WIGOS station identifier")
     if payload.get("rank") not in RANKS or isinstance(payload.get("rank"), bool):
         raise SynopProductError(f"{label}.rank must be one of {RANKS}")
     times = payload.get("time")
@@ -287,6 +347,19 @@ def validate_station_line(payload: object, label: str) -> None:
             raise SynopProductError(f"{label}.obs.{key} must be as long as time")
         for position, value in enumerate(values):
             _element_value(key, value, f"{label}.obs.{key}[{position}]")
+    codes = payload.get("qc")
+    if codes is None:
+        return
+    if not isinstance(codes, dict):
+        raise SynopProductError(f"{label}.qc must be an object of element arrays")
+    for key, values in codes.items():
+        if not isinstance(key, str) or not ELEMENT.match(key):
+            raise SynopProductError(f"{label}.qc has a malformed element key {key!r}")
+        if not isinstance(values, list) or len(values) != len(times):
+            raise SynopProductError(f"{label}.qc.{key} must be as long as time")
+        for position, value in enumerate(values):
+            if value is not None:
+                _integer(value, f"{label}.qc.{key}[{position}]", QC_RANGE)
 
 
 def _validate_elements(elements: object, label: str) -> list[str]:
@@ -391,6 +464,7 @@ def validate_index(payload: object) -> None:
             raise SynopProductError(f"index.networks lists {network['id']} twice")
         seen.add(network["id"])
     elements = _validate_elements(payload.get("elements"), "index.elements")
+    validate_element_table(payload.get("elementTable"), elements, "index.elementTable")
 
     if version == 1:
         _validate_rows(
@@ -404,6 +478,7 @@ def validate_index(payload: object) -> None:
     elif "stations" in payload:
         raise SynopProductError("a v2 index carries no stations: each network's are in its stations file")
     validate_sources(payload.get("sources"), "index.sources")
+    check_builder(SynopProductError, payload.get("builder"), "index.builder")
 
 
 def validate_stations_file(payload: object, index: dict[str, Any], network_id: str) -> None:

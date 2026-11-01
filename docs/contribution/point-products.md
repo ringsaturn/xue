@@ -86,7 +86,14 @@ failed. `AIRPORT_KEEP` rounds are kept.
   merge lays new values over old element by element instead of replacing
   the time whole.
 - AMeDAS reads the agency's map-page JSON (no API, no SLA); the quality
-  rule and the 16-point wind code come from that page's own script.
+  rule and the 16-point wind code come from that page's own script. Its
+  codes ride with the values under `station.QC_KEY` (not an element key)
+  through the merge when `Network.quality_codes` is set; a line writes a
+  `qc` column only where the codes say more than the values, and the next
+  round reconstructs the omitted ones from the values.
+- Each adapter's `read` stores `sha256` of the bytes it read in its
+  source's status; the index adds `elementTable` and `builder`
+  (`XUE_BUILD_REVISION`, set by the workflow, null offline).
 - DWD is BUFR through `bufr_dump -j f`; values are picked by key plus the
   `timePeriod` / sensor height in force, never by template position, since
   one batch mixes four templates. HKO's CSVs name stations only in

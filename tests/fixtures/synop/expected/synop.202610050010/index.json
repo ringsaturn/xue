@@ -8,19 +8,21 @@
    "name": "JMA AMeDAS",
    "cadence": 600,
    "prPeriod": 600,
+   "wsPeriod": 600,
    "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
    "license": "PDL-1.0",
+   "licenseUrl": "https://www.jma.go.jp/jma/kishou/info/coment.html",
    "url": "https://www.jma.go.jp/bosai/amedas/",
    "latest": "2026-10-05T00:10:00Z",
    "file": {
     "path": "amedas.jsonl",
-    "byteLength": 5531,
-    "crc32": "56dfb706"
+    "byteLength": 5931,
+    "crc32": "9d6a7441"
    },
    "stations": {
     "path": "amedas.stations.json",
     "byteLength": 2207,
-    "crc32": "085b96d4",
+    "crc32": "d66772e3",
     "count": 14
    }
   },
@@ -29,19 +31,21 @@
    "name": "DWD SYNOP Germany",
    "cadence": 600,
    "prPeriod": 600,
+   "wsPeriod": 600,
    "attribution": "Source: Deutscher Wetterdienst",
    "license": "CC-BY-4.0",
+   "licenseUrl": "https://www.dwd.de/copyright",
    "url": "https://opendata.dwd.de/",
    "latest": "2026-10-04T23:50:00Z",
    "file": {
     "path": "dwd.jsonl",
-    "byteLength": 2177,
-    "crc32": "79b0e337"
+    "byteLength": 2320,
+    "crc32": "5ec96d61"
    },
    "stations": {
     "path": "dwd.stations.json",
     "byteLength": 1028,
-    "crc32": "969f85dc",
+    "crc32": "049e13e3",
     "count": 6
    }
   },
@@ -50,8 +54,10 @@
    "name": "Hong Kong Observatory",
    "cadence": 600,
    "prPeriod": null,
+   "wsPeriod": 600,
    "attribution": "Hong Kong Observatory (DATA.GOV.HK)",
    "license": "DATA.GOV.HK",
+   "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
    "url": "https://data.gov.hk/",
    "latest": "2026-10-05T00:10:00Z",
    "file": {
@@ -68,6 +74,73 @@
   }
  ],
  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "elementTable": {
+  "t": {
+   "unit": "°C",
+   "cell": "point",
+   "period": null
+  },
+  "td": {
+   "unit": "°C",
+   "cell": "point",
+   "period": null
+  },
+  "rh": {
+   "unit": "%",
+   "cell": "point",
+   "period": null
+  },
+  "p": {
+   "unit": "hPa",
+   "cell": "point",
+   "period": null
+  },
+  "slp": {
+   "unit": "hPa",
+   "cell": "point",
+   "period": null
+  },
+  "wd": {
+   "unit": "°",
+   "cell": "mean",
+   "period": "network"
+  },
+  "ws": {
+   "unit": "m/s",
+   "cell": "mean",
+   "period": "network"
+  },
+  "gust": {
+   "unit": "m/s",
+   "cell": "max",
+   "period": null
+  },
+  "pr": {
+   "unit": "mm",
+   "cell": "sum",
+   "period": "network"
+  },
+  "pr1h": {
+   "unit": "mm",
+   "cell": "sum",
+   "period": 3600
+  },
+  "sun": {
+   "unit": "min",
+   "cell": "sum",
+   "period": "network"
+  },
+  "snow": {
+   "unit": "cm",
+   "cell": "point",
+   "period": null
+  },
+  "vis": {
+   "unit": "m",
+   "cell": "point",
+   "period": null
+  }
+ },
  "sources": [
   {
    "id": "jma-amedas-map",
@@ -76,7 +149,8 @@
    "url": "https://www.jma.go.jp/bosai/amedas/data/map",
    "snapshots": 1,
    "missing": 0,
-   "reports": 14
+   "reports": 14,
+   "sha256": "1679de43c16744abcd0c916ce90d26a2e77eba8734e2c20888bc94431d73b0a9"
   },
   {
    "id": "jma-amedas-table",
@@ -84,6 +158,7 @@
    "fetched": "2026-10-05T00:04:00Z",
    "url": "https://www.jma.go.jp/bosai/amedas/const/amedastable.json",
    "cached": true,
+   "sha256": "eef99540b31e8325cc598c808f40000e09ee40eb978710a2abdaa9fdfa06b235",
    "reports": 14
   },
   {
@@ -93,6 +168,7 @@
    "url": "https://opendata.dwd.de/weather/weather_reports/synoptic/germany/",
    "files": 2,
    "missing": 0,
+   "sha256": "def95268f273bb6830954ff78255f2ff128f7b736e206cdfa84dc2fb4b3bcc2c",
    "reports": 10,
    "unplaced": 0
   },
@@ -104,7 +180,12 @@
    "files": 5,
    "missing": 0,
    "reports": 50,
-   "unplaced": 3
+   "unplaced": 3,
+   "sha256": "e6f811cdeeac4132ddd1a547951f029fec540eb60fa2b70062e4bd4150dd07c1"
   }
- ]
+ ],
+ "builder": {
+  "name": "xuebuild",
+  "revision": null
+ }
 }

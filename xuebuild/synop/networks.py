@@ -23,8 +23,12 @@ class Network:
     """Seconds between a station's reports."""
     pr_period: int | None
     """Seconds the ``pr`` and ``sun`` elements accumulate over."""
+    ws_period: int | None
+    """Seconds the ``ws`` and ``wd`` elements are means over."""
     attribution: str
     license: str
+    license_url: str
+    """The terms page ``license`` names."""
     url: str
     sources: tuple[str, ...]
     """The adapter's source ids, in the order ``sources[]`` lists them."""
@@ -38,6 +42,9 @@ class Network:
     several messages, several files, several rounds. The merge then lays a
     new report over the old element by element, so a piece that leaves an
     element out does not erase what an earlier piece said."""
+    quality_codes: bool = False
+    """Whether the adapter hands over the network's own quality code per
+    value (under ``station.QC_KEY``), which the lines publish as ``qc``."""
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -45,8 +52,10 @@ class Network:
             "name": self.name,
             "cadence": self.cadence,
             "prPeriod": self.pr_period,
+            "wsPeriod": self.ws_period,
             "attribution": self.attribution,
             "license": self.license,
+            "licenseUrl": self.license_url,
             "url": self.url,
         }
 
@@ -56,12 +65,15 @@ AMEDAS = Network(
     name="JMA AMeDAS",
     cadence=600,
     pr_period=600,
+    ws_period=600,
     attribution="出典：気象庁ホームページ (Japan Meteorological Agency)",
     license="PDL-1.0",
+    license_url="https://www.jma.go.jp/jma/kishou/info/coment.html",
     url="https://www.jma.go.jp/bosai/amedas/",
     sources=(amedas.MAP_SOURCE, amedas.TABLE_SOURCE),
     fetch=amedas.fetch,
     read=amedas.read,
+    quality_codes=True,
 )
 
 DWD = Network(
@@ -69,8 +81,10 @@ DWD = Network(
     name="DWD SYNOP Germany",
     cadence=600,
     pr_period=600,
+    ws_period=600,
     attribution="Source: Deutscher Wetterdienst",
     license="CC-BY-4.0",
+    license_url="https://www.dwd.de/copyright",
     url="https://opendata.dwd.de/",
     sources=(dwd.SOURCE,),
     fetch=dwd.fetch,
@@ -83,8 +97,10 @@ HKO = Network(
     name="Hong Kong Observatory",
     cadence=600,
     pr_period=None,
+    ws_period=600,
     attribution="Hong Kong Observatory (DATA.GOV.HK)",
     license="DATA.GOV.HK",
+    license_url="https://data.gov.hk/en/terms-and-conditions",
     url="https://data.gov.hk/",
     sources=(hko.SOURCE,),
     fetch=hko.fetch,

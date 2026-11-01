@@ -38,7 +38,9 @@ template states before it, never by its position in the template:
 - ``meteorologicalOpticalRange`` (the ten-minute MOR) for ``vis``, else
   the hourly template's ``horizontalVisibility``.
 
-The BUFR carries no quality flags; a missing value is null and a value
+The station's WIGOS identifier, which the templates state in 3 01 150,
+is published as ``wigos``. The BUFR carries no quality flags; a missing
+value is null and a value
 outside the element's range is null.
 
 Data: CC BY 4.0, credited "Source: Deutscher Wetterdienst".
@@ -60,9 +62,9 @@ from ..airport.fetch import SourceStatus
 from ..eccodescli import bufr_dump_json
 from ..errors import DownloadError, XueError
 from ..gdal import require_command
-from ..pointproduct import write_bytes_atomic
+from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import ELEMENT_BOUNDS, ELEMENTS, ELEVATION_RANGE, HISTORY_HOURS, STATION, round_directory
+from .schema import ELEMENT_BOUNDS, ELEMENTS, ELEVATION_RANGE, HISTORY_HOURS, STATION, WIGOS, round_directory
 from .station import NetworkRead, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -243,6 +245,7 @@ class Subset:
     """The DWD station identifier (``shortStationName`` or the WMO block
     and station number)."""
     wmo: str | None
+    wigos: str | None
     epoch: int | None
     name: str | None
     lat: float | None
@@ -270,8 +273,25 @@ HEADER_KEYS = frozenset(
         "latitude",
         "longitude",
         "heightOfStationGroundAboveMeanSeaLevel",
+        "wigosIdentifierSeries",
+        "wigosIssuerOfIdentifier",
+        "wigosIssueNumber",
+        "wigosLocalIdentifierCharacter",
     }
 )
+
+
+def _wigos(header: dict[str, Any]) -> str | None:
+    """The WIGOS station identifier the template's 3 01 150 states, as
+    ``<series>-<issuer>-<issue number>-<local identifier>``, or null."""
+    parts = [_number(header.get(key)) for key in ("wigosIdentifierSeries", "wigosIssuerOfIdentifier", "wigosIssueNumber")]
+    local = header.get("wigosLocalIdentifierCharacter")
+    if isinstance(local, (int, float)) and not isinstance(local, bool):
+        local = str(int(local))
+    if any(part is None or part < 0 or part != int(part) for part in parts) or not isinstance(local, str) or not local.strip():
+        return None
+    value = "-".join(str(int(part)) for part in parts) + f"-{local.strip()}"  # type: ignore[arg-type]
+    return value if WIGOS.match(value) else None
 
 
 def _identity(header: dict[str, Any]) -> tuple[str, str | None] | None:
@@ -327,6 +347,7 @@ def parse_subset(walked: list[tuple[str, Any, str | None]]) -> Subset | None:
     subset = Subset(
         station=station,
         wmo=wmo,
+        wigos=_wigos(header),
         epoch=_epoch(header),
         name=name.strip() if isinstance(name, str) and name.strip() else None,
         lat=None if lat is None else round(lat, 4),
@@ -463,6 +484,8 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
     directory = raw_root / status.file
     paths = sorted(directory.glob("*.bin"), key=lambda path: path.name) if directory.is_dir() else []
     stations, unplaced = read_batches(paths)
+    if paths:
+        status.detail["sha256"] = sha256_hex(*(path.read_bytes() for path in paths))
     metas: dict[str, StationMeta] = {}
     observations: list[tuple[str, int, dict[str, float | int | None]]] = []
     for key, station in stations.items():
@@ -471,7 +494,15 @@ def read(raw_root: Path, statuses: dict[str, SourceStatus]) -> NetworkRead:
             continue  # placed by no subset this round: the previous round's metadata stands
         station_id = f"{NETWORK}:{key}"
         metas[station_id] = StationMeta(
-            id=station_id, name=meta.name, names=None, lat=meta.lat, lon=meta.lon, elev=meta.elev, wmo=meta.wmo, rank=_rank(station)
+            id=station_id,
+            name=meta.name,
+            names=None,
+            lat=meta.lat,
+            lon=meta.lon,
+            elev=meta.elev,
+            wmo=meta.wmo,
+            rank=_rank(station),
+            wigos=meta.wigos,
         )
     for key, station in sorted(stations.items()):
         for epoch, subset in sorted(station.observations.items()):

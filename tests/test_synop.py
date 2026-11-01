@@ -19,6 +19,7 @@ from tests.prepare_synop_golden import FIXTURES, GENERATED, ROUNDS, build_rounds
 from xuebuild.errors import SynopProductError
 from xuebuild.synop import amedas, dwd, hko
 from xuebuild.synop.build import build_product, load_previous_index
+from xuebuild.synop.station import QC_KEY
 from xuebuild.synop.schema import (
     ELEMENTS,
     ROW_HEAD,
@@ -106,6 +107,9 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(converted["rh"], 100)
         for key in ("p", "ws", "pr", "vis", "sun"):
             self.assertIsNone(converted[key], key)
+        # Every code is kept beside the values, the dropped ones included;
+        # a cell without a usable code has none.
+        self.assertEqual(converted[QC_KEY], {"t": 0, "rh": 1, "p": 2, "ws": 5, "pr": 0, "vis": 6})
 
     def test_a_value_out_of_range_becomes_null(self) -> None:
         self.assertIsNone(amedas.convert({"temp": [999.0, 0]})["t"])
@@ -237,6 +241,17 @@ class DwdTest(unittest.TestCase):
         subset = dwd.parse_subset(national)
         assert subset is not None
         self.assertEqual((subset.station, subset.wmo), ("M031", None))
+        self.assertIsNone(subset.wigos)
+        wigos = [
+            ("wigosIdentifierSeries", 0, None),
+            ("wigosIssuerOfIdentifier", 276, None),
+            ("wigosIssueNumber", 3, None),
+            ("wigosLocalIdentifierCharacter", "5484", None),
+            *national,
+        ]
+        subset = dwd.parse_subset(wigos)
+        assert subset is not None
+        self.assertEqual(subset.wigos, "0-276-3-5484")
         nil = [(key, None, units) for key, _value, units in walked()]
         self.assertIsNone(dwd.parse_subset(nil))
 
@@ -348,6 +363,34 @@ class RoundsTest(unittest.TestCase):
         self.assertEqual(second["networks"][0]["latest"], "2026-10-05T00:10:00Z")
         self.assertEqual(first["networks"][0]["latest"], "2026-10-05T00:00:00Z")
 
+    def test_amedas_lines_carry_the_quality_codes_the_values_do_not_imply(self) -> None:
+        station = line_of(self.directories[1], self.rows[1]["amedas:82182"])
+        self.assertEqual(station["qc"], {"rh": [1, 6, 1]})
+        self.assertEqual(station["obs"]["rh"][1], None)  # code 6, missing
+        soya = line_of(self.directories[1], self.rows[1]["amedas:11001"])
+        self.assertNotIn("qc", soya)  # every value code 0
+        for network in ("dwd", "hko"):
+            for station, row in self.rows[1].items():
+                if station.startswith(f"{network}:"):
+                    self.assertNotIn("qc", line_of(self.directories[1], row), station)
+
+    def test_dwd_lines_carry_the_wigos_identifier(self) -> None:
+        lindenberg = line_of(self.directories[1], self.rows[1]["dwd:10393"])
+        self.assertEqual(lindenberg["wigos"], "0-20000-0-10393")
+        self.assertEqual(line_of(self.directories[1], self.rows[1]["dwd:M031"])["wigos"], "0-276-3-5484")
+        self.assertNotIn("wigos", line_of(self.directories[1], self.rows[1]["hko:HKO"]))
+
+    def test_the_index_describes_its_elements_and_build(self) -> None:
+        for index in self.indexes:
+            self.assertEqual(list(index["elementTable"]), index["elements"])
+            self.assertEqual(index["builder"], {"name": "xuebuild", "revision": None})
+            for network in index["networks"]:
+                self.assertEqual(network["wsPeriod"], 600)
+                self.assertTrue(network["licenseUrl"].startswith("https://"))
+            for source in index["sources"]:
+                if source["ok"]:
+                    self.assertRegex(source.get("sha256", ""), r"^[0-9a-f]{64}$", source["id"])
+
     def test_a_station_the_table_does_not_place_is_dropped(self) -> None:
         ids = set(self.rows[1])
         self.assertNotIn("amedas:12066", ids)
@@ -424,8 +467,12 @@ class SwitchTest(unittest.TestCase):
         rows = stations_of(directory, index)
         # The AMeDAS history came out of the v1 round's file: the network
         # file is what the golden's second round, built on a v2 first
-        # round, holds byte for byte.
-        self.assertEqual((directory / "amedas.jsonl").read_bytes(), (EXPECTED / directory.name / "amedas.jsonl").read_bytes())
+        # round, holds — but for the quality codes, which a v1 round did
+        # not keep, so its times carry the codes their values imply.
+        def without_codes(path: Path) -> list[dict]:
+            return [{key: value for key, value in json.loads(line).items() if key != "qc"} for line in path.read_bytes().splitlines()]
+
+        self.assertEqual(without_codes(directory / "amedas.jsonl"), without_codes(EXPECTED / directory.name / "amedas.jsonl"))
         self.assertEqual(len(line_of(directory, rows["amedas:44132"])["time"]), 3)
         # The networks the v1 round did not carry start their window here.
         self.assertTrue(all(len(line_of(directory, row)["time"]) == 1 for station, row in rows.items() if station.startswith("hko:")))
@@ -552,6 +599,16 @@ class ValidatorTest(unittest.TestCase):
             "network twice": lambda index: index["networks"].append(index["networks"][0]),
             "stations in the index": lambda index: index.__setitem__("stations", []),
             "schema version": lambda index: index.__setitem__("schemaVersion", 3),
+            "element table out of order": lambda index: index.__setitem__(
+                "elementTable", dict(reversed(list(index["elementTable"].items())))
+            ),
+            "element table cell": lambda index: index["elementTable"]["t"].__setitem__("cell", "median"),
+            "element table period": lambda index: index["elementTable"]["pr"].__setitem__("period", "hour"),
+            "wind period": lambda index: index["networks"][0].__setitem__("wsPeriod", 0),
+            "licence url": lambda index: index["networks"][0].__setitem__("licenseUrl", "ftp://example.org/"),
+            "source digest": lambda index: index["sources"][0].__setitem__("sha256", "ABC"),
+            "builder": lambda index: index.__setitem__("builder", {"name": "other", "revision": None}),
+            "builder revision": lambda index: index.__setitem__("builder", {"name": "xuebuild", "revision": "main"}),
         }
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(SynopProductError):
@@ -590,6 +647,8 @@ class ValidatorTest(unittest.TestCase):
     def test_unknown_elements_and_networks_are_admitted(self) -> None:
         def widen(payload: dict) -> None:
             payload["elements"].append("dewpoint2")
+            if "elementTable" in payload:
+                payload["elementTable"]["dewpoint2"] = {"unit": "°C", "cell": "point", "period": None}
             for row in payload.get("stations", []):
                 row.insert(len(ROW_HEAD) + len(ELEMENTS), 1.5)
 
@@ -603,6 +662,9 @@ class ValidatorTest(unittest.TestCase):
             "column too short": lambda line: line["obs"]["t"].pop(),
             "bad id": lambda line: line.__setitem__("id", "11001"),
             "rank": lambda line: line.__setitem__("rank", 3),
+            "qc too short": lambda line: line.__setitem__("qc", {"t": [0]}),
+            "qc not an integer": lambda line: line.__setitem__("qc", {"t": ["0"] * len(line["time"])}),
+            "wigos": lambda line: line.__setitem__("wigos", "10393"),
         }
         for name, change in cases.items():
             line = copy.deepcopy(self.line)

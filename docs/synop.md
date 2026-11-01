@@ -18,8 +18,10 @@ normative description of that product, index schema v2.
 Everything is a static file under the data root, beside the run pointers
 and the other point products' pointers.
 
-- `latest-synop.json` is the one mutable object. Fetch it with caching
-  disabled. It names the newest round's directory and the index inside it:
+- `latest-synop.json` is the one mutable object. Request it with
+  `Cache-Control: no-cache` (in a browser, `fetch(url, {cache: "no-cache"})`):
+  without it a browser cache may answer with a pointer up to four hours
+  old. It names the newest round's directory and the index inside it:
 
   ```json
   {"schemaVersion": 1, "product": "synop", "issued": "2026-10-05T00:10:00Z",
@@ -97,7 +99,7 @@ the adapter. The index lists them in this order (`elements`):
 | `pr1h` | precipitation over the hour ending at the time | mm, to a tenth | number, 0 … 1000 |
 | `sun` | sunshine over the network's `prPeriod` ending at the time | minutes | number, 0 … 60 |
 | `snow` | snow depth | cm | integer, 0 … 2000 |
-| `vis` | visibility | metres | integer, ≥ 0 |
+| `vis` | visibility | metres | integer, ≥ 0; each network's ceiling in §9 |
 
 - A network publishes the elements it measures and leaves the others
   `null`; nothing is derived — no dew point from temperature and humidity,
@@ -119,11 +121,14 @@ the adapter. The index lists them in this order (`elements`):
   sea level of the ground at the station, from the network's station
   table, or `null`.
 
+The index carries this table as `elementTable` (§4), so a reader need
+not hard-code it.
+
 The files are written compactly with ASCII escaping, and a file's identity
 is its bytes: the CRC32 in the index, and the pointer's, is of the file
 exactly as served. Given the same inputs a round is byte-identical; only
-the index's `generated` and the sources' `fetched` depend on when the
-build ran.
+the index's `generated`, the sources' `fetched` and the `builder`'s
+`revision` depend on when and from what the build ran.
 
 ## 3. Identity
 
@@ -145,15 +150,19 @@ national-network stations have none.
   "issued": "2026-10-05T00:10:00Z",
   "generated": "2026-10-05T00:15:30Z",
   "networks": [
-    {"id": "amedas", "name": "JMA AMeDAS", "cadence": 600, "prPeriod": 600,
+    {"id": "amedas", "name": "JMA AMeDAS", "cadence": 600, "prPeriod": 600, "wsPeriod": 600,
      "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
-     "license": "PDL-1.0", "url": "https://www.jma.go.jp/bosai/amedas/",
+     "license": "PDL-1.0", "licenseUrl": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+     "url": "https://www.jma.go.jp/bosai/amedas/",
      "latest": "2026-10-05T00:10:00Z",
      "file": {"path": "amedas.jsonl", "byteLength": 6779928, "crc32": "3b0b746f"},
      "stations": {"path": "amedas.stations.json", "byteLength": 182000, "crc32": "0a1b2c3d", "count": 1286}}
   ],
   "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
-  "sources": [ … ]
+  "elementTable": {"t": {"unit": "°C", "cell": "point", "period": null}, …,
+                   "pr": {"unit": "mm", "cell": "sum", "period": "network"}, …},
+  "sources": [ … ],
+  "builder": {"name": "xuebuild", "revision": "56ea0e8"}
 }
 ```
 
@@ -161,16 +170,31 @@ national-network stations have none.
 - `networks[]` is one entry per network that has a station in the window,
   in the publisher's order (`amedas`, `dwd`, `hko`): its id and display
   `name`; `cadence`, the seconds between a station's reports; `prPeriod`,
-  the seconds `pr` and `sun` accumulate over (or `null`); the
+  the seconds `pr` and `sun` accumulate over (or `null`); `wsPeriod`
+  (optional), the seconds `ws` and `wd` are means over; the
   `attribution` a display must show, the `license` the network's data is
-  reused under and the network's `url`; `latest`, the newest observation
+  reused under, `licenseUrl` (optional), the terms page that licence
+  string names (§9), and the network's `url`; `latest`, the newest observation
   time in the network's files; `file`, the network file's name (always
   `<id>.jsonl`), length and CRC32; and `stations`, the stations file's
   name (always `<id>.stations.json`), length, CRC32 and `count`, the
   number of rows in it.
 - `elements` is the element order of the stations files' rows. It is
   authoritative: each stations file repeats it and must be equal.
+- `elementTable` (optional) describes each of `elements`, one entry per
+  element in the same order: `unit`, the unit of §2's table; `cell`, how
+  the value stands for its time — `point` (an instantaneous reading),
+  `mean`, `sum`, `max` or `min`; and `period`, the seconds the value
+  covers, ending at its time — a number, `"network"` where it is the
+  network entry's field (`wsPeriod` for `ws` and `wd`, `prPeriod` for `pr`
+  and `sun`), or `null` for an instantaneous value. `gust` is the `max`
+  of a window that varies by network and report (§9), so its `period` is
+  `null`. A reader that finds no entry for an element falls back to §2.
 - `sources[]` is §7.
+- `builder` (optional) names the code that built the round:
+  `{"name": "xuebuild", "revision": <commit hash or null>}`. The
+  publisher sets the commit (`XUE_BUILD_REVISION`); an offline build
+  leaves it `null`.
 
 The index carries no stations: a map reads the stations files of the
 networks it shows.
@@ -219,9 +243,12 @@ object below followed by `\n`:
 ```
 {"id": "amedas:50066", "name": "Mt. Fuji" | null,
  "names": {"ja": "富士山", "ja-Kana": "フジサン"} | null,
- "lat": 35.36, "lon": 138.7267, "elev": 3775.0 | null, "wmo": null, "rank": 0,
+ "lat": 35.36, "lon": 138.7267, "elev": 3775.0 | null, "wmo": null,
+ "wigos": "0-20000-0-10393",              — optional, where the network gives one
+ "rank": 0,
  "time": [1791158400, 1791159000, …],     — epoch seconds UTC, strictly increasing
- "obs": {"t": [5.5, 5.8, …], "rh": [98, null, …], "p": [646.7, null, …]}}
+ "obs": {"t": [5.5, 5.8, …], "rh": [98, null, …], "p": [646.7, null, …]},
+ "qc": {"rh": [1, 6, …]}}                 — optional, where the network has quality codes
 ```
 
 - `names` maps BCP 47 language tags to the network's own spellings;
@@ -232,6 +259,18 @@ object below followed by `\n`:
   the window, each as long as `time`, `null` where that element was not
   reported at that time. An element the station never reported in the
   window is absent, and reads as all `null`.
+- `wigos` (optional) is the station's WIGOS identifier
+  (`<series>-<issuer>-<issue number>-<local identifier>`), present where
+  the network's reports state one (`dwd`, §9.2). It is not the key (§3).
+- `qc` (optional) carries the network's own quality code of each value,
+  for a network that has them (`amedas`, §9.1): per element an array as
+  long as `time`, the code as the network gives it, `null` where there
+  was no reading. `obs` keeps its rule — a value whose code the network
+  says is not good is `null` there (§2) — and `qc` says why. A column is
+  written only where it says more than `obs` does: an element without
+  one had code 0 wherever its value is not `null` and no reading where it
+  is, and a line with nothing to add has no `qc`. An element can have a
+  `qc` column and no `obs` column (suspended all day).
 
 A station's window is a merge, not a snapshot. Each round lays the
 network's new observations over the previous round's file keyed by
@@ -259,7 +298,10 @@ One entry per source, every network's in turn, in build order:
  "reports": 2310, "unplaced": 7}
 ```
 
-`ok: false` always carries `error`. `reports` is what the source
+`sha256` (optional) is the SHA-256, lowercase hex, of the raw bytes the
+build read from the source, file after file in the order they were
+fetched, so a round can be traced to its input; it is absent when the
+source contributed no bytes. `ok: false` always carries `error`. `reports` is what the source
 contributed — observations read (one per station and time), stations in a
 table. `files` is how many files were read, `missing` how many were gone
 when asked for, `unplaced` how many reports named no station the network
@@ -293,7 +335,8 @@ files.
 
 The Japan Meteorological Agency's Automated Meteorological Data
 Acquisition System: about 1 300 stations over Japan and its islands, every
-ten minutes. `cadence` and `prPeriod` are 600.
+ten minutes. `cadence`, `prPeriod` and `wsPeriod` (`wind` is the
+ten-minute mean) are 600.
 
 Source. The JSON the agency's own AMeDAS map page reads; there is no
 published API and no service commitment.
@@ -313,7 +356,10 @@ published API and no service commitment.
 Reading. Each value arrives as `[value, quality]`. A value is kept when
 its quality is 0 (normal) or 1 (quasi-normal) and it is not null — the
 agency's own page's rule; 2–4 (insufficient data), 5 (suspended) and 6
-(missing) become `null`. The elements:
+(missing) become `null`. Each line's `qc` (§6) carries these codes as
+they arrive, per element, for the key below that element is read from:
+0 normal, 1 quasi-normal, 2–4 insufficient data, 5 suspended, 6 missing;
+a code outside 0–255 or not an integer is `null`. The elements:
 
 | AMeDAS key | element | conversion |
 |---|---|---|
@@ -329,7 +375,9 @@ agency's own page's rule; 2–4 (insufficient data), 5 (suspended) and 6
 | `snow` | `snow` | — |
 | `visibility` | `vis` | metres |
 
-`td` and `gust` are not in the snapshots and stay `null`. The hourly
+`td` and `gust` are not in the snapshots and stay `null`. `vis` reaches
+20 000 m and no further in the snapshots examined: read 20 000 as
+"20 km or more". The hourly
 snapshot (on the hour) carries more than the others: several stations,
 Mt. Fuji among them, report humidity and pressure only then, and snow
 depth and the present-weather code appear only then (the weather code is
@@ -344,7 +392,7 @@ wind (a precipitation gauge), and 1 otherwise. A snapshot entry for a
 station the table does not list is dropped.
 
 Terms. The agency's website content is reusable, commercially included,
-under the Public Data License v1.0 with the source credited —
+under the Public Data License v1.0 (the `licenseUrl` below) with the source credited —
 「出典：気象庁ホームページ」 — and, for edited content, a statement that it
 was edited; it must not be presented as the agency's own publication
 (<https://www.jma.go.jp/jma/kishou/info/coment.html>). The `attribution`
@@ -355,7 +403,8 @@ string carries the credit, and a display shows it with the data.
 Deutscher Wetterdienst's national ten-minute SYNOP reports in BUFR: about
 1 000 German stations — some 220 WMO stations, about 300 national stations
 with the full set of elements and about 470 that measure precipitation
-alone. `cadence` and `prPeriod` are 600. The network is `partial` (§6).
+alone. `cadence`, `prPeriod` and `wsPeriod` are 600 (`ws` and `wd` are
+the −10 min means). The network is `partial` (§6).
 
 Source. `dwd-synop-bufr` —
 <https://opendata.dwd.de/weather/weather_reports/synoptic/germany/>, a
@@ -399,7 +448,7 @@ template:
 | `totalPrecipitationOrTotalWaterEquivalent` | `timePeriod` −60 min (or −1 h) | `pr1h` | mm |
 | `sunshineOverPeriodSpecified` | `timePeriod` −10 min | `sun` | minutes |
 | `totalSnowDepth` | — | `snow` | m × 100; negative codes `null` |
-| `meteorologicalOpticalRange` | — | `vis` | m (DWD's ten-minute MOR) |
+| `meteorologicalOpticalRange` | — | `vis` | m (DWD's ten-minute MOR); the largest value in the batches examined is 75 000 |
 | `horizontalVisibility` | when no MOR | `vis` | m (the hourly SYNOP template) |
 
 The one-minute precipitation series, the 3, 6, 12 and 24-hour totals and
@@ -423,14 +472,17 @@ and station number for a WMO station (WIGOS `0-20000-0-<wmo>`, e.g.
 `dwd:10393`, Lindenberg) and for the few national stations DWD numbers in
 the WMO style (`dwd:10271`, Neuruppin, WIGOS `0-276-2-96`); checked
 against the station list on 2026-10-31. `wmo` is the block and station
-number where the BUFR carries one. Position, elevation (ground) and
+number where the BUFR carries one, and `wigos` the WIGOS identifier its
+3 01 150 sequence states (`wigosIdentifierSeries`,
+`wigosIssuerOfIdentifier`, `wigosIssueNumber`,
+`wigosLocalIdentifierCharacter`), as given. Position, elevation (ground) and
 `name` (`stationOrSiteName`) come from the newest subset that places the
 station; `names` is `null`. `rank` is 0 for a station with a WMO number,
 2 for one whose reports in the round were precipitation and nothing else,
 1 otherwise.
 
 Terms. DWD's open data is licensed under CC BY 4.0
-(<https://www.dwd.de/copyright>); the source is credited as
+(<https://www.dwd.de/copyright>, the `licenseUrl`); the source is credited as
 "Source: Deutscher Wetterdienst"
 (<https://www.dwd.de/EN/service/legal_notice/templates_dwd_as_source.html>),
 which is the `attribution` string.
@@ -439,7 +491,7 @@ which is the `attribution` string.
 
 The Hong Kong Observatory's regional weather: about fifty manned,
 automatic, buoy and wind stations every ten minutes. `cadence` is 600;
-`prPeriod` is `null`, and there is no `pr` or `pr1h`: the Observatory's
+`wsPeriod` is 600 (the ten-minute mean wind); `prPeriod` is `null`, and there is no `pr` or `pr1h`: the Observatory's
 rain gauges have no machine-readable positions. The network is `partial`
 (§6): each element comes from its own file, and the files of one round
 need not name the same minute.
@@ -463,7 +515,7 @@ Reading. Missing values are `N/A` or empty. There are no quality flags.
 | 10-Minute Mean Wind Direction | `wd` | eight compass points, North = 360, Northeast = 45, …; `Calm` and `Variable` have no direction |
 | 10-Minute Mean Speed (km/h) | `ws` | ÷ 3.6; `Calm` is 0 |
 | 10-Minute Maximum Gust (km/h) | `gust` | ÷ 3.6 |
-| 10 minute mean visibility | `vis` | `18 km` → 18000 |
+| 10 minute mean visibility | `vis` | `18 km` → 18000; whole kilometres, no ceiling stated (35 km is the largest in the fixture) |
 
 Stations. The CSVs name stations by English name only, so positions come
 from `xuebuild/synop/hko_stations.json`, built once (2026-10-31) from the
@@ -509,7 +561,7 @@ is 0 for the two manned stations (`HKO`, `HKA`) and 1 for every other.
 The station page gives no WMO numbers, so `wmo` is `null`.
 
 Terms. DATA.GOV.HK's terms of use
-(<https://data.gov.hk/en/terms-and-conditions>) allow reuse, commercial
+(<https://data.gov.hk/en/terms-and-conditions>, the `licenseUrl`) allow reuse, commercial
 included, on condition that the source is identified and the Government's
 and the Observatory's ownership acknowledged, with proper attribution to
 them and to DATA.GOV.HK. The `attribution` string, "Hong Kong Observatory
