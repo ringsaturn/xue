@@ -43,9 +43,9 @@ from typing import Any
 
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
-from .alert import NetworkRead, network_directory, parse_utc, read_json, texts, utc
+from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .http import get
-from .schema import iso_z, round_directory, write_bytes_atomic
+from .schema import iso_z, round_directory, sha256_hex, write_bytes_atomic
 from .tables import jma_kind, jma_kind_of
 
 LOG = logging.getLogger(__name__)
@@ -192,7 +192,8 @@ def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) ->
     if status is None or not status.ok or not status.file:
         return NetworkRead([], False)
     directory = raw_root / status.file
-    map_time = parse_map_time((directory / MAP_TIME_FILENAME).read_text(encoding="utf-8"))
+    map_time_bytes = (directory / MAP_TIME_FILENAME).read_bytes()
+    map_time = parse_map_time(map_time_bytes.decode("utf-8"))
     fetched = status.fetched or moment
     if fetched - map_time > STALE_AFTER:
         status.ok = False
@@ -200,10 +201,12 @@ def read(raw_root: Path, moment: datetime, statuses: dict[str, SourceStatus]) ->
         LOG.warning("alerts jma: %s", status.error)
         return NetworkRead([], False, latest=map_time)
     if status.detail.get("unchanged"):
+        status.detail["sha256"] = sha256_hex(map_time_bytes)
         return NetworkRead([], True, latest=map_time, unchanged=True)
-    reports = read_json(raw_root, SourceStatus(SOURCE, True, file=f"{status.file}/{MAP_FILENAME}"))
+    map_bytes = (directory / MAP_FILENAME).read_bytes()
+    reports = json.loads(map_bytes)
     if not isinstance(reports, list):
         raise ValueError("map.json is not a list of reports")
     alerts, lifted, skipped = convert(reports)
-    status.detail.update({"reports": len(reports), "skipped": skipped})
+    status.detail.update({"reports": len(reports), "skipped": skipped, "sha256": sha256_hex(map_time_bytes, map_bytes)})
     return NetworkRead(alerts, True, latest=map_time, cancelled=lifted)

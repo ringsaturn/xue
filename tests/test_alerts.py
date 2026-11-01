@@ -34,7 +34,7 @@ from xuebuild.alerts.schema import (
     validate_index,
     validate_pointer,
 )
-from xuebuild.alerts.tables import eccc_category, eccc_level, jma_kind, nws_category, nws_level, tables
+from xuebuild.alerts.tables import eccc_category, eccc_level, jma_kind, nws_category, nws_level, tables, tables_crc32
 
 EXPECTED = FIXTURES / "expected"
 FIRST, SECOND = (parse_round(name) for name in ROUNDS)
@@ -353,6 +353,34 @@ class SchemaTest(unittest.TestCase):
             broken = line | change
             with self.assertRaises(AlertsProductError, msg=str(change)):
                 validate_alert_line(broken, "line")
+
+    def test_provenance_fields(self) -> None:
+        self.assertEqual(self.index["builder"], {"name": "xuebuild", "revision": None})
+        self.assertEqual(self.index["mapping"], {"tables": tables_crc32()})
+        sources = {status["id"]: status for status in self.index["sources"]}
+        self.assertRegex(sources["nws-alerts"]["sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("sha256", sources["eccc-alerts"])  # the fetch failed
+        for network in self.index["networks"]:
+            self.assertTrue(network["licenseUrl"].startswith("https://"))
+        for key, value in (("builder", {"name": "other"}), ("mapping", {"tables": "x"})):
+            broken = copy.deepcopy(self.index)
+            broken[key] = value
+            self.assertRejected(broken)
+        digest = copy.deepcopy(self.index)
+        digest["sources"][0]["sha256"] = "ABC"
+        self.assertRejected(digest)
+        terms = copy.deepcopy(self.index)
+        terms["networks"][0]["licenseUrl"] = "weather.gov"
+        self.assertRejected(terms)
+        # Every one is optional: an index written before them still reads.
+        older = copy.deepcopy(self.index)
+        for key in ("builder", "mapping"):
+            del older[key]
+        for network in older["networks"]:
+            del network["licenseUrl"]
+        for status in older["sources"]:
+            status.pop("sha256", None)
+        validate_index(older)
 
     def test_pointer(self) -> None:
         index_bytes = encode_json(self.index)

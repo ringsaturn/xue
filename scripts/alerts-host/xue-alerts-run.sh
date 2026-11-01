@@ -30,6 +30,9 @@ cd "$SRC"
 git fetch --quiet origin main
 git checkout --quiet --force --detach FETCH_HEAD
 uv sync --frozen --quiet
+# The index's builder block names the commit the round was built from.
+XUE_BUILD_REVISION=$(git rev-parse HEAD)
+export XUE_BUILD_REVISION
 
 # Every round starts from the live state on R2, never from local leftovers.
 rm -rf web/public/data/alerts.* web/public/data/latest-alerts.json

@@ -11,7 +11,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from .schema import CATEGORIES, LEVELS, AlertsProductError
+from .schema import CATEGORIES, LEVELS, AlertsProductError, crc32_hex
 
 TABLES_PATH = Path(__file__).with_name("tables.json")
 
@@ -40,6 +40,13 @@ def tables() -> dict[str, Any]:
     if not set(levels) <= set(LEVELS):
         raise AlertsProductError("tables.json uses a level outside 1–5")
     return payload
+
+
+@cache
+def tables_crc32() -> str:
+    """The CRC32 of ``tables.json``'s bytes: the index's ``mapping.tables``,
+    so a reader can tell which version of the mapping filed a round."""
+    return crc32_hex(TABLES_PATH.read_bytes())
 
 
 # --- nws ---------------------------------------------------------------
