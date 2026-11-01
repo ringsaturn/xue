@@ -10,9 +10,11 @@ keeps its own validators and raises its own error class through them.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
+import os
 import posixpath
 import re
 from collections.abc import Callable
@@ -37,6 +39,48 @@ def encode_json(payload: dict[str, Any]) -> bytes:
     return json.dumps(
         payload, separators=(",", ":"), ensure_ascii=True, allow_nan=False
     ).encode("ascii")
+
+
+BUILD_REVISION_ENV = "XUE_BUILD_REVISION"
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+REVISION = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def sha256_hex(*parts: bytes) -> str:
+    """A source's ``sha256``: the digest of the bytes it was read from, in
+    the order they were fetched, so a round can be traced to its input."""
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(part)
+    return digest.hexdigest()
+
+
+def builder_block() -> dict[str, Any]:
+    """The index's optional ``builder``: the commit the round was built
+    from, taken from ``XUE_BUILD_REVISION`` (the workflows and the host set
+    it), ``null`` when unset — so offline and golden builds stay
+    byte-for-byte reproducible."""
+    revision = os.environ.get(BUILD_REVISION_ENV, "").strip().lower() or None
+    if revision is not None and not REVISION.fullmatch(revision):
+        revision = None
+    return {"name": "xuebuild", "revision": revision}
+
+
+def check_builder(error: ProductError, value: object, label: str) -> None:
+    """Validate an optional ``builder`` block (absent is fine)."""
+    if value is None:
+        return
+    if not isinstance(value, dict) or value.get("name") != "xuebuild":
+        raise error(f"{label} must be an object naming xuebuild")
+    revision = value.get("revision")
+    if revision is not None and (not isinstance(revision, str) or not REVISION.fullmatch(revision)):
+        raise error(f"{label}.revision must be a commit hash or null")
+
+
+def check_sha256(error: ProductError, value: object, label: str) -> None:
+    """Validate an optional source ``sha256`` (absent is fine)."""
+    if value is not None and (not isinstance(value, str) or not SHA256.fullmatch(value)):
+        raise error(f"{label} must be 64 lowercase hex digits")
 
 
 def pointer_payload(
