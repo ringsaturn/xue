@@ -4,7 +4,7 @@
 //! way the STAC catalog does (Collection → live pointer → manifest), reads the
 //! bundle's Zarr store over ranges and decodes with the same `xue` crate the
 //! browser's wasm decoder uses. The point products (soundings, airports,
-//! surface stations, storms) are read the same way — pointer → index → one
+//! surface and air-quality stations, storms) are read the same way — pointer → index → one
 //! station's byte span — and answered as JSON a client need not decode
 //! further. `docs/api.md` is the wire contract (routes, parameters, response
 //! shapes, errors, caching); `docs/zarr-profile.md` is the store layout these
@@ -50,7 +50,7 @@ mod runtime;
 pub mod server;
 mod sounding;
 mod source;
-mod synop;
+mod stations;
 mod tc;
 mod timezone;
 

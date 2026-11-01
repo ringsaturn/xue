@@ -1,14 +1,14 @@
-//! What the four point products share: the pointer → index resolution, the
+//! What the point products share: the pointer → index resolution, the
 //! `issue=` pin, the spatial selection of an index's stations and the ranged
 //! read of one station's line.
 //!
 //! A point product (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`,
-//! `docs/tc.md`) is a mutable pointer `latest-<product>.json` naming an
-//! immutable `<product>.<issue>/index.json`, with the stations' records
-//! beside it in one NDJSON file (or one JSON file per storm) that the index
-//! addresses by byte span. The handlers in `sounding`, `airport`, `synop` and
-//! `tc` turn those bytes into the API's shapes; nothing here knows a
-//! product's fields.
+//! `docs/aq.md`, `docs/tc.md`) is a mutable pointer
+//! `latest-<product>.json` naming an immutable `<product>.<issue>/index.json`,
+//! with the records beside it in NDJSON files (or one JSON file per storm)
+//! that the index addresses by byte span. The handlers in `sounding`,
+//! `airport`, `stations` and `tc` turn those bytes into the API's
+//! shapes; nothing here knows a product's fields.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -30,7 +30,7 @@ pub struct Product {
     archived: bool,
 }
 
-pub const PRODUCTS: [Product; 5] = [
+pub const PRODUCTS: [Product; 6] = [
     Product {
         id: "sounding",
         endpoint: Some("/v1/soundings"),
@@ -50,6 +50,11 @@ pub const PRODUCTS: [Product; 5] = [
         id: "tc",
         endpoint: Some("/v1/storms"),
         archived: true,
+    },
+    Product {
+        id: "aq",
+        endpoint: Some("/v1/aq"),
+        archived: false,
     },
     Product {
         id: "nexrad",

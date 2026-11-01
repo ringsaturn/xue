@@ -9,7 +9,8 @@ use url::Url;
 
 use crate::bucket::Data;
 use crate::error::HttpError;
-use crate::{airport, docs, point, products, sounding, source, synop, tc};
+use crate::stations::{AQ, SYNOP};
+use crate::{airport, docs, point, products, sounding, source, stations, tc};
 
 /// A `200` JSON answer: the serialized body, its `Cache-Control` and any
 /// further headers (`x-xue-run`, `x-xue-issue`).
@@ -88,7 +89,8 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
         }
         "/v1/soundings" => product_json(sounding::list(data, url).await?, url),
         "/v1/airports" => product_json(airport::list(data, url).await?, url),
-        "/v1/synop" => product_json(synop::list(data, url).await?, url),
+        "/v1/synop" => product_json(stations::list(&SYNOP, data, url).await?, url),
+        "/v1/aq" => product_json(stations::list(&AQ, data, url).await?, url),
         "/v1/storms" => product_json(tc::list(data, url).await?, url),
         _ => {
             if let Some(source_id) = path.strip_prefix("/v1/sources/") {
@@ -103,6 +105,7 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
                 ("/v1/soundings/", "sounding"),
                 ("/v1/airports/", "airport"),
                 ("/v1/synop/", "synop"),
+                ("/v1/aq/", "aq"),
                 ("/v1/storms/", "tc"),
             ] {
                 if let Some(id) = path.strip_prefix(prefix) {
@@ -119,7 +122,8 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
                     let answer = match product {
                         "sounding" => sounding::station(data, &id, url).await?,
                         "airport" => airport::station(data, &id, url).await?,
-                        "synop" => synop::station(data, &id, url).await?,
+                        "synop" => stations::station(&SYNOP, data, &id, url).await?,
+                        "aq" => stations::station(&AQ, data, &id, url).await?,
                         _ => tc::storm(data, &id, url).await?,
                     };
                     return product_json(answer, url);
