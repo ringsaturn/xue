@@ -2641,6 +2641,18 @@ html[lang="ja"] .rail-glyph {
   padding-right: 34px;
 }
 
+/* A long card (several warnings in force at one spot) scrolls inside
+   itself, no taller than the room cardpopup.ts finds between its point and
+   the panels; the close button stays in its corner because only the card's
+   body scrolls. */
+.tc-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button),
+.station-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button) {
+  max-height: var(--card-max-height, 46vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
 .tc-popup .maplibregl-popup-close-button,
 .station-popup .maplibregl-popup-close-button {
   top: 6px;
