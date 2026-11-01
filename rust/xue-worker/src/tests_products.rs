@@ -807,18 +807,25 @@ fn an_aq_station_answers_in_the_point_shape() {
     assert_eq!(err(&data, "aq/amedas:11016", "").code, "unknown_station");
 }
 
+/// The id of the newest round before the live one, flat or filed under
+/// its day.
+fn earlier_round(objects: &HashMap<String, Vec<u8>>, product: &str) -> String {
+    let live = pointer_dir(objects, &format!("latest-{product}.json"));
+    let live = live.rsplit('/').next().unwrap().to_owned();
+    let mut rounds: Vec<String> = objects
+        .keys()
+        .filter_map(|key| key.strip_suffix("/index.json"))
+        .map(|dir| dir.rsplit('/').next().unwrap().to_owned())
+        .filter(|round| round.starts_with(&format!("{product}.")) && *round != live)
+        .collect();
+    rounds.sort();
+    rounds.pop().unwrap_or_else(|| panic!("an earlier {product} round"))
+}
+
 #[test]
 fn an_aq_round_can_be_pinned() {
     let objects = bucket();
-    let live = pointer_dir(&objects, "latest-aq.json");
-    let mut rounds: Vec<String> = objects
-        .keys()
-        .filter(|key| key.starts_with("aq.") && key.ends_with("/index.json"))
-        .map(|key| key.trim_end_matches("/index.json").to_owned())
-        .filter(|round| *round != live)
-        .collect();
-    rounds.sort();
-    let round = rounds.last().expect("an earlier aq round").clone();
+    let round = earlier_round(&objects, "aq");
     let data = Data::in_memory(objects);
     assert_eq!(ok(&data, "aq", &format!("issue={round}"))["issue"], json!(round));
 }

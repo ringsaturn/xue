@@ -56,7 +56,7 @@
  ],
  "assets": {
   "index": {
-   "href": "../aq.202610311545/index.json?v=92520590",
+   "href": "2026/10/31/aq.202610311545/index.json?v=92520590",
    "type": "application/json",
    "title": "aq index (schema v1)",
    "roles": ["metadata"],
@@ -66,7 +66,7 @@
    "file:checksum": "b2020492520590"
   },
   "airnow": {
-   "href": "../aq.202610311545/airnow.jsonl?v=e5d0c4f5",
+   "href": "2026/10/31/aq.202610311545/airnow.jsonl?v=e5d0c4f5",
    "type": "application/x-ndjson",
    "title": "AirNow: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
@@ -78,7 +78,7 @@
    "file:checksum": "b20204e5d0c4f5"
   },
   "airnow.stations": {
-   "href": "../aq.202610311545/airnow.stations.json?v=5cfe1d96",
+   "href": "2026/10/31/aq.202610311545/airnow.stations.json?v=5cfe1d96",
    "type": "application/json",
    "title": "AirNow: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -91,7 +91,7 @@
    "file:checksum": "b202045cfe1d96"
   },
   "hkepd": {
-   "href": "../aq.202610311545/hkepd.jsonl?v=2a3c24e4",
+   "href": "2026/10/31/aq.202610311545/hkepd.jsonl?v=2a3c24e4",
    "type": "application/x-ndjson",
    "title": "Hong Kong EPD: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
@@ -103,7 +103,7 @@
    "file:checksum": "b202042a3c24e4"
   },
   "hkepd.stations": {
-   "href": "../aq.202610311545/hkepd.stations.json?v=67fe1d34",
+   "href": "2026/10/31/aq.202610311545/hkepd.stations.json?v=67fe1d34",
    "type": "application/json",
    "title": "Hong Kong EPD: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",

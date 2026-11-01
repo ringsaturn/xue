@@ -26,6 +26,7 @@ from xuebuild.aq.schema import (
     encode_json,
     floor_round,
     parse_round,
+    raw_directory,
     read_index,
     round_directory,
     to_mixing_ratio,
@@ -185,7 +186,7 @@ class RoundsTest(unittest.TestCase):
 
     def test_golden(self) -> None:
         for directory, index in zip(self.directories, self.indexes):
-            expected = EXPECTED / directory.name
+            expected = EXPECTED / directory.relative_to(self.output)
             self.assertEqual(pretty(json.loads((directory / "index.json").read_bytes())) + "\n", (expected / "index.json").read_text())
             for network in index["networks"]:
                 path, table = network["file"]["path"], network["stations"]["path"]
@@ -281,7 +282,7 @@ class RoundsTest(unittest.TestCase):
 
     def test_the_pointer_names_the_newest_round(self) -> None:
         pointer = json.loads((self.output / "latest-aq.json").read_bytes())
-        self.assertEqual(pointer["path"], f"{self.directories[1].name}/index.json")
+        self.assertEqual(pointer["path"], f"{self.directories[1].relative_to(self.output).as_posix()}/index.json")
         validate_pointer(pointer)
 
 
@@ -302,7 +303,7 @@ class MergeTest(unittest.TestCase):
     def _record(self, moment: datetime, *, airnow_ok: bool) -> None:
         """A round in which AirNow answered with no new hour (or failed)
         and EPD failed."""
-        directory = self.raw / round_directory(moment)
+        directory = self.raw / raw_directory(moment)
         directory.mkdir(parents=True, exist_ok=True)
         failed = {"ok": False, "fetched": "2026-10-31T16:00:00Z", "error": "HTTP Error 503"}
         airnow_status = {"id": "airnow-hourly", "ok": True, "file": f"{directory.name}/airnow", "files": 0, "missing": 3}
@@ -362,7 +363,7 @@ class MergeTest(unittest.TestCase):
 class ValidatorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        directory = EXPECTED / f"aq.{ROUNDS[1]}"
+        directory = EXPECTED / round_directory(SECOND)
         cls.index = json.loads((directory / "index.json").read_text())
         cls.network = cls.index["networks"][0]
         cls.table = json.loads((directory / cls.network["stations"]["path"]).read_text())

@@ -21,9 +21,10 @@ NEXRAD_SITES ?= all
 .PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc upload-r2-tc-archive airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
 
 # $(call point_dir,product,id): an issue's directory under the data root.
-# The hourly products file it under its day, <product>/YYYY/MM/DD/<product>.<id>,
-# so the archive can grow for years; the airport's rounds stay flat.
-point_dir = $(if $(filter tc sounding,$(1)),$(1)/$(shell printf '%s' '$(2)' | cut -c1-4)/$(shell printf '%s' '$(2)' | cut -c5-6)/$(shell printf '%s' '$(2)' | cut -c7-8)/$(1).$(2),$(1).$(2))
+# tc, sounding and aq file it under its UTC day,
+# <product>/YYYY/MM/DD/<product>.<id>, so the root does not carry a prefix
+# per issue; the airport's, synop's and alerts' rounds stay flat.
+point_dir = $(if $(filter tc sounding aq,$(1)),$(1)/$(shell printf '%s' '$(2)' | cut -c1-4)/$(shell printf '%s' '$(2)' | cut -c5-6)/$(shell printf '%s' '$(2)' | cut -c7-8)/$(1).$(2),$(1).$(2))
 
 # $(call point_pointer_check,product,id,noun,pass hint,why no pointer): the
 # pointer on disk must name this issue and carry its index's CRC32.
@@ -102,7 +103,9 @@ endef
 # $(call point_prune,product,keep,noun): delete directories beyond the newest
 # <keep>, never the one the live pointer names; no pointer, nothing to prune.
 # The candidates are the flat <product>.<id> directories under the root and
-# those under <product>/YYYY/MM/DD/, ranked by their own name. A nested listing
+# those under <product>/YYYY/MM/DD/, ranked by their own name. Only four-digit
+# years are walked, so <product>/archive/ (the alerts archive) and the
+# Collection and live Item beside the years are never candidates. A nested listing
 # that fails only hides candidates, and a hidden one is neither deleted nor
 # pushes a listed one past <keep>.
 define point_prune

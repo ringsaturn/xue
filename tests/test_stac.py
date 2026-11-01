@@ -663,14 +663,14 @@ class PointProductTests(unittest.TestCase):
         return self.item("fire", "fire.202610120500", "fire/expected/fire.202610120500/index.json")
 
     def aq_item(self) -> dict:
-        index, encoded = self.index("aq/expected/aq.202610311545/index.json")
-        directory = FIXTURES / "aq/expected/aq.202610311545"
+        index, encoded = self.index("aq/expected/aq/2026/10/31/aq.202610311545/index.json")
+        directory = FIXTURES / "aq/expected/aq/2026/10/31/aq.202610311545"
         return stac.point_product_item(
             index,
             len(encoded),
             crc32_hex(encoded),
             product="aq",
-            index_relative_path="aq.202610311545/index.json",
+            index_relative_path="aq/2026/10/31/aq.202610311545/index.json",
             stations_files={
                 network["id"]: json.loads((directory / network["stations"]["path"]).read_text(encoding="utf-8"))
                 for network in index["networks"]
