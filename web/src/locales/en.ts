@@ -649,6 +649,9 @@ export const en = {
    * carries the same three letters throughout. */
   probeDemLabel: "DEM",
   probeCloseAria: "Close point data",
+  /** The close button on a map card (a storm point, a station, a fire,
+   * the warnings in force at a spot). Screen-reader copy only. */
+  cardCloseAria: "Close card",
 
   // The letter on a pressure center, following each country's own chart
   // convention: H/L in English, 高/低 on a Chinese or Japanese chart, 고/저

@@ -387,6 +387,7 @@ export const zh: Record<MessageKey, string> = {
   probeModelElevationLabel: "模式",
   probeDemLabel: "DEM",
   probeCloseAria: "关闭点位数据",
+  cardCloseAria: "关闭卡片",
 
   centerHigh: "高",
   centerLow: "低",
