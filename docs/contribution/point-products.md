@@ -197,8 +197,8 @@ per frame and never gate the playhead; a showcase case hides them, and
   network files (one GET each) are read only while the tile is pressed,
   once per round. A polygon warning is a feature of one GeoJSON source; an
   area-coded one is drawn from its boundary set through the `pmtiles://`
-  protocol (`alerts/pmtiles.ts`, a small PMTiles v3 reader — the basemap
-  is not PMTiles), one vector source per set and a fill and an outline
+  protocol (the `pmtiles` package's, registered in `alerts/pmtiles.ts`),
+  one vector source per set and a fill and an outline
   layer per set layer, filtered to the codes in force and coloured by the
   highest level on each code. NWS fire weather events go to the `fire`
   layer, the rest to the others. A click inside an area still pins the

@@ -1,7 +1,7 @@
 /** The weather warnings in the shell (`docs/alerts.md`): the pointer, index
  * and network-file readers on the committed golden, how area-coded
  * warnings are joined to their boundary sets, the style the layers add,
- * the card's text choices and the PMTiles reader's arithmetic. */
+ * the card's text choices and the boundary sets' source URL. */
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -21,7 +21,7 @@ import {
   sortHits,
   type AlertHit,
 } from "../../web/src/alerts/layer";
-import { findEntry, parseDirectory, zxyToTileId } from "../../web/src/alerts/pmtiles";
+import { pmtilesSourceUrl } from "../../web/src/alerts/pmtiles";
 import {
   parseAlertLine,
   parseAlertLines,
@@ -178,25 +178,10 @@ describe("the warnings card", () => {
   });
 });
 
-describe("the PMTiles reader", () => {
-  it("numbers tiles along the Hilbert curve, zoom by zoom", () => {
-    expect(zxyToTileId(0, 0, 0)).toBe(0);
-    expect([zxyToTileId(1, 0, 0), zxyToTileId(1, 0, 1), zxyToTileId(1, 1, 1), zxyToTileId(1, 1, 0)]).toEqual([1, 2, 3, 4]);
-    expect(zxyToTileId(2, 0, 0)).toBe(5);
-    expect(zxyToTileId(3, 7, 0)).toBe(1 + 4 + 16 + 63);
-  });
-
-  it("reads a directory and finds runs and leaves in it", () => {
-    // Three entries: tile 0, a run of two from tile 4, and a leaf at 10.
-    const bytes = Uint8Array.from([3, 0, 4, 6, 1, 2, 0, 10, 20, 30, 1, 0, 101]);
-    const entries = parseDirectory(bytes);
-    expect(entries).toEqual([
-      { tileId: 0, offset: 0, length: 10, runLength: 1 },
-      { tileId: 4, offset: 10, length: 20, runLength: 2 },
-      { tileId: 10, offset: 100, length: 30, runLength: 0 },
-    ]);
-    expect(findEntry(entries, 5)?.tileId).toBe(4);
-    expect(findEntry(entries, 6)).toBeNull();
-    expect(findEntry(entries, 12)?.runLength).toBe(0);
+describe("the boundary sets", () => {
+  it("are named to MapLibre through the pmtiles protocol", () => {
+    expect(pmtilesSourceUrl("https://data.test/alerts-areas/nws-zones.20260416.pmtiles")).toBe(
+      "pmtiles://https://data.test/alerts-areas/nws-zones.20260416.pmtiles",
+    );
   });
 });
