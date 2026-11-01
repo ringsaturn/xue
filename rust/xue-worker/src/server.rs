@@ -48,7 +48,7 @@ use tokio::net::TcpListener;
 
 use crate::bucket::Data;
 use crate::error::{self, HttpError};
-use crate::{metrics, route};
+use crate::{docs, metrics, route};
 
 const DEFAULT_ORIGIN: &str = "https://dataset.ringsaturn.me/xue/";
 
@@ -212,6 +212,14 @@ pub trait Routes {
     /// milliseconds since the epoch. `data` is the server's own: an answer
     /// built on the API's may ask it with [`crate::dispatch`].
     fn answer<'a>(&'a self, path: &'a str, url: &'a url::Url, data: &'a Data, now: f64) -> Answering<'a>;
+
+    /// OpenAPI documents describing these routes, merged into the served
+    /// contract (`/v1/openapi.json`, and so `/docs/`): their `tags`, `paths`
+    /// and `components` are added beside the API's own. Each may `$ref` the
+    /// API's components. None by default.
+    fn openapi(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
 }
 
 /// What [`Routes::answer`] returns: the handlers run on one thread, so the
@@ -652,7 +660,13 @@ async fn handle(
         None => route::dispatch(path, &url, &state.data, now_ms()).await,
     };
     state.inflight.set(state.inflight.get() - 1);
-    let answer = answer?;
+    let mut answer = answer?;
+    if let (Some(routes), "/openapi.json" | "/v1/openapi.json") = (&state.routes, path) {
+        let extra = routes.openapi();
+        if !extra.is_empty() {
+            answer.body = docs::merge(&answer.body, &extra)?;
+        }
+    }
     let body = Bytes::from(answer.body);
     if cacheable {
         if let Some(seconds) = max_age(answer.cache_control) {

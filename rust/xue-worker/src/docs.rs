@@ -117,3 +117,70 @@ async fn enrich(data: &Data) -> Result<String, HttpError> {
     serde_json::to_string_pretty(&spec)
         .map_err(|error| HttpError::new(502, "internal", error.to_string()))
 }
+
+/// The contract `spec` with each of `extra` (OpenAPI documents of a native
+/// server's own routes, `server::Routes::openapi`) merged in: their `tags`
+/// appended, their `paths` and every `components` section added by name.
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+pub(crate) fn merge(spec: &[u8], extra: &[&str]) -> Result<Vec<u8>, HttpError> {
+    let internal = |error: serde_json::Error| HttpError::new(502, "internal", error.to_string());
+    let mut spec: Value = serde_json::from_slice(spec).map_err(internal)?;
+    for document in extra {
+        let document: Value = serde_json::from_str(document).map_err(internal)?;
+        if let Some(tags) = document.get("tags").and_then(Value::as_array) {
+            if !spec["tags"].is_array() {
+                spec["tags"] = json!([]);
+            }
+            if let Some(into) = spec["tags"].as_array_mut() {
+                into.extend(tags.iter().cloned());
+            }
+        }
+        if let Some(paths) = document.get("paths").and_then(Value::as_object) {
+            add(&mut spec["paths"], paths);
+        }
+        if let Some(components) = document.get("components").and_then(Value::as_object) {
+            for (section, entries) in components {
+                if let Some(entries) = entries.as_object() {
+                    add(&mut spec["components"][section], entries);
+                }
+            }
+        }
+    }
+    serde_json::to_vec_pretty(&spec).map_err(internal)
+}
+
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+fn add(into: &mut Value, entries: &serde_json::Map<String, Value>) {
+    if !into.is_object() {
+        *into = json!({});
+    }
+    if let Some(into) = into.as_object_mut() {
+        for (name, entry) in entries {
+            into.insert(name.clone(), entry.clone());
+        }
+    }
+}
+
+#[cfg(all(test, feature = "server", not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merges_paths_components_and_tags() {
+        let extra = r##"{
+            "tags": [{"name": "extra"}],
+            "paths": {"/v1/extra": {"get": {"responses": {"400": {"$ref": "#/components/responses/ErrorResponse"}}}}},
+            "components": {"schemas": {"ExtraResponse": {"type": "object"}}, "examples": {"ExtraExample": {}}}
+        }"##;
+        let merged: Value = serde_json::from_slice(&merge(OPENAPI.as_bytes(), &[extra]).unwrap()).unwrap();
+        let base: Value = serde_json::from_str(OPENAPI).unwrap();
+        assert!(merged["paths"]["/v1/extra"].is_object());
+        assert!(merged["paths"]["/v1/point"].is_object());
+        assert!(merged["components"]["schemas"]["ExtraResponse"].is_object());
+        assert!(merged["components"]["schemas"]["Error"].is_object());
+        assert!(merged["components"]["examples"]["ExtraExample"].is_object());
+        let tags = merged["tags"].as_array().unwrap();
+        assert_eq!(tags.len(), base["tags"].as_array().unwrap().len() + 1);
+        assert_eq!(tags.last().unwrap()["name"], "extra");
+    }
+}
