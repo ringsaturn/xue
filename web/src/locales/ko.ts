@@ -392,6 +392,7 @@ export const ko: Record<MessageKey, string> = {
   probeModelElevationLabel: "모델",
   probeDemLabel: "DEM",
   probeCloseAria: "지점 데이터 닫기",
+  cardCloseAria: "카드 닫기",
 
   centerHigh: "고",
   centerLow: "저",

@@ -2634,6 +2634,40 @@ html[lang="ja"] .rail-glyph {
   font-family: var(--font-ui);
 }
 
+/* The close button sits in the card's top-right corner; the content keeps
+   clear of it. MapLibre's own button is restyled, not replaced. */
+.tc-popup .maplibregl-popup-content,
+.station-popup .maplibregl-popup-content {
+  padding-right: 34px;
+}
+
+.tc-popup .maplibregl-popup-close-button,
+.station-popup .maplibregl-popup-close-button {
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.tc-popup .maplibregl-popup-close-button:hover,
+.station-popup .maplibregl-popup-close-button:hover {
+  background: var(--line);
+  color: var(--text);
+}
+
+.tc-popup .maplibregl-popup-close-button:focus-visible,
+.station-popup .maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
 .tc-popup .maplibregl-popup-tip,
 .station-popup .maplibregl-popup-tip {
   border-top-color: var(--sheet);

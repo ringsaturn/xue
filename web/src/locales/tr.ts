@@ -393,6 +393,7 @@ export const tr: Record<MessageKey, string> = {
   probeModelElevationLabel: "Model",
   probeDemLabel: "DEM",
   probeCloseAria: "Nokta verisini kapat",
+  cardCloseAria: "Kartı kapat",
 
   centerHigh: "Y",
   centerLow: "A",

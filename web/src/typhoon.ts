@@ -13,6 +13,7 @@ import { deliverMp4, exportMp4, isMp4ExportSupported, MP4_MAX_FRAMES, mp4FileNam
 import { formatUtcHour } from "./format";
 import { guardContextLoss } from "./glguard";
 import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i18n";
+import { cardPopup } from "./cardpopup";
 import { applyPageMeta } from "./pagemeta";
 import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
@@ -213,7 +214,7 @@ function ensureMap(): MaplibreMap {
     for (const feature of created.queryRenderedFeatures(box, { layers })) {
       const data = pointDataOf(feature);
       if (!data) continue;
-      card = new Popup({ closeButton: false, closeOnClick: false, className: "tc-popup", maxWidth: "300px", offset: 12 })
+      card = cardPopup({ className: "tc-popup", maxWidth: "300px", offset: 12 })
         .setLngLat([data.lon, data.lat])
         .setDOMContent(buildTcCard(data, { formatTime: formatUtcHour }))
         .addTo(created);

@@ -390,6 +390,7 @@ export const de: Record<MessageKey, string> = {
   probeModelElevationLabel: "Modell",
   probeDemLabel: "DEM",
   probeCloseAria: "Punktdaten schließen",
+  cardCloseAria: "Karte schließen",
 
   centerHigh: "H",
   centerLow: "T",

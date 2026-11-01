@@ -31,6 +31,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import { createSheet, mountLanguagePicker } from "./sheet";
+import { cardPopup } from "./cardpopup";
 import { formatBytes, formatPointDegrees, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
 import { ViewControl } from "./viewcontrol";
@@ -7172,7 +7173,7 @@ function renderCaseMarkers(showcaseCase: ShowcaseCase): void {
 function showMarkerCard(marker: ShowcaseMarker): void {
   closeStationCard();
   closeTcCard();
-  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "320px", offset: 12 })
+  stationCard = cardPopup({ className: "station-popup", maxWidth: "320px", offset: 12 })
     .setLngLat([marker.lon, marker.lat])
     .setDOMContent(buildMarkerCard(marker, { locale, formatTime: (time) => formatDate(time) }))
     .addTo(map);
@@ -8093,7 +8094,7 @@ function tcPointAt(point: { x: number; y: number }): { data: TcPointData; lngLat
 
 function showTcCard(data: TcPointData, lngLat: [number, number]): void {
   closeTcCard();
-  tcCard = new Popup({ closeButton: false, closeOnClick: false, className: "tc-popup", maxWidth: "300px", offset: 12 })
+  tcCard = cardPopup({ className: "tc-popup", maxWidth: "300px", offset: 12 })
     .setLngLat(lngLat)
     .setDOMContent(buildTcCard(data, { formatTime: (time) => formatDate(time) }))
     .addTo(map);
@@ -8740,7 +8741,7 @@ function openFire(hit: FireDetection | { cluster: number; lngLat: [number, numbe
       .catch(() => map.easeTo({ center: hit.lngLat, zoom: map.getZoom() + 2 }));
     return;
   }
-  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 8 })
+  stationCard = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 8 })
     .setLngLat([hit.lon, hit.lat])
     .setDOMContent(buildFireCard(hit, { formatTime: (time) => formatDate(time) }))
     .addTo(map);
@@ -8799,7 +8800,7 @@ function showStationCard(data: StationPointData, lngLat: [number, number]): void
           ? buildSynopCard(data.station, data.network, options)
           : buildAirportCard(data.station, options);
   }
-  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 10 })
+  stationCard = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 10 })
     .setLngLat(lngLat)
     .setDOMContent(content)
     .addTo(map);
@@ -8809,7 +8810,7 @@ function showStationCard(data: StationPointData, lngLat: [number, number]): void
 function showAlertsCard(hits: AlertHit[], lngLat: [number, number]): void {
   closeStationCard();
   if (!alertsLoaded) return;
-  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "300px", offset: 6 })
+  stationCard = cardPopup({ className: "station-popup", maxWidth: "300px", offset: 6 })
     .setLngLat(lngLat)
     .setDOMContent(
       buildAlertsCard(hits, {
