@@ -8,8 +8,8 @@
     "license": { "name": "MIT OR Apache-2.0" }
   },
   "servers": [
-    { "url": "https://xue-api.ringsaturn.me" },
-    { "url": "/" }
+    { "url": "/", "description": "The server this document was read from" },
+    { "url": "https://xue-api.ringsaturn.me", "description": "The public API" }
   ],
   "tags": [
     { "name": "meta", "description": "Liveness and the machine-readable contract." },
