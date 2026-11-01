@@ -1,0 +1,17 @@
+# Install the newest xue-api-server from the `api-server` prerelease, with a
+# health check and roll-back (xue-api-update.sh). Started by the timer.
+[Unit]
+Description=Update xue-api-server from the api-server release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/xue-api-update
+StateDirectory=xue-api-update
+ProtectSystem=strict
+ReadWritePaths=/usr/local/bin
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+Nice=10

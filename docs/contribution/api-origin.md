@@ -36,8 +36,9 @@ workspace manifest and lock) and publishes it as the rolling prerelease
 `.sha256`, and a build provenance attestation. The release is replaced on
 each build, its tag moved to that commit; the binary reports the commit as
 `revision` (metrics, start-up line). A host installs from there after
-`sha256sum -c` and `gh attestation verify <file> --repo ringsaturn/xue`;
-the workflow names no host and reaches none.
+`sha256sum -c` (by itself: `xue-api-update.timer`, under Units) and, by
+hand, `gh attestation verify <file> --repo ringsaturn/xue`; the workflow
+names no host and reaches none.
 
 ## Metrics
 
@@ -124,6 +125,23 @@ address to the API's hostname.
   Cloudflare's own error page; with several it moves traffic to the others.
 - `install.sh`: installs the binary and the units, `cloudflared` from
   Cloudflare's apt repository if missing, restarts and checks `/health`.
+- `xue-api-update.timer` / `.service` / `.sh` (installed as
+  `/usr/local/sbin/xue-api-update`): every ten minutes, fetch the
+  `api-server` release's `.sha256`; when it differs from the installed
+  binary, download the binary, `sha256sum -c` it, install it, restart, and
+  wait up to 30 s for `/health`. A build that fails is rolled back to the
+  previous binary and remembered in `/var/lib/xue-api-update/rejected`, so
+  it is not retried until the release moves on. A run while the release is
+  being replaced (no asset, or a `.sha256` of another build) does nothing.
+  The checksum guards against a torn or mixed download, not against a
+  forged release; the host does not run `gh attestation verify`.
+
+So a host follows `main`: a merge that touches the server is live about
+fifteen minutes later. A binary installed by hand (`deploy.sh` from a
+branch) is replaced at the next run; stop the timer
+(`systemctl disable --now xue-api-update.timer`) to keep it, and start it
+again to go back to the release. `journalctl -u xue-api-update` shows what
+each run did.
 
 ## Deploy
 
