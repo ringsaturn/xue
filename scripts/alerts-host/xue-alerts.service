@@ -1,0 +1,30 @@
+# One weather-warnings round (xue-alerts-run.sh), started by xue-alerts.timer.
+# The host is shared with the data API and other services: the caps keep a
+# round from taking more than its share.
+[Unit]
+Description=Publish one xue alerts round
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/xue-alerts/r2.env
+
+[Service]
+Type=oneshot
+# Read by systemd as root (mode 600) before the dynamic user takes over.
+EnvironmentFile=/etc/xue-alerts/r2.env
+EnvironmentFile=-/etc/xue-alerts/env
+ExecStart=/usr/local/sbin/xue-alerts-run
+DynamicUser=yes
+StateDirectory=xue-alerts
+Environment=HOME=/var/lib/xue-alerts
+Environment=UV_CACHE_DIR=/var/lib/xue-alerts/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR=/var/lib/xue-alerts/python
+TimeoutStartSec=8min
+MemoryMax=400M
+CPUQuota=50%
+Nice=10
+IOSchedulingClass=idle
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
