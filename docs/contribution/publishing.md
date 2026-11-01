@@ -206,9 +206,20 @@ times skipped) cannot promise. So `alerts` runs on a host:
 `xue-alerts.timer` (`*:0/5:30`).
 
 - Each run updates a sparse checkout of `main` (`xuebuild`, `mk`,
-  `scripts`), `uv sync --frozen`s it, and takes the same steps as the
-  workflow: live index, build, upload, prune. The host follows `main`
+  `scripts`), `uv sync --frozen`s it, exports `XUE_BUILD_REVISION` (the
+  checkout's commit, the index's `builder`) and takes the same steps as
+  the workflow: live index, build, upload, prune. The host follows `main`
   with no deploy of its own.
+- Then it journals the round into the monthly archive
+  (`xue alerts-archive`, `docs/alerts.md` §12) under
+  `$STATE/alerts-archive/`, which must survive restarts: the journal and
+  the month in progress live only there until the hourly fold uploads
+  them (`make upload-r2-alerts-archive`). A lost directory is seeded
+  again from the published month; what it loses is the rounds journaled
+  since the last fold. A failed archive step is logged and does not fail
+  the round. The workflow fallback keeps no state and does not archive.
+- The boundary sets' box files are cached in the checkout's
+  `data/raw/alerts-areas/`, fetched once from the data origin.
 - `/etc/xue-alerts/r2.env` (mode 600) holds an R2 token scoped to the
   dataset bucket, as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
   `CLOUDFLARE_ACCOUNT_ID`; the AWS CLI is awscli from PyPI through `uvx`.

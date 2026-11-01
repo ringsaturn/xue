@@ -25,7 +25,9 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   warning per line, with area codes resolved against boundary sets
   published once per upstream release under `alerts-areas/` (PMTiles for
   drawing, a `.bbox.json` of every code's box that gives an area-coded
-  warning its index box); a
+  warning its index box) and a monthly archive under `alerts/archive/`
+  that the publisher feeds from a journal in its state directory, since
+  the rounds last three hours; a
   fire round one JSONL per sensor with one line per UTC hour, so the index
   addresses hours rather than stations.
 - **One object per issue, never per station**: many small files hurt bucket
