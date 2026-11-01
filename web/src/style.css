@@ -2884,6 +2884,72 @@ html[lang="ja"] .rail-glyph {
   text-align: right;
 }
 
+.station-card-rows[hidden] {
+  display: none;
+}
+
+/* A caveat the data's terms ask a display to state (preliminary data). */
+.station-card-note {
+  color: var(--text);
+  font-size: var(--fs-1);
+  font-style: italic;
+  line-height: 1.3;
+}
+
+/* The warnings card: one entry per warning in force at the spot, highest
+   level first, each led by its level in the level's colour. Long lists
+   scroll inside the card rather than over the map. */
+.alerts-card {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+.alerts-card-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.alerts-card-item {
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  border-left: 3px solid var(--card-ink);
+  gap: 2px;
+}
+
+.alerts-card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.alerts-card-event {
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.alerts-card-headline {
+  font-size: var(--fs-1);
+  line-height: 1.35;
+}
+
+.alerts-card-item a,
+.alerts-card-set a {
+  color: inherit;
+}
+
+.alerts-card-notice summary {
+  cursor: pointer;
+}
+
+.alerts-card-notice div {
+  margin-top: 2px;
+}
+
 /* ---------------------------------------------------------------------------
    Map context menu. */
 
@@ -3231,6 +3297,14 @@ html[lang="ja"] .rail-glyph {
 
 .probe-airport-category[hidden] {
   display: none;
+}
+
+/* The warning chip: its level, then the event, cut short before it
+   crowds the code. */
+.probe-alert span:last-child {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------------------------------------------------------------------------

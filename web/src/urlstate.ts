@@ -639,11 +639,14 @@ export function parseTcFromSearch(search: string): TcUrlState {
  * soundings, `?stations=apt` for the airports, `?stations=syn` for the
  * surface stations, `?stations=fire` for the satellite fire detections
  * (`docs/fire.md` — not a station network, but a mark product drawn and
- * switched the same way, so it rides the same parameter), any of them
- * joined by commas, and `?stations=off` — or no parameter at all — for
- * none. `sounding`, `airport`, `synop`, `surface`, `fires`, `firms`, their
- * plurals, `on` and `all` are accepted spellings, so a link typed out by
- * hand still opens.
+ * switched the same way, so it rides the same parameter), `?stations=aq`
+ * for the air-quality stations (`docs/aq.md`), `?stations=alerts` for the
+ * weather warnings in force (`docs/alerts.md`, areas rather than points,
+ * switched the same way), any of them joined by commas, and
+ * `?stations=off` — or no parameter at all — for none. `sounding`,
+ * `airport`, `synop`, `surface`, `fires`, `firms`, `airquality`, `pm25`,
+ * `alert`, `warnings`, their plurals, `on` and `all` are accepted
+ * spellings, so a link typed out by hand still opens.
  *
  * Off is the default because on is not a neutral choice: five thousand
  * airport marks on the default view are a texture over the field, not a
@@ -654,9 +657,18 @@ export interface StationsUrlState {
   airports: boolean;
   synop: boolean;
   fire: boolean;
+  aq: boolean;
+  alerts: boolean;
 }
 
-const STATIONS_OFF: StationsUrlState = { soundings: false, airports: false, synop: false, fire: false };
+const STATIONS_OFF: StationsUrlState = {
+  soundings: false,
+  airports: false,
+  synop: false,
+  fire: false,
+  aq: false,
+  alerts: false,
+};
 
 const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
   snd: "soundings",
@@ -674,6 +686,13 @@ const STATION_ALIASES: Record<string, keyof StationsUrlState> = {
   fire: "fire",
   fires: "fire",
   firms: "fire",
+  aq: "aq",
+  airquality: "aq",
+  pm25: "aq",
+  alerts: "alerts",
+  alert: "alerts",
+  warning: "alerts",
+  warnings: "alerts",
 };
 
 export function parseStationsFromSearch(search: string): StationsUrlState {
@@ -687,6 +706,8 @@ export function parseStationsFromSearch(search: string): StationsUrlState {
       state.airports = true;
       state.synop = true;
       state.fire = true;
+      state.aq = true;
+      state.alerts = true;
       continue;
     }
     const key = STATION_ALIASES[name];
@@ -705,6 +726,8 @@ export function searchWithStations(search: string, state: StationsUrlState): str
   if (state.airports) parts.push("apt");
   if (state.synop) parts.push("syn");
   if (state.fire) parts.push("fire");
+  if (state.aq) parts.push("aq");
+  if (state.alerts) parts.push("alerts");
   if (parts.length) params.set("stations", parts.join(","));
   else params.delete("stations");
   return `?${params.toString()}`;

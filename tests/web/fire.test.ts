@@ -317,9 +317,11 @@ describe("the ?stations=fire switch", () => {
       airports: false,
       synop: true,
       fire: true,
+      aq: false,
+      alerts: false,
     });
     expect(
-      searchWithStations("?type=temp", { soundings: false, airports: false, synop: true, fire: true }),
+      searchWithStations("?type=temp", { soundings: false, airports: false, synop: true, fire: true, aq: false, alerts: false }),
     ).toBe("?type=temp&stations=syn%2Cfire");
   });
 });
