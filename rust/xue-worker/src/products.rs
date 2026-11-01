@@ -25,8 +25,9 @@ pub struct Product {
     /// The API route that lists it, `None` for a product the API reads no
     /// further than its Collection.
     pub endpoint: Option<&'static str>,
-    /// Issues filed under `<product>/<YYYY>/<MM>/<DD>/` (the hourly products
-    /// keep an archive); the ten-minute rounds sit flat under the root.
+    /// Issues filed under `<product>/<YYYY>/<MM>/<DD>/` (a pinned issue is
+    /// looked for there first, then flat under the root, where issues were
+    /// published before that layout); the NEXRAD rounds sit flat.
     archived: bool,
 }
 
@@ -39,12 +40,12 @@ pub const PRODUCTS: [Product; 7] = [
     Product {
         id: "airport",
         endpoint: Some("/v1/airports"),
-        archived: false,
+        archived: true,
     },
     Product {
         id: "synop",
         endpoint: Some("/v1/synop"),
-        archived: false,
+        archived: true,
     },
     Product {
         id: "tc",
@@ -54,12 +55,12 @@ pub const PRODUCTS: [Product; 7] = [
     Product {
         id: "aq",
         endpoint: Some("/v1/aq"),
-        archived: false,
+        archived: true,
     },
     Product {
         id: "alerts",
         endpoint: Some("/v1/alerts"),
-        archived: false,
+        archived: true,
     },
     Product {
         id: "nexrad",
@@ -165,8 +166,8 @@ pub async fn resolve_issue(
                 format!("{} publishes no issue {issue}", product.id),
             )
         };
-        // The hourly products file an issue under its UTC day; one published
-        // before that layout, and every ten-minute round, sits flat.
+        // An issue is filed under its UTC day; one published before that
+        // layout, and every NEXRAD round, sits flat.
         let mut candidates = Vec::new();
         if product.archived {
             candidates.push(format!(

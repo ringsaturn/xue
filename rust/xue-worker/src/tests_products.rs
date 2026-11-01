@@ -38,6 +38,33 @@ fn pointer_dir(objects: &HashMap<String, Vec<u8>>, pointer: &str) -> String {
     path.rsplit_once('/').map(|(dir, _)| dir.to_owned()).unwrap()
 }
 
+/// Every `<product>.<digits>` directory under `dir`, at any depth, into the
+/// bucket under its path from `root`.
+fn put_rounds(objects: &mut HashMap<String, Vec<u8>>, product: &str, root: &Path, dir: &Path) {
+    for entry in std::fs::read_dir(dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display())) {
+        let path = entry.expect("entry").path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().and_then(|name| name.to_str()).expect("name");
+        let is_round = name
+            .strip_prefix(product)
+            .and_then(|rest| rest.strip_prefix('.'))
+            .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+        if !is_round {
+            put_rounds(objects, product, root, &path);
+            continue;
+        }
+        let prefix = path.strip_prefix(root).expect("under root").to_str().expect("utf-8").replace('\\', "/");
+        for file in std::fs::read_dir(&path).expect("round") {
+            let file = file.expect("entry").file_name().into_string().expect("name");
+            if file.ends_with(".json") || file.ends_with(".jsonl") {
+                put(objects, &format!("{prefix}/{file}"), &path.join(&file));
+            }
+        }
+    }
+}
+
 /// Every product, live, plus the previous airport, synop, aq and alerts
 /// rounds for the `issue=` pin, and a Collection per product as the catalog
 /// publishes.
@@ -65,45 +92,18 @@ fn bucket() -> HashMap<String, Vec<u8>> {
         put(&mut objects, &format!("{dir}/{file}"), &tc.join(file));
     }
 
-    let airport = root.join("airport/expected");
-    put(&mut objects, "latest-airport.json", &airport.join("latest-airport.json"));
-    for round in ["airport.202609161430", "airport.202609161440"] {
-        for file in ["index.json", "history.jsonl"] {
-            put(&mut objects, &format!("{round}/{file}"), &airport.join(round).join(file));
-        }
-    }
-
-    let synop = root.join("synop/expected");
-    put(&mut objects, "latest-synop.json", &synop.join("latest-synop.json"));
-    for round in ["synop.202610050000", "synop.202610050010"] {
-        // Every file of the round: a v1 round is the index and the network
-        // files, a v2 round adds a station table per network.
-        for entry in std::fs::read_dir(synop.join(round)).expect("synop round") {
-            let file = entry.expect("entry").file_name().into_string().expect("name");
-            if file.ends_with(".json") || file.ends_with(".jsonl") {
-                put(&mut objects, &format!("{round}/{file}"), &synop.join(round).join(&file));
-            }
-        }
-    }
-
-    // The two rounds of each of aq and alerts, every file of each.
-    for product in ["aq", "alerts"] {
+    // Every round of the minute-round products, at the path it has under
+    // the golden's root (flat `<product>.<round>/` or filed under its day,
+    // `<product>/YYYY/MM/DD/<product>.<round>/`), every file of each: a v1
+    // synop round is the index and the network files, a v2 round adds a
+    // station table per network.
+    for product in ["airport", "synop", "aq", "alerts"] {
         let expected = root.join(product).join("expected");
         let pointer = format!("latest-{product}.json");
         put(&mut objects, &pointer, &expected.join(&pointer));
-        for entry in std::fs::read_dir(&expected).expect("expected") {
-            let entry = entry.expect("entry");
-            let round = entry.file_name().into_string().expect("name");
-            if !round.starts_with(&format!("{product}.")) || !entry.path().is_dir() {
-                continue;
-            }
-            for file in std::fs::read_dir(entry.path()).expect("round") {
-                let file = file.expect("entry").file_name().into_string().expect("name");
-                if file.ends_with(".json") || file.ends_with(".jsonl") {
-                    put(&mut objects, &format!("{round}/{file}"), &expected.join(&round).join(&file));
-                }
-            }
-        }
+        put_rounds(&mut objects, product, &expected, &expected);
+        let live = pointer_dir(&objects, &pointer);
+        assert!(objects.contains_key(&format!("{live}/index.json")), "{live}");
     }
 
     for product in ["sounding", "airport", "synop", "tc", "aq", "alerts"] {
@@ -1207,7 +1207,7 @@ fn issue_pins_a_round_and_the_dated_tree_is_derived_from_the_id() {
     assert_eq!(pinned["issue"], "airport.202609161430");
     assert_eq!(pinned["issued"], "2026-09-16T14:30:00Z");
     let paths: Vec<String> = data.reads().into_iter().map(|(path, _)| path).collect();
-    assert!(paths.contains(&"airport.202609161430/index.json".to_owned()));
+    assert!(paths.iter().any(|path| path.ends_with("airport.202609161430/index.json")));
     assert_eq!(
         ok(&data, "synop/amedas:11016", "issue=synop.202610050000")["issue"],
         "synop.202610050000"
