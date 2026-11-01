@@ -1,12 +1,14 @@
 # Runs on the R2 dataset bucket: upload, take live, prune, read back.
 # Needs an R2 token's key pair in AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-# and CLOUDFLARE_ACCOUNT_ID (the endpoint host).
+# and CLOUDFLARE_ACCOUNT_ID (the endpoint host). Any other S3-compatible bucket
+# works the same with R2_ENDPOINT, R2_BUCKET and R2_PREFIX from the environment.
 
 # Published runs of one model to keep (one: the live run, no history).
 KEEP ?= 1
 # `--dryrun` to preview an upload or a prune.
 DRY_RUN ?=
-# WARM=false skips the edge-cache warm-up between the assets and the pointer.
+# WARM=false skips the edge-cache warm-up between the assets and the pointer
+# (a bucket with no CDN in front).
 WARM ?= true
 LATEST_FILE = $(if $(filter gfs,$(MODEL)),latest.json,latest-$(MODEL).json)
 STAC_CATALOG = catalog.json
@@ -82,7 +84,7 @@ upload-r2-bundles: ## Upload this machine's bundle groups of a fanned-out run
 		[ "$$attempt" -lt 3 ] || { echo "uploading the bundles failed three times"; exit 1; }; \
 		echo "upload attempt $$attempt failed; retrying in $$((attempt * 20)) s"; sleep $$((attempt * 20)); \
 	done; \
-	[ -n "$(DRY_RUN)" ] || for part in $$dir/manifest.part.*.json; do \
+	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || for part in $$dir/manifest.part.*.json; do \
 		scripts/warm_edge_cache.sh $(MODEL) $(RUN) --artifacts-of "$$part" \
 			|| echo "warming the edge cache for $$part failed; those artifacts go live cold"; \
 	done
@@ -97,7 +99,7 @@ upload-r2-manifest: ## Upload an assembled manifest, then take the run live
 	$(S3) cp $$dir/manifest.json $(R2_ROOT)/$(MODEL).$(RUN)/manifest.json --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "public, max-age=31536000, immutable"; \
 	$(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN); \
-	[ -n "$(DRY_RUN)" ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --assembled \
+	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --assembled \
 		|| echo "warming the manifest and the shared stores failed; they go live cold"; \
 	$(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN)
 

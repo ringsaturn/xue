@@ -59,7 +59,9 @@
 # command; empty runs to the deadline), WARM (false skips the edge-cache
 # warm-up of each round), SEGMENTS (true cuts each round's stores into
 # clock-aligned segments under <model>.segments/ and uploads only the ones
-# the live round does not already name).
+# the live round does not already name), AFTER_ROUND (a command run after
+# each published round's prune, its failure only a warning: a mirror
+# that follows the bucket).
 # PYTHON names the interpreter (the Makefile's default is the project's
 # .venv).
 set -u
@@ -77,6 +79,7 @@ force=${FORCE:-false}
 dry_run=${DRY_RUN:-}
 once=${ONCE:-false}
 handover_check=${HANDOVER_CHECK:-}
+after_round=${AFTER_ROUND:-}
 warm=${WARM:-true}
 segments=${SEGMENTS:-false}
 python=${PYTHON:-.venv/bin/python}
@@ -172,6 +175,9 @@ while :; do
         if [ "$segments" = true ]; then
           make prune-r2-segments MODEL=$model DRY_RUN="$dry_run" \
             || echo "pruning the window's segments failed; the next round tries again"
+        fi
+        if [ -n "$after_round" ]; then
+          sh -c "$after_round" || echo "::warning::AFTER_ROUND failed; the next round runs it again"
         fi
         prune_seconds=$(( $(date -u +%s) - t0 ))
         built_epoch=$($python -c "from datetime import datetime, UTC; print(int(datetime.strptime('$built', '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC).timestamp()))")
