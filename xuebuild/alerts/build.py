@@ -29,6 +29,7 @@ from .. import stac
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead
+from .boxes import Boxes, area_box, load_boxes
 from .fetch import read_fetch_record
 from .networks import NETWORKS, Network
 from .schema import (
@@ -167,10 +168,13 @@ def build_product(
     previous_index: dict[str, Any] | None = None,
     force: bool = False,
     now: datetime | None = None,
+    areas_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Read the round's fetched files, write ``alerts.<round>/`` — a file
     per network and the index over them — and, unless no network's state
-    arrived, the pointer."""
+    arrived, the pointer. The boundary sets' boxes are read from
+    ``raw_root/alerts-areas/``, fetched from ``areas_base_url`` into it when
+    missing (never, when it is None)."""
     now = now or datetime.now(UTC)
     directory = output_root / round_directory(moment)
     if (directory / INDEX_FILENAME).exists() and not force:
@@ -212,6 +216,9 @@ def build_product(
                 if not result.unchanged or latest is None:
                     latest = datetime.fromisoformat(described["latest"]) if described.get("latest") else None
 
+        boxes: Boxes | None = None
+        if network.areas is not None and network.area_layers is not None:
+            boxes = load_boxes(network.areas, raw_root, areas_base_url)
         position = len(published)
         body_lines: list[bytes] = []
         offset = 0
@@ -222,6 +229,8 @@ def build_product(
                 expired.add(alert)
                 continue
             box = validate_alert_line(payload, f"{network.id}[{alert}]")
+            if box is None and boxes is not None and network.area_layers is not None:
+                box = area_box(payload["areas"], network.area_layers(payload), boxes)
             for old in payload.get("replaces", ()):
                 # Lines go by in id order, so of two successors the first
                 # by id is named.

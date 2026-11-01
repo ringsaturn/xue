@@ -118,6 +118,20 @@ def convert(feature: dict[str, Any]) -> dict[str, Any] | None:
     return line
 
 
+FIRE_WEATHER_EVENTS = frozenset({"Red Flag Warning", "Fire Weather Watch", "Extreme Fire Danger", "Fire Warning"})
+"""Events whose zone codes are fire weather zones: they share the public
+zones' ``Z`` code space but not their shapes."""
+
+
+def area_layers(line: dict[str, Any]) -> tuple[str, ...]:
+    """The ``nws-zones`` layers a line's UGC codes resolve against: the
+    fire weather zones for the fire-weather events, else the public zones,
+    counties and marine zones (which share no codes)."""
+    if line["native"]["event"] in FIRE_WEATHER_EVENTS:
+        return ("fire",)
+    return ("zone", "county", "marine", "offshore")
+
+
 def references(feature: dict[str, Any]) -> list[str]:
     """The alerts a message's CAP ``references`` name, as product ids."""
     properties = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}

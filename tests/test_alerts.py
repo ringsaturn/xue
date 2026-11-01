@@ -19,13 +19,15 @@ from xuebuild.airport.fetch import SourceStatus
 from xuebuild.alerts import areas, eccc, jma, nws
 from xuebuild.alerts.build import build_product, load_previous_index
 from xuebuild.alerts.geometry import bbox, simplify
-from xuebuild.alerts.networks import NETWORKS, NWS_ZONES
+from xuebuild.alerts.boxes import area_box, load_boxes
+from xuebuild.alerts.networks import JMA_CLASS20, NETWORKS, NWS_ZONES
 from xuebuild.alerts.schema import (
     CATEGORIES,
     ROW_FIELDS,
     AlertsProductError,
     areas_path,
     build_pointer,
+    crc32_hex,
     encode_json,
     floor_round,
     parse_round,
@@ -292,7 +294,7 @@ class BuildTest(unittest.TestCase):
             index = index_of(output, FIRST)
         self.assertEqual([network["id"] for network in index["networks"]], [network.id for network in NETWORKS])
         self.assertEqual(index["networks"][0]["areas"]["path"], areas_path("nws-zones", NWS_ZONES.version))
-        self.assertIsNone(index["networks"][1]["areas"])
+        self.assertEqual(index["networks"][1]["areas"]["path"], areas_path("jma-class20", JMA_CLASS20.version))
         self.assertIsNone(index["networks"][2]["areas"])
         self.assertEqual(index["categories"], list(CATEGORIES))
 
@@ -433,6 +435,32 @@ class AreasTest(unittest.TestCase):
         self.assertIsNone(areas._county_code({"STATE": "OK", "FIPS": None}))
         self.assertEqual(areas._jma_code({"regioncode": "1310300"}), "1310300")
         self.assertIsNone(areas._jma_code({"regioncode": "13103"}))
+
+    def test_the_pinned_box_files_are_the_fixture(self) -> None:
+        for area_set in (NWS_ZONES, JMA_CLASS20):
+            body = (FIXTURES / "alerts-areas" / area_set.bbox_filename).read_bytes()
+            self.assertEqual((len(body), crc32_hex(body)), (area_set.bbox_byte_length, area_set.bbox_crc32))
+            self.assertEqual(list(json.loads(body)["layers"]), list(area_set.layers))
+
+    def test_a_box_is_the_union_of_its_codes_or_none(self) -> None:
+        boxes = {"zone": {"A": (0.0, 0.0, 1.0, 1.0)}, "fire": {"A": (5.0, 5.0, 6.0, 6.0)}, "marine": {"B": (-2.0, 3.0, -1.0, 4.0)}}
+        self.assertEqual(area_box(["A", "B"], ("zone", "marine"), boxes), (-2.0, 0.0, 1.0, 4.0))
+        self.assertEqual(area_box(["A"], ("fire",), boxes), (5.0, 5.0, 6.0, 6.0))
+        self.assertIsNone(area_box(["A", "C"], ("zone", "marine"), boxes))  # a code the set lacks
+        self.assertIsNone(area_box([], ("zone",), boxes))
+        line = {"native": {"event": "Red Flag Warning"}}
+        self.assertEqual(nws.area_layers(line), ("fire",))
+
+    def test_area_coded_rows_have_boxes_and_a_build_without_the_file_has_none(self) -> None:
+        index = json.loads((EXPECTED / round_directory(FIRST) / "index.json").read_text(encoding="utf-8"))
+        jma_rows = [row for row in index["alerts"] if row[0].startswith("jma:")]
+        self.assertTrue(jma_rows and all(row[8] is not None for row in jma_rows))
+        with tempfile.TemporaryDirectory() as empty:
+            self.assertIsNone(load_boxes(NWS_ZONES, Path(empty), None))
+            stale = Path(empty) / "alerts-areas" / NWS_ZONES.bbox_filename
+            stale.parent.mkdir()
+            stale.write_bytes(b"{}")
+            self.assertIsNone(load_boxes(NWS_ZONES, Path(empty), None))  # not the pinned CRC32
 
     def test_the_boundary_tool_refuses_bad_input(self) -> None:
         with tempfile.TemporaryDirectory() as empty:

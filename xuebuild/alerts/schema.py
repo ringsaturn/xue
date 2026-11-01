@@ -145,10 +145,18 @@ def areas_filename(set_id: str, version: str) -> str:
     return f"{set_id}.{version}.pmtiles"
 
 
+def areas_bbox_filename(set_id: str, version: str) -> str:
+    return f"{set_id}.{version}.bbox.json"
+
+
 def areas_path(set_id: str, version: str) -> str:
     """The boundary set's path relative to a round's index: the sets sit
     in one directory beside the rounds and outlive them."""
     return f"../{AREAS_DIRECTORY}/{areas_filename(set_id, version)}"
+
+
+def areas_bbox_path(set_id: str, version: str) -> str:
+    return f"../{AREAS_DIRECTORY}/{areas_bbox_filename(set_id, version)}"
 
 
 # --- primitives --------------------------------------------------------
@@ -229,6 +237,8 @@ def validate_areas(payload: object, label: str) -> None:
         or len(set(layers)) != len(layers)
     ):
         raise AlertsProductError(f"{label}.layers must be a non-empty list of unique layer names")
+    if payload.get("bbox") is not None:
+        _crc_file(payload["bbox"], f"{label}.bbox", areas_bbox_path(set_id, version))
 
 
 def validate_geometry(payload: object, label: str) -> tuple[float, float, float, float] | None:

@@ -190,8 +190,10 @@ acknowledgement requested, which the description carries in full) for the
 fires, and both of the first two plus CC BY 4.0 for the tracks, whose sources are
 several agencies at once; the AirNow Data Exchange Guidelines and the
 DATA.GOV.HK terms for the air-quality stations, and the NWS disclaimer,
-JMA's website terms and the Open Government Licence – Canada for the
-warnings. `extent` is the whole world and
+JMA's website terms, the Public Data License 1.0 (with a `via` link to
+the agency's GIS data page, whose credit and survey approval notice the
+JMA provider's description carries for the warning area boundaries) and
+the Open Government Licence – Canada for the warnings. `extent` is the whole world and
 `[[null, null]]`: every issue is a rolling window whose start moves, so a
 Collection stating the live issue's bounds would be wrong as soon as the
 next one lands, and the description says so. Links: `root` and `parent` to
@@ -219,8 +221,10 @@ storms either side of the Pacific make a box the long way round rather
 than one across the antimeridian. A fire index carries no positions —
 the detections are wherever something burns — so a fire round with any
 detection is the whole world, `[-180, -90, 180, 90]`, and one without is
-`null`; so is a warnings round, whose warnings mostly name area codes
-rather than draw a polygon. The air-quality stations, like the surface
+`null`. A warnings round is the union of its index rows' boxes (each
+warning's polygon, or its area codes' boxes from the boundary set,
+`docs/alerts.md` §5); a round whose warnings have no box at all is the
+whole world, and one with no warning `null`. The air-quality stations, like the surface
 stations from synop schema v2, keep their positions in the per-network
 stations files, which the Item is built from with the index. An index whose storms have nothing
 observed has no positions at all, and then `geometry` is `null` with no

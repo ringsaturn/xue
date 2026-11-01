@@ -23,7 +23,9 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   size of a network and a map loads only the networks it shows (aq has
   the same shape); an alerts round one JSONL per warning service, one
   warning per line, with area codes resolved against boundary sets
-  published once per upstream release under `alerts-areas/`; a
+  published once per upstream release under `alerts-areas/` (PMTiles for
+  drawing, a `.bbox.json` of every code's box that gives an area-coded
+  warning its index box); a
   fire round one JSONL per sensor with one line per UTC hour, so the index
   addresses hours rather than stations.
 - **One object per issue, never per station**: many small files hurt bucket
