@@ -15,7 +15,7 @@
     { "name": "meta", "description": "Liveness and the machine-readable contract." },
     { "name": "catalog", "description": "What the dataset publishes." },
     { "name": "data", "description": "One cell's series." },
-    { "name": "stations", "description": "The point products: radiosonde soundings, airport reports, surface stations. Each is a list of stations and one station's record." },
+    { "name": "stations", "description": "The point products: radiosonde soundings, airport reports, surface and air-quality stations. Each is a list of stations and one station's record." },
     { "name": "storms", "description": "The tropical cyclone product: the live systems and one storm's tracks." }
   ],
   "paths": {
@@ -352,6 +352,70 @@
         }
       }
     },
+    "/v1/aq": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "aq",
+        "summary": "Every air-quality station's current values.",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": false,
+            "description": "Keep one network (`airnow`, `hkepd`).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/nearLat" },
+          { "$ref": "#/components/parameters/nearLon" },
+          { "$ref": "#/components/parameters/radius" },
+          { "$ref": "#/components/parameters/bbox" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The networks, the element table and the stations, nearest first when `lat`/`lon` are given.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AqList" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/aq/{station}": {
+      "get": {
+        "tags": ["stations"],
+        "operationId": "aqStation",
+        "summary": "One air-quality station's 24-hour window, in the shape `/v1/point` answers.",
+        "parameters": [
+          {
+            "name": "station",
+            "in": "path",
+            "required": true,
+            "description": "The station id, `<network>:<the network's own id>` (`airnow:060371103`).",
+            "schema": { "type": "string" }
+          },
+          { "$ref": "#/components/parameters/timeNearest" },
+          { "$ref": "#/components/parameters/issue" }
+        ],
+        "responses": {
+          "200": {
+            "description": "The station, its network, the time axis and one entry per element.",
+            "headers": { "x-xue-issue": { "$ref": "#/components/headers/issue" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AqResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" },
+          "502": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
     "/v1/storms": {
       "get": {
         "tags": ["storms"],
@@ -509,7 +573,7 @@
         "name": "issue",
         "in": "query",
         "required": false,
-        "description": "Pin a product issue instead of following its live pointer: the STAC Item id, `<product>.<YYYYMMDDHH>` for the hourly products (`sounding.2026091402`, `tc.2026091301`) or `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds (`airport.202609161440`, `synop.202610050010`). The answer is then stable and caches for a day; a pruned issue is `404 unknown_issue`.",
+        "description": "Pin a product issue instead of following its live pointer: the STAC Item id, `<product>.<YYYYMMDDHH>` for the hourly products (`sounding.2026091402`, `tc.2026091301`) or `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds (`airport.202609161440`, `synop.202610050010`, `aq.202610311545`). The answer is then stable and caches for a day; a pruned issue is `404 unknown_issue`.",
         "schema": { "type": "string" }
       },
       "nearLat": {
@@ -783,7 +847,7 @@
         "description": "The fields every point-product answer opens with.",
         "required": ["product", "issue", "issued", "generated"],
         "properties": {
-          "product": { "type": "string", "enum": ["sounding", "airport", "synop", "tc"] },
+          "product": { "type": "string", "enum": ["sounding", "airport", "synop", "aq", "tc"] },
           "issue": { "type": "string", "description": "The issue's STAC Item id." },
           "issued": { "type": ["string", "null"], "format": "date-time", "description": "The aggregation hour or ten-minute round." },
           "generated": { "type": ["string", "null"], "format": "date-time", "description": "When the build ran." }
@@ -807,6 +871,39 @@
         "properties": {
           "label": { "type": ["string", "null"] },
           "unit": { "type": ["string", "null"] }
+        }
+      },
+      "Element": {
+        "type": "object",
+        "description": "A station element: its label, and the unit, cell method and period the index's `elementTable` gives (the unit falls back to the API's own, `cell` and `period` to `null`, for a round without one).",
+        "required": ["label", "unit", "cell", "period"],
+        "properties": {
+          "label": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] },
+          "cell": { "type": ["string", "null"], "enum": ["point", "mean", "sum", "max", "min", null], "description": "What a value is over its period." },
+          "period": { "description": "Seconds a value covers, ending at its time; `null` for an instantaneous value (or one the round does not describe); `\"network\"` for the network's own period (`prPeriod`, `wsPeriod`, `avgPeriod`).", "type": ["integer", "string", "null"] }
+        }
+      },
+      "StationTime": {
+        "type": "object",
+        "required": ["unitSeconds", "times"],
+        "properties": {
+          "unitSeconds": { "type": ["integer", "null"], "description": "The network's cadence." },
+          "times": { "type": "array", "description": "The station's window, oldest first (one instant with `time=`).", "items": { "type": "string", "format": "date-time" } }
+        }
+      },
+      "StationVariables": {
+        "type": "object",
+        "description": "One entry per element of the index, keyed by element, `values` following `time.times` one to one — the shape `/v1/point` answers, without `bundle`.",
+        "additionalProperties": {
+          "allOf": [
+            { "$ref": "#/components/schemas/Element" },
+            {
+              "type": "object",
+              "required": ["values"],
+              "properties": { "values": { "type": "array", "items": { "type": ["number", "null"] } } }
+            }
+          ]
         }
       },
       "StationBase": {
@@ -1026,7 +1123,7 @@
             "properties": {
               "request": { "$ref": "#/components/schemas/SpatialRequest" },
               "networks": { "type": "array", "items": { "$ref": "#/components/schemas/SynopNetwork" } },
-              "elements": { "type": "object", "description": "The element table, keyed by element.", "additionalProperties": { "$ref": "#/components/schemas/Unit" } },
+              "elements": { "type": "object", "description": "The element table, keyed by element.", "additionalProperties": { "$ref": "#/components/schemas/Element" } },
               "count": { "type": "integer" },
               "stations": { "type": "array", "items": { "$ref": "#/components/schemas/SynopStation" } },
               "sources": { "description": "The build's account of its sources (`docs/synop.md` §6)." }
@@ -1058,27 +1155,93 @@
                 }
               },
               "network": { "$ref": "#/components/schemas/SynopNetwork" },
-              "time": {
+              "time": { "$ref": "#/components/schemas/StationTime" },
+              "variables": { "$ref": "#/components/schemas/StationVariables" }
+            }
+          }
+        ]
+      },
+      "AqNetwork": {
+        "type": "object",
+        "description": "A network's entry of the index (`docs/aq.md` §4) without its file descriptors.",
+        "required": ["id", "name", "cadence", "avgPeriod", "preliminary", "attribution", "license", "url", "latest"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "cadence": { "type": "integer", "description": "Seconds between a station's reports." },
+          "avgPeriod": { "type": "integer", "description": "Seconds each value averages over, ending at its time." },
+          "preliminary": { "type": "boolean", "description": "Unvalidated data, which a display must say." },
+          "attribution": { "type": "string", "description": "The credit a display must show." },
+          "license": { "type": "string" },
+          "url": { "type": "string" },
+          "latest": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AqStation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/StationBase" },
+          {
+            "type": "object",
+            "required": ["id", "network", "rank", "name", "agency", "obsTime", "values"],
+            "properties": {
+              "id": { "type": "string", "description": "`<network>:<the network's own id>`." },
+              "network": { "type": "string" },
+              "rank": { "type": "integer", "description": "0 principal or background, 1 general, 2 roadside." },
+              "name": { "type": ["string", "null"] },
+              "agency": { "type": ["string", "null"], "description": "The agency that operates the station and owns its data; shown with its values where the network's terms ask." },
+              "obsTime": { "type": "string", "format": "date-time", "description": "The end of the station's newest hour." },
+              "values": {
                 "type": "object",
-                "required": ["unitSeconds", "times"],
+                "description": "The station's current value per element of `elements`, `null` where not measured.",
+                "additionalProperties": { "type": ["number", "null"] }
+              }
+            }
+          }
+        ]
+      },
+      "AqList": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["request", "networks", "elements", "count", "stations", "sources"],
+            "properties": {
+              "request": { "$ref": "#/components/schemas/SpatialRequest" },
+              "networks": { "type": "array", "items": { "$ref": "#/components/schemas/AqNetwork" } },
+              "elements": { "type": "object", "description": "The element table, keyed by element.", "additionalProperties": { "$ref": "#/components/schemas/Element" } },
+              "count": { "type": "integer" },
+              "stations": { "type": "array", "items": { "$ref": "#/components/schemas/AqStation" } },
+              "sources": { "description": "The build's account of its sources (`docs/aq.md` §7)." }
+            }
+          }
+        ]
+      },
+      "AqResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Issue" },
+          {
+            "type": "object",
+            "required": ["station", "network", "time", "variables"],
+            "properties": {
+              "station": {
+                "type": "object",
+                "required": ["id", "network", "name", "names", "lat", "lon", "elev", "rank", "agency", "timezone"],
                 "properties": {
-                  "unitSeconds": { "type": ["integer", "null"], "description": "The network's cadence." },
-                  "times": { "type": "array", "description": "The station's window, oldest first (one instant with `time=`).", "items": { "type": "string", "format": "date-time" } }
+                  "id": { "type": "string" },
+                  "network": { "type": "string" },
+                  "name": { "type": ["string", "null"] },
+                  "names": { "type": ["object", "null"], "description": "BCP 47 tag to the network's own spelling.", "additionalProperties": { "type": "string" } },
+                  "lat": { "type": "number" },
+                  "lon": { "type": "number" },
+                  "elev": { "type": ["number", "null"] },
+                  "rank": { "type": "integer" },
+                  "agency": { "type": ["string", "null"] },
+                  "timezone": { "type": ["string", "null"] }
                 }
               },
-              "variables": {
-                "type": "object",
-                "description": "One entry per element of the index, keyed by element, `values` following `time.times` one to one — the shape `/v1/point` answers, without `bundle`.",
-                "additionalProperties": {
-                  "type": "object",
-                  "required": ["label", "unit", "values"],
-                  "properties": {
-                    "label": { "type": ["string", "null"] },
-                    "unit": { "type": ["string", "null"] },
-                    "values": { "type": "array", "items": { "type": ["number", "null"] } }
-                  }
-                }
-              }
+              "network": { "$ref": "#/components/schemas/AqNetwork" },
+              "time": { "$ref": "#/components/schemas/StationTime" },
+              "variables": { "$ref": "#/components/schemas/StationVariables" }
             }
           }
         ]

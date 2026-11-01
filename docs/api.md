@@ -13,7 +13,7 @@ published dataset. It resolves a run the way the STAC catalog does
 (Collection → live pointer → manifest), reads the bundle's Zarr store with
 ranged requests and decodes the quantized codes with the same `xue` crate
 the viewer's wasm decoder uses. The point products — soundings, airports,
-surface stations, tropical cyclones — it reads through their own pointer
+surface stations, air-quality stations, tropical cyclones — it reads through their own pointer
 and index, one station per ranged read, and answers in physical units. It
 writes nothing. The viewer does not depend on it, so the site and the
 catalog work when it is down.
@@ -52,6 +52,8 @@ ignored.
 | `GET /v1/airports/{icao}` | one airport's METARs and TAF | same |
 | `GET /v1/synop` | every surface station's current values (§ Surface stations) | same |
 | `GET /v1/synop/{station}` | one station's 24-hour window | same |
+| `GET /v1/aq` | every air-quality station's current values (§ Air-quality stations) | same |
+| `GET /v1/aq/{station}` | one air-quality station's 24-hour window | same |
 | `GET /v1/storms` | the tropical systems of the live issue (§ Storms) | same |
 | `GET /v1/storms/{storm}` | one storm's tracks | same |
 
@@ -175,15 +177,15 @@ The ids `/v1/point?variables=` accepts are the distinct `bundle` values of
 `kind` says what the source is and `endpoint` which route reads it:
 `grid` and `/v1/point` for a run or an observation window, `point` and the
 product's list route (`/v1/soundings`, `/v1/airports`, `/v1/synop`,
-`/v1/storms`) for a point product; `null` for a point product the API only
+`/v1/aq`, `/v1/storms`) for a point product; `null` for a point product the API only
 names (`nexrad`). Asking `/v1/point` for a point product is `400
 not_a_grid`, whose `detail.endpoint` is the right route.
 
 ## Point products
 
 The soundings (`docs/sounding.md`), airports (`docs/airport.md`), surface
-stations (`docs/synop.md`) and tropical cyclones (`docs/tc.md`) share one
-shape on the bucket — a mutable `latest-<product>.json` naming an immutable
+stations (`docs/synop.md`), air-quality stations (`docs/aq.md`) and
+tropical cyclones (`docs/tc.md`) share one shape on the bucket — a mutable `latest-<product>.json` naming an immutable
 `<product>.<issue>/index.json`, the records beside it addressed by byte
 span — and one shape here: a **list** route that answers the index, and a
 **record** route that answers one station or storm. Each read costs the
@@ -194,7 +196,7 @@ Every product answer opens with the same four fields:
 
 | Field | Meaning |
 |---|---|
-| `product` | `sounding`, `airport`, `synop`, `tc` |
+| `product` | `sounding`, `airport`, `synop`, `aq`, `tc` |
 | `issue` | the issue's STAC Item id: `sounding.2026091402`, `airport.202609161440` |
 | `issued` | the aggregation hour, or the ten-minute round |
 | `generated` | when the build ran |
@@ -205,8 +207,8 @@ and takes the same optional parameter:
 |---|---|
 | `issue` | pin an issue instead of following the live pointer: `<product>.<YYYYMMDDHH>` for the hourly products, `<product>.<YYYYMMDDHHMM>` for the ten-minute rounds. The hourly products' issues are found under their UTC day (`sounding/2026/09/14/sounding.2026091402/`), then flat; a pruned issue is `404 unknown_issue` |
 
-The three station lists (`/v1/soundings`, `/v1/airports`, `/v1/synop`)
-take the same spatial selection, and echo it as `request`:
+The four station lists (`/v1/soundings`, `/v1/airports`, `/v1/synop`,
+`/v1/aq`) take the same spatial selection, and echo it as `request`:
 
 | Parameter | Meaning |
 |---|---|
@@ -215,7 +217,7 @@ take the same spatial selection, and echo it as `request`:
 | `bbox` | `west,south,east,north` in degrees; `west > east` spans the antimeridian |
 | `limit` | at most this many stations: the nearest with `lat`/`lon`, the first in index order otherwise |
 
-and `count` is the number of stations answered. The three record routes
+and `count` is the number of stations answered. The four record routes
 take `time`, an ISO 8601 instant: only the record nearest to it is
 answered (one ascent, one METAR, one observation time); without it the
 whole window is. A station's `timezone` is its IANA zone, as on `/v1/point`.
@@ -279,9 +281,10 @@ slp, wx, cloud, category, auto, type`) — and `taf`, the current `Taf` or
 ### Surface stations
 
 `GET /v1/synop` answers `networks[]` (each network's entry of the index
-without its file descriptor: `id, name, cadence, prPeriod, attribution,
-license, url, latest`), `elements` (the element table, each
-`{label, unit}`) and `stations[]`: `{id, network, lat, lon, elev, rank,
+without its file descriptors: `id, name, cadence, prPeriod, attribution,
+license, url, latest`, and whatever further fields the index gives a
+network), `elements` (the element table, each `{label, unit, cell,
+period}`) and `stations[]`: `{id, network, lat, lon, elev, rank,
 name, obsTime, values}`, `values` keyed by element with the station's
 current value or `null`. `network=` keeps one network (`404
 unknown_network` otherwise, `detail.available` listing them).
@@ -310,7 +313,34 @@ one type:
   seconds written as ISO instants; `unitSeconds` is the network's cadence.
 - `variables` has one entry per element of the index, whether or not the
   station reports it (an element it never reported is all `null`), with
-  `values` following `times` one to one. There is no `bundle` field.
+  `values` following `times` one to one, and the element's `label`,
+  `unit`, `cell` and `period`. There is no `bundle` field.
+- `label` is the API's own. `unit`, `cell` (`point`, `mean`, `sum`, `max`,
+  `min`) and `period` (seconds a value covers, ending at its time; `null`
+  for an instantaneous value; `"network"` for the network's own period —
+  `prPeriod`, `wsPeriod`) are the index's `elementTable` (`docs/synop.md`).
+  A round written before the table has the API's own unit and `null` for
+  `cell` and `period`.
+- The line's further fields (quality codes, a WIGOS identifier) are not
+  answered; read the product for them.
+
+### Air-quality stations
+
+`GET /v1/aq` and `GET /v1/aq/{station}` read the air-quality product
+(`docs/aq.md`) exactly as the surface-station routes read theirs, with the
+same parameters, shapes and errors. The differences:
+
+- `networks[]` carry `avgPeriod` (seconds each value averages over) and
+  `preliminary` (unvalidated data, which a display must say) instead of
+  `prPeriod`; every element's `period` is the network's (`"network"`).
+- A list's station carries `agency` after `name`: the agency that runs
+  the station and owns its data, which a display credits with the values
+  where the network's terms ask it to (AirNow). A record's `station` has
+  `id, network, name, names, lat, lon, elev, rank, agency, timezone`
+  (no `wmo`).
+- The elements are `pm25`, `pm10` (µg/m³), `o3`, `no2`, `so2` (ppb) and
+  `co` (ppm), hourly means timed at the end of the hour; a station id is
+  `<network>:<the network's own id>` (`airnow:060371103`).
 
 ### Storms
 
@@ -365,7 +395,7 @@ forecasts and best tracks are passed through as the product writes them.
 | 404 | `unknown_run` | `run=` names no manifest |
 | 404 | `unknown_issue` | `issue=` names no index (pruned, or never published) |
 | 404 | `unknown_variable` | the run has no such bundle (`detail.available` lists those it has), or the bundle ships no store |
-| 404 | `unknown_station` | the issue has no such sounding station, airport or surface station |
+| 404 | `unknown_station` | the issue has no such sounding station, airport, surface station or air-quality station |
 | 404 | `unknown_network` | `network=` names no network of the issue (`detail.available` lists them) |
 | 404 | `unknown_storm` | no storm, crosswalk entry or alias by that id (`detail.available` lists the storms) |
 | 404 | `not_found` | no such route |

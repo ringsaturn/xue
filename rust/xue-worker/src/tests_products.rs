@@ -1,7 +1,7 @@
 //! The point-product handlers over the products' committed goldens
-//! (`tests/fixtures/{sounding,airport,synop,tc}/expected/`), laid out in an
-//! in-memory bucket the way the publishers lay them out on R2: the pointer
-//! at the root, the issue under the directory the pointer names.
+//! (`tests/fixtures/{sounding,airport,synop,aq,tc}/expected/`), laid
+//! out in an in-memory bucket the way the publishers lay them out on R2: the
+//! pointer at the root, the issue under the directory the pointer names.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,8 @@ use crate::bucket::Data;
 use crate::error::HttpError;
 use crate::point::{parse_query, read_point};
 use crate::source::read_source;
-use crate::{airport, sounding, synop, tc};
+use crate::stations::{AQ, SYNOP};
+use crate::{airport, sounding, stations, tc};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
@@ -37,8 +38,9 @@ fn pointer_dir(objects: &HashMap<String, Vec<u8>>, pointer: &str) -> String {
     path.rsplit_once('/').map(|(dir, _)| dir.to_owned()).unwrap()
 }
 
-/// All four products, live, plus the previous airport and synop rounds for
-/// the `issue=` pin, and a Collection per product as the catalog publishes.
+/// Every product, live, plus the previous airport, synop and aq rounds
+/// for the `issue=` pin, and a Collection per product as the catalog
+/// publishes.
 fn bucket() -> HashMap<String, Vec<u8>> {
     let root = fixtures();
     let mut objects = HashMap::new();
@@ -84,7 +86,27 @@ fn bucket() -> HashMap<String, Vec<u8>> {
         }
     }
 
-    for product in ["sounding", "airport", "synop", "tc"] {
+    // The aq rounds, every file of each.
+    for product in ["aq"] {
+        let expected = root.join(product).join("expected");
+        let pointer = format!("latest-{product}.json");
+        put(&mut objects, &pointer, &expected.join(&pointer));
+        for entry in std::fs::read_dir(&expected).expect("expected") {
+            let entry = entry.expect("entry");
+            let round = entry.file_name().into_string().expect("name");
+            if !round.starts_with(&format!("{product}.")) || !entry.path().is_dir() {
+                continue;
+            }
+            for file in std::fs::read_dir(entry.path()).expect("round") {
+                let file = file.expect("entry").file_name().into_string().expect("name");
+                if file.ends_with(".json") || file.ends_with(".jsonl") {
+                    put(&mut objects, &format!("{round}/{file}"), &expected.join(&round).join(&file));
+                }
+            }
+        }
+    }
+
+    for product in ["sounding", "airport", "synop", "tc", "aq"] {
         put_json(
             &mut objects,
             &format!("{product}/collection.json"),
@@ -100,7 +122,8 @@ fn list(product: &str) -> Handler {
     match product {
         "soundings" => |data, url| block_on(sounding::list(data, url)),
         "airports" => |data, url| block_on(airport::list(data, url)),
-        "synop" => |data, url| block_on(synop::list(data, url)),
+        "synop" => |data, url| block_on(stations::list(&SYNOP, data, url)),
+        "aq" => |data, url| block_on(stations::list(&AQ, data, url)),
         _ => |data, url| block_on(tc::list(data, url)),
     }
 }
@@ -109,7 +132,8 @@ fn station(product: &str, id: &str, data: &Data, url: &Url) -> Result<(Value, St
     match product {
         "soundings" => block_on(sounding::station(data, id, url)),
         "airports" => block_on(airport::station(data, id, url)),
-        "synop" => block_on(synop::station(data, id, url)),
+        "synop" => block_on(stations::station(&SYNOP, data, id, url)),
+        "aq" => block_on(stations::station(&AQ, data, id, url)),
         _ => block_on(tc::storm(data, id, url)),
     }
 }
@@ -579,6 +603,224 @@ fn a_v2_network_whose_table_fails_is_left_out() {
     assert_eq!((error.status, error.code.as_str()), (502, "upstream_failed"));
 }
 
+// ── element tables ──────────────────────────────────────────────────────
+
+/// The live round's directory and index of a product.
+fn live_index(objects: &HashMap<String, Vec<u8>>, product: &str) -> (String, Value) {
+    let dir = pointer_dir(objects, &format!("latest-{product}.json"));
+    let index = serde_json::from_slice(&objects[&format!("{dir}/index.json")]).expect("index");
+    (dir, index)
+}
+
+/// Replace the live index of a product, with a pointer crc no other test
+/// uses: the isolate holds an index by its pointer's crc.
+fn replace_index(objects: &mut HashMap<String, Vec<u8>>, product: &str, index: &Value, crc32: &str) {
+    let dir = pointer_dir(objects, &format!("latest-{product}.json"));
+    put_json(objects, &format!("{dir}/index.json"), index);
+    let pointer = format!("latest-{product}.json");
+    let mut held: Value = serde_json::from_slice(&objects[&pointer]).expect("pointer");
+    held["crc32"] = json!(crc32);
+    put_json(objects, &pointer, &held);
+}
+
+#[test]
+fn an_element_table_in_the_index_gives_the_units() {
+    for (product, element, fallback, crc32) in
+        [("synop", "t", "°C", "e1e00001"), ("aq", "pm25", "µg/m³", "e1e00002")]
+    {
+        // Without a table (or with this reader's own), the reader's unit.
+        let data = Data::in_memory(bucket());
+        let body = ok(&data, product, "");
+        let entry = &body["elements"][element];
+        assert!(entry.get("cell").is_some() && entry.get("period").is_some());
+        let (_, index) = live_index(&bucket(), product);
+        if index.get("elementTable").is_none() {
+            assert_eq!(entry["unit"], fallback, "{product}");
+            assert_eq!(entry["cell"], Value::Null);
+        } else {
+            assert_eq!(entry["unit"], index["elementTable"][element]["unit"]);
+        }
+
+        // A table's unit, cell method and period win and are passed through.
+        let mut objects = bucket();
+        let (_, mut index) = live_index(&objects, product);
+        let mut table = serde_json::Map::new();
+        for key in index["elements"].as_array().unwrap() {
+            table.insert(
+                key.as_str().unwrap().to_owned(),
+                json!({ "unit": format!("u-{}", key.as_str().unwrap()), "cell": "mean", "period": "network" }),
+            );
+        }
+        table.insert(element.to_owned(), json!({ "unit": "X", "cell": "point", "period": null }));
+        index["elementTable"] = Value::Object(table);
+        replace_index(&mut objects, product, &index, crc32);
+        let data = Data::in_memory(objects);
+        let body = ok(&data, product, "");
+        assert_eq!(
+            body["elements"][element],
+            json!({ "label": entry["label"], "unit": "X", "cell": "point", "period": null })
+        );
+        let other = index["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|key| key.as_str().unwrap())
+            .find(|key| *key != element)
+            .unwrap();
+        assert_eq!(body["elements"][other]["period"], "network");
+        let station = body["stations"][0]["id"].as_str().unwrap().to_owned();
+        let record = ok(&data, &format!("{product}/{station}"), "");
+        assert_eq!(record["variables"][element]["unit"], "X");
+        assert_eq!(record["variables"][element]["cell"], "point");
+    }
+}
+
+// ── aq ──────────────────────────────────────────────────────────────────
+
+/// The live aq round's station tables, in network order.
+fn aq_tables(objects: &HashMap<String, Vec<u8>>) -> Vec<Value> {
+    let (dir, index) = live_index(objects, "aq");
+    index["networks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|network| {
+            let path = network["stations"]["path"].as_str().unwrap();
+            serde_json::from_slice(&objects[&format!("{dir}/{path}")]).expect("table")
+        })
+        .collect()
+}
+
+#[test]
+fn the_aq_list_keys_the_values_by_element_and_names_the_agency() {
+    let objects = bucket();
+    let (_, index) = live_index(&objects, "aq");
+    let tables = aq_tables(&objects);
+    let data = Data::in_memory(objects);
+    let body = ok(&data, "aq", "");
+    assert_eq!(body["product"], "aq");
+    let rows: Vec<&Value> = tables
+        .iter()
+        .flat_map(|table| table["stations"].as_array().unwrap())
+        .collect();
+    assert_eq!(body["count"], rows.len());
+    let mut expected: Vec<String> = rows.iter().map(|row| row[0].as_str().unwrap().to_owned()).collect();
+    expected.sort();
+    assert_eq!(ids(&body, "stations", "id"), expected);
+    let networks: Vec<&str> = index["networks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|network| network["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids(&body, "networks", "id"),
+        networks.iter().map(|id| id.to_string()).collect::<Vec<_>>()
+    );
+    assert!(body["networks"][0].get("file").is_none());
+    assert!(body["networks"][0].get("stations").is_none());
+    assert!(body["networks"][0]["avgPeriod"].is_number());
+    assert_eq!(
+        body["elements"].as_object().unwrap().keys().cloned().collect::<Vec<_>>().len(),
+        index["elements"].as_array().unwrap().len()
+    );
+
+    // Every station is its table row, named: the agency in its own column,
+    // the values after it.
+    let elements = index["elements"].as_array().unwrap();
+    for station in body["stations"].as_array().unwrap() {
+        let row = rows.iter().find(|row| row[0] == station["id"]).unwrap();
+        assert_eq!(station["lat"], row[1]);
+        assert_eq!(station["name"], row[5]);
+        assert_eq!(station["agency"], row[6]);
+        assert_eq!(station["obsTime"], row[7]);
+        for (offset, key) in elements.iter().enumerate() {
+            assert_eq!(station["values"][key.as_str().unwrap()], row[8 + offset]);
+        }
+        let network = station["id"].as_str().unwrap().split_once(':').unwrap().0;
+        assert_eq!(station["network"], network);
+    }
+
+    let network = networks[networks.len() - 1];
+    let one = ok(&data, "aq", &format!("network={network}"));
+    assert!(ids(&one, "stations", "id").iter().all(|id| id.starts_with(&format!("{network}:"))));
+    assert_eq!(one["networks"].as_array().unwrap().len(), 1);
+    let error = err(&data, "aq", "network=amedas");
+    assert_eq!((error.status, error.code.as_str()), (404, "unknown_network"));
+    assert_eq!(error.detail.unwrap()["available"], json!(networks));
+}
+
+#[test]
+fn an_aq_station_answers_in_the_point_shape() {
+    let objects = bucket();
+    let (dir, index) = live_index(&objects, "aq");
+    let tables = aq_tables(&objects);
+    for (network, table) in index["networks"].as_array().unwrap().iter().zip(&tables) {
+        let row = &table["stations"][0];
+        let id = row[0].as_str().unwrap();
+        let width = row.as_array().unwrap().len();
+        let (offset, length) = (
+            row[width - 2].as_u64().unwrap() as usize,
+            row[width - 1].as_u64().unwrap() as usize,
+        );
+        let file = &objects[&format!("{dir}/{}", network["file"]["path"].as_str().unwrap())];
+        let line: Value = serde_json::from_slice(&file[offset..offset + length]).expect("line");
+
+        let data = Data::in_memory(bucket());
+        let body = ok(&data, &format!("aq/{id}"), "");
+        assert_eq!(body["product"], "aq");
+        assert_eq!(body["station"]["id"], id);
+        assert_eq!(body["station"]["network"], network["id"]);
+        assert_eq!(body["station"]["agency"], line["agency"]);
+        assert_eq!(body["station"]["names"], line["names"]);
+        assert!(body["station"]["timezone"].is_string());
+        assert!(body["network"].get("file").is_none());
+        assert_eq!(body["time"]["unitSeconds"], network["cadence"]);
+        let times = line["time"].as_array().unwrap();
+        assert_eq!(body["time"]["times"].as_array().unwrap().len(), times.len());
+        let variables = body["variables"].as_object().unwrap();
+        assert_eq!(variables.len(), index["elements"].as_array().unwrap().len());
+        for (key, variable) in variables {
+            let values = variable["values"].as_array().unwrap();
+            assert_eq!(values.len(), times.len(), "{key}");
+            match line["obs"].get(key) {
+                Some(series) => assert_eq!(&variable["values"], series, "{key}"),
+                None => assert!(values.iter().all(Value::is_null), "{key}"),
+            }
+        }
+        assert_eq!(range_reads(&data, network["file"]["path"].as_str().unwrap()), 1);
+
+        // `time=` keeps the nearest hour.
+        let last = times.last().unwrap().as_f64().unwrap();
+        let at = xue::zarr::format_iso_millis(last * 1000.0 - 60_000.0);
+        let one = ok(&data, &format!("aq/{id}"), &format!("time={at}"));
+        assert_eq!(
+            one["time"]["times"],
+            json!([xue::zarr::format_iso_millis(last * 1000.0)])
+        );
+    }
+    let data = Data::in_memory(bucket());
+    let error = err(&data, "aq/airnow:000000000", "");
+    assert_eq!((error.status, error.code.as_str()), (404, "unknown_station"));
+    assert_eq!(err(&data, "aq/amedas:11016", "").code, "unknown_station");
+}
+
+#[test]
+fn an_aq_round_can_be_pinned() {
+    let objects = bucket();
+    let live = pointer_dir(&objects, "latest-aq.json");
+    let mut rounds: Vec<String> = objects
+        .keys()
+        .filter(|key| key.starts_with("aq.") && key.ends_with("/index.json"))
+        .map(|key| key.trim_end_matches("/index.json").to_owned())
+        .filter(|round| *round != live)
+        .collect();
+    rounds.sort();
+    let round = rounds.last().expect("an earlier aq round").clone();
+    let data = Data::in_memory(objects);
+    assert_eq!(ok(&data, "aq", &format!("issue={round}"))["issue"], json!(round));
+}
+
 // ── storms ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -777,6 +1019,11 @@ fn a_source_summary_says_which_route_reads_it() {
     let sounding = block_on(read_source(&data, "sounding")).expect("summary");
     assert_eq!(sounding["kind"], "point");
     assert_eq!(sounding["endpoint"], "/v1/soundings");
+    for (product, endpoint) in [("synop", "/v1/synop"), ("aq", "/v1/aq")] {
+        let summary = block_on(read_source(&data, product)).expect("summary");
+        assert_eq!(summary["kind"], "point", "{product}");
+        assert_eq!(summary["endpoint"], endpoint, "{product}");
+    }
     let gfs = block_on(read_source(&data, "gfs")).expect("summary");
     assert_eq!(gfs["kind"], "grid");
     assert_eq!(gfs["endpoint"], "/v1/point");

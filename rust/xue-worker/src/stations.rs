@@ -1,8 +1,10 @@
-//! The surface stations (`docs/synop.md`): the index's compact rows as
-//! objects keyed by element, and one station's 24 h window sliced out of its
-//! network's file and answered in the shape `/v1/point` uses — an ISO time
-//! axis and a flat `variables` map — so a client reads a station and a grid
-//! cell with one type.
+//! The station products — the surface stations (`docs/synop.md`) and the
+//! air-quality stations (`docs/aq.md`), which share one layout: an index
+//! naming per network a table of compact rows and an NDJSON file of each
+//! station's window. The list is the rows as objects keyed by element; one
+//! station's window is sliced out of its network's file and answered in the
+//! shape `/v1/point` uses — an ISO time axis and a flat `variables` map — so
+//! a client reads a station and a grid cell with one type.
 
 use futures_util::future::join_all;
 use serde_json::{json, Map, Value};
@@ -15,42 +17,115 @@ use crate::error::HttpError;
 use crate::products::{self, nearest, round_km, text, Issue, Query, Spatial};
 use crate::timezone;
 
-const PRODUCT: &str = "synop";
+/// What tells one station product from the other.
+pub struct Kind {
+    product: &'static str,
+    /// The leading columns of a row in v1 index shape (`network` second,
+    /// as its position in `networks[]`); the elements follow, then the byte
+    /// span. A station table's rows are the same without `network` (the
+    /// table is the network's), and are read back into this shape.
+    lead: &'static [&'static str],
+    /// The station table version the index names beside itself.
+    table_version: u64,
+    /// Index versions below this carry the rows inline (`stations[]`);
+    /// from it on, one station table per network.
+    tables_from: u64,
+    /// The newest index version this reader implements.
+    index_version: u64,
+    /// The elements with their labels and fallback units. An element the
+    /// index lists that is not here is admitted with a null label and unit.
+    elements: &'static [(&'static str, &'static str, &'static str)],
+    /// The fields of a station's line copied into the record's `station`.
+    station_fields: &'static [&'static str],
+}
 
-/// The fixed leading columns of a v1 index row; the elements follow, then
-/// the byte span. A v2 station table's rows are the same without `network`
-/// (the table is the network's), and are read back into this shape.
-const LEAD: [&str; 8] = [
-    "id", "network", "lat", "lon", "elev", "rank", "name", "obsTime",
-];
+pub const SYNOP: Kind = Kind {
+    product: "synop",
+    lead: &[
+        "id", "network", "lat", "lon", "elev", "rank", "name", "obsTime",
+    ],
+    table_version: 2,
+    tables_from: 2,
+    index_version: 2,
+    elements: &[
+        ("t", "air temperature", "°C"),
+        ("td", "dew point", "°C"),
+        ("rh", "relative humidity", "%"),
+        ("p", "station pressure", "hPa"),
+        ("slp", "sea-level pressure", "hPa"),
+        (
+            "wd",
+            "wind direction (from); null when calm or variable",
+            "°",
+        ),
+        ("ws", "mean wind speed", "m/s"),
+        ("gust", "gust", "m/s"),
+        ("pr", "precipitation over the network's period", "mm"),
+        ("pr1h", "precipitation over the hour", "mm"),
+        ("sun", "sunshine over the network's period", "min"),
+        ("snow", "snow depth", "cm"),
+        ("vis", "visibility", "m"),
+    ],
+    station_fields: &["name", "names", "lat", "lon", "elev", "wmo", "rank"],
+};
 
-/// The station table version a v2 index names beside itself.
-const STATIONS_SCHEMA_VERSION: u64 = 2;
+pub const AQ: Kind = Kind {
+    product: "aq",
+    lead: &[
+        "id", "network", "lat", "lon", "elev", "rank", "name", "agency", "obsTime",
+    ],
+    table_version: 1,
+    tables_from: 0,
+    index_version: 1,
+    elements: &[
+        ("pm25", "PM2.5 mass concentration, hourly mean", "µg/m³"),
+        ("pm10", "PM10 mass concentration, hourly mean", "µg/m³"),
+        ("o3", "ozone, hourly mean", "ppb"),
+        ("no2", "nitrogen dioxide, hourly mean", "ppb"),
+        ("so2", "sulphur dioxide, hourly mean", "ppb"),
+        ("co", "carbon monoxide, hourly mean", "ppm"),
+    ],
+    station_fields: &["name", "names", "lat", "lon", "elev", "rank", "agency"],
+};
 
-/// The contract's elements with their labels and units. An element the
-/// index lists that is not here is admitted with a null label and unit.
-const ELEMENTS: [(&str, &str, &str); 13] = [
-    ("t", "air temperature", "°C"),
-    ("td", "dew point", "°C"),
-    ("rh", "relative humidity", "%"),
-    ("p", "station pressure", "hPa"),
-    ("slp", "sea-level pressure", "hPa"),
-    ("wd", "wind direction (from); null when calm or variable", "°"),
-    ("ws", "mean wind speed", "m/s"),
-    ("gust", "gust", "m/s"),
-    ("pr", "precipitation over the network's period", "mm"),
-    ("pr1h", "precipitation over the hour", "mm"),
-    ("sun", "sunshine over the network's period", "min"),
-    ("snow", "snow depth", "cm"),
-    ("vis", "visibility", "m"),
-];
+impl Kind {
+    /// An element's `{label, unit, cell, period}`: the label this reader
+    /// knows; the unit, cell method and period the index's `elementTable`
+    /// gives, the unit falling back to this reader's own where the index
+    /// has none (a round from before the table).
+    fn element(&self, table: Option<&Map<String, Value>>, key: &str) -> Map<String, Value> {
+        let known = self.elements.iter().find(|(held, _, _)| *held == key);
+        let entry = table.and_then(|table| table.get(key));
+        let field = |name: &str| entry.and_then(|entry| entry.get(name));
+        let unit = field("unit")
+            .filter(|unit| unit.is_string())
+            .cloned()
+            .or_else(|| known.map(|(_, _, unit)| json!(unit)))
+            .unwrap_or(Value::Null);
+        let mut out = Map::new();
+        out.insert(
+            "label".into(),
+            known
+                .map(|(_, label, _)| json!(label))
+                .unwrap_or(Value::Null),
+        );
+        out.insert("unit".into(), unit);
+        out.insert("cell".into(), field("cell").cloned().unwrap_or(Value::Null));
+        out.insert(
+            "period".into(),
+            field("period").cloned().unwrap_or(Value::Null),
+        );
+        out
+    }
 
-fn element_meta(key: &str) -> (Value, Value) {
-    ELEMENTS
-        .iter()
-        .find(|(held, _, _)| *held == key)
-        .map(|(_, label, unit)| (json!(label), json!(unit)))
-        .unwrap_or((Value::Null, Value::Null))
+    /// The width of a station table's row.
+    fn table_width(&self, elements: &[String]) -> usize {
+        self.lead.len() - 1 + elements.len() + 2
+    }
+}
+
+fn element_table(index: &Value) -> Option<&Map<String, Value>> {
+    index.get("elementTable").and_then(Value::as_object)
 }
 
 fn elements(index: &Value) -> Vec<String> {
@@ -85,13 +160,14 @@ fn position(row: &Value) -> Option<(f64, f64)> {
 }
 
 fn station_json(
+    kind: &Kind,
     row: &Value,
     networks: &[Value],
     elements: &[String],
     distance: Option<f64>,
 ) -> Value {
     let mut station = Map::new();
-    for (index, key) in LEAD.iter().enumerate() {
+    for (index, key) in kind.lead.iter().enumerate() {
         let value = row.get(index).cloned().unwrap_or(Value::Null);
         let value = if *key == "network" {
             json!(network_id(networks, row))
@@ -104,7 +180,9 @@ fn station_json(
     for (offset, key) in elements.iter().enumerate() {
         values.insert(
             key.clone(),
-            row.get(LEAD.len() + offset).cloned().unwrap_or(Value::Null),
+            row.get(kind.lead.len() + offset)
+                .cloned()
+                .unwrap_or(Value::Null),
         );
     }
     station.insert("values".into(), Value::Object(values));
@@ -130,11 +208,17 @@ fn index_version(index: &Value) -> u64 {
         .unwrap_or(1)
 }
 
+/// Whether the index carries its rows inline rather than in station tables.
+fn inline_rows(kind: &Kind, index: &Value) -> bool {
+    index_version(index) < kind.tables_from
+}
+
 /// One network's v2 station table, its rows put back into v1's shape with
 /// `position` as their network. A table that is not the one the index
 /// names — another version, another network, other elements, another row
 /// count, rows out of order or outside the network — is refused whole.
 async fn network_rows(
+    kind: &Kind,
     data: &Data,
     issue: &Issue,
     network: &Value,
@@ -152,8 +236,11 @@ async fn network_rows(
             format!("{}: {path} {why}", issue.id),
         )
     };
-    if table.get("schemaVersion").and_then(Value::as_u64) != Some(STATIONS_SCHEMA_VERSION) {
-        return Err(refuse("is not a v2 station table"));
+    if table.get("schemaVersion").and_then(Value::as_u64) != Some(kind.table_version) {
+        return Err(refuse(&format!(
+            "is not a v{} station table",
+            kind.table_version
+        )));
     }
     if table.get("network").and_then(Value::as_str) != Some(id) {
         return Err(refuse(&format!("is not network {id}'s")));
@@ -172,10 +259,13 @@ async fn network_rows(
         .ok_or_else(|| refuse("has no stations"))?;
     if let Some(count) = descriptor.get("count").and_then(Value::as_u64) {
         if rows.len() as u64 != count {
-            return Err(refuse(&format!("has {} rows, the index says {count}", rows.len())));
+            return Err(refuse(&format!(
+                "has {} rows, the index says {count}",
+                rows.len()
+            )));
         }
     }
-    let width = LEAD.len() - 1 + elements.len() + 2;
+    let width = kind.table_width(elements);
     let prefix = format!("{id}:");
     let byte_length = network
         .get("file")
@@ -202,7 +292,9 @@ async fn network_rows(
             return Err(refuse(&format!("gives {station} no byte span")));
         };
         if offset < end || byte_length.is_some_and(|bytes| offset + length > bytes) {
-            return Err(refuse(&format!("gives {station} a span out of order or past its file")));
+            return Err(refuse(&format!(
+                "gives {station} a span out of order or past its file"
+            )));
         }
         end = offset + length;
         let mut v1 = Vec::with_capacity(width + 1);
@@ -219,12 +311,13 @@ async fn network_rows(
 /// network whose table fails is left out (the rest renumbered), as the
 /// shell leaves it out, rather than failing the whole list.
 async fn stations_v1(
+    kind: &Kind,
     data: &Data,
     issue: &Issue,
     elements: &[String],
 ) -> (Vec<Value>, Vec<Value>) {
     let networks = networks(&issue.index);
-    if index_version(&issue.index) < 2 {
+    if inline_rows(kind, &issue.index) {
         let rows = issue
             .index
             .get("stations")
@@ -233,13 +326,11 @@ async fn stations_v1(
             .unwrap_or_default();
         return (networks, rows);
     }
-    let tables = join_all(
-        networks
-            .iter()
-            .enumerate()
-            .map(|(position, network)| network_rows(data, issue, network, position, elements)),
-    )
-    .await;
+    let tables =
+        join_all(networks.iter().enumerate().map(|(position, network)| {
+            network_rows(kind, data, issue, network, position, elements)
+        }))
+        .await;
     let mut kept = Vec::new();
     let mut rows = Vec::new();
     for (network, table) in networks.into_iter().zip(tables) {
@@ -255,23 +346,35 @@ async fn stations_v1(
     (kept, rows)
 }
 
-async fn resolve(data: &Data, query: &Query<'_>) -> Result<Issue, HttpError> {
-    products::resolve_issue(
+async fn resolve(kind: &Kind, data: &Data, query: &Query<'_>) -> Result<Issue, HttpError> {
+    let issue = products::resolve_issue(
         data,
-        products::product(PRODUCT).expect("registered"),
+        products::product(kind.product).expect("registered"),
         query.issue().as_deref(),
     )
-    .await
+    .await?;
+    let version = index_version(&issue.index);
+    if version > kind.index_version {
+        return Err(HttpError::new(
+            502,
+            "upstream_failed",
+            format!(
+                "{}: index schemaVersion {version} is newer than this reader's {}",
+                issue.id, kind.index_version
+            ),
+        ));
+    }
+    Ok(issue)
 }
 
-/// `GET /v1/synop`: every station's current values.
-pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> {
+/// `GET /v1/synop`, `GET /v1/aq`: every station's current values.
+pub async fn list(kind: &Kind, data: &Data, url: &Url) -> Result<(Value, String), HttpError> {
     let query = Query::new(url);
     let spatial = Spatial::parse(&query)?;
     let wanted = query.get("network");
-    let issue = resolve(data, &query).await?;
+    let issue = resolve(kind, data, &query).await?;
     let elements = elements(&issue.index);
-    let (networks, rows) = stations_v1(data, &issue, &elements).await;
+    let (networks, rows) = stations_v1(kind, data, &issue, &elements).await;
     if let Some(wanted) = &wanted {
         if !networks.iter().any(|network| text(network, "id") == wanted) {
             let available: Vec<&str> = networks.iter().map(|network| text(network, "id")).collect();
@@ -293,13 +396,13 @@ pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> 
     let stations: Vec<Value> = spatial
         .select(rows, position)
         .iter()
-        .map(|(row, distance)| station_json(row, &networks, &elements, *distance))
+        .map(|(row, distance)| station_json(kind, row, &networks, &elements, *distance))
         .collect();
 
-    let mut element_table = Map::new();
+    let mut table = Map::new();
+    let held = element_table(&issue.index);
     for key in &elements {
-        let (label, unit) = element_meta(key);
-        element_table.insert(key.clone(), json!({ "label": label, "unit": unit }));
+        table.insert(key.clone(), Value::Object(kind.element(held, key)));
     }
     let mut body = issue.envelope();
     let mut request = spatial.request_json();
@@ -318,23 +421,28 @@ pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> 
                 .collect(),
         ),
     );
-    body.insert("elements".into(), Value::Object(element_table));
+    body.insert("elements".into(), Value::Object(table));
     body.insert("count".into(), json!(stations.len()));
     body.insert("stations".into(), Value::Array(stations));
     body.insert("sources".into(), issue.sources());
     Ok((Value::Object(body), issue.id))
 }
 
-/// `GET /v1/synop/{station}`: one station's window as a time axis and a
-/// flat `variables` map, one entry per element of the index (all `null` for
-/// an element the station never reported).
-pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String), HttpError> {
+/// `GET /v1/synop/{station}`, `GET /v1/aq/{station}`: one station's window
+/// as a time axis and a flat `variables` map, one entry per element of the
+/// index (all `null` for an element the station never reported).
+pub async fn station(
+    kind: &Kind,
+    data: &Data,
+    id: &str,
+    url: &Url,
+) -> Result<(Value, String), HttpError> {
     let query = Query::new(url);
     let target = query.time()?;
-    let issue = resolve(data, &query).await?;
+    let issue = resolve(kind, data, &query).await?;
     let networks = networks(&issue.index);
     let elements = elements(&issue.index);
-    let rows = if index_version(&issue.index) < 2 {
+    let rows = if inline_rows(kind, &issue.index) {
         issue
             .index
             .get("stations")
@@ -350,7 +458,7 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
             .position(|network| Some(text(network, "id")) == wanted)
         {
             Some(position) => {
-                network_rows(data, &issue, &networks[position], position, &elements).await?
+                network_rows(kind, data, &issue, &networks[position], position, &elements).await?
             }
             None => Vec::new(),
         }
@@ -377,7 +485,8 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
             )
         })?;
     let (path, crc32) = issue.file(network.get("file").unwrap_or(&Value::Null), "network")?;
-    let line = products::read_slice(data, &path, &crc32, row, LEAD.len() + elements.len()).await?;
+    let line =
+        products::read_slice(data, &path, &crc32, row, kind.lead.len() + elements.len()).await?;
 
     // Epoch seconds to the API's ISO instants; `time=` keeps the nearest.
     let epoch: Vec<f64> = line
@@ -397,6 +506,7 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
         .map(|&index| json!(zarr::format_iso_millis(epoch[index] * 1000.0)))
         .collect();
     let obs = line.get("obs").and_then(Value::as_object);
+    let held = element_table(&issue.index);
     let mut variables = Map::new();
     for key in &elements {
         let series = obs.and_then(|obs| obs.get(key)).and_then(Value::as_array);
@@ -409,19 +519,20 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
                     .unwrap_or(Value::Null)
             })
             .collect();
-        let (label, unit) = element_meta(key);
-        variables.insert(
-            key.clone(),
-            json!({ "label": label, "unit": unit, "values": values }),
-        );
+        let mut variable = kind.element(held, key);
+        variable.insert("values".into(), Value::Array(values));
+        variables.insert(key.clone(), Value::Object(variable));
     }
 
     let (lat, lon) = position(row).unwrap_or((f64::NAN, f64::NAN));
     let mut station = Map::new();
     station.insert("id".into(), json!(id));
     station.insert("network".into(), json!(text(network, "id")));
-    for key in ["name", "names", "lat", "lon", "elev", "wmo", "rank"] {
-        station.insert(key.to_owned(), line.get(key).cloned().unwrap_or(Value::Null));
+    for key in kind.station_fields {
+        station.insert(
+            (*key).to_owned(),
+            line.get(*key).cloned().unwrap_or(Value::Null),
+        );
     }
     station.insert(
         "timezone".into(),
