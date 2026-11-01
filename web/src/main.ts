@@ -196,6 +196,12 @@ import { buildFireCard } from "./fire/card";
 import { fetchCaseFireIndex, fetchFireIndex, type LoadedFireIndex } from "./fire/fetch";
 import { FIRE_CLICKABLE_LAYERS, FireLayers, type FireDetection } from "./fire/layer";
 import { FireWindArrow, meanWind } from "./fire/windarrow";
+import { buildAqCard } from "./aq/card";
+import { fetchAqIndex, fetchAqStation, type LoadedAqIndex } from "./aq/fetch";
+import { buildAlertsCard } from "./alerts/card";
+import { fetchAlertLines, fetchAlertsIndex, type LoadedAlertsIndex } from "./alerts/fetch";
+import { AlertLayers, alertLevelColor, type AlertHit } from "./alerts/layer";
+import type { AlertLine } from "./alerts/schema";
 import {
   fetchAirportIndex,
   fetchAirportStation,
@@ -210,12 +216,14 @@ import {
   StationLayers,
   STATION_CLICKABLE_LAYERS,
   categoryColor,
+  pm25Color,
   stationDataOf,
   type StationPointData,
 } from "./stations/layers";
 import {
   nearestAirport,
   nearestSounding,
+  nearestAq,
   nearestSynopStations,
   synopForElevation,
   type NearestStation,
@@ -233,6 +241,7 @@ import {
   type ObservationAxis,
 } from "./stations/observations";
 import type { AirportStation, AirportStationHistory, SynopStation, SynopStationSeries } from "./stations/schema";
+import type { AqStation } from "./aq/schema";
 import { createSoundingSection, type SoundingSection } from "./sounding/section";
 import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
 import { profileFromModel, type ModelLevel, type Profile } from "./sounding/profile";
@@ -885,6 +894,7 @@ function applyBasemapTheme(): void {
   tcLayers?.setInk(darkGround);
   stationLayers?.setInk(darkGround);
   fireLayers?.setInk(darkGround);
+  alertLayers?.setInk(darkGround);
   caseMarkers?.setInk(darkGround);
   caseContext?.setInk(darkGround);
   riverCase?.setInk(darkGround);
@@ -1428,6 +1438,8 @@ const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
 const synopTile = required<HTMLButtonElement>("synop-tile");
 const fireTile = required<HTMLButtonElement>("fire-tile");
+const aqTile = required<HTMLButtonElement>("aq-tile");
+const alertsTile = required<HTMLButtonElement>("alerts-tile");
 const radarTile = required<HTMLButtonElement>("radar-tile");
 const legendFolded = required<HTMLElement>("legend-folded");
 const tcSheet = required<HTMLElement>("tc-sheet");
@@ -2930,6 +2942,10 @@ let probeAirportSequence = 0;
  * ground height under it (`probeSynop`), so the candidates are kept rather
  * than one chosen at pin time. */
 let probeSynopCandidates: NearestStation<SynopStation>[] = [];
+/** The air-quality station within reach of the pin, from the index; and the
+ * highest warning drawn under the pin, while the warnings are on screen. */
+let probeAq: NearestStation<AqStation> | null = null;
+let probeAlert: AlertHit | null = null;
 const probeSynopSeries = new Map<string, SynopStationSeries | "pending" | "failed">();
 let probeSynopSequence = 0;
 
@@ -3045,6 +3061,17 @@ function buildProbePanel() {
   const airportCategory = document.createElement("span");
   airportCategory.className = "probe-airport-category";
   airport.append(airportId, airportCategory);
+  // Two more chips of the same make: the nearest air-quality station's
+  // PM2.5, and the highest warning in force under the pin while the
+  // warnings are drawn. Out of the layout when there is none.
+  const aqChip = document.createElement("span");
+  aqChip.className = "probe-airport probe-aq";
+  aqChip.id = "probe-aq";
+  aqChip.hidden = true;
+  const alertChip = document.createElement("span");
+  alertChip.className = "probe-airport probe-alert";
+  alertChip.id = "probe-alert";
+  alertChip.hidden = true;
   const value = document.createElement("output");
   value.className = "probe-value";
   value.id = "probe-value";
@@ -3093,7 +3120,7 @@ function buildProbePanel() {
   canvas.setAttribute("aria-hidden", "true");
   const codeLine = document.createElement("span");
   codeLine.className = "probe-code-line";
-  codeLine.append(code, airport);
+  codeLine.append(code, airport, aqChip, alertChip);
   headline.append(codeLine, value);
   metaLine.append(meta, coords, elevation, zone, compare, footer, close);
   axis.append(metaLine, canvas);
@@ -3121,6 +3148,8 @@ function buildProbePanel() {
     airport,
     airportId,
     airportCategory,
+    aqChip,
+    alertChip,
     coords,
     elevation,
     zone,
@@ -3272,6 +3301,11 @@ function resolveProbeStations(longitude: number, latitude: number): void {
   probeSynopSeries.clear();
   probeSynopSequence += 1;
 
+  probeAq = aqLoaded ? nearestAq(aqLoaded.index, longitude, latitude) : null;
+  resolveProbeAlerts();
+  // The warning areas under a fresh pin may still be loading their tiles.
+  map.once("idle", resolveProbeAlerts);
+
   const airport = airportLoaded ? nearestAirport(airportLoaded.index, longitude, latitude) : null;
   probeAirport = airport
     ? { station: airport.station, distanceKm: airport.distanceKm, history: null }
@@ -3335,6 +3369,8 @@ function closeProbe(): void {
   probeSynopCandidates = [];
   probeSynopSeries.clear();
   probeSynopSequence += 1;
+  probeAq = null;
+  probeAlert = null;
   soundingSection.setStation(null, null, 0);
   gaugeSection.setGauge(null, null);
   probeMarker?.remove();
@@ -3793,10 +3829,52 @@ function renderProbe(): void {
   paintSkewtSheet();
 }
 
+/** The warning drawn under the pin, highest level first: read off the
+ * rendered areas, so only while the warnings are on screen. */
+function resolveProbeAlerts(): void {
+  const series = probe;
+  const hits = series && alertLayers ? alertLayers.alertsAt(map.project([series.longitude, series.latitude])) : [];
+  probeAlert = hits[0] ?? null;
+  renderProbeMarkChips();
+}
+
+/** The air-quality and warning chips beside the airport's. A station's
+ * id and the PM2.5 value are instrument text; the event is the service's
+ * own words. */
+function renderProbeMarkChips(): void {
+  const darkGround = document.body.dataset.ground === "dark";
+  const aq = probeAq;
+  const pm25 = aq?.station.values.pm25 ?? null;
+  const aqChip = probePanel.aqChip;
+  aqChip.hidden = pm25 === null;
+  if (aq && pm25 !== null) {
+    const value = document.createElement("span");
+    value.className = "probe-airport-category";
+    value.textContent = `PM2.5 ${pm25.toFixed(1)}`;
+    aqChip.style.setProperty("--card-ink", pm25Color(pm25) ?? "");
+    aqChip.replaceChildren(value);
+    aqChip.title = t("aqNearest", { km: aq.distanceKm.toFixed(0) });
+  }
+  const alert = probeAlert;
+  const alertChip = probePanel.alertChip;
+  alertChip.hidden = alert === null;
+  if (alert) {
+    const level = document.createElement("span");
+    level.className = "probe-airport-category";
+    level.textContent = `L${alert.line.level}`;
+    const event = document.createElement("span");
+    event.textContent = alert.line.native.event;
+    alertChip.style.setProperty("--card-ink", alertLevelColor(alert.line.level, darkGround));
+    alertChip.replaceChildren(level, event);
+    alertChip.title = `${t("alertsLevel", { level: alert.line.level })} · ${alert.line.native.event}`;
+  }
+}
+
 /** The nearest airport beside the panel's code: its ICAO id and the flight
  * category in the category's own color, the chip the station card uses. An
  * id and a category are instrument text and are never translated. */
 function renderProbeAirportChip(): void {
+  renderProbeMarkChips();
   const airport = probeAirport;
   probePanel.airport.hidden = airport === null;
   if (!airport) return;
@@ -6610,6 +6688,8 @@ function syncRail(): void {
   airportTile.setAttribute("aria-pressed", String(!airportTile.hidden && view.marks.stations.airports));
   synopTile.setAttribute("aria-pressed", String(!synopTile.hidden && view.marks.stations.synop));
   fireTile.setAttribute("aria-pressed", String(!fireTile.hidden && view.marks.stations.fire));
+  aqTile.setAttribute("aria-pressed", String(!aqTile.hidden && view.marks.stations.aq));
+  alertsTile.setAttribute("aria-pressed", String(!alertsTile.hidden && view.marks.stations.alerts));
   radarTile.setAttribute("aria-pressed", String(!radarTile.hidden && view.marks.radar.on));
 }
 
@@ -8221,6 +8301,19 @@ let synopLoaded: LoadedSynopIndex | null = null;
  * span rather than whole. */
 let fireLoaded: LoadedFireIndex | null = null;
 let fireLayers: FireLayers | null = null;
+/** The air-quality stations (docs/aq.md) are station marks of the same
+ * layers; the weather warnings (docs/alerts.md) are areas, on a layer of
+ * their own, and a snapshot of now that the playhead does not touch. */
+let aqLoaded: LoadedAqIndex | null = null;
+let alertsLoaded: LoadedAlertsIndex | null = null;
+let alertLayers: AlertLayers | null = null;
+/** The network files of the round on the map, read only while the
+ * warnings are drawn: the index URL they belong to and each network's
+ * lines (empty until read, or when the read failed). */
+let alertLines: { indexUrl: string; lines: AlertLine[][] } | null = null;
+/** What the warning layers were last given, so a poll that brought
+ * nothing new rebuilds nothing. */
+let alertsDrawn: { indexUrl: string; lines: AlertLine[][] } | null = null;
 
 /** The wind a case's fire marks are read against (`fire/windarrow.ts`):
  * the case's own `wind10m`, or the one its `wind` block borrows from
@@ -8267,11 +8360,13 @@ let stationCard: Popup | null = null;
 async function loadStations(): Promise<void> {
   if (document.hidden && stationsPolled) return;
   const base = dataBaseUrl();
-  const [soundings, airports, synop, fire] = await Promise.allSettled([
+  const [soundings, airports, synop, fire, aq, alerts] = await Promise.allSettled([
     fetchSoundingIndex(base),
     fetchAirportIndex(base),
     fetchSynopIndex(base),
     fetchFireIndex(base),
+    fetchAqIndex(base),
+    fetchAlertsIndex(base),
   ]);
   stationsPolled = true;
   // A poll that fails leaves the previous issue drawn; only an answer
@@ -8280,6 +8375,8 @@ async function loadStations(): Promise<void> {
   if (airports.status === "fulfilled") airportLoaded = airports.value;
   if (synop.status === "fulfilled") synopLoaded = synop.value;
   if (fire.status === "fulfilled") fireLoaded = fire.value;
+  if (aq.status === "fulfilled") aqLoaded = aq.value;
+  if (alerts.status === "fulfilled") alertsLoaded = alerts.value;
   if (activeCase === null && requestedCaseId === null) loadLiveRadar();
   applyStationView();
 }
@@ -8320,22 +8417,35 @@ function applyStationView(): void {
     fireTile.hidden = !fireAvailable;
     railChanged = true;
   }
+  const aqAvailable = aqLoaded !== null && !hidden;
+  const alertsAvailable = alertsLoaded !== null && !hidden;
+  if (aqTile.hidden === aqAvailable) {
+    aqTile.hidden = !aqAvailable;
+    railChanged = true;
+  }
+  if (alertsTile.hidden === alertsAvailable) {
+    alertsTile.hidden = !alertsAvailable;
+    railChanged = true;
+  }
   if (railChanged) syncRailDensity();
   const drawSoundings = soundingAvailable && view.marks.stations.soundings;
   const drawAirports = airportAvailable && view.marks.stations.airports;
   const drawSynop = synopAvailable && view.marks.stations.synop;
   const drawFire = fireAvailable && view.marks.stations.fire;
+  const drawAq = aqAvailable && view.marks.stations.aq;
   syncRail();
   applyFireView(drawFire);
+  applyAlertsView(alertsAvailable && view.marks.stations.alerts);
   // Nothing on screen and nothing on the map: the layers are never added,
   // so a viewer who asks for no station pays nothing for the products
   // existing.
-  if (!drawSoundings && !drawAirports && !drawSynop && stationLayers === null) return;
+  if (!drawSoundings && !drawAirports && !drawSynop && !drawAq && stationLayers === null) return;
   const layers = ensureStationLayers();
   if (!layers) return;
   layers.setSoundings(drawSoundings ? soundingLoaded!.index : null);
   layers.setAirports(drawAirports ? airportLoaded!.index : null);
   layers.setSynop(drawSynop ? synopLoaded!.index : null);
+  layers.setAq(drawAq ? aqLoaded!.index : null);
   syncStationTime();
   closeStationCard();
 }
@@ -8361,6 +8471,46 @@ function applyFireView(draw: boolean): void {
   // marks' and keeps its room.
   fireWind.arrow.ensure();
   syncFireWindArrow();
+}
+
+/** The warnings in force, drawn while their tile is pressed: the round's
+ * network files are read once per round (one GET each), and the layers
+ * rebuilt only when the round or its lines change. */
+function applyAlertsView(draw: boolean): void {
+  if (!draw && alertLayers === null) return;
+  if (!mapStyleReady) return;
+  alertLayers ??= new AlertLayers(map);
+  alertLayers.setBefore((map.getStyle().layers ?? []).find((entry) => entry.type === "symbol")?.id);
+  alertLayers.setInk(document.body.dataset.ground === "dark");
+  const loaded = draw ? alertsLoaded : null;
+  if (loaded && alertLines?.indexUrl !== loaded.indexUrl) {
+    const lines: AlertLine[][] = loaded.index.networks.map(() => []);
+    alertLines = { indexUrl: loaded.indexUrl, lines };
+    const pending = loaded.index.networks.map((network, position) =>
+      fetchAlertLines(loaded, network)
+        .then((read) => {
+          lines[position] = read;
+        })
+        .catch((error: unknown) => {
+          console.warn(`alerts: ${network.id} not read:`, error instanceof Error ? error.message : error);
+        }),
+    );
+    void Promise.all(pending).then(() => {
+      if (alertLines?.lines !== lines) return;
+      alertLines = { indexUrl: loaded.indexUrl, lines: [...lines] };
+      applyAlertsView(alertsLoaded !== null && activeCase === null && view.marks.stations.alerts);
+    });
+  }
+  const next = loaded && alertLines?.indexUrl === loaded.indexUrl ? alertLines : null;
+  if (next === alertsDrawn) return;
+  alertsDrawn = next;
+  if (next && loaded) alertLayers.setData(loaded, next.lines);
+  else alertLayers.setData(null, []);
+  // The pin's chip reads the rendered areas, which are there once drawn.
+  if (probe) {
+    resolveProbeAlerts();
+    map.once("idle", resolveProbeAlerts);
+  }
 }
 
 /** Ask for the wind the case's fire marks are read against, once per
@@ -8625,15 +8775,49 @@ function showStationCard(data: StationPointData, lngLat: [number, number]): void
       if (data.kind === "sounding") soundingSection.open();
     },
   };
-  const content =
-    data.kind === "sounding"
-      ? buildSoundingCard(data.station, options)
-      : data.kind === "synop"
-        ? buildSynopCard(data.station, data.network, options)
-        : buildAirportCard(data.station, options);
+  let content: HTMLElement;
+  if (data.kind === "aq") {
+    const loaded = aqLoaded;
+    if (!loaded) return;
+    const card = buildAqCard(data.station, data.network, loaded.index, options);
+    content = card.root;
+    // The window adds the day's range and the station's own spelling of
+    // its name: one range request, made when the card opens.
+    const station = loaded.index.stations.find((entry) => entry.id === data.station.id);
+    if (station) {
+      void fetchAqStation(loaded, station)
+        .then((series) => card.setSeries(series))
+        .catch((error: unknown) => {
+          console.warn(`aq: ${station.id} window not read:`, error instanceof Error ? error.message : error);
+        });
+    }
+  } else {
+    content =
+      data.kind === "sounding"
+        ? buildSoundingCard(data.station, options)
+        : data.kind === "synop"
+          ? buildSynopCard(data.station, data.network, options)
+          : buildAirportCard(data.station, options);
+  }
   stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "280px", offset: 10 })
     .setLngLat(lngLat)
     .setDOMContent(content)
+    .addTo(map);
+}
+
+/** The warnings card at a clicked point: every warning drawn there. */
+function showAlertsCard(hits: AlertHit[], lngLat: [number, number]): void {
+  closeStationCard();
+  if (!alertsLoaded) return;
+  stationCard = new Popup({ closeButton: false, closeOnClick: false, className: "station-popup", maxWidth: "300px", offset: 6 })
+    .setLngLat(lngLat)
+    .setDOMContent(
+      buildAlertsCard(hits, {
+        issued: alertsLoaded.index.issued,
+        formatTime: (time) => formatDate(time),
+        darkGround: document.body.dataset.ground === "dark",
+      }),
+    )
     .addTo(map);
 }
 
@@ -9135,6 +9319,8 @@ soundingTile.addEventListener("click", () => toggleStationProduct("soundings"));
 airportTile.addEventListener("click", () => toggleStationProduct("airports"));
 synopTile.addEventListener("click", () => toggleStationProduct("synop"));
 fireTile.addEventListener("click", () => toggleStationProduct("fire"));
+aqTile.addEventListener("click", () => toggleStationProduct("aq"));
+alertsTile.addEventListener("click", () => toggleStationProduct("alerts"));
 
 function ensureLayers(): void {
   if (layersAdded) return;
@@ -11441,6 +11627,10 @@ map.on("click", (event) => {
   }
   closeStationCard();
   if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
+  // A warning is an area, not a mark: a click inside one still pins the
+  // point, and opens the card of what is in force there beside it.
+  const warnings = alertLayers?.alertsAt(event.point) ?? [];
+  if (warnings.length) showAlertsCard(warnings, [event.lngLat.lng, event.lngLat.lat]);
 });
 map.on("mousemove", (event) => {
   if (measureTool?.armed) return;

@@ -829,6 +829,54 @@ export const en = {
   fireOverpass: "Overpass",
   fireDay: "day",
   fireNight: "night",
+  /** The air-quality stations (`docs/aq.md`): monitoring stations of
+   * national networks (US EPA AirNow, Hong Kong EPD), drawn as dots
+   * coloured by the station's current PM2.5 concentration. Never call it an
+   * index or "AQI": the product publishes concentrations only, and the
+   * networks' terms forbid publishing a derived index. `PM2.5`, `PM10`,
+   * `O₃` and units are instrument text. "Agency" is the body that runs the
+   * station and owns its data; "Network" the national network it reports
+   * through. The preliminary note is what the networks' terms require a
+   * display of their real-time data to say. `{km}` is a distance. */
+  aqTileTip: "Air quality stations (PM2.5)",
+  varAq: "PM2.5",
+  glyphAq: "Q",
+  aqStation: "Air quality",
+  aqAgency: "Agency",
+  aqNetwork: "Network",
+  aqPreliminary: "Preliminary data: not validated, subject to change",
+  aqDayRange: "PM2.5, last 24 h",
+  aqNearest: "Nearest air-quality station, {km} km",
+  /** The weather warnings (`docs/alerts.md`): every warning a national
+   * service (US NWS, JMA, ECCC) has in force now, drawn as areas on one
+   * 1–5 level scale; a snapshot of now, not of the forecast hour on
+   * screen. The event names on the card are the services' own and are not
+   * translated; the category words are this product's sixteen classes. A
+   * JMA warning is in force until it is lifted ("until cancelled"). */
+  alertsTileTip: "Weather warnings in force now",
+  varAlerts: "WARNINGS",
+  glyphAlerts: "!",
+  alertsCardTitle: "Warnings",
+  alertsInForceNow: "In force now",
+  alertsAsOf: "as of {time}",
+  alertsLevel: "Level {level}",
+  alertsUntilCancelled: "until cancelled",
+  alertCategoryRain: "Heavy rain",
+  alertCategoryFlood: "Flood",
+  alertCategoryLandslide: "Landslide",
+  alertCategoryWind: "Wind",
+  alertCategoryThunderstorm: "Thunderstorm",
+  alertCategorySnowIce: "Snow and ice",
+  alertCategoryHeat: "Heat",
+  alertCategoryCold: "Cold",
+  alertCategoryFog: "Fog",
+  alertCategoryDust: "Dust",
+  alertCategoryFire: "Fire weather",
+  alertCategoryAir: "Air quality",
+  alertCategoryCoastal: "Coastal",
+  alertCategoryMarine: "Marine",
+  alertCategoryTsunami: "Tsunami",
+  alertCategoryOther: "Other",
   /** A showcase case's markers (`casemarkers.ts`): labelled points of
    * context on the map. The kind word heads the card a marker opens;
    * `markerSources` heads its list of links; `caseMarkersAria` names

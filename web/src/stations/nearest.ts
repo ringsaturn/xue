@@ -17,6 +17,7 @@
  * Arithmetic only — no DOM, no fetching. The index is read, never mutated.
  */
 
+import type { AqIndex, AqStation } from "../aq/schema";
 import type {
   AirportIndex,
   AirportStation,
@@ -118,6 +119,23 @@ export function nearestAirport(
   maxKm: number = AIRPORT_RADIUS_KM,
 ): NearestStation<AirportStation> | null {
   return nearest(index.stations, longitude, latitude, maxKm);
+}
+
+/** The air-quality station with a PM2.5 value nearest the pinned point,
+ * or null when none is inside `maxKm`. The same radius as a surface
+ * station's: a monitor measures its own street and neighbourhood. */
+export function nearestAq(
+  index: AqIndex,
+  longitude: number,
+  latitude: number,
+  maxKm: number = SYNOP_RADIUS_KM,
+): NearestStation<AqStation> | null {
+  return nearest(
+    index.stations.filter((station) => station.values.pm25 !== null && station.values.pm25 !== undefined),
+    longitude,
+    latitude,
+    maxKm,
+  );
 }
 
 /** The surface stations inside `maxKm` of the pinned point, nearest first,

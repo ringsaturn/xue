@@ -22,6 +22,7 @@ import type {
   Map as MaplibreMap,
 } from "maplibre-gl";
 
+import type { AqIndex, AqNetwork, AqStation } from "../aq/schema";
 import { NEUTRAL_DARK_GROUND, NEUTRAL_LIGHT_GROUND } from "../tc/agencies";
 import type {
   AirportIndex,
@@ -37,6 +38,7 @@ import type {
 const SOUNDING_SOURCE = "station-soundings";
 const AIRPORT_SOURCE = "station-airports";
 const SYNOP_SOURCE = "station-synop";
+const AQ_SOURCE = "station-aq";
 
 const LAYERS = {
   sounding: "station-sounding",
@@ -50,6 +52,9 @@ const LAYERS = {
   synopPrincipal: "station-synop-principal",
   synopAutomatic: "station-synop-automatic",
   synopGauge: "station-synop-gauge",
+  /** Air-quality stations (`docs/aq.md`), every one at every zoom: two
+   * thousand over a continent is sparser than the surface stations. */
+  aq: "station-aq",
 } as const;
 
 const SYNOP_LAYERS = [LAYERS.synopGauge, LAYERS.synopAutomatic, LAYERS.synopPrincipal] as const;
@@ -64,6 +69,7 @@ export const STATION_CLICKABLE_LAYERS: readonly string[] = [
   LAYERS.synopPrincipal,
   LAYERS.synopAutomatic,
   LAYERS.synopGauge,
+  LAYERS.aq,
 ];
 
 /** Below this zoom the airports thin to the ones with a current TAF. The
@@ -89,6 +95,9 @@ export const AIRPORT_STALE_MS = 3 * 3600 * 1000;
 export const SOUNDING_STALE_MS = 15 * 3600 * 1000;
 /** A surface station reports every ten minutes to every hour. */
 export const SYNOP_STALE_MS = 2 * 3600 * 1000;
+/** An air-quality station posts an hourly mean that arrives up to an hour
+ * after the hour ends, so its newest value is routinely two hours old. */
+export const AQ_STALE_MS = 3 * 3600 * 1000;
 
 const FULL_OPACITY = 0.92;
 const STALE_OPACITY = 0.28;
@@ -112,6 +121,20 @@ const SURFACE_T_RAMP: readonly (readonly [number, string])[] = [
   [35, "#b2182b"],
 ];
 const NO_TEMPERATURE = "#98a2b0";
+
+/** The air-quality stations' PM2.5 scale, µg/m³: fixed steps of the
+ * concentration itself, light to dark. It is not an index and borrows no
+ * index's breakpoints or colours: the product publishes concentrations
+ * (docs/aq.md §2), and the card reads the value. A station without PM2.5
+ * is drawn hollow. */
+export const PM25_STEPS: readonly (readonly [number, string])[] = [
+  [0, "#d4ebb0"],
+  [10, "#f0d45a"],
+  [25, "#f09a3e"],
+  [50, "#d8482c"],
+  [100, "#9c1f4c"],
+  [200, "#5a1a5f"],
+];
 /** A sounding with no 500 hPa temperature is drawn hollow: the ring in
  * the map's ink and nothing inside it. */
 const HOLLOW = "rgba(0, 0, 0, 0)";
@@ -210,7 +233,8 @@ export function isStale(observed: number, time: number, limit: number): boolean 
 export type StationPointData =
   | { kind: "sounding"; station: SoundingStationEntry }
   | { kind: "airport"; station: AirportStation }
-  | { kind: "synop"; station: SynopStation; network: SynopNetwork };
+  | { kind: "synop"; station: SynopStation; network: SynopNetwork }
+  | { kind: "aq"; station: AqStation; network: AqNetwork };
 
 export function stationDataOf(feature: { properties?: unknown }): StationPointData | null {
   const properties = feature.properties as Record<string, unknown> | null | undefined;
@@ -293,6 +317,47 @@ export function synopFeatures(index: SynopIndex | null): FeatureCollection {
       });
     }),
   );
+}
+
+/** One circle per air-quality station, carrying its current PM2.5 where it
+ * has one and its newest time. */
+export function aqFeatures(index: AqIndex | null): FeatureCollection {
+  if (index === null) return collection([]);
+  return collection(
+    index.stations.map((station) => {
+      const pm25 = station.values.pm25 ?? null;
+      return point(station.lon, station.lat, {
+        id: station.id,
+        kind: "aq",
+        ...(pm25 === null ? {} : { pm25 }),
+        time: Date.parse(station.obsTime),
+        data: JSON.stringify({
+          kind: "aq",
+          station,
+          network: index.networks[station.network]!,
+        } satisfies StationPointData),
+      });
+    }),
+  );
+}
+
+/** The PM2.5 step a concentration falls in, as the map colours it. */
+export function pm25Color(value: number | null): string | null {
+  if (value === null) return null;
+  let color = PM25_STEPS[0]![1];
+  for (const [floor, step] of PM25_STEPS) if (value >= floor) color = step;
+  return color;
+}
+
+/** An air-quality station's fill: its PM2.5 step, or hollow without one. */
+export function aqColorExpression(): ExpressionSpecification {
+  const stops = PM25_STEPS.slice(1).flatMap(([value, color]) => [value, color]);
+  return [
+    "case",
+    ["has", "pm25"],
+    ["step", ["number", ["get", "pm25"]], PM25_STEPS[0]![1], ...stops] as ExpressionSpecification,
+    HOLLOW,
+  ];
 }
 
 /** A surface station's fill: its current temperature on the ramp, or the
@@ -379,8 +444,13 @@ export function stationSourceSpecs(data: {
   soundings: SoundingIndex | null;
   airports: AirportIndex | null;
   synop: SynopIndex | null;
+  aq?: AqIndex | null;
 }): { id: string; source: GeoJSONSourceSpecification }[] {
   return [
+    {
+      id: AQ_SOURCE,
+      source: { type: "geojson", data: aqFeatures(data.aq ?? null), promoteId: "id" },
+    },
     {
       id: SYNOP_SOURCE,
       source: { type: "geojson", data: synopFeatures(data.synop), promoteId: "id" },
@@ -398,8 +468,8 @@ export function stationSourceSpecs(data: {
 
 /** The circle layers, in the order they are added: each goes under the
  * same symbol layer, so the last one added draws on top — the surface
- * stations, the densest set, at the bottom, then the airports, and the
- * soundings, the sparsest, over both.
+ * stations, the densest set, at the bottom, the air-quality stations over
+ * them, then the airports, and the soundings, the sparsest, over all.
  *
  * The airports are two layers rather than one because `zoom` is not an
  * expression a filter may use: the ones with a current TAF are drawn at
@@ -420,6 +490,7 @@ export function stationLayerSpecs(state: {
   } as const;
   const soundingOpacity = freshnessOpacity(state.time, SOUNDING_STALE_MS);
   const synopOpacity = freshnessOpacity(state.time, SYNOP_STALE_MS);
+  const aqOpacity = freshnessOpacity(state.time, AQ_STALE_MS);
   const synopPaint = {
     "circle-radius": SYNOP_RADIUS_EXPRESSION,
     "circle-color": synopColorExpression(),
@@ -451,6 +522,19 @@ export function stationLayerSpecs(state: {
       source: SYNOP_SOURCE,
       filter: ["==", ["get", "rank"], 0],
       paint: { ...synopPaint },
+    },
+    {
+      id: LAYERS.aq,
+      type: "circle",
+      source: AQ_SOURCE,
+      paint: {
+        "circle-radius": SYNOP_RADIUS_EXPRESSION,
+        "circle-color": aqColorExpression(),
+        "circle-stroke-color": state.ink,
+        "circle-stroke-width": 1,
+        "circle-opacity": aqOpacity,
+        "circle-stroke-opacity": aqOpacity,
+      },
     },
     {
       id: LAYERS.airportMinor,
@@ -492,6 +576,7 @@ export class StationLayers {
   private soundings: SoundingIndex | null = null;
   private airports: AirportIndex | null = null;
   private synop: SynopIndex | null = null;
+  private aq: AqIndex | null = null;
   private hovered: { source: string; id: string } | null = null;
 
   constructor(private readonly map: MaplibreMap) {}
@@ -506,6 +591,7 @@ export class StationLayers {
       soundings: this.soundings,
       airports: this.airports,
       synop: this.synop,
+      aq: this.aq,
     })) {
       if (!map.getSource(id)) map.addSource(id, source);
     }
@@ -549,6 +635,11 @@ export class StationLayers {
     this.publish(SYNOP_SOURCE, synopFeatures(index));
   }
 
+  setAq(index: AqIndex | null): void {
+    this.aq = index;
+    this.publish(AQ_SOURCE, aqFeatures(index));
+  }
+
   /** The playhead's valid time, which is only ever what a mark's opacity
    * is measured against: the marks take no session and never gate it. */
   setTime(time: number | null): void {
@@ -570,6 +661,9 @@ export class StationLayers {
       this.map.setPaintProperty(id, "circle-opacity", synopOpacity);
       this.map.setPaintProperty(id, "circle-stroke-opacity", synopOpacity);
     }
+    const aqOpacity = freshnessOpacity(time, AQ_STALE_MS);
+    this.map.setPaintProperty(LAYERS.aq, "circle-opacity", aqOpacity);
+    this.map.setPaintProperty(LAYERS.aq, "circle-stroke-opacity", aqOpacity);
   }
 
   /** The mark under the pointer, which grows by a pixel; null clears it. */
@@ -582,7 +676,9 @@ export class StationLayers {
           ? { source: SOUNDING_SOURCE, id: data.station.id }
           : data.kind === "synop"
             ? { source: SYNOP_SOURCE, id: data.station.id }
-            : { source: AIRPORT_SOURCE, id: data.station.icao };
+            : data.kind === "aq"
+              ? { source: AQ_SOURCE, id: data.station.id }
+              : { source: AIRPORT_SOURCE, id: data.station.icao };
     const previous = this.hovered;
     if (previous?.source === next?.source && previous?.id === next?.id) return;
     if (previous) this.map.setFeatureState(previous, { hover: false });
@@ -595,7 +691,7 @@ export class StationLayers {
   remove(): void {
     if (!this.added) return;
     for (const id of STATION_LAYER_IDS) if (this.map.getLayer(id)) this.map.removeLayer(id);
-    for (const source of [SOUNDING_SOURCE, AIRPORT_SOURCE, SYNOP_SOURCE])
+    for (const source of [SOUNDING_SOURCE, AIRPORT_SOURCE, SYNOP_SOURCE, AQ_SOURCE])
       if (this.map.getSource(source)) this.map.removeSource(source);
     this.added = false;
     this.hovered = null;
