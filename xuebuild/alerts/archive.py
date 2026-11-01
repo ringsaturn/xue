@@ -209,7 +209,7 @@ def empty_catalog() -> dict[str, Any]:
 
 def _round_lines(directory: Path, index: dict[str, Any]) -> dict[str, dict[str, bytes]]:
     """A round's lines by network and id; a network whose file is missing
-    maps to None (its lines are unknown, not empty)."""
+    is absent (its lines are unknown, not empty)."""
     lines: dict[str, dict[str, bytes]] = {}
     for network in index["networks"]:
         path = directory / network["file"]["path"]
@@ -469,12 +469,22 @@ def _ensure_month(root: Path, origin: Origin, published: dict[str, dict[str, Any
     """A month the published catalog names and the disk lacks is pulled
     first, so the fold continues the published record."""
     directory = root / month_directory(month)
-    if (directory / INDEX_FILENAME).exists() or month not in published:
+    if month not in published or _complete(directory):
         return
     origin.pull(f"{month_directory(month)}/{INDEX_FILENAME}", published[month]["crc32"])
     index = json.loads((directory / INDEX_FILENAME).read_bytes())
     validate_month_index(index)
     origin.pull(f"{month_directory(month)}/{ALERTS_FILENAME}", index["alerts"]["crc32"])
+
+
+def _complete(directory: Path) -> bool:
+    """A month on disk is its index and the lines that index names; an index
+    whose lines a pull did not finish is no record to merge into."""
+    try:
+        index = json.loads((directory / INDEX_FILENAME).read_bytes())
+        return _crc32_file(directory / ALERTS_FILENAME) == index["alerts"]["crc32"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
 def _catalog_entry(root: Path, month: str) -> dict[str, Any]:
