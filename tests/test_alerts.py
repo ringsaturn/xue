@@ -16,7 +16,7 @@ from pathlib import Path
 
 from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
-from xuebuild.alerts import areas, eccc, jma, nws
+from xuebuild.alerts import archive, areas, eccc, jma, nws
 from xuebuild.alerts.build import build_product, load_previous_index
 from xuebuild.alerts.geometry import bbox, simplify
 from xuebuild.alerts.boxes import area_box, load_boxes
@@ -422,6 +422,66 @@ class SchemaTest(unittest.TestCase):
         validate_pointer(pointer)
         with self.assertRaises(AlertsProductError):
             validate_pointer(pointer | {"path": f"{round_directory(FIRST)}/index.json"})
+
+
+class ArchiveTest(unittest.TestCase):
+    def archived(self, archive_root: Path) -> tuple[dict, dict, list[dict]]:
+        scratch, output = built()
+        with scratch:
+            first = archive.archive_round(output, archive_root, FIRST, base_url=None)
+            second = archive.archive_round(output, archive_root, SECOND, base_url=None, compact=True)
+        directory = archive_root / archive.month_directory("2026-11")
+        records = [json.loads(line) for line in (directory / archive.ALERTS_FILENAME).read_bytes().splitlines()]
+        return first, second, records
+
+    def test_two_rounds_fold_into_one_month(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            first, second, records = self.archived(Path(root))
+            self.assertFalse(first["folded"])  # the same hour: journaled only
+            self.assertTrue(second["folded"])
+            self.assertEqual(second["written"][-1], "alerts/archive/catalog.json")
+            index = json.loads((Path(root) / archive.month_directory("2026-11") / "index.json").read_bytes())
+            archive.validate_month_index(index)
+            archive.validate_catalog(json.loads((Path(root) / "alerts/archive/catalog.json").read_bytes()))
+            self.assertFalse((Path(root) / archive.JOURNAL_FILENAME).exists())
+        by_id = {record["id"]: record for record in records}
+        self.assertEqual([record["id"] for record in records], sorted(by_id))
+        statement = "nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b"
+        self.assertEqual(
+            by_id[f"{statement}.001.1"]["ended"],
+            {"time": "2026-11-01T00:05:00Z", "reason": "replaced", "by": f"{statement}.002.1"},
+        )
+        self.assertEqual(by_id[f"{statement}.002.1"]["first"], "2026-11-01T00:05:00Z")
+        self.assertIsNone(by_id[f"{statement}.002.1"]["ended"])
+        self.assertEqual(by_id["jma:011000-14"]["first"], "2026-11-01T00:00:00Z")
+
+    def test_a_fold_is_a_function_of_the_records(self) -> None:
+        with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
+            self.archived(Path(one))
+            self.archived(Path(two))
+            relative = archive.month_directory("2026-11")
+            for name in (archive.ALERTS_FILENAME, "index.json"):
+                self.assertEqual((Path(one) / relative / name).read_bytes(), (Path(two) / relative / name).read_bytes())
+            scratch, output = built()
+            with scratch:
+                again = archive.archive_round(output, Path(one), SECOND, base_url=None, compact=True)
+            self.assertEqual(again["written"], [])  # journaling a round twice changes nothing
+
+    def test_folding_keeps_the_first_round_and_the_last_line(self) -> None:
+        line = {"id": "nws:x", "category": "other", "level": 1, "native": {"event": "E"}}
+        later = line | {"level": 2}
+        ended = {"time": "2026-11-01T00:10:00Z", "reason": "gone"}
+        record = archive.fold(None, [{"round": "2026-11-01T00:05:00Z", "id": "nws:x", "line": line}])
+        record = archive.fold(record, [{"round": "2026-11-01T00:10:00Z", "id": "nws:x", "ended": ended}])
+        self.assertEqual(record["ended"], ended)
+        record = archive.fold(record, [{"round": "2026-11-01T00:15:00Z", "id": "nws:x", "line": later}])
+        self.assertEqual((record["first"], record["ended"], record["alert"]["level"]), ("2026-11-01T00:05:00Z", None, 2))
+        self.assertIsNone(archive.fold(None, [{"round": "2026-11-01T00:10:00Z", "id": "nws:x", "ended": ended}]))
+
+    def test_a_fold_is_due_once_an_hour(self) -> None:
+        entries = [{"round": "2026-11-01T00:55:00Z"}]
+        self.assertFalse(archive.due(entries, datetime(2026, 11, 1, 0, 55, tzinfo=UTC)))
+        self.assertTrue(archive.due(entries, datetime(2026, 11, 1, 1, 0, tzinfo=UTC)))
 
 
 class AreasTest(unittest.TestCase):

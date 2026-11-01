@@ -50,7 +50,8 @@ and the other point products' pointers.
 A round is a **snapshot of what is in force at `issued`**: what each
 network lists as current, less what has expired by the round's minute. It
 carries no history; `ended[]` (§7) names what left since the previous
-round, for that round only.
+round, for that round only. The history is the monthly archive under
+`alerts/archive/` (§12).
 
 Two ways to read an alert's full record:
 

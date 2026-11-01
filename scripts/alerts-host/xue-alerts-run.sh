@@ -59,3 +59,22 @@ if [ "$(jq -r .pointer "$report")" = "null" ]; then
 fi
 make --no-print-directory upload-r2-alerts ROUND="$round" DRY_RUN="$DRY_RUN" AWS="$AWS"
 make --no-print-directory prune-r2-alerts ALERTS_KEEP="$KEEP" DRY_RUN="$DRY_RUN" AWS="$AWS"
+
+# The monthly archive (docs/alerts.md §12): the round's changes go to a
+# journal kept in $STATE, folded into the month files once an hour. The
+# round is already live, so a failure here only leaves the journal to the
+# next fold.
+archive=$STATE/alerts-archive
+archive_report=$STATE/alerts-archive-report.json
+if [ -n "$DRY_RUN" ]; then
+  echo "dry run: the archive is not journaled"
+elif .venv/bin/python -m xuebuild -v alerts-archive --round "$round" --archive-dir "$archive" > "$archive_report"; then
+  jq -c '{round, journaled, folded, written: (.written | length), removed}' "$archive_report"
+  if [ "$(jq '.written | length' "$archive_report")" -gt 0 ]; then
+    make --no-print-directory upload-r2-alerts-archive ALERTS_ARCHIVE_DIR="$archive" \
+      ALERTS_ARCHIVE_REPORT="$archive_report" AWS="$AWS" \
+      || echo "warning: the archive upload failed; the next fold lists the files again"
+  fi
+else
+  echo "warning: alerts-archive failed; the journal waits for the next round"
+fi

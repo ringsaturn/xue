@@ -56,6 +56,7 @@ from .fire.schema import floor_round as floor_fire_round
 from .fire.schema import parse_round as parse_fire_round
 from .fire.schema import WINDOW_HOURS as FIRE_WINDOW_HOURS
 from .fire.sensors import SOURCES as FIRE_SOURCES
+from .alerts.archive import archive_round as archive_alerts_round
 from .alerts.areas import SETS as ALERTS_AREA_SETS
 from .alerts.areas import build_area_set as build_alerts_area_set
 from .alerts.build import build_product as build_alerts_product
@@ -710,6 +711,25 @@ def parser() -> argparse.ArgumentParser:
     )
     alerts_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     alerts_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists, and fetch it again")
+
+    alerts_archive = commands.add_parser(
+        "alerts-archive",
+        help="journal a published alerts round into the monthly archive and, at most once an hour, fold the journal "
+        "into the month files (docs/alerts.md §12); prints the files to upload, in order",
+    )
+    alerts_archive.add_argument("--round", required=True, help="the round just published, YYYYMMDDHHMM")
+    alerts_archive.add_argument("--output-dir", type=Path, default=Path("web/public/data"), help="where the round and the one before it are")
+    alerts_archive.add_argument(
+        "--archive-dir",
+        type=Path,
+        default=Path("data/alerts-archive"),
+        help="the publisher's persistent archive state: the journal and alerts/archive/ as published",
+    )
+    alerts_archive.add_argument(
+        "--base-url", default=ALERTS_DATA_ORIGIN, help="the data origin the published catalog and missing months are read from"
+    )
+    alerts_archive.add_argument("--offline", action="store_true", help="read no published catalog; the archive directory's own stands for it")
+    alerts_archive.add_argument("--compact", action="store_true", help="fold the journal now, whatever the hour")
 
     alerts_areas = commands.add_parser(
         "alerts-areas",
@@ -1495,6 +1515,15 @@ def main(argv: list[str] | None = None) -> int:
                 previous_index=previous,
                 force=arguments.force,
                 areas_base_url=None if arguments.offline else arguments.areas_base_url,
+            )
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        elif arguments.command == "alerts-archive":
+            report = archive_alerts_round(
+                arguments.output_dir,
+                arguments.archive_dir,
+                parse_alerts_round(arguments.round),
+                base_url=None if arguments.offline else arguments.base_url,
+                compact=arguments.compact,
             )
             print(json.dumps(report, indent=2, ensure_ascii=False))
         elif arguments.command == "alerts-areas":

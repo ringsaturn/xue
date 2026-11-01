@@ -417,8 +417,10 @@ prune-r2-aq: ## Delete aq rounds beyond the newest AQ_KEEP
 ALERTS_ROUND = $(if $(ROUND),$(ROUND),now)
 ALERTS_KEEP ?= 36
 ALERTS_AREAS_DIR ?= web/public/data/alerts-areas
+ALERTS_ARCHIVE_DIR ?= data/alerts-archive
+ALERTS_ARCHIVE_REPORT ?= alerts-archive-report.json
 
-.PHONY: alerts-build live-alerts-index upload-r2-alerts prune-r2-alerts upload-r2-alerts-areas
+.PHONY: alerts-build live-alerts-index upload-r2-alerts prune-r2-alerts upload-r2-alerts-archive upload-r2-alerts-areas
 
 alerts-build: ## Build the weather warnings snapshot for ROUND (docs/alerts.md)
 	$(PYTHON) -m xuebuild alerts-build --round $(ALERTS_ROUND) $(FORCE)
@@ -479,6 +481,23 @@ upload-r2-alerts: ## Upload an alerts round, then take it live
 
 prune-r2-alerts: ## Delete alerts rounds beyond the newest ALERTS_KEEP
 	$(call point_prune,alerts,$(ALERTS_KEEP),round)
+
+# The archive (docs/alerts.md §12) rewrites the month in progress in place
+# under a new CRC32; `written` in the alerts-archive report lists each file
+# before the file naming it, the catalog last, so a reader following the
+# catalog never meets a CRC32 R2 does not have yet. Paths are relative to
+# ALERTS_ARCHIVE_DIR, which mirrors the data root.
+upload-r2-alerts-archive: ## Upload the alerts archive files an alerts-archive run wrote (ALERTS_ARCHIVE_REPORT)
+	@set -e; [ -f "$(ALERTS_ARCHIVE_REPORT)" ] || { echo "no $(ALERTS_ARCHIVE_REPORT)"; exit 1; }; \
+	for relative in $$(jq -r '.written[]' "$(ALERTS_ARCHIVE_REPORT)"); do \
+		case "$$relative" in \
+			*/catalog.json) type=application/json; cache="no-cache" ;; \
+			*.jsonl) type=application/x-ndjson; cache="public, max-age=3600" ;; \
+			*) type=application/json; cache="public, max-age=3600" ;; \
+		esac; \
+		$(S3) cp "$(ALERTS_ARCHIVE_DIR)/$$relative" "$(R2_ROOT)/$$relative" --no-progress $(DRY_RUN) \
+			--content-type $$type --cache-control "$$cache"; \
+	done
 
 # A boundary set is immutable under its versioned name and outlives every
 # round that names it, so it goes up once, by hand, after `xue alerts-areas`
