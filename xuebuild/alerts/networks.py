@@ -20,7 +20,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from . import eccc, jma, nws
 from .alert import NetworkRead
-from .schema import areas_path
+from .schema import areas_bbox_filename, areas_bbox_path, areas_path
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,14 @@ class AreaSet:
     byte_length: int
     crc32: str
     layers: tuple[str, ...]
+    bbox_byte_length: int
+    bbox_crc32: str
+    """``<set>.<version>.bbox.json``, every code's box, written beside the
+    tiles by ``xue alerts-areas`` and pinned the same way."""
+
+    @property
+    def bbox_filename(self) -> str:
+        return areas_bbox_filename(self.set, self.version)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -39,6 +47,11 @@ class AreaSet:
             "byteLength": self.byte_length,
             "crc32": self.crc32,
             "layers": list(self.layers),
+            "bbox": {
+                "path": areas_bbox_path(self.set, self.version),
+                "byteLength": self.bbox_byte_length,
+                "crc32": self.bbox_crc32,
+            },
         }
 
 
@@ -58,6 +71,9 @@ class Network:
     in the previous round's index, or None."""
     read: Callable[[Path, datetime, dict[str, SourceStatus]], NetworkRead]
     areas: AreaSet | None
+    area_layers: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    """The layers of ``areas`` a line's codes resolve against, in the order
+    they are looked up (``docs/alerts.md`` §9)."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -76,6 +92,8 @@ NWS_ZONES = AreaSet(
     byte_length=8907673,
     crc32="3f5d3096",
     layers=("zone", "county", "marine", "offshore", "fire"),
+    bbox_byte_length=524181,
+    bbox_crc32="e6ac20a5",
 )
 """The AWIPS public zones, counties, coastal and offshore marine zones and
 fire weather zones effective 2026-04-16 (``z_16ap26``, ``c_16ap26``,
@@ -87,11 +105,12 @@ JMA_CLASS20 = AreaSet(
     byte_length=2795153,
     crc32="43b3b6eb",
     layers=("class20",),
+    bbox_byte_length=82289,
+    bbox_crc32="c361aa9d",
 )
 """The agency's 予報区等GISデータ, 市町村等（気象警報等）, released
-2026-02-26. Built and measured, but not named by the ``jma`` network yet:
-whether a simplified derivative may be redistributed is still being
-checked (``docs/alerts.md`` §10.2)."""
+2026-02-26, simplified and tiled by xue; reused under the Public Data
+License v1.0 with the credit ``docs/alerts.md`` §9.2 gives."""
 
 NWS = Network(
     id=nws.NETWORK,
@@ -104,6 +123,7 @@ NWS = Network(
     fetch=nws.fetch,
     read=nws.read,
     areas=NWS_ZONES,
+    area_layers=nws.area_layers,
 )
 
 JMA = Network(
@@ -116,7 +136,8 @@ JMA = Network(
     sources=(jma.SOURCE,),
     fetch=jma.fetch,
     read=jma.read,
-    areas=None,
+    areas=JMA_CLASS20,
+    area_layers=lambda line: ("class20",),
 )
 
 ECCC = Network(

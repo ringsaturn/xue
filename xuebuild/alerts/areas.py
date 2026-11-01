@@ -14,13 +14,17 @@ simplify, keep only the code attribute) and ``tippecanoe`` (tile to
 PMTiles), with a pure-Python pass between them that turns each layer's
 attributes into the one feature property ``id`` and holds the layers a
 continental view does not need (counties, fire zones) back to their
-minimum zoom.
+minimum zoom. Beside the tiles it writes ``<set>.<version>.bbox.json``,
+every code's bounding box per layer, from the unsimplified boundaries:
+what the build puts in an index row for an alert that names areas rather
+than drawing them.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -30,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .schema import AlertsProductError, areas_filename, crc32_hex
+from .schema import COORDINATE_DECIMALS, AlertsProductError, areas_bbox_filename, areas_filename, crc32_hex, encode_json
 
 LOG = logging.getLogger(__name__)
 
@@ -163,6 +167,59 @@ def _features(path: Path, layer: LayerSpec) -> Iterator[tuple[str, dict[str, Any
             yield code, geometry
 
 
+def _positions(geometry: dict[str, Any]) -> Iterator[tuple[float, float]]:
+    def walk(value: Any) -> Iterator[tuple[float, float]]:
+        if isinstance(value, list) and len(value) >= 2 and all(isinstance(number, (int, float)) for number in value[:2]):
+            yield float(value[0]), float(value[1])
+        elif isinstance(value, list):
+            for item in value:
+                yield from walk(item)
+
+    yield from walk(geometry.get("coordinates"))
+
+
+def _outward(box: list[float]) -> list[float]:
+    """A box to the index's four decimals, rounded outward so it still
+    holds the area: plain minimum and maximum, like an index row's."""
+    scale = 10**COORDINATE_DECIMALS
+    west, south, east, north = box
+    return [
+        max(-180.0, math.floor(west * scale) / scale),
+        max(-90.0, math.floor(south * scale) / scale),
+        min(180.0, math.ceil(east * scale) / scale),
+        min(90.0, math.ceil(north * scale) / scale),
+    ]
+
+
+def layer_boxes(datasource: str, layer: LayerSpec, area_set: AreaSet, scratch: Path) -> dict[str, list[float]]:
+    """Every code of a layer → the bounding box of all its features, read
+    from the boundaries as released (reprojected, not simplified), so a
+    simplified tile never lies outside the box."""
+    raw = scratch / f"{layer.name}.bbox.geojsonl"
+    command = ["ogr2ogr", "-f", "GeoJSONSeq", "-t_srs", "EPSG:4326"]
+    if area_set.source_srs:
+        command += ["-s_srs", area_set.source_srs]
+    command += ["-select", ",".join(layer.fields), str(raw), datasource]
+    _run(command)
+    boxes: dict[str, list[float]] = {}
+    for code, geometry in _features(raw, layer):
+        for lon, lat in _positions(geometry):
+            box = boxes.get(code)
+            if box is None:
+                boxes[code] = [lon, lat, lon, lat]
+            else:
+                box[0], box[1], box[2], box[3] = min(box[0], lon), min(box[1], lat), max(box[2], lon), max(box[3], lat)
+    raw.unlink()
+    return {code: _outward(boxes[code]) for code in sorted(boxes)}
+
+
+def boxes_payload(set_id: str, version: str, layers: dict[str, dict[str, list[float]]]) -> bytes:
+    """``<set>.<version>.bbox.json``: ``{"set", "version", "layers": {layer:
+    {code: [west, south, east, north]}}}``, layers in the set's order and
+    codes sorted, so the same release gives the same bytes."""
+    return encode_json({"set": set_id, "version": version, "layers": layers})
+
+
 def write_layer(datasource: str, layer: LayerSpec, area_set: AreaSet, scratch: Path) -> tuple[Path, int, int]:
     """One layer → a GeoJSONSeq file of ``{"id": code}`` features ready
     for tippecanoe; returns it, its feature count and its distinct codes."""
@@ -201,13 +258,16 @@ def build_area_set(set_id: str, source: Path, version: str, output: Path) -> dic
         raise AlertsProductError("tippecanoe is not on PATH")
     output.mkdir(parents=True, exist_ok=True)
     destination = output / areas_filename(set_id, version)
+    boxes_destination = output / areas_bbox_filename(set_id, version)
     layers: list[dict[str, Any]] = []
+    boxes: dict[str, dict[str, list[float]]] = {}
     with tempfile.TemporaryDirectory(prefix=f"alerts-areas-{set_id}-") as scratch_name:
         scratch = Path(scratch_name)
         inputs: list[str] = []
         for layer in area_set.layers:
             datasource = find_datasource(source, layer, area_set)
             path, count, codes = write_layer(datasource, layer, area_set, scratch)
+            boxes[layer.name] = layer_boxes(datasource, layer, area_set, scratch)
             layers.append({"layer": layer.name, "source": datasource, "features": count, "codes": codes, "minzoom": layer.minzoom})
             inputs.append(f"--named-layer={layer.name}:{path.name}")
         # tippecanoe records its command line in the file's metadata: run
@@ -235,11 +295,14 @@ def build_area_set(set_id: str, source: Path, version: str, output: Path) -> dic
         )
         shutil.move(scratch / tiles, destination)
     payload = destination.read_bytes()
+    boxes_bytes = boxes_payload(set_id, version, boxes)
+    boxes_destination.write_bytes(boxes_bytes)
     return {
         "set": set_id,
         "version": version,
         "path": str(destination),
         "byteLength": len(payload),
         "crc32": crc32_hex(payload),
+        "bbox": {"path": str(boxes_destination), "byteLength": len(boxes_bytes), "crc32": crc32_hex(boxes_bytes)},
         "layers": layers,
     }

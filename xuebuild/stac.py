@@ -396,7 +396,12 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "name": "Japan Meteorological Agency",
                     "description": (
                         "Warnings and advisories as the agency's website publishes them; 出典：気象庁ホームページ. "
-                        "Reused under the Public Data License v1.0."
+                        "Reused under the Public Data License v1.0. The warning area boundaries: "
+                        "出典：気象庁「予報区等GISデータ」, Public Data License 1.0; 加工：簡略化・PMTiles 化 by xue, "
+                        "not published by the agency. この地図の作成に当たっては、国土地理院長の承認を得て、"
+                        "同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を"
+                        "使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・"
+                        "令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）"
                     ),
                     "roles": ["producer", "licensor"],
                     "url": "https://www.jma.go.jp/bosai/warning/",
@@ -424,6 +429,18 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "href": "https://www.jma.go.jp/jma/kishou/info/coment.html",
                     "type": "text/html",
                     "title": "JMA website terms of use: Public Data License v1.0, source credit required",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://www.digital.go.jp/resources/open_data/public_data_license_v1.0",
+                    "type": "text/html",
+                    "title": "Public Data License 1.0 (公共データ利用規約 第1.0版)",
+                },
+                {
+                    "rel": "via",
+                    "href": "https://www.data.jma.go.jp/developer/gis.html",
+                    "type": "text/html",
+                    "title": "JMA 予報区等GISデータ: the source of the jma-class20 boundaries, with the GSI approval notice",
                 },
                 {
                     "rel": "license",
@@ -1990,10 +2007,13 @@ def _point_product_positions(
             for row in payload["stations"]
         ]
     if product == "alerts":
-        # Most warnings name area codes rather than drawing a polygon, and
-        # the services between them cover most of a hemisphere, so a round
-        # with any warning states the whole world, as a fire round does.
-        return [(-180.0, -90.0), (180.0, 90.0)] if index["alerts"] else []
+        # Each row's box: the warning's polygon, or the union of its area
+        # codes' boxes. A round whose warnings have no box at all (an index
+        # written before the boundary boxes) states the whole world.
+        boxed = [row for row in index["alerts"] if row[8] is not None]
+        if not boxed:
+            return [(-180.0, -90.0), (180.0, 90.0)] if index["alerts"] else []
+        return [(float(row[8]), float(row[9])) for row in boxed] + [(float(row[10]), float(row[11])) for row in boxed]
     if product == "nexrad":
         return [(float(row[3]), float(row[2])) for row in index["sites"]]
     if product == "fire":

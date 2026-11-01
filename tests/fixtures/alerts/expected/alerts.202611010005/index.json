@@ -22,7 +22,12 @@
     "path": "../alerts-areas/nws-zones.20260416.pmtiles",
     "byteLength": 8907673,
     "crc32": "3f5d3096",
-    "layers": ["zone", "county", "marine", "offshore", "fire"]
+    "layers": ["zone", "county", "marine", "offshore", "fire"],
+    "bbox": {
+     "path": "../alerts-areas/nws-zones.20260416.bbox.json",
+     "byteLength": 524181,
+     "crc32": "e6ac20a5"
+    }
    }
   },
   {
@@ -38,7 +43,19 @@
     "byteLength": 1978,
     "crc32": "c7990fe6"
    },
-   "areas": null
+   "areas": {
+    "set": "jma-class20",
+    "version": "20260226",
+    "path": "../alerts-areas/jma-class20.20260226.pmtiles",
+    "byteLength": 2795153,
+    "crc32": "43b3b6eb",
+    "layers": ["class20"],
+    "bbox": {
+     "path": "../alerts-areas/jma-class20.20260226.bbox.json",
+     "byteLength": 82289,
+     "crc32": "c361aa9d"
+    }
+   }
   },
   {
    "id": "eccc",
@@ -62,13 +79,13 @@
  },
  "alerts": [
   ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 2339],
-  ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, null, null, null, null, 0, 642],
-  ["jma:011000-26", 1, "snow-ice", 2, "着雪注意報", "2026-10-31T06:20:00Z", null, null, null, null, null, null, 643, 651],
-  ["jma:150000-29", 1, "landslide", 2, "レベル２土砂災害注意報", "2026-10-31T11:31:00Z", null, null, null, null, null, null, 1295, 682],
-  ["nws:urn:oid:2.49.0.1.840.0.beefc58017b3da8b25350b5a3960a5dc0e77103f2dc1.001.1", 0, "snow-ice", 2, "Winter Storm Watch", "2026-11-01T00:04:00Z", "2026-11-01T12:00:00Z", "2026-11-02T06:00:00Z", null, null, null, null, 0, 1119],
-  ["nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.002.1", 0, "other", 1, "Special Weather Statement", "2026-11-01T00:02:00Z", "2026-10-31T23:20:00Z", "2026-11-01T01:00:00Z", null, null, null, null, 1120, 1268],
+  ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 0, 642],
+  ["jma:011000-26", 1, "snow-ice", 2, "着雪注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 643, 651],
+  ["jma:150000-29", 1, "landslide", 2, "レベル２土砂災害注意報", "2026-10-31T11:31:00Z", null, null, 137.6349, 36.7661, 139.1243, 37.7103, 1295, 682],
+  ["nws:urn:oid:2.49.0.1.840.0.beefc58017b3da8b25350b5a3960a5dc0e77103f2dc1.001.1", 0, "snow-ice", 2, "Winter Storm Watch", "2026-11-01T00:04:00Z", "2026-11-01T12:00:00Z", "2026-11-02T06:00:00Z", -104.0467, 45.9445, -101.9973, 46.6312, 0, 1119],
+  ["nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.002.1", 0, "other", 1, "Special Weather Statement", "2026-11-01T00:02:00Z", "2026-10-31T23:20:00Z", "2026-11-01T01:00:00Z", -165.3873, 66.9658, -159.8018, 68.2946, 1120, 1268],
   ["nws:urn:oid:2.49.0.1.840.0.f00d163a97442f0ed098453e3d2bc21d007daedff5f8.001.1", 0, "thunderstorm", 4, "Tornado Warning", "2026-10-31T23:50:00Z", "2026-10-31T23:50:00Z", "2026-11-01T00:30:00Z", -111.91, 33.43, -111.69, 33.52, 2389, 1982],
-  ["nws:urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1", 0, "marine", 2, "Small Craft Advisory", "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z", null, null, null, null, 4372, 1327]
+  ["nws:urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1", 0, "marine", 2, "Small Craft Advisory", "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z", -76.5116, 36.8323, -76.2653, 37.0524, 4372, 1327]
  ],
  "ended": [
   ["eccc:700460001437647014202610310502_fea1-2388", 2, "expired"],

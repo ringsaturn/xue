@@ -41,7 +41,8 @@ and the other point products' pointers.
   hours (`make prune-r2-alerts`, `ALERTS_KEEP=36`).
 - `alerts-areas/<set>.<version>.pmtiles` are the boundary sets (§9): one
   file per upstream release, immutable under its versioned name and kept
-  for as long as any round may name it. They are not part of a round and
+  for as long as any round may name it, each with its codes' boxes beside
+  it in `<set>.<version>.bbox.json`. They are not part of a round and
   are never pruned with one.
 - Paths inside `index.json` are relative to it; request each as
   `<path>?v=<crc32>` with the CRC the index carries.
@@ -282,8 +283,10 @@ chain an event's messages across rounds.
      "areas": {"set": "nws-zones", "version": "20260416",
                "path": "../alerts-areas/nws-zones.20260416.pmtiles",
                "byteLength": 8907673, "crc32": "3f5d3096",
-               "layers": ["zone", "county", "marine", "offshore", "fire"]}},
-    {"id": "jma", …, "areas": null},
+               "layers": ["zone", "county", "marine", "offshore", "fire"],
+               "bbox": {"path": "../alerts-areas/nws-zones.20260416.bbox.json",
+                        "byteLength": 524181, "crc32": "e6ac20a5"}}},
+    {"id": "jma", …, "areas": {"set": "jma-class20", "version": "20260226", …}},
     {"id": "eccc", …, "areas": null}
   ],
   "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold",
@@ -313,7 +316,8 @@ chain an event's messages across rounds.
   boundary set the network's area codes resolve against (§9), or `null`.
   `areas.path` is relative to the index and always
   `../alerts-areas/<set>.<version>.pmtiles`; `layers` are the layer names
-  in that file.
+  in that file; `bbox` (optional) is the set's box file (§9),
+  `../alerts-areas/<set>.<version>.bbox.json`, with its length and CRC32.
 - `categories` is §2's list, in that order.
 - `mapping` (optional) is `{"tables": <crc32>}`, the CRC32 of the bytes of
   `xuebuild/alerts/tables.json`, the mapping (§3) that filed this round's
@@ -335,8 +339,13 @@ chain an event's messages across rounds.
   stops being in force, ISO 8601 UTC, or `null` where the network states
   none (JMA states neither: a Japanese warning is in force until lifted).
   The four bounds are the bounding box of the line's `geometry` to four
-  decimals (plain minimum and maximum of the coordinates), or four nulls
-  when the alert has no polygon of its own. `offset` and `length` are the
+  decimals (plain minimum and maximum of the coordinates); for an alert
+  with no polygon of its own, the union of its `areas` codes' boxes from
+  the network's boundary set (§9); four nulls when it has neither — no
+  polygon and no boundary set, or a code the set does not hold (a box
+  that left part of the area out would hide the alert from a reader
+  asking about that part). Like any plain minimum and maximum, the box of
+  an area that crosses the antimeridian spans every longitude. `offset` and `length` are the
   byte span of the alert's line in its network's file, the JSON object
   alone; the spans of one network's alerts are in row order, do not
   overlap, and lie inside that file's `byteLength`.
@@ -347,8 +356,8 @@ chain an event's messages across rounds.
   publisher sets), or `null` for a build that was not told (an offline
   build or the golden, which stays reproducible that way).
 
-The index is what a map layer reads: every alert's category, level, times
-and box, about 90 KB (11 KB gzipped) for the 431 alerts in force on
+The index is what a map layer reads, and what a point or box query
+filters on: every alert's category, level, times and box, about 90 KB (11 KB gzipped) for the 431 alerts in force on
 2026-10-31 15:20 UTC, and no text.
 
 ## 6. `<network>.jsonl`
@@ -486,6 +495,24 @@ file and a new pin in the network table, and older rounds keep naming the
 file they were built against, so a round and its boundaries never
 disagree.
 
+Beside each set, `<set>.<version>.bbox.json` holds every code's box:
+
+```json
+{"set": "nws-zones", "version": "20260416",
+ "layers": {"zone": {"AKZ317": [-143.8934, 58.8091, -137.4999, 60.5219], …}, "county": {…}, …}}
+```
+
+one object per layer in the set's order, codes sorted, each box
+`[west, south, east, north]` over all of the code's features as released
+(reprojected, not simplified), rounded outward to four decimals so it
+holds the area. It is pinned by length and CRC32 in the network table
+like the tiles. The build reads it from the raw directory's
+`alerts-areas/`, fetching it once from the public data origin under
+`?v=<crc32>` when it is missing there; a build that cannot have it (an
+offline build without it, the origin down) leaves the boxes of the rows
+that need it null and publishes anyway. How a network's codes resolve
+against the layers is in its section (§9.1, §9.2).
+
 Sets are built by hand, not by the five-minute build:
 
 ```sh
@@ -501,9 +528,10 @@ size or feature limit, tiny polygons kept so every code can be hit), with
 a Python pass between them that builds each feature's `id` and holds the
 county and fire-zone layers back to z6. tippecanoe runs on relative names
 inside a scratch directory, so the same release builds the same bytes and
-the pinned CRC32 can be reproduced. It prints the file's length and CRC32
-for the network table (`xuebuild/alerts/networks.py`); the upload refuses
-to replace an existing object of a different length.
+the pinned CRC32 can be reproduced. It writes the box file beside the tiles
+and prints both files' lengths and CRC32s for the network table
+(`xuebuild/alerts/networks.py`); the upload sends both and refuses to
+replace an existing object of a different length.
 
 Low-zoom thinning is tuned to two view budgets, measured with
 `pmtiles extract <set> <out> --bbox=… --minzoom=z --maxzoom=z` (the size
@@ -531,16 +559,21 @@ current and the next release side by side under their effective date:
 | `offshore` | offshore marine zones `oz16ap26` | `ID` (`PZZ900`) | 0–9 | 130 | 130 |
 | `fire` | fire weather zones `fz16ap26` | `STATE` + `Z` + `ZONE` | 6–9 | 3 683 | 3 603 |
 
-`nws-zones.20260416.pmtiles`: 8 907 673 bytes, CRC32 `3f5d3096`, built in
-21 s. Other views: CONUS z3 169 278 bytes, the southern Plains at z6
-(`-104,33,-94,40`) 71 571, a 1° box around Oklahoma City at z9 5 609.
+`nws-zones.20260416.pmtiles`: 8 907 673 bytes, CRC32 `3f5d3096`, built
+in 21 s; `nws-zones.20260416.bbox.json`: 524 181 bytes, CRC32
+`e6ac20a5`. Other views: CONUS z3 169 278 bytes, the southern Plains at
+z6 (`-104,33,-94,40`) 71 571, a 1° box around Oklahoma City at z9 5 609.
 
 Fire weather zones share the public zones' `Z` code space but not their
 shapes: a code resolves against the `fire` layer for the fire-weather
 events (`Red Flag Warning`, `Fire Weather Watch`, `Extreme Fire Danger`,
 `Fire Warning`) and against `zone`, `county`, `marine` and `offshore`
 otherwise (the four do not share codes). The high seas areas (`hz…`)
-are not UGC-coded and not in the set.
+are not UGC-coded and not in the set. Boxes resolve the same way: a
+fire-weather event's codes against `fire`, any other's against `zone`,
+`county`, `marine` and `offshore` in that order. Three marine zones and an
+Aleutian county cross the antimeridian, so their boxes span every
+longitude.
 
 ### 9.2 `jma-class20`
 
@@ -550,14 +583,24 @@ one layer, `class20`, id `regioncode` (seven digits, the class20 codes of
 the warning map), zooms 0–10, 1 805 features and codes, read as JGD2011
 (EPSG:6668; the release ships without a `.prj`).
 `jma-class20.20260226.pmtiles`: 2 795 153 bytes, CRC32 `43b3b6eb`, built
-in 15 s. Other views: all Japan z4 83 439 bytes, Kantō at z8
-(`138.5,35,140.5,36.5`) 52 003, central Tokyo at z10 32 221.
+in 15 s; `jma-class20.20260226.bbox.json`: 82 289 bytes, CRC32
+`c361aa9d`. Other views: all Japan z4 83 439 bytes, Kantō at z8
+(`138.5,35,140.5,36.5`) 52 003, central Tokyo at z10 32 221. A line's
+codes resolve against `class20`.
 
-The set is built and measured but **not named by the `jma` network**
-(`areas: null`): the agency's GIS page notes the survey approval its maps
-rest on, and whether a simplified derivative may be redistributed under
-the Public Data License alone is being checked. Until then a reader
-resolves JMA's class20 codes against its own copy of the release.
+Terms. The release is reused under the agency's website terms (the
+Public Data License v1.0,
+<https://www.jma.go.jp/jma/kishou/info/coment.html>). Wherever the set or
+a map drawn from it is shown or redistributed it carries:
+
+- 出典：気象庁「予報区等GISデータ」(<https://www.data.jma.go.jp/developer/gis.html>),
+  公共データ利用規約 第1.0版 (Public Data License 1.0,
+  <https://www.digital.go.jp/resources/open_data/public_data_license_v1.0>);
+- 加工：簡略化・PMTiles 化 by xue — the set is simplified and converted to
+  vector tiles by xue, and is not published by the Japan Meteorological
+  Agency;
+- the agency's notice of the Geospatial Information Authority of Japan's
+  approval, as its GIS page gives it: この地図の作成に当たっては、国土地理院長の承認を得て、同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）
 
 ## 10. Networks
 
@@ -653,8 +696,7 @@ in:
 - `sent`: the report's `reportDatetime`; `onset` and `expires`: `null`.
 - `texts.ja.headline`: the report's `headlineText`, the only text the
   map carries (it covers the office's whole report, not this kind alone).
-- `areas`: the class20 codes, sorted; drawn by `jma-class20` (§9.2) once
-  the network names it.
+- `areas`: the class20 codes, sorted; drawn by `jma-class20` (§9.2).
 - `url`: the office's page on the warning map; `sender`: the
   `publishingOffice`.
 
@@ -665,7 +707,9 @@ under the Public Data License v1.0 with the source credited —
 「出典：気象庁ホームページ」 — and, for edited content, a statement that it
 was edited; it must not be presented as the agency's own publication
 (<https://www.jma.go.jp/jma/kishou/info/coment.html>). The lines are
-edited content (the agency's map reorganised by office and kind).
+edited content (the agency's map reorganised by office and kind). The
+boundary set the network names carries its own credit and the survey
+approval notice (§9.2).
 `license` `PDL-1.0`, `licenseUrl`
 `https://www.jma.go.jp/jma/kishou/info/coment.html`, attribution
 `出典：気象庁ホームページ (Japan Meteorological Agency)`, url
@@ -711,7 +755,8 @@ url `https://weather.gc.ca/`.
 
 `xuebuild/alerts/schema.py` validates every file as it is written, and
 `tests/test_alerts.py` holds two consecutive rounds built from the fetched
-fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`) to the
+fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`, with
+the boundary sets' box files in `alerts-areas/`) to the
 committed golden (`tests/fixtures/alerts/expected/`), regenerated by
 `tests/prepare_alerts_golden.py`. The second round exercises every
 `ended[]` reason (an NWS `Update` for `replaced`), an NWS cancel, a stale JMA map carried over and a failed

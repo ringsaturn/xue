@@ -27,6 +27,11 @@ rounds:
   fetch failed (``fetch.json``), so the network carries over and loses the
   fog advisory to its expiry.
 
+``alerts-areas/`` holds the two boundary sets' box files exactly as
+published (the CRC32s ``xuebuild/alerts/networks.py`` pins), where a
+build's raw directory caches them, so the area-coded rows get their boxes
+offline.
+
 This script builds the first round, then the second on top of it, offline
 and with fixed generation times, and writes both under
 ``tests/fixtures/alerts/expected/`` for ``tests/test_alerts.py`` to hold

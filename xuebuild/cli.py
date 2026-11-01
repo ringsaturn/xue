@@ -59,6 +59,7 @@ from .fire.sensors import SOURCES as FIRE_SOURCES
 from .alerts.areas import SETS as ALERTS_AREA_SETS
 from .alerts.areas import build_area_set as build_alerts_area_set
 from .alerts.build import build_product as build_alerts_product
+from .alerts.boxes import DATA_ORIGIN as ALERTS_DATA_ORIGIN
 from .alerts.build import load_previous_index as load_previous_alerts_index
 from .alerts.fetch import fetch_round as fetch_alerts_round
 from .alerts.networks import NETWORKS as ALERTS_NETWORKS
@@ -700,6 +701,12 @@ def parser() -> argparse.ArgumentParser:
         help="the previous round's index.json, against which ended[] is measured and from whose network files a failed "
         "network carries over (default: the one the local latest-alerts.json names, if any; `make live-alerts-index` "
         "fetches the live one and its files)",
+    )
+    alerts_build.add_argument(
+        "--areas-base-url",
+        default=ALERTS_DATA_ORIGIN,
+        help="the data origin a boundary set's bbox file is fetched from when the raw directory's alerts-areas/ "
+        "lacks it (not with --offline)",
     )
     alerts_build.add_argument("--offline", action="store_true", help="build from what is already fetched; touch no network")
     alerts_build.add_argument("--force", action="store_true", help="rebuild a round whose index exists, and fetch it again")
@@ -1487,6 +1494,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.output_dir,
                 previous_index=previous,
                 force=arguments.force,
+                areas_base_url=None if arguments.offline else arguments.areas_base_url,
             )
             print(json.dumps(report, indent=2, ensure_ascii=False))
         elif arguments.command == "alerts-areas":

@@ -482,25 +482,28 @@ prune-r2-alerts: ## Delete alerts rounds beyond the newest ALERTS_KEEP
 
 # A boundary set is immutable under its versioned name and outlives every
 # round that names it, so it goes up once, by hand, after `xue alerts-areas`
-# built it; an object already there under the name must be the same length,
-# and is never replaced. Pin the length and CRC32 in
-# xuebuild/alerts/networks.py only after this succeeded.
-upload-r2-alerts-areas: ## Upload a warning boundary set by hand, SET=nws-zones VERSION=YYYYMMDD
+# built it: the tiles and the codes' boxes beside them. An object already
+# there under the name must be the same length, and is never replaced. Pin
+# both lengths and CRC32s in xuebuild/alerts/networks.py only after this
+# succeeded.
+upload-r2-alerts-areas: ## Upload a warning boundary set and its boxes by hand, SET=nws-zones VERSION=YYYYMMDD
 	@set -e; \
 	{ [ -n "$(SET)" ] && [ -n "$(VERSION)" ]; } || { echo "pass SET=<set> VERSION=YYYYMMDD"; exit 1; }; \
-	name="$(SET).$(VERSION).pmtiles"; \
-	file="$(ALERTS_AREAS_DIR)/$$name"; \
-	[ -f "$$file" ] || { echo "no $$file; build it with xue alerts-areas --set $(SET) --version $(VERSION)"; exit 1; }; \
-	local_bytes=$$(wc -c < "$$file" | tr -d ' '); \
-	remote_bytes=$$($(call r2_size,alerts-areas/$$name)); \
-	if [ -n "$$remote_bytes" ]; then \
-		[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is already on R2 at $$remote_bytes bytes, not $$local_bytes; a set is never replaced, give it a new VERSION"; exit 1; }; \
-		echo "alerts-areas/$$name is already on R2 ($$remote_bytes bytes)"; exit 0; \
-	fi; \
-	$(S3) cp "$$file" $(R2_ROOT)/alerts-areas/$$name --no-progress $(DRY_RUN) \
-		--content-type application/vnd.pmtiles --cache-control "public, max-age=31536000, immutable"; \
-	[ -n "$(DRY_RUN)" ] || { \
+	for name in "$(SET).$(VERSION).pmtiles" "$(SET).$(VERSION).bbox.json"; do \
+		file="$(ALERTS_AREAS_DIR)/$$name"; \
+		[ -f "$$file" ] || { echo "no $$file; build it with xue alerts-areas --set $(SET) --version $(VERSION)"; exit 1; }; \
+		case "$$name" in *.pmtiles) type=application/vnd.pmtiles ;; *) type=application/json ;; esac; \
+		local_bytes=$$(wc -c < "$$file" | tr -d ' '); \
 		remote_bytes=$$($(call r2_size,alerts-areas/$$name)); \
-		[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is '$$remote_bytes' bytes on R2, not $$local_bytes"; exit 1; }; \
-		echo "verified alerts-areas/$$name ($$local_bytes bytes, CRC32 $$($(CRC32) "$$file")) on R2"; \
-	}
+		if [ -n "$$remote_bytes" ]; then \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is already on R2 at $$remote_bytes bytes, not $$local_bytes; a set is never replaced, give it a new VERSION"; exit 1; }; \
+			echo "alerts-areas/$$name is already on R2 ($$remote_bytes bytes)"; continue; \
+		fi; \
+		$(S3) cp "$$file" $(R2_ROOT)/alerts-areas/$$name --no-progress $(DRY_RUN) \
+			--content-type $$type --cache-control "public, max-age=31536000, immutable"; \
+		[ -n "$(DRY_RUN)" ] || { \
+			remote_bytes=$$($(call r2_size,alerts-areas/$$name)); \
+			[ "$$remote_bytes" = "$$local_bytes" ] || { echo "alerts-areas/$$name is '$$remote_bytes' bytes on R2, not $$local_bytes"; exit 1; }; \
+			echo "verified alerts-areas/$$name ($$local_bytes bytes, CRC32 $$($(CRC32) "$$file")) on R2"; \
+		}; \
+	done
