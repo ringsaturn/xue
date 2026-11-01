@@ -244,6 +244,7 @@ export const zh: Record<MessageKey, string> = {
   dataInterrupted: "数据加载中断",
   errorHint: "{message}。请确认已运行 make mvp,并通过 make serve 打开页面。",
   loadFailed: "加载失败",
+  webglLost: "WebGL 不可用：请完全退出浏览器后重新打开",
   saveData: "省流",
   debugCopied: "调试信息已复制",
   copyFailed: "复制失败",

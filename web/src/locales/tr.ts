@@ -250,6 +250,7 @@ export const tr: Record<MessageKey, string> = {
   dataInterrupted: "Veri yükleme kesildi",
   errorHint: "{message}. make mvp çalıştırıldığından ve sayfanın make serve ile sunulduğundan emin olun.",
   loadFailed: "Yükleme başarısız",
+  webglLost: "WebGL kullanılamıyor: tarayıcıdan tamamen çıkıp yeniden açın",
   saveData: "tasarruf",
   debugCopied: "Hata ayıklama bilgisi kopyalandı",
   copyFailed: "Kopyalama başarısız",

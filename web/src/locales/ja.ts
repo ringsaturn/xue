@@ -244,6 +244,7 @@ export const ja: Record<MessageKey, string> = {
   dataInterrupted: "データの読み込みが中断しました",
   errorHint: "{message}。make mvp を実行し、make serve でページを開いているか確認してください。",
   loadFailed: "読み込み失敗",
+  webglLost: "WebGL が使えません。ブラウザを完全に終了して開き直してください",
   saveData: "節約",
   debugCopied: "デバッグ情報をコピーしました",
   copyFailed: "コピーに失敗しました",

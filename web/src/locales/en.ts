@@ -451,6 +451,9 @@ export const en = {
   dataInterrupted: "Data loading interrupted",
   errorHint: "{message}. Make sure make mvp has been run and the page is served via make serve.",
   loadFailed: "Load failed",
+  /** The map's WebGL context is lost again on every restore (a wedged GPU
+   * process); only restarting the browser brings it back. */
+  webglLost: "WebGL unavailable: quit the browser fully and reopen it",
   saveData: "saver",
   debugCopied: "Debug info copied",
   copyFailed: "Copy failed",
