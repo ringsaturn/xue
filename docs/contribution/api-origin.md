@@ -126,7 +126,7 @@ address to the API's hostname.
 - `install.sh`: installs the binary and the units, `cloudflared` from
   Cloudflare's apt repository if missing, restarts and checks `/health`.
 - `xue-api-update.timer` / `.service` / `.sh` (installed as
-  `/usr/local/sbin/xue-api-update`): every ten minutes, fetch the
+  `/usr/local/sbin/xue-api-update`): every five minutes, fetch the
   `api-server` release's `.sha256`; when it differs from the installed
   binary, download the binary, `sha256sum -c` it, install it, restart, and
   wait up to 30 s for `/health`. A build that fails is rolled back to the
@@ -137,7 +137,7 @@ address to the API's hostname.
   forged release; the host does not run `gh attestation verify`.
 
 So a host follows `main`: a merge that touches the server is live about
-fifteen minutes later. A binary installed by hand (`deploy.sh` from a
+ten minutes later. A binary installed by hand (`deploy.sh` from a
 branch) is replaced at the next run; stop the timer
 (`systemctl disable --now xue-api-update.timer`) to keep it, and start it
 again to go back to the release. `journalctl -u xue-api-update` shows what
