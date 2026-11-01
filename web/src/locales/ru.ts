@@ -249,6 +249,7 @@ export const ru: Record<MessageKey, string> = {
   dataInterrupted: "Загрузка данных прервана",
   errorHint: "{message}. Убедитесь, что выполнена команда make mvp и страница открыта через make serve.",
   loadFailed: "Ошибка загрузки",
+  webglLost: "WebGL недоступен: полностью закройте браузер и откройте его снова",
   saveData: "экономия",
   debugCopied: "Отладочные сведения скопированы",
   copyFailed: "Не удалось скопировать",

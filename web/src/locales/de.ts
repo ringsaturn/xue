@@ -247,6 +247,7 @@ export const de: Record<MessageKey, string> = {
   dataInterrupted: "Laden der Daten unterbrochen",
   errorHint: "{message}. Stelle sicher, dass make mvp gelaufen ist und die Seite über make serve ausgeliefert wird.",
   loadFailed: "Laden fehlgeschlagen",
+  webglLost: "WebGL nicht verfügbar: Browser vollständig beenden und neu öffnen",
   saveData: "Sparmodus",
   debugCopied: "Debug-Infos kopiert",
   copyFailed: "Kopieren fehlgeschlagen",

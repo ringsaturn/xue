@@ -244,6 +244,7 @@ export const zhHant: Record<MessageKey, string> = {
   dataInterrupted: "資料載入中斷",
   errorHint: "{message}。請確認已執行 make mvp,並透過 make serve 開啟頁面。",
   loadFailed: "載入失敗",
+  webglLost: "WebGL 無法使用：請完全結束瀏覽器後重新開啟",
   saveData: "省流量",
   debugCopied: "除錯資訊已複製",
   copyFailed: "複製失敗",

@@ -249,6 +249,7 @@ export const ko: Record<MessageKey, string> = {
   dataInterrupted: "자료 읽기가 중단되었습니다",
   errorHint: "{message}. make mvp를 실행하고 make serve로 페이지를 열었는지 확인하세요.",
   loadFailed: "읽기 실패",
+  webglLost: "WebGL을 사용할 수 없습니다. 브라우저를 완전히 종료한 뒤 다시 여세요",
   saveData: "절약",
   debugCopied: "디버그 정보를 복사했습니다",
   copyFailed: "복사 실패",

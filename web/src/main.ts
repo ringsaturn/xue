@@ -20,6 +20,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { fetchImmutable } from "./fetchimmutable";
+import { guardContextLoss } from "./glguard";
 import {
   applyStaticMessages,
   basemapLang,
@@ -1343,6 +1344,15 @@ const tickMarks = required<HTMLElement>("tick-marks");
 const trackNow = required<HTMLElement>("track-now");
 const errorPanel = required<HTMLElement>("error-panel");
 const errorMessage = required<HTMLElement>("error-message");
+
+// A context that is lost again on every restore cannot draw the map; say so
+// instead of leaving the shell on "Loading manifest" while it spins.
+guardContextLoss(map.getContainer(), () => {
+  stopPlayback();
+  document.body.classList.remove("is-data-loading");
+  say(loadStatus, "webglLost");
+  loadStatus.className = "load-status is-error";
+});
 const retryButton = required<HTMLButtonElement>("retry-button");
 const playButton = required<HTMLButtonElement>("play-button");
 const playLabel = required<HTMLElement>("play-label");
