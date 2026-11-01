@@ -64,7 +64,7 @@ from ..errors import DownloadError, XueError
 from ..gdal import require_command
 from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import ELEMENT_BOUNDS, ELEMENTS, ELEVATION_RANGE, HISTORY_HOURS, STATION, WIGOS, round_directory
+from .schema import ELEMENT_BOUNDS, ELEMENTS, ELEVATION_RANGE, HISTORY_HOURS, STATION, WIGOS, raw_directory
 from .station import NetworkRead, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ two-metre screen value."""
 
 
 def network_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment) / NETWORK
+    return raw_root / raw_directory(moment) / NETWORK
 
 
 # --- fetch -------------------------------------------------------------
@@ -127,7 +127,7 @@ def fetch(
     ``synop.<round>/dwd/`` under their own names."""
     now = now or datetime.now(UTC)
     directory = network_directory(raw_root, moment)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     try:
         response = get(BASE_URL)
         if response.body is None:

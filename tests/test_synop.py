@@ -28,6 +28,7 @@ from xuebuild.synop.schema import (
     encode_json,
     floor_round,
     parse_round,
+    raw_directory,
     read_index,
     read_stations_file,
     round_directory,
@@ -329,7 +330,7 @@ class RoundsTest(unittest.TestCase):
 
     def test_golden(self) -> None:
         for directory, index in zip(self.directories, self.indexes):
-            expected = EXPECTED / directory.name
+            expected = EXPECTED / directory.relative_to(self.output)
             self.assertEqual(pretty(json.loads((directory / "index.json").read_bytes())) + "\n", (expected / "index.json").read_text())
             self.assertEqual([network["id"] for network in index["networks"]], list(NETWORK_IDS))
             for network in index["networks"]:
@@ -439,7 +440,7 @@ class RoundsTest(unittest.TestCase):
     def test_the_pointer_names_the_newest_round(self) -> None:
         pointer = json.loads((self.output / "latest-synop.json").read_bytes())
         self.assertEqual(pointer["schemaVersion"], 1)
-        self.assertEqual(pointer["path"], f"{self.directories[1].name}/index.json")
+        self.assertEqual(pointer["path"], f"{self.directories[1].relative_to(self.output).as_posix()}/index.json")
         validate_pointer(pointer)
 
 
@@ -474,7 +475,7 @@ class SwitchTest(unittest.TestCase):
         def without_codes(path: Path) -> list[dict]:
             return [{key: value for key, value in json.loads(line).items() if key != "qc"} for line in path.read_bytes().splitlines()]
 
-        self.assertEqual(without_codes(directory / "amedas.jsonl"), without_codes(EXPECTED / directory.name / "amedas.jsonl"))
+        self.assertEqual(without_codes(directory / "amedas.jsonl"), without_codes(EXPECTED / directory.relative_to(self.output) / "amedas.jsonl"))
         self.assertEqual(len(line_of(directory, rows["amedas:44132"])["time"]), 3)
         # The networks the v1 round did not carry start their window here.
         self.assertTrue(all(len(line_of(directory, row)["time"]) == 1 for station, row in rows.items() if station.startswith("hko:")))
@@ -497,7 +498,7 @@ class MergeTest(unittest.TestCase):
         self.scratch.cleanup()
 
     def _record(self, moment: datetime, *, map_ok: bool) -> None:
-        directory = self.raw / round_directory(moment)
+        directory = self.raw / raw_directory(moment)
         directory.mkdir(parents=True, exist_ok=True)
         status = {"id": "jma-amedas-map", "ok": map_ok, "fetched": "2026-10-05T01:00:00Z"}
         if map_ok:
@@ -548,8 +549,8 @@ class MergeTest(unittest.TestCase):
 
     def test_a_revised_value_replaces_the_one_it_revises(self) -> None:
         second = parse_round(ROUNDS[1])
-        snapshot = self.raw / round_directory(second) / "amedas" / "map" / "20261005090000.json"
-        cells = json.loads((self.raw / round_directory(self.first) / "amedas" / "map" / "20261005090000.json").read_text())
+        snapshot = self.raw / raw_directory(second) / "amedas" / "map" / "20261005090000.json"
+        cells = json.loads((self.raw / raw_directory(self.first) / "amedas" / "map" / "20261005090000.json").read_text())
         cells["44132"]["temp"] = [21.5, 0]
         snapshot.write_text(json.dumps(cells))
         build_product(second, self.raw, self.output, previous_index=load_previous_index(None, self.output), now=GENERATED[1])
@@ -567,7 +568,7 @@ class MergeTest(unittest.TestCase):
 class ValidatorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        directory = EXPECTED / f"synop.{ROUNDS[1]}"
+        directory = EXPECTED / round_directory(parse_round(ROUNDS[1]))
         cls.index = json.loads((directory / "index.json").read_text())
         cls.stations = json.loads((directory / "amedas.stations.json").read_text())
         cls.line = json.loads((directory / "amedas.jsonl").read_bytes().splitlines()[0])
@@ -585,7 +586,7 @@ class ValidatorTest(unittest.TestCase):
         validate_index(self.v1)
 
     def test_the_golden_stations_files_are_the_bytes_the_index_names(self) -> None:
-        directory = EXPECTED / f"synop.{ROUNDS[1]}"
+        directory = EXPECTED / round_directory(parse_round(ROUNDS[1]))
         for network in self.index["networks"]:
             payload = json.loads((directory / network["stations"]["path"]).read_text())
             self.assertEqual(len(encode_json(payload)), network["stations"]["byteLength"])

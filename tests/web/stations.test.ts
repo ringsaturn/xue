@@ -8,7 +8,7 @@ import airportPointerJson from "../fixtures/airport/expected/latest-airport.json
 import soundingIndexJson from "../fixtures/sounding/expected/index.json";
 import soundingPointerJson from "../fixtures/sounding/expected/latest-sounding.json";
 import synopPointerJson from "../fixtures/synop/expected/latest-synop.json";
-import synopIndexJson from "../fixtures/synop/expected/synop.202610050010/index.json";
+import synopIndexJson from "../fixtures/synop/expected/synop/2026/10/05/synop.202610050010/index.json";
 
 import {
   fetchAirportStation,

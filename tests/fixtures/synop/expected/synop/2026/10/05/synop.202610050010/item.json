@@ -2,7 +2,7 @@
  "type": "Feature",
  "stac_version": "1.1.0",
  "stac_extensions": ["https://stac-extensions.github.io/file/v2.1.0/schema.json"],
- "id": "synop.202610050000",
+ "id": "synop.202610050010",
  "collection": "synop",
  "geometry": {
   "type": "Polygon",
@@ -18,13 +18,13 @@
  },
  "bbox": [8.472, 22.1822, 153.9833, 54.6831],
  "properties": {
-  "title": "Surface weather stations · 2026-10-05 00:00Z round",
-  "datetime": "2026-10-05T00:00:00Z",
-  "start_datetime": "2026-10-04T00:00:00Z",
-  "end_datetime": "2026-10-05T00:00:00Z",
+  "title": "Surface weather stations · 2026-10-05 00:10Z round",
+  "datetime": "2026-10-05T00:10:00Z",
+  "start_datetime": "2026-10-04T00:10:00Z",
+  "end_datetime": "2026-10-05T00:10:00Z",
   "xue:product": "synop",
   "xue:schemaVersion": 2,
-  "xue:issued": "2026-10-05T00:00:00Z",
+  "xue:issued": "2026-10-05T00:10:00Z",
   "xue:stations": 71,
   "xue:sources": [
    {
@@ -48,45 +48,45 @@
  "links": [
   {
    "rel": "root",
-   "href": "../catalog.json",
+   "href": "../../../../../catalog.json",
    "type": "application/json"
   },
   {
    "rel": "parent",
-   "href": "../synop/collection.json",
+   "href": "../../../../collection.json",
    "type": "application/json"
   },
   {
    "rel": "collection",
-   "href": "../synop/collection.json",
+   "href": "../../../../collection.json",
    "type": "application/json"
   }
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=742eb5a8",
+   "href": "index.json?v=66727302",
    "type": "application/json",
    "title": "synop index (schema v2)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 3297,
-   "xue:crc32": "742eb5a8",
-   "file:checksum": "b20204742eb5a8"
+   "file:size": 3296,
+   "xue:crc32": "66727302",
+   "file:checksum": "b2020466727302"
   },
   "amedas": {
-   "href": "amedas.jsonl?v=b709c94c",
+   "href": "amedas.jsonl?v=9d6a7441",
    "type": "application/x-ndjson",
    "title": "JMA AMeDAS: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "amedas",
-   "file:size": 5073,
-   "xue:crc32": "b709c94c",
-   "file:checksum": "b20204b709c94c"
+   "file:size": 5931,
+   "xue:crc32": "9d6a7441",
+   "file:checksum": "b202049d6a7441"
   },
   "amedas.stations": {
-   "href": "amedas.stations.json?v=5ca7ea10",
+   "href": "amedas.stations.json?v=d66772e3",
    "type": "application/json",
    "title": "JMA AMeDAS: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -94,24 +94,24 @@
    "xue:kind": "stations",
    "xue:network": "amedas",
    "xue:stations": 14,
-   "file:size": 2202,
-   "xue:crc32": "5ca7ea10",
-   "file:checksum": "b202045ca7ea10"
+   "file:size": 2207,
+   "xue:crc32": "d66772e3",
+   "file:checksum": "b20204d66772e3"
   },
   "dwd": {
-   "href": "dwd.jsonl?v=d57e2cd9",
+   "href": "dwd.jsonl?v=5ec96d61",
    "type": "application/x-ndjson",
    "title": "DWD SYNOP Germany: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "dwd",
-   "file:size": 2255,
-   "xue:crc32": "d57e2cd9",
-   "file:checksum": "b20204d57e2cd9"
+   "file:size": 2320,
+   "xue:crc32": "5ec96d61",
+   "file:checksum": "b202045ec96d61"
   },
   "dwd.stations": {
-   "href": "dwd.stations.json?v=e9e1d9af",
+   "href": "dwd.stations.json?v=049e13e3",
    "type": "application/json",
    "title": "DWD SYNOP Germany: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -120,23 +120,23 @@
    "xue:network": "dwd",
    "xue:stations": 6,
    "file:size": 1028,
-   "xue:crc32": "e9e1d9af",
-   "file:checksum": "b20204e9e1d9af"
+   "xue:crc32": "049e13e3",
+   "file:checksum": "b20204049e13e3"
   },
   "hko": {
-   "href": "hko.jsonl?v=c84f146d",
+   "href": "hko.jsonl?v=1be41d17",
    "type": "application/x-ndjson",
    "title": "Hong Kong Observatory: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
    "xue:network": "hko",
-   "file:size": 10676,
-   "xue:crc32": "c84f146d",
-   "file:checksum": "b20204c84f146d"
+   "file:size": 11891,
+   "xue:crc32": "1be41d17",
+   "file:checksum": "b202041be41d17"
   },
   "hko.stations": {
-   "href": "hko.stations.json?v=fb97a678",
+   "href": "hko.stations.json?v=5090ede0",
    "type": "application/json",
    "title": "Hong Kong Observatory: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -144,9 +144,9 @@
    "xue:kind": "stations",
    "xue:network": "hko",
    "xue:stations": 51,
-   "file:size": 7667,
-   "xue:crc32": "fb97a678",
-   "file:checksum": "b20204fb97a678"
+   "file:size": 7674,
+   "xue:crc32": "5090ede0",
+   "file:checksum": "b202045090ede0"
   }
  }
 }

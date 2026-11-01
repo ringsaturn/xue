@@ -208,7 +208,7 @@ def build_product(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Read the round's fetched files and the previous round's network
-    files, write ``synop.<round>/`` — two files per network and the index
+    files, write ``synop/YYYY/MM/DD/synop.<round>/`` — two files per network and the index
     over them — and, unless no network's observations arrived, the
     pointer."""
     now = now or datetime.now(UTC)

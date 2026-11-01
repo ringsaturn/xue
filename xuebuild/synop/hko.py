@@ -44,7 +44,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import SynopProductError, XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import ELEMENT_BOUNDS, ELEMENTS, round_directory
+from .schema import ELEMENT_BOUNDS, ELEMENTS, raw_directory
 from .station import NetworkRead, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ VISIBILITY = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(km|m)\s*$")
 
 
 def network_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment) / NETWORK
+    return raw_root / raw_directory(moment) / NETWORK
 
 
 # --- fetch -------------------------------------------------------------
@@ -94,7 +94,7 @@ def fetch(
     del since
     now = now or datetime.now(UTC)
     directory = network_directory(raw_root, moment)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     fetched = missing = 0
     errors: list[str] = []
     for name in FILES.values():

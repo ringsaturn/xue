@@ -71,7 +71,7 @@
   },
   {
    "rel": "alternate",
-   "href": "../synop.202610050010/item.json",
+   "href": "../synop/2026/10/05/synop.202610050010/item.json",
    "type": "application/geo+json",
    "title": "Surface weather stations · 2026-10-05 00:10Z round (beside its index; gone when the issue is)"
   },
