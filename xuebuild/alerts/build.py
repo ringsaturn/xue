@@ -46,6 +46,7 @@ from .schema import (
     iso_z,
     network_filename,
     read_index,
+    local_round_directory,
     round_directory,
     round_name,
     validate_alert_line,
@@ -84,7 +85,7 @@ def _previous_lines(output_root: Path, previous_index: dict[str, Any], network_i
     described = next((network for network in previous_index.get("networks", []) if network.get("id") == network_id), None)
     if described is None:
         return None
-    path = output_root / round_directory(datetime.fromisoformat(previous_index["issued"])) / described["file"]["path"]
+    path = local_round_directory(output_root, datetime.fromisoformat(previous_index["issued"])) / described["file"]["path"]
     try:
         body = path.read_bytes()
     except OSError as exc:

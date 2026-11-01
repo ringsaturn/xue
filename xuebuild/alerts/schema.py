@@ -27,6 +27,8 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the alerts modules i
     check_builder,
     check_number,
     check_pointer,
+    existing_round_directory,
+    round_directories,
     check_sha256,
     check_sources,
     check_time,
@@ -137,6 +139,19 @@ def round_directory(moment: datetime) -> str:
     return f"alerts.{round_name(moment)}"
 
 
+def pointer_directories(moment: datetime) -> tuple[str, ...]:
+    """Where a pointer may name the round: the archive tree
+    (``alerts/YYYY/MM/DD/alerts.<round>``) or the flat ``alerts.<round>``."""
+    return round_directories(PRODUCT, moment)
+
+
+def local_round_directory(output_root: Path, moment: datetime) -> Path:
+    """The round's directory under ``output_root`` in whichever layout it
+    was written or pulled in; where this build would write it when neither
+    holds it."""
+    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
+
+
 def network_filename(network: str) -> str:
     return f"{network}{NETWORK_FILE_SUFFIX}"
 
@@ -149,14 +164,23 @@ def areas_bbox_filename(set_id: str, version: str) -> str:
     return f"{set_id}.{version}.bbox.json"
 
 
-def areas_path(set_id: str, version: str) -> str:
+ROUND_DEPTH = 1
+"""How many directories deep this build writes a round under the data root
+(``alerts.<round>``): how far a path in its index climbs to reach the root."""
+
+ROUND_DEPTHS = (5, 1)
+"""The depths a published round may sit at: ``alerts/YYYY/MM/DD/alerts.<round>``
+or the flat ``alerts.<round>``."""
+
+
+def areas_path(set_id: str, version: str, depth: int = ROUND_DEPTH) -> str:
     """The boundary set's path relative to a round's index: the sets sit
-    in one directory beside the rounds and outlive them."""
-    return f"../{AREAS_DIRECTORY}/{areas_filename(set_id, version)}"
+    in one directory under the data root and outlive the rounds."""
+    return f"{'../' * depth}{AREAS_DIRECTORY}/{areas_filename(set_id, version)}"
 
 
-def areas_bbox_path(set_id: str, version: str) -> str:
-    return f"../{AREAS_DIRECTORY}/{areas_bbox_filename(set_id, version)}"
+def areas_bbox_path(set_id: str, version: str, depth: int = ROUND_DEPTH) -> str:
+    return f"{'../' * depth}{AREAS_DIRECTORY}/{areas_bbox_filename(set_id, version)}"
 
 
 # --- primitives --------------------------------------------------------
@@ -224,8 +248,9 @@ def validate_areas(payload: object, label: str) -> None:
         raise AlertsProductError(f"{label}.set is not a boundary set id")
     if not isinstance(version, str) or not AREA_VERSION.match(version):
         raise AlertsProductError(f"{label}.version must be YYYYMMDD")
-    if payload.get("path") != areas_path(set_id, version):
-        raise AlertsProductError(f"{label}.path must be {areas_path(set_id, version)!r}")
+    depth = next((depth for depth in ROUND_DEPTHS if payload.get("path") == areas_path(set_id, version, depth)), None)
+    if depth is None:
+        raise AlertsProductError(f"{label}.path must be {areas_path(set_id, version)!r} from the round's directory")
     _integer(payload.get("byteLength"), f"{label}.byteLength", 1)
     if not isinstance(payload.get("crc32"), str) or not CRC32.match(payload["crc32"]):
         raise AlertsProductError(f"{label}.crc32 must be 8 lowercase hex characters")
@@ -238,7 +263,7 @@ def validate_areas(payload: object, label: str) -> None:
     ):
         raise AlertsProductError(f"{label}.layers must be a non-empty list of unique layer names")
     if payload.get("bbox") is not None:
-        _crc_file(payload["bbox"], f"{label}.bbox", areas_bbox_path(set_id, version))
+        _crc_file(payload["bbox"], f"{label}.bbox", areas_bbox_path(set_id, version, depth))
 
 
 def validate_geometry(payload: object, label: str) -> tuple[float, float, float, float] | None:
@@ -483,7 +508,7 @@ def validate_pointer(payload: object) -> None:
         AlertsProductError,
         payload,
         PRODUCT,
-        lambda issued: (round_directory(issued),),
+        pointer_directories,
         "alerts pointer path does not name the issued round's directory",
     )
 

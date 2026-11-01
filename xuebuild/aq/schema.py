@@ -26,6 +26,8 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the aq modules impor
     check_number,
     check_builder,
     check_pointer,
+    existing_round_directory,
+    round_directories,
     check_sha256,
     check_sources,
     check_time,
@@ -151,6 +153,19 @@ def round_directory(moment: datetime) -> str:
     the data root. A round carries the whole 24-hour window and lives three
     hours, so there is no archive to file by day."""
     return f"aq.{round_name(moment)}"
+
+
+def pointer_directories(moment: datetime) -> tuple[str, ...]:
+    """Where a pointer may name the round: the archive tree
+    (``aq/YYYY/MM/DD/aq.<round>``) or the flat ``aq.<round>``."""
+    return round_directories(PRODUCT, moment)
+
+
+def local_round_directory(output_root: Path, moment: datetime) -> Path:
+    """The round's directory under ``output_root`` in whichever layout it
+    was written or pulled in; where this build would write it when neither
+    holds it."""
+    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
 
 
 def network_filename(network: str) -> str:
@@ -450,7 +465,7 @@ def validate_pointer(payload: object) -> None:
         AqProductError,
         payload,
         PRODUCT,
-        lambda issued: (round_directory(issued),),
+        pointer_directories,
         "aq pointer path does not name the issued round's directory",
     )
 

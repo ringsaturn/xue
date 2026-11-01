@@ -49,6 +49,7 @@ from .schema import (
     crc32_hex,
     encode_json,
     read_index,
+    local_round_directory,
     round_directory,
     round_name,
     validate_history_station,
@@ -103,7 +104,7 @@ def _read_previous_history(output_root: Path, previous_index: dict[str, Any] | N
     if not previous_index:
         return entries
     issued = datetime.fromisoformat(previous_index["issued"])
-    path = output_root / round_directory(issued) / previous_index["history"]["path"]
+    path = local_round_directory(output_root, issued) / previous_index["history"]["path"]
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:

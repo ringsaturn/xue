@@ -29,6 +29,8 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules 
     pointer_shape_error,
     check_number,
     check_pointer,
+    existing_round_directory,
+    round_directories,
     check_sources,
     check_time,
     read_index_file,
@@ -127,6 +129,19 @@ def round_directory(moment: datetime) -> str:
     """``airport.202609161430``: one immutable directory per round, the
     index and the history file in it."""
     return f"airport.{round_name(moment)}"
+
+
+def pointer_directories(moment: datetime) -> tuple[str, ...]:
+    """Where a pointer may name the round: the archive tree
+    (``airport/YYYY/MM/DD/airport.<round>``) or the flat ``airport.<round>``."""
+    return round_directories(PRODUCT, moment)
+
+
+def local_round_directory(output_root: Path, moment: datetime) -> Path:
+    """The round's directory under ``output_root`` in whichever layout it
+    was written or pulled in; where this build would write it when neither
+    holds it."""
+    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
 
 
 # --- primitives --------------------------------------------------------
@@ -354,7 +369,7 @@ def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict
 
 
 def validate_pointer(payload: object) -> None:
-    check_pointer(AirportProductError, payload, PRODUCT, lambda moment: (round_directory(moment),), "airport pointer path does not name the issued round's directory")
+    check_pointer(AirportProductError, payload, PRODUCT, pointer_directories, "airport pointer path does not name the issued round's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:
