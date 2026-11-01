@@ -18,8 +18,10 @@ document is the normative description of that product, schema v1.
 Everything is a static file under the data root, beside the run pointers
 and the other point products' pointers.
 
-- `latest-alerts.json` is the one mutable object. Fetch it with caching
-  disabled. It names the newest round's directory and the index inside it:
+- `latest-alerts.json` is the one mutable object. Request it with
+  `Cache-Control: no-cache` (in a browser, `fetch(url, {cache: "no-cache"})`):
+  without it a browser cache may answer with a pointer up to four hours
+  old. It names the newest round's directory and the index inside it:
 
   ```json
   {"schemaVersion": 1, "product": "alerts", "issued": "2026-11-01T00:05:00Z",
