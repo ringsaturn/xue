@@ -7,6 +7,7 @@ import airportIndexJson from "../fixtures/airport/expected/airport.202609161440/
 import airportPointerJson from "../fixtures/airport/expected/latest-airport.json";
 import soundingIndexJson from "../fixtures/sounding/expected/index.json";
 import soundingPointerJson from "../fixtures/sounding/expected/latest-sounding.json";
+import synopPointerJson from "../fixtures/synop/expected/latest-synop.json";
 import synopIndexJson from "../fixtures/synop/expected/synop.202610050010/index.json";
 
 import {
@@ -46,6 +47,7 @@ import {
   parseSoundingPointer,
   parseSoundingStation,
   parseSynopIndex,
+  parseSynopPointer,
   type AirportStation,
 } from "../../web/src/stations/schema";
 import { parseStationsFromSearch, searchWithStations } from "../../web/src/urlstate";
@@ -102,7 +104,25 @@ describe("the station product schemas", () => {
 
   it("accepts the committed airport golden, rows expanded", () => {
     const pointer = parseAirportPointer(airportPointerJson);
-    expect(pointer.path).toBe("airport.202609161440/index.json");
+    expect(pointer.path).toMatch(/^(?:airport\/2026\/09\/16\/)?airport\.202609161440\/index\.json$/);
+    // A round is filed under its UTC day, or sits flat under the root as
+    // rounds were published before the archive tree.
+    for (const path of [
+      "airport/2026/09/16/airport.202609161440/index.json",
+      "airport.202609161440/index.json",
+    ]) {
+      expect(parseAirportPointer({ ...airportPointerJson, path }).path).toBe(path);
+    }
+    const misfiled = { ...airportPointerJson, path: "airport/2026/09/15/airport.202609161440/index.json" };
+    expect(() => parseAirportPointer(misfiled)).toThrow();
+    for (const path of [
+      "synop/2026/10/05/synop.202610050010/index.json",
+      "synop.202610050010/index.json",
+    ]) {
+      expect(parseSynopPointer({ ...synopPointerJson, path }).path).toBe(path);
+    }
+    const misfiledSynop = { ...synopPointerJson, path: "synop/2026/10/04/synop.202610050010/index.json" };
+    expect(() => parseSynopPointer(misfiledSynop)).toThrow();
     const station = airportIndex.stations.find((entry) => entry.icao === "FACT")!;
     expect(station).toMatchObject({
       icao: "FACT",

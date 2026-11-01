@@ -63,8 +63,14 @@ const SOURCE_ID = /^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$/;
  * `sounding.<hour>/index.json` issues were published under before. */
 const SOUNDING_PATH =
   /^(?:sounding\/(\d{4})\/(\d{2})\/(\d{2})\/sounding\.\1\2\3\d{2}|sounding\.\d{10})\/index\.json$/;
-const AIRPORT_PATH = /^airport\.\d{12}\/index\.json$/;
-const SYNOP_PATH = /^synop\.\d{12}\/index\.json$/;
+/** `airport/YYYY/MM/DD/airport.<round>/index.json`, or the flat
+ * `airport.<round>/index.json` rounds were published under before. */
+const AIRPORT_PATH =
+  /^(?:airport\/(\d{4})\/(\d{2})\/(\d{2})\/airport\.\1\2\3\d{4}|airport\.\d{12})\/index\.json$/;
+/** `synop/YYYY/MM/DD/synop.<round>/index.json`, or the flat
+ * `synop.<round>/index.json` rounds were published under before. */
+const SYNOP_PATH =
+  /^(?:synop\/(\d{4})\/(\d{2})\/(\d{2})\/synop\.\1\2\3\d{4}|synop\.\d{12})\/index\.json$/;
 /** `<network>:<the network's own station number>`; the first group is the
  * network. */
 const SYNOP_STATION_ID = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*):[0-9A-Za-z_.-]+$/;
