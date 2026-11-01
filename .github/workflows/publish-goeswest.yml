@@ -112,8 +112,8 @@ jobs:
       # six-hour window and the agency archives the scans, so the mirror
       # keeps that window and an hour of slack: a round pulls HOURS + 1 hours.
       FRAMES_KEEP_HOURS: "8"
-      # The DEBRA confidence (dustcf) reads the CAMEL emissivity months the
-      # operational DEBRA pipeline stages on this bucket; a round pulls
+      # The DEBRA confidence (dustcf) reads the CAMEL emissivity months
+      # stage-ancillary.yml stages on this bucket; a round pulls
       # them once (`make pull-r2-ancillary`, a few megabytes) and fetches a
       # slot's GFS skin temperature itself.
       ANCILLARY: "true"

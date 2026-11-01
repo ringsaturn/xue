@@ -56,7 +56,7 @@ prune-r2-frames: ## Delete cached frames older than FRAMES_KEEP_HOURS
 # space-separated and optional: the default is this month and the next, every
 # region.
 ANCILLARY_DIR = data/raw/ancillary
-CAMEL_PREFIX ?= s3://$(R2_BUCKET)/shachen-ops/ancillary/camel
+CAMEL_PREFIX ?= s3://$(R2_BUCKET)/xue/ancillary/camel
 MONTHS ?=
 REGIONS ?=
 pull-r2-ancillary: ## Pull the staged CAMEL months for DEBRA
