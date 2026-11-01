@@ -724,7 +724,12 @@ always installed, at the end of the map's `load` callback, and announced by
 a `xue:ready` event on `window`; a script that runs later finds the object
 already there. A Protomaps key serves only the origins it is bound to, so
 such a page on its own host sets `VITE_PROTOMAPS_KEY` at build time; the
-shell's own key is the fallback. Such a page may also colour its own bundles:
+shell's own key is the fallback. A shell built for another host can also
+point the basemap and relief at mirrors (`VITE_BASEMAP_TILES`, the vector
+tile template; `VITE_BASEMAP_ASSETS`, the root of Protomaps' `fonts/` and
+`sprites/`; `VITE_TERRAIN_TILE_URL`) and offer only the datasets it
+publishes (`VITE_SOURCES`, comma-separated ids; the model switch and
+`?model=` drop the rest). Such a page may also colour its own bundles:
 `window.xuePalettes`, set before the shell's module runs, maps a bundle id
 to at least two `[value, r, g, b, a]` stops in increasing value (channels
 0–255, `palettes.ts::readHostPalettes`), or to `{ stops, sampling }` where

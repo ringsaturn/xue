@@ -624,6 +624,21 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gibs",
 ];
 
+/** The datasets this build offers: `VITE_SOURCES`, comma-separated ids, for
+ * a deployment that publishes only some of them; empty offers every one. */
+const SERVED_MODELS: ReadonlySet<string> | null = (() => {
+  const ids = (import.meta.env.VITE_SOURCES ?? "")
+    .split(",")
+    .map((id: string) => id.trim())
+    .filter((id: string) => id !== "");
+  return ids.length > 0 ? new Set(ids) : null;
+})();
+
+/** True when the model switch and `?model=` offer this dataset. */
+export function isServedModel(model: ForecastModelId): boolean {
+  return SERVED_MODELS === null || SERVED_MODELS.has(model);
+}
+
 /** The members of a mosaic this build knows, in the mosaic's order; a
  * member id the table lacks (a dataset this shell predates) is skipped the
  * way a member whose pointer is missing is. */

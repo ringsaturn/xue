@@ -3,7 +3,9 @@ import { gibsLayer } from "./gibs";
 import {
   FORECAST_MODELS,
   isBundleVariableId,
+  FORECAST_MODEL_IDS,
   isCaseOnlyModel,
+  isServedModel,
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
@@ -13,8 +15,11 @@ import { isPressureBundle, type PressureBundleId } from "./pressure";
 import { variableIds, variableSpec } from "./variables";
 
 /** Default model when the URL names none (or names one this app does not
- * serve — a bad link falls back rather than erroring). */
-const DEFAULT_MODEL: ForecastModelId = "gfs";
+ * serve — a bad link falls back rather than erroring): GFS, else the first
+ * dataset the build offers. */
+const DEFAULT_MODEL: ForecastModelId = isServedModel("gfs")
+  ? "gfs"
+  : (FORECAST_MODEL_IDS.find((id) => isServedModel(id) && !isCaseOnlyModel(id)) ?? "gfs");
 
 /** Layer shown when the URL names none, and the one the app falls back to
  * when a dataset does not ship the requested layer. Every live run carries
@@ -182,7 +187,7 @@ export function parseModelFromSearch(search: string): ForecastModelId {
   const model = new URLSearchParams(search).get("model");
   if (model === null) return DEFAULT_MODEL;
   const id = MODEL_ALIASES[model.toLowerCase()];
-  if (id === undefined || isCaseOnlyModel(id)) return DEFAULT_MODEL;
+  if (id === undefined || isCaseOnlyModel(id) || !isServedModel(id)) return DEFAULT_MODEL;
   return id;
 }
 

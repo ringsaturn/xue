@@ -97,6 +97,7 @@ import {
   HOUR_SECONDS,
   isNowcastModel,
   isObservationModel,
+  isServedModel,
   sameTimeAxis,
   visibleGridShare,
   type BundleMetadata,
@@ -968,6 +969,12 @@ const FORECAST_ANCHOR_LAYER = COASTLINE_LAYER;
 // A Protomaps key is bound to the origins it serves, so a page that builds
 // this shell on its own host brings its own (`VITE_PROTOMAPS_KEY`).
 const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY || "249bb192fefe0a77";
+// A self-hosted shell can point the basemap at its own mirror: the vector
+// tile template (`VITE_BASEMAP_TILES`) and the root holding Protomaps'
+// `fonts/` and `sprites/` (`VITE_BASEMAP_ASSETS`), both absolute.
+const BASEMAP_TILES =
+  import.meta.env.VITE_BASEMAP_TILES || `https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=${PROTOMAPS_KEY}`;
+const BASEMAP_ASSETS = import.meta.env.VITE_BASEMAP_ASSETS || "https://protomaps.github.io/basemaps-assets";
 
 // maplibre-gl 6 does not re-export the style-spec types; take the style
 // object's type from the map options that consume it.
@@ -1063,14 +1070,14 @@ function buildBasemapStyle(): BasemapStyle {
   };
   return {
     version: 8,
-    glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
-    sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${flavorName}`,
+    glyphs: `${BASEMAP_ASSETS}/fonts/{fontstack}/{range}.pbf`,
+    sprite: `${BASEMAP_ASSETS}/sprites/v4/${flavorName}`,
     sources: {
       // Inline tile URLs (no TileJSON fetch) so the shell still boots — dark
       // ocean, no basemap — when api.protomaps.com is unreachable.
       protomaps: {
         type: "vector",
-        tiles: [`https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=${PROTOMAPS_KEY}`],
+        tiles: [BASEMAP_TILES],
         maxzoom: 15,
         attribution: "Protomaps © OpenStreetMap contributors",
       },
@@ -1473,6 +1480,15 @@ function fieldTiles(): HTMLButtonElement[] {
 /** The experiment's toggle tiles for its derived layers. */
 function derivedButtons(): HTMLButtonElement[] {
   return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-derived]")] : [];
+}
+// A build offering only some datasets (VITE_SOURCES) drops the other
+// buttons, and a group heading left with none under it.
+for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-model]")) {
+  if (!isServedModel(button.dataset.model as ForecastModelId)) button.remove();
+}
+for (const heading of document.querySelectorAll<HTMLElement>(".model-switch .field-group-heading")) {
+  const next = heading.nextElementSibling;
+  if (!next || next.matches(".field-group-heading")) heading.remove();
 }
 const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
