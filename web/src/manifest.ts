@@ -626,8 +626,9 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
 
 /** The datasets this build offers: `VITE_SOURCES`, comma-separated ids, for
  * a deployment that publishes only some of them; empty offers every one. */
+// `?.`: Playwright specs import this module outside Vite, where `env` is unset.
 const SERVED_MODELS: ReadonlySet<string> | null = (() => {
-  const ids = (import.meta.env.VITE_SOURCES ?? "")
+  const ids = (import.meta.env?.VITE_SOURCES ?? "")
     .split(",")
     .map((id: string) => id.trim())
     .filter((id: string) => id !== "");
