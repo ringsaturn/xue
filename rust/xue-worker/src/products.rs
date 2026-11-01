@@ -3,11 +3,11 @@
 //! read of one station's line.
 //!
 //! A point product (`docs/sounding.md`, `docs/airport.md`, `docs/synop.md`,
-//! `docs/aq.md`, `docs/tc.md`) is a mutable pointer
+//! `docs/aq.md`, `docs/alerts.md`, `docs/tc.md`) is a mutable pointer
 //! `latest-<product>.json` naming an immutable `<product>.<issue>/index.json`,
 //! with the records beside it in NDJSON files (or one JSON file per storm)
 //! that the index addresses by byte span. The handlers in `sounding`,
-//! `airport`, `stations` and `tc` turn those bytes into the API's
+//! `airport`, `stations`, `alerts` and `tc` turn those bytes into the API's
 //! shapes; nothing here knows a product's fields.
 
 use serde::Deserialize;
@@ -30,7 +30,7 @@ pub struct Product {
     archived: bool,
 }
 
-pub const PRODUCTS: [Product; 6] = [
+pub const PRODUCTS: [Product; 7] = [
     Product {
         id: "sounding",
         endpoint: Some("/v1/soundings"),
@@ -54,6 +54,11 @@ pub const PRODUCTS: [Product; 6] = [
     Product {
         id: "aq",
         endpoint: Some("/v1/aq"),
+        archived: false,
+    },
+    Product {
+        id: "alerts",
+        endpoint: Some("/v1/alerts"),
         archived: false,
     },
     Product {
