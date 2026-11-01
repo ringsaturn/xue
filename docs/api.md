@@ -361,7 +361,7 @@ the id that replaced it, where the round names one, else `null`).
 
 | Parameter | Meaning |
 |---|---|
-| `network` | keep one network (`nws`, `jma`, `eccc`); `404 unknown_network` otherwise, `detail.available` listing them. Also filters `ended[]` |
+| `network` | keep one network (`nws`, `jma`, `eccc`, `meteoalarm`); `404 unknown_network` otherwise, `detail.available` listing them. Also filters `ended[]` |
 | `category` | keep one of the index's `categories`; any other is `400 invalid_parameter`, `detail.available` listing them |
 | `level` | keep the alerts at this level or above, an integer 1 … 5 |
 | `lat`, `lon` | together: keep the alerts in force at this point |
@@ -371,7 +371,9 @@ the id that replaced it, where the round names one, else `null`).
 `radius` is refused (`400 invalid_parameter`): a point either is in an
 alert's area or is not. The point test has two tiers. An alert with its
 own polygon (NWS storm-based warnings, every ECCC alert) is tested against
-that polygon, read from its line. An alert drawn only by area codes is
+that polygon, read from its line; a MeteoAlarm alert that also names areas
+by code (parts of its area the polygon does not draw) matches a point
+outside the polygon by its box, as an area-coded alert does. An alert drawn only by area codes is
 tested against its box, which is the union of its areas' boxes and so
 wider than the areas themselves: a point near such an alert's edge can
 match it without being in any of its areas. An alert with neither a
