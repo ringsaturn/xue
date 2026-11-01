@@ -48,10 +48,9 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
 - **Layout.** tc and sounding file an issue under its UTC day,
   `<product>/YYYY/MM/DD/<product>.<hour>/` (`pointproduct.archive_directory`,
   `point_dir` in `mk/products.mk`), so retention can grow to years without
-  a flat root of thousands of prefixes; aq and alerts do the same with
-  their minute rounds, `<product>/YYYY/MM/DD/<product>.<round>/`
-  (`pointproduct.archive_round_directory`); the airport and synop rounds
-  stay flat. Every validator, the API, the shell's pointer schemas, the
+  a flat root of thousands of prefixes; synop, aq and alerts do the same
+  with their minute rounds, `<product>/YYYY/MM/DD/<product>.<round>/`
+  (`pointproduct.archive_round_directory`); the airport rounds stay flat. Every validator, the API, the shell's pointer schemas, the
   STAC Item and the prune accept both layouts, nested and the flat
   `<product>.<id>/` issues were published under before. Raw fetch
   directories stay flat under `data/raw/`.

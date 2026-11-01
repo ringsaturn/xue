@@ -764,7 +764,8 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   ten minutes (schema 1, `docs/synop.md`): national observation networks,
   each read by an adapter into one set of elements, JMA AMeDAS (about
   1 300 stations over Japan, ten-minute) the first. The mutable pointer
-  `latest-synop.json` names `synop.<YYYYMMDDHHMM>/index.json`, which lists
+  `latest-synop.json` names `synop/<YYYY>/<MM>/<DD>/synop.<YYYYMMDDHHMM>/index.json`
+  (the flat `synop.<YYYYMMDDHHMM>/index.json` before that layout), which lists
   `networks[]` (id, name, `cadence`, `prPeriod`, the `attribution` to show,
   `license`, `latest`, and its `<network>.jsonl` file with length and
   CRC32), the `elements` order (`t`, `rh`, `p`, `slp`, `wd`, `ws`, `gust`,

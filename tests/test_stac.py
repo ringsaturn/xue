@@ -642,20 +642,20 @@ class PointProductTests(unittest.TestCase):
         return self.item("airport", "airport.202609161440", "airport/expected/airport.202609161440/index.json")
 
     def synop_stations_files(self) -> dict[str, dict]:
-        index, _ = self.index("synop/expected/synop.202610050010/index.json")
+        index, _ = self.index("synop/expected/synop/2026/10/05/synop.202610050010/index.json")
         return {
-            network["id"]: self.index(f"synop/expected/synop.202610050010/{network['stations']['path']}")[0]
+            network["id"]: self.index(f"synop/expected/synop/2026/10/05/synop.202610050010/{network['stations']['path']}")[0]
             for network in index["networks"]
         }
 
     def synop_item(self) -> dict:
-        index, encoded = self.index("synop/expected/synop.202610050010/index.json")
+        index, encoded = self.index("synop/expected/synop/2026/10/05/synop.202610050010/index.json")
         return stac.point_product_item(
             index,
             len(encoded),
             crc32_hex(encoded),
             product="synop",
-            index_relative_path="synop.202610050010/index.json",
+            index_relative_path="synop/2026/10/05/synop.202610050010/index.json",
             stations_files=self.synop_stations_files(),
         )
 
@@ -812,7 +812,7 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(len(encoded), pointer["byteLength"])
 
     def test_a_synop_round_is_two_assets_per_network(self) -> None:
-        index, _ = self.index("synop/expected/synop.202610050010/index.json")
+        index, _ = self.index("synop/expected/synop/2026/10/05/synop.202610050010/index.json")
         item = self.synop_item()
         self.assertEqual(item["id"], "synop.202610050010")
         networks = [network["id"] for network in index["networks"]]

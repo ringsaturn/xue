@@ -653,7 +653,7 @@ def parser() -> argparse.ArgumentParser:
 
     synop_build = commands.add_parser(
         "synop-build",
-        help="fetch the surface station networks and write one synop.<round>/ index, a <network>.jsonl per network "
+        help="fetch the surface station networks and write one synop/YYYY/MM/DD/synop.<round>/ index, a <network>.jsonl per network "
         "and the pointer",
     )
     synop_build.add_argument(

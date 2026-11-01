@@ -35,7 +35,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import DownloadError, SynopProductError, XueError
 from ..pointproduct import iso_z, sha256_hex, write_bytes_atomic
 from .http import get
-from .schema import ELEMENT_BOUNDS, HISTORY_HOURS, ROUND_MINUTES, round_directory
+from .schema import ELEMENT_BOUNDS, HISTORY_HOURS, ROUND_MINUTES, raw_directory
 from .station import QC_KEY, NetworkRead, StationMeta
 
 LOG = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ Minamitorishima ``E``). They rank 0."""
 
 
 def network_directory(raw_root: Path, moment: datetime) -> Path:
-    return raw_root / round_directory(moment) / NETWORK
+    return raw_root / raw_directory(moment) / NETWORK
 
 
 def snapshot_stamp(moment: datetime) -> str:
@@ -156,7 +156,7 @@ def fetch(
     is asked for, so a rebuild reads what the round could have read."""
     now = now or datetime.now(UTC)
     directory = network_directory(raw_root, moment)
-    relative = f"{round_directory(moment)}/{NETWORK}"
+    relative = f"{raw_directory(moment)}/{NETWORK}"
     table = fetch_table(raw_root, force=force, now=now)
     try:
         response = get(LATEST_URL)

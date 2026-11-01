@@ -64,7 +64,7 @@
  ],
  "assets": {
   "index": {
-   "href": "../synop.202610050010/index.json?v=66727302",
+   "href": "2026/10/05/synop.202610050010/index.json?v=66727302",
    "type": "application/json",
    "title": "synop index (schema v2)",
    "roles": ["metadata"],
@@ -74,7 +74,7 @@
    "file:checksum": "b2020466727302"
   },
   "amedas": {
-   "href": "../synop.202610050010/amedas.jsonl?v=9d6a7441",
+   "href": "2026/10/05/synop.202610050010/amedas.jsonl?v=9d6a7441",
    "type": "application/x-ndjson",
    "title": "JMA AMeDAS: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
@@ -86,7 +86,7 @@
    "file:checksum": "b202049d6a7441"
   },
   "amedas.stations": {
-   "href": "../synop.202610050010/amedas.stations.json?v=d66772e3",
+   "href": "2026/10/05/synop.202610050010/amedas.stations.json?v=d66772e3",
    "type": "application/json",
    "title": "JMA AMeDAS: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -99,7 +99,7 @@
    "file:checksum": "b20204d66772e3"
   },
   "dwd": {
-   "href": "../synop.202610050010/dwd.jsonl?v=5ec96d61",
+   "href": "2026/10/05/synop.202610050010/dwd.jsonl?v=5ec96d61",
    "type": "application/x-ndjson",
    "title": "DWD SYNOP Germany: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
@@ -111,7 +111,7 @@
    "file:checksum": "b202045ec96d61"
   },
   "dwd.stations": {
-   "href": "../synop.202610050010/dwd.stations.json?v=049e13e3",
+   "href": "2026/10/05/synop.202610050010/dwd.stations.json?v=049e13e3",
    "type": "application/json",
    "title": "DWD SYNOP Germany: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -124,7 +124,7 @@
    "file:checksum": "b20204049e13e3"
   },
   "hko": {
-   "href": "../synop.202610050010/hko.jsonl?v=1be41d17",
+   "href": "2026/10/05/synop.202610050010/hko.jsonl?v=1be41d17",
    "type": "application/x-ndjson",
    "title": "Hong Kong Observatory: observations by station",
    "description": "One station per line, sorted by id, its window as columns. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
@@ -136,7 +136,7 @@
    "file:checksum": "b202041be41d17"
   },
   "hko.stations": {
-   "href": "../synop.202610050010/hko.stations.json?v=5090ede0",
+   "href": "2026/10/05/synop.202610050010/hko.stations.json?v=5090ede0",
    "type": "application/json",
    "title": "Hong Kong Observatory: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",

@@ -20,7 +20,7 @@ from typing import Any
 from ..airport.fetch import FetchRecord, SourceStatus
 from ..pointproduct import write_bytes_atomic
 from .networks import NETWORKS
-from .schema import round_directory, round_name
+from .schema import raw_directory, round_name
 
 LOG = logging.getLogger(__name__)
 
@@ -69,13 +69,13 @@ def fetch_round(
             statuses.append(status)
     record = FetchRecord(round_name(moment), statuses)
     write_bytes_atomic(
-        raw_root / round_directory(moment) / FETCH_FILENAME, json.dumps(record.to_json(), indent=2).encode("utf-8")
+        raw_root / raw_directory(moment) / FETCH_FILENAME, json.dumps(record.to_json(), indent=2).encode("utf-8")
     )
     return record
 
 
 def read_fetch_record(raw_root: Path, moment: datetime) -> FetchRecord | None:
-    path = raw_root / round_directory(moment) / FETCH_FILENAME
+    path = raw_root / raw_directory(moment) / FETCH_FILENAME
     if not path.exists():
         return None
     try:

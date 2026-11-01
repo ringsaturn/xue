@@ -31,8 +31,10 @@ from ..pointproduct import (  # noqa: F401 — re-exported: the synop modules im
     CRC32,
     check_number,
     check_builder,
+    archive_round_directory,
     check_pointer,
     existing_round_directory,
+    flat_round_directory,
     round_directories,
     check_sha256,
     check_sources,
@@ -164,11 +166,16 @@ def round_name(moment: datetime) -> str:
 
 
 def round_directory(moment: datetime) -> str:
-    """``synop.202610050010``: one immutable directory per round, flat
-    under the data root like the airport's. A round carries the whole
-    24-hour window and lives three hours, so there is no archive to file
-    by day."""
-    return f"synop.{round_name(moment)}"
+    """``synop/2026/10/05/synop.202610050010``: one immutable directory per
+    round, filed under its UTC day so the data root does not carry a
+    prefix per round."""
+    return archive_round_directory(PRODUCT, moment)
+
+
+def raw_directory(moment: datetime) -> str:
+    """``synop.202610050010``: where a round's fetched files sit under the
+    raw root, flat: a raw round is read once, by its own build."""
+    return flat_round_directory(PRODUCT, moment)
 
 
 def pointer_directories(moment: datetime) -> tuple[str, ...]:
