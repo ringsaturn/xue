@@ -545,6 +545,7 @@ export const ko: Record<MessageKey, string> = {
   alertsAsOf: "{time} 기준",
   alertsLevel: "{level}단계",
   alertsUntilCancelled: "해제 시까지",
+  alertsIssued: "{time} 발표",
   alertCategoryRain: "호우",
   alertCategoryFlood: "홍수",
   alertCategoryLandslide: "산사태",

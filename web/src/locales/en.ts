@@ -851,9 +851,9 @@ export const en = {
   aqDayRange: "PM2.5, last 24 h",
   aqNearest: "Nearest air-quality station, {km} km",
   /** The weather warnings (`docs/alerts.md`): every warning a national
-   * service (US NWS, JMA, ECCC) has in force now, drawn as areas on one
-   * 1–5 level scale; a snapshot of now, not of the forecast hour on
-   * screen. The event names on the card are the services' own and are not
+   * service (US NWS, JMA, ECCC, Europe's through MeteoAlarm) has in force
+   * now, drawn as areas on one 1–5 level scale; a snapshot of now, not of
+   * the forecast hour on screen. The event names on the card are the services' own and are not
    * translated; the category words are this product's sixteen classes. A
    * JMA warning is in force until it is lifted ("until cancelled"). */
   alertsTileTip: "Weather warnings in force now",
@@ -864,6 +864,7 @@ export const en = {
   alertsAsOf: "as of {time}",
   alertsLevel: "Level {level}",
   alertsUntilCancelled: "until cancelled",
+  alertsIssued: "issued {time}",
   alertCategoryRain: "Heavy rain",
   alertCategoryFlood: "Flood",
   alertCategoryLandslide: "Landslide",

@@ -200,9 +200,13 @@ per frame and never gate the playhead; a showcase case hides them, and
   one vector source per set and a fill and an outline
   layer per set layer, filtered to the codes in force and coloured by the
   highest level on each code. NWS fire weather events go to the `fire`
-  layer, the rest to the others. A click inside an area still pins the
-  probe and opens the card of every warning there; JMA's card carries the
-  boundary set's 出典 and 加工 lines and folds the survey notice.
+  layer, the rest to the others. A MeteoAlarm warning can have both a
+  polygon and codes, for different parts of its area, and both are drawn.
+  A click inside an area still pins the probe and opens the card of every
+  warning there, each with its issue time; JMA's card carries the
+  boundary set's 出典 and 加工 lines and folds the survey notice, and
+  MeteoAlarm's links its credit to meteoalarm.org and carries the
+  disclaimer its terms require.
 - URL state: `?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`,
   `?stations=snd,apt,syn,fire,aq,alerts|off` (link only, never stored).
 

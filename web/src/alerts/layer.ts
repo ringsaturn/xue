@@ -9,7 +9,8 @@
  * the set, filtered to the codes in force and coloured by the highest
  * level any warning gives the code. Where a warning has both, its polygon
  * is the warned area and its codes only the zones it touches, so the
- * polygon alone is drawn.
+ * polygon alone is drawn — except for MeteoAlarm, whose codes are the
+ * parts of the area the polygon does not draw, so both are.
  *
  * The warnings are a snapshot of what is in force now, not a forecast: the
  * playhead does not touch them. Rebuilding is per round (every few minutes
@@ -53,6 +54,10 @@ export function alertLevelColor(level: AlertLevel, darkGround: boolean): string 
   return ALERT_LEVEL_COLORS[darkGround ? "dark" : "light"][level - 1]!;
 }
 
+/** Networks whose codes name the parts of a warning's area its polygon
+ * does not draw (docs/alerts.md §6), rather than the zones it touches. */
+const AREAS_BESIDE_GEOMETRY = new Set(["meteoalarm"]);
+
 /** The layers of a boundary set a warning's codes are drawn on. */
 export function areaLayersFor(set: string, layers: readonly string[], line: AlertLine): string[] {
   if (set !== "nws-zones") return [...layers];
@@ -84,7 +89,7 @@ export function areaTargets(
     const areas = network.areas;
     if (!areas) return;
     for (const line of linesByNetwork[position] ?? []) {
-      if (line.geometry !== null || line.areas.length === 0) continue;
+      if (line.areas.length === 0 || (line.geometry !== null && !AREAS_BESIDE_GEOMETRY.has(network.id))) continue;
       for (const sourceLayer of areaLayersFor(areas.set, areas.layers, line)) {
         const key = `${areas.set}.${areas.version}/${sourceLayer}`;
         let target = targets.get(key);

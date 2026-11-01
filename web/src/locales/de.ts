@@ -543,6 +543,7 @@ export const de: Record<MessageKey, string> = {
   alertsAsOf: "Stand {time}",
   alertsLevel: "Stufe {level}",
   alertsUntilCancelled: "bis zur Aufhebung",
+  alertsIssued: "ausgegeben {time}",
   alertCategoryRain: "Starkregen",
   alertCategoryFlood: "Hochwasser",
   alertCategoryLandslide: "Erdrutsch",

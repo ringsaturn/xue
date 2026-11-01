@@ -545,6 +545,7 @@ export const ru: Record<MessageKey, string> = {
   alertsAsOf: "на {time}",
   alertsLevel: "Уровень {level}",
   alertsUntilCancelled: "до отмены",
+  alertsIssued: "выпущено {time}",
   alertCategoryRain: "Сильный дождь",
   alertCategoryFlood: "Наводнение",
   alertCategoryLandslide: "Оползень",

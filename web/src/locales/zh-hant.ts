@@ -538,6 +538,7 @@ export const zhHant: Record<MessageKey, string> = {
   alertsAsOf: "截至 {time}",
   alertsLevel: "第 {level} 級",
   alertsUntilCancelled: "直至解除",
+  alertsIssued: "{time} 發布",
   alertCategoryRain: "大雨",
   alertCategoryFlood: "洪水",
   alertCategoryLandslide: "山泥傾瀉",
