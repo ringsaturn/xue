@@ -82,7 +82,10 @@ LEVELS = (1, 2, 3, 4, 5)
 """1 statement or information, 2 advisory / yellow / 注意報, 3 warning /
 orange / 警報, 4 danger / red / 危険警報, 5 JMA 特別警報 alone."""
 
-ENDED_REASONS = ("expired", "cancelled", "gone")
+ENDED_REASONS = ("expired", "replaced", "cancelled", "gone")
+"""Why an alert left the snapshot, tested in this order: an ``ended[]``
+entry is ``[id, network, reason]``, or ``[id, network, "replaced", by]``
+naming the alert in force that replaced it."""
 
 ROW_FIELDS = ("id", "network", "category", "level", "event", "sent", "onset", "expires", "west", "south", "east", "north", "offset", "length")
 """An index row, in order; the last two are the byte span of the alert's
@@ -334,6 +337,16 @@ def validate_alert_line(payload: object, label: str) -> tuple[float, float, floa
         raise AlertsProductError(f"{label}.areas must be a list of unique area codes")
     _optional_string(payload.get("url"), f"{label}.url")
     _optional_string(payload.get("sender"), f"{label}.sender")
+    replaces = payload.get("replaces")
+    if replaces is not None:
+        if (
+            not isinstance(replaces, list)
+            or not replaces
+            or len(set(replaces)) != len(replaces)
+            or alert in replaces
+            or not all(isinstance(old, str) and (found := ALERT.match(old)) and found.group(1) == match.group(1) for old in replaces)
+        ):
+            raise AlertsProductError(f"{label}.replaces must be a non-empty list of other ids of the same network")
     return validate_geometry(payload.get("geometry"), f"{label}.geometry")
 
 
@@ -420,9 +433,13 @@ def validate_index(payload: object) -> None:
     previous = None
     for position, row in enumerate(ended):
         label = f"index.ended[{position}]"
-        if not isinstance(row, list) or len(row) != 3:
-            raise AlertsProductError(f"{label} must be [id, network, reason]")
-        alert, network, reason = row
+        if not isinstance(row, list) or len(row) not in (3, 4):
+            raise AlertsProductError(f"{label} must be [id, network, reason] or [id, network, \"replaced\", by]")
+        alert, network, reason = row[:3]
+        if (len(row) == 4) != (reason == "replaced"):
+            raise AlertsProductError(f"{label}: a replaced alert, and only one, names the alert that replaced it")
+        if len(row) == 4 and row[3] not in current:
+            raise AlertsProductError(f"{label}.by must be an alert in force")
         match = ALERT.match(alert) if isinstance(alert, str) else None
         if match is None:
             raise AlertsProductError(f"{label}.id is not a <network>:<upstream id> id")

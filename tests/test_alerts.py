@@ -142,12 +142,26 @@ class NwsTest(unittest.TestCase):
         validate_alert_line(line, "nws")
 
     def test_tests_and_cancels_are_not_in_force(self) -> None:
-        self.assertIsNone(nws.convert(self.payload["features"][5]))  # status Test
+        test = next(feature for feature in self.payload["features"] if feature["properties"]["status"] == "Test")
+        self.assertIsNone(nws.convert(test))
         cancel = copy.deepcopy(self.payload["features"][2])
         cancel["properties"]["messageType"] = "Cancel"
         cancel["properties"]["references"] = [{"identifier": "urn:oid:x"}]
         self.assertIsNone(nws.convert(cancel))
         self.assertEqual(nws.cancelled_by(cancel), ["nws:urn:oid:x"])
+
+    def test_an_update_names_what_it_replaces(self) -> None:
+        line = nws.convert(self.payload["features"][0])  # an Update of an earlier flood warning
+        self.assertEqual(line["replaces"], ["nws:urn:oid:2.49.0.1.840.0.7a03a51affa066bb29da3c0017294f2962c3807a.001.1"])
+        validate_alert_line(line, "nws")
+        self.assertNotIn("replaces", nws.convert(self.payload["features"][2]))  # an Alert references nothing
+        broken = copy.deepcopy(line)
+        broken["replaces"] = [line["id"]]
+        with self.assertRaises(AlertsProductError):
+            validate_alert_line(broken, "nws")
+        broken["replaces"] = ["jma:130000-10"]
+        with self.assertRaises(AlertsProductError):
+            validate_alert_line(broken, "nws")
 
     def test_times_are_utc(self) -> None:
         line = nws.convert(self.payload["features"][0])
@@ -170,9 +184,12 @@ class JmaTest(unittest.TestCase):
         for line in alerts:
             validate_alert_line(line, line["id"])
 
-    def test_a_lowered_urgent_warning_and_a_lifted_kind_are_cancelled(self) -> None:
-        _, lifted, _ = jma.convert(self.reports)
-        self.assertIn("jma:150000-49", lifted)  # 危険警報から注意報 on 29
+    def test_a_lowered_urgent_warning_is_replaced_and_a_lifted_kind_cancelled(self) -> None:
+        alerts, lifted, _ = jma.convert(self.reports)
+        by_id = {line["id"]: line for line in alerts}
+        # 危険警報から注意報 on 29: the 注意報 replaces the office's 危険警報.
+        self.assertEqual(by_id["jma:150000-29"]["replaces"], ["jma:150000-49"])
+        self.assertNotIn("jma:150000-49", lifted)
         self.assertTrue(any(identifier.endswith("-48") for identifier in lifted))  # 高潮危険警報 解除
 
     def test_a_stale_map_time_makes_the_source_fail(self) -> None:
@@ -238,11 +255,16 @@ class BuildTest(unittest.TestCase):
     def test_ended_reasons(self) -> None:
         scratch, output = built()
         with scratch:
-            ended = {row[0].split(":", 1)[0] + ":" + row[2] for row in index_of(output, SECOND)["ended"]}
-            reasons = {row[0]: row[2] for row in index_of(output, SECOND)["ended"]}
-        self.assertEqual(sorted(reasons.values()), ["cancelled", "expired", "expired", "gone"])
+            rows = index_of(output, SECOND)["ended"]
+        ended = {row[0].split(":", 1)[0] + ":" + row[2] for row in rows}
+        reasons = {row[0]: row[2] for row in rows}
+        self.assertEqual(sorted(reasons.values()), ["cancelled", "expired", "expired", "gone", "replaced"])
         self.assertIn("eccc:expired", ended)
         self.assertEqual(reasons["nws:urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1"], "cancelled")
+        # An Update of the special weather statement names the one it replaced.
+        statement = "nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b"
+        replaced = next(row for row in rows if row[2] == "replaced")
+        self.assertEqual(replaced, [f"{statement}.001.1", 0, "replaced", f"{statement}.002.1"])
 
     def test_a_failed_network_carries_its_lines_over(self) -> None:
         scratch, output = built()
@@ -332,6 +354,16 @@ class SchemaTest(unittest.TestCase):
         reason = copy.deepcopy(self.index)
         reason["ended"][0][2] = "downgraded"
         self.assertRejected(reason)
+        successor = copy.deepcopy(self.index)
+        replaced = next(row for row in successor["ended"] if row[2] == "replaced")
+        replaced[3] = replaced[0]  # not in force
+        self.assertRejected(successor)
+        unnamed = copy.deepcopy(self.index)
+        next(row for row in unnamed["ended"] if row[2] == "replaced").pop()
+        self.assertRejected(unnamed)
+        named = copy.deepcopy(self.index)
+        next(row for row in named["ended"] if row[2] == "gone").append(self.index["alerts"][0][0])
+        self.assertRejected(named)
         area = copy.deepcopy(self.index)
         area["networks"][0]["areas"]["path"] = "alerts-areas/nws-zones.pmtiles"
         self.assertRejected(area)

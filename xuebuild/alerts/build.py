@@ -5,9 +5,9 @@ A round is a snapshot, not a merge: each network's file is what the
 network says is in force now, less what has expired by the round's
 minute. The previous round matters for two things only. Its index is what
 ``ended[]`` is measured against — an alert there and not here ended, as
-``expired`` (its expiry passed), ``cancelled`` (the network withdrew it
-in so many words) or ``gone`` (it is simply no longer listed: replaced by
-an update, or lifted without saying). And its network files are what a
+``expired`` (its expiry passed), ``replaced`` (an alert in force names it
+in ``replaces``), ``cancelled`` (the network withdrew it in so many words)
+or ``gone`` (it is simply no longer listed). And its network files are what a
 network that failed this round, or said it has nothing new, carries over:
 the previous lines byte for byte, less the expired, so one bad request
 does not blank a country's warnings for five minutes.
@@ -130,10 +130,12 @@ def _ended(
     current: set[str],
     positions: dict[str, int],
     expired: set[str],
+    replaced: dict[str, str],
     cancelled: set[str],
     moment: datetime,
 ) -> list[list[Any]]:
-    """The previous round's alerts not in this one, with why."""
+    """The previous round's alerts not in this one, with why: an expiry
+    is a fact of the clock and wins; a replacement names its successor."""
     if not previous_index:
         return []
     previous_networks = previous_index.get("networks", [])
@@ -146,12 +148,13 @@ def _ended(
         if network_id not in positions:
             continue
         if alert in expired or (isinstance(row[7], str) and datetime.fromisoformat(row[7]) <= moment):
-            reason = "expired"
+            ended.append([alert, positions[network_id], "expired"])
+        elif alert in replaced:
+            ended.append([alert, positions[network_id], "replaced", replaced[alert]])
         elif alert in cancelled:
-            reason = "cancelled"
+            ended.append([alert, positions[network_id], "cancelled"])
         else:
-            reason = "gone"
-        ended.append([alert, positions[network_id], reason])
+            ended.append([alert, positions[network_id], "gone"])
     ended.sort(key=lambda entry: entry[0])
     return ended
 
@@ -181,6 +184,7 @@ def build_product(
     sources: list[SourceStatus] = []
     expired: set[str] = set()
     cancelled: set[str] = set()
+    replaced: dict[str, str] = {}
     carried: list[str] = []
     any_ok = False
     for network in NETWORKS:
@@ -218,6 +222,10 @@ def build_product(
                 expired.add(alert)
                 continue
             box = validate_alert_line(payload, f"{network.id}[{alert}]")
+            for old in payload.get("replaces", ()):
+                # Lines go by in id order, so of two successors the first
+                # by id is named.
+                replaced.setdefault(old, alert)
             rows.append(_row(payload, position, box, offset, len(line)))
             body_lines.append(line)
             offset += len(line) + 1  # the newline
@@ -243,7 +251,7 @@ def build_product(
         "categories": list(CATEGORIES),
         "mapping": {"tables": tables_crc32()},
         "alerts": rows,
-        "ended": _ended(previous_index, {row[0] for row in rows}, positions, expired, cancelled, moment),
+        "ended": _ended(previous_index, {row[0] for row in rows}, positions, expired, replaced, cancelled, moment),
         "sources": [_published(status) for status in sources],
         "builder": builder_block(),
     }
