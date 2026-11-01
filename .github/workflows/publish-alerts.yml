@@ -16,9 +16,10 @@ name: publish alerts
 #
 # One round per job, no loop: at five-minute cadence the schedule is the loop.
 
+# The five-minute schedule runs on a host (scripts/alerts-host/,
+# docs/contribution/publishing.md): one writer per pointer, so this workflow
+# is the manual fallback and has no cron while the host's timer runs.
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       round:

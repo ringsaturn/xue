@@ -174,6 +174,8 @@ withholds its pointer only when nothing contributed.
 | Soundings | `publish-sounding.yml` | a quarter past every hour | [`docs/sounding.md`](../sounding.md) |
 | Surface stations | `publish-synop.yml` | three past every ten minutes | [`docs/synop.md`](../synop.md) |
 | Active fires | `publish-fire.yml` | twenty-three past every hour | [`docs/fire.md`](../fire.md) |
+| Air quality | `publish-aq.yml` | a quarter past and a quarter to every hour | [`docs/aq.md`](../aq.md) |
+| Weather warnings | a self-hosted timer (below); `publish-alerts.yml` by dispatch only | every five minutes | [`docs/alerts.md`](../alerts.md) |
 
 ```sh
 make live-tc-index && make tc-build                  # previous index first, so ids carry over
@@ -193,6 +195,31 @@ make upload-r2-fire ROUND=202610120500 && make prune-r2-fire    # sensor files â
 
 The airport, sounding, synop and fire builds also take `--offline --raw-dir
 tests/fixtures/<product>`.
+
+### Weather warnings on a host
+
+MeteoAlarm's terms ask for warnings within five minutes on average and ten
+at most, which a scheduled workflow (often late by several minutes, at
+times skipped) cannot promise. So `alerts` runs on a host:
+`scripts/alerts-host/` holds `xue-alerts-run.sh` (installed as
+`/usr/local/sbin/xue-alerts-run`), `xue-alerts.service` and
+`xue-alerts.timer` (`*:0/5:30`).
+
+- Each run updates a sparse checkout of `main` (`xuebuild`, `mk`,
+  `scripts`), `uv sync --frozen`s it, and takes the same steps as the
+  workflow: live index, build, upload, prune. The host follows `main`
+  with no deploy of its own.
+- `/etc/xue-alerts/r2.env` (mode 600) holds an R2 token scoped to the
+  dataset bucket, as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+  `CLOUDFLARE_ACCOUNT_ID`; the AWS CLI is awscli from PyPI through `uvx`.
+- `/etc/xue-alerts/env`, when present, adds `DRY_RUN=--dryrun` or
+  `FORCE=--force` for a test round.
+- The unit runs as a dynamic user under `MemoryMax=400M`, `CPUQuota=50%`;
+  a round takes about 40 s and 20 s of CPU, most of it the sync.
+- One writer per pointer: while the timer runs, `publish-alerts.yml` has
+  no schedule. To fall back, stop the timer
+  (`systemctl disable --now xue-alerts.timer`) and dispatch the workflow,
+  or restore its cron.
 
 ## Indicators
 

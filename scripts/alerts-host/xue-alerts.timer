@@ -1,0 +1,12 @@
+# A round every five minutes, half a minute after the round's minute so
+# the upstream feeds have turned over. A round still running when the next
+# is due is not started twice: the service is oneshot.
+[Unit]
+Description=Publish xue alerts every five minutes
+
+[Timer]
+OnCalendar=*:0/5:30
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
