@@ -107,6 +107,16 @@ def _expired(payload: dict[str, Any], moment: datetime) -> bool:
     return isinstance(expires, str) and datetime.fromisoformat(expires) <= moment
 
 
+def _union(
+    box: tuple[float, float, float, float], other: tuple[float, float, float, float] | None
+) -> tuple[float, float, float, float] | None:
+    """Two boxes' union; None when the second is unknown, since a box short
+    of part of the area would hide the alert from a reader asking there."""
+    if other is None:
+        return None
+    return (min(box[0], other[0]), min(box[1], other[1]), max(box[2], other[2]), max(box[3], other[3]))
+
+
 def _row(payload: dict[str, Any], network: int, box: tuple[float, float, float, float] | None, offset: int, length: int) -> list[Any]:
     west, south, east, north = box if box is not None else (None, None, None, None)
     return [
@@ -202,6 +212,12 @@ def build_product(
         if result.ok and not result.unchanged:
             for payload in result.alerts:
                 lines[payload["id"]] = encode_json(payload)
+            if result.carry is not None and previous_index:
+                # A source that failed keeps its previous lines, byte for
+                # byte, beside what the others delivered.
+                for alert, line in (_previous_lines(output_root, previous_index, network.id) or {}).items():
+                    if alert not in lines and result.carry(json.loads(line)):
+                        lines[alert] = line
         else:
             previous = _previous_lines(output_root, previous_index, network.id) if previous_index else None
             if previous is None:
@@ -230,8 +246,13 @@ def build_product(
                 expired.add(alert)
                 continue
             box = validate_alert_line(payload, f"{network.id}[{alert}]")
-            if box is None and boxes is not None and network.area_layers is not None:
-                box = area_box(payload["areas"], network.area_layers(payload), boxes)
+            if boxes is not None and network.area_layers is not None and payload["areas"]:
+                if box is None:
+                    box = area_box(payload["areas"], network.area_layers(payload), boxes)
+                elif network.areas_beside_geometry:
+                    box = _union(box, area_box(payload["areas"], network.area_layers(payload), boxes))
+            elif box is not None and network.areas_beside_geometry and payload["areas"]:
+                box = None  # codes no box file resolves: the polygons alone would leave them out
             for old in payload.get("replaces", ()):
                 # Lines go by in id order, so of two successors the first
                 # by id is named.

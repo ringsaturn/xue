@@ -35,15 +35,18 @@ def _pace() -> None:
     _last_request = time.monotonic()
 
 
-def get(url: str, *, accept: str | None = None, timeout: float = 60) -> Response:
+def get(url: str, *, accept: str | None = None, timeout: float = 60, pace: bool = True, max_elapsed: float = 90) -> Response:
     """Fetch ``url``, decompressed. Raises :class:`DownloadError` for
-    anything but 200 and 404."""
+    anything but 200 and 404. ``pace=False`` skips the pause, for an
+    adapter that bounds its own concurrency against one host (the pause
+    is process-wide, not per thread)."""
     headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
     if accept:
         headers["Accept"] = accept
-    _pace()
+    if pace:
+        _pace()
     try:
-        response = _request(url, headers=headers, timeout=timeout, attempts=3, max_elapsed=90)
+        response = _request(url, headers=headers, timeout=timeout, attempts=3, max_elapsed=max_elapsed)
     except DownloadError as exc:
         if _http_error_code(exc) == 404:
             return Response(404, None)

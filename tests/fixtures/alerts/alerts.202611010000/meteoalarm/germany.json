@@ -1,0 +1,640 @@
+{
+ "warnings": [
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1793097480000.3c53dbd1-d8fd-4af1-88da-92ba6fc81e05",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1793097480000.3c53dbd1-d8fd-4af1-88da-92ba6fc81e05.MUL",
+    "incidents": "Update",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Elbe von Hamburg bis Cuxhaven",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE804",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "501000004",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "AUFHEBUNG des Seewetterdienstes Hamburg.",
+      "event": "BÖEN",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "11",
+        "valueName": "II"
+       },
+       {
+        "value": "WIND",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-27T11:38:00+01:00",
+      "headline": "AUFHEBUNG der WARNUNG vor STARKWIND (Küste)",
+      "language": "de-DE",
+      "onset": "2026-10-27T03:27:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "DWD / Seewetterdienst Hamburg",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Elbe von Hamburg bis Cuxhaven",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE804",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "501000004",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "This event no longer poses a threat.",
+      "event": "near gale",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "11",
+        "valueName": "II"
+       },
+       {
+        "value": "WIND",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-27T11:38:00+01:00",
+      "headline": "Cancellation of Official NEAR GALE WARNING",
+      "language": "en",
+      "onset": "2026-10-27T03:27:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "DWD / Seewetterdienst Hamburg",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Update",
+    "references": "opendata@dwd.de,2.49.0.0.276.0.DWD.PVW.1793068020000.c6de8032-2dc6-4ea9-8fd3-1867088655c8.MUL,2026-10-27T03:27:00+01:00",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-27T11:38:00+01:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "97b80ef6-2955-4463-99e6-e482a632bfe2"
+  },
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1793441280000.898467df-f87f-4c1f-81d7-34036e5049d1",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1793441280000.898467df-f87f-4c1f-81d7-34036e5049d1.MUL",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Berchtesgadener Land",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE183",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109172000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Es tritt im Warnzeitraum oberhalb 1000 m leichter Schneefall mit Mengen bis 10 cm auf. In Staulagen werden Mengen bis 20 cm erreicht. Verbreitet wird es glatt.",
+      "event": "LEICHTER SCHNEEFALL",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "70",
+        "valueName": "II"
+       },
+       {
+        "value": "SNOWFALL",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-11-01T15:00:00+01:00",
+      "headline": "Amtliche WARNUNG vor LEICHTEM SCHNEEFALL",
+      "instruction": "Hinweis auf: Rutschgefahr. \nHandlungsempfehlungen: \nVerhalten im Straßenverkehr anpassen (Schnee/Glätte und mögliche Sichtbehinderungen)",
+      "language": "de-DE",
+      "onset": "2026-10-31T21:00:00+01:00",
+      "parameter": [
+       {
+        "value": "<10 [cm]",
+        "valueName": "snowfall"
+       },
+       {
+        "value": "<20 [cm]",
+        "valueName": "in windward areas"
+       },
+       {
+        "value": "Rutschgefahr",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "2; snow-ice",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Berchtesgadener Land",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE183",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109172000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "There is a risk of light snowfall (level 1 of 4).\nHeight range: > 1000 m; Precipitation amounts: < 10 cm; in windward areas: < 20 cm",
+      "event": "light snowfall",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "70",
+        "valueName": "II"
+       },
+       {
+        "value": "SNOWFALL",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-11-01T15:00:00+01:00",
+      "headline": "Official WARNING of LIGHT SNOWFALL",
+      "instruction": "Hazard(s) to expect: slippery ground. \nRecommendations for what to do: \nAdapt your behaviour in road traffic (snow/icy surfaces, possibly reduced visibility).",
+      "language": "en",
+      "onset": "2026-10-31T21:00:00+01:00",
+      "parameter": [
+       {
+        "value": "<10 [cm]",
+        "valueName": "snowfall"
+       },
+       {
+        "value": "<20 [cm]",
+        "valueName": "in windward areas"
+       },
+       {
+        "value": "slippery ground",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "2; snow-ice",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Berchtesgadener Land",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE183",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109172000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Il y a un risque de faible chutes de neige (Niveau 1 sur 4).\nAltitude  : > 1000 m ; Volume de précipitations: < 10 cm ; dans une situation de barrage météorologique: < 20 cm",
+      "event": "Faible chutes de neige",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "70",
+        "valueName": "II"
+       },
+       {
+        "value": "SNOWFALL",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-11-01T15:00:00+01:00",
+      "headline": "ALERTE officielle INTEMPÉRIES pour FAIBLES CHUTES DE NEIGE",
+      "instruction": "Attention : chaussée glissante. \nRecommandations d'action : \nAdaptez votre conduite aux conditions de circulation (à la neige/au verglas et éventuellement à des conditions de visibilité difficiles)",
+      "language": "fr",
+      "onset": "2026-10-31T21:00:00+01:00",
+      "parameter": [
+       {
+        "value": "<10 [cm]",
+        "valueName": "snowfall"
+       },
+       {
+        "value": "<20 [cm]",
+        "valueName": "in windward areas"
+       },
+       {
+        "value": "chaussée glissante",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "2; snow-ice",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-31T11:08:00+01:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "58262b7c-2367-477b-a767-aac3d36f6872"
+  },
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1793441280000.33aa44fa-1ca9-4950-aa68-00c62d2a060d",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1793441280000.33aa44fa-1ca9-4950-aa68-00c62d2a060d.MUL",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Freyung-Grafenau",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE380",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109272000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       },
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Regen",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE391",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109276000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Es tritt im Warnzeitraum oberhalb 1000 m leichter Schneefall mit Mengen bis 5 cm auf. In Staulagen werden Mengen bis 10 cm erreicht. Verbreitet wird es glatt.",
+      "event": "LEICHTER SCHNEEFALL",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "70",
+        "valueName": "II"
+       },
+       {
+        "value": "SNOWFALL",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-11-01T01:03:00+01:00",
+      "headline": "Amtliche WARNUNG vor LEICHTEM SCHNEEFALL",
+      "instruction": "Hinweis auf: Rutschgefahr. \nHandlungsempfehlungen: \nVerhalten im Straßenverkehr anpassen (Schnee/Glätte und mögliche Sichtbehinderungen)",
+      "language": "de-DE",
+      "onset": "2026-10-31T21:00:00+01:00",
+      "parameter": [
+       {
+        "value": "<5 [cm]",
+        "valueName": "snowfall"
+       },
+       {
+        "value": "<10 [cm]",
+        "valueName": "in windward areas"
+       },
+       {
+        "value": "Rutschgefahr",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "2; snow-ice",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Freyung-Grafenau",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE380",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109272000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       },
+       {
+        "altitude": 3280.8399,
+        "areaDesc": "Kreis Regen",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE391",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109276000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "There is a risk of light snowfall (level 1 of 4).\nHeight range: > 1000 m; Precipitation amounts: < 5 cm; in windward areas: < 10 cm",
+      "event": "light snowfall",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "70",
+        "valueName": "II"
+       },
+       {
+        "value": "SNOWFALL",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-11-01T01:03:00+01:00",
+      "headline": "Official WARNING of LIGHT SNOWFALL",
+      "instruction": "Hazard(s) to expect: slippery ground. \nRecommendations for what to do: \nAdapt your behaviour in road traffic (snow/icy surfaces, possibly reduced visibility).",
+      "language": "en",
+      "onset": "2026-10-31T21:00:00+01:00",
+      "parameter": [
+       {
+        "value": "<5 [cm]",
+        "valueName": "snowfall"
+       },
+       {
+        "value": "<10 [cm]",
+        "valueName": "in windward areas"
+       },
+       {
+        "value": "slippery ground",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "2; snow-ice",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-31T11:08:00+01:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "8e49843a-0e5a-4cf1-bb46-f576b674261c"
+  }
+ ]
+}

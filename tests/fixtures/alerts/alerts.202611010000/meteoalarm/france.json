@@ -1,0 +1,315 @@
+{
+ "warnings": [
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261031064441.261028",
+    "incidents": "Update",
+    "info": [
+     {
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-11-01T00:00:00+01:00",
+      "event": "Vigilance jaune avalanches",
+      "expires": "2026-11-01T00:00:00+01:00",
+      "headline": "Vigilance jaune avalanches",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-11-01T00:00:00+01:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "9; avalanches",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/",
+      "area": []
+     },
+     {
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-11-01T00:00:00+01:00",
+      "event": "Moderate avalanches warning",
+      "expires": "2026-11-01T00:00:00+01:00",
+      "headline": "Moderate avalanches warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-11-01T00:00:00+01:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "9; avalanches",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/",
+      "area": []
+     }
+    ],
+    "msgType": "Update",
+    "references": "vigilance@meteo.fr,2.49.0.0.250.0.FR.20261031060013.751028,2026-10-31T06:00:13+01:00",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-31T06:44:41+01:00",
+    "status": "Actual"
+   },
+   "uuid": "ed937fab-70f9-4228-a16e-99835d670238"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261101060012.602021",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Var",
+        "geocode": [
+         {
+          "value": "FR825",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Alpes-Maritimes",
+        "geocode": [
+         {
+          "value": "FR823",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Haute-Savoie",
+        "geocode": [
+         {
+          "value": "FR718",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-10-31T23:00:06+01:00",
+      "event": "Vigilance jaune vent-violent",
+      "expires": "2026-11-02T00:00:00+01:00",
+      "headline": "Vigilance jaune vent-violent",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-10-31T23:00:06+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Var",
+        "geocode": [
+         {
+          "value": "FR825",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Alpes-Maritimes",
+        "geocode": [
+         {
+          "value": "FR823",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Haute-Savoie",
+        "geocode": [
+         {
+          "value": "FR718",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-10-31T23:00:06+01:00",
+      "event": "Moderate wind warning",
+      "expires": "2026-11-02T00:00:00+01:00",
+      "headline": "Moderate wind warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-10-31T23:00:06+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-31T23:00:12+01:00",
+    "status": "Actual"
+   },
+   "uuid": "a84c68be-cba2-418b-98fc-f296a6c7ea64"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261101060015.836029",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Alpes-Maritimes",
+        "polygon": [
+         "43.3392,7.1576 43.3826,7.3035 43.4987,7.4439 43.606,7.6548 43.7624,7.5421 43.7291,7.5129 43.7294,7.4623 43.6512,7.3257 43.6696,7.2808 43.599,7.1735 43.5302,7.1643 43.4951,7.0048 43.4547,6.9814 43.3392,7.1576"
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-10-31T23:00:06+01:00",
+      "event": "Vigilance jaune vagues-submersion",
+      "expires": "2026-11-02T00:00:00+01:00",
+      "headline": "Vigilance jaune vagues-submersion",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-10-31T23:00:06+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Alpes-Maritimes",
+        "polygon": [
+         "43.3392,7.1576 43.3826,7.3035 43.4987,7.4439 43.606,7.6548 43.7624,7.5421 43.7291,7.5129 43.7294,7.4623 43.6512,7.3257 43.6696,7.2808 43.599,7.1735 43.5302,7.1643 43.4951,7.0048 43.4547,6.9814 43.3392,7.1576"
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-10-31T23:00:06+01:00",
+      "event": "Moderate coastalevent warning",
+      "expires": "2026-11-02T00:00:00+01:00",
+      "headline": "Moderate coastalevent warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-10-31T23:00:06+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-31T23:00:15+01:00",
+    "status": "Actual"
+   },
+   "uuid": "63cd2546-425d-4085-a5a9-01dd9c03d95a"
+  }
+ ]
+}

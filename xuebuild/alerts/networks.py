@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..airport.fetch import SourceStatus
-from . import eccc, jma, nws
+from . import eccc, jma, meteoalarm, nws
 from .alert import NetworkRead
 from .schema import areas_bbox_filename, areas_bbox_path, areas_path
 
@@ -74,6 +74,10 @@ class Network:
     area_layers: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     """The layers of ``areas`` a line's codes resolve against, in the order
     they are looked up (``docs/alerts.md`` §9)."""
+    areas_beside_geometry: bool = False
+    """A line's ``areas`` are the parts of the warned area its polygon does
+    not draw (MeteoAlarm), rather than the zones the polygon touches
+    (NWS): its box is then the union of both."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -111,6 +115,21 @@ JMA_CLASS20 = AreaSet(
 """The agency's 予報区等GISデータ, 市町村等（気象警報等）, released
 2026-02-26, simplified and tiled by xue; reused under the Public Data
 License v1.0 with the credit ``docs/alerts.md`` §9.2 gives."""
+
+METEOALARM_AREAS = AreaSet(
+    set="meteoalarm-areas",
+    version="20261101",
+    byte_length=896011,
+    crc32="0261074b",
+    layers=("de_kreise", "de_kueste", "de_binnenseen", "fr_departement"),
+    bbox_byte_length=28815,
+    bbox_crc32="81cefa87",
+)
+"""The MeteoAlarm areas with openly licensed boundaries, keyed by the
+geocode a line names (``WARNCELLID:…``, ``NUTS3:…``): the DWD's warn cells
+(CC BY 4.0, Datenbasis: Deutscher Wetterdienst; © GeoBasis-DE / BKG) and
+IGN's ADMIN EXPRESS départements (Licence Ouverte 2.0) under their NUTS
+2013 codes, as fetched on 2026-11-01 (``docs/alerts.md`` §9.3)."""
 
 NWS = Network(
     id=nws.NETWORK,
@@ -153,9 +172,27 @@ ECCC = Network(
     areas=None,
 )
 
-NETWORKS: tuple[Network, ...] = (NWS, JMA, ECCC)
+METEOALARM = Network(
+    id=meteoalarm.NETWORK,
+    name="EUMETNET – MeteoAlarm",
+    attribution="EUMETNET – MeteoAlarm",
+    license="MeteoAlarm-Terms",
+    license_url="https://meteoalarm.org/en/live/page/terms-and-conditions",
+    url="https://meteoalarm.org/en/live/",
+    sources=meteoalarm.SOURCES,
+    fetch=meteoalarm.fetch,
+    read=meteoalarm.read,
+    areas=METEOALARM_AREAS,
+    area_layers=lambda line: METEOALARM_AREAS.layers,
+    areas_beside_geometry=True,
+)
+"""Reused under MeteoAlarm's Terms and Conditions §5: CC BY 4.0 with
+further requirements (credit, issue time, link, disclaimer, delay) that
+``docs/alerts.md`` §10.4 lists."""
 
-AREA_SETS: dict[str, AreaSet] = {area_set.set: area_set for area_set in (NWS_ZONES, JMA_CLASS20)}
+NETWORKS: tuple[Network, ...] = (NWS, JMA, ECCC, METEOALARM)
+
+AREA_SETS: dict[str, AreaSet] = {area_set.set: area_set for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS)}
 
 
 def network_by_id(network_id: str) -> Network | None:

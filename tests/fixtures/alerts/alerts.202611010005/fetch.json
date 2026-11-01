@@ -23,6 +23,27 @@
    "fetched": "2026-11-01T00:12:03Z",
    "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
    "error": "HTTP Error 503: Service Unavailable"
+  },
+  {
+   "id": "meteoalarm-france",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-france",
+   "file": "alerts.202611010005/meteoalarm/france.json"
+  },
+  {
+   "id": "meteoalarm-germany",
+   "ok": false,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany",
+   "error": "timed out"
+  },
+  {
+   "id": "meteoalarm-italy",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-italy",
+   "file": "alerts.202611010005/meteoalarm/italy.json"
   }
  ]
 }

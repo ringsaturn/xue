@@ -27,7 +27,20 @@ rounds:
   fetch failed (``fetch.json``), so the network carries over and loses the
   fog advisory to its expiry.
 
-``alerts-areas/`` holds the two boundary sets' box files exactly as
+- ``meteoalarm/<country>.json`` — three of MeteoAlarm's per-country feeds
+  as fetched on 2026-11-01, each warning cut to two or three languages and
+  a few areas. Round one: Germany's two yellow snow warnings by DWD warn
+  cell (the second's ``expires`` moved to 00:03 UTC) and a message from
+  the week before, long expired; France's wind warning by NUTS 3
+  départements and coastal warning by polygon (both moved to the evening
+  before) and a green message; Italy's wind warning by ``EMMA_ID`` only
+  and a green message. Round two: Germany's fetch failed, so its lines
+  carry over less the expired one; France lists an ``Update`` of the wind
+  warning under a made-up identifier that references it (``replaced``)
+  and no coastal warning (``gone``); Italy unchanged. The other countries
+  are not in ``fetch.json`` and so are recorded as not fetched.
+
+``alerts-areas/`` holds the three boundary sets' box files exactly as
 published (the CRC32s ``xuebuild/alerts/networks.py`` pins), where a
 build's raw directory caches them, so the area-coded rows get their boxes
 offline.

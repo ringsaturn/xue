@@ -71,17 +71,47 @@
     "crc32": "988a0b6f"
    },
    "areas": null
+  },
+  {
+   "id": "meteoalarm",
+   "name": "EUMETNET – MeteoAlarm",
+   "attribution": "EUMETNET – MeteoAlarm",
+   "license": "MeteoAlarm-Terms",
+   "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+   "url": "https://meteoalarm.org/en/live/",
+   "latest": "2026-11-01T00:04:12Z",
+   "file": {
+    "path": "meteoalarm.jsonl",
+    "byteLength": 5620,
+    "crc32": "b78dc151"
+   },
+   "areas": {
+    "set": "meteoalarm-areas",
+    "version": "20261101",
+    "path": "../../../../../alerts-areas/meteoalarm-areas.20261101.pmtiles",
+    "byteLength": 896011,
+    "crc32": "0261074b",
+    "layers": ["de_kreise", "de_kueste", "de_binnenseen", "fr_departement"],
+    "bbox": {
+     "path": "../../../../../alerts-areas/meteoalarm-areas.20261101.bbox.json",
+     "byteLength": 28815,
+     "crc32": "81cefa87"
+    }
+   }
   }
  ],
  "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold", "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
  "mapping": {
-  "tables": "ebaf5daa"
+  "tables": "dac58e75"
  },
  "alerts": [
   ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 2339],
   ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 0, 642],
   ["jma:011000-26", 1, "snow-ice", 2, "着雪注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 643, 651],
   ["jma:150000-29", 1, "landslide", 2, "レベル２土砂災害注意報", "2026-10-31T11:31:00Z", null, null, 137.6349, 36.7661, 139.1243, 37.7103, 1295, 682],
+  ["meteoalarm:2.49.0.0.250.0.FR.20261101060012.999021", 3, "wind", 2, "Vigilance jaune vent-violent", "2026-11-01T00:04:12Z", "2026-10-31T22:00:06Z", "2026-11-01T23:00:00Z", 5.6559, 42.982, 7.719, 46.4083, 0, 1500],
+  ["meteoalarm:2.49.0.0.276.0.DWD.PVW.1793441280000.898467df-f87f-4c1f-81d7-34036e5049d1.MUL", 3, "snow-ice", 2, "LEICHTER SCHNEEFALL", "2026-10-31T10:08:00Z", "2026-10-31T20:00:00Z", "2026-11-01T14:00:00Z", 12.7028, 47.4644, 13.0971, 47.9624, 1501, 2033],
+  ["meteoalarm:2.49.0.0.380.3.IT.261031105004.036", 3, "wind", 2, "Yellow Wind Warning", "2026-10-31T09:50:04Z", "2026-11-01T00:00:00Z", "2026-11-02T22:59:00Z", null, null, null, null, 3535, 2084],
   ["nws:urn:oid:2.49.0.1.840.0.beefc58017b3da8b25350b5a3960a5dc0e77103f2dc1.001.1", 0, "snow-ice", 2, "Winter Storm Watch", "2026-11-01T00:04:00Z", "2026-11-01T12:00:00Z", "2026-11-02T06:00:00Z", -104.0467, 45.9445, -101.9973, 46.6312, 0, 1119],
   ["nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.002.1", 0, "other", 1, "Special Weather Statement", "2026-11-01T00:02:00Z", "2026-10-31T23:20:00Z", "2026-11-01T01:00:00Z", -165.3873, 66.9658, -159.8018, 68.2946, 1120, 1268],
   ["nws:urn:oid:2.49.0.1.840.0.f00d163a97442f0ed098453e3d2bc21d007daedff5f8.001.1", 0, "thunderstorm", 4, "Tornado Warning", "2026-10-31T23:50:00Z", "2026-10-31T23:50:00Z", "2026-11-01T00:30:00Z", -111.91, 33.43, -111.69, 33.52, 2389, 1982],
@@ -89,6 +119,9 @@
  ],
  "ended": [
   ["eccc:700460001437647014202610310502_fea1-2388", 2, "expired"],
+  ["meteoalarm:2.49.0.0.250.0.FR.20261101060012.602021", 3, "replaced", "meteoalarm:2.49.0.0.250.0.FR.20261101060012.999021"],
+  ["meteoalarm:2.49.0.0.250.0.FR.20261101060015.836029", 3, "gone"],
+  ["meteoalarm:2.49.0.0.276.0.DWD.PVW.1793441280000.33aa44fa-1ca9-4950-aa68-00c62d2a060d.MUL", 3, "expired"],
   ["nws:urn:oid:2.49.0.1.840.0.0e283990ffa56627410f1c41a79337ea2e7e74d6.012.1", 0, "cancelled"],
   ["nws:urn:oid:2.49.0.1.840.0.5e1f0b6f3d1c4a7b9e2d8c0a6f4b3e2d1c0b9a8f.001.1", 0, "gone"],
   ["nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.001.1", 0, "replaced", "nws:urn:oid:2.49.0.1.840.0.cad42b2581233afb49e1922a1d62d31e8b56842b.002.1"],
@@ -119,6 +152,206 @@
    "fetched": "2026-11-01T00:12:03Z",
    "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1000",
    "error": "HTTP Error 503: Service Unavailable"
+  },
+  {
+   "id": "meteoalarm-andorra",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-austria",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-belgium",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-bosnia-herzegovina",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-bulgaria",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-croatia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-cyprus",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-czechia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-denmark",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-estonia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-finland",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-france",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-france",
+   "reports": 2,
+   "skipped": 1,
+   "sha256": "208343f7456c00d60b7cfb012c9ee868fd4c02fccfadefb3ad268c10ac462c0e"
+  },
+  {
+   "id": "meteoalarm-germany",
+   "ok": false,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany",
+   "error": "timed out"
+  },
+  {
+   "id": "meteoalarm-greece",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-hungary",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-iceland",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-ireland",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-italy",
+   "ok": true,
+   "fetched": "2026-11-01T00:12:05Z",
+   "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-italy",
+   "reports": 2,
+   "skipped": 1,
+   "sha256": "6ecc003ef8e1b99d899e0399257ab640fe06375d2c91625074e605f2ac377a3a"
+  },
+  {
+   "id": "meteoalarm-latvia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-lithuania",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-luxembourg",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-malta",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-moldova",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-montenegro",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-netherlands",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-norway",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-poland",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-portugal",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-republic-of-north-macedonia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-romania",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-serbia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-slovakia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-slovenia",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-spain",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-sweden",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-switzerland",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-ukraine",
+   "ok": false,
+   "error": "not fetched"
+  },
+  {
+   "id": "meteoalarm-united-kingdom",
+   "ok": false,
+   "error": "not fetched"
   }
  ],
  "builder": {

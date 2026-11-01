@@ -230,5 +230,24 @@
   "levelByColour": {"yellow": 2, "orange": 3, "red": 4},
   "levelByType": {"statement": 1, "advisory": 2, "watch": 2, "warning": 3},
   "defaultLevel": 1
+ },
+ "meteoalarm": {
+  "levelByAwareness": {"2": 2, "3": 3, "4": 4},
+  "categoryByAwarenessType": {
+   "1": "wind",
+   "2": "snow-ice",
+   "3": "thunderstorm",
+   "4": "fog",
+   "5": "heat",
+   "6": "cold",
+   "7": "coastal",
+   "8": "fire",
+   "9": "snow-ice",
+   "10": "rain",
+   "12": "flood",
+   "13": "flood",
+   "14": "marine",
+   "15": "other"
+  }
  }
 }
