@@ -41,7 +41,7 @@ make --no-print-directory live-alerts-index AWS="$AWS"
 round=$(date -u +%Y%m%d%H)$(printf '%02d' $(( 5 * ($(date -u +%M | sed 's/^0//') / 5) )))
 live=""
 if [ -f web/public/data/latest-alerts.json ]; then
-  live=$(jq -r .path web/public/data/latest-alerts.json | sed -n 's:^alerts\.\([0-9]\{12\}\)/index\.json$:\1:p')
+  live=$(jq -r .path web/public/data/latest-alerts.json | sed -n 's:^\(alerts/[0-9/]\{11\}\)\{0,1\}alerts\.\([0-9]\{12\}\)/index\.json$:\2:p')
 fi
 if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
   echo "alerts $round is already live; nothing to build"

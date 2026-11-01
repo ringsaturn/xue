@@ -94,7 +94,7 @@ jobs:
           fi
           live=""
           if [ -f web/public/data/latest-airport.json ]; then
-            live=$(jq -r .path web/public/data/latest-airport.json | sed -n 's:^airport\.\([0-9]\{12\}\)/index\.json$:\1:p')
+            live=$(jq -r .path web/public/data/latest-airport.json | sed -n 's:^\(airport/[0-9/]\{11\}\)\{0,1\}airport\.\([0-9]\{12\}\)/index\.json$:\2:p')
           fi
           if [ "$live" = "$round" ] && [ -z "$FORCE" ]; then
             echo "airport $round is already live; nothing to build" | tee -a "$GITHUB_STEP_SUMMARY"
