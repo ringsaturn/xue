@@ -237,6 +237,18 @@ pub(crate) fn geometry_contains(geometry: &Value, lat: f64, lon: f64) -> bool {
 
 /// Whether a query box (`west > east` across the antimeridian) meets an
 /// alert's plain min/max box.
+/// Whether a line's area codes name parts of the warned area its polygon
+/// does not draw (MeteoAlarm, `docs/alerts.md` §6), rather than the zones
+/// the polygon touches (NWS): such a line stands on its box outside the
+/// polygon, as an area-coded alert does.
+fn areas_beside_geometry(network: &str, line: &Value) -> bool {
+    network == "meteoalarm"
+        && line
+            .get("areas")
+            .and_then(Value::as_array)
+            .is_some_and(|areas| !areas.is_empty())
+}
+
 fn boxes_meet(query: [f64; 4], bbox: [f64; 4]) -> bool {
     let [west, south, east, north] = query;
     let [alert_west, alert_south, alert_east, alert_north] = bbox;
@@ -381,7 +393,10 @@ pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> 
         for (row, line) in kept.into_iter().zip(lines) {
             let line = line?;
             let keep = match line.get("geometry") {
-                Some(geometry) if !geometry.is_null() => geometry_contains(geometry, lat, lon),
+                Some(geometry) if !geometry.is_null() => {
+                    geometry_contains(geometry, lat, lon)
+                        || areas_beside_geometry(text(&networks[row.network], "id"), &line)
+                }
                 _ => true,
             };
             if keep {
