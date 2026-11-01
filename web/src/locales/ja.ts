@@ -540,6 +540,7 @@ export const ja: Record<MessageKey, string> = {
   alertsAsOf: "{time} 時点",
   alertsLevel: "レベル {level}",
   alertsUntilCancelled: "解除まで",
+  alertsIssued: "{time} 発表",
   alertCategoryRain: "大雨",
   alertCategoryFlood: "洪水",
   alertCategoryLandslide: "土砂災害",

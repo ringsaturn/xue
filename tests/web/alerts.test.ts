@@ -75,9 +75,10 @@ describe("the alerts pointer", () => {
 describe("the alerts index and network files", () => {
   it("reads every row, each span naming its own line", () => {
     const { index, lines } = load();
-    expect(index.networks.map((network) => network.id)).toEqual(["nws", "jma", "eccc"]);
+    expect(index.networks.map((network) => network.id)).toEqual(["nws", "jma", "eccc", "meteoalarm"]);
     expect(index.networks[1]!.areas?.set).toBe("jma-class20");
     expect(index.networks[2]!.areas).toBeNull();
+    expect(index.networks[3]!.areas?.set).toBe("meteoalarm-areas");
     for (const row of index.alerts) {
       const network = index.networks[row.network]!;
       const bytes = readFileSync(join(ROUND, network.file.path));
@@ -113,10 +114,22 @@ describe("the warning areas", () => {
     const jma = targets.get("jma-class20.20260226/class20")!;
     const jmaCodes = new Set(lines[1]!.flatMap((line) => line.areas));
     expect(new Set(jma.levels.keys())).toEqual(jmaCodes);
-    // No warning with a polygon of its own is drawn again by its codes.
+    // No NWS or JMA warning with a polygon of its own is drawn again by its codes.
     for (const target of targets.values())
       for (const ids of target.alerts.values())
-        for (const id of ids) expect(lines.flat().find((line) => line.id === id)!.geometry).toBeNull();
+        for (const id of ids)
+          if (!id.startsWith("meteoalarm:")) expect(lines.flat().find((line) => line.id === id)!.geometry).toBeNull();
+  });
+
+  it("draws a MeteoAlarm warning's codes beside its polygon", () => {
+    const { index, lines } = load();
+    const coded = lines[3]!.find((line) => line.areas.length > 0)!;
+    const polygon = lines.flat().find((line) => line.geometry !== null)!;
+    const both = { ...coded, id: "meteoalarm:both", geometry: polygon.geometry };
+    const targets = areaTargets(index.networks, [[], [], [], [both]]);
+    const drawn = [...targets.values()].flatMap((target) => [...target.alerts.values()].flat());
+    expect(drawn).toContain("meteoalarm:both");
+    expect(inlineFeatures([both]).features.length).toBe(1);
   });
 
   it("gives each code the highest level in force on it", () => {

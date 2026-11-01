@@ -546,6 +546,7 @@ export const tr: Record<MessageKey, string> = {
   alertsAsOf: "{time} itibarıyla",
   alertsLevel: "Seviye {level}",
   alertsUntilCancelled: "iptal edilene kadar",
+  alertsIssued: "yayımlandı {time}",
   alertCategoryRain: "Kuvvetli yağış",
   alertCategoryFlood: "Sel",
   alertCategoryLandslide: "Heyelan",
