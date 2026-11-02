@@ -692,6 +692,38 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_alternates=(RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),),
         fill_values=(-999.0, -99.0),
     ),
+    # The radar quality index: the MRMS mosaic's own estimate, 0 to 1 in
+    # tenths, of how far each cell's reflectivity can be trusted near the
+    # ground — 1 close to a radar with a clear beam, falling with range as
+    # the beam rises above the surface and widens, and under terrain
+    # blockage or the melting layer. It is the coverage the composite's code
+    # 0 cannot state: ``cref`` paints "no echo" and "no radar" alike, and
+    # this field tells them apart. There is no WMO parameter for it, so the
+    # MRMS-local 209/8/0 on a "specific altitude above mean sea level"
+    # surface at 0 m is the primary identity, as for the reflectivity
+    # volume. Points outside coverage carry -3 and missing points -1; both
+    # become the bottom of the range, one step below an index of 0, so the
+    # codebook keeps "no coverage" and "no quality" apart (the soil layers'
+    # rule). Unitless; GDAL spells it ``[non-dim]``. The field follows the
+    # network rather than the weather, so its chunks difference against
+    # the previous frame.
+    "rqi": VariableSpec(
+        id="rqi",
+        conversion=rules.NON_DIMENSIONAL,
+        gdal_rules=(rules.template_mrms(),),
+        label="Radar quality index",
+        output_unit="1",
+        value_range=(-0.1, 1.0),
+        grib_element="RadarQualityIndex",
+        mrms_product="RadarQualityIndex_00.00",
+        grib2_discipline=209,
+        grib2_category=8,
+        grib2_number=0,
+        grib2_level_type=102,
+        grib2_level_value=0.0,
+        gdal_unit="non-dim",
+        fill_values=(-3.0, -1.0),
+    ),
     # Three more surface diagnostics, each a GRIB record of its own with no
     # unit conversion. Registered from the GFS pgrb2 set; ECMWF open data
     # carries neighbours rather than equivalents, each accepted through a

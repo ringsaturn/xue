@@ -324,6 +324,7 @@ recognize; anything else it can still decode.
 | `ugrd100m` / `vgrd100m` | 0 / 2 / 2, 0 / 2 / 3 | 103, 100 m | 100 m wind components, the turbine hub height; the `wind100m` bundle |
 | `dswrf` | 0 / 4 / 192 | 1, 0 | NCEP local parameter |
 | `cref` | 0 / 16 / 5 | 10, no value | Composite reflectivity, entire atmosphere; observed (the radar mosaic) or forecast (HRRR's `REFC`, NCEP-local 0 / 16 / 196, accepted on input and never written) |
+| `rqi` | 209 / 8 / 0 | 102, 0 m | Radar quality index of the MRMS mosaic, 0–1, unitless. MRMS-local (discipline 209): no WMO parameter carries it, so the local identity is the one written |
 | `gust` | 0 / 2 / 22 | 1, 0 | Instantaneous surface wind gust (GFS). ECMWF's `10fg` / `10fg3`, the same parameter on the 10 m surface (103, 10 m) as the maximum over the interval ending at the frame, product template 4.8, is accepted on input under this identity and never written; on ECMWF the series starts at the first step |
 | `tcdc` | 0 / 6 / 1 | 10, no value | Total cloud cover, entire atmosphere; the instantaneous record, not the interval average. ECMWF's `tcc`, the ECMWF-local 0 / 6 / 192 on the ground surface as a 0–1 fraction, is accepted on input, scaled to percent, and never written |
 | `cape` | 0 / 7 / 6 | 1, 0 | Surface-based CAPE (not the mixed-layer variants on surface type 108). ECMWF's `mucape`, the same parameter departing from surface type 17, the most unstable parcel's level, is accepted on input and never written |
@@ -834,6 +835,7 @@ values unless noted):
 | `ugrd10m` / `vgrd10m` / `ugrd100m` / `vgrd100m` | −63.5 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `dswrf` | 0 W/m² | 5 | 254 | 255 | 2.5 W/m² |
 | `cref` | 0 dBZ | 0.5 | 160 | 255 | 0.25 dB |
+| `rqi` | −0.1 | 0.1 | 11 | 255 | none: MRMS publishes tenths; code 0 is outside radar coverage, code 1 an index of 0 (every profile) |
 | `gust` | 0 m/s | 0.5 | 254 | 255 | 0.25 m/s |
 | `tcdc` | 0 % | 0.5 | 200 | 255 | 0.25 % |
 | `cape` | 0 J/kg | 25 | 254 | 255 | 12.5 J/kg |
@@ -954,6 +956,9 @@ run; byte-identical re-encoding, a stable legend, and comparable point
 series across runs depend on it.
 
 `cref` code 0 is both "no echo" and "outside the radar network's coverage".
+A reader that must tell them apart reads the mosaic's `rqi` beside it,
+whose code 0 is outside coverage and whose code 1 is covered with an index
+of 0.
 A ground mosaic is a regional product on a rectangular grid, and this
 container carries no bitmap, so the bottom of the codebook is what a
 renderer paints as nothing. It is an ordinary in-range code rather than a

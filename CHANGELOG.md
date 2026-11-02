@@ -5,6 +5,14 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-02
+
+- `mrms` publishes `rqi`, the MRMS radar quality index (0–1 in tenths,
+  MRMS-local 209 / 8 / 0 on surface 102 at 0 m), beside `cref` and
+  `prate`. Its code 0 marks cells outside radar coverage and code 1 an
+  index of 0, so a reader can tell "no radar" from "no echo", which
+  `cref` code 0 does not (`docs/format.md`, `docs/sources.md`).
+
 ## 2026-10-30
 
 - Fixed: a `/v1/point` or `/v1/cell` request for bundles on different axes

@@ -305,9 +305,10 @@ Facts worth getting right:
   six each; `prate` is de-accumulated from the run total and, like `gust`
   (the maximum over the step, or the hour on ARPEGE, ending at the frame),
   has no analysis frame. CMA:
-  `cref`. MRMS: `cref` (observed composite reflectivity, dBZ) and `prate`
-  (the MRMS precipitation rate, mm/h; a case may ship the reflectivity
-  alone). MRMS3D: `refl3d` (the 33-level volume above). WOOF-WRF
+  `cref`. MRMS: `cref` (observed composite reflectivity, dBZ), `prate`
+  (the MRMS precipitation rate, mm/h) and `rqi` (the radar quality index,
+  0–1; code 0 is outside radar coverage, which `cref` code 0 does not tell
+  from no echo); a case may ship the reflectivity alone. MRMS3D: `refl3d` (the 33-level volume above). WOOF-WRF
   (`woof`): `tmp2m`, `prate`, `tmpsfc`, `dpt2m`, `tcdc`, `lcdc`, `mcdc`,
   `hcdc`, `hpbl`, `dswrf`, the static `orog` and the vector pair
   `wind10m` — the same names and units as the GFS's, so a case ships a
