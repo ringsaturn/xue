@@ -5,19 +5,19 @@ the boundary set a network's ``areas`` codes resolve against
 Not part of the five-minute build. A set changes when its agency
 publishes a new release, a few times a year; this runs by hand on the
 downloaded release, and the file goes up once under a name that carries
-the release's date (``make upload-r2-alerts-areas``). The network table
+the day it was built (``make upload-r2-alerts-areas``). The network table
 (:mod:`.networks`) then pins the new file's length and CRC32, so a round
 never names a set that is not on the bucket.
 
-The work is two subprocesses, ``ogr2ogr`` (reproject to EPSG:4326,
-simplify, keep only the code attribute) and ``tippecanoe`` (tile to
-PMTiles), with a pure-Python pass between them that turns each layer's
-attributes into the one feature property ``id`` and holds the layers a
-continental view does not need (counties, fire zones) back to their
-minimum zoom. Beside the tiles it writes ``<set>.<version>.bbox.json``,
-every code's bounding box per layer, from the unsimplified boundaries:
-what the build puts in an index row for an alert that names areas rather
-than drawing them.
+The work is two subprocesses, ``ogr2ogr`` (reproject to EPSG:4326, keep
+only the code attribute) and ``tippecanoe`` (tile to PMTiles, simplified
+below the deepest zoom only), with a pure-Python pass between them that
+turns each layer's attributes into the one feature property ``id`` and
+holds the layers a continental view does not need (counties, fire zones)
+back to their minimum zoom. Beside the tiles it writes
+``<set>.<version>.bbox.json``, every code's bounding box per layer, from
+the boundaries as released: what the build puts in an index row for an
+alert that names areas rather than drawing them.
 """
 
 from __future__ import annotations
@@ -38,12 +38,19 @@ from .schema import COORDINATE_DECIMALS, AlertsProductError, areas_bbox_filename
 
 LOG = logging.getLogger(__name__)
 
-PRE_SIMPLIFY_DEGREES = 0.0005
-"""``ogr2ogr -simplify`` before tiling: under a fifth of a pixel at the
-sets' highest zoom (z10 ≈ 0.0014° a pixel at 256 px tiles), so the tiles
-lose nothing a map shows while tippecanoe reads a tenth of the vertices."""
-
 COORDINATE_PRECISION = 5
+
+MAXZOOM = 11
+"""The deepest tiles. A z11 tile unit (4096 to a tile) is about 5 m at
+the equator, finer than the releases are drawn, so a map zoomed in past
+it overzooms tiles that hold the boundaries as released."""
+
+TIPPECANOE = ("--simplification=10", "--low-detail=11", "--detect-shared-borders", "--simplify-only-low-zooms")
+"""Below :data:`MAXZOOM` lines are simplified to ten tile units (well under
+a screen pixel at the zoom the tile is drawn at), shared borders once for
+both neighbours so they still meet; at :data:`MAXZOOM` the boundaries are
+kept as released. Nothing is simplified before tiling: ``ogr2ogr
+-simplify`` treats every polygon alone and pulls neighbours apart."""
 
 
 @dataclass(frozen=True)
@@ -129,16 +136,16 @@ SETS: dict[str, AreaSet] = {
             LayerSpec("offshore", re.compile(r"^oz\d{2}[a-z]{2}\d{2}$"), ("ID",), _marine_code),
             LayerSpec("fire", re.compile(r"^fz\d{2}[a-z]{2}\d{2}$"), ("STATE", "ZONE"), _zone_code, minzoom=6),
         ),
-        maxzoom=9,
+        maxzoom=MAXZOOM,
         source_srs=None,
-        tippecanoe=("--simplification=10", "--low-detail=11", "--detect-shared-borders"),
+        tippecanoe=TIPPECANOE,
     ),
     "jma-class20": AreaSet(
         id="jma-class20",
         layers=(LayerSpec("class20", re.compile(r".*"), ("regioncode",), _jma_code),),
-        maxzoom=10,
+        maxzoom=MAXZOOM,
         source_srs="EPSG:6668",
-        tippecanoe=("--simplification=10", "--low-detail=11", "--detect-shared-borders"),
+        tippecanoe=TIPPECANOE,
     ),
     "meteoalarm-areas": AreaSet(
         id="meteoalarm-areas",
@@ -148,9 +155,9 @@ SETS: dict[str, AreaSet] = {
             LayerSpec("de_binnenseen", re.compile(r"^Warngebiete_Binnenseen$"), ("WARNCELLID",), _warncell_code),
             LayerSpec("fr_departement", re.compile(r"^ADMINEXPRESS-COG-CARTO_departement$"), ("code_insee",), _departement_code),
         ),
-        maxzoom=9,
+        maxzoom=MAXZOOM,
         source_srs="EPSG:4326",
-        tippecanoe=("--simplification=10", "--low-detail=11", "--detect-shared-borders"),
+        tippecanoe=TIPPECANOE,
     ),
 }
 
@@ -229,8 +236,8 @@ def _outward(box: list[float]) -> list[float]:
 
 def layer_boxes(datasource: str, layer: LayerSpec, area_set: AreaSet, scratch: Path) -> dict[str, list[float]]:
     """Every code of a layer → the bounding box of all its features, read
-    from the boundaries as released (reprojected, not simplified), so a
-    simplified tile never lies outside the box."""
+    from the boundaries as released (reprojected), so a tile never lies
+    outside the box."""
     raw = scratch / f"{layer.name}.bbox.geojsonl"
     command = ["ogr2ogr", "-f", "GeoJSONSeq", "-t_srs", "EPSG:4326"]
     if area_set.source_srs:
@@ -260,7 +267,7 @@ def write_layer(datasource: str, layer: LayerSpec, area_set: AreaSet, scratch: P
     """One layer → a GeoJSONSeq file of ``{"id": code}`` features ready
     for tippecanoe; returns it, its feature count and its distinct codes."""
     raw = scratch / f"{layer.name}.ogr.geojsonl"
-    command = ["ogr2ogr", "-f", "GeoJSONSeq", "-t_srs", "EPSG:4326", "-simplify", str(PRE_SIMPLIFY_DEGREES)]
+    command = ["ogr2ogr", "-f", "GeoJSONSeq", "-t_srs", "EPSG:4326"]
     if area_set.source_srs:
         command += ["-s_srs", area_set.source_srs]
     command += ["-select", ",".join(layer.fields), "-lco", f"COORDINATE_PRECISION={COORDINATE_PRECISION}", str(raw), datasource]
@@ -287,7 +294,7 @@ def build_area_set(set_id: str, source: Path, version: str, output: Path) -> dic
     if area_set is None:
         raise AlertsProductError(f"unknown boundary set {set_id!r}; choose from {', '.join(SETS)}")
     if not re.fullmatch(r"\d{8}", version):
-        raise AlertsProductError("version must be the release's date, YYYYMMDD")
+        raise AlertsProductError("version must be the day the set is built, YYYYMMDD")
     if not source.is_dir():
         raise AlertsProductError(f"{source} is not a directory of the downloaded release")
     if shutil.which("tippecanoe") is None:

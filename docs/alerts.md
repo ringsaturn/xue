@@ -329,13 +329,13 @@ chain an event's messages across rounds.
      "licenseUrl": "https://www.weather.gov/disclaimer",
      "url": "https://www.weather.gov/", "latest": "2026-11-01T00:06:00Z",
      "file": {"path": "nws.jsonl", "byteLength": 578054, "crc32": "0a1b2c3d"},
-     "areas": {"set": "nws-zones", "version": "20260416",
-               "path": "../../../../../alerts-areas/nws-zones.20260416.pmtiles",
-               "byteLength": 8907673, "crc32": "3f5d3096",
+     "areas": {"set": "nws-zones", "version": "20261102",
+               "path": "../../../../../alerts-areas/nws-zones.20261102.pmtiles",
+               "byteLength": 31023141, "crc32": "879ebf6c",
                "layers": ["zone", "county", "marine", "offshore", "fire"],
-               "bbox": {"path": "../../../../../alerts-areas/nws-zones.20260416.bbox.json",
-                        "byteLength": 524181, "crc32": "e6ac20a5"}}},
-    {"id": "jma", …, "areas": {"set": "jma-class20", "version": "20260226", …}},
+               "bbox": {"path": "../../../../../alerts-areas/nws-zones.20261102.bbox.json",
+                        "byteLength": 524181, "crc32": "05a06972"}}},
+    {"id": "jma", …, "areas": {"set": "jma-class20", "version": "20261102", …}},
     {"id": "eccc", …, "areas": null}
   ],
   "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold",
@@ -451,7 +451,7 @@ compact JSON object below followed by `\n`:
   empty for a network whose alerts carry their own polygons.
 - `geometry` is the alert's own polygon where the network draws one
   (NWS storm-based warnings, every ECCC alert, the MeteoAlarm areas a
-  service draws), simplified (§9), else `null`. Where both are given, the
+  service draws), as drawn with rounded coordinates (§9), else `null`. Where both are given, the
   polygon is the warned area and `areas` the zones it touches — except
   for MeteoAlarm, whose `areas` are the parts of the warned area the
   polygon does not draw (§10.4), so a display draws both.
@@ -542,12 +542,11 @@ not know, an expired or green MeteoAlarm message. A network's own fields are des
 ## 9. Geometry and boundary sets
 
 **Inline polygons.** An upstream polygon (GeoJSON Polygon or
-MultiPolygon) becomes a MultiPolygon: Douglas–Peucker at 0.001° (about
-100 m, under a pixel at the zooms a warning is read at), coordinates
-rounded to four decimals, positions the rounding made repeat dropped,
-rings closed. A sliver that simplification would collapse keeps its
-rounded, unsimplified ring; a hole that collapses is dropped; a polygon
-with no area left is dropped, and an alert with none left has `geometry:
+MultiPolygon) becomes a MultiPolygon as drawn, not simplified:
+coordinates rounded to four decimals (about 11 m), positions the rounding
+made repeat dropped, rings closed. A ring left with fewer than three
+distinct corners has no area: such a hole is dropped, such an outer ring
+drops its polygon, and an alert with no polygon left has `geometry:
 null`. Pure NumPy (`xuebuild/alerts/geometry.py`), so the build has no
 GEOS dependency.
 
@@ -558,21 +557,22 @@ release, each feature carrying one property, `id`, the code a line's
 A display joins a round's codes to the set — e.g. MapLibre with
 `promoteId: "id"` and feature state, or a filter on `["get", "id"]` —
 reading only the tiles in view by HTTP range. A set is named
-`<set>.<version>` by the release's effective date; a new release is a new
-file and a new pin in the network table, and older rounds keep naming the
+`<set>.<version>` by the day it was built (the upstream release is named
+in its section); a new release or a new build recipe is a new file and a
+new pin in the network table, and older rounds keep naming the
 file they were built against, so a round and its boundaries never
 disagree.
 
 Beside each set, `<set>.<version>.bbox.json` holds every code's box:
 
 ```json
-{"set": "nws-zones", "version": "20260416",
+{"set": "nws-zones", "version": "20261102",
  "layers": {"zone": {"AKZ317": [-143.8934, 58.8091, -137.4999, 60.5219], …}, "county": {…}, …}}
 ```
 
 one object per layer in the set's order, codes sorted, each box
 `[west, south, east, north]` over all of the code's features as released
-(reprojected, not simplified), rounded outward to four decimals so it
+(reprojected), rounded outward to four decimals so it
 holds the area. It is pinned by length and CRC32 in the network table
 like the tiles. The build reads it from the raw directory's
 `alerts-areas/`, fetching it once from the public data origin under
@@ -584,16 +584,22 @@ against the layers is in its section (§9.1, §9.2, §9.3).
 Sets are built by hand, not by the five-minute build:
 
 ```sh
-xue alerts-areas --set nws-zones --source <the downloaded release> --version 20260416 \
+xue alerts-areas --set nws-zones --source <the downloaded release> --version 20261102 \
   --output web/public/data/alerts-areas
-make upload-r2-alerts-areas SET=nws-zones VERSION=20260416
+make upload-r2-alerts-areas SET=nws-zones VERSION=20261102
 ```
 
-The tool runs `ogr2ogr` (reproject to EPSG:4326, simplify by 0.0005°,
-keep the code attributes, five-decimal GeoJSONSeq) and `tippecanoe`
-(`--simplification=10 --low-detail=11 --detect-shared-borders`, no tile
-size or feature limit, tiny polygons kept so every code can be hit), with
-a Python pass between them that builds each feature's `id` and holds the
+The tool runs `ogr2ogr` (reproject to EPSG:4326, keep the code
+attributes, five-decimal GeoJSONSeq; nothing simplified: `ogr2ogr
+-simplify` treats each polygon alone and pulls neighbours apart) and
+`tippecanoe` (zooms 0–11, `--simplification=10 --low-detail=11
+--detect-shared-borders --simplify-only-low-zooms`, no tile size or
+feature limit, tiny polygons kept so every code can be hit): below z11 a
+line moves at most ten tile units, well under a screen pixel at the zoom
+the tile is drawn at, and a shared border is simplified once for both
+neighbours so they still meet; z11 holds the boundaries as released, so
+a map zoomed past it overzooms exact edges. A Python pass between the
+two builds each feature's `id` and holds the
 county and fire-zone layers back to z6. tippecanoe runs on relative names
 inside a scratch directory, so the same release builds the same bytes and
 the pinned CRC32 can be reproduced. It writes the box file beside the tiles
@@ -607,12 +613,11 @@ of the extract, header and directories included):
 
 | view | budget | measured |
 |---|---|---|
-| CONUS z4, `-125,24,-66,50` | ≤ 300 KB | 202 501 bytes |
-| all Japan z5, `122,24,146,46` | ≤ 200 KB | 117 335 bytes |
+| CONUS z4, `-125,24,-66,50` | ≤ 300 KB | 171 454 bytes |
+| all Japan z5, `122,24,146,46` | ≤ 200 KB | 82 446 bytes |
 
-Untuned (`--detect-shared-borders` alone) the same views were 481 435 and
-217 526 bytes and the files 20.6 MB and 5.1 MB; `--low-detail=10` brought
-CONUS z4 to 160 607 bytes at visibly coarser coastlines.
+With no simplification at any zoom (`--no-line-simplification`) the same
+views were 797 765 and 310 650 bytes and the files 65.5 MB and 26.9 MB.
 
 ### 9.1 `nws-zones`
 
@@ -621,16 +626,17 @@ current and the next release side by side under their effective date:
 
 | layer | release | id | zooms | features | codes |
 |---|---|---|---|---|---|
-| `zone` | public forecast zones `z_16ap26` | `STATE` + `Z` + `ZONE` (`OKZ025`) | 0–9 | 4 157 | 4 080 |
-| `county` | counties `c_16ap26` | `STATE` + `C` + last three digits of `FIPS` (`OKC109`) | 6–9 | 3 352 | 3 269 |
-| `marine` | coastal marine zones `mz16ap26` | `ID` (`ANZ639`) | 0–9 | 569 | 569 |
-| `offshore` | offshore marine zones `oz16ap26` | `ID` (`PZZ900`) | 0–9 | 130 | 130 |
-| `fire` | fire weather zones `fz16ap26` | `STATE` + `Z` + `ZONE` | 6–9 | 3 683 | 3 603 |
+| `zone` | public forecast zones `z_16ap26` | `STATE` + `Z` + `ZONE` (`OKZ025`) | 0–11 | 4 157 | 4 080 |
+| `county` | counties `c_16ap26` | `STATE` + `C` + last three digits of `FIPS` (`OKC109`) | 6–11 | 3 352 | 3 269 |
+| `marine` | coastal marine zones `mz16ap26` | `ID` (`ANZ639`) | 0–11 | 569 | 569 |
+| `offshore` | offshore marine zones `oz16ap26` | `ID` (`PZZ900`) | 0–11 | 130 | 130 |
+| `fire` | fire weather zones `fz16ap26` | `STATE` + `Z` + `ZONE` | 6–11 | 3 683 | 3 603 |
 
-`nws-zones.20260416.pmtiles`: 8 907 673 bytes, CRC32 `3f5d3096`, built
-in 21 s; `nws-zones.20260416.bbox.json`: 524 181 bytes, CRC32
-`e6ac20a5`. Other views: CONUS z3 169 278 bytes, the southern Plains at
-z6 (`-104,33,-94,40`) 71 571, a 1° box around Oklahoma City at z9 5 609.
+`nws-zones.20261102.pmtiles`: 31 023 141 bytes, CRC32 `879ebf6c`;
+`nws-zones.20261102.bbox.json`: 524 181 bytes, CRC32 `05a06972`. Other
+views: CONUS z3 150 322 bytes, the southern Plains at z6
+(`-104,33,-94,40`) 55 243, a 1° box around Oklahoma City
+(`-98,35,-97,36`) at z9 4 576 and at z11 11 016.
 
 Fire weather zones share the public zones' `Z` code space but not their
 shapes: a code resolves against the `fire` layer for the fire-weather
@@ -648,12 +654,12 @@ longitude.
 The agency's 予報区等GISデータ (`https://www.data.jma.go.jp/developer/gis.html`),
 市町村等（気象警報等）, release `20260226_AreaInformationCity_weather_GIS`:
 one layer, `class20`, id `regioncode` (seven digits, the class20 codes of
-the warning map), zooms 0–10, 1 805 features and codes, read as JGD2011
+the warning map), zooms 0–11, 1 805 features and codes, read as JGD2011
 (EPSG:6668; the release ships without a `.prj`).
-`jma-class20.20260226.pmtiles`: 2 795 153 bytes, CRC32 `43b3b6eb`, built
-in 15 s; `jma-class20.20260226.bbox.json`: 82 289 bytes, CRC32
-`c361aa9d`. Other views: all Japan z4 83 439 bytes, Kantō at z8
-(`138.5,35,140.5,36.5`) 52 003, central Tokyo at z10 32 221. A line's
+`jma-class20.20261102.pmtiles`: 12 593 916 bytes, CRC32 `49385bc7`;
+`jma-class20.20261102.bbox.json`: 82 289 bytes, CRC32 `c1108b5b`. Other
+views: all Japan z4 66 452 bytes, Kantō at z8 (`138.5,35,140.5,36.5`)
+33 311, central Tokyo at z11 (`139.6,35.6,139.9,35.8`) 64 613. A line's
 codes resolve against `class20`.
 
 Terms. The release is reused under the agency's website terms (the
@@ -664,8 +670,8 @@ a map drawn from it is shown or redistributed it carries:
 - 出典：気象庁「予報区等GISデータ」(<https://www.data.jma.go.jp/developer/gis.html>),
   公共データ利用規約 第1.0版 (Public Data License 1.0,
   <https://www.digital.go.jp/resources/open_data/public_data_license_v1.0>);
-- 加工：簡略化・PMTiles 化 by xue — the set is simplified and converted to
-  vector tiles by xue, and is not published by the Japan Meteorological
+- 加工：PMTiles 化 by xue — the set is converted to vector tiles by
+  xue, and is not published by the Japan Meteorological
   Agency;
 - the agency's notice of the Geospatial Information Authority of Japan's
   approval, as its GIS page gives it: この地図の作成に当たっては、国土地理院長の承認を得て、同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）
@@ -674,8 +680,7 @@ a map drawn from it is shown or redistributed it carries:
 
 The MeteoAlarm areas named by a code whose boundaries are published under
 open terms, each feature's `id` the code a line lists (`<valueName>:<value>`,
-§10.4). One set, several upstreams, versioned by the day they were
-fetched:
+§10.4). One set, several upstreams (fetched on 2026-11-01):
 
 | layer | upstream | id | features |
 |---|---|---|---|
@@ -690,17 +695,17 @@ the 11 214 municipality cells are not used by the feed). The IGN layer is
 `https://data.geopf.fr/wfs/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=ADMINEXPRESS-COG-CARTO.LATEST:departement&outputFormat=application/json&srsName=CRS:84`.
 Each is saved as `<layer's upstream name>.geojson` without its `crs`
 member (the coordinates are longitude, latitude) and passed to
-`xue alerts-areas --set meteoalarm-areas`, all zooms 0–9. Météo-France's
+`xue alerts-areas --set meteoalarm-areas`, all zooms 0–11. Météo-France's
 warnings carry NUTS **2013** codes (`FR711` is Ain); the département
 codes are mapped to them by `xuebuild/alerts/fr_nuts2013.json`, the 101
 level-3 codes of the NUTS 2013 classification (Commission Regulation (EU)
 No 1319/2013) matched by name to the départements' INSEE codes.
 
-`meteoalarm-areas.20261101.pmtiles`: 896 011 bytes, CRC32 `0261074b`;
-`meteoalarm-areas.20261101.bbox.json`: 28 815 bytes, CRC32 `81cefa87`.
-Views: Germany and France at z4 (`-6,41,16,56`) 30 768 bytes, at z5
-43 202; Germany at z6 (`5,47,16,55`) 47 393; a 1° box around Munich at z9
-13 257.
+`meteoalarm-areas.20261102.pmtiles`: 3 563 611 bytes, CRC32 `25117c18`;
+`meteoalarm-areas.20261102.bbox.json`: 28 815 bytes, CRC32 `97b9b07f`.
+Views: Germany and France at z4 (`-6,41,16,56`) 23 725 bytes, at z5
+33 668; Germany at z6 (`5,47,16,55`) 40 610; a 1° box around Munich
+(`11,47.6,12,48.6`) at z11 17 860.
 
 `EMMA_ID` codes are not in the set. MeteoAlarm's Redistribution Hub
 (<https://meteoalarm.org/en/live/page/redistribution-hub>) links an
@@ -713,14 +718,14 @@ Terms. Wherever the set or a map drawn from it is shown or redistributed
 it carries:
 
 - for the German layers: "Datenbasis: Deutscher Wetterdienst,
-  Warngebiete vereinfacht und als Vektorkacheln aufbereitet" and
+  Warngebiete als Vektorkacheln aufbereitet" and
   "© GeoBasis-DE / BKG 2021 (Daten modifiziert)" — DWD geodata are
   reusable under CC BY 4.0 with a source note
   (<https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html>),
   and the warn cells carry the BKG's notice as a feature property;
 - for the French layer: "IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte
   2.0 (<https://www.etalab.gouv.fr/licence-ouverte-open-licence/>),
-  simplifié et tuilé par xue".
+  tuilé par xue".
 
 ## 10. Networks
 

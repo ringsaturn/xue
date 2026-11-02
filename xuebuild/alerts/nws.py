@@ -33,7 +33,7 @@ from typing import Any
 
 from ..airport.fetch import SourceStatus
 from .alert import NetworkRead, fetch_document, network_directory, parse_utc, read_json, texts, utc
-from .geometry import simplify
+from .geometry import normalize
 from .schema import raw_directory, sha256_hex
 from .tables import nws_category, nws_level
 
@@ -108,7 +108,7 @@ def convert(feature: dict[str, Any]) -> dict[str, Any] | None:
             )
         },
         "areas": _unique(geocode.get("UGC")),
-        "geometry": simplify(feature.get("geometry")),
+        "geometry": normalize(feature.get("geometry")),
         "url": properties.get("@id") if isinstance(properties.get("@id"), str) else None,
         "sender": properties.get("senderName") if isinstance(properties.get("senderName"), str) else None,
     }

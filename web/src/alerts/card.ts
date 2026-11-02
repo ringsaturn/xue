@@ -62,7 +62,7 @@ export function alertHeadline(line: AlertLine, wanted: string): string | null {
 /** The boundary set's credit (docs/alerts.md §9.2), shown wherever a map
  * drawn from it is. */
 const JMA_SET_SOURCE = "出典：気象庁「予報区等GISデータ」（公共データ利用規約 第1.0版）";
-const JMA_SET_EDIT = "加工：簡略化・PMTiles 化 by xue（気象庁が作成したものではありません）";
+const JMA_SET_EDIT = "加工：PMTiles 化 by xue（気象庁が作成したものではありません）";
 const JMA_SET_URL = "https://www.data.jma.go.jp/developer/gis.html";
 const JMA_SURVEY_NOTICE =
   "この地図の作成に当たっては、国土地理院長の承認を得て、同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）";
@@ -79,13 +79,13 @@ const METEOALARM_SET_CREDITS: readonly { prefix: string; lines: readonly string[
   {
     prefix: "WARNCELLID:",
     lines: [
-      "Datenbasis: Deutscher Wetterdienst, Warngebiete vereinfacht und als Vektorkacheln aufbereitet",
+      "Datenbasis: Deutscher Wetterdienst, Warngebiete als Vektorkacheln aufbereitet",
       "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
     ],
   },
   {
     prefix: "NUTS3:FR",
-    lines: ["IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte 2.0, simplifié et tuilé par xue"],
+    lines: ["IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte 2.0, tuilé par xue"],
   },
 ];
 

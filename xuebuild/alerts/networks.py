@@ -92,12 +92,12 @@ class Network:
 
 NWS_ZONES = AreaSet(
     set="nws-zones",
-    version="20260416",
-    byte_length=8907673,
-    crc32="3f5d3096",
+    version="20261102",
+    byte_length=31023141,
+    crc32="879ebf6c",
     layers=("zone", "county", "marine", "offshore", "fire"),
     bbox_byte_length=524181,
-    bbox_crc32="e6ac20a5",
+    bbox_crc32="05a06972",
 )
 """The AWIPS public zones, counties, coastal and offshore marine zones and
 fire weather zones effective 2026-04-16 (``z_16ap26``, ``c_16ap26``,
@@ -105,25 +105,25 @@ fire weather zones effective 2026-04-16 (``z_16ap26``, ``c_16ap26``,
 
 JMA_CLASS20 = AreaSet(
     set="jma-class20",
-    version="20260226",
-    byte_length=2795153,
-    crc32="43b3b6eb",
+    version="20261102",
+    byte_length=12593916,
+    crc32="49385bc7",
     layers=("class20",),
     bbox_byte_length=82289,
-    bbox_crc32="c361aa9d",
+    bbox_crc32="c1108b5b",
 )
 """The agency's 予報区等GISデータ, 市町村等（気象警報等）, released
-2026-02-26, simplified and tiled by xue; reused under the Public Data
+2026-02-26, tiled by xue; reused under the Public Data
 License v1.0 with the credit ``docs/alerts.md`` §9.2 gives."""
 
 METEOALARM_AREAS = AreaSet(
     set="meteoalarm-areas",
-    version="20261101",
-    byte_length=896011,
-    crc32="0261074b",
+    version="20261102",
+    byte_length=3563611,
+    crc32="25117c18",
     layers=("de_kreise", "de_kueste", "de_binnenseen", "fr_departement"),
     bbox_byte_length=28815,
-    bbox_crc32="81cefa87",
+    bbox_crc32="97b9b07f",
 )
 """The MeteoAlarm areas with openly licensed boundaries, keyed by the
 geocode a line names (``WARNCELLID:…``, ``NUTS3:…``): the DWD's warn cells

@@ -28,7 +28,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
-from .geometry import simplify
+from .geometry import normalize
 from .http import get
 from .schema import raw_directory, sha256_hex, write_bytes_atomic
 from .tables import eccc_category, eccc_level
@@ -126,7 +126,7 @@ def convert(feature: dict[str, Any]) -> dict[str, Any] | None:
         "status": "actual",
         "texts": {language: text for language, text in languages.items() if text},
         "areas": [],
-        "geometry": simplify(feature.get("geometry")),
+        "geometry": normalize(feature.get("geometry")),
         "url": None,
         "sender": None,
     }

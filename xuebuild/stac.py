@@ -401,7 +401,7 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                     "description": (
                         "Warnings and advisories as the agency's website publishes them; 出典：気象庁ホームページ. "
                         "Reused under the Public Data License v1.0. The warning area boundaries: "
-                        "出典：気象庁「予報区等GISデータ」, Public Data License 1.0; 加工：簡略化・PMTiles 化 by xue, "
+                        "出典：気象庁「予報区等GISデータ」, Public Data License 1.0; 加工：PMTiles 化 by xue, "
                         "not published by the agency. この地図の作成に当たっては、国土地理院長の承認を得て、"
                         "同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を"
                         "使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・"
@@ -427,9 +427,9 @@ def _point_product_prose(product: str) -> dict[str, Any]:
                         "feeds, every language's text kept verbatim beside the categories and levels derived from "
                         "it. Reused under the MeteoAlarm Terms and Conditions §5: CC BY 4.0 terms with its further "
                         "requirements. The area boundaries: for Germany, Datenbasis: Deutscher Wetterdienst, "
-                        "Warngebiete vereinfacht und als Vektorkacheln aufbereitet; © GeoBasis-DE / BKG 2021 "
+                        "Warngebiete als Vektorkacheln aufbereitet; © GeoBasis-DE / BKG 2021 "
                         "(Daten modifiziert); for France, IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte 2.0, "
-                        "simplifié et tuilé par xue."
+                        "tuilé par xue."
                     ),
                     "roles": ["producer", "licensor"],
                     "url": "https://meteoalarm.org/en/live/",

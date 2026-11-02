@@ -1,6 +1,6 @@
 """The alerts product (``xuebuild/alerts``): the four adapters on the
 fetched fixture and on constructed input, the category and level tables,
-polygon simplification, the snapshot with its ``ended[]`` and carry-over,
+polygon rounding, the snapshot with its ``ended[]`` and carry-over,
 the validators on malformed input, and two consecutive rounds held to a
 committed golden.
 """
@@ -18,7 +18,7 @@ from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
 from xuebuild.alerts import archive, areas, eccc, jma, meteoalarm, nws
 from xuebuild.alerts.build import build_product, load_previous_index
-from xuebuild.alerts.geometry import bbox, simplify
+from xuebuild.alerts.geometry import bbox, normalize
 from xuebuild.alerts.boxes import area_box, load_boxes
 from xuebuild.alerts.build import _union
 from xuebuild.alerts.networks import JMA_CLASS20, METEOALARM_AREAS, NETWORKS, NWS_ZONES
@@ -111,35 +111,36 @@ class TablesTest(unittest.TestCase):
 
 
 class GeometryTest(unittest.TestCase):
-    def test_collinear_points_go_and_coordinates_keep_four_decimals(self) -> None:
+    def test_polygons_keep_every_corner_at_four_decimals(self) -> None:
         ring = [[-100.0, 30.0], [-99.5, 30.00001], [-99.0, 30.0], [-99.0, 31.123456], [-100.0, 31.0], [-100.0, 30.0]]
-        result = simplify({"type": "Polygon", "coordinates": [ring]})
+        result = normalize({"type": "Polygon", "coordinates": [ring]})
         self.assertEqual(result["type"], "MultiPolygon")
-        self.assertEqual(result["coordinates"], [[[[-100.0, 30.0], [-99.0, 30.0], [-99.0, 31.1235], [-100.0, 31.0], [-100.0, 30.0]]]])
+        self.assertEqual(
+            result["coordinates"],
+            [[[[-100.0, 30.0], [-99.5, 30.0], [-99.0, 30.0], [-99.0, 31.1235], [-100.0, 31.0], [-100.0, 30.0]]]],
+        )
         self.assertEqual(bbox(result), (-100.0, 30.0, -99.0, 31.1235))
 
-    def test_a_sliver_falls_back_to_the_rounded_ring_and_a_tiny_hole_is_dropped(self) -> None:
+    def test_a_sliver_stays_and_a_hole_rounding_collapses_is_dropped(self) -> None:
         sliver = [[0.0, 0.0], [0.0005, 0.0002], [0.001, 0.0], [0.0, 0.0]]
-        result = simplify({"type": "Polygon", "coordinates": [sliver]})
+        result = normalize({"type": "Polygon", "coordinates": [sliver]})
         self.assertEqual(result["coordinates"], [[[[0.0, 0.0], [0.0005, 0.0002], [0.001, 0.0], [0.0, 0.0]]]])
         outer = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]
         hole = [[0.5, 0.5], [0.50001, 0.5], [0.5, 0.50001], [0.5, 0.5]]
-        result = simplify({"type": "MultiPolygon", "coordinates": [[outer, hole]]})
+        result = normalize({"type": "MultiPolygon", "coordinates": [[outer, hole]]})
         self.assertEqual(len(result["coordinates"][0]), 1)
 
     def test_no_polygon_is_none(self) -> None:
-        self.assertIsNone(simplify(None))
-        self.assertIsNone(simplify({"type": "Point", "coordinates": [0, 0]}))
-        self.assertIsNone(simplify({"type": "Polygon", "coordinates": [[[0, 0], [0, 0], [0, 0], [0, 0]]]}))
+        self.assertIsNone(normalize(None))
+        self.assertIsNone(normalize({"type": "Point", "coordinates": [0, 0]}))
+        self.assertIsNone(normalize({"type": "Polygon", "coordinates": [[[0, 0], [0, 0], [0, 0], [0, 0]]]}))
 
-    def test_simplified_geometry_validates(self) -> None:
+    def test_normalized_geometry_validates(self) -> None:
         feature = json.loads((FIXTURES / "alerts.202611010000/eccc/page-001.json").read_text(encoding="utf-8"))["features"][1]
-        result = simplify(feature["geometry"])
+        result = normalize(feature["geometry"])
         line = eccc.convert(feature)
         self.assertEqual(line["geometry"], result)
         self.assertEqual(validate_alert_line(line, "eccc"), bbox(result))
-        original = sum(len(ring) for ring in feature["geometry"]["coordinates"])
-        self.assertLess(sum(len(ring) for polygon in result["coordinates"] for ring in polygon), original)
 
 
 class NwsTest(unittest.TestCase):

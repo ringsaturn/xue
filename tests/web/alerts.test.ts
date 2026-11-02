@@ -111,7 +111,7 @@ describe("the warning areas", () => {
     const inline = inlineFeatures(lines.flat());
     expect(inline.features.length).toBe(lines.flat().filter((line) => line.geometry !== null).length);
     const targets = areaTargets(index.networks, lines);
-    const jma = targets.get("jma-class20.20260226/class20")!;
+    const jma = targets.get("jma-class20.20261102/class20")!;
     const jmaCodes = new Set(lines[1]!.flatMap((line) => line.areas));
     expect(new Set(jma.levels.keys())).toEqual(jmaCodes);
     // No NWS or JMA warning with a polygon of its own is drawn again by its codes.
@@ -135,7 +135,7 @@ describe("the warning areas", () => {
   it("gives each code the highest level in force on it", () => {
     const { index, lines } = load();
     const jma = lines[1]!.map((line, at) => (at === 0 ? { ...line, level: 5 as const } : line));
-    const target = areaTargets(index.networks, [[], jma, []]).get("jma-class20.20260226/class20")!;
+    const target = areaTargets(index.networks, [[], jma, []]).get("jma-class20.20261102/class20")!;
     for (const code of jma[0]!.areas) expect(target.levels.get(code)).toBe(5);
   });
 

@@ -50,7 +50,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
-from .geometry import simplify
+from .geometry import normalize
 from .http import get
 from .schema import LANGUAGE, raw_directory, sha256_hex, write_bytes_atomic
 from .tables import meteoalarm_category, meteoalarm_level
@@ -313,7 +313,7 @@ def convert(warning: dict[str, Any], country: str, moment: datetime) -> dict[str
         "status": "actual",
         "texts": languages,
         "areas": codes,
-        "geometry": simplify({"type": "MultiPolygon", "coordinates": polygons}) if polygons else None,
+        "geometry": normalize({"type": "MultiPolygon", "coordinates": polygons}) if polygons else None,
         "url": primary.get("web") if isinstance(primary.get("web"), str) and primary["web"].startswith("http") else None,
         "sender": primary.get("senderName") if isinstance(primary.get("senderName"), str) and primary["senderName"] else None,
     }
