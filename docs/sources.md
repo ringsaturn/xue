@@ -169,13 +169,6 @@ publishes intensity classes, not reflectivity, so it ships `prate` alone at
 each class's representative rate (0.5, 3, 7.5, 15, 25, 40, 65, 100 mm/h).
 Fetched through [jma-radar](https://github.com/ringsaturn/jma-radar).
 
-### CMA radar mosaic (`cma`)
-
-0.0439° over China (67.5–146.25°E, 11.25–56.25°N), every 6 min, a 3 h
-window, ending 20–30 min behind real time. The level-3 composite
-reflectivity mosaic (RADAR_L3_MST_CREF) as `cref`, read from an archive
-named by `XUE_CMA_ARCHIVE`.
-
 ### Geostationary imagers (`himawari`, `himawarijp`, `goeseast`, `goeswest`, `meteosat`)
 
 | Source | Spacecraft | Disk | Cadence and window |

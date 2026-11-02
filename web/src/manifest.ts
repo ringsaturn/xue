@@ -299,7 +299,8 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // minutes behind real time (the portal publishes late and the archive
   // syncs every twenty minutes). The region is where the camera goes when
   // it is opened from elsewhere. The id was `radar` while the source was
-  // cases only; the manifest identity CMA-RADAR is unchanged.
+  // cases only; the manifest identity CMA-RADAR is unchanged. Not in the
+  // model sheet: it is reached through `?model=cma` and showcase cases.
   cma: {
     id: "cma",
     label: "CMA-RADAR",

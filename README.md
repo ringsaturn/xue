@@ -11,7 +11,7 @@
 - Forecasts from GFS, ECMWF IFS and AIFS, HRRR, ICON-EU, ARPEGE and CFSv2: temperature,
   precipitation, wind particles, isobars, upper-air charts, clear-air
   turbulence; skew-T soundings and point meteograms anywhere.
-- Observations: MRMS, NEXRAD, JMA and CMA radar; Himawari, GOES and
+- Observations: MRMS, NEXRAD and JMA radar; Himawari, GOES and
   Meteosat imagery with dust products; METAR, soundings, typhoon tracks.
 - A globe with terrain, 3D radar volumes, and replays of past events
   ([showcase](https://xue.ringsaturn.me/showcase.html)).
@@ -48,7 +48,6 @@ is no longer published and every decoder still reads it.
 | NCEP CFSv2 (`cfs`) | T126 Gaussian / 1° global · 6-hourly F6–F6552 (39 weeks); 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA MRMS radar (`mrms`) | 0.02° contiguous US · 2 min, rolling 4 h | <a href="https://dataset.ringsaturn.me/xue/latest-mrms.json"><img alt="the newest mrms run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.runTime&label=&color=b7472a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | JMA precipitation nowcast (`jma`) | 0.005° Japan · 5 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-jma.json"><img alt="the newest jma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.runTime&label=&color=c25b2c&style=flat-square&cacheSeconds=600" width="170"></a> |
-| CMA radar mosaic (`cma`) | 0.0439° China · 6 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-cma.json"><img alt="the newest cma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cma.json&query=%24.runTime&label=&color=b03a5b&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Himawari-9 (`himawari`) | 0.04° disk at 140.7°E · 10 min, rolling 6 h | <a href="https://dataset.ringsaturn.me/xue/latest-himawari.json"><img alt="the newest himawari run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-himawari.json&query=%24.runTime&label=&color=6d597a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Himawari-9 over Japan (`himawarijp`) | 0.01° Japan box, 24–46°N 122–148°E · 10 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-himawarijp.json"><img alt="the newest himawarijp run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-himawarijp.json&query=%24.runTime&label=&color=6d597a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | GOES-19 East (`goeseast`) | 0.04° disk at 75.2°W · 10 min, rolling 6 h | <a href="https://dataset.ringsaturn.me/xue/latest-goeseast.json"><img alt="the newest goeseast run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeseast.json&query=%24.runTime&label=&color=5c677d&style=flat-square&cacheSeconds=600" width="170"></a> |
