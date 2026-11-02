@@ -170,6 +170,12 @@ QUALITY_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=0.5, 
 COMPACT_REFLECTIVITY = TemperatureCodebook(minimum=0.0, maximum=80.0, step=1.0, name="cref")
 # The reflectivity volume's 33 levels quantize exactly as the composite does:
 # the same quantity in the same unit, drawn with the same palette.
+# The radar quality index: MRMS publishes it in tenths from 0 to 1, so the
+# codebook takes the tenth as its step and starts one step below 0 — code 0
+# is "outside radar coverage" (the product's -3 and -1 sentinels, filled
+# with the bottom of the range), code 1 an index of 0, code 11 an index of
+# 1. Twelve codes in every profile: there is no finer resolution to trade.
+RADAR_QUALITY = TemperatureCodebook(minimum=-0.1, maximum=1.0, step=0.1, name="rqi")
 QUALITY_REFLECTIVITY_VOLUME = {variable_id: QUALITY_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
 COMPACT_REFLECTIVITY_VOLUME = {variable_id: COMPACT_REFLECTIVITY for variable_id in REFLECTIVITY_VARIABLE_IDS}
 # Cloud water mixing ratio: 0–2.53 g/kg at 0.01 g/kg. Liquid water content
@@ -806,6 +812,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        "rqi": RADAR_QUALITY,
         **QUALITY_REFLECTIVITY_VOLUME,
         **QUALITY_CLOUD_WATER_VOLUME,
         "gust": QUALITY_GUST,
@@ -842,6 +849,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": COMPACT_WIND,
         "dswrf": COMPACT_FLUX,
         "cref": COMPACT_REFLECTIVITY,
+        "rqi": RADAR_QUALITY,
         **COMPACT_REFLECTIVITY_VOLUME,
         **COMPACT_CLOUD_WATER_VOLUME,
         "gust": COMPACT_GUST,
@@ -889,6 +897,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "vgrd100m": QUALITY_WIND,
         "dswrf": QUALITY_FLUX,
         "cref": QUALITY_REFLECTIVITY,
+        "rqi": RADAR_QUALITY,
         **QUALITY_REFLECTIVITY_VOLUME,
         **QUALITY_CLOUD_WATER_VOLUME,
         "gust": QUALITY_GUST,

@@ -140,6 +140,9 @@ VERTICAL_VELOCITY = as_is("pa/s", "pas-1", "pas^-1")
 GEOPOTENTIAL_METRES = as_is("gpm", "m")
 PERCENT = as_is("%")
 DIMENSIONLESS = as_is("numeric", "1", "-", "")
+# An index MRMS publishes without a unit; its GRIB table spells it
+# "[non-dim]".
+NON_DIMENSIONAL = as_is("non-dim")
 PARTICULATE = as_is("10^-6g/m^3", "10^-6g/m3", "ug/m^3", "ug/m3", "µg/m^3", "µg/m3", "µg/m³")
 SOIL_MOISTURE = as_is("fraction", "proportion", "m^3/m^3", "m3/m3", "m³/m³", "m^3m^-3", "m3m-3", "1", "-", "")
 

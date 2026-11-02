@@ -158,8 +158,13 @@ A rolling window is rebuilt every few minutes; each build is a round under
 ### NOAA MRMS radar (`mrms`)
 
 0.02° contiguous US, every 2 min, a 4 h window. Composite reflectivity
-(`cref`) and radar precipitation rate (`prate`), thinned two to one by
-block maximum.
+(`cref`), radar precipitation rate (`prate`) and the radar quality index
+(`rqi`), thinned two to one by block maximum. `rqi` is MRMS's estimate,
+0 to 1 in tenths, of how far the reflectivity near the ground can be
+trusted (falling with range from the radars, under beam blockage and in the
+melting layer); its code 0 marks cells outside radar coverage, which
+`cref` code 0 does not tell from "no echo". The block maximum keeps the
+best cell of each block.
 
 ### JMA precipitation nowcast (`jma`)
 

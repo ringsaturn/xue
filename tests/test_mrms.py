@@ -14,12 +14,14 @@ itself is described on its round step rather than the hair-off one GDAL
 derives. And two registry alternates: the MRMS-local composite reflectivity
 (209/10/0 on a 500 m surface) under ``cref`` and the radar precipitation
 rate (209/6/1, already in mm/h) under ``prate``, with the product's
-out-of-coverage and no-echo sentinels folded to the codebook bottom.
+out-of-coverage and no-echo sentinels folded to the codebook bottom. The
+radar quality index (209/8/0) is published under its MRMS identity as
+``rqi``, its no-coverage sentinel a code below an index of 0.
 
 ``tests/fixtures/mrms.2026091300.t0000.crop.grib2`` and ``t0002`` are a
 160 x 160 cell window of the 2026-09-13 00:00:42 and 00:02:42 composites
-with the 00:00 and 00:02 rates appended, the way the fetcher assembles a
-frame, on the James Bay shore at the edge of the Canadian coverage: about a
+with the 00:00 and 00:02 rates and quality indexes appended, the way the
+fetcher assembles a frame, on the James Bay shore at the edge of the Canadian coverage: about a
 quarter of the window is outside radar coverage, half inside it with no
 echo, and a quarter a rain band.
 """
@@ -112,6 +114,21 @@ def prate_key(day: str, time: str) -> str:
     return f"CONUS/PrecipRate_00.00/{day}/MRMS_PrecipRate_00.00_{day}-{time}.grib2.gz"
 
 
+def rqi_key(day: str, time: str) -> str:
+    return f"CONUS/RadarQualityIndex_00.00/{day}/MRMS_RadarQualityIndex_00.00_{day}-{time}.grib2.gz"
+
+
+def on_the_mark(url: str) -> bool:
+    """Whether a listing asks for one of the products stamped on the
+    two-minute mark: the rate and the quality index."""
+    return "PrecipRate" in url or "RadarQualityIndex" in url
+
+
+def mark_key(url: str, day: str, time: str) -> str:
+    """The key of the on-the-mark product a listing asks for."""
+    return rqi_key(day, time) if "RadarQualityIndex" in url else prate_key(day, time)
+
+
 def split_messages(path: Path) -> list[bytes]:
     """The GRIB messages of one file, by the indicator section's length."""
     data = path.read_bytes()
@@ -152,7 +169,7 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertIsNone(source_spec(model).cadence_seconds, model)
 
     def test_published_bundles_and_the_core_set(self) -> None:
-        self.assertEqual(published_bundle_ids(MRMS), ("cref", "prate"))
+        self.assertEqual(published_bundle_ids(MRMS), ("cref", "prate", "rqi"))
         # A source's core set is a subset of what it publishes, or a
         # complete build could never validate.
         for source in SOURCES.values():
@@ -162,6 +179,7 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_products_are_registered_on_the_variables(self) -> None:
         self.assertEqual(variable_spec("cref").mrms_product, "MergedReflectivityQCComposite_00.50")
         self.assertEqual(variable_spec("prate").mrms_product, "PrecipRate_00.00")
+        self.assertEqual(variable_spec("rqi").mrms_product, "RadarQualityIndex_00.00")
         self.assertEqual(variable_spec("tmp2m").mrms_product, "")
 
 
@@ -230,19 +248,20 @@ class ListingTests(unittest.TestCase):
                     cref_key("20260913", "030040"),
                     cref_key("20260913", "030241"),
                 )
-            if "PrecipRate" in url and "20260913" in url:
-                # The rate has the 00:04 the composite lacks and lacks 00:06.
+            if on_the_mark(url) and "20260913" in url:
+                # The rate and the quality index have the 00:04 the composite
+                # lacks and lack 00:06.
                 return listing(
-                    prate_key("20260913", "000000"),
-                    prate_key("20260913", "000200"),
-                    prate_key("20260913", "000400"),
-                    prate_key("20260913", "030000"),
+                    mark_key(url, "20260913", "000000"),
+                    mark_key(url, "20260913", "000200"),
+                    mark_key(url, "20260913", "000400"),
+                    mark_key(url, "20260913", "030000"),
                 )
             return listing()
 
         frames = mrms_window_frames(MRMS, RUN, 3, fetch=fetch_text)
         self.assertEqual([slot.strftime("%H:%M") for slot in frames], ["00:00", "00:02", "03:00"])
-        self.assertEqual(list(frames[datetime(2026, 9, 13, 0, 2, tzinfo=UTC)]), ["cref", "prate"])
+        self.assertEqual(list(frames[datetime(2026, 9, 13, 0, 2, tzinfo=UTC)]), ["cref", "prate", "rqi"])
         self.assertEqual(frames[datetime(2026, 9, 13, 0, 2, tzinfo=UTC)]["cref"].observed.second, 59)
         # Narrowed to one product, its own slots stand.
         only = mrms_window_frames(MRMS, RUN, 3, ("cref",), fetch=fetch_text)
@@ -255,8 +274,8 @@ class ListingTests(unittest.TestCase):
             return listing()
 
         self.assertEqual(mrms_window_frames(MRMS, GfsRun(datetime(2026, 9, 12, 22, tzinfo=UTC)), 3, fetch=two_days), {})
-        self.assertEqual(sum("20260912" in url for url in listed), 2)
-        self.assertEqual(sum("20260913" in url for url in listed), 2)
+        self.assertEqual(sum("20260912" in url for url in listed), 3)
+        self.assertEqual(sum("20260913" in url for url in listed), 3)
 
     def test_the_frame_name_is_the_slot_offset(self) -> None:
         self.assertEqual(mrms_frame_name(MRMS, RUN, datetime(2026, 9, 13, 0, 2, tzinfo=UTC)), "mrms.2026091300.t0002.grib2")
@@ -273,7 +292,7 @@ class ListingTests(unittest.TestCase):
                 return listing()
             if "MergedReflectivityQCComposite" in url:
                 return listing(cref_key("20260913", "000042"), cref_key("20260913", latest["cref"]))
-            return listing(prate_key("20260913", "000000"), prate_key("20260913", latest["prate"]))
+            return listing(mark_key(url, "20260913", "000000"), mark_key(url, "20260913", latest["prate"]))
 
         with mock.patch("xuebuild.fetch.fetch_text", fetch_text):
             self.assertTrue(_mrms_run_is_complete(MRMS, RUN, 3))
@@ -301,7 +320,7 @@ class ListingTests(unittest.TestCase):
                 return listing()
             if "MergedReflectivityQCComposite" in url:
                 return listing(cref_key("20260913", "140042"), cref_key("20260913", "140241"), cref_key("20260913", "140441"))
-            return listing(prate_key("20260913", "140000"), prate_key("20260913", "140200"))
+            return listing(mark_key(url, "20260913", "140000"), mark_key(url, "20260913", "140200"))
 
         now = datetime(2026, 9, 13, 14, 5, 30, tzinfo=UTC)
         self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 13, 14, 2, tzinfo=UTC))
@@ -320,7 +339,7 @@ class ListingTests(unittest.TestCase):
             if "20260912" in url:
                 if "MergedReflectivityQCComposite" in url:
                     return listing(cref_key("20260912", "235642"), cref_key("20260912", "235841"))
-                return listing(prate_key("20260912", "235600"), prate_key("20260912", "235800"))
+                return listing(mark_key(url, "20260912", "235600"), mark_key(url, "20260912", "235800"))
             if "20260913" in url and "MergedReflectivityQCComposite" in url:
                 # The composite has crossed midnight, the rate has not yet.
                 return listing(cref_key("20260913", "000042"))
@@ -330,13 +349,13 @@ class ListingTests(unittest.TestCase):
         # product has is yesterday's last.
         now = datetime(2026, 9, 13, 0, 1, 30, tzinfo=UTC)
         self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 12, 23, 58, tzinfo=UTC))
-        self.assertEqual(sum("20260912" in url for url in listed), 2)
+        self.assertEqual(sum("20260912" in url for url in listed), 3)
         # Later in the day yesterday is only read when a product has nothing
         # today — and then for every product, so the slots can still meet.
         listed.clear()
         now = datetime(2026, 9, 13, 3, 0, tzinfo=UTC)
         self.assertEqual(latest_mrms_slot(MRMS, now=now, fetch=fetch_text), datetime(2026, 9, 12, 23, 58, tzinfo=UTC))
-        self.assertEqual([("20260912" in url) for url in listed], [False, False, True, True])
+        self.assertEqual([("20260912" in url) for url in listed], [False, False, False, True, True, True])
 
 
 class DownloadTests(TempRoot, unittest.TestCase):
@@ -346,13 +365,15 @@ class DownloadTests(TempRoot, unittest.TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        cref0, prate0 = split_messages(FRAMES[0])
-        cref2, prate2 = split_messages(FRAMES[1])
+        cref0, prate0, rqi0 = split_messages(FRAMES[0])
+        cref2, prate2, rqi2 = split_messages(FRAMES[1])
         self.objects = {
             cref_key("20260913", "000042"): cref0,
             prate_key("20260913", "000000"): prate0,
+            rqi_key("20260913", "000000"): rqi0,
             cref_key("20260913", "000242"): cref2,
             prate_key("20260913", "000200"): prate2,
+            rqi_key("20260913", "000200"): rqi2,
         }
 
     def request(self, url: str, consume=None, **_: object) -> object:
@@ -378,6 +399,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
         objects = {
             "cref": MrmsObject(cref_key("20260913", "000242"), datetime(2026, 9, 13, 0, 2, 42, tzinfo=UTC)),
             "prate": MrmsObject(prate_key("20260913", "000200"), slot),
+            "rqi": MrmsObject(rqi_key("20260913", "000200"), slot),
         }
         with mock.patch("xuebuild.fetch._request", self.request):
             path = _download_mrms_frame(MRMS, RUN, slot, objects, self.root, force=False)
@@ -393,8 +415,8 @@ class DownloadTests(TempRoot, unittest.TestCase):
         def fetch_text(url: str) -> str:
             if "MergedReflectivityQCComposite" in url and "20260913" in url:
                 return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
-            if "PrecipRate" in url and "20260913" in url:
-                return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+            if on_the_mark(url) and "20260913" in url:
+                return listing(mark_key(url, "20260913", "000000"), mark_key(url, "20260913", "000200"))
             return listing()
 
         with mock.patch("xuebuild.fetch._request", self.request), mock.patch("xuebuild.fetch.fetch_text", fetch_text):
@@ -407,6 +429,7 @@ class DownloadTests(TempRoot, unittest.TestCase):
         self.assertEqual([frame["slot"] for frame in record["frames"]], ["2026-09-13T00:00:00Z", "2026-09-13T00:02:00Z"])
         self.assertEqual(record["frames"][1]["objects"]["cref"]["observed"], "2026-09-13T00:02:42Z")
         self.assertEqual(record["frames"][1]["objects"]["prate"]["key"], prate_key("20260913", "000200"))
+        self.assertEqual(record["frames"][1]["objects"]["rqi"]["key"], rqi_key("20260913", "000200"))
         with mock.patch("xuebuild.fetch.fetch_text", lambda url: listing()), self.assertRaisesRegex(DownloadError, "no frames"):
             _fetch_mrms_run(MRMS, RUN, 3, self.root, force=False, input_ids=None)
         # What the window holds, for the rolling publish to compare the
@@ -432,8 +455,8 @@ class DownloadTests(TempRoot, unittest.TestCase):
         def fetch_text(url: str) -> str:
             if "MergedReflectivityQCComposite" in url and "20260913" in url:
                 return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
-            if "PrecipRate" in url and "20260913" in url:
-                return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+            if on_the_mark(url) and "20260913" in url:
+                return listing(mark_key(url, "20260913", "000000"), mark_key(url, "20260913", "000200"))
             return listing()
 
         with mock.patch("xuebuild.fetch._request", self.request), mock.patch("xuebuild.fetch.fetch_text", fetch_text):
@@ -465,8 +488,8 @@ class RollingWindowCliTests(DownloadTests):
         def fetch_text(url: str) -> str:
             if "MergedReflectivityQCComposite" in url and "20260913" in url:
                 return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
-            if "PrecipRate" in url and "20260913" in url:
-                return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+            if on_the_mark(url) and "20260913" in url:
+                return listing(mark_key(url, "20260913", "000000"), mark_key(url, "20260913", "000200"))
             return listing()
 
         calls: list[dict[str, object]] = []
@@ -588,19 +611,24 @@ class RecordMatchingTests(unittest.TestCase):
         self.assertFalse(_band_matches("cref", rate, description))
         self.assertFalse(_band_matches("prate_ave", rate, description))
         self.assertFalse(_band_matches("tcdc", composite, description))
+        quality = {"GRIB_ELEMENT": "RadarQualityIndex", "GRIB_SHORT_NAME": "0-GPML", "GRIB_DISCIPLINE": "209", "GRIB_COMMENT": "Radar Quality Index [non-dim]"}
+        self.assertTrue(_band_matches("rqi", quality, description))
+        self.assertFalse(_band_matches("prate", quality, description))
+        self.assertFalse(_band_matches("rqi", rate, description))
         # The element alone is not enough: the discipline says MRMS.
         self.assertFalse(_band_matches("cref", {**composite, "GRIB_DISCIPLINE": "0"}, description))
 
     def test_every_product_is_found_in_the_fixture_both_ways(self) -> None:
         for path, minute in zip(FRAMES, (0, 2)):
             fast = grib2.inspect_grib_fast(path, MRMS.input_variable_ids)
-            self.assertEqual(tuple(fast), ("cref", "prate"))
-            self.assertEqual([frame.band for frame in fast.values()], [1, 2])
-            self.assertEqual((fast["cref"].unit, fast["prate"].unit), ("dBZ", "mm/hr"))
+            self.assertEqual(tuple(fast), ("cref", "prate", "rqi"))
+            self.assertEqual([frame.band for frame in fast.values()], [1, 2, 3])
+            self.assertEqual((fast["cref"].unit, fast["prate"].unit, fast["rqi"].unit), ("dBZ", "mm/hr", "non-dim"))
             # Each product is its own observation: a zero forecast time from
             # its own reference time, the composite's jittered past the mark.
             self.assertEqual(fast["cref"].valid_time, datetime(2026, 9, 13, 0, minute, 42, tzinfo=UTC))
             self.assertEqual(fast["prate"].valid_time, datetime(2026, 9, 13, 0, minute, tzinfo=UTC))
+            self.assertEqual(fast["rqi"].valid_time, datetime(2026, 9, 13, 0, minute, tzinfo=UTC))
             self.assertEqual({frame.lead_seconds for frame in fast.values()}, {0})
             if shutil.which("gdalinfo") is None:
                 continue
@@ -762,6 +790,17 @@ class FixtureGridTests(unittest.TestCase):
         np.testing.assert_array_equal(cref, raw_cref.reshape(80, 2, 80, 2).max(axis=(1, 3)))
         raw_prate = raw["prate"].reshape(160, 160)
         np.testing.assert_array_equal(prate, raw_prate.reshape(80, 2, 80, 2).max(axis=(1, 3)))
+        # The quality index's -3 (no coverage) becomes the bottom of its own
+        # range, a tenth below an index of 0: the window holds both, so "no
+        # radar" and "a radar that cannot see here" stay apart. The block
+        # keeps its best cell, as it keeps the composite's strongest.
+        rqi = planes["rqi"].reshape(80, 80)
+        raw_rqi = raw["rqi"].reshape(160, 160)
+        # (GDAL reads the tenths through float32: within 1e-7 of them.)
+        np.testing.assert_allclose(np.unique(raw_rqi), [-0.1, 0.0, 0.1, 0.2, 0.3, 0.4], atol=1e-6)
+        self.assertGreater(np.isclose(raw_rqi, -0.1).sum(), 5000)
+        self.assertGreater(np.isclose(raw_rqi, 0.0, atol=1e-6).sum(), 10000)
+        np.testing.assert_array_equal(rqi, raw_rqi.reshape(80, 2, 80, 2).max(axis=(1, 3)))
 
     def test_a_crop_is_cut_from_the_thinned_grid(self) -> None:
         cropped = crop_grid(self.grid, (-77.0, 51.0, -76.5, 51.5))
@@ -786,8 +825,8 @@ class ShowcaseCaseTests(DownloadTests):
     def fetch_text(self, url: str) -> str:
         if "MergedReflectivityQCComposite" in url and "20260913" in url:
             return listing(cref_key("20260913", "000042"), cref_key("20260913", "000242"))
-        if "PrecipRate" in url and "20260913" in url:
-            return listing(prate_key("20260913", "000000"), prate_key("20260913", "000200"))
+        if on_the_mark(url) and "20260913" in url:
+            return listing(mark_key(url, "20260913", "000000"), mark_key(url, "20260913", "000200"))
         return listing()
 
     def case(self, **overrides: object):
@@ -881,7 +920,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             )
 
     def test_the_window_is_a_two_minute_axis_on_the_thinned_grid(self) -> None:
-        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["cref", "prate"])
+        self.assertEqual([bundle["variable"] for bundle in self.report["bundles"]], ["cref", "prate", "rqi"])
         self.assertEqual(self.report["videos"], [])
         manifest = json.loads((self.root / "out" / "manifest.json").read_text())
         self.assertEqual((manifest["model"], manifest["product"]), ("NOAA-MRMS", "conus-cref"))
@@ -906,7 +945,21 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         codes = np.asarray(bundle.decode_plane(1, 0)).reshape(80, 80)
         self.assertGreater(codes.max(), 60)
         self.assertGreater((codes == 0).sum(), 3000)
-        for name in ("cref.half.xue", "cref.poster.bin", "prate.half.xue", "prate.poster.bin"):
+        # The quality index keeps the MRMS-local identity, there being no WMO
+        # one, and codes "no coverage" 0 and an index of 0 as 1.
+        quality = read_bundle(self.root / "out" / "rqi.xue")
+        parameter = quality.metadata["variables"][0]["parameter"]
+        self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (209, 8, 0))
+        self.assertEqual(quality.metadata["variables"][0]["unit"], "1")
+        self.assertEqual(
+            {key: quality.metadata["variables"][0]["quantization"][key] for key in ("offset", "scale", "maximumCode")},
+            {"offset": -0.1, "scale": 0.1, "maximumCode": 11},
+        )
+        codes = np.asarray(quality.decode_plane(1, 0)).reshape(80, 80)
+        self.assertEqual(set(np.unique(codes).tolist()), {0, 1, 2, 3, 4, 5})
+        self.assertGreater((codes == 0).sum(), 1000)
+        self.assertGreater((codes == 1).sum(), 1000)
+        for name in ("cref.half.xue", "cref.poster.bin", "prate.half.xue", "prate.poster.bin", "rqi.half.xue", "rqi.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_a_complete_build_wants_the_production_grid(self) -> None:

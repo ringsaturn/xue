@@ -500,8 +500,12 @@ slot is kept only when every product has it) and re-keyed onto the window's
 axis (`binconvert.py::_snap_observation_frames`,
 mirrored in `convert.rs`). Records match under `cref` / `prate` through
 `RecordAlternate`s for the MRMS-local discipline 209 (the `template-mrms`
-rule in their `gdal_rules`);
-the `-999` / `-99` / `-3` sentinels are `fill_values`. `downsample` factor
+rule in their `gdal_rules`), and under `rqi` through its own MRMS-local
+identity, as the volume's levels do;
+the `-999` / `-99` / `-3` / `-1` sentinels are `fill_values`. The quality
+index is stamped on the mark like the rate, so it shares the composite's
+slots; its codebook starts a tenth below 0 so the filled no-coverage cells
+are a code of their own. `downsample` factor
 2; MRMS writes its last coordinate short, hence the step snap. The
 workflow's `--hours 4` covers three whole hours plus the hour in progress. `pickBundleVariant` scales the needed width by the bundle's
 longitude span, so a regional grid can take its half tier zoomed out.

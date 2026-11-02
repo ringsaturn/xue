@@ -1908,9 +1908,9 @@ SOURCES: dict[str, SourceSpec] = {
         product="conus-cref",
         latest_filename="latest-mrms.json",
         steps=(),
-        input_variable_ids=("cref", "prate"),
+        input_variable_ids=("cref", "prate", "rqi"),
         accumulated_precipitation=False,
-        bundle_scalar_ids=("cref", "prate"),
+        bundle_scalar_ids=("cref", "prate", "rqi"),
         core_bundle_ids=("cref",),
         # The thinned 0.02° grid: 130W to 60W, 55N to 20N.
         production_grid=(3500, 1750),

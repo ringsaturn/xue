@@ -1103,6 +1103,85 @@
         ]
       }
     },
+    "rqi": {
+      "label": "Radar quality index",
+      "unit": "1",
+      "parameter": {
+        "discipline": 209,
+        "parameterCategory": 8,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 102,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": -0.1,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 11,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": -0.1,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 11,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": -0.1,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 11,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        -0.1,
+        1.0
+      ],
+      "fillValues": [
+        -3.0,
+        -1.0
+      ],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "non-dim"
+        ]
+      },
+      "match": {
+        "gribElement": "RadarQualityIndex",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "RadarQualityIndex_00.00",
+        "gdalUnit": "non-dim",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-mrms"
+          }
+        ]
+      }
+    },
     "gust": {
       "label": "Wind gust",
       "unit": "m/s",
@@ -20579,7 +20658,8 @@
       "steps": [],
       "inputVariableIds": [
         "cref",
-        "prate"
+        "prate",
+        "rqi"
       ],
       "accumulatedPrecipitation": false,
       "companionFiles": [],
@@ -20596,7 +20676,8 @@
       "region": null,
       "bundleScalarIds": [
         "cref",
-        "prate"
+        "prate",
+        "rqi"
       ],
       "coreBundleIds": [
         "cref"
