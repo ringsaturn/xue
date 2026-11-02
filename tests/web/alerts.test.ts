@@ -109,7 +109,7 @@ describe("the warning areas", () => {
   it("draws a polygon where a warning has one and its codes otherwise", () => {
     const { index, lines } = load();
     const inline = inlineFeatures(lines.flat());
-    expect(inline.features.length).toBe(lines.flat().filter((line) => line.geometry !== null).length);
+    expect(inline.features.length).toBe(lines.flat().reduce((parts, line) => parts + (line.geometry?.length ?? 0), 0));
     const targets = areaTargets(index.networks, lines);
     const jma = targets.get("jma-class20.20261102/class20")!;
     const jmaCodes = new Set(lines[1]!.flatMap((line) => line.areas));
@@ -129,7 +129,19 @@ describe("the warning areas", () => {
     const targets = areaTargets(index.networks, [[], [], [], [both]]);
     const drawn = [...targets.values()].flatMap((target) => [...target.alerts.values()].flat());
     expect(drawn).toContain("meteoalarm:both");
-    expect(inlineFeatures([both]).features.length).toBe(1);
+    expect(inlineFeatures([both]).features.length).toBe(polygon.geometry!.length);
+  });
+
+  it("draws each part of a warning's polygon as its own feature", () => {
+    // MapLibre's hit test is even-odd over every ring of a feature: two
+    // overlapping parts in one feature would hide the warning from a click.
+    const { lines } = load();
+    const polygon = lines.flat().find((line) => line.geometry !== null)!;
+    const part = polygon.geometry![0]!;
+    const overlapping = { ...polygon, id: "meteoalarm:overlap", geometry: [part, part] };
+    const features = inlineFeatures([overlapping]).features;
+    expect(features.map((feature) => feature.geometry.type)).toEqual(["Polygon", "Polygon"]);
+    expect(features.every((feature) => feature.properties?.alert === "meteoalarm:overlap")).toBe(true);
   });
 
   it("gives each code the highest level in force on it", () => {

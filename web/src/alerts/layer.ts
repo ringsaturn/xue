@@ -109,17 +109,23 @@ export function areaTargets(
   return targets;
 }
 
-/** The warnings with their own polygons, one feature each, carrying the
- * id the card looks them up by and the level they are coloured by. */
+/** The warnings with their own polygons, one feature per part, each
+ * carrying the id the card looks them up by and the level they are
+ * coloured by. A part is its own feature because MapLibre's hit test
+ * counts crossings over every ring of a feature at once: a point inside
+ * two overlapping parts of one MultiPolygon (MeteoAlarm sends such) reads
+ * as outside it, though it is drawn. */
 export function inlineFeatures(lines: readonly AlertLine[]): FeatureCollection {
   const features: Feature[] = [];
   for (const line of lines) {
     if (line.geometry === null) continue;
-    features.push({
-      type: "Feature",
-      geometry: { type: "MultiPolygon", coordinates: line.geometry },
-      properties: { alert: line.id, level: line.level },
-    });
+    for (const polygon of line.geometry) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: polygon },
+        properties: { alert: line.id, level: line.level },
+      });
+    }
   }
   return { type: "FeatureCollection", features };
 }
