@@ -1,15 +1,16 @@
 /** Generates the shell's point-product validators from the normative JSON
  * Schemas under `docs/schemas/` (draft 2020-12): one module per schema in
  * `web/src/schema/generated/`, each a type and a `check…` function that
- * throws an `Error` naming the refused field. The output is plain
- * TypeScript, so the shell gains no runtime dependency.
+ * throws an `Error` naming the refused field, written as calls to the
+ * helpers of `web/src/schema/check.ts`. The output is plain TypeScript, so
+ * the shell gains no runtime dependency.
  *
  * The generator implements a closed subset of the vocabulary and refuses a
  * schema that uses anything else, so a keyword the shell would silently
  * ignore cannot reach a contract. Unknown object fields are always
  * admitted: a reader ignores what a later revision adds.
  *
- *   node web/tooling/schemagen.ts          (rewrite the modules)
+ *   make schemas      (node web/tooling/schemagen.ts: rewrite the modules)
  *
  * `tests/web/schemagen.test.ts` holds the committed modules to a fresh run. */
 
@@ -112,6 +113,8 @@ class Generator {
   }
 
   private readonly patterns = new Map<string, string>();
+  /** The helpers of `web/src/schema/check.ts` the module calls. */
+  private readonly used = new Set<string>();
 
   /** The module-level constant holding a pattern, compiled once. */
   private pattern(source: string): string {
@@ -133,10 +136,6 @@ class Generator {
       return head ? `${head} + ${joined}` : joined;
     }
     return `${at} + ${literal(text)}`;
-  }
-
-  private fail(at: string, text: string): string {
-    return `fail(${this.label(at, text)})`;
   }
 
   private fresh(prefix: string): string {
@@ -197,6 +196,18 @@ class Generator {
     return extra === null ? known : `${known} & Record<string, ${extra}>`;
   }
 
+  /** A call with its trailing `undefined` arguments dropped. */
+  private call(name: string, args: (string | undefined)[]): string {
+    const kept = [...args];
+    while (kept.length > 0 && kept[kept.length - 1] === undefined) kept.pop();
+    this.used.add(name);
+    return `${name}(${kept.map((arg) => arg ?? "undefined").join(", ")})`;
+  }
+
+  private number(value: unknown): string | undefined {
+    return typeof value === "number" ? String(value) : undefined;
+  }
+
   /** Statements that throw unless the value in the variable `v` is
    * admitted by `schema`; `at` is a TypeScript expression for its label. */
   check(schema: Schema, v: string, at: string, indent: string): string[] {
@@ -213,72 +224,66 @@ class Generator {
       out.push(`${indent}if (${v} !== null) {`);
       inner = `${indent}  `;
     } else if (nullable) {
-      out.push(`${indent}if (${v} !== null) ${this.fail(at, ` must be null`)};`);
+      out.push(`${indent}${this.call("isOneOf", [v, at, "[null]"])};`);
     }
-    if (kind !== undefined) out.push(...this.typed(schema, kind, v, at, inner, nullable));
-    if (schema.const !== undefined)
-      out.push(`${indent}if (${v} !== ${literal(schema.const)}) ${this.fail(at, ` must be ${literal(schema.const)}`)};`);
-    if (Array.isArray(schema.enum))
-      out.push(
-        `${indent}if (!(${literal(schema.enum)} as unknown[]).includes(${v})) ${this.fail(at, ` must be one of ${schema.enum.map(literal).join(", ")}`)};`,
-      );
+    if (kind !== undefined) out.push(...this.typed(schema, kind, v, at, inner));
+    if (schema.const !== undefined) out.push(`${inner}${this.call("isOneOf", [v, at, `[${literal(schema.const)}]`])};`);
+    if (Array.isArray(schema.enum)) out.push(`${inner}${this.call("isOneOf", [v, at, literal(schema.enum)])};`);
     if (Array.isArray(schema.anyOf)) {
       const branches = (schema.anyOf as Schema[]).map((branch) => {
-        const body = this.check(branch, "x", "a", `${indent}    `);
-        return [`${indent}  (x: unknown, a: string): void => {`, ...body, `${indent}  },`].join("\n");
+        const body = this.check(branch, "x", "a", `${inner}    `);
+        return [`${inner}  (x: unknown, a: string): void => {`, ...body, `${inner}  },`].join("\n");
       });
-      out.push(`${indent}if (!passesOne(${v}, ${at}, [\n${branches.join("\n")}\n${indent}])) ${this.fail(at, ` matches none of its allowed shapes`)};`);
+      this.used.add("isAnyOf");
+      out.push(`${inner}isAnyOf(${v}, ${at}, [\n${branches.join("\n")}\n${inner}]);`);
     }
     if (nullable && kind !== undefined) out.push(`${indent}}`);
     return out;
   }
 
-  private typed(schema: Schema, kind: string, v: string, at: string, indent: string, nullable: boolean): string[] {
+  private typed(schema: Schema, kind: string, v: string, at: string, indent: string): string[] {
     const out: string[] = [];
-    const orNull = nullable ? " or null" : "";
     switch (kind) {
       case "boolean":
-        out.push(`${indent}if (typeof ${v} !== "boolean") ${this.fail(at, ` must be a boolean${orNull}`)};`);
+        out.push(`${indent}${this.call("isBoolean", [v, at])};`);
         break;
       case "integer":
-      case "number": {
-        const guard = kind === "integer" ? `Number.isInteger(${v})` : `Number.isFinite(${v})`;
-        out.push(`${indent}if (typeof ${v} !== "number" || !${guard}) ${this.fail(at, ` must be ${kind === "integer" ? "an integer" : "a number"}${orNull}`)};`);
-        if (typeof schema.minimum === "number")
-          out.push(`${indent}if (${v} < ${schema.minimum}) ${this.fail(at, ` must be at least ${schema.minimum}`)};`);
+      case "number":
+        out.push(
+          `${indent}${this.call(kind === "integer" ? "isInteger" : "isNumber", [v, at, this.number(schema.minimum), this.number(schema.maximum)])};`,
+        );
         if (typeof schema.exclusiveMinimum === "number")
-          out.push(`${indent}if (${v} <= ${schema.exclusiveMinimum}) ${this.fail(at, ` must be above ${schema.exclusiveMinimum}`)};`);
-        if (typeof schema.maximum === "number")
-          out.push(`${indent}if (${v} > ${schema.maximum}) ${this.fail(at, ` must be at most ${schema.maximum}`)};`);
+          out.push(`${indent}${this.call("isAbove", [v, at, String(schema.exclusiveMinimum)])};`);
         if (typeof schema.multipleOf === "number")
-          out.push(`${indent}if (${v} % ${schema.multipleOf} !== 0) ${this.fail(at, ` must be a multiple of ${schema.multipleOf}`)};`);
+          out.push(`${indent}${this.call("isMultipleOf", [v, at, String(schema.multipleOf)])};`);
         break;
-      }
       case "string":
-        out.push(`${indent}if (typeof ${v} !== "string") ${this.fail(at, ` must be a string${orNull}`)};`);
-        if (typeof schema.minLength === "number")
-          out.push(`${indent}if ([...${v}].length < ${schema.minLength}) ${this.fail(at, ` must be at least ${schema.minLength} characters`)};`);
-        if (typeof schema.pattern === "string")
-          out.push(`${indent}if (!${this.pattern(schema.pattern)}.test(${v})) ${this.fail(at, ` is malformed`)};`);
-        if (schema.format === "date-time")
-          out.push(`${indent}if (!Number.isFinite(Date.parse(${v}))) ${this.fail(at, ` is not a valid timestamp`)};`);
+        out.push(
+          `${indent}${this.call("isString", [
+            v,
+            at,
+            typeof schema.pattern === "string" ? this.pattern(schema.pattern) : undefined,
+            this.number(schema.minLength),
+            schema.format === "date-time" ? "true" : undefined,
+          ])};`,
+        );
         break;
       case "array": {
-        out.push(`${indent}if (!Array.isArray(${v})) ${this.fail(at, ` must be a list${orNull}`)};`);
-        if (typeof schema.minItems === "number")
-          out.push(`${indent}if (${v}.length < ${schema.minItems}) ${this.fail(at, ` must have at least ${schema.minItems} items`)};`);
-        if (typeof schema.maxItems === "number")
-          out.push(`${indent}if (${v}.length > ${schema.maxItems}) ${this.fail(at, ` must have at most ${schema.maxItems} items`)};`);
+        out.push(`${indent}${this.call("isList", [v, at, this.number(schema.minItems), this.number(schema.maxItems)])};`);
         const prefix = (schema.prefixItems as Schema[] | undefined) ?? [];
+        const minimum = typeof schema.minItems === "number" ? schema.minItems : 0;
         prefix.forEach((item, index) => {
           const value = this.fresh("v");
-          out.push(`${indent}if (${v}.length > ${index}) {`);
-          out.push(`${indent}  const ${value}: unknown = ${v}[${index}];`);
-          out.push(...this.check(item, value, this.label(at, `[${index}]`), `${indent}  `));
-          out.push(`${indent}}`);
+          // Positions the length check already guarantees need no guard.
+          const guarded = index >= minimum;
+          const inner = guarded ? `${indent}  ` : indent;
+          if (guarded) out.push(`${indent}if (${v}.length > ${index}) {`);
+          out.push(`${inner}const ${value}: unknown = ${v}[${index}];`);
+          out.push(...this.check(item, value, this.label(at, `[${index}]`), inner));
+          if (guarded) out.push(`${indent}}`);
         });
         if (schema.items === false) {
-          out.push(`${indent}if (${v}.length > ${prefix.length}) ${this.fail(at, ` must have at most ${prefix.length} items`)};`);
+          out.push(`${indent}${this.call("isList", [v, at, undefined, String(prefix.length)])};`);
         } else if (schema.items !== undefined) {
           const position = this.fresh("i");
           const value = this.fresh("v");
@@ -290,20 +295,18 @@ class Generator {
         break;
       }
       case "object": {
-        const record = this.fresh("o");
-        out.push(`${indent}if (typeof ${v} !== "object" || ${v} === null || Array.isArray(${v})) ${this.fail(at, ` must be an object${orNull}`)};`);
-        out.push(`${indent}const ${record} = ${v} as Record<string, unknown>;`);
+        out.push(`${indent}${this.call("isObject", [v, at])};`);
         const required = new Set((schema.required as string[] | undefined) ?? []);
         const properties = (schema.properties as Record<string, Schema> | undefined) ?? {};
         for (const key of required)
-          if (!(key in properties)) out.push(`${indent}if (${record}[${literal(key)}] === undefined) ${this.fail(at, `.${key} is missing`)};`);
+          if (!(key in properties)) out.push(`${indent}${this.call("field", [v, literal(key), at])};`);
         for (const [key, child] of Object.entries(properties)) {
           const value = this.fresh("v");
-          out.push(`${indent}const ${value} = ${record}[${literal(key)}];`);
           if (required.has(key)) {
-            out.push(`${indent}if (${value} === undefined) ${this.fail(at, `.${key} is missing`)};`);
+            out.push(`${indent}const ${value} = ${this.call("field", [v, literal(key), at])};`);
             out.push(...this.check(child, value, this.label(at, `.${key}`), indent));
           } else {
+            out.push(`${indent}const ${value} = ${v}[${literal(key)}];`);
             out.push(`${indent}if (${value} !== undefined) {`);
             out.push(...this.check(child, value, this.label(at, `.${key}`), `${indent}  `));
             out.push(`${indent}}`);
@@ -313,7 +316,7 @@ class Generator {
           const key = this.fresh("k");
           const value = this.fresh("v");
           const known = Object.keys(properties);
-          out.push(`${indent}for (const [${key}, ${value}] of Object.entries(${record})) {`);
+          out.push(`${indent}for (const [${key}, ${value}] of Object.entries(${v})) {`);
           if (known.length > 0) out.push(`${indent}  if ((${literal(known)} as string[]).includes(${key})) continue;`);
           out.push(...this.check(schema.additionalProperties as Schema, value, `${this.label(at, ".")} + ${key}`, `${indent}  `));
           out.push(`${indent}}`);
@@ -326,30 +329,6 @@ class Generator {
 
   module(source: string): string {
     const title = typeof this.root.title === "string" ? this.root.title : pascal(this.name);
-    const out: string[] = [
-      `// Generated by web/tooling/schemagen.ts from ${source}. Do not edit:`,
-      `// change the schema and run \`node web/tooling/schemagen.ts\`.`,
-      "",
-      "function fail(message: string): never {",
-      "  throw new Error(message);",
-      "}",
-    ];
-    const usesAnyOf = JSON.stringify(this.root).includes('"anyOf"');
-    if (usesAnyOf) {
-      out.push(
-        "",
-        "function passesOne(value: unknown, label: string, branches: ((value: unknown, label: string) => void)[]): boolean {",
-        "  return branches.some((branch) => {",
-        "    try {",
-        "      branch(value, label);",
-        "      return true;",
-        "    } catch {",
-        "      return false;",
-        "    }",
-        "  });",
-        "}",
-      );
-    }
     const body: string[] = [];
     const definitions: [string, Schema][] = [...Object.entries(this.defs), [title, { ...this.root, $defs: undefined }]];
     for (const [name, schema] of definitions) {
@@ -362,8 +341,14 @@ class Generator {
       body.push(...this.check(schema, "v", "at", "  "));
       body.push("}");
     }
+    const out: string[] = [
+      `// Generated by web/tooling/schemagen.ts from ${source}. Do not edit:`,
+      `// change the schema and run \`make schemas\`.`,
+      "",
+      `import { ${[...this.used].sort().join(", ")} } from "../check";`,
+    ];
     if (this.patterns.size > 0) out.push("");
-    for (const [source, name] of this.patterns) out.push(`const ${name} = new RegExp(${literal(source)}, "u");`);
+    for (const [patternSource, name] of this.patterns) out.push(`const ${name} = new RegExp(${literal(patternSource)}, "u");`);
     out.push(...body);
     return `${out.join("\n")}\n`;
   }
