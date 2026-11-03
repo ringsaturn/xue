@@ -14,8 +14,7 @@
  * `tests/web/schemagen.test.ts` holds the committed modules to a fresh run. */
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 
 type Schema = { [key: string]: unknown };
 
@@ -384,10 +383,15 @@ export function generate(schemaDirectory: string): Map<string, string> {
   return modules;
 }
 
-const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
-export const SCHEMA_DIRECTORY = join(REPO_ROOT, "docs/schemas");
-export const GENERATED_DIRECTORY = join(REPO_ROOT, "web/src/schema/generated");
+/** The schemas and the modules, under the repository root. */
+export const SCHEMA_DIRECTORY = "docs/schemas";
+export const GENERATED_DIRECTORY = "web/src/schema/generated";
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  for (const [file, text] of generate(SCHEMA_DIRECTORY)) writeFileSync(join(GENERATED_DIRECTORY, file), text);
+/** Rewrites every module from the schemas, both under `root`. */
+export function write(root: string): void {
+  for (const [file, text] of generate(join(root, SCHEMA_DIRECTORY))) writeFileSync(join(root, GENERATED_DIRECTORY, file), text);
 }
+
+// Run as a script (`node web/tooling/schemagen.ts`), not when imported.
+const script = process.argv[1];
+if (script && /(^|[/\\])schemagen\.ts$/.test(script)) write(resolve(dirname(script), "../.."));
