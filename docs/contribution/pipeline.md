@@ -12,8 +12,8 @@ behaviour is in [sources.md](sources.md).
 **`sources.py` (`SourceSpec`)** — one row per source: data location, time
 axis as `(last_hour, step)` segments ending at `horizon_hours` (the
 `--hours` default), `cycle_hours`, inputs, published bundles, grid, ladder,
-fetch concurrency. Adding a model starts here; mirrors are
-`rust/xue/src/encode/sources.rs` and `FORECAST_MODELS` in
+fetch concurrency. Adding a model starts here; the native encoder reads
+`rust/xue/registry.json`, and the shell's mirror is `FORECAST_MODELS` in
 `web/src/manifest.ts`.
 
 **`variables.py`** — one entry per variable in GRIB2 terms (triple, surface,
@@ -25,8 +25,8 @@ rule: which spellings a record may carry and the arithmetic to the
 published unit), `gdal_rules` (how its record is told apart among a GRIB's
 bands; derived from the identity by `default_gdal_rules` unless set),
 `predictor` (`delta` / `raw`), `decimation` (`sample` / `peak`) and
-`companions` (`poster`; `video` is the retired H.264 companion, built by
-no encoder). Nothing in the encoders selects behaviour
+`companions` (`poster`; `video` names the retired H.264 companion, which
+no encoder builds). Nothing in the encoders selects behaviour
 by a variable's id: a new quantity sets the fields that differ from the
 defaults and the rest follows. It feeds both record matching and the v3
 `parameter` block; it assigns no container id.

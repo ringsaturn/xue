@@ -26,7 +26,7 @@ code: open access only, and record the attribution the licence requires.
 ## Checklist
 
 1. **Registry**: a `SourceSpec` in `xuebuild/sources.py` (axis or window,
-   cadence, inputs, published and core bundles, grid, tile, ladder, video,
+   cadence, inputs, published and core bundles, grid, tile, ladder,
    fetch concurrency). Put new variables in `xuebuild/variables.py` and their
    codebooks in `xuebuild/quantize.py` for every profile.
 2. **Fetch**: set `SourceSpec.feed` (and `packing="ccsds"` when the
@@ -48,7 +48,7 @@ code: open access only, and record the attribution the licence requires.
    `docs/registry.md` and `docs/encoder.md`.
 4. **Tests**: a small crop fixture (`tests/fixtures/<id>.*`, documented in
    `tests/fixtures/README.md` with the exact cut command) and
-   `tests/test_<id>.py`, which runs it through both encoders byte for byte.
+   `tests/test_<id>.py`, which runs it through both encoders.
 5. **STAC**: licence and provider prose in `xuebuild/stac_prose.json`.
    `tests/test_stac.py` holds it to the registry.
 6. **Shell**: the source's id, label, product, pointer, observation flag,
@@ -71,8 +71,10 @@ code: open access only, and record the attribution the licence requires.
    workflow (`publish-jma.yml` shape), sets `FRAME_CACHE` if it caches
    frames, and takes its `Resolve the encoder` step from
    `native.knows_source`.
-8. **Discovery and docs**: `web/public/llms.txt`, the README sources table
-   (with its run badge), and `docs/contribution/sources.md`.
+8. **Discovery and docs**: `docs/sources.md` (what it publishes; the one
+   home of that fact table), a row in the README sources table (with its run
+   badge), the id in `web/public/llms.txt`, and the engineering notes in
+   `docs/contribution/sources.md`.
 
 ## Verify
 

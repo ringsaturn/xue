@@ -72,8 +72,8 @@ xue-encode convert-bin cases/ --model gfs --output out/ \
 xue-encode convert-bin --help
 ```
 
-The flags mirror `python -m xuebuild convert-bin`. `--skip-video` is
-accepted and ignored: no encoder builds the retired H.264 companion.
+`--skip-video` is accepted and ignored: no encoder builds the retired H.264
+companion.
 
 ## In the build pipeline
 
@@ -408,8 +408,7 @@ frame's GRIB after the primary file's records, on the source's own grid.
 
 ## Not covered
 
-Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin`
-stay in Python.
+Fetching (`xue fetch`), the showcase driver and `build-bin` stay in Python.
 
 ## Verified against
 

@@ -110,8 +110,8 @@ An FCI channel takes the id of the window it is nearest to (IR 10.5 is
 the shell classifies by it), so the Dust RGB's inputs keep their ids
 across the three imagers.
 
-Adding a channel is: a `VariableSpec` in `variables.py` and its mirror in
-`encode/variables.rs` (parameter block, codebook, label), the id in the
+Adding a channel is: a `VariableSpec` in `variables.py` and its entry in
+the registry document (parameter block, codebook, label), the id in the
 source's `input_variable_ids` and `bundle_scalar_ids`, the regenerated
 registry snapshots (`xue registry --output rust/xue/registry.json --shell
 web/src/registry.ts`), and a row of the shell's variable table with a
@@ -185,7 +185,7 @@ each gun takes a local-use one — discipline 3 (space products), category
 192, parameter number 1, 2 or 3, on surface 8 — that means nothing
 without the `producer` block beside it, `{"id": "shachen", "version":
 …}`. The id is registered on the variable (`VariableSpec.producer_id`,
-mirrored in `encode/variables.rs`); the version is whatever ran, stamped
+in the registry document); the version is whatever ran, stamped
 on the series by the fetch stage and copied into the metadata by
 whichever encoder converts, so a shachen upgrade changes the files it
 produces and no registry.
@@ -196,8 +196,7 @@ one step below zero — is "no data"**: a cell the disk does not cover, or
 one an input channel lacked, is code 0 in all three guns at once, and
 black (0, 0, 0) stays a value at code 1. The shell paints nothing where
 any gun is code 0 and otherwise shows the three guns straight as the
-pixel's colour; there is no palette. The composite has no poster and no
-video companion; it has the reduced-resolution variants and the Zarr store
+pixel's colour; there is no palette. The composite has no poster; it has the reduced-resolution variants and the Zarr store
 (three arrays) like a vector bundle. A satellite source publishes two
 rungs where most sources publish one (`SourceSpec.variant_factors`
 `(2, 4)`): `.half` and `.quarter` (1500 and 750 cells a side, tiles 32
@@ -323,7 +322,7 @@ Dust RGB's missing 11.2 µm window is.
 The guns are the Dust RGB's shape: three variables of one composite
 bundle, local-use parameters 3 / 192 / **7, 8, 9** on surface 8, the
 guns' codebook (code 0 no data, 0.0 at code 1, 1.0 at code 251), no
-poster, no video, the three-rung ladder. The `producer` block beside each
+poster, the three-rung ladder. The `producer` block beside each
 is `{"id": "xue", "version": "5"}`: the id names this pipeline, and the
 version is the recipe's (`producers.TRUE_COLOR_VERSION`), bumped when a
 constant above changes and never with the package, since a cached slot is
@@ -497,8 +496,7 @@ Their identity is the guns' pattern: a local-use parameter, discipline
 it (`{"id": "shachen", "version": …}`, the id registered on the
 variable, the version whatever ran), no band. Their codebook is the
 guns' (linear, offset −0.004, step 0.004, codes 0–251, code 0 no data,
-0.0 at code 1, 1.0 at code 251), the same ladder, no poster and no
-video. A produced frame's record names, beside the
+0.0 at code 1, 1.0 at code 251), the same ladder, no poster. A produced frame's record names, beside the
 producer and the input frames, the ancillary it was computed against
 (the staged directory and the GFS record by name, whose name is the
 cycle and forecast hour). Like every produced frame it is composed once:
