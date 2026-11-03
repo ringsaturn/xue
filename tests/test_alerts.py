@@ -14,6 +14,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from tests import pointschemas
 from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
 from xuebuild.alerts import archive, areas, eccc, jma, meteoalarm, nws
@@ -372,6 +373,11 @@ class SchemaTest(unittest.TestCase):
         with self.assertRaises(AlertsProductError):
             validate_index(index)
 
+    def assertOffSchema(self, schema: str, payload: dict) -> None:
+        """A break only the schema can see: the writer's validator keeps
+        to what a schema cannot say."""
+        self.assertTrue(pointschemas.errors(schema, payload))
+
     def test_malformed_indexes_are_rejected(self) -> None:
         unsorted = copy.deepcopy(self.index)
         unsorted["alerts"].reverse()
@@ -381,7 +387,7 @@ class SchemaTest(unittest.TestCase):
         self.assertRejected(category)
         level = copy.deepcopy(self.index)
         level["alerts"][0][3] = 6
-        self.assertRejected(level)
+        self.assertOffSchema("alerts-index", level)
         span = copy.deepcopy(self.index)
         span["alerts"][0][-2] = 10**6
         self.assertRejected(span)
@@ -390,7 +396,7 @@ class SchemaTest(unittest.TestCase):
         self.assertRejected(ended)
         reason = copy.deepcopy(self.index)
         reason["ended"][0][2] = "downgraded"
-        self.assertRejected(reason)
+        self.assertOffSchema("alerts-index", reason)
         successor = copy.deepcopy(self.index)
         replaced = next(row for row in successor["ended"] if row[2] == "replaced")
         replaced[3] = replaced[0]  # not in force
@@ -407,14 +413,22 @@ class SchemaTest(unittest.TestCase):
         foreign = copy.deepcopy(self.index)
         foreign["alerts"][0][1] = 0  # an eccc id under nws
         self.assertRejected(foreign)
+        reordered = copy.deepcopy(self.index)
+        reordered["columns"].reverse()
+        self.assertRejected(reordered)
+        self.assertOffSchema("alerts-index", reordered)
+        positional = copy.deepcopy(self.index)
+        del positional["columns"]  # a round from before the field
+        validate_index(positional)
+        pointschemas.check("alerts-index", positional)
 
     def test_malformed_lines_are_rejected(self) -> None:
         line = json.loads((EXPECTED / round_directory(SECOND) / "eccc.jsonl").read_bytes().splitlines()[0])
         validate_alert_line(line, "line")
+        for change in ({"status": "test"}, {"texts": {"en": {"headline": 3}}}, {"level": 0}):
+            self.assertOffSchema("alerts-line", line | change)
         for change in (
-            {"status": "test"},
             {"network": "nws"},
-            {"texts": {"en": {"headline": 3}}},
             {"areas": ["A", "A"]},
             {"geometry": {"type": "MultiPolygon", "coordinates": [[[[0.12345, 0.0], [1.0, 0.0], [1.0, 1.0], [0.12345, 0.0]]]]}},
             {"geometry": {"type": "MultiPolygon", "coordinates": [[[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]]}},
@@ -434,13 +448,13 @@ class SchemaTest(unittest.TestCase):
         for key, value in (("builder", {"name": "other"}), ("mapping", {"tables": "x"})):
             broken = copy.deepcopy(self.index)
             broken[key] = value
-            self.assertRejected(broken)
+            self.assertOffSchema("alerts-index", broken)
         digest = copy.deepcopy(self.index)
         digest["sources"][0]["sha256"] = "ABC"
-        self.assertRejected(digest)
+        self.assertOffSchema("alerts-index", digest)
         terms = copy.deepcopy(self.index)
         terms["networks"][0]["licenseUrl"] = "weather.gov"
-        self.assertRejected(terms)
+        self.assertOffSchema("alerts-index", terms)
         # Every one is optional: an index written before them still reads.
         older = copy.deepcopy(self.index)
         for key in ("builder", "mapping"):
@@ -450,6 +464,7 @@ class SchemaTest(unittest.TestCase):
         for status in older["sources"]:
             status.pop("sha256", None)
         validate_index(older)
+        pointschemas.check("alerts-index", older)
 
     def test_pointer(self) -> None:
         index_bytes = encode_json(self.index)

@@ -6,21 +6,17 @@
  * that names areas by code points at a boundary set (PMTiles) published
  * once per upstream release under `alerts-areas/`.
  *
- * Admission is structural, as in `stations/schema.ts`: a network, an
- * event, a category or a native field this build has never seen passes;
- * a wrong shape, a level outside 1 … 5 and a `schemaVersion` above the one
- * implemented do not. Unknown fields are ignored. */
+ * The shapes are `docs/schemas/alerts-{index,line}.schema.json`, checked
+ * by the generated validators; this module adds what a schema cannot say
+ * and expands the rows, finding each column by the index's `columns` (by
+ * position in an index from before the field). Admission is structural: a
+ * network, an event, a category or a native field this build has never
+ * seen passes; a wrong shape, a level outside 1 … 5 and a `schemaVersion`
+ * above the one implemented do not. Unknown fields are ignored. */
 
-import {
-  CRC32,
-  integer,
-  object,
-  pointer,
-  schemaVersion,
-  string,
-  timestamp,
-  type ProductPointer,
-} from "../schema/validate";
+import { checkAlertsIndex } from "../schema/generated/alerts-index";
+import { checkAlertLine } from "../schema/generated/alerts-line";
+import { pointer, schemaVersion, type ProductPointer } from "../schema/validate";
 
 const ALERTS_SCHEMA_VERSION = 1;
 export const ALERTS_POINTER_FILENAME = "latest-alerts.json";
@@ -29,14 +25,8 @@ export const ALERTS_POINTER_FILENAME = "latest-alerts.json";
  * `alerts.<round>/index.json` rounds were published under before. */
 const ALERTS_PATH =
   /^(?:alerts\/(\d{4})\/(\d{2})\/(\d{2})\/alerts\.\1\2\3\d{4}|alerts\.\d{12})\/index\.json$/;
-const NETWORK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /** `<network>:<the upstream's identifier>`, which may itself hold `:`. */
 const ALERT_ID = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*):.+$/;
-const CATEGORY = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-/** A boundary set's file, climbing from the round to the data root:
- * `../../../../../alerts-areas/<set>.<version>.<ext>` from a dated round,
- * `../alerts-areas/…` from a flat one. */
-const AREAS_PATH = /^(?:\.\.\/){1,5}alerts-areas\/[a-z0-9-]+\.[0-9A-Za-z]+\.(?:pmtiles|bbox\.json)$/;
 
 export type AlertsPointer = ProductPointer<"alerts">;
 
@@ -126,127 +116,97 @@ export interface AlertLine {
   sender: string | null;
 }
 
-function list(input: unknown, label: string): unknown[] {
-  if (!Array.isArray(input)) throw new Error(`${label} must be a list`);
-  return input;
-}
+/** An index row's columns in the order of an index written before
+ * `columns` named them. */
+const ROW_FIELDS = [
+  "id",
+  "network",
+  "category",
+  "level",
+  "event",
+  "sent",
+  "onset",
+  "expires",
+  "west",
+  "south",
+  "east",
+  "north",
+  "offset",
+  "length",
+] as const;
 
-function optionalString(value: unknown, label: string): string | null {
-  return value === null || value === undefined ? null : string(value, label);
-}
-
-function optionalTimestamp(value: unknown, label: string): string | null {
-  return value === null || value === undefined ? null : timestamp(value, label);
-}
-
-function level(value: unknown, label: string): AlertLevel {
-  const parsed = integer(value, label, 1);
-  if (parsed > 5) throw new Error(`${label} must be 1 … 5`);
-  return parsed as AlertLevel;
-}
-
-function file(input: unknown, label: string, name: string): AlertsFile {
-  const value = object(input, label);
-  if (value.path !== name)
-    throw new Error(`${label}.path must be ${name}, the file beside the index`);
-  return {
-    path: name,
-    byteLength: integer(value.byteLength, `${label}.byteLength`),
-    crc32: string(value.crc32, `${label}.crc32`, CRC32),
-  };
-}
-
-function areas(input: unknown, label: string): AlertsAreas | null {
-  if (input === null || input === undefined) return null;
-  const value = object(input, label);
-  return {
-    set: string(value.set, `${label}.set`, NETWORK_ID),
-    version: string(value.version, `${label}.version`, /^[0-9A-Za-z]+$/),
-    path: string(value.path, `${label}.path`, AREAS_PATH),
-    byteLength: integer(value.byteLength, `${label}.byteLength`, 1),
-    crc32: string(value.crc32, `${label}.crc32`, CRC32),
-    layers: list(value.layers, `${label}.layers`).map((item, index) =>
-      string(item, `${label}.layers[${index}]`, /^[A-Za-z0-9_-]+$/),
-    ),
-  };
-}
-
-function coordinate(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value))
-    throw new Error(`${label} must be a number`);
-  return value;
-}
-
-function geometry(input: unknown, label: string): AlertPolygons | null {
-  if (input === null || input === undefined) return null;
-  const value = object(input, label);
-  if (value.type !== "MultiPolygon") throw new Error(`${label} must be a MultiPolygon`);
-  return list(value.coordinates, `${label}.coordinates`).map((polygon, p) =>
-    list(polygon, `${label}[${p}]`).map((ring, r) => {
-      const points = list(ring, `${label}[${p}][${r}]`).map((position, i) => {
-        const pair = list(position, `${label}[${p}][${r}][${i}]`);
-        if (pair.length !== 2) throw new Error(`${label}[${p}][${r}][${i}] must be [lon, lat]`);
-        return [coordinate(pair[0], `${label} lon`), coordinate(pair[1], `${label} lat`)];
-      });
-      if (points.length < 4) throw new Error(`${label}[${p}][${r}] must close a ring`);
-      return points;
-    }),
-  );
+function unique(values: readonly string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`${label} lists a value twice`);
 }
 
 export function parseAlertsPointer(input: unknown): AlertsPointer {
   return pointer(input, "alerts", ALERTS_PATH, ALERTS_SCHEMA_VERSION);
 }
 
-/** `alerts.<round>/index.json`: the networks and one row per warning, each
- * checked against its network's file the way the station rows are. */
+/** Where each of `ROW_FIELDS` sits in the rows: by `columns` when the
+ * index names them, else in place. */
+function columnPositions(columns: readonly string[] | undefined): Record<(typeof ROW_FIELDS)[number], number> & { width: number } {
+  const names: readonly string[] = columns ?? ROW_FIELDS;
+  unique(names, "index.columns");
+  const positions = { width: names.length } as Record<(typeof ROW_FIELDS)[number], number> & { width: number };
+  for (const field of ROW_FIELDS) {
+    const found = names.indexOf(field);
+    if (found < 0) throw new Error(`index.columns has no ${field}`);
+    positions[field] = found;
+  }
+  return positions;
+}
+
+/** `alerts.<round>/index.json`: the schema's shape, then what it cannot
+ * say — file names, unique networks, rows sorted under their network with
+ * four bounds or none and spans in order inside the network's file. */
 export function parseAlertsIndex(input: unknown): AlertsIndex {
-  const value = object(input, "alerts index");
-  const version = schemaVersion(value.schemaVersion, "alerts index", ALERTS_SCHEMA_VERSION);
-  const networks = list(value.networks, "index.networks").map((item, index): AlertsNetwork => {
-    const label = `index.networks[${index}]`;
-    const entry = object(item, label);
-    const id = string(entry.id, `${label}.id`, NETWORK_ID);
+  const version = schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "alerts index", ALERTS_SCHEMA_VERSION);
+  checkAlertsIndex(input, "index");
+  const networks = input.networks.map((entry, index): AlertsNetwork => {
+    if (entry.file.path !== `${entry.id}.jsonl`)
+      throw new Error(`index.networks[${index}].file.path must be ${entry.id}.jsonl, the file beside the index`);
+    const areas = entry.areas ?? null;
     return {
-      id,
-      name: string(entry.name, `${label}.name`),
-      attribution: string(entry.attribution, `${label}.attribution`),
-      license: string(entry.license, `${label}.license`),
-      licenseUrl: optionalString(entry.licenseUrl, `${label}.licenseUrl`),
-      url: string(entry.url, `${label}.url`),
-      latest: optionalTimestamp(entry.latest, `${label}.latest`),
-      file: file(entry.file, `${label}.file`, `${id}.jsonl`),
-      areas: areas(entry.areas, `${label}.areas`),
+      id: entry.id,
+      name: entry.name,
+      attribution: entry.attribution,
+      license: entry.license,
+      licenseUrl: entry.licenseUrl ?? null,
+      url: entry.url,
+      latest: entry.latest ?? null,
+      file: entry.file,
+      areas: areas && {
+        set: areas.set,
+        version: areas.version,
+        path: areas.path,
+        byteLength: areas.byteLength,
+        crc32: areas.crc32,
+        layers: areas.layers,
+      },
     };
   });
-  if (new Set(networks.map((network) => network.id)).size !== networks.length)
-    throw new Error("index.networks lists a network twice");
-  const categories = list(value.categories, "index.categories").map((item, index) =>
-    string(item, `index.categories[${index}]`, CATEGORY),
-  );
+  unique(networks.map((network) => network.id), "index.networks");
+  const column = columnPositions(input.columns as readonly string[] | undefined);
   const ends = networks.map(() => 0);
   let previous = "";
-  const alerts = list(value.alerts, "index.alerts").map((item, index): AlertRow => {
+  const alerts = input.alerts.map((row, index): AlertRow => {
     const label = `index.alerts[${index}]`;
-    const row = list(item, label);
-    if (row.length !== 14) throw new Error(`${label} must be a row of 14 values`);
-    const id = string(row[0], `${label}.id`, ALERT_ID);
+    if (row.length !== column.width) throw new Error(`${label} must be a row of ${column.width} values`);
+    const cell = (field: (typeof ROW_FIELDS)[number]): unknown => row[column[field]];
+    const id = cell("id") as string;
     if (id <= previous) throw new Error("index.alerts must be sorted by id and unique");
     previous = id;
-    const network = integer(row[1], `${label}.network`);
+    const network = cell("network") as number;
     if (network >= networks.length) throw new Error(`${label}.network names no network`);
-    if (ALERT_ID.exec(id)![1] !== networks[network]!.id)
+    if (ALERT_ID.exec(id)?.[1] !== networks[network]!.id)
       throw new Error(`${label}.id does not belong to its network`);
-    const category = string(row[2], `${label}.category`, CATEGORY);
-    const bounds = row.slice(8, 12);
+    const bounds = (["west", "south", "east", "north"] as const).map((field) => cell(field) as number | null);
     let bbox: AlertRow["bbox"] = null;
-    if (bounds.every((bound) => bound !== null)) {
-      bbox = bounds.map((bound, at) => coordinate(bound, `${label}.bbox[${at}]`)) as AlertRow["bbox"];
-    } else if (!bounds.every((bound) => bound === null)) {
-      throw new Error(`${label} must have four bounds or none`);
-    }
-    const offset = integer(row[12], `${label}.offset`);
-    const length = integer(row[13], `${label}.length`, 1);
+    if (bounds.every((bound) => bound !== null)) bbox = bounds as AlertRow["bbox"];
+    else if (!bounds.every((bound) => bound === null)) throw new Error(`${label} must have four bounds or none`);
+    const offset = cell("offset") as number;
+    const length = cell("length") as number;
     if (offset < ends[network]!) throw new Error(`${label}.offset precedes the previous alert's span`);
     if (offset + length > networks[network]!.file.byteLength)
       throw new Error(`${label} spans past the end of the file it indexes`);
@@ -254,12 +214,12 @@ export function parseAlertsIndex(input: unknown): AlertsIndex {
     return {
       id,
       network,
-      category,
-      level: level(row[3], `${label}.level`),
-      event: string(row[4], `${label}.event`),
-      sent: timestamp(row[5], `${label}.sent`),
-      onset: optionalTimestamp(row[6], `${label}.onset`),
-      expires: optionalTimestamp(row[7], `${label}.expires`),
+      category: cell("category") as string,
+      level: cell("level") as AlertLevel,
+      event: cell("event") as string,
+      sent: cell("sent") as string,
+      onset: cell("onset") as string | null,
+      expires: cell("expires") as string | null,
       bbox,
       offset,
       length,
@@ -267,49 +227,40 @@ export function parseAlertsIndex(input: unknown): AlertsIndex {
   });
   return {
     schemaVersion: version,
-    issued: timestamp(value.issued, "index.issued"),
-    generated: timestamp(value.generated, "index.generated"),
+    issued: input.issued,
+    generated: input.generated,
     networks,
-    categories,
+    categories: input.categories,
     alerts,
   };
 }
 
-/** One line of a network file. */
+/** One line of a network file: the schema's shape, and the network its id
+ * names. */
 export function parseAlertLine(input: unknown): AlertLine {
-  const value = object(input, "alert");
-  const id = string(value.id, "alert.id", ALERT_ID);
-  const network = string(value.network, "alert.network", NETWORK_ID);
-  if (ALERT_ID.exec(id)![1] !== network) throw new Error("alert.id does not belong to its network");
-  const native = object(value.native, "alert.native");
+  checkAlertLine(input, "alert");
+  if (ALERT_ID.exec(input.id)?.[1] !== input.network) throw new Error("alert.id does not belong to its network");
   const texts: Record<string, AlertTexts> = {};
-  for (const [tag, entry] of Object.entries(object(value.texts, "alert.texts"))) {
-    const fields = object(entry, `alert.texts.${tag}`);
+  for (const [tag, fields] of Object.entries(input.texts)) {
     const text: AlertTexts = {};
-    for (const key of ["headline", "description", "instruction", "area"] as const) {
-      if (fields[key] !== undefined && fields[key] !== null)
-        text[key] = string(fields[key], `alert.texts.${tag}.${key}`);
-    }
+    for (const key of ["headline", "description", "instruction", "area"] as const)
+      if (fields[key] !== undefined) text[key] = fields[key];
     texts[tag] = text;
   }
   return {
-    id,
-    network,
-    category: string(value.category, "alert.category", CATEGORY),
-    level: level(value.level, "alert.level"),
-    native: {
-      event: string(native.event, "alert.native.event"),
-      code: optionalString(native.code, "alert.native.code"),
-      level: optionalString(native.level, "alert.native.level"),
-    },
-    sent: timestamp(value.sent, "alert.sent"),
-    onset: optionalTimestamp(value.onset, "alert.onset"),
-    expires: optionalTimestamp(value.expires, "alert.expires"),
+    id: input.id,
+    network: input.network,
+    category: input.category,
+    level: input.level,
+    native: { event: input.native.event, code: input.native.code ?? null, level: input.native.level ?? null },
+    sent: input.sent,
+    onset: input.onset ?? null,
+    expires: input.expires ?? null,
     texts,
-    areas: list(value.areas, "alert.areas").map((item, index) => string(item, `alert.areas[${index}]`)),
-    geometry: geometry(value.geometry, "alert.geometry"),
-    url: optionalString(value.url, "alert.url"),
-    sender: optionalString(value.sender, "alert.sender"),
+    areas: input.areas,
+    geometry: input.geometry ? (input.geometry.coordinates as AlertPolygons) : null,
+    url: input.url ?? null,
+    sender: input.sender ?? null,
   };
 }
 

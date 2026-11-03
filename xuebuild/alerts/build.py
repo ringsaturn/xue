@@ -24,8 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import pointproduct
-from .. import stac
+from .. import pointproduct, stac
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead
@@ -37,6 +36,7 @@ from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
     PRODUCT,
+    ROW_FIELDS,
     SCHEMA_VERSION,
     AlertsProductError,
     build_pointer,
@@ -44,9 +44,9 @@ from .schema import (
     crc32_hex,
     encode_json,
     iso_z,
+    local_round_directory,
     network_filename,
     read_index,
-    local_round_directory,
     round_directory,
     round_name,
     validate_alert_line,
@@ -278,6 +278,7 @@ def build_product(
         "networks": published,
         "categories": list(CATEGORIES),
         "mapping": {"tables": tables_crc32()},
+        "columns": list(ROW_FIELDS),
         "alerts": rows,
         "ended": _ended(previous_index, {row[0] for row in rows}, positions, expired, replaced, cancelled, moment),
         "sources": [_published(status) for status in sources],

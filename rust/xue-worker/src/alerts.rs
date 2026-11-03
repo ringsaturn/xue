@@ -22,15 +22,43 @@ const PRODUCT: &str = "alerts";
 /// The newest index version this reader implements.
 const INDEX_VERSION: u64 = 1;
 
-/// An index row: `id, network, category, level, event, sent, onset,
-/// expires, west, south, east, north, offset, length`.
-const ROW_WIDTH: usize = 14;
+/// An index row's columns, in the order of an index written before
+/// `columns` named them (`docs/schemas/alerts-index.schema.json`).
+const ROW_FIELDS: [&str; 14] = [
+    "id", "network", "category", "level", "event", "sent", "onset", "expires", "west", "south",
+    "east", "north", "offset", "length",
+];
+const EVENT: usize = 4;
 const BBOX: usize = 8;
 const OFFSET: usize = 12;
 
+/// Where each of [`ROW_FIELDS`] sits in the index's rows, and their width:
+/// found by name in the index's `columns`, or in place for an index written
+/// before that field.
+fn column_order(index: &Value) -> Result<([usize; 14], usize), String> {
+    let Some(columns) = index.get("columns") else {
+        return Ok((std::array::from_fn(|position| position), ROW_FIELDS.len()));
+    };
+    let names: Vec<&str> = columns
+        .as_array()
+        .and_then(|items| items.iter().map(Value::as_str).collect())
+        .ok_or("the index names its columns with something other than strings")?;
+    let mut order = [0; 14];
+    for (slot, name) in order.iter_mut().zip(ROW_FIELDS) {
+        let mut found = names.iter().enumerate().filter(|(_, held)| **held == name);
+        *slot = match (found.next(), found.next()) {
+            (Some((position, _)), None) => position,
+            (None, _) => return Err(format!("the index has no {name} column")),
+            _ => return Err(format!("the index names the {name} column twice")),
+        };
+    }
+    Ok((order, names.len()))
+}
+
 /// One row of the index, its fields picked out.
 struct Row<'a> {
-    raw: &'a Value,
+    /// The row in [`ROW_FIELDS`] order.
+    raw: Vec<&'a Value>,
     id: &'a str,
     network: usize,
     category: &'a str,
@@ -42,16 +70,16 @@ struct Row<'a> {
 
 impl Row<'_> {
     fn json(&self, networks: &[Value]) -> Value {
-        let item = |index: usize| self.raw.get(index).cloned().unwrap_or(Value::Null);
+        let item = |index: usize| self.raw[index].clone();
         json!({
             "id": self.id,
             "network": text(&networks[self.network], "id"),
             "category": self.category,
             "level": self.level,
-            "event": item(4),
-            "sent": item(5),
-            "onset": item(6),
-            "expires": item(7),
+            "event": item(EVENT),
+            "sent": item(EVENT + 1),
+            "onset": item(EVENT + 2),
+            "expires": item(EVENT + 3),
             "bbox": self.bbox,
         })
     }
@@ -88,12 +116,14 @@ fn rows<'a>(issue: &'a Issue, networks: &[Value]) -> Result<Vec<Row<'a>>, HttpEr
     let Some(rows) = issue.index.get("alerts").and_then(Value::as_array) else {
         return Err(refuse(issue, "the index has no alerts"));
     };
+    let (order, width) = column_order(&issue.index).map_err(|why| refuse(issue, why))?;
     rows.iter()
         .map(|raw| {
-            let items = raw
+            let held = raw
                 .as_array()
-                .filter(|items| items.len() == ROW_WIDTH)
-                .ok_or_else(|| refuse(issue, format!("an alert row is not {ROW_WIDTH} values")))?;
+                .filter(|items| items.len() == width)
+                .ok_or_else(|| refuse(issue, format!("an alert row is not {width} values")))?;
+            let items: Vec<&Value> = order.iter().map(|&column| &held[column]).collect();
             let id = items[0]
                 .as_str()
                 .ok_or_else(|| refuse(issue, "an alert row has no id"))?;
@@ -104,15 +134,15 @@ fn rows<'a>(issue: &'a Issue, networks: &[Value]) -> Result<Vec<Row<'a>>, HttpEr
                 .ok_or_else(|| refuse(issue, format!("{id} names no network")))?;
             let bounds: Vec<f64> = items[BBOX..BBOX + 4]
                 .iter()
-                .filter_map(Value::as_f64)
+                .filter_map(|value| value.as_f64())
                 .collect();
             Ok(Row {
-                raw,
                 id,
                 network,
                 category: items[2].as_str().unwrap_or_default(),
                 level: items[3].as_u64().unwrap_or_default(),
                 bbox: (bounds.len() == 4).then(|| [bounds[0], bounds[1], bounds[2], bounds[3]]),
+                raw: items,
             })
         })
         .collect()
@@ -299,7 +329,8 @@ async fn read_line(
     let network = &networks[row.network];
     let descriptor = network.get("file").unwrap_or(&Value::Null);
     let (path, crc32) = issue.file(descriptor, &format!("{} alert", text(network, "id")))?;
-    let line = products::read_slice(data, &path, &crc32, row.raw, OFFSET).await?;
+    let span = json!([row.raw[OFFSET], row.raw[OFFSET + 1]]);
+    let line = products::read_slice(data, &path, &crc32, &span, 0).await?;
     if line.get("id").and_then(Value::as_str) != Some(row.id) {
         return Err(refuse(
             issue,
@@ -490,6 +521,23 @@ pub async fn alert(data: &Data, id: &str, url: &Url) -> Result<(Value, String), 
 mod tests {
     use super::*;
 
+    /// The columns this reader names are the normative schema's
+    /// (`docs/schemas/alerts-index.schema.json`), in its order.
+    #[test]
+    fn the_row_fields_are_the_schemas() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../docs/schemas/alerts-index.schema.json"
+        ))
+        .expect("schema");
+        let named: Vec<&str> = schema["properties"]["columns"]["prefixItems"]
+            .as_array()
+            .expect("prefixItems")
+            .iter()
+            .map(|item| item["const"].as_str().expect("const"))
+            .collect();
+        assert_eq!(named, ROW_FIELDS);
+    }
+
     #[test]
     fn a_polygon_holds_its_inside_and_not_its_hole() {
         let square =
@@ -539,3 +587,4 @@ mod tests {
         assert_eq!(resolve_path("", "x.pmtiles"), "x.pmtiles");
     }
 }
+

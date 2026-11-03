@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/alerts-index.schema.json",
+  "title": "AlertsIndex",
+  "description": "alerts/<YYYY>/<MM>/<DD>/alerts.<round>/index.json (docs/alerts.md section 5). Each file's name and climb, the networks' uniqueness, the rows' order, network, category, box and byte spans, and the ended rows' rules are the readers' own checks.",
+  "type": "object",
+  "required": ["schemaVersion", "issued", "generated", "networks", "categories", "alerts", "ended", "sources"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "issued": {
+      "description": "The round: a UTC minute that is a multiple of five.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d[05]:00Z$",
+      "format": "date-time"
+    },
+    "generated": {"$ref": "#/$defs/Timestamp"},
+    "networks": {"type": "array", "items": {"$ref": "#/$defs/AlertsNetwork"}},
+    "categories": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"}},
+    "mapping": {
+      "description": "The CRC32 of the mapping tables that filed this round's categories and levels.",
+      "type": ["object", "null"],
+      "required": ["tables"],
+      "properties": {"tables": {"type": "string", "pattern": "^[0-9a-f]{8}$"}}
+    },
+    "columns": {
+      "description": "The alerts rows' columns by name. A reader finds a column by its name here; an index written before the field has the same layout and is read by position.",
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "prefixItems": [
+        {"const": "id"},
+        {"const": "network"},
+        {"const": "category"},
+        {"const": "level"},
+        {"const": "event"},
+        {"const": "sent"},
+        {"const": "onset"},
+        {"const": "expires"},
+        {"const": "west"},
+        {"const": "south"},
+        {"const": "east"},
+        {"const": "north"},
+        {"const": "offset"},
+        {"const": "length"}
+      ]
+    },
+    "alerts": {"type": "array", "items": {"$ref": "#/$defs/AlertRow"}},
+    "ended": {"type": "array", "items": {"$ref": "#/$defs/EndedRow"}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/AlertsSource"}},
+    "builder": {"$ref": "#/$defs/Builder"}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "AlertId": {
+      "description": "<network>:<the upstream's identifier>, which may itself hold a colon.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S+$"
+    },
+    "CrcFile": {
+      "description": "A file beside the index or under alerts-areas/: its path, length and zlib CRC32.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"}
+      }
+    },
+    "AlertsAreas": {
+      "description": "The boundary set a network's area codes resolve against (docs/alerts.md section 9).",
+      "type": "object",
+      "required": ["set", "version", "path", "byteLength", "crc32", "layers"],
+      "properties": {
+        "set": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+        "version": {"type": "string", "pattern": "^\\d{8}$"},
+        "path": {"type": "string", "pattern": "^(\\.\\./){1,5}alerts-areas/[a-z0-9-]+\\.\\d{8}\\.pmtiles$"},
+        "byteLength": {"type": "integer", "minimum": 1},
+        "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"},
+        "layers": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+        "bbox": {"anyOf": [{"$ref": "#/$defs/CrcFile"}, {"type": "null"}]}
+      }
+    },
+    "AlertsNetwork": {
+      "description": "One network with a file this round; its file is always <id>.jsonl.",
+      "type": "object",
+      "required": ["id", "name", "attribution", "license", "url", "file"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+        "name": {"type": "string", "minLength": 1},
+        "attribution": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "licenseUrl": {"type": ["string", "null"], "pattern": "^https://"},
+        "url": {"type": "string", "minLength": 1},
+        "latest": {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "format": "date-time"},
+        "file": {"$ref": "#/$defs/CrcFile"},
+        "areas": {"anyOf": [{"$ref": "#/$defs/AlertsAreas"}, {"type": "null"}]}
+      }
+    },
+    "AlertRow": {
+      "description": "[id, network (its position in networks), category, level, event, sent, onset, expires, west, south, east, north, offset, length].",
+      "type": "array",
+      "minItems": 14,
+      "prefixItems": [
+        {"$ref": "#/$defs/AlertId"},
+        {"type": "integer", "minimum": 0},
+        {"type": "string", "minLength": 1},
+        {"enum": [1, 2, 3, 4, 5]},
+        {"type": "string", "minLength": 1},
+        {"$ref": "#/$defs/Timestamp"},
+        {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "format": "date-time"},
+        {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "format": "date-time"},
+        {"type": ["number", "null"], "minimum": -180, "maximum": 180},
+        {"type": ["number", "null"], "minimum": -90, "maximum": 90},
+        {"type": ["number", "null"], "minimum": -180, "maximum": 180},
+        {"type": ["number", "null"], "minimum": -90, "maximum": 90},
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 1}
+      ]
+    },
+    "EndedRow": {
+      "description": "[id, network, reason], or [id, network, \"replaced\", by].",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "prefixItems": [
+        {"$ref": "#/$defs/AlertId"},
+        {"type": "integer", "minimum": 0},
+        {"enum": ["expired", "replaced", "cancelled", "gone"]},
+        {"$ref": "#/$defs/AlertId"}
+      ]
+    },
+    "AlertsSource": {
+      "description": "One source's outcome (docs/alerts.md section 8). That ok false carries error, and that ids are unique, are the readers' own checks.",
+      "type": "object",
+      "required": ["id", "ok"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "ok": {"type": "boolean"},
+        "error": {"type": "string"},
+        "fetched": {"$ref": "#/$defs/Timestamp"},
+        "url": {"type": "string"},
+        "reports": {"type": "integer", "minimum": 0},
+        "alerts": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "pages": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "Builder": {
+      "description": "The code that built the round.",
+      "type": ["object", "null"],
+      "required": ["name"],
+      "properties": {
+        "name": {"const": "xuebuild"},
+        "revision": {"type": ["string", "null"], "pattern": "^[0-9a-f]{7,40}$"}
+      }
+    }
+  }
+}

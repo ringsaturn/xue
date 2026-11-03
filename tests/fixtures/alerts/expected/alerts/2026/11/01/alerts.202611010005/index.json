@@ -104,6 +104,7 @@
  "mapping": {
   "tables": "dac58e75"
  },
+ "columns": ["id", "network", "category", "level", "event", "sent", "onset", "expires", "west", "south", "east", "north", "offset", "length"],
  "alerts": [
   ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 4036],
   ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 0, 642],

@@ -318,6 +318,11 @@ chain an event's messages across rounds.
 
 ## 5. `index.json`
 
+The shape — every field, its type and range — is
+[`schemas/alerts-index.schema.json`](schemas/alerts-index.schema.json); the
+pointer's is [`schemas/pointer.schema.json`](schemas/pointer.schema.json).
+This section says what the fields mean and the rules across them.
+
 ```json
 {
   "schemaVersion": 1,
@@ -341,6 +346,8 @@ chain an event's messages across rounds.
   "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold",
                  "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
   "mapping": {"tables": "ebaf5daa"},
+  "columns": ["id", "network", "category", "level", "event", "sent", "onset", "expires",
+              "west", "south", "east", "north", "offset", "length"],
   "alerts": [
     ["nws:urn:oid:2.49.0.1.840.0.f65e…002.1", 0, "marine", 2, "Small Craft Advisory",
      "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z",
@@ -376,6 +383,11 @@ chain an event's messages across rounds.
   categories and levels: two rounds with the same value were mapped
   alike, and a reader that wants the table itself reads it at the commit
   `builder` names.
+- `columns` (optional) names the columns of `alerts[]`'s rows, and a
+  reader finds a column by its name there. In v1 it is always the layout
+  below, so a reader that indexes by position reads it too; rounds
+  published before it (every alerts round up to 2026-11-04) do not carry
+  it, and a reader takes their rows in the layout below.
 - `alerts[]` is one compact row per alert in force, sorted by id and
   unique:
 
@@ -416,6 +428,7 @@ filters on: every alert's category, level, times and box, about 90 KB (11 KB gzi
 
 ## 6. `<network>.jsonl`
 
+Each line's shape is [`schemas/alerts-line.schema.json`](schemas/alerts-line.schema.json).
 One line per alert of that network in force, sorted by id, each the
 compact JSON object below followed by `\n`:
 
@@ -973,7 +986,17 @@ and any display of it meets them so:
 
 ## 11. Validation
 
-`xuebuild/alerts/schema.py` validates every file as it is written, and
+The JSON Schemas of §5 and §6 are normative for shape: a file that does
+not match them is not an alerts file. `tests/test_point_schemas.py` holds
+the committed golden to them, and the shell's validators are generated
+from them (`web/src/schema/generated/`). `xuebuild/alerts/schema.py`
+checks, as every file is written and read, what a schema cannot say: file
+names and the boundary sets' climb, unique networks, categories, area
+codes and `replaces`, `columns` against the v1 layout, the rows sorted
+under their network with a category the index lists, four bounds or none
+to four decimals and not inverted, the spans in row order inside the
+network file, the `ended[]` rules of §7, a line's network that of its id
+and a category of §2, its language tags, and closed four-decimal rings.
 `tests/test_alerts.py` holds two consecutive rounds built from the fetched
 fixture (`tests/fixtures/alerts/alerts.202611010000/` and `…0005/`, the
 raw rounds, which stay flat under the raw root, with
