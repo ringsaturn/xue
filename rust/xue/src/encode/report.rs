@@ -7,11 +7,11 @@ use serde_json::{json, Map, Value};
 use time::OffsetDateTime;
 
 use crate::encode::convert::{
-    bundle_grid_family, crc32_hex, zstd_version, ConvertOptions, PlaneStats,
+    bundle_grid_family, zstd_version, ConvertOptions, PlaneStats,
 };
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::grid::GridInfo;
-use crate::encode::manifest::{build_bin_manifest, build_latest_pointer, serialize_json, write_json};
+use crate::encode::manifest::{build_bin_manifest, write_json};
 use crate::encode::metadata::lead_hours;
 use crate::encode::registry::Registry;
 use crate::encode::sources::SourceSpec;
@@ -230,6 +230,9 @@ pub(super) fn build_report(
 }
 
 /// The run's manifest, over the bundles this build wrote, at `manifest_path`.
+/// No live pointer: it carries the CRC32 of the finished manifest, which
+/// `xuebuild/native.py` completes with the video descriptors first, so the
+/// pointer is always written on the Python side.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_manifest<'g>(
     manifest_path: &Path,
@@ -282,25 +285,5 @@ pub(super) fn write_manifest<'g>(
     )?;
     write_json(manifest_path, &payload, options.force)?;
     log!(options, "wrote manifest {}", manifest_path.display());
-    if let (Some(latest_path), Some(run_id)) = (&options.latest_path, &options.run_id) {
-        let manifest_bytes = serialize_json(&payload);
-        let relative = manifest_path
-            .strip_prefix(latest_path.parent().unwrap_or(Path::new(".")))
-            .unwrap_or(manifest_path);
-        let pointer = build_latest_pointer(
-            run_id,
-            run_time,
-            &relative.to_string_lossy().replace('\\', "/"),
-            &crc32_hex(manifest_bytes.as_bytes()),
-            &source.manifest_model,
-            &source.product,
-        );
-        write_json(latest_path, &pointer, true)?;
-        log!(
-            options,
-            "wrote live pointer {} -> run {run_id}",
-            latest_path.display()
-        );
-    }
     Ok(())
 }

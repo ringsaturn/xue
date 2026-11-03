@@ -56,8 +56,6 @@ pub struct ConvertOptions {
     pub require_complete: bool,
     pub expected_hours: i64,
     pub manifest_path: Option<PathBuf>,
-    pub latest_path: Option<PathBuf>,
-    pub run_id: Option<String>,
     pub force: bool,
     pub skip_variants: bool,
     pub model: String,
@@ -88,8 +86,6 @@ impl Default for ConvertOptions {
             require_complete: false,
             expected_hours: 120,
             manifest_path: None,
-            latest_path: None,
-            run_id: None,
             force: false,
             skip_variants: false,
             model: "gfs".into(),
@@ -871,7 +867,7 @@ fn bundle_chunks(
     })
 }
 
-pub(super) fn crc32_hex(bytes: &[u8]) -> String {
+fn crc32_hex(bytes: &[u8]) -> String {
     format!("{:08x}", binformat::crc32_plane(bytes))
 }
 
@@ -1016,8 +1012,8 @@ fn verify_bundle_bytes(bytes: &[u8]) -> Result<()> {
 /// two-variable `wind10m.xue` bundle when the input files carry the 10 m wind
 /// components, per-variable posters, the reduced `<bundle>.<tier>.xue`
 /// variants of the source's resolution ladder (`.half.xue`, and `.quarter`
-/// on the satellite disks), and returns build statistics. When `latest_path` and `run_id` are given, also
-/// (re)writes the mutable live pointer aimed at the freshly written manifest.
+/// on the satellite disks), and returns build statistics. It writes no live
+/// pointer: `xuebuild/native.py` writes that once the manifest is final.
 ///
 /// `bbox` crops every plane to a region and `bundle_ids` restricts which
 /// bundles are built — the two knobs the historical showcase cases use.
@@ -1662,7 +1658,7 @@ pub fn convert_bin(
         registry,
     )?;
 
-    // -- manifest and live pointer --------------------------------------------
+    // -- manifest -------------------------------------------------------------
     if let Some(manifest_path) = &options.manifest_path {
         write_manifest(
             manifest_path,

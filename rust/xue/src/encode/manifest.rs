@@ -1,9 +1,8 @@
-//! The public manifest and the live pointer — the port of `xuebuild/manifest.py`'s
-//! builders.
+//! The public manifest — the port of `xuebuild/manifest.py`'s builder.
 //!
-//! Two layers, both versioned: the only mutable object per model is a tiny
-//! live pointer at the data root (schema v1), and everything it names — the
-//! run's `manifest.json` (schema v5) and every artifact — is immutable.
+//! The run's `manifest.json` (schema v5) and every artifact it names are
+//! immutable; the mutable live pointer above them is written by
+//! `xuebuild/native.py`, after the video descriptors complete the manifest.
 //!
 //! Validation stays with the Python implementation, which is the contract's
 //! reference; what this module guarantees is that the bytes it writes are the
@@ -276,32 +275,7 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry
     Ok(())
 }
 
-/// Build the tiny mutable `latest.json` live pointer.
-///
-/// The pointer is the only mutable object in the dataset: it names the current
-/// run and where that run's immutable manifest lives (relative to the pointer
-/// itself), plus the manifest's CRC32 so clients can fetch the manifest
-/// through immutable `?v=` caching.
-pub fn build_latest_pointer(
-    run_id: &str,
-    run_time: OffsetDateTime,
-    manifest_path: &str,
-    manifest_crc32: &str,
-    model: &str,
-    product: &str,
-) -> Value {
-    let mut payload = Map::new();
-    payload.insert("schemaVersion".into(), json!(1));
-    payload.insert("model".into(), json!(model));
-    payload.insert("product".into(), json!(product));
-    payload.insert("run".into(), json!(run_id));
-    payload.insert("runTime".into(), json!(iso_z(run_time)));
-    payload.insert("manifestPath".into(), json!(manifest_path));
-    payload.insert("manifestCrc32".into(), json!(manifest_crc32));
-    Value::Object(payload)
-}
-
-/// Serialize a manifest or pointer exactly as the Python writer does:
+/// Serialize a manifest exactly as the Python writer does:
 /// `json.dump(..., ensure_ascii=False, indent=2)` plus a trailing newline.
 pub fn serialize_json(payload: &Value) -> String {
     let mut text = serde_json::to_string_pretty(payload).expect("serializable payload");

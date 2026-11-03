@@ -155,9 +155,10 @@ passed in by `native.py`). It does not write three artifacts, and
   codes. As in the reference, a missing ffmpeg drops the artifact and
   leaves the store as the fallback.
 - The live pointer. It carries the manifest's CRC32, and folding the video
-  descriptors in changes the manifest, so the native encoder is asked for
-  the manifest alone and the pointer is written afterwards, from the
-  finished bytes.
+  descriptors in changes the manifest, so the native encoder has no
+  pointer writer: it writes the manifest alone and the pointer is written
+  afterwards, from the finished bytes. The wheel's `convert_bin` still
+  accepts `latest_path` and `run_id` and ignores them.
 
 `tests/test_native.py` holds the two together: one build through each
 encoder into identically shaped directories, then every artifact compared
