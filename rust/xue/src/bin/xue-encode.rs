@@ -21,8 +21,6 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   --registry <path>        the registry document (docs/registry.md) to build
                            from; the snapshot embedded at release by default
   --manifest <path>        write a schema v5 manifest.json here
-  --latest <path>          also write the mutable live pointer here
-  --run <id>               the YYYYMMDDHH cycle id the pointer names
   --hours <n>              observation sources: last hour of the series
   --expected-hours <n>     the axis a --require-complete build must match
   --require-complete       reject anything but a full production run
@@ -38,8 +36,8 @@ usage: xue-encode convert-bin <input>... --output <dir> [options]
   -v, --verbose            show progress
   -h, --help               show this message
 
-The optional H.264 companion artifacts are not built here; they stay with the
-Python pipeline and the frontend treats them as optional by design.
+Neither the optional H.264 companion artifacts nor the live pointer are built
+here; `xuebuild/native.py` adds both after a wheel build.
 ";
 
 fn main() -> ExitCode {
@@ -98,8 +96,6 @@ fn run() -> Result<String, Error> {
             "--profile" => options.profile = value()?,
             "--registry" => registry_path = Some(PathBuf::from(value()?)),
             "--manifest" => options.manifest_path = Some(PathBuf::from(value()?)),
-            "--latest" => options.latest_path = Some(PathBuf::from(value()?)),
-            "--run" => options.run_id = Some(value()?),
             "--hours" => options.last_hour = Some(parse_number(&value()?)?),
             "--expected-hours" => options.expected_hours = parse_number(&value()?)?,
             "--require-complete" => options.require_complete = true,

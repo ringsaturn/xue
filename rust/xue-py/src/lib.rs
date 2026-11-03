@@ -241,8 +241,9 @@ impl Bundle {
 
 /// Convert gridded input into per-variable Xue bundles.
 ///
-/// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts. Returns
-/// the build report as a dictionary. `registry` is the registry document
+/// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts and
+/// the live pointer (`latest_path` and `run_id` are accepted and ignored).
+/// Returns the build report as a dictionary. `registry` is the registry document
 /// as JSON text (`xuebuild.registry.document_json()`): the variables,
 /// bundles and sources the build is made from, which this wheel carries no
 /// table of. `zarr` writes each bundle's Zarr store straight from the codes
@@ -301,6 +302,10 @@ fn convert_bin(
     container: bool,
     series_bundle_ids: Option<Vec<String>>,
 ) -> PyResult<Py<PyAny>> {
+    // Retired: the wheel writes no live pointer (`native.py` writes it once
+    // the manifest is final). Still accepted so callers that pass
+    // `latest_path=None, run_id=None` keep working; the next release drops them.
+    let _ = (latest_path, run_id);
     let defaults = ConvertOptions::default();
     let options = ConvertOptions {
         profile,
@@ -309,8 +314,6 @@ fn convert_bin(
         require_complete,
         expected_hours,
         manifest_path,
-        latest_path,
-        run_id,
         force,
         skip_variants,
         bbox,
