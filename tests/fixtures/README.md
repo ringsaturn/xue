@@ -660,6 +660,71 @@ for variable_id in ("dustsfc", "aoddust"):
 The two files are 3.3 KB. A change to what the fetch writes means
 regenerating them the same way and saying so in the commit.
 
+`silam.2026110300/` is FMI's SILAM v6.1 global air-quality forecast as
+the `silam` fetch writes it (`xuebuild/silam.py`): one NetCDF classic
+series per variable, `silam.2026110300.<xue id>.nc` for `pm25` and `pm10`
+(`ug/m3`, the files' `PM25` / `PM10`), latitudes ascending as the product
+has them, longitudes from -180°, `time` in hours since the cycle, a NaN
+fill. Hours 1, 2 and 3 of the 2026-11-03 00Z run over a 5 by 4 cell box
+(116.0–116.8°E, 39.6–40.2°N) over Beijing, PM2.5 42–223 µg/m³ and PM10
+155–419 µg/m³. Cut from the run's fetched series (`xue fetch --model silam
+--run 2026110300 --raw-dir <raw>`; the bucket keeps a few days):
+
+```python
+from pathlib import Path
+import netCDF4
+import numpy as np
+from xuebuild import silam
+from xuebuild.cmadust import write_series
+from xuebuild.fetch import parse_run
+
+run = parse_run("2026110300", "silam")
+raw = Path("<raw>/silam.2026110300")
+out = Path("tests/fixtures/silam.2026110300")
+out.mkdir(parents=True, exist_ok=True)
+for v in ("pm25", "pm10"):
+    with netCDF4.Dataset(raw / silam.series_name(run, v)) as series:
+        latitudes, longitudes = series["latitude"][:], series["longitude"][:]
+        rows = np.flatnonzero((latitudes > 39.5) & (latitudes < 40.3))
+        columns = np.flatnonzero((longitudes > 115.9) & (longitudes < 116.9))
+        frames = np.asarray(series[v][0:3, rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1], dtype=np.float32)
+    write_series(
+        out / silam.series_name(run, v), v, run.time, [1, 2, 3], latitudes[rows], longitudes[columns], frames,
+        silam.series_attributes(run, "cut from the FMI S3 day files of run 2026110300 (tests/fixtures/README.md)"),
+        long_name=silam.LONG_NAMES[v], units=silam.SERIES_UNIT,
+    )
+```
+
+The two files are 1.6 KB each. A change to what the fetch writes means
+regenerating them the same way and saying so in the commit.
+
+`volume-registry.json` is the registry golden for the volume bundles'
+levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
+`clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter
+block and quality / compact codebooks (`tests/test_woof.py`; the Rust
+encoder and the frontend read the same file). Regenerate it with the
+change that meant it:
+
+```sh
+.venv/bin/python -c "import json; from tests._support import registry_entry; \
+    from xuebuild.binconvert import VOLUME_BUNDLES; \
+    print(json.dumps({v: registry_entry(v) for ids in VOLUME_BUNDLES.values() for v in ids}, \
+    indent=2, ensure_ascii=False))" > tests/fixtures/volume-registry.json
+```
+
+`soil-registry.json` is the registry golden for the soil layers, the
+temperature then the volumetric water in layers 1–4, each with its label,
+unit, GRIB2 parameter block (the GFS record's) and quality / compact
+codebooks (`tests/test_soil.py`; the Rust encoder reads the same file).
+Regenerate it with the change that meant it:
+
+```sh
+.venv/bin/python -c "import json; from tests._support import registry_entry; \
+    from xuebuild.variables import SOIL_VARIABLE_IDS; \
+    print(json.dumps({v: registry_entry(v) for v in SOIL_VARIABLE_IDS}, \
+    indent=2, ensure_ascii=False))" > tests/fixtures/soil-registry.json
+```
+
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable

@@ -19821,6 +19821,74 @@
       "video": false,
       "catCalibration": []
     },
+    "silam": {
+      "id": "silam",
+      "manifestModel": "SILAM",
+      "product": "silam-glob02",
+      "latestFilename": "latest-silam.json",
+      "steps": [
+        [
+          72,
+          1
+        ],
+        [
+          120,
+          3
+        ]
+      ],
+      "inputVariableIds": [
+        "pm25",
+        "pm10"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 1,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [],
+      "bands": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "pm25",
+        "pm10"
+      ],
+      "coreBundleIds": [
+        "pm25"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        1800,
+        897
+      ],
+      "tile": [
+        60,
+        69
+      ],
+      "variantFactors": [
+        2
+      ],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 24,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "regrid": null,
+      "video": false,
+      "catCalibration": []
+    },
     "cfs": {
       "id": "cfs",
       "manifestModel": "CFSv2",

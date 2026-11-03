@@ -289,6 +289,7 @@ export const REGISTRY = {
     "hrrr": {"label": "HRRR", "product": "wrfsfc", "latestFilename": "latest-hrrr.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "gefsaero": {"label": "GEFS-AEROSOLS", "product": "chem-a2d-0p25", "latestFilename": "latest-gefsaero.json", "observation": false, "coreBundleIds": ["aod"], "cadenceSeconds": null},
     "cmadust": {"label": "CMA-CW-DUST", "product": "cma-cw-dust-0p15", "latestFilename": "latest-cmadust.json", "observation": false, "coreBundleIds": ["dustsfc"], "cadenceSeconds": null},
+    "silam": {"label": "SILAM", "product": "silam-glob02", "latestFilename": "latest-silam.json", "observation": false, "coreBundleIds": ["pm25"], "cadenceSeconds": null},
     "cfs": {"label": "CFSv2", "product": "time-grib-01", "latestFilename": "latest-cfs.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "iconeu": {"label": "ICON-EU", "product": "iconeu", "latestFilename": "latest-iconeu.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "arpege": {"label": "ARPEGE", "product": "arpege", "latestFilename": "latest-arpege.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},

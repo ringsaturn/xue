@@ -3,7 +3,7 @@ name: publish run
 # Reusable publishing pipeline, one call per source. Callers
 # (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-ifs.yml, publish-aifs.yml,
 # publish-ifshres.yml, publish-hrrr.yml, publish-gefsaero.yml, publish-cmadust.yml,
-# publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml) own the schedule
+# publish-silam.yml, publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml) own the schedule
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
@@ -46,7 +46,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, gefsaero, cmadust, cfs, iconeu or arpege"
+        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, gefsaero, cmadust, silam, cfs, iconeu or arpege"
         required: true
         type: string
       run:
@@ -144,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODEL" in
-            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cmadust|cfs|iconeu|arpege) ;;
+            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|gefsaero|cmadust|silam|cfs|iconeu|arpege) ;;
             *) echo "::error::unknown source: $MODEL"; exit 1 ;;
           esac
           case "$PROFILE" in
@@ -271,8 +271,10 @@ jobs:
           # Planes compress in-process through the stdlib zstd module.
           python-version: "3.14"
 
+      # The SILAM fetch reads FMI's NetCDF-4 day files through netCDF4, a
+      # dependency group of its own; every other source's fetch needs none.
       - name: Sync Python environment
-        run: uv sync
+        run: uv sync ${{ inputs.model == 'silam' && '--group silam' || '' }}
 
       # No GDAL. This job converts through the native encoder (XUE_ENCODER is
       # pinned to `native` above) and the xuepy wheel carries its own — for

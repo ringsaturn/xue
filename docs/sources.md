@@ -129,6 +129,21 @@ model concentrations are coded 0. Data: China
 Meteorological Administration, WMO core data under the WMO Unified Data
 Policy (free and unrestricted).
 
+### FMI SILAM global air quality (`silam`)
+
+0.2° global (1800 × 897 cells, 180°W–179.8°E, 89.6°S–89.6°N; the model's
+own grid, nothing resampled), hourly from F001 to F072 and 3-hourly to
+F120 from the 00Z cycle, complete about five hours after the cycle. The
+Finnish Meteorological Institute's SILAM v6.1 atmospheric composition and
+air-quality forecast, read from FMI's open data on AWS. Two bundles on the
+GEFS-Aerosols identities and codebooks: the surface PM2.5 (`pm25`, the
+core) and PM10 (`pm10`) concentrations in µg/m³, each the total of every
+aerosol the model carries (dust, sea salt, sulphate, nitrate, carbon,
+fire smoke, secondary organics). Every value is the mean over the hour
+ending at its time, a 3-hourly frame included; the bucket carries no
+analysis, so the run starts at F001. Data: Finnish Meteorological
+Institute, SILAM, CC BY 4.0.
+
 ### NCEP CFSv2 (`cfs`)
 
 Seasonal: ensemble member 01 of the 00Z and 12Z cycles, 6-hourly from F6 to

@@ -296,6 +296,52 @@
         }
       ]
     },
+    "silam": {
+      "title": "FMI SILAM global air quality 0.2°",
+      "description": "The Finnish Meteorological Institute's SILAM v6.1 global atmospheric composition and air quality forecast on its 0.2° regular grid: the surface PM2.5 and PM10 concentrations of every aerosol the model carries, each the mean over the hour ending at its time, hourly from 1 to 72 hours and three-hourly to 120. One cycle a day (00Z); only the newest is kept. Obtained from FMI's open data on AWS (fmi-opendata-silam-surface-netcdf). Source: Finnish Meteorological Institute, SILAM, licensed under CC BY 4.0.",
+      "license": "CC-BY-4.0",
+      "providers": [
+        {
+          "name": "Finnish Meteorological Institute",
+          "description": "SILAM v6.1, the global air-quality forecast.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://silam.fmi.fi/"
+        },
+        {
+          "name": "Amazon Web Services",
+          "description": "The AWS Open Data Sponsorship Program, fmi-opendata-silam-surface-netcdf.",
+          "roles": [
+            "host"
+          ],
+          "url": "https://registry.opendata.aws/silam/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://creativecommons.org/licenses/by/4.0/",
+          "type": "text/html",
+          "title": "Creative Commons Attribution 4.0 International"
+        },
+        {
+          "rel": "describedby",
+          "href": "https://registry.opendata.aws/silam/",
+          "type": "text/html",
+          "title": "SILAM Air Quality on the Registry of Open Data on AWS"
+        }
+      ]
+    },
     "cfs": {
       "title": "NCEP CFSv2 seasonal",
       "description": "The NCEP Climate Forecast System version 2, the operational coupled atmosphere-ocean-land forecast, ensemble member 01, six-hourly from 6 to 6552 hours — thirty-nine weeks of a nine-month run. The surface fields are on the model's native T126 Gaussian grid (0.9375°) and the sea level pressure, pressure-level heights, temperatures, winds, vertical velocity and derived water vapour flux on the regular 1° grid NCEP publishes them on, so each bundle states the grid its own planes are on. Two cycles a day (00Z and 12Z); only the newest is kept. The precipitation rate, downward shortwave radiation and total cloud cover are means over the six hours ending at each frame.",
