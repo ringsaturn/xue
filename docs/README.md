@@ -9,13 +9,15 @@ terms (see the [README](../README.md#data-and-licensing)).
 
 | Document | Specifies |
 |---|---|
-| [format.md](format.md) | The `.xue` container (v1, v2), the bundle metadata JSON (`schemaVersion` 1–3), the codebooks and the residual arithmetic |
-| [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store |
+| [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store: what is published today, so read this first |
+| [format.md](format.md) | The bundle metadata JSON (`schemaVersion` 1–3), the codebooks and the residual arithmetic, then the retired `.xue` container (v1, v2) that published runs still carry |
 | [stac.md](stac.md) | The STAC catalog: layout, run Items, source Collections, point products, the showcase |
 | [registry.md](registry.md) | The registry document: the variables, bundles and sources an encoder builds, the closed sets of rules it names |
-| [encoder.md](encoder.md) | The native encoder and its byte-for-byte parity rule with the reference encoder |
+| [encoder.md](encoder.md) | The native encoder and its parity rule with the reference encoder |
 | [sources.md](sources.md) | What each source publishes: variables, grids, axes, caveats |
 | [tc.md](tc.md), [airport.md](airport.md), [sounding.md](sounding.md), [synop.md](synop.md), [aq.md](aq.md), [alerts.md](alerts.md), [nexrad.md](nexrad.md) | The point and single-site radar products: pointer, index, files, `schemaVersion` |
+| [fire.md](fire.md) | The active fire product: FIRMS detections aggregated hourly, pointer, index, sensor files |
+| [river.md](river.md) | River flow in a showcase case: the `river/` directory, the network and gauge kinds |
 | [satellite.md](satellite.md) | Geostationary imagery and its composites |
 | [indicators.md](indicators.md) | The agriculture indicators: crop-area-weighted daily quantities per forecast run, appended to monthly files read by byte range |
 | [metrics.md](metrics.md) | The run metrics: when each forecast run went live, measured from the publish workflows |
@@ -34,7 +36,7 @@ Every artifact carries its own version, none tied to a code release.
 | Zarr store (`zarr_format`) | 3 | 3 |
 | STAC (`stac_version`) | 1.1.0 | — |
 | Point products (`schemaVersion`, one per product) | see each document | up to the one a reader implements |
-| Indicators (`schemaVersion`) | 1 | 1 |
+| Indicators (`schemaVersion`) | 2 | 2 |
 | Run metrics (`schemaVersion`) | 1 | 1 |
 
 ## Compatibility
@@ -50,5 +52,9 @@ Every artifact carries its own version, none tied to a code release.
   keeps being read.
 - Nothing is removed from a specification. A retired artifact (the
   container) stays specified for the files that exist.
+
+How these are built, tested and released is in
+[`contribution/`](contribution/README.md); why the format looks as it does,
+in [`contribution/architecture-rationale.md`](contribution/architecture-rationale.md).
 
 Changes to these documents are listed in [`CHANGELOG.md`](../CHANGELOG.md).
