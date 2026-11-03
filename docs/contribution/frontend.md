@@ -54,6 +54,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `measure.ts` | The ruler and the area tool on the view tile: armed by a press, every map click is a vertex (the click handler hands it over before marks or the probe, and double-click zoom is off meanwhile), so the map still pans between vertices. A click back on the last vertex ends the shape (a double click does), on the first ends an area; Escape ends, a second Escape or press puts it away, Backspace takes a vertex back. Lengths are haversine on the 6371008.8 m sphere, areas the line-integral form over the ring densified along great circles (≤ 50 km steps), and the edges are drawn along those same great circles with longitudes unwrapped across the antimeridian. One GeoJSON source on top of the map, inked like a case's measures. |
 | `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. A case's round is drawn as its story instead (`setHistory`): the whole window is read once and every detection up to the playhead stays, colored by overpass burst (detections more than `PASS_GAP_MS` apart start a new pass) — the newest pass yellow, the one before red-orange, older ones a dark burnt-red stipple — and the playhead sweeps it between frames (`sweep`, from `blendFrames`, as the exports sample it), rebuilding the features only when it crosses a detection time. `fire/windarrow.ts` draws the mean 10 m wind at the newest pass's detections from that pass's start to the playhead, downwind at `ARROW_KM_PER_MS`, off a series request to the case's own `wind10m` session or the one its `wind` block borrows (`fireWind` in `marks.ts`, opened like a mosaic member; a borrowed wind also runs the particles over the case's own fields, by valid time). |
 | `river/` | A case's river data (`docs/river.md`): the index and gauge lines (`index.ts`), the reaches' GeoParquet read by range (`parquet.ts`, `wkb.ts`), the network store (`store.ts`), the line layer (`layer.ts`, `palette.ts`), gauges and extents on the map with the case-panel controls (`case.ts`), the gauge's hydrograph in the probe panel (`gauge.ts`, `hydrograph.ts`). See "River layer" below. |
+| `overlays.ts` | The overlays controller (`createOverlays`): the single-site radar (feed, overlay, title, chip, legend, site and product switches) and a case's fire, river and context layers. |
 | `radar/` | Single-site radar overlay (`docs/nexrad.md`): two feeds behind one session (`feed.ts`) — a case's window manifest, one unit per round, and the live source bucket (`live.ts`, §7), one unit per Level 3 object, over the static `sites.json` — a worker that range-reads a round and decodes it with the WASM `decodeChunk` (RAW) or reads a live sweep whole and decodes it with `decodeLevel3`, a session that streams units outward from the playhead, a live site's newest first (≤ 6 in flight, byte budget 384 MB desktop / 96 MB narrow, farthest rounds evicted first), the polar `R8UI` shader on the projection prelude, and radome site marks with ICAO labels. A chosen site is drawn alone (`ForecastLayer.setSuppressed` holds the field off screen; its slot keeps running), its scale takes the field legend (`legend[data-radar]`), REF / VEL are a radio pair on the rail under the radar tile, shown while a site is open, and the level row's `radar` group carries the sweep time and the site as a pressed chip whose ✕ closes it. Follows the playhead, never holds it; not draped on terrain. |
 
 ## Sessions and delivery
@@ -445,7 +446,7 @@ and the window shrinks to fit it.
 
 A showcase case whose catalog row carries a `river` block
 (`showcase-catalog.ts::riverBlock`) plays its river directory
-([`docs/river.md`](../river.md)) beside the field. `main.ts::loadCaseRiver`
+([`docs/river.md`](../river.md)) beside the field. `overlays.ts::loadCaseRiver`
 fetches `river/index.json?v=<crc32>` once per case and validates it
 (`river/index.ts::parseRiverIndex`, the writer's rules); a refused index or
 a failed request is one console warning and the case plays its field alone.
@@ -490,7 +491,7 @@ a failed request is one console warning and the case plays its field alone.
   `DISRP_CLASSES` hues; width `1 + log10(Q)` device pixels, 1 to 5; no
   value is a faint 1 px grey (`river/palette.ts`, the same arithmetic in
   TypeScript for the tests). A row whose block names `color` colours by
-  flow instead: `main.ts::syncRiverRamp` hands the layer that bundle's
+  flow instead: `overlays.ts::syncRiverRamp` hands the layer that bundle's
   `buildPalette` (a page's declared palette included) and codebook once
   its session is open, the texture's second channel carries the flow's code
   (`reachCode`), and the vertex stage reads the 256-texel palette at it; the
