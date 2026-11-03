@@ -295,6 +295,8 @@ export const en = {
   /** The CMA's sand-and-dust model, the WMO SDS-WAS Asian Center's,
    * carried by WMO WIS2; the model and programme names stay as written. */
   creditsCmaDust: "Dust forecast: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0.15° over Asia, via WMO WIS2",
+  /** FMI's global air-quality model; the model name stays as written. */
+  creditsSilam: "Air-quality forecast: FMI SILAM v6.1 global 0.2°, CC BY 4.0",
   /** The seasonal run: one forecast nine months deep, so the strip under
    * the track reads in months rather than in days. */
   creditsCfs: "Seasonal forecast: CFSv2, 9 months, 6-hourly",

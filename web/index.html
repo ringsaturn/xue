@@ -179,7 +179,7 @@
               "temperature, relative humidity, wind, water vapour flux, vertical velocity and equivalent potential temperature on isobaric surfaces",
               "wind gust, total and low / middle / high cloud cover, CAPE, visibility, 2 m dew point and apparent temperature",
               "sea surface (skin) temperature, sea ice cover and thickness, significant wave height, primary wave period, and the wave vector (height along the direction of travel) with particle animation, with the same height, period and vector for the wind sea and the first swell partition",
-              "aerosol optical depth at 550 nm (total, dust, sea salt, sulphate, organic carbon, black carbon) and surface PM2.5, PM10 and dust PM10 concentrations (GEFS-Aerosols)",
+              "aerosol optical depth at 550 nm (total, dust, sea salt, sulphate, organic carbon, black carbon) and surface PM2.5, PM10 and dust PM10 concentrations (GEFS-Aerosols; PM2.5 and PM10 also FMI SILAM)",
               "dust optical depth at 550 nm and surface dust concentration of every particle size (CMA-CW-DUST, over East and Central Asia)",
               "composite radar reflectivity (observed by the CMA and NOAA MRMS mosaics, forecast by HRRR)",
               "radar precipitation intensity classes (the JMA nowcast over Japan, as representative rates)",
@@ -202,6 +202,7 @@
               { "@type": "DataDownload", "name": "Météo-France ARPEGE live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-arpege.json" },
               { "@type": "DataDownload", "name": "GEFS-Aerosols live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-gefsaero.json" },
               { "@type": "DataDownload", "name": "CMA-CW-DUST live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cmadust.json" },
+              { "@type": "DataDownload", "name": "FMI SILAM live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-silam.json" },
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "Himawari-9 infrared imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawari.json" },
@@ -976,6 +977,11 @@
               <small>CMA dust Asia 0.15°</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="silam" aria-pressed="false">
+              <span class="model-name">SILAM</span>
+              <small>FMI air quality global 0.2°</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <p class="field-group-heading" data-i18n="modelGroupRadar">Radar</p>
             <button type="button" data-model="mrms" aria-pressed="false">
               <span class="model-name">MRMS</span>
@@ -1150,6 +1156,7 @@
           <span class="source-credit" data-credit-model="arpege">Source: <a href="https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/" target="_blank" rel="noreferrer">Météo-France</a> (<a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noreferrer">Licence Ouverte 2.0</a>, quantized);</span>
           <span class="source-credit" data-credit-model="cma">Radar: <a href="https://www.nmc.cn" target="_blank" rel="noreferrer">CMA</a>;</span>
           <span class="source-credit" data-credit-model="cmadust">Dust forecast: <a href="https://www.cma.gov.cn" target="_blank" rel="noreferrer">CMA</a> CMA-CW-DUST via <a href="https://wis2.wmo.int/" target="_blank" rel="noreferrer">WMO WIS2</a>;</span>
+          <span class="source-credit" data-credit-model="silam">Air-quality forecast: <a href="https://silam.fmi.fi/" target="_blank" rel="noreferrer">Finnish Meteorological Institute</a> SILAM (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>, quantized);</span>
           <span class="source-credit" data-credit-model="mrms">Radar: <a href="https://registry.opendata.aws/noaa-mrms-pds/" target="_blank" rel="noreferrer">NOAA MRMS</a>;</span>
           <span class="source-credit" data-credit-model="nexrad">Radar: <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA/NWS NEXRAD Level III</a> via <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">Unidata</a>;</span>
           <span class="source-credit" data-credit-model="jma">Source: <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA website</a> (regridded);</span>
@@ -1215,6 +1222,13 @@
               <a href="https://wis2.wmo.int/" target="_blank" rel="noreferrer">
                 <span class="credits-name">CMA-CW-DUST</span>
                 <small data-i18n="creditsCmaDust">Dust forecast: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0.15° over Asia, via WMO WIS2</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://silam.fmi.fi/" target="_blank" rel="noreferrer">
+                <span class="credits-name">FMI SILAM</span>
+                <small data-i18n="creditsSilam">Air-quality forecast: FMI SILAM v6.1 global 0.2°, CC BY 4.0</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

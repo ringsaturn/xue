@@ -155,6 +155,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsHrrr: "預報資料：HRRR 3 公里，美國本土",
   creditsGefsAero: "氣溶膠預報：GEFS-Aerosols 0.25°，光學厚度與地面懸浮微粒",
   creditsCmaDust: "沙塵預報：CMA-CW v1.0/DUST（WMO SDS-WAS 亞洲中心）0.15°，亞洲區域，經 WMO WIS2",
+  creditsSilam: "空氣品質預報：FMI SILAM v6.1 全球 0.2°，CC BY 4.0",
   creditsCfs: "季節預報：CFSv2，9 個月，6 小時間隔",
   creditsEcmwf: "含經修改的 ECMWF 資料，CC BY 4.0",
   creditsIfsHres: "改編自 ECMWF IFS，由 ECMWF 提供，依 CC BY 4.0 授權；經 Open-Meteo 轉發；IFS HRES 約 9 公里，重新取樣至 0.1°",

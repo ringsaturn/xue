@@ -20,7 +20,7 @@ Facts worth getting right:
 
 - Live sources, one shell (the ids are the `?model=` and `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`,
-  `gefsaero`, `cmadust`, `cfs`, `iconeu`, `arpege`. Observations:
+  `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`. Observations:
   `mrms`, `jma`, `aurora` and the satellites `himawari`, `himawarijp`,
   `goeseast`, `goeswest`, `meteosat`. Cases only (no live pointer, no place
   in the model switch): `mrms3d`, `woof`, `efas`, `efaswb`, `era5`, `cams`.
@@ -106,7 +106,8 @@ Facts worth getting right:
   0/20/0 on the ground with a dust `aerosol` block of no size interval)
   and `aoddust` (the dust optical depth at 550 nm, GEFS-Aerosols'
   identity and scale, so a storm core past 5 reads as the top of the
-  scale). CFSv2 (`cfs`): on the T126
+  scale). SILAM (`silam`): `pm25` and `pm10`, the total of every
+  aerosol the model carries, on the GEFS-Aerosols identities. CFSv2 (`cfs`): on the T126
   Gaussian grid `tmp2m`, `prate`, `tcdc`, `dswrf`, `tmpsfc`, `icec`,
   `icetk` and the vector pair `wind10m`; on the 1° grid `prmsl`,
   `hgt1000` / `hgt850` / `hgt700` / `hgt500` / `hgt200`, `tmp1000` /
@@ -201,7 +202,9 @@ Facts worth getting right:
   `cmadust` is the China Meteorological Administration's CMA-CW v1.0/DUST
   forecast of the WMO SDS-WAS Asian Center, obtained through WMO WIS2,
   where it is exchanged as core data under the WMO Unified Data Policy
-  (Resolution 1 (Cg-Ext(2021)): free and unrestricted); the basemap
+  (Resolution 1 (Cg-Ext(2021)): free and unrestricted); `silam` is the
+  Finnish Meteorological Institute's SILAM forecast, CC-BY-4.0 ("Source:
+  Finnish Meteorological Institute, SILAM"); the basemap
   is Protomaps © OpenStreetMap contributors.
 
 ## The geostationary mosaic
@@ -248,9 +251,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|iconeu|arpege|gefsaero|cmadust|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|iconeu|arpege|gefsaero|cmadust|silam|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
@@ -438,7 +441,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),

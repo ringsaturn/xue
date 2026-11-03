@@ -140,6 +140,8 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   cmadust: "cmadust",
   "cma-dust": "cmadust",
   "cma-cw-dust": "cmadust",
+  silam: "silam",
+  "silam-aq": "silam",
   mrms: "mrms",
   mrms3d: "mrms3d",
   "mrms-3d": "mrms3d",

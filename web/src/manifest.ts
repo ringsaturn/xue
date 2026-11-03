@@ -236,6 +236,17 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     railCore: ["dustsfc", "aod"],
     region: [25.0, 15.0, 150.1, 60.0],
   },
+  // FMI's SILAM v6.1 global air-quality forecast, on its own regular 0.2°
+  // grid (1800 × 897 cells, centres 180°W–179.8°E, 89.6°S–89.6°N). Hourly
+  // from F001 to F072, then three-hourly to F120, from the 00Z cycle; every
+  // value the mean over the hour ending at its time, so there is no
+  // analysis frame. Total PM2.5 and PM10 on the GEFS-Aerosols identities:
+  // PM2.5 is the core and the field it opens on, PM10 its family's other
+  // member.
+  silam: {
+    defaultVariable: "pm25",
+    railCore: ["pm25"],
+  },
   // CMA weather radar level-3 mosaic composite reflectivity: the national
   // composite every six minutes on the data portal's plate carrée tile grid
   // (0.0439°, 67.5°E–146.25°E and 11.25°N–56.25°N), read by the encoder out
@@ -519,6 +530,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "arpege",
   "gefsaero",
   "cmadust",
+  "silam",
   "mrms",
   "mrms3d",
   "jma",
