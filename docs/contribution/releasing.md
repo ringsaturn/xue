@@ -105,6 +105,54 @@ MRMS) resolve the encoder at job time with `native.knows_source`, which
 hands the wheel the document and reads its answer, and fall back to the
 reference pipeline with a warning.
 
+## The own index
+
+PyPI is the public channel for `xuepy`. The repository also keeps its own
+[PEP 503](https://peps.python.org/pep-0503/) index of the wheels attached
+to its GitHub releases, for its own builds:
+<https://ringsaturn.github.io/xue/simple/>. Each link points at the
+release asset with its `sha256`, and these are the files PyPI received, so
+both indexes resolve to the same hashes. The index starts at `v0.3.0`, the
+first release that carries wheels.
+
+How it stays current:
+
+1. `release-xuepy.yml` attaches the wheels to the release.
+2. When it finishes, [`release-wheels-csv.yml`](../../.github/workflows/release-wheels-csv.yml)
+   runs `scripts/build_simple_index.py`, which records the new assets in
+   [`.github/release_wheels.csv`](../../.github/release_wheels.csv) (only
+   those uploaded by `github-actions[bot]`), commits the file to `main`
+   and dispatches `docs-rust.yml`.
+3. [`docs-rust.yml`](../../.github/workflows/docs-rust.yml) renders the
+   index from the CSV alone into `simple/` beside the rustdoc preview and
+   deploys both. A GitHub Pages deployment replaces the whole site, so this
+   one workflow owns every path on it. The site carries HTML only, never a
+   wheel; the build refuses an artifact that holds one.
+
+A dispatch of `release-wheels-csv.yml` refreshes the CSV by hand. To
+rebuild it from every release, run the script with the workflow's
+arguments plus `--full-fetch` and commit the result.
+
+To install from it:
+
+```sh
+uv pip install xuepy \
+  --index-url https://ringsaturn.github.io/xue/simple/ \
+  --extra-index-url https://pypi.org/simple
+```
+
+`pyproject.toml` carries the `[[tool.uv.index]]` (`explicit = true`) and
+`[tool.uv.sources]` blocks that pin `xuepy` to this index, commented out.
+Enabling them changes xuepy's source in `uv.lock`, so it is a commit of
+its own: uncomment both blocks, `uv lock --refresh-package xuepy`, check
+that only xuepy's `source` line changed (the hashes are the same), and
+commit `pyproject.toml` with `uv.lock`. Do it only once the index lists the
+locked version; an explicit index that does not list it fails resolution.
+
+Until then the release flow above is unchanged: the relock waits for the
+wheel on PyPI. PyPI stays required for anyone installing `xuepy` without
+this index, so every `v*` tag still publishes there.
+
 ## Deploy order
 
 The Pages shell ([`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml))

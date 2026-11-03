@@ -63,3 +63,17 @@ context = ["shapely>=2"]
 indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
 # Staging the CAMEL emissivity months the dust confidence reads (xuebuild/satellite/staging.py): earthaccess behind shachen[data].
 staging = ["shachen[data]>=0.4.0", "xarray>=2025.1", "netcdf4>=1.7"]
+
+# The repository's own xuepy index: the wheels attached to the GitHub releases,
+# indexed on GitHub Pages (docs/contribution/releasing.md, "The own index").
+# Commented out until that index serves the locked version: an explicit index
+# that does not list xuepy makes resolution fail, and switching the source
+# rewrites xuepy's entry in uv.lock, so enabling it is a relock commit.
+#
+# [[tool.uv.index]]
+# name = "xuepy-index"
+# url = "https://ringsaturn.github.io/xue/simple"
+# explicit = true
+#
+# [tool.uv.sources]
+# xuepy = { index = "xuepy-index" }
