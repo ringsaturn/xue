@@ -16,6 +16,7 @@ use time::OffsetDateTime;
 use crate::encode::binformat::write_atomic;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::metadata::iso_z;
+use crate::encode::pyjson::dumps_indented;
 use crate::encode::registry::Registry;
 
 /// A bundle's `variable` is a name, not a registered number: it must look like
@@ -275,19 +276,11 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry
     Ok(())
 }
 
-/// Serialize a manifest exactly as the Python writer does:
-/// `json.dump(..., ensure_ascii=False, indent=2)` plus a trailing newline.
-pub fn serialize_json(payload: &Value) -> String {
-    let mut text = serde_json::to_string_pretty(payload).expect("serializable payload");
-    text.push('\n');
-    text
-}
-
 /// Atomically write a manifest. An immutable object: an existing file that
 /// differs is an error unless `force` is set, which is the Python writer's
 /// guard against silently republishing a run under a changed description.
 pub fn write_json(path: &Path, payload: &Value, force: bool) -> Result<()> {
-    let text = serialize_json(payload);
+    let text = dumps_indented(payload);
     if path.exists() && !force {
         let existing = std::fs::read_to_string(path).map_err(|error| {
             EncodeError::manifest(format!(

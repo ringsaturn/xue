@@ -32,6 +32,7 @@ use serde_json::{json, Map, Value};
 
 use crate::encode::binformat::crc32_plane;
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::pyjson::dumps_indented;
 use crate::format::TileGeometry;
 use crate::zarr;
 
@@ -159,22 +160,6 @@ impl Geometry {
         let (height, width) = self.tiles().shape(tile as u32);
         (height as usize, width as usize)
     }
-}
-
-// -- JSON in Python's spelling -------------------------------------------------
-
-/// `json.dumps(value, indent=2, ensure_ascii=False) + "\n"`: two-space
-/// indentation, `": "` between a key and its value, raw UTF-8, and `{}` /
-/// `[]` for empty containers, which is serde_json's pretty printer with a
-/// two-space indent. Numbers are serde_json's, the same spelling the bundle
-/// metadata already shares with the reference.
-fn dump_json(value: &Value) -> Vec<u8> {
-    let mut output = Vec::new();
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"  ");
-    let mut serializer = serde_json::Serializer::with_formatter(&mut output, formatter);
-    serde::Serialize::serialize(value, &mut serializer).expect("serializable JSON");
-    output.push(b'\n');
-    output
 }
 
 fn write_file(path: &Path, data: &[u8]) -> Result<u64> {
@@ -375,7 +360,7 @@ fn write_coordinates(
     for (name, values, length, data_type, fill_value, attributes) in coordinates {
         let document = coordinate_metadata(length, data_type, fill_value, attributes, name);
         let directory = store.join(name);
-        let written = write(&directory.join("zarr.json"), &dump_json(&document))?
+        let written = write(&directory.join("zarr.json"), &dumps_indented(&document).into_bytes())?
             + write(&directory.join("c").join("0"), &values)?;
         documents.push((name.to_owned(), document));
         sizes.push((name.to_owned(), written));
@@ -468,7 +453,7 @@ fn write_array(
         )));
     }
     let document = array_metadata(geometry, document_variable, predictor, use_delta, bundle, dimensions);
-    let text = dump_json(&document);
+    let text = dumps_indented(&document).into_bytes();
     zarr::parse_array_metadata(std::str::from_utf8(&text).expect("UTF-8 JSON"))
         .map_err(|error| EncodeError::bundle(format!("{}: array document is invalid: {}", variable.id, error.0)))?;
     let mut written = write_file(&directory.join("zarr.json"), &text)?;
@@ -678,7 +663,7 @@ pub fn write_store(
             "metadata": Value::Object(consolidated),
         },
     });
-    let text = dump_json(&root);
+    let text = dumps_indented(&root).into_bytes();
     zarr::parse_group_metadata(std::str::from_utf8(&text).expect("UTF-8 JSON"))
         .map_err(|error| EncodeError::bundle(format!("group document is invalid: {}", error.0)))?;
     report.byte_length += write_file(&store.join("zarr.json"), &text)?;
@@ -962,7 +947,7 @@ pub fn group_document(bundles: &[&BundleWrite]) -> Result<Value> {
 /// decoder's own check (`zarr::parse_group_metadata_for`), so a part the
 /// readers would refuse once merged never leaves the encoder.
 pub fn write_part(store: &Path, bundles: &[&BundleWrite]) -> Result<(PathBuf, String)> {
-    let text = dump_json(&group_document(bundles)?);
+    let text = dumps_indented(&group_document(bundles)?).into_bytes();
     let utf8 = std::str::from_utf8(&text).expect("UTF-8 JSON");
     for bundle in bundles {
         zarr::parse_group_metadata_for(utf8, &bundle.bundle_id).map_err(|error| {
@@ -980,16 +965,6 @@ mod tests {
 
     fn pool() -> rayon::ThreadPool {
         rayon::ThreadPoolBuilder::new().num_threads(2).build().expect("pool")
-    }
-
-    #[test]
-    fn json_is_spelled_the_way_python_indents_it() {
-        let value = json!({"a": [1, 2.5, "°C"], "b": {}, "c": [], "d": {"e": true}});
-        let text = String::from_utf8(dump_json(&value)).expect("UTF-8");
-        assert_eq!(
-            text,
-            "{\n  \"a\": [\n    1,\n    2.5,\n    \"°C\"\n  ],\n  \"b\": {},\n  \"c\": [],\n  \"d\": {\n    \"e\": true\n  }\n}\n"
-        );
     }
 
     #[test]

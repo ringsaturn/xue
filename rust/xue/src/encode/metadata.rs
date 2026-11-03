@@ -176,79 +176,9 @@ pub fn build_metadata(
     Ok(Value::Object(block))
 }
 
-/// Serialize a value the way Python's `json.dumps` does *by default*: one line,
-/// a space after every separator, and every non-ASCII character escaped.
-///
-/// The bundles embed their metadata with compact separators and raw UTF-8, and
-/// the encoder matches that with plain `serde_json::to_string`. The
-/// `metadataJson` strings the manifest carries for posters and videos are the
-/// one place the reference leaves `json.dumps` at its defaults, so they need
-/// both the spaced form and `ensure_ascii`.
-pub fn to_spaced_json(value: &Value) -> String {
-    let mut output = Vec::new();
-    let mut serializer =
-        serde_json::Serializer::with_formatter(&mut output, SpacedFormatter);
-    serde::Serialize::serialize(value, &mut serializer).expect("serializable value");
-    String::from_utf8(output).expect("UTF-8 JSON")
-}
-
-struct SpacedFormatter;
-
-impl serde_json::ser::Formatter for SpacedFormatter {
-    fn begin_array_value<W: ?Sized + std::io::Write>(
-        &mut self,
-        writer: &mut W,
-        first: bool,
-    ) -> std::io::Result<()> {
-        writer.write_all(if first { b"" } else { b", " })
-    }
-
-    fn begin_object_key<W: ?Sized + std::io::Write>(
-        &mut self,
-        writer: &mut W,
-        first: bool,
-    ) -> std::io::Result<()> {
-        writer.write_all(if first { b"" } else { b", " })
-    }
-
-    fn begin_object_value<W: ?Sized + std::io::Write>(
-        &mut self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        writer.write_all(b": ")
-    }
-
-    /// `ensure_ascii`: every character outside ASCII becomes a `\uXXXX`
-    /// escape, in lowercase hex, an astral one as its UTF-16 surrogate pair.
-    /// The degree sign in the temperature unit is the one that shows up in
-    /// practice, and the manifest is compared byte for byte.
-    fn write_string_fragment<W: ?Sized + std::io::Write>(
-        &mut self,
-        writer: &mut W,
-        fragment: &str,
-    ) -> std::io::Result<()> {
-        if fragment.is_ascii() {
-            return writer.write_all(fragment.as_bytes());
-        }
-        let mut start = 0;
-        for (index, character) in fragment.char_indices() {
-            if character.is_ascii() {
-                continue;
-            }
-            writer.write_all(&fragment.as_bytes()[start..index])?;
-            start = index + character.len_utf8();
-            let mut units = [0u16; 2];
-            for unit in character.encode_utf16(&mut units) {
-                write!(writer, "\\u{unit:04x}")?;
-            }
-        }
-        writer.write_all(&fragment.as_bytes()[start..])
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{axis_unit_seconds, build_metadata, lead_hours, to_spaced_json};
+    use super::{axis_unit_seconds, build_metadata, lead_hours};
     use crate::encode::grid::GridInfo;
     use crate::encode::registry::Registry;
     use crate::encode::sources::SatelliteBand;
@@ -349,24 +279,5 @@ mod tests {
                 "{model}"
             );
         }
-    }
-
-    #[test]
-    fn spaced_json_matches_python_json_dumps_defaults() {
-        // The manifest's poster and video descriptors carry a variable's metadata
-        // as a string written by `json.dumps` with nothing overridden: a space
-        // after every separator, and every non-ASCII character escaped. The degree
-        // sign in the temperature unit is the one that occurs in practice.
-        let value = serde_json::json!({
-            "unit": "°C",
-            "labels": ["雪", "\u{1f300}"],
-            "quoted": "a \"b\"\n",
-            "plain": 1,
-        });
-        assert_eq!(
-            to_spaced_json(&value),
-            "{\"unit\": \"\\u00b0C\", \"labels\": [\"\\u96ea\", \"\\ud83c\\udf00\"], \
-             \"quoted\": \"a \\\"b\\\"\\n\", \"plain\": 1}"
-        );
     }
 }

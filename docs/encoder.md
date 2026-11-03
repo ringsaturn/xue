@@ -359,7 +359,7 @@ Four places needed care to reach that:
   `metadataJson` a manifest carries for a poster or a video is the same
   object written with a space after every separator and every non-ASCII
   character escaped, so the degree sign in the temperature unit reaches the
-  manifest as `°`. `to_spaced_json` does both.
+  manifest as `°`. `pyjson::dumps_default` does both.
 - Compression is one-shot on both sides. The Python encoder calls
   `compression.zstd.compress`, which records the pledged source size in the
   frame header. The streaming encoder does not, and picks different window
