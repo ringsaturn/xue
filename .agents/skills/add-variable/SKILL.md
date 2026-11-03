@@ -38,8 +38,10 @@ Read `.claude/rules/encoder.md` and
    and the id to `bundle_scalar_ids` / `bundle_vector_ids`, in the source's
    existing order. ECMWF follows GFS order, so a model switch keeps the
    layer.
-3. Native mirror: `rust/xue/src/encode/variables.rs`, `sources.rs`,
-   `quantize.rs` (and `convert.rs` for a derivation).
+3. Native encoder: no mirror to write. It reads `rust/xue/registry.json`
+   (step 4). Rust changes only for a rule or derivation the closed sets
+   lack (`rust/xue/src/encode/{units,inspect,convert}.rs`; see the
+   `add-source` skill, step 3).
 4. Fixtures:
    - recut the source's crop GRIB if it needs new records
      (`tests/fixtures/README.md` has the exact `gdal_translate -srcwin`);
@@ -65,9 +67,7 @@ make encoder-rust-test
 npx vitest run tests/web
 ```
 
-The `xuepy` floor must cover a wheel whose source table publishes the new
-bundle, otherwise native builds refuse it. So do the encoder change on a
-`release/0.N` branch and follow the `release` skill: the change, the
-release commit, the tag, PyPI, the relock, then a fast-forward into
-`main`. The next scheduled run publishes the bundle. For a new chart,
-deploy the shell from `main` before the release lands.
+A bundle, level or variable built from existing rules is a commit to `main`
+with the regenerated snapshots, and no release; the next scheduled run
+publishes it. Only a new rule is encoder work and follows the `release`
+skill. For a new chart, deploy the shell from `main` first.
