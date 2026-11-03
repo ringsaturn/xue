@@ -199,16 +199,6 @@ export function parseCaseFromSearch(search: string): string | null {
   return id;
 }
 
-/** Whether this session may use the H.264 companion artifacts. The video
- * path is opt-in: `?use_h264=true` (or `1`) turns it on, and anything else —
- * including no param at all — keeps every variable on the Xue decoder. */
-export function parseUseH264FromSearch(search: string): boolean {
-  const value = new URLSearchParams(search).get("use_h264");
-  if (value === null) return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "true" || normalized === "1";
-}
-
 /** The experimental synoptic composite (`?x=`): whether it is on at all
  * — the stepped precipitation key on chart paper, the sea level pressure
  * lines, the particles run by the 850 hPa vapour flux — and which of the

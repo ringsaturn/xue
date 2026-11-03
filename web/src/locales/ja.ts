@@ -369,7 +369,6 @@ export const ja: Record<MessageKey, string> = {
   pointerRequestFailed: "ライブポインターの要求が HTTP {status} を返しました",
   manifestRequestFailed: "マニフェストの要求が HTTP {status} を返しました",
   bundleRequestFailed: "バンドルの要求が HTTP {status} を返しました",
-  videoIndexRequestFailed: "動画索引の要求が HTTP {status} を返しました",
   bundleTooLong: "バンドルがマニフェストの宣言した長さを超えています",
   bundleLengthMismatch: "バンドルの長さがマニフェストと一致しません",
   bundleChecksumMismatch: "バンドルのチェックサムが一致しません",

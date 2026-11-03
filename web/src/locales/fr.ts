@@ -372,7 +372,6 @@ export const fr: Record<MessageKey, string> = {
   pointerRequestFailed: "La requête du pointeur temps réel a renvoyé HTTP {status}",
   manifestRequestFailed: "La requête du manifeste a renvoyé HTTP {status}",
   bundleRequestFailed: "La requête du lot a renvoyé HTTP {status}",
-  videoIndexRequestFailed: "La requête de l'index vidéo a renvoyé HTTP {status}",
   bundleTooLong: "Le lot dépasse la longueur déclarée par le manifeste",
   bundleLengthMismatch: "La longueur du lot ne correspond pas au manifeste",
   bundleChecksumMismatch: "Somme de contrôle du lot incorrecte",

@@ -375,7 +375,6 @@ export const tr: Record<MessageKey, string> = {
   pointerRequestFailed: "Canlı işaretçi isteği HTTP {status} döndürdü",
   manifestRequestFailed: "Manifest isteği HTTP {status} döndürdü",
   bundleRequestFailed: "Paket isteği HTTP {status} döndürdü",
-  videoIndexRequestFailed: "Video dizini isteği HTTP {status} döndürdü",
   bundleTooLong: "Paket, manifestte bildirilen uzunluğu aşıyor",
   bundleLengthMismatch: "Paket uzunluğu manifestle eşleşmiyor",
   bundleChecksumMismatch: "Paket sağlama toplamı uyuşmuyor",

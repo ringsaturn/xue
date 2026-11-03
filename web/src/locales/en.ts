@@ -369,7 +369,7 @@ export const en = {
   // The data card's readout for a session on the Zarr channel — the
   // default wherever a run ships a store; "Xue" is the container a run
   // published before, or `?backend=xue`. A format name is instrument text
-  // — "Xue", "H.264" — so it stays "Zarr" in every locale.
+  // — "Xue", "Zarr" — so it stays "Zarr" in every locale.
   formatZarr: "Zarr",
   preloadProgressAria: "Forecast data preload progress",
   statDataset: "Dataset",
@@ -619,7 +619,6 @@ export const en = {
   pointerRequestFailed: "Live pointer request returned HTTP {status}",
   manifestRequestFailed: "Manifest request returned HTTP {status}",
   bundleRequestFailed: "Bundle request returned HTTP {status}",
-  videoIndexRequestFailed: "Video index request returned HTTP {status}",
   bundleTooLong: "Bundle exceeds the length declared by the manifest",
   bundleLengthMismatch: "Bundle length does not match the manifest",
   bundleChecksumMismatch: "Bundle checksum mismatch",

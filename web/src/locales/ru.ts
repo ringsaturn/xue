@@ -374,7 +374,6 @@ export const ru: Record<MessageKey, string> = {
   pointerRequestFailed: "Запрос указателя вернул HTTP {status}",
   manifestRequestFailed: "Запрос манифеста вернул HTTP {status}",
   bundleRequestFailed: "Запрос пакета вернул HTTP {status}",
-  videoIndexRequestFailed: "Запрос индекса видео вернул HTTP {status}",
   bundleTooLong: "Пакет длиннее, чем объявлено в манифесте",
   bundleLengthMismatch: "Длина пакета не совпадает с манифестом",
   bundleChecksumMismatch: "Контрольная сумма пакета не совпадает",

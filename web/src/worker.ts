@@ -26,7 +26,7 @@
  *
  * On a container v2 bundle two more things are addressable, and the `ready`
  * message's `tileGeometry` is how the main thread learns they are (it is null
- * on a v1 file, and on the video path, which has no tiles):
+ * on a v1 file, which has no tiles):
  *
  * - `decode` and `prefetch-window` may carry a list of tile rectangles, and
  *   then only those tiles are fetched and reconstructed. The `frame` reply

@@ -868,22 +868,6 @@ export function compositeComponents(id: ForecastBundleId): readonly [CompositeCo
   return isCompositeBundle(id) ? COMPOSITE_BUNDLES[id] : null;
 }
 
-export interface VideoBundleDescriptor {
-  streamPath: string;
-  indexPath: string;
-  byteLength: number;
-  crc32: string;
-  codec: string;
-  width: number;
-  height: number;
-  gop: number;
-  frameCount: number;
-  /** Same shape as the metadata embedded in the .xue file, scoped to this
-   * variable — lets the video path skip fetching the .xue just for grid,
-   * time axis, and quantization info. Parse with parseBundleMetadata(). */
-  metadataJson: string;
-}
-
 export interface PosterDescriptor {
   path: string;
   width: number;
@@ -981,9 +965,6 @@ export interface VariableBundleDescriptor {
   crc32?: string;
   /** Reduced-resolution renditions. */
   variants?: VariantDescriptor[];
-  /** Alternate WebCodecs-decodable artifact, present per variable when the
-   * build had ffmpeg available. */
-  video?: VideoBundleDescriptor;
   /** Tiny first-frame artifact for instant paint on variable switch. */
   poster?: PosterDescriptor;
   /** The bundle as a Zarr store, when the build derived one. */
@@ -1188,26 +1169,6 @@ function validatePosterDescriptor(input: unknown, paths: Set<string>): PosterDes
   return poster as unknown as PosterDescriptor;
 }
 
-function validateVideoDescriptor(input: unknown, paths: Set<string>): VideoBundleDescriptor {
-  const video = object(input);
-  relativePath(video.streamPath, ".h264", paths, "video stream");
-  relativePath(video.indexPath, ".h264.index.json", paths, "video index");
-  if (typeof video.byteLength !== "number" || !Number.isInteger(video.byteLength) || video.byteLength <= 0) {
-    throw new Error("invalid video byteLength");
-  }
-  if (typeof video.crc32 !== "string" || !/^[0-9a-f]{8}$/.test(video.crc32)) {
-    throw new Error("invalid video crc32");
-  }
-  if (typeof video.codec !== "string" || video.codec.length === 0) throw new Error("invalid video codec string");
-  for (const key of ["width", "height", "gop", "frameCount"] as const) {
-    if (typeof video[key] !== "number" || !Number.isInteger(video[key]) || (video[key] as number) <= 0) {
-      throw new Error(`invalid video ${key}`);
-    }
-  }
-  metadataJsonField(video.metadataJson, "video");
-  return video as unknown as VideoBundleDescriptor;
-}
-
 interface ManifestValidationOptions {
   /** Whether the manifest must ship its dataset's core bundles
    * (`ForecastModelInfo.coreBundles`: the tmp2m and prate pair on a
@@ -1260,9 +1221,8 @@ export function validateManifest(
       }
       for (const variant of bundle.variants) validateVariantDescriptor(variant, paths);
     }
-    if (bundle.video !== undefined) {
-      validateVideoDescriptor(bundle.video, paths);
-    }
+    // A `video` block (the retired H.264 companion, docs/format.md) is
+    // left unread: published runs and cases still carry it.
     if (bundle.poster !== undefined) {
       validatePosterDescriptor(bundle.poster, paths);
     }

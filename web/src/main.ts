@@ -59,7 +59,6 @@ import {
   FORECAST_MODELS,
   mosaicMembers,
   containerOf,
-  deliveryBytes,
   fetchLatestPointer,
   fetchManifest,
   ManifestRejectedError,
@@ -87,7 +86,6 @@ import {
   type KnownBundleId,
   type VariantBudget,
   type VariantDescriptor,
-  type VideoBundleDescriptor,
 } from "./manifest";
 import {
   identifyBundle,
@@ -145,7 +143,6 @@ import {
   parseModelFromSearch,
   parseResolutionFromSearch,
   parseSceneFromSearch,
-  parseUseH264FromSearch,
   parseVerticalExaggerationFromSearch,
   searchNamesTerrain,
   searchWithScene,
@@ -216,18 +213,11 @@ import {
 } from "./showcase-catalog";
 import { captionText } from "./casecaptions";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
-import {
-  createVideoDecodeChannel,
-  isWebCodecsSupported,
-  type DecodeChannel,
-  type VideoFrameIndexEntry,
-  type VideoStreamSource,
-} from "./webcodecs";
 import { spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 import { MeasureTool, type MeasureKind } from "./measure";
-import type { DecodedFrame, VariableSession } from "./session";
+import type { DecodeChannel, DecodedFrame, VariableSession } from "./session";
 import { createProbePanel } from "./probepanel";
 import { createMarks } from "./marks";
 import { createRelief } from "./relief";
@@ -1446,10 +1436,6 @@ function resolveComposition(view: ViewComposition, run: ForecastManifest, fallba
 /** The case to open: the link's, then whichever an embedding page switched
  * to in place (`embedOpenCase`). */
 let requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
-/** Whether this session may take the H.264 video path at all. It is off by
- * default — the Xue decoder is the everyday path, and the video artifacts
- * ride along only for `?use_h264=true`. */
-const h264Enabled = parseUseH264FromSearch(window.location.search);
 /** Which channel a session reads its bundle through. `zarr` — the default
  * — is the Zarr store a run publishes, for the bundles that have one, and
  * the container for the rest; `?backend=xue` takes the container wherever
@@ -2225,7 +2211,7 @@ function handleStreamMessage(message: {
     return;
   }
   if (message.type === "progress" && typeof message.bytes === "number") {
-    session.bytes = Math.min(session.totalBytes, session.extraBytes + message.bytes);
+    session.bytes = Math.min(session.totalBytes, message.bytes);
   }
   if (message.type === "resident") {
     session.resident = true;
@@ -3189,12 +3175,11 @@ function planesPerFrame(): number {
 function handleDecodedFrame(
   session: VariableSession,
   message: {
-    /** Absent on cache-warm-up frames the video path decodes alongside a target. */
     requestId?: number;
     variableId: number;
     frameOffset: number;
     decodeMs: number;
-    /** Absent when the whole plane is valid — the video path never narrows. */
+    /** Absent when the whole plane is valid. */
     tiles?: TileRect[];
     buffer: ArrayBuffer;
   },
@@ -4785,8 +4770,7 @@ async function supportsRangeRequests(url: string): Promise<boolean> {
   }
 }
 
-/** Downloads and CRC32-verifies one manifest-declared artifact. Used for both
- * .xue bundles and the tmp2m video stream — both carry {path, byteLength, crc32}. */
+/** Downloads and CRC32-verifies one manifest-declared `.xue` bundle. */
 async function downloadBundle(
   descriptor: { path: string; byteLength: number; crc32: string },
   sequence: number,
@@ -4828,21 +4812,6 @@ async function downloadBundle(
   if (offset !== total) throw new Error(t("bundleLengthMismatch"));
   if (crc32Hex(crc) !== descriptor.crc32) throw new Error(t("bundleChecksumMismatch"));
   return data.buffer;
-}
-
-/** Fetches the small per-frame index for a video artifact. Not CRC-checked
- * like the stream itself — it's a few KB of JSON and fetch/JSON.parse already
- * fail loudly on a truncated or corrupt response. */
-async function downloadVideoIndex(
-  descriptor: VideoBundleDescriptor,
-): Promise<{ frames: VideoFrameIndexEntry[]; byteLength: number }> {
-  if (!manifestUrl) throw new Error("manifest not loaded");
-  const url = new URL(descriptor.indexPath, manifestUrl);
-  const response = await fetch(url.href, { cache: "no-cache" });
-  if (!response.ok) throw new Error(t("videoIndexRequestFailed", { status: response.status }));
-  const buffer = await response.arrayBuffer();
-  const payload = JSON.parse(new TextDecoder().decode(buffer)) as { frames: VideoFrameIndexEntry[] };
-  return { frames: payload.frames, byteLength: buffer.byteLength };
 }
 
 function spawnWorker(): Worker {
@@ -4972,8 +4941,7 @@ function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: Variable
  *
  * A probe session (the meteogram's rows) is the primary's tier opened
  * quietly on the streaming path alone: it exists to read one cell's series
- * out of one tile, so it never takes the video path and never downloads a
- * bundle whole — where the origin cannot serve ranges it is not opened at
+ * out of one tile, so it never downloads a bundle whole — where the origin cannot serve ranges it is not opened at
  * all. The session it makes is otherwise the one a layer would have made,
  * and the rail reuses it should the viewer switch to that field. */
 function loadVariable(
@@ -5015,13 +4983,10 @@ function loadVariable(
     let format: VariableSession["format"];
     let downloadedBytes: number;
     let totalBytes: number;
-    let extraBytes = 0;
     let streaming = false;
-    // Pick a resolution tier before choosing the decode path. A selected
-    // variant always rides the Xue path — the video artifacts are full
-    // resolution, so whenever a reduced tier suffices the half bundle is
-    // strictly cheaper. The view's pixels say which tier it could show;
-    // the cell budget says which tier a frame of it can afford to hold.
+    // Pick a resolution tier before choosing the decode path. The view's
+    // pixels say which tier it could show; the cell budget says which tier
+    // a frame of it can afford to hold.
     const overlay = role === "overlay";
     const quiet = role !== "primary";
     const pickTier = (): VariantDescriptor | null => {
@@ -5040,111 +5005,66 @@ function loadVariable(
       );
     };
     const variant = pickTier();
-    const video = h264Enabled && role !== "probe" ? descriptor.video : undefined;
-    // Opted in, the video path must still earn its bytes — prefer it only
-    // when the stream is not larger than the bundle it replaces (lossless
-    // H.264 wins that comparison for tmp2m but loses it for prate; the
-    // manifest's byteLengths decide, so a future lossy tier flips this
-    // automatically).
-    if (
-      !variant &&
-      video &&
-      video.byteLength <= deliveryBytes(descriptor) &&
-      (await isWebCodecsSupported(video.codec, video.width, video.height))
-    ) {
-      const streamUrl = artifactUrl(video.streamPath, video.crc32, runUrl);
-      streaming = await supportsRangeRequests(streamUrl);
+    const target = variant ?? descriptor;
+    const container = containerOf(target);
+    // The store is the everyday path wherever the tier carries one
+    // (`?backend=xue` asks for the container instead), streamed over
+    // ranges. An origin that serves none sends the session to the
+    // container — streamed, else downloaded whole — and only an entry
+    // that ships no container at all opens its store by whole objects,
+    // one shard (one temporal group) per GET: what a whole bundle
+    // download costs, group by group. A probe session is streamed or
+    // nothing either way.
+    //
+    // A probe session reads one cell's series and nothing else, so where
+    // the bundle ships a series companion it opens that instead: one inner
+    // chunk is the whole axis of the cell's block, where the map store
+    // costs one chunk per time chunk. The companion is full resolution, so
+    // a chosen tier's series is the same read; the `.xue` container has no
+    // series form, so `?backend=xue` keeps the map path.
+    const seriesStore = role === "probe" && dataBackend !== "xue" ? descriptor.series : undefined;
+    const store = seriesStore ?? zarrStoreFor(dataBackend, descriptor, variant);
+    const storeStreams = store !== undefined && runUrl ? await supportsRangeRequests(zarrProbeUrl(store, runUrl)) : false;
+    if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
+    if (store !== undefined && runUrl && (storeStreams || !container)) {
+      if (!storeStreams && role === "probe") {
+        throw new Error("range requests unsupported; a probe session never downloads a whole shard");
+      }
+      streaming = true;
+      channel = spawnZarrWorker();
+      channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
+      initMessage = zarrInitMessage(store, descriptor.variable, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
+      downloadedBytes = 0;
+      format = "Zarr";
+      totalBytes = store.byteLength;
+    } else if (container) {
+      const url = artifactUrl(container.path, container.crc32, runUrl);
+      streaming = await supportsRangeRequests(url);
       if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      const index = await downloadVideoIndex(video);
-      if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      let source: VideoStreamSource;
       if (streaming) {
-        source = { kind: "url", url: streamUrl, byteLength: video.byteLength, variableKey };
-        downloadedBytes = index.byteLength;
-      } else {
-        const streamBuffer = await downloadBundle(
-          { path: video.streamPath, byteLength: video.byteLength, crc32: video.crc32 },
-          sequence,
-          quiet,
-          runUrl,
-        );
-        if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-        source = { kind: "buffer", buffer: streamBuffer };
-        downloadedBytes = video.byteLength + index.byteLength;
-      }
-      channel = createVideoDecodeChannel({
-        source,
-        frames: index.frames,
-        codec: video.codec,
-        width: video.width,
-        height: video.height,
-        metadataJson: video.metadataJson,
-      });
-      format = "H.264";
-      totalBytes = video.byteLength + index.byteLength;
-      extraBytes = index.byteLength;
-    } else {
-      const target = variant ?? descriptor;
-      const container = containerOf(target);
-      // The store is the everyday path wherever the tier carries one
-      // (`?backend=xue` asks for the container instead), streamed over
-      // ranges. An origin that serves none sends the session to the
-      // container — streamed, else downloaded whole — and only an entry
-      // that ships no container at all opens its store by whole objects,
-      // one shard (one temporal group) per GET: what a whole bundle
-      // download costs, group by group. A probe session is streamed or
-      // nothing either way.
-      //
-      // A probe session reads one cell's series and nothing else, so where
-      // the bundle ships a series companion it opens that instead: one inner
-      // chunk is the whole axis of the cell's block, where the map store
-      // costs one chunk per time chunk. The companion is full resolution, so
-      // a chosen tier's series is the same read; the `.xue` container has no
-      // series form, so `?backend=xue` keeps the map path.
-      const seriesStore = role === "probe" && dataBackend !== "xue" ? descriptor.series : undefined;
-      const store = seriesStore ?? zarrStoreFor(dataBackend, descriptor, variant);
-      const storeStreams = store !== undefined && runUrl ? await supportsRangeRequests(zarrProbeUrl(store, runUrl)) : false;
-      if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      if (store !== undefined && runUrl && (storeStreams || !container)) {
-        if (!storeStreams && role === "probe") {
-          throw new Error("range requests unsupported; a probe session never downloads a whole shard");
-        }
-        streaming = true;
-        channel = spawnZarrWorker();
-        channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-        initMessage = zarrInitMessage(store, descriptor.variable, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
+        channel = spawnWorker();
+        initMessage = {
+          type: "init-stream",
+          url,
+          byteLength: container.byteLength,
+          variableKey,
+        };
         downloadedBytes = 0;
-        format = "Zarr";
-        totalBytes = store.byteLength;
-      } else if (container) {
-        const url = artifactUrl(container.path, container.crc32, runUrl);
-        streaming = await supportsRangeRequests(url);
-        if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-        if (streaming) {
-          channel = spawnWorker();
-          initMessage = {
-            type: "init-stream",
-            url,
-            byteLength: container.byteLength,
-            variableKey,
-          };
-          downloadedBytes = 0;
-        } else if (role === "probe") {
-          throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
-        } else {
-          const initBuffer = await downloadBundle(container, sequence, quiet, runUrl);
-          if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-          channel = spawnWorker();
-          initMessage = { type: "init", buffer: initBuffer };
-          transfer = [initBuffer];
-          downloadedBytes = container.byteLength;
-        }
-        format = "Xue";
-        totalBytes = container.byteLength;
+      } else if (role === "probe") {
+        throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
       } else {
-        // The validator admits no entry without one delivery or the other.
-        throw new Error(t("manifestMissingBundle", { id: variableId }));
+        const initBuffer = await downloadBundle(container, sequence, quiet, runUrl);
+        if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
+        channel = spawnWorker();
+        initMessage = { type: "init", buffer: initBuffer };
+        transfer = [initBuffer];
+        downloadedBytes = container.byteLength;
       }
+      format = "Xue";
+      totalBytes = container.byteLength;
+    } else {
+      // The validator admits no entry without one delivery or the other.
+      throw new Error(t("manifestMissingBundle", { id: variableId }));
     }
 
     if (!quiet) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
@@ -5207,7 +5127,6 @@ function loadVariable(
       streamKey: variableKey,
       bytes: downloadedBytes,
       totalBytes,
-      extraBytes,
       tiles,
       streaming,
       resident: !streaming,
@@ -5220,7 +5139,7 @@ function loadVariable(
     const early = pendingStream.get(variableKey);
     if (early) {
       pendingStream.delete(variableKey);
-      if (early.bytes > 0) session.bytes = Math.min(totalBytes, extraBytes + early.bytes);
+      if (early.bytes > 0) session.bytes = Math.min(totalBytes, early.bytes);
       if (early.resident) {
         session.resident = true;
         session.residentScope = early.scope;

@@ -2,12 +2,18 @@ import type { BundleMetadata, BundleVariable, ForecastBundleId, KnownBundleId, V
 import type { VariableIdentity } from "./identity";
 import type { TileGeometry, TileRect } from "./tiles";
 import type { VolumeLevels } from "./volume";
-import type { DecodeChannel } from "./webcodecs";
+
+/** What `main.ts` holds of a decode worker: the slice of `Worker` it uses. */
+export interface DecodeChannel {
+  postMessage(message: unknown, transfer?: Transferable[]): void;
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+  terminate(): void;
+}
 
 /** One resident per-variable bundle: its decode channel and embedded metadata.
- * `worker` is either a real Worker (Xue/WASM path) or a WebCodecs
- * `DecodeChannel` (video path, tmp2m only, when the browser supports it) —
- * both speak the same booted/init/ready/decode/frame/error protocol. */
+ * `worker` speaks the booted/init/ready/decode/frame/error protocol of
+ * `worker.ts` (the `.xue` container) or `zarr/worker.ts` (the store). */
 export interface VariableSession {
   /** Bundle-level id this session was loaded for (wind10m carries two data
    * variables). */
@@ -42,9 +48,9 @@ export interface VariableSession {
   /** Every data variable a frame of this session needs decoded — one for
    * scalars, the u and v pair for wind, the three guns for a composite. */
   variables: BundleVariable[];
-  /** Delivery format actually in use for this variable: the container,
-   * the same bytes read through the Zarr channel, or the video companion. */
-  format: "H.264" | "Xue" | "Zarr";
+  /** Delivery format actually in use for this variable: the container, or
+   * the same bytes read through the Zarr channel. */
+  format: "Xue" | "Zarr";
   /** The resolution tier in use, as the data card names it beside the
    * format: empty at full resolution, else the rung's fraction of the
    * canonical grid ("½", "¼", "⅛"). */
@@ -58,13 +64,10 @@ export interface VariableSession {
   streamKey: string;
   /** Network bytes downloaded for this variable's artifacts only. */
   bytes: number;
-  /** Total bytes of this variable's artifacts (stream + index). */
+  /** Total bytes of this variable's artifacts. */
   totalBytes: number;
-  /** Bytes outside the channel's own reporting (e.g. the video index),
-   * added on top of streaming `progress` messages. */
-  extraBytes: number;
-  /** The bundle's tiling, or null when it has none — a container v1 file, or
-   * the video path. Tiles are what make a viewport-sized decode and a
+  /** The bundle's tiling, or null when it has none — a container v1 file.
+   * Tiles are what make a viewport-sized decode and a
    * one-shot point series possible. */
   tiles: TileGeometry | null;
   /** On-demand range delivery; `bytes` grows as groups arrive. */
