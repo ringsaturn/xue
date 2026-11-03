@@ -12,7 +12,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | Module | Role |
 | --- | --- |
 | `main.ts` | Composition root: sessions, slots, playback, rail, polling. Feature controllers are factories it wires up with their state as explicit `Deps`. |
-| `session.ts` | The `VariableSession` type the controllers share. |
+| `session.ts` | The `VariableSession` and `DecodedFrame` types the controllers share. |
+| `stats.ts` | The data card's "stats for nerds" rows and decode graph, the debug copy and the map's context menu (`createStats`). |
 | `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
