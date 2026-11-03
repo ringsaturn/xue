@@ -372,7 +372,6 @@ export const pt: Record<MessageKey, string> = {
   pointerRequestFailed: "O pedido do ponteiro em direto devolveu HTTP {status}",
   manifestRequestFailed: "O pedido do manifesto devolveu HTTP {status}",
   bundleRequestFailed: "O pedido do pacote devolveu HTTP {status}",
-  videoIndexRequestFailed: "O pedido do índice de vídeo devolveu HTTP {status}",
   bundleTooLong: "O pacote excede o comprimento declarado pelo manifesto",
   bundleLengthMismatch: "O comprimento do pacote não corresponde ao manifesto",
   bundleChecksumMismatch: "A soma de verificação do pacote não corresponde",

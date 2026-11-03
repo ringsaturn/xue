@@ -192,8 +192,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   // time axis. On a container v2 bundle it asks for the series outright — one
   // chunk per temporal group of the one tile holding the cell, a few dozen KB
   // whatever the axis length — so the chart is complete the moment it opens.
-  // Where the container cannot address a cell (a v1 bundle, or the H.264 video
-  // path) it falls back to sampling every plane the app decodes for the screen
+  // Where the container cannot address a cell (a v1 bundle) it falls back to sampling every plane the app decodes for the screen
   // anyway: the series fills in as playback or a scrub walks the axis, and an
   // undecoded frame is just a gap. That keeps the probe honest under windowed
   // streaming, where only the frames around the playhead are ever local.

@@ -374,7 +374,6 @@ export const ko: Record<MessageKey, string> = {
   pointerRequestFailed: "실시간 포인터 요청이 HTTP {status}를 반환했습니다",
   manifestRequestFailed: "매니페스트 요청이 HTTP {status}를 반환했습니다",
   bundleRequestFailed: "번들 요청이 HTTP {status}를 반환했습니다",
-  videoIndexRequestFailed: "동영상 색인 요청이 HTTP {status}를 반환했습니다",
   bundleTooLong: "번들이 매니페스트가 선언한 길이를 넘습니다",
   bundleLengthMismatch: "번들 길이가 매니페스트와 다릅니다",
   bundleChecksumMismatch: "번들 체크섬이 맞지 않습니다",

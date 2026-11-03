@@ -372,7 +372,6 @@ export const es: Record<MessageKey, string> = {
   pointerRequestFailed: "La petición del puntero en vivo devolvió HTTP {status}",
   manifestRequestFailed: "La petición del manifiesto devolvió HTTP {status}",
   bundleRequestFailed: "La petición del paquete devolvió HTTP {status}",
-  videoIndexRequestFailed: "La petición del índice de vídeo devolvió HTTP {status}",
   bundleTooLong: "El paquete supera la longitud declarada por el manifiesto",
   bundleLengthMismatch: "La longitud del paquete no coincide con el manifiesto",
   bundleChecksumMismatch: "La suma de verificación del paquete no coincide",

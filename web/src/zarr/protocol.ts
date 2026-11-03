@@ -4,10 +4,9 @@
  * `main.ts` never holds a file, only a `DecodeChannel` that speaks
  * `booted` → `init-stream` → `ready`, then `decode` → `frame`, `series` →
  * `series`, `prefetch-window`, `recycle` and `clear-cache` (worker.ts is the
- * `.xue` implementation, webcodecs.ts the H.264 one). The Zarr worker is the
- * third implementation and answers the same messages with the same replies;
- * what differs is only how it is opened, which is the one message declared
- * here. The request shapes below mirror worker.ts's exactly and exist so the
+ * `.xue` implementation). The Zarr worker is the other one and answers the
+ * same messages with the same replies; what differs is only how it is
+ * opened, which is the one message declared here. The request shapes below mirror worker.ts's exactly and exist so the
  * two workers and their tests share one spelling without importing a worker
  * entry module (whose top level posts `booted` on load).
  */

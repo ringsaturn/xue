@@ -47,7 +47,7 @@ export interface ViewportBounds {
 }
 
 /** The four numbers `tileGeometry()` returns, or null on a plane-major v1
- * bundle (and on the video path, which has no tiles at all). */
+ * bundle. */
 export function parseTileGeometry(raw: Uint32Array | undefined | null): TileGeometry | null {
   if (!raw || raw.length < 4) return null;
   const [tileWidth, tileHeight, columns, rows] = raw;

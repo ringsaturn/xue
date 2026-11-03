@@ -369,7 +369,6 @@ export const zhHant: Record<MessageKey, string> = {
   pointerRequestFailed: "即時指標請求傳回 HTTP {status}",
   manifestRequestFailed: "清單請求傳回 HTTP {status}",
   bundleRequestFailed: "資料包請求傳回 HTTP {status}",
-  videoIndexRequestFailed: "影片索引請求傳回 HTTP {status}",
   bundleTooLong: "資料包超出清單宣告的長度",
   bundleLengthMismatch: "資料包長度與清單不一致",
   bundleChecksumMismatch: "資料包檢查碼不一致",

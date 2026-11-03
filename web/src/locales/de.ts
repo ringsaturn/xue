@@ -372,7 +372,6 @@ export const de: Record<MessageKey, string> = {
   pointerRequestFailed: "Live-Zeiger-Anfrage lieferte HTTP {status}",
   manifestRequestFailed: "Manifest-Anfrage lieferte HTTP {status}",
   bundleRequestFailed: "Bündel-Anfrage lieferte HTTP {status}",
-  videoIndexRequestFailed: "Videoindex-Anfrage lieferte HTTP {status}",
   bundleTooLong: "Bündel überschreitet die im Manifest angegebene Länge",
   bundleLengthMismatch: "Bündellänge stimmt nicht mit dem Manifest überein",
   bundleChecksumMismatch: "Prüfsumme des Bündels stimmt nicht",

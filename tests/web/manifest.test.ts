@@ -146,23 +146,18 @@ describe("the bundle id registry", () => {
 });
 
 describe("validateManifest", () => {
-  it("accepts a valid schema v5 manifest with a video descriptor", () => {
+  it("accepts a valid schema v5 manifest that still carries the retired video block", () => {
+    // Published runs and cases keep their H.264 descriptor; the shell no
+    // longer reads it, but the manifest must stay admissible.
     const manifest = validateManifest(manifestFixture());
     expect(manifest.bundles.map((bundle) => bundle.variable)).toEqual(["tmp2m", "prate"]);
     expect(manifest.bundles[0]!.path).toBe("gfs.2026081506/tmp2m.xue");
-    expect(manifest.bundles[0]!.video?.codec).toBe("avc1.f40028");
-    expect(manifest.bundles[1]!.video).toBeUndefined();
   });
 
-  it("rejects an invalid video descriptor shape", () => {
-    const missingMetadata = manifestFixture();
-    const { metadataJson: _metadataJson, ...rest } = missingMetadata.bundles[0]!.video!;
-    missingMetadata.bundles[0]!.video = rest as ReturnType<typeof videoFixture>;
-    expect(() => validateManifest(missingMetadata)).toThrow("metadata");
-
-    const badStreamPath = manifestFixture();
-    badStreamPath.bundles[0]!.video!.streamPath = "gfs.2026081506/tmp2m.mp4";
-    expect(() => validateManifest(badStreamPath)).toThrow("path");
+  it("leaves the retired video block unread, whatever its shape", () => {
+    const malformed = manifestFixture() as unknown as { bundles: Record<string, unknown>[] };
+    malformed.bundles[0]!.video = { streamPath: "gfs.2026081506/tmp2m.mp4" };
+    expect(validateManifest(malformed).bundles[0]!.variable).toBe("tmp2m");
   });
 
   it("rejects other schema versions", () => {
@@ -252,8 +247,6 @@ describe("validateManifest", () => {
     sflux.product = "sfluxgrb";
     sflux.bundles[0]!.path = "sflux.2026081506/tmp2m.xue";
     sflux.bundles[0]!.variants![0]!.path = "sflux.2026081506/tmp2m.half.xue";
-    sflux.bundles[0]!.video!.streamPath = "sflux.2026081506/tmp2m.h264";
-    sflux.bundles[0]!.video!.indexPath = "sflux.2026081506/tmp2m.h264.index.json";
     sflux.bundles[1]!.path = "sflux.2026081506/prate.xue";
     sflux.bundles.push({
       variable: "dswrf",

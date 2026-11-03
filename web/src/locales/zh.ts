@@ -369,7 +369,6 @@ export const zh: Record<MessageKey, string> = {
   pointerRequestFailed: "直播指针请求返回 HTTP {status}",
   manifestRequestFailed: "清单请求返回 HTTP {status}",
   bundleRequestFailed: "数据包请求返回 HTTP {status}",
-  videoIndexRequestFailed: "视频索引请求返回 HTTP {status}",
   bundleTooLong: "数据包超出清单声明的长度",
   bundleLengthMismatch: "数据包长度与清单不一致",
   bundleChecksumMismatch: "数据包校验和不一致",

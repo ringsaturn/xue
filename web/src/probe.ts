@@ -9,8 +9,7 @@
  * fetches and replays in one `series` round trip regardless of how many
  * frames the axis has. `adopt` takes that result.
  *
- * Otherwise — a v1 bundle, or the H.264 video path, neither of which can
- * address a cell — the probe samples opportunistically: every plane the app
+ * Otherwise — a v1 bundle, which cannot address a cell — the probe samples opportunistically: every plane the app
  * decodes anyway (the frame on screen, the playback prefetch, a scrub)
  * contributes that cell's code through `sample`, and a frame that was never
  * decoded is simply a gap. That keeps the probe compatible with windowed
