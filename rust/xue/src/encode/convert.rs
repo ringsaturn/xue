@@ -46,6 +46,8 @@ use crate::encode::report::{build_report, write_manifest};
 pub use crate::encode::derive::{
     average_window_start, deaccumulate_precipitation, deaverage_precipitation,
 };
+// The wheel's `decimate` is this sampling, so the two cannot drift.
+pub use crate::encode::ladder::decimate_codes;
 
 pub const DEFAULT_ZSTD_LEVEL: i32 = 15;
 
