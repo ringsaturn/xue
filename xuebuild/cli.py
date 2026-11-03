@@ -314,6 +314,9 @@ def parser() -> argparse.ArgumentParser:
         "registry", help="print the registry document (docs/registry.md): the variables, bundles and sources this tree builds"
     )
     registry_parser.add_argument("--output", type=Path, help="write the document here instead of standard output")
+    registry_parser.add_argument(
+        "--shell", type=Path, help="also write the shell's trimmed copy here (web/src/registry.ts, docs/registry.md)"
+    )
 
     stac_parser = commands.add_parser(
         "stac",
@@ -1175,13 +1178,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(report, indent=2))
         elif arguments.command == "registry":
-            from .registry import document_json  # noqa: PLC0415
+            from .registry import document_json, shell_module  # noqa: PLC0415
 
             text = document_json()
             if arguments.output is None:
                 sys.stdout.write(text)
             else:
                 arguments.output.write_text(text, encoding="utf-8")
+            if arguments.shell is not None:
+                arguments.shell.write_text(shell_module(), encoding="utf-8")
         elif arguments.command == "stac" and arguments.product is not None:
             if arguments.issue is None:
                 raise XueError(f"stac --product {arguments.product} needs the issue it describes: --issue YYYYMMDDHH")

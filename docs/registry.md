@@ -233,6 +233,21 @@ repacking is the source's `packing`, not a family's.
 or `null`. The meaning of each field is `SourceSpec`'s docstring and
 `docs/contribution/sources.md`.
 
+## The shell's copy
+
+`xue registry --shell web/src/registry.ts` writes, beside the document,
+the part of it the shell reads, as a TypeScript module (`export const
+REGISTRY = {…} as const`) so the ids reach the type checker as literal
+unions. It carries every published variable's `unit`, `parameter`,
+`producer`, `aerosol` and `quality` codebook; every bundle's `kind` and
+`members`; each source's label (`manifestModel`), `product`,
+`latestFilename`, `observation`, `coreBundleIds` and `cadenceSeconds`;
+and, from the same tables, the isobaric and turbulence levels, the family
+lists the shell's rail groups by, the pressure family's contour intervals
+and the tropical cyclone registry (`xuebuild/tc/registry.py`). It is not
+a published artifact either, and it is held to the tables by the same test
+as the document.
+
 ## Closed sets
 
 A reader implements these names and refuses a document that names any

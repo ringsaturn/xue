@@ -7,10 +7,13 @@ import json
 import unittest
 
 from tests._support import FIXTURES
-from xuebuild.registry import REGISTRY_SCHEMA, document, document_json
+from xuebuild.registry import REGISTRY_SCHEMA, document, document_json, shell_document, shell_module
 
 # Inside the crate, so the native encoder can embed it; one copy only.
 SNAPSHOT = FIXTURES.parents[1] / "rust" / "xue" / "registry.json"
+# The shell's trimmed copy, imported by the frontend in place of tables of
+# its own.
+SHELL_SNAPSHOT = FIXTURES.parents[1] / "web" / "src" / "registry.ts"
 
 CONVERSION_RULES = {
     "none",
@@ -61,6 +64,30 @@ class RegistryDocumentTests(unittest.TestCase):
             "the tables moved: regenerate with `xue registry --output rust/xue/registry.json` "
             "and say so in the commit",
         )
+
+    def test_the_committed_shell_copy_still_describes_this_tree(self) -> None:
+        self.assertEqual(
+            SHELL_SNAPSHOT.read_text(encoding="utf-8"),
+            shell_module(),
+            "the tables moved: regenerate with `xue registry --output rust/xue/registry.json "
+            "--shell web/src/registry.ts` and say so in the commit",
+        )
+
+    def test_the_shell_copy_is_the_document_trimmed(self) -> None:
+        whole = document()
+        shell = shell_document()
+        for variable_id, entry in shell["variables"].items():
+            with self.subTest(variable=variable_id):
+                full = whole["variables"][variable_id]
+                self.assertEqual(entry["parameter"], full["parameter"])
+                self.assertEqual(entry["quality"], full["quantization"]["quality"])
+                self.assertEqual(entry.get("aerosol"), full.get("aerosol"))
+                self.assertEqual(entry.get("producer"), full.get("producer"))
+        for family, ids in shell["families"].items():
+            with self.subTest(family=family):
+                for variable_id in ids:
+                    self.assertIn(variable_id, shell["variables"])
+        self.assertEqual(set(shell["sources"]), set(whole["sources"]))
 
     def test_the_snapshot_is_the_document_round_tripped(self) -> None:
         self.assertEqual(json.loads(SNAPSHOT.read_text(encoding="utf-8")), document())
