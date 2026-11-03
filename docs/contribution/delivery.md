@@ -94,7 +94,7 @@ products'.
   pointer (`write_point_product_documents`).
 - The live Item `<source>/item.json` is the run's Item relocated
   (`relocate_item`) so its path outlives the run.
-- Licence and provider prose: `_source_prose`, `_point_product_prose`, held
+- Licence and provider prose: `xuebuild/stac_prose.json`, held
   to the registry by `tests/test_stac.py`. `stacindex.py` renders the root
   `index.html` from the same prose; its hostnames mirror `web/src/site.ts`.
 - Uploads: the run Item no-cache with the manifest; Collection, live Item

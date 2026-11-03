@@ -665,9 +665,8 @@ forecast).
 4. **Tests.** A small crop fixture (`tests/fixtures/<id>.*`, described in
    `tests/fixtures/README.md`) and `tests/test_<id>.py` running it through
    both encoders byte for byte.
-5. **STAC.** Licence and provider prose in `xuebuild/stac.py::_source_prose`
-   and `tests/fixtures/stac-prose.json` (`tests/test_stac.py` holds them to
-   the registry).
+5. **STAC.** Licence and provider prose in the `sources` entry of
+   `xuebuild/stac_prose.json` (`tests/test_stac.py` holds it to the registry).
 6. **Shell.** A row in `FORECAST_MODELS` (and the `ForecastModelId` union) in
    `web/src/manifest.ts`, with `domain` / `region` for a regional grid; any
    new quantity in `web/src/variables.ts`, `identity.ts`, `palettes.ts`;

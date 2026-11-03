@@ -46,9 +46,8 @@ code: open access only, and record the attribution the licence requires.
 4. **Tests**: a small crop fixture (`tests/fixtures/<id>.*`, documented in
    `tests/fixtures/README.md` with the exact cut command) and
    `tests/test_<id>.py`, which runs it through both encoders byte for byte.
-5. **STAC**: licence and provider prose in `xuebuild/stac.py::_source_prose`
-   and `tests/fixtures/stac-prose.json`. `tests/test_stac.py` holds them to
-   the registry.
+5. **STAC**: licence and provider prose in `xuebuild/stac_prose.json`.
+   `tests/test_stac.py` holds it to the registry.
 6. **Shell**: a row in `FORECAST_MODELS` (and the `ForecastModelId` union)
    in `web/src/manifest.ts`, with `domain` / `region` for a regional grid.
    Any new quantity goes in `web/src/variables.ts`, `identity.ts` and
