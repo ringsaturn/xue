@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/ocean-registry.json";
-
 import {
   identifyBundle,
   identityForBundleId,
@@ -37,11 +35,11 @@ import {
   identityForParameterPair,
 } from "../../web/src/identity";
 import { vectorMaxMagnitude } from "../../web/src/levels";
-import { registryVariable, rgba, type RegistryEntry } from "./helpers";
+import { registryEntries, registryVariable, rgba } from "./helpers";
 
-/** The committed registry both encoders are held to (`tests/test_ocean.py`,
- * and the Rust encoder's unit tests). */
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+/** The registry both encoders build from (`rust/xue/registry.json`): the
+ * ocean set and the components of the three wave vectors. */
+const registry = registryEntries([...OCEAN_IDS, ...WAVE_COMPONENT_IDS, ...WINDWAVE_COMPONENT_IDS, ...SWELL_COMPONENT_IDS]);
 
 function bundleVariable(
   id: string,

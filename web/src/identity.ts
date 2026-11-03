@@ -1,4 +1,5 @@
 import type { BundleAerosol, BundleBand, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
+import { REGISTRY } from "./registry";
 import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
@@ -186,132 +187,133 @@ function isTriple(parameter: BundleParameter, discipline: number, category: numb
   );
 }
 
+type RegistryVariableId = keyof typeof REGISTRY.variables;
+
+/** A registered variable's parameter block (`registry.ts`): the numbers
+ * every rule below compares against are the encoders' own. */
+function registered(id: RegistryVariableId): BundleParameter {
+  return REGISTRY.variables[id].parameter;
+}
+
+/** A registered variable's discipline / category / number. */
+function tripleOf(id: RegistryVariableId): readonly [number, number, number] {
+  const parameter = registered(id);
+  return [parameter.discipline, parameter.parameterCategory, parameter.parameterNumber];
+}
+
+/** True when a parameter is the registered variable's quantity, on any
+ * surface: the level of an isobaric family is read off the parameter. */
+function isQuantityOf(parameter: BundleParameter, id: RegistryVariableId): boolean {
+  return isTriple(parameter, ...tripleOf(id));
+}
+
+/** True when a parameter is the registered variable's quantity on its type
+ * of surface, whatever value the surface carries. */
+function isOnSurfaceOf(parameter: BundleParameter, id: RegistryVariableId): boolean {
+  return isQuantityOf(parameter, id) && parameter.typeOfFirstFixedSurface === registered(id).typeOfFirstFixedSurface;
+}
+
+/** True when a parameter is the registered variable's quantity on its
+ * surface, the surface's value included (2 m, 10 m, the first swell). */
+function isAtSurfaceOf(parameter: BundleParameter, id: RegistryVariableId): boolean {
+  return isOnSurfaceOf(parameter, id) && surfaceValue(parameter) === surfaceValue(registered(id));
+}
+
 /** True on the first swell partition: WAVEWATCH III writes its swell
  * partitions on code table 4.5 type 241, "ordered sequence of data", the
  * surface's value the partition's place in the sequence. Only the first is
  * published, and the second and third would be other fields. */
 function isFirstSwell(parameter: BundleParameter): boolean {
-  return parameter.typeOfFirstFixedSurface === 241 && surfaceValue(parameter) === 1;
+  const swell = registered("swhgt");
+  return parameter.typeOfFirstFixedSurface === swell.typeOfFirstFixedSurface && surfaceValue(parameter) === surfaceValue(swell);
 }
 
 /**
  * The identity of one scalar variable, or null when its parameters are not
  * ones this shell has chart knowledge for.
  *
- * The table (discipline / category / number @ surface type):
- * (0,3,5) @100 geopotential height, (0,3,1) @101 sea level pressure,
- * (0,0,0) @100 and @103 value 2 temperature, (0,1,1) @100 relative humidity,
- * (0,1,0) @100 specific humidity, (0,1,7) @1 precipitation rate,
- * (0,4,192) @1 downward shortwave radiation, (0,16,5) @10 composite
- * reflectivity, (0,2,22) @1 wind gust, (0,6,1) @10 total cloud cover,
- * (0,6,3) @214 / (0,6,4) @224 / (0,6,5) @234 low / middle / high cloud
- * cover, (0,7,6) @1 surface-based CAPE and (0,7,7) @1 convective
- * inhibition, (0,1,3) @200 precipitable water (NCEP's local "entire
- * atmosphere (considered as a single layer)" surface, which carries no
- * value), (0,3,196) @1 planetary boundary layer height, (0,1,19) @1
- * precipitation type, (0,19,0) @1 visibility, (0,0,6)
- * @103 value 2 dew point, (0,0,21) @103 value 2 apparent temperature,
- * (0,2,8) @100 vertical velocity, (0,0,3) @100 equivalent potential
- * temperature, (0,19,29) @100 clear-air turbulence in EDR units (what
- * the encoders derive from the resolved flow), (0,0,0) @1 surface (skin)
- * temperature, (10,2,0) @1 sea ice
- * cover, (10,2,1) @1 sea ice thickness, (10,0,3) / (10,0,11) / (10,0,10)
- * @1 significant wave height, primary wave period and direction, (10,0,5) /
- * (10,0,6) / (10,0,4) @1 the wind sea's height, mean period and direction —
- * the oceanographic discipline's surface, whose value (0 from pgrb2, 1 from
- * WAVEWATCH III, none once declared) is not part of the identity; (10,0,8) /
- * (10,0,9) / (10,0,7) @241 value 1 the first swell partition's height,
- * mean period and direction (`isFirstSwell`); (0,4,4)
- * @8 brightness temperature, a satellite channel told apart by the
- * `band` block's central wave number (10–11 µm is the infrared window,
- * `ir104`, 3.5–4.2 µm the shortwave window, `ir039`); (0,20,102) @10 aerosol optical thickness and (0,13,193) /
- * (0,13,192) @1 fine / coarse particulate matter (NCEP-local numbers) and
- * (0,20,0) @1 aerosol mass concentration, each
- * told apart by the `aerosol` block's species, size and wavelength
- * (`aerosolField`), (0,1,22) @102 cloud water mixing ratio at an altitude
- * above mean sea level — one level of a cloud volume, whose altitude is
- * the volume's business (volume.ts), not the identity's, (2,0,2) @106 soil
- * temperature and (2,0,192) @106 volumetric soil moisture (NCEP-local
- * SOILW), the layer told apart by the surface's value (`soilLayer`),
- * (1,0,7) river discharge — the hydrological discipline's own parameter,
- * on whatever surface the source writes it, the six-hour mean EFAS
- * publishes as `dis06`. The statistical process (code table 4.10: 0, the
- * average) is not part of the identity, as it is not for the
- * precipitation rate or the gust: a parameter names one chart however the
- * step was reduced.
+ * Each rule names the registered variable whose parameter block it reads
+ * (`registry.ts`): the triple and the surface type are the registry's, and
+ * what a rule leaves out is what the chart does not tell apart. An
+ * isobaric family takes its level off the parameter, on any surface; the
+ * oceanographic discipline's surface value (0 from pgrb2, 1 from
+ * WAVEWATCH III, none once declared) is not part of the identity, the
+ * 2 m, 10 m and first-swell values are. A satellite channel is told apart
+ * by the `band` block's central wave number (10–11 µm is the infrared
+ * window, `ir104`, 3.5–4.2 µm the shortwave window, `ir039`); an aerosol
+ * by its `aerosol` block (`aerosolField`); a soil layer by the surface's
+ * value (`soilLayer`); a cloud water level's altitude is the volume's
+ * business (volume.ts), not the identity's; the river discharge is
+ * accepted on whatever surface the source writes it. The statistical
+ * process (code table 4.10) is not part of the identity: a parameter
+ * names one chart however the step was reduced.
  */
 export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
   const surface = parameter.typeOfFirstFixedSurface;
   const level = isobaricLevel(parameter);
   const value = surfaceValue(parameter);
-  if (isTriple(parameter, 0, 4, 4) && surface === 8) {
+  if (isOnSurfaceOf(parameter, "ir104")) {
     const channel = satelliteChannel(band);
     return channel === null ? null : scalar(channel, null);
   }
-  if (isTriple(parameter, 0, 20, 102) && surface === 10) {
-    const field = aerosolField(AEROSOL_OPTICAL_DEPTHS, aerosol);
+  if (AEROSOL_FIELDS.some((id) => isOnSurfaceOf(parameter, id))) {
+    const field = aerosolField(parameter, aerosol);
     return field === null ? null : scalar(field, null);
   }
-  if ((isTriple(parameter, 0, 13, 193) || isTriple(parameter, 0, 13, 192)) && surface === 1) {
-    const field = aerosolField(parameter.parameterNumber === 193 ? FINE_PARTICULATES : COARSE_PARTICULATES, aerosol);
-    return field === null ? null : scalar(field, null);
-  }
-  if (isTriple(parameter, 0, 20, 0) && surface === 1) {
-    const field = aerosolField(MASS_CONCENTRATIONS, aerosol);
-    return field === null ? null : scalar(field, null);
-  }
-  if (isTriple(parameter, 0, 3, 5) && level !== null) return scalar("hgt", level);
+  if (isQuantityOf(parameter, "hgt500") && level !== null) return scalar("hgt", level);
   // Orography: the geopotential height on the ground surface (NCEP), or the
   // geopotential itself (ECMWF open data), no level of its own.
-  if (isTriple(parameter, 0, 3, 5) && surface === 1) return scalar("orog", null);
-  if (isTriple(parameter, 0, 3, 4) && surface === 1) return scalar("orog", null);
-  if (isTriple(parameter, 0, 3, 1) && surface === 101) return scalar("hgt", null);
-  if (isTriple(parameter, 0, 0, 0)) {
+  if (isOnSurfaceOf(parameter, "orog")) return scalar("orog", null);
+  // The geopotential (0,3,4) is no registered variable's own block, only
+  // an input spelling of the orography, so it stays written out here.
+  if (isTriple(parameter, 0, 3, 4) && surface === registered("orog").typeOfFirstFixedSurface) return scalar("orog", null);
+  if (isOnSurfaceOf(parameter, "prmsl")) return scalar("hgt", null);
+  if (isQuantityOf(parameter, "tmp2m")) {
     if (level !== null) return scalar("tmp", level);
-    if (surface === 103 && value === 2) return scalar("tmp", null);
-    if (surface === 1) return scalar("tmpsfc", null);
+    if (isAtSurfaceOf(parameter, "tmp2m")) return scalar("tmp", null);
+    if (isOnSurfaceOf(parameter, "tmpsfc")) return scalar("tmpsfc", null);
   }
-  if (isTriple(parameter, 10, 2, 0) && surface === 1) return scalar("icec", null);
-  if (isTriple(parameter, 10, 2, 1) && surface === 1) return scalar("icetk", null);
-  if (isTriple(parameter, 10, 0, 3) && surface === 1) return scalar("htsgw", null);
-  if (isTriple(parameter, 10, 0, 11) && surface === 1) return scalar("perpw", null);
-  if (isTriple(parameter, 10, 0, 10) && surface === 1) return scalar("dirpw", null);
-  if (isTriple(parameter, 10, 0, 5) && surface === 1) return scalar("wvhgt", null);
-  if (isTriple(parameter, 10, 0, 6) && surface === 1) return scalar("wvper", null);
-  if (isTriple(parameter, 10, 0, 4) && surface === 1) return scalar("wvdir", null);
+  if (isOnSurfaceOf(parameter, "icec")) return scalar("icec", null);
+  if (isOnSurfaceOf(parameter, "icetk")) return scalar("icetk", null);
+  if (isOnSurfaceOf(parameter, "htsgw")) return scalar("htsgw", null);
+  if (isOnSurfaceOf(parameter, "perpw")) return scalar("perpw", null);
+  if (isOnSurfaceOf(parameter, "dirpw")) return scalar("dirpw", null);
+  if (isOnSurfaceOf(parameter, "wvhgt")) return scalar("wvhgt", null);
+  if (isOnSurfaceOf(parameter, "wvper")) return scalar("wvper", null);
+  if (isOnSurfaceOf(parameter, "wvdir")) return scalar("wvdir", null);
   if (isFirstSwell(parameter)) {
-    if (isTriple(parameter, 10, 0, 8)) return scalar("swhgt", null);
-    if (isTriple(parameter, 10, 0, 9)) return scalar("swper", null);
-    if (isTriple(parameter, 10, 0, 7)) return scalar("swdir", null);
+    if (isQuantityOf(parameter, "swhgt")) return scalar("swhgt", null);
+    if (isQuantityOf(parameter, "swper")) return scalar("swper", null);
+    if (isQuantityOf(parameter, "swdir")) return scalar("swdir", null);
   }
-  if (isTriple(parameter, 0, 0, 3) && level !== null) return scalar("thetae", level);
-  if (isTriple(parameter, 0, 19, 29) && level !== null) return scalar("cat", level);
-  if (isTriple(parameter, 0, 0, 6) && surface === 103 && value === 2) return scalar("dpt2m", null);
-  if (isTriple(parameter, 0, 0, 21) && surface === 103 && value === 2) return scalar("aptmp2m", null);
-  if (isTriple(parameter, 0, 2, 8) && level !== null) return scalar("vvel", level);
-  if (isTriple(parameter, 0, 1, 1) && level !== null) return scalar("rh", level);
-  if (isTriple(parameter, 0, 1, 0) && level !== null) return scalar("spfh", level);
-  if (isTriple(parameter, 0, 1, 7) && surface === 1) return scalar("prate", null);
-  if (isTriple(parameter, 0, 4, 192) && surface === 1) return scalar("dswrf", null);
-  if (isTriple(parameter, 0, 16, 5) && surface === 10) return scalar("cref", null);
-  if (isTriple(parameter, 0, 2, 22) && surface === 1) return scalar("gust", null);
-  if (isTriple(parameter, 0, 6, 1) && surface === 10) return scalar("tcdc", null);
-  if (isTriple(parameter, 0, 6, 3) && surface === 214) return scalar("lcdc", null);
-  if (isTriple(parameter, 0, 6, 4) && surface === 224) return scalar("mcdc", null);
-  if (isTriple(parameter, 0, 6, 5) && surface === 234) return scalar("hcdc", null);
-  if (isTriple(parameter, 0, 7, 6) && surface === 1) return scalar("cape", null);
-  if (isTriple(parameter, 0, 7, 7) && surface === 1) return scalar("cin", null);
-  if (isTriple(parameter, 0, 19, 0) && surface === 1) return scalar("vis", null);
-  if (isTriple(parameter, 0, 1, 3) && surface === 200) return scalar("pwat", null);
-  if (isTriple(parameter, 0, 3, 196) && surface === 1) return scalar("hpbl", null);
-  if (isTriple(parameter, 0, 1, 19) && surface === 1) return scalar("ptype", null);
-  if (isTriple(parameter, 0, 1, 22) && surface === 102) return scalar("clw", null);
-  if (isTriple(parameter, 1, 0, 7)) return scalar("dis06", null);
-  if (isTriple(parameter, 2, 0, 2) && surface === 106) {
+  if (isQuantityOf(parameter, "thetae850") && level !== null) return scalar("thetae", level);
+  if (isQuantityOf(parameter, "cat300") && level !== null) return scalar("cat", level);
+  if (isAtSurfaceOf(parameter, "dpt2m")) return scalar("dpt2m", null);
+  if (isAtSurfaceOf(parameter, "aptmp2m")) return scalar("aptmp2m", null);
+  if (isQuantityOf(parameter, "vvel850") && level !== null) return scalar("vvel", level);
+  if (isQuantityOf(parameter, "rh850") && level !== null) return scalar("rh", level);
+  if (isQuantityOf(parameter, "spfh850") && level !== null) return scalar("spfh", level);
+  if (isOnSurfaceOf(parameter, "prate")) return scalar("prate", null);
+  if (isOnSurfaceOf(parameter, "dswrf")) return scalar("dswrf", null);
+  if (isOnSurfaceOf(parameter, "cref")) return scalar("cref", null);
+  if (isOnSurfaceOf(parameter, "gust")) return scalar("gust", null);
+  if (isOnSurfaceOf(parameter, "tcdc")) return scalar("tcdc", null);
+  if (isOnSurfaceOf(parameter, "lcdc")) return scalar("lcdc", null);
+  if (isOnSurfaceOf(parameter, "mcdc")) return scalar("mcdc", null);
+  if (isOnSurfaceOf(parameter, "hcdc")) return scalar("hcdc", null);
+  if (isOnSurfaceOf(parameter, "cape")) return scalar("cape", null);
+  if (isOnSurfaceOf(parameter, "cin")) return scalar("cin", null);
+  if (isOnSurfaceOf(parameter, "vis")) return scalar("vis", null);
+  if (isOnSurfaceOf(parameter, "pwat")) return scalar("pwat", null);
+  if (isOnSurfaceOf(parameter, "hpbl")) return scalar("hpbl", null);
+  if (isOnSurfaceOf(parameter, "ptype")) return scalar("ptype", null);
+  if (isOnSurfaceOf(parameter, "clw500")) return scalar("clw", null);
+  if (isQuantityOf(parameter, "dis06")) return scalar("dis06", null);
+  if (isOnSurfaceOf(parameter, "tsoil1")) {
     const layer = soilLayer(SOIL_TEMPERATURE_LAYERS, value);
     return layer === null ? null : scalar(layer, null);
   }
-  if (isTriple(parameter, 2, 0, 192) && surface === 106) {
+  if (isOnSurfaceOf(parameter, "soilw1")) {
     const layer = soilLayer(SOIL_MOISTURE_LAYERS, value);
     return layer === null ? null : scalar(layer, null);
   }
@@ -324,9 +326,11 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
  * encoders write them on the same four values (docs/format.md), so the
  * value names the layer's index and never its depth. Millimetres, so the
  * comparison is exact whatever float a scale factor of 1 leaves behind. */
-const SOIL_LAYER_TOPS_MM: readonly number[] = [0, 100, 400, 1000];
-const SOIL_TEMPERATURE_LAYERS: readonly SoilChartFamily[] = ["tsoil1", "tsoil2", "tsoil3", "tsoil4"];
-const SOIL_MOISTURE_LAYERS: readonly SoilChartFamily[] = ["soilw1", "soilw2", "soilw3", "soilw4"];
+const SOIL_TEMPERATURE_LAYERS = ["tsoil1", "tsoil2", "tsoil3", "tsoil4"] as const satisfies readonly SoilChartFamily[];
+const SOIL_MOISTURE_LAYERS = ["soilw1", "soilw2", "soilw3", "soilw4"] as const satisfies readonly SoilChartFamily[];
+const SOIL_LAYER_TOPS_MM: readonly number[] = SOIL_TEMPERATURE_LAYERS.map((id) =>
+  Math.round((surfaceValue(registered(id)) ?? Number.NaN) * 1000),
+);
 
 function soilLayer(layers: readonly SoilChartFamily[], depth: number | null): SoilChartFamily | null {
   if (depth === null || !Number.isFinite(depth)) return null;
@@ -360,106 +364,26 @@ function satelliteChannel(band: BundleBand | undefined): ChartFamily | null {
   return null;
 }
 
-/** One aerosol field's `aerosol` block, as the chart tells it apart: the
- * species (GRIB2 code table 4.233: 62000 the total, 62001 dust, 62006
- * sulphate, 62008 sea salt, 62009 black carbon, 62010 organic matter), the
- * size interval and, for an optical depth, the wavelength interval. Each
- * interval is its code table 4.91 type and its two limits in metres as
- * `[scaleFactor, scaledValue]`, or null for the limits of an interval the
- * record does not carry (type 255). Everything in the block is compared:
- * an optical depth at another wavelength, or a size cut this build has no
- * chart for, is an unknown field and renders generically. */
-interface AerosolField {
-  family: ChartFamily;
-  aerosolType: number;
-  size: AerosolInterval;
-  wavelength: AerosolInterval;
-}
+/** The registered fields that carry an `aerosol` block beside their
+ * parameter: every optical depth is one WMO parameter on the entire
+ * atmosphere and the two PM10 cuts one NCEP-local number on the ground,
+ * so the block — species (code table 4.233), size and wavelength
+ * intervals (code table 4.91) — is what tells them apart. */
+const AEROSOL_FIELDS = (Object.keys(REGISTRY.variables) as RegistryVariableId[]).filter(
+  (id) => "aerosol" in REGISTRY.variables[id],
+);
 
-interface AerosolInterval {
-  type: number;
-  first: readonly [number, number] | null;
-  second: readonly [number, number] | null;
-}
-
-/** Code table 4.91's "missing", with no limits. */
-const NO_INTERVAL: AerosolInterval = { type: 255, first: null, second: null };
-/** "Smaller than the first limit": particles under 20 µm, 2.5 µm, 10 µm. */
-const UNDER_20_MICRONS: AerosolInterval = { type: 0, first: [6, 20], second: [0, 0] };
-const UNDER_2P5_MICRONS: AerosolInterval = { type: 0, first: [7, 25], second: [0, 0] };
-const UNDER_10_MICRONS: AerosolInterval = { type: 0, first: [6, 10], second: [0, 0] };
-/** "Between the two limits": the 545–565 nm band the 550 nm depth is
- * reported over. */
-const AT_550_NANOMETRES: AerosolInterval = { type: 7, first: [9, 545], second: [9, 565] };
-
-/** The optical depths: (0,20,102) on the entire atmosphere, the whole
- * aerosol column under 20 µm at 550 nm, one family per species. */
-const AEROSOL_OPTICAL_DEPTHS: readonly AerosolField[] = [
-  { family: "aod", aerosolType: 62000, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-  { family: "aoddust", aerosolType: 62001, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-  { family: "aodsalt", aerosolType: 62008, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-  { family: "aodsulf", aerosolType: 62006, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-  { family: "aodorg", aerosolType: 62010, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-  { family: "aodbc", aerosolType: 62009, size: UNDER_20_MICRONS, wavelength: AT_550_NANOMETRES },
-];
-/** The fine particulates, (0,13,193) on the ground: the total under 2.5 µm. */
-const FINE_PARTICULATES: readonly AerosolField[] = [
-  { family: "pm25", aerosolType: 62000, size: UNDER_2P5_MICRONS, wavelength: NO_INTERVAL },
-];
-/** The coarse particulates, (0,13,192) on the ground: the total and the
- * dust under 10 µm. */
-const COARSE_PARTICULATES: readonly AerosolField[] = [
-  { family: "pm10", aerosolType: 62000, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
-  { family: "pm10dust", aerosolType: 62001, size: UNDER_10_MICRONS, wavelength: NO_INTERVAL },
-];
-/** The mass concentrations, (0,20,0) on the ground: the dust of every
- * particle size, so no size interval — what CMA-CW-DUST forecasts, and not
- * the PM10 cut of it. */
-const MASS_CONCENTRATIONS: readonly AerosolField[] = [
-  { family: "dustsfc", aerosolType: 62001, size: NO_INTERVAL, wavelength: NO_INTERVAL },
-];
-
-function sameLimit(a: readonly [number, number] | null, scale: number | null, value: number | null): boolean {
-  return a === null ? scale === null && value === null : a[0] === scale && a[1] === value;
-}
-
-function sameInterval(
-  interval: AerosolInterval,
-  type: number,
-  first: readonly [number | null, number | null],
-  second: readonly [number | null, number | null],
-): boolean {
-  return interval.type === type && sameLimit(interval.first, ...first) && sameLimit(interval.second, ...second);
-}
-
-/** The aerosol field a block names among `fields`, or null: a parameter
- * with no block, or a block naming a species, size or wavelength none of
- * them has, is an unknown field. */
-function aerosolField(fields: readonly AerosolField[], aerosol: BundleAerosol | undefined): ChartFamily | null {
+/** The registered aerosol a parameter and its block name, or null: a
+ * parameter with no block, or a block naming a species, size or
+ * wavelength no registered field on that parameter has, is an unknown
+ * field and renders generically. Everything in the block is compared. */
+function aerosolField(parameter: BundleParameter, aerosol: BundleAerosol | undefined): ChartFamily | null {
   if (aerosol === undefined) return null;
-  for (const field of fields) {
-    if (field.aerosolType !== aerosol.aerosolType) continue;
-    if (
-      !sameInterval(
-        field.size,
-        aerosol.typeOfSizeInterval,
-        [aerosol.scaleFactorOfFirstSize, aerosol.scaledValueOfFirstSize],
-        [aerosol.scaleFactorOfSecondSize, aerosol.scaledValueOfSecondSize],
-      )
-    ) {
-      continue;
-    }
-    if (
-      !sameInterval(
-        field.wavelength,
-        aerosol.typeOfWavelengthInterval,
-        [aerosol.scaleFactorOfFirstWavelength, aerosol.scaledValueOfFirstWavelength],
-        [aerosol.scaleFactorOfSecondWavelength, aerosol.scaledValueOfSecondWavelength],
-      )
-    ) {
-      continue;
-    }
-    return field.family;
+  for (const id of AEROSOL_FIELDS) {
+    if (!isOnSurfaceOf(parameter, id)) continue;
+    const registeredBlock = (REGISTRY.variables[id] as { aerosol: BundleAerosol }).aerosol;
+    const keys = Object.keys(registeredBlock) as (keyof BundleAerosol)[];
+    if (keys.every((key) => aerosol[key] === registeredBlock[key])) return id as ChartFamily;
   }
   return null;
 }
@@ -474,11 +398,11 @@ function aerosolField(fields: readonly AerosolField[], aerosol: BundleAerosol | 
  * construction on the next local numbers, the swell's on its partition's
  * surface. */
 const VECTOR_PAIRS: readonly { family: ChartFamily; u: readonly [number, number, number]; v: readonly [number, number, number] }[] = [
-  { family: "wind", u: [0, 2, 2], v: [0, 2, 3] },
-  { family: "qflux", u: [0, 1, 250], v: [0, 1, 251] },
-  { family: "wave", u: [10, 0, 250], v: [10, 0, 251] },
-  { family: "windwave", u: [10, 0, 252], v: [10, 0, 253] },
-  { family: "swell", u: [10, 0, 254], v: [10, 0, 255] },
+  { family: "wind", u: tripleOf("ugrd10m"), v: tripleOf("vgrd10m") },
+  { family: "qflux", u: tripleOf("uqflx850"), v: tripleOf("vqflx850") },
+  { family: "wave", u: tripleOf("uwave"), v: tripleOf("vwave") },
+  { family: "windwave", u: tripleOf("uwindwave"), v: tripleOf("vwindwave") },
+  { family: "swell", u: tripleOf("uswell"), v: tripleOf("vswell") },
 ];
 
 /**
@@ -511,6 +435,38 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
   return null;
 }
 
+/** A registered variable's producer id; a produced field is named by it. */
+function producerOf(id: RegistryVariableId): string {
+  const producer = (REGISTRY.variables[id] as { producer?: { id: string } }).producer;
+  if (producer === undefined) throw new Error(`${id} is registered without a producer`);
+  return producer.id;
+}
+
+/** A composite's guns as the registry lists them, red, green, blue. */
+function compositeOf(family: "dustrgb" | "truecolor") {
+  const members = REGISTRY.bundles[family].members;
+  const [discipline, category] = tripleOf(members[0]);
+  return {
+    family,
+    producer: producerOf(members[0]),
+    discipline,
+    category,
+    guns: [tripleOf(members[0])[2], tripleOf(members[1])[2], tripleOf(members[2])[2]] as const,
+  };
+}
+
+/** A produced scalar's producer and parameter, the registry's. */
+function producedScalarOf(family: "dustcf" | "zhouye" | "disrp" | "upstream") {
+  const [discipline, category, number] = tripleOf(family);
+  return { family, producer: producerOf(family), discipline, category, number };
+}
+
+/** A local-use scalar's parameter, the registry's. */
+function localScalarOf(id: RegistryVariableId) {
+  const [discipline, category, number] = tripleOf(id);
+  return { discipline, category, number };
+}
+
 /** The composites by producer: a produced field's `parameter` is in
  * GRIB2's local-use range (category 192 and above, docs/format.md §"Band
  * and Producer"), where a number means nothing without the `producer.id`
@@ -530,8 +486,8 @@ const COMPOSITE_TRIPLES: readonly {
   category: number;
   guns: readonly [number, number, number];
 }[] = [
-  { family: "dustrgb", producer: "shachen", discipline: 3, category: 192, guns: [1, 2, 3] },
-  { family: "truecolor", producer: "xue", discipline: 3, category: 192, guns: [7, 8, 9] },
+  compositeOf("dustrgb"),
+  compositeOf("truecolor"),
 ];
 
 /** Whether a parameter is in a local-use category, where only a producer
@@ -559,10 +515,10 @@ const PRODUCED_SCALARS: readonly {
   category: number;
   number: number;
 }[] = [
-  { family: "dustcf", producer: "shachen", discipline: 3, category: 192, number: 4 },
-  { family: "zhouye", producer: "shachen", discipline: 3, category: 192, number: 6 },
-  { family: "disrp", producer: "xue", discipline: 1, category: 192, number: 1 },
-  { family: "upstream", producer: "xue", discipline: 1, category: 192, number: 2 },
+  producedScalarOf("dustcf"),
+  producedScalarOf("zhouye"),
+  producedScalarOf("disrp"),
+  producedScalarOf("upstream"),
 ];
 
 /**
@@ -593,7 +549,7 @@ const LOCAL_SCALARS: readonly {
   discipline: number;
   category: number;
   number: number;
-}[] = [{ family: "aurora", discipline: 3, category: 192, number: 5 }];
+}[] = [{ family: "aurora", ...localScalarOf("aurora") }];
 
 /** The identity of a local-use scalar this shell knows without a producer
  * block, or null. A local-use parameter under a number this build has no

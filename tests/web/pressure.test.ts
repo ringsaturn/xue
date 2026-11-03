@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/pressure-registry.json";
-
 import { KNOWN_BUNDLE_IDS } from "../../web/src/manifest";
 import type { LinearQuantization } from "../../web/src/manifest";
 import { buildPalette } from "../../web/src/palettes";
@@ -15,38 +13,17 @@ import {
   pressureLegend,
   pressureLevel,
 } from "../../web/src/pressure";
+import { registryEntries } from "./helpers";
 
-/** The committed registry both encoders are held to
- * (`tests/test_pressure.py`, and the Rust encoder's unit tests). The
- * frontend's own table has to agree with it or a contour is drawn at an
- * interval the codebook was not aligned for. */
-interface RegistryEntry {
-  contourInterval: number;
-  emphasisInterval?: number;
-  emphasisContours?: number[];
-  quality: LinearQuantization;
-  compact: LinearQuantization;
-}
-
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+/** The registry both encoders build from (`rust/xue/registry.json`): the
+ * contours below are checked against its codebooks, not the shell's. */
+const registry = registryEntries<LinearQuantization>(PRESSURE_BUNDLE_IDS);
 
 describe("the pressure level registry", () => {
   it("names the same levels the encoders register", () => {
     expect([...PRESSURE_BUNDLE_IDS]).toEqual(Object.keys(registry));
     for (const id of PRESSURE_BUNDLE_IDS) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
-    }
-  });
-
-  it("draws each level at the interval its codebook was aligned for", () => {
-    for (const id of PRESSURE_BUNDLE_IDS) {
-      const level = PRESSURE_LEVELS[id];
-      const entry = registry[id]!;
-      expect(level.contourInterval).toBe(entry.contourInterval);
-      expect(level.emphasisInterval ?? undefined).toBe(entry.emphasisInterval);
-      expect(level.emphasisContours ? [...level.emphasisContours] : undefined).toEqual(
-        entry.emphasisContours,
-      );
     }
   });
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/aerosol-registry.json";
 
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId, type ChartFamily } from "../../web/src/identity";
 import {
@@ -33,16 +32,16 @@ import { buildPalette, decodeValue, encodeLog } from "../../web/src/palettes";
 import { displayUnit } from "../../web/src/units";
 import { parseModelFromSearch } from "../../web/src/urlstate";
 import { FIELD_GROUPS, variableIds, variableSpec } from "../../web/src/variables";
-import { metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
+import { metadataJson, registryEntries, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
-/** The committed registry both encoders are held to (`tests/test_aerosol.py`,
- * and the Rust encoder's unit tests): the nine aerosol fields with their
- * parameter and aerosol blocks and their logarithmic codebooks. */
+/** The registry both encoders build from (`rust/xue/registry.json`): the
+ * nine aerosol fields with their parameter and aerosol blocks and their
+ * logarithmic codebooks. */
 interface AerosolEntry extends RegistryEntry<LogQuantization> {
   aerosol: BundleAerosol;
 }
 
-const registry = registryJson as unknown as Record<string, AerosolEntry>;
+const registry = registryEntries<LogQuantization>(AEROSOL_IDS) as Record<string, AerosolEntry>;
 
 function bundleVariable(id: string, profile: "quality" | "compact" = "quality"): BundleVariable {
   const entry = registry[id]!;

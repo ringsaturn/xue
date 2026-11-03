@@ -137,10 +137,7 @@ export interface LegendSwatch {
 /** The precipitation type's key: one swatch per class, the colours its
  * categorical palette paints (`levels.ts::PTYPE_CLASSES`, `palettes.ts`).
  * Code 0 (no precipitation) is transparent and is no swatch. Built on
- * demand rather than at load: this module sits on a cycle (identity.ts
- * reads it and the level registry it reads comes back through here), so
- * reading `PTYPE_CLASSES` at module evaluation would see an uninitialised
- * binding when `levels.ts` is the entry point. */
+ * demand, like the table, so a locale switch reaches it. */
 function ptypeKey(): readonly { color: string; labelKey: MessageKey }[] {
   return PTYPE_CLASSES.map(({ rgb, labelKey }) => ({
     color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
@@ -153,8 +150,7 @@ function ptypeKey(): readonly { color: string; labelKey: MessageKey }[] {
  * and the EDR span that opens and closes it (`levels.ts::CAT_CLASSES`).
  * The numbers are instrument values and stay as written in every locale;
  * the unit line above the key says what they are in. Nil is transparent
- * and is no swatch. Built on demand for the same cycle reason as
- * `ptypeKey`. */
+ * and is no swatch. Built on demand like `ptypeKey`. */
 function catKey(): readonly LegendSwatch[] {
   const number = (value: number) => value.toFixed(2);
   return CAT_CLASSES.map((entry, index) => {
@@ -169,8 +165,7 @@ function catKey(): readonly LegendSwatch[] {
 
 /** The return-period class's key: one swatch per class, the highest
  * first like a ramp's top tick, the colours its palette paints
- * (`levels.ts::DISRP_CLASSES`). Built on demand for the same cycle reason
- * as `ptypeKey`. */
+ * (`levels.ts::DISRP_CLASSES`). Built on demand like `ptypeKey`. */
 function disrpKey(): readonly { color: string; labelKey: MessageKey }[] {
   return DISRP_CLASSES.map(({ rgb, alpha, labelKey }) => ({
     color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${(alpha / 255).toFixed(3)})`,
@@ -370,9 +365,8 @@ function pressure(): VariableSpec[] {
 
 /** The table, in the field sheet's order: group by group, a family's
  * levels beside its surface member. Built on first use rather than at
- * load: this module sits on a cycle (identity.ts reads it, and the level
- * and pressure registries it reads are behind identity.ts), so nothing
- * here may run while those are still initialising. */
+ * load, so importing the module costs nothing until a field is asked
+ * about. */
 function buildSpecs(): readonly VariableSpec[] {
   return [
   // Temperature. The opaque coats sit on the near-void ground.

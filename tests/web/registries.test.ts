@@ -1,23 +1,67 @@
 import { describe, expect, it } from "vitest";
 
-import oceanJson from "../fixtures/ocean-registry.json";
-import soilJson from "../fixtures/soil-registry.json";
-import surfaceJson from "../fixtures/surface-registry.json";
-
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
 import { isobaricLegend, scalarLegendRange } from "../../web/src/levels";
-import { OCEAN_IDS, SOIL_IDS, SURFACE_DIAGNOSTIC_IDS } from "../../web/src/manifest";
+import { COMPOSITE_BUNDLES, FORECAST_MODELS, OCEAN_IDS, SOIL_IDS, SURFACE_DIAGNOSTIC_IDS, VECTOR_BUNDLES, VOLUME_BUNDLE_LEVELS } from "../../web/src/manifest";
 import { decodeValue } from "../../web/src/palettes";
-import { registryVariable, type RegistryEntry } from "./helpers";
+import { REGISTRY } from "../../web/src/registry";
+import { variableSpec } from "../../web/src/variables";
+import { REGISTRY_DOCUMENT, publishedBundleIds, registryEntries, registryVariable } from "./helpers";
 
-/** The single-surface scalar registries, each the committed fixture both
- * encoders are held to (`tests/test_surface.py`, `tests/test_ocean.py`,
- * `tests/test_soil.py`, and the Rust encoder's unit tests). The contract below is the same for each;
- * what is particular to one lives in its own test file. */
+/** Bundles a source publishes that have no row in the variable table on
+ * purpose: the radar quality index draws generically, and the 3D
+ * reflectivity is the volume layer's (volume.ts), never a rail field. */
+const GENERIC_BUNDLE_IDS = new Set(["rqi", "refl3d"]);
+
+describe("the shell's registry", () => {
+  it("is the registry document, trimmed", () => {
+    for (const [id, entry] of Object.entries(REGISTRY.variables)) {
+      const whole = REGISTRY_DOCUMENT.variables[id]!;
+      expect(entry.parameter).toEqual(whole.parameter);
+      expect(entry.quality).toEqual(whole.quantization!.quality);
+    }
+    for (const [id, entry] of Object.entries(REGISTRY_DOCUMENT.variables)) {
+      if (entry.quantization) expect(REGISTRY.variables).toHaveProperty(id);
+    }
+  });
+
+  it("names a dataset for every source, under the source's own label and product", () => {
+    for (const id of Object.keys(REGISTRY_DOCUMENT.sources)) {
+      const info = FORECAST_MODELS[id as keyof typeof FORECAST_MODELS];
+      const source = REGISTRY.sources[id as keyof typeof REGISTRY.sources];
+      expect(info).toBeDefined();
+      expect(info.label).toBe(source.label);
+      expect(info.product).toBe(source.product);
+      expect(info.latestFilename).toBe(source.latestFilename ?? undefined);
+      expect(info.observation === true).toBe(source.observation);
+    }
+  });
+
+  it("carries the members of every vector, composite and volume bundle", () => {
+    for (const [id, bundle] of Object.entries(REGISTRY_DOCUMENT.bundles)) {
+      if (bundle.kind === "vector") expect(VECTOR_BUNDLES).toHaveProperty(id, bundle.members);
+      if (bundle.kind === "composite" && bundle.members!.length === 3) expect(COMPOSITE_BUNDLES).toHaveProperty(id, bundle.members);
+      if (bundle.kind === "volume") expect(VOLUME_BUNDLE_LEVELS.get(id)).toBe(bundle.members!.length);
+    }
+  });
+
+  it("has chart knowledge for every bundle a source publishes", () => {
+    // A new bundle cannot ship without a row in variables.ts (and so a
+    // palette, a legend and a ground) unless it is listed as generic.
+    for (const id of publishedBundleIds()) {
+      if (GENERIC_BUNDLE_IDS.has(id)) continue;
+      expect(variableSpec(id), id).not.toBeNull();
+    }
+  });
+});
+
+/** The single-surface scalar families, read off the registry document.
+ * The contract below is the same for each; what is particular to one
+ * lives in its own test file. */
 const REGISTRIES = [
   {
     name: "surface diagnostic",
-    registry: surfaceJson as unknown as Record<string, RegistryEntry>,
+    registry: registryEntries(SURFACE_DIAGNOSTIC_IDS),
     ids: SURFACE_DIAGNOSTIC_IDS as readonly string[],
     // Precipitation type is categorical: its legend is a swatch key, not a
     // ramp, so it has no numeric span (`isobaricLegend` is null too).
@@ -26,7 +70,7 @@ const REGISTRIES = [
   },
   {
     name: "ocean",
-    registry: oceanJson as unknown as Record<string, RegistryEntry>,
+    registry: registryEntries(OCEAN_IDS),
     ids: OCEAN_IDS as readonly string[],
     withoutLegend: [] as string[],
     // The directions' legend closes the circle at 360, which the codebook
@@ -35,7 +79,7 @@ const REGISTRIES = [
   },
   {
     name: "soil",
-    registry: soilJson as unknown as Record<string, RegistryEntry>,
+    registry: registryEntries(SOIL_IDS),
     ids: SOIL_IDS as readonly string[],
     withoutLegend: [] as string[],
     legendPastCodebook: [] as string[],
