@@ -242,7 +242,7 @@ jobs:
           {
             echo "### $MODEL build jobs"
             echo
-            printf '%s' "$groups" | jq -r '.[] | "- `\(.group)`" + (if .video then " (video)" else "" end) + (if .eccodes then " (eccodes)" else "" end)'
+            printf '%s' "$groups" | jq -r '.[] | "- `\(.group)`" + (if .eccodes then " (eccodes)" else "" end)'
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -283,27 +283,17 @@ jobs:
       # also what keeps a wheel whose decoder predates container v2 out of
       # this job: the build reads every bundle back through it.
       #
-      # ffmpeg encodes the H.264 companions, which stay on the Python side,
-      # and only the groups carrying a surface field with a companion need
-      # it: the encoder skips the companion with a warning when ffmpeg is
-      # missing, which is why the matrix says rather than the job guessing.
       # A source whose feed arrives CCSDS packed (`SourceSpec.packing`: the
       # ECMWF open data, DWD ICON-EU, Météo-France ARPEGE) is repacked with
       # eccodes at fetch time because GDAL builds usually lack libaec (and
       # ARPEGE's zero analysis accumulation is written with it), so the
       # matrix flags every job of such a source `eccodes`.
-      - name: Install ffmpeg / eccodes
-        if: ${{ matrix.video || matrix.eccodes }}
-        env:
-          VIDEO: ${{ matrix.video }}
-          ECCODES: ${{ matrix.eccodes }}
+      - name: Install eccodes
+        if: ${{ matrix.eccodes }}
         run: |
           set -euo pipefail
-          packages=""
-          [ "$VIDEO" != "true" ] || packages="$packages ffmpeg"
-          [ "$ECCODES" != "true" ] || packages="$packages libeccodes-tools"
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends $packages
+          sudo apt-get install -y --no-install-recommends libeccodes-tools
 
       # The one source whose fetch stage is a tool of its own: `ifshres` is
       # not GRIB but Open-Meteo's forwarding of ECMWF IFS HRES in the `.om`

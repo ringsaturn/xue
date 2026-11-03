@@ -157,7 +157,7 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No ffmpeg: no rounds source ships video. The xuepy wheel carries the
+      # The xuepy wheel carries the
       # GDAL the native encoder extracts and inspects with.
       - name: Sync Python environment
         env:

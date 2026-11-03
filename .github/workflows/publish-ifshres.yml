@@ -13,7 +13,7 @@ name: publish ifshres
 # this source alone, pinned by version and sha256. It reads the `.om` files
 # byte range by byte range and writes one CF NetCDF series per variable, the
 # same series-file input the JMA and CMA sources arrive as; xuebuild runs it
-# as a subprocess, the way it runs gdal_translate and ffmpeg. That boundary
+# as a subprocess, the way it runs gdal_translate and zstd. That boundary
 # is also a licence boundary: om2nc is GPL-2.0-only and lives in its own
 # repository (ringsaturn/om2nc), and nothing in this tree imports, links or
 # vendors it.
