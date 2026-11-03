@@ -684,7 +684,7 @@ mod cat_tests {
         let zero = vec![0.0; ROWS * COLUMNS];
         let planes = planes(300, ROWS * COLUMNS, &zero, &zero);
         let refused = ellrod_ti1(&input(&planes, ROWS, COLUMNS, &latitudes, 1.0, 1.0, true), 300);
-        assert!(matches!(refused, Err(EncodeError::Conversion(_))));
+        assert!(matches!(refused, Err(EncodeError(_))));
     }
 
     const PROJECTION_ROWS: usize = 5;

@@ -22,9 +22,9 @@ use serde_json::Value;
 use crate::format::{err, DecodeError};
 
 /// Bytes of one `(offset, nbytes)` pair in a shard index.
-pub const INDEX_ENTRY_BYTES: usize = 16;
+pub(crate) const INDEX_ENTRY_BYTES: usize = 16;
 /// The CRC-32C trailer of a shard index.
-pub const INDEX_CHECKSUM_BYTES: usize = 4;
+pub(crate) const INDEX_CHECKSUM_BYTES: usize = 4;
 /// The array-to-array delta codec's name in an inner codec chain.
 pub const DELTA_CODEC: &str = "xue.delta";
 /// Padding frames and cells are this many bytes per value.

@@ -69,14 +69,6 @@ pub fn group_forecast_hours(offsets: &[i64]) -> Result<Vec<Vec<i64>>> {
         .collect())
 }
 
-/// The anchor is the frame at zero-based index `floor(n / 2)` in its group.
-pub fn anchor_hour(group: &[i64]) -> Result<i64> {
-    group
-        .get(group.len() / 2)
-        .copied()
-        .ok_or_else(|| EncodeError::conversion("temporal group is empty"))
-}
-
 
 /// One tile's block of a group's planes, frame-major and clipped.
 ///

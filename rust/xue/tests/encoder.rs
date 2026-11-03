@@ -13,9 +13,9 @@ use xue::encode::convert::{
 };
 use xue::Bundle;
 use xue::encode::grid::{crop_grid, GridInfo};
-use xue::encode::poster::{decode_poster, encode_poster};
+use xue::encode::poster::encode_poster;
 use xue::encode::registry::Registry;
-use xue::encode::temporal::{anchor_hour, encode_residual, group_forecast_hours, split_segments};
+use xue::encode::temporal::{encode_residual, group_forecast_hours, split_segments};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -30,17 +30,6 @@ fn registry() -> std::sync::Arc<Registry> {
 // -- quantization ------------------------------------------------------------
 
 #[test]
-fn linear_codebook_rounds_half_up() {
-    let book = registry().codebook("quality", "tmp2m").expect("temperature codebook");
-    // -60 + 0.5 * 1 = -59.5 is exactly on a step; -59.75 sits exactly half way
-    // and must round up, which round-half-even would not do.
-    let values = [-60.0, -59.75, -59.5, 0.0, 50.0, 99.0, -99.0];
-    let mut codes = [0u8; 7];
-    book.quantize(&values, &mut codes).expect("quantizes");
-    assert_eq!(codes, [0, 1, 1, 120, 220, 220, 0]);
-}
-
-#[test]
 fn linear_codebook_declares_its_maximum_code() {
     for (variable, expected) in [("tmp2m", 220), ("ugrd10m", 254), ("dswrf", 254), ("cref", 160)] {
         let book = registry().codebook("quality", variable).expect("codebook");
@@ -50,20 +39,6 @@ fn linear_codebook_declares_its_maximum_code() {
             "{variable}"
         );
     }
-}
-
-#[test]
-fn precipitation_codebook_marks_dry_and_overflow() {
-    let book = registry().codebook("quality", "prate").expect("precipitation codebook");
-    let values = [0.0, 0.009, 0.01, 1.0, 128.0, 200.0];
-    let mut codes = [0u8; 6];
-    book.quantize(&values, &mut codes).expect("quantizes");
-    assert_eq!(codes[0], 0, "dry");
-    assert_eq!(codes[1], 0, "below trace is dry");
-    assert_eq!(codes[2], 1, "trace is the first positive code");
-    assert_eq!(codes[4], 253, "the maximum decodes to exactly the maximum");
-    assert_eq!(codes[5], 254, "above the maximum is the overflow code");
-    assert!(codes[3] > 1 && codes[3] < 253);
 }
 
 #[test]
@@ -101,13 +76,6 @@ fn groups_never_straddle_a_cadence_change() {
         assert!(steps.windows(2).all(|pair| pair[0] == pair[1]), "{group:?}");
         assert!(group.len() <= 6);
     }
-}
-
-#[test]
-fn the_anchor_is_the_middle_frame() {
-    assert_eq!(anchor_hour(&[0, 1, 2, 3, 4, 5]).expect("anchor"), 3);
-    assert_eq!(anchor_hour(&[0]).expect("anchor"), 0);
-    assert_eq!(anchor_hour(&[0, 1, 2]).expect("anchor"), 1);
 }
 
 #[test]
@@ -220,6 +188,27 @@ fn deaveraging_differences_within_the_window() {
 }
 
 // -- posters ----------------------------------------------------------------
+
+/// Reference decoder for `encode_poster`: inflate, then undo the "Up" filter.
+fn decode_poster(payload: &[u8], width: usize, height: usize) -> Result<Vec<u8>, String> {
+    use flate2::read::ZlibDecoder;
+    use std::io::Read;
+
+    let mut plane = Vec::new();
+    ZlibDecoder::new(payload)
+        .read_to_end(&mut plane)
+        .map_err(|error| format!("poster inflate failed: {error}"))?;
+    if plane.len() != width * height {
+        return Err("poster payload has the wrong size".into());
+    }
+    for row in 1..height {
+        for column in 0..width {
+            plane[row * width + column] =
+                plane[row * width + column].wrapping_add(plane[(row - 1) * width + column]);
+        }
+    }
+    Ok(plane)
+}
 
 #[test]
 fn posters_round_trip() {

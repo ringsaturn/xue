@@ -7,37 +7,32 @@
 
 use std::fmt;
 
+/// One message, whatever stage raised it: nothing matches on the kind, and
+/// the CLI prints every one the same way. The constructors name the stage
+/// at the call site.
 #[derive(Debug)]
-pub enum EncodeError {
-    /// A GRIB/NetCDF file or a conversion step was invalid.
-    Conversion(String),
-    /// The public manifest violates the versioned contract.
-    Manifest(String),
-    /// A Xue bundle violates the versioned binary contract.
-    Bundle(String),
-}
+pub struct EncodeError(pub String);
 
 impl EncodeError {
+    /// A GRIB/NetCDF file or a conversion step was invalid.
     pub fn conversion(message: impl Into<String>) -> Self {
-        Self::Conversion(message.into())
+        Self(message.into())
     }
 
+    /// The public manifest violates the versioned contract.
     pub fn manifest(message: impl Into<String>) -> Self {
-        Self::Manifest(message.into())
+        Self(message.into())
     }
 
+    /// A Xue bundle or store violates the versioned contract.
     pub fn bundle(message: impl Into<String>) -> Self {
-        Self::Bundle(message.into())
+        Self(message.into())
     }
 }
 
 impl fmt::Display for EncodeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Conversion(message) | Self::Manifest(message) | Self::Bundle(message) => {
-                formatter.write_str(message)
-            }
-        }
+        formatter.write_str(&self.0)
     }
 }
 
