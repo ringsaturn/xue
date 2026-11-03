@@ -47,7 +47,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source, stored_bundle
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import interval_rate, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
@@ -57,10 +57,9 @@ from xuebuild.quantize import PROFILES
 from xuebuild.showcase import parse_case
 from xuebuild.sources import SOURCES, source_spec
 from xuebuild.stac import _source_prose
-from xuebuild.variables import CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, cloud_water_level, variable_spec
+from xuebuild.variables import CLOUD_WATER_LEVELS_M, CLOUD_WATER_VARIABLE_IDS, cloud_water_level, variable_spec
 
 SERIES_DIR = FIXTURES / "woof.2026101006"
-VOLUME_REGISTRY = FIXTURES / "volume-registry.json"
 SPEC = source_spec("woof")
 RUN_TIME = datetime(2026, 10, 10, 6, tzinfo=UTC)
 WIDTH, HEIGHT = 20, 16
@@ -213,18 +212,6 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertEqual(PROFILES["balanced"][variable_id], PROFILES["quality"][variable_id])
             self.assertEqual(PROFILES["compact"][variable_id].step, 0.02)
             self.assertEqual(variable_spec(variable_id).predictor, "delta")
-
-    def test_the_committed_volume_registry_still_describes_this_encoder(self) -> None:
-        pinned = json.loads(VOLUME_REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in REFLECTIVITY_VARIABLE_IDS + CLOUD_WATER_VARIABLE_IDS}
-        self.assertEqual(
-            pinned,
-            actual,
-            "the volume registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate tests/fixtures/volume-registry.json deliberately "
-            "(tests/fixtures/README.md) and change every implementation together",
-        )
-        self.assertEqual(list(pinned), list(binconvert.VOLUME_BUNDLES["refl3d"] + binconvert.VOLUME_BUNDLES["cloud3d"]))
 
     def test_the_catalog_prose_names_recast_the_gfs_and_the_dem(self) -> None:
         prose = _source_prose(SPEC)

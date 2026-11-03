@@ -17,9 +17,9 @@ spelled out in the ``.idx`` line after the forecast hour, which is what the
 registry's ``index_qualifier`` is for. The fields take the precipitation
 codebook's logarithmic shape with their own numbers.
 
-``tests/fixtures/aerosol-registry.json`` is the committed golden that holds
-the Python and Rust encoders and the frontend to one set of identities and
-codebooks, aerosol blocks included. ``tests/fixtures/gefsaero.2026091900.f000.crop.grib2``
+The registry document (``rust/xue/registry.json``, and the shell's copy
+``web/src/registry.ts``) holds the Python and Rust encoders and the
+frontend to one set of identities and codebooks, aerosol blocks included. ``tests/fixtures/gefsaero.2026091900.f000.crop.grib2``
 and ``f003`` are an 80 x 80 cell window of the analysis and the first step
 of the 2026-09-19 00Z cycle over the Sahara and the Gulf of Guinea (10W–10E,
 10N–30N), the nine records the source fetches in source order.
@@ -50,7 +50,6 @@ from xuebuild.stac import _PROSE
 from xuebuild.variables import AEROSOL_VARIABLE_IDS, VARIABLES, AerosolIdentity, variable_spec
 
 FIXTURE_FRAMES = [FIXTURES / "gefsaero.2026091900.f000.crop.grib2", FIXTURES / "gefsaero.2026091900.f003.crop.grib2"]
-REGISTRY = FIXTURES / "aerosol-registry.json"
 GEFSAERO = source_spec("gefsaero")
 AOD_IDS = tuple(variable_id for variable_id in AEROSOL_VARIABLE_IDS if variable_id.startswith("aod"))
 PM_IDS = ("pm25", "pm10", "pm10dust")
@@ -144,17 +143,6 @@ def tearDownModule() -> None:
 
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: aerosol_entry(variable_id) for variable_id in AEROSOL_VARIABLE_IDS}
-        self.assertEqual(list(actual), list(expected), "the registry's order is the source's")
-        self.assertEqual(
-            actual,
-            expected,
-            "the aerosol registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so change it deliberately and change all three",
-        )
-
     def test_every_aerosol_variable_carries_the_whole_identity(self) -> None:
         for variable_id in AEROSOL_VARIABLE_IDS:
             spec = variable_spec(variable_id)
@@ -429,7 +417,7 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(self.report["precipitationOverflowPoints"], 0)
 
     def test_the_metadata_carries_the_registered_aerosol_block(self) -> None:
-        registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+        registry = {variable_id: aerosol_entry(variable_id) for variable_id in AEROSOL_VARIABLE_IDS}
         for variable_id in AEROSOL_VARIABLE_IDS:
             _, metadata = self._plane(variable_id, 0)
             variable = metadata["variables"][0]

@@ -730,8 +730,7 @@ QUALITY_CAT = TemperatureCodebook(minimum=0.0, maximum=0.635, step=0.005, name="
 COMPACT_CAT = TemperatureCodebook(minimum=0.0, maximum=0.64, step=0.01, name="cat")
 
 
-# The EFAS river fields (``RIVER_VARIABLE_IDS``), held to the native
-# encoder and the frontend by tests/fixtures/river-registry.json. The
+# The EFAS river fields (``RIVER_VARIABLE_IDS``). The
 # discharge spans six orders of magnitude on one plane — a 50 km² headwater
 # carries a few m³/s, the Danube's mouth ten thousand — so it takes the log
 # codebook: 0.1 m³/s is the trace, 10 m³/s the knee (a step of about
@@ -781,9 +780,8 @@ QUALITY_ISOBARIC = _isobaric_codebooks(compact=False)
 COMPACT_ISOBARIC = _isobaric_codebooks(compact=True)
 ISOBARIC_VARIABLE_IDS: tuple[str, ...] = tuple(QUALITY_ISOBARIC)
 
-# The surface diagnostics held to the Rust encoder and the frontend by
-# tests/fixtures/surface-registry.json, the way the pressure family and the
-# isobaric families have registries of their own.
+# The surface diagnostics, in the order the shell's rail lists them
+# (``web/src/registry.ts`` carries the list).
 SURFACE_VARIABLE_IDS: tuple[str, ...] = (
     "gust",
     "tcdc",

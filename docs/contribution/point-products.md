@@ -76,8 +76,8 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
 Parsers: `atcf.py`, `tcw.py`, `bufrtracks.py`, `ibtracs.py` → `track.py`.
 `identity.py` keys on the ATCF id; invests and model-found systems get
 `x-<basin>-<hour>-<n>` ids carried forward from the previous index by alias
-and proximity. `tests/fixtures/tc-registry.json` holds `registry.py` and
-`web/src/tc/agencies.ts` to one agency table.
+and proximity. `web/src/tc/agencies.ts` reads `registry.py`'s agency
+table out of the shell's registry (`web/src/registry.ts`).
 
 ## Airports
 

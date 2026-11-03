@@ -39,5 +39,5 @@ Background: [`docs/contribution/pipeline.md`](../../docs/contribution/pipeline.m
   is tuned for wasm, `encoder` inherits it at `opt-level = 3`.
 - Widening a source's input list means recutting its crop fixture
   (`tests/fixtures/*.crop.grib2`, same `-srcwin`; see `tests/fixtures/README.md`)
-  and regenerating the registry fixtures.
+  and regenerating the registry snapshots.
 - A new source or bundle: use the `add-source` / `add-variable` skills.

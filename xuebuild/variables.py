@@ -2040,23 +2040,19 @@ VARIABLES: dict[str, VariableSpec] = {
 }
 
 # The ocean set: the three pgrb2 fields and the three GFS-Wave fields above,
-# held to the Rust encoder by tests/fixtures/ocean-registry.json the way the
-# surface diagnostics are by surface-registry.json. The registry fixture
-# also carries the two derived wave vector components.
+# then the two derived wave vector components.
 OCEAN_VARIABLE_IDS: tuple[str, ...] = ("tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw")
 WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwave", "vwave")
-# The wind sea and the first swell partition, GFS-Wave only, held to the
-# Rust encoder by the same ocean registry fixture, with their two derived
-# vectors' components.
+# The wind sea and the first swell partition, GFS-Wave only, with their two
+# derived vectors' components.
 WAVE_PARTITION_IDS: tuple[str, ...] = ("wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir")
 WIND_WAVE_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uwindwave", "vwindwave")
 SWELL_VECTOR_COMPONENT_IDS: tuple[str, str] = ("uswell", "vswell")
 # The water-surface directions the converter reduces modulo 360 before
 # quantization, so a record's 360 is the codebook's 0.
 WAVE_DIRECTION_IDS: tuple[str, ...] = ("dirpw", "wvdir", "swdir")
-# The satellite channels, the composite guns and the confidences, held to
-# the Rust encoder and the frontend by tests/fixtures/satellite-registry.json
-# the same way. The channels are what a platform's imager measures (a
+# The satellite channels, the composite guns and the confidences. The
+# channels are what a platform's imager measures (a
 # ``band`` block each when published): six infrared windows, which every
 # source fetches first (the first is the one a listing walks), then the
 # four visible and near-infrared bands the true colour composite reads;
@@ -2071,7 +2067,7 @@ DUST_RGB_COMPONENT_IDS: tuple[str, str, str] = ("dustr", "dustg", "dustb")
 # the fetch stage like the guns, read off the series as a variable of its
 # own, never derived by a converter.
 #: The EFAS river fields in bundle order: the discharge, its return-period
-#: class and the upstream area (``tests/fixtures/river-registry.json``).
+#: class and the upstream area.
 RIVER_VARIABLE_IDS: tuple[str, ...] = ("dis06", "disrp", "upstream")
 DUST_CF_BUNDLE_ID = "dustcf"
 DUST_CF_COMPONENT_IDS: tuple[str] = ("dustcf",)
@@ -2092,9 +2088,8 @@ SATELLITE_VARIABLE_IDS: tuple[str, ...] = (
     + TRUE_COLOR_COMPONENT_IDS
 )
 # The aerosol set, in the order GEFS-Aerosols publishes it: the six optical
-# thicknesses, then the three surface concentrations. Held to the Rust
-# encoder and the frontend by tests/fixtures/aerosol-registry.json, which
-# carries each variable's ``aerosol`` block beside its parameter.
+# thicknesses, then the three surface concentrations, each with its
+# ``aerosol`` block beside its parameter.
 AEROSOL_VARIABLE_IDS: tuple[str, ...] = (
     "aod",
     "aoddust",

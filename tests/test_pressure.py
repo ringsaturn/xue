@@ -3,10 +3,9 @@
 Nine variables that add nothing to the container — no version bump, no new
 metadata key — and everything to the registries: a GRIB2 identity, a linear
 codebook, a record matcher, a bundle id. What holds them together across the
-three implementations is `tests/fixtures/pressure-registry.json`, a committed
-golden this module regenerates and compares; the Rust encoder's unit tests and
-the frontend's vitest read the same file, so a number can only move in all
-three at once.
+three implementations is the registry document (`rust/xue/registry.json`,
+and the shell's copy `web/src/registry.ts`, which carries the contour
+intervals too), so a number can only move in all three at once.
 
 The rule with no other home is **half-code alignment**: every standard
 contour value must land exactly halfway between two codes. It is what keeps
@@ -17,12 +16,11 @@ container neither knows nor cares.
 
 from __future__ import annotations
 
-import json
 import unittest
 
 import numpy as np
 
-from tests._support import FIXTURES, registry_entry
+from tests._support import registry_entry
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.quantize import (
@@ -33,8 +31,6 @@ from xuebuild.quantize import (
     PROFILES,
 )
 from xuebuild.variables import HEIGHT_LEVELS_HPA, height_variable_id, variable_spec
-
-REGISTRY = FIXTURES / "pressure-registry.json"
 
 
 def pressure_entry(variable_id: str) -> dict:
@@ -48,16 +44,6 @@ def pressure_entry(variable_id: str) -> dict:
 
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: pressure_entry(variable_id) for variable_id in PRESSURE_VARIABLE_IDS}
-        self.assertEqual(
-            actual,
-            expected,
-            "the pressure registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate it deliberately and change all three",
-        )
-
     def test_the_levels_are_registered_once_each_and_in_order(self) -> None:
         heights = [height_variable_id(level) for level in HEIGHT_LEVELS_HPA]
         self.assertEqual(list(PRESSURE_VARIABLE_IDS), ["prmsl", *heights])

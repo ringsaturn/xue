@@ -5,10 +5,9 @@ layer height and the categorical precipitation type.
 
 Like the pressure family and the upper-air fills before them, these add
 nothing to the container and everything to the registries: a GRIB2 identity,
-a linear codebook, a record matcher, a bundle id. `tests/fixtures/surface-registry.json`
-is the committed golden that holds the three implementations to one set of
-numbers: this module regenerates and compares it, the Rust encoder's unit
-tests and the frontend's vitest read the same file, so a codebook can only
+a linear codebook, a record matcher, a bundle id. The registry document
+(`rust/xue/registry.json`, and the shell's copy `web/src/registry.ts`) holds
+the three implementations to one set of numbers, so a codebook can only
 move in all three at once.
 
 GFS publishes them all; sflux and ECMWF none yet (ECMWF carries neighbours
@@ -18,13 +17,11 @@ a fraction — and needs its own matching rules first).
 
 from __future__ import annotations
 
-import json
 import unittest
 from datetime import UTC, datetime
 
 import numpy as np
 
-from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     PTYPE_CODES,
     VECTOR_BUNDLES,
@@ -38,7 +35,6 @@ from xuebuild.quantize import PROFILES, SURFACE_VARIABLE_IDS
 from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
 
-REGISTRY = FIXTURES / "surface-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 CLOUD_COVER_IDS = ("tcdc", "lcdc", "mcdc", "hcdc")
 # Fields whose codebook is not one-sided: a temperature runs below zero (the
@@ -51,16 +47,6 @@ CATEGORICAL_IDS = ("ptype",)
 
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in SURFACE_VARIABLE_IDS}
-        self.assertEqual(
-            actual,
-            expected,
-            "the surface registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate it deliberately and change all three",
-        )
-
     def test_balanced_is_quality_except_for_cloud_cover(self) -> None:
         # Cloud cover is relative humidity's kind of field — small-scale
         # structure everywhere, read in tens of percent — and takes the same

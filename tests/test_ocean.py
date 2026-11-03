@@ -5,9 +5,8 @@ and direction from the cycle's GFS-Wave file.
 Like the surface diagnostics before them, they add nothing to the container
 and everything to the registries: a GRIB2 identity (the first ones in the
 oceanographic discipline), a linear codebook, a record matcher, a bundle id.
-`tests/fixtures/ocean-registry.json` is the committed golden that holds the
-Python and Rust encoders to one set of numbers: this module regenerates and
-compares it, and the Rust encoder's unit tests read the same file.
+The registry document (`rust/xue/registry.json`) holds the Python and Rust
+encoders and the shell to one set of numbers.
 
 Two things are new with the wave fields, and both are checked here against
 the real records in the GRIB fixture: a source reading a second file family
@@ -32,7 +31,6 @@ are held to rank 1 here.
 
 from __future__ import annotations
 
-import json
 import math
 import shutil
 import subprocess
@@ -44,7 +42,6 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import FIXTURES, registry_entry
 from xuebuild import grib2
 from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
 from xuebuild.binconvert import (
@@ -88,11 +85,10 @@ from xuebuild.variables import (
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "gfs.2026081406.f000.crop.grib2"
-REGISTRY = FIXTURES / "ocean-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 WAVE_IDS = ("htsgw", "perpw", "dirpw")
 # Every vector component derived from a height and a direction, and every
-# id the ocean registry fixture holds.
+# id of the ocean set.
 VECTOR_COMPONENT_IDS = WAVE_VECTOR_COMPONENT_IDS + WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS
 REGISTRY_IDS = OCEAN_VARIABLE_IDS + WAVE_VECTOR_COMPONENT_IDS + WAVE_PARTITION_IDS + WIND_WAVE_VECTOR_COMPONENT_IDS + SWELL_VECTOR_COMPONENT_IDS
 # GFS reads the combined sea, the wind sea and the first swell partition
@@ -102,16 +98,6 @@ GDAL_GRIB_NODATA = 9999.0
 
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in REGISTRY_IDS}
-        self.assertEqual(
-            actual,
-            expected,
-            "the ocean registry moved; the Rust encoder reads the same fixture, so "
-            "regenerate it deliberately and change both",
-        )
-
     def test_balanced_is_quality_except_for_ice_cover(self) -> None:
         # Ice concentration is read in tenths, so production takes the same
         # 1 % step cloud cover does.

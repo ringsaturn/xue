@@ -112,9 +112,10 @@ across the three imagers.
 
 Adding a channel is: a `VariableSpec` in `variables.py` and its mirror in
 `encode/variables.rs` (parameter block, codebook, label), the id in the
-source's `input_variable_ids` and `bundle_scalar_ids`, a regenerated
-`satellite-registry.json` (`tests/prepare_satellite_registry.py`), and a
-row of the shell's variable table with a palette. Nothing in the fetch
+source's `input_variable_ids` and `bundle_scalar_ids`, the regenerated
+registry snapshots (`xue registry --output rust/xue/registry.json --shell
+web/src/registry.ts`), and a row of the shell's variable table with a
+palette. Nothing in the fetch
 stage, the converter or the format changes: the fetch warps every channel
 a source lists, and the ingest reads one series file per variable. A
 channel is warped by its kind (`fetch.resampling_for`): a brightness
@@ -1003,11 +1004,11 @@ two confidences one by day), the definition and gate rules, and the producer in 
 naming its ancillary); the satellite and GOES suites stage the same
 fixtures under the raw root (`stage_ancillary`) so no test reaches the
 GFS bucket.
-`tests/fixtures/satellite-registry.json` (`variables`: each channel's and
-gun's label, unit, parameter block, band block or producer id and
-codebooks; `bundles`: each composite's components in order) holds them
-identical across the Python encoder, the Rust encoder and the shell;
-`tests/prepare_satellite_registry.py` regenerates it.
+The registry document (`rust/xue/registry.json`, and its trimmed shell
+copy `web/src/registry.ts`) holds each channel's and gun's label, unit,
+parameter block, band block or producer id and codebooks, and each
+composite's components in order, identical across the Python encoder,
+the Rust encoder and the shell (`docs/registry.md`).
 
 `tests/fixtures/goes/` is eighteen windows cut from real GOES-19 CMIPF
 files (`tests/prepare_goes_fixture.py`: the six dust channels and the

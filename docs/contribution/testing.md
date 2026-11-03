@@ -40,9 +40,11 @@ npx playwright test tests/e2e/app.spec.ts -g "scrub"
   `tests/prepare_bin_fixture.py` writes to the codes they were written
   from (read back out of the shared store by the NumPy reader), plus the
   container rejection paths and mutation fuzzing.
-- **Registry fixtures** (`tests/fixtures/*-registry.json`) hold the three
-  implementations to one set of ids, identities and codebooks; regenerate
-  them when a source's inputs widen.
+- **Registry snapshots** (`rust/xue/registry.json`, the shell's
+  `web/src/registry.ts`) hold the three implementations to one set of ids,
+  identities and codebooks; `tests/test_registry.py` fails until
+  `xue registry --output rust/xue/registry.json --shell web/src/registry.ts`
+  regenerates them.
 - **Web** (`tests/web/`, Vitest): manifest validation, the Zarr reader
   (every frame and series identical to the wasm bundle reader), the
   variable table, URL state, discovery files.

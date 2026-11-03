@@ -336,10 +336,6 @@ for h in 006 012; do
 done
 ```
 
-`aerosol-registry.json` is the registry golden for the nine, with each
-variable's `aerosol` block beside its parameter (`tests/test_aerosol.py`;
-the Rust encoder and the frontend read the same file).
-
 `mrms.2026091300.t0000.crop.grib2` and `mrms.2026091300.t0002.crop.grib2`
 are a 160 by 160 cell window of two consecutive frames of the MRMS mosaic,
 each the composite reflectivity (`MergedReflectivityQCComposite_00.50`,
@@ -664,33 +660,6 @@ for variable_id in ("dustsfc", "aoddust"):
 The two files are 3.3 KB. A change to what the fetch writes means
 regenerating them the same way and saying so in the commit.
 
-`volume-registry.json` is the registry golden for the volume bundles'
-levels, in bundle order: the 33 `refl<m>` levels of `refl3d`, then the 24
-`clw<m>` levels of `cloud3d`, each with its label, unit, GRIB2 parameter
-block and quality / compact codebooks (`tests/test_woof.py`; the Rust
-encoder and the frontend read the same file). Regenerate it with the
-change that meant it:
-
-```sh
-.venv/bin/python -c "import json; from tests._support import registry_entry; \
-    from xuebuild.binconvert import VOLUME_BUNDLES; \
-    print(json.dumps({v: registry_entry(v) for ids in VOLUME_BUNDLES.values() for v in ids}, \
-    indent=2, ensure_ascii=False))" > tests/fixtures/volume-registry.json
-```
-
-`soil-registry.json` is the registry golden for the soil layers, the
-temperature then the volumetric water in layers 1–4, each with its label,
-unit, GRIB2 parameter block (the GFS record's) and quality / compact
-codebooks (`tests/test_soil.py`; the Rust encoder reads the same file).
-Regenerate it with the change that meant it:
-
-```sh
-.venv/bin/python -c "import json; from tests._support import registry_entry; \
-    from xuebuild.variables import SOIL_VARIABLE_IDS; \
-    print(json.dumps({v: registry_entry(v) for v in SOIL_VARIABLE_IDS}, \
-    indent=2, ensure_ascii=False))" > tests/fixtures/soil-registry.json
-```
-
 # Xue fixtures
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable
@@ -732,28 +701,13 @@ active list cut to Norbert and one other system. About 180 KB.
 `tc/expected/` is the product built from it, offline, pretty-printed
 with scalar arrays kept on one line; `tests/prepare_tc_golden.py`
 regenerates it after a deliberate change, and `tests/test_tc.py` holds
-the build to it (skipped without `bufr_dump`). `tc-registry.json` pins
-the agency / model registry (`xuebuild/tc/registry.py`) the frontend's
-table is held to.
+the build to it (skipped without `bufr_dump`).
 
 The BUFR crops were cut with:
 
 ```sh
 printf 'set unpack=1;\nif (stormIdentifier is "14E" || stormIdentifier is "70W") { write; }\n' > sel.filter
 bufr_filter -o 2026091200-oper-tf.bufr sel.filter 20260912000000-360h-oper-tf.bufr
-```
-
-`river-registry.json` is the registry golden for the EFAS river fields
-in bundle order — `dis06`, `disrp`, `upstream` — each with its label,
-unit, GRIB2 parameter block and quality / compact codebooks
-(`tests/test_efas.py`; the Rust encoder and the frontend read the same
-file). Regenerate it with the change that meant it:
-
-```sh
-.venv/bin/python -c "import json; from tests._support import registry_entry; \
-    from xuebuild.variables import RIVER_VARIABLE_IDS; \
-    print(json.dumps({v: registry_entry(v) for v in RIVER_VARIABLE_IDS}, \
-    indent=2, ensure_ascii=False))" > tests/fixtures/river-registry.json
 ```
 
 The point products' goldens carry the STAC documents their builds
