@@ -29,7 +29,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .geometry import normalize
-from .http import get
+from ..http import get
 from .schema import raw_directory, sha256_hex, write_bytes_atomic
 from .tables import eccc_category, eccc_level
 
@@ -63,7 +63,7 @@ def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bo
         while url is not None:
             if len(pages) >= MAX_PAGES:
                 raise XueError(f"{URL}: more than {MAX_PAGES} pages")
-            response = get(url, accept="application/geo+json")
+            response = get(url, accept="application/geo+json", compressed=True)
             if response.body is None:
                 raise XueError(f"{url}: HTTP {response.status}")
             pages.append(response.body)

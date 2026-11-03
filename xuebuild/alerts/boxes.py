@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import XueError
-from .http import get
+from ..http import get
 from .networks import AreaSet
 from .schema import AREAS_DIRECTORY, crc32_hex, write_bytes_atomic
 
@@ -56,7 +56,7 @@ def load_boxes(area_set: AreaSet, cache: Path, base_url: str | None) -> Boxes | 
         return None
     url = f"{base_url.rstrip('/')}/{AREAS_DIRECTORY}/{area_set.bbox_filename}?v={area_set.bbox_crc32}"
     try:
-        response = get(url, accept="application/json")
+        response = get(url, accept="application/json", compressed=True)
         if response.body is None:
             raise XueError(f"{url}: HTTP {response.status}")
         if crc32_hex(response.body) != area_set.bbox_crc32:

@@ -39,7 +39,7 @@ from pathlib import Path
 from ..airport.fetch import SourceStatus
 from ..errors import DownloadError, XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
-from .http import get
+from ..http import get
 from .schema import AqProductError, bounded, raw_directory, to_mixing_ratio
 from .station import NetworkRead, Observation, StationMeta
 

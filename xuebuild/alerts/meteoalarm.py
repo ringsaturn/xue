@@ -51,7 +51,7 @@ from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
 from .geometry import normalize
-from .http import get
+from ..http import get
 from .schema import LANGUAGE, raw_directory, sha256_hex, write_bytes_atomic
 from .tables import meteoalarm_category, meteoalarm_level
 
@@ -130,7 +130,7 @@ def _feed_filename(country: str) -> str:
 
 def _download(country: str) -> bytes:
     url = URL.format(country=country)
-    response = get(url, accept="application/json", timeout=FEED_TIMEOUT, pace=False, max_elapsed=FEED_DEADLINE)
+    response = get(url, accept="application/json", compressed=True, timeout=FEED_TIMEOUT, pace=False, max_elapsed=FEED_DEADLINE)
     if response.body is None:
         raise XueError(f"{url}: HTTP {response.status}")
     payload = json.loads(response.body)

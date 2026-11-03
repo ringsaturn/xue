@@ -34,7 +34,7 @@ from pathlib import Path
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
-from .http import get
+from ..http import get
 from .schema import ELEVATION_RANGE, HISTORY_HOURS, STATION, AqProductError, bounded, raw_directory
 from .station import NetworkRead, Observation, StationMeta
 

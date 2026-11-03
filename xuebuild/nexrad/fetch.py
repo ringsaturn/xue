@@ -22,7 +22,7 @@ from urllib.parse import quote
 
 from ..errors import DownloadError, NexradProductError, XueError
 from ..pointproduct import write_bytes_atomic
-from ..synop.http import get
+from ..http import get
 
 LOG = logging.getLogger(__name__)
 
