@@ -17,7 +17,7 @@ from .assemble import (
     partial_manifest_path,
     read_manifest,
 )
-from .binconvert import bundle_input_ids, published_bundle_ids, verify_bin
+from .binconvert import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary
@@ -25,12 +25,6 @@ from .localrun import LOCAL_DIRECTORY, build_local_run, parse_bbox
 from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, write_catalog
 from .sources import SOURCES, source_spec
 from .stac import POINT_PRODUCTS, write_point_product_documents, write_run_documents
-from .zarrstore import (
-    DEFAULT_INDEX_LOCATION,
-    INDEX_LOCATIONS,
-    export_bundle,
-    store_path_for,
-)
 from .aq import cli as aq_cli
 from .airport.build import build_product as build_airport_product
 from .airport.build import load_previous_index as load_previous_airport_index
@@ -211,72 +205,6 @@ def parser() -> argparse.ArgumentParser:
     _common_run_arguments(fetch, force_help="download and replace existing GRIB files")
     _model_argument(fetch)
     fetch.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
-
-    convert_bin_parser = commands.add_parser(
-        "convert-bin", help="convert a GRIB run (or one observation NetCDF file) into per-variable Xue bundles"
-    )
-    convert_bin_parser.add_argument("input", type=Path)
-    _model_argument(convert_bin_parser, fetched_only=False)
-    convert_bin_parser.add_argument("--output", type=Path, required=True, help="output directory for the shared Zarr stores (bundles.zarr, bundles.<tier>.zarr)")
-    convert_bin_parser.add_argument("--profile", choices=("quality", "compact", "balanced"), default="quality")
-    convert_bin_parser.add_argument("--work-dir", type=Path, default=Path("data/work"))
-    convert_bin_parser.add_argument("--manifest", type=Path, help="write a schema v3 manifest.json to this path")
-    convert_bin_parser.add_argument("--force", action="store_true", help="replace an existing manifest")
-    convert_bin_parser.add_argument(
-        "--hours",
-        type=forecast_hours,
-        help="observation sources only: last hour of the series to include, counted from its first frame",
-    )
-    convert_bin_parser.add_argument(
-        "--skip-video",
-        action="store_true",
-        help="do not build the optional per-variable WebCodecs video artifacts",
-    )
-    convert_bin_parser.add_argument(
-        "--skip-variants",
-        action="store_true",
-        help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter tier too)",
-    )
-    convert_bin_parser.add_argument(
-        "--xue",
-        dest="container",
-        action="store_true",
-        help="also write each bundle's .xue container (and name it in the manifest) beside its Zarr store, "
-        "from the same codes; a build writes the store alone otherwise",
-    )
-    convert_bin_parser.add_argument(
-        "--no-series",
-        dest="series",
-        action="store_false",
-        help="do not write the series companion stores (<bundle>.series.zarr) the point-read bundles "
-        "would otherwise ship (docs/zarr-profile.md)",
-    )
-
-    verify_bin_parser = commands.add_parser("verify-bin", help="validate and fully decode a Xue bundle")
-    verify_bin_parser.add_argument("bundle", type=Path)
-
-    export_zarr_parser = commands.add_parser(
-        "export-zarr",
-        help="derive a Zarr v3 store from a Xue bundle: the same codes, re-chunked onto a regular six-frame time "
-        "grid, one shard per array (docs/zarr-profile.md)",
-    )
-    export_zarr_parser.add_argument("bundle", type=Path)
-    export_zarr_parser.add_argument(
-        "--out", type=Path, help="the store's root directory (default: <bundle>.zarr beside the bundle)"
-    )
-    export_zarr_parser.add_argument(
-        "--delta",
-        action="store_true",
-        help="put the xue.delta codec in front of zstd on the variables the bundle predicts from the previous "
-        "frame, so their chunks compress to the bundle's own bytes; a client then needs the codec registered",
-    )
-    export_zarr_parser.add_argument(
-        "--index-location",
-        choices=INDEX_LOCATIONS,
-        default=DEFAULT_INDEX_LOCATION,
-        help=f"where each shard keeps its chunk index (default {DEFAULT_INDEX_LOCATION}, which a client fetches "
-        "as a suffix range without knowing the object's length)",
-    )
 
     build_bin_parser = commands.add_parser("build-bin", help="fetch a run and build per-variable Xue bundles and the manifest")
     _common_run_arguments(build_bin_parser, force_help="replace existing bundle and manifest")
@@ -983,22 +911,6 @@ def main(argv: list[str] | None = None) -> int:
             run = resolve_run(arguments.run, hours=arguments.hours, model=arguments.model, raw_root=arguments.raw_dir)
             paths = fetch_run(run, arguments.hours, arguments.raw_dir, force=arguments.force, model=arguments.model)
             print("\n".join(str(path) for path in paths))
-        elif arguments.command == "convert-bin":
-            report = convert_bin(
-                arguments.input,
-                arguments.output,
-                profile=arguments.profile,
-                work_root=arguments.work_dir,
-                manifest_path=arguments.manifest,
-                force=arguments.force,
-                skip_video=arguments.skip_video,
-                skip_variants=arguments.skip_variants,
-                model=arguments.model,
-                last_hour=arguments.hours,
-                container=arguments.container,
-                series=arguments.series,
-            )
-            print(json.dumps(report, indent=2))
         elif arguments.command == "wrf-series":
             from .wrf import convert_run  # noqa: PLC0415 - the one command that reads NetCDF in-process
 
@@ -1089,16 +1001,6 @@ def main(argv: list[str] | None = None) -> int:
 
             index = build_river(load_river_definition(arguments.definition, work=arguments.work, output=arguments.output))
             print(json.dumps({key: index[key] for key in index if key != "gauges"}, indent=2, ensure_ascii=False))
-        elif arguments.command == "verify-bin":
-            print(json.dumps(verify_bin(arguments.bundle), indent=2))
-        elif arguments.command == "export-zarr":
-            report = export_bundle(
-                arguments.bundle,
-                arguments.out if arguments.out is not None else store_path_for(arguments.bundle),
-                delta=arguments.delta,
-                index_location=arguments.index_location,
-            )
-            print(json.dumps(report.to_dict(), indent=2))
         elif arguments.command == "build-local":
             source = source_spec(arguments.model)
             report = build_local_run(

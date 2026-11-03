@@ -10,11 +10,9 @@ document). A **one-bundle store** (profile 1, :func:`write_store`) is what a
 series store still is, and what every map store was before shared stores;
 the readers here open both.
 
-Either writer packs a bundle's quantized codes from whatever holds them (a
-:class:`ChunkSource`): the planes a build holds in memory
-(:class:`CodesSource`) or a finished ``.xue`` (:func:`export_bundle`). The
-metadata, shard bytes, index and CRC-32C are assembled with NumPy alone, so
-the build gains no dependency.
+Either writer packs a bundle's quantized codes from the planes a build holds
+in memory (:class:`CodesSource`). The metadata, shard bytes, index and
+CRC-32C are assembled with NumPy alone, so the build gains no dependency.
 """
 
 from __future__ import annotations
@@ -266,15 +264,7 @@ class ArrayGeometry:
 
 @dataclass
 class ExportReport:
-    """What one export wrote, and how much of it the bundle already held.
-
-    ``comparable_chunks`` are the inner chunks that cover exactly the frames
-    and the unclipped tile of one of the bundle's chunks; ``identical_chunks``
-    are those among them whose compressed bytes equal the bundle's. Under
-    the delta chain every comparable chunk of a PREVIOUS variable is
-    identical, under the standard chain every comparable chunk of a RAW
-    variable; the counts say so rather than the code assuming it.
-    """
+    """What one one-bundle store write wrote."""
 
     path: Path
     byte_length: int
@@ -283,8 +273,6 @@ class ExportReport:
     index_location: str
     arrays: dict[str, int] = field(default_factory=dict)
     chunk_count: int = 0
-    comparable_chunks: int = 0
-    identical_chunks: int = 0
 
     def descriptor(self, manifest_dir: Path) -> dict[str, Any]:
         """The manifest's ``zarr`` descriptor: the store's root, relative to
@@ -305,8 +293,6 @@ class ExportReport:
             "indexLocation": self.index_location,
             "arrays": dict(self.arrays),
             "chunkCount": self.chunk_count,
-            "comparableChunks": self.comparable_chunks,
-            "identicalChunks": self.identical_chunks,
         }
 
 
@@ -320,111 +306,6 @@ def _write(path: Path, data: bytes) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return len(data)
-
-
-def _predictor_name(bundle: binformat.Bundle, numeric_id: int) -> str:
-    """``previous`` for a variable stored as residuals, ``raw`` otherwise. A
-    v2 file says so per variable; a v1 file says so per plane, and a variable
-    with any predicted plane counts as predicted."""
-    if bundle.container_version == binformat.VERSION_V2:
-        predictor = bundle.predictors[numeric_id]
-    else:
-        predicted = {binformat.PREDICTOR_ANCHOR, binformat.PREDICTOR_PREVIOUS}
-        predictor = (
-            binformat.PREDICTOR_PREVIOUS
-            if any(entry.predictor in predicted for entry in bundle.entries if entry.variable_id == numeric_id)
-            else binformat.PREDICTOR_RAW
-        )
-    return "previous" if predictor == binformat.PREDICTOR_PREVIOUS else "raw"
-
-
-def _bundle_tile(bundle: binformat.Bundle, tile: tuple[int, int] | None) -> tuple[int, int]:
-    """The (width, height) a bundle is cut with. A v2 file carries its own;
-    a v1 file has no tiles, so the caller names one or the source's is
-    looked up by the model the metadata declares and clamped to the grid."""
-    if bundle.container_version == binformat.VERSION_V2:
-        return bundle.tiles.tile_width, bundle.tiles.tile_height
-    if tile is None:
-        from .sources import SOURCES  # noqa: PLC0415  (only the v1 fallback needs the registry)
-
-        model = bundle.metadata.get("model")
-        source = next((source for source in SOURCES.values() if source.manifest_model == model), None)
-        if source is None:
-            raise ConversionError(f"a v1 bundle of an unregistered model ({model!r}) needs an explicit tile")
-        tile = source.tile
-    return min(tile[0], bundle.width), min(tile[1], bundle.height)
-
-
-def _tile_blocks(
-    bundle: binformat.Bundle, numeric_id: int, geometry: ArrayGeometry, frames: range
-) -> list[np.ndarray]:
-    """One time chunk's codes, tile by tile in row-major order, each block
-    ``(len(frames), clipped height, clipped width)``.
-
-    A v2 file is read chunk by chunk: the time chunk's frames come from one
-    or two of the bundle's groups (two across a change of step), sliced to
-    the frames wanted. A v1 file is read plane by plane and cut into tiles
-    here. Either way the bundle's caches are dropped afterwards so a pass
-    over a run never holds more than one time chunk decoded.
-    """
-    if bundle.container_version == binformat.VERSION_V2:
-        pieces: list[tuple[int, int, int]] = []
-        for frame in frames:
-            group_index, _ = bundle.frame_group[frame]
-            if not pieces or pieces[-1][0] != group_index:
-                pieces.append((group_index, frame, frame + 1))
-            else:
-                pieces[-1] = (group_index, pieces[-1][1], frame + 1)
-        blocks = []
-        for tile in range(geometry.tile_count):
-            parts = []
-            for group_index, first, stop in pieces:
-                chunk = bundle.decode_chunk(bundle.chunk_position(group_index, tile, numeric_id))
-                origin = bundle.groups[group_index].first_frame
-                parts.append(chunk[first - origin : stop - origin])
-            blocks.append(parts[0] if len(parts) == 1 else np.concatenate(parts))
-    else:
-        stack = np.stack(
-            [
-                bundle.decode_plane(numeric_id, bundle.frame_offsets[frame]).reshape(geometry.height, geometry.width)
-                for frame in frames
-            ]
-        )
-        blocks = []
-        for tile in range(geometry.tile_count):
-            row, column = geometry.tile_origin(tile)
-            height, width = geometry.tile_shape(tile)
-            blocks.append(stack[:, row : row + height, column : column + width])
-    bundle.clear_cache()
-    return blocks
-
-
-def _series_blocks(bundle: binformat.Bundle, numeric_id: int, geometry: ArrayGeometry) -> list[np.ndarray]:
-    """Every frame of every block, for a series geometry.
-
-    A series geometry has thousands of tiny blocks and one time chunk, so the
-    v2 chunk path (`_tile_blocks`) would decode one group chunk per (tile,
-    group) — tens of thousands of decodes for a global run. Decode one whole
-    frame at a time instead, the pass the v1 branch already makes, and cut
-    every block out of it. The blocks together hold the variable's whole cube
-    (``frame_count`` x height x width; 167 MB for a 161-frame global uint8
-    temperature bundle), which is what the one pass costs in memory.
-    """
-    if geometry.time_chunks != 1:
-        raise AssertionError("a series geometry has one time chunk")
-    height, width = geometry.height, geometry.width
-    blocks = [
-        np.empty((geometry.frame_count, *geometry.tile_shape(tile)), dtype=np.uint8)
-        for tile in range(geometry.tile_count)
-    ]
-    for frame in range(geometry.frame_count):
-        plane = bundle.decode_plane(numeric_id, bundle.frame_offsets[frame]).reshape(height, width)
-        for tile, block in enumerate(blocks):
-            row, column = geometry.tile_origin(tile)
-            block_height, block_width = block.shape[1], block.shape[2]
-            block[frame] = plane[row : row + block_height, column : column + block_width]
-    bundle.clear_cache()
-    return blocks
 
 
 def _pad_block(block: np.ndarray, geometry: ArrayGeometry, nodata: int) -> np.ndarray:
@@ -583,34 +464,6 @@ def _coordinate_metadata(length: int, data_type: str, fill_value: Any, attribute
     }
 
 
-def _comparable_chunk(
-    bundle: binformat.Bundle, geometry: ArrayGeometry, time_chunk: int, tile: int, numeric_id: int
-) -> int | None:
-    """The bundle chunk a Zarr inner chunk covers exactly, if there is one:
-    a group starting on the same frame with the same length, on a tile the
-    grid does not clip. Only a v2 file has chunks to compare against."""
-    if bundle.container_version != binformat.VERSION_V2:
-        return None
-    # The bundle chunk a store chunk equals must be cut the same way: same tile
-    # size, same frames. A series geometry's blocks are far smaller than the
-    # bundle's tiles, so nothing is comparable — without this the two tile
-    # grids would be conflated (a one-group bundle, a single-frame file
-    # included, would look comparable block for block).
-    if (geometry.tile_width, geometry.tile_height) != (bundle.tiles.tile_width, bundle.tiles.tile_height):
-        return None
-    if geometry.tile_shape(tile) != (geometry.tile_height, geometry.tile_width):
-        return None
-    first = time_chunk * geometry.time_chunk
-    for group_index, group in enumerate(bundle.groups):
-        if group.first_frame == first:
-            if group.frame_count == geometry.time_chunk:
-                return bundle.chunk_position(group_index, tile, numeric_id)
-            return None
-        if group.first_frame > first:
-            return None
-    return None
-
-
 def _write_atomic(path: Path, data: bytes) -> int:
     """Write by rename: in a shared store several bundles write the same
     coordinate array concurrently, always the same bytes, and a rename never
@@ -628,7 +481,7 @@ def _write_atomic(path: Path, data: bytes) -> int:
 
 
 def _write_coordinates(
-    source: ChunkSource, zarr_dir: Path, names: tuple[str, str, str] = _DIMENSIONS, *, atomic: bool = False
+    source: CodesSource, zarr_dir: Path, names: tuple[str, str, str] = _DIMENSIONS, *, atomic: bool = False
 ) -> dict[str, int]:
     """The three one-dimensional coordinate arrays: for xarray and its kind,
     never read by the viewer, which reads the group's metadata block.
@@ -674,81 +527,10 @@ def _write_coordinates(
 
 # -- chunk sources -------------------------------------------------------------
 
-class ChunkSource:
-    """Where the writer takes a bundle's codes from.
-
-    A store is a function of the bundle's metadata, its codes, its tile and
-    each variable's predictor, nothing else, so one writer serves every
-    source of codes: :class:`ContainerSource` reads them out of a finished
-    ``.xue`` (``export-zarr``, the fixtures), :class:`CodesSource` takes the
-    planes a build holds in memory. ``array_names`` lists the variables in
-    the metadata's order, which is the store's array order."""
-
-    metadata: dict[str, Any]
-    frame_count: int
-    height: int
-    width: int
-    unit_seconds: int
-    frame_offsets: list[int]
-    tile: tuple[int, int]
-    """``(width, height)`` of the tile the bundle is cut with."""
-    array_names: list[str]
-
-    def predictor(self, name: str) -> str:
-        """``previous`` or ``raw``."""
-        raise NotImplementedError
-
-    def tile_blocks(self, name: str, geometry: ArrayGeometry, frames: range) -> list[np.ndarray]:
-        """One time chunk's codes, tile by tile in row-major order, each
-        block ``(len(frames), clipped height, clipped width)``."""
-        raise NotImplementedError
-
-    def series_blocks(self, name: str, geometry: ArrayGeometry) -> list[np.ndarray]:
-        """Every frame of every block of a series geometry."""
-        raise NotImplementedError
-
-    def comparable_payload(self, name: str, geometry: ArrayGeometry, time_chunk: int, tile: int) -> bytes | None:
-        """The bundle's own compressed chunk covering exactly this inner
-        chunk, where there is one (see :class:`ExportReport`)."""
-        return None
-
-
-class ContainerSource(ChunkSource):
-    """The codes of a finished ``.xue``, read chunk by chunk."""
-
-    def __init__(self, bundle: binformat.Bundle, tile: tuple[int, int] | None = None) -> None:
-        self.bundle = bundle
-        self.metadata = bundle.metadata
-        self.frame_count = bundle.frame_count
-        self.height = bundle.height
-        self.width = bundle.width
-        self.unit_seconds = bundle.unit_seconds
-        self.frame_offsets = bundle.frame_offsets
-        self.tile = _bundle_tile(bundle, tile)
-        self.array_names = [variable["id"] for variable in bundle.metadata["variables"]]
-        if sorted(self.array_names) != sorted(bundle.variable_ids.values()):
-            raise BundleError("the metadata's variables do not name the bundle's arrays")
-        self._numeric_ids = {name: numeric_id for numeric_id, name in bundle.variable_ids.items()}
-
-    def predictor(self, name: str) -> str:
-        return _predictor_name(self.bundle, self._numeric_ids[name])
-
-    def tile_blocks(self, name: str, geometry: ArrayGeometry, frames: range) -> list[np.ndarray]:
-        return _tile_blocks(self.bundle, self._numeric_ids[name], geometry, frames)
-
-    def series_blocks(self, name: str, geometry: ArrayGeometry) -> list[np.ndarray]:
-        return _series_blocks(self.bundle, self._numeric_ids[name], geometry)
-
-    def comparable_payload(self, name: str, geometry: ArrayGeometry, time_chunk: int, tile: int) -> bytes | None:
-        position = _comparable_chunk(self.bundle, geometry, time_chunk, tile, self._numeric_ids[name])
-        if position is None:
-            return None
-        start, end = self.bundle.chunk_span(position)
-        return self.bundle.data[start:end]
-
-
-class CodesSource(ChunkSource):
-    """The codes a build holds in memory, written without a container.
+class CodesSource:
+    """Where the writers take a bundle's codes from: the planes a build
+    holds in memory. A store is a function of the bundle's metadata, its
+    codes, its tile and each variable's predictor, nothing else.
 
     ``planes`` maps each variable id to its planes in frame order (one
     ``height x width`` or flat ``uint8`` array per frame of the axis);
@@ -756,8 +538,8 @@ class CodesSource(ChunkSource):
     ``(width, height)`` the bundle is cut with. The metadata is taken through
     the bytes a container embeds (:func:`binformat.metadata_json_bytes`), so
     the store's ``xue`` block is the document a bundle of the same codes
-    would carry, and a store written from here equals one exported from that
-    bundle byte for byte."""
+    would carry. ``array_names`` lists the variables in the metadata's
+    order, which is the store's array order."""
 
     def __init__(
         self,
@@ -813,7 +595,7 @@ class CodesSource(ChunkSource):
 # -- the writer ----------------------------------------------------------------
 
 def _write_array(
-    source: ChunkSource,
+    source: CodesSource,
     name: str,
     variable: dict[str, Any],
     geometry: ArrayGeometry,
@@ -825,10 +607,9 @@ def _write_array(
     series: bool = False,
     bundle: str | None = None,
     dimensions: tuple[str, str, str] = _DIMENSIONS,
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int]:
     """One variable's array: its metadata and its one shard. Returns bytes
-    written, inner chunks written, comparable and identical chunks (see
-    :class:`ExportReport`). ``series`` reads the source a plane at a time,
+    and inner chunks written. ``series`` reads the source a plane at a time,
     the way a series geometry's thousands of tiny blocks want. ``bundle``
     and ``dimensions`` are a shared store's (:func:`write_bundle_arrays`)."""
     predictor = source.predictor(name)
@@ -850,7 +631,7 @@ def _write_array(
     )
     if geometry.shard_count != 1:
         raise AssertionError("the exporter writes one shard per array")
-    chunks = comparable = identical = 0
+    chunks = 0
     shard = _ShardWriter(array_dir / "c" / "0" / "0" / "0", geometry.chunks_per_shard, index_location)
     for time_chunk in range(geometry.time_chunks):
         blocks = (
@@ -864,12 +645,6 @@ def _write_array(
             stored = [_delta_encode(block) for block in stored]
         payloads = list(executor.map(_compress_block, stored))
         del stored
-        for tile, payload in enumerate(payloads):
-            reference = source.comparable_payload(name, geometry, time_chunk, tile)
-            if reference is None:
-                continue
-            comparable += 1
-            identical += reference == payload
         shard.extend(payloads)
         chunks += len(payloads)
     # The axis rounded up to whole time chunks: the index names every inner
@@ -878,10 +653,10 @@ def _write_array(
     nodata_block = _compress_block(np.full(geometry.inner_shape, nodata, dtype=np.uint8))
     shard.extend([nodata_block] * max(0, geometry.chunks_per_shard - shard.count))
     written += shard.close()
-    return written, chunks, comparable, identical
+    return written, chunks
 
 
-def _store_geometry(source: ChunkSource, series: bool, block: tuple[int, int] | None) -> ArrayGeometry:
+def _store_geometry(source: CodesSource, series: bool, block: tuple[int, int] | None) -> ArrayGeometry:
     if series:
         block = block or SERIES_BLOCK
         if len(block) != 2 or block[0] < 1 or block[1] < 1:
@@ -905,7 +680,7 @@ def _store_geometry(source: ChunkSource, series: bool, block: tuple[int, int] | 
 
 
 def write_store(
-    source: ChunkSource,
+    source: CodesSource,
     zarr_dir: Path,
     *,
     delta: bool = False,
@@ -914,7 +689,7 @@ def write_store(
     series: bool = False,
     block: tuple[int, int] | None = None,
 ) -> ExportReport:
-    """Write the Zarr v3 store of one bundle from a :class:`ChunkSource`.
+    """Write the Zarr v3 store of one bundle from a :class:`CodesSource`.
 
     ``zarr_dir`` is the store's root (``<bundle>.zarr``) and is replaced
     whole. ``delta`` puts the ``xue.delta`` codec in front of ``bytes`` on
@@ -942,7 +717,7 @@ def write_store(
     try:
         report = ExportReport(path=zarr_dir, byte_length=0, crc32="", delta=delta, index_location=index_location)
         for name in source.array_names:
-            written, chunks, comparable, identical = _write_array(
+            written, chunks = _write_array(
                 source,
                 name,
                 variables[name],
@@ -956,8 +731,6 @@ def write_store(
             report.arrays[name] = written
             report.byte_length += written
             report.chunk_count += chunks
-            report.comparable_chunks += comparable
-            report.identical_chunks += identical
         for name, written in _write_coordinates(source, zarr_dir).items():
             report.arrays[name] = written
             report.byte_length += written
@@ -986,77 +759,6 @@ def write_store(
         if own_executor:
             pool.shutdown()
     return report
-
-
-def export_bundle(
-    xue_path: Path,
-    zarr_dir: Path,
-    *,
-    delta: bool = False,
-    index_location: str = DEFAULT_INDEX_LOCATION,
-    tile: tuple[int, int] | None = None,
-    executor: ThreadPoolExecutor | None = None,
-    series: bool = False,
-    block: tuple[int, int] | None = None,
-) -> ExportReport:
-    """Derive the Zarr v3 store of one finished ``.xue`` (:func:`write_store`
-    over a :class:`ContainerSource`). ``tile`` is only for a v1 bundle,
-    which carries no tiling of its own."""
-    if index_location not in INDEX_LOCATIONS:
-        raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
-    source = ContainerSource(binformat.read_bundle(xue_path), tile)
-    return write_store(
-        source,
-        zarr_dir,
-        delta=delta,
-        index_location=index_location,
-        executor=executor,
-        series=series,
-        block=block,
-    )
-
-
-def export_series(
-    xue_path: Path,
-    zarr_dir: Path,
-    *,
-    block: tuple[int, int] = SERIES_BLOCK,
-    delta: bool = True,
-    index_location: str = DEFAULT_INDEX_LOCATION,
-    executor: ThreadPoolExecutor | None = None,
-) -> ExportReport:
-    """Derive the series store of one finished ``.xue`` (docs/zarr-profile.md,
-    "Series store").
-
-    The same codes cut one way for the map and the other way for a point:
-    one inner chunk is the whole time axis of one ``block`` spatial block, so
-    a cell's series costs one chunk instead of one per time chunk. ``delta``
-    defaults on — the ``xue.delta`` chain is the bundle's own PREVIOUS
-    predictor, and it is what the series layout was measured with; the
-    published map store leaves it off for standard-Zarr readability, which a
-    series store does not need to imitate.
-    """
-    return export_bundle(
-        xue_path,
-        zarr_dir,
-        delta=delta,
-        index_location=index_location,
-        executor=executor,
-        series=True,
-        block=block,
-    )
-
-
-def store_path_for(xue_path: Path) -> Path:
-    """``tmp2m.xue`` → ``tmp2m.zarr``, ``tmp2m.half.xue`` → ``tmp2m.half.zarr``."""
-    return xue_path.with_suffix(".zarr")
-
-
-def series_store_path_for(xue_path: Path) -> Path:
-    """``tmp2m.xue`` → ``tmp2m.series.zarr``, ``tmp2m.half.xue`` →
-    ``tmp2m.half.series.zarr``. Only the full-resolution bundle ships one in
-    production, but the mapping is total so a variant can be exported too."""
-    return xue_path.with_suffix(".series.zarr")
 
 
 # -- the shared store (profile 2) ----------------------------------------------
@@ -1120,8 +822,6 @@ class BundleWrite:
     index_location: str
     arrays: dict[str, int] = field(default_factory=dict)
     chunk_count: int = 0
-    comparable_chunks: int = 0
-    identical_chunks: int = 0
     crc32: str = ""
 
     def entry(self) -> tuple[str, dict[str, Any], dict[str, dict[str, Any]]]:
@@ -1146,13 +846,11 @@ class BundleWrite:
             "dimensions": list(self.dimensions),
             "arrays": dict(self.arrays),
             "chunkCount": self.chunk_count,
-            "comparableChunks": self.comparable_chunks,
-            "identicalChunks": self.identical_chunks,
         }
 
 
 def write_bundle_arrays(
-    source: ChunkSource,
+    source: CodesSource,
     zarr_dir: Path,
     bundle_id: str,
     dimensions: tuple[str, str, str] = _DIMENSIONS,
@@ -1199,7 +897,7 @@ def write_bundle_arrays(
         for name in source.array_names:
             if name in dimensions:
                 raise BundleError(f"{bundle_id}: variable {name} is named like a coordinate")
-            written, chunks, comparable, identical = _write_array(
+            written, chunks = _write_array(
                 source,
                 name,
                 variables[name],
@@ -1213,8 +911,6 @@ def write_bundle_arrays(
             )
             report.arrays[name] = written
             report.chunk_count += chunks
-            report.comparable_chunks += comparable
-            report.identical_chunks += identical
         report.arrays.update(_write_coordinates(source, zarr_dir, dimensions, atomic=True))
         report.byte_length = sum(report.arrays.values())
         report.documents = {name: read_json(zarr_dir / name / "zarr.json") for name in report.arrays}
@@ -1403,7 +1099,7 @@ class SharedMember:
     """One bundle of a shared store written whole by :func:`write_shared_store`."""
 
     bundle_id: str
-    source: ChunkSource
+    source: CodesSource
     dimensions: tuple[str, str, str] = _DIMENSIONS
     delta: bool = False
 
@@ -1440,32 +1136,6 @@ def write_shared_store(
     for report in reports:
         report.crc32 = crc32
     return {report.bundle_id: report for report in reports}
-
-
-def export_shared_bundles(
-    bundles: list[tuple[str, Path]],
-    zarr_dir: Path,
-    *,
-    dimensions: dict[str, tuple[str, str, str]] | None = None,
-    delta: bool = False,
-    index_location: str = DEFAULT_INDEX_LOCATION,
-) -> dict[str, BundleWrite]:
-    """The shared store of finished ``.xue`` bundles, ``(bundle id, path)``
-    in manifest order: :func:`write_shared_store` over their
-    :class:`ContainerSource`\\ s."""
-    return write_shared_store(
-        zarr_dir,
-        [
-            SharedMember(
-                bundle_id,
-                ContainerSource(binformat.read_bundle(path)),
-                (dimensions or {}).get(bundle_id, _DIMENSIONS),
-                delta,
-            )
-            for bundle_id, path in bundles
-        ],
-        index_location=index_location,
-    )
 
 
 # -- reading (NumPy only, for tests and inspection) -----------------------------

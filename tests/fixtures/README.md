@@ -695,7 +695,9 @@ Regenerate it with the change that meant it:
 
 `tests/prepare_bin_fixture.py` encodes the same cropped GRIB into per-variable
 bundles `tests/fixtures/generated/tmp2m.xue` and `generated/prate.xue` plus
-Python-decoded golden planes (`expected.<variable>.f000.bin`). The Rust tests
+golden planes (`expected.<variable>.f000.bin`), the codes those containers
+were written from, read back out of the shared store the same build writes
+by the NumPy reader (`zarrstore.read_frames`). The Rust tests
 in `rust/xue/tests/golden.rs` and the browser tests in
 `rust/xue-wasm/tests/web.rs` compare their decode output byte for byte
 against those planes.

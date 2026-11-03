@@ -21,6 +21,7 @@ from xuebuild.binconvert import (
     _bundle_chunks,
     _bundle_tile,
     _decimate_codes,
+    _store_source,
     _playback_bandwidth,
     build_metadata,
     encode_poster,
@@ -79,6 +80,10 @@ SHOWCASE_GRID = GridInfo(
 
 
 
+# Each container's codes, by path, for the stores written beside it.
+_CODES: dict[Path, zarrstore.CodesSource] = {}
+
+
 def write_v2_bundle(
     path: Path,
     metadata: dict,
@@ -112,23 +117,33 @@ def write_v2_bundle(
         groups=groups,
         chunks=chunks,
     )
-    binformat.read_bundle(path).verify_all()
+    # The stores beside the containers are written from these same codes,
+    # as a build writes them (`_codes_source`).
+    _CODES[path] = _store_source(variable_ids, hours, planes_by_hour, metadata, tile)
     return path.read_bytes()
+
+
+def _codes_source(path: Path) -> zarrstore.CodesSource:
+    """The codes the container at ``path`` was written from."""
+    return _CODES[path]
 
 def _export_shared_stores(bundles: list[dict]) -> None:
     """The run's shared stores, ``bundles.zarr`` and ``bundles.half.zarr``,
-    holding the store bundles in manifest order, derived from their finished
-    files the way a build derives them; every entry of a tier names its
-    store, under the store's one CRC-32."""
+    holding the store bundles in manifest order, written from the codes of
+    their containers the way a build writes them; every entry of a tier
+    names its store, under the store's one CRC-32."""
     by_id = {bundle["variable"]: bundle for bundle in bundles}
     order = [bundle_id for bundle_id in FIXTURE_BUNDLE_ORDER if bundle_id in FIXTURE_ZARR_BUNDLES]
-    full = zarrstore.export_shared_bundles(
-        [(bundle_id, WEB_FIXTURE_ROOT / f"{bundle_id}.xue") for bundle_id in order],
+    full = zarrstore.write_shared_store(
         WEB_FIXTURE_ROOT / zarrstore.shared_store_name(),
+        [zarrstore.SharedMember(bundle_id, _codes_source(WEB_FIXTURE_ROOT / f"{bundle_id}.xue")) for bundle_id in order],
     )
-    half = zarrstore.export_shared_bundles(
-        [(bundle_id, WEB_FIXTURE_ROOT / f"{bundle_id}.half.xue") for bundle_id in order],
+    half = zarrstore.write_shared_store(
         WEB_FIXTURE_ROOT / zarrstore.shared_store_name("half"),
+        [
+            zarrstore.SharedMember(bundle_id, _codes_source(WEB_FIXTURE_ROOT / f"{bundle_id}.half.xue"))
+            for bundle_id in order
+        ],
     )
     for bundle_id in order:
         by_id[bundle_id]["zarr"] = full[bundle_id].descriptor(WEB_FIXTURE_ROOT)
@@ -137,8 +152,11 @@ def _export_shared_stores(bundles: list[dict]) -> None:
 
 def _export_series(bundle_path: Path) -> dict:
     """The bundle's series companion beside it, and the manifest descriptor
-    that names it — derived from the finished file, as the map store is."""
-    report = zarrstore.export_series(bundle_path, zarrstore.series_store_path_for(bundle_path))
+    that names it — written from the bundle's codes with the `xue.delta`
+    chain, as a build writes it."""
+    report = zarrstore.write_store(
+        _codes_source(bundle_path), bundle_path.with_suffix(".series.zarr"), delta=True, series=True
+    )
     return report.descriptor(WEB_FIXTURE_ROOT)
 
 
@@ -434,8 +452,11 @@ def prepare_web_fixture() -> Path:
     # 1) store, so the readers' older path stays exercised too. The two options the
     # profile leaves open are what it exercises: the reader must accept
     # either index location and decode `xue.delta` as the PREVIOUS predictor.
-    zarrstore.export_bundle(
-        WEB_FIXTURE_ROOT / "tmp2m.xue", WEB_FIXTURE_ROOT / "tmp2m.delta.zarr", delta=True, index_location="start"
+    zarrstore.write_store(
+        _codes_source(WEB_FIXTURE_ROOT / "tmp2m.xue"),
+        WEB_FIXTURE_ROOT / "tmp2m.delta.zarr",
+        delta=True,
+        index_location="start",
     )
 
     # A real run writes scalars before vectors; the fixture mirrors that,

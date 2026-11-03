@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tests._support import requires_native
 from xuebuild import binformat
 
 from xuebuild.binconvert import (
@@ -467,8 +468,12 @@ class WindBundleTests(unittest.TestCase):
         # Both components use the same predictor and the same partition.
         self.assertEqual({v.predictor for v in variables}, {binformat.PREDICTOR_PREVIOUS})
 
+    @requires_native
     def test_two_variable_bundle_round_trips(self) -> None:
+        """Written by the reference writer, read back by the wheel's decoder."""
         from dataclasses import replace
+
+        import xue
 
         from xuebuild import zstdcli
 
@@ -495,22 +500,18 @@ class WindBundleTests(unittest.TestCase):
                 groups=groups,
                 chunks=chunks,
             )
-            bundle = binformat.read_bundle(path)
-            bundle.verify_all()
-            self.assertEqual(sorted(bundle.variable_ids.values()), ["ugrd10m", "vgrd10m"])
+            bundle = xue.Bundle.open(path)
+            self.assertEqual(
+                [variable["id"] for variable in bundle.metadata["variables"]], ["ugrd10m", "vgrd10m"]
+            )
             for hour in self.HOURS:
-                np.testing.assert_array_equal(bundle.decode_plane(1, hour), planes[hour]["ugrd10m"])
-                np.testing.assert_array_equal(bundle.decode_plane(2, hour), planes[hour]["vgrd10m"])
-            # A wind series is one chunk per group of one tile, per component,
-            # and those two chunks are adjacent bytes.
+                np.testing.assert_array_equal(bundle.decode(1, hour), planes[hour]["ugrd10m"])
+                np.testing.assert_array_equal(bundle.decode(2, hour), planes[hour]["vgrd10m"])
+            # A wind series is one chunk per group of one tile, per component.
             for column, row in ((0, 0), (7, 7), (5, 2)):
                 for numeric_id, component in ((1, "ugrd10m"), (2, "vgrd10m")):
                     expected = [int(planes[hour][component][row * 8 + column]) for hour in self.HOURS]
-                    self.assertEqual(bundle.decode_series(numeric_id, column, row).tolist(), expected)
-            tile = bundle.tiles.tile_of(0, 0)
-            u_span = bundle.chunk_span(bundle.chunk_position(0, tile, 1))
-            v_span = bundle.chunk_span(bundle.chunk_position(0, tile, 2))
-            self.assertEqual(u_span[1], v_span[0])
+                    self.assertEqual(np.asarray(bundle.series(numeric_id, column, row)).tolist(), expected)
 
     def test_manifest_admits_any_well_formed_bundle_name(self) -> None:
         def bundles(*, wind: bool) -> list[dict[str, object]]:

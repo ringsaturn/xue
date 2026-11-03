@@ -35,10 +35,10 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, registry_entry, requires_gdalinfo
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, registry_entry, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
-from xuebuild.binformat import Bundle, BundleError, read_bundle
+from xuebuild.binformat import BundleError, parse_metadata
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import GEFS_BASE_URL, _run_is_complete, gefsaero_object_url, model_object_url, resolve_run
 from xuebuild.gdal import _band_matches, raster_expression
@@ -416,7 +416,7 @@ class ConversionTests(unittest.TestCase):
         _, cls.report = REFERENCE.get()
 
     def _plane(self, variable_id: str, offset: int) -> tuple[np.ndarray, dict]:
-        bundle = read_bundle(self.output / f"{variable_id}.xue")
+        bundle = stored_bundle(self.output, variable_id)
         return bundle.decode_plane(1, offset), bundle.metadata
 
     def test_every_published_bundle_is_written_and_no_video(self) -> None:
@@ -469,9 +469,9 @@ class ConversionTests(unittest.TestCase):
 
     def test_the_half_tier_and_the_poster_follow(self) -> None:
         for variable_id in AEROSOL_VARIABLE_IDS:
-            self.assertTrue((self.output / f"{variable_id}.half.xue").is_file(), variable_id)
+            self.assertTrue(stored_bundle(self.output, f"{variable_id}.half").frame_count, variable_id)
             self.assertTrue((self.output / f"{variable_id}.poster.bin").is_file(), variable_id)
-        half = read_bundle(self.output / "pm25.half.xue")
+        half = stored_bundle(self.output, "pm25.half")
         self.assertEqual(half.metadata["variables"][0]["aerosol"], variable_spec("pm25").grib2_aerosol.metadata())
 
 
@@ -493,22 +493,15 @@ class MetadataValidationTests(ClassTempRoot, unittest.TestCase):
             work_root=cls.root / "work",
             model="gefsaero",
             bundle_ids=("pm25", "aod"),
-            container=True, zarr=False,
         )
-        cls.pm25 = read_bundle(output / "pm25.xue").metadata
-        cls.aod = read_bundle(output / "aod.xue").metadata
+        cls.pm25 = stored_bundle(output, "pm25").metadata
+        cls.aod = stored_bundle(output, "aod").metadata
 
     @staticmethod
     def _parse(metadata: dict) -> None:
         """The reader's metadata pass alone, on a document rather than a
-        file: what a container carries is bytes at an offset, and the pass
-        reads nothing else."""
-        bundle = Bundle.__new__(Bundle)
-        encoded = json.dumps(metadata).encode("utf-8")
-        bundle.data = encoded
-        bundle.metadata_offset = 0
-        bundle.metadata_length = len(encoded)
-        bundle._parse_metadata()
+        file."""
+        parse_metadata(metadata)
 
     def _edited(self, base: dict, edit) -> dict:
         metadata = copy.deepcopy(base)
@@ -614,7 +607,7 @@ class NativeParityTests(ParityCase, unittest.TestCase):
     and the aerosol block, on real GEFS-Aerosols records."""
 
     reference = REFERENCE
-    expect = ("gefsaero.2026091900/pm10dust.xue",)
+    expect = (store_path("gefsaero.2026091900", "pm10dust"),)
 
 
 if __name__ == "__main__":

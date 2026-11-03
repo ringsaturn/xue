@@ -11,16 +11,15 @@ from pathlib import Path
 
 import numpy as np
 
+from tests._support import requires_native
 from xuebuild import binformat, temporal, zstdcli
 from xuebuild.binformat import (
     COMPRESSION_NONE,
     COMPRESSION_ZSTD,
-    COMPRESSION_ZSTD_DICT,
     NO_DEPENDENCY,
     PREDICTOR_ANCHOR,
     PREDICTOR_PREVIOUS,
     PREDICTOR_RAW,
-    Bundle,
     ChunkPayload,
     GroupEntry,
     PlaneEntry,
@@ -40,6 +39,13 @@ from xuebuild.quantize import (
     QUALITY_PRECIPITATION,
     QUALITY_TEMPERATURE,
 )
+
+
+def read_back(path: Path):
+    """A container the writer made, opened by the wheel's decoder."""
+    import xue  # noqa: PLC0415 - the wheel; its tests skip without it
+
+    return xue.Bundle.open(path)
 
 
 def round_half_up(value: float) -> int:
@@ -305,7 +311,11 @@ def build_synthetic(path: Path) -> tuple[np.ndarray, np.ndarray]:
     return plane0, plane1
 
 
+@requires_native
 class BinFormatTests(unittest.TestCase):
+    """The v1 writer, read back through the wheel's decoder: every reader
+    rejection is the Rust decoder's to test (`rust/xue`)."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -313,13 +323,11 @@ class BinFormatTests(unittest.TestCase):
 
     def test_write_and_read_round_trip(self) -> None:
         plane0, plane1 = build_synthetic(self.path)
-        bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.width, 4)
-        self.assertEqual(bundle.height, 3)
+        bundle = read_back(self.path)
+        self.assertEqual((bundle.metadata["grid"]["width"], bundle.metadata["grid"]["height"]), (4, 3))
         self.assertEqual(bundle.frame_count, 2)
-        self.assertEqual(bundle.decode_plane(1, 0).tolist(), plane0.tolist())
-        self.assertEqual(bundle.decode_plane(1, 1).tolist(), plane1.tolist())
-        bundle.verify_all()
+        self.assertEqual(bundle.decode(1, 0).tolist(), plane0.tolist())
+        self.assertEqual(bundle.decode(1, 1).tolist(), plane1.tolist())
 
     def test_layout_offsets_and_alignment(self) -> None:
         build_synthetic(self.path)
@@ -337,112 +345,6 @@ class BinFormatTests(unittest.TestCase):
         self.assertEqual(header[10], 0)
         self.assertEqual(header[11], 0)
         self.assertEqual(len(data) % 8, 0)
-
-    def test_truncated_file_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = self.path.read_bytes()
-        with self.assertRaises(BundleError):
-            Bundle(data[:-4])
-        with self.assertRaises(BundleError):
-            Bundle(data[:40])
-
-    def test_oversized_offset_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        struct.pack_into("<Q", data, 40, len(data) * 2)  # indexOffset
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_nonzero_padding_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        metadata_length = struct.unpack_from("<Q", data, 32)[0]
-        index_offset = struct.unpack_from("<Q", data, 40)[0]
-        if index_offset == 80 + metadata_length:
-            self.skipTest("metadata happened to be aligned, no padding to corrupt")
-        data[80 + metadata_length] = 0xAA
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_trailing_garbage_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        if len(data) == struct.unpack_from("<Q", data, 16)[0]:
-            data.extend(b"\x00" * 8)
-            struct.pack_into("<Q", data, 16, len(data))
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_invalid_checksum_rejected(self) -> None:
-        build_synthetic(self.path)
-        bundle = binformat.read_bundle(self.path)
-        entry = bundle.entry_map[(1, 0)]
-        data = bytearray(self.path.read_bytes())
-        struct.pack_into("<I", data, self._entry_offset(data, 0) + 28, entry.crc32 ^ 0xFFFFFFFF)
-        corrupted = Bundle(bytes(data))
-        with self.assertRaises(BundleError):
-            corrupted.decode_plane(1, 0)
-
-    def _entry_offset(self, data: bytes, position: int) -> int:
-        index_offset = struct.unpack_from("<Q", data, 40)[0]
-        return index_offset + 16 + position * 40
-
-    def test_unknown_predictor_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        data[self._entry_offset(data, 0) + 1] = 9
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_zstd_dict_without_dictionary_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        data[self._entry_offset(data, 0) + 2] = COMPRESSION_ZSTD_DICT
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_cyclic_dependency_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        # Make f000 an ANCHOR depending on f001 while f001 depends on f000.
-        offset = self._entry_offset(data, 0)
-        data[offset + 1] = PREDICTOR_ANCHOR
-        struct.pack_into("<H", data, offset + 6, 1)
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_dependency_outside_group_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        offset = self._entry_offset(data, 1)
-        struct.pack_into("<H", data, offset + 8, 5)  # groupId of the ANCHOR entry
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
-
-    def test_unindexed_gap_rejected(self) -> None:
-        plane = np.arange(12, dtype=np.uint8)
-        payload = zstdcli.compress(plane.tobytes())
-        metadata = synthetic_metadata(frame_count=1)
-        write_bundle(self.path, metadata, [PlanePayload(raw_entry(0, plane, payload), payload)])
-        data = bytearray(self.path.read_bytes())
-        data_offset = struct.unpack_from("<Q", data, 56)[0]
-        # Move the payload 8 bytes later, leaving an unindexed gap.
-        grown = data[:data_offset] + b"\x00" * 8 + data[data_offset:]
-        entry_offset = self._entry_offset(grown, 0)
-        struct.pack_into("<Q", grown, entry_offset + 16, data_offset + 8)
-        struct.pack_into("<Q", grown, 16, len(grown))
-        with self.assertRaises(BundleError):
-            Bundle(bytes(grown))
-
-    def test_overlapping_payloads_rejected(self) -> None:
-        build_synthetic(self.path)
-        data = bytearray(self.path.read_bytes())
-        first = self._entry_offset(data, 0)
-        second = self._entry_offset(data, 1)
-        offset0 = struct.unpack_from("<Q", data, first + 16)[0]
-        struct.pack_into("<Q", data, second + 16, offset0)
-        with self.assertRaises(BundleError):
-            Bundle(bytes(data))
 
     def test_previous_predictor_round_trip(self) -> None:
         plane0 = np.arange(12, dtype=np.uint8)
@@ -470,8 +372,7 @@ class BinFormatTests(unittest.TestCase):
             synthetic_metadata(),
             [PlanePayload(raw_entry(0, plane0, payload0), payload0), PlanePayload(entry1, payload1)],
         )
-        bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.decode_plane(1, 1).tolist(), plane1.tolist())
+        self.assertEqual(read_back(self.path).decode(1, 1).tolist(), plane1.tolist())
 
     def test_uncompressed_payload_round_trip(self) -> None:
         plane = np.arange(12, dtype=np.uint8)
@@ -492,8 +393,7 @@ class BinFormatTests(unittest.TestCase):
             maximum_code=11,
         )
         write_bundle(self.path, synthetic_metadata(frame_count=1), [PlanePayload(entry, payload)])
-        bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.decode_plane(1, 0).tolist(), plane.tolist())
+        self.assertEqual(read_back(self.path).decode(1, 0).tolist(), plane.tolist())
 
 
 def mixed_axis_metadata(hours: list[int], **kwargs) -> dict:
@@ -526,7 +426,7 @@ def build_tiled(
     *,
     predictor: int = PREDICTOR_PREVIOUS,
     group_length: int = 3,
-) -> dict[int, dict[int, np.ndarray]]:
+) -> tuple[dict[int, dict[int, np.ndarray]], list[ChunkPayload]]:
     planes = tiled_planes()
     tiles = TileGeometry(TILED_WIDTH, TILED_HEIGHT, TILE_WIDTH, TILE_HEIGHT)
     variables, groups, raw = temporal.build_chunks(
@@ -549,7 +449,7 @@ def build_tiled(
         groups=groups,
         chunks=chunks,
     )
-    return planes
+    return planes, chunks
 
 
 class TileGeometryTests(unittest.TestCase):
@@ -589,49 +489,26 @@ class TileGeometryTests(unittest.TestCase):
 
 
 class TiledContainerTests(unittest.TestCase):
+    """The v2 writer's bytes. Reading them back is the wheel's decoder's,
+    and its rejections the Rust decoder's to test (`rust/xue`)."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "tiled.xue"
 
-    def read(self) -> Bundle:
-        return binformat.read_bundle(self.path)
-
-    def rewrite(self, mutate) -> bytes:
-        data = bytearray(self.path.read_bytes())
-        mutate(data)
-        return bytes(data)
-
-    def index_offset(self) -> int:
-        return struct.unpack_from("<Q", self.path.read_bytes(), 40)[0]
-
+    @requires_native
     def test_round_trip_planes_and_series(self) -> None:
         for predictor in (PREDICTOR_PREVIOUS, PREDICTOR_RAW):
             with self.subTest(predictor=predictor):
-                planes = build_tiled(self.path, predictor=predictor)
-                bundle = self.read()
-                self.assertEqual(bundle.container_version, 2)
-                bundle.verify_all()
+                planes, _chunks = build_tiled(self.path, predictor=predictor)
+                bundle = read_back(self.path)
                 for hour in TILED_HOURS:
-                    self.assertEqual(bundle.decode_plane(1, hour).tolist(), planes[hour][1].tolist())
+                    self.assertEqual(bundle.decode(1, hour).tolist(), planes[hour][1].tolist())
                 for row in range(TILED_HEIGHT):
                     for column in range(TILED_WIDTH):
                         expected = [int(planes[hour][1][row * TILED_WIDTH + column]) for hour in TILED_HOURS]
-                        self.assertEqual(bundle.decode_series(1, column, row).tolist(), expected)
-
-    def test_partial_tile_decode_matches_the_whole_plane(self) -> None:
-        planes = build_tiled(self.path)
-        bundle = self.read()
-        whole = bundle.decode_plane(1, 4).reshape(TILED_HEIGHT, TILED_WIDTH)
-        self.assertEqual(whole.tolist(), planes[4][1].reshape(TILED_HEIGHT, TILED_WIDTH).tolist())
-        for tile in range(bundle.tiles.count):
-            partial = bundle.decode_plane(1, 4, tiles=[tile]).reshape(TILED_HEIGHT, TILED_WIDTH)
-            row, column = bundle.tiles.origin(tile)
-            height, width = bundle.tiles.shape(tile)
-            self.assertEqual(
-                partial[row : row + height, column : column + width].tolist(),
-                whole[row : row + height, column : column + width].tolist(),
-            )
+                        self.assertEqual(bundle.series(1, column, row).tolist(), expected)
 
     def test_layout_offsets_and_index_size(self) -> None:
         build_tiled(self.path)
@@ -650,103 +527,22 @@ class TiledContainerTests(unittest.TestCase):
         self.assertEqual(header[8], 32 + 4 * variables + 4 * groups + 8 * chunks)
 
     def test_chunk_offsets_are_the_prefix_sums(self) -> None:
-        """Offsets are not stored, so a reader that computes them differently
-        from the writer would read a shifted file rather than fail."""
-        build_tiled(self.path)
-        bundle = self.read()
-        cursor = bundle.data_offset
-        for position, chunk in enumerate(bundle.chunks):
-            self.assertEqual(bundle.chunk_span(position), (cursor, cursor + chunk.compressed_length))
-            cursor += chunk.compressed_length
-        self.assertEqual(align8(cursor), len(bundle.data))
-
-    def test_a_whole_group_is_one_contiguous_span(self) -> None:
-        """The global-view guarantee: playing a frame costs the same single
-        range request v1 cost."""
-        build_tiled(self.path)
-        bundle = self.read()
-        for group in range(len(bundle.groups)):
-            spans = [
-                bundle.chunk_span(bundle.chunk_position(group, tile, 1))
-                for tile in range(bundle.tiles.count)
-            ]
-            for before, after in zip(spans, spans[1:]):
-                self.assertEqual(before[1], after[0])
-
-    def test_group_partition_rejections(self) -> None:
-        build_tiled(self.path)
-        start = self.index_offset() + 32 + 4  # one variable entry
-        for label, offset, packed in [
-            ("first group not at zero", 0, struct.pack("<HBB", 1, 3, 0)),
-            ("gap between groups", 4, struct.pack("<HBB", 4, 3, 0)),
-            ("overlapping groups", 4, struct.pack("<HBB", 2, 3, 0)),
-            ("empty group", 0, struct.pack("<HBB", 0, 0, 0)),
-            ("short last group", 8, struct.pack("<HBB", 6, 1, 0)),
-            ("reserved byte set", 0, struct.pack("<HBB", 0, 3, 1)),
-        ]:
-            with self.subTest(label):
-                def mutate(data, offset=offset, packed=packed):
-                    data[start + offset : start + offset + 4] = packed
-
-                with self.assertRaises(BundleError):
-                    Bundle(self.rewrite(mutate))
-
-    def test_index_header_rejections(self) -> None:
-        build_tiled(self.path)
-        index = self.index_offset()
-        for label, offset, packed in [
-            ("zero tile width", 8, struct.pack("<H", 0)),
-            ("tile wider than the grid", 8, struct.pack("<H", TILED_WIDTH + 1)),
-            ("tile taller than the grid", 10, struct.pack("<H", TILED_HEIGHT + 1)),
-            ("wrong group count", 12, struct.pack("<H", 9)),
-            ("wrong variable count", 14, struct.pack("<B", 2)),
-            ("uncompressed chunks", 15, struct.pack("<B", COMPRESSION_NONE)),
-            ("dictionary without one", 15, struct.pack("<B", COMPRESSION_ZSTD_DICT)),
-            ("wrong chunk count", 16, struct.pack("<I", 3)),
-            ("wrong magic", 0, b"IDX1"),
-            ("wrong index version", 4, struct.pack("<H", 1)),
-            ("wrong header size", 6, struct.pack("<H", 16)),
-            ("reserved word set", 20, struct.pack("<I", 1)),
-        ]:
-            with self.subTest(label):
-                def mutate(data, offset=offset, packed=packed):
-                    data[index + offset : index + offset + len(packed)] = packed
-
-                with self.assertRaises(BundleError):
-                    Bundle(self.rewrite(mutate))
-
-    def test_anchor_and_zero_predictors_rejected(self) -> None:
-        """A v2 chunk is decompressed whole, so an anchor would give one chunk
-        a second valid encoding."""
-        build_tiled(self.path)
-        variable = self.index_offset() + 32
-        for predictor in (PREDICTOR_ANCHOR, 3, 9):
-            with self.subTest(predictor=predictor):
-                def mutate(data, predictor=predictor):
-                    data[variable + 1] = predictor
-
-                with self.assertRaises(BundleError):
-                    Bundle(self.rewrite(mutate))
-
-    def test_corrupt_chunk_fails_its_crc(self) -> None:
-        build_tiled(self.path)
-        bundle = self.read()
-        start, _ = bundle.chunk_span(0)
-
-        def mutate(data):
-            data[start + 6] ^= 0xFF
-
-        mutated = self.rewrite(mutate)
-        with self.assertRaises((BundleError, ConversionError)):
-            Bundle(mutated).verify_all()
-
-    def test_trailing_garbage_and_size_rejected(self) -> None:
-        build_tiled(self.path)
+        """Offsets are not stored, so the writer must lay the payloads out
+        back to back from ``dataOffset`` in index order: a reader computes
+        each one as the prefix sum of the lengths before it."""
+        _planes, chunks = build_tiled(self.path)
         data = self.path.read_bytes()
-        with self.assertRaises(BundleError):
-            Bundle(data + b"\x00" * 8)
-        with self.assertRaises(BundleError):
-            Bundle(data[:-8])
+        header = struct.unpack_from("<8sHHIQQQQQQQQ", data, 0)
+        index = struct.unpack_from("<4sHHHHHBBIIQ", data, header[7])
+        groups, variables, count = index[5], index[6], index[8]
+        self.assertEqual(count, len(chunks))
+        table = header[7] + 32 + 4 * variables + 4 * groups
+        cursor = header[9]
+        for position, chunk in enumerate(chunks):
+            self.assertEqual(data[table + 8 * position : table + 8 * position + 8], chunk.entry.pack())
+            self.assertEqual(data[cursor : cursor + chunk.entry.compressed_length], chunk.payload)
+            cursor += chunk.entry.compressed_length
+        self.assertEqual(align8(cursor), len(data))
 
     def test_writer_rejects_a_broken_partition(self) -> None:
         planes = tiled_planes()
@@ -837,37 +633,24 @@ class SchemaV2Tests(unittest.TestCase):
         write_bundle(self.path, metadata, payloads)
         return planes
 
+    @requires_native
     def test_mixed_axis_round_trip(self) -> None:
         planes = self._write(mixed_axis_metadata(self.HOURS))
-        bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.frame_offsets, self.HOURS)
+        bundle = read_back(self.path)
+        self.assertEqual(list(bundle.frame_offsets), self.HOURS)
         for hour, plane in planes.items():
-            self.assertEqual(bundle.decode_plane(1, hour).tolist(), plane.tolist())
-        bundle.verify_all()
+            self.assertEqual(bundle.decode(1, hour).tolist(), plane.tolist())
 
+    @requires_native
     def test_previous_predictor_uses_the_axis_not_hour_minus_one(self) -> None:
         # The frame preceding f009 is f006 on this axis; a PREVIOUS entry must
         # carry exactly that hour.
         planes = self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: 6})
-        bundle = binformat.read_bundle(self.path)
-        self.assertEqual(bundle.decode_plane(1, 9).tolist(), planes[9].tolist())
-
-    def test_previous_predictor_sentinel_rejected(self) -> None:
-        self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: NO_DEPENDENCY})
-        with self.assertRaises(BundleError):
-            binformat.read_bundle(self.path)
-
-    def test_previous_predictor_wrong_dependency_rejected(self) -> None:
-        # frameOffset - 1 (f008) is not on the axis: the old uniform-axis
-        # interpretation must be rejected, not silently derived.
-        self._write(mixed_axis_metadata(self.HOURS), previous_dependency={9: 8})
-        with self.assertRaises(BundleError):
-            binformat.read_bundle(self.path)
+        self.assertEqual(read_back(self.path).decode(1, 9).tolist(), planes[9].tolist())
 
     def _reject(self, metadata: dict) -> None:
         with self.assertRaises(BundleError):
-            self._write(metadata)
-            binformat.read_bundle(self.path)
+            binformat.parse_metadata(metadata)
 
     def test_axis_validation(self) -> None:
         hours = self.HOURS
@@ -907,7 +690,7 @@ class SchemaV2Tests(unittest.TestCase):
         payload = zstdcli.compress(plane.tobytes())
         with self.assertRaises(BundleError):
             write_bundle(self.path, metadata, [PlanePayload(raw_entry(0, plane, payload), payload)])
-            binformat.read_bundle(self.path)
+            binformat.parse_metadata(metadata)
 
 
 class SourceAxisTests(unittest.TestCase):
@@ -1034,11 +817,6 @@ class TimeMetadataTests(unittest.TestCase):
 class ParameterMetadataTests(unittest.TestCase):
     """Schema v3: every variable carries its GRIB2 identity (docs/format.md)."""
 
-    def setUp(self) -> None:
-        self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.path = Path(self.directory.name) / "parameter.xue"
-
     def _metadata(self) -> dict:
         from xuebuild.binconvert import build_metadata, GridInfo
 
@@ -1046,22 +824,9 @@ class ParameterMetadataTests(unittest.TestCase):
                         longitude_step=0.25, latitude_step=-0.25)
         return build_metadata(datetime(2026, 8, 15, 6, tzinfo=UTC), [0, 1], grid, "quality", ("tmp2m",))
 
-    def _write(self, metadata: dict) -> None:
-        plane = np.zeros(12, dtype=np.uint8)
-        payload = zstdcli.compress(plane.tobytes())
-        binformat.write_bundle(
-            self.path,
-            metadata,
-            [
-                binformat.PlanePayload(entry=raw_entry(hour, plane, payload, group_id=hour), payload=payload)
-                for hour in (0, 1)
-            ],
-        )
-
     def _reject(self, metadata: dict) -> None:
-        self._write(metadata)
         with self.assertRaises(BundleError):
-            binformat.read_bundle(self.path)
+            binformat.parse_metadata(metadata)
 
     def test_encoder_emits_the_grib2_identity(self) -> None:
         metadata = self._metadata()
@@ -1077,8 +842,7 @@ class ParameterMetadataTests(unittest.TestCase):
                 "scaledValueOfFirstFixedSurface": 2,
             },
         )
-        self._write(metadata)
-        self.assertEqual(binformat.read_bundle(self.path).variable_ids, {1: "tmp2m"})
+        self.assertEqual(binformat.parse_metadata(metadata).variable_ids, {1: "tmp2m"})
 
     def test_derived_rate_declares_its_statistical_process(self) -> None:
         """ECMWF and sflux publish prate as a mean over the step, not the
@@ -1154,8 +918,7 @@ class ParameterMetadataTests(unittest.TestCase):
         variable = metadata["variables"][0]
         variable["band"] = dict(self.BAND)
         variable["producer"] = dict(self.PRODUCER)
-        self._write(metadata)
-        read = binformat.read_bundle(self.path)
+        read = binformat.parse_metadata(metadata)
         self.assertEqual(read.variable_ids, {1: "tmp2m"})
         self.assertEqual(read.metadata["variables"][0]["band"], self.BAND)
         self.assertEqual(read.metadata["variables"][0]["producer"], self.PRODUCER)
@@ -1207,8 +970,7 @@ class ParameterMetadataTests(unittest.TestCase):
         variable = metadata["variables"][0]
         self.assertEqual(variable["band"], self.BAND)
         self.assertEqual(list(variable), ["numericId", "id", "label", "unit", "parameter", "band", "quantization"])
-        self._write(metadata)
-        self.assertEqual(binformat.read_bundle(self.path).metadata["variables"][0]["band"], self.BAND)
+        self.assertEqual(binformat.parse_metadata(metadata).metadata["variables"][0]["band"], self.BAND)
         plain = build_metadata(
             datetime(2026, 8, 15, 6, tzinfo=UTC), [0, 1], grid, "quality", ("cref",),
             source=source_spec("cma"), unit_seconds=360,
