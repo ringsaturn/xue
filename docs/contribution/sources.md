@@ -230,7 +230,8 @@ WMO 0/20/102, entire atmosphere) and surface PM in µg/m³ (`pm25`, `pm10`,
 the species after the hour, so `VariableSpec.index_qualifier` is a second
 phrase, matched case-insensitively (Google capitalises `Dust Dry`).
 Codebooks are parameterised `log1p` (`PrecipitationCodebook`), pinned with
-the identities by `tests/fixtures/aerosol-registry.json`.
+the identities by the registry snapshots (`rust/xue/registry.json`,
+`web/src/registry.ts`).
 
 **cmadust.** CMA-CW v1.0/DUST, the China Meteorological Administration's
 sand and dust storm forecast for the WMO SDS-WAS Asian Center, exchanged
@@ -446,7 +447,7 @@ series-file build takes its grid from the file and holds it to
 100 000 top); `disrp` 1/192/1 under producer `xue`, a class codebook 0–5
 whose code 0 is "not evaluated";
 `upstream` 1/192/2 under producer `xue`, log codebook (1 km² trace, 100
-knee, 10⁷ top) — `tests/fixtures/river-registry.json`. The series carry
+knee, 10⁷ top) — pinned by the registry snapshots. The series carry
 no NaN: every series declares `_FillValue` −9999 and every river
 variable names it as its one `fill_values` entry with `value_range[0]` 0,
 so both encoders fold it to the codebook bottom twice over, through the
@@ -665,8 +666,8 @@ the rest of the repo must keep in mind:
   plane does not fit the shell's cell budget zoomed out. No eighth: it
   cost a quarter of a disk's bucket objects; the coarsest zoom plays the
   quarter.
-- `tests/fixtures/satellite-registry.json` pins variables and bundles across
-  the three implementations (`tests/prepare_satellite_registry.py`).
+- The registry snapshots (`rust/xue/registry.json`, `web/src/registry.ts`)
+  pin variables and bundles across the three implementations.
 
 ## Adding a source
 
