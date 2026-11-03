@@ -61,7 +61,8 @@ on:
 permissions:
   contents: read
   # scripts/successor_queued.sh lists this workflow's waiting runs, for a
-  # looping dispatch to yield to the next scheduled job.
+  # looping dispatch to yield to the next scheduled job. rounds.yml can only
+  # narrow what it is granted here.
   actions: read
 
 concurrency:
@@ -72,124 +73,21 @@ concurrency:
   # nothing new; a looping dispatch yields to it on its own.
   cancel-in-progress: false
 
-env:
-  # Convert through the native encoder (the xuepy wheel, a dependency of
-  # xuebuild) and insist on it: a round that quietly fell back to the
-  # subprocess pipeline would overrun its five minutes.
-  XUE_ENCODER: native
-
 jobs:
   publish:
     # Scheduled runs on forks would publish into a bucket they cannot reach.
     if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
-    runs-on: ubuntu-24.04
-    # One round is a few minutes; a round that has to fetch a window's
-    # worth of frames after an outage takes longer. A looping dispatch
-    # stops at twenty past the next hour on its own (UNTIL_MINUTE below);
-    # this is the backstop for a round that hangs.
-    timeout-minutes: 90
-    env:
-      ONCE: ${{ !inputs.loop }}
-      ROUND_MINUTES: ${{ inputs.round_minutes || '5' }}
-      # For a looping dispatch: run past the hour, and hand over to the next
-      # scheduled job as soon as it is waiting.
-      UNTIL_MINUTE: "80"
-      HANDOVER_CHECK: scripts/successor_queued.sh
-      # No edge-cache warm-up: a round is a handful of small objects
-      # replaced a few minutes later, and the shell's next poll fills the
-      # edge itself.
-      WARM: "false"
-      HOURS: ${{ inputs.hours || '4' }}
-      PROFILE: ${{ inputs.profile || 'balanced' }}
-      KEEP: ${{ inputs.keep || '2' }}
-      FORCE: ${{ inputs.force || false }}
-      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate inputs
-        run: |
-          set -euo pipefail
-          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
-            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
-          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
-            || { echo "::error::hours must be a positive integer"; exit 1; }
-          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
-            || { echo "::error::keep must be a positive integer"; exit 1; }
-
-      # The AWS CLI is preinstalled on the runner; R2 is its S3 endpoint.
-      # The credentials are step-scoped rather than job env, so third-party
-      # actions never see them; the read proves they work before the
-      # first round rather than at its upload.
-      - name: Check R2 credentials
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
-        run: |
-          for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
-            [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
-          done
-          aws --version
-          aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
-            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
-            || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          python-version: "3.14"
-
-      # No GDAL and no ffmpeg: the source ships no video, and the xuepy
-      # wheel carries the GDAL the native encoder extracts and inspects
-      # with (`xuepy>=0.20`; 0.15 was the first wheel that knew the source).
-      - name: Sync Python environment
-        run: uv sync
-
-      - name: Run the rounds
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        run: |
-          set -o pipefail
-          scripts/window_rounds.sh 2>&1 | tee rounds.log
-          status=$?
-          {
-            echo "### mrms rounds"
-            echo
-            echo '```'
-            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-
-      # The pointer is served with no-cache, so the edge revalidates it; a
-      # stale read here means the last flip has not propagated rather than
-      # failed, so it warns instead of failing an otherwise complete hour.
-      - name: Verify the live pointer
-        if: ${{ !inputs.dry_run }}
-        run: |
-          set -uo pipefail
-          [ -f web/public/data/latest-mrms.json ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
-          url="https://dataset.ringsaturn.me/xue/latest-mrms.json"
-          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
-          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
-            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
-          fi
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: publish-report-mrms
-          path: |
-            rounds.log
-            build-report.json
-            web/public/data/latest-mrms.json
-          retention-days: 14
-          if-no-files-found: ignore
+    uses: ./.github/workflows/rounds.yml
+    with:
+      model: mrms
+      hours: ${{ inputs.hours || '4' }}
+      round_minutes: ${{ inputs.round_minutes || '5' }}
+      loop: ${{ inputs.loop || false }}
+      # Insist on the wheel: a round that quietly fell back to the subprocess
+      # pipeline would overrun its five minutes.
+      encoder: native
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '2' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets: inherit
