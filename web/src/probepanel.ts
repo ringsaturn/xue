@@ -1697,3 +1697,6 @@ export function createProbePanel(deps: ProbePanelDeps) {
     },
   };
 }
+
+/** What the page holds of the probe panel. */
+export type ProbePanel = ReturnType<typeof createProbePanel>;
