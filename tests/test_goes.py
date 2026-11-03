@@ -24,10 +24,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen
+from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen, stored_bundle
 from tests.test_satellite import bucket, stage_ancillary
 from xuebuild import binconvert, observation
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     _fetch_satellite_run,
@@ -447,7 +446,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
-                container=True, zarr=False,
             )
 
     def test_the_bundles_are_the_east_disk_with_the_abi_band(self) -> None:
@@ -456,7 +454,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("GOES-EAST", "abi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T15:00:00Z")
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
-        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        bundle = stored_bundle(self.root / "out", "ir104")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 1, "frameCount": 2, "frameStep": 1})
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"], grid["firstLongitude"], grid["firstLatitude"]), (3000, 3000, -135.18, 59.98))
@@ -464,13 +462,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         variable = bundle.metadata["variables"][0]
         self.assertEqual(variable["band"], GOES_EAST.band("ir104").metadata())
         self.assertEqual(variable["band"]["satelliteNumber"], 273)
-        composite = read_bundle(self.root / "out" / "dustrgb.xue")
+        composite = stored_bundle(self.root / "out", "dustrgb")
         self.assertEqual([(v["numericId"], v["id"]) for v in composite.metadata["variables"]], [(1, "dustr"), (2, "dustg"), (3, "dustb")])
         self.assertEqual(composite.metadata["variables"][0]["producer"], {"id": "shachen", "version": DUST.version})
         self.assertEqual(composite.metadata["grid"], grid)
 
     def test_the_planes_are_kelvin_with_the_disk_at_the_bottom(self) -> None:
-        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        bundle = stored_bundle(self.root / "out", "ir104")
         codes = np.asarray(bundle.decode_plane(1, 1)).reshape(3000, 3000)
         # The fixture covers 66.07–61.77°W, 7.16–11.26°N: columns 1728–1836,
         # rows 1218–1321 of the disk grid; everything else is the fill.
@@ -482,7 +480,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         kelvin = PROFILES["quality"]["ir104"].decode(covered)
         self.assertLess(float(kelvin.min()), 240.0)
         self.assertGreater(float(kelvin.max()), 290.0)
-        guns = [np.asarray(read_bundle(self.root / "out" / "dustrgb.xue").decode_plane(number, 1)).reshape(3000, 3000) for number in (1, 2, 3)]
+        guns = [np.asarray(stored_bundle(self.root / "out", "dustrgb").decode_plane(number, 1)).reshape(3000, 3000) for number in (1, 2, 3)]
         for gun in guns:
             self.assertEqual((gun == 0).tolist() == (codes == 0).tolist(), True)
             self.assertGreaterEqual(int(gun[codes > 0].min()), 1)
@@ -497,17 +495,17 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for entry in manifest["bundles"]:
             bundle_id = entry["variable"]
             with self.subTest(bundle=bundle_id):
-                self.assertEqual([variant["path"] for variant in entry["variants"]], [f"{bundle_id}.{tier}.xue" for tier, _, _, _ in rungs])
+                self.assertEqual([variant["zarr"]["path"] for variant in entry["variants"]], [f"bundles.{tier}.zarr" for tier, _, _, _ in rungs])
                 self.assertEqual([variant["width"] for variant in entry["variants"]], [side for _, _, side, _ in rungs])
-                full = read_bundle(self.root / "out" / f"{bundle_id}.xue")
+                full = stored_bundle(self.root / "out", bundle_id)
                 for tier, factor, side, tile in rungs:
-                    rung = read_bundle(self.root / "out" / f"{bundle_id}.{tier}.xue")
-                    self.assertEqual((rung.width, rung.height, rung.tiles.tile_width, rung.tiles.tile_height), (side, side, tile, tile))
+                    rung = stored_bundle(self.root / "out", f"{bundle_id}.{tier}")
+                    self.assertEqual((rung.width, rung.height, rung.geometry.tile_width, rung.geometry.tile_height), (side, side, tile, tile))
                     self.assertEqual(rung.metadata["time"], full.metadata["time"])
                     offset = full.frame_offsets[-1]
                     expected = decimated_rung(np.asarray(full.decode_plane(1, offset)).reshape(3000, 3000), factor, bundle_id)
                     np.testing.assert_array_equal(np.asarray(rung.decode_plane(1, offset)).reshape(side, side), expected)
-        self.assertEqual([Path(variant["output"]).name for variant in self.report["variants"]], [f"{b}.{t}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for t, _, _, _ in rungs])
+        self.assertEqual([(variant["zarr"]["bundle"], Path(variant["zarr"]["path"]).name) for variant in self.report["variants"]], [(b, f"bundles.{t}.zarr") for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for t, _, _, _ in rungs])
 
     @requires_native_source("goeseast")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

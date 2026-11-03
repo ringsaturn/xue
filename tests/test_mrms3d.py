@@ -40,15 +40,15 @@ from tests._support import (
     assert_native_matches,
     requires_gdalinfo,
     requires_native_source,
+    stored_bundle,
 )
-from xuebuild import binconvert, binformat, fetch, grib2, stac
+from xuebuild import binconvert, fetch, grib2, stac, zarrstore
 from xuebuild.binconvert import (
     VOLUME_BUNDLES,
     bundle_input_ids,
     bundle_variable_ids,
     published_bundle_ids,
 )
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     MRMS_BASE_URL,
@@ -414,7 +414,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_one_volume_bundle_on_a_ten_minute_axis(self) -> None:
@@ -425,18 +424,18 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["refl3d"])
         self.assertNotIn("poster", manifest["bundles"][0])
         self.assertNotIn("video", manifest["bundles"][0])
-        self.assertEqual(sorted(path.name for path in (self.root / "out").iterdir()), ["manifest.json", "refl3d.half.xue", "refl3d.xue"])
-        bundle = read_bundle(self.root / "out" / "refl3d.xue")
+        self.assertEqual(sorted(path.name for path in (self.root / "out").iterdir()), ["bundles.half.zarr", "bundles.zarr", "manifest.json"])
+        bundle = stored_bundle(self.root / "out", "refl3d")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 3, "frameCount": 2, "frameStep": 1})
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (60, 28))
         self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.05, -0.05))
         self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (-81.725, 31.975))
-        # Two tiles of 50 across the 60-cell side, one temporal group.
-        self.assertEqual((bundle.frame_count, len(bundle.groups), bundle.tiles.count), (2, 1, 2))
+        # Two tiles of 50 across the 60-cell side.
+        self.assertEqual((bundle.frame_count, bundle.geometry.tile_count), (2, 2))
 
     def test_the_bundle_carries_every_level_in_order_with_its_identity(self) -> None:
-        bundle = read_bundle(self.root / "out" / "refl3d.xue")
+        bundle = stored_bundle(self.root / "out", "refl3d")
         variables = bundle.metadata["variables"]
         self.assertEqual([variable["id"] for variable in variables], list(REFLECTIVITY_VARIABLE_IDS))
         self.assertEqual([variable["numericId"] for variable in variables], list(range(1, 34)))
@@ -445,7 +444,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             self.assertEqual(variable["unit"], "dBZ")
             self.assertEqual(variable["quantization"], PROFILES["quality"]["cref"].metadata())
         self.assertEqual(variables[10]["label"], "Radar reflectivity at 3 km MSL")
-        self.assertEqual({entry.predictor for entry in bundle.variable_entries}, {binformat.PREDICTOR_RAW})
+        self.assertEqual(
+            {zarrstore.read_json(bundle.store / variable_id / "zarr.json")["attributes"]["xue"]["predictor"] for variable_id in REFLECTIVITY_VARIABLE_IDS},
+            {"raw"},
+        )
         # The storm is in the codes: echo near the ground over a fraction of
         # the window (the beams overshoot the low levels offshore), echo
         # aloft over most of it, tops near 17 km and nothing at 19.
@@ -464,10 +466,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
     def test_the_half_variant(self) -> None:
         [variant] = self.report["variants"]
         self.assertEqual((variant["width"], variant["height"]), (30, 14))
-        half = read_bundle(self.root / "out" / "refl3d.half.xue")
+        half = stored_bundle(self.root / "out", "refl3d.half")
         self.assertEqual(len(half.metadata["variables"]), 33)
-        self.assertEqual(half.tiles.count, 2)
-        full = read_bundle(self.root / "out" / "refl3d.xue")
+        self.assertEqual(half.geometry.tile_count, 2)
+        full = stored_bundle(self.root / "out", "refl3d")
         for numeric_id in (1, 21):
             np.testing.assert_array_equal(
                 np.asarray(half.decode_plane(numeric_id, 4)).reshape(14, 30),
@@ -487,7 +489,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "1400x700 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="mrms3d", skip_video=True, require_complete=True, expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("mrms3d", "the MRMS reflectivity volume")

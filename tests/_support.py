@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from xuebuild import binconvert, grib2, native
+from xuebuild import binconvert, binformat, grib2, native, zarrstore
 from xuebuild.gdal import inspect_grib_multi
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -173,35 +173,36 @@ def _json_differences(left: Any, right: Any, prefix: str = "") -> list[str]:
 
 def describe_difference(reference: Path, subject: Path, limit: int = 12) -> str:
     """Where two artifacts of a parity test differ, for the failure message:
-    the paths of a JSON document, a bundle's metadata and then its planes,
-    any other file's first differing byte."""
+    the paths of a JSON document (a store's group and array documents
+    included), a container's metadata and then its planes, any other file's
+    first differing byte. A container is read through the wheel's decoder,
+    which every parity test has installed."""
     import json  # noqa: PLC0415 - the failure path only
 
     import numpy as np  # noqa: PLC0415
-
-    from xuebuild.binformat import read_bundle, time_axis  # noqa: PLC0415
 
     try:
         if reference.suffix == ".json":
             found = _json_differences(json.loads(reference.read_text()), json.loads(subject.read_text()))
             return "; ".join(found[:limit]) + (f"; … {len(found)} in all" if len(found) > limit else "")
         if reference.suffix == ".xue":
-            left, right = read_bundle(reference), read_bundle(subject)
+            import xue  # noqa: PLC0415
+
+            left, right = xue.Bundle.open(reference), xue.Bundle.open(subject)
             found = _json_differences(left.metadata, right.metadata)
             if found:
                 return "metadata " + "; ".join(found[:limit]) + (f"; … {len(found)} in all" if len(found) > limit else "")
-            _, offsets = time_axis(left.metadata)
-            for variable in left.metadata["variables"]:
-                numeric_id = int(variable["numericId"])
-                for offset in offsets:
-                    one = np.asarray(left.decode_plane(numeric_id, offset))
-                    other = np.asarray(right.decode_plane(numeric_id, offset))
+            names = {variable["numericId"]: variable.get("id") for variable in left.metadata["variables"]}
+            for numeric_id in left.variable_ids:
+                for offset in left.frame_offsets:
+                    one = np.asarray(left.decode(numeric_id, offset))
+                    other = np.asarray(right.decode(numeric_id, offset))
                     if np.array_equal(one, other):
                         continue
                     where = np.flatnonzero(one != other)
                     samples = ", ".join(f"[{index}] {one[index]} != {other[index]}" for index in where[:5])
                     found.append(
-                        f"{variable.get('id', numeric_id)} frame {offset}: {where.size} of {one.size} codes differ ({samples})"
+                        f"{names.get(numeric_id, numeric_id)} frame {offset}: {where.size} of {one.size} codes differ ({samples})"
                     )
                     if len(found) >= limit:
                         return "planes " + "; ".join(found)
@@ -224,12 +225,10 @@ def assert_native_matches(
     **options: Any,
 ) -> None:
     """Build ``inputs`` through the wheel into ``subject`` the way an
-    observation round builds (no video, the manifest beside the bundles)
+    observation round builds (no video, the manifest beside the stores)
     and hold it to the reference build in ``reference``, byte for byte.
-    The container alone unless ``options`` say otherwise, as the reference
-    builds the source tests compare against are made."""
-    options.setdefault("container", True)
-    options.setdefault("zarr", False)
+    ``options`` must match the reference build's: the shared stores alone
+    unless they say otherwise, as production publishes."""
     with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
         report = native.convert_bin(
             inputs, subject, model=model, skip_video=True, manifest_path=subject / "manifest.json", **options
@@ -285,6 +284,54 @@ def registry_entry(variable_id: str, **extra: Any) -> dict:
     }
 
 
+class StoredBundle:
+    """One bundle read back out of a store a build wrote, addressed the way
+    a container is: planes by the variable's ``numericId`` and the frame's
+    offset on the axis. What the source tests check the published codes
+    with; :func:`stored_bundle` opens one."""
+
+    def __init__(self, store: Path, bundle_id: str) -> None:
+        self.store = store
+        self.bundle_id = bundle_id
+        self.metadata = zarrstore.bundle_metadata(store, bundle_id)
+        grid = self.metadata["grid"]
+        self.width, self.height = int(grid["width"]), int(grid["height"])
+        self.unit_seconds, self.frame_offsets = binformat.time_axis(self.metadata)
+        self.frame_count = len(self.frame_offsets)
+        self.variable_ids = {int(variable["numericId"]): variable["id"] for variable in self.metadata["variables"]}
+        first = self.variable_ids[min(self.variable_ids)]
+        #: The array layout (tile, time chunk) the store cut the bundle with.
+        self.geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / first / "zarr.json"))
+
+    def decode_plane(self, numeric_id: int, frame_offset: int) -> Any:
+        """One frame of one variable as a flat plane of codes."""
+        frame = self.frame_offsets.index(frame_offset)
+        return zarrstore.read_plane(self.store, self.variable_ids[numeric_id], frame).ravel()
+
+    def decode_series(self, numeric_id: int, column: int, row: int) -> Any:
+        """One cell's code on every frame, in axis order."""
+        import numpy as np  # noqa: PLC0415
+
+        return np.array([plane[row, column] for plane in zarrstore.read_frames(self.store, self.variable_ids[numeric_id])], dtype=np.uint8)
+
+
+def stored_bundle(directory: Path, name: str) -> StoredBundle:
+    """The bundle a build wrote into ``directory``, named the way its
+    container would be without the suffix: ``tmp2m`` reads the shared
+    store ``bundles.zarr``, ``tmp2m.half`` the rung's ``bundles.half.zarr``."""
+    bundle_id, _, tier = name.partition(".")
+    return StoredBundle(directory / zarrstore.shared_store_name(tier or None), bundle_id)
+
+
+def store_path(run: str, name: str, array: str | None = None) -> str:
+    """The relative path of a bundle's array document in a run's shared
+    store, for a parity test's ``expect``: ``store_path("gfs.2026081406",
+    "wind10m.half", "ugrd10m")``. ``array`` defaults to the bundle id, the
+    array a scalar bundle stores its one variable in."""
+    bundle_id, _, tier = name.partition(".")
+    return f"{run}/{zarrstore.shared_store_name(tier or None)}/{array or bundle_id}/zarr.json"
+
+
 class TempRoot:
     """A fresh scratch directory per test, as ``self.root``, removed after.
 
@@ -330,12 +377,10 @@ def convert_run(
 ) -> tuple[Path, dict]:
     """A whole run as a scheduled build writes it: the run directory under
     ``root``, its manifest inside, the live pointer beside it. Returns
-    ``root`` and the report. The container alone unless ``options`` say
-    otherwise: the source tests read the bundles back."""
+    ``root`` and the report. The shared stores alone unless ``options``
+    say otherwise, as production publishes; the source tests read the
+    bundles back out of them (:func:`stored_bundle`)."""
     from xuebuild.sources import source_spec  # noqa: PLC0415
-
-    options.setdefault("container", True)
-    options.setdefault("zarr", False)
 
     run_directory = root / f"{model}.{run_id}"
     report = implementation.convert_bin(

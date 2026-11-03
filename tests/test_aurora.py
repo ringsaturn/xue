@@ -17,9 +17,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import aurora, binconvert
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import _fetch_aurora_run, latest_aurora_slot, observation_window_start
 from xuebuild.model import GfsRun
@@ -274,7 +273,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
@@ -284,7 +282,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("SWPC-AURORA", "ovation-aurora-1p00"))
         self.assertEqual(manifest["runTime"], "2026-10-03T04:00:00Z")
         self.assertEqual(manifest["forecastHours"], 1)
-        bundle = read_bundle(self.root / "out" / "aurora.xue")
+        bundle = stored_bundle(self.root / "out", "aurora")
         # 04:40, 04:45 and 04:55 from the 04:00 run: offsets listed in
         # five-minute units, since 04:50 is not there.
         self.assertEqual(
@@ -299,8 +297,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(variable["parameter"]["discipline"], 3)
         self.assertEqual(variable["parameter"]["parameterCategory"], 192)
         self.assertEqual(variable["quantization"]["type"], "linear")
-        # The gap at 04:50 ends a temporal group: two groups for three frames.
-        self.assertEqual((bundle.frame_count, len(bundle.groups)), (3, 2))
+        self.assertEqual(bundle.frame_count, 3)
         # Decoding a plane gives the codebook's own half-percent grid.
         values = bundle.decode_plane(1, 8)
         self.assertGreater(float(max(values)), 0.0)
@@ -311,7 +308,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "360x181 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="aurora", skip_video=True, require_complete=True, expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("aurora")

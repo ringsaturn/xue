@@ -32,10 +32,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.efas import series as efas_series
 from xuebuild.efas.series import Message, Window, return_period_class
 from xuebuild.errors import ConversionError, DownloadError
@@ -337,12 +336,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     work_root=cls.root / f"work-{source_id}",
                     run_id=run_id,
                     manifest_path=cls.root / source_id / "manifest.json",
-                    container=True,
-                    zarr=False,
                 )
 
     def bundle(self, source_id: str, name: str):
-        return read_bundle(self.root / source_id / f"{name}.xue")
+        return stored_bundle(self.root / source_id, name)
 
     def plane(self, source_id: str, name: str, hour: int) -> np.ndarray:
         return np.asarray(self.bundle(source_id, name).decode_plane(1, hour)).reshape(HEIGHT, WIDTH)
@@ -359,7 +356,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual(manifest["runTime"], run_time.strftime("%Y-%m-%dT%H:%M:%SZ"))
                 self.assertEqual(manifest["forecastHours"], 120)
                 validate_bin_manifest(manifest, expected_hours=120, require_core_variables=True)
-                self.assertFalse((self.root / source_id / "dis06.half.xue").exists(), "no ladder")
+                self.assertFalse((self.root / source_id / "bundles.half.zarr").exists(), "no ladder")
 
     def test_the_time_axis_and_the_grid(self) -> None:
         for source_id in RUNS:
@@ -442,8 +439,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     skip_video=True,
                     require_complete=True,
                     expected_hours=120,
-                    container=True,
-                    zarr=False,
                 )
 
     @requires_native_source("efas")

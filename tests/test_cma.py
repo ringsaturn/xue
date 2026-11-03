@@ -38,9 +38,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, cmaarchive, fetch, observation
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     CMA_ARCHIVE_VARIABLE,
@@ -467,7 +466,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_the_window_is_a_six_minute_axis_from_the_hour(self) -> None:
@@ -478,7 +476,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(manifest["runTime"], "2026-09-16T09:00:00Z")
         self.assertEqual(manifest["forecastHours"], 1)
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
-        bundle = read_bundle(self.root / "out" / "cref.xue")
+        bundle = stored_bundle(self.root / "out", "cref")
         # 09:00, 09:06 and 09:18 from the 09:00 run: offsets listed, since
         # 09:12 is not there. Two 64-cell tiles across two rows.
         self.assertEqual(
@@ -492,9 +490,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         variable = bundle.metadata["variables"][0]
         self.assertEqual(variable["unit"], "dBZ")
         self.assertEqual((variable["parameter"]["parameterCategory"], variable["parameter"]["parameterNumber"]), (16, 5))
-        # The gap at 09:12 ends a temporal group: two groups for three frames.
-        self.assertEqual((bundle.frame_count, len(bundle.groups), bundle.tiles.count), (3, 2, 4))
-        for name in ("cref.half.xue", "cref.poster.bin"):
+        self.assertEqual((bundle.frame_count, bundle.geometry.tile_count), (3, 4))
+        for name in ("bundles.half.zarr/cref/zarr.json", "cref.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_a_complete_build_wants_the_production_grid(self) -> None:
@@ -502,7 +499,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "1792x1024 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="cma", skip_video=True, require_complete=True, expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("cma")

@@ -54,9 +54,8 @@ from xml.sax.saxutils import escape
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen, stored_bundle
 from xuebuild import binconvert, observation
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     _fetch_satellite_run,
@@ -1425,7 +1424,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
-                container=True, zarr=False,
             )
 
     def test_the_bundle_is_the_disk_grid_with_the_band_beside_the_parameter(self) -> None:
@@ -1434,7 +1432,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI", "ahi-fldk-0p04"))
         self.assertEqual(manifest["runTime"], "2026-09-17T03:00:00Z")
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
-        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        bundle = stored_bundle(self.root / "out", "ir104")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (3000, 3000))
@@ -1445,7 +1443,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(variable["unit"], "K")
         self.assertEqual(variable["band"], HIMAWARI.band("ir104").metadata())
         self.assertEqual(variable["parameter"]["typeOfFirstFixedSurface"], 8)
-        self.assertEqual(bundle.tiles.count, 47 * 47)
+        self.assertEqual(bundle.geometry.tile_count, 47 * 47)
 
     def test_the_composite_is_three_guns_with_the_producer_beside_the_parameter(self) -> None:
         """The Dust RGB bundle: the three guns as variables 1, 2 and 3 in
@@ -1459,9 +1457,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertNotIn("video", entry)
         self.assertEqual(len(entry["variants"]), 2)
         self.assertFalse((self.root / "out" / "dustrgb.poster.bin").exists())
-        bundle = read_bundle(self.root / "out" / "dustrgb.xue")
+        bundle = stored_bundle(self.root / "out", "dustrgb")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
-        self.assertEqual(bundle.metadata["grid"], read_bundle(self.root / "out" / "ir104.xue").metadata["grid"])
+        self.assertEqual(bundle.metadata["grid"], stored_bundle(self.root / "out", "ir104").metadata["grid"])
         variables = bundle.metadata["variables"]
         self.assertEqual([(variable["numericId"], variable["id"]) for variable in variables], [(1, "dustr"), (2, "dustg"), (3, "dustb")])
         for number, variable in enumerate(variables, start=1):
@@ -1472,10 +1470,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             self.assertEqual(parameter["typeOfFirstFixedSurface"], 8)
             self.assertEqual(variable["producer"], {"id": "shachen", "version": DUST.version})
             self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
-        self.assertEqual(bundle.tiles.count, 47 * 47)
+        self.assertEqual(bundle.geometry.tile_count, 47 * 47)
         # Code 0 is no data in every gun exactly where the channel has none,
         # and inside the disk every gun is a value in 1..251.
-        ir104 = np.asarray(read_bundle(self.root / "out" / "ir104.xue").decode_plane(1, 0)).reshape(3000, 3000)
+        ir104 = np.asarray(stored_bundle(self.root / "out", "ir104").decode_plane(1, 0)).reshape(3000, 3000)
         guns = [np.asarray(bundle.decode_plane(number, 0)).reshape(3000, 3000) for number in (1, 2, 3)]
         for codes in guns:
             self.assertEqual((codes == 0).tolist() == (ir104 == 0).tolist(), True)
@@ -1508,8 +1506,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         entry = next(bundle for bundle in manifest["bundles"] if bundle["variable"] == "truecolor")
         self.assertNotIn("poster", entry)
         self.assertEqual(len(entry["variants"]), 2)
-        bundle = read_bundle(self.root / "out" / "truecolor.xue")
-        self.assertEqual(bundle.metadata["grid"], read_bundle(self.root / "out" / "ir104.xue").metadata["grid"])
+        bundle = stored_bundle(self.root / "out", "truecolor")
+        self.assertEqual(bundle.metadata["grid"], stored_bundle(self.root / "out", "ir104").metadata["grid"])
         variables = bundle.metadata["variables"]
         self.assertEqual([(variable["numericId"], variable["id"]) for variable in variables], [(1, "truer"), (2, "trueg"), (3, "trueb")])
         for number, variable in zip((7, 8, 9), variables):
@@ -1541,9 +1539,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertNotIn("poster", entry)
         self.assertNotIn("video", entry)
         self.assertEqual(len(entry["variants"]), 2)
-        bundle = read_bundle(self.root / "out" / "dustcf.xue")
+        bundle = stored_bundle(self.root / "out", "dustcf")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
-        self.assertEqual(bundle.metadata["grid"], read_bundle(self.root / "out" / "ir104.xue").metadata["grid"])
+        self.assertEqual(bundle.metadata["grid"], stored_bundle(self.root / "out", "ir104").metadata["grid"])
         (variable,) = bundle.metadata["variables"]
         self.assertEqual((variable["numericId"], variable["id"], variable["unit"]), (1, "dustcf", "1"))
         self.assertEqual(list(variable), ["numericId", "id", "label", "unit", "parameter", "producer", "quantization"])
@@ -1551,7 +1549,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"], parameter["typeOfFirstFixedSurface"]), (3, 192, 4, 8))
         self.assertEqual(variable["producer"], {"id": "shachen", "version": DEBRA.version})
         self.assertEqual(variable["quantization"], PROFILES["quality"]["dustr"].metadata())
-        ir104 = np.asarray(read_bundle(self.root / "out" / "ir104.xue").decode_plane(1, 0)).reshape(3000, 3000)
+        ir104 = np.asarray(stored_bundle(self.root / "out", "ir104").decode_plane(1, 0)).reshape(3000, 3000)
         codes = np.asarray(bundle.decode_plane(1, 0)).reshape(3000, 3000)
         self.assertTrue((codes[ir104 == 0] == 0).all())
         inside = codes[ir104 > 0]
@@ -1564,7 +1562,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
 
     def test_the_planes_are_kelvin_with_the_uncovered_disk_at_the_bottom(self) -> None:
-        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        bundle = stored_bundle(self.root / "out", "ir104")
         codes = np.asarray(bundle.decode_plane(1, 0)).reshape(3000, 3000)
         kelvin = PROFILES["quality"]["ir104"].decode(codes)
         # The two tiles cover 140.7–162.9°E, 20.7–32.5°N: columns 1500–2055,
@@ -1577,7 +1575,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         inside = kelvin[700:970, 1520:2040][covered > 0]
         self.assertLess(float(inside.min()), 200.0)
         self.assertGreater(float(inside.max()), 295.0)
-        for name in ("ir104.half.xue", "ir104.poster.bin"):
+        for name in ("bundles.half.zarr/ir104/zarr.json", "ir104.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_the_ladder_is_half_and_quarter_in_that_order(self) -> None:
@@ -1595,22 +1593,22 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for entry in manifest["bundles"]:
             bundle_id = entry["variable"]
             with self.subTest(bundle=bundle_id):
-                self.assertEqual([variant["path"] for variant in entry["variants"]], [f"{bundle_id}.{tier}.xue" for tier, _, _, _ in rungs])
+                self.assertEqual([variant["zarr"]["path"] for variant in entry["variants"]], [f"bundles.{tier}.zarr" for tier, _, _, _ in rungs])
                 self.assertEqual([(variant["width"], variant["height"]) for variant in entry["variants"]], [(side, side) for _, _, side, _ in rungs])
                 self.assertTrue(all(variant["bandwidth"] > 0 for variant in entry["variants"]))
                 self.assertGreater(entry["variants"][0]["byteLength"], entry["variants"][1]["byteLength"])
-                full = read_bundle(self.root / "out" / f"{bundle_id}.xue")
+                full = stored_bundle(self.root / "out", bundle_id)
                 for tier, factor, side, tile in rungs:
-                    rung = read_bundle(self.root / "out" / f"{bundle_id}.{tier}.xue")
+                    rung = stored_bundle(self.root / "out", f"{bundle_id}.{tier}")
                     grid = rung.metadata["grid"]
                     self.assertEqual((grid["width"], grid["height"]), (side, side))
                     self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.04 * factor, -0.04 * factor))
                     self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (80.72, 59.98))
-                    self.assertEqual((rung.tiles.tile_width, rung.tiles.tile_height), (tile, tile))
+                    self.assertEqual((rung.geometry.tile_width, rung.geometry.tile_height), (tile, tile))
                     # 1500 / 32 and 750 / 16 are both 46.875: the same
                     # 47 x 47 tiles as the full tier, so tile n covers the
                     # same ground at every rung.
-                    self.assertEqual(rung.tiles.count, full.tiles.count)
+                    self.assertEqual(rung.geometry.tile_count, full.geometry.tile_count)
                     self.assertEqual(rung.metadata["time"], full.metadata["time"])
                     self.assertEqual(rung.metadata["variables"], full.metadata["variables"])
                     for numeric_id in full.variable_ids:
@@ -1620,10 +1618,11 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         # The build report lists the rungs per bundle, ascending, in the
         # bundles' own order.
         self.assertEqual(
-            [Path(variant["output"]).name for variant in self.report["variants"]],
-            [f"{bundle_id}.{tier}.xue" for bundle_id in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
+            [(variant["zarr"]["bundle"], Path(variant["zarr"]["path"]).name) for variant in self.report["variants"]],
+            [(bundle_id, f"bundles.{tier}.zarr") for bundle_id in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for tier, _, _, _ in rungs],
         )
-        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.xue")), sorted(f"{b}{s}.xue" for b in ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor") for s in ("", ".half", ".quarter")))
+        self.assertEqual(sorted(path.name for path in (self.root / "out").glob("*.zarr")), ["bundles.half.zarr", "bundles.quarter.zarr", "bundles.zarr"])
+        self.assertEqual(list((self.root / "out").glob("*.xue")), [])
         self.assertEqual(source_spec("gfs").variant_factors, (2,))
 
     def test_a_crop_past_the_antimeridian_reads_the_disk_s_eastern_columns(self) -> None:
@@ -1636,14 +1635,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_variants=True,
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
-                container=True, zarr=False,
             )
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"])
-        grid = read_bundle(self.root / "crop" / "ir104.xue").metadata["grid"]
+        grid = stored_bundle(self.root / "crop", "ir104").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (376, 252))
         self.assertEqual(grid["firstLongitude"], -175.0)
         self.assertFalse(grid["wrapLongitude"])
-        self.assertEqual(read_bundle(self.root / "crop" / "dustrgb.xue").metadata["grid"], grid)
+        self.assertEqual(stored_bundle(self.root / "crop", "dustrgb").metadata["grid"], grid)
 
     def test_a_restricted_build_reads_only_the_bundles_it_was_asked_for(self) -> None:
         """``--bundles ir104`` reads the channel's series alone — the guns'
@@ -1654,17 +1652,19 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 report = binconvert.convert_bin(
                     self.inputs, self.root / "only-ir", model="himawari", skip_video=True, skip_variants=True,
                     work_root=self.root / "only-ir-work", bundle_ids=("ir104",),
-                    container=True, zarr=False,
                 )
             self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104"])
             self.assertEqual([str(call.args[0]) for call in inspected.call_args_list], [str(observation.netcdf_dataset(self.inputs / "himawari.2026091703.ir104.nc", "ir104"))])
             report = binconvert.convert_bin(
                 self.inputs, self.root / "only-dust", model="himawari", skip_video=True, skip_variants=True,
                 work_root=self.root / "only-dust-work", bundle_ids=("dustrgb",),
-                container=True, zarr=False,
             )
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["dustrgb"])
-        self.assertTrue(filecmp.cmp(self.root / "only-dust" / "dustrgb.xue", self.root / "out" / "dustrgb.xue", shallow=False))
+        alone, whole = stored_bundle(self.root / "only-dust", "dustrgb"), stored_bundle(self.root / "out", "dustrgb")
+        self.assertEqual(alone.metadata, whole.metadata)
+        for variable_id in whole.variable_ids.values():
+            for relative in ("zarr.json", "c/0/0/0"):
+                self.assertTrue(filecmp.cmp(alone.store / variable_id / relative, whole.store / variable_id / relative, shallow=False), f"{variable_id}/{relative}")
 
     @requires_native_source("himawari", "the himawari source's bundle set")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
@@ -1860,7 +1860,6 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
                 expected_hours=3,
-                container=True, zarr=False,
             )
 
     def test_the_bundles_are_the_box_with_the_disk_s_band(self) -> None:
@@ -1874,11 +1873,11 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
         manifest = json.loads((self.root / "out" / "manifest.json").read_text(encoding="utf-8"))
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
         self.assertEqual((manifest["model"], manifest["product"]), ("HIMAWARI-JP", "ahi-japan-0p01"))
-        bundle = read_bundle(self.root / "out" / "ir104.xue")
+        bundle = stored_bundle(self.root / "out", "ir104")
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"], grid["firstLongitude"], grid["firstLatitude"]), (2600, 2200, 122.005, 45.995))
         self.assertEqual(bundle.metadata["variables"][0]["band"], HIMAWARI.band("ir104").metadata())
-        self.assertEqual(bundle.tiles.count, 41 * 35)
+        self.assertEqual(bundle.geometry.tile_count, 41 * 35)
 
     @requires_native_source("himawarijp")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

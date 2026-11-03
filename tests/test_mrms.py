@@ -42,7 +42,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source, stored_bundle
 from xuebuild import binconvert, cli, fetch, grib2
 from xuebuild.binconvert import (
     BlockReduction,
@@ -55,7 +55,6 @@ from xuebuild.binconvert import (
     crop_grid,
     published_bundle_ids,
 )
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import (
     MRMS_BASE_URL,
@@ -855,8 +854,6 @@ class ShowcaseCaseTests(DownloadTests):
                 output_root=self.root / "out",
                 raw_root=self.root / "raw",
                 work_root=self.root / "work",
-                container=True,
-                zarr=False,
             )
 
     def test_a_case_is_a_cropped_window_of_the_mosaic(self) -> None:
@@ -884,7 +881,7 @@ class ShowcaseCaseTests(DownloadTests):
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["cref"])
         self.assertNotIn("video", manifest["bundles"][0])
         self.assertNotIn("variants", manifest["bundles"][0])
-        bundle = read_bundle(self.root / "out" / "showcase" / "mrms-window" / "cref.xue")
+        bundle = stored_bundle((self.root / "out" / entry["manifestPath"]).parent, "cref")
         self.assertEqual(bundle.metadata["time"]["unitSeconds"], 120)
         self.assertEqual((bundle.metadata["time"]["firstFrameOffset"], bundle.metadata["time"]["frameStep"], bundle.metadata["time"]["frameCount"]), (0, 1, 2))
         self.assertEqual((bundle.metadata["grid"]["width"], bundle.metadata["grid"]["longitudeStep"]), (27, 0.02))
@@ -916,7 +913,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_the_window_is_a_two_minute_axis_on_the_thinned_grid(self) -> None:
@@ -926,7 +922,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("NOAA-MRMS", "conus-cref"))
         self.assertEqual(manifest["runTime"], "2026-09-13T00:00:00Z")
         self.assertEqual(manifest["forecastHours"], 1)
-        bundle = read_bundle(self.root / "out" / "cref.xue")
+        bundle = stored_bundle(self.root / "out", "cref")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 120, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 1})
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (80, 80))
@@ -936,18 +932,18 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         parameter = bundle.metadata["variables"][0]["parameter"]
         self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (0, 16, 5))
         self.assertEqual(bundle.metadata["variables"][0]["unit"], "dBZ")
-        rate = read_bundle(self.root / "out" / "prate.xue")
+        rate = stored_bundle(self.root / "out", "prate")
         self.assertEqual(rate.metadata["variables"][0]["parameter"]["parameterCategory"], 1)
         self.assertEqual(rate.metadata["variables"][0]["unit"], "mm/h")
         self.assertEqual(rate.metadata["time"]["unitSeconds"], 120)
-        # Two frames, one temporal group, a 2 x 2 tile grid on the 80-cell side.
-        self.assertEqual((bundle.frame_count, len(bundle.groups), bundle.tiles.count), (2, 1, 4))
+        # Two frames, a 2 x 2 tile grid on the 80-cell side.
+        self.assertEqual((bundle.frame_count, bundle.geometry.tile_count), (2, 4))
         codes = np.asarray(bundle.decode_plane(1, 0)).reshape(80, 80)
         self.assertGreater(codes.max(), 60)
         self.assertGreater((codes == 0).sum(), 3000)
         # The quality index keeps the MRMS-local identity, there being no WMO
         # one, and codes "no coverage" 0 and an index of 0 as 1.
-        quality = read_bundle(self.root / "out" / "rqi.xue")
+        quality = stored_bundle(self.root / "out", "rqi")
         parameter = quality.metadata["variables"][0]["parameter"]
         self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (209, 8, 0))
         self.assertEqual(quality.metadata["variables"][0]["unit"], "1")
@@ -959,7 +955,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(set(np.unique(codes).tolist()), {0, 1, 2, 3, 4, 5})
         self.assertGreater((codes == 0).sum(), 1000)
         self.assertGreater((codes == 1).sum(), 1000)
-        for name in ("cref.half.xue", "cref.poster.bin", "prate.half.xue", "prate.poster.bin", "rqi.half.xue", "rqi.poster.bin"):
+        for name in ("bundles.half.zarr/cref/zarr.json", "cref.poster.bin", "bundles.half.zarr/prate/zarr.json", "prate.poster.bin", "bundles.half.zarr/rqi/zarr.json", "rqi.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_a_complete_build_wants_the_production_grid(self) -> None:
@@ -967,7 +963,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "3500x1750 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="mrms", skip_video=True, require_complete=True, expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("mrms", "the MRMS source")

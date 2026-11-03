@@ -34,10 +34,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import fetch, grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ARPEGE_PACKAGES,
@@ -260,13 +259,13 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(self.report["videos"], [])
 
     def test_the_crop_grid(self) -> None:
-        grid = read_bundle(self.output / "tmp2m.xue").metadata["grid"]
+        grid = stored_bundle(self.output, "tmp2m").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (80, 80))
         self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.25, -0.25))
         self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (2.0, 50.0))
 
     def test_the_first_hour_s_rate_is_its_total(self) -> None:
-        bundle = read_bundle(self.output / "prate.xue")
+        bundle = stored_bundle(self.output, "prate")
         self.assertEqual(bundle.metadata["time"], {"unitSeconds": 3600, "firstFrameOffset": 1, "frameCount": 1, "frameStep": 1})
         rates = quantize.PROFILES["quality"]["prate"].decode(bundle.decode_plane(1, 1))
         # The window's wettest cell has 8.3 mm in the first hour: differenced
@@ -275,12 +274,12 @@ class ConversionTests(unittest.TestCase):
         self.assertLess(float(rates.max()), 10.0)
 
     def test_the_gust_starts_at_the_first_step(self) -> None:
-        metadata = read_bundle(self.output / "gust.xue").metadata
+        metadata = stored_bundle(self.output, "gust").metadata
         self.assertEqual(metadata["time"]["firstFrameOffset"], 1)
         self.assertEqual(metadata["variables"][0]["parameter"]["typeOfStatisticalProcessing"], 2)
 
     def test_the_terrain_is_one_frame_in_metres(self) -> None:
-        bundle = read_bundle(self.output / "orog.xue")
+        bundle = stored_bundle(self.output, "orog")
         self.assertEqual(bundle.metadata["time"]["frameCount"], 1)
         heights = quantize.PROFILES["quality"]["orog"].decode(bundle.decode_plane(1, 0))
         # The window holds the Mediterranean and the Alps: sea level within
@@ -294,7 +293,7 @@ class NativeParityTests(ParityCase, unittest.TestCase):
     """The same two frames through both encoders, byte for byte."""
 
     reference = REFERENCE
-    expect = ("arpege.2026102512/prate.xue", "arpege.2026102512/wind10m.xue")
+    expect = (store_path("arpege.2026102512", "prate"), store_path("arpege.2026102512", "wind10m", "ugrd10m"))
 
 
 if __name__ == "__main__":

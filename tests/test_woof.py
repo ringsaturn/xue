@@ -47,10 +47,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import interval_rate, published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import resolve_run
 from xuebuild.manifest import validate_bin_manifest
@@ -306,14 +305,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026101006",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def manifest(self) -> dict:
         return json.loads((self.root / "out" / "manifest.json").read_text())
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def test_the_run_publishes_every_bundle_the_source_declares(self) -> None:
         self.assertEqual(tuple(bundle["variable"] for bundle in self.report["bundles"]), BUNDLES)
@@ -326,7 +324,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         validate_bin_manifest(manifest, expected_hours=2, require_core_variables=True)
         self.assertTrue((self.root / "out" / "tmp2m.poster.bin").is_file())
         # No ladder: a plane of the nest is under 5000 cells.
-        self.assertFalse((self.root / "out" / "tmp2m.half.xue").exists())
+        self.assertFalse((self.root / "out" / "bundles.half.zarr").exists())
 
     def test_the_grid_is_the_fixture_s_window_of_the_nest(self) -> None:
         grid = self.bundle("tmp2m").metadata["grid"]
@@ -491,7 +489,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     skip_video=True,
                     require_complete=True,
                     expected_hours=2,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("woof")

@@ -35,9 +35,8 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, fetch, jmacli, observation
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     JMA_BBOX,
@@ -456,7 +455,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_the_window_is_a_five_minute_axis_from_the_hour(self) -> None:
@@ -467,7 +465,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(manifest["runTime"], "2026-09-16T01:00:00Z")
         self.assertEqual(manifest["forecastHours"], 1)
         validate_bin_manifest(manifest, expected_hours=1, require_core_variables=True)
-        bundle = read_bundle(self.root / "out" / "prate.xue")
+        bundle = stored_bundle(self.root / "out", "prate")
         # 01:05, 01:10 and 01:20 from the 01:00 run: offsets listed, since
         # 01:15 is not there. Three 128-cell tiles across four rows.
         self.assertEqual(
@@ -481,8 +479,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         variable = bundle.metadata["variables"][0]
         self.assertEqual(variable["unit"], "mm/h")
         self.assertEqual(variable["parameter"]["parameterCategory"], 1)
-        # The gap at 01:15 ends a temporal group: two groups for three frames.
-        self.assertEqual((bundle.frame_count, len(bundle.groups), bundle.tiles.count), (3, 2, 12))
+        self.assertEqual((bundle.frame_count, bundle.geometry.tile_count), (3, 12))
         # The classes come through as their representative rates: decoding a
         # plane gives the codebook's nearest rate to each, and nothing else.
         codebook = PROFILES["quality"]["prate"]
@@ -492,7 +489,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertLess(float(np.abs(rates - nearest).max() / representative.max()), 0.05)
         self.assertGreater(len(set(np.round(nearest.ravel(), 1).tolist())), 6)
         self.assertGreater(float(nearest.max()), 40.0)
-        for name in ("prate.half.xue", "prate.poster.bin"):
+        for name in ("bundles.half.zarr/prate/zarr.json", "prate.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_a_complete_build_wants_the_production_grid(self) -> None:
@@ -500,7 +497,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             with self.assertRaisesRegex(ConversionError, "5600x5000 grid"):
                 binconvert.convert_bin(
                     self.inputs, self.root / "complete", model="jma", skip_video=True, require_complete=True, expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     def test_a_run_directory_holds_exactly_one_series(self) -> None:
@@ -510,7 +506,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         shutil.copy(SERIES, two / "b.nc")
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "exactly one NetCDF series"):
-                binconvert.convert_bin(two, self.root / "two-out", model="jma", skip_video=True, container=True, zarr=False)
+                binconvert.convert_bin(two, self.root / "two-out", model="jma", skip_video=True)
 
     @requires_native_source("jma", "the JMA source")
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:

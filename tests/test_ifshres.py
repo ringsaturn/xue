@@ -39,10 +39,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, fetch, observation, om2nccli
 from xuebuild.binconvert import interval_rate, published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     OPEN_METEO_BASE_URL,
@@ -590,14 +589,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026091800",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def manifest(self) -> dict:
         return json.loads((self.root / "out" / "manifest.json").read_text())
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def test_the_run_publishes_every_bundle_the_source_declares(self) -> None:
         self.assertEqual(tuple(bundle["variable"] for bundle in self.report["bundles"]), BUNDLES)
@@ -607,7 +605,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(manifest["runTime"], "2026-09-18T00:00:00Z")
         self.assertEqual(manifest["forecastHours"], 3)
         validate_bin_manifest(manifest, expected_hours=3, require_core_variables=True)
-        for name in ("tmp2m.half.xue", "tmp2m.quarter.xue", "tmp2m.poster.bin"):
+        for name in ("bundles.half.zarr", "bundles.quarter.zarr", "tmp2m.poster.bin"):
             self.assertTrue((self.root / "out" / name).is_file(), name)
 
     def test_the_grid_is_the_fixture_s_window_of_the_published_one(self) -> None:
@@ -699,7 +697,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     skip_video=True,
                     require_complete=True,
                     expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("ifshres")

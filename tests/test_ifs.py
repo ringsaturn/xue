@@ -25,10 +25,9 @@ import json
 import unittest
 from datetime import UTC, datetime
 
-from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,
@@ -180,11 +179,11 @@ class ConversionTests(unittest.TestCase):
         self.assertFalse(any("video" in bundle for bundle in manifest["bundles"]))
         self.assertEqual(self.report["videos"], [])
         self.assertEqual(len(self.report["variants"]), 2 * len(published_bundle_ids(IFS)))
-        for name in ("tmp2m.half.xue", "tmp2m.quarter.xue", "wave.half.xue", "wave.quarter.xue"):
-            self.assertTrue((self.output / name).is_file(), name)
+        for name in ("tmp2m.half", "tmp2m.quarter", "wave.half", "wave.quarter"):
+            self.assertTrue(stored_bundle(self.output, name).frame_count, name)
 
     def test_the_grid_is_the_fixture_s_window_of_the_0p1_one(self) -> None:
-        grid = read_bundle(self.output / "tmp2m.xue").metadata["grid"]
+        grid = stored_bundle(self.output, "tmp2m").metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (100, 100))
         self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.1, -0.1))
         self.assertEqual((grid["firstLongitude"], grid["firstLatitude"]), (60.0, 85.0))
@@ -192,13 +191,13 @@ class ConversionTests(unittest.TestCase):
         self.assertFalse(grid["wrapLongitude"])
 
     def test_the_gust_series_starts_at_the_first_step(self) -> None:
-        gust = read_bundle(self.output / "gust.xue")
+        gust = stored_bundle(self.output, "gust")
         self.assertEqual(gust.metadata["time"], {"unitSeconds": 3600, "firstFrameOffset": 3, "frameCount": 1, "frameStep": 1})
         self.assertGreater(int(gust.decode_plane(1, 3).max()), 0)
         self.assertEqual(gust.metadata["variables"][0]["parameter"]["typeOfStatisticalProcessing"], 2)
-        prate = read_bundle(self.output / "prate.xue")
+        prate = stored_bundle(self.output, "prate")
         self.assertEqual(prate.metadata["time"]["firstFrameOffset"], 3)
-        tmp2m = read_bundle(self.output / "tmp2m.xue")
+        tmp2m = stored_bundle(self.output, "tmp2m")
         self.assertEqual(tmp2m.metadata["time"], {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 2, "frameStep": 3})
 
 
@@ -207,7 +206,7 @@ class NativeParityTests(ParityCase, unittest.TestCase):
     0.1° grid with its two rungs."""
 
     reference = REFERENCE
-    expect = ("ifs.2026102012/gust.xue", "ifs.2026102012/wave.quarter.xue")
+    expect = (store_path("ifs.2026102012", "gust"), store_path("ifs.2026102012", "wave.quarter", "uwave"))
 
 
 if __name__ == "__main__":

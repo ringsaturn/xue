@@ -35,10 +35,9 @@ from datetime import UTC, datetime
 
 import numpy as np
 
-from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2, quantize
 from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,
@@ -278,7 +277,7 @@ class ConversionTests(unittest.TestCase):
         _, cls.report = REFERENCE.get()
 
     def _plane(self, variable_id: str, offset: int, member: int = 1) -> tuple[np.ndarray, dict]:
-        bundle = read_bundle(self.output / f"{variable_id}.xue")
+        bundle = stored_bundle(self.output, variable_id)
         return bundle.decode_plane(member, offset), bundle.metadata
 
     def test_every_published_bundle_is_written_and_no_video(self) -> None:
@@ -333,7 +332,7 @@ class NativeParityTests(ParityCase, unittest.TestCase):
     bitmap fill and the wave vector, on real AIFS records."""
 
     reference = REFERENCE
-    expect = ("aifs.2026091700/lcdc.xue", "aifs.2026091700/wave.xue")
+    expect = (store_path("aifs.2026091700", "lcdc"), store_path("aifs.2026091700", "wave", "uwave"))
 
 
 if __name__ == "__main__":
