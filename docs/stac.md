@@ -177,8 +177,8 @@ source does — a Collection, a live Item, an Item per issue — derived from
 that `index.json` alone and from nothing else.
 
 `<product>/collection.json`. Id: the product id. `title`, `description`,
-`license`, `keywords` and `providers` come from `_point_product_prose` in
-`xuebuild/stac.py`; none of them has an SPDX identifier to name, so
+`license`, `keywords` and `providers` come from the `pointProducts` entry in
+`xuebuild/stac_prose.json`; none of them has an SPDX identifier to name, so
 all are `other` with the terms linked: the WMO Unified Data Policy
 (Resolution 1, Cg-Ext(2021)) for the soundings, the NWS disclaimer for the
 airport caches (a work of the US government is in the public domain, which

@@ -754,18 +754,6 @@ file). Regenerate it with the change that meant it:
     indent=2, ensure_ascii=False))" > tests/fixtures/river-registry.json
 ```
 
-`stac-prose.json` pins what the STAC catalog says about who owns the data
-and under which terms: every source's and every point product's title,
-description, licence, providers and licence links
-(`xuebuild.stac.prose_document`, `tests/test_stac.py`). Regenerate it with
-the change that meant it:
-
-```sh
-.venv/bin/python -c "import json; from xuebuild import stac; \
-    print(json.dumps(stac.prose_document(), indent=2, ensure_ascii=False))" \
-    > tests/fixtures/stac-prose.json
-```
-
 The point products' goldens carry the STAC documents their builds
 write beside the data: `<product>.<issue>/item.json` in each, and for the
 airport, synop and fire rounds also `<product>/collection.json` and the live

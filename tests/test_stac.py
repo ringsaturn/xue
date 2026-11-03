@@ -443,6 +443,7 @@ class CollectionAndCatalogTests(unittest.TestCase):
         self.assertEqual(stac.root_catalog(), catalog, "a pure function of the registry")
 
     def test_every_source_has_catalog_prose(self) -> None:
+        self.assertEqual(set(stac._PROSE["sources"]), set(SOURCES), "no stale or missing entry in stac_prose.json")
         for source in SOURCES.values():
             with self.subTest(source=source.id):
                 prose = stac._source_prose(source)
@@ -1009,12 +1010,11 @@ class PointProductTests(unittest.TestCase):
                 self.assertEqual(collection["id"], schema.PRODUCT)
                 self.assertEqual(item["properties"]["xue:schemaVersion"], schema.SCHEMA_VERSION)
 
-    def test_the_prose_is_pinned(self) -> None:
-        pinned = json.loads((FIXTURES / "stac-prose.json").read_text(encoding="utf-8"))
-        self.assertEqual(stac.prose_document(), pinned)
+    def test_every_point_product_has_catalog_prose(self) -> None:
+        self.assertEqual(set(stac._PROSE["pointProducts"]), set(stac.POINT_PRODUCTS))
         for product in stac.POINT_PRODUCTS:
             with self.subTest(product=product):
-                prose = pinned["pointProducts"][product]
+                prose = stac._point_product_prose(product)
                 self.assertTrue(prose["title"] and prose["description"] and prose["providers"])
                 # None of them has an SPDX id, so each names its terms.
                 self.assertEqual(prose["license"], "other")

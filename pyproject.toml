@@ -35,6 +35,7 @@ xuebuild = [
     "palette.txt",
     "precipitation_palette.txt",
     "stacindex.html",
+    "stac_prose.json",
     "synop/*.json",
     "aq/*.json",
     "alerts/*.json",
