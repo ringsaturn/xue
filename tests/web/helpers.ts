@@ -1,6 +1,6 @@
 /** Fixture builders the web unit tests share. */
 
-import { readFileSync } from "node:fs";
+import registryText from "../../rust/xue/registry.json?raw";
 
 import type {
   BundleAerosol,
@@ -54,11 +54,9 @@ interface RegistryDocument {
   >;
 }
 
-/** The whole registry document, read off disk rather than imported so the
- * type checker does not infer a type for its twenty thousand lines. */
-export const REGISTRY_DOCUMENT: RegistryDocument = JSON.parse(
-  readFileSync(new URL("../../rust/xue/registry.json", import.meta.url), "utf-8"),
-) as RegistryDocument;
+/** The whole registry document, imported as text so the type checker does
+ * not infer a type for its twenty thousand lines. */
+export const REGISTRY_DOCUMENT: RegistryDocument = JSON.parse(registryText) as RegistryDocument;
 
 /** The registry's entries for `ids`, in that order. */
 export function registryEntries<Q extends LinearQuantization | LogQuantization = LinearQuantization>(
