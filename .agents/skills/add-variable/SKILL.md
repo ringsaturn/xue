@@ -1,6 +1,6 @@
 ---
 name: add-variable
-description: Add a bundle (a published field) to an existing Xue source — a new isobaric level of a known family, a new surface quantity, or a derived scalar/vector — through the Python encoder, the native encoder, the registry fixtures and optionally the frontend. Use when asked to publish another variable, level, or derived field for gfs/ecmwf/aifs/hrrr/… .
+description: Add a bundle (a published field) to an existing Xue source — a new isobaric level of a known family, a new surface quantity, or a derived scalar/vector — through the Python encoder, the native encoder, the registry snapshots and the frontend's chart knowledge. Use when asked to publish another variable, level, or derived field for gfs/ecmwf/aifs/hrrr/… .
 ---
 
 # Adding a variable or bundle
@@ -43,14 +43,17 @@ Read `.claude/rules/encoder.md` and
 4. Fixtures:
    - recut the source's crop GRIB if it needs new records
      (`tests/fixtures/README.md` has the exact `gdal_translate -srcwin`);
-   - regenerate the registry snapshot
-     (`xue registry --output rust/xue/registry.json`, said in the
-     commit) and the affected family fixture
-     (`tests/fixtures/*-registry.json`); the failing registry test names it.
-5. Frontend (optional; an unknown id renders generically):
-   `web/src/variables.ts` (one `VariableSpec` row), `levels.ts` for a family
-   member, a palette, an i18n label in `web/src/locales/en.ts` and the
-   other ten locales.
+   - regenerate both registry snapshots (`xue registry --output rust/xue/registry.json --shell web/src/registry.ts`,
+     said in the commit); `tests/test_registry.py` fails until it is done.
+     The ids, parameter blocks, codebooks, bundle members and family lists
+     reach the shell from `web/src/registry.ts`: no TS table is edited for
+     them.
+5. Frontend chart knowledge: `web/src/variables.ts` (one `VariableSpec`
+   row), `levels.ts` for a family member or a chart ceiling, a palette,
+   an i18n label in `web/src/locales/en.ts` and the other ten locales;
+   `identity.ts` only when no existing rule reads the parameter block. A
+   published bundle without a row fails `tests/web/registries.test.ts`;
+   one meant to draw generically goes into its `GENERIC_BUNDLE_IDS`.
 6. `web/public/llms.txt` if what the model publishes changed. Check the STAC
    prose in `xuebuild/stac.py` if a licence or provider changes.
 
