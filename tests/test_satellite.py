@@ -1596,7 +1596,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual([variant["zarr"]["path"] for variant in entry["variants"]], [f"bundles.{tier}.zarr" for tier, _, _, _ in rungs])
                 self.assertEqual([(variant["width"], variant["height"]) for variant in entry["variants"]], [(side, side) for _, _, side, _ in rungs])
                 self.assertTrue(all(variant["bandwidth"] > 0 for variant in entry["variants"]))
-                self.assertGreater(entry["variants"][0]["byteLength"], entry["variants"][1]["byteLength"])
+                self.assertGreater(entry["variants"][0]["zarr"]["byteLength"], entry["variants"][1]["zarr"]["byteLength"])
                 full = stored_bundle(self.root / "out", bundle_id)
                 for tier, factor, side, tile in rungs:
                     rung = stored_bundle(self.root / "out", f"{bundle_id}.{tier}")
