@@ -121,7 +121,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
-    "iconeu", "arpege", "cmadust", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -1521,6 +1521,39 @@ SOURCES: dict[str, SourceSpec] = {
         fetch_concurrency=8,
         series_file=True,
         cycle_hours=12,
+    ),
+    # SILAM v6.1, the Finnish Meteorological Institute's global air-quality
+    # forecast on a 0.2° grid, from FMI's AWS open data bucket
+    # (``fmi-opendata-silam-surface-netcdf``). One NetCDF-4 file per field
+    # and forecast day, 24 hourly frames from +1 h; the fetch
+    # (xuebuild/silam.py) reads the five day files of each field and writes
+    # one CF series per variable (``silam.<run>.<variable>.nc``), so this is
+    # a ``series_file`` forecast like ``cmadust``. The run starts at +1 h:
+    # each value is the mean over the hour ending at its time, and the bucket
+    # carries no analysis. Total PM2.5 and PM10 on the GEFS-Aerosols
+    # identities, every aerosol the model carries (dust, sea salt, sulphate,
+    # smoke, anthropogenic); the bucket has no dust-only field.
+    "silam": SourceSpec(
+        id="silam",
+        feed="fmi-silam",
+        manifest_model="SILAM",
+        product="silam-glob02",
+        latest_filename="latest-silam.json",
+        # Hourly through 72 hours, three-hourly to 120: 88 frames.
+        steps=((72, 1), (120, 3)),
+        first_hour=1,
+        input_variable_ids=("pm25", "pm10"),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("pm25", "pm10"),
+        core_bundle_ids=("pm25",),
+        production_grid=(1800, 897),
+        # 1800 x 897 divides exactly into 30 x 13 = 390 tiles of 12° x 13.8°,
+        # about the 0p25 grid's 48 x 52 on the ground.
+        tile=(60, 69),
+        # Ten day files of some 35 MB on S3.
+        fetch_concurrency=4,
+        series_file=True,
+        cycle_hours=24,
     ),
     # NCEP CFSv2 member 01, nine months of six-hourly output from the 00Z
     # and 12Z cycles, fetched as one series-major object per variable

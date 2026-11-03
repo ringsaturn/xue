@@ -515,11 +515,15 @@ def write_series(
     longitudes: np.ndarray,
     frames: np.ndarray,
     attributes: dict[str, str],
+    *,
+    long_name: str | None = None,
+    units: str | None = None,
 ) -> None:
     """One variable's CF series as a NetCDF classic file: ``time`` in hours
     from the run (whose epoch names the cycle), the run as the global
     ``forecast_reference_time``, latitudes ascending, float32 with a NaN
-    fill, the variable named by its Xue id. Written through ``.part`` and
+    fill, the variable named by its Xue id. The variable's ``long_name`` and
+    ``units`` default to this product's own. Written through ``.part`` and
     renamed, so a series that exists is whole."""
     count, height, width = frames.shape
     if (count, height, width) != (len(hours), latitudes.size, longitudes.size):
@@ -552,7 +556,11 @@ def write_series(
             variable_id,
             (0, 1, 2),
             NC_FLOAT,
-            {"long_name": LONG_NAMES[variable_id], "units": SERIES_UNITS[variable_id], "_FillValue": float("nan")},
+            {
+                "long_name": long_name or LONG_NAMES[variable_id],
+                "units": units or SERIES_UNITS[variable_id],
+                "_FillValue": float("nan"),
+            },
             b"",
         ),
     ]

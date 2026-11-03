@@ -22,6 +22,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | `aod` |
 | `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | `dustsfc` |
+| `silam` | series-file forecast (air quality) | FMI open data on AWS, whole NetCDF-4 day files | `pm25` |
 | `cfs` | forecast (seasonal) | one object per variable per run | `tmp2m`, `prate` |
 | `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | `tmp2m`, `prate` |
 | `arpege` | forecast | Météo-France packages, whole objects cut by identity | `tmp2m`, `prate` |
@@ -88,7 +89,7 @@ the shape of its objects: `noaa-gfs`, `noaa-sflux` and
 object names; `noaa-hrrr`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
 `dwd-icon-eu` and `meteofrance-arpege` are the other one-GRIB-per-hour
 feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
-`open-meteo` and `cmadust` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
+`open-meteo`, `cmadust` and `fmi-silam` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
 `jma-nowcast`, `cma-archive`, `ovation` and `satellite` (every disk) are
 observation windows; `local` is a source nothing fetches (`woof`, `efas`,
 `efaswb`, `era5`, `cams`). What a family needs to tell its sources apart
@@ -275,6 +276,34 @@ core, with occasional isolated single-cell spikes up to about 1500. Those
 cells take the overflow code, which the map draws at the top colour and a
 point read answers as null. Negative surface concentrations from the model
 are coded 0. `tests/test_cmadust.py`.
+
+**silam.** SILAM v6.1, the Finnish Meteorological Institute's global
+air-quality forecast, from FMI's AWS open data bucket
+(`XUE_SILAM_BASE_URL`, `https://fmi-opendata-silam-surface-netcdf.s3.amazonaws.com`,
+CC BY 4.0). One NetCDF-4 file per field and forecast day,
+`global/<YYYYMMDD>/silam_glob_v6_1_<YYYYMMDD>_<FIELD>_d<N>.nc`, `N` 0–4,
+24 hourly frames each from +1 h of the day, about 35 MB of deflated HDF5;
+the whole run lands at once, about 05:07Z, and the bucket keeps a few
+days. The bucket carries total PM2.5 and PM10 (and gases), no dust of its
+own. `xuebuild/silam.py` lists the folder (a run is complete when it holds
+every published field's day files through the horizon), fetches each day
+file whole and reads it with netCDF4, the `silam` dependency group:
+`publish.yml` syncs it in the build job for this model only. Each file is
+held to the product: the `lat` / `lon` of the 0.2° grid (float32, so the
+tolerance is 1e-3°), a time axis in seconds since a UTC instant (FMI counts
+from two days before the folder's date; only valid times are compared),
+the field in `ug/m3` and float32. Both the `_FillValue` and the
+`missing_value` become NaN. The file's longitudes run -179.8° to 180°; the
+fetch rolls the 180° column to the west edge, so the series run from -180°
+like the GFS grid. Each variable's run becomes one series,
+`silam.<run>.<id>.nc`, written by `cmadust.write_series` with this
+product's names and unit: 570 MB a variable, so `publish-silam.yml` builds
+the two bundles in two jobs. Every value is the hour's mean ending at its
+time, a 3-hourly frame included, so no statistical process is declared,
+and there is no analysis: the axis starts at F001. The grid is 1800 × 897
+cells, tile 60 × 69 (30 × 13 tiles, no clipped edge) and the half tier.
+The quantities, identities and codebooks are GEFS-Aerosols' `pm25` and
+`pm10`. `tests/test_silam.py`.
 
 **cfs.** NCEP CFSv2 member 01, nine-month runs on the T126 Gaussian grid
 (384 × 190), 1092 frames. The bucket (`noaa-cfs-pds`, `XUE_CFS_BASE_URL`) is

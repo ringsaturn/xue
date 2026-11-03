@@ -27,6 +27,7 @@ IDENTITIES = {
     "hrrr": ("HRRR", "wrfsfc", "latest-hrrr.json", FORECAST_CORE),
     "gefsaero": ("GEFS-AEROSOLS", "chem-a2d-0p25", "latest-gefsaero.json", ("aod",)),
     "cmadust": ("CMA-CW-DUST", "cma-cw-dust-0p15", "latest-cmadust.json", ("dustsfc",)),
+    "silam": ("SILAM", "silam-glob02", "latest-silam.json", ("pm25",)),
     "cfs": ("CFSv2", "time-grib-01", "latest-cfs.json", FORECAST_CORE),
     "iconeu": ("ICON-EU", "iconeu", "latest-iconeu.json", FORECAST_CORE),
     "arpege": ("ARPEGE", "arpege", "latest-arpege.json", FORECAST_CORE),

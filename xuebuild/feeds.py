@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from . import cmadust, fetch
+from . import cmadust, fetch, silam
 from .errors import DownloadError
 from .model import GfsRun
 from .sources import SourceSpec
@@ -278,6 +278,37 @@ class CmaDust(Feed):
         )
 
 
+class FmiSilam(Feed):
+    """FMI's SILAM surface fields on AWS open data (:mod:`xuebuild.silam`)."""
+
+    def is_complete(
+        self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
+    ) -> bool:
+        # The whole run lands at once; the folder must hold every field's
+        # day files.
+        return silam.run_is_complete(spec, run, hours, fetch=fetch.fetch_text)
+
+    def fetch_run(
+        self, spec: SourceSpec, run: GfsRun, hours: int, raw_root: Path, *, force: bool, input_ids: InputIds, bbox: BBox
+    ) -> list[Path]:
+        return silam.fetch_run(
+            spec,
+            run,
+            hours,
+            raw_root,
+            force=force,
+            input_ids=input_ids,
+            fetch_text=fetch.fetch_text,
+            fetch_bytes=fetch_silam_file,
+        )
+
+
+def fetch_silam_file(url: str) -> bytes:
+    """One SILAM day file, whole: some 35 MB, so a longer budget than a
+    GRIB range's."""
+    return fetch.get_ok(url, timeout=silam.FILE_TIMEOUT, max_elapsed=silam.FILE_MAX_ELAPSED)
+
+
 # -- observation windows -------------------------------------------------------
 
 
@@ -380,6 +411,7 @@ FEEDS: dict[str, Fetcher] = {
     "meteofrance-arpege": MeteoFranceArpege(),
     "open-meteo": OpenMeteo(),
     "cmadust": CmaDust(),
+    "fmi-silam": FmiSilam(),
     "jma-nowcast": JmaNowcast(),
     "cma-archive": CmaArchive(),
     "ovation": Ovation(),

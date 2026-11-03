@@ -161,6 +161,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "depth by species and the surface PM2.5 / PM10), "
             "cmadust, CMA-CW/DUST over Asia at 0.15 degree (hourly to 72, 3-hourly to 168; 00Z and 12Z, "
             "from the WMO WIS2 global caches: surface dust concentration and dust optical depth), "
+            "silam, FMI SILAM global air quality at 0.2 degree (hourly from 1 to 72, 3-hourly to 120; 00Z, "
+            "from the FMI AWS open data bucket: surface PM2.5 and PM10), "
             "cfs, NCEP CFSv2 seasonal on its T126 Gaussian grid (6-hourly from 6 to 6552 hours, "
             "thirty-nine weeks; 00Z and 12Z), "
             "iconeu, DWD ICON-EU over Europe at 0.0625 degree (hourly to 78, 3-hourly to 120), "

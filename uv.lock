@@ -2038,6 +2038,9 @@ satellite = [
     { name = "shachen" },
     { name = "xarray" },
 ]
+silam = [
+    { name = "netcdf4" },
+]
 staging = [
     { name = "netcdf4" },
     { name = "shachen", extra = ["data"] },
@@ -2094,6 +2097,7 @@ satellite = [
     { name = "shachen", specifier = ">=0.4.0" },
     { name = "xarray", specifier = ">=2025.1" },
 ]
+silam = [{ name = "netcdf4", specifier = ">=1.7" }]
 staging = [
     { name = "netcdf4", specifier = ">=1.7" },
     { name = "shachen", extras = ["data"], specifier = ">=0.4.0" },
