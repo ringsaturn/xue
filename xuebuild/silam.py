@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -73,6 +74,10 @@ FILE_MAX_ELAPSED = 900
 
 FETCH_FILENAME = "fetch.json"
 INSTALL_HINT = "uv sync --group silam"
+
+#: The HDF5 library under netCDF4 is not thread-safe: the day files come
+#: down in parallel, but one is read at a time.
+_READ_LOCK = threading.Lock()
 
 _EPOCH_RE = re.compile(r"^seconds since (\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*(?:UTC|Z|\+00:?00))?$")
 
@@ -183,6 +188,21 @@ def read_day(
     ``longitudes`` given, for a box), each wanted hour's valid time in it,
     the field float32 in µg/m³. The fill becomes NaN and, on the whole
     grid, the 180° column moves to the west edge."""
+    with _READ_LOCK:
+        return _read_day(payload, run, variable_id, hours, label=label, latitudes=latitudes, longitudes=longitudes, roll=roll)
+
+
+def _read_day(
+    payload: bytes,
+    run: GfsRun,
+    variable_id: str,
+    hours: list[int],
+    *,
+    label: str,
+    latitudes: np.ndarray | None,
+    longitudes: np.ndarray | None,
+    roll: bool,
+) -> dict[int, np.ndarray]:
     netCDF4 = _netcdf4()
     if latitudes is None or longitudes is None:
         latitudes, longitudes = file_coordinates()
