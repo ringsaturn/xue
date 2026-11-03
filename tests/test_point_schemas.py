@@ -19,6 +19,8 @@ LINES = "lines"
 
 GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     "pointer": ((JSON, "*/expected/latest-*.json"),),
+    "fire-index": ((JSON, "fire/expected/fire.*/index.json"),),
+    "fire-line": ((LINES, "fire/expected/fire.*/*.jsonl"),),
 }
 """Schema → the golden files it holds: whole JSON documents, or JSONL files
 whose every line is one document."""

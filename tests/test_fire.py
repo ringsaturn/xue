@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 
+from tests import pointschemas
 from tests.prepare_fire_golden import FIXTURES, GENERATED, ROUNDS, build_rounds, pretty
 from xuebuild.errors import FireProductError
 from xuebuild.fire import firms
@@ -279,44 +280,69 @@ class ValidatorTest(unittest.TestCase):
         validate_hour_line(self.line, "line")
 
     def test_malformed_indexes_are_refused(self) -> None:
-        cases = {
+        # What a schema cannot say is the validator's; the rest the schema's.
+        invariants = {
             "unsorted": lambda index: index["hours"].reverse(),
             "gap between spans": lambda index: index["hours"][1].__setitem__(4, index["hours"][1][4] + 1),
             "short of the file": lambda index: index["sensors"][0]["file"].__setitem__("byteLength", 10**7),
             "count is not the sum": lambda index: index["sensors"][0].__setitem__("count", 1),
             "short row": lambda index: index["hours"][0].pop(),
-            "off-hour": lambda index: index["hours"][0].__setitem__(1, "2026-10-11T05:30:00Z"),
             "sensor out of range": lambda index: index["hours"][-1].__setitem__(0, 9),
-            "off-round issue": lambda index: index.__setitem__("issued", "2026-10-12T05:10:00Z"),
             "window backwards": lambda index: index["window"].__setitem__("start", "2026-10-13T00:00:00Z"),
             "bad file name": lambda index: index["sensors"][0]["file"].__setitem__("path", "fires.jsonl"),
             "sensor twice": lambda index: index["sensors"].append(index["sensors"][0]),
             "schema version": lambda index: index.__setitem__("schemaVersion", 2),
+            "no sources": lambda index: index.pop("sources"),
         }
-        for name, change in cases.items():
+        for name, change in invariants.items():
             with self.subTest(name), self.assertRaises(FireProductError):
                 validate_index(self.broken_index(change))
+        shapes = {
+            "short row": lambda index: index["hours"][0].pop(),
+            "off-hour": lambda index: index["hours"][0].__setitem__(1, "2026-10-11T05:30:00Z"),
+            "off-round issue": lambda index: index.__setitem__("issued", "2026-10-12T05:10:00Z"),
+            "schema version": lambda index: index.__setitem__("schemaVersion", 2),
+            "negative frpMax": lambda index: index["hours"][0].__setitem__(3, -1),
+            "resolution": lambda index: index["sensors"][0].__setitem__("resolution", 0),
+            "empty name": lambda index: index["sensors"][0].__setitem__("name", ""),
+            "crc": lambda index: index["sensors"][0]["file"].__setitem__("crc32", "XYZ"),
+            "source id": lambda index: index["sources"][0].__setitem__("id", "FIRMS"),
+            "reports": lambda index: index["sources"][0].__setitem__("reports", -1),
+        }
+        for name, change in shapes.items():
+            with self.subTest(name):
+                self.assertTrue(pointschemas.errors("fire-index", self.broken_index(change)))
 
     def test_an_unknown_sensor_is_admitted(self) -> None:
-        validate_index(self.broken_index(lambda index: index["sensors"][0].__setitem__("id", "abi-goes19") or index["sensors"][0]["file"].__setitem__("path", "abi-goes19.jsonl")))
+        index = self.broken_index(lambda index: index["sensors"][0].__setitem__("id", "abi-goes19") or index["sensors"][0]["file"].__setitem__("path", "abi-goes19.jsonl"))
+        validate_index(index)
+        pointschemas.check("fire-index", index)
 
     def test_malformed_lines_are_refused(self) -> None:
-        cases = {
+        invariants = {
             "unsorted": lambda line: (line["lat"].reverse(), line["lon"].reverse()),
             "column too short": lambda line: line["frp"].pop(),
+            "day or night": lambda line: line.__setitem__("dn", "D" * (line["n"] - 1)),
+        }
+        shapes = {
             "off-minute": lambda line: line["t"].__setitem__(0, line["t"][0] + 1),
             "past the hour": lambda line: line["t"].__setitem__(-1, 3600),
             "confidence": lambda line: line.__setitem__("conf", "x" * line["n"]),
-            "day or night": lambda line: line.__setitem__("dn", "D" * (line["n"] - 1)),
             "brightness": lambda line: line["bt"].__setitem__(0, 100),
             "off-hour": lambda line: line.__setitem__("hour", line["hour"] + 60),
             "latitude": lambda line: line["lat"].__setitem__(-1, 900001),
+            "no sensor": lambda line: line.pop("sensor"),
         }
-        for name, change in cases.items():
-            line = copy.deepcopy(self.line)
-            change(line)
-            with self.subTest(name), self.assertRaises(FireProductError):
-                validate_hour_line(line, "line")
+        for refused, cases in (("validator", invariants), ("schema", shapes)):
+            for name, change in cases.items():
+                line = copy.deepcopy(self.line)
+                change(line)
+                with self.subTest(refused=refused, case=name):
+                    if refused == "validator":
+                        with self.assertRaises(FireProductError):
+                            validate_hour_line(line, "line")
+                    else:
+                        self.assertTrue(pointschemas.errors("fire-line", line))
 
     def test_pointer(self) -> None:
         moment = parse_round(ROUNDS[1])

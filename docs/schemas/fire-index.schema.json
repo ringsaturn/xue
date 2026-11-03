@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/fire-index.schema.json",
+  "title": "FireIndex",
+  "description": "fire.<round>/index.json (docs/fire.md section 4). The byte spans' arithmetic, the row order, the per-sensor sums and each file's name are the readers' own checks.",
+  "type": "object",
+  "required": ["schemaVersion", "issued", "generated", "window", "sensors", "hours", "sources"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "issued": {"$ref": "#/$defs/Hour"},
+    "generated": {"$ref": "#/$defs/Timestamp"},
+    "window": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"$ref": "#/$defs/Timestamp"},
+        "end": {"$ref": "#/$defs/Timestamp"}
+      }
+    },
+    "sensors": {"type": "array", "items": {"$ref": "#/$defs/FireSensor"}},
+    "hours": {"type": "array", "items": {"$ref": "#/$defs/FireHourRow"}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/FireSource"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "Hour": {
+      "description": "A whole UTC hour.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:00:00Z$",
+      "format": "date-time"
+    },
+    "CrcFile": {
+      "description": "A file beside the index: its name, length and zlib CRC32.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"}
+      }
+    },
+    "FireSensor": {
+      "description": "One sensor with a detection in the window; its file is always <id>.jsonl.",
+      "type": "object",
+      "required": ["id", "name", "resolution", "attribution", "license", "url", "latest", "count", "file"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+        "name": {"type": "string", "minLength": 1},
+        "resolution": {"description": "Nominal pixel size, metres.", "type": "integer", "minimum": 1, "maximum": 100000},
+        "attribution": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "url": {"type": "string", "minLength": 1},
+        "latest": {"$ref": "#/$defs/Timestamp"},
+        "count": {"type": "integer", "minimum": 1},
+        "file": {"$ref": "#/$defs/CrcFile"}
+      }
+    },
+    "FireHourRow": {
+      "description": "One sensor-hour: [sensor (its position in sensors), hour, count, frpMax (MW), offset, length].",
+      "type": "array",
+      "minItems": 6,
+      "prefixItems": [
+        {"type": "integer", "minimum": 0},
+        {"$ref": "#/$defs/Hour"},
+        {"type": "integer", "minimum": 1},
+        {"type": "number", "minimum": 0},
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 1}
+      ]
+    },
+    "FireSource": {
+      "description": "One FIRMS file's outcome (docs/fire.md section 6). That ok false carries error, and that ids are unique, are the readers' own checks.",
+      "type": "object",
+      "required": ["id", "ok"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "ok": {"type": "boolean"},
+        "error": {"type": "string"},
+        "fetched": {"$ref": "#/$defs/Timestamp"},
+        "url": {"type": "string"},
+        "reports": {"type": "integer", "minimum": 0},
+        "rejected": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
