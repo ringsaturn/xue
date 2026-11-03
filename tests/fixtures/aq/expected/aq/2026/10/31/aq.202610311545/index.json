@@ -22,8 +22,8 @@
    },
    "stations": {
     "path": "airnow.stations.json",
-    "byteLength": 1240,
-    "crc32": "5cfe1d96",
+    "byteLength": 1363,
+    "crc32": "7b628b04",
     "count": 7
    }
   },
@@ -49,8 +49,8 @@
    },
    "stations": {
     "path": "hkepd.stations.json",
-    "byteLength": 601,
-    "crc32": "67fe1d34",
+    "byteLength": 724,
+    "crc32": "2a1c2264",
     "count": 4
    }
   }

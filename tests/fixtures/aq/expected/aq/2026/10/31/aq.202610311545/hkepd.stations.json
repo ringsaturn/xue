@@ -3,6 +3,7 @@
  "network": "hkepd",
  "issued": "2026-10-31T15:45:00Z",
  "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "columns": ["id", "lat", "lon", "elev", "rank", "name", "agency", "obsTime", "pm25", "pm10", "o3", "no2", "so2", "co", "offset", "length"],
  "stations": [
   ["hkepd:0", 22.2849, 114.1444, null, 1, "Central/Western", "EPD", "2026-10-31T14:00:00Z", 20.7, 28.4, 60.6, 11.8, 0.8, null, 0, 1006],
   ["hkepd:10", 22.2889, 113.9437, null, 1, "Tung Chung", "EPD", "2026-10-31T14:00:00Z", 16.1, 25.0, 46.9, 6.3, 1.0, 0.56, 1007, 1108],

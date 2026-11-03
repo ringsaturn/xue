@@ -5,21 +5,19 @@
  * `<network>.jsonl` beside it whose lines — addressed by the stations
  * file's own byte spans — are each station's 24-hour window.
  *
- * Admission is structural, as in `stations/schema.ts`: a network, a station
- * or an element key this build has never seen passes; a wrong shape, a
- * value of a known element outside its range and a `schemaVersion` above
- * the one implemented do not. Unknown fields are ignored. */
+ * The shapes are `docs/schemas/aq-{index,stations,line}.schema.json`,
+ * checked by the generated validators; this module adds what a schema
+ * cannot say and expands the rows, finding each column by the stations
+ * file's `columns` (by position in a file from before the field). Admission
+ * is structural: a network, a station or an element key this build has
+ * never seen passes; a wrong shape, a value of a known element outside its
+ * range and a `schemaVersion` above the one implemented do not. Unknown
+ * fields are ignored. */
 
-import {
-  CRC32,
-  integer,
-  object,
-  pointer,
-  schemaVersion,
-  string,
-  timestamp,
-  type ProductPointer,
-} from "../schema/validate";
+import { checkAqIndex } from "../schema/generated/aq-index";
+import { checkAqLine } from "../schema/generated/aq-line";
+import { checkAqStationsFile } from "../schema/generated/aq-stations";
+import { pointer, schemaVersion, type ProductPointer } from "../schema/validate";
 
 const AQ_SCHEMA_VERSION = 1;
 export const AQ_POINTER_FILENAME = "latest-aq.json";
@@ -30,12 +28,7 @@ const AQ_PATH = /^(?:aq\/(\d{4})\/(\d{2})\/(\d{2})\/aq\.\1\2\3\d{4}|aq\.\d{12})\
 /** `<network>:<the network's own station identifier>`; the first group is
  * the network. */
 const AQ_STATION_ID = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*):[0-9A-Za-z_.-]+$/;
-const NETWORK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const ELEMENT_KEY = /^[a-z][a-z0-9]*$/;
-
-const LATITUDE: [number, number] = [-90, 90];
-const LONGITUDE: [number, number] = [-180, 180];
-const ELEVATION: [number, number] = [-500, 9000];
 
 /** The ranges §2 holds its elements to. An element this build does not
  * know is admitted as any number. */
@@ -132,162 +125,151 @@ export interface AqStationSeries {
   obs: Record<string, (number | null)[]>;
 }
 
-function list(input: unknown, label: string): unknown[] {
-  if (!Array.isArray(input)) throw new Error(`${label} must be a list`);
-  return input;
-}
+/** The columns of a v1 row, in the order a file without `columns` lays
+ * them out: the station, its current value per element, its byte span. */
+const ROW_HEAD = ["id", "lat", "lon", "elev", "rank", "name", "agency", "obsTime"] as const;
+const ROW_TAIL = ["offset", "length"] as const;
 
-function number(value: unknown, label: string, range?: [number, number]): number {
-  if (typeof value !== "number" || !Number.isFinite(value))
-    throw new Error(`${label} must be a number`);
-  if (range && (value < range[0] || value > range[1]))
+function inRange(key: string, value: number | null, label: string): number | null {
+  const range = AQ_BOUNDS[key];
+  if (value !== null && range && (value < range[0] || value > range[1]))
     throw new Error(`${label} is outside ${range[0]}..${range[1]}`);
   return value;
 }
 
-function optionalNumber(value: unknown, label: string, range?: [number, number]): number | null {
-  return value === null || value === undefined ? null : number(value, label, range);
-}
-
-function optionalString(value: unknown, label: string): string | null {
-  return value === null || value === undefined ? null : string(value, label);
-}
-
-function file(input: unknown, label: string, name: string): AqFile {
-  const value = object(input, label);
-  if (value.path !== name)
-    throw new Error(`${label}.path must be ${name}, the file beside the index`);
-  return {
-    path: name,
-    byteLength: integer(value.byteLength, `${label}.byteLength`),
-    crc32: string(value.crc32, `${label}.crc32`, CRC32),
-  };
-}
-
-function elementValue(key: string, value: unknown, label: string): number | null {
-  return optionalNumber(value, label, AQ_BOUNDS[key]);
+function unique(values: readonly string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`${label} lists a key twice`);
 }
 
 export function parseAqPointer(input: unknown): AqPointer {
   return pointer(input, "aq", AQ_PATH, AQ_SCHEMA_VERSION);
 }
 
-/** `aq.<round>/index.json`. The stations come from the tables beside it,
- * so the index comes back with `stations` empty. */
+/** `aq.<round>/index.json`: the schema's shape, then what it cannot say —
+ * each file is its network's, networks and elements are unique. The
+ * stations come from the tables beside it, so the index comes back with
+ * `stations` empty. */
 export function parseAqIndex(input: unknown): AqIndex {
-  const value = object(input, "aq index");
-  const version = schemaVersion(value.schemaVersion, "aq index", AQ_SCHEMA_VERSION);
-  const networks = list(value.networks, "index.networks").map((item, index): AqNetwork => {
-    const label = `index.networks[${index}]`;
-    const entry = object(item, label);
-    const id = string(entry.id, `${label}.id`, NETWORK_ID);
-    const stations = file(entry.stations, `${label}.stations`, `${id}.stations.json`);
-    if (typeof entry.preliminary !== "boolean")
-      throw new Error(`${label}.preliminary must be a boolean`);
+  const version = schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "aq index", AQ_SCHEMA_VERSION);
+  checkAqIndex(input, "index");
+  const networks = input.networks.map((entry, index): AqNetwork => {
+    for (const [key, name] of [["file", `${entry.id}.jsonl`], ["stations", `${entry.id}.stations.json`]] as const)
+      if (entry[key].path !== name)
+        throw new Error(`index.networks[${index}].${key}.path must be ${name}, the file beside the index`);
     return {
-      id,
-      name: string(entry.name, `${label}.name`),
-      cadence: integer(entry.cadence, `${label}.cadence`, 60),
-      avgPeriod: integer(entry.avgPeriod, `${label}.avgPeriod`, 60),
+      id: entry.id,
+      name: entry.name,
+      cadence: entry.cadence,
+      avgPeriod: entry.avgPeriod,
       preliminary: entry.preliminary,
-      attribution: string(entry.attribution, `${label}.attribution`),
-      license: string(entry.license, `${label}.license`),
-      licenseUrl: optionalString(entry.licenseUrl, `${label}.licenseUrl`),
-      url: string(entry.url, `${label}.url`),
-      latest:
-        entry.latest === null || entry.latest === undefined
-          ? null
-          : timestamp(entry.latest, `${label}.latest`),
-      file: file(entry.file, `${label}.file`, `${id}.jsonl`),
-      stations: {
-        ...stations,
-        count: integer(object(entry.stations, `${label}.stations`).count, `${label}.stations.count`),
-      },
+      attribution: entry.attribution,
+      license: entry.license,
+      licenseUrl: entry.licenseUrl ?? null,
+      url: entry.url,
+      latest: entry.latest ?? null,
+      file: entry.file,
+      stations: entry.stations,
     };
   });
-  if (new Set(networks.map((network) => network.id)).size !== networks.length)
-    throw new Error("index.networks lists a network twice");
-  const elements = list(value.elements, "index.elements").map((item, index) =>
-    string(item, `index.elements[${index}]`, ELEMENT_KEY),
-  );
-  if (new Set(elements).size !== elements.length)
-    throw new Error("index.elements lists an element twice");
+  unique(networks.map((network) => network.id), "index.networks");
+  unique(input.elements, "index.elements");
   const elementTable: Record<string, AqElementInfo> = {};
-  if (value.elementTable !== null && value.elementTable !== undefined) {
-    const table = object(value.elementTable, "index.elementTable");
-    for (const key of elements) {
-      if (table[key] === undefined) continue;
-      const entry = object(table[key], `index.elementTable.${key}`);
-      elementTable[key] = {
-        unit: string(entry.unit, `index.elementTable.${key}.unit`),
-        cell: string(entry.cell, `index.elementTable.${key}.cell`),
-      };
-    }
+  for (const key of input.elements) {
+    const entry = input.elementTable?.[key];
+    if (entry) elementTable[key] = { unit: entry.unit, cell: entry.cell };
   }
   return {
     schemaVersion: version,
-    issued: timestamp(value.issued, "index.issued"),
-    generated: timestamp(value.generated, "index.generated"),
+    issued: input.issued,
+    generated: input.generated,
     networks,
-    elements,
+    elements: input.elements,
     elementTable,
     stations: [],
   };
 }
 
-/** A `<network>.stations.json`, checked against the index that names it:
- * the network it says it is, the index's element list exactly, the row
- * count the index gave, rows sorted and unique under the network's prefix,
- * and spans in row order inside the network's `.jsonl`. */
+/** Where each column of a row is: by `columns` when the file names them,
+ * else by the v1 layout a file from before the field has. */
+function columnPositions(columns: readonly string[] | undefined, elements: readonly string[], what: string) {
+  const layout = [...ROW_HEAD, ...elements, ...ROW_TAIL];
+  const names = columns ?? layout;
+  const at = (name: string): number => {
+    const found = names.indexOf(name);
+    if (found < 0) throw new Error(`${what}.columns has no ${name}`);
+    return found;
+  };
+  unique(names, `${what}.columns`);
+  return {
+    width: names.length,
+    id: at("id"),
+    lat: at("lat"),
+    lon: at("lon"),
+    elev: at("elev"),
+    rank: at("rank"),
+    name: at("name"),
+    agency: at("agency"),
+    obsTime: at("obsTime"),
+    offset: at("offset"),
+    length: at("length"),
+    elements: elements.map((key) => [key, at(key)] as const),
+  };
+}
+
+/** A `<network>.stations.json`: the schema's shape, then checked against
+ * the index that names it — the network it says it is, the index's element
+ * list exactly, the row count the index gave, rows sorted and unique under
+ * the network's prefix, each known element in its range, and spans in row
+ * order inside the network's `.jsonl`. */
 export function parseAqStationTable(input: unknown, index: AqIndex, position: number): AqStation[] {
   const network = index.networks[position];
   if (!network) throw new Error(`aq index has no network ${position}`);
   const what = network.stations.path;
-  const value = object(input, what);
-  schemaVersion(value.schemaVersion, what, AQ_SCHEMA_VERSION);
-  if (value.network !== network.id) throw new Error(`${what}.network must be ${network.id}`);
-  timestamp(value.issued, `${what}.issued`);
-  const elements = list(value.elements, `${what}.elements`);
+  schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, what, AQ_SCHEMA_VERSION);
+  checkAqStationsFile(input, what);
+  if (input.network !== network.id) throw new Error(`${what}.network must be ${network.id}`);
   if (
-    elements.length !== index.elements.length ||
-    elements.some((key, at) => key !== index.elements[at])
+    input.elements.length !== index.elements.length ||
+    input.elements.some((key, at) => key !== index.elements[at])
   )
     throw new Error(`${what}.elements must equal the index's`);
-  const rows = list(value.stations, `${what}.stations`);
+  const rows = input.stations;
   if (rows.length !== network.stations.count)
     throw new Error(`${what} has ${rows.length} rows, the index says ${network.stations.count}`);
-  const width = 8 + index.elements.length + 2;
+  const column = columnPositions(input.columns, index.elements, what);
   let previous = "";
   let end = 0;
-  return rows.map((item, at): AqStation => {
+  return rows.map((row, at): AqStation => {
     const label = `${what}.stations[${at}]`;
-    const row = list(item, label);
-    if (row.length !== width) throw new Error(`${label} must be a row of ${width} values`);
-    const id = string(row[0], `${label}.id`, AQ_STATION_ID);
+    if (row.length !== column.width) throw new Error(`${label} must be a row of ${column.width} values`);
+    const cell = (position: number) => row[position] as unknown;
+    const id = cell(column.id);
+    if (typeof id !== "string") throw new Error(`${label}.id must be a string`);
     if (id <= previous) throw new Error(`${what}.stations must be sorted by id and unique`);
     previous = id;
-    if (AQ_STATION_ID.exec(id)![1] !== network.id)
+    if (AQ_STATION_ID.exec(id)?.[1] !== network.id)
       throw new Error(`${label}.id does not belong to its network`);
-    const offset = integer(row[width - 2], `${label}.offset`);
-    const length = integer(row[width - 1], `${label}.length`, 1);
+    const offset = cell(column.offset) as number;
+    const length = cell(column.length) as number;
+    if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length < 1)
+      throw new Error(`${label} has no byte span`);
     if (offset < end) throw new Error(`${label}.offset precedes the previous station's span`);
     if (offset + length > network.file.byteLength)
       throw new Error(`${label} spans past the end of the file it indexes`);
     end = offset + length;
     const values: Record<string, number | null> = {};
-    index.elements.forEach((key, column) => {
-      values[key] = elementValue(key, row[8 + column], `${label}.${key}`);
-    });
+    for (const [key, place] of column.elements)
+      values[key] = inRange(key, cell(place) as number | null, `${label}.${key}`);
     return {
       id,
       network: position,
-      lat: number(row[1], `${label}.lat`, LATITUDE),
-      lon: number(row[2], `${label}.lon`, LONGITUDE),
-      elev: optionalNumber(row[3], `${label}.elev`, ELEVATION),
-      rank: integer(row[4], `${label}.rank`),
-      name: optionalString(row[5], `${label}.name`),
-      agency: optionalString(row[6], `${label}.agency`),
-      obsTime: timestamp(row[7], `${label}.obsTime`),
+      lat: cell(column.lat) as number,
+      lon: cell(column.lon) as number,
+      elev: cell(column.elev) as number | null,
+      rank: cell(column.rank) as number,
+      name: cell(column.name) as string | null,
+      agency: cell(column.agency) as string | null,
+      obsTime: cell(column.obsTime) as string,
       values,
       offset,
       length,
@@ -311,39 +293,27 @@ export function assembleAqIndex(index: AqIndex, tables: readonly (AqStation[] | 
   return { ...index, networks, stations };
 }
 
-/** One line of a network file, the slice a row's span reads out. */
+/** One line of a network file, the slice a row's span reads out: the
+ * schema's shape, `time` strictly increasing and every `obs` array an
+ * element's and as long as it. */
 export function parseAqStation(input: unknown): AqStationSeries {
-  const value = object(input, "station");
-  const time = list(value.time, "station.time").map((item, index) =>
-    integer(item, `station.time[${index}]`),
-  );
-  if (time.length === 0) throw new Error("station.time must not be empty");
+  checkAqLine(input, "station");
+  const time = input.time;
   for (let index = 1; index < time.length; index += 1)
     if (time[index]! <= time[index - 1]!) throw new Error("station.time must be strictly increasing");
-  const columns = object(value.obs, "station.obs");
   const obs: Record<string, (number | null)[]> = {};
-  for (const [key, column] of Object.entries(columns)) {
+  for (const [key, values] of Object.entries(input.obs)) {
     if (!ELEMENT_KEY.test(key)) throw new Error(`station.obs has a malformed key ${key}`);
-    const values = list(column, `station.obs.${key}`);
     if (values.length !== time.length) throw new Error(`station.obs.${key} must be as long as time`);
-    obs[key] = values.map((item, index) => elementValue(key, item, `station.obs.${key}[${index}]`));
-  }
-  let names: Record<string, string> | null = null;
-  if (value.names !== null && value.names !== undefined) {
-    names = Object.fromEntries(
-      Object.entries(object(value.names, "station.names")).map(([tag, name]) => [
-        tag,
-        string(name, `station.names.${tag}`),
-      ]),
-    );
+    obs[key] = values;
   }
   return {
-    id: string(value.id, "station.id", AQ_STATION_ID),
-    name: optionalString(value.name, "station.name"),
-    names,
-    lat: number(value.lat, "station.lat", LATITUDE),
-    lon: number(value.lon, "station.lon", LONGITUDE),
-    agency: optionalString(value.agency, "station.agency"),
+    id: input.id,
+    name: input.name ?? null,
+    names: input.names ?? null,
+    lat: input.lat,
+    lon: input.lon,
+    agency: input.agency ?? null,
     time,
     obs,
   };
