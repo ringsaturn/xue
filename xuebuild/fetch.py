@@ -22,9 +22,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from . import aurora, cmaarchive, cmadust, jmacli, om2nccli
+from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
 from .common import (
     S3_NAMESPACE,
@@ -48,6 +48,9 @@ from .idx import (
 from .model import GfsRun
 from .sources import SourceSpec, family_frame_path, source_spec
 from .variables import VARIABLES
+
+if TYPE_CHECKING:
+    from .feeds import Fetcher
 
 LOG = logging.getLogger(__name__)
 # GFS objects (pgrb2 and sflux, including .idx files) are mirrored bit-for-bit
@@ -143,9 +146,6 @@ ARPEGE_PACKAGE_DIRNAME = "SP1"
 # of a message on the regular latitude/longitude grid.
 ARPEGE_STATIC_PACKAGE = "SP2"
 ARPEGE_HEAD_BYTES = 512
-# Sources whose records arrive CCSDS packed besides the ECMWF open data:
-# every frame is repacked to grid_simple before GDAL reads it.
-CCSDS_SOURCES = frozenset({"iconeu", "arpege"})
 MRMS_FETCH_FILENAME = "fetch.json"
 # What a built window holds, written beside its manifest by `build-bin` for
 # an observation source (`xuebuild.cli`), from the fetch record below.
@@ -1420,17 +1420,7 @@ def latest_observation_slot(spec: SourceSpec, *, now: datetime | None = None) ->
     """The newest frame a live observation source's feed holds — what the
     rolling publish compares the live window against, and what
     ``resolve_run("latest")`` ends the window at."""
-    if spec.mrms:
-        return latest_mrms_slot(spec, now=now)
-    if spec.id == "jma":
-        return latest_jma_slot(spec, now=now)
-    if spec.id == "cma":
-        return latest_cma_slot(spec, now=now)
-    if spec.id == "aurora":
-        return latest_aurora_slot(spec, now=now)
-    if spec.platform is not None:
-        return latest_satellite_slot(spec, now=now)
-    raise DownloadError(f"{spec.manifest_model} is not a live observation source")
+    return _fetcher(spec).latest_slot(spec, now=now)
 
 
 def observation_window_start(
@@ -1910,29 +1900,18 @@ def _fetch_satellite_run(
     return list(window.series.values())
 
 
+def _fetcher(spec: SourceSpec) -> Fetcher:
+    # Imported here: every feed calls back into this module.
+    from .feeds import fetcher
+
+    return fetcher(spec)
+
+
 def model_object_url(run: GfsRun, forecast_hour: int, model: str) -> str:
-    if model in ECMWF_OPEN_DATA_MODELS:
-        # The object a log line or a probe names: on a split source the
-        # surface part, which every frame touches.
-        part = "sfc" if ECMWF_OPEN_DATA_MODELS[model].split else None
-        return ecmwf_object_url(run, forecast_hour, model=model, part=part)
-    if model == "cfs":
-        # CFSv2 has no object per forecast hour: a run is one object per
-        # variable holding the whole series. The hour is ignored and the
-        # run's reference object named — the one a probe would ask for.
-        return cfs_variable_url(run, source_spec(model).input_variable_ids[0])
-    if model == "sflux":
-        return sflux_object_url(run, forecast_hour)
-    if model == "hrrr":
-        return hrrr_object_url(run, forecast_hour)
-    if model == "gefsaero":
-        return gefsaero_object_url(run, forecast_hour)
-    if model == "iconeu":
-        # One object per field: the temperature's names the frame.
-        return icon_eu_object_url(run, forecast_hour, "tmp2m")
-    if model == "arpege":
-        return arpege_package_url(run, arpege_package(forecast_hour))
-    return object_url(run, forecast_hour)
+    """The object one forecast hour of ``model`` is fetched from — the one
+    a log line or a probe names."""
+    spec = source_spec(model)
+    return _fetcher(spec).object_url(spec, run, forecast_hour)
 
 
 def _is_ecmwf_url(url: str) -> bool:
@@ -2083,72 +2062,67 @@ def _run_is_complete(
     *,
     now: datetime | None = None,
 ) -> bool:
-    if source_spec(model).mrms:
-        return _mrms_run_is_complete(source_spec(model), run, hours)
-    if model == "jma":
-        return _jma_run_is_complete(source_spec(model), run, hours)
-    if model == "cma":
-        return _cma_run_is_complete(source_spec(model), run, hours)
-    if model == "aurora":
-        return _aurora_run_is_complete(source_spec(model), run, hours)
-    if model == "cfs":
-        return _cfs_run_is_complete(source_spec(model), run, hours)
-    if source_spec(model).open_meteo is not None:
-        return _open_meteo_run_is_complete(source_spec(model), run)
-    if model == "cmadust":
-        # Neither WIS2 cache holds every file of a run; their listings
-        # together must name every lead time.
-        return cmadust.run_is_complete(source_spec(model), run, hours, fetch=fetch_text)
-    if source_spec(model).platform is not None:
-        return _satellite_run_is_complete(source_spec(model), run, hours, now=now)
-    if model == "hrrr":
-        # Every hour, on one mirror: the hours of a cycle land out of order
-        # and the two copies disagree for a while, so the ends prove nothing.
-        # The ``.idx`` the build reads lands on its own, up to ten minutes
-        # after the GRIB it describes, so both are probed.
-        # A mirror that cannot be probed is a mirror that cannot serve.
-        for base_url in HRRR_BASE_URLS:
-            try:
-                if all(
-                    exists(url) and exists(url + ".idx")
-                    for url in (
-                        hrrr_object_url(run, hour, base_url=base_url)
-                        for hour in source_spec(model).forecast_hours(hours, cycle=run.time.hour)
-                    )
-                ):
-                    return True
-            except DownloadError as exc:
-                LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
-        return False
-    if model == "iconeu":
-        # One object per field and step, written field by field: both ends
-        # of every input (the gust has no analysis record to probe).
-        spec = source_spec(model)
-        return all(
-            exists(icon_eu_object_url(run, hour, variable_id))
-            for hour in (0, hours)
-            for variable_id in _frame_variable_ids(spec, hour)
-        )
-    if model == "arpege":
-        # A package object appears whole once written: every package the
-        # axis reaches must be there, and the one the terrain is read from.
-        spec = source_spec(model)
-        packages = dict.fromkeys(arpege_package(hour) for hour in spec.forecast_hours(hours))
-        urls = [arpege_package_url(run, package) for package in packages]
-        if any(VARIABLES[variable_id].static for variable_id in spec.input_variable_ids):
-            urls.append(arpege_package_url(run, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE))
-        return all(exists(url) for url in urls)
-    if model not in ECMWF_OPEN_DATA_MODELS:
-        urls = [model_object_url(run, 0, model), model_object_url(run, hours, model)]
-        for companion in source_spec(model).companion_files:
-            urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
-        return all(exists(url) for url in urls)
+    spec = source_spec(model)
+    return _fetcher(spec).is_complete(spec, run, hours, exists, now=now)
 
+
+def _grib_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
+    """Both ends of the primary object and of each companion family's: a
+    NOAA cycle writes its hours in order, so the last proves the rest."""
+    urls = [model_object_url(run, 0, spec.id), model_object_url(run, hours, spec.id)]
+    for companion in spec.companion_files:
+        urls += [companion_object_url(run, 0, companion.id), companion_object_url(run, hours, companion.id)]
+    return all(exists(url) for url in urls)
+
+
+def _hrrr_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
+    # Every hour, on one mirror: the hours of a cycle land out of order
+    # and the two copies disagree for a while, so the ends prove nothing.
+    # The ``.idx`` the build reads lands on its own, up to ten minutes
+    # after the GRIB it describes, so both are probed.
+    # A mirror that cannot be probed is a mirror that cannot serve.
+    for base_url in HRRR_BASE_URLS:
+        try:
+            if all(
+                exists(url) and exists(url + ".idx")
+                for url in (
+                    hrrr_object_url(run, hour, base_url=base_url)
+                    for hour in spec.forecast_hours(hours, cycle=run.time.hour)
+                )
+            ):
+                return True
+        except DownloadError as exc:
+            LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
+    return False
+
+
+def _icon_eu_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
+    # One object per field and step, written field by field: both ends
+    # of every input (the gust has no analysis record to probe).
+    return all(
+        exists(icon_eu_object_url(run, hour, variable_id))
+        for hour in (0, hours)
+        for variable_id in _frame_variable_ids(spec, hour)
+    )
+
+
+def _arpege_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
+    # A package object appears whole once written: every package the
+    # axis reaches must be there, and the one the terrain is read from.
+    packages = dict.fromkeys(arpege_package(hour) for hour in spec.forecast_hours(hours))
+    urls = [arpege_package_url(run, package) for package in packages]
+    if any(VARIABLES[variable_id].static for variable_id in spec.input_variable_ids):
+        urls.append(arpege_package_url(run, ARPEGE_PACKAGES[0], ARPEGE_STATIC_PACKAGE))
+    return all(exists(url) for url in urls)
+
+
+def _ecmwf_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
     # Both ends of every object a frame touches, on one mirror: the wave
     # stream lands on its own schedule, and so does each part of a split
     # stream, and a run is complete only when all of them are there.
-    label = source_spec(model).manifest_model
-    parts: tuple[str | None, ...] = ("sfc", "pl") if ECMWF_OPEN_DATA_MODELS[model].split else (None,)
+    model = spec.id
+    label = spec.manifest_model
+    parts: tuple[str | None, ...] = ("sfc", "pl") if ecmwf_open_data(model).split else (None,)
     transient_error: DownloadError | None = None
     for base_url in ECMWF_BASE_URLS:
         urls = [
@@ -2156,7 +2130,7 @@ def _run_is_complete(
             for part in parts
             for hour in (0, hours)
         ]
-        for companion in source_spec(model).companion_files:
+        for companion in spec.companion_files:
             urls += [
                 ecmwf_companion_object_url(run, hour, companion.id, base_url=base_url, model=model)
                 for hour in (0, hours)
@@ -2339,31 +2313,10 @@ def _download_noaa_payload(
     )
     for companion in spec.companion_files:
         url = companion_object_url(run, forecast_hour, companion.id)
-        records = _download_noaa_records(
+        payload += _download_noaa_records(
             url, tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids)
         )
-        if records and companion.repack:
-            records = _repack_grid_simple(records, url)
-        payload += records
     return payload
-
-
-def _repack_grid_simple(records: bytes, url: str) -> bytes:
-    """The same GRIB messages repacked to ``grid_simple`` with eccodes — for
-    a family whose packing the wheel's GDAL cannot read (GFS-Wave's JPEG
-    2000). Done on the family's bytes alone, before they join the frame, so
-    the pgrb2 records keep the packing they came with."""
-    from .eccodescli import repack_grid_simple
-
-    with tempfile.TemporaryDirectory(prefix="xue-repack-") as scratch:
-        raw = Path(scratch) / "records.grib2"
-        repacked = Path(scratch) / "records.simple.grib2"
-        raw.write_bytes(records)
-        try:
-            repack_grid_simple(raw, repacked)
-            return repacked.read_bytes()
-        except Exception as exc:
-            raise DownloadError(f"could not repack GRIB records from {url}: {exc}") from exc
 
 
 def _download_hrrr_payload(
@@ -2615,9 +2568,13 @@ def fetch_frame(
     input_ids: tuple[str, ...] | None = None,
 ) -> Path:
     from .eccodescli import repack_grid_simple
+    from .feeds import FrameFeed
     from .gdal import inspect_grib
 
     spec = source_spec(model)
+    feed = _fetcher(spec)
+    if not isinstance(feed, FrameFeed):
+        raise DownloadError(f"{spec.manifest_model} is not fetched one GRIB per forecast hour")
     frame_variable_ids = _frame_variable_ids(spec, forecast_hour, input_ids)
     if not frame_variable_ids:
         # Every requested input is static (read at the analysis alone) or
@@ -2645,21 +2602,12 @@ def fetch_frame(
                 f"enable a forced download to replace it: {output}"
             )
     LOG.info("downloading GRIB %s", output)
-    url = model_object_url(run, forecast_hour, model)
-    if spec.id in ECMWF_OPEN_DATA_MODELS:
-        payload = _download_ecmwf_payload(run, forecast_hour, spec, input_ids)
-    elif spec.id == "hrrr":
-        payload = _download_hrrr_payload(run, forecast_hour, spec, input_ids)
-    elif spec.id == "iconeu":
-        payload = _download_icon_eu_payload(run, forecast_hour, spec, input_ids)
-    elif spec.id == "arpege":
-        payload = _download_arpege_payload(run, forecast_hour, spec, destination, input_ids)
-    else:
-        payload = _download_noaa_payload(run, forecast_hour, spec, input_ids)
-    if spec.id in ECMWF_OPEN_DATA_MODELS or spec.id in CCSDS_SOURCES:
-        # Open data messages are CCSDS/AEC packed (DRS 5.42), the IFS's and
-        # the AIFS's alike, and so are DWD's and Météo-France's; repack to
-        # grid_simple so any GDAL build can read the stored file.
+    url = feed.object_url(spec, run, forecast_hour)
+    payload = feed.frame_payload(spec, run, forecast_hour, destination, input_ids)
+    if spec.packing == "ccsds":
+        # CCSDS/AEC packed messages (DRS 5.42: the ECMWF open data, DWD's
+        # and Météo-France's) are repacked to grid_simple so any GDAL build
+        # can read the stored file.
         raw = output.with_suffix(".ccsds.grib2")
         repacked = output.with_suffix(".repack.grib2")
         write_bytes_atomic(raw, payload)
@@ -2693,58 +2641,36 @@ def fetch_run(
     input_ids: tuple[str, ...] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
 ) -> list[Path]:
-    """Fetch every frame of a run, ``spec.fetch_concurrency`` frames at a
-    time (each frame is several fresh HTTPS round-trips, so a sequential
-    fetch is latency-bound, not bandwidth-bound). Results keep frame order.
-    ECMWF retries a failed frame in place so completed frames remain reusable.
-    ``bbox`` narrows a satellite window to the cells a crop to it keeps;
-    every other source is fetched whole and cropped by the converter."""
+    """Fetch every frame of a run through the source's feed
+    (:attr:`SourceSpec.feed`), into ``raw_root``. ``bbox`` narrows a
+    satellite window to the cells a crop to it keeps; every other source is
+    fetched whole and cropped by the converter."""
     spec = source_spec(model)
-    if spec.mrms:
-        return _fetch_mrms_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.id == "jma":
-        return _fetch_jma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.id == "cma":
-        return _fetch_cma_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.id == "aurora":
-        return _fetch_aurora_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.id == "cfs":
-        return _fetch_cfs_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.platform is not None:
-        return _fetch_satellite_run(spec, run, hours, raw_root, force=force, input_ids=input_ids, bbox=bbox)
-    if spec.open_meteo is not None:
-        return _fetch_open_meteo_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
-    if spec.id == "cmadust":
-        return cmadust.fetch_run(
-            spec,
-            run,
-            hours,
-            raw_root,
-            force=force,
-            input_ids=input_ids,
-            fetch_text=fetch_text,
-            read_range=fetch_range,
-        )
-    destination = raw_root / f"{spec.id}.{run.id}"
-    forecast_hours = spec.forecast_hours(hours, cycle=run.time.hour)
-    frame_attempts = ECMWF_FRAME_ATTEMPTS if model in ECMWF_OPEN_DATA_MODELS else 1
-    if spec.id == "arpege":
-        # The frames are cut out of whole packages: fetch the packages the
-        # frames not on disk yet reach, then cut them as any frame is made.
-        missing = [
-            hour
-            for hour in forecast_hours
-            if force or not (destination / f"{spec.id}.{run.id}.f{hour:03d}.grib2").exists()
-        ]
-        if missing:
-            _fetch_arpege_packages(run, missing, destination, force=force)
+    return _fetcher(spec).fetch_run(spec, run, hours, raw_root, force=force, input_ids=input_ids, bbox=bbox)
+
+
+def fetch_frames(
+    spec: SourceSpec,
+    run: GfsRun,
+    forecast_hours: list[int],
+    destination: Path,
+    *,
+    force: bool = False,
+    input_ids: tuple[str, ...] | None = None,
+    attempts: int = 1,
+) -> list[Path]:
+    """Fetch the frames of a one-GRIB-per-hour feed, ``spec.fetch_concurrency``
+    frames at a time (each frame is several fresh HTTPS round-trips, so a
+    sequential fetch is latency-bound, not bandwidth-bound). Results keep
+    frame order. A feed with ``attempts`` above one retries a failed frame
+    in place so completed frames remain reusable."""
 
     def fetch_with_retries(hour: int) -> Path:
-        for attempt in range(frame_attempts):
+        for attempt in range(attempts):
             try:
-                return fetch_frame(run, hour, destination, force=force, model=model, input_ids=input_ids)
+                return fetch_frame(run, hour, destination, force=force, model=spec.id, input_ids=input_ids)
             except DownloadError as exc:
-                if attempt + 1 == frame_attempts:
+                if attempt + 1 == attempts:
                     raise
                 delay_cap = min(180.0, 60.0 * (2**attempt))
                 delay = random.uniform(60.0, delay_cap)

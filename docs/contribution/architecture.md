@@ -14,7 +14,7 @@ Normative specs, which win over this page: [format.md](../format.md),
 ## Map
 
 - `xuebuild/` — Python pipeline and **reference encoder** ([pipeline.md](pipeline.md)).
-  `sources.py` / `variables.py` registries; `fetch.py` + `idx.py` +
+  `sources.py` / `variables.py` registries; `feeds.py` per-family fetchers over `fetch.py` + `idx.py` +
   `grib2.py` range fetches; `binconvert.py` the conversion; `quantize.py`,
   `temporal.py`, `binformat.py` codebooks, residuals, container I/O;
   `observation.py` NetCDF ingest; `model.py` shared shapes (`SourceFrame`,

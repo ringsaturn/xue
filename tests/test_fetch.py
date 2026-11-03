@@ -10,7 +10,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from xuebuild import registry
 from xuebuild.errors import DownloadError
+from xuebuild.feeds import FEEDS, FrameFeed, fetcher
 from xuebuild.fetch import (
     ECMWF_OPEN_DATA_MODELS,
     _download_ecmwf_payload,
@@ -25,6 +27,7 @@ from xuebuild.fetch import (
     fetch_run,
     floor_to_cycle,
     get_ok,
+    latest_observation_slot,
     object_url,
     parse_run,
     remote_exists,
@@ -33,7 +36,7 @@ from xuebuild.fetch import (
 )
 from xuebuild.idx import ByteRange
 from xuebuild.model import GfsRun
-from xuebuild.sources import source_spec
+from xuebuild.sources import SOURCES, source_spec
 from xuebuild.variables import variable_spec
 
 
@@ -399,6 +402,43 @@ class FetchTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+
+class FeedTests(unittest.TestCase):
+    """The source table names each source's feed family; the families'
+    structural markers must agree with it."""
+
+    def test_every_source_names_a_known_feed(self) -> None:
+        for source_id, spec in SOURCES.items():
+            with self.subTest(source=source_id):
+                self.assertIn(spec.feed, FEEDS)
+                self.assertIs(fetcher(spec), FEEDS[spec.feed])
+                self.assertEqual(spec.feed == "local", not spec.fetched)
+                self.assertEqual(spec.feed == "noaa-mrms", spec.mrms)
+                self.assertEqual(spec.feed == "satellite", spec.platform is not None)
+                self.assertEqual(spec.feed == "open-meteo", spec.open_meteo is not None)
+                self.assertEqual(spec.feed == "ecmwf-open-data", source_id in ECMWF_OPEN_DATA_MODELS)
+                self.assertIn(spec.packing, ("published", "ccsds"))
+
+    def test_only_one_grib_per_hour_feeds_are_repacked(self) -> None:
+        ccsds = {source_id for source_id, spec in SOURCES.items() if spec.packing == "ccsds"}
+        self.assertEqual(ccsds, {"ecmwf", "ifs", "aifs", "iconeu", "arpege"})
+        for source_id in ccsds:
+            self.assertIsInstance(fetcher(SOURCES[source_id]), FrameFeed)
+
+    def test_a_local_source_is_not_fetched(self) -> None:
+        run = GfsRun(datetime(2026, 8, 15, 0, tzinfo=UTC))
+        with self.assertRaisesRegex(DownloadError, "not fetched"):
+            fetch_run(run, 6, Path("raw"), model="woof")
+        with self.assertRaisesRegex(DownloadError, "not a live observation source"):
+            latest_observation_slot(source_spec("gfs"))
+
+    def test_the_fetch_only_fields_stay_out_of_the_registry_document(self) -> None:
+        for entry in registry.document()["sources"].values():
+            self.assertNotIn("feed", entry)
+            self.assertNotIn("packing", entry)
+            for companion in entry["companionFiles"]:
+                self.assertIs(companion["repack"], False)
 
 
 if __name__ == "__main__":
