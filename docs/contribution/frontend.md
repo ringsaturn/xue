@@ -11,7 +11,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 
 | Module | Role |
 | --- | --- |
-| `main.ts` | Composition root: sessions, slots, playback, rail, probe, polling. |
+| `main.ts` | Composition root: sessions, slots, playback, rail, polling. Feature controllers are factories it wires up with their state as explicit `Deps`. |
+| `session.ts` | The `VariableSession` type the controllers share. |
 | `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
@@ -31,6 +32,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
+| `probepanel.ts` | The probe panel's controller (`createProbePanel`): the pin, series requests, probe sessions, rows, terrain column, station chips, skew-T sheet. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
 | `accumulation.ts` | Sliding-window precipitation totals (`?accum=`) from the published rate frames; see "Precipitation totals" below. |
 | `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `main.ts` (`fireDerived`). |
