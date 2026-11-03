@@ -46,7 +46,7 @@ from xuebuild.idx import field_byte_range
 from xuebuild.model import GfsRun
 from xuebuild.quantize import PROFILES
 from xuebuild.sources import source_spec
-from xuebuild.stac import prose_document
+from xuebuild.stac import _PROSE
 from xuebuild.variables import AEROSOL_VARIABLE_IDS, VARIABLES, AerosolIdentity, variable_spec
 
 FIXTURE_FRAMES = [FIXTURES / "gefsaero.2026091900.f000.crop.grib2", FIXTURES / "gefsaero.2026091900.f003.crop.grib2"]
@@ -278,7 +278,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual((GEFSAERO.production_grid, GEFSAERO.tile, GEFSAERO.variant_factors), ((1440, 721), (48, 52), (2,)))
         self.assertFalse(GEFSAERO.video)
         self.assertEqual(video_variable_ids(GEFSAERO), frozenset())
-        prose = prose_document()["sources"]["gefsaero"]
+        prose = _PROSE["sources"]["gefsaero"]
         self.assertEqual(prose["license"], "other")
         self.assertEqual(prose["providers"][0]["name"], "NOAA / NCEP")
 

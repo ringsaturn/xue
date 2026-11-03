@@ -51,7 +51,7 @@ from xuebuild.fetch import (
 from xuebuild.idx import ByteRange
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
-from xuebuild.stac import prose_document
+from xuebuild.stac import _PROSE
 
 FIXTURE_FRAMES = [FIXTURES / "arpege.2026102512.f000.crop.grib2", FIXTURES / "arpege.2026102512.f001.crop.grib2"]
 ARPEGE = source_spec("arpege")
@@ -90,7 +90,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(ARPEGE.tile, GFS.tile)
         self.assertFalse(ARPEGE.video)
         self.assertEqual(video_variable_ids(ARPEGE), frozenset())
-        prose = prose_document()["sources"]["arpege"]
+        prose = _PROSE["sources"]["arpege"]
         self.assertEqual(prose["license"], "etalab-2.0")
         self.assertIn("Météo-France", prose["description"])
 
