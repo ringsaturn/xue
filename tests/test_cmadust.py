@@ -338,12 +338,12 @@ class ListingTests(unittest.TestCase):
     def test_resolve_run_latest_walks_back_over_the_twelve_hour_cycles(self) -> None:
         now = datetime(2026, 10, 30, 13, 0, tzinfo=UTC)
         with mock.patch.object(
-            fetch.cmadust, "run_is_complete", side_effect=lambda spec, run, hours, **kwargs: run.id == "2026103000"
+            cmadust, "run_is_complete", side_effect=lambda spec, run, hours, **kwargs: run.id == "2026103000"
         ) as probe:
             run = resolve_run("latest", hours=168, now=now, model="cmadust")
         self.assertEqual(run.id, "2026103000")
         self.assertEqual([call.args[1].id for call in probe.call_args_list], ["2026103012", "2026103000"])
-        with mock.patch.object(fetch.cmadust, "run_is_complete", return_value=False):
+        with mock.patch.object(cmadust, "run_is_complete", return_value=False):
             with self.assertRaisesRegex(DownloadError, "incomplete"):
                 resolve_run("2026103000", hours=168, model="cmadust")
 
@@ -438,7 +438,7 @@ class FetchTests(TempRoot, unittest.TestCase):
             self.run_fetch(bucket, input_ids=("pm10dust",))
 
     def test_the_dispatch_reaches_the_module(self) -> None:
-        with mock.patch.object(fetch.cmadust, "fetch_run", return_value=[]) as fetch_run:
+        with mock.patch.object(cmadust, "fetch_run", return_value=[]) as fetch_run:
             fetch.fetch_run(RUN, 3, self.root, model="cmadust", input_ids=("dustsfc",))
         self.assertEqual(fetch_run.call_args.kwargs["input_ids"], ("dustsfc",))
         self.assertIs(fetch_run.call_args.kwargs["read_range"], fetch.fetch_range)

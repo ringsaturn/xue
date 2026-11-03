@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
@@ -22,6 +23,10 @@ from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIV
 #: order: GEFS-Aerosols' total and organic optical depth and its fine
 #: particulate matter.
 AEROSOL_SERIES_IDS = ("aod", "aodorg", "pm25")
+
+#: How a feed packs the GRIB records a frame is cut from
+#: (:attr:`SourceSpec.packing`).
+Packing = Literal["published", "ccsds"]
 
 
 @dataclass(frozen=True)
@@ -54,16 +59,6 @@ class CompanionFile:
     variable_ids: tuple[str, ...]
     """Which of the source's :attr:`SourceSpec.input_variable_ids` come
     from this family rather than the primary file, in assembly order."""
-    repack: bool = False
-    """True when the family's records must be repacked to ``grid_simple``
-    with eccodes at fetch time, the way the CCSDS-packed ECMWF files are,
-    because some GDAL this pipeline converts through cannot decode their
-    packing. A build job of a bundle from such a family installs
-    ``grib_set`` (``assemble.group_needs_eccodes``). No family needs it:
-    the GDAL the ``xuepy`` wheel carries links OpenJPEG
-    (``scripts/build-gdal-minimal.sh``) and so decodes WAVEWATCH III's
-    JPEG 2000 packing (DRS template 5.40); the switch is for a packing a
-    wheel cannot read."""
     production_grid: tuple[int, int] | None = None
     """Set when the family is on a grid of its own (CFSv2's 1° pressure-level
     series beside its T126 Gaussian surface series): the grid a complete
@@ -151,6 +146,17 @@ class SourceSpec:
     accumulated_precipitation: bool
     """True when precipitation arrives as a run-total accumulation (ECMWF
     ``tp``, metres) and must be de-accumulated into a rate."""
+    feed: str
+    """The feed family a run of the source is fetched through: a key of
+    :data:`xuebuild.feeds.FEEDS`, whose fetcher knows the feed's object
+    names, when a run of it has landed, what its newest frame is and how a
+    run comes down (``docs/contribution/sources.md``, "Feeds"). Sources
+    on one upstream service share a family (``ecmwf-open-data`` for the
+    IFS at both resolutions and the AIFS, ``satellite`` for every disk,
+    ``noaa-mrms`` for the mosaic and the volume); ``local`` for a source
+    nothing fetches, read from a file or directory a tool wrote. Read on
+    the Python side only: the native encoder never fetches, so the
+    registry document leaves it out."""
     companion_files: tuple[CompanionFile, ...] = ()
     """Further file families of the same cycle some inputs come from. A run
     is complete only when every family has its first and last frame, and a
@@ -212,7 +218,7 @@ class SourceSpec:
     open_meteo: str | None = None
     """For a source fetched from the Open-Meteo open data bucket, the model
     directory under ``data_spatial/`` its runs live in (``ecmwf_ifs``). The
-    fetch dispatches on it (:func:`xuebuild.fetch.fetch_run`), asks the
+    ``open-meteo`` feed reads it (:func:`xuebuild.fetch.fetch_run`), asks the
     ``om2nc`` tool for one CF NetCDF series per variable
     (:mod:`xuebuild.om2nccli`) and names each variable with the registry's
     :attr:`~xuebuild.variables.VariableSpec.open_meteo`. None for every
@@ -317,6 +323,16 @@ class SourceSpec:
     on a single dataset before the next. Only full-resolution bundles are
     mirrored. The encoder derives the store from the bundle on the Python
     side, so the wheel's own source table carries nothing for it."""
+    packing: Packing = "published"
+    """How the feed packs the GRIB records a frame is cut from.
+    ``published``, every feed but five, is a packing the GDAL a build
+    converts through reads as it comes. ``ccsds`` is CCSDS/AEC (DRS
+    template 5.42) — the ECMWF open data, DWD's ICON-EU and Météo-France's
+    ARPEGE — which GDAL builds without libaec cannot decode, so the fetch
+    repacks every frame to ``grid_simple`` with eccodes' ``grib_set``
+    before writing it, and every build job of the source installs the
+    eccodes tools (``assemble.group_needs_eccodes``, the matrix's
+    ``eccodes``). Read on the Python side only, like :attr:`feed`."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
     round-trips, so sequential fetching is latency-bound. NOAA's bucket and
@@ -428,7 +444,8 @@ class SourceSpec:
         (:attr:`~xuebuild.variables.VariableSpec.mrms_product`), one GRIB
         per frame rather than a series file — the composite mosaic and the
         reflectivity volume, but not the JMA nowcast, whose ``prate`` is
-        also an MRMS product's quantity. What the fetch dispatches on."""
+        also an MRMS product's quantity. Exactly the sources of the
+        ``noaa-mrms`` :attr:`feed`."""
         return (
             self.observation
             and self.window_hours is not None
@@ -583,6 +600,7 @@ CFS_PGB_IDS: tuple[str, ...] = (
 SOURCES: dict[str, SourceSpec] = {
     "gfs": SourceSpec(
         id="gfs",
+        feed="noaa-gfs",
         manifest_model="GFS",
         product="pgrb2.0p25",
         latest_filename="latest.json",
@@ -810,6 +828,8 @@ SOURCES: dict[str, SourceSpec] = {
     ),
     "ecmwf": SourceSpec(
         id="ecmwf",
+        feed="ecmwf-open-data",
+        packing="ccsds",
         manifest_model="ECMWF",
         product="ifs-0p25",
         latest_filename="latest-ecmwf.json",
@@ -984,6 +1004,8 @@ SOURCES: dict[str, SourceSpec] = {
     # frame per step as for ``ecmwf``. Grid, tile and ladder as ``ifshres``.
     "ifs": SourceSpec(
         id="ifs",
+        feed="ecmwf-open-data",
+        packing="ccsds",
         manifest_model="IFS",
         product="ifs-0p1",
         latest_filename="latest-ifs.json",
@@ -1141,6 +1163,8 @@ SOURCES: dict[str, SourceSpec] = {
     # about five and a half hours after the cycle.
     "aifs": SourceSpec(
         id="aifs",
+        feed="ecmwf-open-data",
+        packing="ccsds",
         manifest_model="AIFS",
         product="aifs-single-0p25",
         latest_filename="latest-aifs.json",
@@ -1251,6 +1275,7 @@ SOURCES: dict[str, SourceSpec] = {
     # the analysis.
     "ifshres": SourceSpec(
         id="ifshres",
+        feed="open-meteo",
         manifest_model="ECMWF-HRES",
         product="ifs-hres-0p1",
         latest_filename="latest-ifshres.json",
@@ -1322,6 +1347,7 @@ SOURCES: dict[str, SourceSpec] = {
     # window-cumulative PRATE averages.
     "sflux": SourceSpec(
         id="sflux",
+        feed="noaa-sflux",
         manifest_model="GFS-SFLUX",
         product="sfluxgrb",
         latest_filename="latest-sflux.json",
@@ -1359,6 +1385,7 @@ SOURCES: dict[str, SourceSpec] = {
     # observation.
     "hrrr": SourceSpec(
         id="hrrr",
+        feed="noaa-hrrr",
         manifest_model="HRRR",
         product="wrfsfc",
         latest_filename="latest-hrrr.json",
@@ -1447,6 +1474,7 @@ SOURCES: dict[str, SourceSpec] = {
     # either.
     "gefsaero": SourceSpec(
         id="gefsaero",
+        feed="noaa-gefs-aerosols",
         manifest_model="GEFS-AEROSOLS",
         product="chem-a2d-0p25",
         latest_filename="latest-gefsaero.json",
@@ -1476,6 +1504,7 @@ SOURCES: dict[str, SourceSpec] = {
     # ladder and no video.
     "cmadust": SourceSpec(
         id="cmadust",
+        feed="cmadust",
         manifest_model="CMA-CW-DUST",
         product="cma-cw-dust-0p15",
         latest_filename="latest-cmadust.json",
@@ -1505,6 +1534,7 @@ SOURCES: dict[str, SourceSpec] = {
     # published one is what every cycle reaches: 6552 hours, 1092 frames.
     "cfs": SourceSpec(
         id="cfs",
+        feed="noaa-cfs",
         manifest_model="CFSv2",
         product="time-grib-01",
         latest_filename="latest-cfs.json",
@@ -1610,6 +1640,8 @@ SOURCES: dict[str, SourceSpec] = {
     # time-invariant object per cycle).
     "iconeu": SourceSpec(
         id="iconeu",
+        feed="dwd-icon-eu",
+        packing="ccsds",
         manifest_model="ICON-EU",
         product="iconeu",
         latest_filename="latest-iconeu.json",
@@ -1645,6 +1677,8 @@ SOURCES: dict[str, SourceSpec] = {
     # fetch reads its one record out of the first ``SP2`` package by Range.
     "arpege": SourceSpec(
         id="arpege",
+        feed="meteofrance-arpege",
+        packing="ccsds",
         manifest_model="ARPEGE",
         product="arpege",
         latest_filename="latest-arpege.json",
@@ -1683,6 +1717,7 @@ SOURCES: dict[str, SourceSpec] = {
     # there is no ladder and no video.
     "woof": SourceSpec(
         id="woof",
+        feed="local",
         manifest_model="WOOF-WRF",
         product="nest",
         latest_filename=None,
@@ -1754,6 +1789,7 @@ SOURCES: dict[str, SourceSpec] = {
     # video; 64 x 64 cells is about a degree.
     "efas": SourceSpec(
         id="efas",
+        feed="local",
         manifest_model="EFAS-v5",
         product="hres",
         latest_filename=None,
@@ -1779,6 +1815,7 @@ SOURCES: dict[str, SourceSpec] = {
     # compares the two frame for frame.
     "efaswb": SourceSpec(
         id="efaswb",
+        feed="local",
         manifest_model="EFAS-v5-WB",
         product="water_balance",
         latest_filename=None,
@@ -1811,6 +1848,7 @@ SOURCES: dict[str, SourceSpec] = {
     # cells, so there is no ladder and no video.
     "era5": SourceSpec(
         id="era5",
+        feed="local",
         manifest_model="ERA5",
         product="reanalysis-single-levels",
         latest_filename=None,
@@ -1843,6 +1881,7 @@ SOURCES: dict[str, SourceSpec] = {
     # a few thousand cells, so there is no ladder and no video.
     "cams": SourceSpec(
         id="cams",
+        feed="local",
         manifest_model="CAMS",
         product="global-composition-analysis",
         latest_filename=None,
@@ -1875,6 +1914,7 @@ SOURCES: dict[str, SourceSpec] = {
     # cut from the mosaics (``dataset``), as the cases before the archive did.
     "cma": SourceSpec(
         id="cma",
+        feed="cma-archive",
         manifest_model="CMA-RADAR",
         product="l3-mst-cref",
         latest_filename="latest-cma.json",
@@ -1904,6 +1944,7 @@ SOURCES: dict[str, SourceSpec] = {
     # the previous frame, so a three-hour window is tens of megabytes.
     "mrms": SourceSpec(
         id="mrms",
+        feed="noaa-mrms",
         manifest_model="NOAA-MRMS",
         product="conus-cref",
         latest_filename="latest-mrms.json",
@@ -1936,6 +1977,7 @@ SOURCES: dict[str, SourceSpec] = {
     # one ``refl3d`` bundle, so a column or a slab is one range.
     "mrms3d": SourceSpec(
         id="mrms3d",
+        feed="noaa-mrms",
         manifest_model="NOAA-MRMS3D",
         product="conus-refl3d",
         latest_filename="latest-mrms3d.json",
@@ -1981,6 +2023,7 @@ SOURCES: dict[str, SourceSpec] = {
     # with the bucket so the agency's tiles are fetched once).
     "jma": SourceSpec(
         id="jma",
+        feed="jma-nowcast",
         manifest_model="JMA-HRPNS",
         product="japan-prate",
         latest_filename="latest-jma.json",
@@ -2036,6 +2079,7 @@ SOURCES: dict[str, SourceSpec] = {
     # bucket.
     "himawari": SourceSpec(
         id="himawari",
+        feed="satellite",
         manifest_model="HIMAWARI",
         product="ahi-fldk-0p04",
         latest_filename="latest-himawari.json",
@@ -2094,6 +2138,7 @@ SOURCES: dict[str, SourceSpec] = {
     # staged on the disk grids.
     "himawarijp": SourceSpec(
         id="himawarijp",
+        feed="satellite",
         manifest_model="HIMAWARI-JP",
         product="ahi-japan-0p01",
         latest_filename="latest-himawarijp.json",
@@ -2143,6 +2188,7 @@ SOURCES: dict[str, SourceSpec] = {
     # Himawari's grid already takes.
     "goeseast": SourceSpec(
         id="goeseast",
+        feed="satellite",
         manifest_model="GOES-EAST",
         product="abi-fldk-0p04",
         latest_filename="latest-goeseast.json",
@@ -2169,6 +2215,7 @@ SOURCES: dict[str, SourceSpec] = {
     ),
     "goeswest": SourceSpec(
         id="goeswest",
+        feed="satellite",
         manifest_model="GOES-WEST",
         product="abi-fldk-0p04",
         latest_filename="latest-goeswest.json",
@@ -2212,6 +2259,7 @@ SOURCES: dict[str, SourceSpec] = {
     # of the numbers after it. A 24-hour window at that cadence is 25 frames.
     "meteosat": SourceSpec(
         id="meteosat",
+        feed="satellite",
         manifest_model="METEOSAT",
         product="fci-fldk-0p04",
         latest_filename="latest-meteosat.json",
@@ -2259,6 +2307,7 @@ SOURCES: dict[str, SourceSpec] = {
     # five-minute mark.
     "aurora": SourceSpec(
         id="aurora",
+        feed="ovation",
         manifest_model="SWPC-AURORA",
         product="ovation-aurora-1p00",
         latest_filename="latest-aurora.json",

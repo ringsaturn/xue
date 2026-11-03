@@ -57,15 +57,11 @@ def group_needs_video(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
 
 
 def group_needs_eccodes(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
-    """Whether a group fetches records the fetcher repacks with ``grib_set``
-    (a companion family with ``repack``), i.e. whether its job needs eccodes
-    installed. ECMWF needs it for every group and the workflow says so on its
-    own; this is for the sources that need it for some bundles only."""
-    return any(
-        (companion := source.companion_of(input_id)) is not None and companion.repack
-        for bundle_id in bundle_ids
-        for input_id in bundle_input_ids(source, bundle_id)
-    )
+    """Whether a group's job needs the eccodes tools installed: every group
+    of a source whose feed arrives CCSDS packed, since the fetch repacks
+    each frame with ``grib_set`` (:attr:`SourceSpec.packing`) whichever
+    records the group asks for."""
+    return source.packing == "ccsds"
 
 
 def _bundle_weight(source: SourceSpec, bundle_id: str) -> int:

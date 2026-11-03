@@ -111,12 +111,27 @@ def _camel_keys(value: Any) -> Any:
     return value
 
 
+#: Source fields the fetch alone reads. The native encoder never fetches,
+#: so they stay out of the document.
+FETCH_ONLY_SOURCE_FIELDS = ("feed", "packing")
+
+
+def _companion_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    # Schema 1 spells a companion family's ``repack`` switch, which the
+    # native encoder still parses. Repacking is the source's ``packing``
+    # now and never a family's, so the key is always false.
+    head = {key: entry[key] for key in ("id", "variableIds")}
+    return {**head, "repack": False, **{key: value for key, value in entry.items() if key not in head}}
+
+
 def _sources() -> dict[str, Any]:
     sources: dict[str, Any] = {}
     for source_id, spec in SOURCES.items():
         assert is_dataclass(spec)
-        entry = _camel_keys(asdict(spec))
+        fields = {key: value for key, value in asdict(spec).items() if key not in FETCH_ONLY_SOURCE_FIELDS}
+        entry = _camel_keys(fields)
         entry["bands"] = [[variable_id, band] for variable_id, band in entry["bands"]]
+        entry["companionFiles"] = [_companion_entry(companion) for companion in entry["companionFiles"]]
         sources[source_id] = entry
     return sources
 

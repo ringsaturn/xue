@@ -59,7 +59,7 @@ bound on `--hours` is `MAX_FORECAST_HOURS`, derived from the registry.
 first hour (`window_hours`, the `--hours` default), and `cadence_seconds`
 makes the window's slots the axis, so `unitSeconds` is the cadence.
 `--run latest` resolves (`fetch.py::resolve_run`, `latest_observation_slot`
-dispatching per source, `observation_window_start`) to the window whose last
+asking the source's feed, `observation_window_start`) to the window whose last
 hour holds the newest frame. The same run is rebuilt as frames arrive, so
 each build takes `--round HHMM` and lands in `<model>.<run>/<HHMM>/` with a
 `window.json` (`fetch.py::window_summary`). **Never overwrite an object
@@ -75,6 +75,35 @@ so no runner is held for an hour); a `loop` dispatch runs rounds to twenty
 past the next hour and yields through `scripts/successor_queued.sh`. The
 shell treats a changed `manifestCrc32` on the pointer as a new run
 (`checkForNewRun` / `resumeOnNewRun` in `main.ts`).
+
+**Feeds.** `SourceSpec.feed` names the family a source is fetched
+through, a key of `xuebuild/feeds.py::FEEDS`. Its fetcher answers the four
+questions `fetch.py` asks of a source — the object of a forecast hour
+(`object_url`), whether a run has landed (`is_complete`), an observation's
+newest frame (`latest_slot`) and the run's download (`fetch_run`) — so
+nothing in the fetch tests a source id. A family is an upstream service and
+the shape of its objects: `noaa-gfs`, `noaa-sflux` and
+`noaa-gefs-aerosols` share the `.idx` byte-range path under their own
+object names; `noaa-hrrr`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
+`dwd-icon-eu` and `meteofrance-arpege` are the other one-GRIB-per-hour
+feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
+`open-meteo` and `cmadust` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
+`jma-nowcast`, `cma-archive`, `ovation` and `satellite` (every disk) are
+observation windows; `local` is a source nothing fetches (`woof`, `efas`,
+`efaswb`, `era5`, `cams`). What a family needs to tell its sources apart
+comes from their own fields (`platform`, `open_meteo`, `companion_files`)
+or a table in the family's code (`ECMWF_OPEN_DATA_MODELS`). The families'
+code stays in `fetch.py` beside the request, range and index helpers;
+`feeds.py` only says which of it serves which question.
+
+**Packing.** `SourceSpec.packing` is `published` (GDAL reads the records as
+they come) or `ccsds`: CCSDS/AEC (DRS template 5.42), which GDAL builds
+without libaec cannot decode, so `fetch_frame` repacks every frame to
+`grid_simple` with eccodes' `grib_set` before writing it. `ecmwf`, `ifs`,
+`aifs`, `iconeu` and `arpege` are `ccsds`; `assemble.group_needs_eccodes`
+flags every build job of such a source `eccodes`, which is all
+`publish.yml` reads to install the tools. Both fields are the fetch's
+alone: the registry document leaves them out.
 
 **Frame caches.** A feed without an archive deep enough for a whole window
 (JMA tiles expire after days, the aurora feed keeps one grid, the satellite
@@ -521,7 +550,8 @@ is the bucket's interval, `cadence_seconds` (600) the axis's, and
 only on a multiple of the latter. A frame is therefore the scan stamped in
 `[mark, mark + 120 s)`, every level from that one scan, and a mark any level
 lacks is a gap; the window listing, the live slot and the completeness check
-all go through it (`SourceSpec.mrms` is the dispatch key for both sources).
+all go through it (both sources are the `noaa-mrms` feed, and exactly the
+sources `SourceSpec.mrms` marks).
 The levels share one GRIB element, so the `template-mrms` rule compares the
 level too (template 4.0's assembled surface, or the `<metres>-GPML` short
 name);
@@ -652,11 +682,14 @@ forecast).
    bundle that is not a plain scalar in `xuebuild/bundles.py`. Regenerate
    `rust/xue/registry.json`, and a new family's fixture under
    `tests/fixtures/`.
-2. **Fetch.** The dispatch in `xuebuild/fetch.py`: frame URLs or the fetch
+2. **Fetch.** The source's `feed` (and `packing="ccsds"` if its records
+   arrive CCSDS packed; see "Feeds" and "Packing" above). On a known
+   service, name its family. A new service is a fetcher in
+   `xuebuild/feeds.py` registered in `FEEDS` — frame URLs or the fetch
    tool, the completeness check, and for an observation the latest-slot
-   resolver wired into `latest_observation_slot` / `resolve_run`. An
-   external tool stays a subprocess (`*cli.py`) and an optional dependency
-   goes in its own `pyproject.toml` group. Add the model to the CLI help in
+   resolver — over functions in `xuebuild/fetch.py`. An external tool
+   stays a subprocess (`*cli.py`) and an optional dependency goes in its
+   own `pyproject.toml` group. Add the model to the CLI help in
    `xuebuild/cli.py`.
 3. **Native mirror.** The same source, variables and codebooks in
    `rust/xue/src/encode/sources.rs`, `variables.rs`, `quantize.rs` (and

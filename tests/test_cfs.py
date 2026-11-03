@@ -260,7 +260,6 @@ class GridFamilyTests(unittest.TestCase):
         self.assertEqual(len(CFS_PGB_IDS), 31)
         self.assertEqual((family.production_grid, family.tile), ((360, 181), (90, 91)))
         self.assertTrue(family.own_grid)
-        self.assertFalse(family.repack)
         # The primary file keeps the nine surface inputs, and the family's
         # thirty-one follow them in the source's input order.
         self.assertEqual(CFS.primary_input_ids(), CFS.input_variable_ids[:9])

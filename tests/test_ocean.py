@@ -65,9 +65,9 @@ from xuebuild.binconvert import (
     vector_input_ids,
     video_variable_ids,
 )
+from xuebuild.eccodescli import repack_grid_simple
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
-    _repack_grid_simple,
     _run_is_complete,
     companion_object_url,
     object_url,
@@ -276,17 +276,18 @@ class RegistryTests(unittest.TestCase):
         # WAVEWATCH III packs its records as JPEG 2000. The wheel's GDAL
         # reads that since it took OpenJPEG on board (the JP2 fixture below
         # is what proves it), so the family is fetched as published and no
-        # GFS build job installs grib_set; the repack switch stays for a
-        # packing some GDAL cannot read.
-        self.assertFalse(wave.repack)
+        # GFS build job installs grib_set.
+        self.assertEqual(gfs.packing, "published")
         self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", "htsgw")))
         self.assertFalse(group_needs_eccodes(gfs, ("tmp2m", WAVE_BUNDLE_ID)))
         self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(gfs, 100)))
-        self.assertTrue(
-            group_needs_eccodes(replace(gfs, companion_files=(replace(wave, repack=True),)), ("tmp2m", WAVE_BUNDLE_ID)),
-            "a repacked family flags every group that reads it, the wave vector's included",
-        )
         self.assertFalse(any(entry["eccodes"] for entry in bundle_group_matrix(source_spec("sflux"), 100)))
+        # A CCSDS-packed feed is repacked frame by frame, whatever a group
+        # asks for, so every one of its jobs installs the tools.
+        for model in ("ecmwf", "ifs", "aifs", "iconeu", "arpege"):
+            with self.subTest(model=model):
+                self.assertTrue(all(entry["eccodes"] for entry in bundle_group_matrix(source_spec(model), 100)))
+        self.assertTrue(group_needs_eccodes(replace(gfs, packing="ccsds"), ("tmp2m",)))
         for variable_id in GFS_WAVE_IDS:
             self.assertIs(gfs.companion_of(variable_id), wave)
         for variable_id in ("tmpsfc", "icec", "icetk", "tmp2m", "prate"):
@@ -300,7 +301,7 @@ class RegistryTests(unittest.TestCase):
         # family id, appended the same way.
         ecmwf = source_spec("ecmwf")
         (ecmwf_wave,) = ecmwf.companion_files
-        self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids, ecmwf_wave.repack), ("wave", WAVE_IDS, False))
+        self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids), ("wave", WAVE_IDS))
         self.assertEqual(ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS)
         self.assertEqual(len(ecmwf.primary_input_ids()), 64)
 
@@ -342,24 +343,18 @@ class FetchTests(unittest.TestCase):
 class RepackTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("grib_set"), "eccodes CLI")
     def test_repacking_rewrites_every_message_as_grid_simple(self) -> None:
-        # The plumbing only, kept for the next family that needs it: the
-        # fixture's messages were written by GDAL (grid_ieee and
-        # grid_complex with GDAL's own scale choices), which `grib_set -r`
-        # does not carry over faithfully, so the values are not compared
-        # here. WAVEWATCH III's JPEG 2000 records, which this was written
-        # for, repack to the same integers; that was verified on a live
-        # frame by hand before the wheel learnt to read them as published.
-        repacked = _repack_grid_simple(FIXTURE.read_bytes(), "fixture")
+        # The plumbing the CCSDS feeds go through: the fixture's messages
+        # were written by GDAL (grid_ieee and grid_complex with GDAL's own
+        # scale choices), which `grib_set -r` does not carry over
+        # faithfully, so the values are not compared here.
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"
-            path.write_bytes(repacked)
+            repack_grid_simple(FIXTURE, path)
             self.assertEqual(len(grib2.index_messages(path)), 88, "every message survives, in order")
             listing = subprocess.run(
                 ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
             ).stdout
             self.assertEqual(listing.count("grid_simple"), 88)
-        with self.assertRaises(DownloadError):
-            _repack_grid_simple(b"not a grib message", "nowhere")
 
 
 class MatcherTests(unittest.TestCase):

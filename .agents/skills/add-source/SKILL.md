@@ -30,12 +30,15 @@ code: open access only, and record the attribution the licence requires.
    fetch concurrency). Put new variables in `xuebuild/variables.py` and their
    codebooks in `xuebuild/quantize.py` for every profile. A new family also
    regenerates its registry fixture under `tests/fixtures/`.
-2. **Fetch**: the dispatch in `xuebuild/fetch.py`, which covers the frame
-   URLs or the fetch tool, the completeness check and, for an observation,
-   the latest-slot resolver wired into `latest_observation_slot` /
-   `resolve_run`. An external tool stays a subprocess (`*cli.py`). An
-   optional dependency goes in its own `pyproject.toml` group. Add the model
-   to the CLI help in `xuebuild/cli.py`.
+2. **Fetch**: set `SourceSpec.feed` (and `packing="ccsds"` when the
+   records arrive CCSDS packed). A source on a service xue already reads
+   names that family. A new service is a fetcher in `xuebuild/feeds.py`,
+   registered in `FEEDS`, covering the frame URLs or the fetch tool, the
+   completeness check and, for an observation, the latest slot; its code
+   goes in `xuebuild/fetch.py`. Never add an `if spec.id == …` branch.
+   An external tool stays a subprocess (`*cli.py`). An optional dependency
+   goes in its own `pyproject.toml` group. Add the model to the CLI help in
+   `xuebuild/cli.py`.
 3. **Registry**: the native encoder has no tables; it reads the registry
    document (`docs/registry.md`). Regenerate the snapshot (`xue registry
    --output rust/xue/registry.json`, said in the commit). Only a *rule* the

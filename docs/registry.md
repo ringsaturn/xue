@@ -204,7 +204,10 @@ precipitation flags).
 ## Sources
 
 One entry per source, every field of `xuebuild/sources.py`'s `SourceSpec`
-under its camelCase name, nested records as objects, tuples as arrays:
+under its camelCase name, nested records as objects, tuples as arrays —
+except `feed` and `packing`, which only the fetch reads (the native
+encoder never fetches). A companion family's `repack` is always `false`:
+repacking is the source's `packing`, not a family's.
 
 ```jsonc
 "gfs": {
@@ -213,7 +216,7 @@ under its camelCase name, nested records as objects, tuples as arrays:
   "inputVariableIds": ["tmp2m", "prate", …],
   "accumulatedPrecipitation": false, "averagedPrecipitation": false, "intervalPrecipitation": false,
   "averageWindowHours": 6, "firstHour": 0,
-  "companionFiles": [{ "id": "wave", "variableIds": ["htsgw", …], "repack": true, "productionGrid": null, "tile": null }],
+  "companionFiles": [{ "id": "wave", "variableIds": ["htsgw", …], "repack": false, "productionGrid": null, "tile": null }],
   "optionalAtAnalysis": ["prate", …],
   "statisticalProcesses": [["gust", 2]],
   "bands": [["ir039", { "satelliteSeries": 0, "satelliteNumber": 174, "instrumentType": 297, "centralWavenumber": 257380 }]],

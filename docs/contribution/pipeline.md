@@ -84,9 +84,9 @@ the first step.
 - `SourceSpec.companion_files`: a second file family of the cycle (GFS
   `gfswave.*`, ECMWF `wave`). Its records are appended after the primary
   ones, so a frame stays one GRIB, and a run is complete only when they are
-  up. `CompanionFile.repack` (repack with `grib_set`; `bundle-groups` flags
-  the job `eccodes`) exists but nothing uses it. WAVEWATCH III is JPEG 2000:
-  the wheel's GDAL needs the OpenJPEG `scripts/build-gdal-minimal.sh` links.
+  up. A family is fetched in the packing it is published in: WAVEWATCH
+  III is JPEG 2000, which the wheel's GDAL reads through the OpenJPEG
+  `scripts/build-gdal-minimal.sh` links.
 - `VariableSpec.fill_values`: GDAL nodata becomes the codebook bottom
   **before** unit conversion, in both encoders. The format has no bitmap.
 
@@ -104,8 +104,11 @@ regenerating the registry fixtures ([testing.md](testing.md)).
 ## Modules
 
 - **`fetch.py` → `idx.py` / `grib2.py`**: byte-range fetches of exact GRIB
-  records, one `.idx` + range set per family. ECMWF's CCSDS packing is
-  repacked to `grid_simple` with `grib_set` at fetch time.
+  records, one `.idx` + range set per family. Which code fetches a source
+  is its `SourceSpec.feed`, looked up in `feeds.py`
+  ([sources.md](sources.md), "Feeds"). A source whose `packing` is `ccsds`
+  (ECMWF open data, ICON-EU, ARPEGE) is repacked to `grid_simple` with
+  `grib_set` at fetch time.
 - **`binconvert.py`**: grid discovery, `crop_grid`, units, de-accumulation,
   quantization, grouping, bundles, ladder, posters, video, manifest entries.
   Rules mirrored in `rust/xue/src/encode/`:
