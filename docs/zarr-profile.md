@@ -336,7 +336,7 @@ byteLength, crc32}`, or the segmented form (see "Segmented stores").
   `bundles.<tier>.zarr`, `<tier>` a non-empty run of lowercase ASCII
   letters other than `series` (any such tier, not only `half`, `quarter`
   and `eighth`). Every other path — a container, a series store (so
-  `bundles.series.zarr` too), a poster, a video, a one-bundle store — stays
+  `bundles.series.zarr` too), a poster, a one-bundle store — stays
   unique in the manifest.
 - `byteLength` is the bundle's share: the objects of its variable arrays
   (each `zarr.json` and shard) and of the coordinate arrays it uses (each

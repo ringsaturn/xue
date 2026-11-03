@@ -12,8 +12,6 @@
 - zstd ≥ 1.5 comes with the standard library (`compression.zstd`); no CLI.
 - Node.js ≥ 22.
 - A Rust toolchain and `wasm-pack` (the browser decoder, `make wasm`).
-- ffmpeg (optional): the H.264 companions, built only for a source with
-  `SourceSpec.video` on; no source has it on.
 - eccodes: `grib_set` repacks ECMWF open data (CCSDS-packed) to
   `grid_simple` at fetch time; `bufr_dump` decodes the tropical cyclone and
   sounding BUFR.
@@ -69,10 +67,8 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
   into the run's shared store `bundles.zarr/` straight from the codes, with
   `--xue` each bundle's `.xue` container beside it from the same codes; the
   reduced tiers (`bundles.half.zarr/`, plus `.quarter` on satellites and the
-  0.1° grids), a first-frame poster and, where
-  the source enables it, H.264 companions. `--skip-variants` /
-  `--skip-video` turn those off. The pressure family gets no poster or
-  companion: contours need exact codes.
+  0.1° grids) and a first-frame poster. `--skip-variants` turns the tiers
+  off. The pressure family gets no poster: contours need exact codes.
 - A vector bundle (`wind10m`, `wind850`, `qflux850`, …) is added only when
   its components were fetched; `--force-download` re-fetches.
 - Overwriting an existing manifest needs `--force`

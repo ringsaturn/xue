@@ -93,8 +93,8 @@ same block a store's `attributes.xue.grid` holds — so the Item reads an
 exact grid and states it again, verbatim, as `xue:grid`, for a client that
 wants the origin and steps without parsing `cube:dimensions`. A manifest
 written before the field falls back to the bundle metadata a run's core
-scalars always carry: the H.264 companion's when there is one (the full
-grid), else a poster's, which is the grid decimated two to one
+scalars always carry: the retired H.264 companion's on a run published with
+one (the full grid), else a poster's, which is the grid decimated two to one
 (`GridInfo.decimated`: same origin, doubled step), whose steps are halved
 back — the origin is then exact and a regional far edge is right to within
 one full cell. A wrapping grid is `[-180, -90, 180, 90]`. `bbox` and
@@ -122,7 +122,7 @@ Assets. One per artifact, keyed by bundle:
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
 | `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` too on the satellite disks and the 0.1° grids (`SourceSpec.variant_factors`), `-eighth` on a run published with it | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |
-| `<bundle>-video`, `-video-index` | the H.264 companion and its index | `video/H264`, `application/json` | `data`, `metadata` |
+| `<bundle>-video`, `-video-index` | the retired H.264 companion and its index, on a run published with them (`docs/format.md`, "Retired artifacts readers still accept") | `video/H264`, `application/json` | `data`, `metadata` |
 
 A store and a container beside it are not alternates in the
 [alternate-assets](https://github.com/stac-extensions/alternate-assets)

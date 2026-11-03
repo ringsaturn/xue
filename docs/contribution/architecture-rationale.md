@@ -46,11 +46,11 @@ coincide; the series store always takes it.
 ## Four implementations
 
 - Python encoder (`xuebuild/`), the reference: a format change lands here
-  first. GDAL, ffmpeg and eccodes are CLI subprocesses.
+  first. GDAL and eccodes are CLI subprocesses.
 - Native encoder (`rust/xue/src/encode/`, shipped in the `xuepy` wheel):
   the same conversion with GDAL, grib-rs and zstd linked in, held to the
   reference by byte-identical output ([`docs/encoder.md`](../encoder.md)).
 - Rust decoder (`rust/xue`, `rust/xue-wasm`), built into the frontend.
 - TypeScript frontend (`web/src/`): manifest resolution and tier choice, a
-  decode worker with windowed prefetch, WebGL2 blend playback, wind
-  particles, and an opt-in WebCodecs H.264 path.
+  decode worker with windowed prefetch, WebGL2 blend playback and wind
+  particles.

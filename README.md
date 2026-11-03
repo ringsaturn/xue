@@ -124,7 +124,6 @@ with HTTP Range requests.
 | `stations` | `snd`, `apt`, `snd,apt` or `off`: sounding and airport marks |
 | `tc`, `tcagency`, `tcmodel`, `tcmembers` | a tropical cyclone (`<id>` or `off`) and which tracks to draw |
 | `backend` | `xue` reads the `.xue` container where a run still ships one |
-| `use_h264` | `true` opts into the WebCodecs H.264 companions where a run ships them |
 | `lang`, `theme` | one of eleven locales; `light` or `dark` |
 
 Values are case-insensitive and unrecognized ones fall back to defaults.
