@@ -52,7 +52,7 @@ from xuebuild.fetch import (
 from xuebuild.gdal import raster_expression
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
-from xuebuild.stac import prose_document
+from xuebuild.stac import _PROSE
 from xuebuild.variables import variable_spec
 
 FIXTURE_FRAMES = [FIXTURES / "aifs.2026091700.f000.crop.grib2", FIXTURES / "aifs.2026091700.f006.crop.grib2"]
@@ -125,8 +125,8 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(AIFS.tile, ECMWF.tile)
         self.assertFalse(AIFS.video)
         self.assertEqual(video_variable_ids(AIFS), frozenset())
-        self.assertIn("aifs", prose_document()["sources"])
-        self.assertEqual(prose_document()["sources"]["aifs"]["license"], "CC-BY-4.0")
+        self.assertIn("aifs", _PROSE["sources"])
+        self.assertEqual(_PROSE["sources"]["aifs"]["license"], "CC-BY-4.0")
 
     def test_every_input_names_its_open_data_record(self) -> None:
         for variable_id in AIFS.input_variable_ids:

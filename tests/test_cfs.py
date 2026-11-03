@@ -94,7 +94,7 @@ from xuebuild.sources import (
     family_frame_path,
     source_spec,
 )
-from xuebuild.stac import prose_document
+from xuebuild.stac import _PROSE
 from xuebuild.variables import variable_spec
 
 FIXTURE_FRAMES = [FIXTURES / "cfs.2026091900.f006.crop.grib2", FIXTURES / "cfs.2026091900.f012.crop.grib2"]
@@ -244,7 +244,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(CFS.statistical_processes, (("prate", 0), ("dswrf", 0), ("tcdc", 0)))
 
     def test_the_prose_names_noaa(self) -> None:
-        prose = prose_document()["sources"]["cfs"]
+        prose = _PROSE["sources"]["cfs"]
         self.assertEqual(prose["license"], "other")
         self.assertIn("CFS", prose["title"])
         self.assertTrue(any(provider["name"].startswith("NOAA") for provider in prose["providers"]))

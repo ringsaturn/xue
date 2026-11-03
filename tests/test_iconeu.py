@@ -36,7 +36,7 @@ from xuebuild.errors import DownloadError
 from xuebuild.fetch import _run_is_complete, icon_eu_object_url, model_object_url, resolve_run
 from xuebuild.model import GfsRun
 from xuebuild.sources import source_spec
-from xuebuild.stac import prose_document
+from xuebuild.stac import _PROSE
 from xuebuild.variables import variable_spec
 
 FIXTURE_FRAMES = [FIXTURES / "iconeu.2026102512.f000.crop.grib2", FIXTURES / "iconeu.2026102512.f001.crop.grib2"]
@@ -78,7 +78,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(ICONEU.variant_factors, (2,))
         self.assertFalse(ICONEU.video)
         self.assertEqual(video_variable_ids(ICONEU), frozenset())
-        prose = prose_document()["sources"]["iconeu"]
+        prose = _PROSE["sources"]["iconeu"]
         self.assertEqual(prose["license"], "CC-BY-4.0")
         self.assertIn("Deutscher Wetterdienst", prose["description"])
 
