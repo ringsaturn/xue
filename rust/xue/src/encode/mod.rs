@@ -26,6 +26,15 @@
 //! here, and `xuebuild/binconvert.py` is the reference the outputs are diffed
 //! against.
 
+/// An `INFO` line on stderr when the build asked for a verbose log.
+macro_rules! log {
+    ($options:expr, $($argument:tt)*) => {
+        if $options.verbose {
+            eprintln!("INFO {}", format!($($argument)*));
+        }
+    };
+}
+
 // Only what something outside this crate actually links against is public:
 // `xue-py` imports convert, gdalio, grid, poster, quantize, registry and
 // temporal, and the xue-encode binary — a separate crate against the lib, not
@@ -34,12 +43,15 @@
 // is tested from inside those modules instead.
 pub(crate) mod binformat;
 pub mod convert;
+pub(crate) mod derive;
+pub(crate) mod discover;
 pub mod errors;
 pub mod gdalio;
 pub mod grid;
 pub(crate) mod gribindex;
 pub(crate) mod gribpng;
 pub(crate) mod inspect;
+pub(crate) mod ladder;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
 pub(crate) mod model;
@@ -48,6 +60,7 @@ pub(crate) mod parallel;
 pub mod poster;
 pub mod quantize;
 pub mod registry;
+pub(crate) mod report;
 pub(crate) mod reproject;
 pub(crate) mod sources;
 pub mod temporal;
