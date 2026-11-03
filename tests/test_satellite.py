@@ -120,7 +120,6 @@ from xuebuild.variables import (
 
 TILES = FIXTURES / "himawari"
 DEBRA_FIXTURES = FIXTURES / "debra"
-REGISTRY = FIXTURES / "satellite-registry.json"
 SPEC = source_spec("himawari")
 IR104 = HIMAWARI.channel("ir104")
 #: The ten channels the source fetches, in source order: six infrared
@@ -185,7 +184,7 @@ def registry_document() -> dict[str, object]:
     """The satellite registry as this encoder describes it: every channel
     and gun with its label, unit, parameter, band (channels, per platform)
     or producer id (guns), and codebooks; then each composite bundle's
-    components in order. tests/fixtures/satellite-registry.json is this."""
+    components in order."""
     variables: dict[str, object] = {}
     for variable_id in SATELLITE_VARIABLE_IDS:
         spec = variable_spec(variable_id)
@@ -231,7 +230,6 @@ def bucket(keys: dict[str, Path], *, sizes: dict[str, int] | None = None) -> tup
         return keys[url.split(".amazonaws.com/", 1)[1]].read_bytes()
 
     return listing, download
-
 
 
 def strip_frame_record(frame: Path, out: Path) -> None:
@@ -357,13 +355,6 @@ class FrameRecordTests(TempRoot, unittest.TestCase):
             assemble.frame_packing(tiff_with_metadata(self.root / "nopacking.tif", gdal_metadata({"scale": 1})))
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        self.assertEqual(registry_document(), expected,
-            "the satellite registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate it deliberately (tests/prepare_satellite_registry.py) and change all three",
-        )
-
     def test_brightness_temperature_is_the_top_of_atmosphere_parameter(self) -> None:
         parameter = variable_spec("ir104").parameter_metadata()
         self.assertEqual((parameter["discipline"], parameter["parameterCategory"], parameter["parameterNumber"]), (0, 4, 4))

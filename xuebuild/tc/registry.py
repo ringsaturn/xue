@@ -2,11 +2,10 @@
 tracks the product carries, the models whose objective tracks it carries,
 and the basin vocabulary they share.
 
-This table is mirrored by the frontend (``web/src/tc/agencies.ts``) and
-pinned by ``tests/fixtures/tc-registry.json``, the way
-``pressure-registry.json`` pins the codebooks: an id, a color or a basin
-letter changed here without the fixture is a test failure, not a silent
-drift.
+The frontend reads this table out of the shell's registry
+(``web/src/registry.ts``, ``xue registry --shell``), so an id, a color or
+a basin letter changed here reaches it with the next regeneration, and
+``tests/test_registry.py`` fails until it is done.
 """
 
 from __future__ import annotations
@@ -170,7 +169,7 @@ def season_of(basin: str, time: datetime) -> int:
 
 
 def registry_document() -> dict[str, Any]:
-    """The table as ``tests/fixtures/tc-registry.json`` pins it."""
+    """The table as the shell's registry carries it (``web/src/registry.ts``)."""
     return {
         "agencies": [
             {

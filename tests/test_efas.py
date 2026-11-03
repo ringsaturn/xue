@@ -32,7 +32,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, registry_entry, requires_gdal, requires_native_source, stored_bundle
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import published_bundle_ids
 from xuebuild.efas import series as efas_series
@@ -47,7 +47,6 @@ from xuebuild.stac import _source_prose
 from xuebuild.model import PlaneSource
 from xuebuild.variables import EFAS_SERIES_FILL, RIVER_VARIABLE_IDS, variable_spec
 
-RIVER_REGISTRY = FIXTURES / "river-registry.json"
 BUNDLES = ("dis06", "disrp", "upstream")
 HOURS = list(range(6, 121, 6))
 WIDTH, HEIGHT = 21, 15
@@ -153,18 +152,6 @@ class SourceRegistryTests(unittest.TestCase):
         np.testing.assert_array_equal(PROFILES["quality"]["disrp"].quantize(np.arange(6.0)), np.arange(6))
         fold = PlaneSource(fill_values=variable_spec("disrp").fill_values, fill_replacement=0.0)
         self.assertEqual(int(PROFILES["quality"]["disrp"].quantize(fold.apply_fill(np.array([EFAS_SERIES_FILL])))[0]), 0)
-
-    def test_the_committed_river_registry_still_describes_this_encoder(self) -> None:
-        pinned = json.loads(RIVER_REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in RIVER_VARIABLE_IDS}
-        self.assertEqual(
-            pinned,
-            actual,
-            "the river registry moved; the Rust encoder and the frontend read the same fixture, so "
-            "regenerate tests/fixtures/river-registry.json deliberately (tests/fixtures/README.md) "
-            "and change every implementation together",
-        )
-        self.assertEqual(list(pinned), list(RIVER_VARIABLE_IDS))
 
     def test_the_catalog_prose_carries_the_licence_credit_and_disclaimer(self) -> None:
         for source_id in RUNS:

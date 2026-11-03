@@ -4,10 +4,9 @@ and the water vapour flux on the eight standard isobaric surfaces.
 Like the pressure family before them (`tests/test_pressure.py`), these add
 nothing to the container — no version bump, no new metadata key — and
 everything to the registries: a GRIB2 identity, a linear codebook, a record
-matcher, a bundle id. `tests/fixtures/isobaric-registry.json` is the committed
-golden that holds the three implementations to one set of numbers: this module
-regenerates and compares it, the Rust encoder's unit tests and the frontend's
-vitest read the same file, so a codebook can only move in all three at once.
+matcher, a bundle id. The registry document (`rust/xue/registry.json`, and
+the shell's copy `web/src/registry.ts`) holds the three implementations to
+one set of numbers, so a codebook can only move in all three at once.
 
 The one rule with no other home is the **vapour flux derivation**: `q·V/g`
 with `q` in g/kg, `V` in m/s and standard gravity, in that operation order,
@@ -17,13 +16,11 @@ neither of them reads from a record.
 
 from __future__ import annotations
 
-import json
 import unittest
 from dataclasses import replace
 
 import numpy as np
 
-from tests._support import FIXTURES, registry_entry
 from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     bundle_input_ids,
@@ -47,20 +44,8 @@ from xuebuild.variables import (
     variable_spec,
 )
 
-REGISTRY = FIXTURES / "isobaric-registry.json"
-
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in ISOBARIC_VARIABLE_IDS}
-        self.assertEqual(
-            actual,
-            expected,
-            "the isobaric registry moved; the Rust encoder and the frontend read the same "
-            "fixture, so regenerate it deliberately and change all three",
-        )
-
     def test_balanced_is_quality_except_for_relative_humidity(self) -> None:
         for variable_id in ISOBARIC_VARIABLE_IDS:
             expected = "compact" if variable_id.startswith("rh") else "quality"

@@ -47,15 +47,15 @@ fixtures: `rust/xue/registry.json` is the whole registry document
 (`docs/registry.md`: every variable's identity, codebooks, unit rule, GDAL
 rules, predictor, decimation and companions; every bundle; every source),
 printed by `xue registry` and read by the native encoder in place of a
-table of its own; the per-family
-`tests/fixtures/{isobaric,pressure,surface,ocean,aerosol,satellite,soil,volume,river,tc}-registry.json`
-hold the native encoder and the frontend to the same ids and codebooks.
+table of its own; `web/src/registry.ts` is its trimmed copy for the shell,
+written by the same command (`--shell`), which the frontend reads in place
+of tables of its own.
 The Python encoder never selects behaviour by a variable or bundle id: a
 rule is a field of `VariableSpec` / `BundleSpec`, named out of the closed
 sets of `xuebuild/rules.py`. When a test reports that a registry moved,
-regenerate the fixture deliberately (`xue registry --output
-rust/xue/registry.json`, said in the commit) and change every
-implementation that reads it, never only the fixture.
+regenerate both snapshots deliberately (`xue registry --output
+rust/xue/registry.json --shell web/src/registry.ts`, said in the commit)
+and change every implementation that reads them, never only a snapshot.
 
 ## Invariants that are easy to break
 

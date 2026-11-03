@@ -90,16 +90,16 @@ the first step.
 - `VariableSpec.fill_values`: GDAL nodata becomes the codebook bottom
   **before** unit conversion, in both encoders. The format has no bitmap.
 
-## Registry fixtures
+## Registry snapshots
 
-`rust/xue/registry.json` is the whole registry document, held to the
-tables by `tests/test_registry.py` (regenerate with
-`xue registry --output rust/xue/registry.json` and say so in the
-commit); the per-family `tests/fixtures/*-registry.json` hold the native
-encoder and the frontend to the same ids and codebooks. Widening a source's
-inputs means recutting its crop fixture (`gfs.*.crop.grib2` with the same
-run and `-srcwin`; the two-frame `ecmwf.*` / `aifs.*` pairs) and
-regenerating the registry fixtures ([testing.md](testing.md)).
+`rust/xue/registry.json` is the whole registry document and
+`web/src/registry.ts` the shell's trimmed copy, both held to the tables by
+`tests/test_registry.py` (regenerate with `xue registry --output
+rust/xue/registry.json --shell web/src/registry.ts` and say so in the
+commit). Widening a source's inputs means recutting its crop fixture
+(`gfs.*.crop.grib2` with the same run and `-srcwin`; the two-frame
+`ecmwf.*` / `aifs.*` pairs) and regenerating the snapshots
+([testing.md](testing.md)).
 
 ## Modules
 

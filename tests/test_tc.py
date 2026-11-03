@@ -19,7 +19,7 @@ from xuebuild.tc import atcf, bufrtracks, ibtracs, tcw
 from xuebuild.tc.build import build_product, previous_systems
 from xuebuild.tc.fetch import ecmwf_tf_url
 from xuebuild.tc.identity import MATCH_KM, PreviousSystem, Sighting, distance_km, resolve, sighting_kind
-from xuebuild.tc.registry import AGENCIES, MODELS, registry_document
+from xuebuild.tc.registry import AGENCIES, MODELS
 from xuebuild.tc.schema import (
     build_pointer,
     crc32_hex,
@@ -43,10 +43,6 @@ def utc(*parts: int) -> datetime:
 
 
 class RegistryTests(unittest.TestCase):
-    def test_registry_matches_the_pinned_fixture(self) -> None:
-        pinned = json.loads((FIXTURES / "tc-registry.json").read_text(encoding="utf-8"))
-        self.assertEqual(registry_document(), pinned)
-
     def test_ids_are_product_keys(self) -> None:
         for key in (*AGENCIES, *MODELS):
             self.assertRegex(key, r"^[a-z][a-z0-9]*$")

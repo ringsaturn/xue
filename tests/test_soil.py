@@ -5,10 +5,8 @@ and the top two on AIFS.
 Like the ocean fields before them, they add nothing to the container and
 everything to the registries: a GRIB2 identity per layer (the registry's
 first in GRIB2's land surface discipline, 2), a linear codebook, a record
-matcher, a bundle id. `tests/fixtures/soil-registry.json` is the committed
-golden that holds the Python and Rust encoders to one set of numbers: this
-module regenerates and compares it, and the Rust encoder's unit tests read
-the same file.
+matcher, a bundle id. The registry document (`rust/xue/registry.json`)
+holds the Python and Rust encoders and the shell to one set of numbers.
 
 Three things are particular to them, and each is checked here against the
 real records the GRIB fixtures carry:
@@ -38,7 +36,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support import FIXTURES, registry_entry
+from tests._support import FIXTURES
 from xuebuild import grib2
 from xuebuild.binconvert import (
     SOIL_KELVIN_THRESHOLD,
@@ -70,7 +68,6 @@ from xuebuild.variables import (
 GFS_FIXTURE = FIXTURES / "gfs.2026081406.f000.crop.grib2"
 ECMWF_FIXTURES = (FIXTURES / "ecmwf.2026091212.f000.crop.grib2", FIXTURES / "ecmwf.2026091212.f003.crop.grib2")
 AIFS_FIXTURES = (FIXTURES / "aifs.2026091700.f000.crop.grib2", FIXTURES / "aifs.2026091700.f006.crop.grib2")
-REGISTRY = FIXTURES / "soil-registry.json"
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 GDAL_GRIB_NODATA = 9999.0
 GFS_LAYER_TOPS_M = (0.0, 0.1, 0.4, 1.0)
@@ -78,16 +75,6 @@ AIFS_SOIL_IDS = ("tsoil1", "tsoil2", "soilw1", "soilw2")
 
 
 class RegistryTests(unittest.TestCase):
-    def test_the_committed_registry_still_describes_this_encoder(self) -> None:
-        expected = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        actual = {variable_id: registry_entry(variable_id) for variable_id in SOIL_VARIABLE_IDS}
-        self.assertEqual(
-            actual,
-            expected,
-            "the soil registry moved; the Rust encoder reads the same fixture, so "
-            "regenerate it deliberately and change both",
-        )
-
     def test_the_ids_are_layer_indices(self) -> None:
         self.assertEqual(SOIL_LAYERS, (1, 2, 3, 4))
         self.assertEqual(SOIL_TEMPERATURE_IDS, ("tsoil1", "tsoil2", "tsoil3", "tsoil4"))
