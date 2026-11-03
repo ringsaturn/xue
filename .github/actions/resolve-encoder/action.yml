@@ -1,0 +1,41 @@
+name: Resolve the encoder
+description: >-
+  Turn auto | native | python into the XUE_ENCODER every later step sees.
+  `auto` is native when the installed xuepy wheel knows the source, else the
+  reference pipeline with a ::warning:: on the run: a wheel is released on
+  the crate's tags, not with every source, so a scheduled run (which cannot
+  pass an input) would otherwise take the wheel whenever it imports and only
+  fail inside the round. Run it after `uv sync`: it imports xuebuild.
+
+inputs:
+  encoder:
+    description: auto, native or python
+    default: auto
+  model:
+    description: The source id the wheel must know
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the encoder
+      shell: bash
+      env:
+        ENCODER: ${{ inputs.encoder }}
+        MODEL: ${{ inputs.model }}
+      run: |
+        set -euo pipefail
+        case "$ENCODER" in
+          native|python) encoder="$ENCODER" ;;
+          auto)
+            if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
+              encoder=native
+            else
+              wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
+              echo "::warning::xuepy ${wheel} does not know the ${MODEL} source with every bundle it publishes; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
+              encoder=python
+            fi ;;
+          *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
+        esac
+        echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
+        echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
