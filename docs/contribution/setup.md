@@ -54,23 +54,18 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
 
 ```sh
 .venv/bin/python -m xuebuild fetch --run latest --hours 240
-.venv/bin/python -m xuebuild convert-bin data/raw/gfs.YYYYMMDDHH \
-  --output web/public/data/gfs.YYYYMMDDHH \
-  --manifest web/public/data/manifest.json
 .venv/bin/python -m xuebuild build-bin --model ecmwf --run latest
 .venv/bin/python -m xuebuild build-bin --model gfs --run latest --hours 6 --xue           # also the .xue
-.venv/bin/python -m xuebuild verify-bin web/public/data/gfs.YYYYMMDDHH/tmp2m.xue
 .venv/bin/python -m xuebuild build-bin --model mrms --run 2026091300 --hours 3            # a past window
 .venv/bin/python -m xuebuild build-bin --model mrms --run latest --hours 4 --round now    # one live round
 .venv/bin/python -m xuebuild build-bin --model himawari --run latest --hours 6 --round now
-.venv/bin/python -m xuebuild export-zarr <bundle.xue> [--delta] [--index-location start|end]
 ```
 
 - `XUE_ENCODER`: `auto` (default; the wheel when installed), `native`
   (fail without it) or `python` (the reference pipeline). Both produce
   identical bytes.
 - `--hours` may be any hour on the model's axis.
-- `build-bin` (and `convert-bin`, `showcase build`) writes every bundle
+- `build-bin` (and `showcase build`) writes every bundle
   into the run's shared store `bundles.zarr/` straight from the codes, with
   `--xue` each bundle's `.xue` container beside it from the same codes; the
   reduced tiers (`bundles.half.zarr/`, plus `.quarter` on satellites and the
@@ -80,7 +75,6 @@ Step by step (`--model` takes any id in [`docs/sources.md`](../sources.md);
   companion: contours need exact codes.
 - A vector bundle (`wind10m`, `wind850`, `qflux850`, …) is added only when
   its components were fetched; `--force-download` re-fetches.
-- `verify-bin` validates one container and decodes every frame.
 - Overwriting an existing manifest needs `--force`
   (`make mvp FORCE=--force`).
 

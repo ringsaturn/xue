@@ -25,8 +25,8 @@ not explain:
   from the chunk shape, so earlier per-time-chunk stores still read.
 - **Inner chunks are regular six-frame chunks** of the bundle's tiles. They
   match the container's temporal groups only up to the first step change,
-  so every chunk is re-encoded from codes (the export reports
-  `comparableChunks` / `identicalChunks`).
+  so every chunk is encoded from the codes, never copied out of a
+  container.
 
 Writing:
 
@@ -44,14 +44,12 @@ Writing:
   back with the decoder's own validators.
 - A tier's manifest `bandwidth` hint is computed from the delivery it
   ships: the container's size where one is written, the store's otherwise.
-- `zarrstore.export_bundle` derives the same store from a finished `.xue`
-  (`ContainerSource`), for `xue export-zarr` and the fixtures.
-- `build-bin`, `convert-bin` and `showcase build` write the stores alone
+- `build-bin` and `showcase build` write the stores alone
   and the manifest names nothing else; `--xue` (`container=True` in the
   Python and wheel APIs) writes each bundle's `.xue` beside its store and
-  names both.
-- `xue export-zarr <bundle.xue> [--delta] [--index-location start|end]` by
-  hand. The `zarr` dependency group is for tests and delta stores only.
+  names both. A store is never derived from a finished `.xue`.
+- The `zarr` dependency group is for tests and for reading delta stores
+  with zarr-python (`xuebuild/zarrcodec.py`).
 
 Manifest: a bundle entry and each variant may carry `zarr: {path,
 byteLength, crc32}` (`crc32` of the group `zarr.json`, also the store's
