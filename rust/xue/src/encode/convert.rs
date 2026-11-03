@@ -562,7 +562,7 @@ impl PlaneSlot {
         state
             .clone()
             .expect("published")
-            .map_err(EncodeError::Conversion)
+            .map_err(EncodeError)
     }
 }
 

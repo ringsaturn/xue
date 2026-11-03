@@ -40,24 +40,3 @@ pub fn encode_poster(codes: &[u8], grid: &GridInfo) -> Result<(Vec<u8>, GridInfo
         .map(|payload| (payload, poster_grid))
         .map_err(|error| EncodeError::conversion(format!("poster deflate failed: {error}")))
 }
-
-/// Reference decoder for [`encode_poster`], used by tests.
-pub fn decode_poster(payload: &[u8], width: usize, height: usize) -> Result<Vec<u8>> {
-    use flate2::read::ZlibDecoder;
-    use std::io::Read;
-
-    let mut plane = Vec::new();
-    ZlibDecoder::new(payload)
-        .read_to_end(&mut plane)
-        .map_err(|error| EncodeError::conversion(format!("poster inflate failed: {error}")))?;
-    if plane.len() != width * height {
-        return Err(EncodeError::conversion("poster payload has the wrong size"));
-    }
-    for row in 1..height {
-        for column in 0..width {
-            plane[row * width + column] =
-                plane[row * width + column].wrapping_add(plane[(row - 1) * width + column]);
-        }
-    }
-    Ok(plane)
-}

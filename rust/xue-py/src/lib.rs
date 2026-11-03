@@ -125,8 +125,9 @@ impl Bundle {
         self.inner.metadata_json()
     }
 
-    /// The container's registered variable ids present in this bundle: 1
-    /// tmp2m, 2 prate, 3/4 the wind components, 5 dswrf, 6 cref.
+    /// The file-local numeric ids of this bundle's variables, 1..n in the
+    /// order the metadata lists them. They are not stable across bundles or
+    /// sessions: identity is the metadata's GRIB2 `parameter` block.
     #[getter]
     fn variable_ids(&self) -> Vec<u8> {
         self.inner.variable_ids().to_vec()
