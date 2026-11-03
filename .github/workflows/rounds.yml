@@ -1,0 +1,240 @@
+name: publish rounds
+
+# Reusable rolling-window publisher, one call per feed. Callers
+# (publish-himawari.yml, publish-himawarijp.yml, publish-goeseast.yml,
+# publish-goeswest.yml, publish-jma.yml, publish-aurora.yml,
+# publish-mrms.yml, publish-mrms3d.yml) own the cron, the manual dispatch,
+# the fork guard and the concurrency group; this file owns the job.
+#
+# Not the three-job pipeline of publish.yml: one job runs one round
+# (scripts/window_rounds.sh, ONCE=true) or, for a looping dispatch, rounds
+# until twenty past the next hour, handing the feed over to the next
+# scheduled job as soon as it is waiting (scripts/successor_queued.sh). A
+# round is rebuilt into a round subdirectory of its run
+# (<model>.<run>/<HHMM>/) and pointed at by latest-<model>.json.
+#
+# publish-cma.yml and publish-meteosat.yml stay standalone: the first reads
+# a private archive with its own credentials, the second skips every step
+# when the EUMETSAT secrets are absent and probes the runner's GDAL.
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: "The feed: himawari, himawarijp, goeseast, goeswest, jma, aurora, mrms or mrms3d"
+        required: true
+        type: string
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        required: true
+        type: string
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        required: true
+        type: string
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      encoder:
+        description: >-
+          auto (native when the installed xuepy wheel knows the source, else
+          the reference pipeline), native (insist on the wheel) or python
+          (insist on the reference pipeline). A feed whose reference pipeline
+          cannot run on a runner passes native.
+        type: string
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: string
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the newest frame"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+      uv_group:
+        description: "Dependency group `uv sync` installs on top of the defaults; empty for none"
+        type: string
+        default: ""
+      pip_install:
+        description: "A requirement `uv pip install` adds to the environment after the sync; empty for none"
+        type: string
+        default: ""
+      gdal:
+        description: >-
+          none (the wheel's GDAL is enough), fallback (install gdal-bin only
+          when the encoder resolved to the reference pipeline) or always (the
+          fetch stage runs gdalwarp whichever encoder converts)
+        type: string
+        default: none
+      frame_cache:
+        description: "Sync the decoded-frame cache with the bucket (FRAME_CACHE)"
+        type: boolean
+        default: false
+      frames_keep_hours:
+        description: "Hours of frame cache to keep on the bucket (FRAMES_KEEP_HOURS); empty for the script's default"
+        type: string
+        default: ""
+      ancillary:
+        description: "Pull the staged CAMEL emissivity months (ANCILLARY)"
+        type: boolean
+        default: false
+      segments:
+        description: "Cut each round's stores into hour segments and upload only the new ones (SEGMENTS)"
+        type: boolean
+        default: false
+    secrets:
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists the calling workflow's waiting runs,
+  # for a looping dispatch to yield to the next scheduled job.
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    # One round is a few minutes; a round that has to decode a window's
+    # worth of frames after an outage takes up to half an hour. A looping
+    # dispatch stops at twenty past the next hour on its own (UNTIL_MINUTE
+    # below); this is the backstop for a round that hangs.
+    timeout-minutes: 90
+    env:
+      MODEL: ${{ inputs.model }}
+      FRAME_CACHE: ${{ inputs.frame_cache }}
+      FRAMES_KEEP_HOURS: ${{ inputs.frames_keep_hours }}
+      ANCILLARY: ${{ inputs.ancillary }}
+      SEGMENTS: ${{ inputs.segments }}
+      ONCE: ${{ !inputs.loop }}
+      ROUND_MINUTES: ${{ inputs.round_minutes }}
+      # For a looping dispatch: run past the hour, and hand over to the next
+      # scheduled job as soon as it is waiting.
+      UNTIL_MINUTE: "80"
+      HANDOVER_CHECK: scripts/successor_queued.sh
+      # No edge-cache warm-up: a round is replaced minutes later, and the
+      # shell's next poll fills the edge itself.
+      WARM: "false"
+      HOURS: ${{ inputs.hours }}
+      PROFILE: ${{ inputs.profile }}
+      KEEP: ${{ inputs.keep }}
+      FORCE: ${{ inputs.force }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "$ROUND_MINUTES" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::round_minutes must be a positive integer of minutes"; exit 1; }
+          printf '%s' "$HOURS" | grep -Eq '^[1-9][0-9]?$' \
+            || { echo "::error::hours must be a positive integer"; exit 1; }
+          printf '%s' "$KEEP" | grep -Eq '^[1-9][0-9]*$' \
+            || { echo "::error::keep must be a positive integer"; exit 1; }
+
+      - uses: ./.github/actions/check-r2-credentials
+        with:
+          account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # No ffmpeg: no rounds source ships video. The xuepy wheel carries the
+      # GDAL the native encoder extracts and inspects with.
+      - name: Sync Python environment
+        env:
+          UV_GROUP: ${{ inputs.uv_group }}
+        run: uv sync ${UV_GROUP:+--group "$UV_GROUP"}
+
+      - name: Install the extra requirement
+        if: ${{ inputs.pip_install != '' }}
+        env:
+          REQUIREMENT: ${{ inputs.pip_install }}
+        run: uv pip install --python .venv/bin/python "$REQUIREMENT"
+
+      # The satellite fetch stage mosaics and warps with gdalbuildvrt,
+      # gdalwarp and gdal_translate whichever encoder converts afterwards:
+      # the wheel's GDAL is a library with no GeoTIFF driver.
+      - name: Install GDAL for the fetch stage
+        if: ${{ inputs.gdal == 'always' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+
+      # Resolved once, here, so every later step sees one answer.
+      - uses: ./.github/actions/resolve-encoder
+        with:
+          encoder: ${{ inputs.encoder }}
+          model: ${{ inputs.model }}
+
+      - name: Install GDAL for the reference pipeline
+        if: ${{ inputs.gdal == 'fallback' && env.XUE_ENCODER == 'python' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+          gdalinfo --version
+
+      - name: Run the rounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -o pipefail
+          scripts/window_rounds.sh 2>&1 | tee rounds.log
+          status=$?
+          {
+            echo "### ${MODEL} rounds"
+            echo
+            echo '```'
+            grep -E '^round [0-9]{4}:|rounds this hour' rounds.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # The pointer is served with no-cache, so the edge revalidates it; a
+      # stale read here means the last flip has not propagated rather than
+      # failed, so it warns instead of failing an otherwise complete hour.
+      - name: Verify the live pointer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          [ -f "web/public/data/latest-${MODEL}.json" ] || { echo "No round built this hour." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          url="https://dataset.ringsaturn.me/xue/latest-${MODEL}.json"
+          published=$(curl -fsSL "$url" | jq -r '.manifestPath' || true)
+          if [ -n "$published" ] && [ -f "web/public/data/$published" ]; then
+            echo "$url serves $published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$url serves '${published:-nothing}', not the round this job last built"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: publish-report-${{ inputs.model }}
+          path: |
+            rounds.log
+            build-report.json
+            web/public/data/latest-${{ inputs.model }}.json
+          retention-days: 14
+          if-no-files-found: ignore
