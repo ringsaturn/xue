@@ -408,9 +408,13 @@ class NativeStoreWriterTests(ClassTempRoot, unittest.TestCase):
                         if subject["zstdVersion"] != ".".join(map(str, zstdcli.zstd_version())):
                             self.skipTest(f"libzstd differs: the wheel carries {subject['zstdVersion']}")
                         assert_trees_identical(self, reference.path, Path(subject["path"]))
+                        # The wheel may still report the export's chunk
+                        # counts, always zero for a store written from codes.
+                        self.assertEqual((subject.get("comparableChunks", 0), subject.get("identicalChunks", 0)), (0, 0))
+                        ignored = ("path", "zstdVersion", "comparableChunks", "identicalChunks")
                         self.assertEqual(
                             {key: value for key, value in reference.to_dict().items() if key != "path"},
-                            {key: value for key, value in subject.items() if key not in ("path", "zstdVersion")},
+                            {key: value for key, value in subject.items() if key not in ignored},
                         )
 
 

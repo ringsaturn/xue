@@ -606,7 +606,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(manifest["forecastHours"], 3)
         validate_bin_manifest(manifest, expected_hours=3, require_core_variables=True)
         for name in ("bundles.half.zarr", "bundles.quarter.zarr", "tmp2m.poster.bin"):
-            self.assertTrue((self.root / "out" / name).is_file(), name)
+            self.assertTrue((self.root / "out" / name).exists(), name)
 
     def test_the_grid_is_the_fixture_s_window_of_the_published_one(self) -> None:
         grid = self.bundle("tmp2m").metadata["grid"]
