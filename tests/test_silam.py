@@ -418,9 +418,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         for name in BUNDLES:
             codebook = PROFILES["quality"][name]
             values = self.series(name)
+            # The second argument is the lead hour; the run starts at +1 h.
             for index in (0, 2):
                 with self.subTest(bundle=name, frame=index):
-                    codes = np.asarray(self.bundle(name).decode_plane(1, index)).reshape(HEIGHT, WIDTH)
+                    codes = np.asarray(self.bundle(name).decode_plane(1, index + 1)).reshape(HEIGHT, WIDTH)
                     np.testing.assert_array_equal(codes, codebook.quantize(values[index]))
 
     def test_the_box_is_on_the_scale(self) -> None:
