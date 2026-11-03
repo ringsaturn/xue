@@ -18,13 +18,14 @@ byte spans are in order, do not overlap, and tile the file exactly.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..errors import SoundingProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the sounding modules import them from here
     CRC32,
+    IssueProduct,
     archive_directory,
     flat_directory,
     crc32_hex,
@@ -69,24 +70,13 @@ as it writes, so the two cannot drift: anything the parser emits is
 something this validator admits."""
 
 
-def issue_directory(issue: datetime) -> str:
-    """``sounding/2026/09/14/sounding.2026091402``: one directory per
-    aggregation hour, filed under its year, month and day."""
-    return archive_directory(PRODUCT, issue)
-
-
-def pointer_directories(issue: datetime) -> tuple[str, ...]:
-    """Where a pointer may name the issue: the archive tree, or the flat
-    ``sounding.<hour>`` directory issues were published in before it."""
-    return (issue_directory(issue), flat_directory(PRODUCT, issue))
-
-
-def parse_issue(value: str) -> datetime:
-    return parse_issue_hour(SoundingProductError, value)
-
-
-def _time(value: object, label: str) -> datetime:
-    return check_time(SoundingProductError, value, label)
+ISSUES = IssueProduct(PRODUCT, SoundingProductError)
+issue_directory = ISSUES.issue_directory
+pointer_directories = ISSUES.pointer_directories
+parse_issue = ISSUES.parse_issue
+build_pointer = ISSUES.build_pointer
+validate_pointer = ISSUES.validate_pointer
+_time = ISSUES.time
 
 
 def _number(value: object, label: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
@@ -305,16 +295,6 @@ def validate_index(payload: object) -> None:
             f"index.stations must span {SOUNDINGS_FILENAME} exactly: the spans end at {end} of {soundings_bytes}"
         )
     validate_sources(payload.get("sources"), "index.sources")
-
-
-def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issue, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(SoundingProductError, payload, PRODUCT, pointer_directories, "sounding pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

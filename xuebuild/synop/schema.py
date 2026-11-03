@@ -22,13 +22,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..errors import SynopProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the synop modules import them from here
     CRC32,
+    RoundProduct,
     check_number,
     check_builder,
     archive_round_directory,
@@ -141,54 +142,16 @@ ELEMENT = re.compile(r"^[a-z][a-z0-9]*$")
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
-def parse_round(value: str) -> datetime:
-    """``202610050010`` → the round's UTC minute. A minute that is not a
-    multiple of :data:`ROUND_MINUTES` names no round."""
-    if not ROUND.match(value):
-        raise SynopProductError("round must be a UTC minute, YYYYMMDDHHMM")
-    try:
-        moment = datetime.strptime(value, "%Y%m%d%H%M").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise SynopProductError(f"round is not a valid minute: {value}") from exc
-    if moment.minute % ROUND_MINUTES:
-        raise SynopProductError(f"round minute must be a multiple of {ROUND_MINUTES}: {value}")
-    return moment
-
-
-def floor_round(moment: datetime) -> datetime:
-    """The round a moment falls in: the minute floored to the cadence."""
-    moment = moment.astimezone(UTC)
-    return moment.replace(minute=(moment.minute // ROUND_MINUTES) * ROUND_MINUTES, second=0, microsecond=0)
-
-
-def round_name(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y%m%d%H%M")
-
-
-def round_directory(moment: datetime) -> str:
-    """``synop/2026/10/05/synop.202610050010``: one immutable directory per
-    round, filed under its UTC day so the data root does not carry a
-    prefix per round."""
-    return archive_round_directory(PRODUCT, moment)
-
-
-def raw_directory(moment: datetime) -> str:
-    """``synop.202610050010``: where a round's fetched files sit under the
-    raw root, flat: a raw round is read once, by its own build."""
-    return flat_round_directory(PRODUCT, moment)
-
-
-def pointer_directories(moment: datetime) -> tuple[str, ...]:
-    """Where a pointer may name the round: the archive tree
-    (``synop/YYYY/MM/DD/synop.<round>``) or the flat ``synop.<round>``."""
-    return round_directories(PRODUCT, moment)
-
-
-def local_round_directory(output_root: Path, moment: datetime) -> Path:
-    """The round's directory under ``output_root`` in whichever layout it
-    was written or pulled in; where this build would write it when neither
-    holds it."""
-    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
+ROUNDS = RoundProduct(PRODUCT, SynopProductError, cadence_minutes=ROUND_MINUTES)
+parse_round = ROUNDS.parse_round
+floor_round = ROUNDS.floor_round
+round_name = ROUNDS.round_name
+round_directory = ROUNDS.round_directory
+raw_directory = ROUNDS.raw_directory
+pointer_directories = ROUNDS.pointer_directories
+local_round_directory = ROUNDS.local_round_directory
+build_pointer = ROUNDS.build_pointer
+validate_pointer = ROUNDS.validate_pointer
 
 
 def network_filename(network: str) -> str:
@@ -205,33 +168,19 @@ def stations_filename(network: str) -> str:
 Bounds = tuple[float | None, float | None]
 
 
-def _time(value: object, label: str) -> datetime:
-    return check_time(SynopProductError, value, label)
+_time = ROUNDS.time
 
 
-def _number(value: object, label: str, bounds: Bounds | None = None) -> None:
-    minimum, maximum = bounds or (None, None)
-    check_number(SynopProductError, value, label, minimum=minimum, maximum=maximum)
+_number = ROUNDS.number
 
 
-def _integer(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise SynopProductError(f"{label} must be an integer")
-    minimum, maximum = bounds or (None, None)
-    if minimum is not None and value < minimum:
-        raise SynopProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise SynopProductError(f"{label} must be at most {maximum}")
+_integer = ROUNDS.integer
 
 
-def _optional_number(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if value is not None:
-        _number(value, label, bounds)
+_optional_number = ROUNDS.optional_number
 
 
-def _optional_string(value: object, label: str) -> None:
-    if value is not None and not isinstance(value, str):
-        raise SynopProductError(f"{label} must be a string or null")
+_optional_string = ROUNDS.optional_string
 
 
 def _optional_url(value: object, label: str) -> None:
@@ -271,17 +220,7 @@ def _element_value(key: str, value: object, label: str) -> None:
         _number(value, label, ELEMENT_BOUNDS.get(key))
 
 
-def _crc_file(value: object, label: str, path: str) -> int:
-    if not isinstance(value, dict):
-        raise SynopProductError(f"{label} must be an object")
-    if value.get("path") != path:
-        raise SynopProductError(f"{label}.path must be {path!r}, the file beside the index")
-    byte_length = value.get("byteLength")
-    if isinstance(byte_length, bool) or not isinstance(byte_length, int) or byte_length < 0:
-        raise SynopProductError(f"{label}.byteLength must be a non-negative integer")
-    if not isinstance(value.get("crc32"), str) or not CRC32.match(value["crc32"]):
-        raise SynopProductError(f"{label}.crc32 must be 8 lowercase hex characters")
-    return byte_length
+_crc_file = ROUNDS.crc_file
 
 
 def validate_sources(sources: object, label: str) -> None:
@@ -535,22 +474,6 @@ def validate_stations_file(payload: object, index: dict[str, Any], network_id: s
     assert isinstance(rows, list)
     if len(rows) != described["stations"]["count"]:
         raise SynopProductError(f"{label} holds {len(rows)} stations; the index counts {described['stations']['count']}")
-
-
-def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issued, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(
-        SynopProductError,
-        payload,
-        PRODUCT,
-        pointer_directories,
-        "synop pointer path does not name the issued round's directory",
-    )
 
 
 def read_index(path: Path) -> dict[str, Any]:
