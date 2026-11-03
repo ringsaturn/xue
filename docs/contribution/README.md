@@ -23,11 +23,13 @@ Normative specifications ([`docs/README.md`](../README.md) lists them all,
 with the versions in use and the compatibility rules), which win over
 anything here:
 
-- [`docs/format.md`](../format.md): the `.xue` container and bundle metadata
 - [`docs/zarr-profile.md`](../zarr-profile.md): the Zarr store profile
+- [`docs/format.md`](../format.md): bundle metadata and the retired `.xue` container
 - [`docs/encoder.md`](../encoder.md): the native encoder and its parity rule
 - [`docs/stac.md`](../stac.md): the STAC catalog
 - [`docs/satellite.md`](../satellite.md): the satellite fetch stage and producers
+- [`docs/api.md`](../api.md): the data API contract (its origin: [api-origin.md](api-origin.md))
+- [`docs/river.md`](../river.md): river flow in a showcase case
 - [`docs/tc.md`](../tc.md), [`docs/airport.md`](../airport.md),
   [`docs/sounding.md`](../sounding.md): the point products
 

@@ -19,7 +19,9 @@ and index, one station per ranged read, and answers in physical units. It
 writes nothing. The viewer does not depend on it, so the site and the
 catalog work when it is down.
 
-This document is the contract. `rust/xue-worker/static/openapi.json` is
+This document is the contract (how the same routes run on a self-hosted
+origin, and why, is in
+[`contribution/api-origin.md`](contribution/api-origin.md)). `rust/xue-worker/static/openapi.json` is
 its machine copy, served at `/v1/openapi.json` with the live source list
 filled in and rendered at `/docs` (Swagger UI). A test holds the two to the
 same set of routes. `https://xue.ringsaturn.me/api.html` is a console
