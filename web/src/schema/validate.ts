@@ -2,6 +2,8 @@
  * `tc/schema.ts`) are written in. Each names the field it refused, so a
  * rejected product says which value cost it. */
 
+import { checkProductPointer } from "./generated/pointer";
+
 export const CRC32 = /^[0-9a-f]{8}$/;
 
 export function object(input: unknown, label: string): Record<string, unknown> {
@@ -53,6 +55,9 @@ export interface ProductPointer<P extends string> {
   crc32: string;
 }
 
+/** The version gate first, so an over-declared pointer is refused as
+ * such; then `docs/schemas/pointer.schema.json`; then the product's own
+ * identity and directory rule. */
 export function pointer<P extends string>(
   input: unknown,
   product: P,
@@ -64,12 +69,7 @@ export function pointer<P extends string>(
   schemaVersion(value.schemaVersion, label, supported);
   if (value.product !== product)
     throw new Error(`${label} product must be ${product}`);
-  return {
-    schemaVersion: 1,
-    product,
-    issued: timestamp(value.issued, `${label}.issued`),
-    path: string(value.path, `${label}.path`, path),
-    byteLength: integer(value.byteLength, `${label}.byteLength`, 1),
-    crc32: string(value.crc32, `${label}.crc32`, CRC32),
-  };
+  checkProductPointer(value, label);
+  if (!path.test(value.path)) throw new Error(`${label}.path is malformed`);
+  return { schemaVersion: 1, product, issued: value.issued, path: value.path, byteLength: value.byteLength, crc32: value.crc32 };
 }

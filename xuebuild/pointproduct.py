@@ -17,7 +17,8 @@ import math
 import os
 import posixpath
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -311,6 +312,18 @@ def check_pointer(
     issued = check_time(error, payload.get("issued"), "pointer.issued")
     if posixpath.dirname(payload["path"]) not in directories(issued):
         raise error(mismatch)
+
+
+@contextmanager
+def shaped(error: ProductError, label: str) -> Iterator[None]:
+    """Where a product's validator reads fields it no longer checks the
+    shape of (``docs/schemas/`` does, in the tests): a file without that
+    shape is refused as the product's error, not raised as a bug, so a
+    corrupt previous index is skipped like any other invalid one."""
+    try:
+        yield
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+        raise error(f"{label} does not have its schema's shape: {exc!r}") from exc
 
 
 def read_index_file(
