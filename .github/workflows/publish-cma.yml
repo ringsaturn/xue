@@ -177,23 +177,10 @@ jobs:
       # every later step (the GDAL install, the rounds) sees one answer.
       # `auto` on the xuebuild side would take the wheel whenever it imports
       # and only fail inside the round, as the scheduled runs did.
-      - name: Resolve the encoder
-        run: |
-          set -euo pipefail
-          case "$ENCODER" in
-            native|python) encoder="$ENCODER" ;;
-            auto)
-              if .venv/bin/python -c "import sys; from xuebuild import native; sys.exit(0 if native.knows_source('$MODEL') else 1)"; then
-                encoder=native
-              else
-                wheel=$(.venv/bin/python -c "from xuebuild import native; print(native.version() or 'unknown')")
-                echo "::warning::xuepy ${wheel} does not know the ${MODEL} source; converting through the reference pipeline (slower). Release a wheel that carries it and bump the pin in pyproject.toml."
-                encoder=python
-              fi ;;
-            *) echo "::error::encoder must be auto, native or python, not '$ENCODER'"; exit 1 ;;
-          esac
-          echo "XUE_ENCODER=$encoder" >> "$GITHUB_ENV"
-          echo "encoder: $encoder" >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/resolve-encoder
+        with:
+          encoder: ${{ env.ENCODER }}
+          model: ${{ env.MODEL }}
 
       - name: Install GDAL for the reference pipeline
         if: ${{ env.XUE_ENCODER == 'python' }}
