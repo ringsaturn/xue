@@ -17,6 +17,12 @@ name: docs-rust
 #
 # Separate surface from the Cloudflare Pages site deploy-pages.yml publishes:
 # that one is the viewer, this one is the API reference.
+#
+# The same GitHub Pages site serves the own xuepy index under simple/, rendered
+# from .github/release_wheels.csv (release-wheels-csv.yml keeps it current).
+# A Pages deployment replaces the whole site, so this one workflow owns every
+# path on it: a second workflow deploying the index alone would erase the API
+# reference, and this one would erase the index.
 
 on:
   push:
@@ -24,6 +30,8 @@ on:
     paths:
       - rust/**
       - .github/workflows/docs-rust.yml
+      - .github/release_wheels.csv
+      - scripts/build_simple_index.py
   workflow_dispatch:
 
 permissions:
@@ -65,6 +73,24 @@ jobs:
           <meta http-equiv="refresh" content="0; url=xue/index.html">
           <a href="xue/index.html">xue</a>
           HTML
+
+      # From the committed CSV alone, with no API call. The pages link to the
+      # release assets, so the site must never carry a wheel itself.
+      - name: Render the xuepy index
+        run: |
+          set -euo pipefail
+          python3 scripts/build_simple_index.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --package xuepy \
+            --min-tag v0.3.0 \
+            --csv .github/release_wheels.csv \
+            --skip-fetch \
+            --output rust/target/doc
+          test -f rust/target/doc/simple/xuepy/index.html
+          if find rust/target/doc -type f -name '*.whl' | grep -q .; then
+            echo "the Pages artifact contains wheel files" >&2
+            exit 1
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
