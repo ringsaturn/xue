@@ -1,9 +1,10 @@
 # Sources
 
 Engineering notes per source: what each one fetches, how its fetch stage
-differs, and what the rest of the system relies on. `xuebuild/sources.py`
-(`SourceSpec`) is the registry; the native encoder mirrors it in
-`rust/xue/src/encode/sources.rs`, and the shell's mirror is
+differs, and what the rest of the system relies on. What a source publishes
+(grid, axis, cadence, variables) is in [`docs/sources.md`](../sources.md).
+`xuebuild/sources.py` (`SourceSpec`) is the registry; the native encoder
+reads it as `rust/xue/registry.json`, and the shell's mirror is
 `FORECAST_MODELS` in `web/src/manifest.ts`. The conversion itself is in
 [pipeline.md](pipeline.md), the delivery contract in
 [delivery.md](delivery.md), and the satellite fetch stage in
@@ -11,32 +12,32 @@ differs, and what the rest of the system relies on. `xuebuild/sources.py`
 
 ## Overview
 
-| id | kind | fetch stage | axis / cadence | core |
-| --- | --- | --- | --- | --- |
-| `gfs` | forecast | `.idx` byte ranges, NOAA (Google mirror) | 1 h to F120, 3 h to F240; 6-hourly cycles | `tmp2m`, `prate` |
-| `sflux` | forecast | as GFS, surface flux files | as GFS | `tmp2m`, `prate` |
-| `ecmwf` | forecast | ECMWF open data, repacked from CCSDS | 3 h to F144, 6 h to F240 | `tmp2m`, `prate` |
-| `ifs` | forecast | ECMWF open data at 0.1°, `-sfc`/`-pl` objects reassembled | as `ecmwf` | `tmp2m`, `prate` |
-| `aifs` | forecast | ECMWF open data (`aifs-single`) | 6 h to F360 | `tmp2m`, `prate` |
-| `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | 1 h to F18; hourly cycles | `tmp2m`, `prate` |
-| `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | 3 h to F120 | `aod` |
-| `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | 1 h to F72, 3 h to F168; 00Z/12Z | `dustsfc` |
-| `cfs` | forecast (seasonal) | one object per variable per run | 6 h from F6 to F6552; 00Z/12Z | `tmp2m`, `prate` |
-| `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | 1 h to F78, 3 h to F120 | `tmp2m`, `prate` |
-| `arpege` | forecast | Météo-France packages, whole objects cut by identity | 1 h to F48, 3 h to F102 | `tmp2m`, `prate` |
-| `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | 1 h to F90, 3 h to F144, 6 h to F360; 00Z/12Z | `tmp2m`, `prate` |
-| `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | 1 h from F1 to F72 | `tmp2m` |
-| `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | 6 h from F6 to F120 | `dis06` |
-| `era5` | series-file reanalysis, no feed (cases only) | `xue era5-series` over a CDS NetCDF | 1 h from F0 to F1440; a window from any hour | `tmp2m` |
-| `cams` | series-file aerosol analysis, no feed (cases only) | `xue cams-series` over an ADS NetCDF | 3 h from F0 to F1440; a window from any 3 h mark | `aod` |
-| `mrms` | fetched observation | gzipped GRIB listed off the bucket | 120 s slots, 3 h window (4 in the workflow) | `cref` |
-| `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | 600 s marks of 120 s scans, 3 h window | `refl3d` |
-| `jma` | series-file observation | `jma-radar` tool, frame cache | 300 s, 3 h window | `prate` |
-| `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | 360 s, 3 h window | `cref` |
-| `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | 300 s, 12 h window | `aurora` |
-| `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | 600 s, 6 h window | `ir104` |
-| `himawarijp` | satellite (regional box) | `xuebuild/satellite/`, the tiles over its box, frame cache of its own | 600 s, 3 h window | `ir104` |
-| `meteosat` | satellite | `xuebuild/satellite/` (EUMETSAT Data Store) | 3600 s, 24 h window | `ir104` |
+| id | kind | fetch stage | core |
+| --- | --- | --- | --- |
+| `gfs` | forecast | `.idx` byte ranges, NOAA (Google mirror) | `tmp2m`, `prate` |
+| `sflux` | forecast | as GFS, surface flux files | `tmp2m`, `prate` |
+| `ecmwf` | forecast | ECMWF open data, repacked from CCSDS | `tmp2m`, `prate` |
+| `ifs` | forecast | ECMWF open data at 0.1°, `-sfc`/`-pl` objects reassembled | `tmp2m`, `prate` |
+| `aifs` | forecast | ECMWF open data (`aifs-single`) | `tmp2m`, `prate` |
+| `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | `tmp2m`, `prate` |
+| `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | `aod` |
+| `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | `dustsfc` |
+| `cfs` | forecast (seasonal) | one object per variable per run | `tmp2m`, `prate` |
+| `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | `tmp2m`, `prate` |
+| `arpege` | forecast | Météo-France packages, whole objects cut by identity | `tmp2m`, `prate` |
+| `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | `tmp2m`, `prate` |
+| `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | `tmp2m` |
+| `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | `dis06` |
+| `era5` | series-file reanalysis, no feed (cases only) | `xue era5-series` over a CDS NetCDF | `tmp2m` |
+| `cams` | series-file aerosol analysis, no feed (cases only) | `xue cams-series` over an ADS NetCDF | `aod` |
+| `mrms` | fetched observation | gzipped GRIB listed off the bucket | `cref` |
+| `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | `refl3d` |
+| `jma` | series-file observation | `jma-radar` tool, frame cache | `prate` |
+| `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | `cref` |
+| `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | `aurora` |
+| `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | `ir104` |
+| `himawarijp` | satellite (regional box) | `xuebuild/satellite/`, the tiles over its box, frame cache of its own | `ir104` |
+| `meteosat` | satellite | `xuebuild/satellite/` (EUMETSAT Data Store) | `ir104` |
 
 Each source publishes from `.github/workflows/publish-<id>.yml`. Forecast
 workflows call the reusable `publish.yml` (one build job per bundle
@@ -62,9 +63,9 @@ makes the window's slots the axis, so `unitSeconds` is the cadence.
 asking the source's feed, `observation_window_start`) to the window whose last
 hour holds the newest frame. The same run is rebuilt as frames arrive, so
 each build takes `--round HHMM` and lands in `<model>.<run>/<HHMM>/` with a
-`window.json` (`fetch.py::window_summary`). **Never overwrite an object
-under an unchanged `?v=`**: a viewer's range requests against it would decode
-the wrong bytes; a new round is a new directory. A round is: newest frame vs
+`window.json` (`fetch.py::window_summary`). A new round is a new
+directory, because nothing is overwritten under an unchanged `?v=`
+([publishing.md](publishing.md)). A round is: newest frame vs
 the live `window.json` → build → `make upload-r2 … ROUND=` →
 `prune-r2-rounds`, which keeps the live run's newest two rounds in clock
 order (a round is named by its build minute and a run's rounds may straddle
@@ -145,9 +146,9 @@ wheel to convert nothing for the source's whole published bundle set; a
 wheel that predates the source or one of its bundles refuses, and the
 workflow takes the reference pipeline with a `::warning::`. The observation
 workflows (`jma`, `cma`, `aurora`, the four satellites) resolve this way,
-because a cron run cannot wait for a wheel release; `publish.yml` and
-`publish-mrms.yml` pin `XUE_ENCODER=native`, so a forecast source cannot
-publish on schedule before a wheel carries it. A source whose shape changes
+because a cron run cannot wait for a wheel release; the forecast
+workflows pin the native encoder, so a forecast source cannot publish on
+schedule before a wheel carries it. A source whose shape changes
 takes a new id so an old wheel is not mistaken for a new one (`radar` →
 `cma`).
 
@@ -209,7 +210,7 @@ projection from GDAL's WKT (`reproject.py`; the wheel's `gdal_info` reports
 over the footprint; `_extract_planes` resamples each plane (bilinear, edge
 cells continued into the corners the conic domain never covers) before the
 crop. `reproject.rs` repeats the arithmetic and `tests/test_hrrr.py` holds
-it byte-identical, so the operation order is fixed. Mirrors lag each other
+it identical, so the operation order is fixed. Mirrors lag each other
 per frame, so a frame comes from the first mirror that has it and a cycle is
 complete only when one mirror has every hour (`XUE_HRRR_BASE_URLS`). The
 shell clips to the footprint (`FORECAST_MODELS[].domain`, `web/src/domain.ts`).
@@ -263,7 +264,7 @@ the same module (no netCDF4): `time` in hours since the cycle,
 `forecast_reference_time` beside it, latitudes ascending as the file has
 them (GDAL turns them north-up), a NaN fill. The grid is the model's own,
 835 × 301 cells of 0.15° from 25°E to 150.1°E and 15°N to 60°N, published
-as is: a tile of 56 × 43 cells, no ladder, no video. `dustsfc` is a
+as is: a tile of 56 × 43 cells, no ladder. `dustsfc` is a
 quantity of its own, every particle size the model carries (not
 `pm10dust`, GEFS-Aerosols' dust under 10 µm): WMO 0/20/0 on the ground with
 a dust `aerosol` block of no size or wavelength interval, a `log1p`
@@ -394,7 +395,7 @@ The 24 cloud water levels ship as one volume bundle, `cloud3d`
 (a `volume` in `bundles.py`, after MRMS's `refl3d`), in g/kg on the linear `clw`
 codebook; the NaN under the terrain is filled as 0 g/kg, so the volume
 carries no nodata code and the viewer hides the ground by occlusion.
-No ladder and no video: a plane is under 5000 cells. `tests/test_woof.py`.
+No ladder: a plane is under 5000 cells. `tests/test_woof.py`.
 
 **efas, efaswb.** The Copernicus Emergency Management Service's European
 Flood Awareness System (EFAS v5, LISFLOOD, run by ECMWF): `efas` is the
@@ -454,7 +455,7 @@ so both encoders fold it to the codebook bottom twice over, through the
 file's declared fill (`observation._plane_source`) and the registry's
 (`binconvert._fill_missing`), as the soil layers' 9999 is folded to "no
 soil": no river is zero discharge and zero area, and an unevaluated cell
-class 0, apart from every class. No ladder and no video: a case
+class 0, apart from every class. No ladder: a case
 is a box of a few thousand cells. The STAC prose carries the CEMS-FLOODS
 licence, the credit "Contains modified Copernicus Emergency Management
 Service information 2024" and the licence's caveat that EFAS data are for
@@ -487,7 +488,7 @@ so both encoders take the series-file path unchanged and learn nothing
 ERA5. `fg10` is the 3 s gust maximum over the hour ending at the frame
 ("since previous post-processing", hourly in ERA5): published as `gust`
 with `typeOfStatisticalProcessing: 2`, the way ECMWF's open-data gust is.
-No ladder and no video: a case is a box of a few hundred cells. The STAC
+No ladder: a case is a box of a few hundred cells. The STAC
 prose carries CC-BY-4.0, the credit "Contains modified Copernicus Climate
 Change Service information" and the dataset's DOI as `cite-as`.
 `tests/test_era5.py`.
@@ -519,7 +520,7 @@ rounds off; PM2.5 comes in kg m**-3 and is written in µg/m³, the optical
 depths as `1`, and the series reuse ERA5's `Window` and `write_series`.
 The codebooks are GEFS-Aerosols' (optical depth to 5, PM2.5 to
 1000 µg/m³), so the core of a dense plume is drawn at the top of the scale.
-No ladder and no video. The STAC prose carries CC-BY-4.0, the credit
+No ladder. The STAC prose carries CC-BY-4.0, the credit
 "Contains modified Copernicus Atmosphere Monitoring Service information"
 and the dataset's DOI as `cite-as`. `tests/test_cams.py`.
 
@@ -544,7 +545,7 @@ longitude span, so a regional grid can take its half tier zoomed out.
 levels (`REFLECTIVITY_LEVELS_M`, 500 m to 19 km MSL), each a product of its
 own on the bucket and an id of its own (`refl<metres>`), published as one
 `refl3d` bundle (a `volume` in `bundles.py`, after the composites in
-manifest order; no poster, no video). The levels are scanned every two
+manifest order; no poster). The levels are scanned every two
 minutes and published every ten: `SourceSpec.object_cadence_seconds` (120)
 is the bucket's interval, `cadence_seconds` (600) the axis's, and
 `fetch.py::mrms_object_slot` snaps an object down to the former and keeps it
@@ -675,7 +676,7 @@ Most recent additions to copy from: `aurora` (an observation) and `cfs` (a
 forecast).
 
 1. **Registry.** A `SourceSpec` in `xuebuild/sources.py` (axis or window,
-   cadence, inputs, published and core bundles, grid, tile, ladder, video,
+   cadence, inputs, published and core bundles, grid, tile, ladder,
    fetch concurrency). New variables in `xuebuild/variables.py` — the
    identity plus, where the defaults do not fit, the `conversion`,
    `gdal_rules`, `predictor`, `decimation` and `companions` fields — and
@@ -692,13 +693,14 @@ forecast).
    stays a subprocess (`*cli.py`) and an optional dependency goes in its
    own `pyproject.toml` group. Add the model to the CLI help in
    `xuebuild/cli.py`.
-3. **Native mirror.** The same source, variables and codebooks in
-   `rust/xue/src/encode/sources.rs`, `variables.rs`, `quantize.rs` (and
-   `grid.rs` / `inspect.rs` / `observation.rs` for a new rule), plus a line in
-   `docs/encoder.md`. Python changes first; the native side follows.
+3. **Native encoder.** It has no table of its own: it reads the
+   regenerated `rust/xue/registry.json`. Rust changes only for a rule the
+   closed sets lack (`units.rs`, `inspect.rs`, `convert.rs`,
+   `observation.rs`), plus a line in `docs/registry.md` and
+   `docs/encoder.md`; see the `add-source` skill.
 4. **Tests.** A small crop fixture (`tests/fixtures/<id>.*`, described in
    `tests/fixtures/README.md`) and `tests/test_<id>.py` running it through
-   both encoders byte for byte.
+   both encoders.
 5. **STAC.** Licence and provider prose in the `sources` entry of
    `xuebuild/stac_prose.json` (`tests/test_stac.py` holds it to the registry).
 6. **Shell.** A row in `FORECAST_MODELS` (and the `ForecastModelId` union) in
