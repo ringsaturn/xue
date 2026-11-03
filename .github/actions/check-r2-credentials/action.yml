@@ -1,0 +1,37 @@
+name: Check R2 credentials
+description: >-
+  Fail early, with a clear message, when the R2 repository secrets are empty
+  or cannot read the dataset bucket. The AWS CLI is preinstalled on the
+  runner; R2 is its S3 endpoint. The credentials live in this step's env
+  only, so no other step or third-party action sees them.
+
+inputs:
+  account-id:
+    description: Cloudflare account id (the CLOUDFLARE_ACCOUNT_ID secret)
+    required: true
+  access-key-id:
+    description: R2 access key id (the R2_ACCESS_KEY_ID secret)
+    required: true
+  secret-access-key:
+    description: R2 secret access key (the R2_SECRET_ACCESS_KEY secret)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check R2 credentials
+      shell: bash
+      env:
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+        AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      run: |
+        for name in CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+          [ -n "${!name}" ] || { echo "::error::$name is empty; set the R2 repository secrets"; exit 1; }
+        done
+        aws --version
+        aws s3api head-object --bucket dataset --key xue/catalog.json --region auto \
+          --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" > /dev/null \
+          || { echo "::error::R2 credentials failed a test read of the dataset bucket"; exit 1; }
