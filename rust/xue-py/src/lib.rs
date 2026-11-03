@@ -21,7 +21,11 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use xue::encode::convert::{convert_bin as native_convert, zstd_version, ConvertOptions};
+use std::sync::{Arc, Mutex};
+
+use xue::encode::convert::{
+    convert_bin as native_convert, decimate_codes, zstd_version, ConvertOptions,
+};
 use xue::encode::gdalio::info_json;
 use xue::encode::grid::GridInfo;
 use xue::encode::poster::encode_poster as native_encode_poster;
@@ -37,8 +41,21 @@ fn to_py_error(error: xue::encode::EncodeError) -> PyErr {
 /// text — `xuebuild.registry.document_json()` — parsed and validated whole
 /// before anything is read. A document outside the closed sets this wheel
 /// implements is refused here, with the field and value named.
-fn parse_registry(text: &str) -> PyResult<std::sync::Arc<Registry>> {
-    Registry::parse(text).map_err(to_py_error)
+///
+/// A caller hands in the same half-megabyte document on every `quantize`
+/// and `convert_bin`, so the last one parsed is kept and reused while the
+/// text is unchanged.
+fn parse_registry(text: &str) -> PyResult<Arc<Registry>> {
+    static LAST: Mutex<Option<(String, Arc<Registry>)>> = Mutex::new(None);
+    let mut last = LAST.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((held, registry)) = last.as_ref() {
+        if held == text {
+            return Ok(Arc::clone(registry));
+        }
+    }
+    let registry = Registry::parse(text).map_err(to_py_error)?;
+    *last = Some((text.to_owned(), Arc::clone(&registry)));
+    Ok(registry)
 }
 
 /// Turn a `serde_json::Value` into the equivalent Python object, so the report
@@ -458,13 +475,10 @@ fn decimate<'py>(
             codes.len()
         )));
     }
-    let mut reduced = Vec::with_capacity(width.div_ceil(factor) * height.div_ceil(factor));
-    for row in (0..height).step_by(factor) {
-        for column in (0..width).step_by(factor) {
-            reduced.push(codes[row * width + column]);
-        }
-    }
-    Ok(reduced.to_pyarray(python))
+    // The sampling reads the grid's shape alone; the georeference is a
+    // placeholder.
+    let grid = GridInfo::new(width, height, -180.0, 90.0, 360.0 / width as f64, -1.0);
+    Ok(decimate_codes(codes, &grid, factor).to_pyarray(python))
 }
 
 /// The subset of `gdalinfo -json` that `xuebuild` reads, from the GDAL linked

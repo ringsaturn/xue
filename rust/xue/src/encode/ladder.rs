@@ -65,7 +65,7 @@ pub(super) fn bundle_tile(tile: (usize, usize), grid: &GridInfo, factor: usize) 
 /// it twice or three times. `grid` is the full plane's grid.
 ///
 /// Mirrors `_decimate_codes(codes, grid, factor)` in `xuebuild/binconvert.py`.
-fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
+pub fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
     let mut reduced =
         Vec::with_capacity(grid.width.div_ceil(factor) * grid.height.div_ceil(factor));
     for row in (0..grid.height).step_by(factor) {
