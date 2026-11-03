@@ -42,7 +42,8 @@ FILE_EXTENSION = "https://stac-extensions.github.io/file/v2.1.0/schema.json"
 # `application/vnd.zarr` is the media type pystac 1.14 registers for a Zarr
 # store (`MediaType.VND_ZARR`, stac-utils/pystac#1554); the older
 # `application/vnd+zarr` spelling is what earlier catalogs carry. The
-# container has no registered type. The video companion is a raw H.264
+# container has no registered type. The retired video companion, which
+# manifests published with it still name (docs/format.md), is a raw H.264
 # Annex B stream, which is what IANA's `video/H264` names.
 ZARR_MEDIA_TYPE = "application/vnd.zarr"
 CONTAINER_MEDIA_TYPE = "application/octet-stream"
@@ -148,8 +149,9 @@ def _iso_duration(seconds: int) -> str:
 
 def _metadata_blocks(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     """Every bundle metadata JSON the manifest carries, tagged with where it
-    came from: ``video`` describes the full grid, ``poster`` the decimated
-    one. Videos first, so a grid is read exact wherever one exists."""
+    came from: ``video`` (the retired companion, on manifests published with
+    it) describes the full grid, ``poster`` the decimated one. Videos first,
+    so a grid is read exact wherever one exists."""
     blocks: list[tuple[str, dict[str, Any]]] = []
     for kind in ("video", "poster"):
         for bundle in manifest["bundles"]:
@@ -459,8 +461,9 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
     """Every artifact a manifest names, as STAC assets keyed by bundle:
     ``<bundle>`` (and ``<bundle>-xue``) for the full tier, ``<bundle>-<tier>``
     for each reduced one (``-half``; on the satellite disks ``-quarter``
-    too, and ``-eighth`` on what was published with it), ``<bundle>-poster, ``<bundle>-video`` with its
-    ``-video-index``, and ``manifest`` for the manifest itself under the
+    too, and ``-eighth`` on what was published with it), ``<bundle>-poster``,
+    ``<bundle>-video`` with its ``-video-index`` on a manifest that still
+    names the retired companion, and ``manifest`` for the manifest itself under the
     ``?v=`` a viewer fetches it with. Hrefs are relative to the Item, which
     sits beside the manifest."""
     assets: dict[str, Any] = {

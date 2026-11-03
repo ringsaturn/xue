@@ -463,7 +463,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 inputs,
                 cls.root / "out",
                 model="cma",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
@@ -498,7 +497,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "1792x1024 grid"):
                 binconvert.convert_bin(
-                    self.inputs, self.root / "complete", model="cma", skip_video=True, require_complete=True, expected_hours=3,
+                    self.inputs, self.root / "complete", model="cma", require_complete=True, expected_hours=3,
                 )
 
     @requires_native_source("cma")

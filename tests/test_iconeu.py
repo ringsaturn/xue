@@ -30,7 +30,7 @@ from unittest import mock
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import fetch, grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import _run_is_complete, icon_eu_object_url, model_object_url, resolve_run
 from xuebuild.model import GfsRun
@@ -76,7 +76,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertIsNone(ICONEU.regrid)
         self.assertEqual(ICONEU.variant_factors, (2,))
         self.assertFalse(ICONEU.video)
-        self.assertEqual(video_variable_ids(ICONEU), frozenset())
         prose = _PROSE["sources"]["iconeu"]
         self.assertEqual(prose["license"], "CC-BY-4.0")
         self.assertIn("Deutscher Wetterdienst", prose["description"])

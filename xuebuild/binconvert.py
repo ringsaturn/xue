@@ -85,7 +85,6 @@ from .variables import (
     VARIABLES,
     variable_spec,
 )
-from .videoconvert import build_debug_playlist, encode_variable_video
 
 LOG = logging.getLogger(__name__)
 
@@ -93,19 +92,6 @@ METADATA_SCHEMA_VERSION = 3
 """Bundle metadata schema this encoder writes: every variable descriptor
 carries its GRIB2 parameter identity (docs/format.md). Earlier versions
 remain readable; nothing new is written at them."""
-
-
-
-def video_variable_ids(source: SourceSpec) -> frozenset[str]:
-    """The scalars of one source that ship an H.264 companion: the
-    variables whose ``companions`` name ``video`` (the surface fields the
-    video path was built for; it is an opt-in path, ``?use_h264=true``, so
-    the upper-air fills ship bundles and posters only rather than cost the
-    scheduled build an ffmpeg pass per level), or none at all where the
-    source has switched the video path off (``SourceSpec.video``)."""
-    if not source.video:
-        return frozenset()
-    return frozenset(variable_id for variable_id, spec in VARIABLES.items() if "video" in spec.companions)
 
 
 def _predictor(variable_id: str) -> int:
@@ -1932,7 +1918,6 @@ def _verify_container(path: Path) -> None:
 def _bundle_manifest_entry(
     bundle: dict[str, Any],
     manifest_dir: Path,
-    video_report: dict[str, Any] | None,
     poster_report: dict[str, Any] | None,
     variant_reports: list[dict[str, Any]] | None = None,
     *,
@@ -1958,19 +1943,6 @@ def _bundle_manifest_entry(
             "byteLength": poster_report["byteLength"],
             "crc32": poster_report["crc32"],
             "metadataJson": poster_report["metadataJson"],
-        }
-    if video_report is not None:
-        entry["video"] = {
-            "streamPath": Path(video_report["streamPath"]).relative_to(manifest_dir).as_posix(),
-            "indexPath": Path(video_report["indexPath"]).relative_to(manifest_dir).as_posix(),
-            "byteLength": video_report["byteLength"],
-            "crc32": video_report["crc32"],
-            "codec": video_report["codec"],
-            "width": video_report["width"],
-            "height": video_report["height"],
-            "gop": video_report["gop"],
-            "frameCount": video_report["frameCount"],
-            "metadataJson": video_report["metadataJson"],
         }
     if "zarr" in bundle:
         entry["zarr"] = _zarr_descriptor(bundle["zarr"], manifest_dir)
@@ -2040,7 +2012,6 @@ def convert_bin(
     latest_path: Path | None = None,
     run_id: str | None = None,
     force: bool = False,
-    skip_video: bool = False,
     skip_variants: bool = False,
     model: str = "gfs",
     bbox: tuple[float, float, float, float] | None = None,
@@ -2060,8 +2031,7 @@ def convert_bin(
     ``bundles.half.zarr`` (and on the satellite disks ``bundles.quarter.zarr``
     too, ``SourceSpec.variant_factors``), the series store
     (``<bundle>.series.zarr``) of the source's point-read bundles,
-    per-variable posters, the optional per-variable video
-    artifacts and their debug playlists, and returns build statistics. The
+    per-variable posters, and returns build statistics. The
     ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
     (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
     written manifest.
@@ -2514,18 +2484,14 @@ def convert_bin(
     )
     # Scalars that also ship a poster — every published scalar whose
     # companions name one, which leaves out the contour-drawn pressure
-    # family — and, among those, the surface fields that also get a video
-    # companion when ffmpeg is around.
+    # family.
     companion_variable_ids = tuple(
         variable_id for variable_id in scalar_variable_ids if "poster" in variable_spec(variable_id).companions
-    )
-    video_bundle_ids = tuple(
-        variable_id for variable_id in companion_variable_ids if variable_id in video_variable_ids(source)
     )
 
     # Per-variable time axes. A variable with no data for the analysis frame
     # starts at the first real step, and every artifact of it (bundle,
-    # variant, poster, video) carries its own shorter axis: the rate on a
+    # variant, poster) carries its own shorter axis: the rate on a
     # derived-precipitation source (ECMWF accumulations, sflux window
     # averages), whose interval would precede the run, and any scalar whose
     # record the source lists as optional at the analysis (ECMWF's gust, an
@@ -2546,54 +2512,6 @@ def convert_bin(
     for variable_id in encoded_variable_ids:
         if VARIABLES[variable_id].static:
             variable_offsets[variable_id] = [offsets[0]]
-
-    # Optional per-variable WebCodecs video artifacts.
-    # Best-effort: a missing ffmpeg or an encode failure just skips that
-    # variable's artifact, Xue remains the universal fallback.
-    video_reports: dict[str, dict[str, Any]] = {}
-    if not skip_video:
-        for variable_id in video_bundle_ids:
-            video_grid = grid_for(variable_id)
-            try:
-                video_artifact = encode_variable_video(
-                    codes_by_offset,
-                    variable_offsets[variable_id],
-                    variable_id,
-                    width=video_grid.width,
-                    height=video_grid.height,
-                )
-            except ConversionError as exc:
-                LOG.warning("skipping %s video artifact: %s", variable_id, exc)
-                continue
-            output_dir.mkdir(parents=True, exist_ok=True)
-            stream_path = output_dir / f"{variable_id}.h264"
-            index_path = output_dir / f"{variable_id}.h264.index.json"
-            stream_path.write_bytes(video_artifact.stream_bytes)
-            index_path.write_text(json.dumps(video_artifact.index) + "\n", encoding="utf-8")
-            playlist_path = output_dir / f"{variable_id}.h264.m3u8"
-            playlist_path.write_text(
-                build_debug_playlist(video_artifact.index["frames"], stream_path.name),
-                encoding="utf-8",
-            )
-            # Same shape as the metadata embedded in the .xue, scoped to this
-            # variable: the frontend needs grid/time/quantization to configure
-            # the WebGL layer and palette regardless of which decode path it uses.
-            video_metadata = build_metadata(run_time, variable_offsets[variable_id], video_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds)
-            video_reports[variable_id] = {
-                "variable": variable_id,
-                "streamPath": str(stream_path),
-                "indexPath": str(index_path),
-                "byteLength": len(video_artifact.stream_bytes),
-                "crc32": crc32_hex(video_artifact.stream_bytes),
-                "codec": video_artifact.codec_string,
-                "width": video_grid.width,
-                "height": video_grid.height,
-                "gop": video_artifact.index["gop"],
-                "frameCount": video_artifact.index["frameCount"],
-                "metadataJson": json.dumps(video_metadata),
-                "playlistPath": str(playlist_path),
-            }
-            LOG.info("wrote %s (%.2f MB)", stream_path, len(video_artifact.stream_bytes) / 1e6)
 
     # First-frame posters: one tiny artifact per variable so a variable switch
     # can paint immediately while the real stream loads.
@@ -2805,7 +2723,9 @@ def convert_bin(
         "bundles": bundle_reports,
         "variants": [variant for variants in variant_reports.values() for variant in variants],
         "posters": list(poster_reports.values()),
-        "videos": list(video_reports.values()),
+        # Always empty: the report keeps the key the native encoder's
+        # report still writes.
+        "videos": [],
         "byteLength": sum(_delivered_byte_length(bundle) for bundle in bundle_reports),
         "temperatureMaxAbsError": max((item.max_abs_error for item in stats if item.variable_id == "tmp2m"), default=0.0),
         "temperatureClampedPoints": sum(item.clamped_points for item in stats if item.variable_id == "tmp2m"),
@@ -2840,7 +2760,6 @@ def convert_bin(
                 _bundle_manifest_entry(
                     bundle,
                     manifest_path.parent,
-                    video_reports.get(bundle["variable"]),
                     poster_reports.get(bundle["variable"]),
                     variant_reports.get(bundle["variable"]),
                     grid=grids[bundle_grid_family(source, bundle["variable"])],

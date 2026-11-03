@@ -350,7 +350,7 @@ def prepare_web_fixture() -> Path:
 
     # One level of the pressure family: an optional bundle the viewer draws as
     # contours rather than a filled field. Like production it ships no poster
-    # and no video companion — a filled first frame would misrepresent a view
+    # — a filled first frame would misrepresent a view
     # made of lines — so this is also the fixture's only bundle with a variant
     # and nothing else.
     height_planes = {hour: {"hgt500": _height_plane(hour)} for hour in HOURS}
@@ -395,7 +395,7 @@ def prepare_web_fixture() -> Path:
     )
 
     # The optional two-variable wind bundle (u/v pair on one time axis),
-    # with its own half-resolution variant and no poster or video artifacts.
+    # with its own half-resolution variant and no poster.
     level3 = 3
     wind_planes_by_hour = {
         hour: {component: _wind_plane(hour, component) for component in WIND_COMPONENT_IDS} for hour in HOURS

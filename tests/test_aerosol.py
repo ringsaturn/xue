@@ -37,7 +37,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, registry_entry, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.binformat import BundleError, parse_metadata
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import GEFS_BASE_URL, _run_is_complete, gefsaero_object_url, model_object_url, resolve_run
@@ -265,7 +265,6 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_grid_video_and_catalog_prose(self) -> None:
         self.assertEqual((GEFSAERO.production_grid, GEFSAERO.tile, GEFSAERO.variant_factors), ((1440, 721), (48, 52), (2,)))
         self.assertFalse(GEFSAERO.video)
-        self.assertEqual(video_variable_ids(GEFSAERO), frozenset())
         prose = _PROSE["sources"]["gefsaero"]
         self.assertEqual(prose["license"], "other")
         self.assertEqual(prose["providers"][0]["name"], "NOAA / NCEP")

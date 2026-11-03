@@ -95,9 +95,7 @@ def build_bin_manifest(
     Each entry in ``bundles`` must carry ``variable`` and at least one of its
     two deliveries — the ``.xue`` container as ``path``, ``byteLength`` and
     ``crc32`` (one unit), the Zarr store as a ``zarr`` descriptor — and may
-    optionally carry a ``video`` object describing an alternate
-    WebCodecs-decodable artifact for that variable, a ``poster`` descriptor,
-    and a ``variants`` list of reduced-resolution renditions (HLS
+    optionally carry a ``poster`` descriptor and a ``variants`` list of reduced-resolution renditions (HLS
     ``STREAM-INF`` semantics — the top-level entry stays the canonical
     full-resolution tier).
     """
@@ -115,7 +113,6 @@ def build_bin_manifest(
                 **({"byteLength": bundle["byteLength"]} if "path" in bundle else {}),
                 **({"crc32": bundle["crc32"]} if "path" in bundle else {}),
                 **({"variants": bundle["variants"]} if "variants" in bundle else {}),
-                **({"video": bundle["video"]} if "video" in bundle else {}),
                 **({"poster": bundle["poster"]} if "poster" in bundle else {}),
                 **({"zarr": bundle["zarr"]} if "zarr" in bundle else {}),
                 **({"series": bundle["series"]} if "series" in bundle else {}),
@@ -292,48 +289,6 @@ def _validate_poster_descriptor(poster: object, variable: str, paths: set[str]) 
         raise ManifestError(f"manifest bundle poster metadataJson is not valid JSON for {variable}") from exc
 
 
-def _validate_video_descriptor(video: object, variable: str, paths: set[str]) -> None:
-    if not isinstance(video, dict):
-        raise ManifestError(f"manifest bundle video descriptor must be an object for {variable}")
-
-    def _relative_path(key: str, suffix: str) -> None:
-        value = video.get(key)
-        if (
-            not isinstance(value, str)
-            or not value.endswith(suffix)
-            or value.startswith(("/", "http:", "https:"))
-            or ".." in Path(value).parts
-        ):
-            raise ManifestError(f"manifest bundle video {key} must be a relative {suffix} path for {variable}")
-        if value in paths:
-            raise ManifestError("manifest contains duplicate bundle paths")
-        paths.add(value)
-
-    _relative_path("streamPath", ".h264")
-    _relative_path("indexPath", ".h264.index.json")
-
-    byte_length = video.get("byteLength")
-    if not isinstance(byte_length, int) or byte_length <= 0:
-        raise ManifestError(f"manifest bundle video byteLength must be a positive integer for {variable}")
-    crc32 = video.get("crc32")
-    if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
-        raise ManifestError(f"manifest bundle video crc32 must be 8 lowercase hex characters for {variable}")
-    codec = video.get("codec")
-    if not isinstance(codec, str) or not codec:
-        raise ManifestError(f"manifest bundle video codec must be a non-empty string for {variable}")
-    for key in ("width", "height", "gop", "frameCount"):
-        value = video.get(key)
-        if not isinstance(value, int) or value <= 0:
-            raise ManifestError(f"manifest bundle video {key} must be a positive integer for {variable}")
-    metadata_json = video.get("metadataJson")
-    if not isinstance(metadata_json, str) or not metadata_json:
-        raise ManifestError(f"manifest bundle video metadataJson must be a non-empty string for {variable}")
-    try:
-        json.loads(metadata_json)
-    except json.JSONDecodeError as exc:
-        raise ManifestError(f"manifest bundle video metadataJson is not valid JSON for {variable}") from exc
-
-
 def validate_bin_manifest(
     payload: dict[str, Any],
     *,
@@ -375,8 +330,8 @@ def validate_bin_manifest(
                 raise ManifestError(f"manifest bundle variants must be a non-empty list for {variable}")
             for variant in variants:
                 _validate_variant_descriptor(variant, variable, paths)
-        if "video" in bundle:
-            _validate_video_descriptor(bundle["video"], variable, paths)
+        # A ``video`` block (the retired H.264 companion, docs/format.md) is
+        # left unread: published runs and cases still carry it.
         if "poster" in bundle:
             _validate_poster_descriptor(bundle["poster"], variable, paths)
         if "zarr" in bundle:

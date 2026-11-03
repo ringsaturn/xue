@@ -13,8 +13,7 @@ field differently along the axis (``10fg`` / ``10fg3``,
 cycle, the ``wave`` stream, read through the same ``CompanionFile``
 mechanism as GFS-Wave. A scalar whose record is empty at the analysis
 (``optional_at_analysis`` on a source that is not sflux) and whose series
-therefore starts at the first step, the way a de-accumulated rate does. And
-a source that has switched the H.264 companion off (``SourceSpec.video``).
+therefore starts at the first step, the way a de-accumulated rate does.
 
 ``tests/fixtures/ecmwf.2026091212.f000.crop.grib2`` and ``f003`` are an 80 x
 80 cell window of the 2026-09-12 12Z cycle over the Kara Sea (60–80E,
@@ -35,7 +34,7 @@ import numpy as np
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,
@@ -97,7 +96,6 @@ class SourceRegistryTests(unittest.TestCase):
     def test_no_source_ships_video(self) -> None:
         for model in ("ecmwf", "sflux", "gfs", "hrrr"):
             self.assertFalse(source_spec(model).video, model)
-            self.assertEqual(video_variable_ids(source_spec(model)), frozenset(), model)
 
 
 class FetchTests(unittest.TestCase):

@@ -219,11 +219,6 @@ def parser() -> argparse.ArgumentParser:
         help="download GRIB files again even when valid local files exist",
     )
     build_bin_parser.add_argument(
-        "--skip-video",
-        action="store_true",
-        help="do not build the optional per-variable WebCodecs video artifacts",
-    )
-    build_bin_parser.add_argument(
         "--skip-variants",
         action="store_true",
         help="do not build the reduced-resolution variant bundles (the .half tier; on the satellite sources the .quarter tier too)",
@@ -1130,7 +1125,6 @@ def main(argv: list[str] | None = None) -> int:
                 latest_path=latest_path,
                 run_id=run.id if latest_path is not None else None,
                 force=arguments.force,
-                skip_video=arguments.skip_video,
                 skip_variants=arguments.skip_variants,
                 model=arguments.model,
                 bundle_ids=bundle_ids,

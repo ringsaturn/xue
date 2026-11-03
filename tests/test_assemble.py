@@ -15,7 +15,6 @@ import filecmp
 import json
 import unittest
 import zlib
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -63,24 +62,11 @@ class BundleGroupTests(unittest.TestCase):
         anchor = mine.index("tmp2m")
         self.assertEqual(groups, [(b,) for b in mine[:anchor]] + [("tmp2m", "orog")] + [(b,) for b in mine[anchor + 1 :] if b != "orog"])
 
-    def test_the_matrix_flags_the_video_jobs(self) -> None:
-        # No source ships the companion; the flag is held on one that would.
-        matrix = assemble.bundle_group_matrix(replace(source_spec("gfs"), video=True), 100)
-        flagged = {entry["group"]: entry["video"] for entry in matrix}
-        self.assertEqual({group for group, video in flagged.items() if video}, {"tmp2m", "prate"})
+    def test_the_matrix_names_each_job_and_its_tools(self) -> None:
+        # tmp2m, prate and dswrf each cost one plane.
+        matrix = assemble.bundle_group_matrix(source_spec("gfs"), 100)
+        self.assertEqual({key for entry in matrix for key in entry}, {"group", "slug", "eccodes"})
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "GFS repacks nothing")
-
-    def test_a_source_without_video_flags_no_job(self) -> None:
-        # With the H.264 companion off no job installs ffmpeg, and the
-        # companion does not weigh on the grouping: tmp2m, prate and dswrf
-        # each cost one plane.
-        for model in ("sflux", "ecmwf"):
-            with self.subTest(model=model):
-                source = source_spec(model)
-                self.assertFalse(source.video)
-                self.assertEqual(binconvert.video_variable_ids(source), frozenset())
-                matrix = assemble.bundle_group_matrix(source, 100)
-                self.assertFalse(any(entry["video"] for entry in matrix))
         matrix = assemble.bundle_group_matrix(source_spec("sflux"), 100)
         self.assertEqual([entry["slug"] for entry in matrix], ["tmp2m-prate", "dswrf-orog", "wind10m"])
         self.assertFalse(any(entry["eccodes"] for entry in matrix), "sflux repacks nothing")
@@ -356,7 +342,7 @@ class SplitBuildIdentityTests(ClassTempRoot, unittest.TestCase):
             model="gfs",
             container=True, zarr=False,
         )
-        # Four groups, so that vector, derived and video bundles each share a
+        # Four groups, so that vector and derived bundles each share a
         # job with scalars — the grouping the workflow would use, not one
         # bundle per job.
         cls.groups = assemble.bundle_groups(cls.source, 4)

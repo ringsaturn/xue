@@ -518,7 +518,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 FIXTURE,
                 cls.root / "out",
                 model="hrrr",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )

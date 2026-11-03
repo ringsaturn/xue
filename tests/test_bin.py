@@ -978,21 +978,6 @@ class ParameterMetadataTests(unittest.TestCase):
         self.assertNotIn("band", plain["variables"][0])
 
 
-def video_descriptor() -> dict:
-    return {
-        "streamPath": "gfs.2026081506/tmp2m.h264",
-        "indexPath": "gfs.2026081506/tmp2m.h264.index.json",
-        "byteLength": 19_000_000,
-        "crc32": "c63a61aa",
-        "codec": "avc1.f40028",
-        "width": 1440,
-        "height": 721,
-        "gop": 6,
-        "frameCount": 121,
-        "metadataJson": json.dumps({"schemaVersion": 1, "time": {"frameCount": 121}}),
-    }
-
-
 def variant_descriptor(variable: str) -> dict:
     return {
         "path": f"gfs.2026081506/{variable}.half.xue",
@@ -1012,7 +997,6 @@ def manifest_bundles() -> list[dict]:
             "byteLength": 45_000_000,
             "crc32": "a1b2c3d4",
             "variants": [variant_descriptor("tmp2m")],
-            "video": video_descriptor(),
         },
         {"variable": "prate", "path": "gfs.2026081506/prate.xue", "byteLength": 25_000_000, "crc32": "d4c3b2a1"},
     ]
@@ -1039,8 +1023,6 @@ class BinManifestTests(unittest.TestCase):
         payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=manifest_bundles())
         self.assertEqual(payload["schemaVersion"], 5)
         self.assertEqual([bundle["variable"] for bundle in payload["bundles"]], ["tmp2m", "prate"])
-        self.assertEqual(payload["bundles"][0]["video"]["codec"], "avc1.f40028")
-        self.assertNotIn("video", payload["bundles"][1])
         self.assertEqual(payload["bundles"][0]["variants"][0]["width"], 720)
         self.assertNotIn("variants", payload["bundles"][1])
         validate_bin_manifest(payload)
@@ -1117,22 +1099,6 @@ class BinManifestTests(unittest.TestCase):
             broken = json.loads(json.dumps(payload))
             target = broken["bundles"][0] if where == "bundles" else broken["bundles"][0]["variants"][0]
             target["zarr"] = "gfs.2026081506/tmp2m.zarr"
-            with self.assertRaises(ManifestError):
-                validate_bin_manifest(broken)
-
-    def test_invalid_video_descriptor_rejected(self) -> None:
-        payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=manifest_bundles())
-        for mutation in (
-            {"streamPath": "gfs.2026081506/tmp2m.mp4"},
-            {"indexPath": "gfs.2026081506/tmp2m.json"},
-            {"byteLength": 0},
-            {"crc32": "not-hex!"},
-            {"codec": ""},
-            {"width": 0},
-            {"metadataJson": "{not valid json"},
-        ):
-            broken = json.loads(json.dumps(payload))
-            broken["bundles"][0]["video"].update(mutation)
             with self.assertRaises(ManifestError):
                 validate_bin_manifest(broken)
 

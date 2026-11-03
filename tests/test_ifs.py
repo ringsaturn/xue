@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,
@@ -76,7 +76,6 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertEqual(getattr(IFS, field), getattr(ECMWF, field), field)
         self.assertEqual(published_bundle_ids(IFS), published_bundle_ids(ECMWF))
         self.assertEqual(analysis_optional_ids(IFS, published_bundle_ids(IFS)), ("prate", "gust"))
-        self.assertEqual(video_variable_ids(IFS), frozenset())
         self.assertEqual(IFS.steps, ((144, 3), (240, 6)))
         self.assertTrue(IFS.fetched and IFS.live and not IFS.series_file and not IFS.observation)
         # The 0.25° fit, pending a refit on 0.1° runs.

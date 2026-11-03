@@ -1410,7 +1410,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 cls.inputs,
                 cls.root / "out",
                 model="himawari",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,
@@ -1622,7 +1621,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 self.inputs,
                 self.root / "crop",
                 model="himawari",
-                skip_video=True,
                 skip_variants=True,
                 work_root=self.root / "crop-work",
                 bbox=(-175.0, 0.0, -160.0, 10.0),
@@ -1641,13 +1639,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with mock.patch.object(observation, "dataset_info", wraps=observation.dataset_info) as inspected:
                 report = binconvert.convert_bin(
-                    self.inputs, self.root / "only-ir", model="himawari", skip_video=True, skip_variants=True,
+                    self.inputs, self.root / "only-ir", model="himawari", skip_variants=True,
                     work_root=self.root / "only-ir-work", bundle_ids=("ir104",),
                 )
             self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["ir104"])
             self.assertEqual([str(call.args[0]) for call in inspected.call_args_list], [str(observation.netcdf_dataset(self.inputs / "himawari.2026091703.ir104.nc", "ir104"))])
             report = binconvert.convert_bin(
-                self.inputs, self.root / "only-dust", model="himawari", skip_video=True, skip_variants=True,
+                self.inputs, self.root / "only-dust", model="himawari", skip_variants=True,
                 work_root=self.root / "only-dust-work", bundle_ids=("dustrgb",),
             )
         self.assertEqual([bundle["variable"] for bundle in report["bundles"]], ["dustrgb"])
@@ -1846,7 +1844,6 @@ class JapanConversionTests(ClassTempRoot, unittest.TestCase):
                 cls.inputs,
                 cls.root / "out",
                 model="himawarijp",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,

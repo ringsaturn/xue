@@ -255,7 +255,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 SERIES_DIR,
                 cls.root / "out",
                 model="era5",
-                skip_video=True,
                 work_root=cls.root / "work",
                 run_id="2026100800",
                 manifest_path=cls.root / "out" / "manifest.json",

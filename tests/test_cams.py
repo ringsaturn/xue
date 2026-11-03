@@ -259,7 +259,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 SERIES_DIR,
                 cls.root / "out",
                 model="cams",
-                skip_video=True,
                 work_root=cls.root / "work",
                 run_id="2026100900",
                 manifest_path=cls.root / "out" / "manifest.json",

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
-from .binconvert import bundle_input_ids, published_bundle_ids, video_variable_ids
+from .binconvert import bundle_input_ids, published_bundle_ids
 from .errors import BundleError, ManifestError
 from .variables import variable_spec
 from .manifest import (
@@ -48,14 +48,6 @@ def partial_manifest_path(run_directory: Path, bundle_ids: tuple[str, ...]) -> P
     return run_directory / f"{PARTIAL_MANIFEST_PREFIX}{bundle_group_slug(bundle_ids)}.json"
 
 
-def group_needs_video(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
-    """Whether a group ships an H.264 companion, i.e. whether its job needs
-    ffmpeg installed. The encoder skips the companion with a warning when
-    ffmpeg is missing, so the job has to know up front; a source that has
-    switched the companion off needs it for no group."""
-    return any(bundle_id in video_variable_ids(source) for bundle_id in bundle_ids)
-
-
 def group_needs_eccodes(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
     """Whether a group's job needs the eccodes tools installed: every group
     of a source whose feed arrives CCSDS packed, since the fetch repacks
@@ -67,12 +59,8 @@ def group_needs_eccodes(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool
 def _bundle_weight(source: SourceSpec, bundle_id: str) -> int:
     # A job's time is a fixed setup cost plus work that scales with the planes
     # it fetches and compresses: one per input variable (a vector pair is
-    # two, the vapour flux three). The video companion is an ffmpeg install
-    # and an encode on top.
-    weight = 1 + len(bundle_input_ids(source, bundle_id))
-    if bundle_id in video_variable_ids(source):
-        weight += 1
-    return weight
+    # two, the vapour flux three).
+    return 1 + len(bundle_input_ids(source, bundle_id))
 
 
 def manifest_bundle_ids(manifest: dict[str, Any]) -> tuple[str, ...]:
@@ -175,13 +163,12 @@ def bundle_group_matrix(
 ) -> list[dict[str, Any]]:
     """The groups as a GitHub Actions matrix: ``group`` is the space-separated
     ids a shell passes straight to ``--bundles``, ``slug`` names the job's
-    files and artifacts, ``video`` says whether the job installs ffmpeg and
-    ``eccodes`` whether it installs grib_set."""
+    files and artifacts and ``eccodes`` says whether the job installs
+    grib_set."""
     return [
         {
             "group": " ".join(group),
             "slug": bundle_group_slug(group),
-            "video": group_needs_video(source, group),
             "eccodes": group_needs_eccodes(source, group),
         }
         for group in bundle_groups(source, max_groups, bundle_ids)

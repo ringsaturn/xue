@@ -978,9 +978,7 @@ def build_case(
             manifest_path=manifest_path,
             force=force,
             # A cropped case is already a few megabytes: the half-resolution
-            # ladder has nothing left to save, and the H.264 companion cannot
-            # beat it at these sizes either.
-            skip_video=True,
+            # ladder has nothing left to save.
             skip_variants=True,
             model=spec.model,
             bbox=spec.bbox,

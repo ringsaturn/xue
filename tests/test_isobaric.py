@@ -17,7 +17,6 @@ neither of them reads from a record.
 from __future__ import annotations
 
 import unittest
-from dataclasses import replace
 
 import numpy as np
 
@@ -28,7 +27,6 @@ from xuebuild.binconvert import (
     published_bundle_ids,
     vapour_flux_level,
     vector_input_ids,
-    video_variable_ids,
 )
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
@@ -131,10 +129,6 @@ class VectorBundleTests(unittest.TestCase):
             [variable for variable in published if variable not in VECTOR_BUNDLES]
             + [variable for variable in published if variable in VECTOR_BUNDLES],
         )
-
-    def test_only_the_surface_fields_get_a_video_companion(self) -> None:
-        # No source ships the companion; the set is read off one that would.
-        self.assertEqual(set(video_variable_ids(replace(source_spec("gfs"), video=True))), {"tmp2m", "prate", "dswrf", "cref"})
 
     def test_the_vapour_flux_is_q_v_over_g(self) -> None:
         q = np.array([10.0, 0.0, 20.0])  # g/kg

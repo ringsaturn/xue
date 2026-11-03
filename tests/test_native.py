@@ -138,7 +138,7 @@ class RegistryHandoverTests(unittest.TestCase):
     def test_a_build_hands_the_wheel_the_document(self) -> None:
         module, calls = self._wheel(RuntimeError("stop here"))
         with mock.patch.object(native, "require", return_value=module), self.assertRaises(RuntimeError):
-            native.convert_bin(FIXTURE_GRIB, Path("out"), model="gfs", skip_video=True)
+            native.convert_bin(FIXTURE_GRIB, Path("out"), model="gfs")
         (call,) = calls
         self.assertEqual(call["registry"], registry.document_json())
         self.assertEqual(call["series_bundle_ids"], list(source_spec("gfs").series_bundle_ids))
@@ -173,7 +173,6 @@ class NativeContainerParityTests(ClassTempRoot, unittest.TestCase):
             latest_path=cls.root / name / "latest.json",
             run_id="2026081406",
             model="gfs",
-            skip_video=True,
             zarr=True,
             container=True,
         )
@@ -220,7 +219,6 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
             latest_path=cls.root / name / "latest.json",
             run_id="2026081406",
             model="gfs",
-            skip_video=True,
             zarr=True,
             container=False,
         )
@@ -260,7 +258,7 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
         for implementation in (binconvert, native):
             with self.subTest(implementation=implementation.__name__), self.assertRaises(ConversionError):
                 implementation.convert_bin(
-                    FIXTURE_GRIB, self.root / "refused", model="gfs", skip_video=True, zarr=False, container=False
+                    FIXTURE_GRIB, self.root / "refused", model="gfs", zarr=False, container=False
                 )
 
     def test_every_object_is_byte_identical(self) -> None:
@@ -294,7 +292,6 @@ class NativePartialParityTests(ClassTempRoot, unittest.TestCase):
             work_root=cls.root / f"{name}-work",
             manifest_path=run_directory / "manifest.part.tmp2m-wind10m.json",
             model="gfs",
-            skip_video=True,
             bundle_ids=cls.group,
             partial=True,
         )
@@ -336,14 +333,14 @@ class NativeReportTests(ClassTempRoot, unittest.TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.reference = binconvert.convert_bin(
-            FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work", skip_video=True,
+            FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work",
         )
-        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True)
+        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject")
 
     def test_the_reports_have_the_same_shape(self) -> None:
         self.assertEqual(sorted(self.reference), sorted(self.subject))
 
-    def test_skip_video_leaves_no_companions(self) -> None:
+    def test_no_build_writes_a_video_companion(self) -> None:
         self.assertEqual(self.subject["videos"], [])
         self.assertEqual(list((self.root / "subject").glob("*.h264")), [])
 
@@ -385,7 +382,6 @@ class NativeRestrictedBuildTests(ClassTempRoot, unittest.TestCase):
             model="gfs",
             bbox=cls.bbox,
             bundle_ids=("tmp2m",),
-            skip_video=True,
             skip_variants=True,
         )
         return directory, report
@@ -427,7 +423,6 @@ class NativeJpeg2000Tests(ClassTempRoot, unittest.TestCase):
             manifest_path=directory / "manifest.json",
             model="gfs",
             bundle_ids=cls.WAVE_BUNDLES,
-            skip_video=True,
             skip_variants=True,
         )
         return directory, report

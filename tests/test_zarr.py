@@ -523,7 +523,6 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                 directory,
                 work_root=cls.root / f"work-{int(zarr)}",
                 manifest_path=directory / "manifest.json",
-                skip_video=True,
                 zarr=zarr,
                 container=True,
             )

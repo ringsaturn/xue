@@ -60,7 +60,6 @@ from xuebuild.binconvert import (
     derive_wave_vector,
     published_bundle_ids,
     vector_input_ids,
-    video_variable_ids,
 )
 from xuebuild.eccodescli import repack_grid_simple
 from xuebuild.errors import ConversionError, DownloadError
@@ -243,7 +242,6 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(DERIVED_VECTORS[WAVE_BUNDLE_ID], ("htsgw", "dirpw"))
         self.assertEqual(vector_input_ids(WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
         self.assertEqual(bundle_input_ids(gfs, WAVE_BUNDLE_ID), ("htsgw", "dirpw"))
-        self.assertNotIn(WAVE_BUNDLE_ID, video_variable_ids(gfs))
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         for bundle_id in WAVE_PARTITION_IDS + (WIND_WAVE_BUNDLE_ID, SWELL_BUNDLE_ID):
             self.assertNotIn(bundle_id, ecmwf, "ECMWF open data carries no partitions")

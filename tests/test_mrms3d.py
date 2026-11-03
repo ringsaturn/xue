@@ -411,7 +411,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 inputs,
                 cls.root / "out",
                 model="mrms3d",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
             )
@@ -488,7 +487,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "1400x700 grid"):
                 binconvert.convert_bin(
-                    self.inputs, self.root / "complete", model="mrms3d", skip_video=True, require_complete=True, expected_hours=3,
+                    self.inputs, self.root / "complete", model="mrms3d", require_complete=True, expected_hours=3,
                 )
 
     @requires_native_source("mrms3d", "the MRMS reflectivity volume")

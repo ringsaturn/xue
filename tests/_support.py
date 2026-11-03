@@ -225,13 +225,13 @@ def assert_native_matches(
     **options: Any,
 ) -> None:
     """Build ``inputs`` through the wheel into ``subject`` the way an
-    observation round builds (no video, the manifest beside the stores)
+    observation round builds (the manifest beside the stores)
     and hold it to the reference build in ``reference``, byte for byte.
     ``options`` must match the reference build's: the shared stores alone
     unless they say otherwise, as production publishes."""
     with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
         report = native.convert_bin(
-            inputs, subject, model=model, skip_video=True, manifest_path=subject / "manifest.json", **options
+            inputs, subject, model=model, manifest_path=subject / "manifest.json", **options
         )
     require_comparable_compression(case, reference_report, report)
     assert_trees_identical(case, reference, subject)
