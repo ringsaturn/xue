@@ -58,6 +58,7 @@ pub(crate) mod model;
 pub(crate) mod observation;
 pub(crate) mod parallel;
 pub mod poster;
+pub(crate) mod pyjson;
 pub mod quantize;
 pub mod registry;
 pub(crate) mod report;

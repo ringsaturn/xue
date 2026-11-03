@@ -23,7 +23,8 @@ use crate::encode::gribpng::GribPngFile;
 use crate::encode::grid::{
     crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps, GridInfo,
 };
-use crate::encode::metadata::{axis_unit_seconds, build_metadata, to_spaced_json};
+use crate::encode::metadata::{axis_unit_seconds, build_metadata};
+use crate::encode::pyjson::dumps_default;
 use crate::encode::model::{PlaneSource, SourceFrame};
 use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
@@ -1360,7 +1361,7 @@ pub fn convert_bin(
                 "height": poster_grid.height,
                 "byteLength": payload.len(),
                 "crc32": crc32_hex(&payload),
-                "metadataJson": to_spaced_json(&metadata),
+                "metadataJson": dumps_default(&metadata),
             }),
         );
         log!(
