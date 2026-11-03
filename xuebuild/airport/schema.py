@@ -16,13 +16,14 @@ of it by range and parse the slice on its own.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..errors import AirportProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the airport modules import them from here
     CRC32,
+    RoundProduct,
     crc32_hex,
     encode_json,
     pointer_payload,
@@ -100,97 +101,40 @@ COVER = re.compile(r"^[A-Z]{3,5}$")
 ``CAVOK`` where a forecast uses it."""
 
 
-def parse_round(value: str) -> datetime:
-    """``202609161430`` → the round's UTC minute. A minute that is not a
-    multiple of :data:`ROUND_MINUTES` names no round."""
-    if not ROUND.match(value):
-        raise AirportProductError("round must be a UTC minute, YYYYMMDDHHMM")
-    try:
-        moment = datetime.strptime(value, "%Y%m%d%H%M").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise AirportProductError(f"round is not a valid minute: {value}") from exc
-    if moment.minute % ROUND_MINUTES:
-        raise AirportProductError(f"round minute must be a multiple of {ROUND_MINUTES}: {value}")
-    return moment
-
-
-def floor_round(moment: datetime) -> datetime:
-    """The round a moment falls in: the minute floored to the cadence.
-    The publisher's clock is never exactly on it (GitHub's ten-minute cron
-    drifts by a minute or three), and the round name must not drift with
-    it."""
-    moment = moment.astimezone(UTC)
-    return moment.replace(minute=(moment.minute // ROUND_MINUTES) * ROUND_MINUTES, second=0, microsecond=0)
-
-
-def round_name(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y%m%d%H%M")
-
-
-def round_directory(moment: datetime) -> str:
-    """``airport/2026/09/16/airport.202609161430``: one immutable directory
-    per round, the index and the history file in it, filed under its UTC
-    day so the data root does not carry a prefix per round."""
-    return archive_round_directory(PRODUCT, moment)
-
-
-def raw_directory(moment: datetime) -> str:
-    """``airport.202609161430``: where a round's fetched files sit under
-    the raw root, flat: a raw round is read once, by its own build."""
-    return flat_round_directory(PRODUCT, moment)
-
-
-def pointer_directories(moment: datetime) -> tuple[str, ...]:
-    """Where a pointer may name the round: the archive tree
-    (``airport/YYYY/MM/DD/airport.<round>``) or the flat ``airport.<round>``."""
-    return round_directories(PRODUCT, moment)
-
-
-def local_round_directory(output_root: Path, moment: datetime) -> Path:
-    """The round's directory under ``output_root`` in whichever layout it
-    was written or pulled in; where this build would write it when neither
-    holds it."""
-    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
+ROUNDS = RoundProduct(PRODUCT, AirportProductError, cadence_minutes=ROUND_MINUTES)
+parse_round = ROUNDS.parse_round
+floor_round = ROUNDS.floor_round
+round_name = ROUNDS.round_name
+round_directory = ROUNDS.round_directory
+raw_directory = ROUNDS.raw_directory
+pointer_directories = ROUNDS.pointer_directories
+local_round_directory = ROUNDS.local_round_directory
+build_pointer = ROUNDS.build_pointer
+validate_pointer = ROUNDS.validate_pointer
 
 
 # --- primitives --------------------------------------------------------
 
 
-def _time(value: object, label: str) -> datetime:
-    return check_time(AirportProductError, value, label)
+_time = ROUNDS.time
 
 
 Bounds = tuple[float | None, float | None]
 
 
-def _number(value: object, label: str, bounds: Bounds | None = None) -> None:
-    minimum, maximum = bounds or (None, None)
-    check_number(AirportProductError, value, label, minimum=minimum, maximum=maximum)
+_number = ROUNDS.number
 
 
-def _optional_number(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if value is not None:
-        _number(value, label, bounds)
+_optional_number = ROUNDS.optional_number
 
 
-def _optional_string(value: object, label: str) -> None:
-    if value is not None and not isinstance(value, str):
-        raise AirportProductError(f"{label} must be a string or null")
+_optional_string = ROUNDS.optional_string
 
 
-def _integer(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise AirportProductError(f"{label} must be an integer")
-    minimum, maximum = bounds or (None, None)
-    if minimum is not None and value < minimum:
-        raise AirportProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise AirportProductError(f"{label} must be at most {maximum}")
+_integer = ROUNDS.integer
 
 
-def _optional_integer(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if value is not None:
-        _integer(value, label, bounds)
+_optional_integer = ROUNDS.optional_integer
 
 
 def _category(value: object, label: str) -> None:
@@ -369,16 +313,6 @@ def validate_index(payload: object) -> None:
             raise AirportProductError(f"{label} spans past the end of {HISTORY_FILENAME}")
         end = offset + length
     validate_sources(payload.get("sources"), "index.sources")
-
-
-def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issued, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(AirportProductError, payload, PRODUCT, pointer_directories, "airport pointer path does not name the issued round's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

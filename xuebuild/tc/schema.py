@@ -14,7 +14,7 @@ non-negative radii, the fixed-point arrays' lengths.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -22,6 +22,7 @@ from typing import Any
 from ..errors import TcProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the tc modules import them from here
     CRC32,
+    IssueProduct,
     archive_directory,
     flat_directory,
     crc32_hex,
@@ -51,24 +52,13 @@ ALIAS = re.compile(r"^[A-Za-z0-9:._-]+$")
 ISSUE = re.compile(r"^\d{10}$")
 
 
-def issue_directory(issue: datetime) -> str:
-    """``tc/2026/09/12/tc.2026091206``: one directory per aggregation
-    hour, filed under its year, month and day."""
-    return archive_directory(PRODUCT, issue)
-
-
-def pointer_directories(issue: datetime) -> tuple[str, ...]:
-    """Where a pointer may name the issue: the archive tree, or the flat
-    ``tc.<hour>`` directory issues were published in before it."""
-    return (issue_directory(issue), flat_directory(PRODUCT, issue))
-
-
-def parse_issue(value: str) -> datetime:
-    return parse_issue_hour(TcProductError, value)
-
-
-def _time(value: object, label: str) -> datetime:
-    return check_time(TcProductError, value, label)
+ISSUES = IssueProduct(PRODUCT, TcProductError)
+issue_directory = ISSUES.issue_directory
+pointer_directories = ISSUES.pointer_directories
+parse_issue = ISSUES.parse_issue
+build_pointer = ISSUES.build_pointer
+validate_pointer = ISSUES.validate_pointer
+_time = ISSUES.time
 
 
 def _number(value: object, label: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
@@ -333,16 +323,6 @@ def validate_index(payload: object) -> None:
         if not _storm_id_ok(old) or not _storm_id_ok(new) or old == new:
             raise TcProductError(f"index.crosswalk entry {old!r} → {new!r} is malformed")
     validate_sources(payload.get("sources"), "index.sources")
-
-
-def build_pointer(issue: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issue, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(TcProductError, payload, PRODUCT, pointer_directories, "tc pointer path does not name the issued hour's directory")
 
 
 def read_index(path: Path) -> dict[str, Any]:

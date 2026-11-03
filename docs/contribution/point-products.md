@@ -38,6 +38,22 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   the JSONL's CRC32).
 - **Sources fail alone** into `sources[]`; the pointer is withheld only when
   nothing contributed, so the last good issue stays live.
+- **One skeleton, in `xuebuild/pointproduct.py`.** A minute-round product
+  (airport, synop, aq, alerts, fire, nexrad) binds
+  `RoundProduct(PRODUCT, <its error class>, cadence_minutes=…, archived=…)`
+  in its `schema.py` and re-exports its methods under the module-level
+  names (`parse_round`, `floor_round`, `round_directory`, `raw_directory`,
+  `pointer_directories`, `local_round_directory`, `build_pointer`,
+  `validate_pointer`, and the `_time` / `_number` / `_integer` /
+  `_optional_*` / `_crc_file` primitives). Fire and nexrad are unarchived:
+  flat round directories, a whole-hour cadence for fire. The hourly-issue
+  twin (tc, sounding) binds `IssueProduct`. A product's `schema.py` keeps
+  only its line validators and constants. `published_source` is the one
+  way a `SourceStatus` enters an index, and `xuebuild/http.py` the one
+  paced GET (custom User-Agent, 404 and, with `modified_since`, 304 as
+  answers; `compressed=True` for a gzip-on-the-wire service). Network
+  tables (`Network`) and station metadata (`StationMeta`) stay per
+  product: their fields differ.
 - **Parsers import no other parser** and convert to SI themselves; `build.py`
   is the only place sources meet; `schema.py` validates on write.
 - **Goldens.** `tests/fixtures/<product>/` is a fetched issue (two rounds

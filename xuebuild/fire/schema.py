@@ -14,13 +14,14 @@ of its file, so any span of hours is one range request.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..errors import FireProductError
 from ..pointproduct import (  # noqa: F401 — re-exported: the fire modules import them from here
     CRC32,
+    RoundProduct,
     check_number,
     check_pointer,
     check_sources,
@@ -64,34 +65,16 @@ SENSOR = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
-def parse_round(value: str) -> datetime:
-    """``202610120500`` → the round's UTC hour. A minute other than 00
-    names no round."""
-    if not ROUND.match(value):
-        raise FireProductError("round must be a UTC minute, YYYYMMDDHHMM")
-    try:
-        moment = datetime.strptime(value, "%Y%m%d%H%M").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise FireProductError(f"round is not a valid minute: {value}") from exc
-    if moment.minute:
-        raise FireProductError(f"round must be a whole hour: {value}")
-    return moment
-
-
-def floor_round(moment: datetime) -> datetime:
-    """The round a moment falls in: its UTC hour."""
-    return moment.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-
-
-def round_name(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y%m%d%H%M")
-
-
-def round_directory(moment: datetime) -> str:
-    """``fire.202610120500``: one immutable directory per round, flat under
-    the data root like the synop rounds. A round carries the whole window
-    and lives six hours, so there is no archive to file by day."""
-    return f"fire.{round_name(moment)}"
+ROUNDS = RoundProduct(PRODUCT, FireProductError, cadence_minutes=60, archived=False)
+parse_round = ROUNDS.parse_round
+floor_round = ROUNDS.floor_round
+round_name = ROUNDS.round_name
+round_directory = ROUNDS.round_directory
+raw_directory = ROUNDS.raw_directory
+pointer_directories = ROUNDS.pointer_directories
+local_round_directory = ROUNDS.local_round_directory
+build_pointer = ROUNDS.build_pointer
+validate_pointer = ROUNDS.validate_pointer
 
 
 def sensor_filename(sensor: str) -> str:
@@ -104,31 +87,13 @@ def sensor_filename(sensor: str) -> str:
 Bounds = tuple[float | None, float | None]
 
 
-def _time(value: object, label: str) -> datetime:
-    return check_time(FireProductError, value, label)
+_time = ROUNDS.time
 
 
-def _integer(value: object, label: str, bounds: Bounds | None = None) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise FireProductError(f"{label} must be an integer")
-    minimum, maximum = bounds or (None, None)
-    if minimum is not None and value < minimum:
-        raise FireProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise FireProductError(f"{label} must be at most {maximum}")
+_integer = ROUNDS.integer
 
 
-def _crc_file(value: object, label: str, path: str) -> int:
-    if not isinstance(value, dict):
-        raise FireProductError(f"{label} must be an object")
-    if value.get("path") != path:
-        raise FireProductError(f"{label}.path must be {path!r}, the file beside the index")
-    byte_length = value.get("byteLength")
-    if isinstance(byte_length, bool) or not isinstance(byte_length, int) or byte_length < 0:
-        raise FireProductError(f"{label}.byteLength must be a non-negative integer")
-    if not isinstance(value.get("crc32"), str) or not CRC32.match(value["crc32"]):
-        raise FireProductError(f"{label}.crc32 must be 8 lowercase hex characters")
-    return byte_length
+_crc_file = ROUNDS.crc_file
 
 
 def validate_sources(sources: object, label: str) -> None:
@@ -260,22 +225,6 @@ def validate_index(payload: object) -> None:
         if counts[position] != sensor["count"]:
             raise FireProductError(f"index.sensors[{position}].count is not the sum of its hours")
     validate_sources(payload.get("sources"), "index.sources")
-
-
-def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issued, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(
-        FireProductError,
-        payload,
-        PRODUCT,
-        lambda issued: (round_directory(issued),),
-        "fire pointer path does not name the issued round's directory",
-    )
 
 
 def read_index(path: Path) -> dict[str, Any]:

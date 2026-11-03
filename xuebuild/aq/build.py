@@ -71,10 +71,7 @@ over the next two — so a map that read the newest hour alone would blink
 an element out for an hour whenever its analyser reported late."""
 
 
-def _published(status: SourceStatus) -> dict[str, Any]:
-    """A source's status as the index publishes it: where the bytes came
-    from, not where this build happened to put them."""
-    return {key: value for key, value in status.to_json().items() if key != "file"}
+_published = pointproduct.published_source
 
 
 def _read_previous_network(

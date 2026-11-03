@@ -16,13 +16,15 @@ slice on its own.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from ..errors import XueError
 from ..pointproduct import (  # noqa: F401 — re-exported: the alerts modules import them from here
     CRC32,
+    RoundProduct,
+    check_integer,
     builder_block,
     check_builder,
     check_number,
@@ -111,53 +113,16 @@ LAYER = re.compile(r"^[a-z][a-z0-9_]*$")
 LANGUAGE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 
 
-def parse_round(value: str) -> datetime:
-    """``202611010005`` → the round's UTC minute. A minute that is not a
-    multiple of :data:`ROUND_MINUTES` names no round."""
-    if not ROUND.match(value):
-        raise AlertsProductError("round must be a UTC minute, YYYYMMDDHHMM")
-    try:
-        moment = datetime.strptime(value, "%Y%m%d%H%M").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise AlertsProductError(f"round is not a valid minute: {value}") from exc
-    if moment.minute % ROUND_MINUTES:
-        raise AlertsProductError(f"round minute must be a multiple of {ROUND_MINUTES}: {value}")
-    return moment
-
-
-def floor_round(moment: datetime) -> datetime:
-    moment = moment.astimezone(UTC)
-    return moment.replace(minute=(moment.minute // ROUND_MINUTES) * ROUND_MINUTES, second=0, microsecond=0)
-
-
-def round_name(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y%m%d%H%M")
-
-
-def round_directory(moment: datetime) -> str:
-    """``alerts/2026/11/01/alerts.202611010005``: one immutable directory per
-    round, filed under its UTC day so the data root does not carry a
-    prefix per round."""
-    return archive_round_directory(PRODUCT, moment)
-
-
-def raw_directory(moment: datetime) -> str:
-    """``alerts.202611010005``: where a round's fetched files sit under the raw
-    root, flat: a raw round is read once, by its own build."""
-    return flat_round_directory(PRODUCT, moment)
-
-
-def pointer_directories(moment: datetime) -> tuple[str, ...]:
-    """Where a pointer may name the round: the archive tree
-    (``alerts/YYYY/MM/DD/alerts.<round>``) or the flat ``alerts.<round>``."""
-    return round_directories(PRODUCT, moment)
-
-
-def local_round_directory(output_root: Path, moment: datetime) -> Path:
-    """The round's directory under ``output_root`` in whichever layout it
-    was written or pulled in; where this build would write it when neither
-    holds it."""
-    return existing_round_directory(output_root, PRODUCT, moment) or output_root / round_directory(moment)
+ROUNDS = RoundProduct(PRODUCT, AlertsProductError, cadence_minutes=ROUND_MINUTES)
+parse_round = ROUNDS.parse_round
+floor_round = ROUNDS.floor_round
+round_name = ROUNDS.round_name
+round_directory = ROUNDS.round_directory
+raw_directory = ROUNDS.raw_directory
+pointer_directories = ROUNDS.pointer_directories
+local_round_directory = ROUNDS.local_round_directory
+build_pointer = ROUNDS.build_pointer
+validate_pointer = ROUNDS.validate_pointer
 
 
 def network_filename(network: str) -> str:
@@ -195,8 +160,7 @@ def areas_bbox_path(set_id: str, version: str, depth: int = ROUND_DEPTH) -> str:
 # --- primitives --------------------------------------------------------
 
 
-def _time(value: object, label: str) -> datetime:
-    return check_time(AlertsProductError, value, label)
+_time = ROUNDS.time
 
 
 def _optional_time(value: object, label: str) -> None:
@@ -204,14 +168,7 @@ def _optional_time(value: object, label: str) -> None:
         _time(value, label)
 
 
-def _integer(value: object, label: str, minimum: int | None = None, maximum: int | None = None) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise AlertsProductError(f"{label} must be an integer")
-    if minimum is not None and value < minimum:
-        raise AlertsProductError(f"{label} must be at least {minimum}")
-    if maximum is not None and value > maximum:
-        raise AlertsProductError(f"{label} must be at most {maximum}")
-    return value
+_integer = partial(check_integer, AlertsProductError)
 
 
 def _string(value: object, label: str) -> str:
@@ -220,9 +177,7 @@ def _string(value: object, label: str) -> str:
     return value
 
 
-def _optional_string(value: object, label: str) -> None:
-    if value is not None and not isinstance(value, str):
-        raise AlertsProductError(f"{label} must be a string or null")
+_optional_string = ROUNDS.optional_string
 
 
 def _coordinate(value: object, label: str, bounds: tuple[float, float]) -> float:
@@ -233,15 +188,7 @@ def _coordinate(value: object, label: str, bounds: tuple[float, float]) -> float
     return float(value)
 
 
-def _crc_file(value: object, label: str, path: str) -> int:
-    if not isinstance(value, dict):
-        raise AlertsProductError(f"{label} must be an object")
-    if value.get("path") != path:
-        raise AlertsProductError(f"{label}.path must be {path!r}, the file beside the index")
-    byte_length = _integer(value.get("byteLength"), f"{label}.byteLength", 0)
-    if not isinstance(value.get("crc32"), str) or not CRC32.match(value["crc32"]):
-        raise AlertsProductError(f"{label}.crc32 must be 8 lowercase hex characters")
-    return byte_length
+_crc_file = ROUNDS.crc_file
 
 
 def validate_areas(payload: object, label: str) -> None:
@@ -504,22 +451,6 @@ def validate_index(payload: object) -> None:
         not isinstance(mapping, dict) or not isinstance(mapping.get("tables"), str) or not CRC32.match(mapping["tables"])
     ):
         raise AlertsProductError("index.mapping.tables must be the CRC32 of tables.json, 8 lowercase hex characters")
-
-
-def build_pointer(issued: datetime, index_path: str, index_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issued, index_path, index_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(
-        AlertsProductError,
-        payload,
-        PRODUCT,
-        pointer_directories,
-        "alerts pointer path does not name the issued round's directory",
-    )
 
 
 def read_index(path: Path) -> dict[str, Any]:

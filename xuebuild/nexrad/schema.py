@@ -12,13 +12,16 @@ window) and the CRC32 pattern.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from functools import partial
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..errors import NexradProductError
 from ..pointproduct import (  # noqa: F401 — re-exported for the nexrad modules
     CRC32,
+    RoundProduct,
+    check_integer,
     check_number,
     check_pointer,
     check_sources,
@@ -50,37 +53,19 @@ manifest (a case, ``docs/nexrad.md`` §1)."""
 SOURCE_KEY = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
-def parse_round(value: str) -> datetime:
-    if not ROUND.match(value):
-        raise NexradProductError("round must be a UTC minute, YYYYMMDDHHMM")
-    try:
-        moment = datetime.strptime(value, "%Y%m%d%H%M").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise NexradProductError(f"round is not a valid minute: {value}") from exc
-    if moment.minute % ROUND_MINUTES:
-        raise NexradProductError(f"round minute must be a multiple of {ROUND_MINUTES}: {value}")
-    return moment
+ROUNDS = RoundProduct(PRODUCT, NexradProductError, cadence_minutes=ROUND_MINUTES, archived=False)
+parse_round = ROUNDS.parse_round
+floor_round = ROUNDS.floor_round
+round_name = ROUNDS.round_name
+round_directory = ROUNDS.round_directory
+raw_directory = ROUNDS.raw_directory
+pointer_directories = ROUNDS.pointer_directories
+local_round_directory = ROUNDS.local_round_directory
+build_pointer = ROUNDS.build_pointer
+validate_pointer = ROUNDS.validate_pointer
 
 
-def floor_round(moment: datetime) -> datetime:
-    moment = moment.astimezone(UTC)
-    return moment.replace(minute=(moment.minute // ROUND_MINUTES) * ROUND_MINUTES, second=0, microsecond=0)
-
-
-def round_name(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y%m%d%H%M")
-
-
-def round_directory(moment: datetime) -> str:
-    return f"nexrad.{round_name(moment)}"
-
-
-def _integer(value: object, label: str, minimum: int | None = None) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise NexradProductError(f"{label} must be an integer")
-    if minimum is not None and value < minimum:
-        raise NexradProductError(f"{label} must be at least {minimum}")
-    return value
+_integer = partial(check_integer, NexradProductError)
 
 
 def _file(value: object, label: str) -> int:
@@ -199,22 +184,6 @@ def validate_window(payload: object) -> None:
                         raise NexradProductError(f"{where} site {site}'s sweeps must strictly follow the window's")
                     latest[key] = time
     check_sources(NexradProductError, payload.get("sources"), "window.sources", SOURCE_KEY, lambda _s, _w: None)
-
-
-def build_pointer(issued: datetime, path: str, window_bytes: bytes) -> dict[str, Any]:
-    payload = pointer_payload(PRODUCT, issued, path, window_bytes)
-    validate_pointer(payload)
-    return payload
-
-
-def validate_pointer(payload: object) -> None:
-    check_pointer(
-        NexradProductError,
-        payload,
-        PRODUCT,
-        lambda issued: (round_directory(issued),),
-        "nexrad pointer path does not name the issued round's directory",
-    )
 
 
 def read_window(path: Path) -> dict[str, Any]:
