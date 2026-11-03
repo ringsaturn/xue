@@ -23,7 +23,7 @@ Normative specs, which win over this page: [format.md](../format.md),
   dispatch; `assemble.py` split builds; `stac.py` catalog; `showcase.py`
   cases; `satellite/` ([sources.md](sources.md)); `tc/`, `airport/`,
   `sounding/` ([point-products.md](point-products.md)); `gdal.py`,
-  `ffmpegcli.py`, `eccodescli.py`, `om2nccli.py`, `jmacli.py` tool wrappers;
+  `eccodescli.py`, `om2nccli.py`, `jmacli.py` tool wrappers;
   `zstdcli.py` in-process zstd.
 - `rust/xue/` — decoder (`src/decode/`), byte layout (`src/format.rs`), Zarr
   read geometry (`src/zarr.rs`), native encoder (`src/encode/`, `encoder`
@@ -53,9 +53,8 @@ Encoder, Rust decoder and TypeScript frontend must stay in agreement.
   and otherwise takes the reference pipeline with a `::warning::`
   ([publishing.md](publishing.md)).
 - The native encoder writes the stores itself (`encode/zarrstore.rs`, held
-  to `zarrstore.write_store` byte for byte) but no video and no pointer.
-  `native.py` reads the codes back out of the stores it wrote, encodes
-  video, folds the descriptors into the manifest, and only then writes the
+  to `zarrstore.write_store` byte for byte) but no pointer. `native.py`
+  stamps the shared stores' CRCs into the manifest and only then writes the
   pointer, whose CRC32 covers the finished manifest.
 - The `encoder` feature is off by default because it links GDAL and the
   decoder must not. Profiles in `rust/Cargo.toml` (Cargo reads them only
@@ -140,7 +139,7 @@ unpacks and the native encoder packs through it, so fields cannot drift.
 
 ## External tools
 
-GDAL, zstd, ffmpeg, eccodes and om2nc run as subprocesses; NumPy is the only
+GDAL, zstd, eccodes and om2nc run as subprocesses; NumPy is the only
 Python runtime dependency. Exceptions and boundaries:
 
 - zstd runs in process (`compression.zstd`); there is no CLI path. Its bytes

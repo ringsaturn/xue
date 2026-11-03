@@ -18,7 +18,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
 | `viewstate.ts`, `urlstate.ts` | `ViewState`; query and camera-hash parsing. |
-| `worker.ts`, `zarr/`, `webcodecs.ts` | The three decode channels (`.xue`, store, H.264). |
+| `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
 | `tiles.ts` | Viewport to tile rectangles. |
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
 | `contourlabels.ts` | The contour labels' controller (`createContourLabels`): the labels worker, their two symbol layers, and when the lines on screen are traced again. |
@@ -68,8 +68,7 @@ tier. Every channel speaks one protocol (`booted` → `init` / `init-stream`
 `main.ts::loadVariable` picks, in order: the Zarr store over ranges
 (whenever the bundle or tier has a `zarr` descriptor, unless
 `?backend=xue`), `.xue` over ranges, `.xue` downloaded whole, the store by
-whole objects (only when no container ships). H.264 only with
-`?use_h264=true`, a video artifact and browser support. Probe sessions are
+whole objects (only when no container ships). Probe sessions are
 streamed or nothing.
 
 Store channel: a session opens a bundle by (store, bundle id),
@@ -585,7 +584,7 @@ Default field: with no `?type=` and nothing pressed this session
 ## Probe panel
 
 A click pins a cell (`probe.ts`); store and v2 sessions answer one `series`
-message for the whole axis, v1 and video fill in from decoded planes. Rows
+message for the whole axis, v1 fills in from decoded planes. Rows
 (`meteogram.ts`) are whatever the manifest publishes, each a probe session
 at the primary's tier, aligned to the primary axis by lead seconds
 (`alignSeries`) so a missing frame is a gap, not a shifted column. Panel and
@@ -695,7 +694,7 @@ Typhoon Committee adds is added there by hand.
   pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
   and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
-  `?case=`, `?res=`, `?use_h264=`, `?particles=`, `?backend=`, `?x=`, `?gibs=`,
+  `?case=`, `?res=`, `?particles=`, `?backend=`, `?x=`, `?gibs=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never

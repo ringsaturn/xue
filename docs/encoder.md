@@ -1,7 +1,7 @@
 # The native encoder
 
-`xuebuild/` is the reference encoder: Python driving GDAL, zstd and ffmpeg as
-CLI subprocesses. `rust/xue/src/encode/` is the same `convert-bin` pipeline
+`xuebuild/` is the reference encoder: Python driving GDAL and zstd as CLI
+subprocesses. `rust/xue/src/encode/` is the same `convert-bin` pipeline
 written in Rust with those tools linked in process, behind the `xue` crate's
 off-by-default `encoder` feature, and published as the `xuepy` wheel.
 
@@ -28,7 +28,6 @@ of it.
 | compression | `compression.zstd` / `zstd` CLI | `zstd` crate (`ZSTD_compress2`) |
 | poster deflate | `zlib.compress(level=9)` | `flate2` on libz |
 | read-back verify | `xuebuild/binformat.py` reference reader | the `xue` decoder crate, the same code the browser runs |
-| H.264 companions | `ffmpeg` subprocess | not built here; `xuebuild/native.py` encodes them afterwards from the bundles this wrote |
 
 `gdal-sys` is used rather than the high-level `gdal` crate because, as of
 `gdal` 0.19, the safe wrapper does not compile against GDAL 3.13 (its
@@ -74,8 +73,7 @@ xue-encode convert-bin --help
 ```
 
 The flags mirror `python -m xuebuild convert-bin`. `--skip-video` is
-accepted and ignored, since this binary builds no video either way; see *In
-the build pipeline* for the path that does.
+accepted and ignored: no encoder builds the retired H.264 companion.
 
 ## In the build pipeline
 
@@ -142,20 +140,13 @@ The native encoder writes the Zarr stores' arrays itself, straight from its
 codes (`rust/xue/src/encode/zarrstore.rs`, the counterpart of
 `zarrstore.write_bundle_arrays` over a `CodesSource`), with the series
 stores for the bundles the caller names (`SourceSpec.series_bundle_ids`,
-passed in by `native.py`). It does not write three artifacts, and
+passed in by `native.py`). It does not write two artifacts, and
 `xuebuild/native.py` supplies them:
 
 - The shared stores' group documents. See "Shared stores" below.
 
-- The H.264 companions. The codes are read back out of the stores the
-  native encoder wrote (`zarrstore.read_frames`; out of the container with
-  the wheel's decoder where only that was written) and handed to the
-  existing `xuebuild/videoconvert.py`. Nothing is re-extracted and nothing
-  is quantized twice; the planes fed to ffmpeg are the delivery's own
-  codes. As in the reference, a missing ffmpeg drops the artifact and
-  leaves the store as the fallback.
-- The live pointer. It carries the manifest's CRC32, and folding the video
-  descriptors in changes the manifest, so the native encoder has no
+- The live pointer. It carries the manifest's CRC32, and stamping the
+  shared stores' CRCs in changes the manifest, so the native encoder has no
   pointer writer: it writes the manifest alone and the pointer is written
   afterwards, from the finished bytes. The wheel's `convert_bin` still
   accepts `latest_path` and `run_id` and ignores them.
@@ -163,8 +154,7 @@ passed in by `native.py`). It does not write three artifacts, and
 `tests/test_native.py` holds the two together: one build through each
 encoder into identically shaped directories, then every artifact compared
 byte for byte (stores, containers where written, reduced-resolution
-variants, posters, H.264 streams and their indexes and playlists,
-`manifest.json`, and the live pointer), and one fanned-out job's arrays,
+variants, posters, `manifest.json`, and the live pointer), and one fanned-out job's arrays,
 parts and partial manifest the same way. `tests/test_zarr.py` also holds the
 two one-bundle store writers to the same bytes directly (`xue.write_store`).
 
@@ -356,7 +346,7 @@ Four places needed care to reach that:
   change every poster payload.
 - The manifest's embedded metadata strings are `json.dumps` at its
   defaults. A bundle stores its metadata compact and in raw UTF-8; the
-  `metadataJson` a manifest carries for a poster or a video is the same
+  `metadataJson` a manifest carries for a poster is the same
   object written with a space after every separator and every non-ASCII
   character escaped, so the degree sign in the temperature unit reaches the
   manifest as `°`. `pyjson::dumps_default` does both.
@@ -419,9 +409,7 @@ frame's GRIB after the primary file's records, on the source's own grid.
 ## Not covered
 
 Fetching (`xue fetch`), the showcase driver, `build-bin` and `verify-bin`
-stay in Python, as does the H.264 encode itself: the native side writes the
-stores those companions are derived from, and `xuebuild/native.py` does
-the rest.
+stay in Python.
 
 ## Verified against
 

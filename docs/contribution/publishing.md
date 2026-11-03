@@ -35,7 +35,7 @@ are never removed. Between the assets and the pointer, `upload-r2` runs
 `make warm-r2` (`scripts/warm_edge_cache.sh`): one GET of every artifact
 through the public hostname with the site's `Origin`, so the edge and the
 tiered cache hold the run before its first viewer (a cold fill from R2 is
-about 1 MB/s per object). H.264 companions are left cold. A failed warm-up
+about 1 MB/s per object). A failed warm-up
 is reported and the pointer goes live anyway; `WARM=false` skips it.
 
 One workflow per source (`publish-gfs.yml`, `publish-ecmwf.yml`, …) calls

@@ -25,7 +25,8 @@ rule: which spellings a record may carry and the arithmetic to the
 published unit), `gdal_rules` (how its record is told apart among a GRIB's
 bands; derived from the identity by `default_gdal_rules` unless set),
 `predictor` (`delta` / `raw`), `decimation` (`sample` / `peak`) and
-`companions` (`poster`, `video`). Nothing in the encoders selects behaviour
+`companions` (`poster`; `video` is the retired H.264 companion, built by
+no encoder). Nothing in the encoders selects behaviour
 by a variable's id: a new quantity sets the fields that differ from the
 defaults and the rest follows. It feeds both record matching and the v3
 `parameter` block; it assigns no container id.
@@ -110,7 +111,7 @@ commit). Widening a source's inputs means recutting its crop fixture
   (ECMWF open data, ICON-EU, ARPEGE) is repacked to `grid_simple` with
   `grib_set` at fetch time.
 - **`binconvert.py`**: grid discovery, `crop_grid`, units, de-accumulation,
-  quantization, grouping, bundles, ladder, posters, video, manifest entries.
+  quantization, grouping, bundles, ladder, posters, manifest entries.
   Rules mirrored in `rust/xue/src/encode/`:
   - a global grid snaps to `360 / width` (WAVEWATCH III's last longitude is
     off, and wave bundles must share the pgrb2 grid; `grid.rs`);
@@ -118,9 +119,8 @@ commit). Widening a source's inputs means recutting its crop fixture
     satellites and the 0.1° IFS grids): every f-th row and column of the codes, tile divided by f
     (`variant_tier`, `_variant_grid`, `_bundle_tile`); `variants` are in
     ascending factor order and nothing keys on the suffix;
-  - a video companion only for the variables whose `companions` name it,
-    and only where `SourceSpec.video` is on; the chunk predictor and the
-    ladder's decimation are the variable's `predictor` and `decimation`.
+  - the chunk predictor and the ladder's decimation are the variable's
+    `predictor` and `decimation`.
 - **`gdal.py`** (mirrored by `inspect.rs`): `gdalinfo` in, `SourceFrame`s
   out. A band is a variable's record when any of its `gdal_rules` accepts
   it (one evaluator per rule name); the unit is checked by the variable's
@@ -194,7 +194,7 @@ make run-local MODEL=hrrr RUN=2025011512 HOURS=48 BBOX=-107,25.5,-93,37 BUNDLES=
 - The output, `data/local/<model>.<run>/`, is the manifest and the shared
   Zarr store `bundles.zarr` holding every bundle, plus
   `<bundle>.series.zarr` for the source's `series_bundle_ids` (`--no-series` drops them) and the posters the
-  manifest names. There is no `.xue`, video, reduced-resolution variant,
+  manifest names. There is no `.xue`, reduced-resolution variant,
   live pointer or STAC.
 - Raw GRIB goes to `data/raw/local/<model>.<run>/`, apart from the live
   `data/raw/<model>.<run>/`, for the same reason the showcase and the

@@ -17,9 +17,6 @@
 #     Cache on the zone that fill lands in the upper tier every other data
 #     center pulls from, not only in the one nearest this machine.
 #
-# The H.264 companions are skipped: they are opt-in (`?use_h264=true`) and
-# would double the bytes warmed for viewers that never request them.
-#
 # A Zarr store (`zarr` descriptor on a bundle or a variant, `series` on a
 # full bundle) is a handful of objects: the group and array documents, each
 # array's one shard — the whole array, read by range the way a bundle is,
