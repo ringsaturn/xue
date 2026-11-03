@@ -3,10 +3,11 @@
 //! the Workers runtime; everything below returns plain values, so it also runs
 //! natively under `cargo test` and in the `xue-api-server` binary.
 
-use worker::{event, Cache, Context, Env, Method, Request, Response};
+use worker::{event, Cache, Context, Env, Headers, Method, Request, Response};
 
 use crate::bucket::Data;
-use crate::error::{self, HttpError};
+use crate::error::HttpError;
+use crate::reply::{self, Reply};
 use crate::route;
 
 #[event(fetch)]
@@ -14,7 +15,7 @@ async fn fetch(request: Request, env: Env, _ctx: Context) -> worker::Result<Resp
     let started = js_sys::Date::now();
     let response = match handle(request, &env).await {
         Ok(response) => response,
-        Err(error) => error::error_response(error)?,
+        Err(error) => response_from(reply::error_reply(&error))?,
     };
     // The Worker's own wall time from handler entry to response, including
     // every `cache.get` / R2 subrequest but excluding the client legs on
@@ -27,7 +28,7 @@ async fn fetch(request: Request, env: Env, _ctx: Context) -> worker::Result<Resp
 async fn handle(request: Request, env: &Env) -> Result<Response, HttpError> {
     let method = request.method();
     if method == Method::Options {
-        return error::preflight();
+        return response_from(reply::preflight()).map_err(HttpError::from);
     }
     if method != Method::Get && method != Method::Head {
         return Err(HttpError::new(
@@ -48,18 +49,28 @@ async fn handle(request: Request, env: &Env) -> Result<Response, HttpError> {
     }
     let data = Data::from_env(env)?;
     let answer = route::dispatch(path, &url, &data, js_sys::Date::now()).await?;
-    let extra: Vec<(&str, &str)> = answer
-        .headers
-        .iter()
-        .map(|(name, value)| (*name, value.as_str()))
-        .collect();
-    let mut response = error::json(answer.body, 200, answer.cache_control, &extra)?;
+    let reply = reply::json(answer.body, 200, answer.cache_control, &answer.headers);
+    let mut response = response_from(reply).map_err(HttpError::from)?;
     if cacheable {
         if let Ok(clone) = response.cloned() {
             edge_put(&request, clone).await;
         }
     }
     Ok(response)
+}
+
+/// A [`Reply`] as a Workers response.
+fn response_from(reply: Reply) -> worker::Result<Response> {
+    let headers = Headers::new();
+    for (name, value) in &reply.headers {
+        headers.set(name, value)?;
+    }
+    let response = if reply.body.is_empty() {
+        Response::empty()?
+    } else {
+        Response::from_bytes(reply.body)?
+    };
+    Ok(response.with_status(reply.status).with_headers(headers))
 }
 
 /// The edge cache (`caches.default`), keyed by the request URL. A miss is a

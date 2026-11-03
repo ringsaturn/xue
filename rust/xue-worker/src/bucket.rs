@@ -1,52 +1,19 @@
 //! Reading the published data.
 //!
-//! Two interchangeable backends on the Workers runtime, chosen by
-//! `DATA_SOURCE`:
-//!
-//! * `r2` (default): the `DATA` R2 binding, `get(key).range(…)` — an exact
-//!   range, no whole-object fill, deterministic on a cold object.
-//! * `cdn`: the public origin (`DATA_ORIGIN`), the same ranged GET the browser
-//!   makes. Used for local development (`wrangler dev`, where the local bucket
-//!   is empty) and as a fallback when an object is served faster from the
-//!   edge cache than from the bucket's own region.
-//!
-//! Natively there is the same origin read over `reqwest` (the `server`
-//! feature, the `xue-api-server` binary), one in memory, which is how the
-//! tests feed the handlers a fixture bucket and count the reads a query costs,
-//! and any [`ObjectSource`] a caller supplies (a mirror on local disk, another
-//! store), served by the same routes through `server::serve`.
+//! [`Data`] is a handle on the dataset over one [`ObjectSource`]; which source
+//! that is (R2 binding, public origin, in-memory fixture, a caller's own) is
+//! `backend/`'s concern.
 //!
 //! The object layout and the resolution chain above this (`collection →
 //! pointer → manifest`) are the data contract, not the API's.
 
 use serde::de::DeserializeOwned;
-#[cfg(not(target_arch = "wasm32"))]
-use std::{cell::RefCell, collections::HashMap, future::Future, pin::Pin};
+use std::{future::Future, pin::Pin};
 #[cfg(target_arch = "wasm32")]
-use worker::{Bucket, Env, Fetch, Headers, Method, Range, Request, RequestInit};
+use worker::Env;
 
 use crate::cache;
 use crate::error::HttpError;
-
-enum Backend {
-    #[cfg(target_arch = "wasm32")]
-    R2(Bucket),
-    #[cfg(target_arch = "wasm32")]
-    Cdn,
-    #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
-    Http(reqwest::Client),
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
-    Source(Box<dyn ObjectSource>),
-    /// Objects by key (no prefix), and the log of every read as
-    /// `(path, kind)`, kind one of `whole`, `range`, `suffix`.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg_attr(feature = "server", allow(dead_code))]
-    Memory {
-        objects: HashMap<String, Vec<u8>>,
-        reads: RefCell<Vec<(String, &'static str)>>,
-    },
-}
 
 /// An explicit byte range: a known length, or a suffix with no object length.
 pub enum ReadRange {
@@ -55,8 +22,8 @@ pub enum ReadRange {
 }
 
 impl ReadRange {
-    #[cfg_attr(not(any(target_arch = "wasm32", feature = "server")), allow(dead_code))]
-    fn header(&self) -> String {
+    /// The `Range` request header for this range.
+    pub fn header(&self) -> String {
         match self {
             ReadRange::Offset { offset, length } => {
                 format!("bytes={offset}-{}", offset + length - 1)
@@ -84,8 +51,8 @@ impl ReadRange {
 /// A missing object is `HttpError` 404 `not_found`; anything else a source
 /// cannot read is a 502 `upstream_failed`.
 ///
-/// The returned future need not be `Send`: the server runs on one thread.
-#[cfg(not(target_arch = "wasm32"))]
+/// The returned future need not be `Send`: the server runs on one thread, and
+/// the Workers runtime's own futures are not `Send`.
 pub trait ObjectSource {
     fn read<'a>(
         &'a self,
@@ -94,54 +61,26 @@ pub trait ObjectSource {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, HttpError>> + 'a>>;
 }
 
-/// An origin answer's status as the handlers see it: a missing object is
-/// `404 not_found`, anything else outside 2xx an upstream failure.
-#[cfg(any(target_arch = "wasm32", feature = "server"))]
-fn origin_status(path: &str, url: &url::Url, status: u16) -> Result<(), HttpError> {
-    if status == 404 {
-        return Err(HttpError::new(
-            404,
-            "not_found",
-            format!("no object {path}"),
-        ));
-    }
-    if !(200..300).contains(&status) {
-        return Err(HttpError::new(
-            502,
-            "upstream_failed",
-            format!("GET {url} -> {status}"),
-        ));
-    }
-    Ok(())
-}
-
-/// The requested bytes of an origin answer. A `206` honoured the range; an
-/// origin that ignored `Range` sent the whole object, sliced here as the point
-/// products do.
-#[cfg(any(target_arch = "wasm32", feature = "server"))]
-fn origin_body(bytes: Vec<u8>, range: Option<ReadRange>, status: u16) -> Vec<u8> {
-    match range {
-        Some(range) if status != 206 => range.slice(&bytes).to_vec(),
-        _ => bytes,
-    }
-}
-
-#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
-fn upstream(error: reqwest::Error) -> HttpError {
-    HttpError::new(502, "upstream_failed", error.to_string())
-}
-
-/// A handle on the public dataset, with the prefix every key shares.
+/// A handle on the public dataset.
 pub struct Data {
-    backend: Backend,
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    prefix: String,
+    source: Box<dyn ObjectSource>,
     /// The public origin a client can read the same objects from directly;
     /// reported by `/v1/catalog` so a consumer can pin a run itself.
     pub origin: String,
+    #[cfg(test)]
+    reads: crate::backend::memory::Reads,
 }
 
 impl Data {
+    fn new(source: Box<dyn ObjectSource>, origin: &str) -> Data {
+        Data {
+            source,
+            origin: origin.to_owned(),
+            #[cfg(test)]
+            reads: Default::default(),
+        }
+    }
+
     #[cfg(target_arch = "wasm32")]
     pub fn from_env(env: &Env) -> Result<Data, HttpError> {
         let prefix = env
@@ -157,185 +96,64 @@ impl Data {
             .map(|value| value.to_string())
             .map(|value| value == "cdn")
             .unwrap_or(false);
-        let backend = if cdn {
-            Backend::Cdn
+        let source: Box<dyn ObjectSource> = if cdn {
+            Box::new(crate::backend::cdn::Cdn {
+                origin: origin.clone(),
+            })
         } else {
-            Backend::R2(
-                env.bucket("DATA")
+            Box::new(crate::backend::r2::R2 {
+                bucket: env
+                    .bucket("DATA")
                     .map_err(|error| HttpError::new(502, "binding_missing", error.to_string()))?,
-            )
+                prefix,
+            })
         };
-        Ok(Data {
-            backend,
-            prefix,
-            origin,
-        })
+        Ok(Data::new(source, &origin))
     }
 
     /// The public origin over HTTP, for the native server.
     #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
     pub fn from_origin(client: reqwest::Client, origin: &str) -> Data {
-        Data {
-            backend: Backend::Http(client),
-            prefix: String::new(),
-            origin: origin.to_owned(),
-        }
+        Data::new(
+            Box::new(crate::backend::http::Http {
+                client,
+                origin: origin.to_owned(),
+            }),
+            origin,
+        )
     }
 
     /// Objects from a caller's own source; `origin` is the public origin
     /// `/v1/catalog` reports for clients to read the same objects directly.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn from_source(source: Box<dyn ObjectSource>, origin: &str) -> Data {
-        Data {
-            backend: Backend::Source(source),
-            prefix: String::new(),
-            origin: origin.to_owned(),
-        }
+        Data::new(source, origin)
     }
 
     /// A bucket held in memory, keyed by path under the data root.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg_attr(feature = "server", allow(dead_code))]
-    pub fn in_memory(objects: HashMap<String, Vec<u8>>) -> Data {
-        Data {
-            backend: Backend::Memory {
-                objects,
-                reads: RefCell::new(Vec::new()),
-            },
-            prefix: String::new(),
-            origin: "https://dataset.example/xue/".to_owned(),
-        }
+    #[cfg(test)]
+    pub fn in_memory(objects: std::collections::HashMap<String, Vec<u8>>) -> Data {
+        let reads = crate::backend::memory::Reads::default();
+        let memory = crate::backend::memory::Memory {
+            objects,
+            reads: reads.clone(),
+        };
+        let mut data = Data::new(Box::new(memory), "https://dataset.example/xue/");
+        data.reads = reads;
+        data
     }
 
     /// Every read so far, `(path, kind)`, oldest first.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg_attr(feature = "server", allow(dead_code))]
+    #[cfg(test)]
     pub fn reads(&self) -> Vec<(String, &'static str)> {
-        match &self.backend {
-            Backend::Memory { reads, .. } => reads.borrow().clone(),
-            #[cfg(feature = "server")]
-            Backend::Http(_) => Vec::new(),
-            Backend::Source(_) => Vec::new(),
-        }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn key(&self, path: &str) -> String {
-        format!(
-            "{}/{}",
-            self.prefix.trim_end_matches('/'),
-            path.trim_start_matches('/')
-        )
-    }
-
-    #[cfg(any(target_arch = "wasm32", feature = "server"))]
-    fn url(&self, path: &str) -> Result<url::Url, HttpError> {
-        let url = format!(
-            "{}/{}",
-            self.origin.trim_end_matches('/'),
-            path.trim_start_matches('/')
-        );
-        url::Url::parse(&url).map_err(|error| {
-            HttpError::new(
-                502,
-                "upstream_failed",
-                format!("{url} is not a URL: {error}"),
-            )
-        })
+        self.reads.borrow().clone()
     }
 
     /// Read an object (or a range of it). A missing object is `404 not_found`;
     /// callers that need a contract code (`unknown_source`, `unknown_run`) remap
     /// it.
     async fn read(&self, path: &str, range: Option<ReadRange>) -> Result<Vec<u8>, HttpError> {
-        match &self.backend {
-            #[cfg(target_arch = "wasm32")]
-            Backend::R2(bucket) => {
-                let request = bucket.get(self.key(path));
-                let request = match range {
-                    Some(ReadRange::Offset { offset, length }) => {
-                        request.range(Range::OffsetWithLength { offset, length })
-                    }
-                    Some(ReadRange::Suffix { suffix }) => request.range(Range::Suffix { suffix }),
-                    None => request,
-                };
-                let object = request
-                    .execute()
-                    .await
-                    .map_err(HttpError::from)?
-                    .ok_or_else(|| HttpError::new(404, "not_found", format!("no object {path}")))?;
-                let body = object.body().ok_or_else(|| {
-                    HttpError::new(502, "upstream_failed", format!("object {path} has no body"))
-                })?;
-                body.bytes().await.map_err(HttpError::from)
-            }
-            #[cfg(target_arch = "wasm32")]
-            Backend::Cdn => {
-                let url = self.url(path)?;
-                let mut init = RequestInit::new();
-                init.with_method(Method::Get);
-                if let Some(header) = range.as_ref().map(ReadRange::header) {
-                    let headers = Headers::new();
-                    headers.set("range", &header).map_err(HttpError::from)?;
-                    init.with_headers(headers);
-                }
-                let request =
-                    Request::new_with_init(url.as_str(), &init).map_err(HttpError::from)?;
-                let mut response = Fetch::Request(request)
-                    .send()
-                    .await
-                    .map_err(HttpError::from)?;
-                let status = response.status_code();
-                origin_status(path, &url, status)?;
-                let bytes = response.bytes().await.map_err(HttpError::from)?;
-                Ok(origin_body(bytes, range, status))
-            }
-            #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
-            Backend::Http(client) => {
-                let url = self.url(path)?;
-                let kind = if range.is_some() { "range" } else { "whole" };
-                let started = std::time::Instant::now();
-                let mut request = client.get(url.clone());
-                if let Some(header) = range.as_ref().map(ReadRange::header) {
-                    request = request.header("range", header);
-                }
-                let read = async {
-                    let response = request.send().await.map_err(upstream)?;
-                    let status = response.status().as_u16();
-                    origin_status(path, &url, status)?;
-                    let bytes = response.bytes().await.map_err(upstream)?;
-                    Ok::<_, HttpError>((bytes, status))
-                }
-                .await;
-                let result = match &read {
-                    Ok(_) => "ok",
-                    Err(error) if error.status == 404 => "not_found",
-                    Err(_) => "error",
-                };
-                let length = read.as_ref().map_or(0, |(bytes, _)| bytes.len());
-                crate::metrics::upstream(kind, result, started.elapsed(), length);
-                let (bytes, status) = read?;
-                Ok(origin_body(bytes.to_vec(), range, status))
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            Backend::Source(source) => source.read(path, range).await,
-            #[cfg(not(target_arch = "wasm32"))]
-            Backend::Memory { objects, reads } => {
-                let kind = match range {
-                    None => "whole",
-                    Some(ReadRange::Offset { .. }) => "range",
-                    Some(ReadRange::Suffix { .. }) => "suffix",
-                };
-                reads.borrow_mut().push((path.to_owned(), kind));
-                let bytes = objects
-                    .get(path.trim_start_matches('/'))
-                    .ok_or_else(|| HttpError::new(404, "not_found", format!("no object {path}")))?;
-                Ok(match range {
-                    Some(range) => range.slice(bytes).to_vec(),
-                    None => bytes.clone(),
-                })
-            }
-        }
+        self.source.read(path, range).await
     }
 
     pub async fn text(&self, path: &str) -> Result<String, HttpError> {

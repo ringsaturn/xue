@@ -27,15 +27,9 @@
 //! binding and the `DATA_SOURCE=cdn` fallback both read the objects from
 //! wherever the Worker runs.
 
-// Natively only the tests (and, with `server`, the binary) call the
-// handlers; on wasm32 `runtime` does.
-#![cfg_attr(
-    not(any(target_arch = "wasm32", feature = "server")),
-    allow(dead_code)
-)]
-
 mod airport;
 mod alerts;
+mod backend;
 mod bucket;
 mod cache;
 mod docs;
@@ -44,6 +38,7 @@ mod error;
 mod metrics;
 mod point;
 mod products;
+pub mod reply;
 mod route;
 #[cfg(target_arch = "wasm32")]
 mod runtime;
@@ -62,8 +57,8 @@ pub use bucket::{Data, ObjectSource, ReadRange};
 pub use error::HttpError;
 // What a caller's own `server::Routes` answers with, and the API's own
 // routes for an answer built on them.
-#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
-pub use route::{dispatch, normalize, Answer};
+#[cfg(not(target_arch = "wasm32"))]
+pub use route::{cacheable, dispatch, normalize, Answer};
 
 #[cfg(test)]
 mod tests;

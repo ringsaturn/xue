@@ -1,4 +1,4 @@
-//! The API's error shape and JSON responses.
+//! The API's error shape.
 //!
 //! Every failure a handler can raise is an [`HttpError`], rendered as
 //! `{"error": {"code", "message", "detail?}}` under the HTTP status the
@@ -8,8 +8,6 @@
 //! an upstream failure unless a caller says otherwise.
 
 use serde_json::Value;
-#[cfg(target_arch = "wasm32")]
-use worker::{Headers, Response};
 
 #[derive(Debug)]
 pub struct HttpError {
@@ -58,84 +56,3 @@ impl From<worker::Error> for HttpError {
 /// cache's own, so a browser client sees what `curl -i` shows.
 pub const EXPOSE_HEADERS: &str =
     "x-xue-api, x-xue-ms, x-xue-run, x-xue-issue, retry-after, age, cf-cache-status";
-
-#[cfg(target_arch = "wasm32")]
-/// The CORS headers every response carries; the API is credential-free and
-/// cross-origin is the norm.
-pub fn cors_headers() -> Result<Headers, HttpError> {
-    let headers = Headers::new();
-    headers
-        .set("access-control-allow-origin", "*")
-        .map_err(HttpError::from)?;
-    headers
-        .set("access-control-expose-headers", EXPOSE_HEADERS)
-        .map_err(HttpError::from)?;
-    Ok(headers)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn base_headers(extra: &[(&str, &str)]) -> Result<Headers, HttpError> {
-    let headers = cors_headers()?;
-    headers
-        .set("content-type", "application/json; charset=utf-8")
-        .map_err(HttpError::from)?;
-    headers
-        .set("x-xue-api", env!("CARGO_PKG_VERSION"))
-        .map_err(HttpError::from)?;
-    for (key, value) in extra {
-        headers.set(key, value).map_err(HttpError::from)?;
-    }
-    Ok(headers)
-}
-
-#[cfg(target_arch = "wasm32")]
-/// A serialized JSON body as a response, `Content-Type` and CORS included.
-pub fn json(
-    body: Vec<u8>,
-    status: u16,
-    cache_control: &str,
-    extra: &[(&str, &str)],
-) -> Result<Response, HttpError> {
-    let headers = base_headers(extra)?;
-    headers
-        .set("cache-control", cache_control)
-        .map_err(HttpError::from)?;
-    Ok(Response::from_bytes(body)
-        .map_err(HttpError::from)?
-        .with_status(status)
-        .with_headers(headers))
-}
-
-#[cfg(target_arch = "wasm32")]
-/// The `204` an `OPTIONS` preflight gets.
-pub fn preflight() -> Result<Response, HttpError> {
-    let headers = cors_headers()?;
-    headers
-        .set("access-control-allow-methods", "GET, HEAD, OPTIONS")
-        .map_err(HttpError::from)?;
-    headers
-        .set("access-control-allow-headers", "*")
-        .map_err(HttpError::from)?;
-    headers
-        .set("access-control-max-age", "86400")
-        .map_err(HttpError::from)?;
-    Ok(Response::empty()
-        .map_err(HttpError::from)?
-        .with_status(204)
-        .with_headers(headers))
-}
-
-#[cfg(target_arch = "wasm32")]
-/// Render any handler failure as the contract's error document. Built with
-/// `worker::Result` directly so it cannot itself need an error handler.
-pub fn error_response(error: HttpError) -> worker::Result<Response> {
-    let body = body(&error);
-    let headers = Headers::new();
-    headers.set("content-type", "application/json; charset=utf-8")?;
-    headers.set("access-control-allow-origin", "*")?;
-    headers.set("access-control-expose-headers", EXPOSE_HEADERS)?;
-    headers.set("x-xue-api", env!("CARGO_PKG_VERSION"))?;
-    Ok(Response::from_json(&body)?
-        .with_status(error.status)
-        .with_headers(headers))
-}
