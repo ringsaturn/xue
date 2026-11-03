@@ -18,7 +18,7 @@ from pathlib import Path
 from ..airport.fetch import FetchRecord, SourceStatus
 from ..errors import DownloadError
 from ..pointproduct import write_bytes_atomic
-from ..synop.http import get
+from ..http import get
 from .schema import round_directory, round_name
 from .sensors import SOURCES
 

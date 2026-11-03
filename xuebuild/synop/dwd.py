@@ -63,7 +63,7 @@ from ..eccodescli import bufr_dump_json
 from ..errors import DownloadError, XueError
 from ..gdal import require_command
 from ..pointproduct import sha256_hex, write_bytes_atomic
-from .http import get
+from ..http import get
 from .schema import ELEMENT_BOUNDS, ELEMENTS, ELEVATION_RANGE, HISTORY_HOURS, STATION, WIGOS, raw_directory
 from .station import NetworkRead, StationMeta
 

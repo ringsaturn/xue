@@ -43,7 +43,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from ..errors import SynopProductError, XueError
 from ..pointproduct import sha256_hex, write_bytes_atomic
-from .http import get
+from ..http import get
 from .schema import ELEMENT_BOUNDS, ELEMENTS, raw_directory
 from .station import NetworkRead, StationMeta
 

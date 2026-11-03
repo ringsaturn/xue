@@ -44,7 +44,7 @@ from typing import Any
 from ..airport.fetch import SourceStatus
 from ..errors import XueError
 from .alert import NetworkRead, network_directory, parse_utc, texts, utc
-from .http import get
+from ..http import get
 from .schema import iso_z, raw_directory, sha256_hex, write_bytes_atomic
 from .tables import jma_kind, jma_kind_of
 
@@ -95,7 +95,7 @@ def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bo
     directory = network_directory(raw_root, moment, NETWORK)
     relative = f"{raw_directory(moment)}/{NETWORK}"
     try:
-        response = get(MAP_TIME_URL)
+        response = get(MAP_TIME_URL, compressed=True)
         if response.body is None:
             raise XueError(f"{MAP_TIME_URL}: HTTP {response.status}")
         map_time = parse_map_time(response.body.decode("utf-8"))
@@ -108,7 +108,7 @@ def fetch(raw_root: Path, moment: datetime, since: datetime | None, *, force: bo
         detail["unchanged"] = True
         return [SourceStatus(SOURCE, True, fetched=now, url=MAP_URL, file=relative, detail=detail)]
     try:
-        response = get(MAP_URL)
+        response = get(MAP_URL, compressed=True)
         if response.body is None:
             raise XueError(f"{MAP_URL}: HTTP {response.status}")
         json.loads(response.body)
