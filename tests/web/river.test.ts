@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/river-registry.json";
-
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
 import { DISCHARGE_CHART, DISRP_CLASSES, UPSTREAM_CHART, disrpClassLabelKey, isobaricLegend, logLegend, scalarLegendRange } from "../../web/src/levels";
 import {
@@ -19,11 +17,11 @@ import { buildPalette, decodeValue, encodeLog, readingValue } from "../../web/sr
 import { displayUnit, formatValueReadout } from "../../web/src/units";
 import { parseModelFromSearch, parseVariableFromSearch } from "../../web/src/urlstate";
 import { variableIds, variableSpec } from "../../web/src/variables";
-import { metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
+import { metadataJson, registryEntries, registryVariable, rgba } from "./helpers";
 
-/** The committed registry both encoders are held to: the three river
- * fields with their parameter blocks and codebooks. */
-const registry = registryJson as unknown as Record<string, RegistryEntry<LinearQuantization | LogQuantization>>;
+/** The registry both encoders build from (`rust/xue/registry.json`): the
+ * three river fields with their parameter blocks and codebooks. */
+const registry = registryEntries<LinearQuantization | LogQuantization>(HYDROLOGY_IDS);
 
 /** The parameter blocks the encoders write (xuebuild/variables.py): WMO
  * 1/0/7 river discharge averaged over the step, and the encoder's own

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/tc-registry.json";
 import expectedIndex from "../fixtures/tc/expected/index.json";
 import expectedPointer from "../fixtures/tc/expected/latest-tc.json";
 import expectedStorm from "../fixtures/tc/expected/EP142026.json";
 
+import { REGISTRY } from "../../web/src/registry";
 import { TC_AGENCIES, TC_BASINS, TC_MODELS } from "../../web/src/tc/agencies";
 import {
   ensembleMembers,
@@ -26,19 +26,9 @@ import {
 } from "../../web/src/tc/tracks";
 import { parseTcFromSearch, searchWithTc } from "../../web/src/urlstate";
 
-interface Registry {
-  agencies: {
-    id: string;
-    name: string;
-    color: string;
-    basins: string[];
-    scale: string;
-  }[];
-  models: { id: string; name: string; ensemble: boolean }[];
-  basins: Record<string, string>;
-}
-
-const registry = registryJson as unknown as Registry;
+/** The storm registry as the encoder writes it (`xuebuild/tc/registry.py`),
+ * carried by the shell's registry. */
+const registry = REGISTRY.tc;
 
 describe("the tropical cyclone registry", () => {
   it("names the agencies the encoder registers, in their colors", () => {

@@ -1,3 +1,4 @@
+import { linearCodebookOffset, linearCodebookRange, logCodebook } from "./codebooks";
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
 import { CAT_LEVELS, ISOBARIC_LEVELS, type ForecastBundleId, type IsobaricLevel } from "./manifest";
@@ -25,13 +26,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * family.
  *
  * Everything here is chart knowledge, not container knowledge: the codebook
- * ranges are copied from the encoders and held to them by
- * `tests/fixtures/isobaric-registry.json` (`tests/web/levels.test.ts`),
- * `tests/fixtures/surface-registry.json` (`tests/web/surface.test.ts`) and
- * `tests/fixtures/ocean-registry.json` (`tests/web/ocean.test.ts`),
- * `tests/fixtures/aerosol-registry.json` (`tests/web/aerosol.test.ts`) and
- * `tests/fixtures/soil-registry.json` (`tests/web/soil.test.ts`), the
- * way pressure.ts is held by its own registry.
+ * ranges are the registry's (`registry.ts`, read through `codebooks.ts`),
+ * and what is written here — palette domains, chart ceilings, legend
+ * steps — is held inside them by the per-family tests in `tests/web/`.
  */
 export type IsobaricFamily =
   | "hgt"
@@ -396,29 +393,6 @@ export function levelCode(id: ForecastBundleId): string {
   return level === null ? FAMILIES[family].surfaceCode : String(level);
 }
 
-/** Codebook coverage of each filled isobaric scalar (the `quality` profile;
- * `balanced` is the same) — the palette's domain and the legend's range.
- * Copied from xuebuild/quantize.py and held to it by the shared registry. */
-const TEMPERATURE_RANGES: Record<IsobaricLevel, readonly [number, number]> = {
-  1000: [-60, 60],
-  925: [-65, 50],
-  850: [-70, 45],
-  700: [-75, 35],
-  500: [-85, 15],
-  300: [-95, 0],
-  250: [-100, -5],
-  200: [-100, -10],
-};
-const SPECIFIC_HUMIDITY_MAX: Record<IsobaricLevel, number> = {
-  1000: 50.8,
-  925: 50.8,
-  850: 25.4,
-  700: 25.4,
-  500: 5.08,
-  300: 2.54,
-  250: 1.27,
-  200: 1.27,
-};
 
 /** True when a level is one of the eight the encoders register a family on.
  * Chart knowledge exists only there; a field on any other surface is drawn
@@ -432,21 +406,19 @@ function isRegisteredLevel(level: number | null): level is IsobaricLevel {
  * encoders register nothing on. */
 export function isobaricRange(family: ChartFamily, level: number | null): readonly [number, number] | null {
   if (!isRegisteredLevel(level)) return null;
-  if (family === "tmp") return TEMPERATURE_RANGES[level];
-  if (family === "rh") return [0, 100];
-  if (family === "spfh") return [0, SPECIFIC_HUMIDITY_MAX[level]];
-  if (family === "vvel") return [-6.35, 6.35];
-  if (family === "thetae") return [THETA_E_OFFSETS[level], THETA_E_OFFSETS[level] + 127];
-  if (family === "cat" && isCatLevel(level)) return [0, CAT_CODEBOOK_MAX];
+  if (family === "tmp" || family === "rh" || family === "spfh" || family === "vvel" || family === "thetae") {
+    return linearCodebookRange(`${family}${level}`);
+  }
+  if (family === "cat" && isCatLevel(level)) return linearCodebookRange(`cat${level}`);
   return null;
 }
 
-/** The clear-air turbulence codebook's top, in m^(2/3) s⁻¹: 0.005 a code
- * over 127 codes, copied from xuebuild/quantize.py. EDR in the free
- * atmosphere rarely passes 0.6, so the top code is the extreme. */
-export const CAT_CODEBOOK_MAX = 0.635;
+/** The clear-air turbulence codebook's top, in m^(2/3) s⁻¹ (0.005 a code
+ * over 127 codes, the same on every jet level). EDR in the free atmosphere
+ * rarely passes 0.6, so the top code is the extreme. */
+export const CAT_CODEBOOK_MAX = linearCodebookRange(`cat${CAT_LEVELS[0]}`)[1];
 
-function isCatLevel(level: number | null): boolean {
+function isCatLevel(level: number | null): level is (typeof CAT_LEVELS)[number] {
   return level !== null && (CAT_LEVELS as readonly number[]).includes(level);
 }
 
@@ -487,25 +459,14 @@ export function catClass(edr: number): number {
   return index;
 }
 
-/** Codebook offsets of the equivalent potential temperature per level, in
- * K: a 127 K window at 0.5 K each. Copied from xuebuild/quantize.py. */
-const THETA_E_OFFSETS: Record<IsobaricLevel, number> = {
-  1000: 235,
-  925: 232,
-  850: 230,
-  700: 235,
-  500: 250,
-  300: 285,
-  250: 295,
-  200: 305,
-};
 
 /** The θe ramp's domain on one surface: the middle hundred kelvin of the
  * level's codebook — 255–355 K at 850 hPa, where a moist tropical air mass
  * sits near 350 and a polar one near 280 — so the legend reads in twenties.
  * An unregistered level takes the 850 hPa window. */
 export function thetaEPaletteDomain(level: number | null): readonly [number, number] {
-  const offset = isRegisteredLevel(level) ? THETA_E_OFFSETS[level] : THETA_E_OFFSETS[850];
+  // A 127 K window at 0.5 K a code, placed per level by the codebook.
+  const offset = linearCodebookOffset(`thetae${isRegisteredLevel(level) ? level : 850}`);
   return [offset + 25, offset + 125];
 }
 
@@ -545,8 +506,8 @@ export function temperatureLegendRange(level: number | null): readonly [number, 
  * reads to 5 m, the whole codebook. Significant wave height saturates at
  * 10 m: a storm sea, past which the codebook's 25.4 m keeps the extreme
  * distinct in a probe. The primary period reads to 20 s, the longest swell
- * that crosses an ocean. Held to `tests/fixtures/ocean-registry.json` by
- * `tests/web/ocean.test.ts`. */
+ * that crosses an ocean. Held inside the
+ * registry's codebooks by `tests/web/ocean.test.ts`. */
 export const ICE_THICKNESS_CHART_MAX = 5;
 export const WAVE_HEIGHT_CHART_MAX = 10;
 export const WAVE_PERIOD_CHART_MAX = 20;
@@ -577,8 +538,8 @@ export function isWaveVector(family: ChartFamily): boolean {
  * and 50 is a category-3 typhoon's. CAPE saturates at 5000 J/kg, the top
  * class of a severe-weather chart; the codebook's 6350 keeps the rare
  * extreme distinct in a probe without stretching the ramp for it. Cloud
- * cover is the whole 0–100 %. Held to `tests/fixtures/surface-registry.json`
- * by `tests/web/surface.test.ts`. */
+ * cover is the whole 0–100 %. Held inside the
+ * registry's codebooks by `tests/web/surface.test.ts`. */
 export const GUST_SPEED_MAX = 50;
 export const CAPE_CHART_MAX = 5000;
 
@@ -657,11 +618,11 @@ export function disrpClassLabelKey(code: number): MessageKey | null {
 /** The river discharge's chart: its codebook (`log1p`, trace 0.1 m³/s,
  * scale 10, maximum 100 000) and the 10 000 m³/s the legend reads to — a
  * great river in flood; the Danube's mouth peaks near it. */
-export const DISCHARGE_CHART: AerosolChart = { trace: 0.1, scale: 10, maximum: 100_000, chartMax: 10_000 };
+export const DISCHARGE_CHART: AerosolChart = { ...logCodebook("dis06"), chartMax: 10_000 };
 /** The upstream area's chart: its codebook (`log1p`, trace 1 km², scale
  * 100, maximum 10⁷) and the 100 000 km² the legend reads to, a large
  * river basin; the Danube's whole is about 800 000. */
-export const UPSTREAM_CHART: AerosolChart = { trace: 1, scale: 100, maximum: 10_000_000, chartMax: 100_000 };
+export const UPSTREAM_CHART: AerosolChart = { ...logCodebook("upstream"), chartMax: 100_000 };
 
 /** The value span a filled scalar's legend reads over, or null where the
  * span is the codebook's own: a registered temperature surface takes its
@@ -709,8 +670,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
 }
 
 /** The aerosol set's codebooks and chart ceilings. The codebooks are
- * logarithmic (`log1p`, the precipitation's shape), copied from
- * xuebuild/quantize.py and held to it by `tests/fixtures/aerosol-registry.json`:
+ * logarithmic (`log1p`, the precipitation's shape), the registry's:
  * the optical depths to 5, the fine particulates to 1000 µg/m³, the
  * coarse to 2000. The chart reads over less where the codebook keeps
  * headroom a legend does not need: an optical depth of 5 is the thickest
@@ -718,7 +678,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
  * µg/m³ (the top of the US AQI's hazardous band is 500) and the PM10
  * fields at 1000, past which the codebook keeps a plume distinct in a
  * probe. The dust model's surface concentration of every size
- * (`dustsfc`, no GEFS-Aerosols field, so not in that fixture) is coded to
+ * (`dustsfc`, no GEFS-Aerosols field) is coded to
  * 50000 µg/m³ and read the whole way: a dust storm's core passes 30000
  * at the surface. Because the codebook is logarithmic, the legend's
  * evenly spaced ticks fall on values that are not round (`logLegend`). */
@@ -728,22 +688,26 @@ export interface AerosolChart {
   maximum: number;
   chartMax: number;
 }
-const AEROSOL_OPTICAL_DEPTH_CHART: AerosolChart = { trace: 0.005, scale: 0.05, maximum: 5, chartMax: 5 };
-const FINE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 1000, chartMax: 500 };
-const COARSE_PARTICULATE_CHART: AerosolChart = { trace: 0.5, scale: 5, maximum: 2000, chartMax: 1000 };
-const DUST_CONCENTRATION_CHART: AerosolChart = { trace: 1, scale: 10, maximum: 50000, chartMax: 50000 };
-export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> = {
-  aod: AEROSOL_OPTICAL_DEPTH_CHART,
-  aoddust: AEROSOL_OPTICAL_DEPTH_CHART,
-  aodsalt: AEROSOL_OPTICAL_DEPTH_CHART,
-  aodsulf: AEROSOL_OPTICAL_DEPTH_CHART,
-  aodorg: AEROSOL_OPTICAL_DEPTH_CHART,
-  aodbc: AEROSOL_OPTICAL_DEPTH_CHART,
-  pm25: FINE_PARTICULATE_CHART,
-  pm10: COARSE_PARTICULATE_CHART,
-  pm10dust: COARSE_PARTICULATE_CHART,
-  dustsfc: DUST_CONCENTRATION_CHART,
+/** The ceiling each aerosol field's legend reads to; the codebook beside
+ * it is the registry's. */
+const AEROSOL_CHART_MAX: Readonly<Record<AerosolChartFamily, number>> = {
+  aod: 5,
+  aoddust: 5,
+  aodsalt: 5,
+  aodsulf: 5,
+  aodorg: 5,
+  aodbc: 5,
+  pm25: 500,
+  pm10: 1000,
+  pm10dust: 1000,
+  dustsfc: 50000,
 };
+export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> = Object.fromEntries(
+  (Object.entries(AEROSOL_CHART_MAX) as [AerosolChartFamily, number][]).map(([family, chartMax]) => [
+    family,
+    { ...logCodebook(family), chartMax },
+  ]),
+) as Record<AerosolChartFamily, AerosolChart>;
 type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust" | "dustsfc";
 
 /** The aerosol chart of a family, or null for any other. */
@@ -975,7 +939,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "tmp" && isRegisteredLevel(level)) return rangeLegend(temperatureLegendRange(level), 5);
   if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
   if (family === "spfh" && isRegisteredLevel(level)) {
-    const max = SPECIFIC_HUMIDITY_MAX[level];
+    const max = linearCodebookRange(`spfh${level}`)[1];
     return rangeLegend([0, max], max >= 20 ? 5 : max >= 5 ? 1 : 0.25);
   }
   return null;

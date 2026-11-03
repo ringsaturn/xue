@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/isobaric-registry.json";
-
 import {
   FAMILIES,
   ISOBARIC_FAMILIES,
@@ -33,17 +31,16 @@ import {
 } from "../../web/src/manifest";
 import { buildPalette, buildVapourFluxPalette, buildWindFieldPalette, legendGradient } from "../../web/src/palettes";
 import type { BundleVariable } from "../../web/src/manifest";
+import { REGISTRY_DOCUMENT, registryEntries } from "./helpers";
 
-/** The committed registry both encoders are held to
- * (`tests/test_isobaric.py`, and the Rust encoder's unit tests). */
-interface RegistryEntry {
-  label: string;
-  unit: string;
-  quality: LinearQuantization;
-  compact: LinearQuantization;
-}
-
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+/** The registry both encoders build from (`rust/xue/registry.json`): every
+ * published variable on an isobaric surface, less the heights, which are
+ * the pressure family's (pressure.ts). */
+const registry = registryEntries<LinearQuantization>(
+  Object.entries(REGISTRY_DOCUMENT.variables)
+    .filter(([id, entry]) => entry.quantization && entry.parameter.typeOfFirstFixedSurface === 100 && !id.startsWith("hgt"))
+    .map(([id]) => id),
+);
 
 describe("the isobaric family registry", () => {
   it("knows every variable the encoders register, and nothing else", () => {

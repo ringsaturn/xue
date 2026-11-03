@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/surface-registry.json";
-
 import { identityForBundleId } from "../../web/src/identity";
 import {
   CAPE_CHART_MAX,
@@ -20,11 +18,10 @@ import {
 } from "../../web/src/manifest";
 import { CAPE_STOPS, buildPalette, buildWindFieldPalette, decodeValue, legendGradient, windFieldStops } from "../../web/src/palettes";
 import { variableSpec } from "../../web/src/variables";
-import { registryVariable, type RegistryEntry } from "./helpers";
+import { registryEntries, registryVariable } from "./helpers";
 
-/** The committed registry both encoders are held to
- * (`tests/test_surface.py`, and the Rust encoder's unit tests). */
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+/** The registry both encoders build from (`rust/xue/registry.json`). */
+const registry = registryEntries(SURFACE_DIAGNOSTIC_IDS);
 
 function bundleVariable(id: string, profile: "quality" | "compact" = "quality"): BundleVariable {
   return registryVariable(id, registry[id]!, registry[id]![profile]);

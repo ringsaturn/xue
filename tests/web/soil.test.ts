@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/soil-registry.json";
-
 import { identifyBundle, identityForBundleId, identityForParameter, registeredBundleId } from "../../web/src/identity";
 import {
   FAMILIES,
@@ -18,11 +16,10 @@ import {
 import { KNOWN_BUNDLE_IDS, SOIL_IDS, isVectorBundle, type BundleVariable } from "../../web/src/manifest";
 import { buildPalette, decodeValue } from "../../web/src/palettes";
 import { variableSpec } from "../../web/src/variables";
-import { registryVariable, rgba, type RegistryEntry } from "./helpers";
+import { registryEntries, registryVariable, rgba } from "./helpers";
 
-/** The committed registry both encoders are held to (`tests/test_soil.py`,
- * and the Rust encoder's unit tests). */
-const registry = registryJson as unknown as Record<string, RegistryEntry>;
+/** The registry both encoders build from (`rust/xue/registry.json`). */
+const registry = registryEntries(SOIL_IDS);
 
 function bundleVariable(id: string, profile: "quality" | "compact" = "quality"): BundleVariable {
   return registryVariable(id, registry[id]!, registry[id]![profile]);

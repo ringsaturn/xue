@@ -1,6 +1,10 @@
 /** Fixture builders the web unit tests share. */
 
+import { readFileSync } from "node:fs";
+
 import type {
+  BundleAerosol,
+  BundleBand,
   BundleMetadata,
   BundleParameter,
   BundleVariable,
@@ -8,15 +12,97 @@ import type {
   LogQuantization,
 } from "../../web/src/manifest";
 
-/** One entry of a committed registry fixture (`tests/fixtures/*-registry.json`)
- * that both encoders are held to: a variable's label, unit, parameter block
- * and its two codebooks. */
+/** One variable of the registry document (`rust/xue/registry.json`, the
+ * one both encoders build from): its label, unit, parameter block, the
+ * optional `aerosol` / `producer` blocks, a `band` block per satellite
+ * platform that publishes it, and its two smallest codebooks lifted out
+ * of `quantization`. */
 export interface RegistryEntry<Q extends LinearQuantization | LogQuantization = LinearQuantization> {
   label: string;
   unit: string;
   parameter: BundleParameter;
+  aerosol?: BundleAerosol;
+  producer?: { id: string };
+  band?: Record<string, BundleBand>;
   quality: Q;
   compact: Q;
+}
+
+interface RegistryDocument {
+  variables: Record<
+    string,
+    {
+      label: string;
+      unit: string;
+      parameter: BundleParameter;
+      aerosol?: BundleAerosol;
+      producer?: { id: string };
+      quantization?: Record<"quality" | "compact" | "balanced", LinearQuantization | LogQuantization>;
+    }
+  >;
+  bundles: Record<string, { kind: string; members?: string[] }>;
+  sources: Record<
+    string,
+    {
+      platform: string | null;
+      bands: [string, { satelliteSeries: number; satelliteNumber: number; instrumentType: number; centralWavenumber: number }][];
+      bundleScalarIds: string[];
+      bundleVectorIds: string[];
+      bundleCompositeIds: string[];
+      bundleVolumeIds: string[];
+    }
+  >;
+}
+
+/** The whole registry document, read off disk rather than imported so the
+ * type checker does not infer a type for its twenty thousand lines. */
+export const REGISTRY_DOCUMENT: RegistryDocument = JSON.parse(
+  readFileSync(new URL("../../rust/xue/registry.json", import.meta.url), "utf-8"),
+) as RegistryDocument;
+
+/** The registry's entries for `ids`, in that order. */
+export function registryEntries<Q extends LinearQuantization | LogQuantization = LinearQuantization>(
+  ids: readonly string[],
+): Record<string, RegistryEntry<Q>> {
+  const entries: Record<string, RegistryEntry<Q>> = {};
+  for (const id of ids) {
+    const variable = REGISTRY_DOCUMENT.variables[id];
+    if (!variable?.quantization) throw new Error(`${id} is no published variable of the registry`);
+    const entry: RegistryEntry<Q> = {
+      label: variable.label,
+      unit: variable.unit,
+      parameter: variable.parameter,
+      quality: variable.quantization.quality as Q,
+      compact: variable.quantization.compact as Q,
+    };
+    if (variable.aerosol) entry.aerosol = variable.aerosol;
+    if (variable.producer) entry.producer = variable.producer;
+    for (const source of Object.values(REGISTRY_DOCUMENT.sources)) {
+      const band = source.bands.find(([bandId]) => bandId === id)?.[1];
+      if (!band || source.platform === null) continue;
+      entry.band ??= {};
+      entry.band[source.platform] ??= {
+        satelliteSeries: band.satelliteSeries,
+        satelliteNumber: band.satelliteNumber,
+        instrumentType: band.instrumentType,
+        scaleFactorOfCentralWaveNumber: 0,
+        scaledValueOfCentralWaveNumber: band.centralWavenumber,
+      };
+    }
+    entries[id] = entry;
+  }
+  return entries;
+}
+
+/** Every bundle id some source publishes. */
+export function publishedBundleIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const source of Object.values(REGISTRY_DOCUMENT.sources)) {
+    for (const id of [...source.bundleScalarIds, ...source.bundleVectorIds, ...source.bundleCompositeIds, ...source.bundleVolumeIds]) {
+      ids.add(id);
+    }
+  }
+  return ids;
 }
 
 /** The metadata variable a registry entry describes, as variable 1 of its

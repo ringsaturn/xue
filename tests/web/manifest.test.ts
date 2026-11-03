@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import surfaceRegistryJson from "../fixtures/surface-registry.json";
-
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
   axisUnitSeconds,
@@ -128,11 +126,8 @@ function manifestFixture() {
 
 describe("the bundle id registry", () => {
   it("carries the new GFS surface fields in the registry's own order", () => {
-    // The 13 entries of tests/fixtures/surface-registry.json, which the
-    // encoder writes from SURFACE_VARIABLE_IDS (xuebuild/quantize.py); the
-    // frontend list is held to that order.
+    // The registry's SURFACE_VARIABLE_IDS (xuebuild/quantize.py), in its order.
     expect(SURFACE_DIAGNOSTIC_IDS).toHaveLength(13);
-    expect(Object.keys(surfaceRegistryJson)).toEqual([...SURFACE_DIAGNOSTIC_IDS]);
     for (const id of ["cin", "pwat", "hpbl", "ptype", "wind100m", "wind80m"]) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
     }
@@ -890,27 +885,19 @@ describe("dataset kinds", () => {
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
       expect(isCaseOnlyModel(model)).toBe(false);
     }
-    expect(FORECAST_MODELS.aifs).toMatchObject({ label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" });
-    expect(FORECAST_MODELS.ifs).toMatchObject({ label: "IFS", product: "ifs-0p1", latestFilename: "latest-ifs.json" });
-    expect(FORECAST_MODELS.ifshres).toMatchObject({ label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" });
-    // The seasonal run ships the forecast core pair, so it takes the
-    // default `coreBundles` and the default opening layer; only its rail
-    // differs, the sea surface standing where the cloud does elsewhere.
-    expect(FORECAST_MODELS.cfs).toMatchObject({
-      label: "CFSv2",
-      product: "time-grib-01",
-      latestFilename: "latest-cfs.json",
-      railCore: ["tmp2m", "prate", "wind10m", "tmpsfc"],
-    });
+    // Labels, products and pointers are the registry's
+    // (tests/web/registries.test.ts). The seasonal run ships the forecast
+    // core pair, so it takes the default `coreBundles` and the default
+    // opening layer; only its rail differs, the sea surface standing where
+    // the cloud does elsewhere.
+    expect(FORECAST_MODELS.cfs.railCore).toEqual(["tmp2m", "prate", "wind10m", "tmpsfc"]);
     expect(FORECAST_MODELS.cfs.coreBundles).toBeUndefined();
     expect(FORECAST_MODELS.cfs.defaultVariable).toBeUndefined();
     // The two European sources (xuebuild/sources.py): ICON-EU is regional
     // on a regular grid, so it has a region to open on and no projected
     // domain to clip to; ARPEGE is global. Both ship the forecast core.
-    expect(FORECAST_MODELS.iconeu).toMatchObject({ label: "ICON-EU", product: "iconeu", latestFilename: "latest-iconeu.json" });
     expect(FORECAST_MODELS.iconeu.region).toEqual([-23.5, 29.5, 62.5, 70.5]);
     expect(FORECAST_MODELS.iconeu.domain).toBeUndefined();
-    expect(FORECAST_MODELS.arpege).toMatchObject({ label: "ARPEGE", product: "arpege", latestFilename: "latest-arpege.json" });
     expect(FORECAST_MODELS.arpege.region).toBeUndefined();
     for (const model of ["iconeu", "arpege"] as const) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
     // The aerosol run ships no temperature and no precipitation: its core
@@ -937,15 +924,6 @@ describe("dataset kinds", () => {
     });
     expect(FORECAST_MODELS.cmadust.region).toEqual([25.0, 15.0, 150.1, 60.0]);
     expect(FORECAST_MODELS.cmadust.domain).toBeUndefined();
-    expect(FORECAST_MODELS.mrms.latestFilename).toBe("latest-mrms.json");
-    expect(FORECAST_MODELS.mrms3d.latestFilename).toBe("latest-mrms3d.json");
-    expect(FORECAST_MODELS.jma.latestFilename).toBe("latest-jma.json");
-    expect(FORECAST_MODELS.cma.latestFilename).toBe("latest-cma.json");
-    expect(FORECAST_MODELS.himawari.latestFilename).toBe("latest-himawari.json");
-    expect(FORECAST_MODELS.himawarijp.latestFilename).toBe("latest-himawarijp.json");
-    expect(FORECAST_MODELS.goeseast.latestFilename).toBe("latest-goeseast.json");
-    expect(FORECAST_MODELS.goeswest.latestFilename).toBe("latest-goeswest.json");
-    expect(FORECAST_MODELS.meteosat.latestFilename).toBe("latest-meteosat.json");
   });
 
   it("opens the Meteosat disk on the infrared channel, 60° either side of 0°", () => {

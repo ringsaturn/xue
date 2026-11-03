@@ -1,6 +1,8 @@
+import { linearCodebookRange } from "./codebooks";
 import { t } from "./i18n";
-import { registeredBundleId, type VariableIdentity } from "./identity";
+import type { VariableIdentity } from "./identity";
 import type { DataVariableId, ForecastBundleId, PressureBundleId } from "./manifest";
+import { REGISTRY } from "./registry";
 
 /**
  * The pressure family: mean sea level pressure and geopotential height on the
@@ -16,10 +18,9 @@ import type { DataVariableId, ForecastBundleId, PressureBundleId } from "./manif
  * off (docs/format.md, "Registered linear codebooks"). A contour drawn where
  * the code is flat would light up a whole plateau instead of a line.
  *
- * The numbers are held to the encoders by
- * `tests/fixtures/pressure-registry.json`: `tests/web/pressure.test.ts` reads
- * that file, as do `tests/test_pressure.py` and the Rust encoder's unit
- * tests, so an interval cannot move on one side alone.
+ * The ids, the codebook ranges and the contour intervals are the
+ * registry's (`registry.ts`), so none of them can move on one side alone;
+ * `tests/web/pressure.test.ts` holds every contour half a code off.
  */
 interface PressureLevelInfo {
   id: PressureBundleId;
@@ -31,46 +32,34 @@ interface PressureLevelInfo {
   emphasisInterval?: number;
   /** Particular contours drawn heavier, when no interval expresses them. */
   emphasisContours?: readonly number[];
-  /** Codebook coverage, which is also the fill palette's range. */
+  /** Codebook coverage (the registry's), which is also the fill palette's range. */
   range: readonly [number, number];
 }
 
 export type { PressureBundleId };
 
-export const PRESSURE_BUNDLE_IDS: readonly PressureBundleId[] = [
-  "prmsl",
-  "hgt1000",
-  "hgt925",
-  "hgt850",
-  "hgt700",
-  "hgt500",
-  "hgt300",
-  "hgt250",
-  "hgt200",
-];
+export const PRESSURE_BUNDLE_IDS: readonly PressureBundleId[] = REGISTRY.families.pressure;
 
-export const PRESSURE_LEVELS: Record<PressureBundleId, PressureLevelInfo> = {
-  // 4 hPa is the surface-chart interval; every fifth line (20 hPa) is the
-  // grid the chart is actually read on.
-  prmsl: { id: "prmsl", levelHpa: null, contourInterval: 4, emphasisInterval: 20, range: [870.5, 1124.5] },
-  hgt1000: { id: "hgt1000", levelHpa: 1000, contourInterval: 30, range: [-905, 1635] },
-  hgt925: { id: "hgt925", levelHpa: 925, contourInterval: 30, range: [-249, 1275] },
-  hgt850: { id: "hgt850", levelHpa: 850, contourInterval: 30, range: [423, 1947] },
-  hgt700: { id: "hgt700", levelHpa: 700, contourInterval: 30, range: [1911, 3435] },
-  // 5880 and 5840 gpm — "588" and "584" — are the two lines the subtropical
-  // high is read by, and they are adjacent contours rather than a sub-family,
-  // so they are named outright.
-  hgt500: {
-    id: "hgt500",
-    levelHpa: 500,
-    contourInterval: 40,
-    emphasisContours: [5840, 5880],
-    range: [4252, 6284],
-  },
-  hgt300: { id: "hgt300", levelHpa: 300, contourInterval: 120, range: [7505, 10045] },
-  hgt250: { id: "hgt250", levelHpa: 250, contourInterval: 120, range: [8598, 11646] },
-  hgt200: { id: "hgt200", levelHpa: 200, contourInterval: 120, range: [10086, 13134] },
-};
+/** Each level's contours, from the registry: the intervals are the
+ * encoder's, which placed every codebook so its contours land half a code
+ * off. 4 hPa is the surface-chart interval and every fifth line (20 hPa)
+ * the grid the chart is read on; 5880 and 5840 gpm — "588" and "584" —
+ * are the two lines the subtropical high is read by, adjacent contours
+ * rather than a sub-family, so they are named outright. */
+export const PRESSURE_LEVELS = Object.fromEntries(
+  PRESSURE_BUNDLE_IDS.map((id) => {
+    const contours: { interval: number; emphasisInterval?: number; emphasisContours?: readonly number[] } = REGISTRY.contours[id];
+    const info: PressureLevelInfo = {
+      id,
+      levelHpa: id === "prmsl" ? null : Number(id.slice("hgt".length)),
+      contourInterval: contours.interval,
+      ...(contours.emphasisInterval === undefined ? {} : { emphasisInterval: contours.emphasisInterval }),
+      ...(contours.emphasisContours === undefined ? {} : { emphasisContours: contours.emphasisContours }),
+      range: linearCodebookRange(id),
+    };
+    return [id, info];
+  }),
+) as Record<PressureBundleId, PressureLevelInfo>;
 
 /** True when a field is drawn as contours rather than filled. Takes either
  * kind of id: a pressure bundle carries exactly one variable of the same
@@ -92,8 +81,10 @@ export function pressureLevel(id: ForecastBundleId | DataVariableId): PressureLe
  * field, and for a height on a surface nothing is registered on. */
 export function pressureLevelForIdentity(identity: VariableIdentity | null): PressureLevelInfo | null {
   if (identity === null || identity.family !== "hgt" || identity.vector) return null;
-  const id = registeredBundleId(identity);
-  return id !== null && isPressureBundle(id) ? PRESSURE_LEVELS[id] : null;
+  // The family's ids are its level's, so the identity names its bundle
+  // without the variable table (which reads this module).
+  const id = identity.level === null ? "prmsl" : `hgt${identity.level}`;
+  return isPressureBundle(id) ? PRESSURE_LEVELS[id] : null;
 }
 
 /** Human-facing name of one level. Sea level pressure is a field with a name;

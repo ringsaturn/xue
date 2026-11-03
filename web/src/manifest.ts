@@ -4,8 +4,10 @@ import { t } from "./i18n";
 // Type-only: both modules import this one at runtime.
 import type { GeoGrid } from "./probe";
 import type { ViewportBounds } from "./tiles";
+import { REGISTRY } from "./registry";
 
 type ForecastVariableId = "tmp2m" | "prate";
+const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
 
 /** Datasets this app can tune to. Each is its own dataset: its own
  * immutable run directories and its own manifest identity, and — when it has
@@ -13,37 +15,15 @@ type ForecastVariableId = "tmp2m" | "prate";
  * bare ``latest.json``; the other live models use ``latest-<model>.json``.
  * The WOOF nest and the two EFAS river-discharge runs have no live feed:
  * each is a forecast archive that reaches the app only as showcase cases. The radar mosaics, the JMA nowcast and the
- * imagers are observations *and* live, each a rolling window. */
-export type ForecastModelId =
-  | "gfs"
-  | "ecmwf"
-  | "ifs"
-  | "aifs"
-  | "ifshres"
-  | "cfs"
-  | "sflux"
-  | "hrrr"
-  | "iconeu"
-  | "arpege"
-  | "woof"
-  | "efas"
-  | "efaswb"
-  | "era5"
-  | "cams"
-  | "gefsaero"
-  | "cmadust"
-  | "cma"
-  | "mrms"
-  | "mrms3d"
-  | "jma"
-  | "himawari"
-  | "himawarijp"
-  | "goeseast"
-  | "goeswest"
-  | "meteosat"
-  | "aurora"
-  | "geo"
-  | "gibs";
+ * imagers are observations *and* live, each a rolling window.
+ *
+ * Every source of the registry (`registry.ts`, generated from
+ * xuebuild/sources.py) is one, plus the two views the shell composes on
+ * its own: the geostationary mosaic and NASA GIBS's daily imagery. */
+export type ForecastModelId = RegistrySourceId | ShellViewId;
+
+type RegistrySourceId = keyof typeof REGISTRY.sources;
+type ShellViewId = "geo" | "gibs";
 
 interface ForecastModelInfo {
   id: ForecastModelId;
@@ -118,34 +98,41 @@ interface ForecastModelInfo {
   imagery?: boolean;
 }
 
+
+/** What the shell knows about a dataset that the registry does not: the
+ * chart knowledge (which tiles the rail opens on, where the camera goes,
+ * the seam of a disk, a mosaic's members). The identity — label, product,
+ * pointer, observation flag, core bundles, cadence — is the registry's
+ * (`modelFromRegistry`); the two views that are no source carry their own. */
+type ModelChart = Omit<ForecastModelInfo, "id" | "label" | "product" | "latestFilename" | "observation" | "coreBundles" | "cadenceSeconds">;
+
 /** The rail's core tiles on a forecast model (`ForecastModelInfo.railCore`). */
 const FORECAST_RAIL_CORE: readonly ForecastBundleId[] = ["tmp2m", "prate", "wind10m", "tcdc"];
 
-export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
-  gfs: { id: "gfs", label: "GFS", product: "pgrb2.0p25", latestFilename: "latest.json" },
+/** The chart knowledge of every dataset, in the model switch's table order
+ * (`Object.keys(FORECAST_MODELS)` is what the metrics and compare pages
+ * order by). A registry source missing here fails the type check. */
+const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellViewId]: ForecastModelInfo } = {
+  gfs: {},
   // GFS surface flux on the native ~13 km grid; the only source that ships
   // the dswrf solar-radiation bundle, which takes the cloud's place among
   // its core tiles: it publishes exactly four fields.
   sflux: {
-    id: "sflux",
-    label: "GFS-SFLUX",
-    product: "sfluxgrb",
-    latestFilename: "latest-sflux.json",
     railCore: ["tmp2m", "prate", "wind10m", "dswrf"],
   },
-  ecmwf: { id: "ecmwf", label: "ECMWF", product: "ifs-0p25", latestFilename: "latest-ecmwf.json" },
+  ecmwf: {},
   // The same IFS cycle's records on the model's full 0.1° regular grid
   // (3600 × 1801, the ifshres grid), from ECMWF's 0p1 open data: the
   // ecmwf bundle set, pressure levels included, landing two hours later.
-  ifs: { id: "ifs", label: "IFS", product: "ifs-0p1", latestFilename: "latest-ifs.json" },
+  ifs: {},
   // ECMWF's data-driven model, AIFS Single, from the same open data service
   // on the same 0.25° grid: six-hourly to 360 hours from every cycle.
-  aifs: { id: "aifs", label: "AIFS", product: "aifs-single-0p25", latestFilename: "latest-aifs.json" },
+  aifs: {},
   // ECMWF's operational IFS HRES on its native ~9 km grid, resampled to
   // 0.1° by Open-Meteo's forwarding of the centre's real-time archive:
   // surface fields only, hourly to F090 and out to F360, from the 00Z and
   // 12Z cycles alone.
-  ifshres: { id: "ifshres", label: "ECMWF-HRES", product: "ifs-hres-0p1", latestFilename: "latest-ifshres.json" },
+  ifshres: {},
   // NOAA CFSv2, the coupled seasonal model: one nine-month forecast from
   // the 00Z and 12Z cycles, six-hourly on the model's own T126 Gaussian
   // grid. Its axis is the long one: 1092 frames (F6 to F6552) over 39 weeks, which the
@@ -153,20 +140,12 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // fields only, so the rail opens on the medium-range core with the sea
   // surface beside it rather than the cloud.
   cfs: {
-    id: "cfs",
-    label: "CFSv2",
-    product: "time-grib-01",
-    latestFilename: "latest-cfs.json",
     railCore: ["tmp2m", "prate", "wind10m", "tmpsfc"],
   },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
   // hour: a regional model, resampled by the encoder from its Lambert
   // conformal grid onto a 0.03° one over the domain's footprint.
   hrrr: {
-    id: "hrrr",
-    label: "HRRR",
-    product: "wrfsfc",
-    latestFilename: "latest-hrrr.json",
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
   },
@@ -175,15 +154,11 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // 23.5°W–62.5°E, 29.5°N–70.5°N), so the rectangle is the model's own
   // domain and nothing is clipped. Hourly to F078, three-hourly to F120.
   iconeu: {
-    id: "iconeu",
-    label: "ICON-EU",
-    product: "iconeu",
-    latestFilename: "latest-iconeu.json",
     region: [-23.5, 29.5, 62.5, 70.5],
   },
   // Météo-France ARPEGE, the global model on its 0.25° grid: hourly to F048,
   // three-hourly to F102.
-  arpege: { id: "arpege", label: "ARPEGE", product: "arpege", latestFilename: "latest-arpege.json" },
+  arpege: {},
   // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
   // Not a live feed: the run is a fixed archive published as showcase
@@ -195,10 +170,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // Its cloud water volume (`cloud3d`) is no rail field: it is drawn over
   // the field from the overlay section's volume switch (`?volume=`).
   woof: {
-    id: "woof",
-    label: "WOOF-WRF",
-    product: "nest",
-    coreBundles: ["tmp2m"],
     defaultVariable: "tmpsfc",
     railCore: ["tmpsfc", "tmp2m", "wind10m", "lcdc"],
   },
@@ -215,19 +186,11 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // beside it. A river is one cell wide, so all three draw without
   // smoothing (`VariableSpec.sampling`).
   efas: {
-    id: "efas",
-    label: "EFAS-v5",
-    product: "hres",
-    coreBundles: ["dis06"],
     defaultVariable: "disrp",
     railCore: ["disrp", "dis06", "upstream"],
     region: [-25.25, 22.75, 50.25, 72.25],
   },
   efaswb: {
-    id: "efaswb",
-    label: "EFAS-v5-WB",
-    product: "water_balance",
-    coreBundles: ["dis06"],
     defaultVariable: "disrp",
     railCore: ["disrp", "dis06", "upstream"],
     region: [-25.25, 22.75, 50.25, 72.25],
@@ -238,10 +201,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // the case, with the 2 m temperature and dew point, the 10 m wind and
   // the hourly gust maximum. No pointer, no place in the model switch.
   era5: {
-    id: "era5",
-    label: "ERA5",
-    product: "reanalysis-single-levels",
-    coreBundles: ["tmp2m"],
     railCore: ["tmp2m", "wind10m", "gust", "dpt2m"],
   },
   // The CAMS global aerosol analyses (ECMWF for the Copernicus Atmosphere
@@ -250,10 +209,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // analysis or a short step of it. Cases only, like ERA5: a window of up
   // to 1440 hours named by its first hour.
   cams: {
-    id: "cams",
-    label: "CAMS",
-    product: "global-composition-analysis",
-    coreBundles: ["aod"],
     defaultVariable: "aod",
     railCore: ["aod", "pm25"],
   },
@@ -265,11 +220,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // carries the two family tiles (optical depth, particulate matter) whose
   // species and size cuts are the sheet's chips.
   gefsaero: {
-    id: "gefsaero",
-    label: "GEFS-AEROSOLS",
-    product: "chem-a2d-0p25",
-    latestFilename: "latest-gefsaero.json",
-    coreBundles: ["aod"],
     defaultVariable: "aod",
     railCore: ["aod", "pm25"],
   },
@@ -282,11 +232,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // concentration, its core and the field it opens on, and the dust
   // optical depth, a variant of the optical depth family.
   cmadust: {
-    id: "cmadust",
-    label: "CMA-CW-DUST",
-    product: "cma-cw-dust-0p15",
-    latestFilename: "latest-cmadust.json",
-    coreBundles: ["dustsfc"],
     defaultVariable: "dustsfc",
     railCore: ["dustsfc", "aod"],
     region: [25.0, 15.0, 150.1, 60.0],
@@ -302,12 +247,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // cases only; the manifest identity CMA-RADAR is unchanged. Not in the
   // model sheet: it is reached through `?model=cma` and showcase cases.
   cma: {
-    id: "cma",
-    label: "CMA-RADAR",
-    product: "l3-mst-cref",
-    latestFilename: "latest-cma.json",
-    observation: true,
-    coreBundles: ["cref"],
     defaultVariable: "cref",
     railCore: ["cref"],
     region: [67.5, 11.25, 146.25, 56.25],
@@ -319,12 +258,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // window of the last three to four hours, rebuilt every five minutes.
   // The region is where the camera goes when it is opened from elsewhere.
   mrms: {
-    id: "mrms",
-    label: "NOAA-MRMS",
-    product: "conus-cref",
-    latestFilename: "latest-mrms.json",
-    observation: true,
-    coreBundles: ["cref"],
     defaultVariable: "cref",
     railCore: ["cref", "prate"],
     region: [-130, 20, -60, 55],
@@ -335,12 +268,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // (volume.ts) on the plane and on the globe. Not in the model sheet: it
   // is reached through showcase cases (and `?model=mrms3d`).
   mrms3d: {
-    id: "mrms3d",
-    label: "NOAA-MRMS3D",
-    product: "conus-refl3d",
-    latestFilename: "latest-mrms3d.json",
-    observation: true,
-    coreBundles: ["refl3d"],
     defaultVariable: "refl3d",
     railCore: ["refl3d"],
     region: [-130, 20, -60, 55],
@@ -353,12 +280,6 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // class's representative rate, and opens on it. Observations and live,
   // like MRMS: a rolling window of the last two to three hours.
   jma: {
-    id: "jma",
-    label: "JMA-HRPNS",
-    product: "japan-prate",
-    latestFilename: "latest-jma.json",
-    observation: true,
-    coreBundles: ["prate"],
     defaultVariable: "prate",
     railCore: ["prate"],
     region: [121, 20.5, 149, 45.5],
@@ -374,17 +295,10 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // The region runs past the antimeridian (200.7°E), which `domain.ts` and
   // `tiles.ts` take in the grid's own copy of the world.
   himawari: {
-    id: "himawari",
-    label: "HIMAWARI",
-    product: "ahi-fldk-0p04",
-    latestFilename: "latest-himawari.json",
-    observation: true,
-    coreBundles: ["ir104"],
     defaultVariable: "ir104",
     railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [80.7, -60, 200.7, 60],
     subLongitude: 140.7,
-    cadenceSeconds: 600,
   },
   // The same imager over Japan alone, 24–46°N, 122–148°E at 0.01° (about
   // 1.1 km): the encoder fetches only the disk's tiles that reach the box
@@ -396,17 +310,10 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // infrared window, the Dust RGB and the true colour, no dust
   // confidence.
   himawarijp: {
-    id: "himawarijp",
-    label: "HIMAWARI-JP",
-    product: "ahi-japan-0p01",
-    latestFilename: "latest-himawarijp.json",
-    observation: true,
-    coreBundles: ["ir104"],
     defaultVariable: "ir104",
     railCore: ["ir104", "dustrgb", "truecolor"],
     region: [122, 24, 148, 46],
     subLongitude: 140.7,
-    cadenceSeconds: 600,
   },
   // The two GOES-R imagers NOAA flies, read from NOAA's own buckets: the
   // same 10.4 µm window and the same Dust RGB as Himawari, one full-disk
@@ -417,30 +324,16 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // past the antimeridian too — spelled 163…283 so it crosses 180 the
   // way Himawari's does, in the grid's own copy of the world.
   goeseast: {
-    id: "goeseast",
-    label: "GOES-EAST",
-    product: "abi-fldk-0p04",
-    latestFilename: "latest-goeseast.json",
-    observation: true,
-    coreBundles: ["ir104"],
     defaultVariable: "ir104",
     railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [-135.2, -60, -15.2, 60],
     subLongitude: 284.8,
-    cadenceSeconds: 600,
   },
   goeswest: {
-    id: "goeswest",
-    label: "GOES-WEST",
-    product: "abi-fldk-0p04",
-    latestFilename: "latest-goeswest.json",
-    observation: true,
-    coreBundles: ["ir104"],
     defaultVariable: "ir104",
     railCore: ["ir104", "dustrgb", "dustcf", "zhouye", "truecolor"],
     region: [163, -60, 283, 60],
     subLongitude: 223,
-    cadenceSeconds: 600,
   },
   // The four disks as one picture (`mosaic.ts`): a view, not a dataset. It
   // opens whichever members' pointers answer, clips each to the longitudes
@@ -479,17 +372,10 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // frames rather than hours of ten-minute ones. Named by the slot (0° is
   // Meteosat-12 today), never the spacecraft, as the other disks are.
   meteosat: {
-    id: "meteosat",
-    label: "METEOSAT",
-    product: "fci-fldk-0p04",
-    latestFilename: "latest-meteosat.json",
-    observation: true,
-    coreBundles: ["ir104"],
     defaultVariable: "ir104",
     railCore: ["ir104", "dustrgb", "truecolor"],
     region: [-60, -60, 60, 60],
     subLongitude: 0,
-    cadenceSeconds: 3600,
   },
   // NOAA SWPC's OVATION aurora probability: the chance, in percent, that
   // aurora is visible overhead, on a 1° global grid, one grid every five
@@ -499,17 +385,39 @@ export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = {
   // it, so the window's newest frames lie ahead of the clock. Global, so no
   // region: the camera stays where the reader left it.
   aurora: {
-    id: "aurora",
-    label: "SWPC-AURORA",
-    product: "ovation-aurora-1p00",
-    latestFilename: "latest-aurora.json",
-    observation: true,
     leadsClock: true,
-    coreBundles: ["aurora"],
     defaultVariable: "aurora",
     railCore: ["aurora"],
   },
 };
+
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, at) => id === b[at]);
+}
+
+/** One source's entry: the registry's identity under the shell's chart.
+ * `coreBundles` stays absent on the forecast pair, which is what absent
+ * means (callers tell a forecast model apart by it). */
+function modelFromRegistry(id: RegistrySourceId, chart: ModelChart): ForecastModelInfo {
+  const source = REGISTRY.sources[id];
+  return {
+    id,
+    label: source.label,
+    product: source.product,
+    ...(source.latestFilename === null ? {} : { latestFilename: source.latestFilename }),
+    ...(source.observation ? { observation: true } : {}),
+    ...(sameIds(source.coreBundleIds, FORECAST_VARIABLE_IDS) ? {} : { coreBundles: source.coreBundleIds }),
+    ...(source.cadenceSeconds === null ? {} : { cadenceSeconds: source.cadenceSeconds }),
+    ...chart,
+  };
+}
+
+export const FORECAST_MODELS: Record<ForecastModelId, ForecastModelInfo> = Object.fromEntries(
+  Object.entries(MODEL_CHARTS).map(([id, chart]) => [
+    id,
+    id in REGISTRY.sources ? modelFromRegistry(id as RegistrySourceId, chart as ModelChart) : (chart as ForecastModelInfo),
+  ]),
+) as Record<ForecastModelId, ForecastModelInfo>;
 
 /** The ids the table above ships with: a case never replaces one. */
 const BUILT_IN_MODEL_IDS: ReadonlySet<string> = new Set(Object.keys(FORECAST_MODELS));
@@ -663,18 +571,18 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
 }
 
 /** The eight standard isobaric surfaces every isobaric family is registered
- * on, in hPa, in the encoders' `variableId` order (mirrors
- * `ISOBARIC_LEVELS_HPA` in xuebuild/variables.py). One bundle per level —
+ * on, in hPa, in the encoders' `variableId` order (the registry's
+ * `ISOBARIC_LEVELS_HPA`). One bundle per level —
  * container v2 orders chunks group -> tile -> variable, so packing the levels
  * together would make a viewport pull every level to read one. */
-export const ISOBARIC_LEVELS = [1000, 925, 850, 700, 500, 300, 250, 200] as const;
+export const ISOBARIC_LEVELS = REGISTRY.isobaricLevels;
 export type IsobaricLevel = (typeof ISOBARIC_LEVELS)[number];
 
 /** The surfaces the clear-air turbulence is published on, from the ground
  * up: the jet levels, where cruising aircraft meet it. The encoders derive
  * it from the wind and height on neighbouring published levels, so it
  * exists nowhere else (xuebuild/variables.py registers it on these three). */
-export const CAT_LEVELS = [300, 250, 200] as const satisfies readonly IsobaricLevel[];
+export const CAT_LEVELS = REGISTRY.catLevels satisfies readonly IsobaricLevel[];
 export type CatLevel = (typeof CAT_LEVELS)[number];
 
 /** The pressure family: mean sea level pressure and geopotential height on
@@ -698,14 +606,22 @@ export type IsobaricScalarBundleId =
  * height, the same parameters on surface type 103 value 100), the wind on
  * each isobaric surface, and the water vapour flux the encoder derives
  * there. */
-type VectorBundleId = "wind10m" | "wind80m" | "wind100m" | `wind${IsobaricLevel}` | `qflux${IsobaricLevel}` | "wave" | "windwave" | "swell";
+type VectorBundleId = BundleOfKind<"vector">;
+
+type RegistryBundles = typeof REGISTRY.bundles;
+/** The registry's bundles of one kind, as a literal union of their ids. */
+type BundleOfKind<Kind extends string> = {
+  [Id in keyof RegistryBundles]: RegistryBundles[Id]["kind"] extends Kind ? Id : never;
+}[keyof RegistryBundles];
 
 /** The three-variable bundles: a colour composite a producer derived from
  * several satellite channels, whose variables are the three guns the viewer
  * draws straight as red, green and blue (the classic Dust RGB; the true
  * colour picture, from the visible bands by day and two infrared windows
  * by night). */
-type CompositeBundleId = "dustrgb" | "truecolor";
+type CompositeBundleId = {
+  [Id in BundleOfKind<"composite">]: RegistryBundles[Id]["members"] extends readonly [string, string, string] ? Id : never;
+}[BundleOfKind<"composite">];
 
 /** A bundle-level id in a manifest.
  *
@@ -745,83 +661,27 @@ export type KnownBundleId =
  * three layers), surface-based CAPE and its twin convective inhibition,
  * visibility, 2 m dew point and 2 m apparent temperature, precipitable
  * water, planetary boundary layer height and the categorical precipitation
- * type — single layers like `dswrf`, held to the encoders by
- * `tests/fixtures/surface-registry.json`. The order is the registry's own
- * (`xuebuild/quantize.py::SURFACE_VARIABLE_IDS`), which `tests/web/surface.test.ts`
- * holds the list to. */
-type SurfaceDiagnosticId =
-  | "gust"
-  | "tcdc"
-  | "cape"
-  | "cin"
-  | "vis"
-  | "dpt2m"
-  | "aptmp2m"
-  | "lcdc"
-  | "mcdc"
-  | "hcdc"
-  | "pwat"
-  | "hpbl"
-  | "ptype";
-export const SURFACE_DIAGNOSTIC_IDS: readonly SurfaceDiagnosticId[] = [
-  "gust",
-  "tcdc",
-  "cape",
-  "cin",
-  "vis",
-  "dpt2m",
-  "aptmp2m",
-  "lcdc",
-  "mcdc",
-  "hcdc",
-  "pwat",
-  "hpbl",
-  "ptype",
-];
+ * type — single layers like `dswrf`, in the registry's own order
+ * (`xuebuild/quantize.py::SURFACE_VARIABLE_IDS`). */
+export const SURFACE_DIAGNOSTIC_IDS = REGISTRY.families.surface;
+type SurfaceDiagnosticId = (typeof SURFACE_DIAGNOSTIC_IDS)[number];
 
 /** The ocean set — the surface (skin) temperature, which is the SST over
  * water, sea ice cover and thickness, and the GFS-Wave significant wave
  * height, primary wave period and direction, and the same three for the
- * wind sea and the first swell partition — single layers held to the
- * encoders by `tests/fixtures/ocean-registry.json`. The same registry
- * carries the components of the `wave`, `windwave` and `swell` vector
- * bundles the encoders derive from each height and direction
- * (`WAVE_COMPONENT_IDS`, `WINDWAVE_COMPONENT_IDS`, `SWELL_COMPONENT_IDS`). */
-type OceanId =
-  | "tmpsfc"
-  | "icec"
-  | "icetk"
-  | "htsgw"
-  | "perpw"
-  | "dirpw"
-  | "wvhgt"
-  | "wvper"
-  | "wvdir"
-  | "swhgt"
-  | "swper"
-  | "swdir";
-export const OCEAN_IDS: readonly OceanId[] = [
-  "tmpsfc",
-  "icec",
-  "icetk",
-  "htsgw",
-  "perpw",
-  "dirpw",
-  "wvhgt",
-  "wvper",
-  "wvdir",
-  "swhgt",
-  "swper",
-  "swdir",
-];
+ * wind sea and the first swell partition — single layers, the registry's
+ * ocean set. The components of the `wave`, `windwave` and `swell` vector
+ * bundles the encoders derive from each height and direction are
+ * `WAVE_COMPONENT_IDS`, `WINDWAVE_COMPONENT_IDS`, `SWELL_COMPONENT_IDS`. */
+export const OCEAN_IDS = REGISTRY.families.ocean;
+type OceanId = (typeof OCEAN_IDS)[number];
 
 /** The soil set — the land surface model's soil temperature and total
  * volumetric water content, layer by layer from the surface down. The id is
  * the layer's index, not its depth: GFS's Noah layers and the IFS's HTESSEL
- * layers are cut at different depths and share the ids (docs/sources.md).
- * Held to the encoders by `tests/fixtures/soil-registry.json`. */
-type SoilId = "tsoil1" | "tsoil2" | "tsoil3" | "tsoil4" | "soilw1" | "soilw2" | "soilw3" | "soilw4";
-export const SOIL_IDS: readonly SoilId[] = ["tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4"];
+ * layers are cut at different depths and share the ids (docs/sources.md). */
+export const SOIL_IDS = REGISTRY.families.soil;
+type SoilId = (typeof SOIL_IDS)[number];
 
 /** The satellite bundles — brightness temperature in the 10.4 µm infrared
  * window, one bundle per channel, named by nominal wavelength and
@@ -835,8 +695,8 @@ export const SOIL_IDS: readonly SoilId[] = ["tsoil1", "tsoil2", "tsoil3", "tsoil
  * ramp like a channel, not a composite), and the true colour picture the
  * encoder composes from the visible bands by day and the 3.9 and 10.4 µm
  * windows by night (`truecolor`, another `CompositeBundleId`; every
- * satellite source publishes it) — held to the encoders by
- * `tests/fixtures/satellite-registry.json`. */
+ * satellite source publishes it). The rail's satellite list, chart
+ * knowledge: every id in it is a bundle of the registry. */
 type SatelliteId = "ir104" | "ir039" | CompositeBundleId | "dustcf" | "zhouye";
 export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"];
 
@@ -847,16 +707,14 @@ export const SATELLITE_IDS: readonly SatelliteId[] = ["ir104", "ir039", "dustrgb
  * depth is one WMO parameter on the entire atmosphere, and the two PM10
  * fields one NCEP-local number on the ground, so each carries the
  * `aerosol` block beside its parameter (`BundleAerosol`), the species and
- * the size cut. Held to the encoders by
- * `tests/fixtures/aerosol-registry.json`. */
-type AerosolId = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust";
-export const AEROSOL_IDS: readonly AerosolId[] = ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"];
+ * the size cut. */
+export const AEROSOL_IDS = REGISTRY.families.aerosol;
+type AerosolId = (typeof AEROSOL_IDS)[number];
 
 /** The dust model's own field: the surface dust concentration of every
  * particle size (CMA-CW-DUST), the mass density (0,20,0) on the ground
  * with a dust `aerosol` block and no size cut. An aerosol like the set
- * above, but no GEFS-Aerosols field, so outside that set and its
- * registry fixture. */
+ * above, but no GEFS-Aerosols field, so outside that set. */
 type DustId = "dustsfc";
 export const DUST_IDS: readonly DustId[] = ["dustsfc"];
 
@@ -865,8 +723,8 @@ export const DUST_IDS: readonly DustId[] = ["dustsfc"];
  * against the EFAS thresholds (`disrp`), and the static upstream area of
  * each river cell (`upstream`) — single layers that exist only on river
  * cells: everything else is the codebook's no-data code. */
-type HydrologyId = "dis06" | "disrp" | "upstream";
-export const HYDROLOGY_IDS: readonly HydrologyId[] = ["dis06", "disrp", "upstream"];
+export const HYDROLOGY_IDS = REGISTRY.families.river;
+type HydrologyId = (typeof HYDROLOGY_IDS)[number];
 
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
@@ -876,28 +734,12 @@ export function isBundleVariableId(value: unknown): value is ForecastBundleId {
 }
 
 /** The component variables a vector bundle carries, both on one time axis. */
-type VectorComponentId =
-  | "ugrd10m"
-  | "vgrd10m"
-  | "ugrd80m"
-  | "vgrd80m"
-  | "ugrd100m"
-  | "vgrd100m"
-  | `ugrd${IsobaricLevel}`
-  | `vgrd${IsobaricLevel}`
-  | `uqflx${IsobaricLevel}`
-  | `vqflx${IsobaricLevel}`
-  | "uwave"
-  | "vwave"
-  | "uwindwave"
-  | "vwindwave"
-  | "uswell"
-  | "vswell";
+type VectorComponentId = RegistryBundles[VectorBundleId]["members"][number];
 
 /** The component variables a composite bundle carries: the three guns of
  * the Dust RGB and the true colour picture, in the order the renderer
  * draws them. */
-type CompositeComponentId = "dustr" | "dustg" | "dustb" | "truer" | "trueg" | "trueb";
+type CompositeComponentId = RegistryBundles[CompositeBundleId]["members"][number];
 
 /** Data-level variable ids that can appear inside bundle metadata. A plain
  * string for the same reason `ForecastBundleId` is: a file names its own
@@ -920,8 +762,6 @@ type KnownDataVariableId =
   | IsobaricScalarBundleId
   | VectorComponentId
   | CompositeComponentId;
-
-const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
 
 function perLevel<Prefix extends string>(prefix: Prefix): `${Prefix}${IsobaricLevel}`[] {
   return ISOBARIC_LEVELS.map((level) => `${prefix}${level}` as `${Prefix}${IsobaricLevel}`);
@@ -963,36 +803,34 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "windwave",
   "swell",
 ];
-export const WIND_COMPONENT_IDS: readonly KnownDataVariableId[] = ["ugrd10m", "vgrd10m"];
+/** The registry's bundles of one kind, as id → members. */
+function bundlesOfKind(kind: string): Record<string, readonly string[]> {
+  return Object.fromEntries(
+    Object.entries(REGISTRY.bundles)
+      .filter(([, bundle]) => bundle.kind === kind)
+      .map(([id, bundle]) => [id, bundle.members]),
+  );
+}
+
+/** The u/v component pair of every vector bundle, u first. */
+export const VECTOR_BUNDLES = bundlesOfKind("vector") as unknown as {
+  readonly [Id in VectorBundleId]: RegistryBundles[Id]["members"];
+};
+export const WIND_COMPONENT_IDS: readonly KnownDataVariableId[] = VECTOR_BUNDLES.wind10m;
 /** The wave vector's pair: the significant wave height laid along the
  * direction the waves travel, in metres, in the wind's u/v convention. */
-export const WAVE_COMPONENT_IDS: readonly ["uwave", "vwave"] = ["uwave", "vwave"];
+export const WAVE_COMPONENT_IDS = VECTOR_BUNDLES.wave;
 /** The same pair for the wind sea and for the first swell partition. */
-export const WINDWAVE_COMPONENT_IDS: readonly ["uwindwave", "vwindwave"] = ["uwindwave", "vwindwave"];
-export const SWELL_COMPONENT_IDS: readonly ["uswell", "vswell"] = ["uswell", "vswell"];
-
-/** The u/v component pair of every vector bundle. */
-export const VECTOR_BUNDLES: Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]> = {
-  wind10m: ["ugrd10m", "vgrd10m"],
-  // The 100 m pair: the same parameters on the turbine hub height, the
-  // `wind100m` bundle (xuebuild/binconvert.py::WIND_100M_COMPONENT_IDS).
-  wind80m: ["ugrd80m", "vgrd80m"],
-  wind100m: ["ugrd100m", "vgrd100m"],
-  ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`wind${level}`, [`ugrd${level}`, `vgrd${level}`]])),
-  ...Object.fromEntries(ISOBARIC_LEVELS.map((level) => [`qflux${level}`, [`uqflx${level}`, `vqflx${level}`]])),
-  wave: WAVE_COMPONENT_IDS,
-  windwave: WINDWAVE_COMPONENT_IDS,
-  swell: SWELL_COMPONENT_IDS,
-} as unknown as Record<VectorBundleId, readonly [VectorComponentId, VectorComponentId]>;
+export const WINDWAVE_COMPONENT_IDS = VECTOR_BUNDLES.windwave;
+export const SWELL_COMPONENT_IDS = VECTOR_BUNDLES.swell;
 
 /** Bundles drawn as a volume, by manifest id, with their level count: the
- * encoders' volume kind (`VOLUME_BUNDLES` in xuebuild/binconvert.py). The
- * count is what a tier is weighed by before the bundle is opened; the
- * levels themselves are read off its variables (volume.ts). */
-export const VOLUME_BUNDLE_LEVELS: ReadonlyMap<string, number> = new Map([
-  ["refl3d", 33],
-  ["cloud3d", 24],
-]);
+ * registry's volume kind. The count is what a tier is weighed by before
+ * the bundle is opened; the levels themselves are read off its variables
+ * (volume.ts). */
+export const VOLUME_BUNDLE_LEVELS: ReadonlyMap<string, number> = new Map(
+  Object.entries(bundlesOfKind("volume")).map(([id, members]) => [id, members.length]),
+);
 
 /** True when a bundle *named* by the convention carries a u/v pair rather
  * than one scalar. A guess from the id string, for use before the bundle is
@@ -1012,10 +850,9 @@ export function vectorComponents(id: ForecastBundleId): readonly [VectorComponen
 /** The three guns of every composite bundle, red, green, blue — the order
  * the encoders number them (1, 2, 3; 7, 8, 9) and the
  * renderer's RGB texture takes them in. */
-export const COMPOSITE_BUNDLES: Record<CompositeBundleId, readonly [CompositeComponentId, CompositeComponentId, CompositeComponentId]> = {
-  dustrgb: ["dustr", "dustg", "dustb"],
-  truecolor: ["truer", "trueg", "trueb"],
-};
+export const COMPOSITE_BUNDLES = Object.fromEntries(
+  Object.entries(bundlesOfKind("composite")).filter(([, members]) => members.length === 3),
+) as unknown as { readonly [Id in CompositeBundleId]: RegistryBundles[Id]["members"] };
 
 /** True when a bundle *named* by the convention carries three colour guns
  * rather than one scalar or a u/v pair. A guess from the id string like

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import registryJson from "../fixtures/satellite-registry.json";
 
 import {
   identifyBundle,
@@ -31,20 +30,30 @@ import {
 import { meteogramRowCode, meteogramRows } from "../../web/src/meteogram";
 import { buildPalette, decodeValue } from "../../web/src/palettes";
 import { variableSpec } from "../../web/src/variables";
-import { HIMAWARI_ENVELOPE, metadataJson, registryVariable, rgba, type RegistryEntry } from "./helpers";
+import { HIMAWARI_ENVELOPE, REGISTRY_DOCUMENT, metadataJson, registryEntries, registryVariable, rgba, type RegistryEntry } from "./helpers";
 
-/** The committed registry both encoders are held to
- * (`tests/test_satellite.py`, and the Rust encoder's unit tests): one entry
- * per data variable under `variables` — the channels with their `band` per
- * platform, the composite's guns and the produced scalar with their
- * `producer` id — and the produced bundles' component lists under
- * `bundles` (the composite's three guns, each confidence's one variable). */
+/** The registry both encoders build from (`rust/xue/registry.json`): one
+ * entry per satellite variable — every channel a source fetches, with its
+ * `band` per platform, and the produced bundles' members with their
+ * `producer` id — and the produced bundles' member lists (the
+ * composites' three guns, each confidence's one variable). */
 interface SatelliteEntry extends RegistryEntry {
   band?: Record<string, BundleBand>;
   producer?: { id: string };
 }
 
-const registryFile = registryJson as unknown as { variables: Record<string, SatelliteEntry>; bundles: Record<string, string[]> };
+const producedBundles: Record<string, string[]> = Object.fromEntries(
+  Object.entries(REGISTRY_DOCUMENT.bundles)
+    .filter(([, bundle]) => bundle.kind === "composite")
+    .map(([id, bundle]) => [id, bundle.members ?? []]),
+);
+const channelIds = [
+  ...new Set(Object.values(REGISTRY_DOCUMENT.sources).flatMap((source) => source.bands.map(([id]) => id))),
+];
+const registryFile = {
+  variables: registryEntries([...channelIds, ...Object.values(producedBundles).flat()]) as Record<string, SatelliteEntry>,
+  bundles: producedBundles,
+};
 const registry = registryFile.variables;
 
 function bundleVariable(id: string, band: BundleBand | undefined = registry[id]!.band?.himawari): BundleVariable {
