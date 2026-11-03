@@ -54,7 +54,8 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
 use crate::bucket::Data;
-use crate::error::{self, HttpError};
+use crate::error::HttpError;
+use crate::reply::{self, Reply};
 use crate::{docs, metrics, route};
 
 const DEFAULT_ORIGIN: &str = "https://dataset.ringsaturn.me/xue/";
@@ -642,7 +643,7 @@ async fn respond(state: &State, request: Request<Incoming>) -> Response<Body> {
     };
     let (mut response, outcome) = match handled {
         Ok(answered) => answered,
-        Err(error) => (error_response(&error), "error"),
+        Err(error) => (hyper_response(error_reply(&error)), "error"),
     };
     response = compress(response, gzip).await;
     let path = route::normalize(target.split('?').next().unwrap_or("/"));
@@ -750,7 +751,7 @@ async fn handle(
     client: Option<&str>,
 ) -> Result<(Response<Body>, &'static str), HttpError> {
     if method == Method::OPTIONS {
-        return Ok((preflight(), "preflight"));
+        return Ok((hyper_response(reply::preflight()), "preflight"));
     }
     if method != Method::GET && method != Method::HEAD {
         return Err(HttpError::new(
@@ -770,15 +771,8 @@ async fn handle(
     if cacheable {
         if let Some((held, remaining)) = state.responses.borrow_mut().get(target, Instant::now()) {
             let cache_control = format!("public, max-age={remaining}");
-            return Ok((
-                json(
-                    held.body.clone(),
-                    StatusCode::OK,
-                    &cache_control,
-                    &held.headers,
-                ),
-                "hit",
-            ));
+            let reply = reply::json(held.body.to_vec(), 200, &cache_control, &held.headers);
+            return Ok((hyper_response(reply), "hit"));
         }
     }
     // Only computing a response holds a slot or draws on the rate; cache hits
@@ -806,23 +800,20 @@ async fn handle(
             answer.body = docs::merge(&answer.body, &extra)?;
         }
     }
-    let body = Bytes::from(answer.body);
+    let reply = reply::json(answer.body, 200, answer.cache_control, &answer.headers);
     if cacheable {
         if let Some(seconds) = max_age(answer.cache_control) {
             state.responses.borrow_mut().put(
                 target.to_owned(),
                 Held {
-                    body: body.clone(),
+                    body: Bytes::copy_from_slice(&reply.body),
                     headers: answer.headers.clone(),
                     expires: Instant::now() + Duration::from_secs(seconds),
                 },
             );
         }
     }
-    Ok((
-        json(body, StatusCode::OK, answer.cache_control, &answer.headers),
-        "miss",
-    ))
+    Ok((hyper_response(reply), "miss"))
 }
 
 /// `max-age` of a `Cache-Control` the router wrote, when it allows caching.
@@ -840,28 +831,11 @@ fn set(response: &mut Response<Body>, name: &'static str, value: &str) {
     }
 }
 
-fn json(
-    body: Bytes,
-    status: StatusCode,
-    cache_control: &str,
-    extra: &[(&'static str, String)],
-) -> Response<Body> {
-    let mut response = Response::new(Full::new(body));
-    *response.status_mut() = status;
-    set(
-        &mut response,
-        "content-type",
-        "application/json; charset=utf-8",
-    );
-    set(&mut response, "access-control-allow-origin", "*");
-    set(
-        &mut response,
-        "access-control-expose-headers",
-        error::EXPOSE_HEADERS,
-    );
-    set(&mut response, "x-xue-api", env!("CARGO_PKG_VERSION"));
-    set(&mut response, "cache-control", cache_control);
-    for (name, value) in extra {
+/// A [`Reply`] as a hyper response.
+fn hyper_response(reply: Reply) -> Response<Body> {
+    let mut response = Response::new(Full::new(Bytes::from(reply.body)));
+    *response.status_mut() = StatusCode::from_u16(reply.status).unwrap_or(StatusCode::BAD_GATEWAY);
+    for (name, value) in &reply.headers {
         set(&mut response, name, value);
     }
     response
@@ -869,12 +843,10 @@ fn json(
 
 /// The contract's error document. `503 overloaded` carries `Retry-After`;
 /// no error is cacheable.
-fn error_response(error: &HttpError) -> Response<Body> {
-    let body = serde_json::to_vec(&error::body(error)).unwrap_or_default();
-    let status = StatusCode::from_u16(error.status).unwrap_or(StatusCode::BAD_GATEWAY);
-    let mut response = json(Bytes::from(body), status, "no-store", &[]);
+fn error_reply(error: &HttpError) -> Reply {
+    let mut reply = reply::error_reply(error).with_header("cache-control", "no-store");
     if error.status == 503 {
-        set(&mut response, "retry-after", "5");
+        reply = reply.with_header("retry-after", "5");
     }
     if let Some(seconds) = error
         .detail
@@ -882,23 +854,9 @@ fn error_response(error: &HttpError) -> Response<Body> {
         .and_then(|detail| detail.get("retryAfter"))
         .and_then(serde_json::Value::as_u64)
     {
-        set(&mut response, "retry-after", &seconds.to_string());
+        reply = reply.with_header("retry-after", seconds.to_string());
     }
-    response
-}
-
-fn preflight() -> Response<Body> {
-    let mut response = Response::new(Full::new(Bytes::new()));
-    *response.status_mut() = StatusCode::NO_CONTENT;
-    set(&mut response, "access-control-allow-origin", "*");
-    set(
-        &mut response,
-        "access-control-allow-methods",
-        "GET, HEAD, OPTIONS",
-    );
-    set(&mut response, "access-control-allow-headers", "*");
-    set(&mut response, "access-control-max-age", "86400");
-    response
+    reply
 }
 
 /// An embedded asset, with the Workers assets server's trailing-slash
