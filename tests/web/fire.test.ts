@@ -147,7 +147,7 @@ describe("a fire line", () => {
   it("holds every column to n and to its range", () => {
     expect(() => parseFireLine({ ...line("viirs-noaa20", H0, 2), dn: "D" })).toThrow(/dn/);
     expect(() => parseFireLine({ ...line("viirs-noaa20", H0, 1), lat: [950000] })).toThrow(/lat/);
-    expect(() => parseFireLine({ ...line("viirs-noaa20", H0, 1), t: [30] })).toThrow(/minute/);
+    expect(() => parseFireLine({ ...line("viirs-noaa20", H0, 1), t: [30] })).toThrow(/t\[0\] must be a multiple of 60/);
     expect(() => parseFireLine({ ...line("viirs-noaa20", H0, 1), conf: "x" })).toThrow(/conf/);
     expect(() => parseFireLine({ ...line("viirs-noaa20", H0 + 1, 1) })).toThrow(/hour/);
   });

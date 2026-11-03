@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/fire-line.schema.json",
+  "title": "FireLine",
+  "description": "One line of fire.<round>/<sensor>.jsonl: a sensor-hour's detections, column by column (docs/fire.md sections 2 and 5). That every column is n long and the detections are sorted and unique on (t, lat, lon) are the readers' own checks.",
+  "type": "object",
+  "required": ["sensor", "hour", "n", "t", "lat", "lon", "frp", "bt", "conf", "dn"],
+  "properties": {
+    "sensor": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "hour": {"description": "Epoch seconds of the UTC hour.", "type": "integer", "minimum": 0, "multipleOf": 3600},
+    "n": {"type": "integer", "minimum": 1},
+    "t": {
+      "description": "Seconds after hour, whole minutes.",
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0, "maximum": 3540, "multipleOf": 60}
+    },
+    "lat": {"description": "1e-4 degrees.", "type": "array", "items": {"type": "integer", "minimum": -900000, "maximum": 900000}},
+    "lon": {"description": "1e-4 degrees.", "type": "array", "items": {"type": "integer", "minimum": -1800000, "maximum": 1800000}},
+    "frp": {"description": "0.1 MW.", "type": "array", "items": {"type": "integer", "minimum": 0}},
+    "bt": {"description": "0.1 K.", "type": "array", "items": {"type": "integer", "minimum": 2000, "maximum": 6000}},
+    "conf": {"description": "l low, n nominal, h high: one character per detection.", "type": "string", "pattern": "^[lnh]+$"},
+    "dn": {"description": "D day, N night: one character per detection.", "type": "string", "pattern": "^[DN]+$"}
+  }
+}
