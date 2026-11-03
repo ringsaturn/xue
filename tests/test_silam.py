@@ -27,10 +27,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, cmadust, feeds, fetch, observation, silam
 from xuebuild.binconvert import published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import parse_run, resolve_run
 from xuebuild.manifest import validate_bin_manifest
@@ -379,15 +378,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 SERIES_DIR,
                 cls.root / "out",
                 model="silam",
-                skip_video=True,
                 work_root=cls.root / "work",
                 run_id="2026110300",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def series(self, name: str) -> np.ndarray:
         data = (SERIES_DIR / f"silam.2026110300.{name}.nc").read_bytes()
@@ -423,7 +420,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             values = self.series(name)
             for index in (0, 2):
                 with self.subTest(bundle=name, frame=index):
-                    codes = np.asarray(self.bundle(name).decode_plane(1, index + 1)).reshape(HEIGHT, WIDTH)
+                    codes = np.asarray(self.bundle(name).decode_plane(1, index)).reshape(HEIGHT, WIDTH)
                     np.testing.assert_array_equal(codes, codebook.quantize(values[index]))
 
     def test_the_box_is_on_the_scale(self) -> None:
@@ -439,10 +436,8 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     SERIES_DIR,
                     self.root / "complete",
                     model="silam",
-                    skip_video=True,
                     require_complete=True,
                     expected_hours=3,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("silam")
