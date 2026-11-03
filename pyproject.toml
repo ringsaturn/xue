@@ -42,6 +42,10 @@ xuebuild = [
 ]
 
 [dependency-groups]
+# The tests: the point products' goldens are held to docs/schemas/ by the
+# reference JSON Schema implementation (tests/pointschemas.py). uv syncs
+# this group by default; the publishing image's --no-dev leaves it out.
+dev = ["jsonschema>=4.23"]
 # Tests, and reading a delta-coded store or the STAC catalog the way a client would.
 zarr = ["zarr>=3.1", "numcodecs>=0.16", "xarray>=2025.1", "pystac>=1.14"]
 # The CMA radar fetch: reads its daily Zarr archive over s3fs (xuebuild/cmaarchive.py).

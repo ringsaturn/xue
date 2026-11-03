@@ -54,6 +54,23 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   answers; `compressed=True` for a gzip-on-the-wire service). Network
   tables (`Network`) and station metadata (`StationMeta`) stay per
   product: their fields differ.
+- **Shapes are JSON Schemas.** Each file a product publishes has one
+  draft 2020-12 schema under `docs/schemas/` (`pointer.schema.json` is
+  every product's pointer), referenced from its spec as the normative
+  shape. The three implementations meet it differently:
+  `tests/test_point_schemas.py` holds every golden to it with the
+  reference `jsonschema` (a `dev` group dependency; the publishing image
+  syncs `--no-dev`), so the writers' `schema.py` validators keep only
+  what a schema cannot say — order, byte spans, sums, file names, the
+  version gate — and refuse a file without the schema's shape through
+  `pointproduct.shaped`; the shell's checks are generated plain TypeScript
+  (`make schemas`, `web/tooling/schemagen.ts` → `web/src/schema/generated/`,
+  held to a fresh run by `tests/web/schemagen.test.ts`), and a product's
+  `schema.ts` runs its version gate, the generated check, then the same
+  invariants; the API worker reads the same goldens in its tests. The
+  generator implements a closed subset of the vocabulary (no `if`, no
+  closed objects: a reader admits a field a later revision adds) and
+  refuses a schema that leaves it.
 - **Parsers import no other parser** and convert to SI themselves; `build.py`
   is the only place sources meet; `schema.py` validates on write.
 - **Goldens.** `tests/fixtures/<product>/` is a fetched issue (two rounds

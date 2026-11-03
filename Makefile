@@ -14,7 +14,7 @@ PROFILE ?= balanced
 ROUND ?=
 RUN_DIR = $(MODEL).$(RUN)$(if $(ROUND),/$(ROUND))
 
-.PHONY: check help install wasm api-worker deploy-api api-dev api-dev-cdn test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel encoder-py mvp serve
+.PHONY: check help install wasm schemas api-worker deploy-api api-dev api-dev-cdn test test-rust test-e2e encoder-rust encoder-rust-test encoder-wheel encoder-py mvp serve
 
 check: ## Verify Python / GDAL / node / wasm-pack versions
 	$(PYTHON) scripts/check_dependencies.py
@@ -27,6 +27,9 @@ install: ## Install the frontend's npm dependencies
 
 wasm: ## Build the WASM decoder into web/src/wasm/
 	cd rust && wasm-pack build xue-wasm --target web --out-dir ../../web/src/wasm --out-name xue
+
+schemas: ## Regenerate the shell's point-product validators from docs/schemas/
+	node web/tooling/schemagen.ts
 
 # The data-API Worker (rust/xue-worker). Its R2 binding is `remote: true`, so
 # `api-dev` reads the real bucket; `api-dev-cdn` reads the public origin
