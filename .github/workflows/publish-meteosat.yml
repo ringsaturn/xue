@@ -174,7 +174,7 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No ffmpeg: the source ships no video. The `satellite` group is the
+      # The `satellite` group is the
       # shachen package the Dust RGB producer runs in the fetch stage
       # (xuebuild/satellite/producers.py) and hdf5plugin, whose JPEG-LS
       # filter GDAL needs to read an FCI chunk; both needed whichever

@@ -164,7 +164,7 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
-      # No ffmpeg: the source ships no video. The xuepy wheel carries the
+      # The xuepy wheel carries the
       # GDAL the native encoder extracts and inspects with; the reference
       # pipeline needs the system one. The `cma` group is what reads the
       # archive: zarr-python, s3fs, xarray and netCDF4.
