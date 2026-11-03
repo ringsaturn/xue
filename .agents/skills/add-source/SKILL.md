@@ -28,8 +28,7 @@ code: open access only, and record the attribution the licence requires.
 1. **Registry**: a `SourceSpec` in `xuebuild/sources.py` (axis or window,
    cadence, inputs, published and core bundles, grid, tile, ladder, video,
    fetch concurrency). Put new variables in `xuebuild/variables.py` and their
-   codebooks in `xuebuild/quantize.py` for every profile. A new family also
-   regenerates its registry fixture under `tests/fixtures/`.
+   codebooks in `xuebuild/quantize.py` for every profile.
 2. **Fetch**: set `SourceSpec.feed` (and `packing="ccsds"` when the
    records arrive CCSDS packed). A source on a service xue already reads
    names that family. A new service is a fetcher in `xuebuild/feeds.py`,
@@ -40,8 +39,9 @@ code: open access only, and record the attribution the licence requires.
    goes in its own `pyproject.toml` group. Add the model to the CLI help in
    `xuebuild/cli.py`.
 3. **Registry**: the native encoder has no tables; it reads the registry
-   document (`docs/registry.md`). Regenerate the snapshot (`xue registry
-   --output rust/xue/registry.json`, said in the commit). Only a *rule* the
+   document (`docs/registry.md`). Regenerate both snapshots (`xue registry --output rust/xue/registry.json --shell web/src/registry.ts`,
+   said in the commit): the shell's copy is what the frontend reads its
+   ids, parameter blocks and codebooks from. Only a *rule* the
    closed sets lack (a new `conversion`, `match.gdal` rule, derivation,
    codebook type or ingest path) is Rust work: `xuebuild/rules.py` first,
    then `rust/xue/src/encode/{units,inspect,convert}.rs`, then a line in
@@ -51,12 +51,19 @@ code: open access only, and record the attribution the licence requires.
    `tests/test_<id>.py`, which runs it through both encoders byte for byte.
 5. **STAC**: licence and provider prose in `xuebuild/stac_prose.json`.
    `tests/test_stac.py` holds it to the registry.
-6. **Shell**: a row in `FORECAST_MODELS` (and the `ForecastModelId` union)
-   in `web/src/manifest.ts`, with `domain` / `region` for a regional grid.
-   Any new quantity goes in `web/src/variables.ts`, `identity.ts` and
-   `palettes.ts`, with copy in all eleven locales (`en.ts` first). Also add
-   the static metadata in `web/index.html` and a case in
-   `tests/web/manifest.test.ts`. If the source exceeds a manifest limit (as
+6. **Shell**: the source's id, label, product, pointer, observation flag,
+   core bundles and cadence reach `FORECAST_MODELS` and `ForecastModelId`
+   from the regenerated `web/src/registry.ts`; nothing of that is typed by
+   hand. What the shell needs beyond it is chart knowledge: the source's
+   `MODEL_CHARTS` row in `web/src/manifest.ts` (the type check fails
+   without one: `railCore`, `defaultVariable`, `region` / `domain` for a
+   regional grid, `subLongitude` for an imager), and for a new quantity a
+   `web/src/variables.ts` row, a palette in `palettes.ts`, a chart ceiling
+   in `levels.ts` where it needs one, and copy in all eleven locales
+   (`en.ts` first); `identity.ts` needs a rule only when the quantity's
+   parameter block is one no existing rule reads. `tests/web/registries.test.ts`
+   fails for a published bundle with no `variables.ts` row. Also add the
+   static metadata in `web/index.html`. If the source exceeds a manifest limit (as
    `forecastHours` was for CFS), widen it in all three validators and in
    `docs/format.md`.
 7. **Workflow**: `publish-<id>.yml`. A forecast calls `publish.yml` and is
