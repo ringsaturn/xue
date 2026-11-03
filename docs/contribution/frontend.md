@@ -31,6 +31,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `exportsheet.ts` (`createExportSheet`, `#export-sheet`) | Both exports start here, off the timeline capsule so its row stays the level chips, the rate and play: a round trigger in the top-right row (heading the right-hand column on phones, the view tile a slot lower) opens a sheet with format, size, rate (the playback ladder; follows the playback rate until one is picked) and a FROM/TO span (default from the frame on screen, clamped to the format's ceiling), a size estimate (MP4 from `mp4Bitrate`, GIF from a rough bytes-per-pixel mean) and EXPORT/Cancel. Format, size and rate are kept in `localStorage`; the span is kept while the axis keeps its length. A long press on the trigger saves with the settings as they stand; progress fills a ring round the trigger and a bar in the sheet. |
 | `volume.ts` | The volumes (`refl3d`, `cloud3d`): a 3D texture per frame, raymarched in a Mercator box, the transfer function chosen by the levels' parameter, stopped by the terrain's depth. |
 | `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
+| `basemap.ts` | The basemap style: Protomaps flavor per theme, the grounds (`GROUND_TONES`), hillshade and coastline layers, and the property diff `syncBasemapStyle` applies. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `probepanel.ts` | The probe panel's controller (`createProbePanel`): the pin, series requests, probe sessions, rows, terrain column, station chips, skew-T sheet. |
@@ -651,7 +652,7 @@ Typhoon Committee adds is added there by hand.
   layers insert below it.
 - Theme and locale switch in place, never by reload (`onThemeChange`,
   `onLocaleChange`). **`map.setStyle` drops the custom WebGL layers**, so
-  `syncBasemapStyle` diffs layer properties instead. `index.html` repeats
+  `syncBasemapStyle` diffs layer properties instead (`basemap.ts::applyBasemapStyleDiff`). `index.html` repeats
   theme detection inline so the first paint is on the right ground.
 - **`isDark`, `locale`, `htmlLang`, `basemapLang`, `displayZone` are live
   bindings: read them at use, never capture them in a module constant.**
