@@ -1,6 +1,9 @@
 # Sources
 
-What each source publishes. Every source is an independent dataset under
+What each source publishes, and the one home of those facts: the README's
+table summarises it with live run badges, `llms.txt` lists the ids, and the
+engineering notes (fetch stages, quirks) are in
+[`contribution/sources.md`](contribution/sources.md). Every source is an independent dataset under
 `<model>.<run>/` on the data root, taken live by its pointer
 (`latest.json` for GFS, `latest-<model>.json` for the rest). The id in each
 heading is the `--model` value and the `?model=` value. Time axes with
@@ -43,7 +46,7 @@ not a format change.
   humidity and wind on all eight isobaric surfaces; 850 hPa water vapour
   flux (`q·V/g`, derived).
 
-### ECMWF IFS open data (`ecmwf`, alias `ifs`)
+### ECMWF IFS open data (`ecmwf`)
 
 0.25° global, 3-hourly to F144 and 6-hourly to F240. The subset of the GFS
 set that open data carries, under the same identities so a model switch
@@ -54,6 +57,13 @@ span 0–7, 7–28, 28–100 and 100–289 cm, not GFS's depths; the open data
 carries no bitmap, so the sea holds the model's soil temperature and a water
 content of 0. Not available: layer cloud covers, visibility, sea ice cover,
 apparent temperature.
+
+### ECMWF IFS open data 0.1° (`ifs`)
+
+The same cycle's records as `ecmwf` on the model's full 0.1° regular grid
+(3600 × 1801), the bundle set, pressure levels and waves included, on the
+same axis, landing about two hours later. It is a separate source with its
+own pointer.
 
 ### ECMWF AIFS Single (`aifs`)
 
@@ -236,6 +246,50 @@ time is the model's forecast time, about an hour after the solar-wind
 observation driving it, so the window is a sequence of successive
 forecasts. The feed carries only its newest grid, so the window grows from
 a frame cache.
+
+## Cases only
+
+These have no live pointer and no place in the model switch; a showcase
+case ([`showcase/README.md`](../showcase/README.md)) opens them.
+
+### Recast WOOF-WRF (`woof`)
+
+A WRF-ARW nest at 500 m over Mount Fuji: a regular 0.005° grid of 79 × 61
+cells, 138.54°E–138.93°E and 35.22°N–35.52°N, every cell inside the model
+domain, hourly from F1 with no analysis frame. `volume=cloud3d` draws its
+cloud water in 3D.
+
+### Copernicus EFAS river discharge (`efas`, `efaswb`)
+
+EFAS v5 (LISFLOOD) discharge on its 1-arcmin regular grid over Europe
+(4530 × 2970 cells, 25.25°W–50.25°E and 22.75°N–72.25°N; a case ships a
+crop), six-hourly from +6 to +120 h. `efas` is the forecast forced by the
+ECMWF HRES; `efaswb` is the water-balance run forced by observations, the
+analysis the forecast starts from, on the same grid and axis. A case opens
+them on the return-period class.
+
+### ECMWF ERA5 (`era5`)
+
+The reanalysis (`reanalysis-single-levels`), hourly on the 0.25° grid over a
+window of up to 1440 hours from any hour; every frame is an analysis. A case
+ships a crop of the 2 m temperature and dew point, the 10 m wind and the
+hourly gust maximum.
+
+### Copernicus CAMS aerosol analyses (`cams`)
+
+The global composition analyses (`global-composition-analysis`) on the 0.4°
+grid, three-hourly over a window of up to 1440 hours; each frame is a 00Z or
+12Z cycle's analysis or its +3/+6/+9 h step. Total and organic optical depth
+(`aod`, `aodorg`) and surface PM2.5 (`pm25`).
+
+### NOAA MRMS 3D reflectivity (`mrms3d`)
+
+The MRMS mosaic's 33 constant-altitude levels, 0.5 to 19 km above mean sea
+level (every 0.25 km to 3 km, 0.5 km to 9 km, 1 km above), one frame every
+ten minutes from the scan at each mark, thinned by block maximum to 0.05°,
+all in one `refl3d` bundle (`refl500` … `refl19000`, dBZ, GRIB2 209/9/0 on
+surface 102 at the altitude in metres). The viewer draws it as a raymarched
+volume (`?vexag=` sets the vertical exaggeration).
 
 ## Point products
 
