@@ -5,8 +5,8 @@ description: Checklist for changing anything Xue writes to disk or reads off the
 
 # Changing the format
 
-The format has three implementations that must agree byte for byte. Read
-`.claude/rules/cross-implementation.md` first.
+Three implementations must agree: read `.claude/rules/cross-implementation.md`
+first.
 
 ## 1. Classify the change
 
@@ -40,7 +40,7 @@ version that fits, so each file keeps exactly one valid encoding.
 
 ```sh
 make test                 # rust golden + python (incl. native parity) + vitest
-make encoder-rust-test    # native encoder byte identity (needs GDAL + libclang)
+make encoder-rust-test    # native encoder parity (needs GDAL + libclang)
 npm run build             # typecheck
 ```
 
@@ -50,9 +50,7 @@ field is rejected by every validator.
 ## 4. Ship
 
 Commit the spec, the code in all implementations and the fixtures together.
-If the change is shell-first, deploy Pages (`deploy-pages.yml`) before any
-publish workflow writes the new shape: merge the reader side to `main`
-first. If the native encoder changed, the encoder side goes through a
-`release/0.N` branch (the `release` skill) and reaches `main` together with
-its relocked wheel. Scheduled workflows pin `XUE_ENCODER=native`, so they
-write the new shape only after that.
+If the change is shell-first, merge the reader side to `main` and let the
+shell deploy before any publish writes the new shape. If the native encoder
+changed, use the `release` skill. Both orders:
+`.claude/rules/delivery-and-deploy.md`.

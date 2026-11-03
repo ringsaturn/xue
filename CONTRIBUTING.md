@@ -16,11 +16,13 @@ Full requirements: [docs/contribution/setup.md](docs/contribution/setup.md).
 
 The Python encoder (`xuebuild/`), the Rust decoder and native encoder
 (`rust/`) and the TypeScript frontend (`web/src/`) must agree. The Python
-encoder is the reference: a format change lands there first, and touches
-the spec under `docs/`, the Python encoder, the Rust side and the fixtures
-in the same change. The native encoder must stay byte-identical to the
-Python one. Shell before data: see
-[deploy order](docs/contribution/releasing.md#deploy-order).
+encoder is the reference. The rules for changing them together (order of
+change, parity, shell before data) are in
+[`.claude/rules/cross-implementation.md`](.claude/rules/cross-implementation.md)
+and
+[`.claude/rules/delivery-and-deploy.md`](.claude/rules/delivery-and-deploy.md);
+the deploy steps are in
+[releasing](docs/contribution/releasing.md#deploy-order).
 
 ## Tests
 

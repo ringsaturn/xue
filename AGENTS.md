@@ -51,16 +51,16 @@ Single tests and the full matrix: [`.claude/rules/workflow.md`](.claude/rules/wo
 ## Rules that always apply
 
 1. **Three implementations, one format.** The Python encoder is the
-   reference. The native encoder must match it byte for byte. A format
-   change updates spec + both encoders + all readers + fixtures together.
-   Tables are data: variables, bundles and sources live in the registry
-   document (`docs/registry.md`), never in Rust and never as an id
-   `match`; only a new rule name is encoder work.
+   reference and the native encoder must match it; a format change updates
+   spec, both encoders, all readers and fixtures together. Tables are data
+   (the registry document), never Rust and never an id `match`. See
+   [`cross-implementation.md`](.claude/rules/cross-implementation.md).
 2. **Decoders never drop a version.** Published `.xue` (v1/v2) and older
    metadata schemas stay readable forever.
-3. **Pointer last, never overwrite under an unchanged `?v=`.**
-4. **Shell before data.** Deploy the Pages shell before publishing a widened
-   schema or a new source id.
+3. **Pointer last, never overwrite under an unchanged `?v=`**
+   ([`delivery-and-deploy.md`](.claude/rules/delivery-and-deploy.md#the-data-contract)).
+4. **Shell before data**, for a widened schema or a new source id
+   ([`delivery-and-deploy.md`](.claude/rules/delivery-and-deploy.md#two-sided-deploys-shell-first)).
 5. Use `.venv/bin/python`. Do not run Playwright locally. Do not run upload,
    prune or deploy targets unless asked.
 6. Never commit generated data. Never reference `plans/`. Never name the

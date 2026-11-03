@@ -14,14 +14,11 @@ Class A operation instead of one per part.
 
 Rules that hold everywhere:
 
-- The pointer goes last. Everything a pointer names is immutable and
-  addressed with `?v=<crc32>`; uploading the pointer is what takes a run
-  live.
-- Never rewrite an object under an unchanged `?v=`: a viewer's range
-  requests against it would decode the wrong bytes. This is why rolling
-  windows build each round into its own directory.
-- The Pages shell deploys before data in a widened schema or from a new
-  source id (see [releasing](releasing.md#deploy-order)).
+- The pointer goes last, and nothing is overwritten under an unchanged
+  `?v=` (which is why rolling windows build each round into its own
+  directory): [`delivery-and-deploy.md`](../../.claude/rules/delivery-and-deploy.md#the-data-contract).
+- The Pages shell deploys before widened or new-source data
+  ([releasing](releasing.md#deploy-order)).
 
 ## Forecast runs
 
@@ -40,9 +37,8 @@ is reported and the pointer goes live anyway; `WARM=false` skips it.
 
 One workflow per source (`publish-gfs.yml`, `publish-ecmwf.yml`, …) calls
 the reusable [`publish.yml`](../../.github/workflows/publish.yml) on a
-schedule and takes a manual dispatch with a dry-run switch. These pin
-`XUE_ENCODER=native`, so a fallback to the slow path fails rather than
-passing unnoticed.
+schedule and takes a manual dispatch with a dry-run switch. They pin the
+native encoder ([`encoder.md`](../encoder.md#in-the-build-pipeline)).
 
 `publish.yml` builds a run in pieces: `xuebuild bundle-groups` packs the
 bundles into at most `max_jobs` groups of roughly equal cost, each group

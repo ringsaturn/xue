@@ -78,7 +78,7 @@ carries instead is the set of *rules* that document can name: the
 names, the `derivation.kind`s and the codebook types (`docs/encoder.md`
 §"The registry document"). A wheel handed a document that names a rule it
 does not implement refuses the whole document before reading any input,
-and the scheduled forecast workflows pin `XUE_ENCODER=native`, so an older
+and the scheduled forecast workflows pin the native encoder, so an older
 wheel fails the build instead of quietly building less.
 
 The floor is therefore the first release that implements every rule name
@@ -94,7 +94,7 @@ If an encoder change (a new rule, derivation, codebook type or ingest path,
 or a schema bump) merged to `main` before its wheel shipped, `main` would
 still install the old locked wheel, which refuses the document. Then
 `tests/test_native.py` (byte parity between the two encoders) and the
-scheduled publishes, which pin `XUE_ENCODER=native`, would fail until the
+scheduled publishes, which pin the native encoder, would fail until the
 relock. Raising the floor before the wheel is on PyPI is worse: `uv sync`
 fails everywhere, because the version cannot be resolved. Keeping steps
 1–4 on `release/0.N` confines both failure windows to the branch.
@@ -159,11 +159,10 @@ The Pages shell ([`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml))
 deploys automatically on every push to `main` that touches `web/`,
 `rust/`, the build configuration or the documents `llms-full.txt` is built
 from. A new shell accepts old data, but an old cached shell rejects new
-data, so the shell must be live **before** the bucket carries:
-
-- a manifest in a widened schema (validator change);
-- a container version bump or a bundle metadata `schemaVersion` bump;
-- a new source id (an older `FORECAST_MODELS` does not know it).
+data, so the shell must be live **before** the bucket carries a widened
+manifest schema, a container or bundle metadata version bump, or a new
+source id (the rule, in
+[`delivery-and-deploy.md`](../../.claude/rules/delivery-and-deploy.md)).
 
 In practice: merge the frontend change, let `deploy-pages.yml` finish,
 then release the wheel and let the publishes run. A tab whose validator
