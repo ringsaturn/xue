@@ -19,7 +19,7 @@
 
 use serde_json::Value;
 
-use crate::format::{err, DecodeError};
+use crate::format::{err, DecodeError, TileGeometry};
 
 /// Bytes of one `(offset, nbytes)` pair in a shard index.
 pub(crate) const INDEX_ENTRY_BYTES: usize = 16;
@@ -861,29 +861,33 @@ pub fn shard_of(layout: &ArrayLayout, time_chunk: u32) -> (u32, u32) {
     )
 }
 
+impl ArrayLayout {
+    /// The grid's tiling, the container's arithmetic over the same cells.
+    /// Built from the parsed fields directly: a store's chunk may exceed a
+    /// small grid, which `TileGeometry::new` refuses for a container.
+    pub fn tiles(&self) -> TileGeometry {
+        TileGeometry {
+            width: self.width,
+            height: self.height,
+            tile_width: self.tile_width,
+            tile_height: self.tile_height,
+        }
+    }
+}
+
 /// The row and column a tile starts at.
 pub fn tile_origin(layout: &ArrayLayout, tile: u32) -> (u32, u32) {
-    (
-        (tile / layout.tile_columns) * layout.tile_height,
-        (tile % layout.tile_columns) * layout.tile_width,
-    )
+    layout.tiles().origin(tile)
 }
 
 /// A tile's clipped shape: what of it lies inside the grid.
 pub fn tile_shape(layout: &ArrayLayout, tile: u32) -> (u32, u32) {
-    let (row, column) = tile_origin(layout, tile);
-    (
-        layout.tile_height.min(layout.height.saturating_sub(row)),
-        layout.tile_width.min(layout.width.saturating_sub(column)),
-    )
+    layout.tiles().shape(tile)
 }
 
 /// The tile a cell falls in.
 pub fn tile_of(layout: &ArrayLayout, row: u32, column: u32) -> Result<u32, DecodeError> {
-    if row >= layout.height || column >= layout.width {
-        return Err(err("cell is outside the grid"));
-    }
-    Ok((row / layout.tile_height) * layout.tile_columns + column / layout.tile_width)
+    layout.tiles().tile_of(row, column)
 }
 
 // -- time ----------------------------------------------------------------------

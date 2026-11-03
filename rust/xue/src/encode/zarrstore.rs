@@ -32,6 +32,7 @@ use serde_json::{json, Map, Value};
 
 use crate::encode::binformat::crc32_plane;
 use crate::encode::errors::{EncodeError, Result};
+use crate::format::TileGeometry;
 use crate::zarr;
 
 /// Frames per time chunk of a map store: the bundle's own group length, on a
@@ -120,14 +121,23 @@ struct Geometry {
 }
 
 impl Geometry {
+    /// The grid's tiling, the container's arithmetic over the same cells.
+    fn tiles(&self) -> TileGeometry {
+        TileGeometry {
+            width: self.width as u32,
+            height: self.height as u32,
+            tile_width: self.tile_width as u32,
+            tile_height: self.tile_height as u32,
+        }
+    }
     fn tile_rows(&self) -> usize {
-        self.height.div_ceil(self.tile_height)
+        self.tiles().rows() as usize
     }
     fn tile_columns(&self) -> usize {
-        self.width.div_ceil(self.tile_width)
+        self.tiles().columns() as usize
     }
     fn tile_count(&self) -> usize {
-        self.tile_rows() * self.tile_columns()
+        self.tiles().count() as usize
     }
     fn time_chunks(&self) -> usize {
         self.frame_count.div_ceil(self.time_chunk)
@@ -142,17 +152,12 @@ impl Geometry {
         self.time_chunk * self.tile_height * self.tile_width
     }
     fn tile_origin(&self, tile: usize) -> (usize, usize) {
-        (
-            (tile / self.tile_columns()) * self.tile_height,
-            (tile % self.tile_columns()) * self.tile_width,
-        )
+        let (row, column) = self.tiles().origin(tile as u32);
+        (row as usize, column as usize)
     }
     fn tile_shape(&self, tile: usize) -> (usize, usize) {
-        let (row, column) = self.tile_origin(tile);
-        (
-            self.tile_height.min(self.height - row),
-            self.tile_width.min(self.width - column),
-        )
+        let (height, width) = self.tiles().shape(tile as u32);
+        (height as usize, width as usize)
     }
 }
 

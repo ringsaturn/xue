@@ -444,12 +444,14 @@ impl TileGeometry {
         ((tile / self.columns()) * self.tile_height, (tile % self.columns()) * self.tile_width)
     }
 
-    /// The clipped (height, width) of a tile in cells.
+    /// The clipped (height, width) of a tile in cells. Saturating, so a
+    /// tile past the last one is empty rather than an overflow; every tile
+    /// below `count()` starts inside the grid and is unaffected.
     pub fn shape(&self, tile: u32) -> (u32, u32) {
         let (row, column) = self.origin(tile);
         (
-            self.tile_height.min(self.height - row),
-            self.tile_width.min(self.width - column),
+            self.tile_height.min(self.height.saturating_sub(row)),
+            self.tile_width.min(self.width.saturating_sub(column)),
         )
     }
 
