@@ -50,22 +50,16 @@ before publishing data** that:
 
 - `publish.yml` (every forecast) and `publish-mrms.yml` pin
   `XUE_ENCODER=native`, so a silent fallback to the slow path fails loudly.
-  Do not unpin them. The other rounds workflows (`jma`, `cma`, `aurora`,
-  the satellites, `showcase.yml`) resolve the encoder with
-  `native.knows_source`. The installed wheel may predate a source, so they
-  fall back to the reference pipeline with a `::warning::`.
+  Do not unpin them. The other rounds workflows resolve the encoder with
+  `native.knows_source` ([`encoder.md`](../../docs/encoder.md#in-the-build-pipeline)).
 - The wheel carries no tables: every call hands it the registry document
   (`docs/registry.md`), so a variable, bundle or source change is a `main`
-  commit with the regenerated `rust/xue/registry.json` and no release.
-  `pyproject.toml`'s `xuepy` floor tracks the `registrySchema` and the rule
-  names the wheel implements; a new rule, derivation, codebook type or
-  ingest path is an encoder change, and a release is prepared for it
-  on a `release/0.N` branch: the change, then the release commit, then the
-  `v*` tag on the branch, then a wait for PyPI, then the relock commit
-  (raise the floor, `uv lock --refresh-package xuepy`), and only then a
-  fast-forward merge into `main`. `main` never holds an encoder change
-  without its wheel, so scheduled publishes do not fail in the window.
-  Never raise the floor before the wheel is on PyPI. Use the `release`
+  commit with the regenerated `rust/xue/registry.json` and no release. A new
+  rule, derivation, codebook type or ingest path is an encoder change and
+  goes out on a `release/0.N` branch; `main` never holds an encoder change
+  without its wheel, and the floor is never raised before the wheel is on
+  PyPI. The steps and the reasons are in
+  [`releasing.md`](../../docs/contribution/releasing.md); use the `release`
   skill.
 - Never chain a commit or push behind a pipe that hides an exit code
   (`make test | tail`, `uv lock | grep`). Gate on the command's own status.

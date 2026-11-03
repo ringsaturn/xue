@@ -7,9 +7,9 @@ build asks for it (`--xue`, `container=True`), and read by every decoder
 forever, since published runs and cases carry it and are never rebuilt.
 Both encoders write each store straight from the codes they quantized.
 
-Normative specs, which win over this page: [format.md](../format.md),
-[zarr-profile.md](../zarr-profile.md), [encoder.md](../encoder.md),
-[stac.md](../stac.md).
+Normative specs, which win over this page: [zarr-profile.md](../zarr-profile.md),
+[format.md](../format.md), [encoder.md](../encoder.md), [stac.md](../stac.md).
+Why the format looks like this: [architecture-rationale.md](architecture-rationale.md).
 
 ## Map
 
@@ -40,20 +40,17 @@ Normative specs, which win over this page: [format.md](../format.md),
 
 Encoder, Rust decoder and TypeScript frontend must stay in agreement.
 
-- **The Python encoder is the reference.** A format change goes there first,
-  with the spec; native encoder, decoders and fixtures follow in the same
-  change.
-- The native encoder (`rust/xue/src/encode/`, linking GDAL, grib-rs, zstd)
-  must write output byte-identical to Python's; `tests/test_native.py`
-  compares every artifact of one build against the other.
+The order of change and the parity rule (the Python encoder is the
+reference; the native encoder, `rust/xue/src/encode/`, linking GDAL,
+grib-rs and zstd, writes identical bytes) are in
+[`.claude/rules/cross-implementation.md`](../../.claude/rules/cross-implementation.md)
+and [`encoder.md`](../encoder.md).
+
 - `xuebuild/encoder.py` converts through the wheel by default; `XUE_ENCODER`
-  = `auto` | `native` | `python` overrides. Scheduled workflows pin `native`
-  so a silent fallback fails. A workflow whose source may be newer than the
-  PyPI wheel asks `native.knows_source` (the whole published bundle set)
-  and otherwise takes the reference pipeline with a `::warning::`
-  ([publishing.md](publishing.md)).
+  (`auto` | `native` | `python`) overrides, and which workflows pin it is in
+  [`encoder.md`](../encoder.md#in-the-build-pipeline).
 - The native encoder writes the stores itself (`encode/zarrstore.rs`, held
-  to `zarrstore.write_store` byte for byte) but no pointer. `native.py`
+  to `zarrstore.write_store`) but no pointer. `native.py`
   stamps the shared stores' CRCs into the manifest and only then writes the
   pointer, whose CRC32 covers the finished manifest.
 - The `encoder` feature is off by default because it links GDAL and the
@@ -72,10 +69,9 @@ Encoder, Rust decoder and TypeScript frontend must stay in agreement.
   served from the site or the bucket (`VITE_DATA_BASE_URL`,
   `web/.env.deploy`). Production hostnames reach the frontend only through
   `web/src/site.ts`.
-- **Shell first.** A new shell accepts old manifests; an old cached shell
-  rejects new ones. Deploy the Pages shell before data that widens the
-  manifest schema, bumps the container or bundle metadata version, or uses
-  a source id `FORECAST_MODELS` does not know.
+- **Shell first**: a new shell accepts old manifests, an old cached shell
+  rejects new ones. When, and what counts, is in
+  [`releasing.md`](releasing.md#deploy-order).
 - **The bundle set is not schema.** The three validators
   (`xuebuild/manifest.py`, `rust/xue/src/encode/manifest.rs`,
   `web/src/manifest.ts`) admit a `variable` by shape alone
