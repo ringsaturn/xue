@@ -225,8 +225,8 @@ class Generator {
       );
     if (Array.isArray(schema.anyOf)) {
       const branches = (schema.anyOf as Schema[]).map((branch) => {
-        const body = this.check(branch, "x", "a", "      ");
-        return [`    (x: unknown, a: string): void => {`, ...body, `    },`].join("\n");
+        const body = this.check(branch, "x", "a", `${indent}    `);
+        return [`${indent}  (x: unknown, a: string): void => {`, ...body, `${indent}  },`].join("\n");
       });
       out.push(`${indent}if (!passesOne(${v}, ${at}, [\n${branches.join("\n")}\n${indent}])) ${this.fail(at, ` matches none of its allowed shapes`)};`);
     }

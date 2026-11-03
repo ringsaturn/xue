@@ -43,12 +43,13 @@ from .schema import (
     SCHEMA_VERSION,
     AqProductError,
     build_pointer,
+    columns,
     crc32_hex,
     encode_json,
     iso_z,
+    local_round_directory,
     network_filename,
     read_index,
-    local_round_directory,
     round_directory,
     round_name,
     stations_filename,
@@ -232,6 +233,7 @@ def build_product(
             "network": network.id,
             "issued": issued,
             "elements": list(ELEMENTS),
+            "columns": columns(list(ELEMENTS)),
             "stations": rows,
         }
         table_bytes = encode_json(table)

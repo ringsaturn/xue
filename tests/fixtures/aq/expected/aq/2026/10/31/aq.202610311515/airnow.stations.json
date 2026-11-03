@@ -3,6 +3,7 @@
  "network": "airnow",
  "issued": "2026-10-31T15:15:00Z",
  "elements": ["pm25", "pm10", "o3", "no2", "so2", "co"],
+ "columns": ["id", "lat", "lon", "elev", "rank", "name", "agency", "obsTime", "pm25", "pm10", "o3", "no2", "so2", "co", "offset", "length"],
  "stations": [
   ["airnow:000010601", 53.3047, -60.3644, 38.7, 1, "Goose Bay", "Canadian Air and Precipitation Monitoring Network", "2026-10-31T14:00:00Z", null, null, 34.0, null, null, null, 0, 224],
   ["airnow:000020104", 46.2406, -63.1306, 19.8, 1, "CHARLOTTETOWN", "Canada-Prince Edward Island1", "2026-10-31T14:00:00Z", 2.5, null, 31.0, 0.8, 0.0, null, 225, 256],

@@ -100,6 +100,19 @@ describe("the aq index and stations tables", () => {
     expect(() => parseAqStationTable(table, index, 0)).toThrow(/network/);
   });
 
+  it("finds a row's columns by name, and by position in a table without them", () => {
+    const index = parseAqIndex(read("index.json"));
+    const table = read(index.networks[1]!.stations.path);
+    expect(table.columns).toBeDefined();
+    const expected = parseAqStationTable(table, index, 1);
+    const positional = clone(table);
+    delete positional.columns;
+    expect(parseAqStationTable(positional, index, 1)).toEqual(expected);
+    const missing = clone(table);
+    (missing.columns as string[])[15] = "span";
+    expect(() => parseAqStationTable(missing, index, 1)).toThrow(/columns/);
+  });
+
   it("drops a network whose table failed and keeps the rest", () => {
     const index = parseAqIndex(read("index.json"));
     const hk = parseAqStationTable(read(index.networks[1]!.stations.path), index, 1);

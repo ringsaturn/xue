@@ -118,9 +118,46 @@ impl Kind {
         out
     }
 
-    /// The width of a station table's row.
-    fn table_width(&self, elements: &[String]) -> usize {
-        self.lead.len() - 1 + elements.len() + 2
+    /// A station table row's columns in the order this reader takes them:
+    /// the lead without `network`, the elements, the byte span. A table
+    /// without `columns` lays its rows out in exactly this order.
+    fn table_columns(&self, elements: &[String]) -> Vec<String> {
+        self.lead
+            .iter()
+            .filter(|key| **key != "network")
+            .map(|key| (*key).to_owned())
+            .chain(elements.iter().cloned())
+            .chain(["offset".to_owned(), "length".to_owned()])
+            .collect()
+    }
+
+    /// Where each of [`Kind::table_columns`] sits in a table's rows, and
+    /// the rows' width: found by name in the table's `columns`, or in
+    /// place for a table written before that field.
+    fn column_order(&self, table: &Value, elements: &[String]) -> Result<(Vec<usize>, usize), String> {
+        let wanted = self.table_columns(elements);
+        let Some(columns) = table.get("columns") else {
+            return Ok(((0..wanted.len()).collect(), wanted.len()));
+        };
+        let names: Vec<&str> = columns
+            .as_array()
+            .and_then(|items| items.iter().map(Value::as_str).collect())
+            .ok_or("names its columns with something other than strings")?;
+        let order = wanted
+            .iter()
+            .map(|name| {
+                let mut found = names
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, held)| **held == name.as_str());
+                match (found.next(), found.next()) {
+                    (Some((position, _)), None) => Ok(position),
+                    (None, _) => Err(format!("has no {name} column")),
+                    _ => Err(format!("names the {name} column twice")),
+                }
+            })
+            .collect::<Result<Vec<usize>, String>>()?;
+        Ok((order, names.len()))
     }
 }
 
@@ -265,7 +302,9 @@ async fn network_rows(
             )));
         }
     }
-    let width = kind.table_width(elements);
+    let (order, width) = kind
+        .column_order(&table, elements)
+        .map_err(|why| refuse(&why))?;
     let prefix = format!("{id}:");
     let byte_length = network
         .get("file")
@@ -275,10 +314,12 @@ async fn network_rows(
     let mut end = 0u64;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let items = row
+        let held = row
             .as_array()
             .filter(|items| items.len() == width)
             .ok_or_else(|| refuse(&format!("has a row that is not {width} values")))?;
+        let items: Vec<&Value> = order.iter().map(|&column| &held[column]).collect();
+        let last = items.len() - 1;
         let station = items[0]
             .as_str()
             .filter(|station| station.starts_with(&prefix))
@@ -287,7 +328,7 @@ async fn network_rows(
             return Err(refuse("is not sorted by id and unique"));
         }
         previous = Some(station);
-        let (Some(offset), Some(length)) = (items[width - 2].as_u64(), items[width - 1].as_u64())
+        let (Some(offset), Some(length)) = (items[last - 1].as_u64(), items[last].as_u64())
         else {
             return Err(refuse(&format!("gives {station} no byte span")));
         };
@@ -297,10 +338,10 @@ async fn network_rows(
             )));
         }
         end = offset + length;
-        let mut v1 = Vec::with_capacity(width + 1);
+        let mut v1 = Vec::with_capacity(items.len() + 1);
         v1.push(items[0].clone());
         v1.push(json!(position));
-        v1.extend(items[1..].iter().cloned());
+        v1.extend(items[1..].iter().map(|&value| value.clone()));
         out.push(Value::Array(v1));
     }
     Ok(out)
@@ -555,4 +596,29 @@ pub async fn station(
     );
     body.insert("variables".into(), Value::Object(variables));
     Ok((Value::Object(body), issue.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The columns this reader takes a row's lead from are the ones the
+    /// normative schema names (`docs/schemas/aq-stations.schema.json`), so
+    /// a column renamed there cannot leave the worker reading another.
+    #[test]
+    fn the_aq_lead_is_the_schemas() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../docs/schemas/aq-stations.schema.json"
+        ))
+        .expect("schema");
+        let named: Vec<String> = schema["properties"]["columns"]["prefixItems"]
+            .as_array()
+            .expect("prefixItems")
+            .iter()
+            .map(|item| item["const"].as_str().expect("const").to_owned())
+            .collect();
+        let columns = AQ.table_columns(&[]);
+        assert_eq!(&columns[..named.len()], named.as_slice());
+        assert_eq!(&columns[named.len()..], ["offset", "length"]);
+    }
 }

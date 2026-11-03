@@ -56,14 +56,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=ce8a0180",
+   "href": "index.json?v=ddcd669d",
    "type": "application/json",
    "title": "aq index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
    "file:size": 2057,
-   "xue:crc32": "ce8a0180",
-   "file:checksum": "b20204ce8a0180"
+   "xue:crc32": "ddcd669d",
+   "file:checksum": "b20204ddcd669d"
   },
   "airnow": {
    "href": "airnow.jsonl?v=07ddc1b6",
@@ -78,7 +78,7 @@
    "file:checksum": "b2020407ddc1b6"
   },
   "airnow.stations": {
-   "href": "airnow.stations.json?v=0815366a",
+   "href": "airnow.stations.json?v=b0f99a2f",
    "type": "application/json",
    "title": "AirNow: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -86,9 +86,9 @@
    "xue:kind": "stations",
    "xue:network": "airnow",
    "xue:stations": 7,
-   "file:size": 1239,
-   "xue:crc32": "0815366a",
-   "file:checksum": "b202040815366a"
+   "file:size": 1362,
+   "xue:crc32": "b0f99a2f",
+   "file:checksum": "b20204b0f99a2f"
   },
   "hkepd": {
    "href": "hkepd.jsonl?v=2a3c24e4",
@@ -103,7 +103,7 @@
    "file:checksum": "b202042a3c24e4"
   },
   "hkepd.stations": {
-   "href": "hkepd.stations.json?v=9d161432",
+   "href": "hkepd.stations.json?v=46a8a76c",
    "type": "application/json",
    "title": "Hong Kong EPD: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -111,9 +111,9 @@
    "xue:kind": "stations",
    "xue:network": "hkepd",
    "xue:stations": 4,
-   "file:size": 601,
-   "xue:crc32": "9d161432",
-   "file:checksum": "b202049d161432"
+   "file:size": 724,
+   "xue:crc32": "46a8a76c",
+   "file:checksum": "b2020446a8a76c"
   }
  }
 }

@@ -14,6 +14,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from tests import pointschemas
 from tests.prepare_aq_golden import FIXTURES, GENERATED, ROUNDS, build_rounds, pretty
 from xuebuild.aq import airnow, hkepd
 from xuebuild.aq.build import build_product, load_previous_index
@@ -23,6 +24,7 @@ from xuebuild.aq.schema import (
     AqProductError,
     bounded,
     build_pointer,
+    columns,
     encode_json,
     floor_round,
     parse_round,
@@ -374,33 +376,51 @@ class ValidatorTest(unittest.TestCase):
         validate_stations_file(self.table, self.network, self.index["elements"], self.index["issued"])
         validate_station_line(self.line, "line")
 
+    def assert_refused(self, invariants: dict, shapes: dict, schema: str, validate, sample) -> None:
+        """``invariants`` break what the validator checks, ``shapes`` what
+        only the schema can: each case is refused by the one it breaks."""
+        for name, change in invariants.items():
+            payload = copy.deepcopy(sample)
+            change(payload)
+            with self.subTest(refused="validator", case=name), self.assertRaises(AqProductError):
+                validate(payload)
+        for name, change in shapes.items():
+            payload = copy.deepcopy(sample)
+            change(payload)
+            with self.subTest(refused="schema", case=name):
+                self.assertTrue(pointschemas.errors(schema, payload))
+
     def test_malformed_indexes_are_refused(self) -> None:
-        cases = {
-            "off-round issue": lambda index: index.__setitem__("issued", "2026-10-31T15:47:00Z"),
+        invariants = {
             "bad file name": lambda index: index["networks"][0]["file"].__setitem__("path", "history.jsonl"),
             "bad stations name": lambda index: index["networks"][0]["stations"].__setitem__("path", "airnow.json"),
-            "no count": lambda index: index["networks"][0]["stations"].pop("count"),
-            "preliminary missing": lambda index: index["networks"][0].pop("preliminary"),
             "network twice": lambda index: index["networks"].append(index["networks"][0]),
             "duplicate element": lambda index: index["elements"].append("pm25"),
             "schema version": lambda index: index.__setitem__("schemaVersion", 2),
             "element table out of order": lambda index: index.__setitem__(
                 "elementTable", dict(reversed(list(index["elementTable"].items())))
             ),
+            "no sources": lambda index: index.pop("sources"),
+        }
+        shapes = {
+            "off-round issue": lambda index: index.__setitem__("issued", "2026-10-31T15:47:00Z"),
+            "no count": lambda index: index["networks"][0]["stations"].pop("count"),
+            "preliminary missing": lambda index: index["networks"][0].pop("preliminary"),
+            "schema version": lambda index: index.__setitem__("schemaVersion", 2),
             "element table unit": lambda index: index["elementTable"]["o3"].__setitem__("unit", ""),
+            "element table period": lambda index: index["elementTable"]["o3"].__setitem__("period", "hour"),
             "gas reference": lambda index: index["networks"][-1].__setitem__("gasReference", {"temperature": 20}),
             "licence url": lambda index: index["networks"][0].__setitem__("licenseUrl", "data.gov.hk"),
             "source digest": lambda index: index["sources"][0].__setitem__("sha256", "0" * 63),
             "builder": lambda index: index.__setitem__("builder", "xuebuild"),
         }
-        for name, change in cases.items():
-            index = copy.deepcopy(self.index)
-            change(index)
-            with self.subTest(name), self.assertRaises(AqProductError):
-                validate_index(index)
+        self.assert_refused(invariants, shapes, "aq-index", validate_index, self.index)
 
     def test_malformed_stations_files_are_refused(self) -> None:
-        cases = {
+        def table_case(change):
+            return lambda pair: change(*pair)
+
+        invariants = {
             "unsorted": lambda table, network: table["stations"].reverse(),
             "span past the file": lambda table, network: table["stations"][-1].__setitem__(-1, 10**7),
             "overlapping spans": lambda table, network: table["stations"][1].__setitem__(-2, 0),
@@ -409,34 +429,54 @@ class ValidatorTest(unittest.TestCase):
             "pm25 out of range": lambda table, network: table["stations"][0].__setitem__(column("pm25"), 20000.0),
             "elements differ": lambda table, network: table["elements"].reverse(),
             "count differs": lambda table, network: network["stations"].__setitem__("count", 1),
-            "agency not a string": lambda table, network: table["stations"][0].__setitem__(6, 3),
+            "columns reordered": lambda table, network: table["columns"].reverse(),
         }
-        for name, change in cases.items():
-            table, network = copy.deepcopy(self.table), copy.deepcopy(self.network)
-            change(table, network)
-            with self.subTest(name), self.assertRaises(AqProductError):
-                validate_stations_file(table, network, self.index["elements"], self.index["issued"])
+        shapes = {
+            "agency not a string": lambda table, network: table["stations"][0].__setitem__(6, 3),
+            "rank": lambda table, network: table["stations"][0].__setitem__(4, 3),
+            "columns not v1's": lambda table, network: table["columns"].__setitem__(0, "station"),
+        }
+        self.assert_refused(
+            {name: table_case(change) for name, change in invariants.items()},
+            {},
+            "aq-stations",
+            lambda pair: validate_stations_file(pair[0], pair[1], self.index["elements"], self.index["issued"]),
+            [self.table, self.network],
+        )
+        for name, change in shapes.items():
+            table = copy.deepcopy(self.table)
+            change(table, copy.deepcopy(self.network))
+            with self.subTest(refused="schema", case=name):
+                self.assertTrue(pointschemas.errors("aq-stations", table))
+
+    def test_a_table_without_columns_is_still_admitted(self) -> None:
+        table = copy.deepcopy(self.table)
+        del table["columns"]
+        validate_stations_file(table, self.network, self.index["elements"], self.index["issued"])
+        pointschemas.check("aq-stations", table)
 
     def test_unknown_elements_are_admitted(self) -> None:
         table = copy.deepcopy(self.table)
         elements = [*self.index["elements"], "nh3"]
         table["elements"] = elements
+        table["columns"] = columns(elements)
         for row in table["stations"]:
             row.insert(len(ROW_HEAD) + len(ELEMENTS), 1.5)
         validate_stations_file(table, self.network, elements, self.index["issued"])
+        pointschemas.check("aq-stations", table)
 
     def test_malformed_lines_are_refused(self) -> None:
-        cases = {
+        invariants = {
             "time not increasing": lambda line: line["time"].reverse(),
             "column too short": lambda line: line["obs"][next(iter(line["obs"]))].pop(),
+        }
+        shapes = {
             "bad id": lambda line: line.__setitem__("id", "060371103"),
             "rank": lambda line: line.__setitem__("rank", 3),
+            "pm25 out of range": lambda line: line["obs"].__setitem__("pm25", [20000.0] * len(line["time"])),
+            "empty window": lambda line: line.__setitem__("time", []),
         }
-        for name, change in cases.items():
-            line = copy.deepcopy(self.line)
-            change(line)
-            with self.subTest(name), self.assertRaises(AqProductError):
-                validate_station_line(line, "line")
+        self.assert_refused(invariants, shapes, "aq-line", lambda line: validate_station_line(line, "line"), self.line)
 
     def test_pointer(self) -> None:
         pointer = build_pointer(SECOND, f"{round_directory(SECOND)}/index.json", encode_json(self.index))
