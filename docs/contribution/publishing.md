@@ -124,7 +124,42 @@ Every window workflow except MRMS resolves its encoder at job time: it
 takes `native` when the installed wheel's `native.knows_source` has the
 model, else the reference pipeline with a system GDAL and a `::warning::`
 on the run (a wheel on PyPI may predate a source, and a cron run takes no
-input). A dispatch can insist on either.
+input). A dispatch can insist on either. MRMS and MRMS 3D pass
+`encoder: native`, so a fallback fails the round.
+
+### How the workflows are built
+
+`publish-<model>.yml` for `himawari`, `himawarijp`, `goeseast`, `goeswest`,
+`jma`, `aurora`, `mrms` and `mrms3d` is a wrapper, like the forecast ones:
+it owns the cron, the dispatch inputs, the fork guard, the `permissions`
+(`actions: read`, which the called workflow can only narrow) and the
+concurrency group, then calls
+[`rounds.yml`](../../.github/workflows/rounds.yml) with the feed's values.
+`rounds.yml` owns the job: validate inputs, check the R2 credentials, set
+up uv and sync, resolve the encoder, run `scripts/window_rounds.sh`, verify
+the live pointer, upload the `publish-report-<model>` artifact. A feed
+differs from the others only in the inputs it passes:
+
+| Input | Meaning |
+|---|---|
+| `model`, `hours`, `round_minutes` | the feed and its window and loop cadence |
+| `encoder` | `auto` (dispatchable) or `native` (pinned) |
+| `uv_group` | the dependency group to sync (`satellite`, `aurora`) |
+| `pip_install` | one extra requirement after the sync (`jma`: the jma-radar tool) |
+| `gdal` | `always` (satellite fetch stage runs `gdalwarp`), `fallback` (only when the encoder resolved to the reference pipeline), `none` |
+| `frame_cache`, `frames_keep_hours`, `ancillary`, `segments` | the `window_rounds.sh` switches of the same names |
+
+`cma` (a private archive with its own credentials and listing check) and
+`meteosat` (every step skipped when the EUMETSAT secrets are absent, and a
+runner GDAL probe) stay standalone workflows.
+
+The steps several workflows share are composite actions under
+`.github/actions/`: `check-r2-credentials` (empty-secret check and a test
+read of the dataset bucket; the secrets are inputs of that one step, so no
+other step sees them) and `resolve-encoder` (the `native.knows_source`
+probe and its `::warning::` fallback; run it after `uv sync`). Both are
+used by `rounds.yml`, `publish-meteosat.yml` and, for the encoder,
+`publish-cma.yml`.
 
 Per-source switches:
 
