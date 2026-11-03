@@ -3,8 +3,8 @@
 Two implementations of the same conversion live in this repository, and they
 are held to byte-for-byte identical output:
 
-* `binconvert` — the reference, pure Python driving `gdal_translate`, `zstd`
-  and `ffmpeg` as subprocesses. It is what a format change lands in first, and
+* `binconvert` — the reference, pure Python driving `gdal_translate` and
+  `zstd` as subprocesses. It is what a format change lands in first, and
   it runs anywhere GDAL does.
 * `native` — the same conversion inside the `xuepy` wheel, with GDAL, grib-rs
   and zstd linked in. Roughly an order of magnitude less process churn, which

@@ -319,7 +319,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     directory,
                     cls.root / source_id,
                     model=source_id,
-                    skip_video=True,
                     work_root=cls.root / f"work-{source_id}",
                     run_id=run_id,
                     manifest_path=cls.root / source_id / "manifest.json",
@@ -423,7 +422,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     directory,
                     self.root / "complete",
                     model="efas",
-                    skip_video=True,
                     require_complete=True,
                     expected_hours=120,
                 )

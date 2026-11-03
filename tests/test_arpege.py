@@ -36,7 +36,7 @@ from unittest import mock
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import fetch, grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ARPEGE_PACKAGES,
@@ -88,7 +88,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(ARPEGE.production_grid, GFS.production_grid)
         self.assertEqual(ARPEGE.tile, GFS.tile)
         self.assertFalse(ARPEGE.video)
-        self.assertEqual(video_variable_ids(ARPEGE), frozenset())
         prose = _PROSE["sources"]["arpege"]
         self.assertEqual(prose["license"], "etalab-2.0")
         self.assertIn("Météo-France", prose["description"])

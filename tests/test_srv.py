@@ -1,6 +1,5 @@
 """Tests for the delivery artifacts: the latest.json live pointer,
-first-frame posters, the debug m3u8 playlist, and the resolution ladder /
-per-variable video plumbing."""
+first-frame posters, and the resolution ladder."""
 
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ from xuebuild.manifest import (
     validate_latest_pointer,
     write_latest_pointer,
 )
-from xuebuild.videoconvert import build_debug_playlist
 
 
 class LatestPointerTests(unittest.TestCase):
@@ -391,12 +389,13 @@ class ResolutionLadderTests(unittest.TestCase):
             validate_bin_manifest(wrong_suffix)
 
 
-class PrateVideoManifestTests(unittest.TestCase):
-    """The video descriptor is valid on any variable."""
+class RetiredVideoBlockTests(unittest.TestCase):
+    """Published runs and cases carry the retired H.264 companion's ``video``
+    block (docs/format.md); the validator leaves it unread, whatever its
+    shape, and the builder never writes it."""
 
-    def test_video_descriptor_on_prate_validates(self) -> None:
-        metadata_json = json.dumps({"schemaVersion": 1})
-        manifest = {
+    def manifest(self, video: object) -> dict:
+        return {
             "schemaVersion": 5,
             "model": "GFS",
             "product": "pgrb2.0p25",
@@ -408,23 +407,37 @@ class PrateVideoManifestTests(unittest.TestCase):
                     "path": f"{variable}.xue",
                     "byteLength": 1000,
                     "crc32": "0123abcd",
-                    "video": {
-                        "streamPath": f"{variable}.h264",
-                        "indexPath": f"{variable}.h264.index.json",
-                        "byteLength": 900,
-                        "crc32": "deadbeef",
-                        "codec": "avc1.f40028",
-                        "width": 1440,
-                        "height": 721,
-                        "gop": 6,
-                        "frameCount": 121,
-                        "metadataJson": metadata_json,
-                    },
+                    "video": video,
                 }
                 for variable in ("tmp2m", "prate")
             ],
         }
-        validate_bin_manifest(manifest)
+
+    def test_a_published_video_block_still_validates(self) -> None:
+        validate_bin_manifest(
+            self.manifest(
+                {
+                    "streamPath": "tmp2m.h264",
+                    "indexPath": "tmp2m.h264.index.json",
+                    "byteLength": 900,
+                    "crc32": "deadbeef",
+                    "codec": "avc1.f40028",
+                    "width": 1440,
+                    "height": 721,
+                    "gop": 6,
+                    "frameCount": 121,
+                    "metadataJson": json.dumps({"schemaVersion": 1}),
+                }
+            )
+        )
+
+    def test_the_block_is_left_unread(self) -> None:
+        validate_bin_manifest(self.manifest({"streamPath": "tmp2m.mp4"}))
+
+    def test_the_builder_does_not_write_it(self) -> None:
+        bundles = self.manifest({"streamPath": "tmp2m.h264"})["bundles"]
+        payload = build_bin_manifest(datetime(2026, 8, 16, tzinfo=UTC), bundles=bundles)
+        self.assertFalse(any("video" in bundle for bundle in payload["bundles"]))
 
 
 class WindBundleTests(unittest.TestCase):
@@ -565,33 +578,6 @@ class WindBundleTests(unittest.TestCase):
         missing_scalar = manifest([entry for entry in bundles(wind=True) if entry["variable"] != "prate"])
         with self.assertRaisesRegex(ManifestError, "prate"):
             validate_bin_manifest(missing_scalar)
-
-
-class DebugPlaylistTests(unittest.TestCase):
-    def test_byterange_segments_cover_the_stream_per_gop(self) -> None:
-        frames = []
-        offset = 0
-        for index in range(13):
-            length = 100 + index
-            frames.append({"offset": offset, "length": length, "keyframe": index % 6 == 0})
-            offset += length
-        playlist = build_debug_playlist(frames, "tmp2m.h264")
-        lines = playlist.strip().split("\n")
-        self.assertEqual(lines[0], "#EXTM3U")
-        self.assertIn("#EXT-X-VERSION:4", lines)
-        self.assertIn("#EXT-X-ENDLIST", lines)
-        byteranges = [line for line in lines if line.startswith("#EXT-X-BYTERANGE:")]
-        self.assertEqual(len(byteranges), 3)  # GOPs: 0-5, 6-11, 12
-        spans = []
-        for line in byteranges:
-            length, start = line.removeprefix("#EXT-X-BYTERANGE:").split("@")
-            spans.append((int(start), int(start) + int(length)))
-        self.assertEqual(spans[0][0], 0)
-        for previous, current in zip(spans, spans[1:]):
-            self.assertEqual(previous[1], current[0])
-        self.assertEqual(spans[-1][1], offset)
-        self.assertEqual(playlist.count("tmp2m.h264\n"), 3)
-        self.assertIn("#EXTINF:0.500000,F000-F005", lines)
 
 
 if __name__ == "__main__":

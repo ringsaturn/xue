@@ -441,7 +441,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 cls.inputs,
                 cls.root / "out",
                 model="goeseast",
-                skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
                 require_complete=True,

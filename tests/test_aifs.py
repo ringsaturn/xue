@@ -37,7 +37,7 @@ import numpy as np
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids, video_variable_ids
+from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,
@@ -123,7 +123,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(AIFS.production_grid, ECMWF.production_grid)
         self.assertEqual(AIFS.tile, ECMWF.tile)
         self.assertFalse(AIFS.video)
-        self.assertEqual(video_variable_ids(AIFS), frozenset())
         self.assertIn("aifs", _PROSE["sources"])
         self.assertEqual(_PROSE["sources"]["aifs"]["license"], "CC-BY-4.0")
 

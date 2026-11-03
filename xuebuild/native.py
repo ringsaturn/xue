@@ -7,7 +7,7 @@ with GDAL, grib-rs and zstd linked in, and is held to the Python encoder by
 byte-for-byte identical output (`docs/encoder.md`). Installing it is what
 lets a build skip the per-plane `gdal_translate` and `zstd` subprocesses.
 
-Three things the native encoder does not do, and this module supplies:
+Two things the native encoder does not do, and this module supplies:
 
 * the shared stores' group documents. The wheel writes every bundle's
   arrays and coordinates into ``bundles[.<tier>].zarr`` and one partial
@@ -19,17 +19,13 @@ Three things the native encoder does not do, and this module supplies:
   implementation — and the entries are stamped with its CRC-32
   (``docs/encoder.md``, "Shared stores").
 
-* the optional H.264 companions. The codes the native encoder wrote are read
-  straight back out of the store (or the container, where only that was
-  written) and handed to the existing ffmpeg encoder, without re-extracting
-  anything.
 * the live pointer. The pointer carries the manifest's CRC32, so it can only
-  be written once the video descriptors are in the manifest; the native
+  be written once the stores' CRCs are stamped into the manifest; the native
   encoder is asked for the manifest alone and the pointer is written here.
 
 `binconvert` stays the reference implementation. Nothing in this module
-reimplements a stage — it calls the native encoder, then the same manifest,
-pointer and video helpers the Python path calls.
+reimplements a stage — it calls the native encoder, then the same manifest
+and pointer helpers the Python path calls.
 """
 
 from __future__ import annotations
@@ -43,9 +39,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import binformat, zarrstore
-from .common import crc32_hex
-from .binconvert import published_bundle_ids, video_variable_ids
+from . import zarrstore
+from .binconvert import published_bundle_ids
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,
@@ -53,8 +48,7 @@ from .manifest import (
     write_pointer_to_manifest,
 )
 from .registry import document_json
-from .sources import SourceSpec, source_spec
-from .videoconvert import build_debug_playlist, encode_variable_video
+from .sources import source_spec
 from .zstdcli import DEFAULT_LEVEL as DEFAULT_ZSTD_LEVEL
 
 LOG = logging.getLogger("xue.native")
@@ -65,9 +59,8 @@ DISTRIBUTION = "xuepy"
 
 # A manifest bundle entry's keys in the order the reference writes them
 # (`binconvert._bundle_manifest_entry`); the manifests are compared byte for
-# byte, and the video descriptor is folded in here, after the wheel wrote
-# the rest.
-_ENTRY_ORDER = ("variable", "grid", "path", "byteLength", "crc32", "variants", "poster", "video", "zarr", "series")
+# byte.
+_ENTRY_ORDER = ("variable", "grid", "path", "byteLength", "crc32", "variants", "poster", "zarr", "series")
 
 
 def require() -> Any:
@@ -147,112 +140,10 @@ def _run_time(manifest: dict[str, Any]) -> datetime:
     return datetime.fromisoformat(str(manifest["runTime"]).replace("Z", "+00:00"))
 
 
-def _bundle_codes(bundle: dict[str, Any], module: Any) -> tuple[dict[str, Any], str, list[int], list[Any]] | None:
-    """One single-variable bundle report's codes, read back out of the
-    delivery the build wrote: its metadata, that metadata as the manifest's
-    ``metadataJson`` string, its frame offsets and one flat plane per frame.
-    The store where there is one, the container otherwise; both carry the
-    codes the native encoder quantized, so the planes are the same bytes
-    either way. ``None`` for a multi-variable bundle."""
-    if "zarr" in bundle:
-        store = Path(bundle["zarr"]["path"])
-        metadata = zarrstore.bundle_metadata(store, bundle["variable"])
-        if len(metadata["variables"]) != 1:
-            return None
-        _unit_seconds, offsets = binformat.time_axis(metadata)
-        planes = [plane.ravel() for plane in zarrstore.read_frames(store, metadata["variables"][0]["id"])]
-        return metadata, json.dumps(metadata), offsets, planes
-    reader = module.Bundle.open(Path(bundle["output"]))
-    numeric_ids = reader.variable_ids
-    if len(numeric_ids) != 1:
-        return None
-    offsets = [int(offset) for offset in reader.frame_offsets]
-    planes = [reader.decode(numeric_ids[0], offset) for offset in offsets]
-    reader.clear_cache()
-    return reader.metadata, _canonical_metadata_json(reader.metadata_json), offsets, planes
-
-
-def _video_reports(
-    source: SourceSpec,
-    bundles: list[dict[str, Any]],
-    output_dir: Path,
-    module: Any,
-) -> dict[str, dict[str, Any]]:
-    """Encode one H.264 companion per single-variable bundle.
-
-    Best-effort, exactly like the Python path: a missing ffmpeg or a failed
-    encode drops that variable's artifact and leaves the store as the
-    universal fallback. The codes come back out of the delivery that was
-    just written, so they are the same bytes it holds by construction.
-    """
-    reports: dict[str, dict[str, Any]] = {}
-    for bundle in bundles:
-        variable_id = bundle["variable"]
-        if variable_id not in video_variable_ids(source):
-            # Only the surface fields get a companion, and only on a source
-            # that has not switched the video path off. The pressure family
-            # is drawn as contour lines, which need the exact codes — an
-            # H.264 approximation would move every line — and the upper-air
-            # fills are not worth an ffmpeg pass per level for an opt-in
-            # path.
-            continue
-        codes = _bundle_codes(bundle, module)
-        if codes is None:
-            # The wind pair ships as one two-variable bundle. The video path is
-            # per scalar plane, and the particle layer never takes it.
-            continue
-        metadata, metadata_json, offsets, planes = codes
-        grid = metadata["grid"]
-        codes_by_offset = {offset: {variable_id: plane} for offset, plane in zip(offsets, planes)}
-        del codes, planes
-        try:
-            artifact = encode_variable_video(
-                codes_by_offset, offsets, variable_id, width=grid["width"], height=grid["height"]
-            )
-        except ConversionError as exc:
-            LOG.warning("skipping %s video artifact: %s", variable_id, exc)
-            continue
-        finally:
-            # A whole variable's codes are a quarter of a gigabyte on a global
-            # run. The next iteration builds its dict before rebinding this
-            # name, so without the drop two of them are alive at once.
-            del codes_by_offset
-        output_dir.mkdir(parents=True, exist_ok=True)
-        stream_path = output_dir / f"{variable_id}.h264"
-        index_path = output_dir / f"{variable_id}.h264.index.json"
-        playlist_path = output_dir / f"{variable_id}.h264.m3u8"
-        stream_path.write_bytes(artifact.stream_bytes)
-        index_path.write_text(json.dumps(artifact.index) + "\n", encoding="utf-8")
-        playlist_path.write_text(
-            build_debug_playlist(artifact.index["frames"], stream_path.name), encoding="utf-8"
-        )
-        reports[variable_id] = {
-            "variable": variable_id,
-            "streamPath": str(stream_path),
-            "indexPath": str(index_path),
-            "byteLength": len(artifact.stream_bytes),
-            "crc32": crc32_hex(artifact.stream_bytes),
-            "codec": artifact.codec_string,
-            "width": grid["width"],
-            "height": grid["height"],
-            "gop": artifact.index["gop"],
-            "frameCount": artifact.index["frameCount"],
-            # A single-variable bundle's own metadata is exactly what the
-            # Python path builds for its video: same run, same axis, same
-            # grid, same variable. Reading it back out of the delivery keeps
-            # the two descriptions of one plane from ever disagreeing, in
-            # the spelling the manifest wants (`json.dumps` at its defaults).
-            "metadataJson": metadata_json,
-            "playlistPath": str(playlist_path),
-        }
-        LOG.info("wrote %s (%.2f MB)", stream_path, len(artifact.stream_bytes) / 1e6)
-    return reports
-
-
 def _canonical_metadata_json(text: str) -> str:
     """An embedded metadata string, re-serialized the way `json.dumps` does.
 
-    The manifest's poster and video descriptors carry a variable's metadata as
+    The manifest's poster descriptors carry a variable's metadata as
     a string, and the reference writes it with `json.dumps` left at its
     defaults: spaced separators and every non-ASCII character escaped. Neither
     the bundles (compact, raw UTF-8) nor every released native encoder writes
@@ -262,9 +153,9 @@ def _canonical_metadata_json(text: str) -> str:
     return json.dumps(json.loads(text))
 
 
-def _manifest_entry(entry: dict[str, Any], video: dict[str, Any] | None, manifest_dir: Path) -> dict[str, Any]:
-    """One manifest bundle entry as the wheel wrote it, with the video
-    descriptor folded in and every key in the reference's order. The wheel
+def _manifest_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """One manifest bundle entry as the wheel wrote it, with every key in the
+    reference's order. The wheel
     already names the container (where one was written), the tiers and the
     stores."""
     entry = dict(entry)
@@ -273,19 +164,6 @@ def _manifest_entry(entry: dict[str, Any], video: dict[str, Any] | None, manifes
         entry["poster"] = {
             **poster,
             "metadataJson": _canonical_metadata_json(poster["metadataJson"]),
-        }
-    if video is not None:
-        entry["video"] = {
-            "streamPath": Path(video["streamPath"]).relative_to(manifest_dir).as_posix(),
-            "indexPath": Path(video["indexPath"]).relative_to(manifest_dir).as_posix(),
-            "byteLength": video["byteLength"],
-            "crc32": video["crc32"],
-            "codec": video["codec"],
-            "width": video["width"],
-            "height": video["height"],
-            "gop": video["gop"],
-            "frameCount": video["frameCount"],
-            "metadataJson": video["metadataJson"],
         }
     ordered = {key: entry[key] for key in _ENTRY_ORDER if key in entry}
     ordered.update({key: value for key, value in entry.items() if key not in ordered})
@@ -315,22 +193,21 @@ def _finalize_shared_stores(output_dir: Path, bundle_order: list[str]) -> dict[s
 def _wheel_manifest_path(manifest_path: Path) -> Path:
     """Where the wheel writes its manifest: beside the real one, so its
     paths resolve the same, but under a name no reader or glob takes, since
-    the real one is written from it here (with the group documents' CRCs
-    and the videos) under the caller's own ``force``."""
+    the real one is written from it here (with the group documents' CRCs)
+    under the caller's own ``force``."""
     return manifest_path.with_name(f".{manifest_path.name}.native")
 
 
 def _rewrite_manifest(
     wheel_manifest: Path,
     manifest_path: Path,
-    videos: dict[str, dict[str, Any]],
     stamps: dict[str, str],
     *,
     require_core: bool,
     force: bool,
 ) -> dict[str, Any]:
-    """The manifest from the one the native encoder wrote: the video
-    descriptors folded in and the shared stores' CRCs stamped.
+    """The manifest from the one the native encoder wrote, with the shared
+    stores' CRCs stamped.
 
     Rebuilt through `build_bin_manifest` rather than edited in place, so the
     result is validated and its keys land in the order the reference writes
@@ -345,7 +222,7 @@ def _rewrite_manifest(
     payload = build_bin_manifest(
         _run_time(existing),
         bundles=[
-            _manifest_entry(entry, videos.get(entry["variable"]), manifest_path.parent)
+            _manifest_entry(entry)
             for entry in existing["bundles"]
         ],
         expected_hours=expected_hours,
@@ -376,7 +253,6 @@ def convert_bin(
     latest_path: Path | None = None,
     run_id: str | None = None,
     force: bool = False,
-    skip_video: bool = False,
     skip_variants: bool = False,
     model: str = "gfs",
     bbox: tuple[float, float, float, float] | None = None,
@@ -425,7 +301,7 @@ def convert_bin(
         expected_hours=expected_hours,
         manifest_path=_wheel_manifest_path(Path(manifest_path)) if manifest_path is not None else None,
         # The pointer is written below, once the manifest is final: it
-        # carries the manifest's CRC32 and the video descriptors change it.
+        # carries the manifest's CRC32 and the store stamps change it.
         latest_path=None,
         run_id=None,
         force=True,
@@ -468,17 +344,11 @@ def convert_bin(
         for variant in report.get("variants", []):
             _stamp_store_crcs(variant, stamps)
 
-    videos: dict[str, dict[str, Any]] = {}
-    if not skip_video:
-        videos = _video_reports(source, report["bundles"], Path(output_dir), module)
-    report["videos"] = list(videos.values())
-
     if manifest_path is not None:
         require_core = bundle_ids is None
         payload = _rewrite_manifest(
             _wheel_manifest_path(Path(manifest_path)),
             Path(manifest_path),
-            videos,
             stamps,
             require_core=require_core,
             force=force,

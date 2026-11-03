@@ -4,7 +4,7 @@ The JMA precipitation nowcast reaches Xue through the sibling project
 `jma-radar <https://github.com/ringsaturn/jma-radar>`_, which lists the
 agency's ``targetTimes``, fetches and decodes the palette tiles, mosaics
 them onto a lat/lon grid and writes a window of analyses as one NetCDF
-series. It is driven as a subprocess the way GDAL, zstd, ffmpeg and eccodes
+series. It is driven as a subprocess the way GDAL, zstd and eccodes
 are (``jma-radar window --json``), so ``xuebuild`` keeps NumPy as its only
 runtime dependency and the tool's own (httpx, Pillow, xarray, netCDF4)
 stay in its wheel.

@@ -415,13 +415,9 @@ class SourceSpec:
     grid the bundles carry is then the regular one; ``production_grid`` and
     ``tile`` describe it, not the projected source."""
     video: bool = False
-    """Whether the source's surface fields also ship their H.264 companion
-    (the variables whose ``companions`` name ``video``). No source does: the
-    shell plays the Zarr stores, and the companion is an opt-in path
-    (``?use_h264=true``) that costs an ffmpeg pass per field — on the sflux
-    Gaussian grid a third of the run and the slowest step of its build. Read
-    on the Python side only, where ffmpeg runs; the native encoder writes no
-    video."""
+    """Always off: the H.264 companion is retired (``docs/format.md``) and
+    nothing reads this. It stays a field only because the registry document
+    (``docs/registry.md``) carries it until its next schema."""
     cat_calibration: tuple[tuple[int, float, float], ...] = ()
     """``(level_hpa, mean, standard deviation)`` of ln TI1 (s^-2) on each
     surface the source publishes a ``cat<level>`` bundle for: the

@@ -288,7 +288,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 SERIES_DIR,
                 cls.root / "out",
                 model="woof",
-                skip_video=True,
                 work_root=cls.root / "work",
                 run_id="2026101006",
                 manifest_path=cls.root / "out" / "manifest.json",
@@ -473,7 +472,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     SERIES_DIR,
                     self.root / "complete",
                     model="woof",
-                    skip_video=True,
                     require_complete=True,
                     expected_hours=2,
                 )

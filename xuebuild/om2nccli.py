@@ -7,7 +7,7 @@ is GPL-2.0-only, so the decoding lives in a separate project —
 `om2nc <https://github.com/ringsaturn/om2nc>`_, GPL-2.0-only, published as a
 statically linked binary — and this repository never imports, links or
 vendors any of it. The tool is driven as a subprocess exactly the way GDAL,
-zstd, ffmpeg, eccodes and ``jma-radar`` are: it reads the byte ranges of the
+zstd, eccodes and ``jma-radar`` are: it reads the byte ranges of the
 variables asked for, resamples the reduced Gaussian grid onto a regular
 latitude/longitude one by nearest neighbour (the cell selection the
 Open-Meteo API itself makes) and writes a CF NetCDF series, which

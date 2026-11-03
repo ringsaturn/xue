@@ -6,7 +6,7 @@ case study) without touching the bucket. The output is an ordinary schema v5
 manifest and the bundles' Zarr stores — the shared map store ``bundles.zarr``
 and, for the source's ``series_bundle_ids``, each one's series companion —
 and nothing else: no ``.xue``
-container, no video, no reduced-resolution variants, no live pointer, no
+container, no reduced-resolution variants, no live pointer, no
 STAC. :func:`xuebuild.showcase.build_case` is this plus a catalog row.
 """
 
@@ -111,8 +111,7 @@ def build_local_run(
         manifest_path=manifest_path,
         force=force,
         # A cropped run is already small: the half-resolution ladder has
-        # nothing left to save, and the H.264 companion cannot beat it.
-        skip_video=True,
+        # nothing left to save.
         skip_variants=True,
         model=model,
         bbox=bbox,

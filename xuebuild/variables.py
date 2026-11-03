@@ -281,8 +281,10 @@ class VariableSpec:
     window, so a one-cell fire survives the half tier)."""
     companions: tuple[str, ...] = ("poster",)
     """Which of ``poster`` and ``video`` the variable's scalar bundle ships
-    beside the store. ``video`` is further subject to the source's
-    ``video`` flag. Empty for the contour-drawn pressure family, whose
+    beside the store. ``video`` names the retired H.264 companion
+    (``docs/format.md``): no encoder builds it, and it stays in the table
+    only because the registry document carries it until its next schema.
+    Empty for the contour-drawn pressure family, whose
     exact codes a chroma-subsampled frame cannot carry and whose filled
     poster the view never shows."""
 

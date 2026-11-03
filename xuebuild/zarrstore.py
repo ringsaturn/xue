@@ -1305,9 +1305,9 @@ def read_plane(zarr_dir: Path, variable_id: str, frame_index: int) -> np.ndarray
 
 def read_frames(zarr_dir: Path, variable_id: str) -> list[np.ndarray]:
     """Every frame of one array as ``(height, width)`` planes of codes, in
-    axis order, each inner chunk decoded once: what a companion derived
-    from a store's codes (the H.264 video) reads, where :func:`read_plane`
-    would decode a time chunk once per frame."""
+    axis order, each inner chunk decoded once: what a reader of the whole
+    axis (a window cut into segments) takes, where :func:`read_plane` would
+    decode a time chunk once per frame."""
     geometry, delta, index_location, fill_value = _array_layout(zarr_dir, variable_id)
     if geometry.shard_count != 1:
         return [read_plane(zarr_dir, variable_id, frame) for frame in range(geometry.frame_count)]

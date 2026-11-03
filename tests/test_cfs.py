@@ -70,7 +70,6 @@ from xuebuild.binconvert import (
     bundle_input_ids,
     bundle_variable_ids,
     published_bundle_ids,
-    video_variable_ids,
 )
 from xuebuild.cli import MAX_FORECAST_HOURS, forecast_hours as cli_forecast_hours
 from xuebuild.errors import ConversionError, DownloadError
@@ -204,7 +203,6 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(CFS.tile, (96, 95))
         self.assertEqual(CFS.variant_factors, (2,))
         self.assertFalse(CFS.video)
-        self.assertEqual(video_variable_ids(CFS), frozenset())
         self.assertTrue(CFS.fetched and CFS.live)
         self.assertFalse(CFS.observation or CFS.series_file)
 

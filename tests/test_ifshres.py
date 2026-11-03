@@ -585,7 +585,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 SERIES_DIR,
                 cls.root / "out",
                 model="ifshres",
-                skip_video=True,
                 work_root=cls.root / "work",
                 run_id="2026091800",
                 manifest_path=cls.root / "out" / "manifest.json",
@@ -694,7 +693,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     SERIES_DIR,
                     self.root / "complete",
                     model="ifshres",
-                    skip_video=True,
                     require_complete=True,
                     expected_hours=3,
                 )
