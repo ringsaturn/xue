@@ -20,18 +20,26 @@ npx playwright test tests/e2e/app.spec.ts -g "scrub"
 
 ## What holds what
 
-- **Python** (`tests/test_*.py`): codebooks, modulo-256 residuals,
-  container structure and its rejection paths (truncation, out-of-range
-  offsets, overlaps, gaps, nonzero padding, cyclic dependencies, checksum
-  failures), the manifest and pointer contracts, every source's crop
-  fixture through both encoders, the Zarr export, the STAC documents and
-  the point products against committed goldens.
-- **Encoder parity**: `tests/test_native.py` compares every artifact of
-  one build through the `xuepy` wheel against the reference pipeline, byte
-  for byte. `tests/test_assemble.py` holds a split build and a top-up
+- **Python** (`tests/test_*.py`): codebooks, modulo-256 residuals, the
+  container writer's bytes and the bundle metadata validator, the manifest
+  and pointer contracts, every source's crop fixture through both encoders,
+  the Zarr store writer and reader, the STAC documents and the point
+  products against committed goldens. A source test builds what
+  production publishes, the shared stores, and reads its bundles back out
+  of them (`tests._support.stored_bundle`); a test that has to read a
+  `.xue` opens it with the wheel's decoder (`xue.Bundle`), the only
+  container reader on the Python side.
+- **Encoder parity**: `tests/test_native.py` and every source test compare
+  every artifact of one build through the `xuepy` wheel against the
+  reference pipeline, byte for byte: the shared stores, the manifest and
+  the pointer. One case, `NativeContainerParityTests`, builds with the
+  container too (`--xue`) and holds the `.xue` bytes of both encoders to
+  each other. `tests/test_assemble.py` holds a split build and a top-up
   identical to a whole one.
-- **Rust**: `rust/xue/tests/golden.rs` decodes fixtures built by
-  `tests/prepare_bin_fixture.py` byte-identically, plus mutation fuzzing.
+- **Rust**: `rust/xue/tests/golden.rs` decodes the containers
+  `tests/prepare_bin_fixture.py` writes to the codes they were written
+  from (read back out of the shared store by the NumPy reader), plus the
+  container rejection paths and mutation fuzzing.
 - **Registry fixtures** (`tests/fixtures/*-registry.json`) hold the three
   implementations to one set of ids, identities and codebooks; regenerate
   them when a source's inputs widen.

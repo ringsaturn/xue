@@ -38,10 +38,10 @@ every live run, round and case is published as stores alone (what
 - the format the golden fixtures and the size comparison above are stated
   in.
 
-`xue export-zarr --delta` swaps in the `xue.delta` codec (the container's
-temporal residual as a codec, `xuebuild/zarrcodec.py`), under which a
-chunk's compressed bytes equal the bundle's wherever the two chunkings
-coincide.
+The delta chain swaps in the `xue.delta` codec (the container's temporal
+residual as a codec, `xuebuild/zarrcodec.py` for zarr-python), under which
+a chunk's compressed bytes equal the bundle's wherever the two chunkings
+coincide; the series store always takes it.
 
 ## Four implementations
 

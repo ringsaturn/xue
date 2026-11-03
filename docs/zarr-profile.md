@@ -3,7 +3,7 @@
 This document specifies how Xue bundles are written as Zarr v3 stores: the
 same quantized codes as the `.xue` container, in a layout any Zarr client
 reads. It is normative for what the store writers (`xuebuild/zarrstore.py`,
-the native encoder's `encode/zarrstore.rs`, `build-bin`, `xue export-zarr`)
+the native encoder's `encode/zarrstore.rs`, `build-bin`)
 write and for what a store must look like to be one of these. The container itself is specified in
 [`format.md`](format.md); this profile adds nothing to it and changes
 nothing in it. A second branch, the [polar store](#polar-store), carries
@@ -16,8 +16,7 @@ tiles, each variable's predictor and each bundle's dimension names (see
 "Coordinates"), and of nothing else. A build writes it
 straight from the codes it quantized; where it writes a `.xue` as well, the
 container comes from the same codes, so the two carry identical codes by
-construction, and `xue export-zarr` derives the same store from a finished
-`.xue`. The frontend plays a store by default wherever a bundle's manifest
+construction. The frontend plays a store by default wherever a bundle's manifest
 entry names one (see "Reading"; `?backend=xue` asks for the container
 instead), and a run whose entries name only their stores is accepted; a run
 published without stores plays from its containers, and a reader that does
@@ -145,7 +144,8 @@ west-to-east order) and carries exactly one codec, `sharding_indexed`.
   the grid, is explicitly nodata rather than a plausible low code.
 - Inner codec chain. The default is the standard `[bytes, zstd]` with
   level 15 and a content checksum, which any Zarr client decodes with
-  nothing registered. `--delta` puts `{"name": "xue.delta",
+  nothing registered. The delta chain (the writers' `delta` option, which
+  the series store always takes) puts `{"name": "xue.delta",
   "configuration": {"axis": 0}}` in front of `bytes` on every variable the
   bundle predicts from the previous frame, and never on a RAW one
   (precipitation, reflectivity).
@@ -173,7 +173,8 @@ codec chain: an inner chunk under `[xue.delta, bytes, zstd]` compresses to
 the same bytes as the bundle's chunk over the same frames and the same
 unclipped tile. It is not numcodecs' `Delta`, which differences the
 flattened buffer. `xuebuild/zarrcodec.py` implements it for zarr-python
-(`register()`); it is only needed to read a store written with `--delta`.
+(`register()`); it is only needed to read a store written with the delta
+chain.
 
 ## Group document
 
@@ -803,16 +804,13 @@ reach's row group.
 ## Equivalence with the container
 
 The codes are identical by construction: a build writes the store and the
-container from the same codes, `xue export-zarr` re-encodes every chunk
-from the codes a bundle decodes to (into a one-bundle store), and `tests/test_zarr.py` holds a
-NumPy-only read-back of every frame to `decode_plane` and a store written
-from the codes to the one exported from their bundle, object for object. Compressed bytes are
+container from the same codes. `tests/test_zarr.py` holds a NumPy-only
+read-back of every frame to the codes a store was written from, and the
+container parity test (`tests/test_native.py`) builds both deliveries and
+reads the container back through the wheel's decoder. Compressed bytes are
 identical where the layouts coincide (a store chunk covering exactly one of
 the bundle's groups on a tile the grid does not clip) under the delta chain
-for a predicted variable and under either chain for a RAW one; the export
-report counts those chunks (`comparableChunks`, `identicalChunks`) rather
-than assuming it. On a 49-frame GFS run every comparable chunk was
-identical.
+for a predicted variable and under either chain for a RAW one.
 
 ---
 

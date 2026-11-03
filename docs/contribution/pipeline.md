@@ -124,7 +124,11 @@ regenerating the registry fixtures ([testing.md](testing.md)).
   `conversion` (`rules.expression`, the arithmetic alone, which the header
   index and the gdalinfo pass compare for identity).
 - **`quantize.py` / `temporal.py` / `binformat.py`**: codebooks, modulo-256
-  residual prediction, container I/O.
+  residual prediction, the container writer and the bundle metadata
+  validator (`BundleMetadata`, which the store writers and readers apply
+  too). Nothing in `xuebuild` decodes a container: a build that writes one
+  reads it back through the wheel's `xue.Bundle` and decodes every plane
+  before reporting it.
 - **`manifest.py`**: manifest and pointer, both validated on write.
 - **`observation.py`** (mirrored by `observation.rs`): NetCDF series into
   the same `SourceFrame` list the GRIB path yields, plus a `PlaneSource`.
@@ -149,7 +153,9 @@ regenerating the registry fixtures ([testing.md](testing.md)).
   `latitude_<family>` / `longitude_<family>` off the primary grid), so a
   subset build writes the objects a whole build does. Series stores stay
   one-bundle (profile 1, `write_store`); the readers open both profiles,
-  a shared one by bundle id (`bundle_metadata`).
+  a shared one by bundle id (`bundle_metadata`). Every writer takes its
+  codes from a `CodesSource`, the planes the build holds in memory; no
+  store is derived from a finished `.xue`.
 - **`assemble.py`**: `publish.yml` fans a run out: `bundle-groups` packs
   bundles into at most `max_jobs` jobs of similar cost; each job runs
   `build-bin --bundles …` (`partial=True`) into `data/raw/partial/<group>/`
