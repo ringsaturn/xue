@@ -158,6 +158,7 @@ export const fr: Record<MessageKey, string> = {
   creditsHrrr: "Données de prévision : HRRR 3 km, États-Unis contigus",
   creditsGefsAero: "Prévision d'aérosols : GEFS-Aerosols 0,25°, AOD et particules en surface",
   creditsCmaDust: "Prévision de poussière : CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15° sur l'Asie, via WMO WIS2",
+  creditsSilam: "Prévision de la qualité de l’air : FMI SILAM v6.1 global 0,2°, CC BY 4.0",
   creditsCfs: "Prévision saisonnière : CFSv2, 9 mois, toutes les 6 heures",
   creditsEcmwf: "Contient des données ECMWF modifiées, CC BY 4.0",
   creditsIfsHres: "Adapté de l'IFS d'ECMWF par ECMWF, sous licence CC BY 4.0 ; via Open-Meteo ; IFS HRES ~9 km, rééchantillonné à 0,1°",

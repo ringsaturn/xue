@@ -160,6 +160,7 @@ export const ru: Record<MessageKey, string> = {
   creditsHrrr: "Прогностические данные: HRRR 3 км, континентальные США",
   creditsGefsAero: "Прогноз аэрозолей: GEFS-Aerosols 0,25°, АОТ и приземные частицы",
   creditsCmaDust: "Прогноз пыли: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15° над Азией, через WMO WIS2",
+  creditsSilam: "Прогноз качества воздуха: FMI SILAM v6.1, глобально, 0,2°, CC BY 4.0",
   creditsCfs: "Сезонный прогноз: CFSv2, 9 месяцев, каждые 6 часов",
   creditsEcmwf: "Содержит изменённые данные ECMWF, CC BY 4.0",
   creditsIfsHres: "Адаптировано из ECMWF IFS центром ECMWF, лицензия CC BY 4.0; через Open-Meteo; IFS HRES ~9 км, пересэмплировано до 0,1°",

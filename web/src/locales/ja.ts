@@ -155,6 +155,7 @@ export const ja: Record<MessageKey, string> = {
   creditsHrrr: "予報データ：HRRR 3 km、米国本土",
   creditsGefsAero: "エーロゾル予報：GEFS-Aerosols 0.25°、光学的厚さと地上 PM",
   creditsCmaDust: "ダスト予報：CMA-CW v1.0/DUST（WMO SDS-WAS アジアセンター）0.15°、アジア域、WMO WIS2 経由",
+  creditsSilam: "大気質予報：FMI SILAM v6.1 全球 0.2°、CC BY 4.0",
   creditsCfs: "季節予報：CFSv2、9 か月、6 時間間隔",
   creditsEcmwf: "改変した ECMWF データを含む（CC BY 4.0）",
   creditsIfsHres: "ECMWF IFS を ECMWF が提供、CC BY 4.0 に基づき改変（Open-Meteo 経由）、IFS HRES 約 9 km を 0.1° に再サンプリング",

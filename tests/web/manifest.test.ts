@@ -853,7 +853,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust"] as const)
+    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "silam"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
 
@@ -872,7 +872,7 @@ describe("dataset kinds", () => {
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -917,6 +917,18 @@ describe("dataset kinds", () => {
     });
     expect(FORECAST_MODELS.cmadust.region).toEqual([25.0, 15.0, 150.1, 60.0]);
     expect(FORECAST_MODELS.cmadust.domain).toBeUndefined();
+    // FMI's SILAM air-quality run (xuebuild/sources.py): global, so no
+    // region and no domain; PM2.5 the core, the opening field and the rail.
+    expect(FORECAST_MODELS.silam).toMatchObject({
+      label: "SILAM",
+      product: "silam-glob02",
+      latestFilename: "latest-silam.json",
+      coreBundles: ["pm25"],
+      defaultVariable: "pm25",
+      railCore: ["pm25"],
+    });
+    expect(FORECAST_MODELS.silam.region).toBeUndefined();
+    expect(FORECAST_MODELS.silam.domain).toBeUndefined();
   });
 
   it("opens the Meteosat disk on the infrared channel, 60° either side of 0°", () => {
@@ -1279,6 +1291,26 @@ describe("dataset kinds", () => {
     expect(modelDefaultVariable("cmadust", "prate")).toBe("dustsfc");
     expect(isObservationModel("cmadust")).toBe(false);
     expect(isCaseOnlyModel("cmadust")).toBe(false);
+  });
+
+  it("admits a SILAM run on its surface PM2.5 and refuses one without it", () => {
+    // Mirrors the `silam` entry of SOURCES: five days from F001, hourly to
+    // F072 then three-hourly, PM2.5 and PM10.
+    const store = (id: string) => ({ zarr: { path: `${id}.zarr`, byteLength: 1, crc32: "00000000" } });
+    const run = {
+      schemaVersion: 5,
+      model: "SILAM",
+      product: "silam-glob02",
+      runTime: "2026-11-03T00:00:00Z",
+      forecastHours: 120,
+      bundles: ["pm25", "pm10"].map((id) => ({ variable: id, ...store(id) })),
+    };
+    expect(validateManifest(run, "silam").bundles.map((bundle) => bundle.variable)).toEqual(["pm25", "pm10"]);
+    expect(() => validateManifest(run, "gefsaero")).toThrow();
+    expect(() => validateManifest({ ...run, bundles: run.bundles.slice(1) }, "silam")).toThrow(/pm25/);
+    expect(modelDefaultVariable("silam", "prate")).toBe("pm25");
+    expect(isObservationModel("silam")).toBe(false);
+    expect(isCaseOnlyModel("silam")).toBe(false);
   });
 
   it("admits an mrms3d manifest with its 33-level reflectivity volume as the core", () => {

@@ -161,6 +161,7 @@ export const tr: Record<MessageKey, string> = {
   creditsHrrr: "Tahmin verisi: HRRR 3 km, ABD anakarası",
   creditsGefsAero: "Aerosol tahmini: GEFS-Aerosols 0,25°, AOD ve yüzey partikülleri",
   creditsCmaDust: "Toz tahmini: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15°, Asya, WMO WIS2 üzerinden",
+  creditsSilam: "Hava kalitesi tahmini: FMI SILAM v6.1 küresel 0,2°, CC BY 4.0",
   creditsCfs: "Mevsimlik tahmin: CFSv2, 9 ay, 6 saatte bir",
   creditsEcmwf: "Değiştirilmiş ECMWF verisi içerir, CC BY 4.0",
   creditsIfsHres: "ECMWF IFS'ten ECMWF tarafından uyarlandı, CC BY 4.0 ile lisanslı; Open-Meteo üzerinden; IFS HRES ~9 km, 0,1°'ye yeniden örneklendi",

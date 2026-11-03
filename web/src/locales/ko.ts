@@ -160,6 +160,7 @@ export const ko: Record<MessageKey, string> = {
   creditsHrrr: "예보 자료: HRRR 3 km, 미국 본토",
   creditsGefsAero: "에어로졸 예보: GEFS-Aerosols 0.25°, 광학 두께와 지상 미세먼지",
   creditsCmaDust: "황사 예보: CMA-CW v1.0/DUST(WMO SDS-WAS 아시아 센터) 0.15°, 아시아, WMO WIS2 경유",
+  creditsSilam: "대기질 예보: FMI SILAM v6.1 전 지구 0.2°, CC BY 4.0",
   creditsCfs: "계절 예보: CFSv2, 9개월, 6시간 간격",
   creditsEcmwf: "수정된 ECMWF 자료 포함, CC BY 4.0",
   creditsIfsHres: "ECMWF IFS를 각색, 제공 ECMWF, CC BY 4.0 라이선스; Open-Meteo 경유; IFS HRES 약 9 km, 0.1°로 재샘플링",
