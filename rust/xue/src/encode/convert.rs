@@ -1286,8 +1286,8 @@ pub fn convert_bin(
     }
     // Scalars that also ship a poster — every published scalar whose entry
     // lists one; the contour-drawn pressure family lists none, since a
-    // filled first-frame poster would misrepresent it (the native encoder
-    // writes no video at all; xuebuild's `native.py` adds those afterwards).
+    // filled first-frame poster would misrepresent it. A `video` companion
+    // names the retired H.264 artifact, which no encoder builds.
     let companion_variable_ids: Vec<&str> = scalar_variable_ids
         .iter()
         .copied()

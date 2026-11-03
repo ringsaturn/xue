@@ -1,7 +1,7 @@
 //! An experimental native encoder for the Xue v1 bundle format.
 //!
 //! The production encoder is Python (`xue/` at the repository root),
-//! orchestrating GDAL, zstd and ffmpeg as CLI subprocesses. This module is the
+//! orchestrating GDAL and zstd as CLI subprocesses. This module is the
 //! same pipeline in Rust with the external tools linked in process instead:
 //!
 //! * **GDAL** through `gdal-sys` (georust) replaces `gdalinfo -json` and

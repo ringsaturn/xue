@@ -2,7 +2,7 @@
 //!
 //! The run's `manifest.json` (schema v5) and every artifact it names are
 //! immutable; the mutable live pointer above them is written by
-//! `xuebuild/native.py`, after the video descriptors complete the manifest.
+//! `xuebuild/native.py`, after the shared stores' CRCs complete the manifest.
 //!
 //! Validation stays with the Python implementation, which is the contract's
 //! reference; what this module guarantees is that the bytes it writes are the
