@@ -1904,11 +1904,8 @@ def _write_variable_bundle(
     )
     LOG.info("wrote %s (%.2f MB)", output, output.stat().st_size / 1e6)
 
-    # Read the complete file back and reconstruct every chunk before
-    # publishing stats.
-    bundle = binformat.read_bundle(output)
-    bundle.verify_all(executor=compressor)
-    LOG.info("verified %d %s chunks by full read-back decode", len(bundle.chunks), variable_id)
+    _verify_container(output)
+    LOG.info("verified %s by full read-back decode", output)
 
     bundle_bytes = output.read_bytes()
     return {
@@ -1917,6 +1914,19 @@ def _write_variable_bundle(
         "byteLength": len(bundle_bytes),
         "crc32": crc32_hex(bundle_bytes),
     }
+
+
+def _verify_container(path: Path) -> None:
+    """Read a written container back through the wheel's decoder and decode
+    every plane, each checked against the CRC-32 the writer recorded, before
+    its stats are published."""
+    import xue  # noqa: PLC0415  (the wheel is only needed when a container is written)
+
+    bundle = xue.Bundle.open(path)
+    for numeric_id in bundle.variable_ids:
+        for offset in bundle.frame_offsets:
+            bundle.decode(numeric_id, offset)
+        bundle.clear_cache()
 
 
 def _bundle_manifest_entry(
@@ -2009,7 +2019,7 @@ def _delivered_byte_length(report: dict[str, Any]) -> int:
 def _zarr_descriptor(report: dict[str, Any], manifest_dir: Path) -> dict[str, Any]:
     """The manifest's ``zarr`` descriptor from a bundle report's ``zarr``
     block (the store's absolute path, its size and the CRC-32 of its root
-    document, as `zarrstore.export_bundle` reports them)."""
+    document, as `zarrstore.write_bundle_arrays` reports them)."""
     return {
         "path": Path(report["path"]).relative_to(manifest_dir).as_posix(),
         "byteLength": report["byteLength"],
@@ -2860,30 +2870,4 @@ def convert_bin(
                 product=source.product,
             )
             LOG.info("wrote live pointer %s -> run %s", latest_path, run_id)
-    return report
-
-
-def verify_bin(path: Path) -> dict[str, Any]:
-    """Structurally validate a bundle and decode every payload."""
-    bundle = binformat.read_bundle(path)
-    bundle.verify_all()
-    report = {
-        "path": str(path),
-        "byteLength": len(bundle.data),
-        "containerVersion": bundle.container_version,
-        "variables": sorted(bundle.variable_ids.values()),
-        "frameCount": bundle.frame_count,
-        "grid": f"{bundle.width}x{bundle.height}",
-        "runTime": bundle.metadata.get("runTime"),
-        "profile": bundle.metadata.get("profile"),
-    }
-    # A payload is a whole plane in v1 and a chunk — one tile of one temporal
-    # group — in v2, so the count that describes a file depends on which.
-    if bundle.container_version == binformat.VERSION_V2:
-        report["chunks"] = len(bundle.chunks)
-        report["groups"] = len(bundle.groups)
-        report["tiles"] = f"{bundle.tiles.tile_width}x{bundle.tiles.tile_height}"
-        report["tileCount"] = bundle.tiles.count
-    else:
-        report["planes"] = len(bundle.entries)
     return report

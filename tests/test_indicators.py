@@ -27,9 +27,8 @@ from tests.prepare_indicators_golden import (
     region_weights,
     serve,
 )
-from tests.prepare_web_fixture import write_v2_bundle
-from xuebuild import binformat, zarrstore
-from xuebuild.binconvert import build_metadata
+from xuebuild import zarrstore
+from xuebuild.binconvert import _store_source, build_metadata
 from xuebuild.indicators import calendar, season, store
 from xuebuild.indicators import weights as weights_module
 from xuebuild.indicators.features import (
@@ -476,34 +475,30 @@ class CodebookTests(unittest.TestCase):
 
 
 class StoreReaderTests(unittest.TestCase):
-    """The reader against the container's decoder: bundles written the way
-    the fixture's are, exported both as the profile's default store and as a
-    delta-chain store with its index at the start, served over HTTP."""
+    """The reader against the codes the stores were written from: bundles
+    cut the way the fixture's are, written as the profile's default store
+    and as a delta-chain store with its index at the start, served over
+    HTTP."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.scratch = Path(tempfile.mkdtemp(prefix="xue-indicators-store-"))
-        cls.bundles = {}
+        cls.codes = {}
+        sources = {}
         for variable_id, builder in PLANES.items():
-            path = cls.scratch / f"{variable_id}.xue"
             codebook = PROFILES[PROFILE][variable_id]
-            write_v2_bundle(
-                path,
-                build_metadata(RUN_TIME, HOURS, GRID, PROFILE, (variable_id,)),
-                GRID,
-                (variable_id,),
-                HOURS,
-                {hour: {variable_id: codebook.quantize(builder(hour).ravel())} for hour in HOURS},
-                level=3,
-                tile=(8, 8),
-            )
-            cls.bundles[variable_id] = binformat.read_bundle(path)
-            zarrstore.export_bundle(path, cls.scratch / f"{variable_id}.zarr")
-            zarrstore.export_bundle(path, cls.scratch / f"{variable_id}.delta.zarr", delta=True, index_location="start")
+            codes = {hour: {variable_id: codebook.quantize(builder(hour).ravel())} for hour in HOURS}
+            cls.codes[variable_id] = codes
+            metadata = build_metadata(RUN_TIME, HOURS, GRID, PROFILE, (variable_id,))
+            source = _store_source((variable_id,), HOURS, codes, metadata, (8, 8))
+            sources[variable_id] = source
+            zarrstore.write_store(source, cls.scratch / f"{variable_id}.zarr")
+            zarrstore.write_store(source, cls.scratch / f"{variable_id}.delta.zarr", delta=True, index_location="start")
         # The run's shared store (profile 2): every bundle in one, opened by
         # (store, bundle id).
-        zarrstore.export_shared_bundles(
-            [(variable_id, cls.scratch / f"{variable_id}.xue") for variable_id in PLANES], cls.scratch / "bundles.zarr"
+        zarrstore.write_shared_store(
+            cls.scratch / "bundles.zarr",
+            [zarrstore.SharedMember(variable_id, source) for variable_id, source in sources.items()],
         )
 
     @classmethod
@@ -522,12 +517,9 @@ class StoreReaderTests(unittest.TestCase):
         return store.open_array(run, variable_id)
 
     def expected_codes(self, variable_id: str, rows: slice, cols: slice) -> np.ndarray:
-        bundle = self.bundles[variable_id]
+        codes = self.codes[variable_id]
         return np.stack(
-            [
-                bundle.decode_plane(1, hour).reshape(GRID.height, GRID.width)[rows, cols]
-                for hour in bundle.frame_offsets
-            ]
+            [codes[hour][variable_id].reshape(GRID.height, GRID.width)[rows, cols] for hour in HOURS]
         )
 
     def test_windows_read_back_the_bundles_codes(self) -> None:

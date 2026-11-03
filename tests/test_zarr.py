@@ -1,14 +1,11 @@
-"""The Zarr v3 store derived from a bundle.
+"""The Zarr v3 store written from a bundle's codes.
 
-Held to the bundle the way the native encoder is held to the reference: the
-store is another packaging of the same codes, so what is pinned is that a
-NumPy-only read-back of every frame equals ``decode_plane``, in both codec
-chains and with the shard index at either end; that the counts of chunks
-whose compressed bytes equal the bundle's are exactly the ones the layout
-predicts (every chunk covering one of the bundle's groups on an unclipped
-tile, before the axis changes step); and — when zarr-python and xarray are
-installed — that a generic Zarr client reads the same codes and dequantizes
-the linear codebook to physical values on its own.
+What is pinned is that a NumPy-only read-back of every frame equals the
+codes the store was written from, in both codec chains and with the shard
+index at either end, on an axis that changes step and a grid no tile
+divides; and — when zarr-python and xarray are installed — that a generic
+Zarr client reads the same codes and dequantizes the linear codebook to
+physical values on its own.
 """
 
 from __future__ import annotations
@@ -17,14 +14,13 @@ import json
 import shutil
 import unittest
 import warnings
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
 from tests._support import ClassTempRoot, requires_native
-from xuebuild import binconvert, binformat, temporal, zarrcodec, zarrstore, zstdcli
+from xuebuild import binconvert, binformat, zarrcodec, zarrstore, zstdcli
 from xuebuild.binconvert import GridInfo, build_metadata
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import validate_bin_manifest
@@ -34,15 +30,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
 
 # The same miniature GFS-shaped axis the golden fixture uses: thirteen hourly
-# frames, then eight three-hourly ones. The bundle cuts its groups at the
-# change of step ([0-5], [6-11], [12], [15-30], [33, 36]); the store's
-# regular six-frame grid does not ([0-5], [6-11], [12-17], [18-20]), so the
-# third store chunk straddles two of the bundle's groups and the last is
-# padded. Only the first two store chunks coincide with a bundle group.
+# frames, then eight three-hourly ones. The store's regular six-frame grid
+# ([0-5], [6-11], [12-17], [18-20]) pads its last time chunk.
 MIXED_HOURS = list(range(13)) + list(range(15, 37, 3))
 # A grid no tile divides: 17 x 9 cells in 5 x 4 tiles leaves a two-column
-# last tile column and a one-row last tile row, so six of the twelve tiles
-# are unclipped.
+# last tile column and a one-row last tile row.
 GRID = GridInfo(
     width=17,
     height=9,
@@ -52,9 +44,8 @@ GRID = GridInfo(
     latitude_step=-20.0,
 )
 TILE = (5, 4)
-UNCLIPPED_TILES = 6
-COINCIDING_CHUNKS = 2
-PREDICTORS = {1: binformat.PREDICTOR_PREVIOUS, 2: binformat.PREDICTOR_RAW}
+PAIR = ("tmp2m", "prate")
+PREDICTORS = {1: "previous", 2: "raw"}
 
 
 def plane(hour: int, variable_id: int) -> np.ndarray:
@@ -66,61 +57,18 @@ def plane(hour: int, variable_id: int) -> np.ndarray:
     return codes
 
 
-def write_v2(path: Path, variable_ids: tuple[str, ...]) -> binformat.Bundle:
-    numeric_ids = tuple(range(1, len(variable_ids) + 1))
-    planes = {hour: {numeric_id: plane(hour, numeric_id) for numeric_id in numeric_ids} for hour in MIXED_HOURS}
-    metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", variable_ids)
-    tiles = binformat.TileGeometry(GRID.width, GRID.height, *TILE)
-    predictors = {numeric_id: PREDICTORS[numeric_id] for numeric_id in numeric_ids}
-    variables, groups, raw_chunks = temporal.build_chunks(MIXED_HOURS, planes, tiles, predictors)
-    chunks = []
-    for entry, stored in raw_chunks:
-        payload = zstdcli.compress(stored.tobytes())
-        chunks.append(binformat.ChunkPayload(replace(entry, compressed_length=len(payload)), payload))
-    binformat.write_bundle_v2(
-        path,
-        metadata,
-        tile_width=TILE[0],
-        tile_height=TILE[1],
-        variables=variables,
-        groups=groups,
-        chunks=chunks,
-    )
-    return binformat.read_bundle(path)
+def codes_source(names: tuple[str, ...]) -> zarrstore.CodesSource:
+    """A bundle's codes as a build holds them: ``plane(hour, n)`` for the
+    n-th variable, a PREVIOUS and then a RAW one (the wind layout)."""
+    metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", names)
+    planes = {name: [plane(hour, index) for hour in MIXED_HOURS] for index, name in enumerate(names, start=1)}
+    predictors = {name: PREDICTORS[index] for index, name in enumerate(names, start=1)}
+    return zarrstore.CodesSource(metadata, planes, predictors, TILE)
 
 
-def write_v1(path: Path) -> binformat.Bundle:
-    """A plane-major bundle of RAW planes: the legacy container the exporter
-    must still read, which carries no tiling of its own."""
-    metadata = build_metadata(datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", ("prate",))
-    payloads = []
-    for hour in MIXED_HOURS:
-        codes = plane(hour, 2)
-        payload = zstdcli.compress(codes.tobytes())
-        entry = binformat.PlaneEntry(
-            variable_id=1,
-            predictor=binformat.PREDICTOR_RAW,
-            compression=binformat.COMPRESSION_ZSTD,
-            flags=binformat.FLAG_ZSTD_CHECKSUM,
-            frame_offset=hour,
-            dependency_offset=binformat.NO_DEPENDENCY,
-            group_id=0,
-            compressed_length=len(payload),
-            data_offset=0,
-            decoded_length=len(codes),
-            crc32=binformat.crc32_plane(codes),
-            minimum_code=int(codes.min()),
-            maximum_code=int(codes.max()),
-        )
-        payloads.append(binformat.PlanePayload(entry, payload))
-    binformat.write_bundle(path, metadata, payloads)
-    return binformat.read_bundle(path)
-
-
-def expected_codes(bundle: binformat.Bundle, numeric_id: int) -> np.ndarray:
-    return np.stack(
-        [bundle.decode_plane(numeric_id, offset).reshape(bundle.height, bundle.width) for offset in bundle.frame_offsets]
-    )
+def expected_codes(numeric_id: int) -> np.ndarray:
+    """The n-th variable's codes over the whole axis, ``(frames, rows, columns)``."""
+    return np.stack([plane(hour, numeric_id).reshape(GRID.height, GRID.width) for hour in MIXED_HOURS])
 
 
 def read_back(store: Path, name: str, frame_count: int) -> np.ndarray:
@@ -133,43 +81,39 @@ class Crc32cTests(unittest.TestCase):
         self.assertEqual(zarrstore.crc32c(b""), 0)
 
 
-class ExportTests(ClassTempRoot, unittest.TestCase):
+class StoreTests(ClassTempRoot, unittest.TestCase):
     """One two-variable bundle (a PREVIOUS and a RAW variable, the wind
-    layout) exported four ways, plus a single-variable one."""
+    layout) written four ways, plus a single-variable one."""
 
     root_prefix = "xue-zarr-"
 
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
-        cls.single = write_v2(cls.root / "single.xue", ("tmp2m",))
+        cls.source = codes_source(PAIR)
         cls.stores: dict[tuple[bool, str], zarrstore.ExportReport] = {}
         for delta in (False, True):
             for location in zarrstore.INDEX_LOCATIONS:
-                cls.stores[delta, location] = zarrstore.export_bundle(
-                    cls.root / "pair.xue",
+                cls.stores[delta, location] = zarrstore.write_store(
+                    cls.source,
                     cls.root / f"pair-{int(delta)}-{location}.zarr",
                     delta=delta,
                     index_location=location,
                 )
-        cls.single_store = zarrstore.export_bundle(cls.root / "single.xue", cls.root / "single.zarr")
+        cls.single_store = zarrstore.write_store(codes_source(("tmp2m",)), cls.root / "single.zarr")
 
     def test_default_index_location_is_the_suffix_range_one(self) -> None:
         self.assertEqual(zarrstore.DEFAULT_INDEX_LOCATION, "end")
         self.assertEqual(self.single_store.index_location, "end")
 
-    def test_read_back_equals_decode_plane(self) -> None:
+    def test_read_back_equals_the_codes(self) -> None:
         for (delta, location), report in self.stores.items():
-            for numeric_id, name in self.bundle.variable_ids.items():
+            for numeric_id, name in enumerate(PAIR, start=1):
                 with self.subTest(delta=delta, index_location=location, variable=name):
                     np.testing.assert_array_equal(
-                        read_back(report.path, name, self.bundle.frame_count),
-                        expected_codes(self.bundle, numeric_id),
+                        read_back(report.path, name, len(MIXED_HOURS)), expected_codes(numeric_id)
                     )
-        np.testing.assert_array_equal(
-            read_back(self.single_store.path, "tmp2m", self.single.frame_count), expected_codes(self.single, 1)
-        )
+        np.testing.assert_array_equal(read_back(self.single_store.path, "tmp2m", len(MIXED_HOURS)), expected_codes(1))
 
     def test_chunks_come_back_trimmed(self) -> None:
         store = self.stores[True, "end"].path
@@ -185,28 +129,17 @@ class ExportTests(ClassTempRoot, unittest.TestCase):
         last_tile = geometry.tile_count - 1
         self.assertEqual(zarrstore.read_array_chunk(store, "tmp2m", 0, last_tile).shape, (6, 1, 2))
         self.assertEqual(zarrstore.read_array_chunk(store, "tmp2m", 3, 0).shape, (3, 4, 5))
-        expected = expected_codes(self.bundle, 1)
+        expected = expected_codes(1)
         np.testing.assert_array_equal(zarrstore.read_array_chunk(store, "tmp2m", 3, 0), expected[18:21, 0:4, 0:5])
         with self.assertRaises(BundleError):
             zarrstore.read_array_chunk(store, "tmp2m", 4, 0)
         with self.assertRaises(BundleError):
-            zarrstore.read_plane(store, "tmp2m", self.bundle.frame_count)
+            zarrstore.read_plane(store, "tmp2m", len(MIXED_HOURS))
 
-    def test_byte_identity_is_measured_where_the_layouts_coincide(self) -> None:
-        """A store chunk is comparable to a bundle chunk when it covers the
-        same six frames on an unclipped tile: the two chunks before the
-        change of step, on the six whole tiles, for each of two variables.
-        Under the delta chain every one of them is byte-identical; under the
-        standard chain only the RAW variable's are, since the PREVIOUS
-        variable's bundle chunks hold residuals."""
-        comparable = COINCIDING_CHUNKS * UNCLIPPED_TILES * len(self.bundle.variable_ids)
+    def test_every_inner_chunk_of_the_axis_is_written(self) -> None:
         for (delta, location), report in self.stores.items():
             with self.subTest(delta=delta, index_location=location):
                 self.assertEqual(report.chunk_count, 2 * 4 * 12)
-                self.assertEqual(report.comparable_chunks, comparable)
-                self.assertEqual(report.identical_chunks, comparable if delta else comparable // 2)
-        self.assertEqual(self.single_store.comparable_chunks, COINCIDING_CHUNKS * UNCLIPPED_TILES)
-        self.assertEqual(self.single_store.identical_chunks, 0)
 
     def test_store_layout(self) -> None:
         for (delta, location), report in self.stores.items():
@@ -214,7 +147,7 @@ class ExportTests(ClassTempRoot, unittest.TestCase):
                 store = report.path
                 root = zarrstore.read_json(store / "zarr.json")
                 self.assertEqual(root["node_type"], "group")
-                self.assertEqual(root["attributes"]["xue"], self.bundle.metadata)
+                self.assertEqual(root["attributes"]["xue"], self.source.metadata)
                 self.assertEqual(root["attributes"]["xue_profile"], 1)
                 self.assertEqual(report.crc32, f"{binformat.crc32_plane((store / 'zarr.json').read_bytes()):08x}")
                 self.assertEqual(report.byte_length, zarrstore.store_byte_length(store))
@@ -229,7 +162,7 @@ class ExportTests(ClassTempRoot, unittest.TestCase):
                     self.assertEqual(consolidated["metadata"][name], zarrstore.read_json(store / name / "zarr.json"))
                 for name, predictor in (("tmp2m", "previous"), ("prate", "raw")):
                     array = zarrstore.read_json(store / name / "zarr.json")
-                    variable = next(v for v in self.bundle.metadata["variables"] if v["id"] == name)
+                    variable = next(v for v in self.source.metadata["variables"] if v["id"] == name)
                     self.assertEqual(array["shape"], [21, 9, 17])
                     self.assertEqual(array["data_type"], "uint8")
                     self.assertEqual(array["chunk_grid"]["configuration"]["chunk_shape"], [24, 12, 20])
@@ -312,10 +245,8 @@ class ExportTests(ClassTempRoot, unittest.TestCase):
             (store / name / "zarr.json").write_bytes(zarrstore._dump_json(metadata))
             geometry = zarrstore.ArrayGeometry.from_metadata(metadata)
             self.assertEqual((geometry.shard_frames, geometry.shard_count, geometry.chunks_per_shard), (6, 4, 12))
-        for numeric_id, name in self.bundle.variable_ids.items():
-            np.testing.assert_array_equal(
-                read_back(store, name, self.bundle.frame_count), expected_codes(self.bundle, numeric_id)
-            )
+        for numeric_id, name in enumerate(PAIR, start=1):
+            np.testing.assert_array_equal(read_back(store, name, len(MIXED_HOURS)), expected_codes(numeric_id))
         broken = zarrstore.read_json(store / "prate" / "zarr.json")
         broken["chunk_grid"]["configuration"]["chunk_shape"] = [9, 12, 20]
         with self.assertRaises(BundleError):
@@ -332,30 +263,21 @@ class ExportTests(ClassTempRoot, unittest.TestCase):
         with self.assertRaises(BundleError):
             zarrstore.read_array_chunk(store, "prate", 0, 0)
 
-    def test_a_v1_bundle_exports_with_an_explicit_tile(self) -> None:
-        bundle = write_v1(self.root / "legacy.xue")
-        self.assertEqual(bundle.container_version, binformat.VERSION)
-        report = zarrstore.export_bundle(self.root / "legacy.xue", self.root / "legacy.zarr", tile=TILE)
-        np.testing.assert_array_equal(read_back(report.path, "prate", bundle.frame_count), expected_codes(bundle, 1))
-        self.assertEqual((report.comparable_chunks, report.identical_chunks), (0, 0))
-        self.assertEqual(zarrstore.read_json(report.path / "prate" / "zarr.json")["attributes"]["xue"]["predictor"], "raw")
-
     def test_the_manifest_descriptor(self) -> None:
         report = self.single_store
         descriptor = report.descriptor(self.root)
         self.assertEqual(descriptor, {"path": "single.zarr", "byteLength": report.byte_length, "crc32": report.crc32})
-        self.assertEqual(zarrstore.store_path_for(Path("x/tmp2m.half.xue")), Path("x/tmp2m.half.zarr"))
 
-    def test_an_export_replaces_a_stale_store(self) -> None:
+    def test_a_write_replaces_a_stale_store(self) -> None:
         store = self.root / "stale.zarr"
         store.mkdir()
         (store / "leftover").write_text("x")
-        zarrstore.export_bundle(self.root / "single.xue", store)
+        zarrstore.write_store(codes_source(("tmp2m",)), store)
         self.assertFalse((store / "leftover").exists())
         self.assertTrue((store / "tmp2m" / "zarr.json").is_file())
 
 
-class SeriesExportTests(ClassTempRoot, unittest.TestCase):
+class SeriesStoreTests(ClassTempRoot, unittest.TestCase):
     """The series store: the same codes cut one inner chunk per 8 x 8 block
     over the whole axis, so a cell's series is one chunk where the map store
     costs one per time chunk."""
@@ -365,27 +287,24 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
-        cls.delta = zarrstore.export_series(cls.root / "pair.xue", cls.root / "pair.series.zarr")
-        cls.plain = zarrstore.export_series(
-            cls.root / "pair.xue", cls.root / "plain.series.zarr", delta=False
-        )
+        cls.source = codes_source(PAIR)
+        cls.delta = zarrstore.write_store(cls.source, cls.root / "pair.series.zarr", delta=True, series=True)
+        cls.plain = zarrstore.write_store(cls.source, cls.root / "plain.series.zarr", series=True)
 
-    def test_read_back_equals_decode_plane(self) -> None:
+    def test_read_back_equals_the_codes(self) -> None:
         for report in (self.delta, self.plain):
-            for numeric_id, name in self.bundle.variable_ids.items():
+            for numeric_id, name in enumerate(PAIR, start=1):
                 with self.subTest(store=report.path.name, variable=name):
                     np.testing.assert_array_equal(
-                        read_back(report.path, name, self.bundle.frame_count),
-                        expected_codes(self.bundle, numeric_id),
+                        read_back(report.path, name, len(MIXED_HOURS)), expected_codes(numeric_id)
                     )
 
     def test_one_chunk_per_block_over_the_whole_axis(self) -> None:
         geometry = zarrstore.ArrayGeometry.from_metadata(
             zarrstore.read_json(self.delta.path / "tmp2m" / "zarr.json")
         )
-        self.assertEqual(geometry.inner_shape, (self.bundle.frame_count, 8, 8))
-        self.assertEqual((geometry.time_chunks, geometry.shard_frames), (1, self.bundle.frame_count))
+        self.assertEqual(geometry.inner_shape, (len(MIXED_HOURS), 8, 8))
+        self.assertEqual((geometry.time_chunks, geometry.shard_frames), (1, len(MIXED_HOURS)))
         # 17 x 9 cells in 8 x 8 blocks: three columns, two rows, each last clipped.
         self.assertEqual((geometry.tile_columns, geometry.tile_rows, geometry.tile_count), (3, 2, 6))
         self.assertEqual(geometry.shard_index_bytes, 16 * 6 + 4)
@@ -393,8 +312,8 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
         tile = (4 // 8) * geometry.tile_columns + 4 // 8
         row, column = geometry.tile_origin(tile)
         block = zarrstore.read_array_chunk(self.delta.path, "tmp2m", 0, tile)
-        self.assertEqual(block.shape, (self.bundle.frame_count, 8, 8))
-        np.testing.assert_array_equal(block[:, 4 - row, 4 - column], self.bundle.decode_series(1, 4, 4))
+        self.assertEqual(block.shape, (len(MIXED_HOURS), 8, 8))
+        np.testing.assert_array_equal(block[:, 4 - row, 4 - column], expected_codes(1)[:, 4, 4])
 
     def test_the_chains_are_the_bundles_predictors(self) -> None:
         for report, delta in ((self.delta, True), (self.plain, False)):
@@ -411,11 +330,8 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
                 )
         # The group carries the bundle's metadata verbatim, as the map store's does.
         self.assertEqual(
-            zarrstore.read_json(self.delta.path / "zarr.json")["attributes"]["xue"], self.bundle.metadata
+            zarrstore.read_json(self.delta.path / "zarr.json")["attributes"]["xue"], self.source.metadata
         )
-
-    def test_the_series_store_path(self) -> None:
-        self.assertEqual(zarrstore.series_store_path_for(Path("x/tmp2m.xue")), Path("x/tmp2m.series.zarr"))
 
     def test_the_rollout_switch_is_per_source(self) -> None:
         """The companion ships only where a source opts in, so it can be
@@ -437,70 +353,9 @@ class SeriesExportTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual(source_spec(model).series_bundle_ids, ())
 
 
-class CodesSourceTests(ClassTempRoot, unittest.TestCase):
-    """A store written straight from the codes a build holds equals the one
-    exported from a bundle of the same codes, object for object: map and
-    series stores, both codec chains, the index at either end, an axis that
-    changes step and a grid no tile divides."""
-
-    root_prefix = "xue-zarr-codes-"
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.bundles = {
-            "pair": write_v2(cls.root / "pair.xue", ("tmp2m", "prate")),
-            "single": write_v2(cls.root / "single.xue", ("tmp2m",)),
-        }
-
-    def codes_source(self, bundle: binformat.Bundle) -> zarrstore.CodesSource:
-        names = [variable["id"] for variable in bundle.metadata["variables"]]
-        planes = {
-            name: [plane(hour, index) for hour in MIXED_HOURS] for index, name in enumerate(names, start=1)
-        }
-        predictors = {
-            name: "previous" if PREDICTORS[index] == binformat.PREDICTOR_PREVIOUS else "raw"
-            for index, name in enumerate(names, start=1)
-        }
-        metadata = build_metadata(
-            datetime(2026, 8, 14, 6, tzinfo=UTC), MIXED_HOURS, GRID, "quality", tuple(names)
-        )
-        return zarrstore.CodesSource(metadata, planes, predictors, TILE)
-
-    def test_a_store_from_the_codes_equals_the_exported_one(self) -> None:
-        from tests._support import assert_trees_identical
-
-        for name, bundle in self.bundles.items():
-            source = self.codes_source(bundle)
-            for series in (False, True):
-                for delta in (False, True):
-                    for location in zarrstore.INDEX_LOCATIONS:
-                        stem = f"{name}-{int(series)}-{int(delta)}-{location}"
-                        with self.subTest(store=stem):
-                            exported = zarrstore.export_bundle(
-                                self.root / f"{name}.xue",
-                                self.root / "exported" / f"{stem}.zarr",
-                                delta=delta,
-                                index_location=location,
-                                series=series,
-                            )
-                            written = zarrstore.write_store(
-                                source,
-                                self.root / "written" / f"{stem}.zarr",
-                                delta=delta,
-                                index_location=location,
-                                series=series,
-                            )
-                            assert_trees_identical(self, exported.path, written.path)
-                            self.assertEqual(
-                                (exported.byte_length, exported.crc32, exported.chunk_count),
-                                (written.byte_length, written.crc32, written.chunk_count),
-                            )
-                            self.assertEqual((written.comparable_chunks, written.identical_chunks), (0, 0))
-
+class CodesSourceTests(unittest.TestCase):
     def test_codes_that_do_not_match_the_metadata_are_refused(self) -> None:
-        source = self.codes_source(self.bundles["single"])
-        metadata = source.metadata
+        metadata = codes_source(("tmp2m",)).metadata
         with self.assertRaises(BundleError):
             zarrstore.CodesSource(metadata, {"prate": [plane(0, 1)] * len(MIXED_HOURS)}, {"prate": "raw"}, TILE)
         with self.assertRaises(BundleError):
@@ -530,10 +385,7 @@ class NativeStoreWriterTests(ClassTempRoot, unittest.TestCase):
             planes = {
                 name: [plane(hour, index) for hour in MIXED_HOURS] for index, name in enumerate(names, start=1)
             }
-            predictors = {
-                name: "previous" if PREDICTORS[index] == binformat.PREDICTOR_PREVIOUS else "raw"
-                for index, name in enumerate(names, start=1)
-            }
+            predictors = {name: PREDICTORS[index] for index, name in enumerate(names, start=1)}
             source = zarrstore.CodesSource(metadata, planes, predictors, TILE)
             for series in (False, True):
                 for delta in (False, True):
@@ -572,12 +424,10 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.bundle = write_v2(cls.root / "pair.xue", ("tmp2m", "prate"))
-        cls.standard = zarrstore.export_bundle(cls.root / "pair.xue", cls.root / "standard.zarr")
-        cls.delta = zarrstore.export_bundle(cls.root / "pair.xue", cls.root / "delta.zarr", delta=True)
-        cls.start = zarrstore.export_bundle(
-            cls.root / "pair.xue", cls.root / "start.zarr", delta=True, index_location="start"
-        )
+        cls.source = codes_source(PAIR)
+        cls.standard = zarrstore.write_store(cls.source, cls.root / "standard.zarr")
+        cls.delta = zarrstore.write_store(cls.source, cls.root / "delta.zarr", delta=True)
+        cls.start = zarrstore.write_store(cls.source, cls.root / "start.zarr", delta=True, index_location="start")
 
     def test_zarr_python_reads_the_codes(self) -> None:
         import zarr
@@ -585,16 +435,16 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
         zarrcodec.register()
         for report in (self.standard, self.delta, self.start):
             group = zarr.open_group(report.path, mode="r")
-            for numeric_id, name in self.bundle.variable_ids.items():
+            for numeric_id, name in enumerate(PAIR, start=1):
                 with self.subTest(store=report.path.name, variable=name):
-                    np.testing.assert_array_equal(group[name][:], expected_codes(self.bundle, numeric_id))
-            self.assertEqual(dict(group.attrs)["xue"], self.bundle.metadata)
+                    np.testing.assert_array_equal(group[name][:], expected_codes(numeric_id))
+            self.assertEqual(dict(group.attrs)["xue"], self.source.metadata)
 
     def test_xarray_dequantizes_the_linear_codebook(self) -> None:
         import xarray as xr
 
         zarrcodec.register()
-        codes = expected_codes(self.bundle, 1)
+        codes = expected_codes(1)
         physical = np.where(codes == 255, np.nan, -60.0 + codes.astype(np.float64) * 0.5)
         for report in (self.standard, self.delta):
             with self.subTest(store=report.path.name), warnings.catch_warnings():
@@ -606,7 +456,7 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
                 np.testing.assert_allclose(dataset["tmp2m"].values, physical)
                 # The log codebook has no CF spelling: the codes come through
                 # as they are, nodata masked.
-                np.testing.assert_array_equal(dataset["prate"].values, expected_codes(self.bundle, 2))
+                np.testing.assert_array_equal(dataset["prate"].values, expected_codes(2))
                 self.assertEqual(
                     dataset["time"].values[:2].astype("datetime64[s]").tolist(),
                     [datetime(2026, 8, 14, 6), datetime(2026, 8, 14, 7)],
@@ -633,11 +483,27 @@ class ZarrClientTests(ClassTempRoot, unittest.TestCase):
         np.testing.assert_array_equal(zarrcodec.delta_decode(zarrcodec.delta_encode(block)), block)
 
 
+def open_container(path: Path):
+    """A `.xue` the build wrote, opened by the wheel's decoder."""
+    import xue  # noqa: PLC0415 - the wheel; the class skips without it
+
+    return xue.Bundle.open(path)
+
+
+def container_codes(bundle, numeric_id: int) -> np.ndarray:
+    grid = bundle.metadata["grid"]
+    return np.stack(
+        [np.asarray(bundle.decode(numeric_id, offset)).reshape(grid["height"], grid["width"]) for offset in bundle.frame_offsets]
+    )
+
+
 @unittest.skipUnless(shutil.which("gdal_translate"), "the reference encoder needs a system GDAL")
+@requires_native
 class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
     """`convert_bin(..., zarr=True, container=True)`: every bundle and variant
-    in its tier's shared store, named in the manifest, and the bundles
-    unchanged by it."""
+    in its tier's shared store, named in the manifest, holding the codes the
+    container beside it holds (read through the wheel's decoder), and the
+    containers unchanged by it."""
 
     root_prefix = "xue-zarr-build-"
 
@@ -668,8 +534,8 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                     tier = artifact["path"].removesuffix(".xue").split(".")[1:]
                     self.assertEqual(store["path"], ".".join(["bundles", *tier, "zarr"]))
                     root_dir = self.with_zarr / store["path"]
-                    bundle_file = binformat.read_bundle(self.with_zarr / artifact["path"])
-                    names = list(bundle_file.variable_ids.values())
+                    bundle_file = open_container(self.with_zarr / artifact["path"])
+                    names = [variable["id"] for variable in bundle_file.metadata["variables"]]
                     used = [*names, *zarrstore.array_dimensions(root_dir, names[0])]
                     self.assertEqual(
                         store["byteLength"],
@@ -679,12 +545,10 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                     root = (root_dir / "zarr.json").read_bytes()
                     self.assertEqual(store["crc32"], f"{binformat.crc32_plane(root):08x}")
                     self.assertEqual(zarrstore.bundle_metadata(root_dir, bundle["variable"]), bundle_file.metadata)
-                    for numeric_id, name in bundle_file.variable_ids.items():
+                    for numeric_id, name in enumerate(names, start=1):
                         np.testing.assert_array_equal(
                             zarrstore.read_plane(self.with_zarr / store["path"], name, 0),
-                            bundle_file.decode_plane(numeric_id, bundle_file.frame_offsets[0]).reshape(
-                                bundle_file.height, bundle_file.width
-                            ),
+                            container_codes(bundle_file, numeric_id)[0],
                         )
 
     def test_the_store_does_not_change_the_bundle(self) -> None:
@@ -718,8 +582,9 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                 self.assertEqual(series["byteLength"], zarrstore.store_byte_length(self.with_zarr / series["path"]))
                 root = (self.with_zarr / series["path"] / "zarr.json").read_bytes()
                 self.assertEqual(series["crc32"], f"{binformat.crc32_plane(root):08x}")
-                bundle_file = binformat.read_bundle(self.with_zarr / bundle["path"])
-                for numeric_id, name in bundle_file.variable_ids.items():
+                bundle_file = open_container(self.with_zarr / bundle["path"])
+                names = [variable["id"] for variable in bundle_file.metadata["variables"]]
+                for numeric_id, name in enumerate(names, start=1):
                     store = self.with_zarr / series["path"]
                     geometry = zarrstore.ArrayGeometry.from_metadata(zarrstore.read_json(store / name / "zarr.json"))
                     self.assertEqual(geometry.time_chunks, 1)
@@ -728,7 +593,7 @@ class BuildIntegrationTests(ClassTempRoot, unittest.TestCase):
                     height, width = geometry.tile_shape(tile)
                     block = zarrstore.read_array_chunk(store, name, 0, tile)
                     np.testing.assert_array_equal(
-                        block, expected_codes(bundle_file, numeric_id)[:, row : row + height, column : column + width]
+                        block, container_codes(bundle_file, numeric_id)[:, row : row + height, column : column + width]
                     )
 
     def test_a_stale_descriptor_is_rejected_when_the_store_moves(self) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from xuebuild import binformat, temporal, zstdcli
+from xuebuild import binformat, temporal, zarrstore, zstdcli
 from xuebuild.binconvert import GridInfo, build_metadata, convert_bin
 from xuebuild.sources import source_spec
 
@@ -75,29 +75,34 @@ def prepare_tiled_fixture() -> None:
         groups=groups,
         chunks=chunks,
     )
-    bundle = binformat.read_bundle(GENERATED_ROOT / "tiled.xue")
-    bundle.verify_all()
+    # The expected planes are the codes the container was written from, so
+    # the Rust decoder is held to the writer's input, not to another reader.
     for variable_id in TILED_PREDICTORS:
         for hour in MIXED_HOURS:
-            plane = bundle.decode_plane(variable_id, hour)
+            plane = planes[hour][variable_id]
             (GENERATED_ROOT / f"expected.tiled.v{variable_id}.f{hour:03d}.bin").write_bytes(plane.tobytes())
         # The south-east corner cell lives in the doubly clipped last tile.
-        series = bundle.decode_series(variable_id, TILED_GRID.width - 1, TILED_GRID.height - 1)
+        corner = TILED_GRID.width * TILED_GRID.height - 1
+        series = np.array([planes[hour][variable_id][corner] for hour in MIXED_HOURS], dtype=np.uint8)
         (GENERATED_ROOT / f"expected.tiled.v{variable_id}.series.bin").write_bytes(series.tobytes())
 
 
 def prepare_bin_fixture() -> Path:
-    """Encode the cropped GRIB fixture and dump Python-decoded golden planes."""
+    """Encode the cropped GRIB fixture and dump its golden planes."""
     GENERATED_ROOT.mkdir(parents=True, exist_ok=True)
     # The cropped fixture GRIB predates the wind components, so this
-    # builds the scalar bundles only; the golden planes cover those.
-    convert_bin(FIXTURE_GRIB, GENERATED_ROOT, work_root=WORK_ROOT, container=True, zarr=False)
+    # builds the scalar bundles only; the golden planes cover those. They
+    # are read out of the shared store written from the same codes as the
+    # containers, by the NumPy reader, so the Rust decoder is held to an
+    # independent implementation.
+    convert_bin(FIXTURE_GRIB, GENERATED_ROOT, work_root=WORK_ROOT, container=True)
+    store = GENERATED_ROOT / zarrstore.shared_store_name()
     for name in source_spec("gfs").bundle_scalar_ids:
-        bundle = binformat.read_bundle(GENERATED_ROOT / f"{name}.xue")
-        for numeric_id in sorted(bundle.variable_ids):
-            for hour in bundle.frame_offsets:
-                plane = bundle.decode_plane(numeric_id, hour)
-                expected = GENERATED_ROOT / f"expected.{name}.f{hour:03d}.bin"
+        metadata = zarrstore.bundle_metadata(store, name)
+        _unit_seconds, offsets = binformat.time_axis(metadata)
+        for variable in metadata["variables"]:
+            for frame, plane in enumerate(zarrstore.read_frames(store, variable["id"])):
+                expected = GENERATED_ROOT / f"expected.{name}.f{offsets[frame]:03d}.bin"
                 expected.write_bytes(plane.tobytes())
     prepare_tiled_fixture()
     return GENERATED_ROOT

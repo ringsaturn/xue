@@ -44,15 +44,10 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import zarrstore
-from xuebuild.binconvert import GridInfo, build_metadata
+from xuebuild.binconvert import GridInfo, _bundle_tile, _store_source, build_metadata
 from xuebuild.common import crc32_hex
 from xuebuild.manifest import build_bin_manifest, build_latest_pointer
 from xuebuild.quantize import PROFILES
-
-try:
-    from tests.prepare_web_fixture import write_v2_bundle
-except ModuleNotFoundError:  # run as a script: tests/ is the path root
-    from prepare_web_fixture import write_v2_bundle
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "indicators"
 STORE_ROOT = FIXTURES / "store"
@@ -191,19 +186,14 @@ def write_store(root: Path = STORE_ROOT) -> None:
     bundles = []
     for variable_id, builder in PLANES.items():
         codebook = PROFILES[PROFILE][variable_id]
-        bundle_path = run_dir / f"{variable_id}.xue"
-        write_v2_bundle(
-            bundle_path,
-            build_metadata(RUN_TIME, HOURS, GRID, PROFILE, (variable_id,)),
-            GRID,
+        source = _store_source(
             (variable_id,),
             HOURS,
             {hour: {variable_id: codebook.quantize(builder(hour).ravel())} for hour in HOURS},
-            level=3,
-            tile=TILE,
+            build_metadata(RUN_TIME, HOURS, GRID, PROFILE, (variable_id,)),
+            _bundle_tile(TILE, GRID, factor=1),
         )
-        report = zarrstore.export_bundle(bundle_path, zarrstore.store_path_for(bundle_path))
-        bundle_path.unlink()
+        report = zarrstore.write_store(source, run_dir / f"{variable_id}.zarr")
         bundles.append({"variable": variable_id, "zarr": report.descriptor(run_dir)})
     manifest = build_bin_manifest(RUN_TIME, bundles=bundles, expected_hours=HOURS[-1])
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
