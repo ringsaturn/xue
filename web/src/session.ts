@@ -91,3 +91,18 @@ export interface VariableSession {
    * once; null for every other bundle. */
   volume: VolumeLevels | null;
 }
+
+/** One decoded plane in the frame cache. */
+export interface DecodedFrame {
+  plane: Uint8Array;
+  decodeMs: number;
+  /** The tiles this plane actually holds, or null for a whole plane. Outside
+   * them the buffer carries whatever the decoder held before, so a plane is
+   * only reusable for a view its tiles still cover. */
+  tiles: TileRect[] | null;
+  /** The session that decoded it: the buffer belongs to that worker and is
+   * recycled back into it, and its grid is what the plane's bytes are on.
+   * A numericId alone cannot say — it is a *file-local* handle, and two open
+   * bundles routinely use the same one. */
+  session: VariableSession;
+}
