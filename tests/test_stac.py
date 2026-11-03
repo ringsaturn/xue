@@ -135,7 +135,10 @@ def _manifest(bundles: list[dict], *, model: str = "gfs", hours: int = 240) -> d
 def _gfs_manifest() -> dict:
     poster = _poster("tmp2m", _metadata(grid=GLOBAL_POSTER_GRID, count=161, offsets=[*range(121), *range(123, 241, 3)]))
     both = {**_store_entry("prate"), "path": "prate.xue", "byteLength": 20, "crc32": "0badf00d"}
-    both["video"] = {
+    manifest = _manifest([_store_entry("tmp2m", poster=poster), both, _container_entry("wind10m"), _container_entry("mystery")])
+    # The retired H.264 companion, as a run published with it carries it: no
+    # builder writes the block any more, so it is added to the built manifest.
+    manifest["bundles"][1]["video"] = {
         "streamPath": "prate.h264",
         "indexPath": "prate.h264.index.json",
         "byteLength": 26_638_477,
@@ -151,7 +154,7 @@ def _gfs_manifest() -> dict:
             offsets=[*range(1, 121), *range(123, 241, 3)],
         ),
     }
-    return _manifest([_store_entry("tmp2m", poster=poster), both, _container_entry("wind10m"), _container_entry("mystery")])
+    return manifest
 
 
 class RunItemTests(unittest.TestCase):
