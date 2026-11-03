@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/alerts-line.schema.json",
+  "title": "AlertLine",
+  "description": "One line of alerts.<round>/<network>.jsonl: a warning in force, its whole record (docs/alerts.md section 6). That network is the id's, that the category is one the index lists, that the areas and replaces are unique and replaces names other alerts of the same network, the language tags, and that every ring is closed with coordinates to four decimals are the readers' own checks.",
+  "type": "object",
+  "required": ["id", "network", "category", "level", "native", "sent", "status", "texts", "areas"],
+  "properties": {
+    "id": {"$ref": "#/$defs/AlertId"},
+    "network": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "category": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "level": {"enum": [1, 2, 3, 4, 5]},
+    "native": {
+      "description": "The upstream's own classification, verbatim; a network's further fields are its section's.",
+      "type": "object",
+      "required": ["event"],
+      "properties": {
+        "event": {"type": "string", "minLength": 1},
+        "code": {"type": ["string", "null"]},
+        "level": {"type": ["string", "null"]}
+      }
+    },
+    "sent": {"$ref": "#/$defs/Timestamp"},
+    "onset": {"$ref": "#/$defs/OptionalTimestamp"},
+    "expires": {"$ref": "#/$defs/OptionalTimestamp"},
+    "status": {"const": "actual"},
+    "texts": {
+      "description": "BCP 47 language tag to that language's texts.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "headline": {"type": "string"},
+          "description": {"type": "string"},
+          "instruction": {"type": "string"},
+          "area": {"type": "string"}
+        },
+        "additionalProperties": {"type": "string"}
+      }
+    },
+    "areas": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "geometry": {"anyOf": [{"$ref": "#/$defs/MultiPolygon"}, {"type": "null"}]},
+    "url": {"type": ["string", "null"]},
+    "sender": {"type": ["string", "null"]},
+    "replaces": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/AlertId"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "OptionalTimestamp": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "AlertId": {
+      "description": "<network>:<the upstream's identifier>, which may itself hold a colon.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S+$"
+    },
+    "Position": {
+      "description": "[lon, lat], degrees.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"type": "number", "minimum": -180, "maximum": 180},
+        {"type": "number", "minimum": -90, "maximum": 90}
+      ]
+    },
+    "MultiPolygon": {
+      "description": "A GeoJSON MultiPolygon as drawn: polygons of rings of at least four positions.",
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": {"const": "MultiPolygon"},
+        "coordinates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "array", "minItems": 4, "items": {"$ref": "#/$defs/Position"}}
+          }
+        }
+      }
+    }
+  }
+}

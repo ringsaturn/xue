@@ -93,9 +93,20 @@ describe("the alerts index and network files", () => {
     const raw = readIndex();
     const rows = raw.alerts as unknown[][];
     const badLevel = { ...raw, alerts: rows.map((row, at) => (at === 0 ? [...row.slice(0, 3), 6, ...row.slice(4)] : row)) };
-    expect(() => parseAlertsIndex(badLevel)).toThrow(/1 … 5/);
+    expect(() => parseAlertsIndex(badLevel)).toThrow(/one of 1, 2, 3, 4, 5/);
     expect(() => parseAlertsIndex({ ...raw, alerts: [...rows].reverse() })).toThrow(/sorted/);
     expect(() => parseAlertsIndex({ ...raw, schemaVersion: 2 })).toThrow(/schema version/);
+  });
+
+  it("finds a row's columns by name, and by position in an index without them", () => {
+    const raw = readIndex();
+    expect(raw.columns).toBeDefined();
+    const expected = parseAlertsIndex(raw);
+    const positional = { ...raw };
+    delete positional.columns;
+    expect(parseAlertsIndex(positional)).toEqual(expected);
+    const reordered = { ...raw, columns: [...(raw.columns as string[])].reverse() };
+    expect(() => parseAlertsIndex(reordered)).toThrow(/columns/);
   });
 
   it("refuses a line filed under another network", () => {

@@ -954,6 +954,44 @@ fn the_alert_list_is_the_index_rows_named() {
 }
 
 #[test]
+fn the_alert_rows_are_read_by_their_column_names() {
+    let golden = Data::in_memory(bucket());
+    let expected = ok(&golden, "alerts", "");
+    let id = expected["alerts"][0]["id"].as_str().unwrap().to_owned();
+    let record = ok(&golden, &format!("alerts/{id}"), "");
+    let variant = |tag: &str, change: &dyn Fn(&mut Value)| {
+        let mut objects = bucket();
+        let (_, mut index) = live_index(&objects, "alerts");
+        assert!(index["columns"].is_array(), "the golden names its columns");
+        change(&mut index);
+        replace_index(&mut objects, "alerts", &index, tag);
+        Data::in_memory(objects)
+    };
+
+    // Named columns in another order read as the golden's do, and an index
+    // from before `columns` is read by position.
+    let reordered = variant("ac000001", &|index| {
+        index["columns"].as_array_mut().unwrap().reverse();
+        for row in index["alerts"].as_array_mut().unwrap() {
+            row.as_array_mut().unwrap().reverse();
+        }
+    });
+    let positional = variant("ac000002", &|index| {
+        index.as_object_mut().unwrap().remove("columns");
+    });
+    for data in [reordered, positional] {
+        assert_eq!(ok(&data, "alerts", "")["alerts"], expected["alerts"]);
+        assert_eq!(ok(&data, &format!("alerts/{id}"), ""), record);
+    }
+
+    // Columns that leave one out are refused.
+    let broken = variant("ac000003", &|index| index["columns"][5] = json!("issued"));
+    let error = err(&broken, "alerts", "");
+    assert_eq!((error.status, error.code.as_str()), (502, "upstream_failed"));
+    assert!(error.message.contains("sent"), "{}", error.message);
+}
+
+#[test]
 fn the_alert_list_filters_by_network_category_and_level() {
     let objects = bucket();
     let (index, rows) = alert_rows(&objects);
