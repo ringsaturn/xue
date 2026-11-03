@@ -62,7 +62,7 @@ from pathlib import Path
 from unittest import mock
 
 
-from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo
+from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, fetch as fetchmod, grib2, quantize
 from xuebuild.binconvert import (
     analysis_optional_ids,
@@ -72,7 +72,6 @@ from xuebuild.binconvert import (
     published_bundle_ids,
     video_variable_ids,
 )
-from xuebuild.binformat import read_bundle
 from xuebuild.cli import MAX_FORECAST_HOURS, forecast_hours as cli_forecast_hours
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -705,7 +704,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         cls.frames = REFERENCE.frames
 
     def _bundle(self, bundle_id: str):
-        return read_bundle(self.output / f"{bundle_id}.xue")
+        return stored_bundle(self.output, bundle_id)
 
     def test_every_published_bundle_is_written_and_no_video(self) -> None:
         manifest = json.loads((self.output / "manifest.json").read_text())
@@ -786,14 +785,13 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             manifest_path=output / "manifest.part.json",
             model="cfs",
             bundle_ids=("tmp2m", "hgt500", "qflux850"),
-            container=True, zarr=False,
         )
         manifest = json.loads((output / "manifest.part.json").read_text())
         self.assertEqual(
             [bundle["variable"] for bundle in manifest["bundles"]], ["tmp2m", "hgt500", "qflux850"]
         )
         for bundle_id, window in (("tmp2m", SURFACE_WINDOW), ("hgt500", PGB_WINDOW), ("qflux850", PGB_WINDOW)):
-            grid = read_bundle(output / f"{bundle_id}.xue").metadata["grid"]
+            grid = stored_bundle(output, bundle_id).metadata["grid"]
             self.assertEqual((grid["width"], grid["height"]), window, bundle_id)
 
     def test_a_family_bundle_carries_its_own_grid_in_the_shared_store(self) -> None:
@@ -833,7 +831,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         with self.assertRaises(ConversionError) as caught:
             binconvert.convert_bin(
                 frames, root / "out", work_root=root / "work", model="cfs", bundle_ids=("tmp2m", "hgt500"),
-                container=True, zarr=False,
             )
         self.assertIn("pgb", str(caught.exception))
 
@@ -853,12 +850,11 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
             manifest_path=output / "manifest.part.json",
             model="cfs",
             bundle_ids=("hgt500", "qflux850"),
-            container=True, zarr=False,
         )
         manifest = json.loads((output / "manifest.part.json").read_text())
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], ["hgt500", "qflux850"])
         for bundle_id in ("hgt500", "qflux850"):
-            grid = read_bundle(output / f"{bundle_id}.xue").metadata["grid"]
+            grid = stored_bundle(output, bundle_id).metadata["grid"]
             self.assertEqual((grid["width"], grid["height"]), PGB_WINDOW)
 
     def test_the_axis_starts_at_the_first_step_for_every_bundle(self) -> None:
@@ -929,7 +925,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 model="cfs",
                 require_complete=True,
                 expected_hours=12,
-                container=True, zarr=False,
             )
 
 
@@ -941,7 +936,11 @@ class NativeParityTests(ParityCase, unittest.TestCase):
     bundles, so a family bundle's grid, tile and ladder are compared too."""
 
     reference = REFERENCE
-    expect = tuple(f"cfs.2026091900/{bundle_id}{suffix}.xue" for bundle_id in PUBLISHED for suffix in ("", ".half"))
+    expect = tuple(
+        store_path("cfs.2026091900", f"{bundle_id}{suffix}", bundle_variable_ids(bundle_id)[0])
+        for bundle_id in PUBLISHED
+        for suffix in ("", ".half")
+    )
 
 
 if __name__ == "__main__":

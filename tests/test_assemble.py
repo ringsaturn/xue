@@ -327,7 +327,10 @@ class MergePartialManifestTests(unittest.TestCase):
 
 
 class SplitBuildIdentityTests(ClassTempRoot, unittest.TestCase):
-    """The GRIB fixture built whole and built in groups, then assembled."""
+    """The GRIB fixture built whole and built in groups, then assembled,
+    with the opt-in ``.xue`` containers: a container must not depend on
+    what else was in the build either. The shared stores' counterpart is
+    :class:`SharedStoreSplitIdentityTests`."""
 
     root: Path
     whole: Path
@@ -430,7 +433,9 @@ if __name__ == "__main__":
 
 class TopUpIdentityTests(ClassTempRoot, unittest.TestCase):
     """A run published short of some bundles, topped up with only those,
-    is the run built whole today — manifest, pointer and artifacts."""
+    is the run built whole today — manifest, pointer and artifacts — with
+    the opt-in ``.xue`` containers. The shared stores' counterpart is
+    :class:`SharedStoreTopUpIdentityTests`."""
 
     root: Path
 

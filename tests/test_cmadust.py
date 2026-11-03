@@ -30,10 +30,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, cmadust, fetch, observation
 from xuebuild.binconvert import published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import parse_run, resolve_run
 from xuebuild.idx import ByteRange
@@ -473,11 +472,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026103000",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def series(self, name: str) -> np.ndarray:
         data = (SERIES_DIR / f"cmadust.2026103000.{name}.nc").read_bytes()
@@ -491,7 +489,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("CMA-CW-DUST", "cma-cw-dust-0p15"))
         self.assertEqual(manifest["runTime"], "2026-10-30T00:00:00Z")
         validate_bin_manifest(manifest, expected_hours=2, require_core_variables=True)
-        self.assertFalse((self.root / "out" / "dustsfc.half.xue").exists())
+        self.assertFalse((self.root / "out" / "bundles.half.zarr" / "dustsfc").exists())
 
     def test_the_grid_is_the_fixture_s_box_north_up(self) -> None:
         grid = self.bundle("dustsfc").metadata["grid"]
@@ -539,7 +537,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                     skip_video=True,
                     require_complete=True,
                     expected_hours=2,
-                    container=True, zarr=False,
                 )
 
     @requires_native_source("cmadust")

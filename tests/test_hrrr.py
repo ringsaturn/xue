@@ -33,7 +33,7 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native, stored_bundle
 from xuebuild import binconvert, grib2
 from xuebuild.binconvert import (
     GridInfo,
@@ -42,7 +42,6 @@ from xuebuild.binconvert import (
     crop_grid,
     published_bundle_ids,
 )
-from xuebuild.binformat import read_bundle
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     HRRR_BASE_URLS,
@@ -522,7 +521,6 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 skip_video=True,
                 work_root=cls.root / "work",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def test_every_published_bundle_is_written_on_the_regular_grid(self) -> None:
@@ -530,7 +528,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(tuple(variables), published_bundle_ids(HRRR))
         manifest = json.loads((self.root / "out" / "manifest.json").read_text())
         self.assertEqual((manifest["model"], manifest["product"]), ("HRRR", "wrfsfc"))
-        bundle = read_bundle(self.root / "out" / "cref.xue")
+        bundle = stored_bundle(self.root / "out", "cref")
         grid = bundle.metadata["grid"]
         self.assertEqual((grid["width"], grid["height"]), (137, 120))
         self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.03, -0.03))
@@ -541,9 +539,9 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         parameter = bundle.metadata["variables"][0]["parameter"]
         self.assertEqual((parameter["parameterCategory"], parameter["parameterNumber"]), (16, 5))
         self.assertEqual(bundle.metadata["variables"][0]["unit"], "dBZ")
-        wind = read_bundle(self.root / "out" / "wind10m.xue")
+        wind = stored_bundle(self.root / "out", "wind10m")
         self.assertEqual([variable["id"] for variable in wind.metadata["variables"]], ["ugrd10m", "vgrd10m"])
-        wind80 = read_bundle(self.root / "out" / "wind80m.xue")
+        wind80 = stored_bundle(self.root / "out", "wind80m")
         self.assertEqual([variable["id"] for variable in wind80.metadata["variables"]], ["ugrd80m", "vgrd80m"])
         surfaces = {
             (variable["parameter"]["typeOfFirstFixedSurface"], variable["parameter"]["scaledValueOfFirstFixedSurface"])

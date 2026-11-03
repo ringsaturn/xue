@@ -26,8 +26,9 @@ from tests._support import (
     assert_trees_identical,
     require_comparable_compression,
     requires_native,
+    stored_bundle,
 )
-from xuebuild import binconvert, binformat, encoder, native, registry, zarrstore
+from xuebuild import binconvert, encoder, native, registry, zarrstore
 from xuebuild.errors import ConversionError
 from xuebuild.sources import source_spec
 
@@ -144,57 +145,11 @@ class RegistryHandoverTests(unittest.TestCase):
 
 
 @requires_native
-class NativeParityTests(ClassTempRoot, unittest.TestCase):
-    """One build each, compared file by file.
-
-    Both encoders write into identically shaped directories under one root, so
-    even the live pointer — which names the manifest relative to itself and
-    carries its CRC32 — has to come out the same.
-    """
-
-    root: Path
-    reference: Path
-    subject: Path
-
-    root_prefix = "xue-native-parity-"
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.reference, cls.reference_report = cls._build(binconvert, "reference")
-        cls.subject, cls.subject_report = cls._build(native, "subject")
-
-    @classmethod
-    def _build(cls, implementation, name: str) -> tuple[Path, dict]:
-        run_directory = cls.root / name / "gfs.2026081406"
-        report = implementation.convert_bin(
-            FIXTURE_GRIB,
-            run_directory,
-            work_root=cls.root / f"{name}-work",
-            manifest_path=run_directory / "manifest.json",
-            latest_path=cls.root / name / "latest.json",
-            run_id="2026081406",
-            model="gfs",
-            container=True, zarr=False,
-        )
-        return cls.root / name, report
-
-    def test_the_same_files_are_written(self) -> None:
-        self.assertEqual(
-            sorted(path.relative_to(self.reference).as_posix() for path in self.reference.rglob("*")),
-            sorted(path.relative_to(self.subject).as_posix() for path in self.subject.rglob("*")),
-        )
-
-    def test_every_artifact_is_byte_identical(self) -> None:
-        require_comparable_compression(self, self.reference_report, self.subject_report)
-        assert_trees_identical(self, self.reference, self.subject)
-
-
-@requires_native
-class NativeZarrParityTests(ClassTempRoot, unittest.TestCase):
-    """Store and container on both paths: each encoder writes the shared
-    stores' arrays, coordinates and parts from its own codes with its own
-    writer (`zarrstore.write_bundle_arrays`, the wheel's
+class NativeContainerParityTests(ClassTempRoot, unittest.TestCase):
+    """The one container parity test (``--xue``): store and container on
+    both paths, where every other parity test compares the stores alone.
+    Each encoder writes the `.xue` and the shared stores' arrays,
+    coordinates and parts from its own codes with its own writer (`zarrstore.write_bundle_arrays`, the wheel's
     `encode/zarrstore.rs`), the group documents come from the parts, and
     every object of both deliveries agrees — and the manifest names every one
     of them the same way."""
@@ -382,9 +337,8 @@ class NativeReportTests(ClassTempRoot, unittest.TestCase):
         super().setUpClass()
         cls.reference = binconvert.convert_bin(
             FIXTURE_GRIB, cls.root / "reference", work_root=cls.root / "work", skip_video=True,
-            container=True, zarr=False,
         )
-        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True, container=True, zarr=False)
+        cls.subject = native.convert_bin(FIXTURE_GRIB, cls.root / "subject", skip_video=True)
 
     def test_the_reports_have_the_same_shape(self) -> None:
         self.assertEqual(sorted(self.reference), sorted(self.subject))
@@ -433,7 +387,6 @@ class NativeRestrictedBuildTests(ClassTempRoot, unittest.TestCase):
             bundle_ids=("tmp2m",),
             skip_video=True,
             skip_variants=True,
-            container=True, zarr=False,
         )
         return directory, report
 
@@ -476,14 +429,13 @@ class NativeJpeg2000Tests(ClassTempRoot, unittest.TestCase):
             bundle_ids=cls.WAVE_BUNDLES,
             skip_video=True,
             skip_variants=True,
-            container=True, zarr=False,
         )
         return directory, report
 
     def test_the_wave_bundles_are_built_from_the_raw_records(self) -> None:
         manifest = json.loads((self.subject / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual([bundle["variable"] for bundle in manifest["bundles"]], list(self.WAVE_BUNDLES))
-        wave = binformat.Bundle((self.subject / "wave.xue").read_bytes())
+        wave = stored_bundle(self.subject, "wave")
         self.assertEqual([variable["id"] for variable in wave.metadata["variables"]], ["uwave", "vwave"])
 
     def test_the_jpeg_2000_build_is_byte_identical(self) -> None:

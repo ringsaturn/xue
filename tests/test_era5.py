@@ -29,10 +29,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.era5 import series as era5_series
 from xuebuild.era5.series import Era5Error
 from xuebuild.errors import DownloadError
@@ -260,11 +259,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026100800",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def test_the_run_publishes_every_bundle_the_source_declares(self) -> None:
         self.assertEqual(tuple(bundle["variable"] for bundle in self.report["bundles"]), BUNDLES)
@@ -272,7 +270,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("ERA5", "reanalysis-single-levels"))
         self.assertEqual(manifest["runTime"], "2026-10-08T00:00:00Z")
         validate_bin_manifest(manifest, expected_hours=2, require_core_variables=True)
-        self.assertFalse((self.root / "out" / "tmp2m.half.xue").exists())
+        self.assertFalse((self.root / "out" / "bundles.half.zarr").exists())
 
     def test_every_bundle_starts_at_the_analysis(self) -> None:
         for name in BUNDLES:

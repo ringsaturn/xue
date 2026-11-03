@@ -27,10 +27,9 @@ from unittest import mock
 
 import numpy as np
 
-from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source
+from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
 from xuebuild.binconvert import published_bundle_ids
-from xuebuild.binformat import read_bundle
 from xuebuild.cams import series as cams_series
 from xuebuild.cams.series import CamsError
 from xuebuild.errors import DownloadError
@@ -264,11 +263,10 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 work_root=cls.root / "work",
                 run_id="2026100900",
                 manifest_path=cls.root / "out" / "manifest.json",
-                container=True, zarr=False,
             )
 
     def bundle(self, name: str):
-        return read_bundle(self.root / "out" / f"{name}.xue")
+        return stored_bundle(self.root / "out", name)
 
     def test_the_run_publishes_every_bundle_the_source_declares(self) -> None:
         self.assertEqual(tuple(bundle["variable"] for bundle in self.report["bundles"]), VARIABLES)
@@ -276,7 +274,7 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual((manifest["model"], manifest["product"]), ("CAMS", "global-composition-analysis"))
         self.assertEqual(manifest["runTime"], "2026-10-09T00:00:00Z")
         validate_bin_manifest(manifest, expected_hours=6, require_core_variables=True)
-        self.assertFalse((self.root / "out" / "aod.half.xue").exists())
+        self.assertFalse((self.root / "out" / "bundles.half.zarr").exists())
 
     def test_every_bundle_steps_three_hourly_from_the_analysis(self) -> None:
         for name in VARIABLES:
