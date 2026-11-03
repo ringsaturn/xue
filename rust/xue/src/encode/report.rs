@@ -177,6 +177,8 @@ pub(super) fn build_report(
         "posters".into(),
         json!(poster_reports.values().collect::<Vec<_>>()),
     );
+    // Always empty: the retired H.264 companion is built by neither encoder,
+    // and the key stays until the report's shape next changes.
     report.insert("videos".into(), json!([]));
     report.insert(
         "byteLength".into(),
@@ -231,7 +233,7 @@ pub(super) fn build_report(
 
 /// The run's manifest, over the bundles this build wrote, at `manifest_path`.
 /// No live pointer: it carries the CRC32 of the finished manifest, which
-/// `xuebuild/native.py` completes with the video descriptors first, so the
+/// `xuebuild/native.py` completes with the shared stores' CRCs first, so the
 /// pointer is always written on the Python side.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_manifest<'g>(

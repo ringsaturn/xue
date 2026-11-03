@@ -146,7 +146,7 @@ pub struct VariableSpec {
     pub predictor: Predictor,
     pub decimation: Decimation,
     /// The artifacts this variable's bundle ships beside the store; `video`
-    /// further subject to the source's `video` flag.
+    /// names the retired H.264 companion, which no encoder builds.
     pub companions: Vec<Companion>,
     pub conversion: Conversion,
     /// The schema v3 `parameter` block, written verbatim.

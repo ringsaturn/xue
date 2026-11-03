@@ -108,7 +108,7 @@ fn run() -> Result<String, Error> {
             "--series" => {
                 options.series_bundle_ids = value()?.split(',').map(str::to_string).collect();
             }
-            "--skip-video" => { /* accepted for CLI parity; no video is built */ }
+            "--skip-video" => { /* accepted so older invocations still parse; no video is built */ }
             "--zstd-level" => options.zstd_level = parse_number(&value()?)? as i32,
             "--extract-workers" => options.extract_workers = parse_number(&value()?)? as usize,
             "--compress-workers" => options.compress_workers = parse_number(&value()?)? as usize,

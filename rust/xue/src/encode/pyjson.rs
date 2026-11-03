@@ -21,7 +21,7 @@ pub(crate) fn dumps_indented(value: &Value) -> String {
 ///
 /// The bundles embed their metadata with compact separators and raw UTF-8, and
 /// the encoder matches that with plain `serde_json::to_string`. The
-/// `metadataJson` strings the manifest carries for posters and videos are the
+/// `metadataJson` strings the manifest carries for posters are the
 /// one place the reference leaves `json.dumps` at its defaults, so they need
 /// both the spaced form and `ensure_ascii`.
 pub(crate) fn dumps_default(value: &Value) -> String {
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn spaced_json_matches_python_json_dumps_defaults() {
-        // The manifest's poster and video descriptors carry a variable's metadata
+        // The manifest's poster descriptors carry a variable's metadata
         // as a string written by `json.dumps` with nothing overridden: a space
         // after every separator, and every non-ASCII character escaped. The degree
         // sign in the temperature unit is the one that occurs in practice.

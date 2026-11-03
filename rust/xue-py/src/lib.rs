@@ -259,8 +259,7 @@ impl Bundle {
 
 /// Convert gridded input into per-variable Xue bundles.
 ///
-/// Mirrors `xuebuild.binconvert.convert_bin`, minus the video artifacts and
-/// the live pointer (`latest_path` and `run_id` are accepted and ignored).
+/// Mirrors `xuebuild.binconvert.convert_bin`, minus the live pointer (`latest_path` and `run_id` are accepted and ignored).
 /// Returns the build report as a dictionary. `registry` is the registry document
 /// as JSON text (`xuebuild.registry.document_json()`): the variables,
 /// bundles and sources the build is made from, which this wheel carries no

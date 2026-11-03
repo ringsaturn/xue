@@ -284,7 +284,8 @@ pub struct SourceSpec {
     /// this step before anything else reads them (`reproject.rs`).
     #[serde(default)]
     pub regrid: Option<Regrid>,
-    /// Whether the H.264 companions are built; read where ffmpeg runs.
+    /// Always false: the H.264 companion is retired, and the registry
+    /// document carries the field until its next schema.
     #[serde(default)]
     pub video: bool,
     /// `(level_hpa, mean, standard deviation)` of ln TI1 (s^-2) on each
