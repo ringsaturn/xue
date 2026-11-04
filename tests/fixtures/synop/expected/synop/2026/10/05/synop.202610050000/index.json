@@ -21,8 +21,8 @@
    },
    "stations": {
     "path": "amedas.stations.json",
-    "byteLength": 2202,
-    "crc32": "5ca7ea10",
+    "byteLength": 2352,
+    "crc32": "f7486d0f",
     "count": 14
    }
   },
@@ -44,8 +44,8 @@
    },
    "stations": {
     "path": "dwd.stations.json",
-    "byteLength": 1028,
-    "crc32": "e9e1d9af",
+    "byteLength": 1178,
+    "crc32": "cf19c2f7",
     "count": 6
    }
   },
@@ -67,8 +67,8 @@
    },
    "stations": {
     "path": "hko.stations.json",
-    "byteLength": 7667,
-    "crc32": "fb97a678",
+    "byteLength": 7817,
+    "crc32": "3e2ae0e6",
     "count": 51
    }
   }

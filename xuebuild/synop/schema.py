@@ -154,6 +154,12 @@ build_pointer = ROUNDS.build_pointer
 validate_pointer = ROUNDS.validate_pointer
 
 
+def columns(elements: list[str]) -> list[str]:
+    """A stations file's ``columns``: its rows' layout by name. A v2 file
+    keeps the positional layout readers from before the field rely on."""
+    return [*ROW_HEAD, *elements, *ROW_TAIL]
+
+
 def network_filename(network: str) -> str:
     return f"{network}{NETWORK_FILE_SUFFIX}"
 
@@ -459,6 +465,9 @@ def validate_stations_file(payload: object, index: dict[str, Any], network_id: s
     elements = _validate_elements(payload.get("elements"), f"{label}.elements")
     if elements != index.get("elements"):
         raise SynopProductError(f"{label}.elements differs from the index's")
+    layout = columns(elements)
+    if "columns" in payload and payload["columns"] != layout:
+        raise SynopProductError(f"{label}.columns must be {', '.join(layout)}")
     described = next((network for network in index.get("networks", []) if network.get("id") == network_id), None)
     if described is None or not isinstance(described.get("stations"), dict):
         raise SynopProductError(f"the index names no stations file for {network_id!r}")

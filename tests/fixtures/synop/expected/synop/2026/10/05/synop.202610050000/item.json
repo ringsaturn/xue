@@ -64,14 +64,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=742eb5a8",
+   "href": "index.json?v=dfc0c9a5",
    "type": "application/json",
    "title": "synop index (schema v2)",
    "roles": ["metadata"],
    "xue:kind": "index",
    "file:size": 3297,
-   "xue:crc32": "742eb5a8",
-   "file:checksum": "b20204742eb5a8"
+   "xue:crc32": "dfc0c9a5",
+   "file:checksum": "b20204dfc0c9a5"
   },
   "amedas": {
    "href": "amedas.jsonl?v=b709c94c",
@@ -86,7 +86,7 @@
    "file:checksum": "b20204b709c94c"
   },
   "amedas.stations": {
-   "href": "amedas.stations.json?v=5ca7ea10",
+   "href": "amedas.stations.json?v=f7486d0f",
    "type": "application/json",
    "title": "JMA AMeDAS: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -94,9 +94,9 @@
    "xue:kind": "stations",
    "xue:network": "amedas",
    "xue:stations": 14,
-   "file:size": 2202,
-   "xue:crc32": "5ca7ea10",
-   "file:checksum": "b202045ca7ea10"
+   "file:size": 2352,
+   "xue:crc32": "f7486d0f",
+   "file:checksum": "b20204f7486d0f"
   },
   "dwd": {
    "href": "dwd.jsonl?v=d57e2cd9",
@@ -111,7 +111,7 @@
    "file:checksum": "b20204d57e2cd9"
   },
   "dwd.stations": {
-   "href": "dwd.stations.json?v=e9e1d9af",
+   "href": "dwd.stations.json?v=cf19c2f7",
    "type": "application/json",
    "title": "DWD SYNOP Germany: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -119,9 +119,9 @@
    "xue:kind": "stations",
    "xue:network": "dwd",
    "xue:stations": 6,
-   "file:size": 1028,
-   "xue:crc32": "e9e1d9af",
-   "file:checksum": "b20204e9e1d9af"
+   "file:size": 1178,
+   "xue:crc32": "cf19c2f7",
+   "file:checksum": "b20204cf19c2f7"
   },
   "hko": {
    "href": "hko.jsonl?v=c84f146d",
@@ -136,7 +136,7 @@
    "file:checksum": "b20204c84f146d"
   },
   "hko.stations": {
-   "href": "hko.stations.json?v=fb97a678",
+   "href": "hko.stations.json?v=3e2ae0e6",
    "type": "application/json",
    "title": "Hong Kong Observatory: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -144,9 +144,9 @@
    "xue:kind": "stations",
    "xue:network": "hko",
    "xue:stations": 51,
-   "file:size": 7667,
-   "xue:crc32": "fb97a678",
-   "file:checksum": "b20204fb97a678"
+   "file:size": 7817,
+   "xue:crc32": "3e2ae0e6",
+   "file:checksum": "b202043e2ae0e6"
   }
  }
 }

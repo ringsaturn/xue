@@ -3,6 +3,7 @@
  "network": "dwd",
  "issued": "2026-10-05T00:10:00Z",
  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "columns": ["id", "lat", "lon", "elev", "rank", "name", "obsTime", "t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "offset", "length"],
  "stations": [
   ["dwd:10271", 52.9437, 12.8518, 49.8, 0, "Neuruppin-Alt Ruppin", "2026-10-04T23:40:00Z", 10.6, 6.5, 76, 1024.9, 1031.2, 330, 1.9, 4.7, null, 0.0, null, 0, 36116, 0, 516],
   ["dwd:10393", 52.2085, 14.118, 97.7, 0, "Lindenberg", "2026-10-04T23:40:00Z", 9.7, 7.8, 88, 1017.2, 1030.0, 360, 1.9, 3.9, null, 0.2, null, 0, 32889, 517, 531],

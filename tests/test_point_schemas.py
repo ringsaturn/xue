@@ -32,6 +32,13 @@ GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     "sounding-line": ((LINES, "sounding/expected/soundings.jsonl"),),
     "airport-index": ((JSON, "airport/expected/airport/*/*/*/airport.*/index.json"),),
     "airport-line": ((LINES, "airport/expected/airport/*/*/*/airport.*/history.jsonl"),),
+    "synop-index": ((JSON, "synop/expected/synop/*/*/*/synop.*/index.json"),),
+    "synop-index-v1": ((JSON, "synop/v1/synop.*/index.json"),),
+    "synop-stations": ((JSON, "synop/expected/synop/*/*/*/synop.*/*.stations.json"),),
+    "synop-line": (
+        (LINES, "synop/expected/synop/*/*/*/synop.*/*.jsonl"),
+        (LINES, "synop/v1/synop.*/*.jsonl"),
+    ),
 }
 """Schema → the golden files it holds: whole JSON documents, or JSONL files
 whose every line is one document."""
