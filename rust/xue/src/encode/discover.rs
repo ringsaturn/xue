@@ -87,8 +87,8 @@ pub fn discover_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
 /// one family's bundles fetches no primary file at all, so its frames are
 /// listed from that family's directory instead and named by the primary path
 /// they would have had; nothing reads that path unless a variable of the
-/// primary file is read. Mirrors `_discover_frames` in
-/// `xuebuild/binconvert.py`.
+/// primary file is read. Mirrors `discover_frames` in
+/// `xuebuild/discover.py`.
 pub(super) fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result<Vec<PathBuf>> {
     match discover_inputs(inputs) {
         Ok(paths) => Ok(paths),
@@ -125,8 +125,8 @@ pub(super) fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result
 /// frame's answers are merged into the one record set the rest of the
 /// converter reads. A frame whose family file is missing is refused before
 /// anything is inspected, since it is a fetch that did not finish rather
-/// than a file to fall back over. Mirrors `_prepare_frames_all` in
-/// `xuebuild/binconvert.py`.
+/// than a file to fall back over. Mirrors `prepare_frames_all` in
+/// `xuebuild/discover.py`.
 pub(super) fn prepare_frames_all(
     paths: &[PathBuf],
     variable_ids: &[&str],

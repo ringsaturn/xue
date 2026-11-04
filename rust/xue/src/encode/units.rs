@@ -70,7 +70,7 @@ fn unsupported(what: &str, unit: &str) -> EncodeError {
 
 /// Above this a temperature the GDAL GRIB driver labels Celsius is kelvin
 /// (`soil_temperature_unit`). Mirrors `SOIL_KELVIN_THRESHOLD` in
-/// `xuebuild/binconvert.py`.
+/// `xuebuild/derive.py`.
 pub const SOIL_KELVIN_THRESHOLD: f64 = 150.0;
 
 /// The unit a soil temperature plane is really in. GDAL's GRIB driver
@@ -79,7 +79,7 @@ pub const SOIL_KELVIN_THRESHOLD: f64 = 150.0;
 /// WMO 2/3/18 ECMWF writes) are not marked: their values come back in kelvin
 /// under a `C` label. A plane labelled Celsius that holds a value above 150
 /// is therefore kelvin. Mirrors `soil_temperature_unit` in
-/// `xuebuild/binconvert.py`.
+/// `xuebuild/derive.py`.
 fn soil_temperature_unit(unit: &'static str, values: &[f64]) -> &'static str {
     if unit == "C" && values.iter().any(|value| *value > SOIL_KELVIN_THRESHOLD) {
         "K"

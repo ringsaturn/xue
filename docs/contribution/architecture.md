@@ -15,7 +15,9 @@ Why the format looks like this: [architecture-rationale.md](architecture-rationa
 
 - `xuebuild/` — Python pipeline and **reference encoder** ([pipeline.md](pipeline.md)).
   `sources.py` / `variables.py` registries; `feeds.py` per-family fetchers over `fetch.py` + `idx.py` +
-  `grib2.py` range fetches; `binconvert.py` the conversion; `quantize.py`,
+  `grib2.py` range fetches; `binconvert.py` the conversion, in stages over
+  `discover.py`, `grid.py`, `derive.py`, `ladder.py`, `metadata.py`,
+  `poster.py` and `report.py` (each beside its `encode/*.rs`); `quantize.py`,
   `temporal.py`, `binformat.py` codebooks, residuals, container I/O;
   `observation.py` NetCDF ingest; `model.py` shared shapes (`SourceFrame`,
   `PlaneSource`); `manifest.py` manifest + pointer; `zarrstore.py` store
