@@ -49,8 +49,8 @@ export function checkTime(v: unknown, at: string): asserts v is Time {
   ]);
 }
 
-/** The regular latitude/longitude grid the planes are on (docs/format.md, "Regional Grids"): row-major, north to south, west to east. */
-export type Grid = { width: number; height: number; layout: "row-major"; rowOrder: "north-to-south"; columnOrder: "west-to-east"; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number; wrapLongitude: boolean };
+/** The regular latitude/longitude grid the planes are on (docs/format.md, "Regional Grids"): row-major, north to south, west to east. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them. */
+export type Grid = { width: number; height: number; layout?: "row-major"; rowOrder?: "north-to-south"; columnOrder?: "west-to-east"; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number; wrapLongitude: boolean };
 
 export function checkGrid(v: unknown, at: string): asserts v is Grid {
   isObject(v, at);
@@ -58,15 +58,21 @@ export function checkGrid(v: unknown, at: string): asserts v is Grid {
   isInteger(v8, at + ".width", 1);
   const v9 = field(v, "height", at);
   isInteger(v9, at + ".height", 1);
-  const v10 = field(v, "layout", at);
-  isString(v10, at + ".layout");
-  isOneOf(v10, at + ".layout", ["row-major"]);
-  const v11 = field(v, "rowOrder", at);
-  isString(v11, at + ".rowOrder");
-  isOneOf(v11, at + ".rowOrder", ["north-to-south"]);
-  const v12 = field(v, "columnOrder", at);
-  isString(v12, at + ".columnOrder");
-  isOneOf(v12, at + ".columnOrder", ["west-to-east"]);
+  const v10 = v["layout"];
+  if (v10 !== undefined) {
+    isString(v10, at + ".layout");
+    isOneOf(v10, at + ".layout", ["row-major"]);
+  }
+  const v11 = v["rowOrder"];
+  if (v11 !== undefined) {
+    isString(v11, at + ".rowOrder");
+    isOneOf(v11, at + ".rowOrder", ["north-to-south"]);
+  }
+  const v12 = v["columnOrder"];
+  if (v12 !== undefined) {
+    isString(v12, at + ".columnOrder");
+    isOneOf(v12, at + ".columnOrder", ["west-to-east"]);
+  }
   const v13 = field(v, "firstLongitude", at);
   isNumber(v13, at + ".firstLongitude");
   const v14 = field(v, "firstLatitude", at);
