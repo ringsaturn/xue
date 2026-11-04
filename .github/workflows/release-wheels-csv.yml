@@ -116,9 +116,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # No cache: a branch that is already relocked never runs uv, and the
+      # action's post step fails on a cache directory that was never made.
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+          enable-cache: false
 
       # For a tag push, the triggering run's head_branch is the tag.
       - name: Relock on the indexed wheel
