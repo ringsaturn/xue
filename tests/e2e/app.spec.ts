@@ -572,6 +572,30 @@ test("the precipitation's level row sums the rate over a window", async ({ page 
   await expect(page.locator("#legend-unit")).toHaveText("mm/h");
 });
 
+test("a level row wider than the capsule stays where the press was", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  await page.addStyleTag({ content: "#level-row { flex: 0 0 220px; max-width: 220px; }" });
+  const row = page.locator("#level-row");
+  const lines = page.locator('#level-row button[data-variable="hgt500"]');
+  await lines.scrollIntoViewIfNeeded();
+  const scrollLeft = () => row.evaluate((element) => element.scrollLeft);
+  const before = await scrollLeft();
+  expect(await row.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  // The rate stays pressed further along the row, and must not pull it there:
+  // not when the lines go on, and not when they come off.
+  await lines.click();
+  await expect(lines).toHaveAttribute("aria-pressed", "true");
+  expect(await scrollLeft()).toBe(before);
+  await lines.click();
+  await expect(lines).toHaveAttribute("aria-pressed", "false");
+  expect(await scrollLeft()).toBe(before);
+});
+
 test("the rail is three sections, and MORE lists the fields the core tiles do not", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await page.emulateMedia({ reducedMotion: "reduce" });
