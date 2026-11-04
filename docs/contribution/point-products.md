@@ -63,11 +63,17 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   syncs `--no-dev`), so the writers' `schema.py` validators keep only
   what a schema cannot say — order, byte spans, sums, file names, the
   version gate — and refuse a file without the schema's shape through
-  `pointproduct.shaped`; the shell's checks are generated plain TypeScript
+  `pointproduct.shaped` (fire, aq and alerts; tc, sounding, airport and
+  synop still check the shapes in `schema.py` too); the shell's checks are generated plain TypeScript
   (`make schemas`, `web/tooling/schemagen.ts` → `web/src/schema/generated/`,
   held to a fresh run by `tests/web/schemagen.test.ts`), and a product's
   `schema.ts` runs its version gate, the generated check, then the same
-  invariants; the API worker reads the same goldens in its tests. The
+  invariants; the API worker reads the same goldens in its tests, and
+  each of its readers ties the fields and columns it takes by name to the
+  committed schema (`include_str!`). Positional rows name their columns in
+  a `columns` array (airport and alerts indexes, aq and synop stations
+  files), which the shell and the worker read by name with a positional
+  fallback for files from before it. The
   generator implements a closed subset of the vocabulary (no `if`, no
   closed objects: a reader admits a field a later revision adds) and
   refuses a schema that leaves it.
