@@ -38,7 +38,7 @@ defaults and the rest follows. It feeds both record matching and the v3
   `gdal.py` and `inspect.rs`); aliases are never written.
 - Input-only entries are read, never published: ECMWF `tp` and sflux
   `prate_ave` (into `prate`), `dirpw`, `spfh<level>`, and GFS's
-  `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `binconvert.derive_ptype`).
+  `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `derive.derive_ptype`).
 - Isobaric families come from one eight-level table (`cat` uses only
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.
@@ -73,7 +73,7 @@ ships, and a listed bundle ships only when its inputs were fetched:
   along its direction of travel in wind convention, `(-h sin θ, -h cos θ)`).
   The `prate` bundle's `precipitation-rate` derivation takes whichever of
   its inputs the source lists, by the source's precipitation flags
-  (`binconvert.precipitation_mode`).
+  (`derive.precipitation_mode`).
 
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by

@@ -2,7 +2,7 @@
 //! precipitation rate from accumulations, averages and interval totals,
 //! Bolton θe, the precipitation type, the vapour flux, the wave vector and
 //! the clear-air turbulence index. Each mirrors its namesake in
-//! `xuebuild/binconvert.py` operation for operation.
+//! `xuebuild/derive.py` operation for operation.
 
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::grid::GridInfo;
@@ -12,7 +12,7 @@ use crate::encode::variables::STANDARD_GRAVITY;
 /// below)`: the deformation is taken on the surface itself, the vertical
 /// shear across the pair of surfaces that brackets it among the eight
 /// registered — centred at 250 hPa, one-sided at the two ends. Mirrors
-/// `CAT_SHEAR_LAYERS` in `xuebuild/binconvert.py`.
+/// `CAT_SHEAR_LAYERS` in `xuebuild/bundles.py`.
 const CAT_SHEAR_LAYERS: [(u32, u32, u32); 3] = [(300, 250, 300), (250, 200, 300), (200, 200, 250)];
 
 /// `(above, below)`, the surfaces the vertical shear of `cat<level>` is
@@ -57,7 +57,7 @@ pub fn deaccumulate_precipitation(
 /// is the one every source follows (`extract_planes`): the NaN fill first,
 /// then unit conversion — none, for a variable already in millimetres — and
 /// only then this division. Mirrors `interval_rate` in
-/// `xuebuild/binconvert.py`, division for division.
+/// `xuebuild/derive.py`, division for division.
 pub fn interval_rate(total_mm: &[f64], step_hours: i64) -> Result<Vec<f64>> {
     if step_hours <= 0 {
         return Err(EncodeError::conversion(format!(
@@ -129,7 +129,7 @@ const THETA_E_MINIMUM_Q: f64 = 1e-7;
 /// combined in: rain, then freezing rain, then ice pellets, then snow, each
 /// later flag overriding an earlier one. Both encoders share this order so
 /// even a point the model should never produce encodes byte-identically.
-/// Mirrors `PTYPE_CODES` in `xuebuild/binconvert.py`.
+/// Mirrors `PTYPE_CODES` in `xuebuild/derive.py`.
 const PTYPE_CODES: [f64; 4] = [1.0, 3.0, 8.0, 5.0];
 
 /// The equivalent potential temperature on one isobaric surface, in K, from
@@ -137,7 +137,7 @@ const PTYPE_CODES: [f64; 4] = [1.0, 3.0, 8.0, 5.0];
 /// there: Bolton (1980) eq. 43 with its own lifting-condensation-level
 /// temperature (eq. 15) and the dew point inverted from its eq. 10. Every
 /// operation runs in the exact order `derive_theta_e` in
-/// `xuebuild/binconvert.py` runs it, in f64, which is what keeps the two
+/// `xuebuild/derive.py` runs it, in f64, which is what keeps the two
 /// encoders byte-identical on a field neither reads from a record.
 pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa: u32) -> Vec<f64> {
     let p = f64::from(level_hpa);
@@ -164,7 +164,7 @@ pub fn derive_theta_e(temperature: &[f64], specific_humidity: &[f64], level_hpa:
 /// pellets and snow in that order: WMO code table 4.201's value for each
 /// (1, 3, 8, 5), 0 where none is set. The flags are combined in that order,
 /// each setting the code where it is non-zero. Comparisons and selects
-/// only, in f64 — exactly what `derive_ptype` in `xuebuild/binconvert.py`
+/// only, in f64 — exactly what `derive_ptype` in `xuebuild/derive.py`
 /// does, so the two encoders stay byte-identical on a field neither reads
 /// from a record.
 pub fn derive_ptype(values: &[(String, Vec<f64>)], inputs: &[String]) -> Result<Vec<f64>> {
@@ -198,7 +198,7 @@ pub fn derive_ptype(values: &[(String, Vec<f64>)], inputs: &[String]) -> Result<
 /// g·cm⁻¹·hPa⁻¹·s⁻¹, from the specific humidity already in g/kg and the wind
 /// in m/s there. One multiplication then one division per component, in this
 /// order, in f64 — exactly what `derive_vapour_flux` in
-/// `xuebuild/binconvert.py` does, so the two encoders stay byte-identical on
+/// `xuebuild/derive.py` does, so the two encoders stay byte-identical on
 /// a field neither reads from a record.
 pub fn derive_vapour_flux(
     specific_humidity: &[f64],
@@ -221,7 +221,7 @@ pub fn derive_vapour_flux(
 /// the meteorological convention the wind uses, so the components are the
 /// wind's `(-h sin θ, -h cos θ)`. Degrees to radians by one multiplication,
 /// sine and cosine, the negated height times each, in f64 — the order
-/// `derive_wave_vector` in `xuebuild/binconvert.py` runs them in, so the
+/// `derive_wave_vector` in `xuebuild/derive.py` runs them in, so the
 /// two encoders stay byte-identical on a field neither reads from a record.
 pub fn derive_wave_vector(height: &[f64], direction: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let mut u = Vec::with_capacity(height.len());
@@ -236,7 +236,7 @@ pub fn derive_wave_vector(height: &[f64], direction: &[f64]) -> (Vec<f64>, Vec<f
 }
 
 /// The clear-air turbulence derivation's constants, each one literal shared
-/// with `xuebuild/binconvert.py`: the mean Earth radius; the latitude past
+/// with `xuebuild/derive.py`: the mean Earth radius; the latitude past
 /// which the zonal spacing shrinks towards nothing and no airway is drawn;
 /// the floor that keeps a calm cell's logarithm finite; Sharman & Pearson's
 /// (2017) climatological ln EDR mean and standard deviation.
@@ -247,7 +247,7 @@ pub const CAT_EDR_LOG_MEAN: f64 = -2.572;
 pub const CAT_EDR_LOG_STD: f64 = 0.5067;
 /// The EDR below which a cell is written as no turbulence: the shell draws
 /// nothing there, and the range would otherwise carry most of a bundle's
-/// entropy. Mirrors `CAT_EDR_NIL` in `xuebuild/binconvert.py`.
+/// entropy. Mirrors `CAT_EDR_NIL` in `xuebuild/derive.py`.
 pub const CAT_EDR_NIL: f64 = 0.10;
 
 /// `np.maximum(value, floor)` for a finite `floor`: a NaN propagates, which
@@ -291,7 +291,7 @@ impl CatPlanes<'_> {
 /// or the differences land on the wrong neighbours.
 ///
 /// Every operation runs in the order `ellrod_ti1` in
-/// `xuebuild/binconvert.py` documents, in f64: per row `c = cos(latitude *
+/// `xuebuild/derive.py` documents, in f64: per row `c = cos(latitude *
 /// rad)` and `dx = R * c * (longitude_step * rad)`, `dy = R *
 /// (-latitude_step * rad)`, the centred differences over `2 * dx` and
 /// `2 * dy` (row r-1 the northern neighbour, columns modulo the width),
@@ -379,7 +379,7 @@ pub fn ellrod_ti1(input: &CatPlanes, level: u32) -> Result<(Vec<f64>, Vec<bool>)
 /// `b = CAT_EDR_LOG_STD / std`, `a = CAT_EDR_LOG_MEAN - b * mean`, then per
 /// cell `exp(a + b * ln(max(TI1, CAT_TI1_FLOOR)))`, then 0 where that is
 /// strictly below [`CAT_EDR_NIL`] (0.10 itself keeps its code) and 0 where
-/// TI1 is undefined — exactly `derive_cat` in `xuebuild/binconvert.py`.
+/// TI1 is undefined — exactly `derive_cat` in `xuebuild/derive.py`.
 pub fn derive_cat(input: &CatPlanes, level: u32, calibration: (f64, f64)) -> Result<Vec<f64>> {
     let (mean, std) = calibration;
     let (ti1, valid) = ellrod_ti1(input, level)?;
@@ -411,7 +411,7 @@ fn nil_below_threshold(edr: f64) -> f64 {
 }
 
 /// `(rows, columns)` of a variable's plane before its crop window is cut.
-/// Mirrors `uncropped_shape` in `xuebuild/binconvert.py`.
+/// Mirrors `uncropped_shape` in `xuebuild/derive.py`.
 pub fn uncropped_shape(grid: &GridInfo) -> (usize, usize) {
     match grid.crop {
         None => (grid.height, grid.width),
@@ -421,7 +421,7 @@ pub fn uncropped_shape(grid: &GridInfo) -> (usize, usize) {
 
 /// The centre latitude of every row of the uncropped plane, in degrees:
 /// `first_latitude + (row - crop_row_start) * latitude_step`. Mirrors
-/// `uncropped_latitudes` in `xuebuild/binconvert.py`.
+/// `uncropped_latitudes` in `xuebuild/derive.py`.
 pub fn uncropped_latitudes(grid: &GridInfo) -> Vec<f64> {
     let (rows, _) = uncropped_shape(grid);
     let row_start = grid.crop.map_or(0, |crop| crop.row_start) as f64;
@@ -431,7 +431,7 @@ pub fn uncropped_latitudes(grid: &GridInfo) -> Vec<f64> {
 }
 
 /// Whether the uncropped plane's columns run all the way round. Mirrors
-/// `uncropped_wraps` in `xuebuild/binconvert.py`.
+/// `uncropped_wraps` in `xuebuild/derive.py`.
 pub fn uncropped_wraps(grid: &GridInfo) -> bool {
     let (_, columns) = uncropped_shape(grid);
     (columns as f64 * grid.longitude_step - 360.0).abs() < 1e-6
@@ -439,8 +439,8 @@ pub fn uncropped_wraps(grid: &GridInfo) -> bool {
 
 /// One `cat<level>` frame on the published (cropped) grid, derived on the
 /// uncropped planes and only then cut to the window. `plane` answers each
-/// input's uncropped plane. Mirrors `_derive_cat_plane` in
-/// `xuebuild/binconvert.py`.
+/// input's uncropped plane. Mirrors `derive_cat_plane` in
+/// `xuebuild/derive.py`.
 pub(super) fn derive_cat_plane<'a>(
     plane: impl Fn(&str) -> Result<&'a [f64]>,
     bundle_id: &str,

@@ -23,11 +23,11 @@ import numpy as np
 from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     bundle_input_ids,
-    derive_vapour_flux,
     published_bundle_ids,
     vapour_flux_level,
     vector_input_ids,
 )
+from xuebuild.derive import derive_vapour_flux
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.quantize import ISOBARIC_VARIABLE_IDS, PROFILES

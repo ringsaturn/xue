@@ -53,11 +53,10 @@ from xuebuild.binconvert import (
     _convert_units,
     _extract_planes,
     bundle_input_ids,
-    derive_vector,
-    derive_wave_vector,
     published_bundle_ids,
     vector_input_ids,
 )
+from xuebuild.derive import derive_vector, derive_wave_vector
 from xuebuild.grid import GridInfo, grid_info, snap_global_longitudes
 from xuebuild.eccodescli import repack_grid_simple
 from xuebuild.errors import ConversionError, DownloadError

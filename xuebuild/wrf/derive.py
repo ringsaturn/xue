@@ -15,7 +15,7 @@ R_DRY = 287.05
 LAPSE_RATE = 0.0065
 #: The hub height the ``wind80m`` pair is read at, metres above ground.
 WIND_80M_AGL = 80.0
-# The same Bolton (1980) constants binconvert.derive_theta_e inverts the
+# The same Bolton (1980) constants xuebuild.derive.derive_theta_e inverts the
 # dew point with, and the same floor on a dry cell's mixing ratio.
 _MINIMUM_Q = 1e-7
 #: Cloud layer bounds in metres above sea level: low below 2 km, middle to

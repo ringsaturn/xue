@@ -23,7 +23,7 @@ real records the GRIB fixtures carry:
 - GDAL's GRIB driver labels the soil temperature Celsius while handing it
   back in kelvin (its tables do not mark these parameters for conversion),
   so the converter reads the unit off the values
-  (``binconvert.soil_temperature_unit``).
+  (``derive.soil_temperature_unit``).
 """
 
 from __future__ import annotations
@@ -38,14 +38,8 @@ import numpy as np
 
 from tests._support import FIXTURES
 from xuebuild import grib2
-from xuebuild.binconvert import (
-    SOIL_KELVIN_THRESHOLD,
-    VECTOR_BUNDLES,
-    _convert_units,
-    _extract_planes,
-    published_bundle_ids,
-    soil_temperature_unit,
-)
+from xuebuild.binconvert import VECTOR_BUNDLES, _convert_units, _extract_planes, published_bundle_ids
+from xuebuild.derive import SOIL_KELVIN_THRESHOLD, soil_temperature_unit
 from xuebuild.grid import grid_info
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, inspect_grib_multi, raster_expression

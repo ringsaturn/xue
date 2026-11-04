@@ -5,7 +5,7 @@ project ln TI1 onto the climatological ln EDR distribution, which needs the
 mean and standard deviation of ln TI1 as each model resolves it. This script
 reads the wind and geopotential height at 300/250/200 hPa of past GFS and
 ECMWF IFS runs by ``.idx`` byte range from their public buckets, computes
-TI1 with the encoder's own :func:`xuebuild.binconvert.ellrod_ti1`, and
+TI1 with the encoder's own :func:`xuebuild.derive.ellrod_ti1`, and
 reports the cos(latitude)-weighted mean and standard deviation of
 ln(max(TI1, floor)) over every cell the index is defined on (|lat| <= 85°).
 The numbers it prints are frozen as ``SourceSpec.cat_calibration``; a refit
@@ -34,7 +34,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from xuebuild.binconvert import CAT_SHEAR_LAYERS, CAT_TI1_FLOOR, ellrod_ti1  # noqa: E402
+from xuebuild.binconvert import CAT_SHEAR_LAYERS  # noqa: E402
+from xuebuild.derive import CAT_TI1_FLOOR, ellrod_ti1  # noqa: E402
 from xuebuild.idx import ecmwf_field_byte_range, field_byte_range  # noqa: E402
 from xuebuild.variables import CAT_LEVELS_HPA  # noqa: E402
 

@@ -41,7 +41,8 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, fetch, observation, om2nccli
-from xuebuild.binconvert import interval_rate, published_bundle_ids
+from xuebuild.binconvert import published_bundle_ids
+from xuebuild.derive import interval_rate
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     OPEN_METEO_BASE_URL,

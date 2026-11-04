@@ -923,7 +923,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # field on the ground surface (NCEP-local 0/1/192–195, GRIB2 code table
     # 4.222's "yes/no"): rain, freezing rain, ice pellets and snow. They are
     # input-only — the converter combines them into the one categorical
-    # ``ptype`` a run publishes (:func:`xuebuild.binconvert.derive_ptype`) —
+    # ``ptype`` a run publishes (:func:`xuebuild.derive.derive_ptype`) —
     # so none of the four ever reaches a bundle and none needs a codebook.
     "crain": VariableSpec(
         id="crain",
@@ -1409,7 +1409,7 @@ VARIABLES: dict[str, VariableSpec] = {
     # The wave vector: the significant wave height laid along the direction
     # the waves travel, as an eastward and a northward component in metres
     # — derived by the converter from ``htsgw`` and ``dirpw``
-    # (binconvert.derive_wave_vector), never fetched, so the record-matching
+    # (derive.derive_wave_vector), never fetched, so the record-matching
     # fields stay empty. It exists so a renderer can draw the sea the way it
     # draws the wind: the height as a filled magnitude, the direction as
     # particles. GRIB2 has no parameter for such a pair; 250 / 251 are
@@ -1438,7 +1438,7 @@ VARIABLES: dict[str, VariableSpec] = {
     ),
     # The wind-sea and swell vectors: each partition's height laid along its
     # own direction of travel, derived the way the wave vector is
-    # (binconvert.derive_wave_vector) from ``wvhgt`` / ``wvdir`` and
+    # (derive.derive_wave_vector) from ``wvhgt`` / ``wvdir`` and
     # ``swhgt`` / ``swdir``, under the next four local numbers in the waves
     # category. Each pair sits on the surface its inputs do: the wind sea's
     # on the water surface with no value, the swell's on the first rank of
@@ -2340,7 +2340,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
     if family == "thetae":
         # Equivalent potential temperature, Bolton (1980) eq. 43, derived by
         # the converter from the temperature and the specific humidity on
-        # the same surface (binconvert.derive_theta_e), never fetched, so
+        # the same surface (derive.derive_theta_e), never fetched, so
         # the record-matching fields stay empty. GRIB2's own number for the
         # quantity is 0/0/3 (EPOT).
         return VariableSpec(
@@ -2356,7 +2356,7 @@ def _isobaric_spec(family: str, level_hpa: int) -> VariableSpec:
         # index (vertical shear times deformation) projected onto the
         # climatological EDR distribution, derived by the converter from the
         # wind and the height on its surface and the ones around it
-        # (binconvert.derive_cat), never fetched. GRIB2's 0/19/29 is the
+        # (derive.derive_cat), never fetched. GRIB2's 0/19/29 is the
         # clear-air turbulence EDR, which is what this is; 0/19/30 (EDPARM)
         # is the all-sources eddy dissipation parameter, which this is not.
         return VariableSpec(
