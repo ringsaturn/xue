@@ -659,7 +659,7 @@ function renderPicker(): void {
   // The list scrolls past a few rows of years: keep the season on screen.
   const chosen = seasonsGroup.querySelector<HTMLElement>('[aria-pressed="true"]');
   if (chosen) {
-    const top = chosen.offsetTop - seasonsGroup.offsetTop;
+    const top = chosen.offsetTop;
     if (top < seasonsGroup.scrollTop || top + chosen.offsetHeight > seasonsGroup.scrollTop + seasonsGroup.clientHeight)
       seasonsGroup.scrollTop = top;
   }
