@@ -33,12 +33,12 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 
 | Concern | Python | Rust | Web |
 |---|---|---|---|
-| Bundle metadata (schema v3) | `binconvert.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
+| Bundle metadata (schema v3) | `metadata.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
 | Container byte layout | `binformat.py` | `format.rs` (the only place it is packed or unpacked) | via wasm |
 | Manifest / pointer validation (all three validators) | `manifest.py` | `encode/manifest.rs` | `manifest.ts` |
-| Grid snapping, regrid, downsample | `binconvert.py`, `reproject.py` | `encode/grid.rs`, `reproject.rs` | `domain.ts` |
+| Grid snapping, regrid, downsample | `grid.py`, `reproject.py` | `encode/grid.rs`, `reproject.rs` | `domain.ts` |
 | Observation ingest | `observation.py` | `encode/observation.rs` | — |
-| Composite inputs, analysis-optional ids | `binconvert.py` | `encode/convert.rs` | — |
+| Composite inputs, analysis-optional ids | `discover.py` | `encode/convert.rs` | — |
 | GRIB matching / template parsing | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
 | Zarr shard reading | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
 
