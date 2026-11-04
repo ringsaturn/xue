@@ -167,7 +167,7 @@ of a fan-out, the wheel writes into each tier's shared store:
 
 - every bundle's variable arrays, as a one-bundle store's but with
   `attributes.xue.bundle` leading the block and the bundle's dimension
-  names (`binconvert.store_dimensions`: `time_<bundle id>` for a published
+  names (`discover.store_dimensions`: `time_<bundle id>` for a published
   scalar in `analysis_optional_ids` or a static first variable,
   `latitude_<family>` / `longitude_<family>`, `<family>` the id
   `bundle_grid_family` returns, for a bundle off the primary grid);

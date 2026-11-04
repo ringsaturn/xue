@@ -31,7 +31,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import published_bundle_ids
 from xuebuild.era5 import series as era5_series
 from xuebuild.era5.series import Era5Error
 from xuebuild.errors import DownloadError

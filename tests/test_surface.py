@@ -22,7 +22,8 @@ from datetime import UTC, datetime
 
 import numpy as np
 
-from xuebuild.binconvert import VECTOR_BUNDLES, published_bundle_ids
+from xuebuild.binconvert import VECTOR_BUNDLES
+from xuebuild.discover import published_bundle_ids
 from xuebuild.derive import PTYPE_CODES, derive_ptype
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression

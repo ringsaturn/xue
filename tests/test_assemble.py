@@ -20,7 +20,7 @@ from pathlib import Path
 
 from tests._support import ClassTempRoot
 from xuebuild import assemble, binconvert, stac, zarrstore
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import build_bin_manifest
 from xuebuild.sources import SOURCES, source_spec

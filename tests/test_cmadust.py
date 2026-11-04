@@ -32,7 +32,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, cmadust, fetch, observation
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import parse_run, resolve_run
 from xuebuild.idx import ByteRange

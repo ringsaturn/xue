@@ -64,11 +64,11 @@ from unittest import mock
 
 from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, fetch as fetchmod, grib2, quantize
-from xuebuild.binconvert import (
+from xuebuild.binconvert import bundle_variable_ids
+from xuebuild.discover import (
     analysis_optional_ids,
     bundle_grid_family,
     bundle_input_ids,
-    bundle_variable_ids,
     published_bundle_ids,
 )
 from xuebuild.cli import MAX_FORECAST_HOURS, forecast_hours as cli_forecast_hours

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import unittest
 
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import published_bundle_ids
 from xuebuild.sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS, SOURCES, source_spec
 
 FORECAST_CORE = ("tmp2m", "prate")

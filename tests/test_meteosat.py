@@ -37,6 +37,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, TempRoot, assert_native_matches, counting, decimated_rung, requires_gdal_warp, requires_hdf5plugin, requires_native_source, requires_shachen, stored_bundle
 from xuebuild import binconvert, observation
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     _fetch_satellite_run,
@@ -198,10 +199,10 @@ class RegistryTests(unittest.TestCase):
         # the DEBRA confidence.
         self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (himawari.bundle_scalar_ids, ("dustrgb", "truecolor"), himawari.core_bundle_ids))
         self.assertEqual(himawari.bundle_composite_ids, ("dustrgb", "dustcf", "zhouye", "truecolor"))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "ir039", "dustrgb", "truecolor"))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir123"))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
-        self.assertEqual(binconvert.bundle_input_ids(himawari, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
+        self.assertEqual(published_bundle_ids(SPEC), ("ir104", "ir039", "dustrgb", "truecolor"))
+        self.assertEqual(bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir123"))
+        self.assertEqual(bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
+        self.assertEqual(bundle_input_ids(himawari, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
         # The cycle on the hour alone, a day of them.
         self.assertEqual((SPEC.grid_step, SPEC.cadence_seconds, SPEC.window_hours, SPEC.production_grid, SPEC.tile), (0.04, 3600, 24, (3000, 3000), (64, 64)))
         self.assertEqual(METEOSAT.cadence_seconds, 600)

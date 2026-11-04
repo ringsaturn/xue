@@ -77,7 +77,7 @@ ships, and a listed bundle ships only when its inputs were fetched:
 
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by
-`binconvert.analysis_optional_ids` (mirrored in `convert.rs`) and starts at
+`discover.analysis_optional_ids` (mirrored in `convert.rs`) and starts at
 the first step.
 
 ## Companion files and fill values
@@ -151,7 +151,7 @@ commit). Widening a source's inputs means recutting its crop fixture
   bundles (`write_part`, `zarr.part.<first bundle>.json`) and, unless
   `partial`, the group document from it (`finalize_store`), whose CRC-32
   every entry naming the store carries. The dimension names are
-  `binconvert.store_dimensions`, a function of the source registry alone
+  `discover.store_dimensions`, a function of the source registry alone
   (`time_<bundle id>` for an analysis-optional scalar or a static field,
   `latitude_<family>` / `longitude_<family>` off the primary grid), so a
   subset build writes the objects a whole build does. Series stores stay

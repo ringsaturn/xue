@@ -36,7 +36,7 @@ from unittest import mock
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import fetch, grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
+from xuebuild.discover import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import DownloadError
 from xuebuild.fetch import (
     ARPEGE_PACKAGES,

@@ -297,19 +297,19 @@ are for xarray and its kind; a player reads the metadata.
   `time_<bundle id>`, and the store carries a coordinate array of that name
   with that bundle's axis (same encoding as `time`). The rules are the two
   by which the encoder shortens a bundle's axis: a published scalar whose
-  series has no analysis frame (`binconvert.analysis_optional_ids`: a
+  series has no analysis frame (`discover.analysis_optional_ids`: a
   de-accumulated or de-averaged rate, an interval maximum such as `gust`),
   and a static field (the terrain, one frame at the analysis).
 - A bundle on a grid family of its own takes `latitude_<family>` and
   `longitude_<family>`, `<family>` being exactly the string
-  `binconvert.bundle_grid_family` returns for it: the id of the companion
+  `discover.bundle_grid_family` returns for it: the id of the companion
   file family its inputs are read from (`pgb`, the CFSv2 pressure levels on
   their 1° grid, so `latitude_pgb`). Every bundle of one family shares the
   pair, as the primary grid's bundles share `latitude` / `longitude`. A
   family id matches `^[a-z][a-z0-9]*$`.
 - The decision is the rule, not a comparison of axes, so it is a function of
   the source registry and the bundle id alone
-  (`binconvert.store_dimensions`): a rate gets `time_prate` even on a build
+  (`discover.store_dimensions`): a rate gets `time_prate` even on a build
   whose axis happens to start past the analysis. A fanned-out job building
   a subset of the bundles therefore writes the same objects a whole build
   does, and every job writes the primary coordinates it needs, the same

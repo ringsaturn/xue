@@ -29,6 +29,7 @@ from tests._support import (
     stored_bundle,
 )
 from xuebuild import binconvert, encoder, native, registry, zarrstore
+from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError
 from xuebuild.sources import source_spec
 
@@ -113,7 +114,7 @@ class RegistryHandoverTests(unittest.TestCase):
         (call,) = calls
         self.assertEqual(call["inputs"], [])
         self.assertEqual(call["model"], "gfs")
-        self.assertEqual(call["bundle_ids"], list(binconvert.published_bundle_ids(source_spec("gfs"))))
+        self.assertEqual(call["bundle_ids"], list(published_bundle_ids(source_spec("gfs"))))
         self.assertEqual(call["registry"], registry.document_json())
         self.assertEqual(json.loads(call["registry"])["registrySchema"], registry.REGISTRY_SCHEMA)
 

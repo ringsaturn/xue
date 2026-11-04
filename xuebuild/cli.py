@@ -17,7 +17,7 @@ from .assemble import (
     partial_manifest_path,
     read_manifest,
 )
-from .binconvert import bundle_input_ids, published_bundle_ids
+from .discover import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
 from .fetch import WINDOW_FILENAME, fetch_run, parse_run, resolve_run, window_summary

@@ -44,6 +44,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source, stored_bundle
 from xuebuild import binconvert, cli, fetch, grib2
+from xuebuild.discover import prepare_frames_all, published_bundle_ids, snap_observation_frames
 from xuebuild.grid import (
     BlockReduction,
     GridInfo,
@@ -53,7 +54,7 @@ from xuebuild.grid import (
     snap_axis,
     snap_regional_steps,
 )
-from xuebuild.binconvert import _extract_planes, _snap_observation_frames, published_bundle_ids
+from xuebuild.binconvert import _extract_planes
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import (
     MRMS_BASE_URL,
@@ -652,7 +653,7 @@ class AxisTests(unittest.TestCase):
         return per_file
 
     def test_observation_times_snap_down_to_the_slot_and_the_hour_is_the_run(self) -> None:
-        snapped = _snap_observation_frames(
+        snapped = snap_observation_frames(
             self.frames(("2026-09-13T00:02:41", "2026-09-13T00:02:00"), ("2026-09-13T00:00:42", "2026-09-13T00:00:00"), ("2026-09-13T02:58:37", "2026-09-13T02:58:00")),
             120,
         )
@@ -661,19 +662,19 @@ class AxisTests(unittest.TestCase):
         self.assertEqual(snapped[0]["prate"].valid_time, datetime(2026, 9, 13, 0, 2, tzinfo=UTC))
         self.assertEqual(snapped[0]["cref"].valid_time, snapped[0]["prate"].valid_time)
         # A window whose first hour has no frame starts at the hour it does.
-        later = _snap_observation_frames(self.frames(("2026-09-13T01:04:41", "2026-09-13T01:04:00")), 120)
+        later = snap_observation_frames(self.frames(("2026-09-13T01:04:41", "2026-09-13T01:04:00")), 120)
         self.assertEqual(later[0]["cref"].run_time, datetime(2026, 9, 13, 1, tzinfo=UTC))
         self.assertEqual(later[0]["cref"].lead_seconds, 240)
         with self.assertRaisesRegex(ConversionError, "disagree on the observation slot"):
-            _snap_observation_frames(self.frames(("2026-09-13T00:02:41", "2026-09-13T00:04:00")), 120)
+            snap_observation_frames(self.frames(("2026-09-13T00:02:41", "2026-09-13T00:04:00")), 120)
 
     def test_two_files_in_one_slot_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             duplicate = Path(scratch) / "mrms.2026091300.t0000.again.grib2"
             shutil.copy(FRAMES[0], duplicate)
             with self.assertRaisesRegex(ConversionError, "duplicate lead times"):
-                binconvert._prepare_frames_all([FRAMES[0], duplicate], MRMS.input_variable_ids, cadence_seconds=120)
-        per_file = binconvert._prepare_frames_all(list(FRAMES), MRMS.input_variable_ids, cadence_seconds=120)
+                prepare_frames_all([FRAMES[0], duplicate], MRMS.input_variable_ids, cadence_seconds=120)
+        per_file = prepare_frames_all(list(FRAMES), MRMS.input_variable_ids, cadence_seconds=120)
         self.assertEqual([frames["cref"].lead_seconds for frames in per_file], [0, 120])
         self.assertEqual(binconvert.axis_unit_seconds([0, 120, 240]), 120)
 

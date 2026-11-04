@@ -35,7 +35,8 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native, stored_bundle
 from xuebuild import binconvert, grib2
-from xuebuild.binconvert import _extract_planes, published_bundle_ids
+from xuebuild.binconvert import _extract_planes
+from xuebuild.discover import published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid, grid_info
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (

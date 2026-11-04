@@ -43,12 +43,8 @@ from tests._support import (
     stored_bundle,
 )
 from xuebuild import binconvert, fetch, grib2, stac, zarrstore
-from xuebuild.binconvert import (
-    VOLUME_BUNDLES,
-    bundle_input_ids,
-    bundle_variable_ids,
-    published_bundle_ids,
-)
+from xuebuild.binconvert import VOLUME_BUNDLES, bundle_variable_ids
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     MRMS_BASE_URL,
