@@ -49,7 +49,8 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
-from xuebuild.binconvert import interval_rate, published_bundle_ids
+from xuebuild.binconvert import published_bundle_ids
+from xuebuild.derive import interval_rate
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import resolve_run
 from xuebuild.manifest import validate_bin_manifest

@@ -170,7 +170,7 @@ class SourceSpec:
     interval since the previous frame (Open-Meteo's ``precipitation``, in
     millimetres, which every ``.om`` file describes since the model's last
     native output time) and becomes a rate by one division
-    (:func:`xuebuild.binconvert.interval_rate`). The third arrival shape
+    (:func:`xuebuild.derive.interval_rate`). The third arrival shape
     beside :attr:`accumulated_precipitation` (a run total, differenced) and
     :attr:`averaged_precipitation` (a window average, de-averaged); a source
     declares at most one."""
@@ -422,7 +422,7 @@ class SourceSpec:
     """``(level_hpa, mean, standard deviation)`` of ln TI1 (s^-2) on each
     surface the source publishes a ``cat<level>`` bundle for: the
     lognormal fit the clear-air turbulence index is projected onto the
-    climatological EDR distribution through (``binconvert.derive_cat``).
+    climatological EDR distribution through (``derive.derive_cat``).
     Per source because the deformation a model resolves depends on its
     effective resolution, so one fit would make two models' EDR
     incomparable. Fitted once, offline, by ``scripts/cat_calibration.py``;

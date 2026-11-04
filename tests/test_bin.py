@@ -1007,7 +1007,7 @@ def manifest_bundles() -> list[dict]:
 
 class DeaccumulationTests(unittest.TestCase):
     def test_rate_from_accumulations(self) -> None:
-        from xuebuild.binconvert import deaccumulate_precipitation
+        from xuebuild.derive import deaccumulate_precipitation
 
         previous = np.array([0.0, 3.0, 6.0])
         current = np.array([3.0, 3.0, 5.5])  # last point dips: packing noise
@@ -1015,7 +1015,7 @@ class DeaccumulationTests(unittest.TestCase):
         np.testing.assert_allclose(rate, [1.0, 0.0, 0.0])
 
     def test_first_frame_has_zero_rate(self) -> None:
-        from xuebuild.binconvert import deaccumulate_precipitation
+        from xuebuild.derive import deaccumulate_precipitation
 
         rate = deaccumulate_precipitation(np.array([1.0, 2.0]), None, 3)
         np.testing.assert_allclose(rate, [0.0, 0.0])

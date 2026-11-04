@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from xuebuild.binconvert import average_window_start, deaverage_precipitation
+from xuebuild.derive import average_window_start, deaverage_precipitation
 from xuebuild.grid import GridInfo, normalize_longitudes
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import fetch_frame, resolve_run, sflux_object_url

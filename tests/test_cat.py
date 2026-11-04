@@ -16,18 +16,20 @@ from unittest import mock
 import numpy as np
 
 from xuebuild.binconvert import (
+    CAT_SHEAR_LAYERS,
+    DERIVED_SCALARS,
+    bundle_input_ids,
+    cat_level,
+    published_bundle_ids,
+)
+from xuebuild.derive import (
     CAT_EDR_LOG_MEAN,
     CAT_EDR_LOG_STD,
     CAT_EDR_NIL,
-    CAT_SHEAR_LAYERS,
-    DERIVED_SCALARS,
     EARTH_RADIUS_M,
-    _derive_cat_plane,
-    bundle_input_ids,
-    cat_level,
     derive_cat,
+    derive_cat_plane,
     ellrod_ti1,
-    published_bundle_ids,
     uncropped_latitudes,
 )
 from xuebuild.grid import CropWindow, GridInfo
@@ -174,7 +176,7 @@ class ProjectionTests(unittest.TestCase):
         self.assertLess(CAT_EDR_NIL - projected(highest_nil), 1e-16)
         ti1_plane = np.zeros((self.rows, self.columns))
         ti1_plane[2, 2], ti1_plane[2, 3], ti1_plane[2, 4] = highest_nil, lowest_kept, 0.3
-        with mock.patch("xuebuild.binconvert.ellrod_ti1", return_value=(ti1_plane, valid)):
+        with mock.patch("xuebuild.derive.ellrod_ti1", return_value=(ti1_plane, valid)):
             edr = self._edr(planes, CAT_EDR_LOG_MEAN, CAT_EDR_LOG_STD)
         self.assertEqual(edr[2, 2], 0.0)
         self.assertEqual(edr[2, 3], projected(lowest_kept))
@@ -192,16 +194,16 @@ class ProjectionTests(unittest.TestCase):
         planes["hgt200"] = planes["hgt200"] + 12000.0
         planes["hgt300"] = planes["hgt300"] + 9000.0
         calibration = {250: (-17.0, 1.1)}
-        whole = _derive_cat_plane(planes, "cat250", grid, calibration).reshape(rows, columns)
+        whole = derive_cat_plane(planes, "cat250", grid, calibration).reshape(rows, columns)
         # A window across the antimeridian, touching the grid's first row.
         crop = CropWindow(source_width=columns, source_height=rows, row_start=0, column_start=20, width=8, height=5)
         cropped_grid = GridInfo(width=8, height=5, first_longitude=120.0, first_latitude=60.0,
                                 longitude_step=15.0, latitude_step=-10.0, crop=crop)
         np.testing.assert_array_equal(uncropped_latitudes(cropped_grid), uncropped_latitudes(grid))
-        cut = _derive_cat_plane(planes, "cat250", cropped_grid, calibration).reshape(5, 8)
+        cut = derive_cat_plane(planes, "cat250", cropped_grid, calibration).reshape(5, 8)
         np.testing.assert_array_equal(cut, crop.take(whole))
         with self.assertRaises(ConversionError):
-            _derive_cat_plane(planes, "cat250", grid, {300: (-17.0, 1.1)})
+            derive_cat_plane(planes, "cat250", grid, {300: (-17.0, 1.1)})
 
 
 class RegistryTests(unittest.TestCase):
