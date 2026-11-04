@@ -5,6 +5,8 @@
 // channel progress that reaches a session by its stream key, and how
 // sessions end. What is on screen (the primary, the slots) stays in
 // `main.ts`; the types are `session.ts`.
+import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
+import { fetchImmutable } from "./fetchimmutable";
 import { t, type MessageKey } from "./i18n";
 import type { CompositeField, VectorField } from "./layer";
 import { isWaveVector, vectorMaxMagnitude } from "./levels";
@@ -86,14 +88,11 @@ export interface SessionRegistryDeps {
   ) => VariantDescriptor | null;
   readonly zarrPayloadBudgetBytes: () => number;
   readonly showError: (message: string) => void;
-  /** The load status line, for the primary's open only. */
-  readonly status: (key: MessageKey) => void;
-  readonly downloadBundle: (
-    descriptor: { path: string; byteLength: number; crc32: string },
-    sequence: number,
-    quiet: boolean,
-    base: string | null,
-  ) => Promise<ArrayBuffer>;
+  /** The load status line or the data card's preload state, for the
+   * primary's open only. */
+  readonly status: (line: "load" | "preload", key: MessageKey, params?: Record<string, string | number>) => void;
+  /** The data card's progress bar, while a whole bundle downloads. */
+  readonly downloadProgress: (bytes: number, total: number) => void;
   readonly initializeChannel: (
     channel: DecodeChannel,
     initMessage: unknown,
@@ -211,6 +210,50 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
     return decodeWorker;
   }
 
+  /** Downloads and CRC32-verifies one manifest-declared `.xue` bundle. */
+  async function downloadBundle(
+    descriptor: { path: string; byteLength: number; crc32: string },
+    sequence: number,
+    quiet: boolean,
+    base: string | null,
+  ): Promise<ArrayBuffer> {
+    if (!quiet) deps.status("preload", "receivingBundle");
+    const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32, base));
+    if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
+    const total = descriptor.byteLength;
+    const data = new Uint8Array(total);
+    let offset = 0;
+    let crc = CRC32_INITIAL;
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const result = await reader.read();
+        if (result.done) break;
+        if (sequence !== deps.initializeSequence) throw new DOMException("aborted", "AbortError");
+        const chunk = result.value;
+        if (offset + chunk.byteLength > total) throw new Error(t("bundleTooLong"));
+        data.set(chunk, offset);
+        offset += chunk.byteLength;
+        crc = crc32Update(crc, chunk);
+        if (quiet) continue;
+        deps.downloadProgress(offset, total);
+        deps.status("load", "receivingBundlePercent", { percent: Math.round((offset / total) * 100) });
+      }
+    } else {
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      if (buffer.byteLength > total) throw new Error(t("bundleTooLong"));
+      data.set(buffer, 0);
+      offset = buffer.byteLength;
+      crc = crc32Update(crc, buffer);
+      if (!quiet) deps.downloadProgress(offset, total);
+    }
+
+    if (offset !== total) throw new Error(t("bundleLengthMismatch"));
+    if (crc32Hex(crc) !== descriptor.crc32) throw new Error(t("bundleChecksumMismatch"));
+    return data.buffer;
+  }
+
   /** Download and initialize one variable's bundle; resident sessions are
    * reused. An overlay loads quietly — the data card and the status line
    * describe the primary — and takes the half-resolution tier where one is
@@ -312,7 +355,7 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
         } else if (role === "probe") {
           throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
         } else {
-          const initBuffer = await deps.downloadBundle(container, sequence, quiet, runUrl);
+          const initBuffer = await downloadBundle(container, sequence, quiet, runUrl);
           if (sequence !== deps.initializeSequence) throw new DOMException("aborted", "AbortError");
           channel = spawnWorker();
           initMessage = { type: "init", buffer: initBuffer };
@@ -326,7 +369,7 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
         throw new Error(t("manifestMissingBundle", { id: variableId }));
       }
 
-      if (!quiet) deps.status(streaming ? "readingIndex" : "initializingDecoder");
+      if (!quiet) deps.status("load", streaming ? "readingIndex" : "initializingDecoder");
       let opened: Awaited<ReturnType<SessionRegistryDeps["initializeChannel"]>>;
       try {
         opened = await deps.initializeChannel(channel, initMessage, transfer, sequence);
