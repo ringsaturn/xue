@@ -21,7 +21,8 @@ import numpy as np
 
 from tests._support import ClassTempRoot, requires_native
 from xuebuild import binconvert, binformat, zarrcodec, zarrstore, zstdcli
-from xuebuild.binconvert import GridInfo, build_metadata
+from xuebuild.binconvert import build_metadata
+from xuebuild.grid import GridInfo
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import validate_bin_manifest
 from xuebuild.sources import source_spec

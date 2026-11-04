@@ -56,6 +56,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen, stored_bundle
 from xuebuild import binconvert, observation
+from xuebuild.grid import GridInfo, crop_grid
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     _fetch_satellite_run,
@@ -1883,7 +1884,7 @@ class CaseGridTest(unittest.TestCase):
         box = (117.0, 45.5, 122.0, 48.5)
         case = satellite_case_grid(spec, box)
         published = satellite_grid(spec)
-        info = binconvert.GridInfo(
+        info = GridInfo(
             width=published.width,
             height=published.height,
             first_longitude=published.first_longitude,
@@ -1891,12 +1892,12 @@ class CaseGridTest(unittest.TestCase):
             longitude_step=published.step,
             latitude_step=-published.step,
         )
-        cropped = binconvert.crop_grid(info, box)
+        cropped = crop_grid(info, box)
         self.assertEqual((case.width, case.height), (cropped.width, cropped.height))
         self.assertEqual((case.first_longitude, case.first_latitude), (cropped.first_longitude, cropped.first_latitude))
         # Cropping the case grid again by the same box keeps all of it.
-        again = binconvert.crop_grid(
-            binconvert.GridInfo(
+        again = crop_grid(
+            GridInfo(
                 width=case.width,
                 height=case.height,
                 first_longitude=case.first_longitude,

@@ -22,8 +22,6 @@ from xuebuild.binconvert import (
     CAT_SHEAR_LAYERS,
     DERIVED_SCALARS,
     EARTH_RADIUS_M,
-    CropWindow,
-    GridInfo,
     _derive_cat_plane,
     bundle_input_ids,
     cat_level,
@@ -32,6 +30,7 @@ from xuebuild.binconvert import (
     published_bundle_ids,
     uncropped_latitudes,
 )
+from xuebuild.grid import CropWindow, GridInfo
 from xuebuild.errors import ConversionError
 from xuebuild.quantize import PROFILES, QUALITY_CAT
 from xuebuild.sources import source_spec

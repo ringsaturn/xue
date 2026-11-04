@@ -12,12 +12,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from xuebuild.binconvert import (
-    GridInfo,
-        _normalize_longitudes,
-    average_window_start,
-    deaverage_precipitation,
-)
+from xuebuild.binconvert import average_window_start, deaverage_precipitation
+from xuebuild.grid import GridInfo, normalize_longitudes
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import fetch_frame, resolve_run, sflux_object_url
 from xuebuild.gdal import raster_expression
@@ -152,7 +148,7 @@ class LongitudeNormalizationTests(unittest.TestCase):
         # GDAL computes the sflux first cell center as exactly 0.0 (edge
         # -step/2 + step/2); tiny positive offsets must normalize identically.
         for first_longitude in (0.0, 0.0000000407):
-            grid = _normalize_longitudes(
+            grid = normalize_longitudes(
                 GridInfo(
                     width=3072,
                     height=1536,
@@ -169,7 +165,7 @@ class LongitudeNormalizationTests(unittest.TestCase):
             self.assertEqual(grid.decimated().column_roll, 0)
 
     def test_grids_already_starting_at_minus_180_stay_unrolled(self) -> None:
-        grid = _normalize_longitudes(
+        grid = normalize_longitudes(
             GridInfo(
                 width=1440,
                 height=721,

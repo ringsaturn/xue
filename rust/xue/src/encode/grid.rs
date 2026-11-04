@@ -1,5 +1,5 @@
 //! Grid discovery, the -180-first column roll, and regional cropping — the
-//! grid half of `xuebuild/binconvert.py`.
+//! port of `xuebuild/grid.py`.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ impl CropWindow {
 /// every `factor` x `factor` block of the `(source_height, source_width)`
 /// plane becomes its maximum. Carried on the grid the way a `Resampler` is,
 /// and like it never serialized — the bundle's grid is the thinned one.
-/// Mirrors `BlockReduction` in `xuebuild/binconvert.py`.
+/// Mirrors `BlockReduction` in `xuebuild/grid.py`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlockReduction {
     pub factor: usize,
@@ -183,7 +183,7 @@ impl GridInfo {
     }
 
     /// The grid a source's block reduction publishes — the port of
-    /// `_downsample_grid` in `xuebuild/binconvert.py`: one cell per
+    /// `downsample_grid` in `xuebuild/grid.py`: one cell per
     /// `factor` x `factor` block, centered on the block (half a source step
     /// in per extra cell, rounded to ten decimals the way a crop's origin
     /// is), at `factor` times the step. The source must divide into whole
@@ -248,7 +248,7 @@ impl GridInfo {
 const GLOBAL_SPAN_TOLERANCE_CELLS: f64 = 1e-3;
 
 /// Give a global grid the exact step and origin its column count implies —
-/// the port of `_snap_global_longitudes` in `xuebuild/binconvert.py`, which
+/// the port of `snap_global_longitudes` in `xuebuild/grid.py`, which
 /// explains the rule; the two must agree to the bit.
 ///
 /// GDAL derives a GRIB grid's longitude step from the first and last
@@ -280,13 +280,13 @@ pub fn snap_global_longitudes(grid: GridInfo) -> GridInfo {
 /// order they are tried: whole thousandths of a degree, then whole
 /// arc-minutes (EFAS's 1/60°, which no decimal spells: the double GDAL
 /// derives for it needs seventeen digits, more than some `gdalinfo`
-/// releases print). Mirrors `_REGIONAL_STEP_UNITS` in `xuebuild/binconvert.py`.
+/// releases print). Mirrors `_REGIONAL_STEP_UNITS` in `xuebuild/grid.py`.
 fn regional_step_units() -> [(f64, f64); 2] {
     [(1e-3, 1000.0), (1.0 / 60.0, 60.0)]
 }
 
 /// Give a regional grid the round step it was clearly published on — the
-/// port of `_snap_regional_steps` in `xuebuild/binconvert.py`, which
+/// port of `snap_regional_steps` in `xuebuild/grid.py`, which
 /// explains the rule; the two must agree to the bit.
 ///
 /// The same GDAL habit that puts a global grid a hair off the globe puts a

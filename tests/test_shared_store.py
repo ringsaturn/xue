@@ -21,7 +21,8 @@ import numpy as np
 
 from tests._support import TempRoot
 from xuebuild import zarrstore
-from xuebuild.binconvert import GridInfo, build_metadata, store_dimensions
+from xuebuild.binconvert import build_metadata, store_dimensions
+from xuebuild.grid import GridInfo
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import is_shared_store_path, validate_bin_manifest
 from xuebuild.sources import source_spec

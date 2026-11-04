@@ -44,7 +44,8 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import zarrstore
-from xuebuild.binconvert import GridInfo, _bundle_tile, _store_source, build_metadata
+from xuebuild.binconvert import _bundle_tile, _store_source, build_metadata
+from xuebuild.grid import GridInfo
 from xuebuild.common import crc32_hex
 from xuebuild.manifest import build_bin_manifest, build_latest_pointer
 from xuebuild.quantize import PROFILES

@@ -43,10 +43,10 @@ from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     _convert_units,
     _extract_planes,
-    _grid_info,
     published_bundle_ids,
     soil_temperature_unit,
 )
+from xuebuild.grid import grid_info
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, inspect_grib_multi, raster_expression
 from xuebuild.grib2 import MessageInfo, _matches
@@ -350,7 +350,7 @@ class ConversionTests(unittest.TestCase):
 
     def test_water_becomes_no_soil_on_the_gfs_fixture(self) -> None:
         gfs = source_spec("gfs")
-        grid = _grid_info(GFS_FIXTURE)
+        grid = grid_info(GFS_FIXTURE)
         frames = grib2.inspect_grib_fast(GFS_FIXTURE, gfs.input_variable_ids)
         with tempfile.TemporaryDirectory() as work:
             planes = _extract_planes({v: frames[v] for v in ("tmp2m", *SOIL_VARIABLE_IDS)}, grid, Path(work))

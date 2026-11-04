@@ -44,17 +44,16 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source, stored_bundle
 from xuebuild import binconvert, cli, fetch, grib2
-from xuebuild.binconvert import (
+from xuebuild.grid import (
     BlockReduction,
     GridInfo,
-    _extract_planes,
-    _grid_info,
-    _snap_axis,
-    _snap_observation_frames,
-    _snap_regional_steps,
     crop_grid,
-    published_bundle_ids,
+    downsample_grid,
+    grid_info,
+    snap_axis,
+    snap_regional_steps,
 )
+from xuebuild.binconvert import _extract_planes, _snap_observation_frames, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import (
     MRMS_BASE_URL,
@@ -683,16 +682,16 @@ class GridTests(unittest.TestCase):
     def test_regional_steps_snap_to_their_thousandth(self) -> None:
         step = 0.0099999997142449
         raw = GridInfo(7000, 3500, -129.99999999985712 + step / 2, 54.9999999998571 - 0.0099999997142041 / 2, step, -0.0099999997142041)
-        full = _snap_regional_steps(raw)
+        full = snap_regional_steps(raw)
         self.assertEqual((full.longitude_step, full.latitude_step), (0.01, -0.01))
         self.assertEqual((full.first_longitude, full.first_latitude), (-129.995, 54.995))
         # The GRIB writer re-rounds a crop's last coordinate: a hair further off, still on 0.01.
         crop_step = 0.009999993710692
-        crop = _snap_regional_steps(GridInfo(160, 160, -77.60000099685537 + crop_step / 2, 51.795, crop_step, -0.01))
+        crop = snap_regional_steps(GridInfo(160, 160, -77.60000099685537 + crop_step / 2, 51.795, crop_step, -0.01))
         self.assertEqual((crop.longitude_step, crop.first_longitude), (0.01, -77.595))
         # 30 thousandths is the double nearest 0.03, as a literal is.
-        self.assertEqual(_snap_axis(0.03 + 1e-10, -100.0, 100), (0.03, -100.0))
-        self.assertEqual(_snap_axis(0.03 + 1e-10, -100.0, 100)[0], 0.03)
+        self.assertEqual(snap_axis(0.03 + 1e-10, -100.0, 100), (0.03, -100.0))
+        self.assertEqual(snap_axis(0.03 + 1e-10, -100.0, 100)[0], 0.03)
         # Not near a thousandth — the radar mosaic's power-of-two tiles, the
         # Gaussian grid, a step a whole thousandth off — passes through.
         for grid in (
@@ -700,13 +699,13 @@ class GridTests(unittest.TestCase):
             GridInfo(3072, 1536, -180.0, 89.91, 0.1171875, -0.117),
             GridInfo(100, 100, -100.0, 40.0, 0.011, -0.011),
         ):
-            self.assertEqual(_snap_regional_steps(grid), grid)
+            self.assertEqual(snap_regional_steps(grid), grid)
         # A global grid is the global rule's business, which runs first and
         # leaves it wrapping; a wrapping grid passes through here untouched.
         wave = GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)
-        self.assertEqual(_snap_regional_steps(wave), wave)
+        self.assertEqual(snap_regional_steps(wave), wave)
         # An origin off the half-step grid keeps its step only.
-        self.assertEqual(_snap_axis(0.0099999997, -129.9, 7000), (0.01, -129.9))
+        self.assertEqual(snap_axis(0.0099999997, -129.9, 7000), (0.01, -129.9))
 
     def test_the_efas_grid_snaps_to_its_arc_minute(self) -> None:
         # No thousandth spells 1/60: GDAL derives these steps from the
@@ -714,14 +713,14 @@ class GridTests(unittest.TestCase):
         # centers on the half-minute grid, as the native encoder's do
         # whatever digits `gdalinfo` printed.
         lon_step, lat_step = 0.016666666666666607, -0.016666666666666226
-        full = _snap_regional_steps(GridInfo(4530, 2970, -25.25 + lon_step / 2, 72.25 + lat_step / 2, lon_step, lat_step))
+        full = snap_regional_steps(GridInfo(4530, 2970, -25.25 + lon_step / 2, 72.25 + lat_step / 2, lon_step, lat_step))
         self.assertEqual((full.longitude_step, full.latitude_step), (1 / 60, -1 / 60))
         self.assertEqual((full.first_longitude, full.first_latitude), (-3029 / 120, 8669 / 120))
-        crop = _snap_regional_steps(GridInfo(21, 15, -0.75 + lon_step / 2, 39.55 + lat_step / 2, lon_step, lat_step))
+        crop = snap_regional_steps(GridInfo(21, 15, -0.75 + lon_step / 2, 39.55 + lat_step / 2, lon_step, lat_step))
         self.assertEqual((crop.first_longitude, crop.first_latitude), (-89 / 120, 4745 / 120))
         # A step a whole thousandth off stays off; so does one near no minute.
         for step in (0.011, 0.0175):
-            self.assertEqual(_snap_axis(step, -100.0, 100), (step, -100.0))
+            self.assertEqual(snap_axis(step, -100.0, 100), (step, -100.0))
 
     def test_the_block_maximum(self) -> None:
         reduction = BlockReduction(factor=2, source_width=4, source_height=2)
@@ -733,7 +732,7 @@ class GridTests(unittest.TestCase):
         self.assertTrue(np.isnan(reduced[0, 1]))
         with self.assertRaises(ConversionError):
             reduction.take(np.zeros((2, 5)))
-        grid = binconvert._downsample_grid(GridInfo(4, 2, -129.995, 54.995, 0.01, -0.01), Downsample(2), Path("x"))
+        grid = downsample_grid(GridInfo(4, 2, -129.995, 54.995, 0.01, -0.01), Downsample(2), Path("x"))
         self.assertEqual((grid.width, grid.height), (2, 1))
         self.assertEqual((grid.first_longitude, grid.first_latitude), (-129.99, 54.99))
         self.assertEqual((grid.longitude_step, grid.latitude_step), (0.02, -0.02))
@@ -741,9 +740,9 @@ class GridTests(unittest.TestCase):
         self.assertEqual(grid.downsample, reduction)
         self.assertIsNone(grid.decimated().downsample)
         with self.assertRaisesRegex(ConversionError, "does not divide"):
-            binconvert._downsample_grid(GridInfo(5, 2, -129.995, 54.995, 0.01, -0.01), Downsample(2), Path("x"))
+            downsample_grid(GridInfo(5, 2, -129.995, 54.995, 0.01, -0.01), Downsample(2), Path("x"))
         with self.assertRaisesRegex(ConversionError, "global grid"):
-            binconvert._downsample_grid(GridInfo(1440, 720, -180.0, 90.0, 0.25, -0.25), Downsample(2), Path("x"))
+            downsample_grid(GridInfo(1440, 720, -180.0, 90.0, 0.25, -0.25), Downsample(2), Path("x"))
 
 
 @requires_gdalinfo
@@ -751,7 +750,7 @@ class FixtureGridTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            cls.grid = _grid_info(FRAMES[0], MRMS)
+            cls.grid = grid_info(FRAMES[0], MRMS)
 
     def test_the_fixture_is_thinned_onto_its_round_step(self) -> None:
         self.assertEqual((self.grid.width, self.grid.height), (80, 80))
@@ -762,14 +761,14 @@ class FixtureGridTests(unittest.TestCase):
         self.assertEqual(self.grid.column_roll, 0)
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             # Without the source's thinning, the same file is the 0.01° grid.
-            raw = _grid_info(FRAMES[0])
+            raw = grid_info(FRAMES[0])
         self.assertEqual((raw.width, raw.longitude_step, raw.first_longitude), (160, 0.01, -77.595))
 
     def test_the_sentinels_are_the_codebook_bottom_and_the_block_keeps_its_maximum(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}), tempfile.TemporaryDirectory() as work:
             frames = inspect_grib_multi(FRAMES[0], MRMS.input_variable_ids)
             planes = _extract_planes(frames, self.grid, Path(work))
-            raw_grid = _grid_info(FRAMES[0])
+            raw_grid = grid_info(FRAMES[0])
             raw = _extract_planes(frames, raw_grid, Path(work))
         cref = planes["cref"].reshape(80, 80)
         prate = planes["prate"].reshape(80, 80)

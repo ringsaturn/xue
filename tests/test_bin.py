@@ -818,7 +818,8 @@ class ParameterMetadataTests(unittest.TestCase):
     """Schema v3: every variable carries its GRIB2 identity (docs/format.md)."""
 
     def _metadata(self) -> dict:
-        from xuebuild.binconvert import build_metadata, GridInfo
+        from xuebuild.binconvert import build_metadata
+        from xuebuild.grid import GridInfo
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
                         longitude_step=0.25, latitude_step=-0.25)
@@ -847,7 +848,8 @@ class ParameterMetadataTests(unittest.TestCase):
     def test_derived_rate_declares_its_statistical_process(self) -> None:
         """ECMWF and sflux publish prate as a mean over the step, not the
         instantaneous field GFS carries under the same parameter."""
-        from xuebuild.binconvert import build_metadata, GridInfo
+        from xuebuild.binconvert import build_metadata
+        from xuebuild.grid import GridInfo
         from xuebuild.sources import source_spec
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
@@ -955,7 +957,8 @@ class ParameterMetadataTests(unittest.TestCase):
         ``quantization``, where the native encoder puts it too."""
         from dataclasses import replace
 
-        from xuebuild.binconvert import build_metadata, GridInfo
+        from xuebuild.binconvert import build_metadata
+        from xuebuild.grid import GridInfo
         from xuebuild.sources import SatelliteBand, source_spec
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,

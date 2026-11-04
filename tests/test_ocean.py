@@ -50,17 +50,15 @@ from xuebuild.binconvert import (
     VECTOR_BUNDLES,
     WAVE_BUNDLE_ID,
     WIND_WAVE_BUNDLE_ID,
-    GridInfo,
     _convert_units,
     _extract_planes,
-    _grid_info,
-    _snap_global_longitudes,
     bundle_input_ids,
     derive_vector,
     derive_wave_vector,
     published_bundle_ids,
     vector_input_ids,
 )
+from xuebuild.grid import GridInfo, grid_info, snap_global_longitudes
 from xuebuild.eccodescli import repack_grid_simple
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -490,7 +488,7 @@ class ConversionTests(unittest.TestCase):
 
     def test_land_becomes_the_bottom_of_the_wave_codebooks(self) -> None:
         gfs = source_spec("gfs")
-        grid = _grid_info(FIXTURE)
+        grid = grid_info(FIXTURE)
         frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
         with tempfile.TemporaryDirectory() as work:
             planes = _extract_planes({v: frames[v] for v in ("tmp2m", *OCEAN_VARIABLE_IDS)}, grid, Path(work))
@@ -516,7 +514,7 @@ class ConversionTests(unittest.TestCase):
 
     def test_the_partitions_share_the_combined_sea_land(self) -> None:
         gfs = source_spec("gfs")
-        grid = _grid_info(FIXTURE)
+        grid = grid_info(FIXTURE)
         frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
         with tempfile.TemporaryDirectory() as work:
             planes = _extract_planes({v: frames[v] for v in ("htsgw", *WAVE_PARTITION_IDS)}, grid, Path(work))
@@ -595,7 +593,7 @@ class WaveVectorTests(unittest.TestCase):
         # vector there is (0, 0) — code 127 in both — and a renderer's
         # magnitude palette paints nothing, as the height's bottom code does.
         gfs = source_spec("gfs")
-        grid = _grid_info(FIXTURE)
+        grid = grid_info(FIXTURE)
         frames = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
         with tempfile.TemporaryDirectory() as work:
             planes = _extract_planes({v: frames[v] for v in ("htsgw", "dirpw")}, grid, Path(work))
@@ -637,10 +635,10 @@ class GlobalGridTests(unittest.TestCase):
     def test_the_wave_grid_snaps_to_the_pgrb2_grid(self) -> None:
         raw = self.wave_grid()
         self.assertFalse(raw.wraps, "as GDAL reports it, the grid does not close")
-        snapped = _snap_global_longitudes(raw)
+        snapped = snap_global_longitudes(raw)
         self.assertEqual((snapped.longitude_step, snapped.first_longitude), (0.25, -180.0))
         self.assertTrue(snapped.wraps)
-        self.assertEqual(snapped.metadata(), _snap_global_longitudes(GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)).metadata())
+        self.assertEqual(snapped.metadata(), snap_global_longitudes(GridInfo(1440, 721, -180.0, 90.0, 0.25, -0.25)).metadata())
 
     def test_exact_grids_pass_through_unchanged(self) -> None:
         for grid in (
@@ -652,7 +650,7 @@ class GlobalGridTests(unittest.TestCase):
             GridInfo(80, 80, 118.0, 38.0, 0.25, -0.25),
         ):
             with self.subTest(grid=grid):
-                snapped = _snap_global_longitudes(grid)
+                snapped = snap_global_longitudes(grid)
                 self.assertEqual(snapped.longitude_step, grid.longitude_step)
                 self.assertEqual(snapped.first_longitude, grid.first_longitude)
 
@@ -660,13 +658,13 @@ class GlobalGridTests(unittest.TestCase):
         # A global grid whose first center sits between two multiples of its
         # step (a staggered grid) gets the exact step and keeps its origin.
         grid = GridInfo(1440, 721, -179.9, 90.0, self.WAVE_STEP, -0.25)
-        snapped = _snap_global_longitudes(grid)
+        snapped = snap_global_longitudes(grid)
         self.assertEqual(snapped.longitude_step, 0.25)
         self.assertEqual(snapped.first_longitude, -179.9)
 
     def test_a_grid_more_than_a_thousandth_of_a_cell_short_is_not_global(self) -> None:
         grid = GridInfo(1440, 721, -180.0, 90.0, 0.25 * (1 - 2e-3), -0.25)
-        self.assertIs(_snap_global_longitudes(grid), grid)
+        self.assertIs(snap_global_longitudes(grid), grid)
         self.assertFalse(math.isclose(grid.width * grid.longitude_step, 360.0))
 
 
