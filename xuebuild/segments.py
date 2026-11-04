@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 
 from . import binformat, zarrstore
-from .binconvert import _time_metadata, axis_unit_seconds
+from .metadata import axis_unit_seconds, time_metadata
 from .common import crc32_hex, iso_z
 from .errors import ConversionError
 from .manifest import _parse_time, validate_latest_pointer, write_bin_manifest, write_latest_pointer
@@ -96,7 +96,7 @@ def _segment_metadata(metadata: dict[str, Any], times: list[datetime]) -> dict[s
     unit_seconds = axis_unit_seconds(leads)
     segment = copy.deepcopy(metadata)
     segment["runTime"] = iso_z(times[0])
-    segment["time"] = _time_metadata([lead // unit_seconds for lead in leads], unit_seconds)
+    segment["time"] = time_metadata([lead // unit_seconds for lead in leads], unit_seconds)
     return segment
 
 

@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import binformat, temporal, zarrstore, zstdcli
-from xuebuild.binconvert import build_metadata, convert_bin
+from xuebuild.binconvert import convert_bin
+from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.sources import source_spec
 

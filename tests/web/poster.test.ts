@@ -5,7 +5,7 @@ import { validateLatestPointer } from "../../web/src/manifest";
 import { decodePosterPlane, isPosterSupported } from "../../web/src/poster";
 
 function encodePoster(plane: Uint8Array, width: number, height: number): Uint8Array {
-  // Mirror of xue.binconvert.encode_poster's filter stage: each row
+  // Mirror of xuebuild.poster.encode_poster's filter stage: each row
   // delta-encoded against the previous one (uint8 wraparound), then deflate.
   const filtered = new Uint8Array(plane);
   for (let row = height - 1; row >= 1; row -= 1) {

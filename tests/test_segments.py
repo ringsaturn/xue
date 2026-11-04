@@ -13,7 +13,7 @@ import numpy as np
 
 from tests._support import TempRoot
 from xuebuild import binformat, segments, zarrstore
-from xuebuild.binconvert import build_metadata
+from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest

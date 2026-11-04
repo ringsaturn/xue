@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 
 from .. import zarrstore, zstdcli
-from ..binconvert import _time_metadata, axis_unit_seconds
+from ..metadata import axis_unit_seconds, time_metadata
 from ..common import crc32_hex, iso_z
 from ..errors import XueError
 from ..quantize import PrecipitationCodebook
@@ -117,7 +117,7 @@ def time_block(run_time: datetime, valid_times: list[datetime]) -> dict[str, Any
     offsets = [lead // unit for lead in leads]
     if offsets[-1] > 65534:
         raise NetworkStoreError("the axis reaches past offset 65534")
-    return _time_metadata(offsets, unit)
+    return time_metadata(offsets, unit)
 
 
 def geometry_descriptor(parquet: Path, row_group_rows: int, feature_count: int) -> dict[str, Any]:

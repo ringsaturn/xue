@@ -6,8 +6,9 @@ import re
 import unittest
 from pathlib import Path
 
-from xuebuild import binconvert, binformat, metrics
+from xuebuild import binformat, metrics
 from xuebuild.indicators import schema as indicators_schema
+from xuebuild.metadata import METADATA_SCHEMA_VERSION
 
 README = Path(__file__).resolve().parents[1] / "docs" / "README.md"
 
@@ -39,8 +40,8 @@ class VersionTableCase(unittest.TestCase):
 
     def test_bundle_metadata(self) -> None:
         written, read = self.row("Bundle metadata")
-        self.assertEqual(first_integer(written), binconvert.METADATA_SCHEMA_VERSION)
-        self.assertEqual(first_integer(read.split("to")[-1]), binconvert.METADATA_SCHEMA_VERSION)
+        self.assertEqual(first_integer(written), METADATA_SCHEMA_VERSION)
+        self.assertEqual(first_integer(read.split("to")[-1]), METADATA_SCHEMA_VERSION)
 
     def test_container(self) -> None:
         written, read = self.row("Container")

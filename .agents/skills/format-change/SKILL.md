@@ -24,7 +24,7 @@ version that fits, so each file keeps exactly one valid encoding.
 
 1. **Spec**: `docs/format.md` (container, metadata), `docs/zarr-profile.md`
    (store), or the manifest section, describing the new rule normatively.
-2. **Python encoder** (the reference): `xuebuild/binconvert.py::build_metadata`,
+2. **Python encoder** (the reference): `xuebuild/metadata.py::build_metadata`,
    `binformat.py`, `zarrstore.py`, `manifest.py` as applicable.
 3. **Python reader**: `binformat.py::_parse_metadata`.
 4. **Rust**: `rust/xue/src/format.rs` (byte layout only),

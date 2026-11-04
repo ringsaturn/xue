@@ -767,41 +767,41 @@ class SourceLadderTests(unittest.TestCase):
 
 class TimeMetadataTests(unittest.TestCase):
     def test_uniform_axis_declares_a_frame_step(self) -> None:
-        from xuebuild.binconvert import _time_metadata
+        from xuebuild.metadata import time_metadata
 
         self.assertEqual(
-            _time_metadata(list(range(0, 121, 3)), 3600),
+            time_metadata(list(range(0, 121, 3)), 3600),
             {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 41, "frameStep": 3},
         )
         self.assertEqual(
-            _time_metadata([7], 3600),
+            time_metadata([7], 3600),
             {"unitSeconds": 3600, "firstFrameOffset": 7, "frameCount": 1, "frameStep": 1},
         )
 
     def test_mixed_axis_lists_its_offsets(self) -> None:
-        from xuebuild.binconvert import _time_metadata
+        from xuebuild.metadata import time_metadata
 
         axis = list(range(121)) + list(range(123, 241, 3))
         self.assertEqual(
-            _time_metadata(axis, 3600),
+            time_metadata(axis, 3600),
             {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 161, "frameOffsets": axis},
         )
 
     def test_observation_axis_lists_its_gaps(self) -> None:
         """A missed publication is an ordinary step change, so the axis lists
         its offsets outright rather than pretending to a cadence it does not have."""
-        from xuebuild.binconvert import _time_metadata
+        from xuebuild.metadata import time_metadata
 
         axis = [0, 1, 2, 5, 6, 7]
         self.assertEqual(
-            _time_metadata(axis, 360),
+            time_metadata(axis, 360),
             {"unitSeconds": 360, "firstFrameOffset": 0, "frameCount": 6, "frameOffsets": axis},
         )
 
     def test_the_axis_unit_is_the_coarsest_that_fits(self) -> None:
         """An hour for every forecast source, so their offsets stay their
         forecast hours; finer only when the data is."""
-        from xuebuild.binconvert import axis_unit_seconds, lead_hours
+        from xuebuild.metadata import axis_unit_seconds, lead_hours
 
         self.assertEqual(axis_unit_seconds([0, 3600, 7200]), 3600)
         self.assertEqual(axis_unit_seconds([0, 10800, 21600]), 3600)
@@ -818,7 +818,7 @@ class ParameterMetadataTests(unittest.TestCase):
     """Schema v3: every variable carries its GRIB2 identity (docs/format.md)."""
 
     def _metadata(self) -> dict:
-        from xuebuild.binconvert import build_metadata
+        from xuebuild.metadata import build_metadata
         from xuebuild.grid import GridInfo
 
         grid = GridInfo(width=4, height=3, first_longitude=-180.0, first_latitude=90.0,
@@ -848,7 +848,7 @@ class ParameterMetadataTests(unittest.TestCase):
     def test_derived_rate_declares_its_statistical_process(self) -> None:
         """ECMWF and sflux publish prate as a mean over the step, not the
         instantaneous field GFS carries under the same parameter."""
-        from xuebuild.binconvert import build_metadata
+        from xuebuild.metadata import build_metadata
         from xuebuild.grid import GridInfo
         from xuebuild.sources import source_spec
 
@@ -957,7 +957,7 @@ class ParameterMetadataTests(unittest.TestCase):
         ``quantization``, where the native encoder puts it too."""
         from dataclasses import replace
 
-        from xuebuild.binconvert import build_metadata
+        from xuebuild.metadata import build_metadata
         from xuebuild.grid import GridInfo
         from xuebuild.sources import SatelliteBand, source_spec
 

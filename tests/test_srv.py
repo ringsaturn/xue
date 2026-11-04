@@ -22,11 +22,10 @@ from xuebuild.binconvert import (
     _decimate_codes,
     _playback_bandwidth,
     _variant_grid,
-    build_metadata,
-    decode_poster,
-    encode_poster,
     variant_tier,
 )
+from xuebuild.poster import decode_poster, encode_poster
+from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import (
