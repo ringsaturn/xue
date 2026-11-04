@@ -3471,6 +3471,8 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
  * generated from the manifest rather than written out: every family has
  * eight surfaces, and a run publishes a few of each. */
 function renderLevelRow(): void {
+  const scrolled = levelRow.scrollLeft;
+  const wasPressed = new Set(pressedLevelButtons().map(levelButtonKey));
   const groups = levelGroups();
   levelRow.hidden = groups.length === 0;
   levelRow.replaceChildren();
@@ -3562,13 +3564,29 @@ function renderLevelRow(): void {
   }
   // The storms' chip likewise belongs to the marks, not the run.
   renderTcLevelGroup();
-  // A row wider than the capsule scrolls: bring each pressed member into
-  // view (the lines' last, so the group that changed most recently wins)
-  // and fade whichever end is clipped.
-  for (const pressed of levelRow.querySelectorAll<HTMLButtonElement>('button[aria-pressed="true"]')) {
-    pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // A row wider than the capsule scrolls, and emptying it above cleared the
+  // position. The row stays where it was, moving only for a member that this
+  // render pressed: another group's standing press must not pull it away from
+  // the one just used. Backwards, so the leftmost of several is the one left
+  // in view when a whole composition arrives at once.
+  levelRow.scrollLeft = scrolled;
+  for (const pressed of pressedLevelButtons().reverse()) {
+    if (!wasPressed.has(levelButtonKey(pressed))) {
+      pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   }
   syncLevelRowFade();
+}
+
+function pressedLevelButtons(): HTMLButtonElement[] {
+  return [...levelRow.querySelectorAll<HTMLButtonElement>('button[aria-pressed="true"]')];
+}
+
+/** What a level button stands for, the same across the rebuilds that replace
+ * the element. */
+function levelButtonKey(button: HTMLButtonElement): string {
+  const { slot, variable, accum, alone } = button.dataset;
+  return [slot, variable, accum, alone].join("/");
 }
 
 /** The precipitation's own group on the level row: the rate, then each
