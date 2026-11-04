@@ -25,8 +25,8 @@ Read `.claude/rules/encoder.md` and
   in `quantize.py`, and optionally frontend chart knowledge. Never a
   branch on the id: the encoders read the entry.
 - **Derived**: a `BundleSpec` in `xuebuild/bundles.py` with a `derivation`
-  (one of the six kinds; its arithmetic in `binconvert.py` has a fixed
-  operation order, mirrored in `rust/xue/src/encode/convert.rs`). It
+  (one of the six kinds; its arithmetic in `derive.py` has a fixed
+  operation order, mirrored in `rust/xue/src/encode/derive.rs`). It
   ships only when all of its inputs are fetched.
 
 ## Steps

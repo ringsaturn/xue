@@ -132,7 +132,7 @@ so neither encoder does Gaussian or geostationary arithmetic.
 
 **Grids.** A global grid is snapped to `360 / width` and a regional grid's
 steps to the thousandth of a degree or, failing that, the arc-minute
-(`_snap_regional_steps`, mirrored in `grid.rs`), since GDAL derives the step
+(`grid.snap_regional_steps`, mirrored in `grid.rs`), since GDAL derives the step
 from the first and last coordinates and some producers write the last one
 short; the arc-minute also keeps the two encoders on one double for EFAS's
 1/60°, which `gdalinfo -json` prints short of its seventeen digits. A `downsample`
@@ -205,7 +205,7 @@ WMO 0/6/1 in percent, and the three layer clouds on the ECMWF layer
 boundaries (ground, 800 hPa, 450 hPa). No isobaric `r`, gust, CAPE, ice
 thickness or peak wave period. `tests/test_aifs.py`.
 
-**hrrr.** Computed on a Lambert conformal grid. `_grid_info` reads the
+**hrrr.** Computed on a Lambert conformal grid. `grid.grid_info` reads the
 projection from GDAL's WKT (`reproject.py`; the wheel's `gdal_info` reports
 `coordinateSystem.wkt`) and builds a `Resampler` onto a regular 0.03° grid
 over the footprint; `_extract_planes` resamples each plane (bilinear, edge

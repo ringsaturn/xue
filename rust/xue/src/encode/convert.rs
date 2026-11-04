@@ -125,7 +125,7 @@ pub fn grid_family_of<'a>(source: &'a SourceSpec, variable_id: &str) -> Option<&
 /// flux at 850 hPa reads the specific humidity and the wind pair there, all
 /// three from the CFSv2 pressure-level family, which is what makes it one
 /// bundle's worth of one grid.) Mirrors `bundle_grid_family` in
-/// `xuebuild/binconvert.py`.
+/// `xuebuild/discover.py`.
 pub fn bundle_grid_family<'a>(
     registry: &Registry,
     source: &'a SourceSpec,
@@ -1318,7 +1318,8 @@ pub fn convert_bin(
         }
     }
     // A static field does not vary in time: its one frame is the first, and
-    // its bundle carries just that offset. Mirrors `xuebuild/binconvert.py`.
+    // its bundle carries just that offset. Mirrors `_variable_offsets` in
+    // `xuebuild/binconvert.py`.
     for variable_id in &encoded_variable_ids {
         if registry.is_static(variable_id) {
             variable_offsets.insert(variable_id.clone(), vec![offsets[0]]);
@@ -1695,7 +1696,7 @@ pub fn zstd_version() -> String {
 /// when the next file will difference against this file's raw plane, so each
 /// shared plane is freed once its consumer finishes. An interval total
 /// (Open-Meteo apcp) needs no predecessor plane at all — only the hour beside
-/// the slot, which is then `None`. Mirrors `sharing_plan` in
+/// the slot, which is then `None`. Mirrors `_sharing_plan` in
 /// `xuebuild/binconvert.py`.
 type SharingPlan = Vec<(Option<(i64, Option<Arc<PlaneSlot>>)>, Option<Arc<PlaneSlot>>)>;
 

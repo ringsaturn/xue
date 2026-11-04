@@ -110,14 +110,28 @@ commit). Widening a source's inputs means recutting its crop fixture
   ([sources.md](sources.md), "Feeds"). A source whose `packing` is `ccsds`
   (ECMWF open data, ICON-EU, ARPEGE) is repacked to `grid_simple` with
   `grib_set` at fetch time.
-- **`binconvert.py`**: grid discovery, `crop_grid`, units, de-accumulation,
-  quantization, grouping, bundles, ladder, posters, manifest entries.
+- **The conversion**, one Python module per module of
+  `rust/xue/src/encode/`, each mirrored by its namesake there:
+  - `binconvert.py` (`convert.rs`): `convert_bin` as a run of named stages,
+    plane extraction, units and fill, quantization, the container and the
+    store writes;
+  - `discover.py` (`discover.rs`): which bundles a source publishes and
+    their inputs, the frames of a run and the records each must carry
+    (`discover_series`, `discover_records`), the store dimensions;
+  - `grid.py` (`grid.rs`): `GridInfo`, `grid_info`, the snaps, `crop_grid`;
+  - `derive.py` (`derive.rs`): the derived vectors and scalars and the
+    precipitation-rate arithmetic;
+  - `ladder.py` (`ladder.rs`), `metadata.py` (`metadata.rs`), `poster.py`
+    (`poster.rs`), `report.py` (`report.rs`): the resolution ladder, the
+    bundle metadata, the first-frame poster, the build report and the
+    manifest.
+
   Rules mirrored in `rust/xue/src/encode/`:
   - a global grid snaps to `360 / width` (WAVEWATCH III's last longitude is
     off, and wave bundles must share the pgrb2 grid; `grid.rs`);
   - ladder `SourceSpec.variant_factors` (`(2,)` default, `(2, 4)` on
     satellites and the 0.1° IFS grids): every f-th row and column of the codes, tile divided by f
-    (`variant_tier`, `_variant_grid`, `_bundle_tile`); `variants` are in
+    (`ladder.py`: `variant_tier`, `variant_grid`, `bundle_tile`); `variants` are in
     ascending factor order and nothing keys on the suffix;
   - the chunk predictor and the ladder's decimation are the variable's
     `predictor` and `decimation`.
