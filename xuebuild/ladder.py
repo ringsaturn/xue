@@ -6,6 +6,8 @@ bandwidth hint every rung is written with.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
+
 import numpy as np
 
 from .grid import GridInfo
@@ -108,3 +110,34 @@ def playback_bandwidth(byte_length: int, frame_count: int, *, fps: float = 12.0)
     """HLS STREAM-INF style bandwidth hint: average bits per second needed to
     keep up with the 12 fps playback rate while downloading the whole tier."""
     return max(1, round(byte_length * 8 * fps / max(1, frame_count)))
+
+
+def build_ladder(
+    variant_factors: tuple[int, ...],
+    grids: Mapping[str | None, GridInfo],
+    codes_by_offset: Mapping[int, Mapping[str, np.ndarray]],
+    offsets: Sequence[int],
+    grid_for: Callable[[str], GridInfo],
+    profile: str,
+) -> tuple[dict[int, dict[str | None, GridInfo]], dict[int, dict[int, dict[str, np.ndarray]]]]:
+    """Every rung of the ladder: its grid per family, and its codes per
+    frame offset, decimated from the full codes by each variable's rule."""
+    # One rung per factor per family: a family's rung is its own grid
+    # decimated, so a bundle's tier keeps the tile geometry of its own grid.
+    variant_grids = {
+        factor: {family: variant_grid(family_grid, factor) for family, family_grid in grids.items()}
+        for factor in variant_factors
+    }
+    # Iterate the codes actually present per hour: derived prate has no
+    # analysis-frame plane on ECMWF/sflux.
+    variant_codes_by_offset = {
+        factor: {
+            offset: {
+                variable_id: decimate_variant_codes(variable_id, codes, grid_for(variable_id), factor, profile)
+                for variable_id, codes in codes_by_offset[offset].items()
+            }
+            for offset in offsets
+        }
+        for factor in variant_factors
+    }
+    return variant_grids, variant_codes_by_offset

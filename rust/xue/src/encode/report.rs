@@ -132,7 +132,8 @@ pub(super) fn bundle_manifest_entry(
 }
 
 /// The build report, key for key the reference report
-/// (`binconvert.convert_bin`), after the quantization acceptance check.
+/// (`build_report` in `xuebuild/report.py`), after the quantization
+/// acceptance check.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_report(
     output_dir: &Path,
@@ -188,7 +189,7 @@ pub(super) fn build_report(
             .sum::<u64>()),
     );
     // The report's named statistics are the reference report's keys
-    // (`binconvert.convert_bin`): the 2 m temperature, the rate and the
+    // (`report.build_report`): the 2 m temperature, the rate and the
     // 10 m wind pair by name, whatever the source published.
     report.insert(
         "temperatureMaxAbsError".into(),

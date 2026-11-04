@@ -1,14 +1,17 @@
-"""Build Xue v1 bundles from gridded input.
+"""Convert gridded input into a run's bundles (mirrored in ``encode/convert.rs``).
 
-Each variable is packaged into its own single-variable ``.xue`` file so the
-frontend can download exactly the fields it needs. Extraction runs one
-``gdalinfo`` and one multi-band ``gdal_translate`` per input file, in parallel
-across files.
+:func:`convert_bin` runs the build in stages: discover the frames and the
+bundles they can build (:mod:`xuebuild.discover`), read every grid family's
+grid (:mod:`xuebuild.grid`), extract and quantize every file in parallel —
+one multi-band ``gdal_translate`` per input file, the derivations of
+:mod:`xuebuild.derive` on the planes it returns — cut the resolution ladder
+(:mod:`xuebuild.ladder`), write every bundle's arrays into the run's shared
+Zarr stores (and, asked for, its ``.xue`` container), and report the build
+and its manifest (:mod:`xuebuild.report`).
 
 A forecast source arrives as one GRIB2 file per forecast hour; an observation
-source (:mod:`xue.observation`) as one NetCDF file whose bands are the time
-axis. Everything past frame discovery — crop, quantize, temporal grouping,
-container write, manifest — is the same for both.
+or series-file source (:mod:`xuebuild.observation`) as NetCDF series whose
+bands are the time axis. Everything past frame discovery is the same for both.
 """
 
 from __future__ import annotations
@@ -19,10 +22,10 @@ import os
 import shutil
 import tempfile
 import zlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,12 +71,12 @@ from .derive import (
     soil_temperature_unit,
 )
 from .discover import (
+    Discovered,
     analysis_optional_ids,
     bundle_grid_family,
     bundle_input_ids,
-    discover_frames,
-    grid_family_of,
-    prepare_frames_all,
+    discover_records,
+    discover_series,
     published_bundle_ids,
     series_lead_seconds,
     store_dimensions,
@@ -81,23 +84,16 @@ from .discover import (
 from .errors import ConversionError, DownloadError
 from . import rules
 from .gdal import (
-    inspect_grib_multi,
     require_command,
     run_command,
 )
 from .grid import GridInfo, crop_grid, grid_info
-from .ladder import bundle_tile, decimate_variant_codes, playback_bandwidth, variant_grid, variant_tier
-from .manifest import (
-    build_bin_manifest,
-    write_bin_manifest,
-    write_pointer_to_manifest,
-)
-from .metadata import axis_unit_seconds, build_metadata, lead_hours
+from .ladder import build_ladder, bundle_tile, playback_bandwidth, variant_tier
+from .metadata import axis_unit_seconds, build_metadata
 from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
-from .observation import inspect_observation
 from .poster import encode_poster
 from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
-from .report import bundle_manifest_entry, delivered_byte_length
+from .report import build_report, delivered_byte_length, write_manifest
 from .sources import SourceSpec, family_frame_path, source_spec
 from .variables import VARIABLES, variable_spec
 
@@ -509,302 +505,28 @@ def _verify_container(path: Path) -> None:
         bundle.clear_cache()
 
 
-def convert_bin(
-    input_path: Path | Sequence[Path],
-    output_dir: Path,
+def _time_axis(
+    per_file: list[dict[str, SourceFrame]],
+    reference_id: str,
+    source: SourceSpec,
     *,
-    profile: str = "quality",
-    work_root: Path | None = None,
-    zstd_level: int = zstdcli.DEFAULT_LEVEL,
-    require_complete: bool = False,
-    expected_hours: int = 120,
-    manifest_path: Path | None = None,
-    latest_path: Path | None = None,
-    run_id: str | None = None,
-    force: bool = False,
-    skip_variants: bool = False,
-    model: str = "gfs",
-    bbox: tuple[float, float, float, float] | None = None,
-    bundle_ids: tuple[str, ...] | None = None,
-    last_hour: int | None = None,
-    zarr: bool = True,
-    container: bool = False,
-    series: bool = True,
-    partial: bool = False,
-) -> dict[str, Any]:
-    """Convert a GRIB run (or a series file) into shared Zarr stores.
-
-    Writes every bundle's arrays into the run's shared store
-    ``<output_dir>/bundles.zarr`` — every scalar variable, plus the
-    two-variable ``wind10m`` bundle when the input files carry the 10 m wind
-    components, and so on — and each rung of the source's ladder into
-    ``bundles.half.zarr`` (and on the satellite disks ``bundles.quarter.zarr``
-    too, ``SourceSpec.variant_factors``), the series store
-    (``<bundle>.series.zarr``) of the source's point-read bundles,
-    per-variable posters, and returns build statistics. The
-    ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
-    (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
-    written manifest.
-
-    ``bbox`` (west, south, east, north, degrees) crops every plane to a
-    region, and ``bundle_ids`` restricts which bundles are built — the two
-    knobs the historical showcase cases use to ship a small slice of a past
-    run. A restricted build's manifest carries only the bundles it was asked
-    for, so it is not required to hold the core tmp2m and prate pair.
-    ``last_hour`` trims an observation source's series to a leading window;
-    a forecast run is already exactly the frames that were fetched.
-    ``zarr`` writes a Zarr v3 store for every bundle and variant
-    (`xuebuild.zarrstore`, docs/zarr-profile.md) straight from the quantized
-    codes and names it in the manifest. ``container`` writes the ``.xue``
-    as well, from the same codes, so the two agree by construction and the
-    bundle's bytes do not depend on whether a store was asked for. Without
-    the container no ``.xue`` is written at all: the manifest names the
-    store alone, so a run publishes one delivery. A build needs one of the
-    two.
-
-    ``partial`` is one job of a fanned-out publish (``build-bin --bundles``):
-    each shared store gets a partial group document
-    (``zarr.part.<first bundle>.json``) instead of its ``zarr.json``, the
-    entries carry that part's CRC-32, and ``assemble-run`` writes the group
-    documents. Otherwise the group documents are written here, last, and
-    the parts removed.
-    """
-    if profile not in PROFILES:
-        raise ConversionError(f"unknown profile: {profile}")
-    if not container and not zarr:
-        raise ConversionError("a build without the container needs the store: pass zarr=True")
-    source = source_spec(model)
-    if bundle_ids is not None:
-        unsupported = [bundle_id for bundle_id in bundle_ids if bundle_id not in published_bundle_ids(source)]
-        if unsupported or not bundle_ids:
-            raise ConversionError(
-                f"{source.manifest_model} publishes {list(published_bundle_ids(source))}, not {list(bundle_ids)}"
-            )
-    zstd_version = zstdcli.zstd_version()
-    codebooks = PROFILES[profile]
-
-    if source.series_file:
-        # A series-file source is one NetCDF file holding a whole variable's
-        # series, one band per time (xue/observation.py): the CMA mosaic's
-        # local archive file, the window the JMA fetch wrote, a satellite
-        # window's channels, or the forecast run om2nc resampled off the
-        # Open-Meteo bucket. There are no records to match. An observation's
-        # own times are the axis, gaps included, with no published cadence to
-        # validate against; a forecast's are its lead times and are validated
-        # below like any cycle's. (The MRMS observation is one GRIB per
-        # frame and takes the record path below, re-keyed onto its window's
-        # axis.) A run directory holds one such file per variable — or one
-        # file for its one variable (observation.series_files). Only the
-        # variables the requested bundles carry are read: a satellite
-        # window's unpublished channels feed its composite in the fetch
-        # stage and are never quantized here.
-        if not isinstance(input_path, Path):
-            raise ConversionError(f"a {source.manifest_model} build takes one NetCDF series, or the directory holding them")
-        if require_complete and not source.fetched:
-            raise ConversionError(f"{source.manifest_model} has no complete run to require")
-        requested_bundle_ids = tuple(
-            bundle_id for bundle_id in published_bundle_ids(source) if bundle_ids is None or bundle_id in bundle_ids
-        )
-        # What the series must carry: a composite's components, which the
-        # fetch stage produced and wrote as series of their own, and every
-        # other bundle's *inputs* — the question the GRIB path asks too, and
-        # the one that matters on a forecast series, where `prate` is
-        # derived from an `apcp` series (`interval_precipitation`). Then the
-        # analysis-optional inputs sort to the back, so the first variable
-        # is one no frame of the run can lack and can key the axis; the GRIB
-        # path sorts its own the same way.
-        series_variable_ids = tuple(
-            sorted(
-                dict.fromkeys(
-                    variable_id
-                    for bundle_id in requested_bundle_ids
-                    for variable_id in (
-                        bundle_variable_ids(bundle_id)
-                        if bundle_id in COMPOSITE_BUNDLES
-                        else bundle_input_ids(source, bundle_id)
-                    )
-                ),
-                key=lambda variable_id: variable_id in source.optional_at_analysis,
-            )
-        )
-        series = inspect_observation(input_path, source, series_variable_ids)
-        # ``last_hour`` trims the series to a leading window of the file, and
-        # the frame it stops on must exist — a case's declared range is never
-        # silently shortened.
-        per_file = series.frames
-        if last_hour is not None:
-            cutoff = last_hour * binformat.HOUR_SECONDS
-            per_file = [frames for frames in per_file if series_lead_seconds(frames) <= cutoff]
-            if not per_file or series_lead_seconds(per_file[-1]) != cutoff:
-                raise ConversionError(
-                    f"{input_path} has no frame exactly at hour {last_hour}; its series ends at "
-                    f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
-                )
-        variable_ids = series_variable_ids
-        # A vector bundle ships when the series carries every input it is
-        # built from — the same rule the GRIB path applies to a run's first
-        # file, asked of the files the fetch wrote.
-        available_vector_ids = tuple(
-            bundle_id
-            for bundle_id in requested_bundle_ids
-            if bundle_id in VECTOR_BUNDLES
-            and all(variable_id in series.datasets for variable_id in vector_input_ids(bundle_id))
-        )
-        available_derived_ids: tuple[str, ...] = ()
-        available_composite_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in COMPOSITE_BUNDLES)
-        available_volume_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in VOLUME_BUNDLES)
-        drop_ids: frozenset[str] = frozenset()
-        grid_path = series.dataset
-        plane_source: PlaneSource | dict[str, PlaneSource] = series.plane_sources
-        producer_versions = series.producers
-        # No series-file source has a grid family: one run, one grid.
-        variable_families: dict[str, str | None] = {}
-    else:
-        paths = discover_frames(input_path, source)
-        # One real gdalinfo pass over the first file: it probes which vector
-        # bundles can be built (their inputs are optional, so runs fetched
-        # before the wind components joined the download set, and the cropped
-        # test fixtures, still build cleanly) and serves as the per-run
-        # cross-check reference for the GRIB2 header index used on every file.
-        # A restricted build inspects only the inputs it asked for: a case that
-        # ships temperature alone must not fail on a file that carries no
-        # precipitation record, because it never downloaded one.
-        inspect_ids = source.input_variable_ids
-        if bundle_ids is not None:
-            needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
-            inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
-        requested_vector_ids = tuple(
-            bundle_id
-            for bundle_id in published_bundle_ids(source)
-            if bundle_id in VECTOR_BUNDLES and (bundle_ids is None or bundle_id in bundle_ids)
-        )
-        requested_derived_ids = tuple(
-            bundle_id
-            for bundle_id in published_bundle_ids(source)
-            if bundle_id in DERIVED_SCALARS and (bundle_ids is None or bundle_id in bundle_ids)
-        )
-        # An input that only feeds a derivation — a vector bundle, a derived
-        # scalar — may be absent; one that is also a published scalar may not.
-        derivation_only_ids = tuple(
-            dict.fromkeys(
-                variable_id
-                for bundle_id in requested_vector_ids + requested_derived_ids
-                for variable_id in bundle_input_ids(source, bundle_id)
-                if variable_id not in source.bundle_scalar_ids
-            )
-        )
-        # Which grid family each input is read from — None for every input of
-        # every source but CFSv2, whose pressure-level inputs sit in a frame
-        # file of their own on a grid of their own (sources.CompanionFile).
-        input_families = {
-            variable_id: grid_family_of(source, variable_id) for variable_id in source.input_variable_ids
-        }
-        reference_frames: dict[str, SourceFrame] = {}
-        for family in dict.fromkeys(input_families[variable_id] for variable_id in inspect_ids):
-            reference_frames.update(
-                inspect_grib_multi(
-                    family_frame_path(paths[0], family),
-                    tuple(
-                        variable_id for variable_id in inspect_ids if input_families[variable_id] == family
-                    ),
-                    optional_ids=source.optional_at_analysis + derivation_only_ids,
-                )
-            )
-        available_vector_ids = tuple(
-            bundle_id
-            for bundle_id in requested_vector_ids
-            if all(variable_id in reference_frames for variable_id in vector_input_ids(bundle_id))
-        )
-        available_derived_ids = tuple(
-            bundle_id
-            for bundle_id in requested_derived_ids
-            if all(variable_id in reference_frames for variable_id in DERIVED_SCALARS[bundle_id])
-        )
-        # A volume's levels are every one of them an input the run must
-        # carry (none is optional), so a listed volume is built from what
-        # the first file was found to hold.
-        available_volume_ids = tuple(
-            bundle_id
-            for bundle_id in published_bundle_ids(source)
-            if bundle_id in VOLUME_BUNDLES
-            and (bundle_ids is None or bundle_id in bundle_ids)
-            and all(variable_id in reference_frames for variable_id in VOLUME_BUNDLES[bundle_id])
-        )
-        for bundle_id in requested_vector_ids + requested_derived_ids:
-            if bundle_id not in available_vector_ids + available_derived_ids:
-                LOG.warning(
-                    "building without the %s bundle, %s are not all in %s",
-                    bundle_id,
-                    ", ".join(bundle_input_ids(source, bundle_id)),
-                    paths[0],
-                )
-
-        # The variables read from the GRIB inputs: every scalar input (ECMWF
-        # carries the accumulated tp instead of a rate and sflux the
-        # window-averaged prate_ave, which _quantize_file de-accumulates /
-        # de-averages into prate), plus the inputs of each vector bundle that
-        # can be built.
-        input_scalar_ids = tuple(
-            variable_id for variable_id in inspect_ids if variable_id not in derivation_only_ids
-        )
-        vector_read_ids = tuple(
-            dict.fromkeys(
-                variable_id
-                for bundle_id in available_vector_ids + available_derived_ids
-                for variable_id in bundle_input_ids(source, bundle_id)
-                if variable_id not in input_scalar_ids
-            )
-        )
-        # The inputs that only serve a derivation (spfh850 under the vapour
-        # flux and the equivalent potential temperature) are released once it
-        # is done, rather than quantized and held for the whole run.
-        drop_ids = frozenset(vector_read_ids) - {
-            variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
-        }
-        # The first variable is the run's reference: every file is keyed by its
-        # forecast hour, so it must be one no file can lack. Stable-sorting the
-        # analysis-optional inputs (sflux prate_ave) to the back is enough unless
-        # nothing else was asked for.
-        variable_ids = tuple(
-            sorted(
-                input_scalar_ids + vector_read_ids,
-                key=lambda variable_id: (
-                    VARIABLES[variable_id].static,
-                    variable_id in source.optional_at_analysis,
-                ),
-            )
-        )
-        if not variable_ids or variable_ids[0] in source.optional_at_analysis or VARIABLES[variable_ids[0]].static:
-            raise ConversionError(
-                f"a {source.manifest_model} build needs at least one variable present in every file, "
-                f"including the analysis; {list(variable_ids)} is not enough"
-            )
-        per_file = prepare_frames_all(
-            paths,
-            variable_ids,
-            source.optional_at_analysis,
-            reference_frames,
-            source.cadence_seconds,
-            families=input_families,
-            static_ids=tuple(variable_id for variable_id in variable_ids if VARIABLES[variable_id].static),
-        )
-        available_composite_ids = ()
-        grid_path = paths[0]
-        plane_source = GRIB_PLANE_SOURCE
-        producer_versions = {}
-        variable_families = dict(input_families)
-
+    require_complete: bool,
+    expected_hours: int,
+) -> tuple[int, list[int], datetime]:
+    """The run's axis — its unit, every frame's offset on it — and its run
+    time, read off ``reference_id``'s frames and checked against the
+    source's published axis."""
     # The bundle's time axis: the coarsest unit that expresses every frame
     # exactly, and each frame's offset in it. An hour for every forecast
     # source, so their offsets are their forecast hours as before.
-    lead_seconds = [frames[variable_ids[0]].lead_seconds for frames in per_file]
+    lead_seconds = [frames[reference_id].lead_seconds for frames in per_file]
     unit_seconds = axis_unit_seconds(lead_seconds)
     offsets = [seconds // unit_seconds for seconds in lead_seconds]
     if offsets[-1] >= binformat.NO_DEPENDENCY:
         raise ConversionError(
             f"the axis needs {offsets[-1]} steps of {unit_seconds} s, past the u16 frame offset range"
         )
-    run_time = per_file[0][variable_ids[0]].run_time.astimezone(UTC)
+    run_time = per_file[0][reference_id].run_time.astimezone(UTC)
     if not source.observation:
         # The input hours must be a contiguous run of the source's published
         # axis (hourly to f120, three-hourly beyond, on GFS), so no frame is
@@ -827,16 +549,18 @@ def convert_bin(
                     f"complete build requires forecast hours 0 through {expected_hours} on the "
                     f"{source.manifest_model} axis"
                 )
+    return unit_seconds, offsets, run_time
 
-    # Every published variable's grid family: for a variable the converter
-    # derives (the vapour flux pair, the rate) the family its bundle's
-    # inputs are read from, for one it reads its own. None throughout on
-    # every source but CFSv2, so there is one family and one grid as there
-    # always was.
-    for bundle_id in published_bundle_ids(source):
-        family = bundle_grid_family(source, bundle_id)
-        for variable_id in bundle_variable_ids(bundle_id):
-            variable_families[variable_id] = family
+
+def _family_grids(
+    source: SourceSpec,
+    variable_ids: tuple[str, ...],
+    variable_families: Mapping[str, str | None],
+    grid_path: Path,
+    *,
+    require_complete: bool,
+    bbox: tuple[float, float, float, float] | None,
+) -> dict[str | None, GridInfo]:
     # One GridInfo per family in play, each read from that family's own file
     # and checked against that family's production grid. The families are in
     # input order, so the primary file's — the run's grid in the build report
@@ -866,20 +590,90 @@ def convert_bin(
                 ",".join(f"{value:g}" for value in bbox),
             )
         grids[family] = family_grid
-    # The run-level grid — the build report's, and the one every source with
-    # a single grid uses throughout.
-    grid = grids[family_order[0]]
+    return grids
 
-    def grid_for(variable_id: str) -> GridInfo:
-        """The grid one published variable's planes are on."""
-        return grids[variable_families.get(variable_id)]
 
-    read_grids = {variable_id: grid_for(variable_id) for variable_id in variable_ids}
+def _sharing_plan(
+    per_file: list[dict[str, SourceFrame]],
+    raw_precipitation_id: str | None,
+    source: SourceSpec,
+    run_time: datetime,
+):
+    """Yield (frames, previous (hour, future | None) | None, own future
+    | None) per file. A future is created only when the next file will
+    difference against this file's raw plane; no reference is kept
+    here, so each shared plane is freed once its consumer finishes."""
+    previous_future: Future | None = None
+    for index, frames in enumerate(per_file):
+        frame = frames.get(raw_precipitation_id) if raw_precipitation_id else None
+        previous: tuple[int, Future | None] | None = None
+        own: Future | None = None
+        if frame is not None and source.interval_precipitation:
+            # The interval this total covers is the distance to the
+            # frame before it on the axis being built. A series that
+            # starts at a step of its own — the rate's, whose analysis
+            # frame does not exist — takes the distance from the
+            # previous step of the source's published axis instead,
+            # which is the interval the model itself accumulated over;
+            # and the first step of an axis that itself starts past
+            # the analysis (``first_hour``) accumulated from the run
+            # time, hour 0. Only a total at the analysis names no
+            # interval at all.
+            hour = frame.lead_seconds // binformat.HOUR_SECONDS
+            if index:
+                interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
+            else:
+                axis = source.forecast_hours(hour, cycle=run_time.hour)
+                if len(axis) >= 2:
+                    interval_start = axis[-2]
+                elif hour > 0:
+                    interval_start = 0
+                else:
+                    raise ConversionError(
+                        f"the interval precipitation frame at hour {hour} names no interval"
+                    )
+            previous = (interval_start, None)
+        elif previous_future is not None and frame is not None:
+            previous = (
+                per_file[index - 1][raw_precipitation_id].lead_seconds // binformat.HOUR_SECONDS,
+                previous_future,
+            )
+        if frame is not None and not source.interval_precipitation and index + 1 < len(per_file):
+            successor = per_file[index + 1].get(raw_precipitation_id)
+            if successor is not None and (
+                precipitation_mode(source) == "accumulated"
+                or average_window_start(
+                    successor.lead_seconds // binformat.HOUR_SECONDS, source.average_window_hours
+                )
+                < frame.lead_seconds // binformat.HOUR_SECONDS
+            ):
+                own = Future()
+        previous_future = own
+        yield frames, previous, own
 
+
+def _quantize_run(
+    discovered: Discovered,
+    read_grids: dict[str, GridInfo],
+    work_parent: Path,
+    codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
+    source: SourceSpec,
+    *,
+    unit_seconds: int,
+    run_time: datetime,
+) -> tuple[dict[int, dict[str, np.ndarray]], list[PlaneStats]]:
+    """Extract and quantize every file of the run in parallel
+    (:func:`_quantize_file`): the codes of every variable by frame offset,
+    and each plane's quantization statistics."""
+    per_file = discovered.per_file
+    variable_ids = discovered.variable_ids
+    plane_source = discovered.plane_source
+    drop_ids = discovered.drop_ids
+    available_vector_ids = discovered.available_vector_ids
+    available_derived_ids = discovered.available_derived_ids
     stats: list[PlaneStats] = []
     codes_by_offset: dict[int, dict[str, np.ndarray]] = {}
 
-    work_parent = work_root or output_dir
     work_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="xue-", dir=work_parent) as temporary:
         work = Path(temporary)
@@ -892,59 +686,6 @@ def convert_bin(
         # predecessor plane, only the length of the interval it covers.
         precipitation = _precipitation_plan(source, variable_ids)
         raw_precipitation_id = precipitation[0] if precipitation is not None else None
-
-        def sharing_plan():
-            """Yield (frames, previous (hour, future | None) | None, own future
-            | None) per file. A future is created only when the next file will
-            difference against this file's raw plane; no reference is kept
-            here, so each shared plane is freed once its consumer finishes."""
-            previous_future: Future | None = None
-            for index, frames in enumerate(per_file):
-                frame = frames.get(raw_precipitation_id) if raw_precipitation_id else None
-                previous: tuple[int, Future | None] | None = None
-                own: Future | None = None
-                if frame is not None and source.interval_precipitation:
-                    # The interval this total covers is the distance to the
-                    # frame before it on the axis being built. A series that
-                    # starts at a step of its own — the rate's, whose analysis
-                    # frame does not exist — takes the distance from the
-                    # previous step of the source's published axis instead,
-                    # which is the interval the model itself accumulated over;
-                    # and the first step of an axis that itself starts past
-                    # the analysis (``first_hour``) accumulated from the run
-                    # time, hour 0. Only a total at the analysis names no
-                    # interval at all.
-                    hour = frame.lead_seconds // binformat.HOUR_SECONDS
-                    if index:
-                        interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
-                    else:
-                        axis = source.forecast_hours(hour, cycle=run_time.hour)
-                        if len(axis) >= 2:
-                            interval_start = axis[-2]
-                        elif hour > 0:
-                            interval_start = 0
-                        else:
-                            raise ConversionError(
-                                f"the interval precipitation frame at hour {hour} names no interval"
-                            )
-                    previous = (interval_start, None)
-                elif previous_future is not None and frame is not None:
-                    previous = (
-                        per_file[index - 1][raw_precipitation_id].lead_seconds // binformat.HOUR_SECONDS,
-                        previous_future,
-                    )
-                if frame is not None and not source.interval_precipitation and index + 1 < len(per_file):
-                    successor = per_file[index + 1].get(raw_precipitation_id)
-                    if successor is not None and (
-                        precipitation_mode(source) == "accumulated"
-                        or average_window_start(
-                            successor.lead_seconds // binformat.HOUR_SECONDS, source.average_window_hours
-                        )
-                        < frame.lead_seconds // binformat.HOUR_SECONDS
-                    ):
-                        own = Future()
-                previous_future = own
-                yield frames, previous, own
 
         derived_vector_ids = tuple(bundle_id for bundle_id in available_vector_ids if bundle_id in DERIVED_VECTORS)
         # Derived after the vapour flux and before the derivation-only inputs
@@ -968,37 +709,21 @@ def convert_bin(
                     cat_calibration,
                     precipitation,
                 ),
-                sharing_plan(),
+                _sharing_plan(per_file, raw_precipitation_id, source, run_time),
             )
             for lead, codes, file_stats in results:
                 codes_by_offset[lead // unit_seconds] = codes
                 stats.extend(file_stats)
     LOG.info("quantized %d planes", sum(len(codes) for codes in codes_by_offset.values()))
+    return codes_by_offset, stats
 
-    # The encoded (bundle) variables — the raw tp / prate_ave inputs have
-    # already been derived into prate by this point, and a derived scalar
-    # whose inputs the run lacked is left out like a vector bundle is.
-    scalar_variable_ids = tuple(
-        variable_id
-        for variable_id in source.bundle_scalar_ids
-        if variable_id not in DERIVED_SCALARS or variable_id in available_derived_ids
-    )
-    if bundle_ids is not None:
-        scalar_variable_ids = tuple(
-            variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
-        )
-    encoded_variable_ids = scalar_variable_ids + tuple(
-        variable_id
-        for bundle_id in available_vector_ids + available_composite_ids + available_volume_ids
-        for variable_id in bundle_variable_ids(bundle_id)
-    )
-    # Scalars that also ship a poster — every published scalar whose
-    # companions name one, which leaves out the contour-drawn pressure
-    # family.
-    companion_variable_ids = tuple(
-        variable_id for variable_id in scalar_variable_ids if "poster" in variable_spec(variable_id).companions
-    )
 
+def _variable_offsets(
+    source: SourceSpec,
+    offsets: list[int],
+    scalar_variable_ids: tuple[str, ...],
+    encoded_variable_ids: tuple[str, ...],
+) -> dict[str, list[int]]:
     # Per-variable time axes. A variable with no data for the analysis frame
     # starts at the first real step, and every artifact of it (bundle,
     # variant, poster) carries its own shorter axis: the rate on a
@@ -1022,7 +747,22 @@ def convert_bin(
     for variable_id in encoded_variable_ids:
         if VARIABLES[variable_id].static:
             variable_offsets[variable_id] = [offsets[0]]
+    return variable_offsets
 
+
+def _write_posters(
+    output_dir: Path,
+    companion_variable_ids: tuple[str, ...],
+    codes_by_offset: dict[int, dict[str, np.ndarray]],
+    variable_offsets: dict[str, list[int]],
+    grid_for: Callable[[str], GridInfo],
+    *,
+    run_time: datetime,
+    profile: str,
+    source: SourceSpec,
+    unit_seconds: int,
+    producer_versions: Mapping[str, tuple[str, str]],
+) -> dict[str, dict[str, Any]]:
     # First-frame posters: one tiny artifact per variable so a variable switch
     # can paint immediately while the real stream loads.
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1042,41 +782,10 @@ def convert_bin(
             "metadataJson": json.dumps(build_metadata(run_time, variable_offsets[variable_id], poster_grid, profile, (variable_id,), source=source, unit_seconds=unit_seconds, producers=producer_versions)),
         }
         LOG.info("wrote %s (%.1f KB)", poster_path, len(payload) / 1e3)
+    return poster_reports
 
-    # Full-resolution canonical bundles (one per scalar variable plus one per
-    # two-variable vector bundle) and the resolution ladder: one rendition
-    # per factor of the source's `variant_factors` (the half alone for most
-    # sources; half and quarter on the satellite disks), each
-    # decimated from the already-quantized full codes exactly like the
-    # posters, same temporal structure; the rung's grid is embedded in the
-    # variant bundle's own metadata, the manifest carries the tier list in
-    # ascending factor order.
-    #
-    # All bundles are written concurrently: compression funnels through one
-    # shared machine-sized zstd pool, while the writer pool lets one bundle's
-    # serial tail (container write, read-back verify) overlap another's
-    # compression. Each job materializes its raw payloads itself, so at most
-    # _BUNDLE_WRITERS bundles' payloads are alive at once.
-    variant_factors = source.variant_factors if not skip_variants else ()
-    # One rung per factor per family: a family's rung is its own grid
-    # decimated, so a bundle's tier keeps the tile geometry of its own grid.
-    variant_grids = {
-        factor: {family: variant_grid(family_grid, factor) for family, family_grid in grids.items()}
-        for factor in variant_factors
-    }
-    # Iterate the codes actually present per hour: derived prate has no
-    # analysis-frame plane on ECMWF/sflux.
-    variant_codes_by_offset = {
-        factor: {
-            offset: {
-                variable_id: decimate_variant_codes(variable_id, codes, grid_for(variable_id), factor, profile)
-                for variable_id, codes in codes_by_offset[offset].items()
-            }
-            for offset in offsets
-        }
-        for factor in variant_factors
-    }
 
+def _open_shared_stores(output_dir: Path, variant_factors: tuple[int, ...], *, zarr: bool, partial: bool) -> dict[int, Path]:
     # The shared stores this build writes into, by factor. A whole build owns
     # them and starts them empty; a fanned-out job shares them with the run's
     # other jobs (on one machine, or merged afterwards), so it only drops the
@@ -1089,6 +798,39 @@ def convert_bin(
                 shutil.rmtree(store)
             (store / "zarr.json").unlink(missing_ok=True)
             shared_stores[factor] = store
+    return shared_stores
+
+
+def _write_bundles(
+    *,
+    source: SourceSpec,
+    run_time: datetime,
+    profile: str,
+    unit_seconds: int,
+    producer_versions: Mapping[str, tuple[str, str]],
+    output_dir: Path,
+    zstd_level: int,
+    container: bool,
+    zarr: bool,
+    series: bool,
+    shared_stores: dict[int, Path],
+    grids: Mapping[str | None, GridInfo],
+    variant_grids: Mapping[int, Mapping[str | None, GridInfo]],
+    variable_families: Mapping[str, str | None],
+    variable_offsets: dict[str, list[int]],
+    codes_by_offset: dict[int, dict[str, np.ndarray]],
+    variant_codes_by_offset: dict[int, dict[int, dict[str, np.ndarray]]],
+    variant_factors: tuple[int, ...],
+    submit_order: tuple[str, ...],
+    report_order: tuple[str, ...],
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, list[dict[str, Any]]],
+    dict[tuple[int, str], zarrstore.BundleWrite],
+]:
+    """Write every bundle of every tier, concurrently: the full tier's
+    reports in ``report_order``, each bundle's rung reports in ascending
+    factor order, and the store write of each (tier, bundle)."""
     store_writes: dict[tuple[int, str], zarrstore.BundleWrite] = {}
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as compressor, ThreadPoolExecutor(
@@ -1185,13 +927,6 @@ def convert_bin(
 
             return writers.submit(job)
 
-        # Submit largest first — the full tier, then each rung of the
-        # ladder in turn — so the volume, composite and vector bundles' long
-        # compression starts at once; reports keep the
-        # scalars-vectors-composites-volumes manifest order and, within a
-        # bundle, the ladder's ascending factor order regardless.
-        submit_order = available_volume_ids + available_composite_ids + available_vector_ids + scalar_variable_ids
-        report_order = scalar_variable_ids + available_vector_ids + available_composite_ids + available_volume_ids
         full_futures = {bundle_id: submit_bundle(bundle_id, 1, codes_by_offset) for bundle_id in submit_order}
         variant_futures = {
             factor: {
@@ -1206,7 +941,19 @@ def convert_bin(
             for bundle_id in report_order
             if variant_factors
         }
+    return bundle_reports, variant_reports, store_writes
 
+
+def _finalize_stores(
+    shared_stores: dict[int, Path],
+    store_writes: dict[tuple[int, str], zarrstore.BundleWrite],
+    report_order: tuple[str, ...],
+    bundle_reports: list[dict[str, Any]],
+    variant_reports: dict[str, list[dict[str, Any]]],
+    variant_factors: tuple[int, ...],
+    *,
+    partial: bool,
+) -> None:
     # Each tier's group document, last: the part over this build's bundles in
     # manifest order, then — unless a fanned-out job's — the group document
     # from it. Every entry naming the store carries its CRC-32.
@@ -1223,31 +970,12 @@ def convert_bin(
         for report in stamped:
             report["zarr"]["crc32"] = crc32
 
-    report = {
-        "outputDir": str(output_dir),
-        "model": source.manifest_model,
-        "grid": grid.metadata(),
-        "profile": profile,
-        "zstdLevel": zstd_level,
-        "zstdVersion": ".".join(map(str, zstd_version)),
-        "bundles": bundle_reports,
-        "variants": [variant for variants in variant_reports.values() for variant in variants],
-        "posters": list(poster_reports.values()),
-        # Always empty: the report keeps the key the native encoder's
-        # report still writes.
-        "videos": [],
-        "byteLength": sum(delivered_byte_length(bundle) for bundle in bundle_reports),
-        "temperatureMaxAbsError": max((item.max_abs_error for item in stats if item.variable_id == "tmp2m"), default=0.0),
-        "temperatureClampedPoints": sum(item.clamped_points for item in stats if item.variable_id == "tmp2m"),
-        "precipitationOverflowPoints": sum(item.overflow_points for item in stats if item.variable_id == "prate"),
-    }
-    if WIND_BUNDLE_ID in available_vector_ids:
-        report["windMaxAbsError"] = max(
-            (item.max_abs_error for item in stats if item.variable_id in WIND_COMPONENT_IDS), default=0.0
-        )
-        report["windClampedPoints"] = sum(
-            item.clamped_points for item in stats if item.variable_id in WIND_COMPONENT_IDS
-        )
+
+def _check_quantization(
+    stats: Sequence[PlaneStats],
+    encoded_variable_ids: tuple[str, ...],
+    codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
+) -> None:
     # Quantization acceptance runs over the *encoded* variables (prate is the
     # de-accumulated output on ECMWF; the raw tp input has no codebook).
     for variable_id in encoded_variable_ids:
@@ -1258,45 +986,259 @@ def convert_bin(
         if worst > 0.5001 * codebook.step:
             raise ConversionError(f"{variable_id} quantization error exceeds half a step")
 
-    if manifest_path is not None:
-        # The source's core bundles (sources.py core_bundle_ids: the
-        # tmp2m/prate pair on a forecast, the reflectivity on a radar
-        # mosaic) are what a complete run must publish. A restricted build
-        # ships only the bundles it was asked for.
-        require_core = bundle_ids is None
-        payload = build_bin_manifest(
-            run_time,
-            bundles=[
-                bundle_manifest_entry(
-                    bundle,
-                    manifest_path.parent,
-                    poster_reports.get(bundle["variable"]),
-                    variant_reports.get(bundle["variable"]),
-                    grid=grids[bundle_grid_family(source, bundle["variable"])],
-                )
-                for bundle in bundle_reports
-            ],
-            expected_hours=lead_hours(offsets[-1], unit_seconds) if len(offsets) > 1 else expected_hours,
-            model=source.manifest_model,
-            product=source.product,
-            require_core_variables=require_core,
-        )
-        write_bin_manifest(
-            manifest_path,
-            payload,
-            force=force,
-            expected_hours=lead_hours(offsets[-1], unit_seconds) if len(offsets) > 1 else expected_hours,
-            require_core_variables=require_core,
-        )
-        LOG.info("wrote manifest %s", manifest_path)
-        if latest_path is not None and run_id is not None:
-            write_pointer_to_manifest(
-                latest_path,
-                manifest_path,
-                run_id=run_id,
-                run_time=run_time,
-                model=source.manifest_model,
-                product=source.product,
+
+def convert_bin(
+    input_path: Path | Sequence[Path],
+    output_dir: Path,
+    *,
+    profile: str = "quality",
+    work_root: Path | None = None,
+    zstd_level: int = zstdcli.DEFAULT_LEVEL,
+    require_complete: bool = False,
+    expected_hours: int = 120,
+    manifest_path: Path | None = None,
+    latest_path: Path | None = None,
+    run_id: str | None = None,
+    force: bool = False,
+    skip_variants: bool = False,
+    model: str = "gfs",
+    bbox: tuple[float, float, float, float] | None = None,
+    bundle_ids: tuple[str, ...] | None = None,
+    last_hour: int | None = None,
+    zarr: bool = True,
+    container: bool = False,
+    series: bool = True,
+    partial: bool = False,
+) -> dict[str, Any]:
+    """Convert a GRIB run (or a series file) into shared Zarr stores.
+
+    Writes every bundle's arrays into the run's shared store
+    ``<output_dir>/bundles.zarr`` — every scalar variable, plus the
+    two-variable ``wind10m`` bundle when the input files carry the 10 m wind
+    components, and so on — and each rung of the source's ladder into
+    ``bundles.half.zarr`` (and on the satellite disks ``bundles.quarter.zarr``
+    too, ``SourceSpec.variant_factors``), the series store
+    (``<bundle>.series.zarr``) of the source's point-read bundles,
+    per-variable posters, and returns build statistics. The
+    ``.xue`` container of each is written only with ``container=True``. When ``latest_path`` and ``run_id`` are given, also
+    (re)writes the mutable ``latest.json`` live pointer aimed at the freshly
+    written manifest.
+
+    ``bbox`` (west, south, east, north, degrees) crops every plane to a
+    region, and ``bundle_ids`` restricts which bundles are built — the two
+    knobs the historical showcase cases use to ship a small slice of a past
+    run. A restricted build's manifest carries only the bundles it was asked
+    for, so it is not required to hold the core tmp2m and prate pair.
+    ``last_hour`` trims an observation source's series to a leading window;
+    a forecast run is already exactly the frames that were fetched.
+    ``zarr`` writes a Zarr v3 store for every bundle and variant
+    (`xuebuild.zarrstore`, docs/zarr-profile.md) straight from the quantized
+    codes and names it in the manifest. ``container`` writes the ``.xue``
+    as well, from the same codes, so the two agree by construction and the
+    bundle's bytes do not depend on whether a store was asked for. Without
+    the container no ``.xue`` is written at all: the manifest names the
+    store alone, so a run publishes one delivery. A build needs one of the
+    two.
+
+    ``partial`` is one job of a fanned-out publish (``build-bin --bundles``):
+    each shared store gets a partial group document
+    (``zarr.part.<first bundle>.json``) instead of its ``zarr.json``, the
+    entries carry that part's CRC-32, and ``assemble-run`` writes the group
+    documents. Otherwise the group documents are written here, last, and
+    the parts removed.
+    """
+    if profile not in PROFILES:
+        raise ConversionError(f"unknown profile: {profile}")
+    if not container and not zarr:
+        raise ConversionError("a build without the container needs the store: pass zarr=True")
+    source = source_spec(model)
+    if bundle_ids is not None:
+        unsupported = [bundle_id for bundle_id in bundle_ids if bundle_id not in published_bundle_ids(source)]
+        if unsupported or not bundle_ids:
+            raise ConversionError(
+                f"{source.manifest_model} publishes {list(published_bundle_ids(source))}, not {list(bundle_ids)}"
             )
-            LOG.info("wrote live pointer %s -> run %s", latest_path, run_id)
+    zstd_version = zstdcli.zstd_version()
+    codebooks = PROFILES[profile]
+
+    if source.series_file:
+        discovered = discover_series(
+            input_path, source, bundle_ids, require_complete=require_complete, last_hour=last_hour
+        )
+    else:
+        discovered = discover_records(input_path, source, bundle_ids)
+    variable_ids = discovered.variable_ids
+    per_file = discovered.per_file
+    available_vector_ids = discovered.available_vector_ids
+    available_derived_ids = discovered.available_derived_ids
+    available_composite_ids = discovered.available_composite_ids
+    available_volume_ids = discovered.available_volume_ids
+    producer_versions = discovered.producer_versions
+    variable_families = discovered.variable_families
+
+    unit_seconds, offsets, run_time = _time_axis(
+        per_file, variable_ids[0], source, require_complete=require_complete, expected_hours=expected_hours
+    )
+
+    # Every published variable's grid family: for a variable the converter
+    # derives (the vapour flux pair, the rate) the family its bundle's
+    # inputs are read from, for one it reads its own. None throughout on
+    # every source but CFSv2, so there is one family and one grid as there
+    # always was.
+    for bundle_id in published_bundle_ids(source):
+        family = bundle_grid_family(source, bundle_id)
+        for variable_id in bundle_variable_ids(bundle_id):
+            variable_families[variable_id] = family
+    grids = _family_grids(
+        source,
+        variable_ids,
+        variable_families,
+        discovered.grid_path,
+        require_complete=require_complete,
+        bbox=bbox,
+    )
+    # The run-level grid — the build report's, and the one every source with
+    # a single grid uses throughout.
+    grid = next(iter(grids.values()))
+
+    def grid_for(variable_id: str) -> GridInfo:
+        """The grid one published variable's planes are on."""
+        return grids[variable_families.get(variable_id)]
+
+    read_grids = {variable_id: grid_for(variable_id) for variable_id in variable_ids}
+
+    codes_by_offset, stats = _quantize_run(
+        discovered,
+        read_grids,
+        work_root or output_dir,
+        codebooks,
+        source,
+        unit_seconds=unit_seconds,
+        run_time=run_time,
+    )
+
+    # The encoded (bundle) variables — the raw tp / prate_ave inputs have
+    # already been derived into prate by this point, and a derived scalar
+    # whose inputs the run lacked is left out like a vector bundle is.
+    scalar_variable_ids = tuple(
+        variable_id
+        for variable_id in source.bundle_scalar_ids
+        if variable_id not in DERIVED_SCALARS or variable_id in available_derived_ids
+    )
+    if bundle_ids is not None:
+        scalar_variable_ids = tuple(
+            variable_id for variable_id in scalar_variable_ids if variable_id in bundle_ids
+        )
+    encoded_variable_ids = scalar_variable_ids + tuple(
+        variable_id
+        for bundle_id in available_vector_ids + available_composite_ids + available_volume_ids
+        for variable_id in bundle_variable_ids(bundle_id)
+    )
+    # Scalars that also ship a poster — every published scalar whose
+    # companions name one, which leaves out the contour-drawn pressure
+    # family.
+    companion_variable_ids = tuple(
+        variable_id for variable_id in scalar_variable_ids if "poster" in variable_spec(variable_id).companions
+    )
+
+    variable_offsets = _variable_offsets(source, offsets, scalar_variable_ids, encoded_variable_ids)
+
+    poster_reports = _write_posters(
+        output_dir,
+        companion_variable_ids,
+        codes_by_offset,
+        variable_offsets,
+        grid_for,
+        run_time=run_time,
+        profile=profile,
+        source=source,
+        unit_seconds=unit_seconds,
+        producer_versions=producer_versions,
+    )
+
+    # Full-resolution canonical bundles (one per scalar variable plus one per
+    # two-variable vector bundle) and the resolution ladder: one rendition
+    # per factor of the source's `variant_factors` (the half alone for most
+    # sources; half and quarter on the satellite disks), each
+    # decimated from the already-quantized full codes exactly like the
+    # posters, same temporal structure; the rung's grid is embedded in the
+    # variant bundle's own metadata, the manifest carries the tier list in
+    # ascending factor order.
+    #
+    # All bundles are written concurrently: compression funnels through one
+    # shared machine-sized zstd pool, while the writer pool lets one bundle's
+    # serial tail (container write, read-back verify) overlap another's
+    # compression. Each job materializes its raw payloads itself, so at most
+    # _BUNDLE_WRITERS bundles' payloads are alive at once.
+    variant_factors = source.variant_factors if not skip_variants else ()
+    variant_grids, variant_codes_by_offset = build_ladder(
+        variant_factors, grids, codes_by_offset, offsets, grid_for, profile
+    )
+    shared_stores = _open_shared_stores(output_dir, variant_factors, zarr=zarr, partial=partial)
+
+    # Submit largest first — the full tier, then each rung of the
+    # ladder in turn — so the volume, composite and vector bundles' long
+    # compression starts at once; reports keep the
+    # scalars-vectors-composites-volumes manifest order and, within a
+    # bundle, the ladder's ascending factor order regardless.
+    submit_order = available_volume_ids + available_composite_ids + available_vector_ids + scalar_variable_ids
+    report_order = scalar_variable_ids + available_vector_ids + available_composite_ids + available_volume_ids
+    bundle_reports, variant_reports, store_writes = _write_bundles(
+        source=source,
+        run_time=run_time,
+        profile=profile,
+        unit_seconds=unit_seconds,
+        producer_versions=producer_versions,
+        output_dir=output_dir,
+        zstd_level=zstd_level,
+        container=container,
+        zarr=zarr,
+        series=series,
+        shared_stores=shared_stores,
+        grids=grids,
+        variant_grids=variant_grids,
+        variable_families=variable_families,
+        variable_offsets=variable_offsets,
+        codes_by_offset=codes_by_offset,
+        variant_codes_by_offset=variant_codes_by_offset,
+        variant_factors=variant_factors,
+        submit_order=submit_order,
+        report_order=report_order,
+    )
+    _finalize_stores(
+        shared_stores, store_writes, report_order, bundle_reports, variant_reports, variant_factors, partial=partial
+    )
+
+    report = build_report(
+        output_dir=output_dir,
+        source=source,
+        grid=grid,
+        profile=profile,
+        zstd_level=zstd_level,
+        zstd_version=zstd_version,
+        bundle_reports=bundle_reports,
+        variant_reports=variant_reports,
+        poster_reports=poster_reports,
+        stats=stats,
+        available_vector_ids=available_vector_ids,
+    )
+    _check_quantization(stats, encoded_variable_ids, codebooks)
+
+    if manifest_path is not None:
+        write_manifest(
+            manifest_path,
+            run_time=run_time,
+            source=source,
+            bundle_reports=bundle_reports,
+            poster_reports=poster_reports,
+            variant_reports=variant_reports,
+            grids=grids,
+            offsets=offsets,
+            unit_seconds=unit_seconds,
+            expected_hours=expected_hours,
+            bundle_ids=bundle_ids,
+            force=force,
+            latest_path=latest_path,
+            run_id=run_id,
+        )
     return report
