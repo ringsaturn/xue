@@ -33,10 +33,8 @@ import { ViewControl } from "./viewcontrol";
 import {
   ForecastLayer,
   MAX_NAMED_CONTOURS,
-  type CompositeField,
   type ContourStyle,
   type FramePlanes,
-  type VectorField,
 } from "./layer";
 import {
   steppedPrecipitationLegend,
@@ -100,16 +98,14 @@ import {
   familyOf,
   familyVariants,
   isobaricCode,
-  isWaveVector,
   levelCode,
   niceStep,
   rangeLegend,
   scalarLegendRange,
-  vectorMaxMagnitude,
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette, encodeLog, hostPaletteCodes, hostPaletteLegend, hostPaletteSampling, legendGradient, logCodebookLegend } from "./palettes";
+import { buildPalette, encodeLog, hostPaletteCodes, hostPaletteLegend, hostPaletteSampling, legendGradient, logCodebookLegend } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   contourSmoothingCells,
@@ -176,13 +172,10 @@ import {
   onDisplayZoneChange,
 } from "./timezone";
 import {
-  coverageBox,
   coversTiles,
   parseTileGeometry,
   sameTileRects,
   viewportTileRects,
-  WHOLE_PLANE_COVERAGE,
-  type CoverageBox,
   type TileGeometry,
   type TileRect,
 } from "./tiles";
@@ -212,7 +205,19 @@ import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 import { MeasureTool, type MeasureKind } from "./measure";
 import type { DecodeChannel, DecodedFrame, VariableSession } from "./session";
-import { artifactUrl, createSessionRegistry, StoreRejectedError, type StreamMessage } from "./sessions";
+import {
+  artifactUrl,
+  compositeField,
+  createSessionRegistry,
+  sessionCoverage,
+  sessionMaxMagnitude,
+  sessionOffsetForLead,
+  sessionParticlePace,
+  StoreRejectedError,
+  vectorPalette,
+  windVectorField,
+  type StreamMessage,
+} from "./sessions";
 import { createProbePanel } from "./probepanel";
 import { createMarks } from "./marks";
 import { createRelief } from "./relief";
@@ -1184,17 +1189,6 @@ const fieldSheetControl = createSheet({
   canOpen: () => manifest !== null && !switchingVariable,
   initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
 });
-
-/** Where a session's frame offset for a lead time comes from: exact match
- * on its own axis, or null when the axis has no frame there. */
-function sessionOffsetForLead(session: VariableSession, seconds: number): number | null {
-  if (!session.leadOffsets) {
-    const time = session.metadata.time;
-    const unit = axisUnitSeconds(time);
-    session.leadOffsets = new Map(frameOffsets(time).map((offset) => [offset * unit, offset]));
-  }
-  return session.leadOffsets.get(seconds) ?? null;
-}
 
 /** A member session's axis as valid times (ms), with its frame keys and
  * the step it holds a frame for, built on first use. */
@@ -2682,14 +2676,6 @@ async function retierPrimary(): Promise<void> {
       scheduleRetier();
     }
   }
-}
-
-/** The texture box a plane's tiles fill on its own session grid — what the
- * shader clips to, so the stale bytes outside them are never painted. */
-function sessionCoverage(session: VariableSession, tiles: TileRect[] | null): CoverageBox {
-  if (!tiles || !session.tiles) return WHOLE_PLANE_COVERAGE;
-  const grid = session.metadata.grid;
-  return coverageBox(session.tiles, grid.width, grid.height, tiles);
 }
 
 /** The plane cached under `key`, but only if it covers the session's current
@@ -5237,65 +5223,6 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     // the field would be worse than none.
     layer.setVisible(!overlay);
   }
-}
-
-/** The ceiling a vector session's magnitude palette tops out at, from what
- * the field is rather than what it is called. */
-function sessionMaxMagnitude(session: VariableSession): number {
-  const identity = session.identity;
-  return identity === null ? vectorMaxMagnitude("wind", null) : vectorMaxMagnitude(identity.family, identity.level);
-}
-
-/** The magnitude palette of a vector session: the wind ramp up to the
- * field's own ceiling, the vapour flux ramp, or — for the wave vector,
- * whose magnitude is the significant wave height — the wave height ramp. */
-function vectorPalette(session: VariableSession): Uint8Array {
-  const max = sessionMaxMagnitude(session);
-  const family = session.identity?.family;
-  if (family === "qflux") return buildVapourFluxPalette(max);
-  if (family !== undefined && isWaveVector(family)) return buildWaveFieldPalette(max);
-  return buildWindFieldPalette(max);
-}
-
-/** How fast the particles run over a vector session's field, relative to
- * the wind's pace, where the field is a speed: the wave vector's magnitude
- * is a height, and a metre of sea is made to travel like three metres a
- * second of wind — a three-metre sea like a fresh breeze, a storm sea past
- * the ramp's ceiling like a gale. */
-function sessionParticlePace(session: VariableSession): number {
-  const family = session.identity?.family;
-  return family !== undefined && isWaveVector(family) ? WAVE_PARTICLE_PACE : 1;
-}
-const WAVE_PARTICLE_PACE = 3;
-
-/** A vector bundle's own decode for the layer's magnitude mode: each
- * component's linear codebook, plus the magnitude the palette tops out at.
- * Null when either component is not linearly quantized — nothing published
- * is, and a magnitude has no meaning without both. */
-function windVectorField(session: VariableSession): VectorField | null {
-  const [u, v] = session.variables;
-  if (u?.quantization.type !== "linear" || v?.quantization.type !== "linear") return null;
-  // One reserved code serves both channels; the encoder gives the pair the
-  // same codebook, and a file that did not could not be drawn as one field.
-  if (u.quantization.nodataCode !== v.quantization.nodataCode) return null;
-  return {
-    offset: [u.quantization.offset, v.quantization.offset],
-    scale: [u.quantization.scale, v.quantization.scale],
-    nodataCode: u.quantization.nodataCode,
-    maxMagnitude: sessionMaxMagnitude(session),
-  };
-}
-
-/** A composite bundle's own decode for the layer's colour mode: each gun's
- * linear codebook. Null when any gun is not linearly quantized — nothing
- * published is, and a picture has no meaning without all three. */
-function compositeField(session: VariableSession): CompositeField | null {
-  const [r, g, b] = session.variables;
-  if (r?.quantization.type !== "linear" || g?.quantization.type !== "linear" || b?.quantization.type !== "linear") return null;
-  return {
-    offset: [r.quantization.offset, g.quantization.offset, b.quantization.offset],
-    scale: [r.quantization.scale, g.quantization.scale, b.quantization.scale],
-  };
 }
 
 /** Turn the particle overlay on or off. Never a reload: the speed field on
