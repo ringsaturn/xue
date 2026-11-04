@@ -30,7 +30,7 @@ change without the wheel that matches it, and the scheduled publishes keep
 working throughout the release window.
 
 A change to the registry tables alone (`xuebuild/variables.py`,
-`quantize.py`, `sources.py`, the bundle tables of `binconvert.py`) is not
+`quantize.py`, `sources.py`, the bundle tables of `bundles.py`) is not
 an encoder change and takes none of this: it is a commit to `main` with
 the regenerated `rust/xue/registry.json` (`xue registry --output
 rust/xue/registry.json`), and the next build hands the new document to the wheel

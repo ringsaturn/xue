@@ -252,14 +252,14 @@ class SourceSpec:
     water vapour flux the converter derives on that surface, ``wave`` for
     the wave vector it derives from the height and direction. Listing one is
     not enough on its own — it ships only when every input it is built from
-    (:func:`xuebuild.binconvert.vector_input_ids`) is in
+    (:func:`xuebuild.bundles.vector_input_ids`) is in
     :attr:`input_variable_ids`, and a run whose files turn out to lack them
     builds without it and says so."""
     bundle_composite_ids: tuple[str, ...] = ()
     """Composite bundles published after the vectors, in manifest order: a
     bundle of three or more variables an algorithm derived from the
     source's channels in the fetch stage — ``dustrgb``, the Dust RGB's
-    three guns (:data:`xuebuild.binconvert.COMPOSITE_BUNDLES`, produced by
+    three guns (:data:`xuebuild.bundles.COMPOSITE_BUNDLES`, produced by
     :mod:`xuebuild.satellite.producers`). Listing one publishes it only
     when every channel its producer reads is in :attr:`input_variable_ids`;
     the converter reads the produced components off the series the fetch
@@ -269,7 +269,7 @@ class SourceSpec:
     bundle of many variables each read directly off the source's records —
     ``refl3d``, the MRMS reflectivity mosaic's 33 constant-altitude levels,
     and ``cloud3d``, a model's cloud water on 24
-    (:data:`xuebuild.binconvert.VOLUME_BUNDLES`), one bundle so a reader
+    (:data:`xuebuild.bundles.VOLUME_BUNDLES`), one bundle so a reader
     takes a column or a slab in one range. Listing one publishes it only
     when every member is in :attr:`input_variable_ids`; a member is not
     published as a scalar of its own."""

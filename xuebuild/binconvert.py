@@ -32,31 +32,13 @@ from typing import Any
 import numpy as np
 
 from . import binformat, temporal, zarrstore, zstdcli
-from .bundles import (  # noqa: F401  (the bundle table's names, re-exported for its readers)
-    BUNDLES,
-    CAT_SHEAR_LAYERS,
-    COMPOSITE_BUNDLES,
+from .bundles import (
     DERIVED_SCALARS,
     DERIVED_VECTORS,
     PRECIPITATION_RATE_BUNDLE_ID,
-    SWELL_BUNDLE_ID,
     VECTOR_BUNDLES,
-    VOLUME_BUNDLES,
-    WAVE_BUNDLE_ID,
-    WIND_100M_BUNDLE_ID,
-    WIND_100M_COMPONENT_IDS,
-    WIND_80M_BUNDLE_ID,
-    WIND_80M_COMPONENT_IDS,
-    WIND_BUNDLE_ID,
-    WIND_COMPONENT_IDS,
-    WIND_WAVE_BUNDLE_ID,
     bundle_variable_ids,
     cat_level,
-    derivation,
-    is_derived_scalar,
-    theta_e_level,
-    vapour_flux_level,
-    vector_input_ids,
 )
 from .common import crc32_hex
 from .derive import (
