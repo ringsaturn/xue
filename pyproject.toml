@@ -18,8 +18,8 @@ dependencies = [
     "numpy>=2.0",
     # The native encoder (rust/xue-py); XUE_ENCODER=python falls back to the
     # reference pipeline. The floor tracks the current release because the
-    # wheel's source table must match xuebuild/sources.py, and a wheel that
-    # publishes a different bundle set refuses to build (docs/contribution/releasing.md).
+    # wheel must implement every rule name this tree's registry document uses,
+    # and refuses the document otherwise (docs/contribution/releasing.md).
     "xuepy>=0.44,<0.45",
 ]
 
@@ -71,16 +71,16 @@ indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
 # Staging the CAMEL emissivity months the dust confidence reads (xuebuild/satellite/staging.py): earthaccess behind shachen[data].
 staging = ["shachen[data]>=0.4.0", "xarray>=2025.1", "netcdf4>=1.7"]
 
-# The repository's own xuepy index: the wheels attached to the GitHub releases,
-# indexed on GitHub Pages (docs/contribution/releasing.md, "The own index").
-# Commented out until that index serves the locked version: an explicit index
-# that does not list xuepy makes resolution fail, and switching the source
-# rewrites xuepy's entry in uv.lock, so enabling it is a relock commit.
-#
-# [[tool.uv.index]]
-# name = "xuepy-index"
-# url = "https://ringsaturn.github.io/xue/simple"
-# explicit = true
-#
-# [tool.uv.sources]
-# xuepy = { index = "xuepy-index" }
+# xuepy resolves from the repository's own index alone: the wheels attached to
+# the GitHub releases, indexed on GitHub Pages (docs/contribution/releasing.md,
+# "The own index"). Every other dependency still comes from PyPI. `uv sync`
+# reads the wheel URLs from uv.lock and never asks the index; only a relock
+# does, and the release workflow runs that once the index lists the version.
+
+[[tool.uv.index]]
+name = "xuepy-index"
+url = "https://ringsaturn.github.io/xue/simple"
+explicit = true
+
+[tool.uv.sources]
+xuepy = { index = "xuepy-index" }
