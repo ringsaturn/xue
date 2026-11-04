@@ -75,6 +75,14 @@ _ORIGIN_RANK = {"live": 0}
 only fills the gaps around it."""
 
 MONTH = re.compile(r"^(\d{4})-(\d{2})$")
+HISTORY_ID = re.compile(r"^[A-Z]{2}-\d{7}[NS]\d{5}-\d{4}$")
+"""A best-track storm that never had an ATCF number: basin, IBTrACS ``SID``,
+season. Its two ends read as an ATCF id's do."""
+
+
+def is_season_storm_id(value: object) -> bool:
+    """An id a season may file a storm under; forecasts stay ATCF-only."""
+    return isinstance(value, str) and bool(ATCF_ID.match(value) or HISTORY_ID.match(value))
 
 
 def month_of(base: str) -> str:
@@ -226,7 +234,7 @@ def make_best(
         "basin": storm[:2],
         "name": name,
         "sid": sid,
-        "atcf": sorted(set(atcf) | {storm}),
+        "atcf": sorted(set(atcf) | ({storm} if ATCF_ID.match(storm) else set())),
         "best": {key: best[key] for key in sorted(best)},
     }
 
@@ -235,11 +243,12 @@ def validate_best(record: object, label: str) -> None:
     if not isinstance(record, dict):
         raise TcProductError(f"{label} must be an object")
     storm = record.get("storm")
-    if not isinstance(storm, str) or not ATCF_ID.match(storm):
-        raise TcProductError(f"{label}.storm must be an ATCF id")
+    if not is_season_storm_id(storm):
+        raise TcProductError(f"{label}.storm must be an ATCF or history id")
     atcf = record.get("atcf")
-    if not isinstance(atcf, list) or storm not in atcf or any(not ATCF_ID.match(str(i)) for i in atcf):
-        raise TcProductError(f"{label}.atcf must list ATCF ids including the storm's own")
+    numbered = ATCF_ID.match(storm) is not None
+    if not isinstance(atcf, list) or (numbered and storm not in atcf) or any(not ATCF_ID.match(str(i)) for i in atcf):
+        raise TcProductError(f"{label}.atcf must list ATCF ids including a numbered storm's own")
     best = record.get("best")
     if not isinstance(best, dict):
         raise TcProductError(f"{label}.best must be an object")
@@ -795,8 +804,8 @@ def validate_season_index(payload: object) -> None:
     previous = ""
     for position, entry in enumerate(storms):
         label = f"season index storms[{position}]"
-        if not isinstance(entry, dict) or not ATCF_ID.match(str(entry.get("id"))):
-            raise TcProductError(f"{label}.id must be an ATCF id")
+        if not isinstance(entry, dict) or not is_season_storm_id(entry.get("id")):
+            raise TcProductError(f"{label}.id must be an ATCF or history id")
         if season_of_id(entry["id"]) != season:
             raise TcProductError(f"{label} is not a storm of season {season}")
         if entry["id"] <= previous:

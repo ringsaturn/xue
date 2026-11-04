@@ -521,6 +521,11 @@ def parser() -> argparse.ArgumentParser:
     )
     tc_archive.add_argument("--from", dest="first", help="first month to backfill, YYYY-MM")
     tc_archive.add_argument("--to", dest="last", help="last month to backfill, YYYY-MM (default: the current one)")
+    tc_archive.add_argument(
+        "--ibtracs-csv",
+        type=Path,
+        help="backfill ibtracs from this copy of the CSV instead of downloading it; --from and --to name its seasons by year",
+    )
 
     airport_build = commands.add_parser(
         "airport-build",
@@ -1269,7 +1274,7 @@ def main(argv: list[str] | None = None) -> int:
                     raise XueError("--backfill needs --from (and optionally --to) as YYYY-MM")
                 if arguments.first > last:
                     raise XueError("--from is after --to")
-                report = {"backfill": tc_backfill(archive, sources, arguments.first, last)}
+                report = {"backfill": tc_backfill(archive, sources, arguments.first, last, ibtracs_csv=arguments.ibtracs_csv)}
             else:
                 if arguments.offline:
                     raise XueError("harvesting reads the published issues; --offline is for --backfill only")

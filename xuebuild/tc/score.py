@@ -428,7 +428,16 @@ def score_stale(archive: Archive, *, seasons: list[int] | None = None) -> dict[s
     catalog. Returns a summary."""
     catalog = archive.catalog
     published = {entry["season"]: entry for entry in catalog.get("scores", [])}
-    candidates = seasons if seasons is not None else [entry["season"] for entry in catalog.get("seasons", [])]
+    # A season of best tracks alone has nothing to verify.
+    candidates = (
+        seasons
+        if seasons is not None
+        else [
+            entry["season"]
+            for entry in catalog.get("seasons", [])
+            if any(storm["months"] for storm in archive.season_index(entry["season"])["storms"])
+        ]
+    )
     scored = []
     for season in candidates:
         signature = season_signature(archive, season)
