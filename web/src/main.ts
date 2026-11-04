@@ -58,7 +58,6 @@ import {
   FORECAST_MODEL_IDS,
   FORECAST_MODELS,
   mosaicMembers,
-  containerOf,
   fetchLatestPointer,
   fetchManifest,
   ManifestRejectedError,
@@ -88,12 +87,8 @@ import {
   type VariantDescriptor,
 } from "./manifest";
 import {
-  identifyBundle,
   identityForBundleId,
-  identityForParameter,
-  isCompositeIdentity,
   registeredBundleId,
-  sameIdentity,
   type VariableIdentity,
 } from "./identity";
 import {
@@ -213,11 +208,11 @@ import {
 } from "./showcase-catalog";
 import { captionText } from "./casecaptions";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
-import { spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
-import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion, volumeLevels } from "./volume";
+import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 import { MeasureTool, type MeasureKind } from "./measure";
 import type { DecodeChannel, DecodedFrame, VariableSession } from "./session";
+import { artifactUrl, createSessionRegistry, StoreRejectedError, type StreamMessage } from "./sessions";
 import { createProbePanel } from "./probepanel";
 import { createMarks } from "./marks";
 import { createRelief } from "./relief";
@@ -1238,12 +1233,6 @@ function slotOfSession(session: VariableSession): RasterSlot | null {
   return null;
 }
 
-/** Streaming progress that arrived before its session finished registering. */
-const pendingStream = new Map<
-  string,
-  { bytes: number; resident: boolean; scope: VariableSession["residentScope"] }
->();
-
 let manifest: ForecastManifest | null = null;
 /** Absolute URL the manifest was loaded from; artifact paths resolve against it. */
 let manifestUrl: string | null = null;
@@ -1332,16 +1321,6 @@ interface MosaicMember {
  * for an ordinary dataset. `primary` is the member whose run is the
  * global `manifest`, and whose session is `activeSession`. */
 let mosaic: { members: MosaicMember[]; primary: ForecastModelId } | null = null;
-
-/** Sessions opened for the mosaic's other members, keyed by member and
- * bundle: they read other runs than `manifest`, so they live beside
- * `sessions` rather than in it. */
-const memberSessions = new Map<string, VariableSession>();
-const memberSessionLoads = new Map<string, Promise<VariableSession>>();
-
-function memberSessionKey(member: ForecastModelId, variableId: ForecastBundleId): string {
-  return `${member}:${variableId}`;
-}
 
 /** The member slots holding a session. */
 function memberSlots(): RasterSlot[] {
@@ -1479,14 +1458,40 @@ let switchingVariable = false;
 /** The embed API (`embed.ts`), installed once the map has loaded. */
 let embedHub: EmbedHub | null = null;
 
-const sessions = new Map<ForecastBundleId, VariableSession>();
-const sessionLoads = new Map<ForecastBundleId, Promise<VariableSession>>();
-/** Every open session by its `streamKey`, for routing the channel's
- * progress: a run's own sessions and the mosaic members' alike. */
-const streamSessions = new Map<string, VariableSession>();
-/** Hands out `VariableSession.key`. Monotonic for the life of the page, so a
- * reloaded session never inherits a stale session's cache entries. */
-let nextSessionKey = 1;
+/** Every decode session the page holds and how one is opened (`sessions.ts`). */
+const sessionRegistry = createSessionRegistry({
+  get manifest() {
+    return manifest;
+  },
+  get manifestUrl() {
+    return manifestUrl;
+  },
+  get initializeSequence() {
+    return initializeSequence;
+  },
+  get caseOpen() {
+    return activeCase !== null;
+  },
+  dataBackend,
+  pickTier: (variableId, descriptor, run, role) => {
+    let budget = volumeBudget(variableId, bundleVariantBudget(descriptor, run.bundles));
+    if (role === "primary") budget = mosaicBudget(variableId, budget);
+    return pickBundleVariant(
+      descriptor.variants,
+      neededGridWidth(),
+      slowConnection(),
+      role === "overlay" ? overlayResolutionPreference(resolutionPreference, budget?.fullGrid) : resolutionPreference,
+      bundleLongitudeSpan(descriptor),
+      budget,
+    );
+  },
+  zarrPayloadBudgetBytes,
+  showError,
+  status: (key) => say(loadStatus, key),
+  downloadBundle,
+  initializeChannel,
+  bindChannel,
+});
 
 const planeCache = new Map<string, DecodedFrame>();
 let planeCacheBytes = 0;
@@ -2106,7 +2111,7 @@ const probePanelControl = createProbePanel({
   get ready() {
     return ready;
   },
-  sessions,
+  sessions: sessionRegistry.sessions,
   planeCache,
   get nextRequestId() {
     return nextRequestId;
@@ -2134,7 +2139,7 @@ const probePanelControl = createProbePanel({
   },
   segmentLabel,
   variableUi,
-  loadVariable,
+  loadVariable: sessionRegistry.load,
   get soundingLoaded() {
     return marksControl.soundingLoaded;
   },
@@ -2168,15 +2173,6 @@ function formatReadout(session: Pick<VariableSession, "format" | "tier">): strin
   return session.tier ? `${name} ${session.tier}` : name;
 }
 
-/** The rung's fraction of the canonical grid, read off the ladder itself:
- * the widest rung is the half tier, so the canonical width is twice it. */
-function tierGlyph(variant: VariantDescriptor | null, variants: VariantDescriptor[] | undefined): string {
-  if (!variant || !variants?.length) return "";
-  const widest = Math.max(...variants.map((rung) => rung.width));
-  const factor = Math.round((widest * 2) / variant.width);
-  return { 2: "½", 4: "¼", 8: "⅛" }[factor] ?? `1/${factor}`;
-}
-
 /** Sync the data card with one session's delivery state. The card only reads
  * complete for a whole bundle: a narrowed session has every byte its view
  * needs but nowhere near every byte of the file, and the progress bar behind
@@ -2191,34 +2187,12 @@ function refreshDataCard(session: VariableSession): void {
 }
 
 /** Handles `progress`/`resident` messages from streaming decode channels. */
-function handleStreamMessage(message: {
-  type: string;
-  variableKey?: unknown;
-  bytes?: unknown;
-  totalBytes?: unknown;
-  scope?: unknown;
-}): void {
-  const id = message.variableKey;
-  if (typeof id !== "string") return;
-  const session = streamSessions.get(id);
-  if (!session) {
-    const entry = pendingStream.get(id) ?? { bytes: 0, resident: false, scope: "bundle" as const };
-    if (message.type === "progress" && typeof message.bytes === "number") entry.bytes = message.bytes;
-    if (message.type === "resident") {
-      entry.resident = true;
-      entry.scope = message.scope === "viewport" ? "viewport" : "bundle";
-    }
-    pendingStream.set(id, entry);
-    return;
-  }
-  if (message.type === "progress" && typeof message.bytes === "number") {
-    session.bytes = Math.min(session.totalBytes, message.bytes);
-  }
-  if (message.type === "resident") {
-    session.resident = true;
-    session.residentScope = message.scope === "viewport" ? "viewport" : "bundle";
-    // With the whole bundle local, narrowing to the view buys nothing any more.
-    if (session.residentScope === "bundle" && slotSessions().includes(session)) refreshViewportTiles();
+function handleStreamMessage(message: StreamMessage): void {
+  const session = sessionRegistry.noteStream(message);
+  if (!session) return;
+  // With the whole bundle local, narrowing to the view buys nothing any more.
+  if (message.type === "resident" && session.residentScope === "bundle" && slotSessions().includes(session)) {
+    refreshViewportTiles();
   }
   if (activeSession === session) refreshDataCard(session);
 }
@@ -2644,8 +2618,7 @@ function sameTier(a: VariantDescriptor | null, b: VariantDescriptor | null): boo
  * cache, and every entry keyed by it. Its buffers are not recycled — the
  * worker they belong to is gone. */
 function disposeSession(session: VariableSession): void {
-  session.worker.terminate();
-  streamSessions.delete(session.streamKey);
+  sessionRegistry.release(session);
   lastPrefetchWindow.delete(session.key);
   for (const [key, frame] of [...planeCache]) {
     if (frame.session !== session) continue;
@@ -2667,7 +2640,7 @@ async function retierPrimary(): Promise<void> {
     retierAgain = true;
     return;
   }
-  if (sessionLoads.has(session.id)) return;
+  if (sessionRegistry.loading(session.id)) return;
   const descriptor = manifest.bundles.find((bundle) => bundle.variable === session.id);
   if (!descriptor?.variants?.length) return;
   const wanted = settleBundleVariant(
@@ -2686,11 +2659,11 @@ async function retierPrimary(): Promise<void> {
   retiering = true;
   const sequence = initializeSequence;
   try {
-    const replacement = await loadVariable(session.id, sequence, "primary", null, { replace: true, tier: wanted });
+    const replacement = await sessionRegistry.load(session.id, sequence, "primary", null, { replace: true, tier: wanted });
     if (sequence !== initializeSequence) return;
     // Whatever the view did meanwhile, the replacement now stands under
     // the bundle id, and the session it replaced is nowhere else.
-    if (sessions.get(session.id) === replacement) disposeSession(session);
+    if (sessionRegistry.sessions.get(session.id) === replacement) disposeSession(session);
     if (activeSession !== session) return;
     const wasPlaying = playing;
     stopPlayback();
@@ -4745,32 +4718,6 @@ function syncUrl(): void {
   window.history.replaceState(null, "", `${window.location.pathname}${withScene}${window.location.hash}`);
 }
 
-/** Absolute artifact URL, resolved against the run manifest's own URL
- * (manifest paths are manifest-relative, HLS style). Artifact paths are stable
- * per run, but their content can be re-encoded (e.g. a codebook change);
- * keying the URL on the artifact CRC keeps a returning visitor's HTTP cache
- * from serving bytes the integrity checks reject. */
-function artifactUrl(path: string, crc32: string, base: string | null = manifestUrl): string {
-  if (!base) throw new Error("manifest not loaded");
-  const url = new URL(path, base);
-  url.searchParams.set("v", crc32);
-  return url.href;
-}
-
-/** True when the server honors single byte ranges with exact 206 responses,
- * which is what the on-demand streaming paths require. A single-range GET is
- * a CORS-safelisted request, so this needs no preflight. */
-async function supportsRangeRequests(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(url, { headers: { Range: "bytes=0-0" } });
-    const supported = response.status === 206;
-    await response.body?.cancel();
-    return supported;
-  } catch {
-    return false;
-  }
-}
-
 /** Downloads and CRC32-verifies one manifest-declared `.xue` bundle. */
 async function downloadBundle(
   descriptor: { path: string; byteLength: number; crc32: string },
@@ -4815,14 +4762,6 @@ async function downloadBundle(
   return data.buffer;
 }
 
-function spawnWorker(): Worker {
-  const decodeWorker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  decodeWorker.onerror = (event) => {
-    showError(event.message || t("workerStartFailed"));
-  };
-  return decodeWorker;
-}
-
 /** Open a channel and wait for its `ready`: boot, hand it the init message,
  * parse the metadata it answers with. Only the messages of that handshake are
  * routed here — a decoded plane cannot arrive before the session it belongs
@@ -4843,7 +4782,7 @@ function initializeChannel(
           break;
         case "progress":
         case "resident":
-          handleStreamMessage(message as Parameters<typeof handleStreamMessage>[0]);
+          handleStreamMessage(message as StreamMessage);
           break;
         case "ready": {
           try {
@@ -4883,7 +4822,7 @@ function bindChannel(session: VariableSession, sequence: number): void {
     switch (message.type) {
       case "progress":
       case "resident":
-        handleStreamMessage(message as Parameters<typeof handleStreamMessage>[0]);
+        handleStreamMessage(message as StreamMessage);
         break;
       case "frame":
         handleDecodedFrame(session, message as unknown as Parameters<typeof handleDecodedFrame>[1]);
@@ -4900,264 +4839,6 @@ function bindChannel(session: VariableSession, sequence: number): void {
       }
     }
   };
-}
-
-/** The variables to draw from a bundle whose parameter blocks say nothing
- * this build recognizes: the one named like the bundle, else simply the
- * first. A two-variable bundle that is not a component pair in the table is
- * not a vector field, so only its first variable is drawn. A bundle named by
- * the convention is still held to carrying the variable that name promises —
- * a file contradicting its own manifest entry is a broken build, not a new
- * layer. */
-function fallbackVariables(variableId: ForecastBundleId, bundleMetadata: BundleMetadata): BundleVariable[] {
-  const named = bundleMetadata.variables.find((item) => item.id === variableId);
-  if (named) return [named];
-  if (identityForBundleId(variableId) !== null) throw new Error(t("bundleMissingVariable", { id: variableId }));
-  return [bundleMetadata.variables[0]!];
-}
-
-/** The manifest can only be read by the naming convention, and the file
- * itself is authoritative. Where they disagree the parameter block wins
- * silently for rendering — but a run publishing `tmp850` bytes under the name
- * `rh850` is a pipeline bug the console should say out loud. Diagnostics stay
- * English in both locales. */
-function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: VariableIdentity | null): void {
-  const guess = identityForBundleId(variableId);
-  if (guess === null || sameIdentity(guess, identity)) return;
-  console.warn(
-    `bundle "${variableId}" is named for ${guess.family}${guess.level ?? ""} but its parameter block says ` +
-      (identity === null ? "something this build does not know" : `${identity.family}${identity.level ?? ""}`) +
-      "; the file wins",
-  );
-}
-
-/** Download and initialize one variable's bundle; resident sessions are
- * reused. An overlay loads quietly — the data card and the status line
- * describe the primary — and takes the half-resolution tier where one is
- * offered: contour lines are smoothed again in the shader, and nothing the
- * lines slot draws needs the full grid, so the bytes go to the field the
- * viewer is actually reading. The exception is a coarse grid, where the
- * half tier has too few samples left to trace a line through
- * (`overlayResolutionPreference`). `?res=` still pins every session.
- *
- * A probe session (the meteogram's rows) is the primary's tier opened
- * quietly on the streaming path alone: it exists to read one cell's series
- * out of one tile, so it never downloads a bundle whole — where the origin cannot serve ranges it is not opened at
- * all. The session it makes is otherwise the one a layer would have made,
- * and the rail reuses it should the viewer switch to that field. */
-function loadVariable(
-  variableId: ForecastBundleId,
-  sequence: number,
-  role: "primary" | "overlay" | "probe" = "primary",
-  member: MosaicMember | null = null,
-  options: {
-    /** Open a fresh session even where one is resident, which the new
-     * one then replaces under the bundle id; the old one is the caller's
-     * to dispose (`retierPrimary`). */
-    replace?: boolean;
-    /** The rung to open, null for the canonical bundle, instead of what
-     * the view would pick now. */
-    tier?: VariantDescriptor | null;
-  } = {},
-): Promise<VariableSession> {
-  // A mosaic member's session reads that member's run, not `manifest`,
-  // and is filed beside the run's own sessions under the member's key.
-  const memberKey = member ? memberSessionKey(member.id, variableId) : null;
-  const resident = options.replace ? undefined : memberKey !== null ? memberSessions.get(memberKey) : sessions.get(variableId);
-  if (resident) return Promise.resolve(resident);
-  const pending = memberKey !== null ? memberSessionLoads.get(memberKey) : sessionLoads.get(variableId);
-  if (pending) return pending;
-  const run = member?.manifest ?? manifest;
-  const runUrl = member?.manifestUrl ?? manifestUrl;
-  // The session's cache identity, taken now so the channel's progress can
-  // carry it from the first byte: the key names this session alone.
-  const sessionKey = nextSessionKey++;
-  const variableKey = `${memberKey ?? variableId}#${sessionKey}`;
-  const load = (async () => {
-    if (!run) throw new Error("manifest not loaded");
-    const descriptor = run.bundles.find((bundle) => bundle.variable === variableId);
-    if (!descriptor) throw new Error(t("manifestMissingBundle", { id: variableId }));
-
-    let channel: DecodeChannel;
-    let initMessage: unknown = { type: "init" };
-    let transfer: Transferable[] = [];
-    let format: VariableSession["format"];
-    let downloadedBytes: number;
-    let totalBytes: number;
-    let streaming = false;
-    // Pick a resolution tier before choosing the decode path. The view's
-    // pixels say which tier it could show; the cell budget says which tier
-    // a frame of it can afford to hold.
-    const overlay = role === "overlay";
-    const quiet = role !== "primary";
-    const pickTier = (): VariantDescriptor | null => {
-      // The caller may have weighed the rung already (`retierPrimary`),
-      // and then nothing here is read at all.
-      if (options.tier !== undefined) return options.tier;
-      let budget = volumeBudget(variableId, bundleVariantBudget(descriptor, run.bundles));
-      if (role === "primary") budget = mosaicBudget(variableId, budget);
-      return pickBundleVariant(
-        descriptor.variants,
-        neededGridWidth(),
-        slowConnection(),
-        overlay ? overlayResolutionPreference(resolutionPreference, budget?.fullGrid) : resolutionPreference,
-        bundleLongitudeSpan(descriptor),
-        budget,
-      );
-    };
-    const variant = pickTier();
-    const target = variant ?? descriptor;
-    const container = containerOf(target);
-    // The store is the everyday path wherever the tier carries one
-    // (`?backend=xue` asks for the container instead), streamed over
-    // ranges. An origin that serves none sends the session to the
-    // container — streamed, else downloaded whole — and only an entry
-    // that ships no container at all opens its store by whole objects,
-    // one shard (one temporal group) per GET: what a whole bundle
-    // download costs, group by group. A probe session is streamed or
-    // nothing either way.
-    //
-    // A probe session reads one cell's series and nothing else, so where
-    // the bundle ships a series companion it opens that instead: one inner
-    // chunk is the whole axis of the cell's block, where the map store
-    // costs one chunk per time chunk. The companion is full resolution, so
-    // a chosen tier's series is the same read; the `.xue` container has no
-    // series form, so `?backend=xue` keeps the map path.
-    const seriesStore = role === "probe" && dataBackend !== "xue" ? descriptor.series : undefined;
-    const store = seriesStore ?? zarrStoreFor(dataBackend, descriptor, variant);
-    const storeStreams = store !== undefined && runUrl ? await supportsRangeRequests(zarrProbeUrl(store, runUrl)) : false;
-    if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-    if (store !== undefined && runUrl && (storeStreams || !container)) {
-      if (!storeStreams && role === "probe") {
-        throw new Error("range requests unsupported; a probe session never downloads a whole shard");
-      }
-      streaming = true;
-      channel = spawnZarrWorker();
-      channel.onerror = (event) => showError(event.message || t("workerStartFailed"));
-      initMessage = zarrInitMessage(store, descriptor.variable, runUrl, variableKey, storeStreams, zarrPayloadBudgetBytes());
-      downloadedBytes = 0;
-      format = "Zarr";
-      totalBytes = store.byteLength;
-    } else if (container) {
-      const url = artifactUrl(container.path, container.crc32, runUrl);
-      streaming = await supportsRangeRequests(url);
-      if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      if (streaming) {
-        channel = spawnWorker();
-        initMessage = {
-          type: "init-stream",
-          url,
-          byteLength: container.byteLength,
-          variableKey,
-        };
-        downloadedBytes = 0;
-      } else if (role === "probe") {
-        throw new Error("range requests unsupported; a probe session never downloads a whole bundle");
-      } else {
-        const initBuffer = await downloadBundle(container, sequence, quiet, runUrl);
-        if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-        channel = spawnWorker();
-        initMessage = { type: "init", buffer: initBuffer };
-        transfer = [initBuffer];
-        downloadedBytes = container.byteLength;
-      }
-      format = "Xue";
-      totalBytes = container.byteLength;
-    } else {
-      // The validator admits no entry without one delivery or the other.
-      throw new Error(t("manifestMissingBundle", { id: variableId }));
-    }
-
-    if (!quiet) say(loadStatus, streaming ? "readingIndex" : "initializingDecoder");
-    let opened: Awaited<ReturnType<typeof initializeChannel>>;
-    try {
-      opened = await initializeChannel(channel, initMessage, transfer, sequence);
-    } catch (error) {
-      // A store this shell cannot open on a run newer than itself is, like
-      // a manifest it refuses, most likely one a newer shell reads: the
-      // profile's shard layout changed once already. Same cure, same guard.
-      if (format.startsWith("Zarr") && role === "primary" && !activeCase) {
-        throw new StoreRejectedError(error instanceof Error ? error.message : String(error));
-      }
-      throw error;
-    }
-    const { worker: sessionWorker, metadata: bundleMetadata, tiles } = opened;
-    if (sequence !== initializeSequence) {
-      sessionWorker.terminate();
-      throw new DOMException("aborted", "AbortError");
-    }
-    if (run && Date.parse(bundleMetadata.runTime) !== Date.parse(run.runTime)) {
-      throw new Error(t("bundleRunMismatch"));
-    }
-    // Grids may differ between sessions (resolution tiers), and time
-    // axes may differ per variable since the ECMWF source: its de-accumulated
-    // prate has no analysis frame, so that series starts at the first real
-    // step. syncTimeline() rebuilds the timeline for whichever session is
-    // active; only the run cycle above must agree.
-    // What the bundle *is* comes from its own variables' GRIB2 parameter
-    // blocks, not from the name the manifest filed it under: a vector bundle
-    // is one whose two variables are a component pair in the table, and the
-    // u/v order is the table's. A file this build cannot place renders its
-    // first variable as a plain scalar.
-    // A volume bundle is one quantity on many altitudes; a frame of it is
-    // every level, and it is what its levels' parameter says: cloud water
-    // is a chart of its own, and MRMS's local reflectivity number, which
-    // no chart is keyed by, takes the composite reflectivity's colours.
-    const volume = VOLUME_BUNDLE_LEVELS.has(variableId) ? volumeLevels(bundleMetadata.variables) : null;
-    const derived = volume ? null : identifyBundle(bundleMetadata.variables);
-    const sessionVariables = volume?.variables ?? derived?.variables ?? fallbackVariables(variableId, bundleMetadata);
-    const volumeParameter = volume?.variables[0]?.parameter;
-    const identity: VariableIdentity | null = volume
-      ? ((volumeParameter ? identityForParameter(volumeParameter) : null) ?? { family: "cref", level: null, vector: false })
-      : (derived?.identity ?? null);
-    warnOnIdentityMismatch(variableId, identity);
-    const session: VariableSession = {
-      id: variableId,
-      key: sessionKey,
-      worker: sessionWorker,
-      metadata: bundleMetadata,
-      identity,
-      chartId: registeredBundleId(identity),
-      vector: identity?.vector === true && sessionVariables.length >= 2,
-      composite: isCompositeIdentity(identity) && sessionVariables.length >= 3,
-      variable: sessionVariables[0]!,
-      variables: sessionVariables,
-      format,
-      tier: tierGlyph(variant, descriptor.variants),
-      variant,
-      streamKey: variableKey,
-      bytes: downloadedBytes,
-      totalBytes,
-      tiles,
-      streaming,
-      resident: !streaming,
-      residentScope: "bundle",
-      viewTiles: null,
-      leadOffsets: null,
-      volume,
-    };
-    // Streaming progress may have raced ahead of session registration.
-    const early = pendingStream.get(variableKey);
-    if (early) {
-      pendingStream.delete(variableKey);
-      if (early.bytes > 0) session.bytes = Math.min(totalBytes, early.bytes);
-      if (early.resident) {
-        session.resident = true;
-        session.residentScope = early.scope;
-      }
-    }
-    if (memberKey !== null) memberSessions.set(memberKey, session);
-    else sessions.set(variableId, session);
-    streamSessions.set(variableKey, session);
-    bindChannel(session, sequence);
-    return session;
-  })();
-  if (memberKey !== null) {
-    memberSessionLoads.set(memberKey, load);
-    return load.finally(() => memberSessionLoads.delete(memberKey));
-  }
-  sessionLoads.set(variableId, load);
-  return load.finally(() => sessionLoads.delete(variableId));
 }
 
 /** Half-widths in device pixels for the two weights a chart draws. Thin
@@ -5329,7 +5010,7 @@ const marksControl = createMarks({
     return caseMarkers;
   },
   syncUrl,
-  loadVariable,
+  loadVariable: sessionRegistry.load,
   get mapStyleReady() {
     return mapStyleReady;
   },
@@ -5387,7 +5068,7 @@ const overlaysControl = createOverlays({
   get requestedFrameIndex() {
     return requestedFrameIndex;
   },
-  sessions,
+  sessions: sessionRegistry.sessions,
   view,
   get selectedVariableId() {
     return selectedVariableId;
@@ -5785,7 +5466,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
   const descriptor = manifest.bundles.find((bundle) => bundle.variable === variableId)?.poster;
   if (!descriptor) return;
   try {
-    const plane = await fetchPoster(artifactUrl(descriptor.path, descriptor.crc32), descriptor);
+    const plane = await fetchPoster(artifactUrl(descriptor.path, descriptor.crc32, manifestUrl), descriptor);
     if (sequence !== initializeSequence || selectedVariableId !== variableId) return;
     const slot = slotFor(variableId);
     // A real frame of this variable beat the poster to the screen.
@@ -5959,11 +5640,11 @@ const reliefControl = createRelief({
   get initializeSequence() {
     return initializeSequence;
   },
-  sessions,
+  sessions: sessionRegistry.sessions,
   frameLeadSeconds,
   terrainColumnLevels,
   requestDecode,
-  loadVariable,
+  loadVariable: sessionRegistry.load,
 });
 const { syncLapse, requestColumnFrame, acceptReliefPlane, acceptColumnPlane } = reliefControl;
 
@@ -6065,9 +5746,7 @@ function resetMosaic(): void {
       member.slot = null;
     }
   }
-  for (const session of memberSessions.values()) session.worker.terminate();
-  memberSessions.clear();
-  memberSessionLoads.clear();
+  sessionRegistry.endMembers();
   mosaic = null;
   slots.fill.band = null;
   slots.fill.layer.setBand(null);
@@ -6126,9 +5805,9 @@ function applyMosaicMembers(): void {
       if (slot.session) detachSlot(slot);
       continue;
     }
-    const resident = memberSessions.get(memberSessionKey(member.id, wanted));
+    const resident = sessionRegistry.member(member.id, wanted);
     const stale = resident && !sameTier(resident.variant, tier) ? resident : null;
-    loadVariable(wanted, sequence, "overlay", member, { replace: stale !== null, tier })
+    sessionRegistry.load(wanted, sequence, "overlay", member, { replace: stale !== null, tier })
       .then((session) => {
         if (sequence !== initializeSequence || !ready) return;
         if (member.wanted !== key || member.slot !== slot) return;
@@ -6212,11 +5891,7 @@ async function checkMosaicForNewRuns(): Promise<void> {
         member.run = loaded.latest.run;
         member.manifestCrc = loaded.latest.manifestCrc32;
         member.wanted = null;
-        for (const [key, session] of memberSessions) {
-          if (!key.startsWith(`${member.id}:`)) continue;
-          session.worker.terminate();
-          memberSessions.delete(key);
-        }
+        sessionRegistry.endMembers(member.id);
         if (member.slot) detachSlot(member.slot);
       } else {
         current.members.push({
@@ -6267,7 +5942,7 @@ function applyOverlays(): void {
   }
   if (slot.session) detachSlot(slot);
   const sequence = initializeSequence;
-  loadVariable(wanted, sequence, "overlay")
+  sessionRegistry.load(wanted, sequence, "overlay")
     .then((session) => {
       if (sequence !== initializeSequence || !ready) return;
       // The composition may have moved on while this loaded.
@@ -6324,7 +5999,7 @@ function applyVolumeOverlay(): void {
   }
   detachVolumeOverlay();
   const sequence = initializeSequence;
-  loadVariable(wanted, sequence, "overlay")
+  sessionRegistry.load(wanted, sequence, "overlay")
     .then((session) => {
       if (sequence !== initializeSequence || !ready) return;
       if (volumeOverField(view) !== wanted || !session.volume) return;
@@ -6453,7 +6128,7 @@ const derivedControl = createDerived({
   syncRailDensity,
   syncRail,
   syncUrl,
-  loadVariable,
+  loadVariable: sessionRegistry.load,
   fireWind,
   syncFillSuppressed,
   ensureWindLayer,
@@ -6492,7 +6167,7 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
   variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable || variableId === activeSession?.id) return;
   const sequence = initializeSequence;
-  const resident = sessions.get(variableId);
+  const resident = sessionRegistry.sessions.get(variableId);
   if (resident) {
     applyVariable(resident);
     // Frame counts can differ per variable (ECMWF prate has no analysis
@@ -6513,7 +6188,7 @@ async function activateVariable(variableId: ForecastBundleId): Promise<void> {
   selectedVariableId = variableId;
   void showPoster(variableId, sequence);
   try {
-    const session = await loadVariable(variableId, sequence);
+    const session = await sessionRegistry.load(variableId, sequence);
     if (sequence !== initializeSequence) return;
     applyVariable(session);
     say(loadStatus, "framesReady", { count: frameCount() });
@@ -6557,11 +6232,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   lastDecodeMs = null;
   decodeEvents.length = 0;
   lastPrefetchWindow.clear();
-  pendingStream.clear();
-  for (const session of sessions.values()) session.worker.terminate();
-  sessions.clear();
-  sessionLoads.clear();
-  streamSessions.clear();
+  sessionRegistry.endRun();
   manifest = null;
   manifestUrl = null;
   currentRun = null;
@@ -6736,7 +6407,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // Paint the poster while the bundle opens (never blocks the load).
     void showPoster(selectedVariableId, sequence);
 
-    const session = await loadVariable(selectedVariableId, sequence);
+    const session = await sessionRegistry.load(selectedVariableId, sequence);
     if (sequence !== initializeSequence) return;
 
     ensureLayers();
@@ -6770,16 +6441,6 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     if (error instanceof ManifestRejectedError && reloadForNewerShell(error.manifestCrc32)) return;
     if (error instanceof StoreRejectedError && currentManifestCrc !== null && reloadForNewerShell(currentManifestCrc)) return;
     showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
-  }
-}
-
-/** A live run's store this shell could not open (`loadVariable`): carried
- * to `initialize`'s recovery as its own kind so a tab older than the data
- * reloads once, the way it does for a manifest it refuses. */
-class StoreRejectedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "StoreRejectedError";
   }
 }
 
