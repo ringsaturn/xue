@@ -5,6 +5,8 @@ import { t } from "./i18n";
 import type { GeoGrid } from "./probe";
 import type { ViewportBounds } from "./tiles";
 import { REGISTRY } from "./registry";
+import { checkBundleMetadataV3 } from "./schema/generated/bundle-metadata";
+import { checkRunManifest } from "./schema/generated/manifest";
 
 type ForecastVariableId = "tmp2m" | "prate";
 const FORECAST_VARIABLE_IDS: readonly ForecastVariableId[] = ["tmp2m", "prate"];
@@ -1196,7 +1198,12 @@ export function validateManifest(
   options: ManifestValidationOptions = {},
 ): ForecastManifest {
   const value = object(input);
+  // The version gate first, so another version is refused as such; then
+  // the shape (docs/schemas/manifest.schema.json); then what a schema
+  // cannot say: the registered dataset, unique names and paths, the
+  // container unit, segment sums and the core set.
   if (value.schemaVersion !== 5) throw new Error("unsupported manifest schema version");
+  checkRunManifest(value, "manifest");
   const modelInfo = modelForManifestString(value.model);
   if (!modelInfo || value.product !== modelInfo.product) throw new Error("unsupported manifest product");
   if (expectedModel !== undefined && modelInfo.id !== expectedModel) throw new Error("manifest model does not match the request");
@@ -1982,6 +1989,12 @@ export function parseBundleMetadata(json: string): BundleMetadata {
   if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3) {
     throw new Error("unsupported bundle metadata schema version");
   }
+  // Version 3, what every writer produces, has a schema
+  // (docs/schemas/bundle-metadata.schema.json); versions 1 and 2 are held
+  // to the hand checks below alone. Those then add what a schema cannot
+  // say, for every version: the lowest version that fits, the one encoding
+  // of an axis, and the pairs that are null together.
+  if (schemaVersion === 3) checkBundleMetadataV3(value, "bundle metadata");
   const time = object(value.time);
   const grid = object(value.grid);
   const axisVersion = validateTimeAxis(time, schemaVersion);

@@ -59,6 +59,15 @@ export function isObject(value: unknown, at: string): asserts value is Record<st
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(`${at} must be an object`);
 }
 
+export function hasProperties(value: Record<string, unknown>, at: string, minProperties: number): void {
+  if (Object.keys(value).length < minProperties) fail(`${at} must have at least ${minProperties} fields`);
+}
+
+/** `additionalProperties: false`: a block the format closes. */
+export function isClosed(value: Record<string, unknown>, at: string, known: readonly string[]): void {
+  for (const key of Object.keys(value)) if (!known.includes(key)) fail(`${at}.${key} is not a field of this block`);
+}
+
 /** A required field's value. */
 export function field(record: Record<string, unknown>, key: string, at: string): unknown {
   const value = record[key];
@@ -70,15 +79,17 @@ export function isOneOf(value: unknown, at: string, allowed: readonly unknown[])
   if (!allowed.includes(value)) fail(`${at} must be one of ${allowed.map((item) => JSON.stringify(item)).join(", ")}`);
 }
 
-/** `anyOf`: the value passes at least one branch. */
+/** `anyOf`: the value passes at least one branch. A refusal names why each
+ * branch refused it, so the field that cost it is in the message. */
 export function isAnyOf(value: unknown, at: string, branches: ((value: unknown, at: string) => void)[]): void {
-  const passes = branches.some((branch) => {
+  const reasons: string[] = [];
+  for (const branch of branches) {
     try {
       branch(value, at);
-      return true;
-    } catch {
-      return false;
+      return;
+    } catch (error) {
+      reasons.push(error instanceof Error ? error.message : String(error));
     }
-  });
-  if (!passes) fail(`${at} matches none of its allowed shapes`);
+  }
+  fail(`${at} matches none of its allowed shapes (${reasons.join("; ")})`);
 }

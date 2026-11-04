@@ -140,9 +140,9 @@ describe("the aerosol registry", () => {
     const withBlock = (aerosol: Record<string, unknown>) => metadata({ ...good, aerosol: aerosol as unknown as BundleAerosol });
     const block = good.aerosol!;
     // A block is its eleven keys and nothing else.
-    expect(() => parseBundleMetadata(withBlock({ ...block, extra: 1 }))).toThrow(/eleven/);
+    expect(() => parseBundleMetadata(withBlock({ ...block, extra: 1 }))).toThrow(/aerosol.extra is not a field/);
     const { scaledValueOfSecondSize: _dropped, ...tenKeys } = block;
-    expect(() => parseBundleMetadata(withBlock(tenKeys))).toThrow(/eleven/);
+    expect(() => parseBundleMetadata(withBlock(tenKeys))).toThrow(/aerosol.scaledValueOfSecondSize is missing/);
     // A code is a non-negative integer in its table's range.
     expect(() => parseBundleMetadata(withBlock({ ...block, aerosolType: -1 }))).toThrow(/aerosolType/);
     expect(() => parseBundleMetadata(withBlock({ ...block, aerosolType: 65536 }))).toThrow(/aerosolType/);
@@ -153,8 +153,8 @@ describe("the aerosol registry", () => {
     expect(() => parseBundleMetadata(withBlock({ ...block, scaledValueOfFirstSize: null }))).toThrow(/wholly/);
     expect(() => parseBundleMetadata(withBlock({ ...block, scaleFactorOfFirstSize: 7.5 }))).toThrow(/scaleFactorOfFirstSize/);
     expect(() => parseBundleMetadata(withBlock({ ...block, scaleFactorOfFirstSize: 128 }))).toThrow(/scaleFactorOfFirstSize/);
-    expect(() => parseBundleMetadata(withBlock({ ...block, scaledValueOfFirstSize: 0xffffffff }))).toThrow(/scaleFactorOfFirstSize/);
-    expect(() => parseBundleMetadata(withBlock({ ...block, scaledValueOfFirstSize: -1 }))).toThrow(/scaleFactorOfFirstSize/);
+    expect(() => parseBundleMetadata(withBlock({ ...block, scaledValueOfFirstSize: 0xffffffff }))).toThrow(/scaledValueOfFirstSize/);
+    expect(() => parseBundleMetadata(withBlock({ ...block, scaledValueOfFirstSize: -1 }))).toThrow(/scaledValueOfFirstSize/);
     // A missing interval (255) carries no limits; a present one carries all four.
     expect(() => parseBundleMetadata(withBlock({ ...block, scaleFactorOfFirstWavelength: 9, scaledValueOfFirstWavelength: 545 }))).toThrow(
       /typeOfWavelengthInterval is missing but carries limits/,
