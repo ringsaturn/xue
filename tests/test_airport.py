@@ -18,6 +18,7 @@ from xuebuild.airport.metar import parse_metars
 from xuebuild.airport.schema import (
     HISTORY_FILENAME,
     HISTORY_HOURS,
+    STATION_ROW,
     build_pointer,
     crc32_hex,
     encode_json,
@@ -672,6 +673,13 @@ class SchemaTests(unittest.TestCase):
         wind[7] = 400
         with self.assertRaises(AirportProductError):
             validate_index({**payload, "stations": [wind]})
+
+    def test_the_index_names_its_columns_and_one_without_them_is_read(self) -> None:
+        payload = self.index()
+        self.assertEqual(payload["columns"], list(STATION_ROW))
+        validate_index({key: value for key, value in payload.items() if key != "columns"})
+        with self.assertRaises(AirportProductError):
+            validate_index({**payload, "columns": list(reversed(STATION_ROW))})
 
     def test_a_row_span_must_lie_in_the_history_file(self) -> None:
         payload = self.index()

@@ -336,7 +336,7 @@ describe("reading one station by range", () => {
   const airportLoaded: LoadedAirportIndex = {
     pointer: parseAirportPointer(airportPointerJson),
     index: airportIndex,
-    indexUrl: "https://data.test/airport.202609161440/index.json?v=ca823538",
+    indexUrl: "https://data.test/airport.202609161440/index.json?v=2a8a5ebb",
   };
 
   afterEach(() => {

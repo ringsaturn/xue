@@ -60,14 +60,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=b887c25f",
+   "href": "index.json?v=e107dea4",
    "type": "application/json",
    "title": "airport index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 25049,
-   "xue:crc32": "b887c25f",
-   "file:checksum": "b20204b887c25f"
+   "file:size": 25177,
+   "xue:crc32": "e107dea4",
+   "file:checksum": "b20204e107dea4"
   },
   "history": {
    "href": "history.jsonl?v=e5c9e862",
