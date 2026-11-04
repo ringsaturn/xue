@@ -4,13 +4,13 @@
   "title": "BundleMetadataV3",
   "description": "A bundle's metadata JSON, schemaVersion 3 (docs/format.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, and that an aerosol interval of type 255 carries null limits and any other type integer ones.",
   "type": "object",
-  "required": ["schemaVersion", "model", "product", "runTime", "time", "grid", "variables"],
+  "required": ["schemaVersion", "model", "runTime", "time", "grid", "variables"],
   "properties": {
     "schemaVersion": {"type": "integer", "const": 3},
     "model": {"description": "The source dataset, with product (docs/format.md, \"Projected Sources\").", "type": "string", "minLength": 1},
-    "product": {"type": "string", "minLength": 1},
+    "product": {"description": "Every writer writes it; no reader needs it.", "type": "string", "minLength": 1},
     "runTime": {"$ref": "#/$defs/Timestamp"},
-    "profile": {"description": "The quantization profile the codebooks come from.", "type": "string", "minLength": 1},
+    "profile": {"description": "The quantization profile the codebooks come from. Every writer writes it; no reader needs it.", "type": "string", "minLength": 1},
     "time": {"$ref": "#/$defs/Time"},
     "grid": {"$ref": "#/$defs/Grid"},
     "variables": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/Variable"}}

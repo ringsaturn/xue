@@ -285,7 +285,7 @@ export function checkCode(v: unknown, at: string): asserts v is Code {
 }
 
 /** A bundle's metadata JSON, schemaVersion 3 (docs/format.md, "Metadata JSON"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, and that an aerosol interval of type 255 carries null limits and any other type integer ones. */
-export type BundleMetadataV3 = { schemaVersion: 3; model: string; product: string; runTime: Timestamp; profile?: string; time: Time; grid: Grid; variables: Variable[] };
+export type BundleMetadataV3 = { schemaVersion: 3; model: string; product?: string; runTime: Timestamp; profile?: string; time: Time; grid: Grid; variables: Variable[] };
 
 export function checkBundleMetadataV3(v: unknown, at: string): asserts v is BundleMetadataV3 {
   isObject(v, at);
@@ -294,8 +294,10 @@ export function checkBundleMetadataV3(v: unknown, at: string): asserts v is Bund
   isOneOf(v67, at + ".schemaVersion", [3]);
   const v68 = field(v, "model", at);
   isString(v68, at + ".model", undefined, 1);
-  const v69 = field(v, "product", at);
-  isString(v69, at + ".product", undefined, 1);
+  const v69 = v["product"];
+  if (v69 !== undefined) {
+    isString(v69, at + ".product", undefined, 1);
+  }
   const v70 = field(v, "runTime", at);
   checkTimestamp(v70, at + ".runTime");
   const v71 = v["profile"];
