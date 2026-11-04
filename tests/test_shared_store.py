@@ -21,7 +21,8 @@ import numpy as np
 
 from tests._support import TempRoot
 from xuebuild import zarrstore
-from xuebuild.binconvert import build_metadata, store_dimensions
+from xuebuild.binconvert import build_metadata
+from xuebuild.discover import store_dimensions
 from xuebuild.grid import GridInfo
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import is_shared_store_path, validate_bin_manifest
@@ -71,7 +72,7 @@ def tree(root: Path) -> list[Path]:
 
 
 class StoreDimensionsTest(unittest.TestCase):
-    """`binconvert.store_dimensions`, the rule both encoders apply."""
+    """`discover.store_dimensions`, the rule both encoders apply."""
 
     def test_a_bundle_on_the_run_axis_and_grid_takes_the_primary_names(self) -> None:
         for model, bundle_id in (("gfs", "tmp2m"), ("gfs", "prate"), ("gfs", "wind10m"), ("ecmwf", "tmp2m")):
@@ -96,7 +97,7 @@ class StoreDimensionsTest(unittest.TestCase):
         self.assertEqual(store_dimensions(cfs, "tmp2m"), PRIMARY)
 
     def test_every_source_names_valid_coordinates(self) -> None:
-        from xuebuild.binconvert import published_bundle_ids
+        from xuebuild.discover import published_bundle_ids
         from xuebuild.sources import SOURCES
 
         for model, source in SOURCES.items():

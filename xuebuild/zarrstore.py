@@ -866,7 +866,7 @@ def write_bundle_arrays(
     :func:`write_part` / :func:`finalize_store`'s.
 
     ``dimensions`` is what the encoder decided for the bundle
-    (``binconvert.store_dimensions``); a coordinate shared with another
+    (``discover.store_dimensions``); a coordinate shared with another
     bundle is the same bytes from either, and is written by rename so two
     concurrent writers never tear it. Arrays, codecs and chunking are exactly
     a one-bundle store's, with ``attributes.xue.bundle`` added."""

@@ -37,7 +37,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, registry_entry, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
+from xuebuild.discover import analysis_optional_ids, published_bundle_ids
 from xuebuild.binformat import BundleError, parse_metadata
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import GEFS_BASE_URL, _run_is_complete, gefsaero_object_url, model_object_url, resolve_run

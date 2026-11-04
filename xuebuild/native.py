@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
-from .binconvert import published_bundle_ids
+from .discover import published_bundle_ids
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,

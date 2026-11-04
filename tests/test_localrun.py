@@ -16,7 +16,7 @@ from unittest import mock
 
 from tests._support import FIXTURES, ClassTempRoot, requires_gdal
 from xuebuild import cli, localrun
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import published_bundle_ids
 from xuebuild.localrun import LocalRunError, build_local_run, parse_bbox
 from xuebuild.sources import source_spec
 

@@ -73,7 +73,8 @@ from pathlib import Path
 from typing import Any
 
 from .common import crc32_hex
-from .binconvert import VOLUME_BUNDLES, bundle_input_ids, published_bundle_ids
+from .binconvert import VOLUME_BUNDLES
+from .discover import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
 from .fetch import parse_run

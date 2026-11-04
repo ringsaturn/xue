@@ -557,7 +557,7 @@ and the dataset's DOI as `cite-as`. `tests/test_cams.py`.
 
 **mrms.** Frames listed off the bucket (`fetch.py::mrms_window_frames`: a
 slot is kept only when every product has it) and re-keyed onto the window's
-axis (`binconvert.py::_snap_observation_frames`,
+axis (`discover.py::snap_observation_frames`,
 mirrored in `convert.rs`). Records match under `cref` / `prate` through
 `RecordAlternate`s for the MRMS-local discipline 209 (the `template-mrms`
 rule in their `gdal_rules`), and under `rqi` through its own MRMS-local

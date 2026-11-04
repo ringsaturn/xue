@@ -37,7 +37,7 @@ import numpy as np
 
 from tests._support import FIXTURES, ParityCase, ReferenceBuild, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import grib2, quantize
-from xuebuild.binconvert import analysis_optional_ids, published_bundle_ids
+from xuebuild.discover import analysis_optional_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     ECMWF_BASE_URLS,

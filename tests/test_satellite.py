@@ -56,6 +56,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen, stored_bundle
 from xuebuild import binconvert, observation
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -459,20 +460,20 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(SPEC.input_variable_ids, ("ir039", "wv062", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"))
         self.assertEqual(SPEC.input_variable_ids, SATELLITE_CHANNEL_IDS)
         self.assertEqual((SPEC.bundle_scalar_ids, SPEC.bundle_composite_ids, SPEC.core_bundle_ids), (("ir104", "ir039"), ("dustrgb", "dustcf", "zhouye", "truecolor"), ("ir104",)))
-        self.assertEqual(binconvert.published_bundle_ids(SPEC), ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"))
+        self.assertEqual(published_bundle_ids(SPEC), ("ir104", "ir039", "dustrgb", "dustcf", "zhouye", "truecolor"))
         # A composite's inputs, for the fetch, are the channels its
         # producer reads; a source that fetched fewer would not publish it.
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "dustcf"), ("ir039", "wv062", "ir086", "ir104", "ir123"))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
+        self.assertEqual(bundle_input_ids(SPEC, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
+        self.assertEqual(bundle_input_ids(SPEC, "dustcf"), ("ir039", "wv062", "ir086", "ir104", "ir123"))
+        self.assertEqual(bundle_input_ids(SPEC, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
         fewer = dataclasses.replace(SPEC, input_variable_ids=("ir104",))
-        self.assertEqual(binconvert.published_bundle_ids(fewer), ("ir104",))
+        self.assertEqual(published_bundle_ids(fewer), ("ir104",))
         dust_only = dataclasses.replace(SPEC, input_variable_ids=("ir086", "ir104", "ir112", "ir123"))
-        self.assertEqual(binconvert.published_bundle_ids(dust_only), ("ir104", "dustrgb"))
+        self.assertEqual(published_bundle_ids(dust_only), ("ir104", "dustrgb"))
         windows_only = dataclasses.replace(SPEC, input_variable_ids=SATELLITE_INFRARED_IDS)
-        self.assertEqual(binconvert.published_bundle_ids(windows_only), ("ir104", "ir039", "dustrgb", "dustcf", "zhouye"))
+        self.assertEqual(published_bundle_ids(windows_only), ("ir104", "ir039", "dustrgb", "dustcf", "zhouye"))
         solar_only = dataclasses.replace(SPEC, input_variable_ids=("ir104", *SATELLITE_REFLECTANCE_IDS))
-        self.assertEqual(binconvert.published_bundle_ids(solar_only), ("ir104",))
+        self.assertEqual(published_bundle_ids(solar_only), ("ir104",))
         self.assertEqual([spec.id for spec in SOURCES.values() if spec.platform], ["himawari", "himawarijp", "goeseast", "goeswest", "meteosat"])
 
     def test_the_source_band_is_the_platform_s(self) -> None:
@@ -1679,11 +1680,11 @@ class JapanSourceTests(unittest.TestCase):
         self.assertEqual((JAPAN.production_grid, JAPAN.tile, JAPAN.variant_factors), ((2600, 2200), (64, 64), (2, 4)))
         # The Dust RGB's windows, the true colour's bands and night
         # windows, no confidence.
-        self.assertEqual(binconvert.published_bundle_ids(JAPAN), ("ir104", "ir039", "dustrgb", "truecolor"))
-        self.assertEqual(binconvert.bundle_input_ids(JAPAN, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
-        self.assertEqual(binconvert.bundle_input_ids(JAPAN, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
+        self.assertEqual(published_bundle_ids(JAPAN), ("ir104", "ir039", "dustrgb", "truecolor"))
+        self.assertEqual(bundle_input_ids(JAPAN, "dustrgb"), ("ir086", "ir104", "ir112", "ir123"))
+        self.assertEqual(bundle_input_ids(JAPAN, "truecolor"), ("vis047", "vis051", "vis064", "nir086", "ir039", "ir104"))
         self.assertEqual(JAPAN.input_variable_ids, ("ir039", "ir086", "ir104", "ir112", "ir123", "vis047", "vis051", "vis064", "nir086"))
-        self.assertEqual(set(JAPAN.input_variable_ids), {*binconvert.bundle_input_ids(JAPAN, "dustrgb"), *binconvert.bundle_input_ids(JAPAN, "truecolor")})
+        self.assertEqual(set(JAPAN.input_variable_ids), {*bundle_input_ids(JAPAN, "dustrgb"), *bundle_input_ids(JAPAN, "truecolor")})
         # Its bands are the disk's, in the disk's order: same spacecraft,
         # same channels.
         self.assertTrue(set(JAPAN.bands) <= set(SPEC.bands))

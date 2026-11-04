@@ -110,7 +110,7 @@ impl Default for ConvertOptions {
 
 /// The id of the grid family one input is read from, or `None` for an input
 /// on the source's own grid (`SourceSpec::grid_family_of`). Mirrors
-/// `grid_family_of` in `xuebuild/binconvert.py`.
+/// `grid_family_of` in `xuebuild/discover.py`.
 pub fn grid_family_of<'a>(source: &'a SourceSpec, variable_id: &str) -> Option<&'a str> {
     source.grid_family_of(variable_id).map(|companion| companion.id.as_str())
 }
@@ -155,7 +155,7 @@ pub fn bundle_grid_family<'a>(
 
 /// The dimension names a bundle's arrays carry in its run's shared store
 /// (`docs/zarr-profile.md`, "Coordinates"), and so the coordinate arrays the
-/// bundle uses there. Mirrors `store_dimensions` in `xuebuild/binconvert.py`.
+/// bundle uses there. Mirrors `store_dimensions` in `xuebuild/discover.py`.
 ///
 /// `time_<bundle id>` for a published scalar whose series has no analysis
 /// frame (`Registry::analysis_optional_ids`) and for a static field;
@@ -1303,7 +1303,7 @@ pub fn convert_bin(
     // own shorter axis: the rate on a derived-precipitation source, whose
     // interval would precede the run, and any scalar whose record the source
     // lists as optional at the analysis (ECMWF's gust). Mirrors
-    // `analysis_optional_ids` in `xuebuild/binconvert.py`.
+    // `analysis_optional_ids` in `xuebuild/discover.py`.
     let mut variable_offsets: BTreeMap<String, Vec<i64>> = encoded_variable_ids
         .iter()
         .map(|id| (id.clone(), offsets.clone()))

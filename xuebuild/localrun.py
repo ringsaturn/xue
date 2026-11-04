@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from .binconvert import bundle_input_ids, published_bundle_ids
+from .discover import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import XueError
 from .fetch import fetch_run, parse_run

@@ -49,7 +49,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.derive import interval_rate
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import resolve_run
@@ -155,11 +155,11 @@ class SourceRegistryTests(unittest.TestCase):
         for variable_id in SPEC.input_variable_ids:
             variable_spec(variable_id)
         self.assertNotIn("apcp", published_bundle_ids(SPEC), "the total is an input only")
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "prate"), ("apcp",))
+        self.assertEqual(bundle_input_ids(SPEC, "prate"), ("apcp",))
         # The two wind pairs are read, not derived; the sea level pressure
         # arrives in pascals, which the converter turns into hectopascals.
         self.assertEqual(SPEC.bundle_vector_ids, ("wind10m", "wind80m"))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "wind80m"), ("ugrd80m", "vgrd80m"))
+        self.assertEqual(bundle_input_ids(SPEC, "wind80m"), ("ugrd80m", "vgrd80m"))
         self.assertNotIn("wind80m", binconvert.DERIVED_VECTORS)
         self.assertEqual(observation.accepted_series_units(variable_spec("prmsl")), ("hPa", "pa"))
         self.assertTrue(SPEC.interval_precipitation)
@@ -183,7 +183,7 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_volume_is_the_cloud_water_on_twenty_four_altitudes(self) -> None:
         self.assertEqual(SPEC.bundle_volume_ids, ("cloud3d",))
         self.assertEqual(binconvert.VOLUME_BUNDLES["cloud3d"], CLOUD_WATER_VARIABLE_IDS)
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "cloud3d"), CLOUD_WATER_VARIABLE_IDS)
+        self.assertEqual(bundle_input_ids(SPEC, "cloud3d"), CLOUD_WATER_VARIABLE_IDS)
         self.assertEqual(
             CLOUD_WATER_LEVELS_M,
             (250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000,

@@ -52,10 +52,9 @@ from xuebuild.binconvert import (
     WIND_WAVE_BUNDLE_ID,
     _convert_units,
     _extract_planes,
-    bundle_input_ids,
-    published_bundle_ids,
     vector_input_ids,
 )
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.derive import derive_vector, derive_wave_vector
 from xuebuild.grid import GridInfo, grid_info, snap_global_longitudes
 from xuebuild.eccodescli import repack_grid_simple

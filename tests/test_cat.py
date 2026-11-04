@@ -15,13 +15,8 @@ from unittest import mock
 
 import numpy as np
 
-from xuebuild.binconvert import (
-    CAT_SHEAR_LAYERS,
-    DERIVED_SCALARS,
-    bundle_input_ids,
-    cat_level,
-    published_bundle_ids,
-)
+from xuebuild.binconvert import CAT_SHEAR_LAYERS, DERIVED_SCALARS, cat_level
+from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.derive import (
     CAT_EDR_LOG_MEAN,
     CAT_EDR_LOG_STD,

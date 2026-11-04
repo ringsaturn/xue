@@ -41,7 +41,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, fetch, observation, om2nccli
-from xuebuild.binconvert import published_bundle_ids
+from xuebuild.discover import analysis_optional_ids, bundle_input_ids, published_bundle_ids
 from xuebuild.derive import interval_rate
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
@@ -137,7 +137,7 @@ class SourceRegistryTests(unittest.TestCase):
         # without ever being published: it is the rate's input.
         self.assertIn("apcp", SPEC.input_variable_ids)
         self.assertNotIn("apcp", published_bundle_ids(SPEC))
-        self.assertEqual(binconvert.bundle_input_ids(SPEC, "prate"), ("apcp",))
+        self.assertEqual(bundle_input_ids(SPEC, "prate"), ("apcp",))
 
     def test_the_interval_quantities_are_declared_as_statistics_and_missing_at_the_analysis(self) -> None:
         self.assertTrue(SPEC.interval_precipitation)
@@ -145,7 +145,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(SPEC.optional_at_analysis, ("apcp", "dswrf", "gust"))
         self.assertEqual(SPEC.statistical_processes, (("prate", 0), ("dswrf", 0), ("gust", 2)))
         self.assertEqual(
-            binconvert.analysis_optional_ids(SPEC, tuple(b for b in BUNDLES if b != "wind10m")),
+            analysis_optional_ids(SPEC, tuple(b for b in BUNDLES if b != "wind10m")),
             ("prate", "dswrf", "gust"),
         )
 

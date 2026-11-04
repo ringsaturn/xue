@@ -289,7 +289,7 @@ pub(super) fn prepare_frames_all(
 }
 
 /// Re-key the frames of a fetched observation onto the window's axis — the
-/// port of `_snap_observation_frames` in `xuebuild/binconvert.py`.
+/// port of `snap_observation_frames` in `xuebuild/discover.py`.
 ///
 /// A GRIB observation names only its own time: each MRMS composite is its
 /// own reference time, some forty seconds past a two-minute mark, with a

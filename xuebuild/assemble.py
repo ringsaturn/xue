@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
-from .binconvert import bundle_input_ids, published_bundle_ids
+from .discover import bundle_input_ids, published_bundle_ids
 from .errors import BundleError, ManifestError
 from .variables import variable_spec
 from .manifest import (
