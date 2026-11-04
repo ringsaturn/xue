@@ -40,9 +40,9 @@
       ]
     },
     "Grid": {
-      "description": "The regular latitude/longitude grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east.",
+      "description": "The regular latitude/longitude grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them.",
       "type": "object",
-      "required": ["width", "height", "layout", "rowOrder", "columnOrder", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+      "required": ["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
       "properties": {
         "width": {"type": "integer", "minimum": 1},
         "height": {"type": "integer", "minimum": 1},
