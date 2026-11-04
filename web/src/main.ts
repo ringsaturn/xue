@@ -225,6 +225,7 @@ import { currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLIN
 import { createStats } from "./stats";
 import { createOverlays } from "./overlays";
 import { createContourLabels } from "./contourlabels";
+import { genericRailGlyph, genericRailTileIds } from "./railtiles";
 
 // Rewrite the static shell into the detected locale and appearance before
 // anything renders.
@@ -3677,7 +3678,6 @@ function unknownRailTile(id: ForecastBundleId): HTMLButtonElement {
   const glyph = document.createElement("b");
   glyph.className = "rail-glyph";
   glyph.setAttribute("aria-hidden", "true");
-  glyph.textContent = id.slice(0, 1).toUpperCase();
   const name = document.createElement("span");
   name.className = "rail-name";
   const code = document.createElement("span");
@@ -3730,7 +3730,7 @@ function syncFamilyGloss(button: HTMLButtonElement, current: boolean): void {
 /** The rail's field section for the run and the field on screen: a core
  * tile (`FORECAST_MODELS[].railCore`) shows whenever the run ships it, any
  * other written tile only while its field is on screen, a field this build
- * has no tile for gets a generic one while it is, and MORE shows when the
+ * has no tile for gets a generic one if it is core or on screen, and MORE shows when the
  * sheet reaches a field the core tiles do not. The sheet's rows are
  * rebuilt with it. */
 function syncFieldTiles(run: ForecastManifest): void {
@@ -3744,12 +3744,15 @@ function syncFieldTiles(run: ForecastManifest): void {
     button.hidden = !fieldTileShipped(button, run) || !(isCore || current);
     syncFamilyGloss(button, current);
   }
-  const fill = view.field;
+  const generic = genericRailTileIds(core, (id) => hasBundle(run, id as ForecastBundleId), view.field, railTileStandsFor);
   for (const stale of fieldSection.querySelectorAll<HTMLButtonElement>("button[data-unknown]")) {
-    if (stale.dataset.variable !== fill) stale.remove();
+    if (!generic.includes(stale.dataset.variable!)) stale.remove();
   }
-  if (fill !== null && !railTileStandsFor(fill) && !fieldSection.querySelector(`button[data-unknown][data-variable="${fill}"]`)) {
-    fieldSection.append(unknownRailTile(fill));
+  for (const id of generic) {
+    const tile =
+      fieldSection.querySelector<HTMLButtonElement>(`button[data-unknown][data-variable="${id}"]`) ??
+      fieldSection.appendChild(unknownRailTile(id as ForecastBundleId));
+    tile.querySelector(".rail-glyph")!.textContent = genericRailGlyph(id, generic);
   }
   for (const button of derivedButtons()) {
     const id = button.dataset.derived as DerivedId;
@@ -3836,7 +3839,7 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
   for (const bundle of run.bundles) {
     const id = bundle.variable;
     if (railTileStandsFor(id)) continue;
-    rows.push({ group: "other", id, members: [], tile: null, core: false, current: view.field === id });
+    rows.push({ group: "other", id, members: [], tile: null, core: core.includes(id), current: view.field === id });
   }
   return rows;
 }
