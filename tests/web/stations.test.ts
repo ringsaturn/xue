@@ -177,7 +177,22 @@ describe("the station product schemas", () => {
   it("refuses a station row that is not sixteen values", () => {
     const payload = copy(airportIndexJson) as { stations: unknown[][] };
     payload.stations[0] = payload.stations[0]!.slice(0, 15);
-    expect(() => parseAirportIndex(payload)).toThrow(/row of 16 values/);
+    expect(() => parseAirportIndex(payload)).toThrow(/at least 16 items/);
+    const wide = copy(airportIndexJson) as { stations: unknown[][] };
+    wide.stations[0]!.push(0);
+    expect(() => parseAirportIndex(wide)).toThrow(/row of 16 values/);
+  });
+
+  it("finds an airport row's columns by name, and by position in an index without them", () => {
+    const named = copy(airportIndexJson) as { columns?: string[] };
+    expect(named.columns).toBeDefined();
+    const expected = parseAirportIndex(named);
+    const positional = copy(airportIndexJson) as { columns?: string[] };
+    delete positional.columns;
+    expect(parseAirportIndex(positional)).toEqual(expected);
+    const renamed = copy(airportIndexJson) as { columns: string[] };
+    renamed.columns[14] = "start";
+    expect(() => parseAirportIndex(renamed)).toThrow(/columns/);
   });
 
   it("refuses a span that reaches past the file it indexes", () => {
@@ -199,10 +214,10 @@ describe("the station product schemas", () => {
   it("refuses a value outside the range the contract admits", () => {
     const payload = copy(airportIndexJson) as { stations: unknown[][] };
     payload.stations[0]![7] = 400;
-    expect(() => parseAirportIndex(payload)).toThrow(/wd is outside/);
+    expect(() => parseAirportIndex(payload)).toThrow(/stations\[0\]\[7\] must be at most 360/);
     const sounding = copy(soundingIndexJson) as { stations: { lat: number }[] };
     sounding.stations[0]!.lat = 120;
-    expect(() => parseSoundingIndex(sounding)).toThrow(/lat is outside/);
+    expect(() => parseSoundingIndex(sounding)).toThrow(/lat must be at most 90/);
   });
 
   it("admits a visibility beyond ten kilometres, which the contract does not cap", () => {
