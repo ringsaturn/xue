@@ -3269,6 +3269,10 @@ html[lang="ja"] .rail-glyph {
 .probe-row-line {
   display: block;
   overflow: hidden;
+  /* The readouts' own size: a larger inherited strut sits on another
+     baseline than the 12px figures and grows the line past 13px (14.5 in
+     Chrome, enough in Safari to push the readout out of its 30px row). */
+  font-size: var(--fs-1);
   line-height: 13px;
   /* One line whatever the width: a wrapped readout would spill into the
      row under it, since the rows share the traces' fixed pitch. */
