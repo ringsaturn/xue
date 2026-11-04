@@ -12,13 +12,17 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from . import binformat, grib2
 from .bundles import (
+    COMPOSITE_BUNDLES,
+    DERIVED_SCALARS,
     PRECIPITATION_RATE_BUNDLE_ID,
+    VECTOR_BUNDLES,
+    VOLUME_BUNDLES,
     bundle,
     bundle_variable_ids,
     vector_input_ids,
@@ -26,7 +30,8 @@ from .bundles import (
 from .derive import precipitation_mode
 from .errors import ConversionError
 from .gdal import discover_inputs, inspect_grib_multi, raster_expression
-from .model import SourceFrame
+from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
+from .observation import inspect_observation
 from .sources import SourceSpec, family_frame_path
 from .variables import VARIABLES, variable_spec
 
@@ -393,3 +398,274 @@ def prepare_frames_all(
                 )
         _check_frames(present, variable_id)
     return per_file
+
+
+@dataclass
+class Discovered:
+    """What a build reads, as frame discovery found it: the variables read
+    (the first keys the run's axis), every file's frames in lead order, the
+    vector, derived, composite and volume bundles the inputs can build, the
+    inputs read only to be derived and then dropped, the file the run's grid
+    is read from and how its planes are filled, the producer stamps of a
+    series, and the grid family each variable is read from."""
+
+    variable_ids: tuple[str, ...]
+    per_file: list[dict[str, SourceFrame]]
+    available_vector_ids: tuple[str, ...]
+    available_derived_ids: tuple[str, ...]
+    available_composite_ids: tuple[str, ...]
+    available_volume_ids: tuple[str, ...]
+    drop_ids: frozenset[str]
+    grid_path: Path
+    plane_source: PlaneSource | dict[str, PlaneSource]
+    producer_versions: dict[str, tuple[str, str]]
+    variable_families: dict[str, str | None]
+
+
+def discover_series(
+    input_path: Path | Sequence[Path],
+    source: SourceSpec,
+    bundle_ids: tuple[str, ...] | None,
+    *,
+    require_complete: bool,
+    last_hour: int | None,
+) -> Discovered:
+    # A series-file source is one NetCDF file holding a whole variable's
+    # series, one band per time (xue/observation.py): the CMA mosaic's
+    # local archive file, the window the JMA fetch wrote, a satellite
+    # window's channels, or the forecast run om2nc resampled off the
+    # Open-Meteo bucket. There are no records to match. An observation's
+    # own times are the axis, gaps included, with no published cadence to
+    # validate against; a forecast's are its lead times and are validated
+    # like any cycle's. (The MRMS observation is one GRIB per frame and
+    # takes the record path, :func:`discover_records`, re-keyed onto its
+    # window's axis.) A run directory holds one such file per variable — or one
+    # file for its one variable (observation.series_files). Only the
+    # variables the requested bundles carry are read: a satellite
+    # window's unpublished channels feed its composite in the fetch
+    # stage and are never quantized here.
+    if not isinstance(input_path, Path):
+        raise ConversionError(f"a {source.manifest_model} build takes one NetCDF series, or the directory holding them")
+    if require_complete and not source.fetched:
+        raise ConversionError(f"{source.manifest_model} has no complete run to require")
+    requested_bundle_ids = tuple(
+        bundle_id for bundle_id in published_bundle_ids(source) if bundle_ids is None or bundle_id in bundle_ids
+    )
+    # What the series must carry: a composite's components, which the
+    # fetch stage produced and wrote as series of their own, and every
+    # other bundle's *inputs* — the question the GRIB path asks too, and
+    # the one that matters on a forecast series, where `prate` is
+    # derived from an `apcp` series (`interval_precipitation`). Then the
+    # analysis-optional inputs sort to the back, so the first variable
+    # is one no frame of the run can lack and can key the axis; the GRIB
+    # path sorts its own the same way.
+    series_variable_ids = tuple(
+        sorted(
+            dict.fromkeys(
+                variable_id
+                for bundle_id in requested_bundle_ids
+                for variable_id in (
+                    bundle_variable_ids(bundle_id)
+                    if bundle_id in COMPOSITE_BUNDLES
+                    else bundle_input_ids(source, bundle_id)
+                )
+            ),
+            key=lambda variable_id: variable_id in source.optional_at_analysis,
+        )
+    )
+    series = inspect_observation(input_path, source, series_variable_ids)
+    # ``last_hour`` trims the series to a leading window of the file, and
+    # the frame it stops on must exist — a case's declared range is never
+    # silently shortened.
+    per_file = series.frames
+    if last_hour is not None:
+        cutoff = last_hour * binformat.HOUR_SECONDS
+        per_file = [frames for frames in per_file if series_lead_seconds(frames) <= cutoff]
+        if not per_file or series_lead_seconds(per_file[-1]) != cutoff:
+            raise ConversionError(
+                f"{input_path} has no frame exactly at hour {last_hour}; its series ends at "
+                f"hour {series_lead_seconds(series.frames[-1]) / binformat.HOUR_SECONDS:g}"
+            )
+    variable_ids = series_variable_ids
+    # A vector bundle ships when the series carries every input it is
+    # built from — the same rule the GRIB path applies to a run's first
+    # file, asked of the files the fetch wrote.
+    available_vector_ids = tuple(
+        bundle_id
+        for bundle_id in requested_bundle_ids
+        if bundle_id in VECTOR_BUNDLES
+        and all(variable_id in series.datasets for variable_id in vector_input_ids(bundle_id))
+    )
+    available_derived_ids: tuple[str, ...] = ()
+    available_composite_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in COMPOSITE_BUNDLES)
+    available_volume_ids = tuple(bundle_id for bundle_id in requested_bundle_ids if bundle_id in VOLUME_BUNDLES)
+    drop_ids: frozenset[str] = frozenset()
+    grid_path = series.dataset
+    plane_source: PlaneSource | dict[str, PlaneSource] = series.plane_sources
+    producer_versions = series.producers
+    # No series-file source has a grid family: one run, one grid.
+    variable_families: dict[str, str | None] = {}
+    return Discovered(
+        variable_ids=variable_ids,
+        per_file=per_file,
+        available_vector_ids=available_vector_ids,
+        available_derived_ids=available_derived_ids,
+        available_composite_ids=available_composite_ids,
+        available_volume_ids=available_volume_ids,
+        drop_ids=drop_ids,
+        grid_path=grid_path,
+        plane_source=plane_source,
+        producer_versions=producer_versions,
+        variable_families=variable_families,
+    )
+
+
+def discover_records(
+    input_path: Path | Sequence[Path], source: SourceSpec, bundle_ids: tuple[str, ...] | None
+) -> Discovered:
+    paths = discover_frames(input_path, source)
+    # One real gdalinfo pass over the first file: it probes which vector
+    # bundles can be built (their inputs are optional, so runs fetched
+    # before the wind components joined the download set, and the cropped
+    # test fixtures, still build cleanly) and serves as the per-run
+    # cross-check reference for the GRIB2 header index used on every file.
+    # A restricted build inspects only the inputs it asked for: a case that
+    # ships temperature alone must not fail on a file that carries no
+    # precipitation record, because it never downloaded one.
+    inspect_ids = source.input_variable_ids
+    if bundle_ids is not None:
+        needed = {input_id for bundle_id in bundle_ids for input_id in bundle_input_ids(source, bundle_id)}
+        inspect_ids = tuple(variable_id for variable_id in inspect_ids if variable_id in needed)
+    requested_vector_ids = tuple(
+        bundle_id
+        for bundle_id in published_bundle_ids(source)
+        if bundle_id in VECTOR_BUNDLES and (bundle_ids is None or bundle_id in bundle_ids)
+    )
+    requested_derived_ids = tuple(
+        bundle_id
+        for bundle_id in published_bundle_ids(source)
+        if bundle_id in DERIVED_SCALARS and (bundle_ids is None or bundle_id in bundle_ids)
+    )
+    # An input that only feeds a derivation — a vector bundle, a derived
+    # scalar — may be absent; one that is also a published scalar may not.
+    derivation_only_ids = tuple(
+        dict.fromkeys(
+            variable_id
+            for bundle_id in requested_vector_ids + requested_derived_ids
+            for variable_id in bundle_input_ids(source, bundle_id)
+            if variable_id not in source.bundle_scalar_ids
+        )
+    )
+    # Which grid family each input is read from — None for every input of
+    # every source but CFSv2, whose pressure-level inputs sit in a frame
+    # file of their own on a grid of their own (sources.CompanionFile).
+    input_families = {
+        variable_id: grid_family_of(source, variable_id) for variable_id in source.input_variable_ids
+    }
+    reference_frames: dict[str, SourceFrame] = {}
+    for family in dict.fromkeys(input_families[variable_id] for variable_id in inspect_ids):
+        reference_frames.update(
+            inspect_grib_multi(
+                family_frame_path(paths[0], family),
+                tuple(
+                    variable_id for variable_id in inspect_ids if input_families[variable_id] == family
+                ),
+                optional_ids=source.optional_at_analysis + derivation_only_ids,
+            )
+        )
+    available_vector_ids = tuple(
+        bundle_id
+        for bundle_id in requested_vector_ids
+        if all(variable_id in reference_frames for variable_id in vector_input_ids(bundle_id))
+    )
+    available_derived_ids = tuple(
+        bundle_id
+        for bundle_id in requested_derived_ids
+        if all(variable_id in reference_frames for variable_id in DERIVED_SCALARS[bundle_id])
+    )
+    # A volume's levels are every one of them an input the run must
+    # carry (none is optional), so a listed volume is built from what
+    # the first file was found to hold.
+    available_volume_ids = tuple(
+        bundle_id
+        for bundle_id in published_bundle_ids(source)
+        if bundle_id in VOLUME_BUNDLES
+        and (bundle_ids is None or bundle_id in bundle_ids)
+        and all(variable_id in reference_frames for variable_id in VOLUME_BUNDLES[bundle_id])
+    )
+    for bundle_id in requested_vector_ids + requested_derived_ids:
+        if bundle_id not in available_vector_ids + available_derived_ids:
+            LOG.warning(
+                "building without the %s bundle, %s are not all in %s",
+                bundle_id,
+                ", ".join(bundle_input_ids(source, bundle_id)),
+                paths[0],
+            )
+
+    # The variables read from the GRIB inputs: every scalar input (ECMWF
+    # carries the accumulated tp instead of a rate and sflux the
+    # window-averaged prate_ave, which _quantize_file de-accumulates /
+    # de-averages into prate), plus the inputs of each vector bundle that
+    # can be built.
+    input_scalar_ids = tuple(
+        variable_id for variable_id in inspect_ids if variable_id not in derivation_only_ids
+    )
+    vector_read_ids = tuple(
+        dict.fromkeys(
+            variable_id
+            for bundle_id in available_vector_ids + available_derived_ids
+            for variable_id in bundle_input_ids(source, bundle_id)
+            if variable_id not in input_scalar_ids
+        )
+    )
+    # The inputs that only serve a derivation (spfh850 under the vapour
+    # flux and the equivalent potential temperature) are released once it
+    # is done, rather than quantized and held for the whole run.
+    drop_ids = frozenset(vector_read_ids) - {
+        variable_id for bundle_id in available_vector_ids for variable_id in VECTOR_BUNDLES[bundle_id]
+    }
+    # The first variable is the run's reference: every file is keyed by its
+    # forecast hour, so it must be one no file can lack. Stable-sorting the
+    # analysis-optional inputs (sflux prate_ave) to the back is enough unless
+    # nothing else was asked for.
+    variable_ids = tuple(
+        sorted(
+            input_scalar_ids + vector_read_ids,
+            key=lambda variable_id: (
+                VARIABLES[variable_id].static,
+                variable_id in source.optional_at_analysis,
+            ),
+        )
+    )
+    if not variable_ids or variable_ids[0] in source.optional_at_analysis or VARIABLES[variable_ids[0]].static:
+        raise ConversionError(
+            f"a {source.manifest_model} build needs at least one variable present in every file, "
+            f"including the analysis; {list(variable_ids)} is not enough"
+        )
+    per_file = prepare_frames_all(
+        paths,
+        variable_ids,
+        source.optional_at_analysis,
+        reference_frames,
+        source.cadence_seconds,
+        families=input_families,
+        static_ids=tuple(variable_id for variable_id in variable_ids if VARIABLES[variable_id].static),
+    )
+    available_composite_ids = ()
+    grid_path = paths[0]
+    plane_source = GRIB_PLANE_SOURCE
+    producer_versions = {}
+    variable_families = dict(input_families)
+    return Discovered(
+        variable_ids=variable_ids,
+        per_file=per_file,
+        available_vector_ids=available_vector_ids,
+        available_derived_ids=available_derived_ids,
+        available_composite_ids=available_composite_ids,
+        available_volume_ids=available_volume_ids,
+        drop_ids=drop_ids,
+        grid_path=grid_path,
+        plane_source=plane_source,
+        producer_versions=producer_versions,
+        variable_families=variable_families,
+    )
