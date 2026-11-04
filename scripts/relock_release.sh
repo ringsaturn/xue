@@ -10,7 +10,9 @@
 # gone), waits until the own index lists the version's wheels, raises the
 # floor in pyproject.toml to the version's minor series, relocks xuepy, checks
 # that the lock holds exactly that version, and commits and pushes. A lock
-# that already holds the version is left alone (exit 0, no commit).
+# that already holds the version behind the right floor is left alone (exit
+# 0, no commit, and no `uv lock`: a newer uv rewrites the lock's `revision`
+# line, which must not become a relock commit of its own on a re-run).
 #
 # Knobs: REMOTE (origin), XUEPY_INDEX (the Pages index), ATTEMPTS × SLEEP
 # seconds for the index poll (40 × 30). With GITHUB_OUTPUT set it writes
@@ -47,6 +49,15 @@ echo "relocking ${branch} on xuepy ${version} (floor ${floor})"
 echo "branch=${branch}" >>"$output"
 git checkout -q -B "$branch" "${remote}/${branch}"
 
+locked_version() {
+  awk '/^name = "xuepy"$/ { found = 1 } found && /^version = / { gsub(/"/, "", $3); print $3; exit }' uv.lock
+}
+if grep -qF "\"${floor}\"" pyproject.toml && [ "$(locked_version)" = "$version" ]; then
+  echo "already relocked on xuepy ${version}"
+  echo "relocked=0" >>"$output"
+  exit 0
+fi
+
 # The index is rendered by a Pages deploy that the CSV job only dispatches.
 found=""
 for attempt in $(seq 1 "${ATTEMPTS:-40}"); do
@@ -73,14 +84,9 @@ path.write_text(text)
 PY
 uv lock --refresh-package xuepy
 
-locked="$(awk '/^name = "xuepy"$/ { found = 1 } found && /^version = / { gsub(/"/, "", $3); print $3; exit }' uv.lock)"
+locked="$(locked_version)"
 [ "$locked" = "$version" ] || { echo "uv.lock holds xuepy ${locked}, not ${version}" >&2; exit 1; }
 
-if git diff --quiet -- pyproject.toml uv.lock; then
-  echo "already relocked on xuepy ${version}"
-  echo "relocked=0" >>"$output"
-  exit 0
-fi
 git add pyproject.toml uv.lock
 git -c commit.gpgsign=false commit -q -m "chore: relock on the published xuepy ${version}"
 git --no-pager show --stat --oneline HEAD
