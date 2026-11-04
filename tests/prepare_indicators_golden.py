@@ -44,7 +44,8 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import zarrstore
-from xuebuild.binconvert import _bundle_tile, _store_source
+from xuebuild.binconvert import _store_source
+from xuebuild.ladder import bundle_tile
 from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.common import crc32_hex
@@ -193,7 +194,7 @@ def write_store(root: Path = STORE_ROOT) -> None:
             HOURS,
             {hour: {variable_id: codebook.quantize(builder(hour).ravel())} for hour in HOURS},
             build_metadata(RUN_TIME, HOURS, GRID, PROFILE, (variable_id,)),
-            _bundle_tile(TILE, GRID, factor=1),
+            bundle_tile(TILE, GRID, factor=1),
         )
         report = zarrstore.write_store(source, run_dir / f"{variable_id}.zarr")
         bundles.append({"variable": variable_id, "zarr": report.descriptor(run_dir)})

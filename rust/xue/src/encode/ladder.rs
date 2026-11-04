@@ -11,7 +11,7 @@ use crate::encode::registry::{Decimation, Registry};
 /// `half` for factor 2, `quarter` for 4, `eighth` for 8. Any other factor is
 /// a registry bug (`SourceSpec::variant_factors`), reported with the factor.
 ///
-/// Mirrors `variant_tier` in `xuebuild/binconvert.py`.
+/// Mirrors `variant_tier` in `xuebuild/ladder.py`.
 fn tier_name(factor: usize) -> Result<&'static str> {
     match factor {
         2 => Ok("half"),
@@ -29,7 +29,7 @@ fn tier_name(factor: usize) -> Result<&'static str> {
 /// division by the factor, so a rung's origin and step are exactly the
 /// posters' and the tier above it. Factor 1 is the full grid.
 ///
-/// Mirrors `_variant_grid` in `xuebuild/binconvert.py`.
+/// Mirrors `variant_grid` in `xuebuild/ladder.py`.
 fn variant_grid(grid: &GridInfo, factor: usize) -> GridInfo {
     let mut rung = grid.clone();
     for _ in 0..factor.trailing_zeros() {
@@ -52,7 +52,7 @@ fn variant_grid(grid: &GridInfo, factor: usize) -> GridInfo {
 /// right answer: there is nothing left to subdivide. Factor 1 is the full
 /// tier.
 ///
-/// Mirrors `_bundle_tile(tile, grid, factor=…)` in `xuebuild/binconvert.py`.
+/// Mirrors `bundle_tile(tile, grid, factor=…)` in `xuebuild/ladder.py`.
 pub(super) fn bundle_tile(tile: (usize, usize), grid: &GridInfo, factor: usize) -> (usize, usize) {
     let tile = (tile.0.div_ceil(factor), tile.1.div_ceil(factor));
     (tile.0.min(grid.width), tile.1.min(grid.height))
@@ -64,7 +64,7 @@ pub(super) fn bundle_tile(tile: (usize, usize), grid: &GridInfo, factor: usize) 
 /// sample sites — sampling the full plane by 4 or 8 is the same as halving
 /// it twice or three times. `grid` is the full plane's grid.
 ///
-/// Mirrors `_decimate_codes(codes, grid, factor)` in `xuebuild/binconvert.py`.
+/// Mirrors `decimate_codes(codes, grid, factor)` in `xuebuild/ladder.py`.
 pub fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
     let mut reduced =
         Vec::with_capacity(grid.width.div_ceil(factor) * grid.height.div_ceil(factor));
@@ -82,8 +82,8 @@ pub fn decimate_codes(codes: &[u8], grid: &GridInfo, factor: usize) -> Vec<u8> {
 /// cell reaches a site. `nodata_code` counts below every code and is the
 /// site's only when its whole window is nodata.
 ///
-/// Mirrors `_decimate_peak_codes(codes, grid, factor, nodata_code)` in
-/// `xuebuild/binconvert.py`.
+/// Mirrors `decimate_peak_codes(codes, grid, factor, nodata_code)` in
+/// `xuebuild/ladder.py`.
 fn decimate_peak_codes(codes: &[u8], grid: &GridInfo, factor: usize, nodata_code: u8) -> Vec<u8> {
     let half = factor / 2;
     let mut reduced =
@@ -110,7 +110,7 @@ fn decimate_peak_codes(codes: &[u8], grid: &GridInfo, factor: usize, nodata_code
 /// whose registry entry asks for it (the 3.9 µm window, published to show
 /// fires, whose one-cell hot spots a plain decimation drops three times in
 /// four at the half tier), the site's own code otherwise. Mirrors
-/// `_decimate_variant_codes` in `xuebuild/binconvert.py`.
+/// `decimate_variant_codes` in `xuebuild/ladder.py`.
 fn decimate_variant_codes(
     variable_id: &str,
     codes: &[u8],

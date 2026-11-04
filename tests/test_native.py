@@ -29,6 +29,7 @@ from tests._support import (
     stored_bundle,
 )
 from xuebuild import binconvert, encoder, native, registry, zarrstore
+from xuebuild.ladder import playback_bandwidth
 from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError
 from xuebuild.sources import source_spec
@@ -252,7 +253,7 @@ class NativeStoreOnlyParityTests(ClassTempRoot, unittest.TestCase):
                     metadata = zarrstore.bundle_metadata(run_directory / variant["zarr"]["path"], bundle["variable"])
                     frames = metadata["time"]["frameCount"]
                     self.assertEqual(
-                        variant["bandwidth"], binconvert._playback_bandwidth(variant["zarr"]["byteLength"], frames)
+                        variant["bandwidth"], playback_bandwidth(variant["zarr"]["byteLength"], frames)
                     )
 
     def test_a_build_needs_the_store_or_the_container(self) -> None:

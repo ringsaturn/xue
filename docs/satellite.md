@@ -148,7 +148,7 @@ that pixel in the bundle:
   they were.
 - **A peak-keeping ladder.** The reduced tiers keep, at each decimated
   site, the largest code within `factor / 2` rows and columns of it
-  (`binconvert._decimate_peak_codes`, mirrored in `convert.rs`), not the
+  (`ladder.decimate_peak_codes`, mirrored in `ladder.rs`), not the
   site's own: a one-cell hot spot lies on a kept row and column one time
   in four at the half. The windows overlap by a row and a column, so
   every cell reaches a site and a peak moves at most half a reduced cell.
