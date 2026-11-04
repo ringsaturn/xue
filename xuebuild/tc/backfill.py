@@ -9,11 +9,12 @@ centres keep themselves, for the months before the live harvest began:
   not in the public decks);
 - ``ecmwf``: the ``tf`` BUFR of ECMWF open data as kept on AWS
   (``s3://ecmwf-forecasts``, from 2023-01-18), every basin;
-- ``ibtracs``: the agencies' best tracks.
+- ``ibtracs``: the agencies' best tracks, every storm of the seasons asked
+  for, numbered or not.
 
 Each record is filed with its ``origin``; a live record of the same key
-always stays (:func:`.archive.merge_records`). Only numbered systems are
-kept: an a-deck's file id, or ECMWF's ``stormIdentifier`` up to 49.
+always stays (:func:`.archive.merge_records`). Only numbered systems' forecasts
+are kept: an a-deck's file id, or ECMWF's ``stormIdentifier`` up to 49.
 """
 
 from __future__ import annotations
@@ -51,6 +52,8 @@ IBTRACS_SINCE1980_URL = (
     "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs"
     "/v04r01/access/csv/ibtracs.since1980.list.v04r01.csv"
 )
+IBTRACS_ALL_URL = IBTRACS_SINCE1980_URL.replace("since1980", "ALL")
+IBTRACS_SINCE1980_FROM = 1980
 ECMWF_FIRST_CYCLE = datetime(2023, 1, 18, tzinfo=UTC)
 ECMWF_RESOLUTIONS = ("ifs/0p25", "0p4-beta")
 """Where a cycle's files sit on the bucket: ``0p4-beta`` before the 0.25°
@@ -342,10 +345,21 @@ def backfill_ecmwf(archive: Archive, first: str, last: str, *, workers: int = 2)
     return {"source": "ecmwf", "cycles": cycles, "records": records, "skipped": sorted(skipped)}
 
 
-def backfill_ibtracs(archive: Archive, first: str, last: str, url: str = IBTRACS_SINCE1980_URL) -> dict[str, Any]:
-    text = get_ok(url, attempts=3, timeout=1800).decode("utf-8", errors="replace")
-    seasons = set(_seasons(first, last))
-    records = [r for r in ibtracs_best(text, first_season=min(seasons)) if int(r["storm"][-4:]) in seasons]
+def backfill_ibtracs(archive: Archive, first: str, last: str, *, csv_path: Path | None = None) -> dict[str, Any]:
+    """The seasons named by the years of ``first`` and ``last``. ``csv_path``
+    is a CSV already on disk: NCEI serves the whole list slowly enough to be
+    worth fetching once, and the seasons can then be added a few at a time."""
+    first_year, last_year = int(first[:4]), int(last[:4])
+    if csv_path is not None:
+        text = csv_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        url = IBTRACS_ALL_URL if first_year < IBTRACS_SINCE1980_FROM else IBTRACS_SINCE1980_URL
+        text = get_ok(url, attempts=3, timeout=3600).decode("utf-8", errors="replace")
+    seasons = set(range(first_year, last_year + 1))
+    # An ATCF id's season can differ from IBTrACS' by a year at the edge of a
+    # season, so a neighbour is parsed and the id's own season decides.
+    around = seasons | {season + offset for season in seasons for offset in (-1, 1)}
+    records = [r for r in ibtracs_best(text, every_storm=True, seasons=around) if int(r["storm"][-4:]) in seasons]
     return {"source": "ibtracs", "storms": add_best_records(archive, records)}
 
 
@@ -357,5 +371,12 @@ RUNNERS: dict[str, Callable[[Archive, str, str], dict[str, Any]]] = {
 }
 
 
-def backfill(archive: Archive, sources: Iterable[str], first: str, last: str) -> list[dict[str, Any]]:
-    return [RUNNERS[source](archive, first, last) for source in sources]
+def backfill(
+    archive: Archive, sources: Iterable[str], first: str, last: str, *, ibtracs_csv: Path | None = None
+) -> list[dict[str, Any]]:
+    return [
+        backfill_ibtracs(archive, first, last, csv_path=ibtracs_csv)
+        if source == "ibtracs"
+        else RUNNERS[source](archive, first, last)
+        for source in sources
+    ]

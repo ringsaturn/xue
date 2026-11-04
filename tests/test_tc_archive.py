@@ -27,13 +27,15 @@ from xuebuild.tc.archive import (
     record_key,
     validate_catalog,
     validate_month_index,
+    validate_best,
+    validate_record,
     validate_season_index,
 )
 from xuebuild.tc.backfill import deck_records, ecmwf_records, released
 from xuebuild.tc.build import ecmwf_key
-from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, storm_records
+from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, ibtracs_best, storm_records
 from xuebuild.tc.identity import dominant_cluster
-from xuebuild.tc.score import along_cross, forecast_positions, great_circle_km, mean_position, score_storm, summarise
+from xuebuild.tc.score import along_cross, forecast_positions, great_circle_km, mean_position, score_stale, score_storm, summarise
 from xuebuild.tc.track import MISSING
 from xuebuild.tc.registry import season_of
 
@@ -433,6 +435,88 @@ class PlacementTest(unittest.TestCase):
         records = self.archive.month("2026-10")
         self.assertEqual(sorted((s, src) for s, src, _ in records), [("WP292026", "ecmwf"), ("WP292026", "gfs")])
         self.assertEqual(records[("WP292026", "ecmwf", base)]["forecast"]["points"][0]["lat"], 15.1)
+
+
+IBTRACS_HEADER = "SID,SEASON,BASIN,NAME,ISO_TIME,NATURE,LAT,LON,WMO_WIND,WMO_PRES,TRACK_TYPE,USA_ATCF_ID,USA_LAT,USA_LON,USA_WIND,USA_PRES,USA_STATUS"
+IBTRACS_UNITS = " ,Year, , , , ,deg,deg,kts,mb, , ,deg,deg,kts,mb, "
+
+
+def _ibtracs(*rows: str) -> str:
+    return "\n".join([IBTRACS_HEADER, IBTRACS_UNITS, *rows]) + "\n"
+
+
+class IbtracsHistoryTest(unittest.TestCase):
+    NUMBERED = "1851175N26270,1851,NA,NOT_NAMED,{time},TS,28.0,-94.8,,,main,AL011851,28.0,-94.8,80,,HU"
+    UNNUMBERED = "1951123S10140,1952,SP,NOT_NAMED,{time},TS,-10.0,140.0,50,,main,,,,,,"
+    SPUR = "1951124S11141,1952,SP,NOT_NAMED,{time},TS,-11.0,141.0,,,spur-split,,,,,,"
+    OLDER = "1900123N10140,1900,WP,NOT_NAMED,{time},NR,10.0,140.0,,,main,,,,,,"
+
+    def _text(self) -> str:
+        return _ibtracs(
+            self.NUMBERED.format(time="1851-06-25 00:00:00"),
+            self.UNNUMBERED.format(time="1951-05-03 00:00:00"),
+            self.UNNUMBERED.format(time="1951-05-03 06:00:00"),
+            self.SPUR.format(time="1951-05-04 00:00:00"),
+            self.OLDER.format(time="1900-05-03 00:00:00"),
+        )
+
+    def test_the_daily_reading_keeps_numbered_storms_only(self) -> None:
+        self.assertEqual([record["storm"] for record in ibtracs_best(self._text())], ["AL011851"])
+
+    def test_the_history_keeps_every_storm_but_a_spur(self) -> None:
+        records = {record["storm"]: record for record in ibtracs_best(self._text(), every_storm=True)}
+        self.assertEqual(sorted(records), ["AL011851", "SH-1951123S10140-1952", "WP-1900123N10140-1900"])
+        for record in records.values():
+            validate_best(record, record["storm"])
+        history = records["SH-1951123S10140-1952"]
+        self.assertEqual(history["basin"], "SH")
+        self.assertEqual(history["atcf"], [])
+        self.assertEqual(history["sid"], "1951123S10140")
+        # No agency holds it: IBTrACS' merged position, with the WMO wind.
+        self.assertEqual(list(history["best"]), ["ibtracs"])
+        self.assertEqual(len(history["best"]["ibtracs"]["points"]), 2)
+        self.assertEqual(history["best"]["ibtracs"]["points"][0]["vmax"], 25.7)
+        self.assertEqual(history["best"]["ibtracs"]["source"], "ibtracs")
+        # A storm an agency does hold has no merged track beside it.
+        self.assertEqual(list(records["AL011851"]["best"]), ["usa"])
+
+    def test_a_gust_of_999_is_not_reported_and_a_pressure_of_999_is_real(self) -> None:
+        text = (
+            "SID,SEASON,BASIN,NAME,ISO_TIME,NATURE,LAT,LON,TRACK_TYPE,USA_ATCF_ID,REUNION_LAT,REUNION_LON,REUNION_WIND,REUNION_PRES,REUNION_GUST\n"
+            " ,Year, , , , ,deg,deg, , ,deg,deg,kts,mb,kts\n"
+            "2005026S20040,2005,SI,NOT_NAMED,2005-01-26 00:00:00,TS,-20.0,40.0,main,,-20.0,40.0,40,999,999\n"
+        )
+        record = ibtracs_best(text, every_storm=True)[0]
+        validate_best(record, record["storm"])
+        point = record["best"]["mfr"]["points"][0]
+        self.assertIsNone(point["gust"])
+        self.assertEqual(point["pmin"], 999.0)
+
+    def test_seasons_narrow_what_is_read(self) -> None:
+        records = ibtracs_best(self._text(), every_storm=True, seasons={1900})
+        self.assertEqual([record["storm"] for record in records], ["WP-1900123N10140-1900"])
+
+    def test_a_history_season_is_written_and_left_unscored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Archive.open(Path(directory))
+            for record in ibtracs_best(self._text(), every_storm=True, seasons={1952}):
+                archive.add_best(record)
+            catalog = archive.write()
+            self.assertEqual([entry["season"] for entry in catalog["seasons"]], [1952])
+            index = archive.season_index(1952)
+            validate_season_index(index)
+            self.assertEqual(index["storms"][0]["id"], "SH-1951123S10140-1952")
+            self.assertEqual(index["storms"][0]["months"], [])
+            self.assertEqual(score_stale(archive), {"scored": []})
+            self.assertNotIn("scores", archive.catalog)
+
+    def test_a_forecast_still_needs_an_atcf_id(self) -> None:
+        record = make_record(
+            "WP-1900123N10140-1900", "WP", None, "gfs", "model", "nhc-atcf",
+            {"issued": "1900-05-03T00:00:00Z", "base": "1900-05-03T00:00:00Z", "points": []},
+        )
+        with self.assertRaises(TcProductError):
+            validate_record(record, "record")
 
 
 if __name__ == "__main__":

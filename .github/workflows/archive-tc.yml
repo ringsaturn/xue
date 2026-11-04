@@ -4,7 +4,7 @@ name: archive tc
 # hourly issues of the last two days are folded into tc/archive/<YYYY>/<MM>/
 # and IBTrACS into the season best tracks. A dispatch with `backfill`
 # instead reads the centres' own archives (NHC and UCAR a-decks, ECMWF's
-# tf BUFR on AWS, IBTrACS since 1980) for a range of months. Reads the
+# tf BUFR on AWS, IBTrACS) for a range of months. Reads the
 # data origin over HTTPS, writes R2; nothing here touches a raster.
 
 on:

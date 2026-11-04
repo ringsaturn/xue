@@ -344,6 +344,19 @@ basin's numbering has two). For each agency key the archive keeps
 IBTrACS' track once it is final, and until then whichever of IBTrACS' and
 the centre's working file (§5 `Track.source`) reaches later.
 
+A season's best tracks may also hold what IBTrACS' backfill brings and the
+centres never numbered, most of the storms before the satellite era. Such a
+storm's id is a history id, `<basin>-<SID>-<season>` (`WP-1951123N10140-1951`):
+the ATCF basin (IBTrACS' `NA` as `AL`, `NI` as `IO`, `SI`, `SP` and `SA` as
+`SH`), IBTrACS' `SID`, and its `SEASON`, which follows the same southern
+July-to-June rule. Like an ATCF id it opens on the basin and ends on the season.
+Its `atcf` is empty, it has no forecasts, and a branch IBTrACS marks as a spur
+of another storm is not kept. A storm no agency holds has one track, under the
+key `ibtracs`: IBTrACS' merged position (`source: "ibtracs"`), `vmax` and `pmin`
+from `WMO_WIND` and `WMO_PRES`, `class` its `NATURE`. Early winds and pressures
+are mostly `null`, and centres' methods changed over the record, so the
+positions and intensities of different eras are not of equal quality.
+
 ### 8.3 Indexes
 
 A month's `index.json`:
@@ -361,7 +374,7 @@ each with `id`, `basin`, `name`, `sid`, `atcf`, its span in `best.jsonl`
 track yet), the agency keys of its tracks (`best`), the first and last
 time any of them places it (`first`, `last`) and its peak wind (`vmax`,
 m/s, on the `usa` track when there is one, else on the first key that has
-a wind; all three `null` without a best track), the `months` it has
+a wind; all three `null` without a best track or wind), the `months` it has
 forecasts in and the `sources` of those forecasts. It names `overview` (`path`,
 `byteLength`, `crc32`; absent from an index written before it):
 `{archiveSchemaVersion, product, season, storms: [{id, track: [[lon×10,
@@ -387,7 +400,11 @@ one it implements.
   → `gefs`, `EMX` → `ecmwf`, `EC00`/`EE01`–`EE50`/`EEMN` → `ecmwfens`,
   `GDMN` → `gdm`; AL, EP, CP), `ucar` (`AVNO`, or `AVNX` where it is alone, → `gfs`, and
   the GEFS techs; WP, IO, SH), `ecmwf` (`oper`/`scda` and `enfo` `tf`
-  BUFR from 2023-01-18) and `ibtracs` (`since1980`). `gdm` is Google
+  BUFR from 2023-01-18) and `ibtracs` (every storm of the seasons named by
+the years of `--from` and `--to`; `since1980`, or `ALL` before 1980, or a
+copy on disk with `--ibtracs-csv`, since the whole list is hundreds of
+megabytes served slowly). The daily harvest adds numbered storms only, so a
+history id appears only where the backfill was run. `gdm` is Google
   DeepMind's experimental model (the ensemble mean NHC files from 2025).
   Its data is CC BY 4.0 only for times past and under Google's real-time
   terms for anything ahead, so it never enters the hourly product, and a
@@ -411,9 +428,9 @@ one it implements.
 
 ## 9. Track-error scores
 
-Each season of the archive carries the errors of its forecasts against its
+Each season of the archive with forecasts carries their errors against its
 best tracks, written by the same daily run (`xue tc-archive`, which scores
-every season whose inputs changed; `--rescore` forces one):
+every such season whose inputs changed; `--rescore` forces one):
 
 ```
 tc/archive/<YYYY>/scores.json    the season's summary, and each storm's span in errors.jsonl

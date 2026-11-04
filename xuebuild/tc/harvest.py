@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import urllib.parse
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -220,14 +221,30 @@ def place_ecmwf(matcher: BestMatcher, records: list[dict[str, Any]]) -> list[dic
     return placed
 
 
-def ibtracs_best(text: str, *, first_season: int | None = None) -> list[dict[str, Any]]:
+def ibtracs_best(
+    text: str,
+    *,
+    first_season: int | None = None,
+    every_storm: bool = False,
+    seasons: Collection[int] | None = None,
+) -> list[dict[str, Any]]:
     """Every storm of an IBTrACS CSV that carries an ATCF id, as archive
-    best records under its newest id; ``first_season`` drops older ones."""
+    best records under its newest id; ``first_season`` drops older ones.
+
+    ``every_storm`` is the history's reading (``docs/tc.md`` §8.2): a storm
+    without an ATCF id is kept under :func:`.ibtracs.history_id` unless it is
+    only a spur of another, and a spur sharing a storm's ATCF id comes before
+    that storm so the storm's own track is the one merged last. ``seasons``
+    narrows what is parsed, by IBTrACS' ``SEASON``."""
     records = []
-    for storm in ibtracs.parse_ibtracs(text).values():
-        if storm.atcf_id is None or not ATCF_ID.match(storm.atcf_id):
+    parsed = ibtracs.parse_ibtracs(text, seasons=seasons, merged=every_storm).values()
+    for storm in sorted(parsed, key=lambda item: not item.spur) if every_storm else parsed:
+        storm_id = storm.atcf_id if storm.atcf_id is not None and ATCF_ID.match(storm.atcf_id) else None
+        if storm_id is None and every_storm and not storm.spur:
+            storm_id = ibtracs.history_id(storm)
+        if storm_id is None:
             continue
-        if first_season is not None and int(storm.atcf_id[-4:]) < first_season:
+        if first_season is not None and int(storm_id[-4:]) < first_season:
             continue
         best = {
             key: {**track.to_json(), "source": "ibtracs"}
@@ -236,7 +253,7 @@ def ibtracs_best(text: str, *, first_season: int | None = None) -> list[dict[str
         }
         if best:
             ids = [atcf_id for atcf_id in storm.atcf_ids if ATCF_ID.match(atcf_id)]
-            records.append(make_best(storm.atcf_id, storm.name, storm.sid, ids, best))
+            records.append(make_best(storm_id, storm.name, storm.sid, ids, best))
     return records
 
 
