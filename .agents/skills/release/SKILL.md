@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a Xue release on a release/0.N branch — bump the xue crate and xuepy wheel versions, tag v* on the branch, let CI publish to crates.io and PyPI, relock xuebuild on the new wheel, then fast-forward main. Use when asked to release, publish a new xuepy/crate version, ship encoder or source-table changes to the scheduled workflows, or relock after a release.
+description: Cut a Xue release on a release/0.N branch — bump the xue crate and xuepy wheel versions, tag v* on the branch, let CI publish to crates.io and PyPI and relock xuebuild on the new wheel, then fast-forward main. Use when asked to release, publish a new xuepy/crate version, ship encoder or source-table changes to the scheduled workflows, or relock after a release.
 ---
 
 # Releasing `xue` / `xuepy`
@@ -45,18 +45,21 @@ scheduled publishes do not fail during the release window.
    git tag v0.N.0 && git push origin release/0.N v0.N.0
    ```
 4. **Wait for the publish**: `gh run list --workflow release-xuepy.yml`,
-   `gh run watch <id>`, and the same for `release-crate.yml`. Confirm the
-   version on PyPI (`pip index versions xuepy`). Do not continue on a red
-   run.
-5. **Relock commit** on the branch:
+   `gh run watch <id>`, and the same for `release-crate.yml`. Do not
+   continue on a red run.
+5. **Wait for the relock**, which CI makes: `release-wheels-csv.yml` runs
+   when `release-xuepy.yml` finishes, records the wheels, redeploys the
+   index and pushes `chore: relock on the published xuepy 0.N.0` to
+   `release/0.N`, then dispatches `test.yml` on the branch. Watch both:
    ```sh
-   # pyproject.toml: "xuepy>=0.N,<0.N+1"
-   uv lock --refresh-package xuepy
-   git add pyproject.toml uv.lock
-   git commit -m "chore: relock on the published xuepy 0.N.0"
-   uv sync && make test
-   git push origin release/0.N
+   gh run list --workflow release-wheels-csv.yml
+   gh run list --workflow test.yml --branch release/0.N
+   git pull   # the relock commit
    ```
+   If the relock job failed, fix the cause and either dispatch the workflow
+   with `relock_tag=v0.N.0` or run `scripts/relock_release.sh v0.N.0` from
+   a fetched checkout. Never write the relock commit by hand while the job
+   may still push one.
 6. **Merge into `main`** as a fast-forward, which keeps the history:
    ```sh
    git checkout main && git merge --ff-only release/0.N && git push origin main
@@ -72,7 +75,7 @@ scheduled publishes do not fail during the release window.
   an encoder change to `main` ahead of its release.
 - Gate every step on its own exit status. Never put `uv lock | tail` or
   `make test | grep` in front of a commit or push.
-- Never raise the floor before the wheel is on PyPI: `uv sync` would fail
-  everywhere.
+- Never raise the floor before the wheel is indexed: `uv sync` would fail
+  everywhere. The relock job does it at the right moment.
 - A manual dispatch of either release workflow is a rehearsal (a dry run,
   or workflow artifacts only) and is safe to run.
