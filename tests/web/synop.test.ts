@@ -304,7 +304,7 @@ describe("the synop v2 readers", () => {
     (short.stations as Row[]).pop();
     expect(read(short)).toThrow(/the index says 2/);
     const wide = table();
-    (wide.stations as Row[])[0]!.splice(1, 0, 0);
+    (wide.stations as Row[])[0]!.splice(7, 0, 0);
     expect(read(wide)).toThrow(/row of/);
     const unsorted = table();
     (unsorted.stations as Row[]).reverse();
@@ -323,6 +323,22 @@ describe("the synop v2 readers", () => {
     const last = (long.stations as Row[])[1]!;
     last[last.length - 1] = 101;
     expect(read(long)).toThrow(/past the end/);
+  });
+
+  it("find a table's columns by name, and by position in a table without them", () => {
+    const head = parseSynopIndex(golden.index);
+    const name = head.networks[0]!.stations!.path;
+    const table = clone(golden.tables[name]!);
+    expect(table.columns).toEqual([
+      "id", "lat", "lon", "elev", "rank", "name", "obsTime", ...head.elements, "offset", "length",
+    ]);
+    const expected = parseSynopStationTable(table, head, 0);
+    const positional = clone(table);
+    delete positional.columns;
+    expect(parseSynopStationTable(positional, head, 0)).toEqual(expected);
+    const missing = clone(table);
+    (missing.columns as string[])[(missing.columns as string[]).length - 1] = "span";
+    expect(() => parseSynopStationTable(missing, head, 0)).toThrow(/columns has no length/);
   });
 
   it("hold a dew point to its range", () => {

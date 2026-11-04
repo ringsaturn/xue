@@ -1,5 +1,5 @@
-/** The three point products the shell draws as station marks, schema v1 —
- * the radiosonde soundings (`docs/sounding.md`, written by
+/** The three point products the shell draws as station marks — the
+ * radiosonde soundings (`docs/sounding.md`, written by
  * `xuebuild/sounding/schema.py`), the airports (`docs/airport.md`,
  * `xuebuild/airport/schema.py`) and the surface stations (`docs/synop.md`,
  * `xuebuild/synop/schema.py`). All take the same shape as the storm
@@ -8,57 +8,36 @@
  * beside it — addressed by the index's own byte span — is one station's
  * whole record.
  *
- * Admission is structural, the posture the manifest and `tc/schema.ts`
- * take: a station identifier, a sonde type or a source id this build has
- * never seen passes; a shape that is wrong, a number outside the range
- * the contract admits, and a `schemaVersion` above the one implemented do
- * not. Unknown fields are ignored rather than refused, so a v1 reader
- * survives an added optional field. */
+ * The shapes are `docs/schemas/{sounding,airport,synop}-*.schema.json`,
+ * checked by the generated validators after each file's version gate; this
+ * module adds what a schema cannot say and expands the rows, finding each
+ * column by the file's `columns` (by position in a file from before the
+ * field). Admission is structural, the posture the manifest and
+ * `tc/schema.ts` take: a station identifier, a sonde type or a source id
+ * this build has never seen passes; a shape that is wrong, a number outside
+ * the range the contract admits, and a `schemaVersion` above the one
+ * implemented do not. Unknown fields are ignored rather than refused, so a
+ * reader survives an added optional field. */
 
-import {
-  CRC32,
-  integer,
-  object,
-  pointer,
-  schemaVersion,
-  string,
-  timestamp,
-  type ProductPointer,
-} from "../schema/validate";
+import { checkAirportIndex } from "../schema/generated/airport-index";
+import { checkAirportLine, type CloudLayer as CloudLayerRecord } from "../schema/generated/airport-line";
+import { checkSoundingIndex } from "../schema/generated/sounding-index";
+import { checkSoundingLine, type Sounding as SoundingRecord } from "../schema/generated/sounding-line";
+import { checkSynopIndex } from "../schema/generated/synop-index";
+import { checkSynopIndexV1 } from "../schema/generated/synop-index-v1";
+import { checkSynopLine } from "../schema/generated/synop-line";
+import { checkSynopStationsFile } from "../schema/generated/synop-stations";
+import { integer, object, pointer, schemaVersion, type ProductPointer } from "../schema/validate";
 
 const STATION_SCHEMA_VERSION = 1;
 export const SOUNDING_POINTER_FILENAME = "latest-sounding.json";
 export const AIRPORT_POINTER_FILENAME = "latest-airport.json";
 export const SYNOP_POINTER_FILENAME = "latest-synop.json";
 
-/** The missing value in every one of a sounding's level arrays, `sig`
- * included. A JSON number, not a 16-bit field. */
-const SOUNDING_MISSING = -32768;
-
-/** The seven parallel level arrays, in the order the contract lists them,
- * with the fixed-point range each stays inside (`MISSING` aside). The
- * encoder enforces the same table (`xuebuild/sounding/bufr.py`), so
- * anything it writes is something this admits. */
-const LEVEL_BOUNDS: Record<string, [number, number]> = {
-  p: [1, 120000],
-  z: [-1000, 100000],
-  t: [10000, 40000],
-  td: [10000, 40000],
-  wd: [0, 360],
-  ws: [0, 3000],
-  sig: [0, 262143],
-};
+/** A sounding's seven level arrays; -32768 is missing in every one but
+ * `p`, which the schema holds present (`docs/sounding.md` section 2). */
 const LEVEL_ARRAYS = ["p", "z", "t", "td", "wd", "ws", "sig"] as const;
-type LevelArray = (typeof LEVEL_ARRAYS)[number];
 
-/** A WIGOS identifier written out: series, issuer, issue number and the
- * local identifier — digits, hyphens and (rarely) letters. */
-const STATION_ID = /^\d+-\d+-\d+-[0-9A-Za-z_]+$/;
-const WMO_NUMBER = /^\d{5}$/;
-const ICAO = /^[A-Z0-9]{2,4}$/;
-/** A gateway id (`jp-jma-gts-to-wis2`) or a native WIS2 topic source
- * (`wis2:jp-jma`), and the airport product's own (`awc-metars`). */
-const SOURCE_ID = /^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$/;
 /** `sounding/YYYY/MM/DD/sounding.<hour>/index.json`, or the flat
  * `sounding.<hour>/index.json` issues were published under before. */
 const SOUNDING_PATH =
@@ -74,23 +53,10 @@ const SYNOP_PATH =
 /** `<network>:<the network's own station number>`; the first group is the
  * network. */
 const SYNOP_STATION_ID = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*):[0-9A-Za-z_.-]+$/;
-const NETWORK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const ELEMENT_KEY = /^[a-z][a-z0-9]*$/;
 
 const FLIGHT_CATEGORIES = ["VFR", "MVFR", "IFR", "LIFR"] as const;
 export type FlightCategory = (typeof FLIGHT_CATEGORIES)[number];
-
-/** The ranges the contract admits, shared by both products' readers. A
- * value outside one is not a measurement: the publisher writes null
- * instead of it, and a file that carries one is malformed. */
-const LATITUDE: [number, number] = [-90, 90];
-const LONGITUDE: [number, number] = [-180, 180];
-const ELEVATION: [number, number] = [-500, 9000];
-const TEMPERATURE: [number, number] = [-100, 70];
-const WIND_DIRECTION: [number, number] = [0, 360];
-const WIND_SPEED: [number, number] = [0, 150];
-const PRESSURE: [number, number] = [800, 1100];
-const HEIGHT: [number, number] = LEVEL_BOUNDS.z!;
 
 /** The pointer both products publish, which is the run pointer's shape
  * with another product name. */
@@ -297,72 +263,28 @@ export interface AirportStationHistory {
 }
 
 // ---------------------------------------------------------------------------
-// The little validators the parsers are written in, beside the shared ones
-// in `schema/validate.ts`. Each names the field it refused, so a rejected
-// product says which value cost it.
+// What the schemas cannot say, shared by the three products' readers. Each
+// names the field it refused, so a rejected product says which value cost
+// it.
 
-function list(input: unknown, label: string): unknown[] {
-  if (!Array.isArray(input)) throw new Error(`${label} must be a list`);
-  return input;
-}
-
-function optionalTimestamp(value: unknown, label: string): string | null {
-  return value === null || value === undefined ? null : timestamp(value, label);
-}
-
-function number(value: unknown, label: string, range?: [number, number]): number {
-  if (typeof value !== "number" || !Number.isFinite(value))
-    throw new Error(`${label} must be a number`);
-  if (range && (value < range[0] || value > range[1]))
-    throw new Error(`${label} is outside ${range[0]}..${range[1]}`);
-  return value;
-}
-
-function optionalNumber(value: unknown, label: string, range?: [number, number]): number | null {
-  return value === null || value === undefined ? null : number(value, label, range);
-}
-
-function optionalInteger(value: unknown, label: string, range?: [number, number]): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "number" || !Number.isInteger(value))
-    throw new Error(`${label} must be an integer or null`);
-  if (range && (value < range[0] || value > range[1]))
-    throw new Error(`${label} is outside ${range[0]}..${range[1]}`);
-  return value;
-}
-
-function optionalString(value: unknown, label: string, pattern?: RegExp): string | null {
-  return value === null || value === undefined ? null : string(value, label, pattern);
-}
-
-function boolean(value: unknown, label: string): boolean {
-  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
-  return value;
-}
-
-function stationFile(input: unknown, label: string, name: string): StationFile {
-  const value = object(input, label);
+/** A file beside the index, by the one name it may have. */
+function stationFile(value: StationFile, label: string, name: string): StationFile {
   if (value.path !== name)
     throw new Error(`${label}.path must be ${name}, the file beside the index`);
-  return {
-    path: name,
-    byteLength: integer(value.byteLength, `${label}.byteLength`),
-    crc32: string(value.crc32, `${label}.crc32`, CRC32),
-  };
+  return { path: name, byteLength: value.byteLength, crc32: value.crc32 };
 }
 
-function sources(input: unknown, label: string): StationSource[] {
-  return list(input, label).map((item, index) => {
-    const value = object(item, `${label}[${index}]`);
-    const status: StationSource = {
-      id: string(value.id, `${label}[${index}].id`, SOURCE_ID),
-      ok: boolean(value.ok, `${label}[${index}].ok`),
-    };
-    if (!status.ok && typeof value.error !== "string")
+function sources(
+  input: readonly { id: string; ok: boolean; url?: string; fetched?: string | null; error?: string }[],
+  label: string,
+): StationSource[] {
+  return input.map((value, index) => {
+    if (!value.ok && value.error === undefined)
       throw new Error(`${label}[${index}] failed without an error`);
-    if (typeof value.url === "string") status.url = value.url;
+    const status: StationSource = { id: value.id, ok: value.ok };
+    if (value.url !== undefined) status.url = value.url;
     if (typeof value.fetched === "string") status.fetched = value.fetched;
-    if (typeof value.error === "string") status.error = value.error;
+    if (value.error !== undefined) status.error = value.error;
     return status;
   });
 }
@@ -370,19 +292,29 @@ function sources(input: unknown, label: string): StationSource[] {
 /** The byte span of one station's line, checked against the file the
  * index measured: spans are in row order, do not overlap, and lie inside
  * it. `previousEnd` is where the last station's line ended. */
-function span(
-  value: Record<string, unknown>,
-  label: string,
-  previousEnd: number,
-  fileBytes: number,
-): { offset: number; length: number } {
-  const offset = integer(value.offset, `${label}.offset`);
-  const length = integer(value.length, `${label}.length`, 1);
+function span(offset: number, length: number, label: string, previousEnd: number, fileBytes: number): void {
   if (offset < previousEnd)
     throw new Error(`${label}.offset precedes the previous station's span`);
   if (offset + length > fileBytes)
     throw new Error(`${label} spans past the end of the file it indexes`);
-  return { offset, length };
+}
+
+/** Where each of `names` sits in a row: by the file's `columns` when it
+ * names them, else in place. Returns the positions and the rows' width. */
+function columnPositions(
+  columns: readonly unknown[] | undefined,
+  names: readonly string[],
+  what: string,
+): { at: Record<string, number>; width: number } {
+  const held = (columns as readonly string[] | undefined) ?? names;
+  if (new Set(held).size !== held.length) throw new Error(`${what}.columns lists a column twice`);
+  const at: Record<string, number> = {};
+  for (const name of names) {
+    const found = held.indexOf(name);
+    if (found < 0) throw new Error(`${what}.columns has no ${name}`);
+    at[name] = found;
+  }
+  return { at, width: held.length };
 }
 
 export function parseSoundingPointer(input: unknown): SoundingPointer {
@@ -393,269 +325,248 @@ export function parseAirportPointer(input: unknown): AirportPointer {
   return pointer(input, "airport", AIRPORT_PATH, STATION_SCHEMA_VERSION);
 }
 
-/** `sounding.<issue>/index.json`: the stations with their headline
- * summary, and the span each one's soundings occupy in the file beside
- * it. */
+/** `sounding.<issue>/index.json`: the schema's shape, then the stations
+ * with their headline summary and the span each one's soundings occupy in
+ * the file beside it, in order and inside it. */
 export function parseSoundingIndex(input: unknown): SoundingIndex {
-  const value = object(input, "sounding index");
-  const version = schemaVersion(value.schemaVersion, "sounding index", STATION_SCHEMA_VERSION);
-  const soundings = stationFile(value.soundings, "index.soundings", "soundings.jsonl");
+  const version = schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "sounding index", STATION_SCHEMA_VERSION);
+  checkSoundingIndex(input, "index");
+  const soundings = stationFile(input.soundings, "index.soundings", "soundings.jsonl");
   let end = 0;
-  const stations = list(value.stations, "index.stations").map((item, index) => {
+  const stations = input.stations.map((entry, index): SoundingStationEntry => {
     const label = `index.stations[${index}]`;
-    const entry = object(item, label);
-    const { offset, length } = span(entry, label, end, soundings.byteLength);
+    span(entry.offset, entry.length, label, end, soundings.byteLength);
     // The newline the span excludes: the next station's line starts after it.
-    end = offset + length + 1;
-    const latest = timestamp(entry.latest, `${label}.latest`);
-    const times = list(entry.times, `${label}.times`).map((time, position) =>
-      timestamp(time, `${label}.times[${position}]`),
-    );
-    if (times.length === 0) throw new Error(`${label}.times must not be empty`);
-    if (times[0] !== latest)
+    end = entry.offset + entry.length + 1;
+    if (entry.times[0] !== entry.latest)
       throw new Error(`${label}.latest must equal the first of its times`);
+    const headline = entry.headline;
     return {
-      id: string(entry.id, `${label}.id`, STATION_ID),
-      wmo: optionalString(entry.wmo, `${label}.wmo`, WMO_NUMBER),
-      name: optionalString(entry.name, `${label}.name`),
-      lat: number(entry.lat, `${label}.lat`, LATITUDE),
-      lon: number(entry.lon, `${label}.lon`, LONGITUDE),
-      elev: optionalNumber(entry.elev, `${label}.elev`, ELEVATION),
-      offset,
-      length,
-      latest,
-      times,
-      headline: headline(entry.headline, `${label}.headline`),
-    } satisfies SoundingStationEntry;
+      id: entry.id,
+      wmo: entry.wmo ?? null,
+      name: entry.name ?? null,
+      lat: entry.lat,
+      lon: entry.lon,
+      elev: entry.elev ?? null,
+      offset: entry.offset,
+      length: entry.length,
+      latest: entry.latest,
+      times: entry.times,
+      headline: {
+        t500: headline.t500 ?? null,
+        td500: headline.td500 ?? null,
+        freezingLevel: headline.freezingLevel ?? null,
+        pw: headline.pw ?? null,
+        levels: headline.levels,
+      },
+    };
   });
   return {
     schemaVersion: version,
-    issued: timestamp(value.issued, "index.issued"),
-    generated: timestamp(value.generated, "index.generated"),
+    issued: input.issued,
+    generated: input.generated,
     soundings,
     stations,
-    sources: sources(value.sources, "index.sources"),
+    sources: sources(input.sources, "index.sources"),
   };
 }
 
-function headline(input: unknown, label: string): SoundingHeadline {
-  const value = object(input, label);
-  return {
-    t500: optionalNumber(value.t500, `${label}.t500`, [-120, 60]),
-    td500: optionalNumber(value.td500, `${label}.td500`, [-150, 60]),
-    freezingLevel: optionalNumber(value.freezingLevel, `${label}.freezingLevel`, HEIGHT),
-    pw: optionalNumber(value.pw, `${label}.pw`, [0, 300]),
-    levels: integer(value.levels, `${label}.levels`, 1),
-  };
-}
-
-/** One line of `soundings.jsonl`, the slice an index span reads out. */
+/** One line of `soundings.jsonl`, the slice an index span reads out: the
+ * schema's shape, then every level array `n` long and pressure present
+ * and strictly descending. */
 export function parseSoundingStation(input: unknown): SoundingStation {
-  const value = object(input, "station");
-  const soundings = list(value.soundings, "station.soundings");
-  if (soundings.length === 0)
-    throw new Error("station.soundings must not be empty");
+  checkSoundingLine(input, "station");
   return {
-    id: string(value.id, "station.id", STATION_ID),
-    wmo: optionalString(value.wmo, "station.wmo", WMO_NUMBER),
-    name: optionalString(value.name, "station.name"),
-    lat: number(value.lat, "station.lat", LATITUDE),
-    lon: number(value.lon, "station.lon", LONGITUDE),
-    elev: optionalNumber(value.elev, "station.elev", ELEVATION),
-    soundings: soundings.map((item, index) =>
-      sounding(item, `station.soundings[${index}]`),
-    ),
+    id: input.id,
+    wmo: input.wmo ?? null,
+    name: input.name ?? null,
+    lat: input.lat,
+    lon: input.lon,
+    elev: input.elev ?? null,
+    soundings: input.soundings.map((item, index) => sounding(item, `station.soundings[${index}]`)),
   };
 }
 
-function sounding(input: unknown, label: string): Sounding {
-  const value = object(input, label);
-  const n = integer(value.n, `${label}.n`, 1);
-  const reported = integer(value.reported, `${label}.reported`, n);
-  const arrays = {} as Record<LevelArray, number[]>;
-  for (const key of LEVEL_ARRAYS) {
-    const [low, high] = LEVEL_BOUNDS[key]!;
-    const values = list(value[key], `${label}.${key}`);
-    if (values.length !== n)
+function sounding(value: SoundingRecord, label: string): Sounding {
+  const { n } = value;
+  if (value.reported < n)
+    throw new Error(`${label}.reported must be at least ${label}.n`);
+  for (const key of LEVEL_ARRAYS)
+    if (value[key].length !== n)
       throw new Error(`${label}.${key} must hold n = ${n} integers`);
-    arrays[key] = values.map((item, index) => {
-      const level = integer(item, `${label}.${key}[${index}]`, SOUNDING_MISSING);
-      if (level !== SOUNDING_MISSING && (level < low || level > high))
-        throw new Error(`${label}.${key}[${index}] is out of range`);
-      return level;
-    });
-  }
   // Pressure is the vertical axis: present on every level and strictly
   // descending, so a reader can walk the profile without sorting it.
-  for (let index = 0; index < n; index += 1) {
-    const pressure = arrays.p[index]!;
-    if (pressure === SOUNDING_MISSING)
-      throw new Error(`${label}.p is missing on a level`);
-    if (index > 0 && pressure >= arrays.p[index - 1]!)
+  for (let index = 1; index < n; index += 1)
+    if (value.p[index]! >= value.p[index - 1]!)
       throw new Error(`${label}.p must be strictly descending`);
-  }
-  const derived = object(value.derived, `${label}.derived`);
+  const derived = value.derived;
   return {
-    time: timestamp(value.time, `${label}.time`),
-    launched: optionalTimestamp(value.launched, `${label}.launched`),
-    sondeType: optionalInteger(value.sondeType, `${label}.sondeType`, [0, 1023]),
-    bulletin: optionalString(value.bulletin, `${label}.bulletin`),
-    gateway: optionalString(value.gateway, `${label}.gateway`, SOURCE_ID),
-    arrived: timestamp(value.arrived, `${label}.arrived`),
+    time: value.time,
+    launched: value.launched ?? null,
+    sondeType: value.sondeType ?? null,
+    bulletin: value.bulletin ?? null,
+    gateway: value.gateway ?? null,
+    arrived: value.arrived,
     n,
-    reported,
-    ...arrays,
+    reported: value.reported,
+    p: value.p,
+    z: value.z,
+    t: value.t,
+    td: value.td,
+    wd: value.wd,
+    ws: value.ws,
+    sig: value.sig,
     derived: {
-      freezingLevel: optionalNumber(derived.freezingLevel, `${label}.derived.freezingLevel`, HEIGHT),
-      pw: optionalNumber(derived.pw, `${label}.derived.pw`, [0, 300]),
-      lapse850_500: optionalNumber(derived.lapse850_500, `${label}.derived.lapse850_500`, [-30, 30]),
-      tropopause: optionalNumber(derived.tropopause, `${label}.derived.tropopause`, HEIGHT),
+      freezingLevel: derived.freezingLevel ?? null,
+      pw: derived.pw ?? null,
+      lapse850_500: derived.lapse850_500 ?? null,
+      tropopause: derived.tropopause ?? null,
     },
   };
 }
 
-function category(value: unknown, label: string): FlightCategory | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string" || !(FLIGHT_CATEGORIES as readonly string[]).includes(value))
-    throw new Error(`${label} must be a flight category or null`);
-  return value as FlightCategory;
-}
+/** The airport index row's columns in the order of an index written before
+ * `columns` named them. */
+const AIRPORT_ROW = [
+  "icao",
+  "lat",
+  "lon",
+  "elev",
+  "obsTime",
+  "t",
+  "td",
+  "wd",
+  "ws",
+  "gust",
+  "vis",
+  "qnh",
+  "category",
+  "tafPresent",
+  "offset",
+  "length",
+] as const;
 
-/** `airport.<round>/index.json`: the compact rows expanded into the
- * station objects the layer and the card read. */
+/** `airport.<round>/index.json`: the schema's shape, then the compact rows
+ * expanded into the station objects the layer and the card read — found by
+ * the index's `columns`, sorted by id, each span inside the history file. */
 export function parseAirportIndex(input: unknown): AirportIndex {
-  const value = object(input, "airport index");
-  const version = schemaVersion(value.schemaVersion, "airport index", STATION_SCHEMA_VERSION);
-  const history = stationFile(value.history, "index.history", "history.jsonl");
+  const version = schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "airport index", STATION_SCHEMA_VERSION);
+  checkAirportIndex(input, "index");
+  const history = stationFile(input.history, "index.history", "history.jsonl");
+  const column = columnPositions(input.columns, AIRPORT_ROW, "index");
   let end = 0;
-  const stations = list(value.stations, "index.stations").map((item, index) => {
+  let previous = "";
+  const stations = input.stations.map((row, index): AirportStation => {
     const label = `index.stations[${index}]`;
-    const row = list(item, label);
-    if (row.length !== 16)
-      throw new Error(`${label} must be a row of 16 values`);
-    const [icao, lat, lon, elev, obsTime, t, td, wd, ws, gust, vis, qnh, flight, taf] = row;
-    const { offset, length } = span(
-      { offset: row[14], length: row[15] },
-      label,
-      end,
-      history.byteLength,
-    );
+    if (row.length !== column.width) throw new Error(`${label} must be a row of ${column.width} values`);
+    const cell = (name: (typeof AIRPORT_ROW)[number]): unknown => row[column.at[name]!];
+    const icao = cell("icao") as string;
+    if (icao <= previous) throw new Error("index.stations must be sorted by icao and unique");
+    previous = icao;
+    const offset = cell("offset") as number;
+    const length = cell("length") as number;
+    span(offset, length, label, end, history.byteLength);
     end = offset + length;
-    if (taf !== 0 && taf !== 1)
-      throw new Error(`${label}.tafPresent must be 0 or 1`);
     return {
-      icao: string(icao, `${label}.icao`, ICAO),
-      lat: number(lat, `${label}.lat`, LATITUDE),
-      lon: number(lon, `${label}.lon`, LONGITUDE),
-      elev: optionalNumber(elev, `${label}.elev`, ELEVATION),
-      obsTime: timestamp(obsTime, `${label}.obsTime`),
-      t: optionalNumber(t, `${label}.t`, TEMPERATURE),
-      td: optionalNumber(td, `${label}.td`, TEMPERATURE),
-      wd: optionalInteger(wd, `${label}.wd`, WIND_DIRECTION),
-      ws: optionalNumber(ws, `${label}.ws`, WIND_SPEED),
-      gust: optionalNumber(gust, `${label}.gust`, WIND_SPEED),
-      vis: optionalInteger(vis, `${label}.vis`, [0, Infinity]),
-      qnh: optionalNumber(qnh, `${label}.qnh`, PRESSURE),
-      category: category(flight, `${label}.category`),
-      tafPresent: taf === 1,
+      icao,
+      lat: cell("lat") as number,
+      lon: cell("lon") as number,
+      elev: cell("elev") as number | null,
+      obsTime: cell("obsTime") as string,
+      t: cell("t") as number | null,
+      td: cell("td") as number | null,
+      wd: cell("wd") as number | null,
+      ws: cell("ws") as number | null,
+      gust: cell("gust") as number | null,
+      vis: cell("vis") as number | null,
+      qnh: cell("qnh") as number | null,
+      category: cell("category") as FlightCategory | null,
+      tafPresent: cell("tafPresent") === 1,
       offset,
       length,
-    } satisfies AirportStation;
+    };
   });
   return {
     schemaVersion: version,
-    issued: timestamp(value.issued, "index.issued"),
-    generated: timestamp(value.generated, "index.generated"),
+    issued: input.issued,
+    generated: input.generated,
     history,
     stations,
-    sources: sources(value.sources, "index.sources"),
+    sources: sources(input.sources, "index.sources"),
   };
 }
 
-function cloud(input: unknown, label: string): CloudLayer[] {
-  return list(input, label).map((item, index) => {
-    const layer = list(item, `${label}[${index}]`);
-    if (layer.length !== 2)
-      throw new Error(`${label}[${index}] must be [cover, base]`);
-    return {
-      cover: string(layer[0], `${label}[${index}].cover`),
-      base: optionalNumber(layer[1], `${label}[${index}].base`, [0, 30000]),
-    };
-  });
+function cloud(layers: readonly CloudLayerRecord[]): CloudLayer[] {
+  return layers.map(([cover, base]) => ({ cover, base }));
 }
 
-function metar(input: unknown, label: string): Metar {
-  const value = object(input, label);
-  return {
-    time: timestamp(value.time, `${label}.time`),
-    raw: string(value.raw, `${label}.raw`),
-    t: optionalNumber(value.t, `${label}.t`, TEMPERATURE),
-    td: optionalNumber(value.td, `${label}.td`, TEMPERATURE),
-    wd: optionalInteger(value.wd, `${label}.wd`, WIND_DIRECTION),
-    ws: optionalNumber(value.ws, `${label}.ws`, WIND_SPEED),
-    gust: optionalNumber(value.gust, `${label}.gust`, WIND_SPEED),
-    vis: optionalInteger(value.vis, `${label}.vis`, [0, Infinity]),
-    qnh: optionalNumber(value.qnh, `${label}.qnh`, PRESSURE),
-    slp: optionalNumber(value.slp, `${label}.slp`, PRESSURE),
-    wx: optionalString(value.wx, `${label}.wx`),
-    cloud: cloud(value.cloud, `${label}.cloud`),
-    category: category(value.category, `${label}.category`),
-    auto: boolean(value.auto, `${label}.auto`),
-    type: string(value.type, `${label}.type`),
-  };
-}
-
-function taf(input: unknown, label: string): Taf {
-  const value = object(input, label);
-  return {
-    issued: timestamp(value.issued, `${label}.issued`),
-    from: timestamp(value.from, `${label}.from`),
-    to: timestamp(value.to, `${label}.to`),
-    raw: string(value.raw, `${label}.raw`),
-    amended: boolean(value.amended, `${label}.amended`),
-    periods: list(value.periods, `${label}.periods`).map((item, index) => {
-      const where = `${label}.periods[${index}]`;
-      const period = object(item, where);
-      return {
-        from: timestamp(period.from, `${where}.from`),
-        to: timestamp(period.to, `${where}.to`),
-        change: optionalString(period.change, `${where}.change`),
-        prob: optionalInteger(period.prob, `${where}.prob`, [0, 100]),
-        wd: optionalInteger(period.wd, `${where}.wd`, WIND_DIRECTION),
-        ws: optionalNumber(period.ws, `${where}.ws`, WIND_SPEED),
-        gust: optionalNumber(period.gust, `${where}.gust`, WIND_SPEED),
-        vis: optionalInteger(period.vis, `${where}.vis`, [0, Infinity]),
-        wx: optionalString(period.wx, `${where}.wx`),
-        cloud: cloud(period.cloud, `${where}.cloud`),
-      } satisfies TafPeriod;
-    }),
-  };
-}
-
-/** One line of `history.jsonl`, the slice an index row's span reads out. */
+/** One line of `history.jsonl`, the slice an index row's span reads out:
+ * the schema's shape, then the METARs newest first and a forecast that
+ * does not end before it starts. */
 export function parseAirportStation(input: unknown): AirportStationHistory {
-  const value = object(input, "station");
-  const metars = list(value.metars, "station.metars");
-  if (metars.length === 0) throw new Error("station.metars must not be empty");
+  checkAirportLine(input, "station");
   let previous = Infinity;
-  const observations = metars.map((item, index) => {
-    const parsed = metar(item, `station.metars[${index}]`);
-    const time = Date.parse(parsed.time);
+  const metars = input.metars.map((metar): Metar => {
+    const time = Date.parse(metar.time);
     if (time >= previous)
       throw new Error("station.metars must be newest first, strictly decreasing");
     previous = time;
-    return parsed;
+    return {
+      time: metar.time,
+      raw: metar.raw,
+      t: metar.t ?? null,
+      td: metar.td ?? null,
+      wd: metar.wd ?? null,
+      ws: metar.ws ?? null,
+      gust: metar.gust ?? null,
+      vis: metar.vis ?? null,
+      qnh: metar.qnh ?? null,
+      slp: metar.slp ?? null,
+      wx: metar.wx ?? null,
+      cloud: cloud(metar.cloud),
+      category: metar.category ?? null,
+      auto: metar.auto,
+      type: metar.type,
+    };
   });
+  let forecast: Taf | null = null;
+  if (input.taf !== null && input.taf !== undefined) {
+    const value = input.taf;
+    if (Date.parse(value.to) < Date.parse(value.from)) throw new Error("station.taf ends before it starts");
+    forecast = {
+      issued: value.issued,
+      from: value.from,
+      to: value.to,
+      raw: value.raw,
+      amended: value.amended,
+      periods: value.periods.map((period, index): TafPeriod => {
+        if (Date.parse(period.to) < Date.parse(period.from))
+          throw new Error(`station.taf.periods[${index}] ends before it starts`);
+        return {
+          from: period.from,
+          to: period.to,
+          change: period.change ?? null,
+          prob: period.prob ?? null,
+          wd: period.wd ?? null,
+          ws: period.ws ?? null,
+          gust: period.gust ?? null,
+          vis: period.vis ?? null,
+          wx: period.wx ?? null,
+          cloud: cloud(period.cloud),
+        };
+      }),
+    };
+  }
   return {
-    icao: string(value.icao, "station.icao", ICAO),
-    name: optionalString(value.name, "station.name"),
-    lat: number(value.lat, "station.lat", LATITUDE),
-    lon: number(value.lon, "station.lon", LONGITUDE),
-    elev: optionalNumber(value.elev, "station.elev", ELEVATION),
-    iata: optionalString(value.iata, "station.iata"),
-    wmo: optionalString(value.wmo, "station.wmo", WMO_NUMBER),
-    metars: observations,
-    taf: value.taf === null || value.taf === undefined ? null : taf(value.taf, "station.taf"),
+    icao: input.icao,
+    name: input.name ?? null,
+    lat: input.lat,
+    lon: input.lon,
+    elev: input.elev ?? null,
+    iata: input.iata ?? null,
+    wmo: input.wmo ?? null,
+    metars,
+    taf: forecast,
   };
 }
 
@@ -671,24 +582,32 @@ const SYNOP_INDEX_SCHEMA_VERSION = 2;
 /** A v2 station table's own version. */
 const SYNOP_STATIONS_SCHEMA_VERSION = 2;
 
-/** The ranges the contract holds its elements to (`docs/synop.md` §2). An
- * element this build does not know is admitted as any number: a network
- * added after this build still reads. */
+/** The ranges the contract holds its elements to (`docs/synop.md` §2),
+ * which a row's values are checked against by element key: the schemas
+ * place them in a line's `obs` but cannot in a row, whose element columns
+ * follow `elements`. An element this build does not know is admitted as
+ * any number: a network added after this build still reads. */
 const SYNOP_BOUNDS: Record<string, [number, number]> = {
-  t: TEMPERATURE,
+  t: [-100, 70],
   td: [-100, 60],
   rh: [0, 100],
   p: [300, 1100],
-  slp: PRESSURE,
-  wd: WIND_DIRECTION,
-  ws: WIND_SPEED,
-  gust: WIND_SPEED,
+  slp: [800, 1100],
+  wd: [0, 360],
+  ws: [0, 150],
+  gust: [0, 150],
   pr: [0, 1000],
   pr1h: [0, 1000],
   sun: [0, 60],
   snow: [0, 2000],
   vis: [0, Infinity],
 };
+const SYNOP_INTEGERS = new Set(["rh", "wd", "snow", "vis"]);
+
+/** A v2 station table row's leading columns; the elements follow, then the
+ * byte span. A v1 index row has `network` second. */
+const SYNOP_ROW_HEAD = ["id", "lat", "lon", "elev", "rank", "name", "obsTime"] as const;
+const SYNOP_ROW_TAIL = ["offset", "length"] as const;
 
 /** How prominent a station is, which the map thins by: 0 a principal
  * station, 1 a multi-element automatic one, 2 a precipitation gauge. */
@@ -763,127 +682,138 @@ export interface SynopStationSeries {
   obs: Record<string, (number | null)[]>;
 }
 
-function rank(value: unknown, label: string): SynopRank {
-  if (value !== 0 && value !== 1 && value !== 2) throw new Error(`${label} must be 0, 1 or 2`);
-  return value;
-}
-
+/** A row's element value, held to its range where §2 gives one. */
 function elementValue(key: string, value: unknown, label: string): number | null {
-  return optionalNumber(value, label, SYNOP_BOUNDS[key]);
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be a number`);
+  if (SYNOP_INTEGERS.has(key) && !Number.isInteger(value)) throw new Error(`${label} must be an integer`);
+  const range = SYNOP_BOUNDS[key];
+  if (range && (value < range[0] || value > range[1]))
+    throw new Error(`${label} is outside ${range[0]}..${range[1]}`);
+  return value;
 }
 
 export function parseSynopPointer(input: unknown): SynopPointer {
   return pointer(input, "synop", SYNOP_PATH, STATION_SCHEMA_VERSION);
 }
 
-/** One compact station row, v1's or a v2 table's, expanded. `lead` is the
- * width of the columns before the elements (8 with v1's network column, 7
- * without); `network` is the row's network position, read from the row in
- * v1 and given by the table in v2. Checks the span against the network's
- * file and returns where it ends. */
+/** One compact station row, v1's or a v2 table's, expanded: its columns
+ * found at `at`, the rows `width` wide, `network` the row's network
+ * position. Checks the span against the network's file. */
 function synopRow(
-  row: unknown[],
+  row: readonly unknown[],
   label: string,
-  lead: number,
+  column: { at: Record<string, number>; width: number },
   network: number,
   networkFile: StationFile,
-  elements: string[],
+  elements: readonly string[],
   previousEnd: number,
 ): SynopStation {
-  const width = lead + elements.length + 2;
-  if (row.length !== width) throw new Error(`${label} must be a row of ${width} values`);
-  const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
-  const { offset, length } = span(
-    { offset: row[width - 2], length: row[width - 1] },
-    label,
-    previousEnd,
-    networkFile.byteLength,
-  );
+  if (row.length !== column.width) throw new Error(`${label} must be a row of ${column.width} values`);
+  const cell = (name: string): unknown => row[column.at[name]!];
+  const offset = cell("offset") as number;
+  const length = cell("length") as number;
+  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(length) || length < 1)
+    throw new Error(`${label} has no byte span`);
+  span(offset, length, label, previousEnd, networkFile.byteLength);
   const values: Record<string, number | null> = {};
-  elements.forEach((key, position) => {
-    values[key] = elementValue(key, row[lead + position], `${label}.${key}`);
-  });
-  // The columns after the id sit one further right in v1, past `network`.
-  const at = lead - 7;
+  for (const key of elements) values[key] = elementValue(key, cell(key), `${label}.${key}`);
   return {
-    id,
+    id: cell("id") as string,
     network,
-    lat: number(row[1 + at], `${label}.lat`, LATITUDE),
-    lon: number(row[2 + at], `${label}.lon`, LONGITUDE),
-    elev: optionalNumber(row[3 + at], `${label}.elev`, ELEVATION),
-    rank: rank(row[4 + at], `${label}.rank`),
-    name: optionalString(row[5 + at], `${label}.name`),
-    obsTime: timestamp(row[6 + at], `${label}.obsTime`),
+    lat: cell("lat") as number,
+    lon: cell("lon") as number,
+    elev: cell("elev") as number | null,
+    rank: cell("rank") as SynopRank,
+    name: cell("name") as string | null,
+    obsTime: cell("obsTime") as string,
     values,
     offset,
     length,
   };
 }
 
-/** `synop.<round>/index.json`, v1 or v2. A v1 index comes back whole, its
- * compact rows expanded and each checked against its network's file the way
- * the airport rows are against theirs. A v2 index carries no rows: it comes
- * back with `stations` empty and each network's `stations` table named, for
+/** `synop.<round>/index.json`, v1 or v2: the version gate, the version's
+ * schema (`synop-index-v1`, `synop-index`), then file names and unique
+ * networks and elements. A v1 index comes back whole, its compact rows
+ * expanded and each checked against its network's file the way the airport
+ * rows are against theirs. A v2 index carries no rows: it comes back with
+ * `stations` empty and each network's `stations` table named, for
  * `parseSynopStationTable` and `assembleSynopIndex` to fill in. */
 export function parseSynopIndex(input: unknown): SynopIndex {
-  const value = object(input, "synop index");
-  const version = schemaVersion(value.schemaVersion, "synop index", SYNOP_INDEX_SCHEMA_VERSION);
-  const networks = list(value.networks, "index.networks").map((item, index) => {
+  const version = schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "synop index", SYNOP_INDEX_SCHEMA_VERSION);
+  let value: {
+    issued: string;
+    generated: string;
+    elements: string[];
+    sources: { id: string; ok: boolean; url?: string; fetched?: string; error?: string }[];
+    networks: {
+      id: string;
+      name: string;
+      cadence: number;
+      prPeriod?: number | null;
+      attribution: string;
+      license: string;
+      url: string;
+      latest?: string | null;
+      file: StationFile;
+      stations?: SynopStationsFile;
+    }[];
+  };
+  let rows: unknown[][] = [];
+  if (version === 1) {
+    checkSynopIndexV1(input, "index");
+    value = input;
+    rows = input.stations;
+  } else {
+    checkSynopIndex(input, "index");
+    value = input;
+  }
+  const networks = value.networks.map((entry, index): SynopNetwork => {
     const label = `index.networks[${index}]`;
-    const entry = object(item, label);
-    const id = string(entry.id, `${label}.id`, NETWORK_ID);
     const network: SynopNetwork = {
-      id,
-      name: string(entry.name, `${label}.name`),
-      cadence: integer(entry.cadence, `${label}.cadence`, 60),
-      prPeriod: entry.prPeriod === null || entry.prPeriod === undefined
-        ? null
-        : integer(entry.prPeriod, `${label}.prPeriod`, 60),
-      attribution: string(entry.attribution, `${label}.attribution`),
-      license: string(entry.license, `${label}.license`),
-      url: string(entry.url, `${label}.url`),
-      latest: optionalTimestamp(entry.latest, `${label}.latest`),
-      file: stationFile(entry.file, `${label}.file`, `${id}.jsonl`),
+      id: entry.id,
+      name: entry.name,
+      cadence: entry.cadence,
+      prPeriod: entry.prPeriod ?? null,
+      attribution: entry.attribution,
+      license: entry.license,
+      url: entry.url,
+      latest: entry.latest ?? null,
+      file: stationFile(entry.file, `${label}.file`, `${entry.id}.jsonl`),
     };
-    if (version >= 2) {
-      const table = stationFile(entry.stations, `${label}.stations`, `${id}.stations.json`);
-      network.stations = {
-        ...table,
-        count: integer(object(entry.stations, `${label}.stations`).count, `${label}.stations.count`),
-      };
-    }
+    if (entry.stations !== undefined)
+      network.stations = { ...stationFile(entry.stations, `${label}.stations`, `${entry.id}.stations.json`), count: entry.stations.count };
     return network;
   });
   if (new Set(networks.map((network) => network.id)).size !== networks.length)
     throw new Error("index.networks lists a network twice");
-  const elements = list(value.elements, "index.elements").map((item, index) =>
-    string(item, `index.elements[${index}]`, ELEMENT_KEY),
-  );
+  const elements = value.elements;
   if (new Set(elements).size !== elements.length)
     throw new Error("index.elements lists an element twice");
   const stations: SynopStation[] = [];
   if (version === 1) {
+    const column = columnPositions(undefined, [SYNOP_ROW_HEAD[0], "network", ...SYNOP_ROW_HEAD.slice(1), ...elements, ...SYNOP_ROW_TAIL], "index");
     const ends = networks.map(() => 0);
     let previous = "";
-    list(value.stations, "index.stations").forEach((item, index) => {
+    rows.forEach((row, index) => {
       const label = `index.stations[${index}]`;
-      const row = list(item, label);
-      const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
+      const id = row[0] as string;
       if (id <= previous) throw new Error("index.stations must be sorted by id and unique");
       previous = id;
-      const network = integer(row[1], `${label}.network`);
+      const network = row[1] as number;
       if (network >= networks.length) throw new Error(`${label}.network names no network`);
       if (SYNOP_STATION_ID.exec(id)![1] !== networks[network]!.id)
         throw new Error(`${label}.id does not belong to its network`);
-      const station = synopRow(row, label, 8, network, networks[network]!.file, elements, ends[network]!);
+      const station = synopRow(row, label, column, network, networks[network]!.file, elements, ends[network]!);
       ends[network] = station.offset + station.length;
       stations.push(station);
     });
   }
   return {
     schemaVersion: version,
-    issued: timestamp(value.issued, "index.issued"),
-    generated: timestamp(value.generated, "index.generated"),
+    issued: value.issued,
+    generated: value.generated,
     networks,
     elements,
     stations,
@@ -892,10 +822,11 @@ export function parseSynopIndex(input: unknown): SynopIndex {
 }
 
 /** A v2 `<network>.stations.json`, checked against the index that names
- * it: its own version, the network it says it is, the index's element list
- * exactly, the row count the index gave, and v1's row rules (sorted,
- * unique, the network's prefix, spans in row order inside its `.jsonl`).
- * The rows come back as v1's, `network` set to `position`. */
+ * it: its own version, `docs/schemas/synop-stations.schema.json`, the
+ * network it says it is, the index's element list exactly, the row count
+ * the index gave, and v1's row rules (sorted, unique, the network's prefix,
+ * spans in row order inside its `.jsonl`), each column found by the file's
+ * `columns`. The rows come back as v1's, `network` set to `position`. */
 export function parseSynopStationTable(
   input: unknown,
   index: SynopIndex,
@@ -904,33 +835,32 @@ export function parseSynopStationTable(
   const network = index.networks[position];
   if (!network) throw new Error(`synop index has no network ${position}`);
   const what = network.stations?.path ?? `${network.id}.stations.json`;
-  const value = object(input, what);
-  const version = integer(value.schemaVersion, `${what}.schemaVersion`, 1);
+  const version = integer(object(input, what).schemaVersion, `${what}.schemaVersion`, 1);
   if (version !== SYNOP_STATIONS_SCHEMA_VERSION)
     throw new Error(`unsupported ${what} schema version ${version}`);
-  if (value.network !== network.id)
+  checkSynopStationsFile(input, what);
+  if (input.network !== network.id)
     throw new Error(`${what}.network must be ${network.id}`);
-  timestamp(value.issued, `${what}.issued`);
-  const elements = list(value.elements, `${what}.elements`);
+  const elements = input.elements;
   if (
     elements.length !== index.elements.length ||
     elements.some((key, at) => key !== index.elements[at])
   )
     throw new Error(`${what}.elements must equal the index's`);
-  const rows = list(value.stations, `${what}.stations`);
+  const rows = input.stations;
   if (network.stations && rows.length !== network.stations.count)
     throw new Error(`${what} has ${rows.length} rows, the index says ${network.stations.count}`);
+  const column = columnPositions(input.columns, [...SYNOP_ROW_HEAD, ...index.elements, ...SYNOP_ROW_TAIL], what);
   let previous = "";
   let end = 0;
-  return rows.map((item, at) => {
+  return rows.map((row, at) => {
     const label = `${what}.stations[${at}]`;
-    const row = list(item, label);
-    const id = string(row[0], `${label}.id`, SYNOP_STATION_ID);
-    if (id <= previous) throw new Error(`${what}.stations must be sorted by id and unique`);
+    const id = row[column.at.id!] as string;
+    if (typeof id !== "string" || id <= previous) throw new Error(`${what}.stations must be sorted by id and unique`);
     previous = id;
-    if (SYNOP_STATION_ID.exec(id)![1] !== network.id)
+    if (SYNOP_STATION_ID.exec(id)?.[1] !== network.id)
       throw new Error(`${label}.id does not belong to its network`);
-    const station = synopRow(row, label, 7, position, network.file, index.elements, end);
+    const station = synopRow(row, label, column, position, network.file, index.elements, end);
     end = station.offset + station.length;
     return station;
   });
@@ -957,39 +887,29 @@ export function assembleSynopIndex(
   return { ...index, networks, stations };
 }
 
-/** One line of a network file, the slice an index row's span reads out. */
+/** One line of a network file, the slice an index row's span reads out:
+ * `docs/schemas/synop-line.schema.json`, then `time` strictly increasing
+ * and every `obs` array as long. */
 export function parseSynopStation(input: unknown): SynopStationSeries {
-  const value = object(input, "station");
-  const time = list(value.time, "station.time").map((item, index) =>
-    integer(item, `station.time[${index}]`),
-  );
-  if (time.length === 0) throw new Error("station.time must not be empty");
+  checkSynopLine(input, "station");
+  const time = input.time;
   for (let index = 1; index < time.length; index += 1)
     if (time[index]! <= time[index - 1]!) throw new Error("station.time must be strictly increasing");
-  const columns = object(value.obs, "station.obs");
   const obs: Record<string, (number | null)[]> = {};
-  for (const [key, column] of Object.entries(columns)) {
+  for (const [key, column] of Object.entries(input.obs)) {
     if (!ELEMENT_KEY.test(key)) throw new Error(`station.obs has a malformed key ${key}`);
-    const values = list(column, `station.obs.${key}`);
-    if (values.length !== time.length) throw new Error(`station.obs.${key} must be as long as time`);
-    obs[key] = values.map((item, index) => elementValue(key, item, `station.obs.${key}[${index}]`));
-  }
-  let names: Record<string, string> | null = null;
-  if (value.names !== null && value.names !== undefined) {
-    const entries = Object.entries(object(value.names, "station.names"));
-    names = Object.fromEntries(
-      entries.map(([tag, name]) => [tag, string(name, `station.names.${tag}`)]),
-    );
+    if (column.length !== time.length) throw new Error(`station.obs.${key} must be as long as time`);
+    obs[key] = column;
   }
   return {
-    id: string(value.id, "station.id", SYNOP_STATION_ID),
-    name: optionalString(value.name, "station.name"),
-    names,
-    lat: number(value.lat, "station.lat", LATITUDE),
-    lon: number(value.lon, "station.lon", LONGITUDE),
-    elev: optionalNumber(value.elev, "station.elev", ELEVATION),
-    wmo: optionalString(value.wmo, "station.wmo"),
-    rank: rank(value.rank, "station.rank"),
+    id: input.id,
+    name: input.name ?? null,
+    names: input.names ?? null,
+    lat: input.lat,
+    lon: input.lon,
+    elev: input.elev ?? null,
+    wmo: input.wmo ?? null,
+    rank: input.rank,
     time,
     obs,
   };
