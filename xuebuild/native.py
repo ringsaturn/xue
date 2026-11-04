@@ -58,7 +58,7 @@ LOG = logging.getLogger("xue.native")
 DISTRIBUTION = "xuepy"
 
 # A manifest bundle entry's keys in the order the reference writes them
-# (`binconvert._bundle_manifest_entry`); the manifests are compared byte for
+# (`report.bundle_manifest_entry`); the manifests are compared byte for
 # byte.
 _ENTRY_ORDER = ("variable", "grid", "path", "byteLength", "crc32", "variants", "poster", "zarr", "series")
 
