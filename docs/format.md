@@ -646,6 +646,10 @@ preserving north-to-south row order. Grids that natively start at Greenwich
 `-180`-first layout. A renderer applies inverse Web Mercator, converts
 longitude and latitude to grid coordinates, and samples this layout
 directly.
+The grid's `layout`, `rowOrder` and `columnOrder` (`row-major`,
+`north-to-south`, `west-to-east`, each the only value allowed) spell this
+order out; every encoder writes them, and a reader accepts a document
+without them, since the schema names them without requiring them.
 
 #### Regional Grids
 
@@ -690,7 +694,9 @@ footprint, and one that does not draws the extension. The reference
 pipeline documents the arithmetic in `xuebuild/reproject.py`; the native
 encoder repeats it and the two are held byte-identical.
 
-`model` and `product` identify the source dataset. Registered pairs:
+`model` and `product` identify the source dataset. Every encoder writes
+`product`, and a reader accepts a document without it: the schema names
+the field without requiring it. Registered pairs:
 
 | `model` | `product` | Grid | Steps published | Notes |
 |---|---|---|---|---|
