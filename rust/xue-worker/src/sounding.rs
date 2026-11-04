@@ -26,6 +26,24 @@ const LEVELS: [(&str, &str, &str); 7] = [
     ("sig", "BUFR 0 08 042 significance flags", ""),
 ];
 
+/// The fields of an index station entry the list answers with
+/// (`docs/schemas/sounding-index.schema.json`).
+const ENTRY_FIELDS: [&str; 9] = ["id", "wmo", "name", "lat", "lon", "elev", "latest", "times", "headline"];
+/// The fields of one ascent copied as they are, beside its decoded levels
+/// (`docs/schemas/sounding-line.schema.json`).
+const SOUNDING_FIELDS: [&str; 8] = [
+    "time",
+    "launched",
+    "sondeType",
+    "bulletin",
+    "gateway",
+    "arrived",
+    "n",
+    "reported",
+];
+/// The fields of a station's line the record's `station` carries.
+const LINE_FIELDS: [&str; 6] = ["id", "wmo", "name", "lat", "lon", "elev"];
+
 pub fn units() -> Value {
     let mut units = Map::new();
     for (key, label, unit) in LEVELS {
@@ -39,7 +57,7 @@ pub fn units() -> Value {
 
 fn station_json(row: &Value, distance: Option<f64>) -> Value {
     let mut station = Map::new();
-    for key in ["id", "wmo", "name", "lat", "lon", "elev", "latest", "times", "headline"] {
+    for key in ENTRY_FIELDS {
         station.insert(key.to_owned(), row.get(key).cloned().unwrap_or(Value::Null));
     }
     if distance.is_some() {
@@ -89,16 +107,7 @@ pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> 
 /// physical units, `-32768` to `null`.
 fn decode_sounding(sounding: &Value) -> Value {
     let mut out = Map::new();
-    for key in [
-        "time",
-        "launched",
-        "sondeType",
-        "bulletin",
-        "gateway",
-        "arrived",
-        "n",
-        "reported",
-    ] {
+    for key in SOUNDING_FIELDS {
         out.insert(
             key.to_owned(),
             sounding.get(key).cloned().unwrap_or(Value::Null),
@@ -183,7 +192,7 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
 
     let (lat, lon) = position(&line).or_else(|| position(row)).unwrap_or((f64::NAN, f64::NAN));
     let mut station = Map::new();
-    for key in ["id", "wmo", "name", "lat", "lon", "elev"] {
+    for key in LINE_FIELDS {
         station.insert(key.to_owned(), line.get(key).cloned().unwrap_or(Value::Null));
     }
     station.insert(
@@ -200,4 +209,36 @@ pub async fn station(data: &Data, id: &str, url: &Url) -> Result<(Value, String)
     body.insert("units".into(), units());
     body.insert("soundings".into(), Value::Array(decoded));
     Ok((Value::Object(body), issue.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn schema(text: &str) -> Value {
+        serde_json::from_str(text).expect("schema")
+    }
+
+    fn named(properties: &Value, fields: &[&str]) {
+        for field in fields {
+            assert!(properties.get(*field).is_some(), "the schema has no {field}");
+        }
+    }
+
+    /// Every field this reader takes by name is one the normative schemas
+    /// define, so a field renamed there cannot leave the worker reading
+    /// another.
+    #[test]
+    fn the_fields_are_the_schemas() {
+        let index = schema(include_str!("../../../docs/schemas/sounding-index.schema.json"));
+        named(&index["$defs"]["SoundingStationEntry"]["properties"], &ENTRY_FIELDS);
+        named(&index["$defs"]["SoundingStationEntry"]["properties"], &["offset", "length"]);
+        let line = schema(include_str!("../../../docs/schemas/sounding-line.schema.json"));
+        named(&line["properties"], &LINE_FIELDS);
+        named(&line["properties"], &["soundings"]);
+        let sounding = &line["$defs"]["Sounding"]["properties"];
+        named(sounding, &SOUNDING_FIELDS);
+        named(sounding, &LEVELS.map(|(key, _, _)| key));
+        named(sounding, &["derived"]);
+    }
 }
