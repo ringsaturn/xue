@@ -6,6 +6,8 @@
 // sessions end. What is on screen (the primary, the slots) stays in
 // `main.ts`; the types are `session.ts`.
 import { t, type MessageKey } from "./i18n";
+import type { CompositeField, VectorField } from "./layer";
+import { isWaveVector, vectorMaxMagnitude } from "./levels";
 import {
   identifyBundle,
   identityForBundleId,
@@ -16,7 +18,9 @@ import {
   type VariableIdentity,
 } from "./identity";
 import {
+  axisUnitSeconds,
   containerOf,
+  frameOffsets,
   type BundleMetadata,
   type BundleVariable,
   type ForecastBundleId,
@@ -25,7 +29,8 @@ import {
   type VariantDescriptor,
 } from "./manifest";
 import type { DecodeChannel, VariableSession } from "./session";
-import type { TileGeometry } from "./tiles";
+import { buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette } from "./palettes";
+import { coverageBox, WHOLE_PLANE_COVERAGE, type CoverageBox, type TileGeometry, type TileRect } from "./tiles";
 import type { DataBackend } from "./urlstate";
 import { VOLUME_BUNDLE_LEVELS, volumeLevels } from "./volume";
 import { spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
@@ -490,3 +495,85 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
 }
 
 export type SessionRegistry = ReturnType<typeof createSessionRegistry>;
+
+// What one session's own axis, tiles and codebooks say, read off the
+// session alone.
+
+/** Where a session's frame offset for a lead time comes from: exact match
+ * on its own axis, or null when the axis has no frame there. */
+export function sessionOffsetForLead(session: VariableSession, seconds: number): number | null {
+  if (!session.leadOffsets) {
+    const time = session.metadata.time;
+    const unit = axisUnitSeconds(time);
+    session.leadOffsets = new Map(frameOffsets(time).map((offset) => [offset * unit, offset]));
+  }
+  return session.leadOffsets.get(seconds) ?? null;
+}
+
+/** The texture box a plane's tiles fill on its own session grid — what the
+ * shader clips to, so the stale bytes outside them are never painted. */
+export function sessionCoverage(session: VariableSession, tiles: TileRect[] | null): CoverageBox {
+  if (!tiles || !session.tiles) return WHOLE_PLANE_COVERAGE;
+  const grid = session.metadata.grid;
+  return coverageBox(session.tiles, grid.width, grid.height, tiles);
+}
+
+/** The ceiling a vector session's magnitude palette tops out at, from what
+ * the field is rather than what it is called. */
+export function sessionMaxMagnitude(session: VariableSession): number {
+  const identity = session.identity;
+  return identity === null ? vectorMaxMagnitude("wind", null) : vectorMaxMagnitude(identity.family, identity.level);
+}
+
+/** The magnitude palette of a vector session: the wind ramp up to the
+ * field's own ceiling, the vapour flux ramp, or — for the wave vector,
+ * whose magnitude is the significant wave height — the wave height ramp. */
+export function vectorPalette(session: VariableSession): Uint8Array {
+  const max = sessionMaxMagnitude(session);
+  const family = session.identity?.family;
+  if (family === "qflux") return buildVapourFluxPalette(max);
+  if (family !== undefined && isWaveVector(family)) return buildWaveFieldPalette(max);
+  return buildWindFieldPalette(max);
+}
+
+const WAVE_PARTICLE_PACE = 3;
+
+/** How fast the particles run over a vector session's field, relative to
+ * the wind's pace, where the field is a speed: the wave vector's magnitude
+ * is a height, and a metre of sea is made to travel like three metres a
+ * second of wind — a three-metre sea like a fresh breeze, a storm sea past
+ * the ramp's ceiling like a gale. */
+export function sessionParticlePace(session: VariableSession): number {
+  const family = session.identity?.family;
+  return family !== undefined && isWaveVector(family) ? WAVE_PARTICLE_PACE : 1;
+}
+
+/** A vector bundle's own decode for the layer's magnitude mode: each
+ * component's linear codebook, plus the magnitude the palette tops out at.
+ * Null when either component is not linearly quantized — nothing published
+ * is, and a magnitude has no meaning without both. */
+export function windVectorField(session: VariableSession): VectorField | null {
+  const [u, v] = session.variables;
+  if (u?.quantization.type !== "linear" || v?.quantization.type !== "linear") return null;
+  // One reserved code serves both channels; the encoder gives the pair the
+  // same codebook, and a file that did not could not be drawn as one field.
+  if (u.quantization.nodataCode !== v.quantization.nodataCode) return null;
+  return {
+    offset: [u.quantization.offset, v.quantization.offset],
+    scale: [u.quantization.scale, v.quantization.scale],
+    nodataCode: u.quantization.nodataCode,
+    maxMagnitude: sessionMaxMagnitude(session),
+  };
+}
+
+/** A composite bundle's own decode for the layer's colour mode: each gun's
+ * linear codebook. Null when any gun is not linearly quantized — nothing
+ * published is, and a picture has no meaning without all three. */
+export function compositeField(session: VariableSession): CompositeField | null {
+  const [r, g, b] = session.variables;
+  if (r?.quantization.type !== "linear" || g?.quantization.type !== "linear" || b?.quantization.type !== "linear") return null;
+  return {
+    offset: [r.quantization.offset, g.quantization.offset, b.quantization.offset],
+    scale: [r.quantization.scale, g.quantization.scale, b.quantization.scale],
+  };
+}
