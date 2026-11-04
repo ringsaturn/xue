@@ -66,9 +66,8 @@
       }
     },
     "GridArrayBlock": {
-      "description": "A grid store's variable array: the bundle it belongs to (on a shared store only), that variable's entry of the bundle's variables, copied, and its predictor.",
+      "description": "A grid store's variable array: the bundle it belongs to (on a shared store only), that variable's entry of the bundle's variables, copied, and its predictor. Every writer writes variable and predictor; a reader takes the variable from the group and decodes by the codec chain, so it needs neither.",
       "type": "object",
-      "required": ["variable", "predictor"],
       "properties": {
         "bundle": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
         "variable": {"$ref": "bundle-metadata.schema.json#/$defs/Variable"},

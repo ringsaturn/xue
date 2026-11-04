@@ -79,8 +79,8 @@ export function checkAttributes(v: unknown, at: string): asserts v is Attributes
   }
 }
 
-/** A grid store's variable array: the bundle it belongs to (on a shared store only), that variable's entry of the bundle's variables, copied, and its predictor. */
-export type GridArrayBlock = { bundle?: string; variable: Variable; predictor: "previous" | "raw" };
+/** A grid store's variable array: the bundle it belongs to (on a shared store only), that variable's entry of the bundle's variables, copied, and its predictor. Every writer writes variable and predictor; a reader takes the variable from the group and decodes by the codec chain, so it needs neither. */
+export type GridArrayBlock = { bundle?: string; variable?: Variable; predictor?: "previous" | "raw" };
 
 export function checkGridArrayBlock(v: unknown, at: string): asserts v is GridArrayBlock {
   isObject(v, at);
@@ -88,11 +88,15 @@ export function checkGridArrayBlock(v: unknown, at: string): asserts v is GridAr
   if (v17 !== undefined) {
     isString(v17, at + ".bundle", PATTERN_1);
   }
-  const v18 = field(v, "variable", at);
-  checkVariable(v18, at + ".variable");
-  const v19 = field(v, "predictor", at);
-  isString(v19, at + ".predictor");
-  isOneOf(v19, at + ".predictor", ["previous","raw"]);
+  const v18 = v["variable"];
+  if (v18 !== undefined) {
+    checkVariable(v18, at + ".variable");
+  }
+  const v19 = v["predictor"];
+  if (v19 !== undefined) {
+    isString(v19, at + ".predictor");
+    isOneOf(v19, at + ".predictor", ["previous","raw"]);
+  }
 }
 
 /** A network store's data array: the variable as the group's xue_network block lists it. */
