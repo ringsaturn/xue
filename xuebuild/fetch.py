@@ -1753,12 +1753,12 @@ def _satellite_run_is_complete(
 
 def satellite_case_grid(spec: SourceSpec, bbox: tuple[float, float, float, float]) -> satellite_fetch.TargetGrid:
     """The cells a case's crop keeps of the published grid
-    (:func:`binconvert.crop_grid`), as a grid of their own: a case warps
+    (:func:`grid.crop_grid`), as a grid of their own: a case warps
     only those, from only the tiles reaching into them, and the
     converter's crop of that grid by the same box is the whole of it. The
     edges stay in the platform's frame, so a disk running past 180°E keeps
     its longitudes."""
-    from .binconvert import GridInfo, crop_grid  # the converter imports nothing of the fetch's
+    from .grid import GridInfo, crop_grid  # the converter imports nothing of the fetch's
 
     grid = satellite_grid(spec)
     published = GridInfo(

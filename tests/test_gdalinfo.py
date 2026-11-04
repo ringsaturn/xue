@@ -60,7 +60,7 @@ class NativeMatchesTheCommandLine(unittest.TestCase):
         cls.native = native.require().gdal_info(str(FIXTURE_GRIB))
 
     def test_grid_geometry_matches(self) -> None:
-        # _grid_info derives the whole published grid from these two.
+        # grid_info derives the whole published grid from these two.
         self.assertEqual(self.native["size"], self.cli["size"])
         self.assertEqual(self.native["geoTransform"], self.cli["geoTransform"])
 
@@ -109,13 +109,13 @@ class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
                 self.assertEqual(native_wkt, cli_info(fixture)["coordinateSystem"]["wkt"])
 
     def test_the_grid_is_read_the_same_way(self) -> None:
-        from xuebuild.binconvert import _grid_info
+        from xuebuild.grid import grid_info
         from xuebuild.sources import source_spec
 
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "native"}):
-            through_wheel = _grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
+            through_wheel = grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            through_cli = _grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
+            through_cli = grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
         self.assertEqual(through_wheel.metadata(), through_cli.metadata())
         self.assertEqual(through_wheel.resample.source, through_cli.resample.source)
 

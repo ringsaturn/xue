@@ -35,13 +35,8 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native, stored_bundle
 from xuebuild import binconvert, grib2
-from xuebuild.binconvert import (
-    GridInfo,
-    _extract_planes,
-    _grid_info,
-    crop_grid,
-    published_bundle_ids,
-)
+from xuebuild.binconvert import _extract_planes, published_bundle_ids
+from xuebuild.grid import GridInfo, crop_grid, grid_info
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     HRRR_BASE_URLS,
@@ -395,7 +390,7 @@ class FixtureGridTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
-            cls.grid = _grid_info(FIXTURE, HRRR)
+            cls.grid = grid_info(FIXTURE, HRRR)
         cls.info = json.loads(subprocess.run(["gdalinfo", "-json", str(FIXTURE)], capture_output=True, text=True, check=True).stdout)
 
     def test_the_projection_is_read_from_the_file(self) -> None:
@@ -492,8 +487,8 @@ class FixtureGridTests(unittest.TestCase):
                 0.0,
                 original["geoTransform"][5],
             ]
-            with mock.patch("xuebuild.binconvert.dataset_info", return_value=noisy):
-                perturbed = _grid_info(FIXTURE, HRRR)
+            with mock.patch("xuebuild.grid.dataset_info", return_value=noisy):
+                perturbed = grid_info(FIXTURE, HRRR)
         self.assertEqual(perturbed.resample.source, self.grid.resample.source)
         np.testing.assert_array_equal(perturbed.resample.fx, self.grid.resample.fx)
         np.testing.assert_array_equal(perturbed.resample.column, self.grid.resample.column)
@@ -501,9 +496,9 @@ class FixtureGridTests(unittest.TestCase):
     def test_a_projected_file_needs_a_regridded_source_and_vice_versa(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "map projection, which this source does not declare"):
-                _grid_info(FIXTURE, source_spec("gfs"))
+                grid_info(FIXTURE, source_spec("gfs"))
             with self.assertRaisesRegex(ConversionError, "regular grid, but this source declares a projected one"):
-                _grid_info(FIXTURE.with_name("gfs.2026081406.f000.crop.grib2"), HRRR)
+                grid_info(FIXTURE.with_name("gfs.2026081406.f000.crop.grib2"), HRRR)
 
 
 @requires_gdalinfo

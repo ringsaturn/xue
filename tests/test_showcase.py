@@ -10,7 +10,8 @@ from unittest import mock
 import numpy as np
 
 from tests._support import TempRoot
-from xuebuild.binconvert import GridInfo, bundle_input_ids, crop_grid, published_bundle_ids
+from xuebuild.binconvert import bundle_input_ids, published_bundle_ids
+from xuebuild.grid import GridInfo, crop_grid
 from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
 from xuebuild.showcase import (

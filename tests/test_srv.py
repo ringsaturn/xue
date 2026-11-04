@@ -17,7 +17,6 @@ from xuebuild import binformat
 from xuebuild.binconvert import (
     VARIANT_TIERS,
     WIND_COMPONENT_IDS,
-    GridInfo,
     _bundle_chunks,
     _bundle_tile,
     _decimate_codes,
@@ -28,6 +27,7 @@ from xuebuild.binconvert import (
     encode_poster,
     variant_tier,
 )
+from xuebuild.grid import GridInfo
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import (
     build_bin_manifest,

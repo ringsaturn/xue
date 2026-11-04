@@ -16,7 +16,6 @@ import numpy as np
 
 from xuebuild import binformat, zarrstore, zstdcli
 from xuebuild.binconvert import (
-    GridInfo,
     WIND_COMPONENT_IDS,
     _bundle_chunks,
     _bundle_tile,
@@ -26,6 +25,7 @@ from xuebuild.binconvert import (
     build_metadata,
     encode_poster,
 )
+from xuebuild.grid import GridInfo
 from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
 from xuebuild.quantize import (
     QUALITY_FLUX,
