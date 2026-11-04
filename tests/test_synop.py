@@ -658,6 +658,8 @@ class ValidatorTest(unittest.TestCase):
             payload["elements"].append("dewpoint2")
             if "elementTable" in payload:
                 payload["elementTable"]["dewpoint2"] = {"unit": "°C", "cell": "point", "period": None}
+            if "columns" in payload:
+                payload["columns"].insert(len(ROW_HEAD) + len(ELEMENTS), "dewpoint2")
             for row in payload.get("stations", []):
                 row.insert(len(ROW_HEAD) + len(ELEMENTS), 1.5)
 
