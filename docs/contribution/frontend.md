@@ -13,6 +13,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | --- | --- |
 | `main.ts` | Composition root: sessions, slots, playback, rail, polling. Feature controllers are factories it wires up with their state as explicit `Deps`. |
 | `session.ts` | The `VariableSession` and `DecodedFrame` types the controllers share. |
+| `sessions.ts` | The session registry (`createSessionRegistry`): the run's sessions by bundle id and the mosaic members' by member and bundle, opening one (tier pick through the page's policy, channel choice, whole-bundle download, identity) with concurrent opens of a bundle folded into one, stream progress routed by `streamKey` (kept when it beats registration), and ending sessions. Also the helpers that read one session alone (`sessionOffsetForLead`, `sessionCoverage`, the vector and composite fields). The channel handshake, binding and frame cache stay in `main.ts`. |
 | `stats.ts` | The data card's "stats for nerds" rows and decode graph, the debug copy and the map's context menu (`createStats`). |
 | `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
@@ -65,7 +66,7 @@ tier. Every channel speaks one protocol (`booted` → `init` / `init-stream`
 → `ready`, then `decode` → `frame`, `series`, `prefetch-window`), so
 `main.ts` holds any of them in the same field.
 
-`main.ts::loadVariable` picks, in order: the Zarr store over ranges
+`sessions.ts::load` (`loadVariable` in the controllers' deps) picks, in order: the Zarr store over ranges
 (whenever the bundle or tier has a `zarr` descriptor, unless
 `?backend=xue`), `.xue` over ranges, `.xue` downloaded whole, the store by
 whole objects (only when no container ships). Probe sessions are
@@ -139,7 +140,7 @@ overlays and mosaic members never re-tier.
 
 When the camera rests (400 ms), `retierPrimary` asks `settleBundleVariant`
 (a 20 % dead band so a boundary does not flap), opens the new rung beside
-the old with `loadVariable(…, { replace, tier })`, keeps the old frame up
+the old with `sessionRegistry.load(…, { replace, tier })`, keeps the old frame up
 until the new lands, then disposes the old session. The plane cache grows
 with frame size to hold the prefetch window (cap 256 MB, 128 MB on ≤ 4 GB)
 and the window shrinks to fit it.
