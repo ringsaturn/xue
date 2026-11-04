@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/store-array.schema.json",
+  "title": "StoreArray",
+  "description": "An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, \"Array metadata\", \"Array attributes\", \"Coordinates\", and the polar and network branches): a variable array of uint8 codes, carrying the xue, xue_polar or xue_network block that says what its codes mean, or a coordinate or side array. The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks.",
+  "type": "object",
+  "required": ["zarr_format", "node_type", "shape", "data_type", "chunk_grid", "chunk_key_encoding", "fill_value", "codecs"],
+  "properties": {
+    "zarr_format": {"type": "integer", "const": 3},
+    "node_type": {"type": "string", "const": "array"},
+    "shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+    "data_type": {"type": "string", "enum": ["uint8", "int32", "int64", "float32", "float64"]},
+    "chunk_grid": {
+      "type": "object",
+      "required": ["name", "configuration"],
+      "properties": {
+        "name": {"type": "string", "const": "regular"},
+        "configuration": {
+          "type": "object",
+          "required": ["chunk_shape"],
+          "properties": {"chunk_shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}}}
+        }
+      }
+    },
+    "chunk_key_encoding": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "const": "default"},
+        "configuration": {"type": "object", "properties": {"separator": {"type": "string", "const": "/"}}}
+      }
+    },
+    "fill_value": {
+      "description": "A code (the nodataCode, or 0 on a polar array) on a variable array; a number or \"NaN\" on a coordinate.",
+      "anyOf": [{"type": "number"}, {"type": "string", "const": "NaN"}]
+    },
+    "codecs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Codec"}},
+    "attributes": {"$ref": "#/$defs/Attributes"},
+    "dimension_names": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "Codec": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "enum": ["sharding_indexed", "bytes", "zstd", "crc32c", "xue.delta"]},
+        "configuration": {"type": "object"}
+      }
+    },
+    "Attributes": {
+      "description": "A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network; a coordinate carries its CF attributes only.",
+      "type": "object",
+      "properties": {
+        "xue": {"$ref": "#/$defs/GridArrayBlock"},
+        "xue_polar": {"$ref": "#/$defs/PolarArrayBlock"},
+        "xue_network": {"$ref": "#/$defs/NetworkArrayBlock"},
+        "scale_factor": {"type": "number"},
+        "add_offset": {"type": "number"},
+        "_FillValue": {"type": "integer", "minimum": 0, "maximum": 255},
+        "flag_values": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}},
+        "flag_meanings": {"type": "string"},
+        "units": {"type": "string"},
+        "calendar": {"type": "string"},
+        "standard_name": {"type": "string"},
+        "long_name": {"type": "string"}
+      }
+    },
+    "GridArrayBlock": {
+      "description": "A grid store's variable array: the bundle it belongs to (on a shared store only), that variable's entry of the bundle's variables, copied, and its predictor.",
+      "type": "object",
+      "required": ["variable", "predictor"],
+      "properties": {
+        "bundle": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
+        "variable": {"$ref": "bundle-metadata.schema.json#/$defs/Variable"},
+        "predictor": {"description": "Informational: decoding follows the codec chain.", "type": "string", "enum": ["previous", "raw"]}
+      }
+    },
+    "NetworkArrayBlock": {
+      "description": "A network store's data array: the variable as the group's xue_network block lists it.",
+      "type": "object",
+      "required": ["variable"],
+      "properties": {"variable": {"$ref": "#/$defs/NetworkVariable"}}
+    },
+    "NetworkVariable": {
+      "description": "A network store's variable: a bundle variable without a GRIB2 identity.",
+      "type": "object",
+      "required": ["numericId", "id", "label", "unit", "quantization"],
+      "properties": {
+        "numericId": {"type": "integer", "minimum": 1, "maximum": 255},
+        "id": {"type": "string", "minLength": 1},
+        "label": {"type": "string"},
+        "unit": {"type": "string"},
+        "quantization": {"$ref": "bundle-metadata.schema.json#/$defs/Quantization"}
+      }
+    },
+    "PolarArrayBlock": {
+      "description": "A polar store's data array: the variable with its source's codebook and reserved codes, and the beam and gate geometry.",
+      "type": "object",
+      "required": ["variable", "geometry"],
+      "properties": {
+        "variable": {"$ref": "#/$defs/PolarVariable"},
+        "geometry": {"$ref": "#/$defs/PolarGeometry"}
+      }
+    },
+    "PolarVariable": {
+      "type": "object",
+      "required": ["id", "label", "unit", "quantization", "reservedCodes"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
+        "label": {"type": "string"},
+        "unit": {"type": "string"},
+        "quantization": {"$ref": "#/$defs/PolarQuantization"},
+        "reservedCodes": {
+          "description": "Code (as a decimal string) to the state it carries in place of a value.",
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^[a-z][a-z_]*$"}
+        },
+        "signConvention": {"type": "string", "const": "positive_away"}
+      }
+    },
+    "PolarQuantization": {
+      "description": "value = code x scale + offset for minimumCode <= code <= maximumCode.",
+      "type": "object",
+      "required": ["type", "offset", "scale", "minimumCode", "maximumCode"],
+      "properties": {
+        "type": {"type": "string", "const": "linear"},
+        "offset": {"type": "number"},
+        "scale": {"type": "number", "exclusiveMinimum": 0},
+        "minimumCode": {"type": "integer", "minimum": 0, "maximum": 255},
+        "maximumCode": {"type": "integer", "minimum": 0, "maximum": 255}
+      }
+    },
+    "PolarGeometry": {
+      "description": "Beam j covers azimuths [azimuthStart + j azimuthStep, ...) degrees clockwise from true north; gate i covers slant ranges [rangeStart + i rangeStep, ...) km.",
+      "type": "object",
+      "required": ["azimuthStart", "azimuthStep", "rangeStart", "rangeStep"],
+      "properties": {
+        "azimuthStart": {"type": "number"},
+        "azimuthStep": {"type": "number", "exclusiveMinimum": 0},
+        "rangeStart": {"type": "number", "minimum": 0},
+        "rangeStep": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}

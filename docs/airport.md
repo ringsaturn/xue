@@ -271,7 +271,7 @@ redistributed by NOAA/NWS; attribution names both.
 ## 7. Validation
 
 The JSON Schemas of §4 and §5 are normative for shape: a file that does
-not match them is not an airport file. `tests/test_point_schemas.py` holds
+not match them is not an airport file. `tests/test_schemas.py` holds
 the committed golden (`tests/fixtures/airport/expected/`, two consecutive
 rounds built from the fetched fixture
 `tests/fixtures/airport/airport.202609161430/` and `…1440/`, the raw

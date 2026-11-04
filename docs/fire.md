@@ -221,7 +221,7 @@ the rows dropped by §2 and §3.
 ## 7. Validation
 
 The JSON Schemas of §4 and §5 are normative for shape: a file that does
-not match them is not a fire file. `tests/test_point_schemas.py` holds the
+not match them is not a fire file. `tests/test_schemas.py` holds the
 committed golden (`tests/fixtures/fire/expected/`, two consecutive rounds
 built from the fetched fixture `tests/fixtures/fire/fire.202610120400/` and
 `…0500/` by `tests/prepare_fire_golden.py`) to them, and the shell's

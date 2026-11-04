@@ -404,7 +404,7 @@ reports no height — which several centres' bulletins do.
 ## 8. Validation
 
 The JSON Schemas of §4 and §5 are normative for shape: a file that does
-not match them is not a sounding file. `tests/test_point_schemas.py` holds
+not match them is not a sounding file. `tests/test_schemas.py` holds
 the committed golden (`tests/fixtures/sounding/expected/`, a build from the
 fetched fixture `tests/fixtures/sounding/sounding.2026091402/` by
 `tests/prepare_sounding_golden.py`) to them, and the shell's validators

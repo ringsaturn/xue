@@ -14,7 +14,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from tests import pointschemas
+from tests import jsonschemas
 from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
 from xuebuild.alerts import archive, areas, eccc, jma, meteoalarm, nws
@@ -376,7 +376,7 @@ class SchemaTest(unittest.TestCase):
     def assertOffSchema(self, schema: str, payload: dict) -> None:
         """A break only the schema can see: the writer's validator keeps
         to what a schema cannot say."""
-        self.assertTrue(pointschemas.errors(schema, payload))
+        self.assertTrue(jsonschemas.errors(schema, payload))
 
     def test_malformed_indexes_are_rejected(self) -> None:
         unsorted = copy.deepcopy(self.index)
@@ -420,7 +420,7 @@ class SchemaTest(unittest.TestCase):
         positional = copy.deepcopy(self.index)
         del positional["columns"]  # a round from before the field
         validate_index(positional)
-        pointschemas.check("alerts-index", positional)
+        jsonschemas.check("alerts-index", positional)
 
     def test_malformed_lines_are_rejected(self) -> None:
         line = json.loads((EXPECTED / round_directory(SECOND) / "eccc.jsonl").read_bytes().splitlines()[0])
@@ -464,7 +464,7 @@ class SchemaTest(unittest.TestCase):
         for status in older["sources"]:
             status.pop("sha256", None)
         validate_index(older)
-        pointschemas.check("alerts-index", older)
+        jsonschemas.check("alerts-index", older)
 
     def test_pointer(self) -> None:
         index_bytes = encode_json(self.index)

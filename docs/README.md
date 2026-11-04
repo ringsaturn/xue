@@ -11,6 +11,7 @@ terms (see the [README](../README.md#data-and-licensing)).
 |---|---|
 | [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store: what is published today, so read this first |
 | [format.md](format.md) | The bundle metadata JSON (`schemaVersion` 1–3), the codebooks and the residual arithmetic, then the retired `.xue` container (v1, v2) that published runs still carry |
+| [schemas/](schemas/) | The JSON Schemas (draft 2020-12) normative for shape: the manifest, bundle metadata v3, a store's group and array documents, the pointer and the point products' files |
 | [stac.md](stac.md) | The STAC catalog: layout, run Items, source Collections, point products, the showcase |
 | [registry.md](registry.md) | The registry document: the variables, bundles and sources an encoder builds, the closed sets of rules it names |
 | [encoder.md](encoder.md) | The native encoder and its parity rule with the reference encoder |

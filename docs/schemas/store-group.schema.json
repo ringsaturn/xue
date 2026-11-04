@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/store-group.schema.json",
+  "title": "StoreGroup",
+  "description": "A grid store's root zarr.json (docs/zarr-profile.md, \"Group document\"): profile 2, a shared store holding every bundle of one tier by id in xue_bundles, or profile 1, one bundle's store (a series store, a segment of a round from before shared stores, or any store published before them) holding its metadata in xue. A segment of a rolling window is an ordinary profile 2 group. The readers' own checks: that xue_profile is one they implement, that a group carries exactly one of xue and xue_bundles and not xue_polar or xue_network (polar-group.schema.json, network-group.schema.json), and the one bundle they open by id. Consolidated metadata is absent from a store written before it, and xue_index, from before that, is ignored.",
+  "type": "object",
+  "required": ["zarr_format", "node_type", "attributes"],
+  "properties": {
+    "zarr_format": {"type": "integer", "const": 3},
+    "node_type": {"type": "string", "const": "group"},
+    "attributes": {"$ref": "#/$defs/Attributes"},
+    "consolidated_metadata": {"$ref": "#/$defs/ConsolidatedMetadata"}
+  },
+  "$defs": {
+    "Attributes": {
+      "type": "object",
+      "required": ["xue_profile"],
+      "properties": {
+        "xue_profile": {"description": "This profile's version: 2 for a shared store, 1 for a one-bundle store.", "type": "integer", "enum": [1, 2]},
+        "xue": {"$ref": "bundle-metadata.schema.json"},
+        "xue_bundles": {
+          "description": "Bundle id to that bundle's metadata, verbatim, in manifest bundle order.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "bundle-metadata.schema.json"}
+        },
+        "xue_index": {"description": "A whole-store index object of the profile's first stores; ignored."}
+      },
+      "anyOf": [
+        {"type": "object", "required": ["xue"], "properties": {"xue_profile": {"const": 1}}},
+        {"type": "object", "required": ["xue_bundles"], "properties": {"xue_profile": {"const": 2}}}
+      ]
+    },
+    "ConsolidatedMetadata": {
+      "description": "The Zarr v3 inline form: every array document of the store, verbatim, the variable arrays first, bundle by bundle, then the coordinates.",
+      "type": "object",
+      "required": ["kind", "must_understand", "metadata"],
+      "properties": {
+        "kind": {"type": "string", "const": "inline"},
+        "must_understand": {"type": "boolean", "const": false},
+        "metadata": {"type": "object", "additionalProperties": {"$ref": "store-array.schema.json"}}
+      }
+    }
+  }
+}

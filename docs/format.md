@@ -163,6 +163,20 @@ Unindexed gaps, overlaps, and nonzero padding bytes make the file invalid.
 
 ### Metadata JSON
 
+The shape of a schemaVersion 3 document is
+[`schemas/bundle-metadata.schema.json`](schemas/bundle-metadata.schema.json),
+which is normative: a document that does not match it is not version 3
+metadata. The sections below give the meaning of each field and the rules
+across fields that a schema cannot say, which every reader checks after
+the shape: the lowest version that fits, the one encoding of a time axis,
+unique `numericId`s, and the halves of a GRIB2 value that are null
+together. Versions 1 and 2 have no schema; their rules are this section's
+prose alone. `tests/test_schemas.py` holds the frozen container corpus
+(`tests/fixtures/v1/`), the synthetic run's containers, posters and stores,
+and the committed stores to it; the shell checks a version 3 document with
+the validator generated from it (`web/src/schema/generated/`), and the Rust
+decoder's tests tie the fields it reads to the names the schema gives.
+
 Example (a single-variable GFS temperature bundle):
 
 ```json

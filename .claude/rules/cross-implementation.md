@@ -31,16 +31,25 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 
 ## Pairs that must stay in step
 
-| Concern | Python | Rust | Web |
-|---|---|---|---|
-| Bundle metadata (schema v3) | `metadata.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
-| Container byte layout | `binformat.py` | `format.rs` (the only place it is packed or unpacked) | via wasm |
-| Manifest / pointer validation (all three validators) | `manifest.py` | `encode/manifest.rs` | `manifest.ts` |
-| Grid snapping, regrid, downsample | `grid.py`, `reproject.py` | `encode/grid.rs`, `reproject.rs` | `domain.ts` |
-| Observation ingest | `observation.py` | `encode/observation.rs` | — |
-| Composite inputs, analysis-optional ids | `discover.py` | `encode/convert.rs` | — |
-| GRIB matching / template parsing | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
-| Zarr shard reading | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
+| Concern | Schema (`docs/schemas/`) | Python | Rust | Web |
+|---|---|---|---|---|
+| Bundle metadata (schema v3) | `bundle-metadata` | `metadata.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
+| Container byte layout | — | `binformat.py` | `format.rs` (the only place it is packed or unpacked) | via wasm |
+| Manifest / pointer validation (all three validators) | `manifest`, `pointer` | `manifest.py` | `encode/manifest.rs` | `manifest.ts` |
+| Grid snapping, regrid, downsample | — | `grid.py`, `reproject.py` | `encode/grid.rs`, `reproject.rs` | `domain.ts` |
+| Observation ingest | — | `observation.py` | `encode/observation.rs` | — |
+| Composite inputs, analysis-optional ids | — | `discover.py` | `encode/convert.rs` | — |
+| GRIB matching / template parsing | — | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
+| Zarr group and array documents | `store-group`, `store-array`, `polar-group`, `network-group` | `zarrstore.py`, `nexrad/store.py`, `river/network.py` (writers) | `zarr.rs`, `network.rs`, `encode/zarrstore.rs` | `zarr/shard.ts`, `river/store.ts` |
+| Zarr shard reading | — | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
+
+A schema is normative for shape. `tests/test_schemas.py` holds every
+writer's goldens to it (the committed ones, and the stores and manifests it
+builds without GDAL); the shell runs the validator generated from it
+(`make schemas`) after its version gate and before the rules a schema
+cannot say; the Rust tests (`schema_tie_tests`) tie every field name the
+code reads or writes to a property the schema names. Changing a shape means
+changing the schema with the code, and `make schemas`.
 
 Registries are held to one set of ids, codebooks and rules by committed
 fixtures: `rust/xue/registry.json` is the whole registry document

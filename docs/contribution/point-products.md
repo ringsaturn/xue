@@ -58,7 +58,7 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   draft 2020-12 schema under `docs/schemas/` (`pointer.schema.json` is
   every product's pointer), referenced from its spec as the normative
   shape. The three implementations meet it differently:
-  `tests/test_point_schemas.py` holds every golden to it with the
+  `tests/test_schemas.py` holds every golden to it with the
   reference `jsonschema` (a `dev` group dependency; the publishing image
   syncs `--no-dev`), so the writers' `schema.py` validators keep only
   what a schema cannot say — order, byte spans, sums, file names, the
@@ -74,9 +74,12 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   a `columns` array (airport and alerts indexes, aq and synop stations
   files), which the shell and the worker read by name with a positional
   fallback for files from before it. The
-  generator implements a closed subset of the vocabulary (no `if`, no
-  closed objects: a reader admits a field a later revision adds) and
-  refuses a schema that leaves it.
+  generator implements a closed subset of the vocabulary (no `if`, and a
+  point product's objects stay open: a reader admits a field a later
+  revision adds) and refuses a schema that leaves it. The grid contracts
+  (the manifest, bundle metadata, a store's documents) use the same
+  harness; their schemas `$ref` one another by file name, and bundle
+  metadata closes the blocks `format.md` declares closed.
 - **Parsers import no other parser** and convert to SI themselves; `build.py`
   is the only place sources meet; `schema.py` validates on write.
 - **Goldens.** `tests/fixtures/<product>/` is a fetched issue (two rounds
