@@ -206,15 +206,42 @@ export function buildBasemapStyle(): BasemapStyle {
     // near-black tones, defeating the per-variable earth color — drop it so
     // land stays a flat themed slate under the data.
     // Basemap labels follow the UI locale.
-    layers: withCoastline(
-      withHillshade(
-        quietedUnderData(
-          basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+    layers: withoutHiddenLayers(
+      withCoastline(
+        withHillshade(
+          quietedUnderData(
+            basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+          ),
+          hillshadePaint(darkGround),
         ),
-        hillshadePaint(darkGround),
       ),
+      BASEMAP_HIDDEN,
     ),
   };
+}
+
+/** What a build leaves off the basemap: `VITE_BASEMAP_HIDE`, comma-separated,
+ * `labels` for every name on it (and the peaks) and `boundaries` for the
+ * borders. In the style the map first draws, so neither ever shows. */
+export function parseBasemapHidden(value: string | undefined): ReadonlySet<string> {
+  return new Set((value ?? "").split(",").map((name) => name.trim()).filter((name) => name !== ""));
+}
+
+// `?.`: Playwright specs import this module outside Vite, where `env` is unset.
+const BASEMAP_HIDDEN = parseBasemapHidden(import.meta.env?.VITE_BASEMAP_HIDE);
+
+/** Whether this build draws the basemap's names, the peaks among them. */
+export function basemapLabelsShown(): boolean {
+  return !BASEMAP_HIDDEN.has("labels");
+}
+
+/** Hidden, not dropped: other layers are placed relative to these ids. */
+export function withoutHiddenLayers(layers: BasemapStyle["layers"], hidden: ReadonlySet<string>): BasemapStyle["layers"] {
+  return layers.map((layer) => {
+    const hide = (hidden.has("labels") && layer.type === "symbol") || (hidden.has("boundaries") && layer.id.startsWith("boundaries"));
+    if (!hide) return layer;
+    return { ...layer, layout: { ...(layer as { layout?: object }).layout, visibility: "none" } } as BasemapStyle["layers"][number];
+  });
 }
 
 /** The relief, inserted just above the land fill. Everything the flavor puts

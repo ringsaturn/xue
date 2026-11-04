@@ -756,7 +756,12 @@ point the basemap and relief at mirrors (`VITE_BASEMAP_TILES`, the vector
 tile template; `VITE_BASEMAP_ASSETS`, the root of Protomaps' `fonts/` and
 `sprites/`; `VITE_TERRAIN_TILE_URL`) and offer only the datasets it
 publishes (`VITE_SOURCES`, comma-separated ids; the model switch and
-`?model=` drop the rest). Such a page may also colour its own bundles:
+`?model=` drop the rest). Its data root may publish only some of the point
+products: `VITE_POINT_PRODUCTS`, comma-separated names (`tc`, `sounding`,
+`airport`, `synop`, `fire`, `aq`, `alerts`) or `none`, stops the shell asking
+for the others (`pointerindex.ts`). `VITE_BASEMAP_HIDE`, comma-separated,
+leaves `labels` (every name, and the peaks) or `boundaries` off the basemap,
+from the first frame (`basemap.ts`). Such a page may also colour its own bundles:
 `window.xuePalettes`, set before the shell's module runs, maps a bundle id
 to at least two `[value, r, g, b, a]` stops in increasing value (channels
 0–255, `palettes.ts::readHostPalettes`), or to `{ stops, sampling }` where
