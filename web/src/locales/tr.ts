@@ -443,7 +443,7 @@ export const tr: Record<MessageKey, string> = {
   tcBest: "En iyi rota",
   tcOptionsAria: "Fırtına seçenekleri",
   tcHistoryHeading: "Geçmiş tropikal siklonlar",
-  tcHistoryIntro: "Arşivdeki her numaralı fırtına: merkezlerin en iyi izleri, onun için yapılan her tahmin ve her birinin ne kadar saptığı.",
+  tcHistoryIntro: "Arşivdeki fırtınalar: merkezlerin en iyi izleri ve arşivlendiyse her tahmin ile ne kadar saptığı.",
   tcHistorySeasonsAria: "Sezon",
   tcHistoryBasinsAria: "Havza",
   tcHistoryAll: "Tümü",

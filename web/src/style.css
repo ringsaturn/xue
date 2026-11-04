@@ -5088,6 +5088,14 @@ html:has(.showcase-page) {
   padding: 0;
 }
 
+/* The archive reaches back to 1842: a few rows of years, then a scroll. */
+#typhoon-seasons {
+  position: relative;
+  flex: none;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
 .typhoon-legend {
   display: grid;
   gap: 4px;

@@ -226,13 +226,15 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase.html — the list of historical cases.
 - https://xue.ringsaturn.me/tc/ — one static page per archived tropical
-  cyclone (`/tc/<season>/<name>-<atcf id>`), per season (`/tc/<season>/`) and
+  cyclone of the seasons with forecasts (`/tc/<season>/<name>-<atcf id>`),
+  per season (`/tc/<season>/`) and
   for the archive, in English and under `/zh/`, `/zh-hant/`, `/ja/`, `/ko/`:
   the storm's facts, its six-hourly best track, a track picture and the
   forecast track errors by source and lead, each linking to the map below.
 - https://xue.ringsaturn.me/typhoon.html — past tropical cyclones on a map,
   picked by season, basin and storm in the panel beside it (`?storm=<ATCF
-  id>`, e.g. `WP062023`; `?issue=YYYYMMDDHH` picks the issue time drawn;
+  id>`, e.g. `WP062023`, or a storm with no number's history id, e.g.
+  `WP-1951123N10140-1951`; `?issue=YYYYMMDDHH` picks the issue time drawn;
   without a storm, the latest of the season running now): the centres' best
   tracks, every archived forecast started at that time (official,
   deterministic, ensemble), and the storm's track errors in km by source and
@@ -525,8 +527,10 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   The storm archive beside it, `tc/archive/catalog.json` (`docs/tc.md` §8–9):
   every distinct forecast of a numbered storm since 2023 by month
   (`<YYYY>/<MM>/forecasts.jsonl` + `index.json` with each storm's byte span),
-  each season's best tracks (`<YYYY>/best.jsonl` + `index.json`) and track
-  errors (`<YYYY>/scores.json`, `errors.jsonl`); every file but the catalog
+  each season's best tracks (`<YYYY>/best.jsonl` + `index.json`; IBTrACS'
+  history adds earlier seasons of best tracks alone, storms without an ATCF
+  number under `WP-<SID>-<season>`) and track errors (`<YYYY>/scores.json`,
+  `errors.jsonl`, seasons with forecasts only); every file but the catalog
   is `?v=<crc32>`-addressed and read by Range. Model `gdm` is Google DeepMind's
   experimental track (CC BY 4.0, archived 48 h after its last valid time;
   cite "Contains experimental research data produced by © 2023-25 Google

@@ -724,7 +724,7 @@ export const en = {
    * codes and the truth keys (`USA`, `JMA`) are instrument text and stay as
    * they are. `{name}` is a storm's name with its id, `{id}` an ATCF id. */
   tcHistoryHeading: "Past tropical cyclones",
-  tcHistoryIntro: "Every numbered storm in the archive: the centres' best tracks, each forecast made for it, and how far each one missed.",
+  tcHistoryIntro: "The archive's storms: the centres' best tracks and, where archived, each forecast made for them and how far it missed.",
   tcHistorySeasonsAria: "Season",
   tcHistoryBasinsAria: "Basin",
   tcHistoryAll: "All",

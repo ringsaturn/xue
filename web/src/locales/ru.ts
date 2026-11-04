@@ -442,7 +442,7 @@ export const ru: Record<MessageKey, string> = {
   tcBest: "Лучший трек",
   tcOptionsAria: "Настройки циклонов",
   tcHistoryHeading: "Прошлые тропические циклоны",
-  tcHistoryIntro: "Каждый пронумерованный шторм архива: лучшие треки центров, каждый прогноз, выпущенный для него, и насколько каждый ошибся.",
+  tcHistoryIntro: "Штормы архива: лучшие треки центров и, где они сохранены, каждый прогноз и его ошибка.",
   tcHistorySeasonsAria: "Сезон",
   tcHistoryBasinsAria: "Бассейн",
   tcHistoryAll: "Все",

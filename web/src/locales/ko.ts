@@ -442,7 +442,7 @@ export const ko: Record<MessageKey, string> = {
   tcBest: "최적 경로",
   tcOptionsAria: "태풍 표시 설정",
   tcHistoryHeading: "지난 열대저기압",
-  tcHistoryIntro: "아카이브의 번호가 붙은 모든 폭풍: 각 기관의 베스트 트랙, 그 폭풍에 대해 나온 모든 예보, 그리고 각각 얼마나 빗나갔는지.",
+  tcHistoryIntro: "아카이브의 폭풍: 각 기관의 베스트 트랙과, 보관된 예보가 있으면 각 예보와 그 오차.",
   tcHistorySeasonsAria: "시즌",
   tcHistoryBasinsAria: "해역",
   tcHistoryAll: "전체",

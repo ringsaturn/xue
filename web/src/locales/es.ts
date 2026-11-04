@@ -440,7 +440,7 @@ export const es: Record<MessageKey, string> = {
   tcBest: "Mejor trayectoria",
   tcOptionsAria: "Opciones de ciclones",
   tcHistoryHeading: "Ciclones tropicales pasados",
-  tcHistoryIntro: "Cada tormenta numerada del archivo: las trayectorias finales de los centros, cada pronóstico emitido para ella y cuánto se desvió cada uno.",
+  tcHistoryIntro: "Las tormentas del archivo: las trayectorias finales de los centros y, cuando están archivados, cada pronóstico emitido y cuánto se desvió.",
   tcHistorySeasonsAria: "Temporada",
   tcHistoryBasinsAria: "Cuenca",
   tcHistoryAll: "Todas",
