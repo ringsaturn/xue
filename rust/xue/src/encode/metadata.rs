@@ -281,3 +281,26 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod schema_tie_tests {
+    //! The fields this writer writes are the ones
+    //! `docs/schemas/bundle-metadata.schema.json` names; the Python test
+    //! holds the documents themselves to it.
+    use crate::schematie::assert_named;
+
+    const SCHEMA: &str = "bundle-metadata";
+
+    #[test]
+    fn the_fields_written_are_the_schemas() {
+        assert_named(SCHEMA, "", &["schemaVersion", "model", "product", "runTime", "profile", "time", "grid", "variables"]);
+        assert_named(SCHEMA, "/$defs/Time", &["unitSeconds", "firstFrameOffset", "frameCount", "frameStep", "frameOffsets"]);
+        assert_named(
+            SCHEMA,
+            "/$defs/Variable",
+            &["numericId", "id", "label", "unit", "parameter", "band", "producer", "aerosol", "quantization"],
+        );
+        assert_named(SCHEMA, "/$defs/Parameter", &["typeOfStatisticalProcessing"]);
+        assert_named(SCHEMA, "/$defs/Producer", &["id", "version"]);
+    }
+}
