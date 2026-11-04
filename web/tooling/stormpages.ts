@@ -23,6 +23,7 @@ import {
   type ErrorColumns,
   type SeasonIndex,
   type SeasonStorm,
+  seasonHasForecasts,
   validateArchiveCatalog,
   validateBest,
   validateMonthIndex,
@@ -712,8 +713,10 @@ async function getLines(url: string): Promise<unknown[]> {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-/** Every storm with a best track, read from the published archive under
- * `dataBaseUrl` (the data root, ending in `/`). */
+/** Every storm with a best track in a season with forecasts, read from the
+ * published archive under `dataBaseUrl` (the data root, ending in `/`). The
+ * seasons of best tracks alone stay on the storm map: thirteen thousand storms
+ * in five languages would not fit a Pages deployment's file limit. */
 export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: ArchiveCatalog; storms: StormData[] }> {
   const root = new URL("tc/archive/", dataBaseUrl).href;
   const catalog = validateArchiveCatalog(await getJson(`${root}catalog.json?t=${Date.now()}`));
@@ -730,6 +733,7 @@ export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: Archiv
   const storms: StormData[] = [];
   for (const entry of catalog.seasons) {
     const index: SeasonIndex = validateSeasonIndex(await getJson(`${root}${entry.path}?v=${entry.crc32}`));
+    if (!seasonHasForecasts(index)) continue;
     const directory = `${root}${String(index.season).padStart(4, "0")}/`;
     const bestById = new Map<string, BestRecord>();
     for (const line of await getLines(`${directory}${index.best.path}?v=${index.best.crc32}`)) {

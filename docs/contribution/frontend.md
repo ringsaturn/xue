@@ -643,7 +643,9 @@ steps a second, and the MP4 is that playback captured through
 `mp4export.ts` with a `GifHost` of the page's own.
 
 Storm pages: `web/tooling/stormpages.ts` writes one static page per
-archived storm, per season and for the archive (`/tc/…`), in English at the
+archived storm of a season with forecasts, per such season and for the
+archive (`/tc/…`; older seasons of best tracks alone stay on the storm map,
+past a Pages deployment's file limit otherwise), in English at the
 root and in `zh`, `zh-hant`, `ja` and `ko` under a prefix, the blog's
 layout: each names every translation with `hreflang` (English the
 `x-default`, whose page sends a reader to their site or browser language)

@@ -437,7 +437,7 @@ export const ja: Record<MessageKey, string> = {
   tcBest: "ベストトラック",
   tcOptionsAria: "台風の表示設定",
   tcHistoryHeading: "過去の熱帯低気圧",
-  tcHistoryIntro: "アーカイブにある番号付きの嵐すべて：各機関のベストトラック、その嵐に出された予報、それぞれのずれ。",
+  tcHistoryIntro: "アーカイブにある嵐：各機関のベストトラックと、予報が保存されているものはその予報とずれ。",
   tcHistorySeasonsAria: "シーズン",
   tcHistoryBasinsAria: "海域",
   tcHistoryAll: "すべて",

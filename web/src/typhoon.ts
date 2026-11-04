@@ -22,6 +22,7 @@ import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
   archiveBounds,
   isArchiveStormId,
+  seasonHasForecasts,
   forecastsAt,
   storyTimes,
   seasonOfStorm,
@@ -134,6 +135,8 @@ interface Loaded {
    * time (`storyTimes`), so a storm is followed past its last forecast. */
   issues: string[];
   sources: { agencies: string[]; models: string[] };
+  /** Its season has static pages (`seasonHasForecasts`). */
+  hasPage: boolean;
 }
 
 let loaded: Loaded | null = null;
@@ -573,13 +576,14 @@ function renderFacts(): void {
     item.append(element("dt", "", label), element("dd", "", value));
     return item;
   };
-  const items = [definition(t("tcPageId"), entry.id)];
+  // A storm with no ATCF number is known by its IBTrACS id.
+  const items = [entry.atcf.length > 0 || !entry.sid ? definition(t("tcPageId"), entry.id) : definition("IBTrACS SID", entry.sid)];
   if (entry.first && entry.last) items.push(definition(t("tcPageLife"), `${formatUtcHour(entry.first)} → ${formatUtcHour(entry.last)}`));
   if (entry.vmax !== null) items.push(definition(t("tcPagePeak"), `${Math.round(entry.vmax / KNOT)} kt`));
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
-  // A storm with a best track has a static page of its own.
-  stormLink.hidden = loaded.best === null;
+  // A storm with a best track in a season of forecasts has a static page.
+  stormLink.hidden = loaded.best === null || !loaded.hasPage;
   stormLink.href = stormPagePath(locale, seasonOfStorm(entry.id), entry);
   stormLink.textContent = `${t("tcPageDetails")} →`;
   applyPageMeta({
@@ -617,11 +621,13 @@ let season: number | null = null;
 let basin: string | null = null;
 let seasonIndex: SeasonIndex | null = null;
 
-/** The season's storms with forecasts, in the order they formed (by id
- * where an index predates the summary). */
+/** The season's storms with forecasts, or with best tracks in a season that
+ * predates the forecasts, in the order they formed (by id where an index
+ * predates the summary). */
 function seasonStorms(): SeasonStorm[] {
+  const withForecasts = seasonIndex !== null && seasonHasForecasts(seasonIndex);
   return (seasonIndex?.storms ?? [])
-    .filter((storm) => storm.months.length > 0)
+    .filter((storm) => (withForecasts ? storm.months.length > 0 : storm.offset !== null))
     .sort((a, b) => (a.first ?? "9").localeCompare(b.first ?? "9") || a.id.localeCompare(b.id));
 }
 
@@ -650,6 +656,13 @@ function renderPicker(): void {
       }),
     ),
   );
+  // The list scrolls past a few rows of years: keep the season on screen.
+  const chosen = seasonsGroup.querySelector<HTMLElement>('[aria-pressed="true"]');
+  if (chosen) {
+    const top = chosen.offsetTop - seasonsGroup.offsetTop;
+    if (top < seasonsGroup.scrollTop || top + chosen.offsetHeight > seasonsGroup.scrollTop + seasonsGroup.clientHeight)
+      seasonsGroup.scrollTop = top;
+  }
   const storms = seasonStorms();
   const basins = BASIN_ORDER.filter((code) => storms.some((storm) => storm.basin === code));
   basinsGroup.replaceChildren(
@@ -671,7 +684,7 @@ function renderPicker(): void {
   seasonNote.hidden = !southern;
   if (southern && season !== null)
     seasonNote.textContent = t("tcHistorySouthernNote", { season, from: `${season - 1}-07`, to: `${season}-06` });
-  seasonLink.hidden = season === null || storms.length === 0;
+  seasonLink.hidden = season === null || storms.length === 0 || seasonIndex === null || !seasonHasForecasts(seasonIndex);
   if (season !== null) {
     seasonLink.href = seasonPagePath(locale, season);
     seasonLink.textContent = `${t("tcPageSeasonList")} →`;
@@ -736,7 +749,7 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   if (pending !== entry.id) return;
   pending = null;
   const issues = storyTimes(records, best);
-  loaded = { entry, best, records, errors, issues, sources: sourcesOf(records, SOURCE_ORDER) };
+  loaded = { entry, best, records, errors, issues, sources: sourcesOf(records, SOURCE_ORDER), hasPage: seasonHasForecasts(index) };
   card?.remove();
   if (truthsOf(errors).length > 0 && !truthsOf(errors).includes(truth)) truth = truthsOf(errors)[0]!;
   const wanted = issue === null ? -1 : issues.findIndex((item) => issueKey(item) === issue);

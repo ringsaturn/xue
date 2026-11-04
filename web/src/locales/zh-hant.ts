@@ -435,7 +435,7 @@ export const zhHant: Record<MessageKey, string> = {
   tcBest: "最佳路徑",
   tcOptionsAria: "颱風選項",
   tcHistoryHeading: "歷史熱帶氣旋",
-  tcHistoryIntro: "存檔裡的每一個編號風暴：各機構的最佳路徑、為它做過的每一次預報，以及每次偏了多遠。",
+  tcHistoryIntro: "存檔裡的風暴：各機構的最佳路徑；有存檔預報的，還有每一次預報及其偏差。",
   tcHistorySeasonsAria: "季節",
   tcHistoryBasinsAria: "海域",
   tcHistoryAll: "全部",

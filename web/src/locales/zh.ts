@@ -435,7 +435,7 @@ export const zh: Record<MessageKey, string> = {
   tcBest: "最佳路径",
   tcOptionsAria: "台风选项",
   tcHistoryHeading: "历史热带气旋",
-  tcHistoryIntro: "存档里的每一个编号风暴：各机构的最佳路径、为它做过的每一次预报，以及每次偏了多远。",
+  tcHistoryIntro: "存档里的风暴：各机构的最佳路径；有存档预报的，还有每一次预报及其偏差。",
   tcHistorySeasonsAria: "季节",
   tcHistoryBasinsAria: "海域",
   tcHistoryAll: "全部",

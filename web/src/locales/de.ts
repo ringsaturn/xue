@@ -440,7 +440,7 @@ export const de: Record<MessageKey, string> = {
   tcBest: "Best Track",
   tcOptionsAria: "Sturmoptionen",
   tcHistoryHeading: "Vergangene tropische Wirbelstürme",
-  tcHistoryIntro: "Jeder nummerierte Sturm im Archiv: die Best Tracks der Zentren, jede für ihn erstellte Vorhersage und wie weit sie danebenlag.",
+  tcHistoryIntro: "Die Stürme im Archiv: die Best Tracks der Zentren und, soweit archiviert, jede Vorhersage dafür und wie weit sie danebenlag.",
   tcHistorySeasonsAria: "Saison",
   tcHistoryBasinsAria: "Becken",
   tcHistoryAll: "Alle",

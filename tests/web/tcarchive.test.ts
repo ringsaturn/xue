@@ -5,6 +5,7 @@ import {
   forecastsAt,
   isArchiveStormId,
   issueTimes,
+  seasonHasForecasts,
   seasonOfStorm,
   sourcesOf,
   stormAt,
@@ -70,6 +71,11 @@ describe("tc archive documents", () => {
     expect(isArchiveStormId("WP062023")).toBe(true);
     expect(isArchiveStormId("wp062023")).toBe(false);
     expect(isArchiveStormId(null)).toBe(false);
+    expect(isArchiveStormId("WP-1951123N10140-1951")).toBe(true);
+    expect(isArchiveStormId("WP-1951123X10140-1951")).toBe(false);
+    expect(seasonOfStorm("SH-1951123S10140-1952")).toBe(1952);
+    expect(stormCode("WP-1951123N10140-1951")).toBe("WP");
+    expect(seasonHasForecasts({ storms: [] })).toBe(false);
     expect(seasonOfStorm("SH022027")).toBe(2027);
     expect(stormCode("WP062023")).toBe("WP06");
   });

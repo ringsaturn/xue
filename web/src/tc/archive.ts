@@ -16,7 +16,10 @@ export const TC_ARCHIVE_DIRECTORY = "tc/archive/";
 export const TC_ARCHIVE_CATALOG = `${TC_ARCHIVE_DIRECTORY}catalog.json`;
 const ARCHIVE_SCHEMA_VERSION = 1;
 const SCORE_SCHEMA_VERSION = 1;
-const ATCF_ID = /^[A-Z]{2}\d{6}$/;
+/** An ATCF id, or a history id (`WP-1951123N10140-1951`, `docs/tc.md` §8.2)
+ * for a storm that never had a number: both open on the basin and end on the
+ * season. */
+const STORM_ID = /^[A-Z]{2}(\d{6}|-\d{7}[NS]\d{5}-\d{4})$/;
 const CRC32 = /^[0-9a-f]{8}$/;
 
 export interface FileRef {
@@ -212,7 +215,7 @@ export function validateSeasonIndex(input: unknown): SeasonIndex {
     storms: list(index.storms, "season index storms").map((value, position) => {
       const label = `season index storms[${position}]`;
       const entry = object(value, label);
-      if (typeof entry.id !== "string" || !ATCF_ID.test(entry.id)) throw new Error(`${label}.id must be an ATCF id`);
+      if (typeof entry.id !== "string" || !STORM_ID.test(entry.id)) throw new Error(`${label}.id must be an ATCF or history id`);
       const strings = (field: unknown) => (Array.isArray(field) ? field.filter((item): item is string => typeof item === "string") : []);
       return {
         id: entry.id,
@@ -428,12 +431,20 @@ export function seasonOfStorm(id: string): number {
 }
 
 export function isArchiveStormId(value: string | null): value is string {
-  return value !== null && ATCF_ID.test(value);
+  return value !== null && STORM_ID.test(value);
 }
 
-/** `WP06`: the basin and number the centres speak a storm by. */
+/** `WP06`: the basin and number the centres speak a storm by; a storm with
+ * no number has only its basin. */
 export function stormCode(id: string): string {
-  return id.slice(0, 4);
+  return id.slice(0, id[2] === "-" ? 2 : 4);
+}
+
+/** Whether any storm of the season has an archived forecast. The seasons
+ * that do are the ones with static pages and scores; the rest are best
+ * tracks alone. */
+export function seasonHasForecasts(index: Pick<SeasonIndex, "storms">): boolean {
+  return index.storms.some((storm) => storm.months.length > 0);
 }
 
 /** The distinct times the storm's forecasts start from, ascending. */
