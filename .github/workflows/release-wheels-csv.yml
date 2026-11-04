@@ -16,6 +16,12 @@ name: release-wheels-csv
 #
 # Only assets uploaded by github-actions[bot] are indexed: a wheel attached by
 # hand to a release does not reach the index without passing the smoke test.
+#
+# Once the index lists the release, the relock job makes the release's last
+# commit (docs/contribution/releasing.md, "The flow", step 4) on the branch
+# that holds the tag: floor raised, xuepy relocked, pushed, and test.yml
+# dispatched on it (a push with the workflow token starts no workflow by
+# itself). What is left for a person is the fast-forward into main.
 
 on:
   workflow_run:
@@ -24,6 +30,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      relock_tag:
+        description: "Also relock the branch holding this release tag (vX.Y.Z); empty refreshes the CSV only"
+        type: string
+        default: ""
+      dry_run:
+        description: "Relock without pushing: show the commit only"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -83,3 +98,41 @@ jobs:
           gh workflow run docs-rust.yml --ref main
         env:
           GH_TOKEN: ${{ github.token }}
+
+  relock:
+    needs: update
+    if: >-
+      github.repository == 'ringsaturn/xue' &&
+      (github.event_name == 'workflow_run' ||
+       (github.event_name == 'workflow_dispatch' && inputs.relock_tag != ''))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push the relock commit to the release branch
+      actions: write # dispatch test.yml on it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every branch and tag: the script looks for the branch holding the tag.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: astral-sh/setup-uv@v5
+
+      # For a tag push, the triggering run's head_branch is the tag.
+      - name: Relock on the indexed wheel
+        id: relock
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/relock_release.sh "${TAG}"
+        env:
+          TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.relock_tag }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+
+      - name: Test the relocked branch
+        if: steps.relock.outputs.relocked == '1'
+        run: gh workflow run test.yml --ref "${BRANCH}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.relock.outputs.branch }}
