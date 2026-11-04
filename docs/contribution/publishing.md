@@ -123,6 +123,11 @@ on the run (a wheel on PyPI may predate a source, and a cron run takes no
 input). A dispatch can insist on either. MRMS and MRMS 3D pass
 `encoder: native`, so a fallback fails the round.
 
+`publish-mrms3d.yml` is disabled in the repository's Actions settings (the
+last scheduled round ran 2026-10-05): the live window is paused and the
+volume is reached through the showcase cases. `gh workflow enable
+publish-mrms3d.yml` resumes the cron; nothing in the tree changes.
+
 ### How the workflows are built
 
 `publish-<model>.yml` for `himawari`, `himawarijp`, `goeseast`, `goeswest`,
@@ -147,7 +152,9 @@ differs from the others only in the inputs it passes:
 
 `cma` (a private archive with its own credentials and listing check) and
 `meteosat` (every step skipped when the EUMETSAT secrets are absent, and a
-runner GDAL probe) stay standalone workflows.
+runner GDAL probe) stay standalone workflows. `cma` stays published and
+is reached through `?model=cma` and the showcase cases, but the shell's
+model sheet and `docs/sources.md` leave it out on purpose.
 
 The steps several workflows share are composite actions under
 `.github/actions/`: `check-r2-credentials` (empty-secret check and a test
