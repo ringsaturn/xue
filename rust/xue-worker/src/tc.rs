@@ -15,6 +15,14 @@ const PRODUCT: &str = "tc";
 
 /// The storm document's sections `include=` may narrow to.
 const SECTIONS: [&str; 5] = ["best", "agencies", "models", "alert", "impact"];
+/// An index entry's file descriptor, which the list leaves out
+/// (`docs/schemas/tc-index.schema.json`).
+const FILE_FIELDS: [&str; 3] = ["path", "byteLength", "crc32"];
+/// The storm document's fields the record copies before its sections
+/// (`docs/schemas/tc-storm.schema.json`).
+const STORM_FIELDS: [&str; 7] = ["id", "level", "basin", "name", "sid", "intl", "aliases"];
+/// An ensemble's fields copied beside its unpacked members.
+const ENSEMBLE_FIELDS: [&str; 3] = ["issued", "base", "run"];
 
 async fn resolve(data: &Data, query: &Query<'_>) -> Result<Issue, HttpError> {
     products::resolve_issue(
@@ -36,7 +44,7 @@ fn storms(index: &Value) -> Vec<Value> {
 /// An index row without the file descriptor (the product's addressing).
 fn storm_json(row: &Value) -> Value {
     let mut out = row.as_object().cloned().unwrap_or_default();
-    for key in ["path", "byteLength", "crc32"] {
+    for key in FILE_FIELDS {
         out.remove(key);
     }
     Value::Object(out)
@@ -121,7 +129,7 @@ fn unpack_ensemble(ensemble: &Value) -> Value {
         })
         .collect();
     let mut out = Map::new();
-    for key in ["issued", "base", "run"] {
+    for key in ENSEMBLE_FIELDS {
         out.insert(key.to_owned(), ensemble.get(key).cloned().unwrap_or(Value::Null));
     }
     out.insert("leads".into(), json!(leads));
@@ -206,7 +214,7 @@ pub async fn storm(data: &Data, id: &str, url: &Url) -> Result<(Value, String), 
 
     let mut body = issue.envelope();
     body.insert("resolvedFrom".into(), json!(resolved_from));
-    for key in ["id", "level", "basin", "name", "sid", "intl", "aliases"] {
+    for key in STORM_FIELDS {
         body.insert(key.to_owned(), document.get(key).cloned().unwrap_or(Value::Null));
     }
     for section in SECTIONS {
@@ -227,4 +235,35 @@ pub async fn storm(data: &Data, id: &str, url: &Url) -> Result<(Value, String), 
     }
     body.insert("sources".into(), document.get("sources").cloned().unwrap_or(Value::Null));
     Ok((Value::Object(body), issue.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn named(properties: &Value, fields: &[&str]) {
+        for field in fields {
+            assert!(properties.get(*field).is_some(), "the schema has no {field}");
+        }
+    }
+
+    /// Every field this reader takes by name is one the normative schemas
+    /// define, so a field renamed there cannot leave the worker reading
+    /// another.
+    #[test]
+    fn the_fields_are_the_schemas() {
+        let index: Value =
+            serde_json::from_str(include_str!("../../../docs/schemas/tc-index.schema.json")).expect("schema");
+        named(&index["properties"], &["storms", "crosswalk", "sources"]);
+        named(&index["$defs"]["TcIndexEntry"]["properties"], &FILE_FIELDS);
+        named(&index["$defs"]["TcIndexEntry"]["properties"], &["id", "basin", "level", "aliases"]);
+        let storm: Value =
+            serde_json::from_str(include_str!("../../../docs/schemas/tc-storm.schema.json")).expect("schema");
+        named(&storm["properties"], &STORM_FIELDS);
+        named(&storm["properties"], &SECTIONS);
+        named(&storm["properties"], &["sources"]);
+        let ensemble = &storm["$defs"]["TcEnsemble"]["properties"];
+        named(ensemble, &ENSEMBLE_FIELDS);
+        named(ensemble, &["leads", "members", "lat", "lon", "vmax", "pmin", "mean"]);
+    }
 }

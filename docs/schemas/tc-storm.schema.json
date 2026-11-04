@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-storm.schema.json",
+  "title": "TcStorm",
+  "description": "tc/<YYYY>/<MM>/<DD>/tc.<issue>/<storm id>.json (docs/tc.md section 5). That an A-level storm carries an ATCF id, the alias keys and the windows' order, the radii thresholds, a forecast point's lead and its time as base + lead, the leads' and times' order, the members' uniqueness and the ensemble arrays' length are the readers' own checks.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "level", "basin", "aliases", "best", "agencies", "models", "impact", "sources"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "id": {"$ref": "#/$defs/StormId"},
+    "level": {"enum": ["A", "B", "C"]},
+    "basin": {"type": "string", "pattern": "^[A-Z]{2}$"},
+    "name": {"type": ["string", "null"]},
+    "sid": {"description": "The IBTrACS storm id.", "type": ["string", "null"]},
+    "intl": {"description": "The international (RSMC Tokyo) number; reserved, null in v1.", "type": ["string", "null"]},
+    "aliases": {"type": "object", "additionalProperties": {"$ref": "#/$defs/AliasWindow"}},
+    "best": {"description": "Best tracks by IBTrACS agency key.", "type": "object", "additionalProperties": {"$ref": "#/$defs/TcTrack"}},
+    "agencies": {"description": "Official forecasts by agency id.", "type": "object", "additionalProperties": {"$ref": "#/$defs/TcForecast"}},
+    "models": {
+      "description": "Model forecasts by model id: a deterministic track, or a member set (an object with leads).",
+      "type": "object",
+      "additionalProperties": {"anyOf": [{"$ref": "#/$defs/TcEnsemble"}, {"$ref": "#/$defs/TcForecast"}]}
+    },
+    "impact": {"description": "Reserved for the impact areas.", "type": "object"},
+    "alert": {"anyOf": [{"$ref": "#/$defs/TcAlert"}, {"type": "null"}]},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/TcSource"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "StormId": {
+      "description": "An ATCF id (EP142026) or a synthetic x-<basin>-<first seen YYYYMMDDHH>-<n> (docs/tc.md section 3).",
+      "type": "string",
+      "pattern": "^([A-Z]{2}\\d{6}|x-[a-z]{2}-\\d{10}-\\d+)$"
+    },
+    "SourceKey": {
+      "description": "An agency, model or source id, admitted on shape alone.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*$"
+    },
+    "Run": {
+      "description": "A model cycle, YYYYMMDDHH: what the raster manifest calls run.",
+      "type": "string",
+      "pattern": "^\\d{10}$"
+    },
+    "AliasWindow": {
+      "description": "When an alias named the storm.",
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {"$ref": "#/$defs/Timestamp"},
+        "to": {"$ref": "#/$defs/Timestamp"}
+      }
+    },
+    "Quadrants": {
+      "description": "One wind threshold's radii, km, as [ne, se, sw, nw]; null where a quadrant is not reported.",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"type": ["number", "null"], "minimum": 0}
+    },
+    "TcPoint": {
+      "description": "A position and its intensity. A forecast's points carry lead, seconds from the forecast's base; a best track's do not.",
+      "type": "object",
+      "required": ["time", "lat", "lon"],
+      "properties": {
+        "time": {"$ref": "#/$defs/Timestamp"},
+        "lead": {"type": "integer", "minimum": 0},
+        "lat": {"type": "number", "minimum": -90, "maximum": 90},
+        "lon": {"type": "number", "minimum": -180, "maximum": 180},
+        "vmax": {"description": "m/s.", "type": ["number", "null"], "minimum": 0, "maximum": 150},
+        "pmin": {"description": "hPa.", "type": ["number", "null"], "minimum": 800, "maximum": 1100},
+        "radii": {
+          "description": "Quadrant radii keyed by the threshold in knots (34, 50, 64).",
+          "type": ["object", "null"],
+          "additionalProperties": {"$ref": "#/$defs/Quadrants"}
+        },
+        "class": {"description": "The source's own intensity string, verbatim.", "type": ["string", "null"]},
+        "rmw": {"description": "Radius of maximum wind, km.", "type": ["number", "null"], "minimum": 0},
+        "gust": {"description": "m/s.", "type": ["number", "null"], "minimum": 0, "maximum": 200},
+        "cone": {"description": "Cone radius, km.", "type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "TcForecast": {
+      "description": "One forecast track: valid time base + lead on every point.",
+      "type": "object",
+      "required": ["issued", "base", "points"],
+      "properties": {
+        "issued": {"$ref": "#/$defs/Timestamp"},
+        "base": {"$ref": "#/$defs/Timestamp"},
+        "run": {"$ref": "#/$defs/Run"},
+        "number": {"description": "A centre's advisory or warning number, verbatim.", "type": "string"},
+        "points": {"type": "array", "items": {"$ref": "#/$defs/TcPoint"}}
+      }
+    },
+    "TcTrack": {
+      "description": "A best track: points by time, no leads.",
+      "type": "object",
+      "required": ["provisional", "points"],
+      "properties": {
+        "source": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*$"},
+        "provisional": {"type": "boolean"},
+        "points": {"type": "array", "items": {"$ref": "#/$defs/TcPoint"}}
+      }
+    },
+    "TcEnsemble": {
+      "description": "A member set on one lead axis, flattened member-major: lat and lon degrees x 100, vmax m/s x 10, pmin hPa x 10, -32768 missing.",
+      "type": "object",
+      "required": ["issued", "base", "leads", "members", "lat", "lon", "vmax", "pmin"],
+      "properties": {
+        "issued": {"$ref": "#/$defs/Timestamp"},
+        "base": {"$ref": "#/$defs/Timestamp"},
+        "run": {"$ref": "#/$defs/Run"},
+        "leads": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "members": {"type": "array", "items": {"type": "integer"}},
+        "lat": {"type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": -9000, "maximum": 9000}]}},
+        "lon": {"type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": -18000, "maximum": 18000}]}},
+        "vmax": {"type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 0, "maximum": 1500}]}},
+        "pmin": {"type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 8000, "maximum": 11000}]}},
+        "mean": {"anyOf": [{"$ref": "#/$defs/TcForecast"}, {"type": "null"}]}
+      }
+    },
+    "LatLon": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"type": "number", "minimum": -90, "maximum": 90},
+        {"type": "number", "minimum": -180, "maximum": 180}
+      ]
+    },
+    "TcAlert": {
+      "description": "JTWC's tropical cyclone formation alert: the formation line's two ends, its half-width (km) and the estimated centre.",
+      "type": "object",
+      "required": ["time"],
+      "properties": {
+        "time": {"$ref": "#/$defs/Timestamp"},
+        "line": {
+          "type": ["array", "null"],
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/LatLon"}
+        },
+        "halfWidth": {"type": ["number", "null"], "minimum": 0},
+        "center": {"anyOf": [{"$ref": "#/$defs/LatLon"}, {"type": "null"}]}
+      }
+    },
+    "TcSource": {
+      "description": "One source's outcome (docs/tc.md section 6), as the index carries it.",
+      "type": "object",
+      "required": ["id", "ok"],
+      "properties": {
+        "id": {"$ref": "#/$defs/SourceKey"},
+        "ok": {"type": "boolean"},
+        "error": {"type": "string"},
+        "fetched": {"$ref": "#/$defs/Timestamp"},
+        "url": {"type": "string"},
+        "cycle": {"$ref": "#/$defs/Run"},
+        "products": {"type": "integer", "minimum": 0},
+        "storms": {"type": "integer", "minimum": 0},
+        "members": {"type": "integer", "minimum": 0},
+        "systems": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
