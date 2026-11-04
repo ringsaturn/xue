@@ -92,7 +92,7 @@ npx vitest run tests/web
    model id.
 2. If the source needed a new rule (step 3), release on a `release/0.N`
    branch (`release` skill): the change, the release commit, the tag on
-   the branch, PyPI, the relock, then a fast-forward into `main`.
+   the branch, the publish and relock by CI, then a fast-forward into `main`.
    `publish.yml` pins the native encoder, so such a source publishes on
    schedule only once the relocked wheel is on `main`. A source built from
    existing rules needs no release: merge to `main`.

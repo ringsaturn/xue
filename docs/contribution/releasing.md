@@ -54,13 +54,21 @@ already installed (see "Why the floor tracks the current release").
    Both authenticate with Trusted Publishing (OIDC), so no token is stored.
    No sdist is published, because a source build needs GDAL, libclang and
    cmake.
-4. **Relock commit** on the branch, `chore: relock on the published xuepy
-   0.N.0`, once the wheels are on PyPI: raise the floor in `pyproject.toml`
-   to `"xuepy>=0.N,<0.N+1"` and run `uv lock --refresh-package xuepy`.
-   Commit `pyproject.toml` and `uv.lock` together.
-5. **Merge into `main`** with a fast-forward (`git merge --ff-only
-   release/0.N`), so the change, the release commit and the relock land on
-   `main` together and keep their history. Then delete the branch.
+4. **Relock commit**, made by CI. When `release-xuepy.yml` has attached
+   the wheels, [`release-wheels-csv.yml`](../../.github/workflows/release-wheels-csv.yml)
+   records them, redeploys the index and, once it lists the version, runs
+   [`scripts/relock_release.sh v0.N.0`](../../scripts/relock_release.sh)
+   on the branch that holds the tag: the floor in `pyproject.toml` becomes
+   `"xuepy>=0.N,<0.N+1"`, `uv lock --refresh-package xuepy` runs, the lock
+   is checked to hold exactly 0.N.0, and `chore: relock on the published
+   xuepy 0.N.0` is pushed to `release/0.N`. A push with the workflow token
+   starts no workflow, so the job then dispatches `test.yml` on the branch;
+   wait for that run too. If the job failed, run the script by hand from a
+   fetched checkout, or dispatch the workflow with its `relock_tag` input
+   (`dry_run` shows the commit without pushing).
+5. **Merge into `main`** with a fast-forward: `git pull`, then `git merge
+   --ff-only release/0.N`, so the change, the release commit and the relock
+   land on `main` together and keep their history. Then delete the branch.
 
 A manual dispatch of either workflow is a rehearsal: `cargo publish
 --dry-run`, or wheels uploaded as workflow artifacts only.
@@ -95,7 +103,7 @@ or a schema bump) merged to `main` before its wheel shipped, `main` would
 still install the old locked wheel, which refuses the document. Then
 `tests/test_native.py` (byte parity between the two encoders) and the
 scheduled publishes, which pin the native encoder, would fail until the
-relock. Raising the floor before the wheel is on PyPI is worse: `uv sync`
+relock. Raising the floor before the wheel is indexed is worse: `uv sync`
 fails everywhere, because the version cannot be resolved. Keeping steps
 1–4 on `release/0.N` confines both failure windows to the branch.
 
@@ -107,13 +115,18 @@ reference pipeline with a warning.
 
 ## The own index
 
-PyPI is the public channel for `xuepy`. The repository also keeps its own
-[PEP 503](https://peps.python.org/pep-0503/) index of the wheels attached
-to its GitHub releases, for its own builds:
+PyPI is the public channel for `xuepy`. The repository's own builds take
+the wheel from its own [PEP 503](https://peps.python.org/pep-0503/) index
+of the wheels attached to its GitHub releases:
 <https://ringsaturn.github.io/xue/simple/>. Each link points at the
 release asset with its `sha256`, and these are the files PyPI received, so
 both indexes resolve to the same hashes. The index starts at `v0.3.0`, the
 first release that carries wheels.
+
+`pyproject.toml` pins `xuepy` to this index (`[[tool.uv.index]]` with
+`explicit = true` and `[tool.uv.sources]`); every other dependency still
+comes from PyPI. `uv sync` reads the wheel URLs and hashes from `uv.lock`
+and never asks the index, so a Pages outage stalls only a relock.
 
 How it stays current:
 
@@ -128,10 +141,14 @@ How it stays current:
    deploys both. A GitHub Pages deployment replaces the whole site, so this
    one workflow owns every path on it. The site carries HTML only, never a
    wheel; the build refuses an artifact that holds one.
+4. The `relock` job of `release-wheels-csv.yml` waits for the index to
+   list the version and makes the relock commit on the release branch
+   ("The flow", step 4).
 
-A dispatch of `release-wheels-csv.yml` refreshes the CSV by hand. To
-rebuild it from every release, run the script with the workflow's
-arguments plus `--full-fetch` and commit the result.
+A dispatch of `release-wheels-csv.yml` refreshes the CSV by hand; with
+`relock_tag` it also relocks the branch holding that tag (`dry_run` only
+shows the commit). To rebuild the CSV from every release, run the script
+with the workflow's arguments plus `--full-fetch` and commit the result.
 
 To install from it:
 
@@ -141,17 +158,8 @@ uv pip install xuepy \
   --extra-index-url https://pypi.org/simple
 ```
 
-`pyproject.toml` carries the `[[tool.uv.index]]` (`explicit = true`) and
-`[tool.uv.sources]` blocks that pin `xuepy` to this index, commented out.
-Enabling them changes xuepy's source in `uv.lock`, so it is a commit of
-its own: uncomment both blocks, `uv lock --refresh-package xuepy`, check
-that only xuepy's `source` line changed (the hashes are the same), and
-commit `pyproject.toml` with `uv.lock`. Do it only once the index lists the
-locked version; an explicit index that does not list it fails resolution.
-
-Until then the release flow above is unchanged: the relock waits for the
-wheel on PyPI. PyPI stays required for anyone installing `xuepy` without
-this index, so every `v*` tag still publishes there.
+PyPI stays required for anyone installing `xuepy` without this index, so
+every `v*` tag still publishes there.
 
 ## Deploy order
 
