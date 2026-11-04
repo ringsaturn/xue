@@ -1466,8 +1466,7 @@ SOURCES: dict[str, SourceSpec] = {
     # and by species, and the surface concentrations of fine and coarse
     # particulate matter — the forecast that pairs with the satellite
     # sources' Dust RGB and DEBRA confidence. No temperature and no rain,
-    # so the core set is the total optical depth alone; no video companion
-    # either.
+    # so the core set is the total optical depth alone.
     "gefsaero": SourceSpec(
         id="gefsaero",
         feed="noaa-gefs-aerosols",
@@ -1497,7 +1496,7 @@ SOURCES: dict[str, SourceSpec] = {
     # surface concentration is the core: it is the field an air-quality
     # reader looks for, the dust optical depth the one a satellite image
     # is compared with. A plane is a quarter of a GFS plane, so there is no
-    # ladder and no video.
+    # ladder.
     "cmadust": SourceSpec(
         id="cmadust",
         feed="cmadust",
@@ -1743,7 +1742,7 @@ SOURCES: dict[str, SourceSpec] = {
     # ``apcp``) at every frame, so nothing is analysis-optional. The nominal
     # grid is d04 inscribed in the regular grid, 79 x 61 cells (138.540 to
     # 138.930°E, 35.220 to 35.520°N): a whole plane is under 5000 cells, so
-    # there is no ladder and no video.
+    # there is no ladder.
     "woof": SourceSpec(
         id="woof",
         feed="local",
@@ -1814,8 +1813,8 @@ SOURCES: dict[str, SourceSpec] = {
     # the upstream area is the static map repeated on every frame. One
     # forecast cycle every twelve hours (00Z, 12Z) to 120 hours at the
     # 6-hourly step the HRES dis06 is published at. A plane is 13.5 M cells,
-    # but a case is a box of a few thousand, so there is no ladder and no
-    # video; 64 x 64 cells is about a degree.
+    # but a case is a box of a few thousand, so there is no ladder; 64 x 64
+    # cells is about a degree.
     "efas": SourceSpec(
         id="efas",
         feed="local",
@@ -1874,7 +1873,7 @@ SOURCES: dict[str, SourceSpec] = {
     # steps hourly; a window may start at any hour (``cycle_hours`` 1). The
     # gust is ``fg10``, the maximum over the hour ending at the frame,
     # declared a maximum like ECMWF's. A case is a box of a few hundred
-    # cells, so there is no ladder and no video.
+    # cells, so there is no ladder.
     "era5": SourceSpec(
         id="era5",
         feed="local",
@@ -1907,7 +1906,7 @@ SOURCES: dict[str, SourceSpec] = {
     # shell learns a new one: the organic matter optical depth is CAMS's
     # spelling of the component ``aodorg`` names. A window may start at any
     # frame (``cycle_hours`` 3) and run up to sixty days; a case is a box of
-    # a few thousand cells, so there is no ladder and no video.
+    # a few thousand cells, so there is no ladder.
     "cams": SourceSpec(
         id="cams",
         feed="local",
