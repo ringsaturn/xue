@@ -621,4 +621,22 @@ mod tests {
         assert_eq!(&columns[..named.len()], named.as_slice());
         assert_eq!(&columns[named.len()..], ["offset", "length"]);
     }
+
+    /// The same for synop (`docs/schemas/synop-stations.schema.json`).
+    #[test]
+    fn the_synop_lead_is_the_schemas() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../docs/schemas/synop-stations.schema.json"
+        ))
+        .expect("schema");
+        let named: Vec<String> = schema["properties"]["columns"]["prefixItems"]
+            .as_array()
+            .expect("prefixItems")
+            .iter()
+            .map(|item| item["const"].as_str().expect("const").to_owned())
+            .collect();
+        let columns = SYNOP.table_columns(&[]);
+        assert_eq!(&columns[..named.len()], named.as_slice());
+        assert_eq!(&columns[named.len()..], ["offset", "length"]);
+    }
 }

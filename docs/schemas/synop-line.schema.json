@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/synop-line.schema.json",
+  "title": "SynopLine",
+  "description": "One line of synop.<round>/<network>.jsonl (docs/synop.md section 6), index v1 and v2 alike: a station and its 24-hour window, column by column. That time strictly increases and every obs and qc array is as long as it are the readers' own checks.",
+  "type": "object",
+  "required": ["id", "lat", "lon", "rank", "time", "obs"],
+  "properties": {
+    "id": {"$ref": "#/$defs/StationId"},
+    "name": {"type": ["string", "null"]},
+    "names": {
+      "description": "The network's own spellings by BCP 47 language tag.",
+      "type": ["object", "null"],
+      "additionalProperties": {"type": "string"}
+    },
+    "lat": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon": {"type": "number", "minimum": -180, "maximum": 180},
+    "elev": {"type": ["number", "null"], "minimum": -500, "maximum": 9000},
+    "wmo": {"type": ["string", "null"]},
+    "wigos": {
+      "description": "The WIGOS identifier: series, issuer, issue number and local identifier.",
+      "type": ["string", "null"],
+      "pattern": "^\\d{1,2}-\\d{1,5}-\\d{1,5}-[0-9A-Za-z_.-]{1,16}$"
+    },
+    "rank": {"$ref": "#/$defs/Rank"},
+    "time": {"description": "Epoch seconds UTC, oldest first.", "type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+    "obs": {
+      "description": "One array per element the station reported in the window, null where it was not reported; an element outside section 2's table is any number.",
+      "type": "object",
+      "properties": {
+        "t": {"type": "array", "items": {"type": ["number", "null"], "minimum": -100, "maximum": 70}},
+        "td": {"type": "array", "items": {"type": ["number", "null"], "minimum": -100, "maximum": 60}},
+        "rh": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0, "maximum": 100}},
+        "p": {"type": "array", "items": {"type": ["number", "null"], "minimum": 300, "maximum": 1100}},
+        "slp": {"type": "array", "items": {"type": ["number", "null"], "minimum": 800, "maximum": 1100}},
+        "wd": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0, "maximum": 360}},
+        "ws": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 150}},
+        "gust": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 150}},
+        "pr": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 1000}},
+        "pr1h": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 1000}},
+        "sun": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 60}},
+        "snow": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0, "maximum": 2000}},
+        "vis": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0}}
+      },
+      "additionalProperties": {"type": "array", "items": {"type": ["number", "null"]}}
+    },
+    "qc": {
+      "description": "The network's own quality code of each value, per element, where the network has them.",
+      "type": ["object", "null"],
+      "additionalProperties": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0, "maximum": 255}}
+    }
+  },
+  "$defs": {
+    "StationId": {
+      "description": "<network>:<the network's own station identifier> (docs/synop.md section 3).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:[0-9A-Za-z_.-]+$"
+    },
+    "Rank": {
+      "description": "0 a principal station, 1 a multi-element automatic station, 2 a precipitation gauge.",
+      "enum": [0, 1, 2]
+    }
+  }
+}

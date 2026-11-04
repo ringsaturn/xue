@@ -43,6 +43,7 @@ from .schema import (
     PRODUCT,
     SCHEMA_VERSION,
     build_pointer,
+    columns,
     crc32_hex,
     encode_json,
     iso_z,
@@ -284,6 +285,7 @@ def build_product(
             "network": network.id,
             "issued": issued,
             "elements": list(ELEMENTS),
+            "columns": columns(list(ELEMENTS)),
             "stations": rows,
         }
         stations_bytes = encode_json(stations_payload)

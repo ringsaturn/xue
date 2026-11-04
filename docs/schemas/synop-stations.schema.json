@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/synop-stations.schema.json",
+  "title": "SynopStationsFile",
+  "description": "synop.<round>/<network>.stations.json, schema v2 (docs/synop.md section 5): one compact row per station. That network, issued and elements are the index's, the rows' count, width, order and byte spans, and each element's range are the readers' own checks.",
+  "type": "object",
+  "required": ["schemaVersion", "network", "issued", "elements", "stations"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 2},
+    "network": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "issued": {
+      "description": "The round: a UTC minute that is a multiple of ten.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d0:00Z$",
+      "format": "date-time"
+    },
+    "elements": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}},
+    "columns": {
+      "description": "The rows' columns by name: the seven below, the elements in their order, then offset and length. A reader finds a column by its name here; a round written before the field has the same layout and is read by position.",
+      "type": "array",
+      "minItems": 9,
+      "prefixItems": [
+        {"const": "id"},
+        {"const": "lat"},
+        {"const": "lon"},
+        {"const": "elev"},
+        {"const": "rank"},
+        {"const": "name"},
+        {"const": "obsTime"}
+      ],
+      "items": {"type": "string", "pattern": "^[a-z][A-Za-z0-9]*$"}
+    },
+    "stations": {"type": "array", "items": {"$ref": "#/$defs/SynopStationRow"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "SynopStationRow": {
+      "description": "[id, lat, lon, elev, rank, name, obsTime, one current value per element, offset, length].",
+      "type": "array",
+      "minItems": 9,
+      "prefixItems": [
+        {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:[0-9A-Za-z_.-]+$"},
+        {"type": "number", "minimum": -90, "maximum": 90},
+        {"type": "number", "minimum": -180, "maximum": 180},
+        {"type": ["number", "null"], "minimum": -500, "maximum": 9000},
+        {"enum": [0, 1, 2]},
+        {"type": ["string", "null"]},
+        {"$ref": "#/$defs/Timestamp"}
+      ],
+      "items": {"type": ["number", "null"]}
+    }
+  }
+}

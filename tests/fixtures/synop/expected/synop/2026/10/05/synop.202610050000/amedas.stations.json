@@ -3,6 +3,7 @@
  "network": "amedas",
  "issued": "2026-10-05T00:00:00Z",
  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "columns": ["id", "lat", "lon", "elev", "rank", "name", "obsTime", "t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "offset", "length"],
  "stations": [
   ["amedas:11001", 45.52, 141.935, 26.0, 1, "Cape Soya", "2026-10-05T00:00:00Z", 15.9, null, 63, null, null, 158, 3.5, null, 0.0, 0.0, 10.0, null, null, 0, 331],
   ["amedas:11016", 45.415, 141.6783, 3.0, 0, "Wakkanai", "2026-10-05T00:00:00Z", 15.4, null, 68, 1016.7, 1018.1, 135, 4.8, null, 0.0, 0.0, 10.0, null, 20000, 332, 404],

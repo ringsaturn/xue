@@ -632,10 +632,16 @@ class ValidatorTest(unittest.TestCase):
             "other elements": lambda payload: payload["elements"].reverse(),
             "another network": lambda payload: payload.__setitem__("network", "dwd"),
             "schema version": lambda payload: payload.__setitem__("schemaVersion", 1),
+            "columns reordered": lambda payload: payload["columns"].reverse(),
+            "a column renamed": lambda payload: payload["columns"].__setitem__(-1, "span"),
         }
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(SynopProductError):
                 validate_stations_file(self.broken(self.stations, change), self.index, "amedas")
+
+    def test_a_stations_file_names_its_columns_and_one_without_them_is_read(self) -> None:
+        self.assertEqual(self.stations["columns"], [*ROW_HEAD, *self.index["elements"], "offset", "length"])
+        validate_stations_file(self.broken(self.stations, lambda payload: payload.pop("columns")), self.index, "amedas")
 
     def test_malformed_v1_indexes_are_still_refused(self) -> None:
         cases = {

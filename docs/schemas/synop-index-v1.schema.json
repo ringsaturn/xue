@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/synop-index-v1.schema.json",
+  "title": "SynopIndexV1",
+  "description": "synop.<round>/index.json, schema v1, the first (docs/synop.md section 8): every station's row in the index itself. No longer written, read forever. Each file's name, the networks' and elements' uniqueness, the rows' width, order, network and byte spans, and each element's range are the readers' own checks.",
+  "type": "object",
+  "required": ["schemaVersion", "issued", "generated", "networks", "elements", "stations", "sources"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "issued": {
+      "description": "The round: a UTC minute that is a multiple of ten.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d0:00Z$",
+      "format": "date-time"
+    },
+    "generated": {"$ref": "#/$defs/Timestamp"},
+    "networks": {"type": "array", "items": {"$ref": "#/$defs/SynopNetworkV1"}},
+    "elements": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}},
+    "stations": {"type": "array", "items": {"$ref": "#/$defs/SynopStationRowV1"}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/SynopSource"}},
+    "builder": {
+      "description": "The code that built the round.",
+      "type": ["object", "null"],
+      "required": ["name"],
+      "properties": {
+        "name": {"const": "xuebuild"},
+        "revision": {"type": ["string", "null"], "pattern": "^[0-9a-f]{7,40}$"}
+      }
+    }
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "CrcFile": {
+      "description": "A file beside the index: its name, length and zlib CRC32.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"}
+      }
+    },
+    "Seconds": {
+      "description": "A period, seconds.",
+      "type": ["integer", "null"],
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "SynopNetworkV1": {
+      "description": "One network with a station in the window; its file is always <id>.jsonl.",
+      "type": "object",
+      "required": ["id", "name", "cadence", "attribution", "license", "url", "file"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+        "name": {"type": "string", "minLength": 1},
+        "cadence": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "prPeriod": {"$ref": "#/$defs/Seconds"},
+        "wsPeriod": {"$ref": "#/$defs/Seconds"},
+        "attribution": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "licenseUrl": {"type": ["string", "null"], "pattern": "^https://"},
+        "url": {"type": "string", "minLength": 1},
+        "latest": {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "format": "date-time"},
+        "file": {"$ref": "#/$defs/CrcFile"}
+      }
+    },
+    "SynopStationRowV1": {
+      "description": "[id, network (its position in networks), lat, lon, elev, rank, name, obsTime, one value per element, offset, length].",
+      "type": "array",
+      "minItems": 10,
+      "prefixItems": [
+        {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:[0-9A-Za-z_.-]+$"},
+        {"type": "integer", "minimum": 0},
+        {"type": "number", "minimum": -90, "maximum": 90},
+        {"type": "number", "minimum": -180, "maximum": 180},
+        {"type": ["number", "null"], "minimum": -500, "maximum": 9000},
+        {"enum": [0, 1, 2]},
+        {"type": ["string", "null"]},
+        {"$ref": "#/$defs/Timestamp"}
+      ],
+      "items": {"type": ["number", "null"]}
+    },
+    "SynopSource": {
+      "description": "One source's outcome (docs/synop.md section 7).",
+      "type": "object",
+      "required": ["id", "ok"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "ok": {"type": "boolean"},
+        "error": {"type": "string"},
+        "fetched": {"$ref": "#/$defs/Timestamp"},
+        "url": {"type": "string"},
+        "reports": {"type": "integer", "minimum": 0},
+        "snapshots": {"type": "integer", "minimum": 0},
+        "missing": {"type": "integer", "minimum": 0},
+        "files": {"type": "integer", "minimum": 0},
+        "unplaced": {"type": "integer", "minimum": 0},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

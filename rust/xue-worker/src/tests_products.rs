@@ -807,12 +807,12 @@ fn an_aq_station_answers_in_the_point_shape() {
     assert_eq!(err(&data, "aq/amedas:11016", "").code, "unknown_station");
 }
 
-/// The live aq round with every station table passed through `change`,
-/// each table and the index under crcs of their own (`tag`): the isolate
-/// holds an immutable object by its crc.
-fn aq_with_tables(tag: u32, change: impl Fn(&mut Value)) -> HashMap<String, Vec<u8>> {
+/// The live round of a station product (aq, synop) with every station
+/// table passed through `change`, each table and the index under crcs of
+/// their own (`tag`): the isolate holds an immutable object by its crc.
+fn with_tables(product: &str, tag: u32, change: impl Fn(&mut Value)) -> HashMap<String, Vec<u8>> {
     let mut objects = bucket();
-    let (dir, mut index) = live_index(&objects, "aq");
+    let (dir, mut index) = live_index(&objects, product);
     for (position, network) in index["networks"].as_array_mut().unwrap().iter_mut().enumerate() {
         let key = format!("{dir}/{}", network["stations"]["path"].as_str().unwrap());
         let mut table: Value = serde_json::from_slice(&objects[&key]).expect("table");
@@ -820,7 +820,7 @@ fn aq_with_tables(tag: u32, change: impl Fn(&mut Value)) -> HashMap<String, Vec<
         put_json(&mut objects, &key, &table);
         network["stations"]["crc32"] = json!(format!("{tag:04x}{position:04x}"));
     }
-    replace_index(&mut objects, "aq", &index, &format!("ab{tag:06x}"));
+    replace_index(&mut objects, product, &index, &format!("ab{tag:06x}"));
     objects
 }
 
@@ -834,14 +834,14 @@ fn an_aq_table_is_read_by_its_column_names() {
 
     // Named columns in another order read as the golden's do, and a table
     // from before `columns` is read by position.
-    let reordered = aq_with_tables(0xc01, |table| {
+    let reordered = with_tables("aq", 0xc01, |table| {
         assert!(table["columns"].is_array(), "the golden names its columns");
         table["columns"].as_array_mut().unwrap().reverse();
         for row in table["stations"].as_array_mut().unwrap() {
             row.as_array_mut().unwrap().reverse();
         }
     });
-    let positional = aq_with_tables(0xc02, |table| {
+    let positional = with_tables("aq", 0xc02, |table| {
         table.as_object_mut().unwrap().remove("columns");
     });
     for objects in [reordered, positional] {
@@ -856,12 +856,52 @@ fn an_aq_table_is_read_by_its_column_names() {
     // and its network left out of the list.
     let first = index["networks"][0]["id"].as_str().unwrap().to_owned();
     for broken in [
-        aq_with_tables(0xc03, |table| table["columns"][7] = json!("observed")),
-        aq_with_tables(0xc04, |table| table["columns"][1] = json!("id")),
+        with_tables("aq", 0xc03, |table| table["columns"][7] = json!("observed")),
+        with_tables("aq", 0xc04, |table| table["columns"][1] = json!("id")),
     ] {
         let data = Data::in_memory(broken);
         let body = ok(&data, "aq", "");
         assert!(!ids(&body, "networks", "id").contains(&first));
+        assert_eq!(body["count"], 0);
+    }
+}
+
+#[test]
+fn a_synop_table_is_read_by_its_column_names() {
+    let golden = Data::in_memory(bucket());
+    let expected = ok(&golden, "synop", "");
+    let station = "amedas:11016";
+    let record = ok(&golden, &format!("synop/{station}"), "");
+
+    // Named columns in another order read as the golden's do, and a table
+    // from before `columns` is read by position.
+    let reordered = with_tables("synop", 0xd01, |table| {
+        assert!(table["columns"].is_array(), "the golden names its columns");
+        table["columns"].as_array_mut().unwrap().reverse();
+        for row in table["stations"].as_array_mut().unwrap() {
+            row.as_array_mut().unwrap().reverse();
+        }
+    });
+    let positional = with_tables("synop", 0xd02, |table| {
+        table.as_object_mut().unwrap().remove("columns");
+    });
+    for objects in [reordered, positional] {
+        let data = Data::in_memory(objects);
+        let body = ok(&data, "synop", "");
+        assert_eq!(body["stations"], expected["stations"]);
+        assert_eq!(body["networks"], expected["networks"]);
+        assert_eq!(ok(&data, &format!("synop/{station}"), "")["variables"], record["variables"]);
+    }
+
+    // Tables whose columns leave one out, or name one twice, are refused
+    // and their networks left out of the list.
+    for broken in [
+        with_tables("synop", 0xd03, |table| table["columns"][6] = json!("observed")),
+        with_tables("synop", 0xd04, |table| table["columns"][1] = json!("id")),
+    ] {
+        let data = Data::in_memory(broken);
+        let body = ok(&data, "synop", "");
+        assert!(!ids(&body, "networks", "id").contains(&"amedas".to_owned()));
         assert_eq!(body["count"], 0);
     }
 }

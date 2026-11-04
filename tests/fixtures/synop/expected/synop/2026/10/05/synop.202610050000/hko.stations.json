@@ -3,6 +3,7 @@
  "network": "hko",
  "issued": "2026-10-05T00:00:00Z",
  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "columns": ["id", "lat", "lon", "elev", "rank", "name", "obsTime", "t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "offset", "length"],
  "stations": [
   ["hko:CCB", 22.2108, 114.0292, null, 1, "Cheung Chau Beach", "2026-10-05T00:00:00Z", null, null, null, null, null, 90, 7.8, 10.3, null, null, null, null, null, 0, 214],
   ["hko:CCH", 22.2011, 114.0267, 72.0, 1, "Cheung Chau", "2026-10-05T00:00:00Z", 25.4, null, 81, null, 1017.9, 135, 8.3, 10.0, null, null, null, null, null, 215, 233],
