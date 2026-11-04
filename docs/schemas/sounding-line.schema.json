@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/sounding-line.schema.json",
+  "title": "SoundingLine",
+  "description": "One line of sounding.<issue>/soundings.jsonl (docs/sounding.md section 5): a station and its newest soundings. The soundings' order, every level array n long, reported at least n, and pressure present and strictly descending are the readers' own checks.",
+  "type": "object",
+  "required": ["id", "lat", "lon", "soundings"],
+  "properties": {
+    "id": {"description": "A WIGOS identifier, series-issuer-issue-local.", "type": "string", "pattern": "^\\d+-\\d+-\\d+-[0-9A-Za-z_]+$"},
+    "wmo": {"type": ["string", "null"], "pattern": "^\\d{5}$"},
+    "name": {"type": ["string", "null"]},
+    "lat": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon": {"type": "number", "minimum": -180, "maximum": 180},
+    "elev": {"type": ["number", "null"], "minimum": -500, "maximum": 9000},
+    "soundings": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Sounding"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "Height": {
+      "description": "Geopotential metres, in the range of the level array z.",
+      "type": ["number", "null"],
+      "minimum": -1000,
+      "maximum": 100000
+    },
+    "Pressure": {"description": "Pa; never missing.", "type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 120000}},
+    "GeopotentialHeight": {"description": "Geopotential metres, -32768 missing.", "type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": -1000, "maximum": 100000}]}},
+    "Temperature": {"description": "K x 100, -32768 missing.", "type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 10000, "maximum": 40000}]}},
+    "Direction": {"description": "Degrees true, -32768 missing.", "type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 0, "maximum": 360}]}},
+    "Speed": {"description": "m/s x 10, -32768 missing.", "type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 0, "maximum": 3000}]}},
+    "Significance": {"description": "The 18-bit vertical significance flags, -32768 missing.", "type": "array", "items": {"anyOf": [{"const": -32768}, {"type": "integer", "minimum": 0, "maximum": 262143}]}},
+    "SoundingDerived": {
+      "description": "docs/sounding.md section 7.",
+      "type": "object",
+      "properties": {
+        "freezingLevel": {"$ref": "#/$defs/Height"},
+        "pw": {"description": "Precipitable water, mm.", "type": ["number", "null"], "minimum": 0, "maximum": 300},
+        "lapse850_500": {"description": "K/km.", "type": ["number", "null"], "minimum": -30, "maximum": 30},
+        "tropopause": {"$ref": "#/$defs/Height"}
+      }
+    },
+    "Sounding": {
+      "description": "One nominal time: seven fixed-point level arrays (docs/sounding.md section 2) and what is derived from them.",
+      "type": "object",
+      "required": ["time", "arrived", "n", "reported", "p", "z", "t", "td", "wd", "ws", "sig", "derived"],
+      "properties": {
+        "time": {"description": "The nominal (synoptic) time, not the launch.", "$ref": "#/$defs/Timestamp"},
+        "launched": {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "format": "date-time"},
+        "sondeType": {"description": "BUFR code table 0 02 011.", "type": ["integer", "null"], "minimum": 0},
+        "bulletin": {"description": "The WMO abbreviated heading, verbatim.", "type": ["string", "null"]},
+        "gateway": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*([.:-][a-z0-9]+)*$"},
+        "arrived": {"$ref": "#/$defs/Timestamp"},
+        "n": {"description": "The published level count.", "type": "integer", "minimum": 1},
+        "reported": {"description": "The levels the bulletin held before thinning.", "type": "integer", "minimum": 1},
+        "p": {"$ref": "#/$defs/Pressure"},
+        "z": {"$ref": "#/$defs/GeopotentialHeight"},
+        "t": {"$ref": "#/$defs/Temperature"},
+        "td": {"$ref": "#/$defs/Temperature"},
+        "wd": {"$ref": "#/$defs/Direction"},
+        "ws": {"$ref": "#/$defs/Speed"},
+        "sig": {"$ref": "#/$defs/Significance"},
+        "derived": {"$ref": "#/$defs/SoundingDerived"}
+      }
+    }
+  }
+}
