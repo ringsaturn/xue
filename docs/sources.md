@@ -304,7 +304,9 @@ level (every 0.25 km to 3 km, 0.5 km to 9 km, 1 km above), one frame every
 ten minutes from the scan at each mark, thinned by block maximum to 0.05°,
 all in one `refl3d` bundle (`refl500` … `refl19000`, dBZ, GRIB2 209/9/0 on
 surface 102 at the altitude in metres). The viewer draws it as a raymarched
-volume (`?vexag=` sets the vertical exaggeration).
+volume (`?vexag=` sets the vertical exaggeration). The live window is
+paused: its scheduled publish is disabled, and the volume is published
+through showcase cases.
 
 ## Point products
 

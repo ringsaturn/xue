@@ -19,6 +19,12 @@ name: publish mrms3d
 #
 # Machine time: six jobs an hour of a few minutes each, free on a public
 # repository's standard runners.
+#
+# Paused: the workflow is disabled in the repository's Actions settings
+# (`gh workflow disable publish-mrms3d.yml`; the last scheduled round ran
+# 2026-10-05), so no live window is published and the volume is reached
+# through the showcase cases. `gh workflow enable publish-mrms3d.yml`
+# resumes the cron; nothing in the tree changes.
 
 on:
   schedule:
