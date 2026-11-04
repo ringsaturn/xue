@@ -292,6 +292,9 @@ Each variable array's `zarr.json`:
   list, copied, for a reader that opens one array alone.
 - `xue.predictor` is `previous` or `raw` and is informational: decoding
   follows the codec chain.
+- Every store writer writes `xue.variable` and `xue.predictor`, and a
+  reader accepts an array without them: the schema names them without
+  requiring them.
 - `_FillValue` is the `nodataCode` for every variable. `scale_factor` and
   `add_offset` are written for a linear codebook only, so a CF-aware client
   dequantizes it (value = `code × scale + offset`); the `log1p` codebook has
