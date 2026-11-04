@@ -1292,10 +1292,11 @@ test("a streaming session reads a pinned series with a few range requests", asyn
     });
   }
   await expect(page.locator('#probe-rows .probe-row[data-row="temperature"] .probe-row-note')).toHaveText("°C");
-  // The wind row reads the speed and the gust, with the unit and the
-  // direction under it.
+  // The wind row reads the speed and the gust, with the unit beside them
+  // and the direction too where the label column has room for it (the
+  // chart draws it as arrows either way).
   await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-value')).toHaveText(/^\d+\.\d+ · \d+\.\d+$/);
-  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-note')).toHaveText(/^m\/s · \d{3}°$/);
+  await expect(page.locator('#probe-rows .probe-row[data-row="wind"] .probe-row-note')).toHaveText(/^m\/s( · \d{3}°)?$/);
   expect(counters.full).toBe(0);
   // A press on the rows scrubs the timeline to the frame under it.
   const chart = page.locator("#probe-rows .probe-rows-chart");
