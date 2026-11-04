@@ -866,6 +866,43 @@ fn an_aq_table_is_read_by_its_column_names() {
     }
 }
 
+#[test]
+fn the_airport_rows_are_read_by_their_column_names() {
+    let golden = Data::in_memory(bucket());
+    let expected = ok(&golden, "airports", "");
+    let record = ok(&golden, "airports/FACT", "");
+    let variant = |tag: &str, change: &dyn Fn(&mut Value)| {
+        let mut objects = bucket();
+        let (_, mut index) = live_index(&objects, "airport");
+        assert!(index["columns"].is_array(), "the golden names its columns");
+        change(&mut index);
+        replace_index(&mut objects, "airport", &index, tag);
+        Data::in_memory(objects)
+    };
+
+    // Named columns in another order read as the golden's do, and an index
+    // from before `columns` is read by position.
+    let reordered = variant("ad000001", &|index| {
+        index["columns"].as_array_mut().unwrap().reverse();
+        for row in index["stations"].as_array_mut().unwrap() {
+            row.as_array_mut().unwrap().reverse();
+        }
+    });
+    let positional = variant("ad000002", &|index| {
+        index.as_object_mut().unwrap().remove("columns");
+    });
+    for data in [reordered, positional] {
+        assert_eq!(ok(&data, "airports", "")["stations"], expected["stations"]);
+        assert_eq!(ok(&data, "airports/FACT", ""), record);
+    }
+
+    // Columns that leave one out are refused.
+    let broken = variant("ad000003", &|index| index["columns"][4] = json!("observed"));
+    let error = err(&broken, "airports", "");
+    assert_eq!((error.status, error.code.as_str()), (502, "upstream_failed"));
+    assert!(error.message.contains("obsTime"), "{}", error.message);
+}
+
 /// The id of the newest round before the live one, flat or filed under
 /// its day.
 fn earlier_round(objects: &HashMap<String, Vec<u8>>, product: &str) -> String {

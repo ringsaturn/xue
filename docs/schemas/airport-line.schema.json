@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/airport-line.schema.json",
+  "title": "AirportLine",
+  "description": "One line of airport.<round>/history.jsonl (docs/airport.md section 5): a station's last 24 hours of METARs, newest first, and its current TAF. The METARs' order and that a TAF and its periods do not end before they start are the readers' own checks.",
+  "type": "object",
+  "required": ["icao", "lat", "lon", "metars"],
+  "properties": {
+    "icao": {"type": "string", "pattern": "^[A-Z0-9]{2,4}$"},
+    "name": {"type": ["string", "null"]},
+    "lat": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon": {"type": "number", "minimum": -180, "maximum": 180},
+    "elev": {"type": ["number", "null"], "minimum": -500, "maximum": 9000},
+    "iata": {"type": ["string", "null"]},
+    "wmo": {"type": ["string", "null"]},
+    "metars": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Metar"}},
+    "taf": {"anyOf": [{"$ref": "#/$defs/Taf"}, {"type": "null"}]}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "Temperature": {"description": "Degrees C, to a tenth.", "type": ["number", "null"], "minimum": -100, "maximum": 70},
+    "Direction": {"description": "Degrees true; null when variable.", "type": ["integer", "null"], "minimum": 0, "maximum": 360},
+    "Speed": {"description": "m/s, to a tenth.", "type": ["number", "null"], "minimum": 0, "maximum": 150},
+    "Visibility": {"description": "Metres; 10000 means at least ten kilometres.", "type": ["integer", "null"], "minimum": 0},
+    "Pressure": {"description": "hPa, to a tenth.", "type": ["number", "null"], "minimum": 800, "maximum": 1100},
+    "CloudLayer": {
+      "description": "[cover, base]: the sky cover code as it arrives and the base in metres above ground, or null.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"type": "string", "pattern": "^[A-Z]{3,5}$"},
+        {"type": ["number", "null"], "minimum": 0}
+      ]
+    },
+    "Cloud": {"type": "array", "items": {"$ref": "#/$defs/CloudLayer"}},
+    "Metar": {
+      "description": "One observation; raw is the report verbatim and is the authority.",
+      "type": "object",
+      "required": ["time", "raw", "cloud", "auto", "type"],
+      "properties": {
+        "time": {"$ref": "#/$defs/Timestamp"},
+        "raw": {"type": "string", "minLength": 1},
+        "t": {"$ref": "#/$defs/Temperature"},
+        "td": {"$ref": "#/$defs/Temperature"},
+        "wd": {"$ref": "#/$defs/Direction"},
+        "ws": {"$ref": "#/$defs/Speed"},
+        "gust": {"$ref": "#/$defs/Speed"},
+        "vis": {"$ref": "#/$defs/Visibility"},
+        "qnh": {"$ref": "#/$defs/Pressure"},
+        "slp": {"$ref": "#/$defs/Pressure"},
+        "wx": {"description": "The present-weather string verbatim.", "type": ["string", "null"]},
+        "cloud": {"$ref": "#/$defs/Cloud"},
+        "category": {"enum": ["VFR", "MVFR", "IFR", "LIFR", null]},
+        "auto": {"type": "boolean"},
+        "type": {"enum": ["METAR", "SPECI"]}
+      }
+    },
+    "TafPeriod": {
+      "description": "One decoded group; a field the group does not restate is null.",
+      "type": "object",
+      "required": ["from", "to", "cloud"],
+      "properties": {
+        "from": {"$ref": "#/$defs/Timestamp"},
+        "to": {"$ref": "#/$defs/Timestamp"},
+        "change": {"enum": ["FM", "BECMG", "TEMPO", "PROB", null]},
+        "prob": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+        "wd": {"$ref": "#/$defs/Direction"},
+        "ws": {"$ref": "#/$defs/Speed"},
+        "gust": {"$ref": "#/$defs/Speed"},
+        "vis": {"$ref": "#/$defs/Visibility"},
+        "wx": {"type": ["string", "null"]},
+        "cloud": {"$ref": "#/$defs/Cloud"}
+      }
+    },
+    "Taf": {
+      "description": "The current forecast; amended is true for an amendment or a correction.",
+      "type": "object",
+      "required": ["issued", "from", "to", "raw", "amended", "periods"],
+      "properties": {
+        "issued": {"$ref": "#/$defs/Timestamp"},
+        "from": {"$ref": "#/$defs/Timestamp"},
+        "to": {"$ref": "#/$defs/Timestamp"},
+        "raw": {"type": "string", "minLength": 1},
+        "amended": {"type": "boolean"},
+        "periods": {"type": "array", "items": {"$ref": "#/$defs/TafPeriod"}}
+      }
+    }
+  }
+}

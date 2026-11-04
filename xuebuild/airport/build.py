@@ -45,6 +45,7 @@ from .schema import (
     POINTER_FILENAME,
     PRODUCT,
     SCHEMA_VERSION,
+    STATION_ROW,
     build_pointer,
     crc32_hex,
     encode_json,
@@ -260,6 +261,7 @@ def build_product(
             "byteLength": len(history),
             "crc32": crc32_hex(history),
         },
+        "columns": list(STATION_ROW),
         "stations": rows,
         "sources": [_published(status) for status in statuses],
     }

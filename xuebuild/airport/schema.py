@@ -89,9 +89,11 @@ STATION_ROW = (
     "offset",
     "length",
 )
-"""The index's compact row, in order. A reader indexes it positionally;
-the last two are the byte span of the station's line in the history file,
-the JSON object alone without its newline."""
+"""The index's compact row, in order, which the index names as its
+``columns``: a reader finds each column by its name there, and reads an
+index from before the field by position. The last two are the byte span of
+the station's line in the history file, the JSON object alone without its
+newline."""
 
 ROUND = re.compile(r"^\d{12}$")
 ICAO = re.compile(r"^[A-Z0-9]{2,4}$")
@@ -273,6 +275,8 @@ def validate_index(payload: object) -> None:
         raise AirportProductError("index.history.byteLength must be a non-negative integer")
     if not isinstance(history.get("crc32"), str) or not CRC32.match(history["crc32"]):
         raise AirportProductError("index.history.crc32 must be 8 lowercase hex characters")
+    if "columns" in payload and payload["columns"] != list(STATION_ROW):
+        raise AirportProductError(f"index.columns must be {', '.join(STATION_ROW)}")
     stations = payload.get("stations")
     if not isinstance(stations, list):
         raise AirportProductError("index.stations must be a list")

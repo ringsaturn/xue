@@ -14,8 +14,9 @@ use crate::timezone;
 
 const PRODUCT: &str = "airport";
 
-/// The index row's columns, in the contract's order; the last two are the
-/// byte span and stay out of the response.
+/// An index row's columns, in the order of an index written before
+/// `columns` named them (`docs/schemas/airport-index.schema.json`); the
+/// last two are the byte span and stay out of the response.
 const COLUMNS: [&str; 16] = [
     "icao",
     "lat",
@@ -35,6 +36,51 @@ const COLUMNS: [&str; 16] = [
     "length",
 ];
 const OFFSET: usize = 14;
+
+/// Where each of [`COLUMNS`] sits in the index's rows, and their width:
+/// found by name in the index's `columns`, or in place for an index written
+/// before that field.
+fn column_order(index: &Value) -> Result<([usize; 16], usize), String> {
+    let Some(columns) = index.get("columns") else {
+        return Ok((std::array::from_fn(|position| position), COLUMNS.len()));
+    };
+    let names: Vec<&str> = columns
+        .as_array()
+        .and_then(|items| items.iter().map(Value::as_str).collect())
+        .ok_or("the index names its columns with something other than strings")?;
+    let mut order = [0; 16];
+    for (slot, name) in order.iter_mut().zip(COLUMNS) {
+        let mut found = names.iter().enumerate().filter(|(_, held)| **held == name);
+        *slot = match (found.next(), found.next()) {
+            (Some((position, _)), None) => position,
+            (None, _) => return Err(format!("the index has no {name} column")),
+            _ => return Err(format!("the index names the {name} column twice")),
+        };
+    }
+    Ok((order, names.len()))
+}
+
+/// The index's rows, each laid out in [`COLUMNS`] order whatever order the
+/// index holds them in.
+fn rows(issue: &Issue) -> Result<Vec<Value>, HttpError> {
+    let refuse = |why: String| HttpError::new(502, "upstream_failed", format!("{}: {why}", issue.id));
+    let (order, width) = column_order(&issue.index).map_err(refuse)?;
+    issue
+        .index
+        .get("stations")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|row| {
+            let held = row
+                .as_array()
+                .filter(|items| items.len() == width)
+                .ok_or_else(|| refuse(format!("a station row is not {width} values")))?;
+            Ok(Value::Array(order.iter().map(|&column| held[column].clone()).collect()))
+        })
+        .collect()
+}
 
 pub fn units() -> Value {
     json!({
@@ -96,12 +142,7 @@ pub async fn list(data: &Data, url: &Url) -> Result<(Value, String), HttpError> 
     let spatial = Spatial::parse(&query)?;
     let category = query.get("category").map(|value| value.to_ascii_uppercase());
     let issue = resolve(data, &query).await?;
-    let rows: Vec<Value> = issue
-        .index
-        .get("stations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
+    let rows: Vec<Value> = rows(&issue)?
         .into_iter()
         .filter(|row| match &category {
             Some(wanted) => column(row, "category").as_str() == Some(wanted.as_str()),
@@ -130,12 +171,7 @@ pub async fn station(data: &Data, icao: &str, url: &Url) -> Result<(Value, Strin
     let target = query.time()?;
     let icao = icao.to_ascii_uppercase();
     let issue = resolve(data, &query).await?;
-    let rows = issue
-        .index
-        .get("stations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let rows = rows(&issue)?;
     let row = rows
         .iter()
         .find(|row| row.get(0).and_then(Value::as_str) == Some(icao.as_str()))
@@ -187,4 +223,27 @@ pub async fn station(data: &Data, icao: &str, url: &Url) -> Result<(Value, Strin
         line.get("taf").cloned().unwrap_or(Value::Null),
     );
     Ok((Value::Object(body), issue.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The columns this reader names are the normative schema's
+    /// (`docs/schemas/airport-index.schema.json`), in its order.
+    #[test]
+    fn the_columns_are_the_schemas() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../docs/schemas/airport-index.schema.json"
+        ))
+        .expect("schema");
+        let named: Vec<&str> = schema["properties"]["columns"]["prefixItems"]
+            .as_array()
+            .expect("prefixItems")
+            .iter()
+            .map(|item| item["const"].as_str().expect("const"))
+            .collect();
+        assert_eq!(named, COLUMNS);
+        assert_eq!(COLUMNS[OFFSET..], ["offset", "length"]);
+    }
 }

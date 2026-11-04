@@ -7,6 +7,7 @@
   "byteLength": 114742,
   "crc32": "c34fab6d"
  },
+ "columns": ["icao", "lat", "lon", "elev", "obsTime", "t", "td", "wd", "ws", "gust", "vis", "qnh", "category", "tafPresent", "offset", "length"],
  "stations": [
   ["FABL", -29.093, 26.302, 1348.0, "2026-09-16T14:00:00Z", 23.0, 5.0, 270, 4.6, null, 10000, 1022.0, "VFR", 0, 0, 398],
   ["FACT", -33.965, 18.602, 48.0, "2026-09-16T14:00:00Z", 16.0, 9.0, 170, 12.3, null, 10000, 1027.8, "VFR", 1, 399, 1301],
