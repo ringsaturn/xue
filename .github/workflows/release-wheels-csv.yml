@@ -117,6 +117,8 @@ jobs:
           fetch-tags: true
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
 
       # For a tag push, the triggering run's head_branch is the tag.
       - name: Relock on the indexed wheel
