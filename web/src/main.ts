@@ -13,8 +13,6 @@ import {
 // module, so a plain `?url` copy would fail on its first import).
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
-import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
-import { fetchImmutable } from "./fetchimmutable";
 import { guardContextLoss } from "./glguard";
 import {
   applyStaticMessages,
@@ -1481,8 +1479,8 @@ const sessionRegistry = createSessionRegistry({
   },
   zarrPayloadBudgetBytes,
   showError,
-  status: (key) => say(loadStatus, key),
-  downloadBundle,
+  status: (line, key, params) => say(line === "preload" ? preloadState : loadStatus, key, params),
+  downloadProgress: updateDownloadProgress,
   initializeChannel,
   bindChannel,
 });
@@ -4702,50 +4700,6 @@ function syncUrl(): void {
   }
   if (withScene === window.location.search) return;
   window.history.replaceState(null, "", `${window.location.pathname}${withScene}${window.location.hash}`);
-}
-
-/** Downloads and CRC32-verifies one manifest-declared `.xue` bundle. */
-async function downloadBundle(
-  descriptor: { path: string; byteLength: number; crc32: string },
-  sequence: number,
-  quiet = false,
-  base: string | null = manifestUrl,
-): Promise<ArrayBuffer> {
-  if (!quiet) say(preloadState, "receivingBundle");
-  const response = await fetchImmutable(artifactUrl(descriptor.path, descriptor.crc32, base));
-  if (!response.ok) throw new Error(t("bundleRequestFailed", { status: response.status }));
-  const total = descriptor.byteLength;
-  const data = new Uint8Array(total);
-  let offset = 0;
-  let crc = CRC32_INITIAL;
-
-  if (response.body) {
-    const reader = response.body.getReader();
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      if (sequence !== initializeSequence) throw new DOMException("aborted", "AbortError");
-      const chunk = result.value;
-      if (offset + chunk.byteLength > total) throw new Error(t("bundleTooLong"));
-      data.set(chunk, offset);
-      offset += chunk.byteLength;
-      crc = crc32Update(crc, chunk);
-      if (quiet) continue;
-      updateDownloadProgress(offset, total);
-      say(loadStatus, "receivingBundlePercent", { percent: Math.round((offset / total) * 100) });
-    }
-  } else {
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength > total) throw new Error(t("bundleTooLong"));
-    data.set(buffer, 0);
-    offset = buffer.byteLength;
-    crc = crc32Update(crc, buffer);
-    if (!quiet) updateDownloadProgress(offset, total);
-  }
-
-  if (offset !== total) throw new Error(t("bundleLengthMismatch"));
-  if (crc32Hex(crc) !== descriptor.crc32) throw new Error(t("bundleChecksumMismatch"));
-  return data.buffer;
 }
 
 /** Open a channel and wait for its `ready`: boot, hand it the init message,
