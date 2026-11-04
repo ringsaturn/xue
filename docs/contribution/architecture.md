@@ -117,7 +117,7 @@ unit-neutral axis (`unitSeconds` + `firstFrameOffset` + `frameStep` |
 - A plane is keyed by frame offset, never forecast hour
   (`PlaneEntry.frame_offset`, the worker's `frameOffset`,
   `SourceFrame.lead_seconds`).
-- Must agree: `binconvert.py::build_metadata`,
+- Must agree: `metadata.py::build_metadata`,
   `binformat.py::_parse_metadata`, `rust/xue/src/decode/metadata.rs`,
   `web/src/manifest.ts::parseBundleMetadata`.
 

@@ -44,6 +44,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, requires_gdalinfo, requires_native_source, stored_bundle
 from xuebuild import binconvert, cli, fetch, grib2
+from xuebuild.metadata import axis_unit_seconds
 from xuebuild.discover import prepare_frames_all, published_bundle_ids, snap_observation_frames
 from xuebuild.grid import (
     BlockReduction,
@@ -676,7 +677,7 @@ class AxisTests(unittest.TestCase):
                 prepare_frames_all([FRAMES[0], duplicate], MRMS.input_variable_ids, cadence_seconds=120)
         per_file = prepare_frames_all(list(FRAMES), MRMS.input_variable_ids, cadence_seconds=120)
         self.assertEqual([frames["cref"].lead_seconds for frames in per_file], [0, 120])
-        self.assertEqual(binconvert.axis_unit_seconds([0, 120, 240]), 120)
+        self.assertEqual(axis_unit_seconds([0, 120, 240]), 120)
 
 
 class GridTests(unittest.TestCase):

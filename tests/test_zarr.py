@@ -22,7 +22,7 @@ import numpy as np
 from tests._support import ClassTempRoot, requires_native
 from xuebuild import binconvert, binformat, zarrcodec, zarrstore, zstdcli
 from xuebuild.discover import published_bundle_ids
-from xuebuild.binconvert import build_metadata
+from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.errors import BundleError, ManifestError
 from xuebuild.manifest import validate_bin_manifest

@@ -28,7 +28,8 @@ from tests.prepare_indicators_golden import (
     serve,
 )
 from xuebuild import zarrstore
-from xuebuild.binconvert import _store_source, build_metadata
+from xuebuild.binconvert import _store_source
+from xuebuild.metadata import build_metadata
 from xuebuild.indicators import calendar, season, store
 from xuebuild.indicators import weights as weights_module
 from xuebuild.indicators.features import (

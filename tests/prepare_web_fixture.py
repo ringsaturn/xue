@@ -20,11 +20,11 @@ from xuebuild.binconvert import (
     _bundle_chunks,
     _bundle_tile,
     _decimate_codes,
-    _store_source,
     _playback_bandwidth,
-    build_metadata,
-    encode_poster,
+    _store_source,
 )
+from xuebuild.poster import encode_poster
+from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
 from xuebuild.manifest import build_bin_manifest, build_latest_pointer, iso_z
 from xuebuild.quantize import (
