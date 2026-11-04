@@ -3113,6 +3113,8 @@ html[lang="ja"] .rail-glyph {
 }
 
 .probe-code {
+  /* What the panel reads keeps its width; the airport beside it gives way. */
+  flex: none;
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--fs-1);
@@ -3268,6 +3270,9 @@ html[lang="ja"] .rail-glyph {
   display: block;
   overflow: hidden;
   line-height: 13px;
+  /* One line whatever the width: a wrapped readout would spill into the
+     row under it, since the rows share the traces' fixed pitch. */
+  white-space: nowrap;
 }
 
 .probe-row-value {
@@ -3308,15 +3313,16 @@ html[lang="ja"] .rail-glyph {
 .probe-code-line {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
 
 .probe-airport {
   display: flex;
+  min-width: 0;
   align-items: baseline;
-  gap: 4px;
+  gap: 3px;
   overflow: hidden;
   color: var(--muted);
   font-family: var(--font-ui);
@@ -3330,11 +3336,17 @@ html[lang="ja"] .rail-glyph {
 }
 
 .probe-airport-id {
+  /* On a phone's column the ICAO id is cut short before the flight
+     category is. */
+  min-width: 0;
+  overflow: hidden;
   color: var(--text);
   font-weight: 400;
+  text-overflow: ellipsis;
 }
 
 .probe-airport-category {
+  flex: none;
   padding: 0 3px;
   border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--card-ink, var(--muted)) 22%, transparent);

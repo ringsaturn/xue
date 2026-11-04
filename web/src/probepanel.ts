@@ -490,6 +490,9 @@ export function createProbePanel(deps: ProbePanelDeps) {
     value: HTMLOutputElement;
     /** The line under the value: the unit, and the wind row's direction. */
     note: HTMLElement;
+    /** The readout's line, value and note together: what must fit the
+     * label column. */
+    line: HTMLElement;
   }
 
   let probeRowElements: ProbeRowElements[] = [];
@@ -525,7 +528,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       line.className = "probe-row-line";
       line.append(value, note);
       root.append(code, line);
-      return { spec, root, code, value, note };
+      return { spec, root, code, value, note, line };
     });
     probePanel.rowList.replaceChildren(...probeRowElements.map((row) => row.root));
     probePanel.rows.hidden = specs.length === 0;
@@ -1450,6 +1453,12 @@ export function createProbePanel(deps: ProbePanelDeps) {
           : `${String(Math.round(direction)).padStart(3, "0")}°`,
       ].filter((part): part is string => part !== null && part !== "");
       element.note.textContent = parts.join(" · ");
+      // Two readouts and a unit (PM2.5 · PM10 at a few hundred µg/m³) can
+      // outrun a phone's label column. The unit is the part to give up:
+      // the code names the quantities and the headline carries the unit.
+      if (readout.unit && reported === null && element.line.scrollWidth > element.line.clientWidth) {
+        element.note.textContent = parts.filter((part) => part !== readout.unit).join(" · ");
+      }
     }
     drawProbeRowsChart(rows, index, offsets.length);
   }
