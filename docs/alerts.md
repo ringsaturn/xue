@@ -987,7 +987,7 @@ and any display of it meets them so:
 ## 11. Validation
 
 The JSON Schemas of §5 and §6 are normative for shape: a file that does
-not match them is not an alerts file. `tests/test_point_schemas.py` holds
+not match them is not an alerts file. `tests/test_schemas.py` holds
 the committed golden to them, and the shell's validators are generated
 from them (`web/src/schema/generated/`). `xuebuild/alerts/schema.py`
 checks, as every file is written and read, what a schema cannot say: file

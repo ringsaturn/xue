@@ -43,7 +43,7 @@ xuebuild = [
 
 [dependency-groups]
 # The tests: the point products' goldens are held to docs/schemas/ by the
-# reference JSON Schema implementation (tests/pointschemas.py). uv syncs
+# reference JSON Schema implementation (tests/jsonschemas.py). uv syncs
 # this group by default; the publishing image's --no-dev leaves it out.
 dev = ["jsonschema>=4.23"]
 # Tests, and reading a delta-coded store or the STAC catalog the way a client would.

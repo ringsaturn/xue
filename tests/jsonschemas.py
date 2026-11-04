@@ -1,8 +1,12 @@
-"""The point products' normative shapes, ``docs/schemas/*.schema.json``, as
-the tests hold the writers to them. The writers' own validators keep only
-what a schema cannot say (row order, byte spans, sums, CRCs); everything
-else a file must be is here, checked with the reference implementation of
-JSON Schema 2020-12 (``jsonschema``, a dev dependency only)."""
+"""The normative shapes of what Xue publishes, ``docs/schemas/*.schema.json``,
+as the tests hold the writers to them: the point products' files, and the
+grid contracts (the run manifest, bundle metadata, and the documents of a
+Zarr store). The writers' own validators keep only what a schema cannot
+say (row order, byte spans, sums, CRCs, the lowest version that fits);
+everything else a file must be is here, checked with the reference
+implementation of JSON Schema 2020-12 (``jsonschema``, a dev dependency
+only). A schema may ``$ref`` another by its file name; every schema is
+registered under its ``$id``, so those resolve without a network."""
 
 from __future__ import annotations
 
@@ -12,16 +16,31 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "docs" / "schemas"
 
 
 @cache
+def _schema(name: str) -> dict[str, Any]:
+    return json.loads((SCHEMAS / f"{name}.schema.json").read_text(encoding="utf-8"))
+
+
+@cache
+def _registry() -> Registry:
+    resources = []
+    for path in sorted(SCHEMAS.glob("*.schema.json")):
+        schema = _schema(path.name.removesuffix(".schema.json"))
+        resources.append((schema["$id"], Resource.from_contents(schema)))
+    return Registry().with_resources(resources)
+
+
+@cache
 def validator(name: str) -> Draft202012Validator:
-    schema = json.loads((SCHEMAS / f"{name}.schema.json").read_text(encoding="utf-8"))
+    schema = _schema(name)
     Draft202012Validator.check_schema(schema)
-    return Draft202012Validator(schema)
+    return Draft202012Validator(schema, registry=_registry())
 
 
 def errors(name: str, payload: Any) -> list[str]:

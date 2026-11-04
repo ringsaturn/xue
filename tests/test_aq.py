@@ -14,7 +14,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from tests import pointschemas
+from tests import jsonschemas
 from tests.prepare_aq_golden import FIXTURES, GENERATED, ROUNDS, build_rounds, pretty
 from xuebuild.aq import airnow, hkepd
 from xuebuild.aq.build import build_product, load_previous_index
@@ -388,7 +388,7 @@ class ValidatorTest(unittest.TestCase):
             payload = copy.deepcopy(sample)
             change(payload)
             with self.subTest(refused="schema", case=name):
-                self.assertTrue(pointschemas.errors(schema, payload))
+                self.assertTrue(jsonschemas.errors(schema, payload))
 
     def test_malformed_indexes_are_refused(self) -> None:
         invariants = {
@@ -447,13 +447,13 @@ class ValidatorTest(unittest.TestCase):
             table = copy.deepcopy(self.table)
             change(table, copy.deepcopy(self.network))
             with self.subTest(refused="schema", case=name):
-                self.assertTrue(pointschemas.errors("aq-stations", table))
+                self.assertTrue(jsonschemas.errors("aq-stations", table))
 
     def test_a_table_without_columns_is_still_admitted(self) -> None:
         table = copy.deepcopy(self.table)
         del table["columns"]
         validate_stations_file(table, self.network, self.index["elements"], self.index["issued"])
-        pointschemas.check("aq-stations", table)
+        jsonschemas.check("aq-stations", table)
 
     def test_unknown_elements_are_admitted(self) -> None:
         table = copy.deepcopy(self.table)
@@ -463,7 +463,7 @@ class ValidatorTest(unittest.TestCase):
         for row in table["stations"]:
             row.insert(len(ROW_HEAD) + len(ELEMENTS), 1.5)
         validate_stations_file(table, self.network, elements, self.index["issued"])
-        pointschemas.check("aq-stations", table)
+        jsonschemas.check("aq-stations", table)
 
     def test_malformed_lines_are_refused(self) -> None:
         invariants = {

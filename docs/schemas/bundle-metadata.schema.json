@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/bundle-metadata.schema.json",
+  "title": "BundleMetadataV3",
+  "description": "A bundle's metadata JSON, schemaVersion 3 (docs/format.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, and that an aerosol interval of type 255 carries null limits and any other type integer ones.",
+  "type": "object",
+  "required": ["schemaVersion", "model", "product", "runTime", "time", "grid", "variables"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 3},
+    "model": {"description": "The source dataset, with product (docs/format.md, \"Projected Sources\").", "type": "string", "minLength": 1},
+    "product": {"type": "string", "minLength": 1},
+    "runTime": {"$ref": "#/$defs/Timestamp"},
+    "profile": {"description": "The quantization profile the codebooks come from.", "type": "string", "minLength": 1},
+    "time": {"$ref": "#/$defs/Time"},
+    "grid": {"$ref": "#/$defs/Grid"},
+    "variables": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/Variable"}}
+  },
+  "$defs": {
+    "Timestamp": {
+      "description": "ISO 8601 UTC, to the second, with a Z suffix.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "format": "date-time"
+    },
+    "Time": {
+      "description": "The schemaVersion 3 time axis (docs/format.md, \"Time Axis\"): integer offsets from runTime, each unitSeconds long, uniform with frameStep or listed with frameOffsets. No other field may appear.",
+      "type": "object",
+      "required": ["unitSeconds", "firstFrameOffset", "frameCount"],
+      "properties": {
+        "unitSeconds": {"description": "A whole divisor of 3600.", "type": "integer", "minimum": 1, "maximum": 3600},
+        "firstFrameOffset": {"type": "integer", "minimum": 0, "maximum": 65534},
+        "frameCount": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "frameStep": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "frameOffsets": {"type": "array", "minItems": 3, "items": {"type": "integer", "minimum": 0, "maximum": 65534}}
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {"type": "object", "required": ["frameStep"]},
+        {"type": "object", "required": ["frameOffsets"]}
+      ]
+    },
+    "Grid": {
+      "description": "The regular latitude/longitude grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east.",
+      "type": "object",
+      "required": ["width", "height", "layout", "rowOrder", "columnOrder", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "layout": {"type": "string", "const": "row-major"},
+        "rowOrder": {"type": "string", "const": "north-to-south"},
+        "columnOrder": {"type": "string", "const": "west-to-east"},
+        "firstLongitude": {"description": "The first column's centre, degrees east.", "type": "number"},
+        "firstLatitude": {"description": "The first row's centre, degrees north.", "type": "number"},
+        "longitudeStep": {"type": "number", "exclusiveMinimum": 0},
+        "latitudeStep": {"description": "Negative: rows run north to south.", "type": "number"},
+        "wrapLongitude": {"description": "True exactly when width x longitudeStep is 360 degrees.", "type": "boolean"}
+      }
+    },
+    "Variable": {
+      "description": "One variable of the bundle: its file-local numericId (1..n in list order, the index's variableId), its GRIB2 identity and its codebook.",
+      "type": "object",
+      "required": ["numericId", "id", "label", "unit", "parameter", "quantization"],
+      "properties": {
+        "numericId": {"type": "integer", "minimum": 1, "maximum": 255},
+        "id": {"type": "string", "minLength": 1},
+        "label": {"type": "string"},
+        "unit": {"type": "string"},
+        "parameter": {"$ref": "#/$defs/Parameter"},
+        "band": {"$ref": "#/$defs/Band"},
+        "producer": {"$ref": "#/$defs/Producer"},
+        "aerosol": {"$ref": "#/$defs/Aerosol"},
+        "quantization": {"$ref": "#/$defs/Quantization"}
+      }
+    },
+    "Parameter": {
+      "description": "The variable's identity in GRIB2's terms (docs/format.md, \"Variable Identity\"). No other key is allowed.",
+      "type": "object",
+      "required": ["discipline", "parameterCategory", "parameterNumber", "typeOfFirstFixedSurface", "scaleFactorOfFirstFixedSurface", "scaledValueOfFirstFixedSurface"],
+      "properties": {
+        "discipline": {"type": "integer", "minimum": 0, "maximum": 255},
+        "parameterCategory": {"type": "integer", "minimum": 0, "maximum": 255},
+        "parameterNumber": {"type": "integer", "minimum": 0, "maximum": 255},
+        "typeOfFirstFixedSurface": {"type": "integer", "minimum": 0, "maximum": 255},
+        "scaleFactorOfFirstFixedSurface": {"$ref": "#/$defs/ScaleFactor"},
+        "scaledValueOfFirstFixedSurface": {"$ref": "#/$defs/ScaledValue"},
+        "typeOfStatisticalProcessing": {"description": "Code table 4.10; absent for an instantaneous field.", "type": "integer", "minimum": 0, "maximum": 255}
+      },
+      "additionalProperties": false
+    },
+    "Band": {
+      "description": "The spectral band a satellite image was measured in, in the fields of GRIB2 template 4.31 (docs/format.md, \"Band, Producer and Aerosol\"). All five keys, no other.",
+      "type": "object",
+      "required": ["satelliteSeries", "satelliteNumber", "instrumentType", "scaleFactorOfCentralWaveNumber", "scaledValueOfCentralWaveNumber"],
+      "properties": {
+        "satelliteSeries": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "satelliteNumber": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "instrumentType": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "scaleFactorOfCentralWaveNumber": {"type": "integer", "minimum": -127, "maximum": 127},
+        "scaledValueOfCentralWaveNumber": {"type": "integer", "minimum": 0, "maximum": 4294967294}
+      },
+      "additionalProperties": false
+    },
+    "Producer": {
+      "description": "The algorithm that derived a composite field. Both keys, no other.",
+      "type": "object",
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "Aerosol": {
+      "description": "An aerosol product's species and intervals, in the fields of GRIB2 template 4.48. All eleven keys, no other; a limit is scaledValue x 10^-scaleFactor metres.",
+      "type": "object",
+      "required": [
+        "aerosolType", "typeOfSizeInterval",
+        "scaleFactorOfFirstSize", "scaledValueOfFirstSize", "scaleFactorOfSecondSize", "scaledValueOfSecondSize",
+        "typeOfWavelengthInterval",
+        "scaleFactorOfFirstWavelength", "scaledValueOfFirstWavelength", "scaleFactorOfSecondWavelength", "scaledValueOfSecondWavelength"
+      ],
+      "properties": {
+        "aerosolType": {"description": "Code table 4.233.", "type": "integer", "minimum": 0, "maximum": 65535},
+        "typeOfSizeInterval": {"description": "Code table 4.91; 255 is missing.", "type": "integer", "minimum": 0, "maximum": 255},
+        "scaleFactorOfFirstSize": {"$ref": "#/$defs/ScaleFactor"},
+        "scaledValueOfFirstSize": {"$ref": "#/$defs/ScaledValue"},
+        "scaleFactorOfSecondSize": {"$ref": "#/$defs/ScaleFactor"},
+        "scaledValueOfSecondSize": {"$ref": "#/$defs/ScaledValue"},
+        "typeOfWavelengthInterval": {"type": "integer", "minimum": 0, "maximum": 255},
+        "scaleFactorOfFirstWavelength": {"$ref": "#/$defs/ScaleFactor"},
+        "scaledValueOfFirstWavelength": {"$ref": "#/$defs/ScaledValue"},
+        "scaleFactorOfSecondWavelength": {"$ref": "#/$defs/ScaleFactor"},
+        "scaledValueOfSecondWavelength": {"$ref": "#/$defs/ScaledValue"}
+      },
+      "additionalProperties": false
+    },
+    "ScaleFactor": {"description": "A GRIB2 scale factor, or null where the value is missing.", "type": ["integer", "null"], "minimum": -127, "maximum": 127},
+    "ScaledValue": {"description": "A GRIB2 scaled value, or null where the value is missing.", "type": ["integer", "null"], "minimum": 0, "maximum": 4294967294},
+    "Quantization": {
+      "description": "One of the codebooks of docs/format.md, \"Quantization Codebooks\".",
+      "anyOf": [{"$ref": "#/$defs/LinearQuantization"}, {"$ref": "#/$defs/LogQuantization"}]
+    },
+    "LinearQuantization": {
+      "description": "value = offset + code x scale for codes 0..maximumCode; nodataCode marks missing data.",
+      "type": "object",
+      "required": ["type", "offset", "scale", "minimumCode", "maximumCode", "nodataCode"],
+      "properties": {
+        "type": {"type": "string", "const": "linear"},
+        "offset": {"type": "number"},
+        "scale": {"type": "number", "exclusiveMinimum": 0},
+        "minimumCode": {"$ref": "#/$defs/Code"},
+        "maximumCode": {"$ref": "#/$defs/Code"},
+        "nodataCode": {"$ref": "#/$defs/Code"}
+      }
+    },
+    "LogQuantization": {
+      "description": "The logarithmic codebook: zeroCode below trace, minimumCode..maximumCode on the log1p grid up to maximum, overflowCode above it, nodataCode missing.",
+      "type": "object",
+      "required": ["type", "trace", "scale", "maximum", "minimumCode", "maximumCode", "zeroCode", "overflowCode", "nodataCode"],
+      "properties": {
+        "type": {"type": "string", "const": "log1p"},
+        "trace": {"type": "number", "exclusiveMinimum": 0},
+        "scale": {"type": "number", "exclusiveMinimum": 0},
+        "maximum": {"type": "number", "exclusiveMinimum": 0},
+        "minimumCode": {"$ref": "#/$defs/Code"},
+        "maximumCode": {"$ref": "#/$defs/Code"},
+        "zeroCode": {"$ref": "#/$defs/Code"},
+        "overflowCode": {"$ref": "#/$defs/Code"},
+        "nodataCode": {"$ref": "#/$defs/Code"}
+      }
+    },
+    "Code": {"description": "A uint8 code.", "type": "integer", "minimum": 0, "maximum": 255}
+  }
+}

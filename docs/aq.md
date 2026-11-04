@@ -301,7 +301,7 @@ are described in its section.
 ## 8. Validation
 
 The JSON Schemas of §4–§6 are normative for shape: a file that does not
-match them is not an aq file. `tests/test_point_schemas.py` holds the
+match them is not an aq file. `tests/test_schemas.py` holds the
 committed golden (`tests/fixtures/aq/expected/`, two consecutive rounds
 built from the fetched fixture `tests/fixtures/aq/aq.202610311515/` and
 `…1545/`, the raw rounds, which stay flat under the raw root, by

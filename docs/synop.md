@@ -328,7 +328,7 @@ can place. A network's own fields are described in its section.
 ## 8. Validation and versions
 
 The JSON Schemas of §4–§6 are normative for shape: a file that does not
-match them is not a synop file. `tests/test_point_schemas.py` holds the
+match them is not a synop file. `tests/test_schemas.py` holds the
 committed golden (`tests/fixtures/synop/expected/`, two consecutive rounds
 built from the fetched fixture `tests/fixtures/synop/synop.202610050000/`
 and `…0010/`, the raw rounds, which stay flat under the raw root, by

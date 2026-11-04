@@ -257,7 +257,7 @@ BUFR), `ecmwfens` (`enfo` `tf` BUFR), `ibtracs` (the v04r01 active list).
 ## 7. Validation
 
 The JSON Schemas of §4 and §5 are normative for shape: a file that does
-not match them is not a tc file. `tests/test_point_schemas.py` holds the
+not match them is not a tc file. `tests/test_schemas.py` holds the
 committed golden (`tests/fixtures/tc/expected/`, a build from the fetched
 fixture `tests/fixtures/tc/tc.2026091206/` by `tests/prepare_tc_golden.py`)
 to them, and the shell's validators are generated from them

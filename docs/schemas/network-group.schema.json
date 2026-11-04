@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/network-group.schema.json",
+  "title": "NetworkGroup",
+  "description": "A network store's root zarr.json (docs/zarr-profile.md, \"Network store\"): one track of one quantity on the reaches of a river network, the xue_network block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block, that its one variable is the data array's, and the time axis rules of bundle metadata beyond its shape (docs/format.md, \"Time Axis\").",
+  "type": "object",
+  "required": ["zarr_format", "node_type", "attributes"],
+  "properties": {
+    "zarr_format": {"type": "integer", "const": 3},
+    "node_type": {"type": "string", "const": "group"},
+    "attributes": {
+      "type": "object",
+      "required": ["xue_network"],
+      "properties": {"xue_network": {"$ref": "#/$defs/Network"}}
+    },
+    "consolidated_metadata": {"$ref": "store-group.schema.json#/$defs/ConsolidatedMetadata"}
+  },
+  "$defs": {
+    "Network": {
+      "type": "object",
+      "required": ["version", "model", "product", "runTime", "time", "geometry", "variables"],
+      "properties": {
+        "version": {"description": "This branch's version.", "type": "integer", "const": 1},
+        "model": {"type": "string", "minLength": 1},
+        "product": {"type": "string", "minLength": 1},
+        "runTime": {"description": "A forecast's cycle, an analysis window's first frame.", "$ref": "bundle-metadata.schema.json#/$defs/Timestamp"},
+        "time": {"$ref": "bundle-metadata.schema.json#/$defs/Time"},
+        "geometry": {"$ref": "#/$defs/Geometry"},
+        "variables": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "store-array.schema.json#/$defs/NetworkVariable"}}
+      }
+    },
+    "Geometry": {
+      "description": "The GeoParquet of the reaches beside the store: its path relative to the directory holding the store, its length and CRC-32, its row count and its row group length.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32", "featureCount", "rowGroupRows"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(?![/]|https?:)(?!(?:.*/)?\\.\\.(?:/|$)).*\\.parquet$"},
+        "byteLength": {"type": "integer", "minimum": 1},
+        "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"},
+        "featureCount": {"type": "integer", "minimum": 1},
+        "rowGroupRows": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

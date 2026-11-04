@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 
-from tests import pointschemas
+from tests import jsonschemas
 from tests.prepare_fire_golden import FIXTURES, GENERATED, ROUNDS, build_rounds, pretty
 from xuebuild.errors import FireProductError
 from xuebuild.fire import firms
@@ -311,12 +311,12 @@ class ValidatorTest(unittest.TestCase):
         }
         for name, change in shapes.items():
             with self.subTest(name):
-                self.assertTrue(pointschemas.errors("fire-index", self.broken_index(change)))
+                self.assertTrue(jsonschemas.errors("fire-index", self.broken_index(change)))
 
     def test_an_unknown_sensor_is_admitted(self) -> None:
         index = self.broken_index(lambda index: index["sensors"][0].__setitem__("id", "abi-goes19") or index["sensors"][0]["file"].__setitem__("path", "abi-goes19.jsonl"))
         validate_index(index)
-        pointschemas.check("fire-index", index)
+        jsonschemas.check("fire-index", index)
 
     def test_malformed_lines_are_refused(self) -> None:
         invariants = {
@@ -342,7 +342,7 @@ class ValidatorTest(unittest.TestCase):
                         with self.assertRaises(FireProductError):
                             validate_hour_line(line, "line")
                     else:
-                        self.assertTrue(pointschemas.errors("fire-line", line))
+                        self.assertTrue(jsonschemas.errors("fire-line", line))
 
     def test_pointer(self) -> None:
         moment = parse_round(ROUNDS[1])

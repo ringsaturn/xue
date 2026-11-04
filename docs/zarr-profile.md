@@ -178,6 +178,26 @@ chain.
 
 ## Group document
 
+The shape of a grid store's group document, either profile, is
+[`schemas/store-group.schema.json`](schemas/store-group.schema.json), and
+of every array document (each array's `zarr.json`, repeated in the
+consolidated block) [`schemas/store-array.schema.json`](schemas/store-array.schema.json);
+the polar and network branches' groups are
+[`schemas/polar-group.schema.json`](schemas/polar-group.schema.json) and
+[`schemas/network-group.schema.json`](schemas/network-group.schema.json).
+They are normative for shape, and embed the bundle metadata schema
+([`format.md`](format.md), "Metadata JSON") wherever a document carries a
+bundle's metadata or a variable of it. This section and the ones below say
+what the fields mean and what a reader checks across them: the profile it
+implements, exactly one branch's block, the bundle it opens by id, key
+order and the CRC. `tests/test_schemas.py` holds the committed stores
+(`tests/fixtures/indicators/store/`, `tests/fixtures/river/network/`) and
+stores it builds without GDAL (the shell's synthetic run, a window cut
+into segments, a polar round and window) to them. The shell checks a group
+with the generated validator over what it reads, the envelope and the
+bundle asked for, so a shared store opens every bundle a reader can parse
+whatever another bundle carries.
+
 A shared store's `zarr.json`:
 
 ```json
@@ -324,8 +344,16 @@ invalid.
 
 ## Manifest
 
-A manifest entry's `zarr` descriptor is unchanged in shape: `{path,
-byteLength, crc32}`, or the segmented form (see "Segmented stores").
+The manifest's shape, schema v5, is
+[`schemas/manifest.schema.json`](schemas/manifest.schema.json), which is
+normative. The shell checks it with the generated validator before the
+rules a schema cannot say; the three hand validators
+(`xuebuild/manifest.py`, `encode/manifest.rs`, `web/src/manifest.ts`)
+hold the rules below, the registered dataset and the core set, and
+`tests/test_schemas.py` holds the writers' manifests to the schema. A
+manifest entry's `zarr` descriptor is
+unchanged in shape: `{path, byteLength, crc32}`, or the segmented form
+(see "Segmented stores").
 
 - `path` names the shared store of the entry's tier: `bundles.zarr` on the
   bundle, `bundles.half.zarr` on its half variant, and so on. Every entry of
