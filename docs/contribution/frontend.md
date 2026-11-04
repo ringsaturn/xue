@@ -539,8 +539,8 @@ volume, the experiment's derived layers), **marks** (switches: storms,
 soundings, airports, stations, fires; the storms' options hang from a TC
 chip on the level row while tracks are drawn). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
-`syncFieldTiles` hides unshipped tiles and writes a generic one for an
-on-screen field without a tile; `syncRailDensity` shrinks tiles to 36px
+`syncFieldTiles` hides unshipped tiles and writes a generic one for a
+core or on-screen field without a tile (`railtiles.ts`); `syncRailDensity` shrinks tiles to 36px
 when they do not fit.
 
 `levels.ts`: one tile per family. `levels` are one quantity on other
@@ -730,7 +730,7 @@ Typhoon Committee adds is added there by hand.
   its `product`, `defaultVariable`, its `variables` as the rail core, no
   core bundles, and its `dataBbox` as the region unless the grid goes
   around the globe. Its manifest then validates like any case's, its fields draw
-  through the generic card and rail tile, and the eyebrow shows the
+  through the generic card and a rail tile each, and the eyebrow shows the
   label. A row is still refused when its `modelId` is a built-in id or is
   not a lowercase slug, when another row admitted the same id with a
   different label or product, or when its label is already another
