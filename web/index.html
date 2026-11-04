@@ -41,6 +41,13 @@
     <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
     <link rel="preconnect" href="https://api.protomaps.com" crossorigin />
 
+    <!-- A link to a case opens without the live viewer's controls: the markup
+         below describes the live view, and the catalog takes a moment to say
+         what the case is. main.ts::endCaseOpening lifts this. -->
+    <script>
+      if (new URLSearchParams(location.search).get("case")) document.documentElement.dataset.caseOpening = "";
+    </script>
+
     <!-- The appearance is settled before the first paint: the module bundle
          lands long after the shell renders, and a page that starts on the
          wrong ground flashes. Detection order matches theme.ts exactly. -->

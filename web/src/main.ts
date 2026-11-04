@@ -221,7 +221,7 @@ import { createMarks } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId } from "./derived";
 import { createExportSheet } from "./exportsheet";
-import { currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLINE_LAYER, FORECAST_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
+import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLINE_LAYER, FORECAST_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
 import { createStats } from "./stats";
 import { createOverlays } from "./overlays";
 import { createContourLabels } from "./contourlabels";
@@ -854,7 +854,7 @@ function currentScene(): SceneState {
 const peakLabels = new PeakLabels(map, () => ({ basemapLang, htmlLang }));
 
 function syncPeakLabels(): void {
-  if (peakLabels.setVisible(map.getTerrain() !== null)) applyBasemapInk(document.body.dataset.ground === "dark");
+  if (peakLabels.setVisible(map.getTerrain() !== null && basemapLabelsShown())) applyBasemapInk(document.body.dataset.ground === "dark");
 }
 
 /** Put the link's scene on the map once the style (and the relief source in
@@ -1936,7 +1936,17 @@ function probeVariables(session: VariableSession): ProbeVariable[] {
   return session.variables.map((variable) => ({ key: probeKey(session, variable), variable }));
 }
 
+/** A link to a case keeps the live viewer's controls off the screen until the
+ * case is on them (index.html sets the mark before the first paint). The timer
+ * is for an open that ends without a field or an error to show, so a page
+ * cannot stay bare. */
+function endCaseOpening(): void {
+  delete document.documentElement.dataset.caseOpening;
+}
+window.setTimeout(endCaseOpening, 15_000);
+
 function showError(message: string): void {
+  endCaseOpening();
   stopPlayback();
   document.body.classList.remove("is-data-loading");
   dataCard.setAttribute("aria-busy", "false");
@@ -4492,6 +4502,7 @@ function updateVariablePresentation(session: VariableSession): void {
   if (manifest) syncFieldTiles(manifest);
   syncRail();
   syncRailDensity();
+  if (activeCase !== null) endCaseOpening();
 }
 
 /** Hold the camera to a case's own region. A case is the whole dataset, so

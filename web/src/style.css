@@ -250,6 +250,10 @@ input {
   }
 }
 
+html[data-case-opening] :is(.title-block, .top-actions, .legend, .variable-rail, .timeline-panel) {
+  visibility: hidden;
+}
+
 body.is-data-loading #map {
   filter: saturate(0.85) brightness(0.96);
 }
