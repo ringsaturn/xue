@@ -1,10 +1,16 @@
 /** The tropical cyclone product, schema v1, as the shell reads it —
  * `docs/tc.md` is normative and `xuebuild/tc/schema.py` writes what this
- * validates. Structural admission, like the manifest's: an agency or a
- * model key the registry does not know passes, a shape that is wrong or
- * a `schemaVersion` above the one implemented does not. */
+ * validates.
+ *
+ * The shapes are `docs/schemas/tc-{index,storm}.schema.json`, checked by
+ * the generated validators; this module adds what a schema cannot say.
+ * Structural admission, like the manifest's: an agency or a model key the
+ * registry does not know passes, a shape that is wrong or a
+ * `schemaVersion` above the one implemented does not. */
 
-import { CRC32, object, pointer, timestamp, type ProductPointer } from "../schema/validate";
+import { checkTcIndex } from "../schema/generated/tc-index";
+import { checkTcStorm, type TcPoint as TcPointRecord } from "../schema/generated/tc-storm";
+import { pointer, schemaVersion, type ProductPointer } from "../schema/validate";
 
 const TC_SCHEMA_VERSION = 1;
 export const TC_POINTER_FILENAME = "latest-tc.json";
@@ -60,6 +66,7 @@ export interface TcIndex {
 export type TcRadii = Partial<Record<"34" | "50" | "64", (number | null)[]>>;
 /** The order a radii threshold's four quadrants come in. */
 export const QUADRANT_CODES = ["NE", "SE", "SW", "NW"] as const;
+const THRESHOLDS: readonly string[] = ["34", "50", "64"];
 
 export interface TcPoint {
   time: string;
@@ -128,149 +135,79 @@ export interface TcStorm {
 }
 
 const ATCF_ID = /^[A-Z]{2}\d{6}$/;
-const SYNTHETIC_ID = /^x-[a-z]{2}-\d{10}-\d+$/;
+const STORM_ID = /^(?:[A-Z]{2}\d{6}|x-[a-z]{2}-\d{10}-\d+)$/;
 const KEY = /^[a-z][a-z0-9]*$/;
+/** An alias as the centres spell it (`EP97`, `ecmwf:70E`). */
+const ALIAS = /^[A-Za-z0-9:._-]+$/;
 /** `tc/YYYY/MM/DD/tc.<hour>/index.json`, or the flat `tc.<hour>/index.json`
  * issues were published under before. */
 const TC_PATH =
   /^(?:tc\/(\d{4})\/(\d{2})\/(\d{2})\/tc\.\1\2\3\d{2}|tc\.\d{10})\/index\.json$/;
 
-function isTcStormId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    (ATCF_ID.test(value) || SYNTHETIC_ID.test(value))
-  );
-}
+type Window = { from: string; to: string };
+type SourceRecord = { id: string; ok: boolean; error?: string; fetched?: string; url?: string; cycle?: string };
 
-/** A `timestamp`, as epoch milliseconds. */
-function instant(value: unknown, label: string): number {
-  return Date.parse(timestamp(value, label));
-}
-
-function number(
-  value: unknown,
+/** The keys of an agency, model or best-track section: ids on shape alone,
+ * so a key the registry does not know passes. */
+function keyed<T, R>(
+  section: Record<string, T>,
   label: string,
-  minimum?: number,
-  maximum?: number,
-): number {
-  if (typeof value !== "number" || !Number.isFinite(value))
-    throw new Error(`${label} must be a number`);
-  if (minimum !== undefined && value < minimum)
-    throw new Error(`${label} is below ${minimum}`);
-  if (maximum !== undefined && value > maximum)
-    throw new Error(`${label} is above ${maximum}`);
-  return value;
-}
-
-function optionalNumber(
-  value: unknown,
-  label: string,
-  minimum?: number,
-  maximum?: number,
-): number | null {
-  return value === null || value === undefined
-    ? null
-    : number(value, label, minimum, maximum);
-}
-
-function optionalString(value: unknown, label: string): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string")
-    throw new Error(`${label} must be a string or null`);
-  return value;
-}
-
-function keyed<T>(
-  input: unknown,
-  label: string,
-  each: (value: unknown, label: string) => T,
-): Record<string, T> {
-  const value = object(input, label);
-  const result: Record<string, T> = {};
-  for (const [key, item] of Object.entries(value)) {
+  each: (value: T, label: string) => R,
+): Record<string, R> {
+  const result: Record<string, R> = {};
+  for (const [key, item] of Object.entries(section)) {
     if (!KEY.test(key)) throw new Error(`${label} has a malformed key ${key}`);
     result[key] = each(item, `${label}.${key}`);
   }
   return result;
 }
 
-function aliases(
-  input: unknown,
-  label: string,
-): Record<string, { from: string; to: string }> {
-  const value = object(input, label);
-  const result: Record<string, { from: string; to: string }> = {};
+function aliases(value: Record<string, Window>, label: string): Record<string, Window> {
+  const result: Record<string, Window> = {};
   for (const [alias, window] of Object.entries(value)) {
-    const item = object(window, `${label}.${alias}`);
-    const from = item.from;
-    const to = item.to;
-    if (
-      instant(from, `${label}.${alias}.from`) >
-      instant(to, `${label}.${alias}.to`)
-    ) {
+    if (!ALIAS.test(alias)) throw new Error(`${label} has a malformed alias ${alias}`);
+    if (Date.parse(window.from) > Date.parse(window.to))
       throw new Error(`${label}.${alias} ends before it starts`);
-    }
-    result[alias] = { from: from as string, to: to as string };
+    result[alias] = { from: window.from, to: window.to };
   }
   return result;
 }
 
-function point(input: unknown, label: string, forecast: boolean): TcPoint {
-  const value = object(input, label);
-  timestamp(value.time, `${label}.time`);
+function point(value: TcPointRecord, label: string, forecast: boolean): TcPoint {
   const result: TcPoint = {
-    time: value.time as string,
-    lat: number(value.lat, `${label}.lat`, -90, 90),
-    lon: number(value.lon, `${label}.lon`, -180, 180),
-    vmax: optionalNumber(value.vmax, `${label}.vmax`, 0),
-    pmin: optionalNumber(value.pmin, `${label}.pmin`, 800, 1100),
+    time: value.time,
+    lat: value.lat,
+    lon: value.lon,
+    vmax: value.vmax ?? null,
+    pmin: value.pmin ?? null,
     radii: null,
-    class: optionalString(value.class, `${label}.class`),
-    rmw: optionalNumber(value.rmw, `${label}.rmw`, 0),
-    gust: optionalNumber(value.gust, `${label}.gust`, 0),
-    cone: optionalNumber(value.cone, `${label}.cone`, 0),
+    class: value.class ?? null,
+    rmw: value.rmw ?? null,
+    gust: value.gust ?? null,
+    cone: value.cone ?? null,
   };
   if (forecast) {
-    const lead = value.lead;
-    if (typeof lead !== "number" || !Number.isInteger(lead) || lead < 0)
-      throw new Error(`${label}.lead must be a non-negative integer`);
-    result.lead = lead;
+    if (value.lead === undefined) throw new Error(`${label}.lead must be a non-negative integer`);
+    result.lead = value.lead;
   }
   if (value.radii !== null && value.radii !== undefined) {
-    const radii = object(value.radii, `${label}.radii`);
     const parsed: TcRadii = {};
-    for (const [threshold, quadrants] of Object.entries(radii)) {
-      if (threshold !== "34" && threshold !== "50" && threshold !== "64")
+    for (const [threshold, quadrants] of Object.entries(value.radii)) {
+      if (!THRESHOLDS.includes(threshold))
         throw new Error(`${label}.radii has threshold ${threshold}`);
-      if (!Array.isArray(quadrants) || quadrants.length !== 4)
-        throw new Error(
-          `${label}.radii[${threshold}] must list four quadrants`,
-        );
-      parsed[threshold] = quadrants.map((q, index) =>
-        optionalNumber(q, `${label}.radii[${threshold}][${index}]`, 0),
-      );
+      parsed[threshold as "34" | "50" | "64"] = quadrants;
     }
     result.radii = parsed;
   }
   return result;
 }
 
-function validateTcForecast(
-  input: unknown,
-  label = "forecast",
-): TcForecast {
-  const value = object(input, label);
-  timestamp(value.issued, `${label}.issued`);
-  const base = instant(value.base, `${label}.base`);
-  if (
-    value.run !== undefined &&
-    (typeof value.run !== "string" || !/^\d{10}$/.test(value.run))
-  )
-    throw new Error(`${label}.run is malformed`);
-  if (value.number !== undefined && typeof value.number !== "string")
-    throw new Error(`${label}.number must be a string`);
-  if (!Array.isArray(value.points))
-    throw new Error(`${label}.points must be a list`);
+type ForecastRecord = { issued: string; base: string; run?: string; number?: string; points: TcPointRecord[] };
+
+/** A forecast's leads strictly increase and each point is valid at
+ * `base + lead`. */
+function forecast(value: ForecastRecord, label: string): TcForecast {
+  const base = Date.parse(value.base);
   let previous = -1;
   const points = value.points.map((item, index) => {
     const parsed = point(item, `${label}.points[${index}]`, true);
@@ -282,25 +219,17 @@ function validateTcForecast(
     previous = lead;
     return parsed;
   });
-  const result: TcForecast = {
-    issued: value.issued as string,
-    base: value.base as string,
-    points,
-  };
-  if (typeof value.run === "string") result.run = value.run;
-  if (typeof value.number === "string") result.number = value.number;
+  const result: TcForecast = { issued: value.issued, base: value.base, points };
+  if (value.run !== undefined) result.run = value.run;
+  if (value.number !== undefined) result.number = value.number;
   return result;
 }
 
-function validateTcTrack(input: unknown, label = "track"): TcTrack {
-  const value = object(input, label);
-  const source = optionalString(value.source, `${label}.source`);
-  if (source !== null && !KEY.test(source))
-    throw new Error(`${label}.source is malformed`);
-  if (typeof value.provisional !== "boolean")
-    throw new Error(`${label}.provisional must be a boolean`);
-  if (!Array.isArray(value.points))
-    throw new Error(`${label}.points must be a list`);
+/** A best track's points strictly increase in time. */
+function track(
+  value: { source?: string | null; provisional: boolean; points: TcPointRecord[] },
+  label: string,
+): TcTrack {
   let previous = -Infinity;
   const points = value.points.map((item, index) => {
     const parsed = point(item, `${label}.points[${index}]`, false);
@@ -310,79 +239,46 @@ function validateTcTrack(input: unknown, label = "track"): TcTrack {
     previous = time;
     return parsed;
   });
-  return { source, provisional: value.provisional, points };
+  return { source: value.source ?? null, provisional: value.provisional, points };
 }
 
-function validateTcEnsemble(
-  input: unknown,
-  label = "ensemble",
-): TcEnsemble {
-  const value = object(input, label);
-  timestamp(value.issued, `${label}.issued`);
-  timestamp(value.base, `${label}.base`);
-  if (
-    value.run !== undefined &&
-    (typeof value.run !== "string" || !/^\d{10}$/.test(value.run))
-  )
-    throw new Error(`${label}.run is malformed`);
-  const leads = value.leads;
-  if (
-    !Array.isArray(leads) ||
-    leads.some(
-      (lead, i) =>
-        !Number.isInteger(lead) || lead < 0 || (i > 0 && lead <= leads[i - 1]),
-    )
-  ) {
+type EnsembleRecord = {
+  issued: string;
+  base: string;
+  run?: string;
+  leads: number[];
+  members: number[];
+  lat: number[];
+  lon: number[];
+  vmax: number[];
+  pmin: number[];
+  mean?: ForecastRecord | null;
+};
+
+/** A member set: increasing leads, unique members, and every array one
+ * value per member and lead. */
+function ensemble(value: EnsembleRecord, label: string): TcEnsemble {
+  const { leads, members } = value;
+  if (leads.some((lead, i) => i > 0 && lead <= leads[i - 1]!))
     throw new Error(`${label}.leads must be increasing non-negative integers`);
-  }
-  const members = value.members;
-  if (
-    !Array.isArray(members) ||
-    members.some((m) => !Number.isInteger(m)) ||
-    new Set(members).size !== members.length
-  ) {
+  if (new Set(members).size !== members.length)
     throw new Error(`${label}.members must be unique integers`);
-  }
   const expected = leads.length * members.length;
-  const arrays: Record<"lat" | "lon" | "vmax" | "pmin", number[]> = {
-    lat: [],
-    lon: [],
-    vmax: [],
-    pmin: [],
-  };
-  const bounds = {
-    lat: [-9000, 9000],
-    lon: [-18000, 18000],
-    vmax: [0, 1500],
-    pmin: [8000, 11000],
-  } as const;
-  for (const key of ["lat", "lon", "vmax", "pmin"] as const) {
-    const values = value[key];
-    if (!Array.isArray(values) || values.length !== expected)
+  for (const key of ["lat", "lon", "vmax", "pmin"] as const)
+    if (value[key].length !== expected)
       throw new Error(`${label}.${key} must hold ${expected} integers`);
-    for (const item of values) {
-      if (!Number.isInteger(item))
-        throw new Error(`${label}.${key} must be integers`);
-      if (
-        item !== TC_MISSING &&
-        (item < bounds[key][0] || item > bounds[key][1])
-      )
-        throw new Error(`${label}.${key} out of range`);
-    }
-    arrays[key] = values as number[];
-  }
   const result: TcEnsemble = {
-    issued: value.issued as string,
-    base: value.base as string,
-    leads: leads as number[],
-    members: members as number[],
-    ...arrays,
-    mean:
-      value.mean === null || value.mean === undefined
-        ? null
-        : validateTcForecast(value.mean, `${label}.mean`),
+    issued: value.issued,
+    base: value.base,
+    leads,
+    members,
+    lat: value.lat,
+    lon: value.lon,
+    vmax: value.vmax,
+    pmin: value.pmin,
+    mean: value.mean === null || value.mean === undefined ? null : forecast(value.mean, `${label}.mean`),
   };
-  if (typeof value.run === "string") result.run = value.run;
+  if (value.run !== undefined) result.run = value.run;
   return result;
 }
 
@@ -392,182 +288,103 @@ export function isTcEnsemble(
   return "leads" in value;
 }
 
-function sources(input: unknown, label: string): TcSourceStatus[] {
-  if (!Array.isArray(input)) throw new Error(`${label} must be a list`);
-  return input.map((item, index) => {
-    const value = object(item, `${label}[${index}]`);
-    if (typeof value.id !== "string" || !KEY.test(value.id))
-      throw new Error(`${label}[${index}].id is malformed`);
-    if (typeof value.ok !== "boolean")
-      throw new Error(`${label}[${index}].ok must be a boolean`);
-    if (!value.ok && typeof value.error !== "string")
+function sources(input: SourceRecord[], label: string): TcSourceStatus[] {
+  return input.map((value, index) => {
+    if (!value.ok && value.error === undefined)
       throw new Error(`${label}[${index}] failed without an error`);
     const status: TcSourceStatus = { id: value.id, ok: value.ok };
-    if (typeof value.fetched === "string") status.fetched = value.fetched;
-    if (typeof value.url === "string") status.url = value.url;
-    if (typeof value.cycle === "string") status.cycle = value.cycle;
-    if (typeof value.error === "string") status.error = value.error;
+    if (value.fetched !== undefined) status.fetched = value.fetched;
+    if (value.url !== undefined) status.url = value.url;
+    if (value.cycle !== undefined) status.cycle = value.cycle;
+    if (value.error !== undefined) status.error = value.error;
     return status;
   });
 }
 
-function level(value: unknown, label: string): TcLevel {
-  if (value !== "A" && value !== "B" && value !== "C")
-    throw new Error(`${label} must be A, B or C`);
-  return value;
-}
-
-function basin(value: unknown, label: string): string {
-  if (typeof value !== "string" || !/^[A-Z]{2}$/.test(value))
-    throw new Error(`${label} must be a two-letter basin`);
-  return value;
-}
-
-function crc(value: unknown, label: string): string {
-  if (typeof value !== "string" || !CRC32.test(value))
-    throw new Error(`${label} must be 8 hex characters`);
-  return value;
-}
-
-function byteLength(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || (value as number) <= 0)
-    throw new Error(`${label} must be a positive integer`);
-  return value as number;
-}
-
+/** `<storm id>.json`: the version gate, `docs/schemas/tc-storm.schema.json`,
+ * then what the schema cannot say — an A-level storm's ATCF id, the alias
+ * and section keys, the radii thresholds, the leads and times in order. */
 export function validateTcStorm(input: unknown): TcStorm {
-  const value = object(input, "storm");
-  if (value.schemaVersion !== TC_SCHEMA_VERSION)
-    throw new Error("unsupported tc storm schema version");
-  if (!isTcStormId(value.id)) throw new Error("storm id is malformed");
-  const stormLevel = level(value.level, "storm.level");
-  if (stormLevel === "A" && !ATCF_ID.test(value.id))
+  schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "tc storm", TC_SCHEMA_VERSION);
+  checkTcStorm(input, "storm");
+  const value = input;
+  if (value.level === "A" && !ATCF_ID.test(value.id))
     throw new Error("an A-level storm carries an ATCF id");
-  const alertValue = value.alert;
   let alert: TcAlert | null = null;
-  if (alertValue !== null && alertValue !== undefined) {
-    const item = object(alertValue, "storm.alert");
-    timestamp(item.time, "storm.alert.time");
-    let line: TcAlert["line"] = null;
-    if (item.line !== null && item.line !== undefined) {
-      if (!Array.isArray(item.line) || item.line.length !== 2)
-        throw new Error("storm.alert.line must be two ends");
-      line = item.line.map((end, index) => {
-        if (!Array.isArray(end) || end.length !== 2)
-          throw new Error(`storm.alert.line[${index}] must be [lat, lon]`);
-        return [
-          number(end[0], "storm.alert.line lat", -90, 90),
-          number(end[1], "storm.alert.line lon", -180, 180),
-        ];
-      }) as TcAlert["line"];
-    }
-    let center: TcAlert["center"] = null;
-    if (Array.isArray(item.center) && item.center.length === 2) {
-      center = [
-        number(item.center[0], "storm.alert.center lat", -90, 90),
-        number(item.center[1], "storm.alert.center lon", -180, 180),
-      ];
-    }
+  if (value.alert !== null && value.alert !== undefined) {
+    const { line, center } = value.alert;
     alert = {
-      time: item.time as string,
-      line,
-      halfWidth: optionalNumber(item.halfWidth, "storm.alert.halfWidth", 0),
-      center,
+      time: value.alert.time,
+      line: line === null || line === undefined ? null : [[line[0]![0], line[0]![1]], [line[1]![0], line[1]![1]]],
+      halfWidth: value.alert.halfWidth ?? null,
+      center: center === null || center === undefined ? null : [center[0], center[1]],
     };
   }
   return {
     schemaVersion: 1,
     id: value.id,
-    level: stormLevel,
-    basin: basin(value.basin, "storm.basin"),
-    name: optionalString(value.name, "storm.name"),
-    sid: optionalString(value.sid, "storm.sid"),
-    intl: optionalString(value.intl, "storm.intl"),
+    level: value.level,
+    basin: value.basin,
+    name: value.name ?? null,
+    sid: value.sid ?? null,
+    intl: value.intl ?? null,
     aliases: aliases(value.aliases, "storm.aliases"),
-    best: keyed(value.best, "storm.best", validateTcTrack),
-    agencies: keyed(value.agencies, "storm.agencies", validateTcForecast),
+    best: keyed(value.best, "storm.best", track),
+    agencies: keyed(value.agencies, "storm.agencies", forecast),
     models: keyed(value.models, "storm.models", (item, label) =>
-      typeof item === "object" && item !== null && "leads" in item
-        ? validateTcEnsemble(item, label)
-        : validateTcForecast(item, label),
+      "leads" in item ? ensemble(item as EnsembleRecord, label) : forecast(item as ForecastRecord, label),
     ),
-    impact: object(value.impact, "storm.impact"),
+    impact: value.impact,
     alert,
     sources: sources(value.sources, "storm.sources"),
   };
 }
 
+/** `index.json`: the version gate, `docs/schemas/tc-index.schema.json`,
+ * then unique storms and paths, the alias keys and windows, and a
+ * crosswalk that maps a storm to another. */
 export function validateTcIndex(input: unknown): TcIndex {
-  const value = object(input, "index");
-  if (value.schemaVersion !== TC_SCHEMA_VERSION)
-    throw new Error("unsupported tc index schema version");
-  timestamp(value.issued, "index.issued");
-  timestamp(value.generated, "index.generated");
-  if (!Array.isArray(value.storms))
-    throw new Error("index.storms must be a list");
+  schemaVersion((input as { schemaVersion?: unknown } | null)?.schemaVersion, "tc index", TC_SCHEMA_VERSION);
+  checkTcIndex(input, "index");
   const ids = new Set<string>();
-  const storms = value.storms.map((item, index) => {
+  const paths = new Set<string>();
+  const storms = input.storms.map((entry, index): TcIndexEntry => {
     const label = `index.storms[${index}]`;
-    const entry = object(item, label);
-    if (!isTcStormId(entry.id)) throw new Error(`${label}.id is malformed`);
     if (ids.has(entry.id)) throw new Error(`index lists ${entry.id} twice`);
     ids.add(entry.id);
-    if (
-      typeof entry.path !== "string" ||
-      entry.path.includes("/") ||
-      entry.path.startsWith(".")
-    )
-      throw new Error(`${label}.path is malformed`);
-    let position: TcPosition | null = null;
-    if (entry.position !== null && entry.position !== undefined) {
-      const item = object(entry.position, `${label}.position`);
-      timestamp(item.time, `${label}.position.time`);
-      position = {
-        time: item.time as string,
-        lat: number(item.lat, `${label}.position.lat`, -90, 90),
-        lon: number(item.lon, `${label}.position.lon`, -180, 180),
-      };
-    }
-    const list = (key: "agencies" | "models" | "best"): string[] => {
-      const values = entry[key];
-      if (
-        !Array.isArray(values) ||
-        values.some((v) => typeof v !== "string" || !KEY.test(v))
-      )
-        throw new Error(`${label}.${key} must list ids`);
-      return values as string[];
-    };
+    if (paths.has(entry.path)) throw new Error(`${label}.path names another storm's file`);
+    paths.add(entry.path);
+    const position = entry.position ?? null;
     return {
       id: entry.id,
-      level: level(entry.level, `${label}.level`),
-      basin: basin(entry.basin, `${label}.basin`),
-      name: optionalString(entry.name, `${label}.name`),
+      level: entry.level,
+      basin: entry.basin,
+      name: entry.name ?? null,
       path: entry.path,
-      byteLength: byteLength(entry.byteLength, `${label}.byteLength`),
-      crc32: crc(entry.crc32, `${label}.crc32`),
+      byteLength: entry.byteLength,
+      crc32: entry.crc32,
       aliases: aliases(entry.aliases, `${label}.aliases`),
-      position,
-      vmax: optionalNumber(entry.vmax, `${label}.vmax`, 0),
-      pmin: optionalNumber(entry.pmin, `${label}.pmin`, 800, 1100),
-      class: optionalString(entry.class, `${label}.class`),
-      classAgency: optionalString(entry.classAgency, `${label}.classAgency`),
-      agencies: list("agencies"),
-      models: list("models"),
-      best: list("best"),
-    } satisfies TcIndexEntry;
+      position: position === null ? null : { time: position.time, lat: position.lat, lon: position.lon },
+      vmax: entry.vmax ?? null,
+      pmin: entry.pmin ?? null,
+      class: entry.class ?? null,
+      classAgency: entry.classAgency ?? null,
+      agencies: entry.agencies,
+      models: entry.models,
+      best: entry.best,
+    };
   });
-  const crosswalk = object(value.crosswalk, "index.crosswalk");
-  for (const [from, to] of Object.entries(crosswalk)) {
-    if (!isTcStormId(from) || !isTcStormId(to) || from === to)
+  for (const [from, to] of Object.entries(input.crosswalk)) {
+    if (from === to || !STORM_ID.test(from))
       throw new Error(`index.crosswalk ${from} is malformed`);
   }
   return {
     schemaVersion: 1,
-    issued: value.issued as string,
-    generated: value.generated as string,
+    issued: input.issued,
+    generated: input.generated,
     storms,
-    crosswalk: crosswalk as Record<string, string>,
-    sources: sources(value.sources, "index.sources"),
+    crosswalk: input.crosswalk,
+    sources: sources(input.sources, "index.sources"),
   };
 }
 
