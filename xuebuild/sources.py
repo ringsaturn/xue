@@ -294,7 +294,7 @@ class SourceSpec:
     """The resolution ladder: the decimation factor of every reduced-
     resolution rendition of a bundle, ascending. Each factor is a power of
     two of at least 2 and names its tier (``2`` → ``.half``, ``4`` →
-    ``.quarter``, ``8`` → ``.eighth``, :func:`xuebuild.binconvert.variant_tier`);
+    ``.quarter``, ``8`` → ``.eighth``, :func:`xuebuild.ladder.variant_tier`);
     the variant's grid is the source grid decimated that many times over
     (every ``f``-th row and column from the origin, the same sample sites
     as the poster) and its tile the source tile divided by it (``ceil``).

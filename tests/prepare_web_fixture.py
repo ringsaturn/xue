@@ -15,14 +15,8 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import binformat, zarrstore, zstdcli
-from xuebuild.binconvert import (
-    WIND_COMPONENT_IDS,
-    _bundle_chunks,
-    _bundle_tile,
-    _decimate_codes,
-    _playback_bandwidth,
-    _store_source,
-)
+from xuebuild.binconvert import WIND_COMPONENT_IDS, _bundle_chunks, _store_source
+from xuebuild.ladder import bundle_tile, decimate_codes, playback_bandwidth
 from xuebuild.poster import encode_poster
 from xuebuild.metadata import build_metadata
 from xuebuild.grid import GridInfo
@@ -100,7 +94,7 @@ def write_v2_bundle(
     """One synthetic container v2 bundle, cut and packed the way the real
     encoder cuts and packs — same tile policy, same grouping, same physical
     order — so what Playwright drives is what production serves."""
-    tile = _bundle_tile(tile or (source or source_spec("gfs")).tile, grid, factor=2 if half else 1)
+    tile = bundle_tile(tile or (source or source_spec("gfs")).tile, grid, factor=2 if half else 1)
     tiles = binformat.TileGeometry(grid.width, grid.height, *tile)
     variables, groups, raw = _bundle_chunks(variable_ids, hours, planes_by_hour, tiles)
     chunks = [
@@ -300,7 +294,7 @@ def prepare_web_fixture() -> Path:
         )
         # Half-resolution variant, decimated from the same synthetic codes.
         half_planes = {
-            hour: {variable_id: _decimate_codes(plane_builders[variable_id](hour), grid)} for hour in HOURS
+            hour: {variable_id: decimate_codes(plane_builders[variable_id](hour), grid)} for hour in HOURS
         }
         half_path = WEB_FIXTURE_ROOT / f"{variable_id}.half.xue"
         half_data = write_v2_bundle(
@@ -323,7 +317,7 @@ def prepare_web_fixture() -> Path:
             "height": half_grid.height,
             "byteLength": len(half_data),
             "crc32": f"{zlib.crc32(half_data) & 0xFFFFFFFF:08x}",
-            "bandwidth": _playback_bandwidth(len(half_data), len(HOURS)),
+            "bandwidth": playback_bandwidth(len(half_data), len(HOURS)),
         }
         entry = {
             "variable": variable_id,
@@ -370,7 +364,7 @@ def prepare_web_fixture() -> Path:
         half_grid,
         ("hgt500",),
         HOURS,
-        {hour: {"hgt500": _decimate_codes(planes["hgt500"], grid)} for hour, planes in height_planes.items()},
+        {hour: {"hgt500": decimate_codes(planes["hgt500"], grid)} for hour, planes in height_planes.items()},
         level=level,
         half=True,
         tile=FIXTURE_TILE,
@@ -388,7 +382,7 @@ def prepare_web_fixture() -> Path:
                     "height": half_grid.height,
                     "byteLength": len(height_half_data),
                     "crc32": f"{zlib.crc32(height_half_data) & 0xFFFFFFFF:08x}",
-                    "bandwidth": _playback_bandwidth(len(height_half_data), len(HOURS)),
+                    "bandwidth": playback_bandwidth(len(height_half_data), len(HOURS)),
                 }
             ],
         }
@@ -412,7 +406,7 @@ def prepare_web_fixture() -> Path:
         tile=FIXTURE_TILE,
     )
     wind_half_planes = {
-        hour: {component: _decimate_codes(planes[component], grid) for component in WIND_COMPONENT_IDS}
+        hour: {component: decimate_codes(planes[component], grid) for component in WIND_COMPONENT_IDS}
         for hour, planes in wind_planes_by_hour.items()
     }
     wind_half_path = WEB_FIXTURE_ROOT / "wind10m.half.xue"
@@ -440,7 +434,7 @@ def prepare_web_fixture() -> Path:
                     "height": half_grid.height,
                     "byteLength": len(wind_half_data),
                     "crc32": f"{zlib.crc32(wind_half_data) & 0xFFFFFFFF:08x}",
-                    "bandwidth": _playback_bandwidth(len(wind_half_data), len(HOURS)),
+                    "bandwidth": playback_bandwidth(len(wind_half_data), len(HOURS)),
                 }
             ],
             "series": _export_series(wind_path),

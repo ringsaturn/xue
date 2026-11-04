@@ -21,7 +21,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from .binconvert import VARIANT_TIERS, VECTOR_BUNDLES, bundle_variable_ids
+from .binconvert import VECTOR_BUNDLES, bundle_variable_ids
+from .ladder import VARIANT_TIERS
 from .errors import ManifestError, XueError
 from .manifest import is_shared_store_path, iso_z
 from .sources import SOURCES, SourceSpec, source_spec

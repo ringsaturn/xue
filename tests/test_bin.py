@@ -729,7 +729,7 @@ class SourceLadderTests(unittest.TestCase):
     and what the native encoder's source table mirrors."""
 
     def test_every_source_s_factors_are_ascending_powers_of_two_with_a_tier_name(self) -> None:
-        from xuebuild.binconvert import VARIANT_TIERS, variant_tier
+        from xuebuild.ladder import VARIANT_TIERS, variant_tier
         from xuebuild.sources import SOURCES
 
         for source_id, spec in SOURCES.items():
