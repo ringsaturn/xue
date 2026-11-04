@@ -44,14 +44,13 @@ import numpy as np
 
 from xuebuild import grib2
 from xuebuild.assemble import bundle_group_matrix, group_needs_eccodes
-from xuebuild.binconvert import (
+from xuebuild.binconvert import _convert_units, _extract_planes
+from xuebuild.bundles import (
     DERIVED_VECTORS,
     SWELL_BUNDLE_ID,
     VECTOR_BUNDLES,
     WAVE_BUNDLE_ID,
     WIND_WAVE_BUNDLE_ID,
-    _convert_units,
-    _extract_planes,
     vector_input_ids,
 )
 from xuebuild.discover import bundle_input_ids, published_bundle_ids

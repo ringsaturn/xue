@@ -56,6 +56,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, TempRoot, assert_native_matches, decimated_rung, requires_gdal_warp, requires_native_source, requires_shachen, stored_bundle
 from xuebuild import binconvert, observation
+from xuebuild.bundles import COMPOSITE_BUNDLES, bundle_variable_ids
 from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid
 from xuebuild.errors import ConversionError, DownloadError
@@ -202,7 +203,7 @@ def registry_document() -> dict[str, object]:
         entry["quality"] = PROFILES["quality"][variable_id].metadata()
         entry["compact"] = PROFILES["compact"][variable_id].metadata()
         variables[variable_id] = entry
-    return {"variables": variables, "bundles": {bundle_id: list(ids) for bundle_id, ids in binconvert.COMPOSITE_BUNDLES.items()}}
+    return {"variables": variables, "bundles": {bundle_id: list(ids) for bundle_id, ids in COMPOSITE_BUNDLES.items()}}
 
 
 def bucket(keys: dict[str, Path], *, sizes: dict[str, int] | None = None) -> tuple[Callable[[str], str], Callable[[str], bytes]]:
@@ -415,7 +416,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(codes.tolist(), [0, 1, 126, 251])
         self.assertEqual(PROFILES["quality"]["dustr"].decode(np.array([1, 251], dtype=np.uint8)).tolist(), [0.0, 1.0])
         self.assertEqual(
-            binconvert.COMPOSITE_BUNDLES,
+            COMPOSITE_BUNDLES,
             {
                 "dustrgb": ("dustr", "dustg", "dustb"),
                 "dustcf": ("dustcf",),
@@ -423,9 +424,9 @@ class RegistryTests(unittest.TestCase):
                 "truecolor": ("truer", "trueg", "trueb"),
             },
         )
-        self.assertEqual(binconvert.bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
-        self.assertEqual(binconvert.bundle_variable_ids("dustcf"), ("dustcf",))
-        self.assertEqual(binconvert.bundle_variable_ids("ir104"), ("ir104",))
+        self.assertEqual(bundle_variable_ids("dustrgb"), DUST_RGB_COMPONENT_IDS)
+        self.assertEqual(bundle_variable_ids("dustcf"), ("dustcf",))
+        self.assertEqual(bundle_variable_ids("ir104"), ("ir104",))
         # The confidence is the next local-use number under the same
         # producer, with the guns' codebook: code 0 is no data, 0.0 is code 1.
         spec = variable_spec("dustcf")
@@ -443,11 +444,11 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual((spec.producer_id, spec.output_unit, spec.value_range), ("xue", "1", (-0.004, 1)))
             for profile in PROFILES:
                 self.assertEqual(PROFILES[profile][gun_id].metadata(), PROFILES[profile]["dustr"].metadata())
-        self.assertEqual(binconvert.bundle_variable_ids("truecolor"), TRUE_COLOR_COMPONENT_IDS)
+        self.assertEqual(bundle_variable_ids("truecolor"), TRUE_COLOR_COMPONENT_IDS)
         self.assertEqual(SATELLITE_VARIABLE_IDS[-3:], TRUE_COLOR_COMPONENT_IDS)
         # No night microphysics composite: the true colour carries the night
         # side, and local numbers 10–12 are left unused.
-        self.assertNotIn("nightmicro", binconvert.COMPOSITE_BUNDLES)
+        self.assertNotIn("nightmicro", COMPOSITE_BUNDLES)
         for gun_id in ("nightr", "nightg", "nightb"):
             self.assertNotIn(gun_id, VARIABLES)
         self.assertFalse(

@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import crc32_hex
-from .binconvert import VOLUME_BUNDLES
+from .bundles import VOLUME_BUNDLES
 from .discover import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import DownloadError, ManifestError, XueError
@@ -854,7 +854,7 @@ def _view_block(value: object, case_id: str, variables: Sequence[str]) -> dict[s
     and a zoom, optionally a pitch, a bearing and the terrain exaggeration
     (a positive number) or ``false`` for an explicitly flat view, and
     optionally the ``volume`` the shell opens drawn over the field — one of
-    the volume bundles (:data:`xuebuild.binconvert.VOLUME_BUNDLES`) among
+    the volume bundles (:data:`xuebuild.bundles.VOLUME_BUNDLES`) among
     the case's own ``variables``. The ranges are MapLibre's; the values
     pass through as written."""
     if not isinstance(value, dict) or set(value) - set(_VIEW_KEYS):

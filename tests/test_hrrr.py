@@ -35,6 +35,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native, stored_bundle
 from xuebuild import binconvert, grib2
+from xuebuild.bundles import VECTOR_BUNDLES
 from xuebuild.binconvert import _extract_planes
 from xuebuild.discover import published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid, grid_info
@@ -125,7 +126,7 @@ class SourceRegistryTests(unittest.TestCase):
     def test_the_80_m_wind_is_a_vector_bundle_with_the_10_m_codebook(self) -> None:
         from xuebuild.quantize import PROFILES
 
-        self.assertEqual(binconvert.VECTOR_BUNDLES["wind80m"], ("ugrd80m", "vgrd80m"))
+        self.assertEqual(VECTOR_BUNDLES["wind80m"], ("ugrd80m", "vgrd80m"))
         for component, number in (("ugrd80m", 2), ("vgrd80m", 3)):
             spec = variable_spec(component)
             self.assertEqual(spec.index_field, f":{component[0].upper()}GRD:80 m above ground:")

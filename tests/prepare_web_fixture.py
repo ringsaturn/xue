@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 
 from xuebuild import binformat, zarrstore, zstdcli
-from xuebuild.binconvert import WIND_COMPONENT_IDS, _bundle_chunks, _store_source
+from xuebuild.binconvert import _bundle_chunks, _store_source
+from xuebuild.bundles import WIND_COMPONENT_IDS
 from xuebuild.ladder import bundle_tile, decimate_codes, playback_bandwidth
 from xuebuild.poster import encode_poster
 from xuebuild.metadata import build_metadata

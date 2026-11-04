@@ -34,7 +34,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from xuebuild.binconvert import CAT_SHEAR_LAYERS  # noqa: E402
+from xuebuild.bundles import CAT_SHEAR_LAYERS  # noqa: E402
 from xuebuild.derive import CAT_TI1_FLOOR, ellrod_ti1  # noqa: E402
 from xuebuild.idx import ecmwf_field_byte_range, field_byte_range  # noqa: E402
 from xuebuild.variables import CAT_LEVELS_HPA  # noqa: E402

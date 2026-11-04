@@ -179,7 +179,7 @@ source's platform, so a `--bundles dustrgb` build and the workflow fetch
 what that imager has.
 
 Each gun is a number in 0–1 and the three are one bundle, variables 1, 2
-and 3 in that order (`binconvert.COMPOSITE_BUNDLES`,
+and 3 in that order (`bundles.COMPOSITE_BUNDLES`,
 `SourceSpec.bundle_composite_ids`). A composite has no GRIB2 parameter:
 each gun takes a local-use one — discipline 3 (space products), category
 192, parameter number 1, 2 or 3, on surface 8 — that means nothing
@@ -486,7 +486,7 @@ and there is no reflectance at night.
 
 The result is two bundles of one variable each, `dustcf` and `zhouye`,
 on the channel's axis and grid: *composite* bundles in the encoders'
-terms (`binconvert.COMPOSITE_BUNDLES`, `SourceSpec.bundle_composite_ids`)
+terms (`bundles.COMPOSITE_BUNDLES`, `SourceSpec.bundle_composite_ids`)
 — produced in the fetch stage, read off the series with their producer
 stamp, never derived by a converter — whose one component is the bundle
 itself.

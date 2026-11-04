@@ -38,7 +38,8 @@ import numpy as np
 
 from tests._support import FIXTURES
 from xuebuild import grib2
-from xuebuild.binconvert import VECTOR_BUNDLES, _convert_units, _extract_planes
+from xuebuild.binconvert import _convert_units, _extract_planes
+from xuebuild.bundles import VECTOR_BUNDLES
 from xuebuild.discover import published_bundle_ids
 from xuebuild.derive import SOIL_KELVIN_THRESHOLD, soil_temperature_unit
 from xuebuild.grid import grid_info

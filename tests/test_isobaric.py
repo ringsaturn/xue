@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from xuebuild.binconvert import VECTOR_BUNDLES, vapour_flux_level, vector_input_ids
+from xuebuild.bundles import VECTOR_BUNDLES, vapour_flux_level, vector_input_ids
 from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.derive import derive_vapour_flux
 from xuebuild.errors import ConversionError

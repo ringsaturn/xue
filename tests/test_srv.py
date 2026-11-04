@@ -14,7 +14,8 @@ import numpy as np
 from tests._support import requires_native
 from xuebuild import binformat
 
-from xuebuild.binconvert import WIND_COMPONENT_IDS, _bundle_chunks
+from xuebuild.binconvert import _bundle_chunks
+from xuebuild.bundles import WIND_COMPONENT_IDS
 from xuebuild.ladder import (
     VARIANT_TIERS,
     bundle_tile,

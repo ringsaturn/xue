@@ -49,6 +49,7 @@ import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdal, requires_native_source, stored_bundle
 from xuebuild import binconvert, observation
+from xuebuild.bundles import DERIVED_VECTORS, VOLUME_BUNDLES
 from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.derive import interval_rate
 from xuebuild.errors import ConversionError, DownloadError
@@ -160,7 +161,7 @@ class SourceRegistryTests(unittest.TestCase):
         # arrives in pascals, which the converter turns into hectopascals.
         self.assertEqual(SPEC.bundle_vector_ids, ("wind10m", "wind80m"))
         self.assertEqual(bundle_input_ids(SPEC, "wind80m"), ("ugrd80m", "vgrd80m"))
-        self.assertNotIn("wind80m", binconvert.DERIVED_VECTORS)
+        self.assertNotIn("wind80m", DERIVED_VECTORS)
         self.assertEqual(observation.accepted_series_units(variable_spec("prmsl")), ("hPa", "pa"))
         self.assertTrue(SPEC.interval_precipitation)
         self.assertFalse(SPEC.accumulated_precipitation or SPEC.averaged_precipitation)
@@ -182,7 +183,7 @@ class SourceRegistryTests(unittest.TestCase):
 
     def test_the_volume_is_the_cloud_water_on_twenty_four_altitudes(self) -> None:
         self.assertEqual(SPEC.bundle_volume_ids, ("cloud3d",))
-        self.assertEqual(binconvert.VOLUME_BUNDLES["cloud3d"], CLOUD_WATER_VARIABLE_IDS)
+        self.assertEqual(VOLUME_BUNDLES["cloud3d"], CLOUD_WATER_VARIABLE_IDS)
         self.assertEqual(bundle_input_ids(SPEC, "cloud3d"), CLOUD_WATER_VARIABLE_IDS)
         self.assertEqual(
             CLOUD_WATER_LEVELS_M,

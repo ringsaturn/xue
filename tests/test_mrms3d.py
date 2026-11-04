@@ -43,7 +43,7 @@ from tests._support import (
     stored_bundle,
 )
 from xuebuild import binconvert, fetch, grib2, stac, zarrstore
-from xuebuild.binconvert import VOLUME_BUNDLES, bundle_variable_ids
+from xuebuild.bundles import VOLUME_BUNDLES, bundle_variable_ids
 from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
