@@ -43,6 +43,9 @@ pub mod level3;
 pub mod network;
 pub mod zarr;
 
+#[cfg(test)]
+mod schematie;
+
 pub use decode::{decode_chunk, Bundle, StreamingBundle};
 pub use level3::{read_level3, Level3Sweep, LEVEL3_BEAMS};
 pub use format::{

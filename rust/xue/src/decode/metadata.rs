@@ -276,6 +276,9 @@ fn parse_band(variable: &serde_json::Value, schema_version: u64) -> Result<(), D
     Ok(())
 }
 
+/// The producer block: the algorithm's id and its version, nothing else.
+const PRODUCER_FIELDS: [&str; 2] = ["id", "version"];
+
 fn parse_producer(variable: &serde_json::Value, schema_version: u64) -> Result<(), DecodeError> {
     let Some(producer) = variable.get("producer") else {
         return Ok(());
@@ -286,11 +289,12 @@ fn parse_producer(variable: &serde_json::Value, schema_version: u64) -> Result<(
     let producer = producer
         .as_object()
         .ok_or_else(|| err("metadata producer must be an object"))?;
-    if producer.len() != 2 {
+    if producer.len() != PRODUCER_FIELDS.len() {
         return Err(err("metadata producer block must carry exactly id and version"));
     }
+    let [id_field, version_field] = PRODUCER_FIELDS;
     let id = producer
-        .get("id")
+        .get(id_field)
         .and_then(|value| value.as_str())
         .ok_or_else(|| err("metadata producer id is invalid"))?;
     let mut chars = id.chars();
@@ -300,7 +304,7 @@ fn parse_producer(variable: &serde_json::Value, schema_version: u64) -> Result<(
         return Err(err("metadata producer id is invalid"));
     }
     producer
-        .get("version")
+        .get(version_field)
         .and_then(|value| value.as_str())
         .filter(|version| !version.is_empty())
         .ok_or_else(|| err("metadata producer version is invalid"))?;
@@ -757,5 +761,49 @@ mod band_tests {
         ] {
             assert!(parse_aerosol(&variable(&json), 3).is_err(), "{json}");
         }
+    }
+}
+
+#[cfg(test)]
+mod schema_tie_tests {
+    //! The field names read here are the ones
+    //! `docs/schemas/bundle-metadata.schema.json` names, and the blocks the
+    //! format closes name exactly the fields this reader knows. Versions 1
+    //! and 2 have no schema; their hour-named time fields are this reader's.
+    use super::{
+        AEROSOL_INTERVALS, AEROSOL_TYPE_FIELDS, BAND_FIELDS, PARAMETER_CODE_FIELDS,
+        PARAMETER_NULLABLE_FIELDS, PRODUCER_FIELDS, V3_TIME_FIELDS,
+    };
+    use crate::schematie::{assert_exactly, assert_named};
+
+    const SCHEMA: &str = "bundle-metadata";
+
+    #[test]
+    fn the_fields_read_are_the_schemas() {
+        assert_named(SCHEMA, "", &["schemaVersion", "grid", "time", "variables"]);
+        assert_named(SCHEMA, "/$defs/Grid", &["width", "height"]);
+        assert_named(
+            SCHEMA,
+            "/$defs/Variable",
+            &["numericId", "id", "parameter", "band", "producer", "aerosol"],
+        );
+    }
+
+    #[test]
+    fn the_closed_blocks_are_the_schemas() {
+        let time: Vec<&str> = V3_TIME_FIELDS.iter().copied().chain(["frameCount"]).collect();
+        assert_exactly(SCHEMA, "/$defs/Time", &time);
+        let parameter: Vec<&str> =
+            PARAMETER_CODE_FIELDS.iter().chain(PARAMETER_NULLABLE_FIELDS.iter()).copied().collect();
+        assert_exactly(SCHEMA, "/$defs/Parameter", &parameter);
+        assert_exactly(SCHEMA, "/$defs/Band", &BAND_FIELDS.map(|(field, _, _)| field));
+        assert_exactly(SCHEMA, "/$defs/Producer", &PRODUCER_FIELDS);
+        let mut aerosol: Vec<&str> = AEROSOL_TYPE_FIELDS.iter().map(|(field, _)| *field).collect();
+        for (_, pairs) in AEROSOL_INTERVALS {
+            for (scale, value) in pairs {
+                aerosol.extend([scale, value]);
+            }
+        }
+        assert_exactly(SCHEMA, "/$defs/Aerosol", &aerosol);
     }
 }

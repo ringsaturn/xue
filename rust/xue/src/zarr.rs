@@ -1347,3 +1347,86 @@ mod tests {
         assert_eq!(format_iso_millis(0.0), "1970-01-01T00:00:00.000Z");
     }
 }
+
+#[cfg(test)]
+mod schema_tie_tests {
+    //! The group and array fields this reader reads, and the metadata fields
+    //! it reads beside the decoder's own validation, are the ones
+    //! `docs/schemas/` names: `store-group`, `polar-group`, `network-group`,
+    //! `store-array` and `bundle-metadata`.
+    use super::{StoreKind, BRANCH_BLOCKS};
+    use crate::schematie::assert_named;
+
+    #[test]
+    fn every_branch_block_is_named_by_its_schema() {
+        for (block, kind) in BRANCH_BLOCKS {
+            let (schema, pointer) = match kind {
+                StoreKind::Grid => ("store-group", "/$defs/Attributes"),
+                StoreKind::Polar => ("polar-group", "/properties/attributes"),
+                StoreKind::Network => ("network-group", "/properties/attributes"),
+            };
+            assert_named(schema, pointer, &[block]);
+        }
+        assert_named("store-group", "/$defs/Attributes", &["xue_profile"]);
+        for schema in ["store-group", "polar-group", "network-group"] {
+            assert_named(schema, "", &["zarr_format", "node_type", "attributes"]);
+        }
+    }
+
+    #[test]
+    fn the_array_fields_read_are_the_schemas() {
+        assert_named(
+            "store-array",
+            "",
+            &["zarr_format", "node_type", "data_type", "shape", "chunk_grid", "chunk_key_encoding", "fill_value", "codecs", "dimension_names", "attributes"],
+        );
+        assert_named("store-array", "/properties/chunk_grid", &["name", "configuration"]);
+        assert_named("store-array", "/properties/chunk_grid/properties/configuration", &["chunk_shape"]);
+        assert_named("store-array", "/properties/chunk_key_encoding", &["name", "configuration"]);
+        assert_named("store-array", "/properties/chunk_key_encoding/properties/configuration", &["separator"]);
+        assert_named("store-array", "/$defs/Codec", &["name", "configuration"]);
+        assert_named("store-array", "/$defs/Attributes", &["xue", "xue_network"]);
+        assert_named("store-array", "/$defs/NetworkArrayBlock", &["variable"]);
+    }
+
+    #[test]
+    fn the_metadata_fields_read_are_the_schemas() {
+        assert_named("bundle-metadata", "", &["runTime", "variables", "grid"]);
+        assert_named(
+            "bundle-metadata",
+            "/$defs/Grid",
+            &["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+        );
+        assert_named("bundle-metadata", "/$defs/Variable", &["numericId", "id", "label", "unit", "quantization"]);
+        assert_named(
+            "bundle-metadata",
+            "/$defs/LinearQuantization",
+            &["type", "offset", "scale", "minimumCode", "maximumCode", "nodataCode"],
+        );
+        assert_named(
+            "bundle-metadata",
+            "/$defs/LogQuantization",
+            &["type", "trace", "scale", "maximum", "minimumCode", "maximumCode", "zeroCode", "overflowCode", "nodataCode"],
+        );
+    }
+
+    #[test]
+    fn the_network_block_read_is_the_schemas() {
+        assert_named(
+            "network-group",
+            "/$defs/Network",
+            &["version", "model", "product", "runTime", "time", "geometry", "variables"],
+        );
+        assert_named(
+            "network-group",
+            "/$defs/Geometry",
+            &["path", "byteLength", "crc32", "featureCount", "rowGroupRows"],
+        );
+        assert_named("store-array", "/$defs/NetworkVariable", &["numericId", "id", "label", "unit", "quantization"]);
+        assert_named(
+            "bundle-metadata",
+            "/$defs/Time",
+            &["unitSeconds", "firstFrameOffset", "frameCount", "frameStep", "frameOffsets"],
+        );
+    }
+}

@@ -584,3 +584,22 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod schema_tie_tests {
+    //! The fields this writer writes and its validator reads are the ones
+    //! `docs/schemas/manifest.schema.json` names.
+    use crate::schematie::assert_named;
+
+    const SCHEMA: &str = "manifest";
+
+    #[test]
+    fn the_fields_written_and_read_are_the_schemas() {
+        assert_named(SCHEMA, "", &["schemaVersion", "model", "product", "runTime", "forecastHours", "bundles"]);
+        assert_named(SCHEMA, "/$defs/Bundle", &["variable", "path", "byteLength", "crc32", "variants", "zarr"]);
+        assert_named(SCHEMA, "/$defs/Variant", &["path", "byteLength", "crc32", "zarr"]);
+        assert_named(SCHEMA, "/$defs/MapStore", &["path", "byteLength", "crc32"]);
+        assert_named(SCHEMA, "/$defs/SegmentedStore", &["byteLength", "segments"]);
+        assert_named(SCHEMA, "/$defs/Segment", &["path", "byteLength", "crc32"]);
+    }
+}
