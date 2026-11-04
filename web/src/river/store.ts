@@ -12,6 +12,7 @@
  * own is the two-dimensional cut and the `xue_network` block.
  */
 
+import { checkNetworkGroup } from "../schema/generated/network-group";
 import { parseShardIndex, shardIndexLength, PREDICTOR_PREVIOUS, PREDICTOR_RAW, type ShardIndexEntry } from "../zarr/shard";
 import type { ZarrStore } from "../zarr/store";
 import type { RiverGeometry } from "./index";
@@ -123,6 +124,9 @@ export function parseNetworkGroup(text: string): NetworkGroup {
   if (blocks.length !== 1 || blocks[0] !== "xue_network") throw new Error("group is not a network store");
   const block = object(attributes.xue_network, "xue_network");
   if (block.version !== NETWORK_VERSION) throw new Error(`xue_network version ${String(block.version)} is not one this reader implements`);
+  // docs/schemas/network-group.schema.json over the group this reads; the
+  // consolidated arrays are each read, and held, where they are opened.
+  checkNetworkGroup({ zarr_format: group.zarr_format, node_type: group.node_type, attributes: { xue_network: block } }, "group metadata");
   const runTime = block.runTime;
   if (typeof runTime !== "string" || !Number.isFinite(Date.parse(runTime))) throw new Error("xue_network runTime is not a timestamp");
   const time = object(block.time, "xue_network time");

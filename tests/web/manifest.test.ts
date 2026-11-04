@@ -218,7 +218,7 @@ describe("validateManifest", () => {
     for (const name of ["Tmp2m", "tmp-2m", "tmp 2m", "2mtemp", "", "tmp_2m", 7, null]) {
       const broken = manifestFixture();
       broken.bundles[0]!.variable = name as string;
-      expect(() => validateManifest(broken)).toThrow("bundle variable name");
+      expect(() => validateManifest(broken)).toThrow("manifest.bundles[0].variable");
     }
     const duplicate = manifestFixture();
     duplicate.bundles[1]!.variable = "tmp2m";
@@ -281,7 +281,7 @@ describe("validateManifest", () => {
     expect(validateManifest({ ...manifestFixture(), forecastHours: 6552 }).forecastHours).toBe(6552);
     expect(validateManifest({ ...manifestFixture(), forecastHours: 8760 }).forecastHours).toBe(8760);
     for (const broken of [0, -24, 1.5, 8761, "120", undefined]) {
-      expect(() => validateManifest({ ...manifestFixture(), forecastHours: broken })).toThrow("range");
+      expect(() => validateManifest({ ...manifestFixture(), forecastHours: broken })).toThrow("manifest.forecastHours");
     }
   });
 
@@ -488,12 +488,12 @@ describe("validateManifest", () => {
     const cases: [(store: ReturnType<typeof segmented>) => unknown, string][] = [
       [(store) => ({ ...store, path: "ir104.half.zarr" }), "no path or crc32"],
       [(store) => ({ ...store, crc32: "760cef95" }), "no path or crc32"],
-      [(store) => ({ ...store, segments: [] }), "segment list"],
+      [(store) => ({ ...store, segments: [] }), "segments must have at least 1 items"],
       [(store) => ({ ...store, byteLength: 31 }), "sum"],
-      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "a/../b/ir104.zarr" }], byteLength: 10 }), "segment path"],
-      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../../x/ir104.zarr" }], byteLength: 10 }), "segment path"],
-      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "/x/ir104.zarr" }], byteLength: 10 }), "segment path"],
-      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../x/ir104.xue" }], byteLength: 10 }), "segment path"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "a/../b/ir104.zarr" }], byteLength: 10 }), "segments[0].path is malformed"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../../x/ir104.zarr" }], byteLength: 10 }), "segments[0].path is malformed"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "/x/ir104.zarr" }], byteLength: 10 }), "segments[0].path is malformed"],
+      [(store) => ({ ...store, segments: [{ ...store.segments[0]!, path: "../../x/ir104.xue" }], byteLength: 10 }), "segments[0].path is malformed"],
       [(store) => ({ ...store, segments: [store.segments[0]!, store.segments[0]!], byteLength: 20 }), "duplicate"],
       [(store) => ({ ...store, segments: [{ ...store.segments[0]!, crc32: "dead" }], byteLength: 10 }), "crc32"],
     ];
@@ -1408,7 +1408,18 @@ describe("parseBundleMetadata", () => {
     product: "pgrb2.0p25",
     runTime: "2026-08-15T06:00:00Z",
     time: { firstForecastHour: 0, stepHours: 1, frameCount: 121 },
-    grid: { width: 1440, height: 721 },
+    grid: {
+      width: 1440,
+      height: 721,
+      layout: "row-major",
+      rowOrder: "north-to-south",
+      columnOrder: "west-to-east",
+      firstLongitude: -180,
+      firstLatitude: 90,
+      longitudeStep: 0.25,
+      latitudeStep: -0.25,
+      wrapLongitude: true,
+    },
     variables: [
       {
         numericId: 1,
@@ -1561,7 +1572,7 @@ describe("parseBundleMetadata", () => {
       ...v3Metadata,
       model: "NOAA-MRMS3D",
       product: "conus-refl3d",
-      grid: { width: 1400, height: 700 },
+      grid: { ...v3Metadata.grid, width: 1400, height: 700, firstLongitude: -130, firstLatitude: 55, longitudeStep: 0.05, latitudeStep: -0.05, wrapLongitude: false },
       time: { unitSeconds: 600, firstFrameOffset: 0, frameCount: 4, frameOffsets: [0, 1, 2, 4] },
       variables: levels.map((metres, index) => ({
         numericId: index + 1,

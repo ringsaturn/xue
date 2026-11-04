@@ -35,6 +35,8 @@
  */
 
 import { parseBundleMetadata, type BundleMetadata } from "../manifest";
+import { checkStoreArray } from "../schema/generated/store-array";
+import { checkStoreGroup } from "../schema/generated/store-group";
 
 /** Predictor codes as `decodeChunk` takes them — the container's own
  * numbering (docs/format.md). */
@@ -175,6 +177,18 @@ export function parseGroupMetadata(text: string, bundle?: string): ZarrGroup {
   } else {
     throw new Error(`xue_profile ${profile} is not one this reader implements`);
   }
+  // The group as this session reads it, held to
+  // docs/schemas/store-group.schema.json: its envelope and the one bundle
+  // asked for. The other bundles of a shared store are each their own
+  // session's to refuse, and the consolidated block is not read here.
+  checkStoreGroup(
+    {
+      zarr_format: group.zarr_format,
+      node_type: group.node_type,
+      attributes: profile === PROFILE_SINGLE ? { xue_profile: profile, xue: block } : { xue_profile: profile, xue_bundles: { [bundle!]: block } },
+    },
+    "group metadata",
+  );
   const metadataJson = JSON.stringify(block);
   return { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
 }
@@ -199,6 +213,9 @@ function arrayBundle(attributes: unknown): string | null {
 export function parseArrayMetadata(text: string): ZarrArrayLayout {
   const array = object(JSON.parse(text), "array metadata");
   if (array.zarr_format !== 3 || array.node_type !== "array") throw new Error("not a Zarr v3 array");
+  // docs/schemas/store-array.schema.json, then what makes it one of this
+  // profile's variable arrays.
+  checkStoreArray(array, "array metadata");
   if (array.data_type !== "uint8") throw new Error(`array data type must be uint8, not ${String(array.data_type)}`);
   const [frameCount, height, width] = positiveInts(array.shape, 3, "array shape") as [number, number, number];
 

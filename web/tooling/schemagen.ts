@@ -1,5 +1,5 @@
-/** Generates the shell's point-product validators from the normative JSON
- * Schemas under `docs/schemas/` (draft 2020-12): one module per schema in
+/** Generates the shell's validators from the normative JSON Schemas under
+ * `docs/schemas/` (draft 2020-12): one module per schema in
  * `web/src/schema/generated/`, each a type and a `check…` function that
  * throws an `Error` naming the refused field, written as calls to the
  * helpers of `web/src/schema/check.ts`. The output is plain TypeScript, so
@@ -7,8 +7,13 @@
  *
  * The generator implements a closed subset of the vocabulary and refuses a
  * schema that uses anything else, so a keyword the shell would silently
- * ignore cannot reach a contract. Unknown object fields are always
- * admitted: a reader ignores what a later revision adds.
+ * ignore cannot reach a contract. Unknown object fields are admitted, since
+ * a reader ignores what a later revision adds, unless a schema closes the
+ * object (`additionalProperties: false`), which the format does only for
+ * the blocks it declares closed (bundle metadata's time axis and identity
+ * blocks). A `$ref` names a definition of the same schema or another schema
+ * by its file name (`bundle-metadata.schema.json`, `…#/$defs/Variable`); the
+ * module then imports that one's check.
  *
  *   make schemas      (node web/tooling/schemagen.ts: rewrite the modules)
  *
@@ -34,6 +39,7 @@ const VALIDATION = new Set([
   "exclusiveMinimum",
   "multipleOf",
   "minLength",
+  "minProperties",
   "pattern",
   "format",
   "enum",
@@ -59,17 +65,58 @@ function literal(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** The root type's name: the schema's title, or its file name. */
+function rootName(name: string, schema: Schema): string {
+  return typeof schema.title === "string" ? schema.title : pascal(name);
+}
+
+const LOCAL_REF = /^#\/\$defs\/([A-Za-z][A-Za-z0-9]*)$/;
+const FOREIGN_REF = /^([a-z0-9-]+)\.schema\.json(?:#\/\$defs\/([A-Za-z][A-Za-z0-9]*))?$/;
+
 class Generator {
   private counter = 0;
   private readonly defs: Record<string, Schema>;
   private readonly name: string;
   private readonly root: Schema;
+  /** Every schema by name, for a `$ref` into another one. */
+  private readonly schemas: ReadonlyMap<string, Schema>;
+  /** What the module imports from other generated modules, by module. */
+  private readonly imports = new Map<string, Set<string>>();
 
-  constructor(name: string, root: Schema) {
+  constructor(name: string, root: Schema, schemas: ReadonlyMap<string, Schema> = new Map()) {
     this.name = name;
     this.root = root;
+    this.schemas = schemas;
     this.defs = (root.$defs as Record<string, Schema> | undefined) ?? {};
     this.audit(root, "#");
+  }
+
+  /** The definition a `$ref` names, and the module it lives in when that
+   * is another schema's; null when it names nothing. */
+  private resolve(ref: string): { name: string; module: string | null } | null {
+    const local = LOCAL_REF.exec(ref);
+    if (local) return this.defs[local[1]!] ? { name: local[1]!, module: null } : null;
+    const foreign = FOREIGN_REF.exec(ref);
+    if (!foreign || foreign[1] === this.name) return null;
+    const target = this.schemas.get(foreign[1]!);
+    if (!target) return null;
+    if (foreign[2] === undefined) return { name: rootName(foreign[1]!, target), module: foreign[1]! };
+    const defs = (target.$defs as Record<string, Schema> | undefined) ?? {};
+    return defs[foreign[2]] ? { name: foreign[2], module: foreign[1]! } : null;
+  }
+
+  /** The type (and `check…`) name a `$ref` is called by here, imported
+   * from its module when it is another schema's. */
+  private referenced(ref: string): string {
+    const target = this.resolve(ref)!;
+    if (target.module !== null) {
+      if (this.defs[target.name] || rootName(this.name, this.root) === target.name)
+        throw new Error(`${this.name}: ${ref} is named ${target.name}, which this schema defines too`);
+      let names = this.imports.get(target.module);
+      if (!names) this.imports.set(target.module, (names = new Set()));
+      names.add(target.name);
+    }
+    return target.name;
   }
 
   /** Refuses what the generator does not implement. */
@@ -84,12 +131,11 @@ class Generator {
     if (node.$defs !== undefined && at !== "#") throw new Error(`${this.name}: $defs only at the root`);
     if (node.format !== undefined && node.format !== "date-time")
       throw new Error(`${this.name}: ${at} format ${String(node.format)} is not implemented`);
-    if (node.additionalProperties === false)
-      throw new Error(`${this.name}: ${at} closes an object; readers admit unknown fields`);
+    if (node.additionalProperties === false && node.properties === undefined)
+      throw new Error(`${this.name}: ${at} closes an object without naming its properties`);
     if (node.$ref !== undefined) {
       const ref = String(node.$ref);
-      const match = /^#\/\$defs\/([A-Za-z][A-Za-z0-9]*)$/.exec(ref);
-      if (!match || !this.defs[match[1]!]) throw new Error(`${this.name}: ${at} $ref ${ref} names no local definition`);
+      if (!this.resolve(ref)) throw new Error(`${this.name}: ${at} $ref ${ref} names no definition`);
       if (Object.keys(node).some((key) => VALIDATION.has(key) && key !== "$ref"))
         throw new Error(`${this.name}: ${at} mixes $ref with other keywords`);
     }
@@ -145,7 +191,7 @@ class Generator {
 
   /** The TypeScript type a value admitted by `schema` has. */
   type(schema: Schema): string {
-    if (schema.$ref !== undefined) return String(schema.$ref).slice("#/$defs/".length);
+    if (schema.$ref !== undefined) return this.referenced(String(schema.$ref));
     if (schema.const !== undefined) return literal(schema.const);
     if (Array.isArray(schema.enum)) return schema.enum.map(literal).join(" | ");
     // anyOf narrows a node that has a type of its own; alone, it is a union.
@@ -213,7 +259,7 @@ class Generator {
   check(schema: Schema, v: string, at: string, indent: string): string[] {
     const out: string[] = [];
     if (schema.$ref !== undefined) {
-      out.push(`${indent}check${this.type(schema)}(${v}, ${at});`);
+      out.push(`${indent}check${this.referenced(String(schema.$ref))}(${v}, ${at});`);
       return out;
     }
     const types = this.types(schema);
@@ -296,6 +342,8 @@ class Generator {
       }
       case "object": {
         out.push(`${indent}${this.call("isObject", [v, at])};`);
+        if (typeof schema.minProperties === "number")
+          out.push(`${indent}${this.call("hasProperties", [v, at, String(schema.minProperties)])};`);
         const required = new Set((schema.required as string[] | undefined) ?? []);
         const properties = (schema.properties as Record<string, Schema> | undefined) ?? {};
         for (const key of required)
@@ -306,12 +354,18 @@ class Generator {
             out.push(`${indent}const ${value} = ${this.call("field", [v, literal(key), at])};`);
             out.push(...this.check(child, value, this.label(at, `.${key}`), indent));
           } else {
+            // An optional field whose schema checks nothing (an annotation
+            // alone) needs no code.
+            const body = this.check(child, value, this.label(at, `.${key}`), `${indent}  `);
+            if (body.length === 0) continue;
             out.push(`${indent}const ${value} = ${v}[${literal(key)}];`);
             out.push(`${indent}if (${value} !== undefined) {`);
-            out.push(...this.check(child, value, this.label(at, `.${key}`), `${indent}  `));
+            out.push(...body);
             out.push(`${indent}}`);
           }
         }
+        if (schema.additionalProperties === false)
+          out.push(`${indent}${this.call("isClosed", [v, at, literal(Object.keys(properties))])};`);
         if (typeof schema.additionalProperties === "object") {
           const key = this.fresh("k");
           const value = this.fresh("v");
@@ -328,7 +382,7 @@ class Generator {
   }
 
   module(source: string): string {
-    const title = typeof this.root.title === "string" ? this.root.title : pascal(this.name);
+    const title = rootName(this.name, this.root);
     const body: string[] = [];
     const definitions: [string, Schema][] = [...Object.entries(this.defs), [title, { ...this.root, $defs: undefined }]];
     for (const [name, schema] of definitions) {
@@ -347,6 +401,10 @@ class Generator {
       "",
       `import { ${[...this.used].sort().join(", ")} } from "../check";`,
     ];
+    for (const [module, names] of [...this.imports].sort(([a], [b]) => a.localeCompare(b))) {
+      const items = [...names].sort().flatMap((name) => [`check${name}`, `type ${name}`]);
+      out.push(`import { ${items.join(", ")} } from "./${module}";`);
+    }
     if (this.patterns.size > 0) out.push("");
     for (const [patternSource, name] of this.patterns) out.push(`const ${name} = new RegExp(${literal(patternSource)}, "u");`);
     out.push(...body);
@@ -360,11 +418,11 @@ export function generate(schemaDirectory: string): Map<string, string> {
   const names = readdirSync(schemaDirectory)
     .filter((name) => name.endsWith(SCHEMA_SUFFIX))
     .sort();
-  for (const file of names) {
-    const name = file.slice(0, -SCHEMA_SUFFIX.length);
-    const schema = JSON.parse(readFileSync(join(schemaDirectory, file), "utf8")) as Schema;
-    modules.set(`${name}.ts`, new Generator(name, schema).module(`docs/schemas/${file}`));
-  }
+  const schemas = new Map<string, Schema>(
+    names.map((file) => [file.slice(0, -SCHEMA_SUFFIX.length), JSON.parse(readFileSync(join(schemaDirectory, file), "utf8")) as Schema]),
+  );
+  for (const [name, schema] of schemas)
+    modules.set(`${name}.ts`, new Generator(name, schema, schemas).module(`docs/schemas/${name}${SCHEMA_SUFFIX}`));
   return modules;
 }
 

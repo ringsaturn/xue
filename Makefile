@@ -28,7 +28,7 @@ install: ## Install the frontend's npm dependencies
 wasm: ## Build the WASM decoder into web/src/wasm/
 	cd rust && wasm-pack build xue-wasm --target web --out-dir ../../web/src/wasm --out-name xue
 
-schemas: ## Regenerate the shell's point-product validators from docs/schemas/
+schemas: ## Regenerate the shell's validators from docs/schemas/
 	node web/tooling/schemagen.ts
 
 # The data-API Worker (rust/xue-worker). Its R2 binding is `remote: true`, so
