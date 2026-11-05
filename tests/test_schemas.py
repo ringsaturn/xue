@@ -182,10 +182,11 @@ def build_tc_archive(root: Path) -> None:
     builders. ``scored``: forecasts in three months (an SH storm of the
     season before the year it is named after, an EP storm with forecasts but
     no best track, an ensemble), a best track the forecasts verify against,
-    a history season from IBTrACS, and the scores. ``history``: that history
+    a history season from IBTrACS, a curated storm, and the scores. ``history``: that history
     season alone, never scored."""
     from tests.test_tc_archive import IbtracsHistoryTest, ScoreTest, TreeTest, _point
     from xuebuild.tc.archive import Archive, make_best, make_record
+    from xuebuild.tc.backfill import backfill
     from xuebuild.tc.harvest import ibtracs_best
     from xuebuild.tc.score import score_stale
     from xuebuild.tc.track import MISSING
@@ -212,6 +213,7 @@ def build_tc_archive(root: Path) -> None:
     archive.add_best(make_best("WP302026", "FUNG-WONG", "2026290N10140", [], scores._best()))
     for record in history:
         archive.add_best(record)
+    backfill(archive, ["curated"], "1944-01", "1944-12")
     archive.write()
     score_stale(archive)
 
