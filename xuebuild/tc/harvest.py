@@ -206,9 +206,9 @@ def harvest_issues(
 
 
 def place_ecmwf(matcher: BestMatcher, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Issues built while ECMWF's own western Pacific numbers were taken as
-    storm ids file its tracks under storms that do not exist (its ``36W``
-    for JTWC's ``WP29``): such a record moves to the storm its start lies
+    """Issues built while ECMWF's own numbers were taken as storm ids file
+    its tracks under storms that do not exist or are another storm (its
+    ``36W`` for JTWC's ``WP29``): such a record moves to the storm its start lies
     on, when the season's best tracks place one there."""
     placed = []
     for record in records:

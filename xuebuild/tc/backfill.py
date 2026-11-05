@@ -270,7 +270,7 @@ def ecmwf_records(
 ) -> list[dict[str, Any]]:
     """Archive records of one file's systems. A system ECMWF numbered as
     JTWC or NHC does keeps that id; one it numbered itself (the western
-    Pacific's, and every ``7x``) is placed on the season's best-track storm
+    Pacific's, the southern hemisphere's, and every ``7x``) is placed on the season's best-track storm
     its start lies on, or dropped — so a storm's forecasts from before it
     was numbered are kept too."""
     records = []
