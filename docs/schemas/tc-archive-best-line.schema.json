@@ -4,21 +4,79 @@
   "title": "TcArchiveBest",
   "description": "One line of tc/archive/<YYYY>/best.jsonl (docs/tc.md section 8.2): one storm's best tracks. That basin is the id's, that a numbered storm's atcf lists its own id, the track keys and the tracks' own rules are the readers' own checks.",
   "type": "object",
-  "required": ["storm", "basin", "name", "sid", "atcf", "best"],
+  "required": [
+    "storm",
+    "basin",
+    "name",
+    "sid",
+    "atcf",
+    "best"
+  ],
   "properties": {
-    "storm": {"$ref": "tc-archive-catalog.schema.json#/$defs/ArchiveStormId"},
-    "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
-    "name": {"type": ["string", "null"]},
-    "sid": {"description": "The IBTrACS storm id, or null.", "type": ["string", "null"]},
+    "storm": {
+      "$ref": "tc-archive-catalog.schema.json#/$defs/ArchiveStormId"
+    },
+    "basin": {
+      "$ref": "tc-archive-catalog.schema.json#/$defs/Basin"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sid": {
+      "description": "The IBTrACS storm id, or null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "atcf": {
       "description": "Every ATCF id the storm carried; empty for a history id.",
       "type": "array",
-      "items": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"}
+      "items": {
+        "$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"
+      }
     },
     "best": {
-      "description": "Best tracks by agency key; ibtracs for IBTrACS' merged track of a storm no agency holds.",
+      "description": "Best tracks by agency key; ibtracs for IBTrACS' merged track of a storm no agency holds; curated for a track reconstructed for this archive.",
       "type": "object",
-      "additionalProperties": {"$ref": "tc-storm.schema.json#/$defs/TcTrack"}
+      "additionalProperties": {
+        "$ref": "tc-storm.schema.json#/$defs/TcTrack"
+      }
+    },
+    "provenance": {
+      "description": "Where a curated storm's data comes from; absent on every other storm.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "publisher",
+          "title",
+          "url",
+          "use"
+        ],
+        "properties": {
+          "publisher": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "use": {
+            "enum": [
+              "position",
+              "pressure",
+              "check"
+            ]
+          }
+        }
+      }
     }
   }
 }

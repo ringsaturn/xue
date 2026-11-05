@@ -20,6 +20,7 @@ are kept: an a-deck's file id, or ECMWF's ``stormIdentifier`` up to 49.
 from __future__ import annotations
 
 import gzip
+import json
 import logging
 import re
 import shutil
@@ -42,7 +43,10 @@ from .track import Ensemble, Forecast, lead_seconds, member_from_points
 
 LOG = logging.getLogger(__name__)
 
-SOURCES = ("nhc", "ucar", "ecmwf", "ibtracs")
+SOURCES = ("nhc", "ucar", "ecmwf", "ibtracs", "curated")
+
+CURATED_FILE = Path(__file__).with_name("curated.json")
+"""Tracks reconstructed for this archive, each naming its sources."""
 
 NHC_ARCHIVE_URL = "https://ftp.nhc.noaa.gov/atcf/archive"
 NHC_CURRENT_URL = "https://ftp.nhc.noaa.gov/atcf/aid_public"
@@ -363,11 +367,19 @@ def backfill_ibtracs(archive: Archive, first: str, last: str, *, csv_path: Path 
     return {"source": "ibtracs", "storms": add_best_records(archive, records)}
 
 
+def backfill_curated(archive: Archive, first: str, last: str) -> dict[str, Any]:
+    """The curated storms of the seasons named by the years of ``first`` and ``last``."""
+    seasons = range(int(first[:4]), int(last[:4]) + 1)
+    records = [r for r in json.loads(CURATED_FILE.read_text(encoding="utf-8")) if int(r["storm"][-4:]) in seasons]
+    return {"source": "curated", "storms": add_best_records(archive, records)}
+
+
 RUNNERS: dict[str, Callable[[Archive, str, str], dict[str, Any]]] = {
     "nhc": lambda archive, first, last: backfill_decks(archive, "nhc", first, last),
     "ucar": lambda archive, first, last: backfill_decks(archive, "ucar", first, last),
     "ecmwf": backfill_ecmwf,
     "ibtracs": backfill_ibtracs,
+    "curated": backfill_curated,
 }
 
 

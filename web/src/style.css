@@ -5174,6 +5174,40 @@ html:has(.showcase-page) {
   display: none;
 }
 
+.typhoon-provenance {
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--r-s);
+  background: rgba(var(--accent-rgb), 0.05);
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.45;
+}
+
+.typhoon-provenance[hidden] {
+  display: none;
+}
+
+.typhoon-provenance h3,
+.typhoon-provenance p,
+.typhoon-provenance ul {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+}
+
+.typhoon-provenance h3 {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.typhoon-provenance ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
 .typhoon-list {
   flex: 0 0 auto;
   max-height: 34dvh;

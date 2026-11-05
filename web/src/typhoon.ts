@@ -35,6 +35,7 @@ import {
   truthsOf,
   type ArchiveRecord,
   type BestRecord,
+  type ProvenanceSource,
   type SeasonIndex,
   type SeasonStorm,
   type StormErrors,
@@ -78,6 +79,7 @@ const basinsGroup = document.getElementById("typhoon-basins") as HTMLDivElement;
 const stormList = document.getElementById("typhoon-list") as HTMLUListElement;
 const seasonNote = document.getElementById("typhoon-season-note") as HTMLParagraphElement;
 const qualityNote = document.getElementById("typhoon-quality-note") as HTMLParagraphElement;
+const provenance = document.getElementById("typhoon-provenance") as HTMLElement;
 const legend = document.getElementById("typhoon-legend") as HTMLDivElement;
 const seasonLink = document.getElementById("typhoon-season-link") as HTMLAnchorElement;
 const stormLink = document.getElementById("typhoon-storm-link") as HTMLAnchorElement;
@@ -579,11 +581,18 @@ function renderFacts(): void {
     return item;
   };
   // A storm with no ATCF number is known by its IBTrACS id.
-  const items = [entry.atcf.length > 0 || !entry.sid ? definition(t("tcPageId"), entry.id) : definition("IBTrACS SID", entry.sid)];
+  const items = [
+    entry.atcf.length > 0
+      ? definition(t("tcPageId"), entry.id)
+      : entry.sid
+        ? definition("IBTrACS SID", entry.sid)
+        : definition(t("tcPageArchiveId"), entry.id),
+  ];
   if (entry.first && entry.last) items.push(definition(t("tcPageLife"), `${formatUtcHour(entry.first)} → ${formatUtcHour(entry.last)}`));
   if (entry.vmax !== null) items.push(definition(t("tcPagePeak"), `${Math.round(entry.vmax / KNOT)} kt`));
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
+  renderProvenance(loaded.best?.provenance ?? []);
   // A storm with a best track in a season of forecasts has a static page.
   stormLink.hidden = loaded.best === null || !loaded.hasPage;
   stormLink.href = stormPagePath(locale, seasonOfStorm(entry.id), entry);
@@ -593,6 +602,25 @@ function renderFacts(): void {
     title: `${stormName(entry)} (${entry.id})`,
     description: t("tcPageMetaDescription"),
   });
+}
+
+/** Where a reconstructed storm's data comes from, so it does not read as an
+ * agency's best track. */
+function renderProvenance(sources: readonly ProvenanceSource[]): void {
+  provenance.hidden = sources.length === 0;
+  if (sources.length === 0) return;
+  const uses = { position: t("tcPageUsePosition"), pressure: t("tcPageUsePressure"), check: t("tcPageUseCheck") };
+  const list = element("ul", "");
+  for (const source of sources) {
+    const item = element("li", "");
+    const link = element("a", "", source.title);
+    link.href = source.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    item.append(element("span", "typhoon-label", uses[source.use]), " ", `${source.publisher}: `, link);
+    list.append(item);
+  }
+  provenance.replaceChildren(element("h3", "", t("tcPageSourcesHeading")), element("p", "", t("tcPageCuratedNote")), list);
 }
 
 function renderAll(): void {
