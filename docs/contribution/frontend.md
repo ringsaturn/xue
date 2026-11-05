@@ -672,7 +672,8 @@ Typhoon Committee adds is added there by hand.
   are separate. Things floating on the map use `--map-ink` /
   `--map-ink-muted`, following `body[data-ground]` from
   `applyBasemapTheme`. The coastline is the shell's own layer; forecast
-  layers insert below it.
+  layers insert below it, and the rivers (lines from z9, the tiles' limit) draw
+  right above it, over the fields.
 - Theme and locale switch in place, never by reload (`onThemeChange`,
   `onLocaleChange`). **`map.setStyle` drops the custom WebGL layers**, so
   `syncBasemapStyle` diffs layer properties instead (`basemap.ts::applyBasemapStyleDiff`). `index.html` repeats

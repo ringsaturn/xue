@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseBasemapHidden, withoutHiddenLayers } from "../../web/src/basemap";
+import { COASTLINE_LAYER, parseBasemapHidden, RIVER_LAYER, withoutHiddenLayers, withRivers } from "../../web/src/basemap";
 import { loadPointerIndex, parsePointProducts } from "../../web/src/pointerindex";
 
 describe("parsePointProducts", () => {
@@ -12,6 +12,48 @@ describe("parsePointProducts", () => {
   it("lists the named ones, `none` naming no product", () => {
     expect([...parsePointProducts("tc, aq")!]).toEqual(["tc", "aq"]);
     expect(parsePointProducts("none")!.has("tc")).toBe(false);
+  });
+});
+
+describe("withRivers", () => {
+  const layers = [
+    { id: "water", type: "fill" },
+    { id: RIVER_LAYER, type: "line", paint: { "line-color": "#dcdcdc" } },
+    { id: COASTLINE_LAYER, type: "line" },
+    { id: "boundaries_country", type: "line" },
+    { id: "water_waterway_label", type: "symbol", minzoom: 13 },
+  ] as unknown as Parameters<typeof withRivers>[0];
+
+  it("puts the rivers right over the coastline, where the fields stop", () => {
+    expect(withRivers(layers).map((layer) => layer.id)).toEqual([
+      "water",
+      COASTLINE_LAYER,
+      RIVER_LAYER,
+      "boundaries_country",
+      "water_waterway_label",
+    ]);
+  });
+
+  it("gives the rivers a color of their own, the same in every build", () => {
+    const river = withRivers(layers).find((layer) => layer.id === RIVER_LAYER) as { paint: Record<string, unknown> };
+    expect(river.paint["line-color"]).not.toBe("#dcdcdc");
+  });
+
+  it("draws named rivers only, which leaves out the connectors across lakes", () => {
+    const flavored = layers.map((layer) =>
+      layer.id === RIVER_LAYER ? { ...layer, filter: ["in", "kind", "river"] } : layer,
+    ) as Parameters<typeof withRivers>[0];
+    const river = withRivers(flavored).find((layer) => layer.id === RIVER_LAYER) as { filter: unknown };
+    expect(river.filter).toEqual(["all", ["in", "kind", "river"], ["has", "name"]]);
+  });
+
+  it("brings the river names forward", () => {
+    const label = withRivers(layers).find((layer) => layer.id === "water_waterway_label");
+    expect(label?.minzoom).toBe(10);
+  });
+
+  it("refuses a flavor without a river layer", () => {
+    expect(() => withRivers(layers.filter((layer) => layer.id !== RIVER_LAYER))).toThrow("no river layer");
   });
 });
 
