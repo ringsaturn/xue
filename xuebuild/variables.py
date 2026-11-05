@@ -1020,14 +1020,14 @@ VARIABLES: dict[str, VariableSpec] = {
     # from those, on a book that stops at 8). The values are WMO code table
     # 4.201's: 1 rain, 3 freezing rain, 5 snow, 6 wet snow, 7 a mixture of rain
     # and snow, 8 ice pellets, 12 freezing drizzle. The parameter is the WMO one
-    # ``ptype`` carries too, so the producer is what tells a viewer which book it
-    # is reading. ECMWF writes the surface with no value. GDAL's tables name the
-    # record differently from one version to the next, hence the template.
+    # ``ptype`` carries too; ECMWF writes the surface with no value where ``ptype``
+    # declares 0, which is what tells a viewer which book it is reading. GDAL's
+    # tables name the record differently from one version to the next, hence the
+    # template.
     "ptypeec": VariableSpec(
         id="ptypeec",
         conversion=rules.code_table("4.201"),
         gdal_rules=(rules.surface("PTYPE"), rules.template()),
-        producer_id="ecmwf",
         predictor="raw",
         label="Precipitation type",
         output_unit="1",
@@ -1038,6 +1038,9 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_number=19,
         grib2_level_type=1,
         grib2_level_value=None,
+        gdal_unit=(
+            "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing"
+        ),
     ),
     # The height of the 0 °C isotherm above sea level, 0/3/5 on surface type 4.
     # NCEP writes 0 where the whole column is below freezing.

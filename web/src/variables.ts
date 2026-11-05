@@ -604,7 +604,7 @@ function buildSpecs(): readonly VariableSpec[] {
     showcaseCode: "PTYPE",
   }),
   // ECMWF's precipitation type as published: the same kind of chart as NCEP's, on
-  // a longer book, told apart by its producer.
+  // a longer book, told apart by the surface value it leaves out.
   surface({
     id: "ptypeec",
     chart: "ptypeec",
