@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-archive-catalog.schema.json",
+  "title": "TcArchiveCatalog",
+  "description": "tc/archive/catalog.json (docs/tc.md sections 8.3 and 9): every month and season of the archive, and the seasons' scores. That entries are sorted and unique, and that each path names its own month or season, are the readers' own checks.",
+  "type": "object",
+  "required": ["archiveSchemaVersion", "product", "months", "seasons"],
+  "properties": {
+    "archiveSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "tc"},
+    "months": {"type": "array", "items": {"$ref": "#/$defs/CatalogMonth"}},
+    "seasons": {"type": "array", "items": {"$ref": "#/$defs/CatalogSeason"}},
+    "scores": {"description": "The scored seasons; absent while none is.", "type": "array", "items": {"$ref": "#/$defs/CatalogScores"}}
+  },
+  "$defs": {
+    "ByteLength": {"description": "A file's length in bytes.", "type": "integer", "minimum": 0},
+    "Crc32": {"description": "A file's CRC32, 8 lowercase hex characters: what it is requested by (?v=).", "type": "string", "pattern": "^[0-9a-f]{8}$"},
+    "Month": {"description": "A UTC month, YYYY-MM.", "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"},
+    "Season": {
+      "description": "An ATCF season: the calendar year, or in the southern hemisphere the year a July-to-June season ends in.",
+      "type": "integer",
+      "minimum": 1800,
+      "maximum": 2200
+    },
+    "AtcfId": {"description": "An ATCF id: basin, number and season (WP302026).", "type": "string", "pattern": "^[A-Z]{2}\\d{6}$"},
+    "ArchiveStormId": {
+      "description": "An ATCF id, or a history id <basin>-<IBTrACS SID>-<season> (SH-1951123S10140-1952) for a storm that never had a number (docs/tc.md section 8.2).",
+      "type": "string",
+      "pattern": "^[A-Z]{2}(\\d{6}|-\\d{7}[NS]\\d{5}-\\d{4})$"
+    },
+    "Basin": {"description": "The ATCF basin.", "type": "string", "pattern": "^[A-Z]{2}$"},
+    "CatalogMonth": {
+      "description": "One month's index.",
+      "type": "object",
+      "required": ["month", "path", "byteLength", "crc32", "storms", "records"],
+      "properties": {
+        "month": {"$ref": "#/$defs/Month"},
+        "path": {"description": "<YYYY>/<MM>/index.json, relative to the catalog.", "type": "string", "pattern": "^\\d{4}/\\d{2}/index\\.json$"},
+        "byteLength": {"$ref": "#/$defs/ByteLength"},
+        "crc32": {"$ref": "#/$defs/Crc32"},
+        "storms": {"description": "Storms with forecasts in the month.", "type": "integer", "minimum": 0},
+        "records": {"description": "Forecasts in the month.", "type": "integer", "minimum": 0}
+      }
+    },
+    "CatalogSeason": {
+      "description": "One season's index.",
+      "type": "object",
+      "required": ["season", "path", "byteLength", "crc32", "storms"],
+      "properties": {
+        "season": {"$ref": "#/$defs/Season"},
+        "path": {"description": "<YYYY>/index.json, relative to the catalog.", "type": "string", "pattern": "^\\d{4}/index\\.json$"},
+        "byteLength": {"$ref": "#/$defs/ByteLength"},
+        "crc32": {"$ref": "#/$defs/Crc32"},
+        "storms": {"description": "Storms the season index lists.", "type": "integer", "minimum": 0}
+      }
+    },
+    "CatalogScores": {
+      "description": "One season's scores.json.",
+      "type": "object",
+      "required": ["season", "path", "byteLength", "crc32", "from"],
+      "properties": {
+        "season": {"$ref": "#/$defs/Season"},
+        "path": {"description": "<YYYY>/scores.json, relative to the catalog.", "type": "string", "pattern": "^\\d{4}/scores\\.json$"},
+        "byteLength": {"$ref": "#/$defs/ByteLength"},
+        "crc32": {"$ref": "#/$defs/Crc32"},
+        "from": {"$ref": "#/$defs/ScoreInputs"}
+      }
+    },
+    "ScoreInputs": {
+      "description": "What a season's scores were computed from: the CRC32 of its index and of every month index its storms appear in.",
+      "type": "object",
+      "required": ["season", "months"],
+      "properties": {
+        "season": {"$ref": "#/$defs/Crc32"},
+        "months": {"description": "YYYY-MM to that month index's CRC32.", "type": "object", "additionalProperties": {"$ref": "#/$defs/Crc32"}}
+      }
+    }
+  }
+}

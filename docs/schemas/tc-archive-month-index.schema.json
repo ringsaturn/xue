@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-archive-month-index.schema.json",
+  "title": "TcArchiveMonthIndex",
+  "description": "tc/archive/<YYYY>/<MM>/index.json (docs/tc.md section 8.3): each storm's byte span in the month's forecasts.jsonl. That storms are sorted and unique and that the spans tile the file are the readers' own checks.",
+  "type": "object",
+  "required": ["archiveSchemaVersion", "product", "month", "forecasts", "storms"],
+  "properties": {
+    "archiveSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "tc"},
+    "month": {"$ref": "tc-archive-catalog.schema.json#/$defs/Month"},
+    "forecasts": {
+      "description": "The month's forecasts, beside the index.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"const": "forecasts.jsonl"},
+        "byteLength": {"$ref": "tc-archive-catalog.schema.json#/$defs/ByteLength"},
+        "crc32": {"$ref": "tc-archive-catalog.schema.json#/$defs/Crc32"}
+      }
+    },
+    "storms": {"type": "array", "items": {"$ref": "#/$defs/MonthStorm"}}
+  },
+  "$defs": {
+    "MonthStorm": {
+      "description": "One storm's forecasts in the month: one byte span.",
+      "type": "object",
+      "required": ["id", "basin", "name", "offset", "length", "records", "sources"],
+      "properties": {
+        "id": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"},
+        "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+        "name": {"description": "The name a source gave in the month, or null.", "type": ["string", "null"]},
+        "offset": {"type": "integer", "minimum": 0},
+        "length": {"type": "integer", "minimum": 1},
+        "records": {"description": "Forecasts in the span.", "type": "integer", "minimum": 1},
+        "sources": {"type": "array", "items": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"}}
+      }
+    }
+  }
+}
