@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/alerts-archive-index.schema.json",
+  "title": "AlertsArchiveIndex",
+  "description": "alerts/archive/<YYYY>/<MM>/index.json (docs/alerts.md section 12.3): every record's row and byte span in the month's alerts.jsonl. That networks are sorted and unique, that rows are sorted by id and unique, that a row's network is the position of its id's network, that ended and reason are both null or both set, and that the spans tile the file are the readers' own checks.",
+  "type": "object",
+  "required": ["archiveSchemaVersion", "product", "month", "alerts", "networks", "rows"],
+  "properties": {
+    "archiveSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "alerts"},
+    "month": {"$ref": "alerts-archive-catalog.schema.json#/$defs/Month"},
+    "alerts": {
+      "description": "The month's records, beside the index.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"const": "alerts.jsonl"},
+        "byteLength": {"$ref": "alerts-archive-catalog.schema.json#/$defs/ByteLength"},
+        "crc32": {"$ref": "alerts-archive-catalog.schema.json#/$defs/Crc32"}
+      }
+    },
+    "networks": {
+      "description": "The networks the month holds, sorted.",
+      "type": "array",
+      "items": {"$ref": "alerts-archive-catalog.schema.json#/$defs/Network"}
+    },
+    "rows": {"type": "array", "items": {"$ref": "#/$defs/ArchiveRow"}}
+  },
+  "$defs": {
+    "ArchiveRow": {
+      "description": "[id, network (its position in networks), category, level, event, first, ended, reason, offset, length]: category, level and event the alert's, first the record's, ended and reason its ended.time and ended.reason or two nulls, and the byte span of the record's JSON object without the newline.",
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {"$ref": "alerts-line.schema.json#/$defs/AlertId"},
+        {"type": "integer", "minimum": 0},
+        {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+        {"enum": [1, 2, 3, 4, 5]},
+        {"type": "string", "minLength": 1},
+        {"$ref": "alerts-archive-catalog.schema.json#/$defs/Round"},
+        {"anyOf": [{"$ref": "alerts-archive-catalog.schema.json#/$defs/Round"}, {"type": "null"}]},
+        {"anyOf": [{"$ref": "alerts-archive-catalog.schema.json#/$defs/EndedReason"}, {"type": "null"}]},
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 1}
+      ]
+    }
+  }
+}
