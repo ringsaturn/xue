@@ -59,11 +59,11 @@
       "cone": null
      },
      {
-      "time": "1944-12-18T04:30:00Z",
-      "lat": 14.9,
-      "lon": 128.2,
+      "time": "1944-12-18T04:15:00Z",
+      "lat": 14.85,
+      "lon": 128.0,
       "vmax": null,
-      "pmin": 934.6,
+      "pmin": 922.8,
       "radii": null,
       "class": null,
       "rmw": null,
@@ -105,16 +105,34 @@
     "use": "position"
    },
    {
-    "publisher": "U.S. Navy, Naval History and Heritage Command",
-    "title": "Pacific Fleet report for December 1944, Annex B: ships' action reports on the typhoon",
-    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-18-december-1944/extracts-relating-to-the-typhoon-from-commander-in-chief-pacific-fleet-report.html",
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Benham (DD-796) war diary, December 1944: position and the centre passing within five miles at 1330(I)",
+    "url": "https://catalog.archives.gov/id/139798583",
     "use": "position"
    },
    {
-    "publisher": "U.S. Navy, Naval History and Heritage Command",
-    "title": "USS Benham (DD 796) action report: 27.60 inHg, checked, as the centre passed",
-    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-18-december-1944/extracts-relating-to-the-typhoon-from-commander-in-chief-pacific-fleet-report.html",
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Hickox (DD-673) war diary, December 1944: position at noon and the wind shift as the centre passed",
+    "url": "https://catalog.archives.gov/id/139798960",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Hickox (DD-673) war diary, December 1944: weather table with 27.25 inHg at 1300(I)",
+    "url": "https://catalog.archives.gov/id/139798960",
     "use": "pressure"
+   },
+   {
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Wasp (CV-18) war diary, December 1944: radar range to the centre",
+    "url": "https://catalog.archives.gov/id/139826154",
+    "use": "check"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Pacific Fleet report for December 1944, Annex B: ships' action reports on the typhoon",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-18-december-1944/extracts-relating-to-the-typhoon-from-commander-in-chief-pacific-fleet-report.html",
+    "use": "check"
    },
    {
     "publisher": "NOAA NCEI",
