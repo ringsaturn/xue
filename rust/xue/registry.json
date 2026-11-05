@@ -2058,9 +2058,6 @@
         "scaleFactorOfFirstFixedSurface": null,
         "scaledValueOfFirstFixedSurface": null
       },
-      "producer": {
-        "id": "ecmwf"
-      },
       "quantization": {
         "quality": {
           "type": "linear",
@@ -2113,7 +2110,7 @@
         "openMeteo": "",
         "dwdParam": "",
         "mrmsProduct": "",
-        "gdalUnit": "",
+        "gdalUnit": "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing",
         "statistical": null,
         "aliases": [],
         "alternates": [],
@@ -2242,9 +2239,9 @@
         "balanced": {
           "type": "linear",
           "offset": 0.0,
-          "scale": 1.0,
+          "scale": 0.5,
           "minimumCode": 0,
-          "maximumCode": 100,
+          "maximumCode": 200,
           "nodataCode": 255
         }
       },

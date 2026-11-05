@@ -926,7 +926,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": QUALITY_PBL,
         "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
-        "cpofp": COMPACT_CPOFP,
+        "cpofp": QUALITY_CPOFP,
         "ptypeec": PTYPE_ECMWF,
         "fzlvl": QUALITY_FREEZING_LEVEL,
         "aurora": COMPACT_AURORA,

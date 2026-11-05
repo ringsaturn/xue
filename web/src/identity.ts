@@ -309,6 +309,9 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isOnSurfaceOf(parameter, "vis")) return scalar("vis", null);
   if (isOnSurfaceOf(parameter, "pwat")) return scalar("pwat", null);
   if (isOnSurfaceOf(parameter, "hpbl")) return scalar("hpbl", null);
+  // ECMWF's type on its longer book writes the surface with no value, where the
+  // one NCEP's flags derive to declares 0.
+  if (isAtSurfaceOf(parameter, "ptypeec")) return scalar("ptypeec", null);
   if (isOnSurfaceOf(parameter, "ptype")) return scalar("ptype", null);
   if (isOnSurfaceOf(parameter, "cpofp")) return scalar("cpofp", null);
   if (isOnSurfaceOf(parameter, "fzlvl")) return scalar("fzlvl", null);
@@ -544,15 +547,6 @@ export function identityForProducedScalar(variable: { parameter?: BundleParamete
   return null;
 }
 
-/** A WMO parameter that means another book of codes under one centre's name:
- * ECMWF's precipitation type is NCEP-derived `ptype`'s parameter, with classes
- * `ptype` does not have. Null for anything else, which the WMO table answers. */
-function identityForCentreField(variable: { parameter?: BundleParameter; producer?: BundleProducer }): VariableIdentity | null {
-  const { parameter, producer } = variable;
-  if (!parameter || producer?.id !== producerOf("ptypeec")) return null;
-  return isOnSurfaceOf(parameter, "ptypeec") ? scalar("ptypeec", null) : null;
-}
-
 /** Local-use scalars carrying no `producer` block: the source's own
  * documentation names them, and no producer algorithm derived them. The
  * SWPC OVATION aurora probability is the first — a space-weather field the
@@ -674,7 +668,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   const identity = first.parameter
     ? isLocalUse(first.parameter)
       ? (identityForProducedScalar(first) ?? identityForLocalScalar(first.parameter))
-      : (identityForCentreField(first) ?? identityForParameter(first.parameter, first.band, first.aerosol))
+      : identityForParameter(first.parameter, first.band, first.aerosol)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }

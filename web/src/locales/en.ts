@@ -66,6 +66,8 @@ export const en = {
   varPtype: "SFC",
   varCin: "SFC",
   varHpbl: "HEIGHT",
+  varCpofp: "%",
+  varFzlvl: "HEIGHT",
   /** Visibility is a surface field; the dew point and apparent temperature
    * are 2 m fields; the two upper-air families name their quantity. */
   varVis: "SFC",
@@ -155,6 +157,8 @@ export const en = {
   glyphPwat: "P",
   glyphCin: "I",
   glyphHpbl: "B",
+  glyphCpofp: "F",
+  glyphFzlvl: "0",
   glyphPtype: "Y",
   glyphDpt2m: "D",
   glyphAptmp2m: "A",

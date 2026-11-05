@@ -161,9 +161,9 @@ describe("buildFrostPlane", () => {
   const value = (code: number) => -1016 + code * 8;
 
   it("is the isotherm's height above the ground", () => {
-    // 1500 and 500 m over ground at 1000 m; the plane only has to hold the
+    // 2500 and 500 m over ground at 1000 m; the plane only has to hold the
     // crossing, and tops out at 1016 m.
-    const height = plane(HEIGHT, 2, 1, [60, 20]);
+    const height = plane(HEIGHT, 2, 1, [100, 20]);
     const ground = plane(GROUND, 2, 1, [100, 100]);
     const out = buildFrostPlane(height, ground);
     expect(value(out[0]!)).toBe(1016);
