@@ -160,7 +160,8 @@ import { geoGrid, type ProbeVariable } from "./probe";
 import { displayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
-import { frameCacheKey, variableKey } from "./sessionkeys";
+import { cacheKey, createPlaneCache, MEBIBYTE } from "./planecache";
+import { variableKey } from "./sessionkeys";
 import {
   buildFrostPlane,
   buildPhaseField,
@@ -471,59 +472,6 @@ function mosaicBudget(variableId: ForecastBundleId, budget: VariantBudget | unde
   return { ...budget, visibleShare: Math.max(budget.visibleShare, share) };
 }
 
-// The plane cache is byte-budgeted (not frame-count-limited) and the
-// background prefetch is windowed — a handful of frames ahead of the
-// playhead, a few fetches at a time, narrower on constrained connections.
-// The two agree with the frame size of the primary session: the cache
-// grows to hold the window plus the two frames on screen, up to a cap, and
-// the window shrinks to what the cache can hold when the cap is hit. A
-// frame's planes are always allocated at the tier's whole grid, even when
-// the session decodes only the viewport's tiles into them, so the frame
-// size is the grid's cells times the variables a frame needs, whatever the
-// view shows.
-
-/** Bytes one frame of the primary session occupies in the plane cache, or
- * null before a session is open. */
-function primaryFrameBytes(): number | null {
-  if (!activeSession) return null;
-  const grid = activeSession.metadata.grid;
-  return grid.width * grid.height * activeSession.variables.length;
-}
-
-/** The frames the window would keep ahead of the playhead if memory were
- * no object. The window is runway in time, not in frames: faster playback
- * burns through the same number of frames sooner, so it needs
- * proportionally more of them resident ahead of the playhead. */
-function prefetchWindowWanted(): number {
-  const base = constrainedConnection() ? 4 : 10;
-  return Math.max(3, Math.round((base * playbackFps) / DEFAULT_FPS));
-}
-
-const MEBIBYTE = 1024 * 1024;
-
-/** The plane cache's ceiling: the floor it has always had (64 MB, 24 MB
- * on a constrained connection, where the floor is also the ceiling — the
- * budget there is the network's, not the device's), raised to hold the
- * wanted window plus two frames of the primary session, and capped at
- * 256 MB (128 MB on a four-gigabyte device). A GFS run never leaves the
- * floor; a full satellite disk (9 MB a plane, 27 MB a Dust RGB frame)
- * fills the cap, and the window below gives way to it. */
-function planeCacheBudgetBytes(): number {
-  if (constrainedConnection()) return 24 * MEBIBYTE;
-  const floor = 64 * MEBIBYTE;
-  const cap = (lowMemoryDevice() ? 128 : 256) * MEBIBYTE;
-  const frame = primaryFrameBytes();
-  if (frame === null) return floor;
-  return Math.min(cap, Math.max(floor, frame * (prefetchWindowWanted() + 2 + totalFrames())));
-}
-
-/** The plane cache's cap, whatever the session: what a total's window has
- * to fit under (`offeredWindows`). */
-function planeCacheCapBytes(): number {
-  if (constrainedConnection()) return 24 * MEBIBYTE;
-  return (lowMemoryDevice() ? 128 : 256) * MEBIBYTE;
-}
-
 /** Compressed chunk bytes one Zarr worker may hold
  * (`ZarrSession.payloadBudgetBytes`), beyond which it drops the least
  * recently used. The window ahead of the playhead is what has to fit: a
@@ -538,17 +486,6 @@ function zarrPayloadBudgetBytes(): number {
   return (lowMemoryDevice() ? 96 : 192) * MEBIBYTE;
 }
 
-/** The frames to keep resident ahead of the playhead: the wanted window,
- * clamped so that it and the two frames on screen fit the cache — never
- * below two, since the blend needs the next frame and playback the one
- * after it. */
-function prefetchWindowFrames(): number {
-  const wanted = prefetchWindowWanted();
-  const frame = primaryFrameBytes();
-  if (frame === null) return wanted;
-  const fits = Math.floor(planeCacheBudgetBytes() / frame) - 2 - totalFrames();
-  return Math.max(2, Math.min(wanted, fits));
-}
 function prefetchConcurrency(): number {
   return constrainedConnection() ? 1 : 3;
 }
@@ -587,7 +524,7 @@ function offeredWindows(session: VariableSession): { kind: RateKind; windows: Ma
   const windows = new Map<number, number>();
   for (const window of accumulationWindows(leads, kind, showingObservations())) {
     const frames = Math.ceil(window / step) + 1;
-    if ((frames + 4) * frameBytes <= planeCacheCapBytes()) windows.set(window, frames);
+    if ((frames + 4) * frameBytes <= planeCache.capBytes()) windows.set(window, frames);
   }
   return { kind, windows };
 }
@@ -1542,8 +1479,19 @@ const sessionRegistry = createSessionRegistry({
   bindChannel,
 });
 
-const planeCache = new Map<string, DecodedFrame>();
-let planeCacheBytes = 0;
+const planeCache = createPlaneCache({
+  get activeSession() {
+    return activeSession;
+  },
+  get playbackFps() {
+    return playbackFps;
+  },
+  defaultFps: DEFAULT_FPS,
+  constrainedConnection,
+  lowMemoryDevice,
+  totalFrames,
+  displayedKeys,
+});
 /** Worker-reported decode time of the most recent plane, for the stats panel. */
 let lastDecodeMs: number | null = null;
 /** Rolling record of decoded planes (bytes + worker decode time), feeding the
@@ -1971,15 +1919,6 @@ function probeStampLine(index: number, member: VariableSession | null): string {
   return name ? `${line} · ${name}` : line;
 }
 
-/** The frame cache's key. A numericId is file-local — the encoder numbers a
- * bundle's variables 1..n, so `tmp2m`'s only variable and `prmsl`'s are both
- * 1 — and the session it belongs to is what makes the pair unique
- * (sessionkeys.ts). Every reader and writer of this cache, the probe series
- * included, keys the same way. */
-function cacheKey(session: VariableSession, variable: BundleVariable, offset: number): string {
-  return frameCacheKey(session, variable, offset);
-}
-
 /** The probe series' key for one of a session's variables — the same session
  * scoping, without a frame offset. */
 function probeKey(session: VariableSession, variable: BundleVariable): string {
@@ -2063,7 +2002,7 @@ function cachedFrameCount(): number {
   if (!activeVariable || !activeSession) return 0;
   const prefix = `${probeKey(activeSession, activeVariable)}:`;
   let cached = 0;
-  for (const key of planeCache.keys()) {
+  for (const key of planeCache.frames.keys()) {
     if (key.startsWith(prefix)) cached += 1;
   }
   return cached;
@@ -2080,8 +2019,8 @@ const statsControl = createStats({
     return playbackFps;
   },
   neededGridWidth,
-  planeCacheBudgetBytes,
-  prefetchWindowFrames,
+  planeCacheBudgetBytes: planeCache.budgetBytes,
+  prefetchWindowFrames: planeCache.prefetchWindowFrames,
   map,
   loadStatus,
   contextMenu,
@@ -2111,7 +2050,7 @@ const statsControl = createStats({
     return activeFrameIndex;
   },
   get planeCacheBytes() {
-    return planeCacheBytes;
+    return planeCache.bytes;
   },
   get lastDecodeMs() {
     return lastDecodeMs;
@@ -2171,7 +2110,7 @@ const probePanelControl = createProbePanel({
     return ready;
   },
   sessions: sessionRegistry.sessions,
-  planeCache,
+  planeCache: planeCache.frames,
   get nextRequestId() {
     return nextRequestId;
   },
@@ -2679,11 +2618,7 @@ function sameTier(a: VariantDescriptor | null, b: VariantDescriptor | null): boo
 function disposeSession(session: VariableSession): void {
   sessionRegistry.release(session);
   lastPrefetchWindow.delete(session.key);
-  for (const [key, frame] of [...planeCache]) {
-    if (frame.session !== session) continue;
-    planeCache.delete(key);
-    planeCacheBytes -= frame.plane.byteLength;
-  }
+  planeCache.dropSession(session);
   for (const [requestId, key] of [...inflight]) {
     if (key.startsWith(`${session.key}:`)) inflight.delete(requestId);
   }
@@ -2822,7 +2757,7 @@ function sendPrefetchWindow(index: number): void {
     if (overlay && playing && constrainedConnection()) continue;
     const slot = overlay ? slotOfSession(session) : null;
     const hours: number[] = [];
-    for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
+    for (let step = 0; step <= planeCache.prefetchWindowFrames(); step += 1) {
       const frame = (index + step) % total;
       const offset = overlay
         ? slot
@@ -2875,8 +2810,7 @@ function trySelectFrame(index: number): boolean {
   if (planes.every((plane) => plane !== undefined)) {
     // Refresh LRU positions, then swap textures — no opacity involved.
     for (const [position, key] of keys.entries()) {
-      planeCache.delete(key);
-      planeCache.set(key, planes[position]!);
+      planeCache.refresh(key, planes[position]!);
     }
     ensureSlotGrid(slot, session);
     if (session.volume) {
@@ -2934,8 +2868,7 @@ function trySelectTotal(session: VariableSession, slot: RasterSlot, index: numbe
   if (plane) {
     for (const term of terms) {
       const frame = planeCache.get(term.key)!;
-      planeCache.delete(term.key);
-      planeCache.set(term.key, frame);
+      planeCache.refresh(term.key, frame);
     }
     ensureSlotGrid(slot, session);
     syncPrimaryPalette(slot, session, on.window);
@@ -3018,8 +2951,7 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
     return;
   }
   for (const [at, key] of keys.entries()) {
-    planeCache.delete(key);
-    planeCache.set(key, frames[at]!);
+    planeCache.refresh(key, frames[at]!);
   }
   const frame = frames[0]!;
   ensureSlotGrid(slot, session);
@@ -3086,8 +3018,7 @@ function trySelectVolumeOverlay(index: number): void {
   }
   if (!complete) return;
   for (const [position, key] of frame.keys.entries()) {
-    planeCache.delete(key);
-    planeCache.set(key, planes[position]!);
+    planeCache.refresh(key, planes[position]!);
   }
   volumeLayer.setFrame(planes.map((plane) => plane!.plane));
   volumeLayer.setVisible(true);
@@ -3199,6 +3130,28 @@ function planesPerFrame(): number {
   return Math.max(1, planes);
 }
 
+/** Every key a layer on screen draws, which the plane cache's eviction
+ * spares: the blend path may still sample them, and wind keeps a u/v pair
+ * displayed. */
+function displayedKeys(): Set<string> {
+  const displayedKeys = new Set<string>();
+  if (activeSession && activeFrameIndex !== null) {
+    for (const variable of activeSession.variables) {
+      displayedKeys.add(cacheKey(activeSession, variable, frameOffset(activeFrameIndex)));
+    }
+  }
+  for (const overlay of overlaySlots()) {
+    if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
+    for (const gun of overlay.shownGuns) displayedKeys.add(gun);
+  }
+  for (const shown of totalShownKeys) displayedKeys.add(shown);
+  for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
+  for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
+  for (const shown of fireWind.shownKeys) displayedKeys.add(shown);
+  for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
+  return displayedKeys;
+}
+
 function handleDecodedFrame(
   session: VariableSession,
   message: {
@@ -3217,13 +3170,10 @@ function handleDecodedFrame(
   const variable = session.variables.find((item) => item.numericId === message.variableId);
   if (!variable) return;
   const key = cacheKey(session, variable, message.frameOffset);
-  const previous = planeCache.get(key);
-  if (previous) planeCacheBytes -= previous.plane.byteLength;
   const plane = new Uint8Array(message.buffer);
-  planeCache.set(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
+  planeCache.store(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
   if (reliefControl.relief?.session === session && !message.tiles) acceptReliefPlane(session, plane);
   acceptColumnPlane(session, message.frameOffset, plane);
-  planeCacheBytes += plane.byteLength;
   lastDecodeMs = message.decodeMs;
   recordDecodeEvent(plane.byteLength, message.decodeMs);
   // The probe reads its cell here, before the eviction below can recycle this
@@ -3231,40 +3181,8 @@ function handleDecodedFrame(
   if (probePanelControl.probe && probePanelControl.probe.sample(session.metadata, probeKey(session, variable), message.frameOffset, plane)) {
     scheduleProbeRender();
   }
-  // Evict by byte budget, oldest first; never evict the just-inserted
-  // frame or the ones on screen (the blend path may still sample them; wind
-  // keeps a u/v pair displayed).
-  const displayedKeys = new Set<string>();
-  if (activeSession && activeFrameIndex !== null) {
-    for (const variable of activeSession.variables) {
-      displayedKeys.add(cacheKey(activeSession, variable, frameOffset(activeFrameIndex)));
-    }
-  }
-  for (const overlay of overlaySlots()) {
-    if (overlay.shownKey !== null) displayedKeys.add(overlay.shownKey);
-    for (const gun of overlay.shownGuns) displayedKeys.add(gun);
-  }
-  for (const shown of totalShownKeys) displayedKeys.add(shown);
-  for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
-  for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
-  for (const shown of fireWind.shownKeys) displayedKeys.add(shown);
-  for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
-  while (planeCacheBytes > planeCacheBudgetBytes() && planeCache.size > 2) {
-    const oldest = planeCache.keys().next().value;
-    if (oldest === undefined || oldest === key) break;
-    const evicted = planeCache.get(oldest)!;
-    planeCache.delete(oldest);
-    if (displayedKeys.has(oldest)) {
-      // Refresh instead of evicting: move to the newest LRU position.
-      planeCache.set(oldest, evicted);
-      continue;
-    }
-    planeCacheBytes -= evicted.plane.byteLength;
-    // The buffer goes back to the worker that produced it — which the frame
-    // itself names, not the key it was filed under.
-    const buffer = evicted.plane.buffer as ArrayBuffer;
-    evicted.session.worker.postMessage({ type: "recycle", buffer }, [buffer]);
-  }
+  // Evict by byte budget; the planes on screen are spared.
+  planeCache.evict(key);
   updateCacheReadout();
 
   if (queuedRequest) {
@@ -5016,7 +4934,7 @@ const marksControl = createMarks({
   get ready() {
     return ready;
   },
-  planeCache,
+  planeCache: planeCache.frames,
   get nextRequestId() {
     return nextRequestId;
   },
@@ -6448,7 +6366,7 @@ const derivedControl = createDerived({
   get initializeSequence() {
     return initializeSequence;
   },
-  planeCache,
+  planeCache: planeCache.frames,
   view,
   experimentFlowInk,
   frameLeadSeconds,
@@ -6557,8 +6475,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   desiredKey = null;
   queuedRequest = null;
   inflight.clear();
-  planeCache.clear();
-  planeCacheBytes = 0;
+  planeCache.reset();
   vectorPlanes.clear();
   probePanelControl.probe?.clear();
   probeSeriesRequests.clear();
