@@ -15,7 +15,13 @@ import {
   trackErrors,
   truthsOf,
   validateArchiveCatalog,
+  validateBest,
+  validateMonthIndex,
+  validateRecord,
+  validateScores,
   validateSeasonIndex,
+  validateSeasonOverview,
+  validateStormErrors,
   type ArchiveRecord,
   type BestRecord,
   type StormErrors,
@@ -47,13 +53,28 @@ describe("tc archive documents", () => {
     expect(catalog.scores).toEqual([]);
     expect(() => validateArchiveCatalog({ archiveSchemaVersion: 2, months: [], seasons: [] })).toThrow(/newer/);
     expect(() =>
-      validateArchiveCatalog({ archiveSchemaVersion: 1, months: [{ month: "2023-08", path: "../x", ...REF }], seasons: [] }),
-    ).toThrow(/relative/);
+      validateArchiveCatalog({
+        archiveSchemaVersion: 1,
+        product: "tc",
+        months: [{ month: "2023-08", path: "../x", storms: 1, records: 1, ...REF }],
+        seasons: [],
+      }),
+    ).toThrow(/catalog\.months\[0\]\.path is malformed/);
+    expect(() =>
+      validateArchiveCatalog({
+        archiveSchemaVersion: 1,
+        product: "tc",
+        months: [],
+        seasons: [],
+        scores: [{ season: 2023, path: "2024/scores.json", from: { season: "0123abcd", months: {} }, ...REF }],
+      }),
+    ).toThrow(/does not name its season/);
   });
 
   it("reads a season index written before the summary fields", () => {
     const index = validateSeasonIndex({
       archiveSchemaVersion: 1,
+      product: "tc",
       season: 2023,
       best: { path: "best.jsonl", ...REF },
       storms: [
@@ -63,9 +84,72 @@ describe("tc archive documents", () => {
     });
     expect(index.storms[0]).toMatchObject({ first: null, last: null, vmax: null, sources: [] });
     expect(index.storms[1]).toMatchObject({ offset: null, first: "2023-08-01T00:00:00Z", vmax: 30, sources: ["gfs"] });
-    expect(() =>
-      validateSeasonIndex({ archiveSchemaVersion: 1, season: 2023, best: { path: "best.jsonl", ...REF }, storms: [{ id: "x-wp-1" }] }),
-    ).toThrow(/ATCF/);
+    const season = (storm: Record<string, unknown>) => ({
+      archiveSchemaVersion: 1,
+      product: "tc",
+      season: 2023,
+      best: { path: "best.jsonl", ...REF },
+      storms: [{ id: "WP062023", basin: "WP", name: null, sid: null, atcf: [], offset: 0, length: 10, best: [], months: [], ...storm }],
+    });
+    expect(() => validateSeasonIndex(season({ id: "x-wp-1" }))).toThrow(/storms\[0\]\.id is malformed/);
+    expect(() => validateSeasonIndex(season({ length: null }))).toThrow(/whole byte span or none/);
+    expect(() => validateSeasonIndex(season({ id: "WP062024" }))).toThrow(/not a storm of season 2023/);
+    expect(validateSeasonIndex(season({ id: "SH-1951123S10140-2023", offset: null, length: null })).storms[0]!.offset).toBeNull();
+  });
+
+  it("reads a month index and refuses a storm listed twice", () => {
+    const storm = { id: "WP062023", basin: "WP", name: null, offset: 0, length: 10, records: 2, sources: ["gfs"] };
+    const month = (storms: unknown[]) => ({ archiveSchemaVersion: 1, product: "tc", month: "2023-08", forecasts: { path: "forecasts.jsonl", ...REF }, storms });
+    expect(validateMonthIndex(month([storm])).storms).toEqual([{ id: "WP062023", offset: 0, length: 10 }]);
+    expect(() => validateMonthIndex(month([storm, storm]))).toThrow(/twice/);
+    expect(() => validateMonthIndex({ ...month([]), archiveSchemaVersion: 2 })).toThrow(/newer/);
+  });
+
+  it("reads a season overview and refuses a class past H5", () => {
+    const overview = (track: unknown) => ({ archiveSchemaVersion: 1, product: "tc", season: 2023, storms: [{ id: "WP062023", track }] });
+    expect(validateSeasonOverview(overview([[1400, 150, 2]])).storms[0]!.track).toEqual([[1400, 150, 2]]);
+    expect(() => validateSeasonOverview(overview([[1400, 150, 7]]))).toThrow(/must be at most 6/);
+  });
+
+  it("reads forecast and best-track lines", () => {
+    expect(validateRecord(record("gefs", "ensemble", "2023-08-01T00:00:00Z")).kind).toBe("ensemble");
+    expect(() => validateRecord({ ...record("gfs", "model", "2023-08-01T00:00:00Z"), kind: "ensemble" })).toThrow(/wrong forecast shape/);
+    expect(() => validateRecord({ ...record("gfs", "model", "2023-08-01T00:00:00Z"), storm: "WP-1951123N10140-1951" })).toThrow(
+      /storm is malformed/,
+    );
+    const best = {
+      storm: "SH-1951123S10140-1952",
+      basin: "SH",
+      name: null,
+      sid: "1951123S10140",
+      atcf: [],
+      best: { ibtracs: { source: "ibtracs", provisional: false, points: [point("1951-05-03T00:00:00Z", undefined, -10, 140)] } },
+    };
+    expect(validateBest(best).best.ibtracs!.points).toHaveLength(1);
+    expect(() => validateBest({ ...best, atcf: ["SH-1951123S10140-1952"] })).toThrow(/atcf\[0\] is malformed/);
+  });
+
+  it("reads scores and an errors line", () => {
+    const scores = {
+      scoreSchemaVersion: 1,
+      product: "tc",
+      season: 2023,
+      from: { season: "0123abcd", months: { "2023-08": "0123abcd" } },
+      leads: [0, 24],
+      errors: { path: "errors.jsonl", ...REF },
+      storms: [{ id: "WP062023", offset: 0, length: 10 }],
+      summary: [],
+      homogeneous: [
+        { basin: "WP", truth: "usa", reference: "jtwc", source: "gfs", lead: 24, n: 1, track: 80, referenceTrack: 0, skill: null },
+      ],
+    };
+    expect(validateScores(scores).storms).toEqual([{ id: "WP062023", offset: 0, length: 10 }]);
+    expect(() => validateScores({ ...scores, scoreSchemaVersion: 2 })).toThrow(/newer/);
+    expect(() => validateScores({ ...scores, errors: { path: "other.jsonl", ...REF } })).toThrow(/errors\.path/);
+    const columns = { base: ["2023-08-01T00:00:00Z"], lead: [24], track: [80], along: [null], cross: [null], vmax: [1], pmin: [null] };
+    const line = { storm: "WP062023", basin: "WP", truths: { usa: { gfs: columns } } };
+    expect(validateStormErrors(line).truths.usa!.gfs!.track).toEqual([80]);
+    expect(() => validateStormErrors({ ...line, truths: { usa: { gfs: { ...columns, lead: [24, 48] } } } })).toThrow(/differ in length/);
   });
 
   it("says what an early season's record lacks", () => {
