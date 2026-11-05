@@ -170,7 +170,10 @@ describe("tc archive documents", () => {
     expect(validateBest(best).provenance).toEqual([]);
     // Its own times, none synoptic: without them nothing could be drawn.
     expect(storyTimes([], validateBest(best))).toEqual(["1944-12-18T04:30:00Z", "1944-12-18T12:30:00Z"]);
-    const source = { publisher: "NOAA", title: "Maps", url: "https://example.com", use: "position" };
+    // Beside an agency's track its points stay reachable though some are synoptic.
+    const beside = { ...best, best: { curated: { source: "curated", provisional: false, points: [point("1945-06-04T18:00:00Z"), point("1945-06-04T19:40:00Z")] }, usa: { source: "usa", provisional: false, points: [point("1945-06-04T18:00:00Z"), point("1945-06-04T21:00:00Z"), point("1945-06-05T00:00:00Z")] } } };
+    expect(storyTimes([], validateBest(beside))).toEqual(["1945-06-04T18:00:00Z", "1945-06-04T19:40:00Z", "1945-06-05T00:00:00Z"]);
+    const source = { publisher: "NOAA", title: "Maps", url: "https://example.com", use: "wind" };
     expect(validateBest({ ...best, provenance: [source] }).provenance).toEqual([source]);
     expect(() => validateBest({ ...best, provenance: [{ ...source, url: "http://example.com" }] })).toThrow();
   });

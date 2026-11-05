@@ -25,7 +25,9 @@ from xuebuild.tc.archive import (
     make_record,
     merge_records,
     month_directory,
+    best_summary,
     overview_track,
+    sshs_index,
     record_key,
     validate_catalog,
     validate_month_index,
@@ -470,10 +472,22 @@ class CuratedTest(unittest.TestCase):
         backfill(self.archive, ["curated"], "1944-01", "1944-12")
         self.assertEqual(len(overview_track(self.archive.season(1944)["WP-COBRA-1944"])), 7)
 
+    def test_a_curated_stretch_sits_beside_the_agency_track_and_can_raise_the_peak(self) -> None:
+        track = {"source": "usa", "provisional": False, "points": [_point("1945-06-05T18:00:00Z", 28.0, 137.0, vmax=36.0)]}
+        self.archive.add_best(make_best("WP031945", "CONNIE", "1945153N11133", ["WP031945"], {"usa": track}))
+        self.assertEqual(backfill(self.archive, ["curated"], "1945-01", "1945-12"), [{"source": "curated", "storms": 1}])
+        record = self.archive.season(1945)["WP031945"]
+        self.assertEqual(sorted(record["best"]), ["curated", "usa"])
+        self.assertEqual(record["sid"], "1945153N11133")
+        self.assertEqual(best_summary(record)["vmax"], 41.2)
+        self.assertEqual(overview_track(record), [[1370, 280, sshs_index(36.0)]])
+        low = {**record, "best": {**record["best"], "usa": {**track, "points": [{**track["points"][0], "vmax": 50.0}]}}}
+        self.assertEqual(best_summary(low)["vmax"], 50.0)
+
     def test_provenance_is_checked(self) -> None:
         backfill(self.archive, ["curated"], "1944-01", "1944-12")
         record = self.archive.season(1944)["WP-COBRA-1944"]
-        for bad in ({"url": "http://example.com"}, {"use": "wind"}, {"title": ""}):
+        for bad in ({"url": "http://example.com"}, {"use": "rumour"}, {"title": ""}):
             with self.assertRaises(TcProductError):
                 validate_best({**record, "provenance": [{**record["provenance"][0], **bad}]}, "best")
 

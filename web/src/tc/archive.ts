@@ -124,7 +124,7 @@ export interface ProvenanceSource {
   publisher: string;
   title: string;
   url: string;
-  use: "position" | "pressure" | "check";
+  use: "position" | "pressure" | "wind" | "check";
 }
 
 /** One source's verified cases against one truth: a column per field, a
@@ -477,15 +477,15 @@ function isoHour(value: string | number): string {
 
 /** The times a storm can be looked at: every synoptic time a best track
  * places it (whether or not anyone forecast it then — a storm that leaves
- * a centre's area is still tracked) and every time a forecast starts,
- * ascending. */
+ * a centre's area is still tracked), every point of a curated track and
+ * every time a forecast starts, ascending. */
 export function storyTimes(records: readonly ArchiveRecord[], best: BestRecord | null): string[] {
   const times = new Set(records.map((record) => isoHour(record.forecast.base)));
   for (const track of Object.values(best?.best ?? {})) {
     const at = track.points.map((point) => Date.parse(point.time));
     const synoptic = at.filter((time) => time % (6 * 3600 * 1000) === 0);
-    // A reconstructed track has its sources' times, none of them synoptic.
-    for (const time of synoptic.length > 0 ? synoptic : at) times.add(isoHour(time));
+    // A reconstructed track has its sources' times, few of them synoptic.
+    for (const time of track.source === "curated" || synoptic.length === 0 ? at : synoptic) times.add(isoHour(time));
   }
   return [...times].sort();
 }

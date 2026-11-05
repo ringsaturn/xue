@@ -373,6 +373,13 @@ and what the sources do not measure stays `null`. Typhoon Cobra has seven
 positions, from the Weather Bureau's daily charts and two ships' war diaries that
 bracket the centre, one measured pressure and no wind.
 
+A storm IBTrACS does hold keeps its id and its agency tracks when the primary
+sources contradict them for a stretch of its life: only that stretch goes under
+`curated`, beside them. CONNIE (`WP031945`), the Navy's Viper, has five points
+around the fleet's passage through the centre on 5 June 1945 (local time), whose
+958.3 hPa and 80 kt the US track, at 43 kt then, does not hold. A source's `use`
+can also be `wind`.
+
 ### 8.3 Indexes
 
 A month's `index.json`:
@@ -390,7 +397,8 @@ each with `id`, `basin`, `name`, `sid`, `atcf`, its span in `best.jsonl`
 track yet), the agency keys of its tracks (`best`), the first and last
 time any of them places it (`first`, `last`) and its peak wind (`vmax`,
 m/s, on the `usa` track when there is one, else on the first key that has
-a wind; all three `null` without a best track or wind), the `months` it has
+a wind, raised by a `curated` track that observed more; all three `null`
+without a best track or wind), the `months` it has
 forecasts in and the `sources` of those forecasts. It names `overview` (`path`,
 `byteLength`, `crc32`; absent from an index written before it):
 `{archiveSchemaVersion, product, season, storms: [{id, track: [[lon×10,
