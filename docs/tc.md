@@ -100,9 +100,10 @@ A system has one id for its whole life in the product:
   in October 2026). The NCEP tracker's sub-basin codes are read as the
   basin JTWC numbers in: `AA` and `BB` as `IO`, `SI` and `SP` as `SH`.
   ECMWF's storm numbers are JTWC's and NHC's except in the western
-  Pacific, where they are its own (its `36W` was JTWC's `WP29`): a
-  western Pacific ECMWF system is therefore placed by position, as a
-  C-level one is, and never names a storm.
+  Pacific and the southern hemisphere, where they are its own (its `36W`
+  was JTWC's `WP29`, its `06S` JTWC's `SH12`): an ECMWF system in those
+  basins is therefore placed by position, as a C-level one is, and never
+  names a storm.
 - B-level, an unnumbered disturbance a centre tracks (an invest, a tropical
   depression under a formation alert): a synthetic id `x-<basin>-<first
   seen YYYYMMDDHH>-<n>` (basin lowercase, `n` from 1). The invest number
@@ -434,12 +435,12 @@ history id appears only where the backfill was run. `gdm` is Google
   under a Creative Commons Attribution 4.0 International (CC BY 4.0)
   Licence. The data is intended for research modelling only and is not
   intended, validated, or approved for real world use." An ECMWF system
-  whose number is not JTWC's or NHC's (every western Pacific one, and
-  every `7x`) is filed under the season's best-track storm whose synoptic
+  whose number is not JTWC's or NHC's (every western Pacific and southern
+  hemisphere one, and every `7x`) is filed under the season's best-track storm whose synoptic
   position at the forecast's start lies within 333 km of the start — the
   nearest when two do — or not at all; a storm's ECMWF forecasts from
   before it was numbered are kept this way. `--rekey --from --to` applies
-  the same placement to the ECMWF western Pacific records already
+  the same placement to the ECMWF records of those two basins already
   archived, dropping those that start on no storm. JTWC's and the Asian
   centres' forecasts have no public archive: they exist from the day the
   live harvest kept them.

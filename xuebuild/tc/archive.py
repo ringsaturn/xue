@@ -633,7 +633,7 @@ class BestMatcher:
     season's best-track storm (any agency key, the US one first) whose
     synoptic position at that time lies within ``MATCH_KM`` of it, the
     nearest when two do. For sources whose own storm numbers cannot be
-    trusted (ECMWF's in the western Pacific)."""
+    trusted (ECMWF's in the western Pacific and the southern hemisphere)."""
 
     def __init__(self, archive: Archive) -> None:
         self.archive = archive

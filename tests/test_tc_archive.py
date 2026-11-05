@@ -395,7 +395,9 @@ class PlacementTest(unittest.TestCase):
         base = datetime(2026, 10, 25, tzinfo=UTC)
         self.assertEqual(ecmwf_key("36W", base), ("36W", "WP"))
         self.assertEqual(ecmwf_key("14E", base), ("EP142026", "EP"))
-        self.assertEqual(ecmwf_key("03S", base), ("SH032027", "SH"))
+        self.assertEqual(ecmwf_key("03S", base), ("03S", "SH"))
+        self.assertEqual(ecmwf_key("03P", base), ("03P", "SH"))
+        self.assertEqual(ecmwf_key("02A", base), ("IO022026", "IO"))
 
     def test_matcher_takes_the_nearest_storm_at_the_start(self) -> None:
         matcher = BestMatcher(self.archive)

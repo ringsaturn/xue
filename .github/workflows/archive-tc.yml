@@ -21,7 +21,7 @@ on:
         type: string
         default: ""
       rekey:
-        description: "Move archived ECMWF western Pacific tracks onto the storm they start on, for from–to"
+        description: "Move archived ECMWF western Pacific and southern hemisphere tracks onto the storm they start on, for from–to"
         type: boolean
         default: false
       from:
