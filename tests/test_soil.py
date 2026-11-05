@@ -289,8 +289,8 @@ class MatcherTests(unittest.TestCase):
 
     def test_the_fixtures_carry_every_layer_and_both_matchers_agree(self) -> None:
         cases = (
-            ("gfs", (GFS_FIXTURE,), SOIL_VARIABLE_IDS, ((72, 73, 74, 75, 76, 77, 78, 79),)),
-            ("ecmwf", ECMWF_FIXTURES, SOIL_VARIABLE_IDS, ((56, 57, 58, 59, 60, 61, 62, 63),) * 2),
+            ("gfs", (GFS_FIXTURE,), SOIL_VARIABLE_IDS, ((74, 75, 76, 77, 78, 79, 80, 81),)),
+            ("ecmwf", ECMWF_FIXTURES, SOIL_VARIABLE_IDS, ((57, 58, 59, 60, 61, 62, 63, 64),) * 2),
             # The analysis carries the orography before them, the step not.
             ("aifs", AIFS_FIXTURES, AIFS_SOIL_IDS, ((30, 31, 32, 33), (29, 30, 31, 32))),
         )

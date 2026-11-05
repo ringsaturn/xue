@@ -15,7 +15,7 @@ entry is ``ecmwf``'s at ``ifshres``'s grid, tile and two-rung ladder.
 ``tests/fixtures/ifs.2026102012.f000.crop.grib2`` and ``f003`` are a 100 x
 100 cell window of the 2026-10-20 12Z cycle north of Novaya Zemlya (60–70E,
 75–85N: sea ice, open water and land), every record the source fetches in
-source order — sixty-six at each frame, as the ecmwf crop — from the three
+source order — sixty-seven at each frame, as the ecmwf crop — from the three
 objects as the fetcher assembles them.
 """
 
@@ -145,7 +145,7 @@ class FetchTests(unittest.TestCase):
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
         optional = IFS.optional_at_analysis + ("orog",)
-        for path, expected in zip(FIXTURE_FRAMES, (66, 66)):
+        for path, expected in zip(FIXTURE_FRAMES, (67, 67)):
             frames = grib2.inspect_grib_fast(path, IFS.input_variable_ids, optional_ids=optional)
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in IFS.input_variable_ids if variable_id in frames]

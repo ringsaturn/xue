@@ -584,7 +584,10 @@ export const PTYPE_CLASSES: readonly { code: number; rgb: readonly [number, numb
   { code: 1, rgb: [58, 123, 214], labelKey: "legendPtypeRain" },
   { code: 3, rgb: [226, 111, 168], labelKey: "legendPtypeFreezingRain" },
   { code: 5, rgb: [205, 224, 242], labelKey: "legendPtypeSnow" },
+  { code: 6, rgb: [150, 190, 232], labelKey: "legendPtypeWetSnow" },
+  { code: 7, rgb: [236, 150, 206], labelKey: "legendPhaseMix" },
   { code: 8, rgb: [138, 92, 196], labelKey: "legendPtypeIcePellets" },
+  { code: 12, rgb: [200, 70, 120], labelKey: "legendPtypeFreezingDrizzle" },
 ];
 
 /** The return-period classes of the EFAS discharge (`disrp`), the code
@@ -643,6 +646,8 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (family === "aptmp2m") return APPARENT_CHART_RANGE;
   if (family === "pwat") return [0, PWAT_CHART_MAX];
   if (family === "hpbl") return [0, PBL_CHART_MAX];
+  if (family === "cpofp") return [0, 100];
+  if (family === "fzlvl") return [0, 6000];
   if (family === "clw") return [0, CLOUD_WATER_CHART_MAX];
   // Precipitation type is categorical: its legend is a swatch key, not a
   // ramp, so it has no scalar span (`isobaricLegend` returns null too).
@@ -914,6 +919,8 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
   if (family === "pwat") return rangeLegend([0, PWAT_CHART_MAX], 10);
   if (family === "hpbl") return rangeLegend([0, PBL_CHART_MAX], 500);
+  if (family === "cpofp") return rangeLegend([0, 100], 25);
+  if (family === "fzlvl") return rangeLegend([0, 6000], 1000);
   if (family === "clw") return rangeLegend([0, CLOUD_WATER_CHART_MAX], 0.5);
   if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);
   if (family === "icec") return rangeLegend([0, 100], 20);

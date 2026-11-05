@@ -72,6 +72,8 @@ export type ChartFamily =
   | "pwat"
   | "hpbl"
   | "ptype"
+  | "cpofp"
+  | "fzlvl"
   | "tmpsfc"
   | "icec"
   | "icetk"
@@ -307,6 +309,8 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
   if (isOnSurfaceOf(parameter, "pwat")) return scalar("pwat", null);
   if (isOnSurfaceOf(parameter, "hpbl")) return scalar("hpbl", null);
   if (isOnSurfaceOf(parameter, "ptype")) return scalar("ptype", null);
+  if (isOnSurfaceOf(parameter, "cpofp")) return scalar("cpofp", null);
+  if (isOnSurfaceOf(parameter, "fzlvl")) return scalar("fzlvl", null);
   if (isOnSurfaceOf(parameter, "clw500")) return scalar("clw", null);
   if (isQuantityOf(parameter, "dis06")) return scalar("dis06", null);
   if (isOnSurfaceOf(parameter, "tsoil1")) {

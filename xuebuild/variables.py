@@ -1015,6 +1015,61 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_level_type=1,
         grib2_level_value=0.0,
     ),
+    # The precipitation type as a field of its own, 0/1/19 on the ground surface:
+    # what ECMWF publishes where NCEP has four flags (``ptype`` above is derived
+    # from those, on a book that stops at 8). The values are WMO code table
+    # 4.201's: 1 rain, 3 freezing rain, 5 snow, 6 wet snow, 7 a mixture of rain
+    # and snow, 8 ice pellets, 12 freezing drizzle.
+    "ptypeec": VariableSpec(
+        id="ptypeec",
+        conversion=rules.code_table("4.201"),
+        predictor="raw",
+        label="Precipitation type",
+        output_unit="1",
+        value_range=(0.0, 12.0),
+        grib_element="PTYPE",
+        ecmwf_param="ptype",
+        grib2_category=1,
+        grib2_number=19,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+    ),
+    # The height of the 0 °C isotherm above sea level, 0/3/5 on surface type 4.
+    # NCEP writes 0 where the whole column is below freezing.
+    "fzlvl": VariableSpec(
+        id="fzlvl",
+        conversion=rules.GEOPOTENTIAL_METRES,
+        gdal_rules=(rules.phrase("HGT", "0deg"),),
+        label="Height of the 0 °C isotherm",
+        output_unit="m",
+        value_range=(0.0, 6350.0),
+        grib_element="HGT",
+        index_field=":HGT:0C isotherm:",
+        grib2_category=3,
+        grib2_number=5,
+        grib2_level_type=4,
+        grib2_level_value=0.0,
+        gdal_unit="gpm",
+    ),
+    # The model's own percentage of the precipitation falling frozen, 0/1/39 on
+    # the ground surface: what says "both" where the four flags above name one
+    # type a cell. A dry cell carries -50, and the flagless blend of that with
+    # its wet neighbours is a negative number; the codebook starts at 0, so
+    # either reads as nothing frozen.
+    "cpofp": VariableSpec(
+        id="cpofp",
+        conversion=rules.PERCENT,
+        label="Percent of frozen precipitation",
+        output_unit="%",
+        value_range=(0.0, 100.0),
+        grib_element="CPOFP",
+        index_field=":CPOFP:surface:",
+        grib2_category=1,
+        grib2_number=39,
+        grib2_level_type=1,
+        grib2_level_value=0.0,
+        gdal_unit="%",
+    ),
     # Surface visibility, 0/19/0 on the ground surface. GRIB2 carries metres
     # (GFS caps it at ~24 km); the codebook quantizes kilometres.
     "vis": VariableSpec(

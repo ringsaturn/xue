@@ -449,9 +449,9 @@ class MatcherTests(unittest.TestCase):
         fast = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
         # The orography and the eight soil layers are the primary-file
         # records between the sea ice and the wave file's, so the six ocean
-        # records are bands 68-70 and 80-82.
-        # The wind sea and the swell partition follow, 83-88.
-        bands = (68, 69, 70, 80, 81, 82, 83, 84, 85, 86, 87, 88)
+        # records are bands 70-72 and 82-84.
+        # The wind sea and the swell partition follow, 85-90.
+        bands = (70, 71, 72, 82, 83, 84, 85, 86, 87, 88, 89, 90)
         for variable_id, band in zip(OCEAN_VARIABLE_IDS + WAVE_PARTITION_IDS, bands, strict=True):
             self.assertEqual(fast[variable_id].band, band, variable_id)
             self.assertEqual(fast[variable_id].unit, variable_spec(variable_id).gdal_unit)

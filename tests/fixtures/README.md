@@ -9,8 +9,9 @@ humidity on the eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
 same eight surfaces, then the surface diagnostics (gust, total / low /
 middle / high cloud cover, CAPE, convective inhibition, visibility, 2 m dew
 point, apparent temperature, precipitable water, planetary boundary layer
-height and the four categorical precipitation-type flags the `ptype` bundle
-is derived from), the 850 / 700 / 500 hPa vertical velocity, the surface
+height, the four categorical precipitation-type flags the `ptype` bundle
+is derived from, the percent of frozen precipitation and the height of the
+0 °C isotherm), the 850 / 700 / 500 hPa vertical velocity, the surface
 temperature and the two sea ice fields, the surface orography (the
 geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), the
 soil temperature and volumetric water in the four Noah layers
@@ -18,7 +19,7 @@ soil temperature and volumetric water in the four Noah layers
 appended by the fetcher from the cycle's GFS-Wave file — the significant
 wave height, primary wave period and direction, then the height, mean
 period and direction of the wind sea and of the first swell partition:
-eighty-eight records (seventy-nine from pgrb2, nine from GFS-Wave), in the order
+ninety records (eighty-one from pgrb2, nine from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
@@ -39,6 +40,12 @@ gdal_translate -srcwin 1192 208 80 80 -of GRIB \
 
 Widening the GFS input list means recutting it the same way, so the parity
 test keeps building the full published set.
+
+The percent of frozen precipitation and the 0 °C isotherm's height were added
+to it after the snow flag the same way as the soil records below: cut alone from
+the same analysis with the same window (`:CPOFP:surface:anl:`,
+`:HGT:0C isotherm:anl:`) and spliced in, so the other records are the bytes they
+were.
 
 The eight soil records were added to it, after the orography and before
 the wave records, by cutting them alone from the same analysis with the
@@ -97,7 +104,7 @@ grib_set -r -s packingType=grid_jpeg /tmp/wave.crop.grib2 \
 
 `hrrr.2026091100.f000.crop.grib2` is a 120 by 120 cell window of every
 record the HRRR source fetches from the 2026-09-11 00:00 UTC analysis,
-twenty-nine records in `xuebuild/sources.py` order — the 80 m wind pair
+thirty-one records in `xuebuild/sources.py` order — the 80 m wind pair
 (`:UGRD:80 m above ground:anl:`, `:VGRD:…`) after the 10 m one, the surface
 orography (`:HGT:surface:`) at the end — over the Gulf coast
 (roughly 88W to 84W, 27N to 31N) and still on the model's own 3 km Lambert
@@ -114,11 +121,15 @@ gdal_translate -srcwin 1220 800 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKI
   /tmp/hrrr.f00.grib2 tests/fixtures/hrrr.2026091100.f000.crop.grib2
 ```
 
+Its `:CPOFP:surface:anl:` and `:HGT:0C isotherm:anl:` records were cut alone the
+same way and spliced in before the reflectivity, so the other records are the
+bytes they were.
+
 `ecmwf.2026091212.f000.crop.grib2` and `ecmwf.2026091212.f003.crop.grib2`
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: sixty-six records at
+three `wave` stream records the fetcher appends: sixty-seven records at
 each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
 the orography the source fetches at the analysis alone) and the first step
 the gust (the interval maximum, empty at the analysis and therefore
@@ -148,10 +159,16 @@ for h in 000 003; do
 done
 ```
 
+The precipitation type (`ptype`, in the fetched cycle's CCSDS packing) was added
+to both after the 2 m dew point: repacked with `grib_set -r -s
+packingType=grid_simple`, cut alone with the same window and spliced in, so the
+other records are the bytes they were. The `ifs` crops below were extended the
+same way.
+
 `ifs.2026102012.f000.crop.grib2` and `ifs.2026102012.f003.crop.grib2`
 are a 100 by 100 cell window of the analysis and the first step of the
 2026-10-20 12:00 UTC ECMWF open data cycle at 0.1° (the `0p1` objects,
-published since the 2026-10-20 06z cycle), the same sixty-six records as
+published since the 2026-10-20 06z cycle), the same sixty-seven records as
 the ecmwf crop in the same order — the `ifs` source fetches `ecmwf`'s
 inputs — assembled by the fetcher from the three objects the resolution
 is split into (`oper` `-sfc` and `-pl`, `wave` `-sfc`), so the fixture

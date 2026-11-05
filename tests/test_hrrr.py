@@ -118,7 +118,7 @@ class SourceRegistryTests(unittest.TestCase):
         for absent in ("hgt250", "rh850", "spfh850", "aptmp2m", "thetae850", "qflux850", "tmpsfc"):
             self.assertNotIn(absent, published, absent)
         # The fixture carries every input, in source order.
-        self.assertEqual(len(HRRR.input_variable_ids), 29)
+        self.assertEqual(len(HRRR.input_variable_ids), 31)
         self.assertEqual(
             HRRR.input_variable_ids[2:6], ("ugrd10m", "vgrd10m", "ugrd80m", "vgrd80m")
         )

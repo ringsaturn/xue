@@ -65,7 +65,7 @@ const REGISTRIES = [
     ids: SURFACE_DIAGNOSTIC_IDS as readonly string[],
     // Precipitation type is categorical: its legend is a swatch key, not a
     // ramp, so it has no numeric span (`isobaricLegend` is null too).
-    withoutLegend: ["ptype"],
+    withoutLegend: ["ptype", "ptypeec"],
     legendPastCodebook: [] as string[],
   },
   {

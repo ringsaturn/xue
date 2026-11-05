@@ -29,18 +29,18 @@ class IndexMessagesTests(unittest.TestCase):
         # nine wave records — the combined sea, the wind sea and the first
         # swell partition — with the orography and the eight soil layers
         # between the two.
-        self.assertEqual(len(messages), 88)
+        self.assertEqual(len(messages), 90)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
         wind_100m = messages[46:48]
-        diagnostics = messages[48:67]
+        diagnostics = messages[48:69]
         # The orography sits between the sea ice and the companion wave
         # records: a primary-file record appended after the ocean trio, its
         # record last of the pgrb2 set and before the wave file's.
-        orography = messages[70]
-        soil = messages[71:79]
-        ocean = messages[67:70] + messages[79:]
+        orography = messages[72]
+        soil = messages[73:81]
+        ocean = messages[69:72] + messages[81:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -123,9 +123,11 @@ class IndexMessagesTests(unittest.TestCase):
                 (62, 1, 193, 1, 0.0),
                 (63, 1, 194, 1, 0.0),
                 (64, 1, 195, 1, 0.0),
-                (65, 2, 8, 100, 85000.0),
-                (66, 2, 8, 100, 70000.0),
-                (67, 2, 8, 100, 50000.0),
+                (65, 1, 39, 1, 0.0),
+                (66, 3, 5, 4, 0.0),
+                (67, 2, 8, 100, 85000.0),
+                (68, 2, 8, 100, 70000.0),
+                (69, 2, 8, 100, 50000.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in diagnostics))
@@ -140,7 +142,7 @@ class IndexMessagesTests(unittest.TestCase):
                 orography.level_type,
                 orography.level_value,
             ),
-            (71, 0, 3, 5, 1, 0.0),
+            (73, 0, 3, 5, 1, 0.0),
         )
         # The ocean fields: the skin temperature and the two sea ice fields
         # on the ground surface (value 0), then the wave fields on the water
@@ -153,18 +155,18 @@ class IndexMessagesTests(unittest.TestCase):
         self.assertEqual(
             [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in ocean],
             [
-                (68, 0, 0, 0, 1, 0.0),
-                (69, 10, 2, 0, 1, 0.0),
-                (70, 10, 2, 1, 1, 0.0),
-                (80, 10, 0, 3, 1, 1.0),
-                (81, 10, 0, 11, 1, 1.0),
-                (82, 10, 0, 10, 1, 1.0),
-                (83, 10, 0, 5, 1, 1.0),
-                (84, 10, 0, 6, 1, 1.0),
-                (85, 10, 0, 4, 1, 1.0),
-                (86, 10, 0, 8, 241, 1.0),
-                (87, 10, 0, 9, 241, 1.0),
-                (88, 10, 0, 7, 241, 1.0),
+                (70, 0, 0, 0, 1, 0.0),
+                (71, 10, 2, 0, 1, 0.0),
+                (72, 10, 2, 1, 1, 0.0),
+                (82, 10, 0, 3, 1, 1.0),
+                (83, 10, 0, 11, 1, 1.0),
+                (84, 10, 0, 10, 1, 1.0),
+                (85, 10, 0, 5, 1, 1.0),
+                (86, 10, 0, 6, 1, 1.0),
+                (87, 10, 0, 4, 1, 1.0),
+                (88, 10, 0, 8, 241, 1.0),
+                (89, 10, 0, 9, 241, 1.0),
+                (90, 10, 0, 7, 241, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))
@@ -176,8 +178,8 @@ class IndexMessagesTests(unittest.TestCase):
         tops = [0.0, 0.1, 0.4, 1.0]
         self.assertEqual(
             [(m.band, m.discipline, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in soil],
-            [(72 + index, 2, 0, 2, 106, top) for index, top in enumerate(tops)]
-            + [(76 + index, 2, 0, 192, 106, top) for index, top in enumerate(tops)],
+            [(74 + index, 2, 0, 2, 106, top) for index, top in enumerate(tops)]
+            + [(78 + index, 2, 0, 192, 106, top) for index, top in enumerate(tops)],
         )
         self.assertTrue(all(message.statistical_process is None for message in soil))
 

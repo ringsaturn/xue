@@ -242,6 +242,14 @@ COMPACT_OROGRAPHY = TemperatureCodebook(minimum=-430.0, maximum=8968.0, step=74.
 # types GFS does not report and are never written; a chart keys on the ones
 # that are.
 PTYPE = TemperatureCodebook(minimum=0.0, maximum=8.0, step=1.0, name="ptype")
+# ECMWF's precipitation type as published, whose codes run past the book above.
+PTYPE_ECMWF = TemperatureCodebook(minimum=0.0, maximum=12.0, step=1.0, name="ptypeec")
+# The 0 °C isotherm's height: a chart reads it in hundreds of metres, and the
+# line where it meets the ground is good to a code.
+FREEZING_LEVEL = TemperatureCodebook(minimum=0.0, maximum=6350.0, step=25.0, name="fzlvl")
+# The frozen share of the precipitation at a percent: a chart reads it in tens,
+# so a finer step would only spend bytes on the model's noise.
+CPOFP = TemperatureCodebook(minimum=0.0, maximum=100.0, step=1.0, name="cpofp")
 # Visibility in kilometres: 0–25.4 km at 100 m spends the full code space
 # over GFS's ~24 km ceiling; fog (under 1 km) keeps ten codes, enough for
 # the 200 / 500 / 1000 m classes a visibility chart draws.
@@ -796,6 +804,9 @@ SURFACE_VARIABLE_IDS: tuple[str, ...] = (
     "pwat",
     "hpbl",
     "ptype",
+    "cpofp",
+    "ptypeec",
+    "fzlvl",
 )
 
 PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
@@ -824,6 +835,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": QUALITY_PBL,
         "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
+        "cpofp": CPOFP,
+        "ptypeec": PTYPE_ECMWF,
+        "fzlvl": FREEZING_LEVEL,
         "aurora": QUALITY_AURORA,
         **QUALITY_CLOUD_LAYER,
         **QUALITY_OCEAN,
@@ -861,6 +875,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": COMPACT_PBL,
         "orog": COMPACT_OROGRAPHY,
         "ptype": PTYPE,
+        "cpofp": CPOFP,
+        "ptypeec": PTYPE_ECMWF,
+        "fzlvl": FREEZING_LEVEL,
         "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **COMPACT_OCEAN,
@@ -909,6 +926,9 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         "hpbl": QUALITY_PBL,
         "orog": QUALITY_OROGRAPHY,
         "ptype": PTYPE,
+        "cpofp": CPOFP,
+        "ptypeec": PTYPE_ECMWF,
+        "fzlvl": FREEZING_LEVEL,
         "aurora": COMPACT_AURORA,
         **COMPACT_CLOUD_LAYER,
         **QUALITY_OCEAN,
