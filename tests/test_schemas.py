@@ -7,8 +7,9 @@ stores (``indicators/store``, ``river/network``), and what this test builds
 in a scratch directory without GDAL: the synthetic run the shell's tests
 play (``tests/prepare_web_fixture.py``), a rolling window cut into segments
 (``tests/test_segments.py``'s round), a polar store from the nexrad
-fixture's sweeps, and a tropical cyclone archive with its scores. They are
-what the shell's, the Rust decoder's and the API worker's tests read, so
+fixture's sweeps, a tropical cyclone archive with its scores, and an
+alerts archive folded from the alerts goldens' rounds. They are what the
+shell's, the Rust decoder's and the API worker's tests read, so
 this is where the three meet the one contract."""
 
 from __future__ import annotations
@@ -52,6 +53,9 @@ TC_ARCHIVE = BUILT + "tc/*/tc/archive"
 """The tc archives ``build_tc_archive`` writes: one scored, one of history
 alone."""
 
+ALERTS_ARCHIVE = BUILT + "alerts/alerts/archive"
+"""The alerts archive ``build_alerts_archive`` writes."""
+
 GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     "pointer": ((JSON, "*/expected/latest-*.json"),),
     "fire-index": ((JSON, "fire/expected/fire.*/index.json"),),
@@ -61,6 +65,9 @@ GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     "aq-line": ((LINES, "aq/expected/aq/*/*/*/aq.*/*.jsonl"),),
     "alerts-index": ((JSON, "alerts/expected/alerts/*/*/*/alerts.*/index.json"),),
     "alerts-line": ((LINES, "alerts/expected/alerts/*/*/*/alerts.*/*.jsonl"),),
+    "alerts-archive-catalog": ((JSON, f"{ALERTS_ARCHIVE}/catalog.json"),),
+    "alerts-archive-index": ((JSON, f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json"),),
+    "alerts-archive-line": ((LINES, f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/alerts.jsonl"),),
     "tc-index": ((JSON, "tc/expected/index.json"),),
     "tc-storm": ((JSON, "tc/expected/[A-Zx]*.json"),),
     "tc-archive-catalog": ((JSON, f"{TC_ARCHIVE}/catalog.json"),),
@@ -216,6 +223,30 @@ def build_tc_archive(root: Path) -> None:
     score_stale(archive)
 
 
+def build_alerts_archive(root: Path) -> None:
+    """An alerts archive as the publisher folds it, from the committed rounds
+    of ``tests/prepare_alerts_golden`` (four networks; alerts expired,
+    replaced, cancelled and gone between them). Before them the first
+    round's jma and nws lines are journaled as the last round of 2026-10,
+    as for alerts in force across the turn of the month; the first round
+    folds that month and its own, the second (compacted) folds into the
+    month on disk."""
+    from tests.prepare_alerts_golden import FIXTURES as ALERTS, ROUNDS
+    from xuebuild.alerts import archive
+    from xuebuild.alerts.schema import parse_round
+
+    output = ALERTS / "expected"
+    first, second = (parse_round(name) for name in ROUNDS)
+    carried = [
+        entry | {"round": "2026-10-31T23:55:00Z", "month": "2026-10"}
+        for entry in archive.journal_round(output, first)
+        if "line" in entry and entry["line"]["network"] in ("jma", "nws")
+    ]
+    archive.append_journal(root / archive.JOURNAL_FILENAME, carried)
+    archive.archive_round(output, root, first, base_url=None)
+    archive.archive_round(output, root, second, base_url=None, compact=True)
+
+
 class SchemaTest(unittest.TestCase):
     built: Path
 
@@ -227,6 +258,7 @@ class SchemaTest(unittest.TestCase):
         build_segments(cls.built / "segments")
         build_polar(cls.built / "polar")
         build_tc_archive(cls.built / "tc")
+        build_alerts_archive(cls.built / "alerts")
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -302,6 +334,31 @@ class SchemaTest(unittest.TestCase):
         self.assertEqual(kinds, {"agency", "model", "ensemble"})
         (scores,) = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{TC_ARCHIVE}/[0-9]*/scores.json")]
         self.assertTrue(scores["storms"] and scores["summary"] and scores["homogeneous"])
+
+    def test_the_alerts_archive_goldens_cover_every_shape(self) -> None:
+        """The alerts archive goldens reach the branches its schemas name: a
+        catalog of more than one month, months holding different networks
+        whose spans tile their files, records still in force (null ended, two null row columns), ended
+        without a successor and replaced with one, and every reason."""
+        (catalog,) = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/catalog.json")]
+        self.assertEqual([entry["month"] for entry in catalog["months"]], ["2026-10", "2026-11"])
+        indexes = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json")]
+        self.assertEqual([index["networks"] for index in indexes], [["jma", "nws"], ["eccc", "jma", "meteoalarm", "nws"]])
+        for path, index in zip(self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json"), indexes):
+            ends = [row[8] + row[9] + 1 for row in index["rows"]]
+            self.assertEqual([row[8] for row in index["rows"]], [0, *ends[:-1]])
+            self.assertEqual(ends[-1], (path.parent / "alerts.jsonl").stat().st_size)
+        rows = [row for index in indexes for row in index["rows"]]
+        self.assertTrue(any(row[6] is None and row[7] is None for row in rows))
+        records = [
+            json.loads(line)
+            for path in self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/alerts.jsonl")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(any(record["ended"] is None for record in records))
+        ended = [record["ended"] for record in records if record["ended"] is not None]
+        self.assertTrue(any("by" in end for end in ended) and any("by" not in end for end in ended))
+        self.assertEqual({end["reason"] for end in ended}, {"expired", "replaced", "cancelled", "gone"})
 
 
 if __name__ == "__main__":
