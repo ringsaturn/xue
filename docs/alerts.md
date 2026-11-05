@@ -1108,6 +1108,17 @@ in order.
 `months` are sorted and unique. A reader rejects an `archiveSchemaVersion`
 above the one it implements.
 
+The shapes are normative in
+[`schemas/alerts-archive-catalog.schema.json`](schemas/alerts-archive-catalog.schema.json),
+[`alerts-archive-index`](schemas/alerts-archive-index.schema.json) and, for a
+line of §12.2's files,
+[`alerts-archive-line`](schemas/alerts-archive-line.schema.json), whose
+`alert` is [`alerts-line`](schemas/alerts-line.schema.json);
+`tests/test_schemas.py` holds an archive it folds from the committed rounds
+to them. What they cannot say, the order, uniqueness and tiling above, a
+row's network position and its two nulls together, and `by` for `replaced`
+alone, is each reader's own check.
+
 ### 12.4 The producer
 
 The rounds on the bucket last three hours, so the archive is fed by the
