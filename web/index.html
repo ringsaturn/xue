@@ -422,6 +422,9 @@
           <li id="legend-ffwi" hidden><span class="legend-swatch legend-swatch-ffwi" aria-hidden="true"></span><span data-i18n="legendFfwi">Fosberg fire weather index</span></li>
           <li id="legend-fwalert" hidden><span class="legend-swatch legend-swatch-fwalert" aria-hidden="true"></span><span data-i18n="legendFwalert">RH under 30 % with gusts of 10 m/s or more</span></li>
         </ul>
+        <!-- The precipitation by phase: a ramp per class, then the freezing
+             line and the freezing rain zone; written by main.ts. -->
+        <ul id="legend-phase" class="legend-derived" hidden></ul>
         <span id="legend-folded" class="legend-folded" hidden>RF</span>
       </aside>
 
@@ -764,6 +767,13 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5c3-2.5 5-2.5 8 0s5 2.5 8 0" /><path d="M3 15.5c3-2.5 5-2.5 8 0s5 2.5 8 0" /><circle cx="6" cy="12" r="1.1" fill="currentColor" stroke="none" /><circle cx="13" cy="12" r="1.1" fill="currentColor" stroke="none" /><circle cx="19.5" cy="12" r="1.1" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphParticles">≈</b>
           <span class="rail-name"><span>PARTICLES</span> <small data-i18n="varParticles">FLOW</small></span>
+        </button>
+        <!-- The precipitation by phase and the 0 °C line (?phase=on), off until
+             pressed; shown on the rate of a run whose model reports a phase. -->
+        <button id="phase-toggle" type="button" data-toggle aria-pressed="false" data-i18n-tip="phaseToggle" data-i18n-aria="phaseToggleAria" aria-label="Toggle precipitation phase and the 0 °C line" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v10M3 6.5l8 5M11 6.5l-8 5" /><path d="M17 8c2 2.6 3.2 4.3 3.2 6a3.2 3.2 0 0 1-6.4 0c0-1.7 1.2-3.4 3.2-6z" /><path d="M3 20h18" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPhase">P</b>
+          <span class="rail-name"><span>PHASE</span> <small data-i18n="varPhase">RAIN/SNOW</small></span>
         </button>
         <!-- The volume over the field (?volume=): the cloud water drawn in
              3D over whatever 2D field is on screen. Shown on a run that

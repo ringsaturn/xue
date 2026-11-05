@@ -38,6 +38,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `probepanel.ts` | The probe panel's controller (`createProbePanel`): the pin, series requests, probe sessions, rows, terrain column, station chips, skew-T sheet. |
+| `precipphase.ts` | The precipitation by phase: classes from `ptype`, `ptypeec` and `cpofp`, the freezing line from `fzlvl` and `orog`, the weights `ForecastLayer.setPhase` paints by, and where the chart writes its labels. Plain arithmetic on decoded planes. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
 | `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the `?x=` experiment's composite and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
 | `accumulation.ts` | Sliding-window precipitation totals (`?accum=`) from the published rate frames; see "Precipitation totals" below. |
@@ -441,6 +442,43 @@ and the window shrinks to fit it.
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
 - Regional models clip raster, particles, probe and labels to
   `FORECAST_MODELS[].domain` (`domain.ts`).
+
+## Precipitation by phase
+
+A rail switch (`?phase=on`, off by default) paints the rate view of `prate` with
+one ramp per class and marks the 0 °C line and the freezing rain zones. Nothing
+loads until it is pressed. It is computed in the browser from published bundles
+(`precipphase.ts`), using only what the model reports:
+
+- `ptype` (GFS, from NCEP's flags) and `ptypeec` (ECMWF's own record, a longer
+  book) give freezing rain and ice pellets. NCEP's flags never overlap in a cell,
+  so on GFS the mix comes from `cpofp`, the model's percent frozen: between 10 and
+  90 % a cell is a mix. ECMWF's type names a mixture itself. A cell neither names
+  is on the plain ramp.
+- A run with neither field has no switch, and the key lists only the classes the
+  run's fields can name. No class is inferred from a temperature.
+- The freezing line is where the 0 °C isotherm meets the ground: `fzlvl` is a
+  height above sea level, so `buildFrostPlane` subtracts `orog` and the contour
+  path draws the result at 0 on a layer of its own. A run without `fzlvl` (GFS and
+  HRRR have it, and `sflux` borrows it) has no line.
+- A model names a type far beyond what reaches the ground, so the freezing rain
+  zone's hatch, outline and name appear only where the rate says it is falling.
+- The phase's sessions are overlays and never gate the playhead, and their own
+  layers are never added to the map, only their planes are read.
+- `buildPhaseField` writes RGBA weights (snow, mix, freezing rain, ice pellets;
+  rain is the remainder). `ForecastLayer.setPhase` samples them bilinearly and
+  looks each class up in a palette row, and draws the zone's outline and hatch
+  from the freezing rain weight. The class steps with the frame while the rate
+  blends through `u_mix`.
+
+## Borrowed bundles
+
+`sflux` publishes no pressure level and no phase. Once its manifest is read, the
+shell lists the isobaric bundles, `prmsl`, `ptype`, `cpofp` and `fzlvl` of the same cycle's
+`gfs` manifest beside its own (`borrowBundles`, `BORROWED_BUNDLES`), with their
+paths made absolute. From there they are ordinary bundles of the run: the rail,
+the level row, the lines and the probe read them from GFS's 0.25° stores, and
+nothing is copied. A cycle GFS has not published leaves `sflux` without them.
 
 ## River layer
 

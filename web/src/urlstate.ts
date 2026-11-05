@@ -311,6 +311,21 @@ export function parseParticlesFromSearch(search: string): boolean | null {
   return SWITCH_ALIASES[value.trim().toLowerCase()] ?? null;
 }
 
+/** Whether the link asks for the precipitation by phase; anything else, or
+ * nothing, leaves it off. */
+export function parsePhaseFromSearch(search: string): boolean {
+  const value = new URLSearchParams(search).get("phase");
+  return value !== null && SWITCH_ALIASES[value.trim().toLowerCase()] === true;
+}
+
+/** The given query string carrying the phase switch, written only when on. */
+export function searchWithPhase(search: string, phase: boolean): string {
+  const params = new URLSearchParams(search);
+  if (phase) params.set("phase", "on");
+  else params.delete("phase");
+  return `?${params.toString()}`;
+}
+
 /** The given query string carrying the particle choice. Only the state the
  * viewer changed is written: a link shared with the overlay off says
  * `particles=off`, and one shared with it on carries nothing, so the

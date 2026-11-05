@@ -1155,6 +1155,30 @@ body.is-pressure .legend {
   border-radius: var(--r-xs);
 }
 
+/* The phase key: each class's ramp, light rates to the left. */
+.legend-swatch-phase {
+  width: 28px;
+  height: 8px;
+}
+
+/* The freezing line and the freezing rain zone, in the ink they are drawn in
+   (currentColor, set by main.ts). */
+.legend-swatch-frost {
+  width: 28px;
+  height: 0;
+  border: 0;
+  border-top: 2px solid currentColor;
+  border-radius: 0;
+}
+
+.legend-swatch-freezing {
+  width: 28px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  background: repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 4px);
+}
+
 /* An outlined region with a wash inside, like the layers themselves:
    matches derivedContourStyle in main.ts and the palettes in composite.ts. */
 .legend-swatch-inflow {

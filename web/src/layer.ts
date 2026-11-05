@@ -23,6 +23,7 @@ import {
   withDefines,
   worldRowAt,
 } from "./projection";
+import type { PhaseField } from "./precipphase";
 import { WHOLE_PLANE_COVERAGE, type CoverageBox } from "./tiles";
 import type { Sampling } from "./variables";
 
@@ -289,6 +290,19 @@ uniform float u_vector_nodata;
 uniform float u_composite;
 uniform vec3 u_composite_offset;
 uniform vec3 u_composite_scale;
+// The precipitation by phase (precipphase.ts): weights of snow, mix, freezing
+// rain and ice pellets on a grid of their own, rain being the remainder, and a
+// palette with one row per class. Inside the freezing rain the chart hatches
+// and outlines the zone in u_phase_ink; u_phase_px is device pixels per CSS
+// pixel, so the hatch has one pitch on every screen.
+uniform float u_phase;
+uniform sampler2D u_phase_weights;
+uniform sampler2D u_phase_palette;
+uniform vec2 u_phase_first;
+uniform vec2 u_phase_step;
+uniform vec2 u_phase_size;
+uniform vec4 u_phase_ink;
+uniform float u_phase_px;
 // A regional model's own footprint on its map projection (domain.ts): the
 // encoder's regular grid extends past a conic domain's corners with the
 // nearest cell, and those corners are not a forecast, so they are clipped
@@ -503,6 +517,48 @@ float sunlit(vec2 mercator) {
   return texture(u_shadow, vec2(sx, sy)).r;
 }
 
+vec4 phaseRow(float code, float row) {
+  vec4 entry = texture(u_phase_palette, vec2((code * 255.0 + 0.5) / 256.0, (row + 0.5) / 5.0));
+  return vec4(entry.rgb * entry.a, entry.a);
+}
+
+vec4 phaseColor(float code, float longitude, float latitude) {
+  float delta = mod(longitude - u_phase_first.x, 360.0);
+  vec2 uv = vec2(
+    (delta / u_phase_step.x + 0.5) / u_phase_size.x,
+    ((latitude - u_phase_first.y) / u_phase_step.y + 0.5) / u_phase_size.y
+  );
+  vec4 weights = texture(u_phase_weights, uv);
+  float zone = weights.b;
+  // Taken here, where every fragment of the quad runs it.
+  float zoneStep = fwidth(zone);
+  float frozen = weights.r + weights.g + weights.b + weights.a;
+  vec4 color;
+  if (frozen <= 0.0) {
+    // Nearly every fragment on most charts: one palette read, not five.
+    color = texture(u_phase_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.1));
+  } else {
+    // Blended premultiplied: a dry class must not dilute a wet one's colour.
+    vec4 blended = max(0.0, 1.0 - frozen) * phaseRow(code, 0.0)
+      + weights.r * phaseRow(code, 1.0)
+      + weights.g * phaseRow(code, 2.0)
+      + weights.b * phaseRow(code, 3.0)
+      + weights.a * phaseRow(code, 4.0);
+    color = blended.a > 0.0 ? vec4(blended.rgb / blended.a, blended.a) : vec4(0.0);
+  }
+  if (frozen <= 0.0) return color;
+  // A model names a type far beyond what reaches the ground, so a zone is marked
+  // only where it is falling: the freezing rain row's alpha turns past this near
+  // ZONE_MINIMUM_RATE.
+  float falling = smoothstep(0.45, 0.55, phaseRow(code, 3.0).a);
+  if (zone > 0.5) {
+    float pitch = 8.0 * u_phase_px;
+    float hatch = 1.0 - step(1.5 * u_phase_px, mod(gl_FragCoord.x + gl_FragCoord.y, pitch));
+    color = mix(color, u_phase_ink, hatch * u_phase_ink.a * falling);
+  }
+  return mix(color, u_phase_ink, lineCoverage(abs(zone - 0.5), zoneStep, 1.1 * u_phase_px) * falling);
+}
+
 void main() {
   float longitude = fract(v_mercator.x) * 360.0 - 180.0;
   float latitude = 90.0 - (360.0 / PI) * atan(exp((v_mercator.y * 2.0 - 1.0) * PI));
@@ -582,7 +638,9 @@ void main() {
 #ifdef XUE_TERRAIN
     if (u_lapse.x > 0.0) code = clamp(code + u_lapse.x * lapseCodes(longitude, latitude, code), 0.0, u_lapse.z);
 #endif
-    color = texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
+    color = u_phase > 0.5
+      ? phaseColor(code, longitude, latitude)
+      : texture(u_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
   }
   if (u_contour.x > 0.0) {
     // Codes mix linearly and the pressure family's codebooks are linear, so
@@ -714,6 +772,15 @@ export interface ContourStyle {
   smoothing: number;
 }
 
+/** What `setPhase` paints the precipitation by. */
+export interface PhaseOverlay {
+  field: PhaseField;
+  /** `buildPhasePalette`. */
+  palette: Uint8Array;
+  /** The freezing rain zone's outline and hatch. */
+  ink: readonly [number, number, number, number];
+}
+
 /** A two-channel field drawn as its magnitude: the 10 m wind, whose plane
  * carries the u codes in red and the v codes in green. Each channel has its
  * own linear codebook, and `maxMagnitude` is the value the palette's last
@@ -795,6 +862,12 @@ export class ForecastLayer implements CustomLayerInterface {
   /** Slot A carries the displayed frame, slot B the following one. */
   private slots: [FrameSlot, FrameSlot] | null = null;
   private paletteTexture: WebGLTexture | null = null;
+  private phase: PhaseOverlay | null = null;
+  private phaseWeightsTexture: WebGLTexture | null = null;
+  private phasePaletteTexture: WebGLTexture | null = null;
+  private phaseUploaded: PhaseField | null = null;
+  private phaseWeightsSize: readonly [number, number] = [0, 0];
+  private phasePaletteUploaded: Uint8Array | null = null;
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
   /** The map pass compiled per projection variant and terrain mode, since
    * MapLibre's prelude differs between them (projection.ts). */
@@ -1022,6 +1095,11 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    this.phaseWeightsTexture = this.createPhaseTexture(gl);
+    this.phasePaletteTexture = this.createPhaseTexture(gl);
+    this.phaseUploaded = null;
+    this.phasePaletteUploaded = null;
+    this.phaseWeightsSize = [0, 0];
 
     this.hasFrame = false;
     if (this.pendingPalette) this.setPalette(this.pendingPalette);
@@ -1113,6 +1191,77 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, palette);
     this.map?.triggerRepaint();
+  }
+
+  /** Paint this plane's codes by phase, or pass null for the one palette.
+   * Uploaded when next drawn, so a frame that is replaced before the map
+   * repaints costs nothing. */
+  setPhase(phase: PhaseOverlay | null): void {
+    this.phase = phase;
+    this.phaseUploaded = null;
+    this.map?.triggerRepaint();
+  }
+
+  private createPhaseTexture(gl: WebGL2RenderingContext): WebGLTexture | null {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    return texture;
+  }
+
+  /** The phase's textures, as of what `setPhase` last said. MapLibre leaves
+   * premultiplied unpacking on after its own images, which would empty every
+   * weight of a cell whose alpha channel, the ice pellets, is zero. */
+  private uploadPhase(gl: WebGL2RenderingContext): void {
+    const phase = this.phase;
+    if (!phase) return;
+    const premultiply = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL) as boolean;
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    if (this.phasePaletteUploaded !== phase.palette) {
+      gl.bindTexture(gl.TEXTURE_2D, this.phasePaletteTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, phase.palette.length / (256 * 4), 0, gl.RGBA, gl.UNSIGNED_BYTE, phase.palette);
+      this.phasePaletteUploaded = phase.palette;
+    }
+    if (this.phaseUploaded !== phase.field) {
+      const { grid, weights } = phase.field;
+      gl.bindTexture(gl.TEXTURE_2D, this.phaseWeightsTexture);
+      // Every frame step lands here: the storage is allocated once a grid.
+      if (this.phaseWeightsSize[0] === grid.width && this.phaseWeightsSize[1] === grid.height) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, grid.width, grid.height, gl.RGBA, gl.UNSIGNED_BYTE, weights);
+      } else {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, grid.wraps ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.width, grid.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, weights);
+        this.phaseWeightsSize = [grid.width, grid.height];
+      }
+      this.phaseUploaded = phase.field;
+    }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
+  }
+
+  /** The phase's uniforms and samplers. The samplers are bound whatever the
+   * mode, for the same reason the guns are. */
+  private bindPhase(gl: WebGL2RenderingContext): void {
+    this.uploadPhase(gl);
+    const phase = this.phase;
+    gl.uniform1f(this.uniforms.u_phase!, phase ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0 + PHASE_WEIGHTS_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.phaseWeightsTexture);
+    gl.uniform1i(this.uniforms.u_phase_weights!, PHASE_WEIGHTS_TEXTURE_UNIT);
+    gl.activeTexture(gl.TEXTURE0 + PHASE_PALETTE_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.phasePaletteTexture);
+    gl.uniform1i(this.uniforms.u_phase_palette!, PHASE_PALETTE_TEXTURE_UNIT);
+    if (!phase) return;
+    const { grid } = phase.field;
+    gl.uniform2f(this.uniforms.u_phase_first!, grid.firstLongitude, grid.firstLatitude);
+    gl.uniform2f(this.uniforms.u_phase_step!, grid.longitudeStep, grid.latitudeStep);
+    gl.uniform2f(this.uniforms.u_phase_size!, grid.width, grid.height);
+    gl.uniform4f(this.uniforms.u_phase_ink!, phase.ink[0], phase.ink[1], phase.ink[2], phase.ink[3]);
+    gl.uniform1f(this.uniforms.u_phase_px!, window.devicePixelRatio || 1);
   }
 
   /** Draw this plane as contour lines instead of (or over) a filled field,
@@ -1547,6 +1696,7 @@ export class ForecastLayer implements CustomLayerInterface {
       gl.uniform1i(this.uniforms[name]!, 3 + at);
     }
     this.bindShadow(gl);
+    this.bindPhase(gl);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -1600,6 +1750,8 @@ const OROGRAPHY_TEXTURE_UNIT = 8;
 const COLUMN_TEXTURE_UNITS = [9, 10, 11] as const;
 /** The terrain shadows' sunlit mask; WebGL2 guarantees 16 units. */
 const SHADOW_TEXTURE_UNIT = 12;
+const PHASE_WEIGHTS_TEXTURE_UNIT = 13;
+const PHASE_PALETTE_TEXTURE_UNIT = 14;
 
 /** The terrain shadows every field layer darkens by (shadowlayer.ts): the
  * latest sunlit mask over its Mercator rectangle, how strongly a shadow
@@ -1632,6 +1784,7 @@ const MAP_UNIFORM_NAMES = [
   "u_contour_value_count", "u_line_color", "u_fill_alpha",
   "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
   "u_composite", "u_composite_offset", "u_composite_scale",
+  "u_phase", "u_phase_weights", "u_phase_palette", "u_phase_first", "u_phase_step", "u_phase_size", "u_phase_ink", "u_phase_px",
   ...DOMAIN_UNIFORM_NAMES,
   "u_band",
   "u_orog", "u_orog_grid", "u_orog_size", "u_orog_decode", "u_lapse",

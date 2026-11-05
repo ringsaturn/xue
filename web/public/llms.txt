@@ -73,8 +73,14 @@ Facts worth getting right:
   temperature), `cin` (convective inhibition), `pwat` (precipitable water),
   `hpbl` (planetary boundary layer height), `ptype` (the categorical
   precipitation type derived from the model's four rain / freezing-rain /
-  ice-pellet / snow flags), the 100 m wind pair `wind100m`, and `icec` (sea
-  ice cover), which the ECMWF open data does not carry. AIFS: the ECMWF set less what its open data lacks — no
+  ice-pellet / snow flags), `cpofp` (the model's percent of the precipitation
+  falling frozen) and `fzlvl` (the 0 °C isotherm's height above sea level), both
+  also on HRRR, the 100 m wind pair `wind100m`, and `icec` (sea
+  ice cover), which the ECMWF open data does not carry. ECMWF and IFS publish `ptypeec`, the
+  model's own type. `?phase=on` paints `prate` by phase from those fields, with
+  the line where `fzlvl` meets `orog` and the freezing rain zones. The `sflux` view
+  reads its pressure levels, `prmsl`, `ptype`, `cpofp` and `fzlvl` from the same
+  cycle's `gfs` stores. AIFS: the ECMWF set less what its open data lacks — no
   `rh850` / `rh700` / `rh500` (it carries specific humidity only), no
   `gust`, `cape`, `icetk` or `perpw`, and of the soil only the top two
   layers (`tsoil1`, `tsoil2`, `soilw1`, `soilw2`, the water content
