@@ -450,6 +450,8 @@ export const tr: Record<MessageKey, string> = {
   tcHistoryEmpty: "Bu sezon ve havzada tahmini olan fırtına yok",
   tcHistoryStormAria: "{name} aç",
   tcHistorySouthernNote: "Güney yarımküre sezonları temmuzdan hazirana sürer ve bittikleri yılla anılır: {season} sezonu {from} ile {to} arasıdır.",
+  tcHistoryEarlyNote: "Modern uydu döneminden (IBTrACS'te 1980) önce izler ve şiddetler daha belirsizdir. Bu sezon rüzgâr hızı olmayan fırtınalar: {count} fırtınadan {missing} tanesi.",
+  tcHistoryDuplicateNote: "IBTrACS, 1950'den önceki bazı fırtınaların doğru eşleştirilmediğini belirtir: aynı fırtına birkaç kez görünebilir ve toplam sayı yüksek çıkar.",
   tcPageTitle: "Geçmiş tropikal siklon",
   tcPageMetaDescription: "Geçmiş bir tropikal siklon: merkezlerin en iyi izleri, onun için arşivlenen her tahmin ve her birinin ne kadar saptığı.",
   tcPageLoading: "Fırtına yükleniyor",

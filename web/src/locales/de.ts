@@ -447,6 +447,8 @@ export const de: Record<MessageKey, string> = {
   tcHistoryEmpty: "Keine Stürme mit Vorhersagen in dieser Saison und diesem Becken",
   tcHistoryStormAria: "{name} öffnen",
   tcHistorySouthernNote: "Saisons auf der Südhalbkugel laufen von Juli bis Juni und tragen das Jahr, in dem sie enden: Die Saison {season} reicht von {from} bis {to}.",
+  tcHistoryEarlyNote: "Vor der modernen Satellitenära (bei IBTrACS ab 1980) sind Zugbahnen und Intensitäten unsicherer. Stürme ohne Windgeschwindigkeit in dieser Saison: {missing} von {count}.",
+  tcHistoryDuplicateNote: "IBTrACS weist darauf hin, dass manche Stürme vor 1950 nicht richtig zugeordnet wurden: Ein Sturm kann mehrfach vorkommen, die Gesamtzahl fällt zu hoch aus.",
   tcPageTitle: "Vergangener tropischer Wirbelsturm",
   tcPageMetaDescription: "Ein vergangener tropischer Wirbelsturm: die Best Tracks der Zentren, jede archivierte Vorhersage dafür und wie weit sie danebenlag.",
   tcPageLoading: "Sturm wird geladen",

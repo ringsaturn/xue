@@ -355,7 +355,12 @@ of another storm is not kept. A storm no agency holds has one track, under the
 key `ibtracs`: IBTrACS' merged position (`source: "ibtracs"`), `vmax` and `pmin`
 from `WMO_WIND` and `WMO_PRES`, `class` its `NATURE`. Early winds and pressures
 are mostly `null`, and centres' methods changed over the record, so the
-positions and intensities of different eras are not of equal quality.
+positions and intensities of different eras are not of equal quality. IBTrACS
+lists as a known issue that some storms before 1950 were not correctly matched,
+so one storm can appear as several and those seasons' counts run high; the
+archive keeps them as IBTrACS has them. The history page says both on a season
+before 1980, the start of what IBTrACS calls the modern era of satellite
+observations.
 
 ### 8.3 Indexes
 

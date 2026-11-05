@@ -447,6 +447,8 @@ export const pt: Record<MessageKey, string> = {
   tcHistoryEmpty: "Nenhuma tempestade com previsões nesta temporada e bacia",
   tcHistoryStormAria: "Abrir {name}",
   tcHistorySouthernNote: "As temporadas do hemisfério sul vão de julho a junho e levam o ano em que terminam: a temporada {season} vai de {from} a {to}.",
+  tcHistoryEarlyNote: "Antes da era moderna dos satélites (1980 no IBTrACS), as trajetórias e as intensidades são menos seguras. Tempestades sem velocidade do vento nesta temporada: {missing} de {count}.",
+  tcHistoryDuplicateNote: "O IBTrACS avisa que algumas tempestades anteriores a 1950 não foram bem associadas: a mesma tempestade pode aparecer várias vezes e o total fica alto.",
   tcPageTitle: "Ciclone tropical passado",
   tcPageMetaDescription: "Um ciclone tropical passado: as trajetórias finais dos centros, cada previsão arquivada para ele e quanto cada uma errou.",
   tcPageLoading: "Carregando tempestade",

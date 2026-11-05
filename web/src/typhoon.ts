@@ -23,6 +23,7 @@ import {
   archiveBounds,
   isArchiveStormId,
   seasonHasForecasts,
+  seasonQuality,
   forecastsAt,
   storyTimes,
   seasonOfStorm,
@@ -76,6 +77,7 @@ const seasonsGroup = document.getElementById("typhoon-seasons") as HTMLDivElemen
 const basinsGroup = document.getElementById("typhoon-basins") as HTMLDivElement;
 const stormList = document.getElementById("typhoon-list") as HTMLUListElement;
 const seasonNote = document.getElementById("typhoon-season-note") as HTMLParagraphElement;
+const qualityNote = document.getElementById("typhoon-quality-note") as HTMLParagraphElement;
 const legend = document.getElementById("typhoon-legend") as HTMLDivElement;
 const seasonLink = document.getElementById("typhoon-season-link") as HTMLAnchorElement;
 const stormLink = document.getElementById("typhoon-storm-link") as HTMLAnchorElement;
@@ -684,6 +686,12 @@ function renderPicker(): void {
   seasonNote.hidden = !southern;
   if (southern && season !== null)
     seasonNote.textContent = t("tcHistorySouthernNote", { season, from: `${season - 1}-07`, to: `${season}-06` });
+  const quality = season !== null && seasonIndex !== null ? seasonQuality(season, storms) : null;
+  qualityNote.hidden = quality === null;
+  if (quality) {
+    const early = t("tcHistoryEarlyNote", { missing: quality.missing, count: quality.count });
+    qualityNote.textContent = quality.duplicates ? `${early} ${t("tcHistoryDuplicateNote")}` : early;
+  }
   seasonLink.hidden = season === null || storms.length === 0 || seasonIndex === null || !seasonHasForecasts(seasonIndex);
   if (season !== null) {
     seasonLink.href = seasonPagePath(locale, season);
