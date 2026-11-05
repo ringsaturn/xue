@@ -161,6 +161,7 @@ import { displayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
 import { cacheKey, createPlaneCache, MEBIBYTE } from "./planecache";
+import { createDecodeQueue, DECODE_GRAPH_BUCKET_MS, DECODE_GRAPH_WINDOW_MS, type DecodedFrameMessage } from "./decodequeue";
 import { variableKey } from "./sessionkeys";
 import {
   buildFrostPlane,
@@ -1505,37 +1506,20 @@ const planeCache = createPlaneCache({
     return shownTotal ? totalTerms(session, index, shownTotal).map((term) => term.hour) : [];
   },
 });
-/** Worker-reported decode time of the most recent plane, for the stats panel. */
-let lastDecodeMs: number | null = null;
-/** Rolling record of decoded planes (bytes + worker decode time), feeding the
- * stats panel's activity graph — the YouTube network-activity analog. The
- * download is one-shot, but decode work streams for as long as playback
- * prefetches planes. */
-const DECODE_GRAPH_WINDOW_MS = 30_000;
-const DECODE_GRAPH_BUCKET_MS = 500;
-const decodeEvents: { at: number; bytes: number; ms: number }[] = [];
-
-function recordDecodeEvent(bytes: number, ms: number): void {
-  const at = performance.now();
-  decodeEvents.push({ at, bytes, ms });
-  const cutoff = at - DECODE_GRAPH_WINDOW_MS - DECODE_GRAPH_BUCKET_MS;
-  while (decodeEvents.length > 0 && decodeEvents[0]!.at < cutoff) decodeEvents.shift();
-}
-
-/** Decoded bytes per second, averaged over the last two seconds. */
-function decodeRateBytesPerSec(): number {
-  const cutoff = performance.now() - 2_000;
-  let sum = 0;
-  for (let index = decodeEvents.length - 1; index >= 0; index -= 1) {
-    if (decodeEvents[index]!.at < cutoff) break;
-    sum += decodeEvents[index]!.bytes;
-  }
-  return sum / 2;
-}
-const inflight = new Map<number, string>();
-let nextRequestId = 1;
-let desiredKey: string | null = null;
-let queuedRequest: { session: VariableSession; variable: BundleVariable; hour: number } | null = null;
+const decodeQueue = createDecodeQueue({
+  get ready() {
+    return ready;
+  },
+  get generation() {
+    return generation;
+  },
+  slotSessions,
+  totalFrames,
+  planeCache,
+  planeArrived,
+  cacheChanged: updateCacheReadout,
+  frameLanded,
+});
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 /** Where the viewer's particle-overlay choice is kept between visits, like
@@ -2064,12 +2048,12 @@ const statsControl = createStats({
     return planeCache.bytes;
   },
   get lastDecodeMs() {
-    return lastDecodeMs;
+    return decodeQueue.lastDecodeMs;
   },
   DECODE_GRAPH_WINDOW_MS,
   DECODE_GRAPH_BUCKET_MS,
-  decodeEvents,
-  decodeRateBytesPerSec,
+  decodeEvents: decodeQueue.decodeEvents,
+  decodeRateBytesPerSec: decodeQueue.decodeRateBytesPerSec,
   reducedMotion,
   frameCount,
   formatLead,
@@ -2123,10 +2107,10 @@ const probePanelControl = createProbePanel({
   sessions: sessionRegistry.sessions,
   planeCache: planeCache.frames,
   get nextRequestId() {
-    return nextRequestId;
+    return decodeQueue.nextRequestId;
   },
   set nextRequestId(value) {
-    nextRequestId = value;
+    decodeQueue.nextRequestId = value;
   },
   view,
   formatDate,
@@ -2629,10 +2613,7 @@ function sameTier(a: VariantDescriptor | null, b: VariantDescriptor | null): boo
 function disposeSession(session: VariableSession): void {
   sessionRegistry.release(session);
   planeCache.dropSession(session);
-  for (const [requestId, key] of [...inflight]) {
-    if (key.startsWith(`${session.key}:`)) inflight.delete(requestId);
-  }
-  if (queuedRequest?.session === session) queuedRequest = null;
+  decodeQueue.dropSession(session);
   vectorPlanes.clear();
   updateCacheReadout();
 }
@@ -2818,10 +2799,10 @@ function trySelectFrame(index: number): boolean {
   }
   // Track the first missing plane; when it arrives the frame is retried,
   // which walks desiredKey to the next still-missing plane (if any).
-  desiredKey = keys.find((_, position) => planes[position] === undefined) ?? null;
+  decodeQueue.desiredKey = keys.find((_, position) => planes[position] === undefined) ?? null;
   for (const [position] of keys.entries()) {
     if (planes[position] !== undefined) continue;
-    requestDecode(session, session.variables[position]!, hour);
+    decodeQueue.request(session, session.variables[position]!, hour);
   }
   frameMissing(index);
   return false;
@@ -2849,8 +2830,8 @@ function trySelectTotal(session: VariableSession, slot: RasterSlot, index: numbe
     return true;
   }
   const missing = terms.filter((term) => !cachedFrame(term.key, session)).reverse();
-  desiredKey = missing[0]?.key ?? null;
-  for (const term of missing) requestDecode(session, session.variable, term.hour);
+  decodeQueue.desiredKey = missing[0]?.key ?? null;
+  for (const term of missing) decodeQueue.request(session, session.variable, term.hour);
   frameMissing(index);
   return false;
 }
@@ -2859,7 +2840,7 @@ function trySelectTotal(session: VariableSession, slot: RasterSlot, index: numbe
  * layers and marks catch up to it, and the frames after it are asked for. */
 function frameShown(index: number): void {
   activeFrameIndex = index;
-  desiredKey = null;
+  decodeQueue.desiredKey = null;
   syncFrameMarks();
   // The overlays follow the frame that is actually on screen, not the one
   // asked for: a line chart of one hour over a field of another would be
@@ -2915,7 +2896,7 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
     // comes back here and asks for the next.
     slot.wantedKey = keys[missing]!;
     for (const [at, variable] of variables.entries()) {
-      if (!frames[at]) requestDecode(session, variable, offset);
+      if (!frames[at]) decodeQueue.request(session, variable, offset);
     }
     return;
   }
@@ -2946,7 +2927,7 @@ function requestOverlayDecode(slot: RasterSlot, index: number): void {
   const offset = overlayOffset(slot, index);
   if (!session || offset === null) return;
   for (const variable of session.composite ? session.variables : [session.variable]) {
-    if (!cachedFrame(cacheKey(session, variable, offset), session)) requestDecode(session, variable, offset);
+    if (!cachedFrame(cacheKey(session, variable, offset), session)) decodeQueue.request(session, variable, offset);
   }
 }
 
@@ -2983,7 +2964,7 @@ function trySelectVolumeOverlay(index: number): void {
     if (planes[position]) continue;
     complete = false;
     volumeOverlay.wantedKeys.add(key);
-    requestDecode(session, session.variables[position]!, frame.offset);
+    decodeQueue.request(session, session.variables[position]!, frame.offset);
   }
   if (!complete) return;
   for (const [position, key] of frame.keys.entries()) {
@@ -3002,7 +2983,7 @@ function requestVolumeOverlayDecode(index: number): void {
   const frame = volumeOverlayFrame(session, index);
   if (!frame) return;
   for (const [position, key] of frame.keys.entries()) {
-    if (planeCache.get(key)?.tiles !== null) requestDecode(session, session.variables[position]!, frame.offset);
+    if (planeCache.get(key)?.tiles !== null) decodeQueue.request(session, session.variables[position]!, frame.offset);
   }
 }
 
@@ -3029,7 +3010,7 @@ function blendVolumeOverlay(index: number, next: number, weight: number): void {
 /** Frames decoded ahead of the playhead during playback. One is not enough:
  * a single slow decode (byte-budget eviction forces perpetual re-decodes on
  * long loops) then stalls the very next frame step. A small pipeline absorbs
- * that jitter; the inflight cap in requestDecode still bounds worker load. */
+ * that jitter; the inflight cap in decodeQueue.request still bounds worker load. */
 const PLAYBACK_DECODE_AHEAD = 3;
 
 function prefetchNext(index: number): void {
@@ -3041,62 +3022,17 @@ function prefetchNext(index: number): void {
     const total = accumulationOn(session);
     if (total) {
       for (const term of totalTerms(session, frame, total)) {
-        if (!cachedFrame(term.key, session)) requestDecode(session, session.variable, term.hour);
+        if (!cachedFrame(term.key, session)) decodeQueue.request(session, session.variable, term.hour);
       }
     }
     for (const variable of session.variables) {
       const key = cacheKey(session, variable, hour);
-      if (!cachedFrame(key, session)) requestDecode(session, variable, hour);
+      if (!cachedFrame(key, session)) decodeQueue.request(session, variable, hour);
     }
     for (const overlay of overlaySlots()) requestOverlayDecode(overlay, frame);
     requestVolumeOverlayDecode(frame);
     for (const input of compositeSessions()) requestCompositeDecode(input, frame);
   }
-}
-
-/** Ask one session's decoder for one of its variables at one frame offset.
- * The session is passed in rather than looked up: a numericId names a
- * variable only inside the file it came from. */
-function requestDecode(
-  session: VariableSession,
-  variable: BundleVariable,
-  hour: number,
-  /** The tiles to decode for a session that is not on screen, which is
-   * otherwise asked for whole planes. */
-  tiles?: TileRect[] | null,
-): void {
-  if (!ready) return;
-  const key = cacheKey(session, variable, hour);
-  if ([...inflight.values()].includes(key)) return;
-  // The wind session needs two planes per frame and an overlay adds its own,
-  // so the inflight cap scales with the planes one frame of the view needs.
-  if (inflight.size >= 2 * planesPerFrame()) {
-    // Keep only the newest queued request while scrubbing.
-    queuedRequest = { session, variable, hour };
-    return;
-  }
-  const requestId = nextRequestId++;
-  inflight.set(requestId, key);
-  session.worker.postMessage({
-    type: "decode",
-    requestId,
-    generation,
-    variableId: variable.numericId,
-    frameOffset: hour,
-    // Only a session on screen narrows the decode to its view; a background
-    // session (the other variable, preloading) is asked for whole planes.
-    tiles: (tiles !== undefined ? tiles : slotSessions().includes(session) ? session.viewTiles : null) ?? undefined,
-  });
-}
-
-/** Planes one frame of the whole view needs: the u/v pair for wind, one per
- * scalar, summed over the slots on screen. */
-function planesPerFrame(): number {
-  let planes = 0;
-  for (const session of slotSessions()) planes += session.variables.length;
-  // A total waits on every frame of its window, not one.
-  planes += totalFrames();
-  return Math.max(1, planes);
 }
 
 /** Every key a layer on screen draws, which the plane cache's eviction
@@ -3121,53 +3057,25 @@ function displayedKeys(): Set<string> {
   return displayedKeys;
 }
 
-function handleDecodedFrame(
-  session: VariableSession,
-  message: {
-    requestId?: number;
-    variableId: number;
-    frameOffset: number;
-    decodeMs: number;
-    /** Absent when the whole plane is valid. */
-    tiles?: TileRect[];
-    buffer: ArrayBuffer;
-  },
-): void {
-  if (typeof message.requestId === "number") inflight.delete(message.requestId);
-  // The message names a variable of *its own* file; the session it arrived
-  // on is what makes that a key.
-  const variable = session.variables.find((item) => item.numericId === message.variableId);
-  if (!variable) return;
-  const key = cacheKey(session, variable, message.frameOffset);
-  const plane = new Uint8Array(message.buffer);
-  planeCache.store(key, { plane, decodeMs: message.decodeMs, tiles: message.tiles ?? null, session });
+/** A landed plane's readers that keep a copy or a cell of it, before
+ * eviction can recycle it back into the worker. */
+function planeArrived(session: VariableSession, variable: BundleVariable, plane: Uint8Array, message: DecodedFrameMessage): void {
   if (reliefControl.relief?.session === session && !message.tiles) acceptReliefPlane(session, plane);
   acceptColumnPlane(session, message.frameOffset, plane);
-  lastDecodeMs = message.decodeMs;
-  recordDecodeEvent(plane.byteLength, message.decodeMs);
-  // The probe reads its cell here, before the eviction below can recycle this
-  // plane back into the worker: one byte is kept, never the plane.
+  // The probe reads its cell here: one byte is kept, never the plane.
   if (probePanelControl.probe && probePanelControl.probe.sample(session.metadata, probeKey(session, variable), message.frameOffset, plane)) {
     scheduleProbeRender();
   }
-  // Evict by byte budget; the planes on screen are spared.
-  planeCache.evict(key);
-  updateCacheReadout();
+}
 
-  if (queuedRequest) {
-    const queued = queuedRequest;
-    queuedRequest = null;
-    const queuedKey = cacheKey(queued.session, queued.variable, queued.hour);
-    if (queuedKey !== key && !planeCache.has(queuedKey)) {
-      requestDecode(queued.session, queued.variable, queued.hour);
-    }
-  }
+/** What a landed plane puts on screen. */
+function frameLanded(key: string, frameOffset: number, wanted: boolean): void {
   // Display only the newest requested target; stale decodes stay cached.
-  if (desiredKey === key && activeVariable) {
+  if (wanted && activeVariable) {
     // A total's missing plane is another frame of the window than the one
     // asked for.
     const index =
-      accumulationOn() && requestedFrameIndex !== null ? requestedFrameIndex : frameIndexForOffset(message.frameOffset);
+      accumulationOn() && requestedFrameIndex !== null ? requestedFrameIndex : frameIndexForOffset(frameOffset);
     if (index < 0) return;
     const shown = trySelectFrame(index);
     // A stalled playhead resumes here, off the decode completion, so restart
@@ -4717,7 +4625,7 @@ function initializeChannel(
         }
         case "error": {
           const text = String(message.message ?? t("decodeFailed"));
-          if (typeof message.requestId === "number") inflight.delete(message.requestId);
+          if (typeof message.requestId === "number") decodeQueue.settle(message.requestId);
           else reject(new Error(text));
           break;
         }
@@ -4743,7 +4651,7 @@ function bindChannel(session: VariableSession, sequence: number): void {
         handleStreamMessage(message as StreamMessage);
         break;
       case "frame":
-        handleDecodedFrame(session, message as unknown as Parameters<typeof handleDecodedFrame>[1]);
+        decodeQueue.handleFrame(session, message as unknown as DecodedFrameMessage);
         break;
       case "series":
         if (acceptFireWindSeries(session, message as unknown as Parameters<typeof acceptFireWindSeries>[1])) break;
@@ -4751,7 +4659,7 @@ function bindChannel(session: VariableSession, sequence: number): void {
         break;
       case "error": {
         const text = String(message.message ?? t("decodeFailed"));
-        if (typeof message.requestId === "number") inflight.delete(message.requestId);
+        decodeQueue.settle(message.requestId);
         showError(t("frameDecodeFailed", { message: text }));
         break;
       }
@@ -4905,10 +4813,10 @@ const marksControl = createMarks({
   },
   planeCache: planeCache.frames,
   get nextRequestId() {
-    return nextRequestId;
+    return decodeQueue.nextRequestId;
   },
   set nextRequestId(value) {
-    nextRequestId = value;
+    decodeQueue.nextRequestId = value;
   },
   view,
   refreshParticleInk,
@@ -4920,7 +4828,7 @@ const marksControl = createMarks({
   setProbe,
   soundingSection,
   ensureWindGrid,
-  requestDecode,
+  requestDecode: decodeQueue.request,
   syncRailDensity,
   syncRail,
   syncCaseCaption,
@@ -5506,7 +5414,7 @@ const reliefControl = createRelief({
   sessions: sessionRegistry.sessions,
   frameLeadSeconds,
   terrainColumnLevels,
-  requestDecode,
+  requestDecode: decodeQueue.request,
   loadVariable: sessionRegistry.load,
 });
 const { syncLapse, requestColumnFrame, acceptReliefPlane, acceptColumnPlane } = reliefControl;
@@ -6346,7 +6254,7 @@ const derivedControl = createDerived({
   ensureWindGrid,
   refreshViewportTiles,
   sendPrefetchWindow: planeCache.sendPrefetchWindow,
-  requestDecode,
+  requestDecode: decodeQueue.request,
   syncRailDensity,
   syncRail,
   syncUrl,
@@ -6441,17 +6349,13 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   stopPlayback();
   ready = false;
   switchingVariable = false;
-  desiredKey = null;
-  queuedRequest = null;
-  inflight.clear();
+  decodeQueue.reset();
   planeCache.reset();
   vectorPlanes.clear();
   probePanelControl.probe?.clear();
   probeSeriesRequests.clear();
   probeCorners.clear();
   scheduleProbeRender();
-  lastDecodeMs = null;
-  decodeEvents.length = 0;
   sessionRegistry.endRun();
   manifest = null;
   manifestUrl = null;
