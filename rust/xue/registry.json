@@ -2047,6 +2047,243 @@
         "gdal": []
       }
     },
+    "ptypeec": {
+      "label": "Precipitation type",
+      "unit": "1",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 19,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 12,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 12,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 12,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        12.0
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "code-table",
+        "table": "4.201"
+      },
+      "match": {
+        "gribElement": "PTYPE",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "ptype",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "surface",
+            "elements": [
+              "PTYPE"
+            ]
+          }
+        ]
+      }
+    },
+    "fzlvl": {
+      "label": "Height of the 0 °C isotherm",
+      "unit": "m",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 3,
+        "parameterNumber": 5,
+        "typeOfFirstFixedSurface": 4,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        6350.0
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "gpm",
+          "m"
+        ]
+      },
+      "match": {
+        "gribElement": "HGT",
+        "indexField": ":HGT:0C isotherm:",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "gpm",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "phrase",
+            "element": "HGT",
+            "phrases": [
+              "0deg"
+            ]
+          }
+        ]
+      }
+    },
+    "cpofp": {
+      "label": "Percent of frozen precipitation",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 39,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        100.0
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "CPOFP",
+        "indexField": ":CPOFP:surface:",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "surface",
+            "elements": [
+              "CPOFP"
+            ]
+          }
+        ]
+      }
+    },
     "vis": {
       "label": "Visibility",
       "unit": "km",
@@ -18531,6 +18768,8 @@
         "cfrzr",
         "cicep",
         "csnow",
+        "cpofp",
+        "fzlvl",
         "vvel850",
         "vvel700",
         "vvel500",
@@ -18591,6 +18830,8 @@
         "tmp2m",
         "prate",
         "ptype",
+        "cpofp",
+        "fzlvl",
         "prmsl",
         "hgt1000",
         "hgt925",
@@ -18788,6 +19029,7 @@
         "tcdc",
         "cape",
         "dpt2m",
+        "ptypeec",
         "vvel850",
         "vvel700",
         "vvel500",
@@ -18845,6 +19087,7 @@
       "bundleScalarIds": [
         "tmp2m",
         "prate",
+        "ptypeec",
         "prmsl",
         "hgt1000",
         "hgt925",
@@ -19022,6 +19265,7 @@
         "tcdc",
         "cape",
         "dpt2m",
+        "ptypeec",
         "vvel850",
         "vvel700",
         "vvel500",
@@ -19079,6 +19323,7 @@
       "bundleScalarIds": [
         "tmp2m",
         "prate",
+        "ptypeec",
         "prmsl",
         "hgt1000",
         "hgt925",
@@ -19583,6 +19828,8 @@
         "cape",
         "vis",
         "dpt2m",
+        "cpofp",
+        "fzlvl",
         "cref",
         "orog"
       ],
@@ -19617,6 +19864,8 @@
         "cape",
         "vis",
         "dpt2m",
+        "cpofp",
+        "fzlvl",
         "cref",
         "orog"
       ],

@@ -449,6 +449,10 @@ export const en = {
    * carried by the accessible label and a visually hidden word. */
   particlesToggle: "Particles",
   particlesToggleAria: "Toggle wind particle animation",
+  phaseToggle: "Precipitation phase and 0 °C line",
+  phaseToggleAria: "Toggle precipitation phase and the 0 °C line",
+  glyphPhase: "P",
+  varPhase: "RAIN/SNOW",
 
   dataInterrupted: "Data loading interrupted",
   errorHint: "{message}. Make sure make mvp has been run and the page is served via make serve.",
@@ -505,6 +509,11 @@ export const en = {
   legendPtypeFreezingRain: "Freezing rain",
   legendPtypeSnow: "Snow",
   legendPtypeIcePellets: "Ice pellets",
+  legendPtypeWetSnow: "Wet snow",
+  legendPtypeFreezingDrizzle: "Freezing drizzle",
+  legendPhaseMix: "Sleet / rain to snow",
+  legendPhaseFrostLine: "Freezing line (0 °C)",
+  legendPhaseFreezingZone: "Freezing rain zone",
   /** The EFAS return-period classes, each the flood level a river cell's
    * discharge has reached; the years stay numerals. */
   legendDisrpBelow: "Below 1.5-year level",
@@ -556,6 +565,8 @@ export const en = {
   varLabelPwat: "Precipitable water",
   varLabelHpbl: "Planetary boundary layer height",
   varLabelPtype: "Precipitation type",
+  varLabelCpofp: "Percent of frozen precipitation",
+  varLabelFzlvl: "Height of the 0 °C level",
   // The ocean set. The skin temperature is one field that is the SST over
   // water and the ground's skin over land; the label says both, since the
   // tile reads "SST".

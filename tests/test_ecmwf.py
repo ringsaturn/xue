@@ -73,7 +73,7 @@ class SourceRegistryTests(unittest.TestCase):
         for bundle_id in ("lcdc", "mcdc", "hcdc", "vis", "icec", "aptmp2m"):
             self.assertIn(bundle_id, gfs)
             self.assertNotIn(bundle_id, ecmwf)
-        self.assertEqual(len(ecmwf), 62)
+        self.assertEqual(len(ecmwf), 63)
 
     def test_every_added_input_names_its_ecmwf_record(self) -> None:
         for variable_id in ECMWF.input_variable_ids:
@@ -151,7 +151,7 @@ class FetchTests(unittest.TestCase):
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
         optional = ECMWF.optional_at_analysis + ("orog",)
-        for path, expected in zip(FIXTURE_FRAMES, (66, 66)):
+        for path, expected in zip(FIXTURE_FRAMES, (67, 67)):
             frames = grib2.inspect_grib_fast(path, ECMWF.input_variable_ids, optional_ids=optional)
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in ECMWF.input_variable_ids if variable_id in frames]

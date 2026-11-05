@@ -595,6 +595,50 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["preciptype", "precipitationtype"],
     showcaseCode: "PTYPE",
   }),
+  // ECMWF's precipitation type as published: the same chart as NCEP's, read by
+  // the same parameter block, on a longer book.
+  surface({
+    id: "ptypeec",
+    chart: "ptype",
+    group: "moisture",
+    code: "PTYPE SFC",
+    title: ["Precipitation", "Type"],
+    bufferTitle: "Precipitation buffer",
+    labelKey: "varLabelPtype",
+    legendKey: ptypeKey(),
+    ground: "slate",
+    urlName: "ptypeec",
+    urlAliases: [],
+    showcaseCode: "PTYPE",
+  }),
+  // The height of the 0 °C isotherm above sea level.
+  surface({
+    id: "fzlvl",
+    chart: "fzlvl",
+    group: "moisture",
+    code: "HGT 0C",
+    title: ["Freezing Level", "Height"],
+    bufferTitle: "Freezing level buffer",
+    labelKey: "varLabelFzlvl",
+    ground: "slate",
+    urlName: "fzlvl",
+    urlAliases: ["freezinglevel", "0c"],
+    showcaseCode: "0C HGT",
+  }),
+  // The model's percent of the precipitation falling frozen.
+  surface({
+    id: "cpofp",
+    chart: "cpofp",
+    group: "moisture",
+    code: "CPOFP SFC",
+    title: ["Frozen Precipitation", "Percent"],
+    bufferTitle: "Precipitation buffer",
+    labelKey: "varLabelCpofp",
+    ground: "slate",
+    urlName: "cpofp",
+    urlAliases: ["frozenpercent"],
+    showcaseCode: "CPOFP",
+  }),
   // Soil, the two quantities side by side. The temperature is a coat like
   // the air's, on the 2 m ramp; the moisture a wash like the humidity's,
   // on the slate.

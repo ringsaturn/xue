@@ -5,7 +5,7 @@ export const REGISTRY = {
   "isobaricLevels": [1000, 925, 850, 700, 500, 300, 250, 200],
   "catLevels": [300, 250, 200],
   "families": {
-    "surface": ["gust", "tcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc", "pwat", "hpbl", "ptype"],
+    "surface": ["gust", "tcdc", "cape", "cin", "vis", "dpt2m", "aptmp2m", "lcdc", "mcdc", "hcdc", "pwat", "hpbl", "ptype", "cpofp", "ptypeec", "fzlvl"],
     "ocean": ["tmpsfc", "icec", "icetk", "htsgw", "perpw", "dirpw", "wvhgt", "wvper", "wvdir", "swhgt", "swper", "swdir"],
     "soil": ["tsoil1", "tsoil2", "tsoil3", "tsoil4", "soilw1", "soilw2", "soilw3", "soilw4"],
     "aerosol": ["aod", "aoddust", "aodsalt", "aodsulf", "aodorg", "aodbc", "pm25", "pm10", "pm10dust"],
@@ -43,6 +43,9 @@ export const REGISTRY = {
     "hpbl": {"unit": "m", "parameter": {"discipline": 0, "parameterCategory": 3, "parameterNumber": 196, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 20.0, "minimumCode": 0, "maximumCode": 254, "nodataCode": 255}},
     "orog": {"unit": "m", "parameter": {"discipline": 0, "parameterCategory": 3, "parameterNumber": 5, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": -430.0, "scale": 37.0, "minimumCode": 0, "maximumCode": 254, "nodataCode": 255}},
     "ptype": {"unit": "1", "parameter": {"discipline": 0, "parameterCategory": 1, "parameterNumber": 19, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 1.0, "minimumCode": 0, "maximumCode": 8, "nodataCode": 255}},
+    "ptypeec": {"unit": "1", "parameter": {"discipline": 0, "parameterCategory": 1, "parameterNumber": 19, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 1.0, "minimumCode": 0, "maximumCode": 12, "nodataCode": 255}},
+    "fzlvl": {"unit": "m", "parameter": {"discipline": 0, "parameterCategory": 3, "parameterNumber": 5, "typeOfFirstFixedSurface": 4, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 25.0, "minimumCode": 0, "maximumCode": 254, "nodataCode": 255}},
+    "cpofp": {"unit": "%", "parameter": {"discipline": 0, "parameterCategory": 1, "parameterNumber": 39, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 1.0, "minimumCode": 0, "maximumCode": 100, "nodataCode": 255}},
     "vis": {"unit": "km", "parameter": {"discipline": 0, "parameterCategory": 19, "parameterNumber": 0, "typeOfFirstFixedSurface": 1, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 0}, "quality": {"type": "linear", "offset": 0.0, "scale": 0.1, "minimumCode": 0, "maximumCode": 254, "nodataCode": 255}},
     "dpt2m": {"unit": "°C", "parameter": {"discipline": 0, "parameterCategory": 0, "parameterNumber": 6, "typeOfFirstFixedSurface": 103, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 2}, "quality": {"type": "linear", "offset": -70.0, "scale": 0.5, "minimumCode": 0, "maximumCode": 220, "nodataCode": 255}},
     "aptmp2m": {"unit": "°C", "parameter": {"discipline": 0, "parameterCategory": 0, "parameterNumber": 21, "typeOfFirstFixedSurface": 103, "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 2}, "quality": {"type": "linear", "offset": -90.0, "scale": 1.0, "minimumCode": 0, "maximumCode": 150, "nodataCode": 255}},

@@ -440,6 +440,29 @@ const PTYPE_STOPS: Stop[] = [
   ...PTYPE_CLASSES.map(({ code, rgb }) => [code, rgb[0], rgb[1], rgb[2], 255] as Stop),
 ];
 
+// The percent of the precipitation falling frozen: nothing frozen is no paint,
+// then the mix's pink into the snow's blue, the colours the phase chart gives
+// the same air (`PHASE_STOPS`).
+const FROZEN_PERCENT_STOPS: Stop[] = [
+  [0, 250, 176, 226, 0],
+  [10, 250, 176, 226, 150],
+  [50, 226, 84, 184, 235],
+  [90, 110, 110, 240, 245],
+  [100, 86, 92, 232, 255],
+];
+
+// The 0 °C isotherm's height, metres above sea level: ground-hugging cold in the
+// blues, then through the greens of the mid-latitudes to the warm tropics.
+const FREEZING_LEVEL_STOPS: Stop[] = [
+  [0, 58, 80, 170, 0],
+  [100, 58, 80, 170, 150],
+  [1000, 70, 150, 210, 200],
+  [2500, 96, 200, 170, 215],
+  [4000, 225, 205, 100, 225],
+  [5000, 240, 130, 70, 235],
+  [6000, 190, 50, 80, 245],
+];
+
 // River discharge, m³/s, on a logarithmic ramp: a stop per half decade,
 // so the linear interpolation between stops reads as even steps of the
 // logarithm — a light blue for a brook through blue for a river to the
@@ -1066,6 +1089,8 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   // Precipitation type is categorical: the palette steps on its class codes
   // and its legend is a swatch key (`levels.ts::PTYPE_CLASSES`).
   if (family === "ptype") return PTYPE_STOPS;
+  if (family === "cpofp") return FROZEN_PERCENT_STOPS;
+  if (family === "fzlvl") return FREEZING_LEVEL_STOPS;
   if (family === "vis") return VISIBILITY_STOPS;
   if (family === "dpt2m") return DEW_POINT_STOPS;
   // The apparent temperature is a temperature: the same ramp, so 30 °C
@@ -1154,4 +1179,53 @@ export function buildPalette(
     palette.set(color, code * 4);
   }
   return palette;
+}
+
+// The ramps of the precipitation by phase (`precipphase.ts`). Rain is the
+// ordinary ramp, so a chart with no cold air in it is the chart it always was.
+// Each of the others keeps to one hue that the rain ramp only reaches at rates
+// frozen precipitation never falls at, deepening with the rate. A frozen rate
+// is small (a heavy snowfall is a few mm/h of water), so these turn opaque
+// sooner than the rain does and spend their range under 20 mm/h.
+function frozenRamp(pale: readonly [number, number, number], full: readonly [number, number, number], deep: readonly [number, number, number]): Stop[] {
+  return [
+    [0, pale[0], pale[1], pale[2], 0],
+    [0.05, pale[0], pale[1], pale[2], 110],
+    [0.5, pale[0], pale[1], pale[2], 215],
+    [2, full[0], full[1], full[2], 240],
+    [20, deep[0], deep[1], deep[2], 255],
+    [128, deep[0], deep[1], deep[2], 255],
+  ];
+}
+
+const PHASE_STOPS: readonly Stop[][] = [
+  PRECIPITATION_STOPS,
+  frozenRamp([168, 182, 255], [86, 92, 232], [34, 22, 138]), // snow
+  frozenRamp([250, 176, 226], [226, 84, 184], [136, 22, 116]), // sleet and rain to snow
+  frozenRamp([255, 150, 122], [226, 44, 44], [124, 0, 26]), // freezing rain
+  frozenRamp([222, 186, 130], [166, 108, 46], [84, 48, 18]), // ice pellets
+];
+
+/** The phase palette: 256 x one row per class, in `precipphase.ts`'s order,
+ * each row indexed by the precipitation's code like the ordinary palette. */
+export function buildPhasePalette(variable: BundleVariable): Uint8Array {
+  const palette = new Uint8Array(256 * PHASE_STOPS.length * 4);
+  for (const [row, stops] of PHASE_STOPS.entries()) {
+    for (let code = 0; code < 256; code += 1) {
+      const value = decodeValue(variable, code);
+      if (value === null || !(value > 0)) continue;
+      palette.set(interpolate(stops, value), (row * 256 + code) * 4);
+    }
+  }
+  return palette;
+}
+
+/** One phase's ramp as a CSS gradient, light rates to the left, for its key. */
+export function phaseLegendGradient(row: number): string {
+  const rates = [0.1, 0.5, 2, 5, 10, 20];
+  const colors = rates.map((rate) => {
+    const [r, g, b, a] = interpolate(PHASE_STOPS[row]!, rate);
+    return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+  });
+  return `linear-gradient(to right, ${colors.join(", ")})`;
 }
