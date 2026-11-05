@@ -27,7 +27,7 @@ const SCORE_SCHEMA_VERSION = 1;
 /** An ATCF id, or a history id (`WP-1951123N10140-1951`, `docs/tc.md` §8.2)
  * for a storm that never had a number: both open on the basin and end on the
  * season. */
-const STORM_ID = /^[A-Z]{2}(\d{6}|-\d{7}[NS]\d{5}-\d{4})$/;
+const STORM_ID = /^[A-Z]{2}(\d{6}|-(\d{7}[NS]\d{5}|[A-Z]+)-\d{4})$/;
 
 export interface FileRef {
   path: string;
@@ -116,6 +116,15 @@ export interface BestRecord {
   sid: string | null;
   atcf: string[];
   best: Record<string, TcTrack>;
+  /** A reconstructed storm's sources; no other storm has any. */
+  provenance?: ProvenanceSource[];
+}
+
+export interface ProvenanceSource {
+  publisher: string;
+  title: string;
+  url: string;
+  use: "position" | "pressure" | "check";
 }
 
 /** One source's verified cases against one truth: a column per field, a
@@ -300,6 +309,7 @@ export function validateBest(input: unknown): BestRecord {
     sid: input.sid,
     atcf: input.atcf,
     best: input.best as unknown as Record<string, TcTrack>,
+    provenance: input.provenance ?? [],
   };
 }
 
@@ -471,11 +481,12 @@ function isoHour(value: string | number): string {
  * ascending. */
 export function storyTimes(records: readonly ArchiveRecord[], best: BestRecord | null): string[] {
   const times = new Set(records.map((record) => isoHour(record.forecast.base)));
-  for (const track of Object.values(best?.best ?? {}))
-    for (const point of track.points) {
-      const at = Date.parse(point.time);
-      if (at % (6 * 3600 * 1000) === 0) times.add(isoHour(at));
-    }
+  for (const track of Object.values(best?.best ?? {})) {
+    const at = track.points.map((point) => Date.parse(point.time));
+    const synoptic = at.filter((time) => time % (6 * 3600 * 1000) === 0);
+    // A reconstructed track has its sources' times, none of them synoptic.
+    for (const time of synoptic.length > 0 ? synoptic : at) times.add(isoHour(time));
+  }
   return [...times].sort();
 }
 

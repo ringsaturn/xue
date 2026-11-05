@@ -24,9 +24,9 @@
     },
     "AtcfId": {"description": "An ATCF id: basin, number and season (WP302026).", "type": "string", "pattern": "^[A-Z]{2}\\d{6}$"},
     "ArchiveStormId": {
-      "description": "An ATCF id, or a history id <basin>-<IBTrACS SID>-<season> (SH-1951123S10140-1952) for a storm that never had a number (docs/tc.md section 8.2).",
+      "description": "An ATCF id, or a history id for a storm that never had a number (docs/tc.md section 8.2): <basin>-<IBTrACS SID>-<season> (SH-1951123S10140-1952), or <basin>-<NAME>-<season> (WP-COBRA-1944) for one IBTrACS does not hold.",
       "type": "string",
-      "pattern": "^[A-Z]{2}(\\d{6}|-\\d{7}[NS]\\d{5}-\\d{4})$"
+      "pattern": "^[A-Z]{2}(\\d{6}|-(\\d{7}[NS]\\d{5}|[A-Z]+)-\\d{4})$"
     },
     "Basin": {"description": "The ATCF basin.", "type": "string", "pattern": "^[A-Z]{2}$"},
     "CatalogMonth": {

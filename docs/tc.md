@@ -363,6 +363,16 @@ archive keeps them as IBTrACS has them. The history page says both on a season
 before 1980, the start of what IBTrACS calls the modern era of satellite
 observations.
 
+A storm IBTrACS does not hold can be reconstructed by hand from primary sources
+and kept in `xuebuild/tc/curated.json`, backfilled as `curated`. Its id is
+`<basin>-<NAME>-<season>` (`WP-COBRA-1944`), its one track has the key and
+source `curated`, and its record adds `provenance`: each source's `publisher`,
+`title`, `url` and `use` (`position`, `pressure` or `check`), shown on the
+history page. Its points carry their sources' own times, without interpolation,
+and what the sources do not measure stays `null`. Typhoon Cobra has seven
+positions, from the Weather Bureau's daily charts and the fleet's reports, one
+measured pressure and no wind.
+
 ### 8.3 Indexes
 
 A month's `index.json`:

@@ -75,9 +75,14 @@ _ORIGIN_RANK = {"live": 0}
 only fills the gaps around it."""
 
 MONTH = re.compile(r"^(\d{4})-(\d{2})$")
-HISTORY_ID = re.compile(r"^[A-Z]{2}-\d{7}[NS]\d{5}-\d{4}$")
-"""A best-track storm that never had an ATCF number: basin, IBTrACS ``SID``,
-season. Its two ends read as an ATCF id's do."""
+HISTORY_ID = re.compile(r"^[A-Z]{2}-(\d{7}[NS]\d{5}|[A-Z]+)-\d{4}$")
+"""A best-track storm that never had an ATCF number: basin, IBTrACS ``SID``
+(or the storm's name, for one IBTrACS does not hold), season. Its two ends
+read as an ATCF id's do."""
+
+
+PROVENANCE_USES = frozenset({"position", "pressure", "check"})
+"""What a curated storm took from a source (``docs/tc.md`` §8.2)."""
 
 
 def is_season_storm_id(value: object) -> bool:
@@ -207,6 +212,8 @@ def overview_track(record: dict[str, Any]) -> list[list[int]]:
             for point in record["best"][key]["points"]
             if point["time"][11:13] in ("00", "06", "12", "18") and point["time"][14:16] == "00"
         ]
+        # A curated track has its sources' times, none of them synoptic.
+        points = points or record["best"][key]["points"]
         if points:
             return [[round(point["lon"] * 10), round(point["lat"] * 10), sshs_index(point["vmax"])] for point in points]
     return []
@@ -227,9 +234,14 @@ def best_summary(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def make_best(
-    storm: str, name: str | None, sid: str | None, atcf: list[str], best: dict[str, dict[str, Any]]
+    storm: str,
+    name: str | None,
+    sid: str | None,
+    atcf: list[str],
+    best: dict[str, dict[str, Any]],
+    provenance: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    return {
+    record = {
         "storm": storm,
         "basin": storm[:2],
         "name": name,
@@ -237,6 +249,7 @@ def make_best(
         "atcf": sorted(set(atcf) | ({storm} if ATCF_ID.match(storm) else set())),
         "best": {key: best[key] for key in sorted(best)},
     }
+    return {**record, "provenance": provenance} if provenance else record
 
 
 def validate_best(record: object, label: str) -> None:
@@ -256,6 +269,15 @@ def validate_best(record: object, label: str) -> None:
         if not SOURCE_KEY.match(key):
             raise TcProductError(f"{label}.best has a malformed key {key!r}")
         validate_track(track, f"{label}.best.{key}")
+    provenance = record.get("provenance", [])
+    if not isinstance(provenance, list):
+        raise TcProductError(f"{label}.provenance must be a list")
+    for index, source in enumerate(provenance):
+        where = f"{label}.provenance[{index}]"
+        if not isinstance(source, dict) or not all(isinstance(source.get(k), str) and source[k] for k in ("publisher", "title")):
+            raise TcProductError(f"{where} must name a publisher and a title")
+        if not str(source.get("url")).startswith("https://") or source.get("use") not in PROVENANCE_USES:
+            raise TcProductError(f"{where} must have an https url and a use out of {sorted(PROVENANCE_USES)}")
 
 
 # --- the local tree ----------------------------------------------------
@@ -411,6 +433,7 @@ class Archive:
             record["sid"] or current["sid"],
             current["atcf"] + record["atcf"],
             best,
+            record.get("provenance") or current.get("provenance"),
         )
 
     # writing

@@ -6,7 +6,7 @@ import { field, isInteger, isList, isObject, isOneOf, isString } from "../check"
 const PATTERN_1 = new RegExp("^[0-9a-f]{8}$", "u");
 const PATTERN_2 = new RegExp("^\\d{4}-(0[1-9]|1[0-2])$", "u");
 const PATTERN_3 = new RegExp("^[A-Z]{2}\\d{6}$", "u");
-const PATTERN_4 = new RegExp("^[A-Z]{2}(\\d{6}|-\\d{7}[NS]\\d{5}-\\d{4})$", "u");
+const PATTERN_4 = new RegExp("^[A-Z]{2}(\\d{6}|-(\\d{7}[NS]\\d{5}|[A-Z]+)-\\d{4})$", "u");
 const PATTERN_5 = new RegExp("^[A-Z]{2}$", "u");
 const PATTERN_6 = new RegExp("^\\d{4}/\\d{2}/index\\.json$", "u");
 const PATTERN_7 = new RegExp("^\\d{4}/index\\.json$", "u");
@@ -47,7 +47,7 @@ export function checkAtcfId(v: unknown, at: string): asserts v is AtcfId {
   isString(v, at, PATTERN_3);
 }
 
-/** An ATCF id, or a history id <basin>-<IBTrACS SID>-<season> (SH-1951123S10140-1952) for a storm that never had a number (docs/tc.md section 8.2). */
+/** An ATCF id, or a history id for a storm that never had a number (docs/tc.md section 8.2): <basin>-<IBTrACS SID>-<season> (SH-1951123S10140-1952), or <basin>-<NAME>-<season> (WP-COBRA-1944) for one IBTrACS does not hold. */
 export type ArchiveStormId = string;
 
 export function checkArchiveStormId(v: unknown, at: string): asserts v is ArchiveStormId {

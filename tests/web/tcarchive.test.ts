@@ -160,6 +160,21 @@ describe("tc archive documents", () => {
     expect(seasonQuality(1949, storms)?.duplicates).toBe(true);
   });
 
+  it("reads a reconstructed storm", () => {
+    expect(isArchiveStormId("WP-COBRA-1944")).toBe(true);
+    expect(isArchiveStormId("WP-cobra-1944")).toBe(false);
+    expect(stormCode("WP-COBRA-1944")).toBe("WP");
+    expect(seasonOfStorm("WP-COBRA-1944")).toBe(1944);
+    const point = (time: string) => ({ time, lat: 15, lon: 128 });
+    const best = { storm: "WP-COBRA-1944", basin: "WP", name: "COBRA", sid: null, atcf: [], best: { curated: { source: "curated", provisional: false, points: [point("1944-12-18T04:30:00Z"), point("1944-12-18T12:30:00Z")] } } };
+    expect(validateBest(best).provenance).toEqual([]);
+    // Its own times, none synoptic: without them nothing could be drawn.
+    expect(storyTimes([], validateBest(best))).toEqual(["1944-12-18T04:30:00Z", "1944-12-18T12:30:00Z"]);
+    const source = { publisher: "NOAA", title: "Maps", url: "https://example.com", use: "position" };
+    expect(validateBest({ ...best, provenance: [source] }).provenance).toEqual([source]);
+    expect(() => validateBest({ ...best, provenance: [{ ...source, url: "http://example.com" }] })).toThrow();
+  });
+
   it("names storms", () => {
     expect(isArchiveStormId("WP062023")).toBe(true);
     expect(isArchiveStormId("wp062023")).toBe(false);

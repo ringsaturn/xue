@@ -1,0 +1,133 @@
+[
+ {
+  "storm": "WP-COBRA-1944",
+  "basin": "WP",
+  "name": "COBRA",
+  "sid": null,
+  "atcf": [],
+  "best": {
+   "curated": {
+    "source": "curated",
+    "provisional": false,
+    "points": [
+     {
+      "time": "1944-12-14T12:30:00Z",
+      "lat": 7.89,
+      "lon": 144.99,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-15T12:30:00Z",
+      "lat": 8.98,
+      "lon": 141.21,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-16T12:30:00Z",
+      "lat": 10.83,
+      "lon": 135.4,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-17T12:30:00Z",
+      "lat": 14.35,
+      "lon": 131.21,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-18T04:30:00Z",
+      "lat": 14.9,
+      "lon": 128.2,
+      "vmax": null,
+      "pmin": 934.6,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-18T12:30:00Z",
+      "lat": 16.83,
+      "lon": 127.31,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1944-12-19T12:30:00Z",
+      "lat": 19.09,
+      "lon": 125.33,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     }
+    ]
+   }
+  },
+  "provenance": [
+   {
+    "publisher": "U.S. Weather Bureau, via NOAA Central Library",
+    "title": "Historical daily synoptic weather maps, Northern Hemisphere sea level, 14–19 December 1944",
+    "url": "https://web.archive.org/web/2016/http://docs.lib.noaa.gov/rescue/swm/1944/",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Pacific Fleet report for December 1944, Annex B: ships' action reports on the typhoon",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-18-december-1944/extracts-relating-to-the-typhoon-from-commander-in-chief-pacific-fleet-report.html",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "USS Benham (DD 796) action report: 27.60 inHg, checked, as the centre passed",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-18-december-1944/extracts-relating-to-the-typhoon-from-commander-in-chief-pacific-fleet-report.html",
+    "use": "pressure"
+   },
+   {
+    "publisher": "NOAA NCEI",
+    "title": "ICOADS Release 3.1, December 1944 marine reports",
+    "url": "https://www.ncei.noaa.gov/data/international-comprehensive-ocean-atmosphere/v3/archive/final-untrim/",
+    "use": "check"
+   },
+   {
+    "publisher": "Teleti, Hawkins and Wood, University of Reading",
+    "title": "Old Weather WW2: US Navy logbooks of USS Aylwin, USS Monterey and USS Santa Fe (CC BY 4.0)",
+    "url": "https://doi.org/10.5281/zenodo.7781108",
+    "use": "check"
+   }
+  ]
+ }
+]

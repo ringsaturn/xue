@@ -234,7 +234,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - https://xue.ringsaturn.me/typhoon.html — past tropical cyclones on a map,
   picked by season, basin and storm in the panel beside it (`?storm=<ATCF
   id>`, e.g. `WP062023`, or a storm with no number's history id, e.g.
-  `WP-1951123N10140-1951`; `?issue=YYYYMMDDHH` picks the issue time drawn;
+  `WP-1951123N10140-1951` (`WP-COBRA-1944` for a storm reconstructed from primary sources, whose record lists them under `provenance`); `?issue=YYYYMMDDHH` picks the issue time drawn;
   without a storm, the latest of the season running now): the centres' best
   tracks, every archived forecast started at that time (official,
   deterministic, ensemble), and the storm's track errors in km by source and

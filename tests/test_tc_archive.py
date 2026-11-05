@@ -20,10 +20,12 @@ from xuebuild.tc.archive import (
     rekey,
     start_position,
     choose_track,
+    is_season_storm_id,
     make_best,
     make_record,
     merge_records,
     month_directory,
+    overview_track,
     record_key,
     validate_catalog,
     validate_month_index,
@@ -31,7 +33,7 @@ from xuebuild.tc.archive import (
     validate_record,
     validate_season_index,
 )
-from xuebuild.tc.backfill import deck_records, ecmwf_records, released
+from xuebuild.tc.backfill import backfill, deck_records, ecmwf_records, released
 from xuebuild.tc.build import ecmwf_key
 from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, ibtracs_best, storm_records
 from xuebuild.tc.identity import dominant_cluster
@@ -445,6 +447,40 @@ IBTRACS_UNITS = " ,Year, , , , ,deg,deg,kts,mb, , ,deg,deg,kts,mb, "
 
 def _ibtracs(*rows: str) -> str:
     return "\n".join([IBTRACS_HEADER, IBTRACS_UNITS, *rows]) + "\n"
+
+
+class CuratedTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.archive = Archive.open(Path(self.directory.name))
+
+    def test_a_curated_storm_keeps_its_sources_through_a_merge(self) -> None:
+        self.assertEqual(backfill(self.archive, ["curated"], "1944-01", "1944-12"), [{"source": "curated", "storms": 1}])
+        self.assertEqual(backfill(self.archive, ["curated"], "1950-01", "1950-12"), [{"source": "curated", "storms": 0}])
+        record = self.archive.season(1944)["WP-COBRA-1944"]
+        again = make_best("WP-COBRA-1944", None, None, [], {"usa": record["best"]["curated"]})
+        self.archive.add_best(again)
+        merged = self.archive.season(1944)["WP-COBRA-1944"]
+        self.assertEqual(sorted(merged["best"]), ["curated", "usa"])
+        self.assertEqual(merged["provenance"], record["provenance"])
+        self.assertEqual({source["use"] for source in merged["provenance"]}, {"position", "pressure", "check"})
+
+    def test_its_track_reaches_the_overview_though_no_time_is_synoptic(self) -> None:
+        backfill(self.archive, ["curated"], "1944-01", "1944-12")
+        self.assertEqual(len(overview_track(self.archive.season(1944)["WP-COBRA-1944"])), 7)
+
+    def test_provenance_is_checked(self) -> None:
+        backfill(self.archive, ["curated"], "1944-01", "1944-12")
+        record = self.archive.season(1944)["WP-COBRA-1944"]
+        for bad in ({"url": "http://example.com"}, {"use": "wind"}, {"title": ""}):
+            with self.assertRaises(TcProductError):
+                validate_best({**record, "provenance": [{**record["provenance"][0], **bad}]}, "best")
+
+    def test_only_a_named_or_sid_history_id_is_admitted(self) -> None:
+        self.assertTrue(is_season_storm_id("WP-COBRA-1944"))
+        self.assertFalse(is_season_storm_id("WP-cobra-1944"))
+        self.assertFalse(is_season_storm_id("WP-COBRA"))
 
 
 class IbtracsHistoryTest(unittest.TestCase):
