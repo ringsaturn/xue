@@ -370,8 +370,8 @@ source `curated`, and its record adds `provenance`: each source's `publisher`,
 `title`, `url` and `use` (`position`, `pressure` or `check`), shown on the
 history page. Its points carry their sources' own times, without interpolation,
 and what the sources do not measure stays `null`. Typhoon Cobra has seven
-positions, from the Weather Bureau's daily charts and the fleet's reports, one
-measured pressure and no wind.
+positions, from the Weather Bureau's daily charts and two ships' war diaries that
+bracket the centre, one measured pressure and no wind.
 
 ### 8.3 Indexes
 
