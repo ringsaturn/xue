@@ -6,6 +6,7 @@ import {
   isArchiveStormId,
   issueTimes,
   seasonHasForecasts,
+  seasonQuality,
   seasonOfStorm,
   sourcesOf,
   stormAt,
@@ -65,6 +66,14 @@ describe("tc archive documents", () => {
     expect(() =>
       validateSeasonIndex({ archiveSchemaVersion: 1, season: 2023, best: { path: "best.jsonl", ...REF }, storms: [{ id: "x-wp-1" }] }),
     ).toThrow(/ATCF/);
+  });
+
+  it("says what an early season's record lacks", () => {
+    const storms = [{ vmax: null }, { vmax: 30 }, { vmax: null }];
+    expect(seasonQuality(1980, storms)).toBeNull();
+    expect(seasonQuality(1979, storms)).toEqual({ count: 3, missing: 2, duplicates: false });
+    expect(seasonQuality(1950, storms)?.duplicates).toBe(false);
+    expect(seasonQuality(1949, storms)?.duplicates).toBe(true);
   });
 
   it("names storms", () => {

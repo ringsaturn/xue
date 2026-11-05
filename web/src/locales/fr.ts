@@ -447,6 +447,8 @@ export const fr: Record<MessageKey, string> = {
   tcHistoryEmpty: "Aucune tempête avec prévisions pour cette saison et ce bassin",
   tcHistoryStormAria: "Ouvrir {name}",
   tcHistorySouthernNote: "Les saisons de l'hémisphère sud vont de juillet à juin et portent l'année où elles finissent : la saison {season} court de {from} à {to}.",
+  tcHistoryEarlyNote: "Avant l'ère moderne des satellites (1980 dans IBTrACS), les trajectoires et les intensités sont moins sûres. Tempêtes sans vitesse du vent cette saison : {missing} sur {count}.",
+  tcHistoryDuplicateNote: "IBTrACS signale que certaines tempêtes d'avant 1950 n'ont pas été correctement appariées : une même tempête peut figurer plusieurs fois et le total est trop élevé.",
   tcPageTitle: "Cyclone tropical passé",
   tcPageMetaDescription: "Un cyclone tropical passé : les trajectoires de référence des centres, chaque prévision archivée pour lui et l'écart de chacune.",
   tcPageLoading: "Chargement de la tempête",

@@ -442,6 +442,8 @@ export const zh: Record<MessageKey, string> = {
   tcHistoryEmpty: "这个季节和海域没有带预报的风暴",
   tcHistoryStormAria: "打开 {name}",
   tcHistorySouthernNote: "南半球的台风季跨年，从 7 月到次年 6 月，按结束的年份命名：{season} 季即 {from} 至 {to}。",
+  tcHistoryEarlyNote: "这一季早于现代卫星时代（IBTrACS 以 1980 年为起点），路径和强度的不确定性更大。本季没有风速记录的风暴：{count} 个中有 {missing} 个。",
+  tcHistoryDuplicateNote: "IBTrACS 提示：1950 年以前有些风暴未能正确匹配，同一个风暴可能出现多次，总数偏高。",
   tcPageTitle: "历史热带气旋",
   tcPageMetaDescription: "一个历史热带气旋：各机构的最佳路径、存档中为它做过的每一次预报，以及每次偏了多远。",
   tcPageLoading: "正在加载风暴",

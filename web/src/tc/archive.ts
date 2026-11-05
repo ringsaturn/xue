@@ -447,6 +447,18 @@ export function seasonHasForecasts(index: Pick<SeasonIndex, "storms">): boolean 
   return index.storms.some((storm) => storm.months.length > 0);
 }
 
+/** What a season's list has to say about its record, or null for a season of
+ * the modern satellite era. IBTrACS names the two years: its `since1980` subset
+ * is "the modern era of satellite observations", and its known issues say
+ * storms before 1950 were not all matched, so one can be counted several times. */
+export function seasonQuality(
+  season: number,
+  storms: readonly Pick<SeasonStorm, "vmax">[],
+): { count: number; missing: number; duplicates: boolean } | null {
+  if (season >= 1980) return null;
+  return { count: storms.length, missing: storms.filter((storm) => storm.vmax === null).length, duplicates: season < 1950 };
+}
+
 /** The distinct times the storm's forecasts start from, ascending. */
 export function issueTimes(records: readonly ArchiveRecord[]): string[] {
   return [...new Set(records.map((record) => record.forecast.base))].sort();

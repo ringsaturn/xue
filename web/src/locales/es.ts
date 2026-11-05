@@ -447,6 +447,8 @@ export const es: Record<MessageKey, string> = {
   tcHistoryEmpty: "No hay tormentas con pronósticos en esta temporada y cuenca",
   tcHistoryStormAria: "Abrir {name}",
   tcHistorySouthernNote: "Las temporadas del hemisferio sur van de julio a junio y llevan el año en que terminan: la temporada {season} va de {from} a {to}.",
+  tcHistoryEarlyNote: "Antes de la era moderna de los satélites (1980 en IBTrACS), las trayectorias y las intensidades son menos seguras. Tormentas sin velocidad del viento esta temporada: {missing} de {count}.",
+  tcHistoryDuplicateNote: "IBTrACS advierte que algunas tormentas anteriores a 1950 no se emparejaron bien: una misma tormenta puede aparecer varias veces y el total resulta alto.",
   tcPageTitle: "Ciclón tropical pasado",
   tcPageMetaDescription: "Un ciclón tropical pasado: las trayectorias finales de los centros, cada pronóstico archivado para él y cuánto se desvió cada uno.",
   tcPageLoading: "Cargando tormenta",

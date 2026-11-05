@@ -449,6 +449,8 @@ export const ko: Record<MessageKey, string> = {
   tcHistoryEmpty: "이 시즌과 해역에는 예보가 있는 폭풍이 없습니다",
   tcHistoryStormAria: "{name} 열기",
   tcHistorySouthernNote: "남반구 시즌은 7월부터 이듬해 6월까지이며 끝나는 해로 부릅니다. {season} 시즌은 {from}부터 {to}까지입니다.",
+  tcHistoryEarlyNote: "현대 위성 시대(IBTrACS 기준 1980년부터) 이전 시즌으로, 경로와 강도의 불확실성이 더 큽니다. 풍속 기록이 없는 폭풍: {count}개 중 {missing}개.",
+  tcHistoryDuplicateNote: "IBTrACS 안내: 1950년 이전에는 올바르게 대조되지 않은 폭풍이 있어, 같은 폭풍이 여러 번 나타나 총수가 많아질 수 있습니다.",
   tcPageTitle: "지난 열대저기압",
   tcPageMetaDescription: "지난 열대저기압: 각 기관의 베스트 트랙, 아카이브된 모든 예보, 그리고 각각 얼마나 빗나갔는지.",
   tcPageLoading: "폭풍을 불러오는 중",

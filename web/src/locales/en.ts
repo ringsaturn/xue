@@ -731,6 +731,8 @@ export const en = {
   tcHistoryEmpty: "No storms with forecasts in this season and basin",
   tcHistoryStormAria: "Open {name}",
   tcHistorySouthernNote: "Southern hemisphere seasons run from July to June and are named after the year they end in: the {season} season is {from} to {to}.",
+  tcHistoryEarlyNote: "Before the modern satellite era (1980 in IBTrACS), tracks and intensities are less certain. Storms with no wind speed this season: {missing} of {count}.",
+  tcHistoryDuplicateNote: "IBTrACS warns that some storms before 1950 were not matched, so one storm can appear several times and the count runs high.",
   tcPageTitle: "Past tropical cyclone",
   tcPageMetaDescription: "A past tropical cyclone: the centres' best tracks, every archived forecast made for it, and how far each one missed.",
   tcPageLoading: "Loading storm",

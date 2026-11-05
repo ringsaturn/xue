@@ -444,6 +444,8 @@ export const ja: Record<MessageKey, string> = {
   tcHistoryEmpty: "このシーズンと海域には予報のある嵐がありません",
   tcHistoryStormAria: "{name} を開く",
   tcHistorySouthernNote: "南半球のシーズンは7月から翌年6月までで、終わる年で呼びます。{season}年シーズンは{from}〜{to}です。",
+  tcHistoryEarlyNote: "現代の衛星時代（IBTrACS では 1980 年以降）より前のシーズンで、経路と強度の不確かさが大きくなります。風速の記録がない嵐：{count} 個中 {missing} 個。",
+  tcHistoryDuplicateNote: "IBTrACS の注意事項：1950 年より前は正しく照合されていない嵐があり、同じ嵐が複数回現れて総数が多くなることがあります。",
   tcPageTitle: "過去の熱帯低気圧",
   tcPageMetaDescription: "過去の熱帯低気圧：各機関のベストトラック、アーカイブされたすべての予報、それぞれのずれ。",
   tcPageLoading: "嵐を読み込み中",
