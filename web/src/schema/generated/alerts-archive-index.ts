@@ -49,7 +49,7 @@ export function checkArchiveRow(v: unknown, at: string): asserts v is ArchiveRow
 }
 
 /** alerts/archive/<YYYY>/<MM>/index.json (docs/alerts.md section 12.3): every record's row and byte span in the month's alerts.jsonl. That networks are sorted and unique, that rows are sorted by id and unique, that a row's network is the position of its id's network, that ended and reason are both null or both set, and that the spans tile the file are the readers' own checks. */
-export type AlertsArchiveIndex = { archiveSchemaVersion: 1; product: "alerts"; month: Month; alerts: { path: "alerts.jsonl"; byteLength: ByteLength; crc32: Crc32 }; networks: Network[]; rows: ArchiveRow[] };
+export type AlertsArchiveIndex = { archiveSchemaVersion: 1; product: "alerts"; month: Month; alerts: { path: "alerts.jsonl"; byteLength: ByteLength; crc32: Crc32 }; networks: Network[]; columns?: ["id", "network", "category", "level", "event", "first", "ended", "reason", "offset", "length", ...(unknown)[]]; rows: ArchiveRow[] };
 
 export function checkAlertsArchiveIndex(v: unknown, at: string): asserts v is AlertsArchiveIndex {
   isObject(v, at);
@@ -74,10 +74,34 @@ export function checkAlertsArchiveIndex(v: unknown, at: string): asserts v is Al
     const v20: unknown = v18[i19];
     checkNetwork(v20, at + ".networks[" + i19 + "]");
   }
-  const v21 = field(v, "rows", at);
-  isList(v21, at + ".rows");
-  for (let i22 = 0; i22 < v21.length; i22++) {
-    const v23: unknown = v21[i22];
-    checkArchiveRow(v23, at + ".rows[" + i22 + "]");
+  const v21 = v["columns"];
+  if (v21 !== undefined) {
+    isList(v21, at + ".columns", 10, 10);
+    const v22: unknown = v21[0];
+    isOneOf(v22, at + ".columns[0]", ["id"]);
+    const v23: unknown = v21[1];
+    isOneOf(v23, at + ".columns[1]", ["network"]);
+    const v24: unknown = v21[2];
+    isOneOf(v24, at + ".columns[2]", ["category"]);
+    const v25: unknown = v21[3];
+    isOneOf(v25, at + ".columns[3]", ["level"]);
+    const v26: unknown = v21[4];
+    isOneOf(v26, at + ".columns[4]", ["event"]);
+    const v27: unknown = v21[5];
+    isOneOf(v27, at + ".columns[5]", ["first"]);
+    const v28: unknown = v21[6];
+    isOneOf(v28, at + ".columns[6]", ["ended"]);
+    const v29: unknown = v21[7];
+    isOneOf(v29, at + ".columns[7]", ["reason"]);
+    const v30: unknown = v21[8];
+    isOneOf(v30, at + ".columns[8]", ["offset"]);
+    const v31: unknown = v21[9];
+    isOneOf(v31, at + ".columns[9]", ["length"]);
+  }
+  const v32 = field(v, "rows", at);
+  isList(v32, at + ".rows");
+  for (let i33 = 0; i33 < v32.length; i33++) {
+    const v34: unknown = v32[i33];
+    checkArchiveRow(v34, at + ".rows[" + i33 + "]");
   }
 }

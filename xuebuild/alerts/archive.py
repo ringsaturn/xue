@@ -153,6 +153,8 @@ def validate_month_index(payload: object) -> None:
         or not all(isinstance(network, str) and NETWORK.match(network) for network in networks)
     ):
         raise AlertsProductError("index.networks must be sorted unique network ids")
+    if "columns" in payload and payload["columns"] != list(ROW_FIELDS):
+        raise AlertsProductError(f"index.columns must be {', '.join(ROW_FIELDS)}")
     end = 0
     previous: str | None = None
     for position, row in enumerate(payload.get("rows") if isinstance(payload.get("rows"), list) else [None]):
@@ -398,6 +400,7 @@ def write_month(root: Path, month: str, entries: list[dict[str, Any]]) -> None:
         "month": month,
         "alerts": {"path": ALERTS_FILENAME, "byteLength": offset, "crc32": crc},
         "networks": ordered,
+        "columns": list(ROW_FIELDS),
         "rows": rows,
     }
     validate_month_index(index)

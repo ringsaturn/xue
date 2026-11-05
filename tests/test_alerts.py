@@ -625,6 +625,23 @@ class ArchiveTest(unittest.TestCase):
                 again = archive.archive_round(output, Path(one), SECOND, base_url=None, compact=True)
             self.assertEqual(again["written"], [])  # journaling a round twice changes nothing
 
+    def test_the_index_names_its_columns_and_one_without_them_still_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            self.archived(Path(root))
+            path = Path(root) / archive.month_directory("2026-11") / "index.json"
+            written = path.read_bytes()
+            index = json.loads(written)
+            self.assertEqual(index["columns"], list(archive.ROW_FIELDS))
+            index.pop("columns")
+            archive.validate_month_index(index)  # every month published before the field
+            with self.assertRaisesRegex(AlertsProductError, "index.columns must be"):
+                archive.validate_month_index(index | {"columns": list(reversed(archive.ROW_FIELDS))})
+            path.write_bytes(encode_json(index))
+            scratch, output = built()
+            with scratch:
+                archive.archive_round(output, Path(root), SECOND, base_url=None, compact=True)
+            self.assertEqual(path.read_bytes(), written)  # an old index folds into one that names them
+
     def test_folding_keeps_the_first_round_and_the_last_line(self) -> None:
         line = {"id": "nws:x", "category": "other", "level": 1, "native": {"event": "E"}}
         later = line | {"level": 2}
