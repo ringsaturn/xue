@@ -486,9 +486,6 @@ function zarrPayloadBudgetBytes(): number {
   return (lowMemoryDevice() ? 96 : 192) * MEBIBYTE;
 }
 
-function prefetchConcurrency(): number {
-  return constrainedConnection() ? 1 : 3;
-}
 
 /** The precipitation total on screen (`?accum=`, accumulation.ts): its
  * window, how the session's frames are weighted, and about how many frames
@@ -1486,11 +1483,27 @@ const planeCache = createPlaneCache({
   get playbackFps() {
     return playbackFps;
   },
+  get playing() {
+    return playing;
+  },
   defaultFps: DEFAULT_FPS,
   constrainedConnection,
   lowMemoryDevice,
   totalFrames,
   displayedKeys,
+  frameCount,
+  slotSessions,
+  windowOffset: (session, overlay) => {
+    if (!overlay) return frameOffset;
+    const slot = slotOfSession(session);
+    return slot
+      ? (frame) => slotOffsetForFrame(slot, frame)
+      : (frame) => sessionOffsetForLead(session, frameLeadSeconds(frame));
+  },
+  totalHours: (session, index) => {
+    const shownTotal = accumulationOn(session);
+    return shownTotal ? totalTerms(session, index, shownTotal).map((term) => term.hour) : [];
+  },
 });
 /** Worker-reported decode time of the most recent plane, for the stats panel. */
 let lastDecodeMs: number | null = null;
@@ -1519,8 +1532,6 @@ function decodeRateBytesPerSec(): number {
   }
   return sum / 2;
 }
-/** Last prefetch window sent per session, to skip redundant messages. */
-const lastPrefetchWindow = new Map<number, string>();
 const inflight = new Map<number, string>();
 let nextRequestId = 1;
 let desiredKey: string | null = null;
@@ -2561,7 +2572,7 @@ function refreshViewportTiles(): void {
     session.viewTiles = next;
     changed = true;
     // The window is keyed by its first hour alone, so force the next send.
-    lastPrefetchWindow.delete(session.key);
+    planeCache.forgetSession(session.key);
     if (session.resident && session.residentScope === "viewport") {
       // The view moved, so what it needs is no longer all local.
       session.resident = false;
@@ -2617,7 +2628,6 @@ function sameTier(a: VariantDescriptor | null, b: VariantDescriptor | null): boo
  * worker they belong to is gone. */
 function disposeSession(session: VariableSession): void {
   sessionRegistry.release(session);
-  lastPrefetchWindow.delete(session.key);
   planeCache.dropSession(session);
   for (const [requestId, key] of [...inflight]) {
     if (key.startsWith(`${session.key}:`)) inflight.delete(requestId);
@@ -2743,47 +2753,6 @@ function displayPlane(session: VariableSession, index: number, planes: DecodedFr
   return packed;
 }
 
-/** Tell every session on screen which frames to keep resident (windowed
- * prefetch): the window ahead of the playhead, wrapped at the loop point,
- * and the tiles the view needs of them. The primary gets the connection's
- * concurrency; an overlay one fetch at a time, so it never crowds out the
- * frame that gates playback, and on a constrained connection an overlay
- * only prefetches while playback is stopped. */
-function sendPrefetchWindow(index: number): void {
-  const total = frameCount();
-  for (const session of slotSessions()) {
-    if (!session.streaming || session.resident) continue;
-    const overlay = session !== activeSession;
-    if (overlay && playing && constrainedConnection()) continue;
-    const slot = overlay ? slotOfSession(session) : null;
-    const hours: number[] = [];
-    for (let step = 0; step <= planeCache.prefetchWindowFrames(); step += 1) {
-      const frame = (index + step) % total;
-      const offset = overlay
-        ? slot
-          ? slotOffsetForFrame(slot, frame)
-          : sessionOffsetForLead(session, frameLeadSeconds(frame))
-        : frameOffset(frame);
-      if (offset !== null && !hours.includes(offset)) hours.push(offset);
-    }
-    // A total keeps its window behind the playhead resident too.
-    const shownTotal = overlay ? null : accumulationOn(session);
-    if (shownTotal) {
-      for (const term of totalTerms(session, index, shownTotal)) if (!hours.includes(term.hour)) hours.push(term.hour);
-    }
-    if (hours.length === 0) continue;
-    const key = `${hours[0]}/${hours.length}`;
-    if (lastPrefetchWindow.get(session.key) === key) continue;
-    lastPrefetchWindow.set(session.key, key);
-    session.worker.postMessage({
-      type: "prefetch-window",
-      hours,
-      concurrency: overlay ? 1 : prefetchConcurrency(),
-      tiles: session.viewTiles ?? undefined,
-    });
-  }
-}
-
 /** Show the frame if every needed plane is decoded (one for scalars, the u/v
  * pair for wind); otherwise request the missing decodes. */
 function trySelectFrame(index: number): boolean {
@@ -2801,7 +2770,7 @@ function trySelectFrame(index: number): boolean {
   const hour = frameOffset(index);
   requestedFrameIndex = index;
   updateFrameReadout(index);
-  sendPrefetchWindow(index);
+  planeCache.sendPrefetchWindow(index);
   const total = accumulationOn(session);
   if (total) return trySelectTotal(session, slot, index, total);
   totalShownKeys = [];
@@ -3614,7 +3583,7 @@ function setAccumulation(window: number | null): void {
   syncUrl();
   const session = activeSession;
   if (!session) return;
-  lastPrefetchWindow.delete(session.key);
+  planeCache.forgetSession(session.key);
   updateVariablePresentation(session);
   trySelectFrame(activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value));
   if (probePanelControl.probe) scheduleProbeRender();
@@ -5727,7 +5696,7 @@ function attachMember(slot: RasterSlot, session: VariableSession): void {
   configureSlotLayer(slot, session, true);
   refreshViewportTiles();
   const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
-  sendPrefetchWindow(index);
+  planeCache.sendPrefetchWindow(index);
   if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
   else requestOverlayDecode(slot, index);
   if (probePanelControl.probe) requestProbeSeries(session);
@@ -5947,7 +5916,7 @@ function openPhaseSlot(slot: RasterSlot, id: ForecastBundleId): void {
       configureSlotLayer(slot, session, true);
       refreshViewportTiles();
       const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
-      sendPrefetchWindow(index);
+      planeCache.sendPrefetchWindow(index);
       if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
       else requestOverlayDecode(slot, index);
     })
@@ -6216,7 +6185,7 @@ function attachOverlay(slot: RasterSlot, session: VariableSession): void {
   applyLabelInk();
   refreshViewportTiles();
   const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
-  sendPrefetchWindow(index);
+  planeCache.sendPrefetchWindow(index);
   if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
   else requestOverlayDecode(slot, index);
 }
@@ -6285,7 +6254,7 @@ function attachVolumeOverlay(session: VariableSession): void {
   configureVolumeOverlay(session);
   refreshViewportTiles();
   const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
-  sendPrefetchWindow(index);
+  planeCache.sendPrefetchWindow(index);
   if (activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
   else requestVolumeOverlayDecode(index);
 }
@@ -6376,7 +6345,7 @@ const derivedControl = createDerived({
   modelDomain,
   ensureWindGrid,
   refreshViewportTiles,
-  sendPrefetchWindow,
+  sendPrefetchWindow: planeCache.sendPrefetchWindow,
   requestDecode,
   syncRailDensity,
   syncRail,
@@ -6483,7 +6452,6 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   scheduleProbeRender();
   lastDecodeMs = null;
   decodeEvents.length = 0;
-  lastPrefetchWindow.clear();
   sessionRegistry.endRun();
   manifest = null;
   manifestUrl = null;

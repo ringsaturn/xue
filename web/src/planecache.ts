@@ -1,9 +1,10 @@
 // The decoded-plane cache (the frame cache): every plane a decode worker
 // has handed back, keyed by `cacheKey`, in least-recently-used order, under
-// a byte budget sized to the primary session's frame. Eviction hands a
-// plane's buffer back to the worker that decoded it. What is on screen, and
-// so what eviction must spare, stays with `main.ts`, which reports it
-// through `displayedKeys`.
+// a byte budget sized to the primary session's frame, and the windowed
+// prefetch that tells each session's worker which frames to keep resident
+// ahead of the playhead. Eviction hands a plane's buffer back to the worker
+// that decoded it. What is on screen, and so what eviction must spare, stays
+// with `main.ts`, which reports it through `displayedKeys`.
 import type { BundleVariable } from "./manifest";
 import type { DecodedFrame, VariableSession } from "./session";
 import { frameCacheKey } from "./sessionkeys";
@@ -19,13 +20,15 @@ export function cacheKey(session: VariableSession, variable: BundleVariable, off
   return frameCacheKey(session, variable, offset);
 }
 
-/** What the cache reads off the page: the primary session and the playback
- * rate (live, through getters), the device and connection class, the frames
- * a total on screen keeps behind the playhead, and the keys on screen that
- * eviction must spare. */
+/** What the cache reads off the page: the primary session, the playback
+ * rate and whether it is playing (live, through getters), the device and
+ * connection class, the frames a total on screen keeps behind the playhead,
+ * the keys on screen that eviction must spare, and the axis the prefetch
+ * window walks. */
 export interface PlaneCacheDeps {
   readonly activeSession: VariableSession | null;
   readonly playbackFps: number;
+  readonly playing: boolean;
   readonly defaultFps: number;
   readonly constrainedConnection: () => boolean;
   readonly lowMemoryDevice: () => boolean;
@@ -34,6 +37,17 @@ export interface PlaneCacheDeps {
   /** Every key a layer on screen is drawing: the blend path may still
    * sample them, and wind keeps a u/v pair displayed. */
   readonly displayedKeys: () => Set<string>;
+  readonly frameCount: () => number;
+  /** Every session on screen. */
+  readonly slotSessions: () => VariableSession[];
+  /** How a session reads the primary axis: a frame index to its own frame
+   * offset, or null where its axis has no such lead. An overlay goes
+   * through its slot (or the lead itself, outside a slot), the primary
+   * through its own axis. */
+  readonly windowOffset: (session: VariableSession, overlay: boolean) => (frame: number) => number | null;
+  /** The frame offsets the total on screen reads for frame `index` (its
+   * window behind the playhead); none while the primary is drawn as it is. */
+  readonly totalHours: (session: VariableSession, index: number) => number[];
 }
 
 // The plane cache is byte-budgeted (not frame-count-limited) and the
@@ -49,6 +63,8 @@ export interface PlaneCacheDeps {
 export function createPlaneCache(deps: PlaneCacheDeps) {
   const frames = new Map<string, DecodedFrame>();
   let bytes = 0;
+  /** Last prefetch window sent per session, to skip redundant messages. */
+  const lastPrefetchWindow = new Map<number, string>();
 
   /** Bytes one frame of the primary session occupies in the plane cache, or
    * null before a session is open. */
@@ -103,6 +119,53 @@ export function createPlaneCache(deps: PlaneCacheDeps) {
     return Math.max(2, Math.min(wanted, fits));
   }
 
+  function prefetchConcurrency(): number {
+    return deps.constrainedConnection() ? 1 : 3;
+  }
+
+  /** Tell every session on screen which frames to keep resident (windowed
+   * prefetch): the window ahead of the playhead, wrapped at the loop point,
+   * and the tiles the view needs of them. The primary gets the connection's
+   * concurrency; an overlay one fetch at a time, so it never crowds out the
+   * frame that gates playback, and on a constrained connection an overlay
+   * only prefetches while playback is stopped. */
+  function sendPrefetchWindow(index: number): void {
+    const total = deps.frameCount();
+    for (const session of deps.slotSessions()) {
+      if (!session.streaming || session.resident) continue;
+      const overlay = session !== deps.activeSession;
+      if (overlay && deps.playing && deps.constrainedConnection()) continue;
+      const offsetOf = deps.windowOffset(session, overlay);
+      const hours: number[] = [];
+      for (let step = 0; step <= prefetchWindowFrames(); step += 1) {
+        const frame = (index + step) % total;
+        const offset = offsetOf(frame);
+        if (offset !== null && !hours.includes(offset)) hours.push(offset);
+      }
+      // A total keeps its window behind the playhead resident too.
+      if (!overlay) {
+        for (const hour of deps.totalHours(session, index)) if (!hours.includes(hour)) hours.push(hour);
+      }
+      if (hours.length === 0) continue;
+      const key = `${hours[0]}/${hours.length}`;
+      if (lastPrefetchWindow.get(session.key) === key) continue;
+      lastPrefetchWindow.set(session.key, key);
+      session.worker.postMessage({
+        type: "prefetch-window",
+        hours,
+        concurrency: overlay ? 1 : prefetchConcurrency(),
+        tiles: session.viewTiles ?? undefined,
+      });
+    }
+  }
+
+  /** Forget the window last sent to a session, so the next send goes out
+   * even when it names the same first frame and length: the memo is keyed
+   * by those alone, not by the tiles or the total the window covers. */
+  function forgetSession(sessionKey: number): void {
+    lastPrefetchWindow.delete(sessionKey);
+  }
+
   /** The plane under `key`, leaving its place in the eviction order alone. */
   function get(key: string): DecodedFrame | undefined {
     return frames.get(key);
@@ -151,9 +214,10 @@ export function createPlaneCache(deps: PlaneCacheDeps) {
     }
   }
 
-  /** Drop every plane a disposed session decoded. Its buffers are not
-   * recycled — the worker they belong to is gone. */
+  /** Drop a disposed session's window memo and every plane it decoded.
+   * Its buffers are not recycled — the worker they belong to is gone. */
   function dropSession(session: VariableSession): void {
+    forgetSession(session.key);
     for (const [key, frame] of [...frames]) {
       if (frame.session !== session) continue;
       frames.delete(key);
@@ -165,6 +229,7 @@ export function createPlaneCache(deps: PlaneCacheDeps) {
   function reset(): void {
     frames.clear();
     bytes = 0;
+    lastPrefetchWindow.clear();
   }
 
   return {
@@ -184,6 +249,8 @@ export function createPlaneCache(deps: PlaneCacheDeps) {
     budgetBytes,
     capBytes,
     prefetchWindowFrames,
+    sendPrefetchWindow,
+    forgetSession,
   };
 }
 
