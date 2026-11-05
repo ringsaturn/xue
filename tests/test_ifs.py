@@ -114,7 +114,7 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(set(parts.values()), {"sfc", "pl", "wave"})
         self.assertEqual(sum(part == "pl" for part in parts.values()), 44)
         self.assertEqual(sum(part == "wave" for part in parts.values()), 3)
-        self.assertEqual(sum(part == "sfc" for part in parts.values()), 20)
+        self.assertEqual(sum(part == "sfc" for part in parts.values()), 21)
         self.assertEqual(len(parts), 67)
         self.assertEqual({parts[f"tsoil{n}"] for n in range(1, 5)} | {parts[f"soilw{n}"] for n in range(1, 5)}, {"sfc"})
         self.assertEqual({parts["prmsl"], parts["orog"], parts["gust"], parts["tmp2m"]}, {"sfc"})

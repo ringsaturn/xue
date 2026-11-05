@@ -584,6 +584,14 @@ export const PTYPE_CLASSES: readonly { code: number; rgb: readonly [number, numb
   { code: 1, rgb: [58, 123, 214], labelKey: "legendPtypeRain" },
   { code: 3, rgb: [226, 111, 168], labelKey: "legendPtypeFreezingRain" },
   { code: 5, rgb: [205, 224, 242], labelKey: "legendPtypeSnow" },
+  { code: 8, rgb: [138, 92, 196], labelKey: "legendPtypeIcePellets" },
+];
+
+/** The same for ECMWF's type, which names three classes NCEP's flags do not. */
+export const PTYPE_ECMWF_CLASSES: readonly { code: number; rgb: readonly [number, number, number]; labelKey: MessageKey }[] = [
+  { code: 1, rgb: [58, 123, 214], labelKey: "legendPtypeRain" },
+  { code: 3, rgb: [226, 111, 168], labelKey: "legendPtypeFreezingRain" },
+  { code: 5, rgb: [205, 224, 242], labelKey: "legendPtypeSnow" },
   { code: 6, rgb: [150, 190, 232], labelKey: "legendPtypeWetSnow" },
   { code: 7, rgb: [236, 150, 206], labelKey: "legendPhaseMix" },
   { code: 8, rgb: [138, 92, 196], labelKey: "legendPtypeIcePellets" },
@@ -919,7 +927,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "aptmp2m") return rangeLegend(APPARENT_CHART_RANGE, 10);
   if (family === "pwat") return rangeLegend([0, PWAT_CHART_MAX], 10);
   if (family === "hpbl") return rangeLegend([0, PBL_CHART_MAX], 500);
-  if (family === "cpofp") return rangeLegend([0, 100], 25);
+  if (family === "cpofp") return rangeLegend([0, 100], 20);
   if (family === "fzlvl") return rangeLegend([0, 6000], 1000);
   if (family === "clw") return rangeLegend([0, CLOUD_WATER_CHART_MAX], 0.5);
   if (family === "tmpsfc") return rangeLegend(temperaturePaletteDomain(null), 10);

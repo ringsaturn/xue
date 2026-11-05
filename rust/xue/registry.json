@@ -2055,8 +2055,11 @@
         "parameterCategory": 1,
         "parameterNumber": 19,
         "typeOfFirstFixedSurface": 1,
-        "scaleFactorOfFirstFixedSurface": 0,
-        "scaledValueOfFirstFixedSurface": 0
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "producer": {
+        "id": "ecmwf"
       },
       "quantization": {
         "quality": {
@@ -2120,6 +2123,9 @@
             "elements": [
               "PTYPE"
             ]
+          },
+          {
+            "rule": "template"
           }
         ]
       }
@@ -2147,9 +2153,9 @@
         "compact": {
           "type": "linear",
           "offset": 0.0,
-          "scale": 25.0,
+          "scale": 50.0,
           "minimumCode": 0,
-          "maximumCode": 254,
+          "maximumCode": 127,
           "nodataCode": 255
         },
         "balanced": {
@@ -2220,9 +2226,9 @@
         "quality": {
           "type": "linear",
           "offset": 0.0,
-          "scale": 1.0,
+          "scale": 0.5,
           "minimumCode": 0,
-          "maximumCode": 100,
+          "maximumCode": 200,
           "nodataCode": 255
         },
         "compact": {

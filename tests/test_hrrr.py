@@ -322,7 +322,7 @@ class RecordMatchingTests(unittest.TestCase):
     def test_every_input_is_found_in_the_fixture_both_ways(self) -> None:
         fast = grib2.inspect_grib_fast(FIXTURE, HRRR.input_variable_ids)
         self.assertEqual(tuple(fast), HRRR.input_variable_ids)
-        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 30)))
+        self.assertEqual([frame.band for frame in fast.values()], list(range(1, 32)))
         self.assertEqual({frame.lead_seconds for frame in fast.values()}, {0})
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             if shutil.which("gdalinfo") is None:

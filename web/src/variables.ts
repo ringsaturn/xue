@@ -27,7 +27,7 @@
 
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { CAT_CLASSES, DISRP_CLASSES, PTYPE_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
+import { CAT_CLASSES, DISRP_CLASSES, PTYPE_CLASSES, PTYPE_ECMWF_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
 import { CAT_LEVELS, ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pressureLegend, type PressureBundleId } from "./pressure";
 
@@ -140,6 +140,14 @@ export interface LegendSwatch {
  * demand, like the table, so a locale switch reaches it. */
 function ptypeKey(): readonly { color: string; labelKey: MessageKey }[] {
   return PTYPE_CLASSES.map(({ rgb, labelKey }) => ({
+    color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+    labelKey,
+  }));
+}
+
+/** ECMWF's type's key, built the same way. */
+function ptypeEcmwfKey(): readonly { color: string; labelKey: MessageKey }[] {
+  return PTYPE_ECMWF_CLASSES.map(({ rgb, labelKey }) => ({
     color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
     labelKey,
   }));
@@ -595,17 +603,17 @@ function buildSpecs(): readonly VariableSpec[] {
     urlAliases: ["preciptype", "precipitationtype"],
     showcaseCode: "PTYPE",
   }),
-  // ECMWF's precipitation type as published: the same chart as NCEP's, read by
-  // the same parameter block, on a longer book.
+  // ECMWF's precipitation type as published: the same kind of chart as NCEP's, on
+  // a longer book, told apart by its producer.
   surface({
     id: "ptypeec",
-    chart: "ptype",
+    chart: "ptypeec",
     group: "moisture",
     code: "PTYPE SFC",
     title: ["Precipitation", "Type"],
     bufferTitle: "Precipitation buffer",
     labelKey: "varLabelPtype",
-    legendKey: ptypeKey(),
+    legendKey: ptypeEcmwfKey(),
     ground: "slate",
     urlName: "ptypeec",
     urlAliases: [],
@@ -622,7 +630,7 @@ function buildSpecs(): readonly VariableSpec[] {
     labelKey: "varLabelFzlvl",
     ground: "slate",
     urlName: "fzlvl",
-    urlAliases: ["freezinglevel", "0c"],
+    urlAliases: ["freezinglevel"],
     showcaseCode: "0C HGT",
   }),
   // The model's percent of the precipitation falling frozen.

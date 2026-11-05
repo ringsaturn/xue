@@ -11,6 +11,7 @@ import {
   OMEGA_PALETTE_MAX,
   PBL_CHART_MAX,
   PTYPE_CLASSES,
+  PTYPE_ECMWF_CLASSES,
   PWAT_CHART_MAX,
   SOIL_MOISTURE_CHART_MAX,
   VISIBILITY_CHART_MAX,
@@ -461,6 +462,12 @@ const FREEZING_LEVEL_STOPS: Stop[] = [
   [4000, 225, 205, 100, 225],
   [5000, 240, 130, 70, 235],
   [6000, 190, 50, 80, 245],
+];
+
+// ECMWF's precipitation type, stepped on its class codes like NCEP's.
+const PTYPE_ECMWF_STOPS: Stop[] = [
+  [0, 0, 0, 0, 0],
+  ...PTYPE_ECMWF_CLASSES.map(({ code, rgb }) => [code, rgb[0], rgb[1], rgb[2], 255] as Stop),
 ];
 
 // River discharge, m³/s, on a logarithmic ramp: a stop per half decade,
@@ -1089,6 +1096,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   // Precipitation type is categorical: the palette steps on its class codes
   // and its legend is a swatch key (`levels.ts::PTYPE_CLASSES`).
   if (family === "ptype") return PTYPE_STOPS;
+  if (family === "ptypeec") return PTYPE_ECMWF_STOPS;
   if (family === "cpofp") return FROZEN_PERCENT_STOPS;
   if (family === "fzlvl") return FREEZING_LEVEL_STOPS;
   if (family === "vis") return VISIBILITY_STOPS;

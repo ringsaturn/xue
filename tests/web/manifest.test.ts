@@ -129,7 +129,7 @@ function manifestFixture() {
 describe("the bundle id registry", () => {
   it("carries the new GFS surface fields in the registry's own order", () => {
     // The registry's SURFACE_VARIABLE_IDS (xuebuild/quantize.py), in its order.
-    expect(SURFACE_DIAGNOSTIC_IDS).toHaveLength(13);
+    expect(SURFACE_DIAGNOSTIC_IDS).toHaveLength(15);
     for (const id of ["cin", "pwat", "hpbl", "ptype", "wind100m", "wind80m"]) {
       expect(KNOWN_BUNDLE_IDS).toContain(id);
     }

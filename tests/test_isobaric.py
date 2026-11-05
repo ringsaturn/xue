@@ -109,7 +109,7 @@ class VectorBundleTests(unittest.TestCase):
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         self.assertEqual(
             [bundle_id for bundle_id in published if bundle_id in ecmwf],
-            list(ecmwf),
+            [bundle_id for bundle_id in ecmwf if bundle_id != "ptypeec"],
         )
         for bundle_id in ("vvel850", "vvel700", "vvel500", "thetae850"):
             self.assertIn(bundle_id, ecmwf)
