@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-scores.schema.json",
+  "title": "TcScores",
+  "description": "tc/archive/<YYYY>/scores.json (docs/tc.md section 9.2): a season's track and intensity errors, summarised, and each storm's span in errors.jsonl. That storms are unique, that the spans tile the file and that from matches the catalog's are the readers' own checks.",
+  "type": "object",
+  "required": ["scoreSchemaVersion", "product", "season", "from", "leads", "errors", "storms", "summary", "homogeneous"],
+  "properties": {
+    "scoreSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "tc"},
+    "season": {"$ref": "tc-archive-catalog.schema.json#/$defs/Season"},
+    "from": {"$ref": "tc-archive-catalog.schema.json#/$defs/ScoreInputs"},
+    "leads": {"description": "The verified leads, hours.", "type": "array", "items": {"type": "integer", "minimum": 0}},
+    "errors": {
+      "description": "The season's errors, beside the scores.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"const": "errors.jsonl"},
+        "byteLength": {"$ref": "tc-archive-catalog.schema.json#/$defs/ByteLength"},
+        "crc32": {"$ref": "tc-archive-catalog.schema.json#/$defs/Crc32"}
+      }
+    },
+    "storms": {"type": "array", "items": {"$ref": "#/$defs/ScoredStorm"}},
+    "summary": {"type": "array", "items": {"$ref": "#/$defs/SummaryRow"}},
+    "homogeneous": {"type": "array", "items": {"$ref": "#/$defs/HomogeneousRow"}}
+  },
+  "$defs": {
+    "ScoredStorm": {
+      "description": "One storm's line in errors.jsonl.",
+      "type": "object",
+      "required": ["id", "offset", "length"],
+      "properties": {
+        "id": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"},
+        "offset": {"type": "integer", "minimum": 0},
+        "length": {"type": "integer", "minimum": 1}
+      }
+    },
+    "SummaryRow": {
+      "description": "One source's errors at one lead against one truth in one basin, on its own sample: km for track, along and cross, m/s for vmax, hPa for pmin.",
+      "type": "object",
+      "required": [
+        "basin",
+        "truth",
+        "source",
+        "lead",
+        "n",
+        "track",
+        "trackMedian",
+        "along",
+        "cross",
+        "nVmax",
+        "vmaxBias",
+        "vmaxMae",
+        "nPmin",
+        "pminBias",
+        "pminMae"
+      ],
+      "properties": {
+        "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+        "truth": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+        "source": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+        "lead": {"description": "Hours.", "type": "integer", "minimum": 0},
+        "n": {"type": "integer", "minimum": 1},
+        "track": {"description": "Mean great-circle error.", "type": "number", "minimum": 0},
+        "trackMedian": {"type": "number", "minimum": 0},
+        "along": {"type": ["number", "null"], "description": "Mean along-track error, positive ahead; null with no motion to resolve it on."},
+        "cross": {"type": ["number", "null"], "description": "Mean cross-track error, positive to the right."},
+        "nVmax": {"type": "integer", "minimum": 0},
+        "vmaxBias": {"type": ["number", "null"], "description": "Mean forecast minus truth; null without a pair."},
+        "vmaxMae": {"type": ["number", "null"], "minimum": 0},
+        "nPmin": {"type": "integer", "minimum": 0},
+        "pminBias": {"type": ["number", "null"], "description": "Mean forecast minus truth; null without a pair."},
+        "pminMae": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "HomogeneousRow": {
+      "description": "One source against a basin's reference at one lead, on exactly the cases both verified.",
+      "type": "object",
+      "required": ["basin", "truth", "reference", "source", "lead", "n", "track", "referenceTrack", "skill"],
+      "properties": {
+        "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+        "truth": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+        "reference": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+        "source": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+        "lead": {"description": "Hours.", "type": "integer", "minimum": 0},
+        "n": {"type": "integer", "minimum": 1},
+        "track": {"description": "The source's mean track error, km.", "type": "number", "minimum": 0},
+        "referenceTrack": {"description": "The reference's, km.", "type": "number", "minimum": 0},
+        "skill": {"type": ["number", "null"], "description": "1 - track / referenceTrack; null where the reference's error is zero."}
+      }
+    }
+  }
+}

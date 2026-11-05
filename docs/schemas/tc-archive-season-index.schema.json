@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-archive-season-index.schema.json",
+  "title": "TcArchiveSeasonIndex",
+  "description": "tc/archive/<YYYY>/index.json (docs/tc.md section 8.3): each storm's byte span in the season's best.jsonl, its summary and the months it has forecasts in. That storms are sorted, unique and of this season, that offset and length are null together, and that the spans tile the file are the readers' own checks.",
+  "type": "object",
+  "required": ["archiveSchemaVersion", "product", "season", "best", "storms"],
+  "properties": {
+    "archiveSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "tc"},
+    "season": {"$ref": "tc-archive-catalog.schema.json#/$defs/Season"},
+    "best": {
+      "description": "The season's best tracks, beside the index.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"const": "best.jsonl"},
+        "byteLength": {"$ref": "tc-archive-catalog.schema.json#/$defs/ByteLength"},
+        "crc32": {"$ref": "tc-archive-catalog.schema.json#/$defs/Crc32"}
+      }
+    },
+    "overview": {
+      "description": "The season's tracks for a picture of it, beside the index; absent from an index written before it.",
+      "type": "object",
+      "required": ["path", "byteLength", "crc32"],
+      "properties": {
+        "path": {"const": "overview.json"},
+        "byteLength": {"$ref": "tc-archive-catalog.schema.json#/$defs/ByteLength"},
+        "crc32": {"$ref": "tc-archive-catalog.schema.json#/$defs/Crc32"}
+      }
+    },
+    "storms": {"type": "array", "items": {"$ref": "#/$defs/SeasonStorm"}}
+  },
+  "$defs": {
+    "SeasonStorm": {
+      "description": "One storm of the season. first, last, vmax and sources are absent from an index written before them.",
+      "type": "object",
+      "required": ["id", "basin", "name", "sid", "atcf", "offset", "length", "best", "months"],
+      "properties": {
+        "id": {"$ref": "tc-archive-catalog.schema.json#/$defs/ArchiveStormId"},
+        "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+        "name": {"type": ["string", "null"]},
+        "sid": {"description": "The IBTrACS storm id, or null.", "type": ["string", "null"]},
+        "atcf": {
+          "description": "Every ATCF id the storm carried; empty for a history id.",
+          "type": "array",
+          "items": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"}
+        },
+        "offset": {
+          "description": "Its line in best.jsonl, or null for a storm with forecasts but no best track yet.",
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "length": {"type": ["integer", "null"], "minimum": 1},
+        "best": {"description": "The agency keys of its best tracks.", "type": "array", "items": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"}},
+        "first": {
+          "description": "The first time any best track places it, or null.",
+          "anyOf": [{"$ref": "tc-storm.schema.json#/$defs/Timestamp"}, {"type": "null"}]
+        },
+        "last": {
+          "description": "The last time any best track places it, or null.",
+          "anyOf": [{"$ref": "tc-storm.schema.json#/$defs/Timestamp"}, {"type": "null"}]
+        },
+        "vmax": {
+          "description": "Peak wind, m/s, on the usa track when there is one, else on the first key with a wind; or null.",
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "months": {
+          "description": "The months it has forecasts in; empty for a storm of best tracks alone.",
+          "type": "array",
+          "items": {"$ref": "tc-archive-catalog.schema.json#/$defs/Month"}
+        },
+        "sources": {"description": "The sources of its forecasts.", "type": "array", "items": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"}}
+      }
+    }
+  }
+}

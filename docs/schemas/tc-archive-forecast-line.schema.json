@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-archive-forecast-line.schema.json",
+  "title": "TcArchiveRecord",
+  "description": "One line of tc/archive/<YYYY>/<MM>/forecasts.jsonl (docs/tc.md section 8.2): one forecast of one numbered storm by one source. That basin is the id's, that forecast is an ensemble exactly when kind is, and the forecast's own rules (docs/tc.md section 7) are the readers' own checks.",
+  "type": "object",
+  "required": ["storm", "basin", "name", "source", "kind", "origin", "forecast"],
+  "properties": {
+    "storm": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"},
+    "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+    "name": {"description": "The name the source gave, or null.", "type": ["string", "null"]},
+    "source": {"$ref": "tc-storm.schema.json#/$defs/SourceKey"},
+    "kind": {"enum": ["agency", "model", "ensemble"]},
+    "origin": {"description": "Where the record came from: the hourly product, or a backfill.", "enum": ["live", "nhc-atcf", "ucar-atcf", "ecmwf-aws"]},
+    "forecast": {
+      "description": "A tc-storm forecast track, or a member set when kind is ensemble.",
+      "anyOf": [{"$ref": "tc-storm.schema.json#/$defs/TcEnsemble"}, {"$ref": "tc-storm.schema.json#/$defs/TcForecast"}]
+    }
+  }
+}

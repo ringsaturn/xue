@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-archive-overview.schema.json",
+  "title": "TcArchiveOverview",
+  "description": "tc/archive/<YYYY>/overview.json (docs/tc.md section 8.3): each storm's track at its synoptic times, small enough for a picture of the season.",
+  "type": "object",
+  "required": ["archiveSchemaVersion", "product", "season", "storms"],
+  "properties": {
+    "archiveSchemaVersion": {"description": "A reader rejects a version above the one it implements.", "type": "integer", "const": 1},
+    "product": {"const": "tc"},
+    "season": {"$ref": "tc-archive-catalog.schema.json#/$defs/Season"},
+    "storms": {"type": "array", "items": {"$ref": "#/$defs/OverviewStorm"}}
+  },
+  "$defs": {
+    "OverviewStorm": {
+      "description": "One storm with a track.",
+      "type": "object",
+      "required": ["id", "track"],
+      "properties": {
+        "id": {"$ref": "tc-archive-catalog.schema.json#/$defs/ArchiveStormId"},
+        "track": {"description": "The US best track, else the first with points.", "type": "array", "items": {"$ref": "#/$defs/OverviewPoint"}}
+      }
+    },
+    "OverviewPoint": {
+      "description": "[lon x 10, lat x 10, class]: tenths of a degree, and the Saffir-Simpson class of the wind from 0 (TD) through 1 (TS) to 2-6 (H1-H5), -1 where there is none.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {"type": "integer", "minimum": -1800, "maximum": 1800},
+        {"type": "integer", "minimum": -900, "maximum": 900},
+        {"type": "integer", "minimum": -1, "maximum": 6}
+      ]
+    }
+  }
+}

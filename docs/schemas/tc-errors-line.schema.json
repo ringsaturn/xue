@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/tc-errors-line.schema.json",
+  "title": "TcStormErrors",
+  "description": "One line of tc/archive/<YYYY>/errors.jsonl (docs/tc.md section 9.2): one storm's verified cases, by truth and source, one column per field and one row per (base, lead). That the columns are of one length is the readers' own check.",
+  "type": "object",
+  "required": ["storm", "basin", "truths"],
+  "properties": {
+    "storm": {"$ref": "tc-archive-catalog.schema.json#/$defs/AtcfId"},
+    "basin": {"$ref": "tc-archive-catalog.schema.json#/$defs/Basin"},
+    "truths": {
+      "description": "Best-track key, then source, to its cases.",
+      "type": "object",
+      "additionalProperties": {"type": "object", "additionalProperties": {"$ref": "#/$defs/ErrorColumns"}}
+    }
+  },
+  "$defs": {
+    "ErrorColumns": {
+      "description": "One source's cases against one truth.",
+      "type": "object",
+      "required": ["base", "lead", "track", "along", "cross", "vmax", "pmin"],
+      "properties": {
+        "base": {"description": "The forecast's base time.", "type": "array", "items": {"$ref": "tc-storm.schema.json#/$defs/Timestamp"}},
+        "lead": {"description": "Hours.", "type": "array", "items": {"type": "integer", "minimum": 0}},
+        "track": {"description": "Great-circle error, km.", "type": "array", "items": {"type": "number", "minimum": 0}},
+        "along": {
+          "description": "Along the best track's motion, km, positive ahead; null with no motion to resolve it on.",
+          "type": "array",
+          "items": {"type": ["number", "null"]}
+        },
+        "cross": {"description": "Across it, km, positive to the right.", "type": "array", "items": {"type": ["number", "null"]}},
+        "vmax": {"description": "Forecast minus truth, m/s; null where either is missing.", "type": "array", "items": {"type": ["number", "null"]}},
+        "pmin": {"description": "Forecast minus truth, hPa; null where either is missing.", "type": "array", "items": {"type": ["number", "null"]}}
+      }
+    }
+  }
+}
