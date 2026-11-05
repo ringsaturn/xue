@@ -10,6 +10,14 @@
  * error means of the scores. Nothing here touches the map. */
 
 import { fetchImmutable } from "../fetchimmutable";
+import { checkTcArchiveBest } from "../schema/generated/tc-archive-best-line";
+import { checkTcArchiveCatalog } from "../schema/generated/tc-archive-catalog";
+import { checkTcArchiveRecord } from "../schema/generated/tc-archive-forecast-line";
+import { checkTcArchiveMonthIndex } from "../schema/generated/tc-archive-month-index";
+import { checkTcArchiveOverview } from "../schema/generated/tc-archive-overview";
+import { checkTcArchiveSeasonIndex } from "../schema/generated/tc-archive-season-index";
+import { checkTcStormErrors } from "../schema/generated/tc-errors-line";
+import { checkTcScores } from "../schema/generated/tc-scores";
 import type { TcEnsemble, TcForecast, TcPoint, TcStorm, TcTrack } from "./schema";
 
 export const TC_ARCHIVE_DIRECTORY = "tc/archive/";
@@ -20,7 +28,6 @@ const SCORE_SCHEMA_VERSION = 1;
  * for a storm that never had a number: both open on the basin and end on the
  * season. */
 const STORM_ID = /^[A-Z]{2}(\d{6}|-\d{7}[NS]\d{5}-\d{4})$/;
-const CRC32 = /^[0-9a-f]{8}$/;
 
 export interface FileRef {
   path: string;
@@ -54,7 +61,7 @@ export interface SeasonStorm {
   offset: number | null;
   length: number | null;
   best: string[];
-  /** Absent from an index written before the summary was added. */
+  /** Null too in an index written before the summary was added. */
   first: string | null;
   last: string | null;
   vmax: number | null;
@@ -136,6 +143,11 @@ export interface ScoresDocument {
 }
 
 // --- validation --------------------------------------------------------
+//
+// Each document in three steps, as `tc/schema.ts` reads the hourly product:
+// the version gate, the check generated from its schema
+// (`docs/schemas/tc-archive-*.schema.json`, `tc-scores`, `tc-errors-line`),
+// then what a schema cannot say.
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -143,177 +155,164 @@ function object(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function list(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be a list`);
-  return value;
-}
-
-function fileRef(value: unknown, label: string): FileRef {
-  const entry = object(value, label);
-  if (typeof entry.path !== "string" || entry.path.includes(".."))
-    throw new Error(`${label}.path must be a relative path`);
-  if (!Number.isInteger(entry.byteLength) || (entry.byteLength as number) < 0)
-    throw new Error(`${label}.byteLength must be a non-negative integer`);
-  if (typeof entry.crc32 !== "string" || !CRC32.test(entry.crc32))
-    throw new Error(`${label}.crc32 must be 8 lowercase hex characters`);
-  return { path: entry.path, byteLength: entry.byteLength as number, crc32: entry.crc32 };
-}
-
-function head(value: unknown, label: string, field: string, version: number): Record<string, unknown> {
-  const document = object(value, label);
-  const declared = document[field];
-  if (typeof declared !== "number" || declared > version)
+/** A version above the one implemented is refused before the shape is
+ * looked at, so a newer document says so rather than naming a field. */
+function gate(input: unknown, label: string, field: string, version: number): void {
+  const declared = object(input, label)[field];
+  if (typeof declared === "number" && declared > version)
     throw new Error(`${label} ${field} ${String(declared)} is newer than this reader (${version})`);
-  return document;
 }
 
-function optionalText(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
+function fileRef(entry: FileRef): FileRef {
+  return { path: entry.path, byteLength: entry.byteLength, crc32: entry.crc32 };
 }
 
+function unique(ids: readonly string[], label: string): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) throw new Error(`${label} lists ${id} twice`);
+    seen.add(id);
+  }
+}
+
+/** `catalog.json`: entries unique by month or season, each path naming
+ * its own. */
 export function validateArchiveCatalog(input: unknown): ArchiveCatalog {
-  const catalog = head(input, "tc archive catalog", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
-  return {
-    months: list(catalog.months, "catalog.months").map((value, index) => {
-      const entry = object(value, `catalog.months[${index}]`);
-      if (typeof entry.month !== "string" || !/^\d{4}-\d{2}$/.test(entry.month))
-        throw new Error(`catalog.months[${index}].month must be YYYY-MM`);
-      return {
-        ...fileRef(entry, `catalog.months[${index}]`),
-        month: entry.month,
-        storms: Number(entry.storms) || 0,
-        records: Number(entry.records) || 0,
-      };
-    }),
-    seasons: list(catalog.seasons, "catalog.seasons").map((value, index) => {
-      const entry = object(value, `catalog.seasons[${index}]`);
-      if (!Number.isInteger(entry.season)) throw new Error(`catalog.seasons[${index}].season must be a year`);
-      return { ...fileRef(entry, `catalog.seasons[${index}]`), season: entry.season as number, storms: Number(entry.storms) || 0 };
-    }),
-    scores: list(catalog.scores ?? [], "catalog.scores").map((value, index) => {
-      const entry = object(value, `catalog.scores[${index}]`);
-      if (!Number.isInteger(entry.season)) throw new Error(`catalog.scores[${index}].season must be a year`);
-      return { ...fileRef(entry, `catalog.scores[${index}]`), season: entry.season as number };
-    }),
-  };
+  gate(input, "tc archive catalog", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  checkTcArchiveCatalog(input, "catalog");
+  const months = input.months.map((entry, index) => {
+    if (entry.path !== `${entry.month.slice(0, 4)}/${entry.month.slice(5, 7)}/index.json`)
+      throw new Error(`catalog.months[${index}].path does not name its month`);
+    return { ...fileRef(entry), month: entry.month, storms: entry.storms, records: entry.records };
+  });
+  const seasons = input.seasons.map((entry, index) => {
+    if (entry.path !== `${String(entry.season).padStart(4, "0")}/index.json`)
+      throw new Error(`catalog.seasons[${index}].path does not name its season`);
+    return { ...fileRef(entry), season: entry.season, storms: entry.storms };
+  });
+  const scores = (input.scores ?? []).map((entry, index) => {
+    if (entry.path !== `${String(entry.season).padStart(4, "0")}/scores.json`)
+      throw new Error(`catalog.scores[${index}].path does not name its season`);
+    return { ...fileRef(entry), season: entry.season };
+  });
+  unique(months.map((entry) => entry.month), "catalog.months");
+  unique(seasons.map((entry) => String(entry.season)), "catalog.seasons");
+  unique(scores.map((entry) => String(entry.season)), "catalog.scores");
+  return { months, seasons, scores };
 }
 
-function span(entry: Record<string, unknown>, label: string, optional: boolean): { offset: number | null; length: number | null } {
-  if (optional && entry.offset === null && entry.length === null) return { offset: null, length: null };
-  if (!Number.isInteger(entry.offset) || !Number.isInteger(entry.length) || (entry.length as number) <= 0)
-    throw new Error(`${label} must carry a byte span`);
-  return { offset: entry.offset as number, length: entry.length as number };
-}
-
+/** A season's `index.json`: storms unique and of the season, and a span
+ * whose offset and length are null together. */
 export function validateSeasonIndex(input: unknown): SeasonIndex {
-  const index = head(input, "tc season index", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
-  if (!Number.isInteger(index.season)) throw new Error("season index season must be a year");
+  gate(input, "tc season index", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  checkTcArchiveSeasonIndex(input, "season index");
+  const season = input.season;
+  unique(input.storms.map((entry) => entry.id), "season index storms");
   return {
-    season: index.season as number,
-    best: fileRef(index.best, "season index best"),
-    overview: index.overview === undefined ? null : fileRef(index.overview, "season index overview"),
-    storms: list(index.storms, "season index storms").map((value, position) => {
+    season,
+    best: fileRef(input.best),
+    overview: input.overview === undefined ? null : fileRef(input.overview),
+    storms: input.storms.map((entry, position) => {
       const label = `season index storms[${position}]`;
-      const entry = object(value, label);
-      if (typeof entry.id !== "string" || !STORM_ID.test(entry.id)) throw new Error(`${label}.id must be an ATCF or history id`);
-      const strings = (field: unknown) => (Array.isArray(field) ? field.filter((item): item is string => typeof item === "string") : []);
+      if (seasonOfStorm(entry.id) !== season) throw new Error(`${label} is not a storm of season ${season}`);
+      if ((entry.offset === null) !== (entry.length === null))
+        throw new Error(`${label} must carry a whole byte span or none`);
       return {
         id: entry.id,
-        basin: typeof entry.basin === "string" ? entry.basin : entry.id.slice(0, 2),
-        name: optionalText(entry.name),
-        sid: optionalText(entry.sid),
-        atcf: strings(entry.atcf),
-        ...span(entry, label, true),
-        best: strings(entry.best),
-        first: optionalText(entry.first),
-        last: optionalText(entry.last),
-        vmax: typeof entry.vmax === "number" ? entry.vmax : null,
-        months: strings(entry.months),
-        sources: strings(entry.sources),
+        basin: entry.basin,
+        name: entry.name,
+        sid: entry.sid,
+        atcf: entry.atcf,
+        offset: entry.offset,
+        length: entry.length,
+        best: entry.best,
+        first: entry.first ?? null,
+        last: entry.last ?? null,
+        vmax: entry.vmax ?? null,
+        months: entry.months,
+        sources: entry.sources ?? [],
       };
     }),
   };
 }
 
 export function validateSeasonOverview(input: unknown): SeasonOverview {
-  const overview = head(input, "tc season overview", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  gate(input, "tc season overview", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  checkTcArchiveOverview(input, "overview");
   return {
-    season: Number(overview.season),
-    storms: list(overview.storms, "overview storms").map((value, position) => {
-      const entry = object(value, `overview storms[${position}]`);
-      const track = list(entry.track, `overview storms[${position}].track`).map((point) => {
-        if (!Array.isArray(point) || point.length !== 3 || point.some((item) => !Number.isInteger(item)))
-          throw new Error(`overview storms[${position}].track holds a malformed point`);
-        return point as [number, number, number];
-      });
-      return { id: String(entry.id), track };
-    }),
+    season: input.season,
+    storms: input.storms.map((entry) => ({
+      id: entry.id,
+      track: entry.track.map((point): [number, number, number] => [point[0], point[1], point[2]]),
+    })),
   };
 }
 
+/** A month's `index.json`: storms unique. */
 export function validateMonthIndex(input: unknown): MonthIndex {
-  const index = head(input, "tc month index", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
-  if (typeof index.month !== "string") throw new Error("month index month must be YYYY-MM");
+  gate(input, "tc month index", "archiveSchemaVersion", ARCHIVE_SCHEMA_VERSION);
+  checkTcArchiveMonthIndex(input, "month index");
+  unique(input.storms.map((entry) => entry.id), "month index storms");
   return {
-    month: index.month,
-    forecasts: fileRef(index.forecasts, "month index forecasts"),
-    storms: list(index.storms, "month index storms").map((value, position) => {
-      const entry = object(value, `month index storms[${position}]`);
-      const found = span(entry, `month index storms[${position}]`, false);
-      return { id: String(entry.id), offset: found.offset!, length: found.length! };
-    }),
+    month: input.month,
+    forecasts: fileRef(input.forecasts),
+    storms: input.storms.map((entry) => ({ id: entry.id, offset: entry.offset, length: entry.length })),
   };
 }
 
+/** A season's `scores.json`: storms unique. */
 export function validateScores(input: unknown): ScoresDocument {
-  const scores = head(input, "tc scores", "scoreSchemaVersion", SCORE_SCHEMA_VERSION);
+  gate(input, "tc scores", "scoreSchemaVersion", SCORE_SCHEMA_VERSION);
+  checkTcScores(input, "scores");
+  unique(input.storms.map((entry) => entry.id), "scores.storms");
   return {
-    season: Number(scores.season),
-    leads: list(scores.leads, "scores.leads").filter((lead): lead is number => typeof lead === "number"),
-    errors: fileRef(scores.errors, "scores.errors"),
-    storms: list(scores.storms, "scores.storms").map((value, position) => {
-      const entry = object(value, `scores.storms[${position}]`);
-      const found = span(entry, `scores.storms[${position}]`, false);
-      return { id: String(entry.id), offset: found.offset!, length: found.length! };
-    }),
+    season: input.season,
+    leads: input.leads,
+    errors: fileRef(input.errors),
+    storms: input.storms.map((entry) => ({ id: entry.id, offset: entry.offset, length: entry.length })),
   };
 }
 
+/** A line of `forecasts.jsonl`: the forecast an ensemble exactly when the
+ * record says so. */
 export function validateRecord(input: unknown): ArchiveRecord {
-  const record = object(input, "tc archive record");
-  if (typeof record.storm !== "string" || typeof record.source !== "string")
-    throw new Error("tc archive record names no storm or source");
-  const kind = record.kind;
-  if (kind !== "agency" && kind !== "model" && kind !== "ensemble")
-    throw new Error(`tc archive record kind ${String(kind)} is unknown`);
-  const forecast = object(record.forecast, "tc archive record forecast");
-  if (typeof forecast.base !== "string") throw new Error("tc archive record forecast has no base");
-  if (kind === "ensemble" ? !Array.isArray(forecast.leads) : !Array.isArray(forecast.points))
-    throw new Error(`tc archive ${kind} record has the wrong forecast shape`);
+  checkTcArchiveRecord(input, "tc archive record");
+  const { kind, forecast } = input;
+  if ((kind === "ensemble") !== "leads" in forecast) throw new Error(`tc archive ${kind} record has the wrong forecast shape`);
   return {
-    storm: record.storm,
-    basin: String(record.basin),
-    name: optionalText(record.name),
-    source: record.source,
+    storm: input.storm,
+    basin: input.basin,
+    name: input.name,
+    source: input.source,
     kind,
-    origin: String(record.origin),
+    origin: input.origin,
     forecast: forecast as unknown as TcForecast | TcEnsemble,
   };
 }
 
+/** A line of `best.jsonl`. */
 export function validateBest(input: unknown): BestRecord {
-  const record = object(input, "tc best record");
-  if (typeof record.storm !== "string") throw new Error("tc best record names no storm");
-  const best = object(record.best, "tc best record best");
-  for (const [key, track] of Object.entries(best)) list(object(track, `best.${key}`).points, `best.${key}.points`);
+  checkTcArchiveBest(input, "tc best record");
   return {
-    storm: record.storm,
-    basin: String(record.basin),
-    name: optionalText(record.name),
-    sid: optionalText(record.sid),
-    atcf: Array.isArray(record.atcf) ? record.atcf.map(String) : [record.storm],
-    best: best as Record<string, TcTrack>,
+    storm: input.storm,
+    basin: input.basin,
+    name: input.name,
+    sid: input.sid,
+    atcf: input.atcf,
+    best: input.best as unknown as Record<string, TcTrack>,
   };
+}
+
+/** A line of `errors.jsonl`: every source's columns one length. */
+export function validateStormErrors(input: unknown): StormErrors {
+  checkTcStormErrors(input, "tc storm errors");
+  for (const [truth, sources] of Object.entries(input.truths))
+    for (const [source, columns] of Object.entries(sources)) {
+      const rows = columns.lead.length;
+      if (Object.values(columns).some((column) => column.length !== rows))
+        throw new Error(`tc storm errors ${truth}.${source} columns differ in length`);
+    }
+  return { storm: input.storm, truths: input.truths };
 }
 
 // --- reading -----------------------------------------------------------
@@ -417,9 +416,7 @@ export class TcArchive {
     const span = scores.storms.find((item) => item.id === id);
     if (!span) return null;
     const [line] = await this.lines(`${String(season).padStart(4, "0")}/`, scores.errors, span.offset, span.length);
-    if (line === undefined) return null;
-    const document = object(line, "tc storm errors");
-    return { storm: String(document.storm), truths: object(document.truths, "tc storm errors truths") as StormErrors["truths"] };
+    return line === undefined ? null : validateStormErrors(line);
   }
 }
 
