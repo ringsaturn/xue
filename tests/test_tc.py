@@ -359,6 +359,27 @@ class IdentityTests(unittest.TestCase):
             [(s.id, s.level, s.name, len(s.sightings)) for s in resolution.systems], [("EP142026", "A", "NORBERT", 2)]
         )
 
+    def test_a_source_name_replaces_the_remembered_one(self) -> None:
+        now = utc(2026, 11, 4, 13)
+        before = now - timedelta(hours=1)
+        previous = [
+            PreviousSystem(
+                id="WP302026",
+                level="A",
+                basin="WP",
+                aliases={},
+                last_time=before,
+                last_lat=25.0,
+                last_lon=138.3,
+                name="THIRTY",
+            )
+        ]
+        named = resolve([_sighting("jtwc", "WP302026", "WP", now, 25.0, 138.3, name="IN-FA")], previous, now)
+        self.assertEqual(named.systems[0].name, "IN-FA")
+        # A source with no name to give leaves the remembered one standing.
+        silent = resolve([_sighting("gfs", "WP302026", "WP", now, 25.0, 138.3)], previous, now)
+        self.assertEqual(silent.systems[0].name, "THIRTY")
+
     def test_invest_gets_a_synthetic_id_that_the_previous_index_carries(self) -> None:
         now = utc(2026, 9, 12, 6)
         first = resolve([_sighting("gfs", "EP97", "EP", now, 14.0, -112.6, first_seen=utc(2026, 9, 10, 12))], [], now)

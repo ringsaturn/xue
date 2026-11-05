@@ -76,6 +76,11 @@ class System:
     level: str
     basin: str
     name: str | None = None
+    """What this hour's sources call it, else ``remembered_name``."""
+    remembered_name: str | None = None
+    """The previous index's name. It only fills a silence: JTWC warns under a
+    spelled-out number (``THIRTY``) before a storm is named, and a remembered
+    one must not outlast the real name once a source gives it."""
     aliases: dict[str, dict[str, str]] = field(default_factory=dict)
     """Alias → ``{"from": ISO, "to": ISO}``: the invest numbers and ECMWF
     identifiers the system has gone under, with their validity."""
@@ -196,8 +201,7 @@ def resolve(sightings: list[Sighting], previous: list[PreviousSystem], now: date
                 current = system.aliases.setdefault(alias, dict(window))
                 current["from"] = min(current["from"], window["from"])
                 current["to"] = max(current["to"], window["to"])
-            if system.name is None:
-                system.name = prior.name
+            system.remembered_name = prior.name
             system.positions.append((prior.last_time, prior.last_lat, prior.last_lon))
 
     # Rule 1: every numbered id is a storm, before anything is matched.
@@ -305,5 +309,7 @@ def resolve(sightings: list[Sighting], previous: list[PreviousSystem], now: date
             crosswalk[prior.id] = target.id
             for alias, window in prior.aliases.items():
                 target.aliases.setdefault(alias, dict(window))
+    for system in systems.values():
+        system.name = system.name or system.remembered_name
     # Old crosswalk entries whose target still exists stay valid.
     return Resolution(systems=list(systems.values()), crosswalk=crosswalk)
