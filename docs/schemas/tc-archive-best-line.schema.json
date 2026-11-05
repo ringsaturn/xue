@@ -30,7 +30,7 @@
           "publisher": {"type": "string"},
           "title": {"type": "string"},
           "url": {"type": "string", "pattern": "^https://"},
-          "use": {"enum": ["position", "pressure", "check"]}
+          "use": {"enum": ["position", "pressure", "wind", "check"]}
         }
       }
     }

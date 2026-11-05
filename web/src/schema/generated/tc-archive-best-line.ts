@@ -8,7 +8,7 @@ import { checkTcTrack, type TcTrack } from "./tc-storm";
 const PATTERN_1 = new RegExp("^https://", "u");
 
 /** One line of tc/archive/<YYYY>/best.jsonl (docs/tc.md section 8.2): one storm's best tracks. That basin is the id's, that a numbered storm's atcf lists its own id, the track keys and the tracks' own rules are the readers' own checks. */
-export type TcArchiveBest = { storm: ArchiveStormId; basin: Basin; name: string | null; sid: string | null; atcf: AtcfId[]; best: Record<string, TcTrack>; provenance?: ({ publisher: string; title: string; url: string; use: "position" | "pressure" | "check" })[] };
+export type TcArchiveBest = { storm: ArchiveStormId; basin: Basin; name: string | null; sid: string | null; atcf: AtcfId[]; best: Record<string, TcTrack>; provenance?: ({ publisher: string; title: string; url: string; use: "position" | "pressure" | "wind" | "check" })[] };
 
 export function checkTcArchiveBest(v: unknown, at: string): asserts v is TcArchiveBest {
   isObject(v, at);
@@ -48,7 +48,7 @@ export function checkTcArchiveBest(v: unknown, at: string): asserts v is TcArchi
       const v16 = field(v13, "url", at + ".provenance[" + i12 + "]");
       isString(v16, at + ".provenance[" + i12 + "].url", PATTERN_1);
       const v17 = field(v13, "use", at + ".provenance[" + i12 + "]");
-      isOneOf(v17, at + ".provenance[" + i12 + "].use", ["position","pressure","check"]);
+      isOneOf(v17, at + ".provenance[" + i12 + "].use", ["position","pressure","wind","check"]);
     }
   }
 }

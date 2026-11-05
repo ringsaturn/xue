@@ -81,7 +81,7 @@ HISTORY_ID = re.compile(r"^[A-Z]{2}-(\d{7}[NS]\d{5}|[A-Z]+)-\d{4}$")
 read as an ATCF id's do."""
 
 
-PROVENANCE_USES = frozenset({"position", "pressure", "check"})
+PROVENANCE_USES = frozenset({"position", "pressure", "wind", "check"})
 """What a curated storm took from a source (``docs/tc.md`` §8.2)."""
 
 
@@ -222,7 +222,8 @@ def overview_track(record: dict[str, Any]) -> list[list[int]]:
 def best_summary(record: dict[str, Any]) -> dict[str, Any]:
     """A season index's one-line summary of a storm's best tracks: the
     first and last time any of them places it, and its peak wind on the
-    US track (one-minute), else on the first key that has one."""
+    US track (one-minute), else on the first key that has one, raised by a
+    curated track that observed more."""
     times = [point["time"] for track in record["best"].values() for point in track["points"]]
     vmax = None
     for key in sorted(record["best"], key=lambda k: (k != "usa", k)):
@@ -230,6 +231,8 @@ def best_summary(record: dict[str, Any]) -> dict[str, Any]:
         if winds:
             vmax = max(winds)
             break
+    observed = [point["vmax"] for point in record["best"].get("curated", {"points": []})["points"] if point["vmax"] is not None]
+    vmax = max(observed + ([] if vmax is None else [vmax]), default=None)
     return {"first": min(times) if times else None, "last": max(times) if times else None, "vmax": vmax}
 
 

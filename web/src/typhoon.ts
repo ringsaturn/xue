@@ -604,12 +604,12 @@ function renderFacts(): void {
   });
 }
 
-/** Where a reconstructed storm's data comes from, so it does not read as an
+/** Where a curated track's data comes from, so it does not read as an
  * agency's best track. */
 function renderProvenance(sources: readonly ProvenanceSource[]): void {
   provenance.hidden = sources.length === 0;
   if (sources.length === 0) return;
-  const uses = { position: t("tcPageUsePosition"), pressure: t("tcPageUsePressure"), check: t("tcPageUseCheck") };
+  const uses = { position: t("tcPageUsePosition"), pressure: t("tcPageUsePressure"), wind: t("tcPageUseWind"), check: t("tcPageUseCheck") };
   const list = element("ul", "");
   for (const source of sources) {
     const item = element("li", "");

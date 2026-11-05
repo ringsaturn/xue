@@ -147,5 +147,144 @@
     "use": "check"
    }
   ]
+ },
+ {
+  "storm": "WP031945",
+  "basin": "WP",
+  "name": "CONNIE",
+  "sid": "1945153N11133",
+  "atcf": [
+   "WP031945"
+  ],
+  "best": {
+   "curated": {
+    "source": "curated",
+    "provisional": false,
+    "points": [
+     {
+      "time": "1945-06-04T12:00:00Z",
+      "lat": 21.4,
+      "lon": 129.0,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1945-06-04T18:00:00Z",
+      "lat": 22.3,
+      "lon": 130.3,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1945-06-04T19:40:00Z",
+      "lat": 22.52,
+      "lon": 131.49,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1945-06-04T22:00:00Z",
+      "lat": 23.06,
+      "lon": 132.13,
+      "vmax": 41.2,
+      "pmin": 958.3,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     },
+     {
+      "time": "1945-06-05T20:30:00Z",
+      "lat": 27.5,
+      "lon": 137.5,
+      "vmax": null,
+      "pmin": null,
+      "radii": null,
+      "class": null,
+      "rmw": null,
+      "gust": null,
+      "cone": null
+     }
+    ]
+   }
+  },
+  "provenance": [
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Task Group 38.1 report, June 1945: the centre where the group passed through it on 5 June, and its estimate at dawn on 6 June",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-june-1945/extract-from-report-of-task-group-thirty-eight-point-one.html",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Pittsburgh (CA-72) war diary, June 1945: centre plotted 240° 30 miles at 0440(I) on 5 June",
+    "url": "https://catalog.archives.gov/id/101744582",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Baltimore (CA-68) war diary, June 1945: the ship's positions either side of that plot",
+    "url": "https://catalog.archives.gov/id/101730504",
+    "use": "position"
+   },
+   {
+    "publisher": "NOAA NCEI",
+    "title": "ICOADS Release 3.1, June 1945 marine reports: centre fitted to wind directions on 4 June",
+    "url": "https://www.ncei.noaa.gov/data/international-comprehensive-ocean-atmosphere/v3/archive/final-untrim/",
+    "use": "position"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Task Group 38.1 report, June 1945: USS Hornet's 958.3 hPa at the edge of the eye at 0545(I), an upper bound for the centre",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-june-1945/extract-from-report-of-task-group-thirty-eight-point-one.html",
+    "use": "pressure"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Task Group 38.1 report, June 1945: winds of 80 to 100 knots at the edge of the eye, the lower end kept",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-june-1945/extract-from-report-of-task-group-thirty-eight-point-one.html",
+    "use": "wind"
+   },
+   {
+    "publisher": "U.S. National Archives, Record Group 38",
+    "title": "USS Baltimore (CA-68) war diary, June 1945: 28.47 inHg and 80 knots at 0630(I)",
+    "url": "https://catalog.archives.gov/id/101730504",
+    "use": "wind"
+   },
+   {
+    "publisher": "NOAA NCEI",
+    "title": "ICOADS Release 3.1, June 1945 marine reports: 959.4 hPa and 75 knots near the centre",
+    "url": "https://www.ncei.noaa.gov/data/international-comprehensive-ocean-atmosphere/v3/archive/final-untrim/",
+    "use": "check"
+   },
+   {
+    "publisher": "U.S. Weather Bureau, via NOAA Central Library",
+    "title": "Historical daily synoptic weather maps, Northern Hemisphere sea level, 3–7 June 1945",
+    "url": "https://web.archive.org/web/2016/http://docs.lib.noaa.gov/rescue/swm/1945/",
+    "use": "check"
+   },
+   {
+    "publisher": "U.S. Navy, Naval History and Heritage Command",
+    "title": "Third Fleet report, June 1945: how far the fleet's position reports of the storm spread",
+    "url": "https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/p/pacific-typhoon-june-1945/extract-from-third-fleet-report.html",
+    "use": "check"
+   }
+  ]
  }
 ]
