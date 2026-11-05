@@ -24,6 +24,24 @@
       "type": "array",
       "items": {"$ref": "alerts-archive-catalog.schema.json#/$defs/Network"}
     },
+    "columns": {
+      "description": "The rows' columns by name. A reader finds a column by its name here; an index written before the field has the same layout and is read by position.",
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {"const": "id"},
+        {"const": "network"},
+        {"const": "category"},
+        {"const": "level"},
+        {"const": "event"},
+        {"const": "first"},
+        {"const": "ended"},
+        {"const": "reason"},
+        {"const": "offset"},
+        {"const": "length"}
+      ]
+    },
     "rows": {"type": "array", "items": {"$ref": "#/$defs/ArchiveRow"}}
   },
   "$defs": {

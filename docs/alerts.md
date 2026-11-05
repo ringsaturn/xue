@@ -1085,6 +1085,7 @@ A month's `index.json`:
 {"archiveSchemaVersion": 1, "product": "alerts", "month": "2026-11",
  "alerts": {"path": "alerts.jsonl", "byteLength": 41234567, "crc32": "…"},
  "networks": ["eccc", "jma", "nws"],
+ "columns": ["id", "network", "category", "level", "event", "first", "ended", "reason", "offset", "length"],
  "rows": [["nws:urn:oid:…", 2, "marine", 2, "Small Craft Advisory",
            "2026-11-01T00:05:00Z", "2026-11-01T03:10:00Z", "replaced", 0, 1450]]}
 ```
@@ -1097,6 +1098,12 @@ length]`: `network` the position in `networks`, `category`, `level` and
 the byte span of the record's JSON object in `alerts.jsonl`, without the
 newline. Rows are sorted by id and unique and their spans tile the file
 in order.
+
+`columns` (optional) names the columns of `rows`, and a reader finds a
+column by its name there. In archive v1 it is always the layout above, so
+a reader that indexes by position reads it too; month indexes written
+before it (every month up to 2026-11-05) do not carry it, and a reader
+takes their rows in the layout above.
 
 `catalog.json`:
 
@@ -1116,8 +1123,8 @@ line of §12.2's files,
 `alert` is [`alerts-line`](schemas/alerts-line.schema.json);
 `tests/test_schemas.py` holds an archive it folds from the committed rounds
 to them. What they cannot say, the order, uniqueness and tiling above, a
-row's network position and its two nulls together, and `by` for `replaced`
-alone, is each reader's own check.
+row's network position and its two nulls together, `columns` against the
+v1 layout, and `by` for `replaced` alone, is each reader's own check.
 
 ### 12.4 The producer
 

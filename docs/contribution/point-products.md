@@ -72,8 +72,8 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   each of its readers ties the fields and columns it takes by name to the
   committed schema (`include_str!`). Positional rows name their columns in
   a `columns` array (airport and alerts indexes, aq and synop stations
-  files), which the shell and the worker read by name with a positional
-  fallback for files from before it. The
+  files, the alerts archive's month indexes), which their readers take by
+  name with a positional fallback for files from before it. The
   generator implements a closed subset of the vocabulary (no `if`, and a
   point product's objects stay open: a reader admits a field a later
   revision adds) and refuses a schema that leaves it. The grid contracts

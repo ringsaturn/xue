@@ -340,12 +340,15 @@ class SchemaTest(unittest.TestCase):
     def test_the_alerts_archive_goldens_cover_every_shape(self) -> None:
         """The alerts archive goldens reach the branches its schemas name: a
         catalog of more than one month, months holding different networks
-        whose spans tile their files, records still in force (null ended, two null row columns), ended
+        whose spans tile their files and name their columns, records still in force (null ended, two null row columns), ended
         without a successor and replaced with one, and every reason."""
+        from xuebuild.alerts import archive
+
         (catalog,) = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/catalog.json")]
         self.assertEqual([entry["month"] for entry in catalog["months"]], ["2026-10", "2026-11"])
         indexes = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json")]
         self.assertEqual([index["networks"] for index in indexes], [["jma", "nws"], ["eccc", "jma", "meteoalarm", "nws"]])
+        self.assertEqual([index["columns"] for index in indexes], [list(archive.ROW_FIELDS)] * 2)
         for path, index in zip(self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json"), indexes):
             ends = [row[8] + row[9] + 1 for row in index["rows"]]
             self.assertEqual([row[8] for row in index["rows"]], [0, *ends[:-1]])
