@@ -66,6 +66,7 @@ GFS = source_spec("gfs")
 # levels, and the turbulence index they would feed; the records exist in
 # the AIFS open data), and what AIFS adds.
 DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 500, 300, 250, 200)) + (
+    "ptypeec",
     "gust",
     "cape",
     "icetk",

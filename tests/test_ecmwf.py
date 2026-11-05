@@ -65,7 +65,13 @@ class SourceRegistryTests(unittest.TestCase):
     def test_ecmwf_publishes_what_the_open_data_carries_in_gfs_order(self) -> None:
         gfs = published_bundle_ids(GFS)
         ecmwf = published_bundle_ids(ECMWF)
-        self.assertEqual([bundle_id for bundle_id in gfs if bundle_id in ecmwf], list(ecmwf))
+        # ECMWF's own type is the one field GFS has no record of; it sits where
+        # GFS's derived one does.
+        self.assertEqual(
+            [bundle_id for bundle_id in gfs if bundle_id in ecmwf],
+            [bundle_id for bundle_id in ecmwf if bundle_id != "ptypeec"],
+        )
+        self.assertEqual(ecmwf.index("ptypeec"), gfs.index("ptype"))
         for bundle_id in ADDED:
             self.assertIn(bundle_id, ecmwf)
         # Not in the open data: the layer cloud covers, the visibility, the

@@ -275,7 +275,7 @@ class RegistryTests(unittest.TestCase):
         # stated input order is the order the records sit in the frame.
         primary = gfs.primary_input_ids()
         self.assertEqual(gfs.input_variable_ids, primary + GFS_WAVE_IDS)
-        self.assertEqual(len(primary), 79)
+        self.assertEqual(len(primary), 81)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
         ecmwf = source_spec("ecmwf")
@@ -329,11 +329,11 @@ class RepackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"
             repack_grid_simple(FIXTURE, path)
-            self.assertEqual(len(grib2.index_messages(path)), 88, "every message survives, in order")
+            self.assertEqual(len(grib2.index_messages(path)), 90, "every message survives, in order")
             listing = subprocess.run(
                 ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
             ).stdout
-            self.assertEqual(listing.count("grid_simple"), 88)
+            self.assertEqual(listing.count("grid_simple"), 90)
 
 
 class MatcherTests(unittest.TestCase):

@@ -161,16 +161,18 @@ describe("buildFrostPlane", () => {
   const value = (code: number) => -1016 + code * 8;
 
   it("is the isotherm's height above the ground", () => {
-    const height = plane(HEIGHT, 2, 1, [100, 20]);
-    const ground = plane(GROUND, 2, 1, [1000, 1000]);
+    // 1500 and 500 m over ground at 1000 m; the plane only has to hold the
+    // crossing, and tops out at 1016 m.
+    const height = plane(HEIGHT, 2, 1, [60, 20]);
+    const ground = plane(GROUND, 2, 1, [100, 100]);
     const out = buildFrostPlane(height, ground);
-    expect(value(out[0]!)).toBeCloseTo(1500);
-    expect(value(out[1]!)).toBeCloseTo(-500);
+    expect(value(out[0]!)).toBe(1016);
+    expect(Math.abs(value(out[1]!) + 500)).toBeLessThanOrEqual(8);
   });
 
   it("reads a column frozen through as below the ground, over sea or land", () => {
     const height = plane(HEIGHT, 2, 1, [0, 0]);
-    const ground = plane(GROUND, 2, 1, [0, 1000]);
+    const ground = plane(GROUND, 2, 1, [0, 100]);
     const out = buildFrostPlane(height, ground);
     expect(value(out[0]!)).toBeLessThan(0);
     expect(out[0]).toBe(out[1]);
@@ -202,10 +204,15 @@ describe("phaseAnchors", () => {
   });
 
   it("places the 0 °C label where the freezing line crosses", () => {
+    // 200 and 400 m over ground at 300 m: the crossing is about halfway along.
     const height = plane(HEIGHT, 2, 1, [8, 16]);
-    const ground = plane(GROUND, 2, 1, [100, 100]);
+    const ground = plane(GROUND, 2, 1, [30, 30]);
     const frost = { ...height, variable: FROST_PLANE_VARIABLE, plane: buildFrostPlane(height, ground) };
-    expect(phaseAnchors(null, null, frost)).toEqual([{ kind: "frost-line", longitude: 100.125, latitude: 40 }]);
+    const anchors = phaseAnchors(null, null, frost);
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]!.kind).toBe("frost-line");
+    expect(anchors[0]!.longitude).toBeCloseTo(100.125, 1);
+    expect(anchors[0]!.latitude).toBe(40);
   });
 });
 

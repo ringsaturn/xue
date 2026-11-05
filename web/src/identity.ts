@@ -72,6 +72,7 @@ export type ChartFamily =
   | "pwat"
   | "hpbl"
   | "ptype"
+  | "ptypeec"
   | "cpofp"
   | "fzlvl"
   | "tmpsfc"
@@ -543,6 +544,15 @@ export function identityForProducedScalar(variable: { parameter?: BundleParamete
   return null;
 }
 
+/** A WMO parameter that means another book of codes under one centre's name:
+ * ECMWF's precipitation type is NCEP-derived `ptype`'s parameter, with classes
+ * `ptype` does not have. Null for anything else, which the WMO table answers. */
+function identityForCentreField(variable: { parameter?: BundleParameter; producer?: BundleProducer }): VariableIdentity | null {
+  const { parameter, producer } = variable;
+  if (!parameter || producer?.id !== producerOf("ptypeec")) return null;
+  return isOnSurfaceOf(parameter, "ptypeec") ? scalar("ptypeec", null) : null;
+}
+
 /** Local-use scalars carrying no `producer` block: the source's own
  * documentation names them, and no producer algorithm derived them. The
  * SWPC OVATION aurora probability is the first — a space-weather field the
@@ -664,7 +674,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   const identity = first.parameter
     ? isLocalUse(first.parameter)
       ? (identityForProducedScalar(first) ?? identityForLocalScalar(first.parameter))
-      : identityForParameter(first.parameter, first.band, first.aerosol)
+      : (identityForCentreField(first) ?? identityForParameter(first.parameter, first.band, first.aerosol))
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }

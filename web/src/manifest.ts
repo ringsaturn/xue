@@ -658,6 +658,7 @@ export type KnownBundleId =
   | "dswrf"
   | "cref"
   | "orog"
+  | "ptypeec"
   | "aurora"
   | "cloud3d"
   | SurfaceDiagnosticId
@@ -791,6 +792,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   "dswrf",
   "cref",
   "orog",
+  "ptypeec",
   "aurora",
   "cloud3d",
   ...SURFACE_DIAGNOSTIC_IDS,
