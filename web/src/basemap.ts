@@ -102,6 +102,32 @@ const COASTLINE_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]
   1.8,
 ];
 
+/** The flavor draws rivers in the water's own color and under the fields, so
+ * they vanish on the land's pale or slate tones and entirely under an opaque
+ * field. They go over the fields with the coast instead, in an ink of their
+ * own that `applyBasemapInk` sets. The tiles carry river lines from z9 only. */
+export const RIVER_LAYER = "water_river";
+
+const WATERWAY_LABEL_LAYER = "water_waterway_label";
+
+/** Named rivers from the regional scale; the streams keep the flavor's z13. */
+const RIVER_LABEL_MIN_ZOOM = 10;
+const STREAM_LABEL_MIN_ZOOM = 13;
+
+/** River width in CSS px by zoom: thinner than the coast, and capped well below
+ * the flavor's 12 px so it stays a line over the data at a city zoom. */
+const RIVER_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]> = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  9,
+  0.6,
+  12,
+  1.4,
+  16,
+  3,
+];
+
 /** Protomaps hosted basemap (real coastlines, waterways, boundaries and
  * labels). The forecast layers insert themselves before this layer — the
  * coastline, which sits just under the boundaries — keeping the coast, the
@@ -207,12 +233,14 @@ export function buildBasemapStyle(): BasemapStyle {
     // land stays a flat themed slate under the data.
     // Basemap labels follow the UI locale.
     layers: withoutHiddenLayers(
-      withCoastline(
-        withHillshade(
-          quietedUnderData(
-            basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+      withRivers(
+        withCoastline(
+          withHillshade(
+            quietedUnderData(
+              basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+            ),
+            hillshadePaint(darkGround),
           ),
-          hillshadePaint(darkGround),
         ),
       ),
       BASEMAP_HIDDEN,
@@ -304,6 +332,43 @@ function withCoastline(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
   const at = layers.findIndex((layer) => layer.id === "boundaries_country");
   if (at < 0) throw new Error("basemap style has no boundaries_country layer");
   return [...layers.slice(0, at), coastline, ...layers.slice(at)];
+}
+
+/** The rivers moved just over the coastline, which is where the fields stop,
+ * and the river names brought forward from the flavor's z13. */
+export function withRivers(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
+  const flavorRiver = layers.find((layer) => layer.id === RIVER_LAYER);
+  if (flavorRiver?.type !== "line") throw new Error("basemap style has no river layer");
+  const river: BasemapStyle["layers"][number] = {
+    ...flavorRiver,
+    // The unnamed lines include the connectors mapped across lakes, fans of
+    // straight segments the flavor hides by drawing them in the water's color.
+    // Over the field they would show, and no style can clip them to the land.
+    filter: ["all", flavorRiver.filter ?? true, ["has", "name"]] as typeof flavorRiver.filter,
+    layout: { ...flavorRiver.layout, "line-join": "round", "line-cap": "round" },
+    // The color is the ground's ink, set by `applyBasemapInk`; this is only
+    // what the layer carries until the style has loaded. One value for every
+    // build, so the style diff never undoes the ink.
+    paint: { ...flavorRiver.paint, "line-color": "rgba(40, 110, 170, 0.6)", "line-width": RIVER_WIDTH },
+  };
+  const rest = layers
+    .filter((layer) => layer.id !== RIVER_LAYER)
+    .map((layer) =>
+      layer.id === WATERWAY_LABEL_LAYER
+        ? ({
+            ...layer,
+            minzoom: RIVER_LABEL_MIN_ZOOM,
+            filter: [
+              "any",
+              ["==", ["get", "kind"], "river"],
+              ["all", ["==", ["get", "kind"], "stream"], [">=", ["zoom"], STREAM_LABEL_MIN_ZOOM]],
+            ],
+          } as BasemapStyle["layers"][number])
+        : layer,
+    );
+  const at = rest.findIndex((layer) => layer.id === COASTLINE_LAYER);
+  if (at < 0) throw new Error("basemap style has no coastline layer");
+  return [...rest.slice(0, at + 1), river, ...rest.slice(at + 1)];
 }
 
 type StyleProperties = Record<string, unknown> | undefined;

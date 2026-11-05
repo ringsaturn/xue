@@ -221,7 +221,7 @@ import { createMarks } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId } from "./derived";
 import { createExportSheet } from "./exportsheet";
-import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLINE_LAYER, FORECAST_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
+import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLINE_LAYER, RIVER_LAYER, FORECAST_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
 import { createStats } from "./stats";
 import { createOverlays } from "./overlays";
 import { createContourLabels } from "./contourlabels";
@@ -704,6 +704,9 @@ function applyBasemapInk(darkGround: boolean): void {
   const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(27, 26, 23, 0.3)";
   // The coast reads darker than a border, the way it does on a chart.
   const coast = darkGround ? "rgba(255, 255, 255, 0.55)" : "rgba(27, 26, 23, 0.6)";
+  // A saturated blue, not the coast's neutral ink: on the dark theme the
+  // brightest fields sit under it, and only the hue still parts it from them.
+  const river = darkGround ? "rgba(60, 165, 250, 0.9)" : "rgba(40, 110, 170, 0.6)";
   for (const layer of map.getStyle().layers ?? []) {
     if (layer.type === "symbol") {
       map.setPaintProperty(layer.id, "text-color", ink);
@@ -712,6 +715,8 @@ function applyBasemapInk(darkGround: boolean): void {
       map.setPaintProperty(layer.id, "line-color", border);
     } else if (layer.id === COASTLINE_LAYER) {
       map.setPaintProperty(layer.id, "line-color", coast);
+    } else if (layer.id === RIVER_LAYER) {
+      map.setPaintProperty(layer.id, "line-color", river);
     }
   }
   applyLabelInk();
