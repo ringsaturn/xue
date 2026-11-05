@@ -393,6 +393,19 @@ degree, `class` the Saffir–Simpson class of its wind from 0 (TD, below
 their file exactly. A reader rejects an `archiveSchemaVersion` above the
 one it implements.
 
+The shapes are normative in
+[`schemas/tc-archive-catalog.schema.json`](schemas/tc-archive-catalog.schema.json),
+[`tc-archive-month-index`](schemas/tc-archive-month-index.schema.json),
+[`tc-archive-season-index`](schemas/tc-archive-season-index.schema.json),
+[`tc-archive-overview`](schemas/tc-archive-overview.schema.json) and, for a
+line of §8.2's files,
+[`tc-archive-forecast-line`](schemas/tc-archive-forecast-line.schema.json) and
+[`tc-archive-best-line`](schemas/tc-archive-best-line.schema.json);
+`tests/test_schemas.py` holds an archive it builds to them, and the shell's
+readers run the validators generated from them (§7). What they cannot say,
+the order, uniqueness and tiling above and a storm's season, is each
+reader's own check.
+
 ### 8.4 Producers
 
 - The daily harvest reads the last 48 hourly issues from the data origin,
@@ -494,6 +507,10 @@ lead) cases both verified, with `skill` = 1 − track ÷ reference track.
 A line of `errors.jsonl` is `{storm, basin, truths: {<truth>: {<source>:
 {base: [], lead: [], track: [], along: [], cross: [], vmax: [], pmin: []}}}}`,
 one column per field and one row per verified case, `lead` in hours.
+The shapes are normative in
+[`schemas/tc-scores.schema.json`](schemas/tc-scores.schema.json) and
+[`schemas/tc-errors-line.schema.json`](schemas/tc-errors-line.schema.json),
+held as §8.3's are.
 
 The official forecasts are compared with the models of the same `base`,
 which ran with the same data but finished after the official forecast

@@ -42,6 +42,7 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 | GRIB matching / template parsing | — | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
 | Zarr group and array documents | `store-group`, `store-array`, `polar-group`, `network-group` | `zarrstore.py`, `nexrad/store.py`, `river/network.py` (writers) | `zarr.rs`, `network.rs`, `encode/zarrstore.rs` | `zarr/shard.ts`, `river/store.ts` |
 | Zarr shard reading | — | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
+| Tropical cyclone archive and scores | `tc-archive-catalog`, `tc-archive-month-index`, `tc-archive-season-index`, `tc-archive-overview`, `tc-archive-forecast-line`, `tc-archive-best-line`, `tc-scores`, `tc-errors-line` | `tc/archive.py`, `tc/score.py` (writers) | — | `tc/archive.ts` |
 
 A schema is normative for shape. `tests/test_schemas.py` holds every
 writer's goldens to it (the committed ones, and the stores and manifests it

@@ -79,7 +79,9 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   revision adds) and refuses a schema that leaves it. The grid contracts
   (the manifest, bundle metadata, a store's documents) use the same
   harness; their schemas `$ref` one another by file name, and bundle
-  metadata closes the blocks `format.md` declares closed.
+  metadata closes the blocks `format.md` declares closed. So does the tc
+  archive (`docs/tc.md` §8–9), whose goldens `tests/test_schemas.py`
+  builds with the archive and score writers.
 - **Parsers import no other parser** and convert to SI themselves; `build.py`
   is the only place sources meet; `schema.py` validates on write.
 - **Goldens.** `tests/fixtures/<product>/` is a fetched issue (two rounds
