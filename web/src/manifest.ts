@@ -1542,6 +1542,46 @@ export async function fetchManifest(baseUrl: string, model: ForecastModelId = "g
   return { manifest, latest, manifestUrl: url.href };
 }
 
+/** One cycle of a model's manifest, named by its run rather than the pointer:
+ * for a dataset reading the same cycle of another (`borrowBundles`), whose
+ * pointer may already have moved on. The run in the `?v=` keeps this request
+ * apart from any other's cache entry. */
+export async function fetchRunManifest(baseUrl: string, model: ForecastModelId, run: string): Promise<{ manifest: ForecastManifest; manifestUrl: string }> {
+  const url = new URL(`${model}.${run}/manifest.json`, new URL(baseUrl, document.baseURI));
+  url.searchParams.set("v", run);
+  const response = await fetchImmutable(url);
+  if (!response.ok) throw new Error(t("manifestRequestFailed", { status: response.status }));
+  return { manifest: validateManifest(await response.json(), model), manifestUrl: url.href };
+}
+
+/** Every artifact path under a descriptor, made absolute against its manifest. */
+function absolutePaths<T>(node: T, manifestUrl: string): T {
+  if (Array.isArray(node)) return node.map((item: unknown) => absolutePaths(item, manifestUrl)) as T;
+  if (typeof node !== "object" || node === null) return node;
+  const copy: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    copy[key] = key === "path" && typeof value === "string" ? new URL(value, manifestUrl).href.split("?")[0] : absolutePaths(value, manifestUrl);
+  }
+  return copy as T;
+}
+
+/** A manifest that also lists bundles another run publishes, read from that
+ * run's own stores: nothing is copied or built. Artifact paths resolve through
+ * `new URL(path, manifestUrl)`, so an absolute one leaves the owner's in charge.
+ * A bundle the manifest has of its own stays its own. */
+export function borrowBundles(
+  own: ForecastManifest,
+  lender: ForecastManifest,
+  lenderUrl: string,
+  wanted: (id: ForecastBundleId) => boolean,
+): ForecastManifest {
+  const held = new Set(own.bundles.map((bundle) => bundle.variable));
+  const borrowed = lender.bundles
+    .filter((bundle) => wanted(bundle.variable) && !held.has(bundle.variable))
+    .map((bundle) => absolutePaths(bundle, lenderUrl));
+  return { ...own, bundles: [...own.bundles, ...borrowed] };
+}
+
 // ---------------------------------------------------------------------------
 // Bundle metadata (embedded UTF-8 JSON inside the .xue file).
 

@@ -26,6 +26,7 @@ import {
   parseExperimentFromSearch,
   parseLinesFromSearch,
   parseParticlesFromSearch,
+  parsePhaseFromSearch,
   parseStationsFromSearch,
   parseRadarFromSearch,
   parseTcFromSearch,
@@ -38,6 +39,7 @@ import {
   searchWithExperiment,
   searchWithLines,
   searchWithParticles,
+  searchWithPhase,
   searchWithRadar,
   searchWithStations,
   searchWithTc,
@@ -78,6 +80,9 @@ export interface ViewState {
   accumulation: number | null;
   /** Whether the particle overlay is drawn where there is a flow to draw. */
   particles: boolean;
+  /** Whether the precipitation is painted by phase, with the 0 °C line
+   * (`?phase=on`, precipphase.ts). Off unless asked for: it loads more bundles. */
+  phase: boolean;
   /** The volume bundle drawn over the field (`?volume=`), or null. Only
    * drawn over a 2D field: a volume chosen as the field is the field. */
   volume: ForecastBundleId | null;
@@ -156,6 +161,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       lines: composition.lines,
       accumulation: parseAccumulationFromSearch(search),
       particles: requestedParticles ?? defaults.particles,
+      phase: parsePhaseFromSearch(search),
       volume: parseVolumeFromSearch(search),
       derived: { inflow: experiment.inflow, front: experiment.front, hotspot: false, ffwi: false, fwalert: false },
       imagery: parseGibsFromSearch(search),
@@ -192,7 +198,8 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const withAccumulation = searchWithAccumulation(withLines, view.field === "prate" ? view.accumulation : null);
   const withVolume = searchWithVolume(withAccumulation, volumeOverField(view));
   const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
-  const withExperiment = searchWithExperiment(withParticles, {
+  const withPhase = searchWithPhase(withParticles, view.phase);
+  const withExperiment = searchWithExperiment(withPhase, {
     enabled: context.experimentEnabled,
     inflow: view.derived.inflow,
     front: view.derived.front,

@@ -6,6 +6,7 @@ import {
   Map as MaplibreMap,
   NavigationControl,
   setWorkerUrl,
+  type GeoJSONSource,
 } from "maplibre-gl";
 // maplibre-gl 6 resolves its worker from `import.meta.url`, which points at
 // the bundle rather than the package once Vite has processed it. `?worker&url`
@@ -55,7 +56,9 @@ import {
   FORECAST_MODELS,
   mosaicMembers,
   fetchLatestPointer,
+  borrowBundles,
   fetchManifest,
+  fetchRunManifest,
   ManifestRejectedError,
   hasBundle,
   isBundleVariableId,
@@ -74,6 +77,7 @@ import {
   sameTimeAxis,
   visibleGridShare,
   type BundleMetadata,
+  type LinearQuantization,
   type BundleVariable,
   type ForecastBundleId,
   type ForecastManifest,
@@ -103,7 +107,7 @@ import {
   type IsobaricFamily,
   UNTILED_BUNDLE_IDS,
 } from "./levels";
-import { buildPalette, encodeLog, hostPaletteCodes, hostPaletteLegend, hostPaletteSampling, legendGradient, logCodebookLegend } from "./palettes";
+import { buildPalette, buildPhasePalette, encodeLog, hostPaletteCodes, hostPaletteLegend, hostPaletteSampling, legendGradient, logCodebookLegend, phaseLegendGradient } from "./palettes";
 import {
   PRESSURE_BUNDLE_IDS,
   contourSmoothingCells,
@@ -157,6 +161,20 @@ import { displayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
 import { frameCacheKey, variableKey } from "./sessionkeys";
+import {
+  buildFrostPlane,
+  buildPhaseField,
+  FROST_PLANE_VARIABLE,
+  phaseAnchors,
+  PHASE_FREEZING_RAIN,
+  PHASE_ICE_PELLETS,
+  PHASE_MIX,
+  PHASE_RAIN,
+  PHASE_SNOW,
+  type PhaseAnchor,
+  type PhaseField,
+  type PhasePlane,
+} from "./precipphase";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
 import { timelinePlan, type TimelinePlan, type TimelineSegment } from "./timeline";
 import {
@@ -217,7 +235,7 @@ import {
   type StreamMessage,
 } from "./sessions";
 import { createProbePanel } from "./probepanel";
-import { createMarks } from "./marks";
+import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId } from "./derived";
 import { createExportSheet } from "./exportsheet";
@@ -965,6 +983,8 @@ const legendBar = legend.querySelector<HTMLElement>(".legend-bar")!;
 const legendUnit = required<HTMLElement>("legend-unit");
 const legendLabels = required<HTMLElement>("legend-labels");
 const legendDerived = required<HTMLElement>("legend-derived");
+const legendPhase = required<HTMLElement>("legend-phase");
+const phaseToggle = required<HTMLButtonElement>("phase-toggle");
 const legendKey = required<HTMLElement>("legend-key");
 const legendInflow = required<HTMLElement>("legend-inflow");
 const legendFront = required<HTMLElement>("legend-front");
@@ -1219,13 +1239,15 @@ function memberOffsetForFrame(session: VariableSession, index: number): number |
  * follows by valid time, the lines by lead seconds on their own axis. */
 function slotOffsetForFrame(slot: RasterSlot, index: number): number | null {
   if (!slot.session) return null;
+  // The ground has one frame, whatever the playhead says.
+  if (slot === precipPhase.ground) return frameOffsets(slot.session.metadata.time)[0] ?? null;
   if (slot.member) return memberOffsetForFrame(slot.session, index);
   return sessionOffsetForLead(slot.session, frameLeadSeconds(index));
 }
 
 /** The slot a session is drawing in, or null when it is off screen. */
 function slotOfSession(session: VariableSession): RasterSlot | null {
-  for (const slot of [slots.fill, slots.lines, ...memberSlots()]) {
+  for (const slot of [slots.fill, slots.lines, ...memberSlots(), ...phaseSlots()]) {
     if (slot.session === session) return slot;
   }
   return null;
@@ -1254,7 +1276,7 @@ let metadata: BundleMetadata | null = null;
  * them is primary at the time. A mosaic's other members each bring one of
  * their own. */
 interface RasterSlot {
-  role: "fill" | "lines" | "member";
+  role: "fill" | "lines" | "member" | "phase";
   layer: ForecastLayer;
   /** The session feeding this slot, or null while it is empty. */
   session: VariableSession | null;
@@ -1336,6 +1358,35 @@ const slots: Record<"fill" | "lines", RasterSlot> = {
 };
 let layersAdded = false;
 
+/** The precipitation by phase (`precipphase.ts`), off until its switch is
+ * pressed. Slots following the playhead like the lines, for the planes of the
+ * model's type, its percent frozen, the 0 °C isotherm's height and the ground;
+ * their own layers never reach the map. `frostLayer` draws the freezing line
+ * from a plane worked out from the last two. */
+const precipPhase = {
+  type: makeSlot("phase", "phase-type"),
+  frozen: makeSlot("phase", "phase-frozen"),
+  height: makeSlot("phase", "phase-height"),
+  ground: makeSlot("phase", "phase-ground"),
+  frostLayer: new ForecastLayer((message) => showError(message), "forecast-frost"),
+  frostGrid: null as BundleMetadata | null,
+  on: false,
+  fieldKey: null as string | null,
+  weights: null as Uint8Array | null,
+  anchors: [] as PhaseAnchor[],
+  labelsAt: 0,
+  labelsTimer: null as ReturnType<typeof setTimeout> | null,
+};
+
+function phaseSlotList(): RasterSlot[] {
+  return [precipPhase.type, precipPhase.frozen, precipPhase.height, precipPhase.ground];
+}
+
+/** The phase's slots holding a session. */
+function phaseSlots(): RasterSlot[] {
+  return phaseSlotList().filter((slot) => slot.session !== null);
+}
+
 /** The slot a bundle draws in, by its kind. */
 function slotFor(id: ForecastBundleId): RasterSlot {
   return isPressureBundle(id) ? slots.lines : slots.fill;
@@ -1349,7 +1400,7 @@ function primarySlot(): RasterSlot | null {
 /** Slots showing a session other than the primary — the overlays: the
  * lines over a field and the mosaic's other members beside it. */
 function overlaySlots(): RasterSlot[] {
-  return [slots.fill, slots.lines, ...memberSlots()].filter(
+  return [slots.fill, slots.lines, ...memberSlots(), ...phaseSlots()].filter(
     (slot) => slot.session !== null && slot.session !== activeSession,
   );
 }
@@ -2947,6 +2998,7 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
     slot.layer.setVisible(false);
     slot.wantedKey = null;
     if (slot === slots.lines) clearLabels();
+    if (slot.role === "phase") syncPrecipPhase(index);
     return;
   }
   // A composite (a member of the satellite mosaic showing true colour or
@@ -2984,6 +3036,7 @@ function trySelectOverlayFrame(slot: RasterSlot, index: number): void {
   slot.shownGuns = keys.slice(1);
   slot.wantedKey = null;
   if (slot === slots.lines) scheduleLabels(frame, false);
+  if (slot.role === "phase") syncPrecipPhase(index);
 }
 
 /** Ask for an overlay's plane for a primary frame without showing anything. */
@@ -4464,6 +4517,7 @@ function updateVariablePresentation(session: VariableSession): void {
   legendBar.style.background = legendGradientFor(session);
   renderLegendKey(ui.legendKey);
   syncDerivedLegend();
+  applyPrecipPhase();
   // A fire field names itself over the map; its key is the derived row,
   // the anchor's colour bar is hidden with the anchor (style.css).
   const fire = fireField();
@@ -5110,6 +5164,8 @@ function ensureLayers(): void {
       map.addLayer(derived.layer, FORECAST_ANCHOR_LAYER);
     }
   }
+  precipPhase.frostLayer.setVisible(false);
+  map.addLayer(precipPhase.frostLayer, FORECAST_ANCHOR_LAYER);
   map.addLayer(slots.lines.layer, FORECAST_ANCHOR_LAYER);
   layersAdded = true;
   // Member slots made before the layers were: under the lines, like every
@@ -5117,6 +5173,8 @@ function ensureLayers(): void {
   for (const member of mosaic?.members ?? []) {
     if (member.slot && !map.getLayer(member.slot.layer.id)) map.addLayer(member.slot.layer, slots.lines.layer.id);
   }
+  // The session may have been presented before there was a map to draw on.
+  applyPrecipPhase();
 }
 
 /** Empty a slot: nothing drawn, no session, and nothing waited on. The
@@ -5835,6 +5893,365 @@ async function checkMosaicForNewRuns(): Promise<void> {
   applyMosaicMembers();
 }
 
+/** The dataset a model's missing fields are read from, the same cycle's, and
+ * which of them. sflux publishes no pressure level and no phase; GFS's 0.25°
+ * files are the same model. */
+const BORROWED_BUNDLES: Partial<Record<ForecastModelId, { from: ForecastModelId; wanted: (id: ForecastBundleId) => boolean }>> = {
+  sflux: {
+    from: "gfs",
+    wanted: (id) => bundleLevel(id) !== null || id === "prmsl" || id === "ptype" || id === "cpofp" || id === "fzlvl",
+  },
+};
+
+/** The run's manifest with what it reads from another's. A cycle the lender has
+ * not published is shown without them: the dataset's own fields are still
+ * right, and a pressure chart of another cycle would not be. */
+async function withBorrowedBundles(model: ForecastModelId, own: ForecastManifest, run: string): Promise<ForecastManifest> {
+  const borrowing = BORROWED_BUNDLES[model];
+  if (!borrowing) return own;
+  try {
+    const lender = await fetchRunManifest(dataBaseUrl(), borrowing.from, run);
+    return borrowBundles(own, lender.manifest, lender.manifestUrl, borrowing.wanted);
+  } catch (error) {
+    console.warn(`${model}: ${borrowing.from}.${run} not read:`, error instanceof Error ? error.message : error);
+    return own;
+  }
+}
+
+/** A value past anything the freezing line's plane holds, so the contour family
+ * at its multiples is the one line at 0. */
+const FROST_LINE_INTERVAL = 10000;
+const PHASE_LABELS_SOURCE = "precip-phase-labels";
+const PHASE_LINE_LABELS_LAYER = "precip-phase-line-labels";
+const PHASE_ZONE_LABELS_LAYER = "precip-phase-zone-labels";
+/** During playback the labels move at most this often, like the isobars'. */
+const PHASE_LABELS_PLAYBACK_MS = 1000;
+
+function frostLineInk(): readonly [number, number, number, number] {
+  return isDark ? [0.55, 0.85, 1, 0.95] : [0.04, 0.32, 0.72, 0.95];
+}
+
+function freezingZoneInk(): readonly [number, number, number, number] {
+  return isDark ? [1, 0.5, 0.52, 0.9] : [0.7, 0.05, 0.18, 0.9];
+}
+
+function frostLineStyle(): ContourStyle {
+  const { offset, scale } = FROST_PLANE_VARIABLE.quantization as LinearQuantization;
+  return {
+    offset,
+    scale,
+    interval: FROST_LINE_INTERVAL,
+    emphasisInterval: 0,
+    values: [],
+    lineWidth: 1.3,
+    emphasisWidth: 0,
+    lineColor: frostLineInk(),
+    fillAlpha: 0,
+    smoothing: precipPhase.height.session ? contourSmoothingCells(geoGrid(precipPhase.height.session.metadata).longitudeStep) : 0,
+  };
+}
+
+/** The type bundle a run ships: the one NCEP's flags make, or ECMWF's own. */
+function phaseTypeBundle(): ForecastBundleId | null {
+  if (!manifest) return null;
+  if (hasBundle(manifest, "ptype")) return "ptype";
+  return hasBundle(manifest, "ptypeec") ? "ptypeec" : null;
+}
+
+/** Whether the view on screen is one a phase can be drawn on: the rate itself,
+ * not a total over a window, which can have fallen as anything, on a run whose
+ * model reports a phase. */
+function precipPhaseOffered(): boolean {
+  const session = activeSession;
+  return (
+    session !== null &&
+    session.chartId === "prate" &&
+    !session.vector &&
+    !session.composite &&
+    !session.volume &&
+    !experimentEnabled &&
+    !mosaic &&
+    fireField() === null &&
+    accumulationOn(session) === null &&
+    manifest !== null &&
+    (phaseTypeBundle() !== null || hasBundle(manifest, "cpofp"))
+  );
+}
+
+/** Reconcile the phase with the view and its switch: open what it reads, after
+ * the primary and never blocking it, or take it all down. */
+function applyPrecipPhase(): void {
+  phaseToggle.hidden = !precipPhaseOffered();
+  phaseToggle.setAttribute("aria-pressed", String(view.phase));
+  if (!layersAdded) return;
+  if (!view.phase || !precipPhaseOffered() || !manifest) {
+    clearPrecipPhase();
+    return;
+  }
+  precipPhase.on = true;
+  const type = phaseTypeBundle();
+  const wanted: readonly [RasterSlot, ForecastBundleId | null][] = [
+    [precipPhase.type, type],
+    [precipPhase.frozen, hasBundle(manifest, "cpofp") ? "cpofp" : null],
+    // The line needs both, and a run missing either draws none.
+    [precipPhase.height, hasBundle(manifest, "fzlvl") && hasBundle(manifest, "orog") ? "fzlvl" : null],
+    [precipPhase.ground, hasBundle(manifest, "fzlvl") && hasBundle(manifest, "orog") ? "orog" : null],
+  ];
+  for (const [slot, id] of wanted) {
+    if (id !== null) openPhaseSlot(slot, id);
+    else if (slot.session) detachSlot(slot);
+  }
+  renderPhaseLegend({
+    type: type !== null,
+    mix: hasBundle(manifest, "cpofp") || type === "ptypeec",
+    line: wanted[2]![1] !== null,
+  });
+  renderPhaseLabels();
+}
+
+function setPhaseShown(next: boolean): void {
+  if (view.phase === next) return;
+  view.phase = next;
+  syncUrl();
+  applyPrecipPhase();
+}
+
+function openPhaseSlot(slot: RasterSlot, id: ForecastBundleId): void {
+  if (slot.session?.id === id || slot.wantedKey === `open:${id}`) return;
+  slot.wantedKey = `open:${id}`;
+  const sequence = initializeSequence;
+  sessionRegistry.load(id, sequence, "overlay")
+    .then((session) => {
+      if (sequence !== initializeSequence || !ready) return;
+      if (slot.wantedKey !== `open:${id}`) return;
+      slot.wantedKey = null;
+      if (!precipPhase.on) return;
+      configureSlotLayer(slot, session, true);
+      refreshViewportTiles();
+      const index = activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value);
+      sendPrefetchWindow(index);
+      if (activeFrameIndex !== null) trySelectOverlayFrame(slot, activeFrameIndex);
+      else requestOverlayDecode(slot, index);
+    })
+    .catch((error: unknown) => {
+      if (slot.wantedKey === `open:${id}`) slot.wantedKey = null;
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.warn(`phase: ${id} not opened:`, error instanceof Error ? error.message : error);
+    });
+}
+
+/** Take the phase off the chart. The sessions stay resident, like every session
+ * that leaves the screen. */
+function clearPrecipPhase(): void {
+  precipPhase.on = false;
+  precipPhase.fieldKey = null;
+  precipPhase.anchors = [];
+  if (precipPhase.labelsTimer !== null) clearTimeout(precipPhase.labelsTimer);
+  precipPhase.labelsTimer = null;
+  for (const slot of phaseSlotList()) {
+    if (slot.session || slot.wantedKey) detachSlot(slot);
+  }
+  precipPhase.frostLayer.setVisible(false);
+  slots.fill.layer.setPhase(null);
+  legendPhase.hidden = true;
+  renderPhaseLabels();
+}
+
+/** A new run or dataset: nothing carries over. */
+function resetPrecipPhase(): void {
+  clearPrecipPhase();
+  for (const slot of phaseSlotList()) slot.gridSource = null;
+  precipPhase.frostGrid = null;
+}
+
+/** A phase slot's plane for the frame at `index`: null while it is not decoded
+ * or not this frame's yet, undefined when it has no frame there or no session. */
+function phasePlane(slot: RasterSlot, index: number): { plane: PhasePlane; key: string } | null | undefined {
+  const session = slot.session;
+  if (!session) return slot.wantedKey?.startsWith("open:") ? null : undefined;
+  const offset = slotOffsetForFrame(slot, index);
+  if (offset === null) return undefined;
+  const key = cacheKey(session, session.variable, offset);
+  if (slot.shownKey !== key) return null;
+  const frame = cachedFrame(key, session);
+  if (!frame) return null;
+  return {
+    key,
+    plane: { grid: geoGrid(session.metadata), variable: session.variable, plane: frame.plane, geometry: session.tiles, tiles: frame.tiles },
+  };
+}
+
+/** Rebuild the phase once its planes are this frame's. Until then the chart
+ * keeps the last one, as an overlay keeps its last frame. A frame the model
+ * reports no phase for is painted by the plain ramp, and one with no isotherm
+ * draws no line: another hour's over this hour's rain would be a wrong chart. */
+function syncPrecipPhase(index: number): void {
+  const session = activeSession;
+  if (!precipPhase.on || !session) return;
+  const type = phasePlane(precipPhase.type, index);
+  const frozen = phasePlane(precipPhase.frozen, index);
+  const height = phasePlane(precipPhase.height, index);
+  const ground = phasePlane(precipPhase.ground, index);
+  if (type === null || frozen === null || height === null || ground === null) return;
+  const part = (entry: { plane: PhasePlane; key: string } | undefined) =>
+    entry ? `${entry.key}:${JSON.stringify(entry.plane.tiles)}` : "";
+  const key = `${part(type)}|${part(frozen)}|${part(height)}|${part(ground)}|${session.variable.id}`;
+  if (key === precipPhase.fieldKey) return;
+  precipPhase.fieldKey = key;
+  let field: PhaseField | null = null;
+  if (type || frozen) {
+    field = buildPhaseField(type?.plane ?? null, frozen?.plane ?? null, precipPhase.weights ?? undefined);
+    precipPhase.weights = field.weights;
+    slots.fill.layer.setPhase({ field, palette: phasePalette(session.variable), ink: freezingZoneInk() });
+  } else {
+    slots.fill.layer.setPhase(null);
+  }
+  const frost = height && ground ? showFrostLine(height.plane, ground.plane) : null;
+  if (!frost) precipPhase.frostLayer.setVisible(false);
+  const rateFrame = cachedFrame(cacheKey(session, session.variable, frameOffset(index)), session);
+  const rate: PhasePlane | null = rateFrame
+    ? { grid: geoGrid(session.metadata), variable: session.variable, plane: rateFrame.plane, geometry: session.tiles, tiles: rateFrame.tiles }
+    : null;
+  schedulePhaseLabels(() => phaseAnchors(field, rate, frost));
+}
+
+/** Work out the freezing line's plane and hand it to its layer. */
+function showFrostLine(height: PhasePlane, ground: PhasePlane): PhasePlane {
+  const session = precipPhase.height.session!;
+  const layer = precipPhase.frostLayer;
+  if (precipPhase.frostGrid !== session.metadata) {
+    layer.configureGrid(session.metadata);
+    layer.setDomain(modelDomain());
+    // Nothing is filled: the lines are the whole layer.
+    layer.setPalette(new Uint8Array(256 * 4));
+    precipPhase.frostGrid = session.metadata;
+  }
+  layer.setContours(frostLineStyle());
+  const plane = buildFrostPlane(height, ground);
+  layer.setFrame(plane, sessionCoverage(session, height.tiles as TileRect[] | null));
+  layer.setVisible(true);
+  return { ...height, variable: FROST_PLANE_VARIABLE, plane };
+}
+
+const phasePalettes = new WeakMap<BundleVariable, Uint8Array>();
+function phasePalette(variable: BundleVariable): Uint8Array {
+  const known = phasePalettes.get(variable);
+  if (known) return known;
+  const palette = buildPhasePalette(variable);
+  phasePalettes.set(variable, palette);
+  return palette;
+}
+
+/** The labels for the newest frame, at once when stopped and at most once a
+ * second while playing, so they do not crawl. */
+function schedulePhaseLabels(anchors: () => PhaseAnchor[]): void {
+  if (precipPhase.labelsTimer !== null) clearTimeout(precipPhase.labelsTimer);
+  precipPhase.labelsTimer = null;
+  const write = () => {
+    precipPhase.labelsTimer = null;
+    precipPhase.labelsAt = performance.now();
+    precipPhase.anchors = anchors();
+    renderPhaseLabels();
+  };
+  const wait = playing ? precipPhase.labelsAt + PHASE_LABELS_PLAYBACK_MS - performance.now() : 0;
+  if (wait <= 0) write();
+  else precipPhase.labelsTimer = setTimeout(write, wait);
+}
+
+/** Write the anchors on the map, in the ink of the line or zone they name.
+ * The source and its layer are added under the basemap's own names. */
+function renderPhaseLabels(): void {
+  if (!mapStyleReady) return;
+  let source = map.getSource(PHASE_LABELS_SOURCE) as GeoJSONSource | undefined;
+  if (!source) {
+    if (precipPhase.anchors.length === 0) return;
+    map.addSource(PHASE_LABELS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    const before = firstSymbolLayerId(map);
+    const layer = (id: string, zone: boolean) =>
+      map.addLayer(
+        {
+          id,
+          type: "symbol",
+          source: PHASE_LABELS_SOURCE,
+          filter: ["==", ["get", "zone"], zone],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": zone ? 13 : 11,
+            // A zone is what the chart warns of and is always named. The line
+            // is long, and any one of its labels will do.
+            "text-padding": zone ? 2 : 48,
+            "text-allow-overlap": zone,
+          },
+          paint: { "text-color": ["get", "color"], "text-halo-width": 1.5 },
+        },
+        before,
+      );
+    layer(PHASE_LINE_LABELS_LAYER, false);
+    layer(PHASE_ZONE_LABELS_LAYER, true);
+    source = map.getSource(PHASE_LABELS_SOURCE) as GeoJSONSource;
+  }
+  // Only the theme changes the halo; a paint write restyles the layer.
+  const halo = isDark ? "rgba(8, 19, 28, 0.85)" : "rgba(255, 255, 255, 0.9)";
+  if (map.getPaintProperty(PHASE_ZONE_LABELS_LAYER, "text-halo-color") !== halo) {
+    for (const id of [PHASE_LINE_LABELS_LAYER, PHASE_ZONE_LABELS_LAYER]) map.setPaintProperty(id, "text-halo-color", halo);
+  }
+  const css = (ink: readonly [number, number, number, number]) =>
+    `rgb(${Math.round(ink[0] * 255)}, ${Math.round(ink[1] * 255)}, ${Math.round(ink[2] * 255)})`;
+  const zoneInk = css(freezingZoneInk());
+  const lineInk = css(frostLineInk());
+  const zoneName = t("legendPhaseFreezingZone");
+  source.setData({
+    type: "FeatureCollection",
+    features: precipPhase.anchors.map((anchor) => {
+      const zone = anchor.kind === "freezing-zone";
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [anchor.longitude, anchor.latitude] },
+        properties: { zone, label: zone ? zoneName : "0 °C", color: zone ? zoneInk : lineInk },
+      };
+    }),
+  });
+}
+
+/** The key under the rain's bar: a ramp per class the run's fields can name,
+ * then the marks. */
+function renderPhaseLegend(can: { type: boolean; mix: boolean; line: boolean }): void {
+  const ramp = (row: number, key: MessageKey) => {
+    const item = document.createElement("li");
+    const chip = document.createElement("span");
+    chip.className = "legend-swatch legend-swatch-phase";
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.background = phaseLegendGradient(row);
+    const label = document.createElement("span");
+    label.textContent = t(key);
+    item.append(chip, label);
+    return item;
+  };
+  const mark = (className: string, key: MessageKey, ink: readonly [number, number, number, number]) => {
+    const item = document.createElement("li");
+    const chip = document.createElement("span");
+    chip.className = `legend-swatch ${className}`;
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.color = `rgb(${Math.round(ink[0] * 255)}, ${Math.round(ink[1] * 255)}, ${Math.round(ink[2] * 255)})`;
+    const label = document.createElement("span");
+    label.textContent = t(key);
+    item.append(chip, label);
+    return item;
+  };
+  legendPhase.replaceChildren(
+    ramp(PHASE_RAIN, "legendPtypeRain"),
+    ...(can.mix ? [ramp(PHASE_MIX, "legendPhaseMix")] : []),
+    ramp(PHASE_SNOW, "legendPtypeSnow"),
+    ...(can.type
+      ? [ramp(PHASE_FREEZING_RAIN, "legendPtypeFreezingRain"), ramp(PHASE_ICE_PELLETS, "legendPtypeIcePellets")]
+      : []),
+    ...(can.line ? [mark("legend-swatch-frost", "legendPhaseFrostLine", frostLineInk())] : []),
+    ...(can.type ? [mark("legend-swatch-freezing", "legendPhaseFreezingZone", freezingZoneInk())] : []),
+  );
+  legendPhase.hidden = false;
+}
+
 /** Reconcile the lines slot with the composition: over a filled field it
  * carries the surface named in `lines`, loading it if need be — after the
  * primary, never blocking it — and it empties when the composition names
@@ -6161,6 +6578,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     slot.gridSource = null;
   }
   resetMosaic();
+  resetPrecipPhase();
   windLayerGridSource = null;
   windLayer?.setVisible(false);
   resetComposite();
@@ -6277,7 +6695,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       if (frame) frameModelRegion();
       const loaded = await fetchManifest(dataBaseUrl(), selectedModelId);
       if (sequence !== initializeSequence) return;
-      loadedManifest = loaded.manifest;
+      loadedManifest = await withBorrowedBundles(selectedModelId, loaded.manifest, loaded.latest.run);
+      if (sequence !== initializeSequence) return;
       manifestUrl = loaded.manifestUrl;
       currentRun = loaded.latest.run;
       currentManifestCrc = loaded.latest.manifestCrc32;
@@ -6474,6 +6893,10 @@ function applyAppearance(): void {
       contourStyleFor(session.variable, session.identity, session !== activeSession, geoGrid(session.metadata).longitudeStep),
     );
   }
+  precipPhase.frostLayer.setContours(frostLineStyle());
+  precipPhase.fieldKey = null;
+  if (activeFrameIndex !== null) syncPrecipPhase(activeFrameIndex);
+  renderPhaseLabels();
   scheduleProbeRender();
 }
 
@@ -6658,6 +7081,7 @@ playButton.addEventListener("click", () => {
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
 attachExportSheet();
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
+phaseToggle.addEventListener("click", () => setPhaseShown(!view.phase));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
 /** Poll the live pointer; a changed manifest re-initializes onto the new
  * run ("排播型电视直播" — the client tunes itself to the newest broadcast).

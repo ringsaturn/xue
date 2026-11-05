@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
   axisUnitSeconds,
+  borrowBundles,
+  type ForecastManifest,
   containerOf,
   modelDefaultVariable,
   deliveryBytes,
@@ -1809,5 +1811,40 @@ describe("palettes", () => {
     expect(palette[255 * 4 + 3]).toBe(255); // ramp ceiling opaque
     expect(palette[2]!).toBeGreaterThan(palette[0]!); // blue-dominant at 0 m/s
     expect(palette[255 * 4]!).toBeGreaterThan(palette[255 * 4 + 1]!); // red over green at 40 m/s
+  });
+});
+
+describe("borrowBundles", () => {
+  const lender = {
+    schemaVersion: 5,
+    model: "GFS",
+    product: "pgrb2",
+    runTime: "2026-11-05T06:00:00Z",
+    forecastHours: 240,
+    bundles: [
+      { variable: "tmp2m", zarr: { path: "bundles.zarr/tmp2m", byteLength: 1, crc32: "00000000" } },
+      {
+        variable: "hgt500",
+        zarr: { path: "bundles.zarr/hgt500", byteLength: 1, crc32: "00000000" },
+        variants: [{ width: 720, height: 361, bandwidth: 1, zarr: { path: "half.zarr/hgt500", byteLength: 1, crc32: "00000000" } }],
+      },
+    ],
+  } as unknown as ForecastManifest;
+  const own = { ...lender, model: "GFS-SFLUX", bundles: [{ variable: "tmp2m", zarr: { path: "mine", byteLength: 1, crc32: "00000000" } }] } as unknown as ForecastManifest;
+  const url = "https://example.test/xue/gfs.2026110506/manifest.json?v=2026110506";
+
+  it("lists what is wanted at the lender's absolute paths and keeps the owner's own", () => {
+    const merged = borrowBundles(own, lender, url, () => true);
+    expect(merged.bundles.map((bundle) => bundle.variable)).toEqual(["tmp2m", "hgt500"]);
+    expect((merged.bundles[0]!.zarr as { path: string }).path).toBe("mine");
+    const borrowed = merged.bundles[1]!;
+    expect((borrowed.zarr as { path: string }).path).toBe("https://example.test/xue/gfs.2026110506/bundles.zarr/hgt500");
+    expect((borrowed.variants![0]!.zarr as { path: string }).path).toBe("https://example.test/xue/gfs.2026110506/half.zarr/hgt500");
+  });
+
+  it("leaves out what is not wanted and does not touch its inputs", () => {
+    const merged = borrowBundles(own, lender, url, (id) => id === "tmp2m");
+    expect(merged.bundles).toHaveLength(1);
+    expect((lender.bundles[1]!.zarr as { path: string }).path).toBe("bundles.zarr/hgt500");
   });
 });
