@@ -857,8 +857,8 @@ test("the shader and the CPU find a projected grid's cells in the same place", a
       if (edge(at[0]) || edge(at[1])) continue;
       if (at[0] > LAMBERT_GRID.width - 0.52 || at[1] > LAMBERT_GRID.height - 0.52 || at[0] < -0.48 || at[1] < -0.48) continue;
       expect(columns[pixel + 3], `pixel ${px},${py}`).toBeGreaterThan(0);
-      expect(columns[pixel], `column at pixel ${px},${py}`).toBe(Math.round(at[0]));
-      expect(rows[pixel], `row at pixel ${px},${py}`).toBe(Math.round(at[1]));
+      expect(columns[pixel], `column at pixel ${px},${py}`).toBe(Math.round(at[0]) + 0);
+      expect(rows[pixel], `row at pixel ${px},${py}`).toBe(Math.round(at[1]) + 0);
       painted += 1;
     }
   }

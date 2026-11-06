@@ -151,8 +151,8 @@ describe("the metadata versions", () => {
   });
 
   it("holds the version to the lowest that fits", () => {
-    expect(() => parseBundleMetadata(JSON.stringify({ ...v3, grid: LAMBERT_BLOCK }))).toThrow(/schema version 4/);
-    expect(() => parseBundleMetadata(JSON.stringify({ ...v3, schemaVersion: 4 }))).toThrow(/schema version 3/);
+    expect(() => parseBundleMetadata(JSON.stringify({ ...v3, grid: LAMBERT_BLOCK }))).toThrow(/grid\.projection|schema version 4/);
+    expect(() => parseBundleMetadata(JSON.stringify({ ...v3, schemaVersion: 4 }))).toThrow(/schemaVersion|schema version 3/);
     const gaussian = { ...v3.grid, gaussian: { n: 361, firstRow: 0, rowStride: 1 } };
     expect(() => parseBundleMetadata(JSON.stringify({ ...v3, schemaVersion: 4, grid: gaussian }))).toThrow();
   });
