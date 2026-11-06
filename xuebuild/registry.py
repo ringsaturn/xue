@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
+from functools import lru_cache
 from typing import Any
 
 from .bundles import BUNDLES
@@ -149,6 +150,53 @@ def document() -> dict[str, Any]:
 def document_json() -> str:
     """The document as the snapshot and the native encoder take it."""
     return json.dumps(document(), indent=2, ensure_ascii=False) + "\n"
+
+
+def _source_slice(whole: dict[str, Any], source_id: str) -> dict[str, Any]:
+    """The part of a document one source reaches: the source, the bundles it
+    publishes and every variable those read."""
+    source = whole["sources"][source_id]
+    bundles = whole["bundles"]
+    pending = [
+        id_
+        for key in (
+            "inputVariableIds",
+            "bundleScalarIds",
+            "bundleVectorIds",
+            "bundleCompositeIds",
+            "bundleVolumeIds",
+            "coreBundleIds",
+            "seriesBundleIds",
+        )
+        for id_ in source[key]
+    ]
+    reached: set[str] = set()
+    while pending:
+        id_ = pending.pop()
+        if id_ in reached:
+            continue
+        reached.add(id_)
+        bundle = bundles.get(id_)
+        if bundle is not None:
+            pending += bundle.get("members", [])
+            pending += bundle.get("inputs", [])
+            pending += bundle.get("optionalInputs", [])
+            pending += bundle.get("derivation", {}).get("inputs", [])
+    return {
+        "registrySchema": whole["registrySchema"],
+        "variables": {id_: entry for id_, entry in whole["variables"].items() if id_ in reached},
+        "bundles": {id_: entry for id_, entry in bundles.items() if id_ in reached},
+        "sources": {source_id: source},
+    }
+
+
+@lru_cache(maxsize=None)
+def source_document_json(source_id: str) -> str:
+    """The document a build of one source hands the wheel. A wheel refuses a
+    document whole when it names a rule the wheel lacks, so a build carries
+    only its own source's part: a rule one source needs before a wheel
+    implements it stops that source and leaves the others building."""
+    return json.dumps(_source_slice(document(), source_id), indent=2, ensure_ascii=False) + "\n"
 
 
 _SHELL_HEADER = (

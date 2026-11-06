@@ -123,10 +123,12 @@ The document reaches the encoder two ways:
   which `xue registry --output rust/xue/registry.json` regenerates and
   `tests/test_registry.py` holds to the Python tables.
 
-The encoder validates the whole document before any input is read
+The encoder validates the document it is handed before any input is read
 (`registry.md` §Validation) and refuses it with the field and value named
 when it carries a `registrySchema`, a rule, a derivation or a codebook
-type the encoder does not implement; a key it does not know it ignores.
+type the encoder does not implement; a key it does not know it ignores. A
+build hands it only its own source's part (`registry.source_document_json`),
+so a rule a wheel lacks stops the sources that use it and no others.
 So a *table* change — a new source, a new bundle, another level of a known
 family, a changed codebook, a changed set of inputs — is a commit to
 `main` and needs no release: the next build hands the new document to the
@@ -134,7 +136,8 @@ wheel already installed. A release is still needed for what the document
 cannot say: a new rule name under `conversion` or `match.gdal`, a new
 `derivation.kind` or codebook `type`, a new ingest path (a file shape the
 converter does not read), or a `registrySchema` bump, each of which the
-installed wheel refuses until the wheel that implements it ships.
+installed wheel refuses, for the sources that use it, until the wheel that
+implements it ships.
 
 The native encoder writes the Zarr stores' arrays itself, straight from its
 codes (`rust/xue/src/encode/zarrstore.rs`, the counterpart of

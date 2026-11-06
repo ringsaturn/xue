@@ -47,7 +47,7 @@ from .manifest import (
     write_bin_manifest,
     write_pointer_to_manifest,
 )
-from .registry import document_json
+from .registry import source_document_json
 from .sources import source_spec
 from .zstdcli import DEFAULT_LEVEL as DEFAULT_ZSTD_LEVEL
 
@@ -110,7 +110,7 @@ def knows_source(model: str) -> bool:
             Path(os.devnull),
             model=model,
             bundle_ids=list(published_bundle_ids(source_spec(model))),
-            registry=document_json(),
+            registry=source_document_json(model),
         )
     except TypeError:
         # A wheel from before the document: its convert_bin has no
@@ -290,10 +290,10 @@ def convert_bin(
     report = module.convert_bin(
         inputs,
         Path(output_dir),
-        # The variables, bundles and sources of this tree, as the one
-        # document the wheel builds from (docs/registry.md): the wheel
-        # carries no table of its own.
-        registry=document_json(),
+        # This source's variables, bundles and entry, as the document the
+        # wheel builds from (docs/registry.md): the wheel carries no table of
+        # its own.
+        registry=source_document_json(model),
         profile=profile,
         model=model,
         zstd_level=zstd_level,
