@@ -908,7 +908,7 @@ function buildSpecs(): readonly VariableSpec[] {
     labelKey: "varLabelAodorg",
     ground: "slate",
     urlName: "aodorg",
-    urlAliases: ["organic", "organiccarbon", "smoke"],
+    urlAliases: ["organic", "organiccarbon"],
     showcaseCode: "AOD ORG",
   }),
   surface({
@@ -996,8 +996,8 @@ function buildSpecs(): readonly VariableSpec[] {
     bufferTitle: "Smoke buffer",
     labelKey: "varLabelSmokesfc",
     ground: "slate",
-    urlName: "smokesfc",
-    urlAliases: ["wildfiresmoke"],
+    urlName: "smoke",
+    urlAliases: ["smokesfc", "wildfiresmoke"],
     showcaseCode: "SMOKE",
   }),
   surface({
