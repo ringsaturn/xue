@@ -9,6 +9,7 @@ discovery's ``test_*.py`` pattern from collecting it.
 
 from __future__ import annotations
 
+import dataclasses
 import filecmp
 import functools
 import importlib.util
@@ -24,6 +25,8 @@ from unittest import mock
 
 from xuebuild import binconvert, binformat, grib2, native, zarrstore
 from xuebuild.gdal import inspect_grib_multi
+from xuebuild.rules import accepts
+from xuebuild.variables import variable_spec
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -252,7 +255,14 @@ def assert_gdalinfo_agrees(
             slow = inspect_grib_multi(path, variable_ids, optional_ids=optional_ids)
             case.assertEqual(set(fast), set(slow), path.name)
             for variable_id, frame in fast.items():
-                case.assertEqual(frame, slow[variable_id], f"{path.name} {variable_id}")
+                found = slow[variable_id]
+                conversion = variable_spec(variable_id).conversion
+                # A code table's unit is GDAL's own text of that table, which
+                # changes with the GDAL version; the rule reads either spelling.
+                if conversion.rule == "code-table":
+                    case.assertTrue(accepts(conversion, found.unit), f"{path.name} {variable_id}")
+                    found = dataclasses.replace(found, unit=frame.unit)
+                case.assertEqual(frame, found, f"{path.name} {variable_id}")
 
 
 def counting(listing: Callable[[str], str]) -> tuple[Callable[[str], str], list[str]]:

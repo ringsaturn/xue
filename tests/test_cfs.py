@@ -61,6 +61,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
+import numpy as np
 
 from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
 from xuebuild import binconvert, fetch as fetchmod, grib2, quantize, zarrstore
