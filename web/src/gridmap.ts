@@ -209,7 +209,20 @@ export function parseGrid(input: unknown): GeoGrid {
     latitudeStep,
     wraps,
   };
-  if (block.gaussian !== undefined) grid.gaussian = parseGaussian(block.gaussian, height, latitudeStep);
+  if (block.gaussian !== undefined) {
+    const gaussian = parseGaussian(block.gaussian, height, latitudeStep);
+    grid.gaussian = gaussian;
+    // The shaders, particles and contours read the regular fields. A file's own
+    // can run half a row off by the southern edge (T126 declares 180/190° from
+    // 89.277°), so they are fitted to the true first and last rows here, which
+    // leaves any row within 0.015 of one.
+    const first = gaussianLatitude(gaussian.n, gaussian.firstRow);
+    grid.firstLatitude = first;
+    if (height > 1) {
+      const last = gaussianLatitude(gaussian.n, gaussian.firstRow + (height - 1) * gaussian.rowStride);
+      grid.latitudeStep = (last - first) / (height - 1);
+    }
+  }
   return grid;
 }
 
@@ -236,27 +249,30 @@ const gaussianTables = new Map<number, Float64Array>();
 export function gaussianLatitudes(n: number): Float64Array {
   const known = gaussianTables.get(n);
   if (known) return known;
-  const degree = 2 * n;
-  const table = new Float64Array(degree);
-  for (let i = 0; i < degree; i += 1) {
-    let x = Math.cos((Math.PI * (i + 0.75)) / (degree + 0.5));
-    for (let iteration = 0; iteration < 100; iteration += 1) {
-      let previous = 1;
-      let value = x;
-      for (let k = 2; k <= degree; k += 1) {
-        const next = ((2 * k - 1) * x * value - (k - 1) * previous) / k;
-        previous = value;
-        value = next;
-      }
-      const slope = (degree * (x * value - previous)) / (x * x - 1);
-      const step = value / slope;
-      x -= step;
-      if (Math.abs(step) < 1e-15) break;
-    }
-    table[i] = (Math.asin(x) * 180) / Math.PI;
-  }
+  const table = new Float64Array(2 * n);
+  for (let row = 0; row < 2 * n; row += 1) table[row] = gaussianLatitude(n, row);
   gaussianTables.set(n, table);
   return table;
+}
+
+/** One row of {@link gaussianLatitudes}. */
+function gaussianLatitude(n: number, row: number): number {
+  const degree = 2 * n;
+  let x = Math.cos((Math.PI * (row + 0.75)) / (degree + 0.5));
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    let previous = 1;
+    let value = x;
+    for (let k = 2; k <= degree; k += 1) {
+      const next = ((2 * k - 1) * x * value - (k - 1) * previous) / k;
+      previous = value;
+      value = next;
+    }
+    const slope = (degree * (x * value - previous)) / (x * x - 1);
+    const step = value / slope;
+    x -= step;
+    if (Math.abs(step) < 1e-15) break;
+  }
+  return (Math.asin(x) * 180) / Math.PI;
 }
 
 // -- the maps ----------------------------------------------------------------

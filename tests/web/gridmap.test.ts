@@ -167,6 +167,26 @@ describe("gridTable", () => {
   });
 });
 
+describe("a Gaussian grid's regular fields", () => {
+  it("are fitted to its true rows, whatever the file declares", () => {
+    const declared = { width: 384, height: 190, firstLongitude: -180, firstLatitude: 89.277, longitudeStep: 0.9375, latitudeStep: -180 / 190, wrapLongitude: true };
+    const grid = parseGrid({ ...declared, gaussian: { n: 95, firstRow: 0, rowStride: 1 } });
+    if (grid.projection) throw new Error("a regular grid");
+    const rows = gaussianLatitudes(95);
+    expect(grid.firstLatitude).toBeCloseTo(rows[0]!, 9);
+    expect(grid.firstLatitude + 189 * grid.latitudeStep).toBeCloseTo(rows[189]!, 9);
+    for (let row = 0; row < 190; row += 1) {
+      expect(Math.abs(grid.firstLatitude + row * grid.latitudeStep - rows[row]!)).toBeLessThan(0.015 * Math.abs(grid.latitudeStep));
+    }
+  });
+
+  it("are left alone without the block", () => {
+    const grid = parseGrid({ width: 384, height: 190, firstLongitude: -180, firstLatitude: 89.277, longitudeStep: 0.9375, latitudeStep: -180 / 190, wrapLongitude: true });
+    if (grid.projection) throw new Error("a regular grid");
+    expect(grid.latitudeStep).toBe(-180 / 190);
+  });
+});
+
 describe("the metadata versions", () => {
   const parameter = { discipline: 0, parameterCategory: 0, parameterNumber: 0, typeOfFirstFixedSurface: 103, scaleFactorOfFirstFixedSurface: 0, scaledValueOfFirstFixedSurface: 2 };
   const v3 = {
