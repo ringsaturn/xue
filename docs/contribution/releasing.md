@@ -66,9 +66,14 @@ already installed (see "Why the floor tracks the current release").
    wait for that run too. If the job failed, run the script by hand from a
    fetched checkout, or dispatch the workflow with its `relock_tag` input
    (`dry_run` shows the commit without pushing).
-5. **Merge into `main`** with a fast-forward: `git pull`, then `git merge
-   --ff-only release/0.N`, so the change, the release commit and the relock
-   land on `main` together and keep their history. Then delete the branch.
+5. **Merge into `main`** with a fast-forward, so the change, the release
+   commit and the relock land on `main` together and keep their history.
+   The CSV commit of "The own index" is already on `main`, so the branch is
+   rebased onto it first; the tag stays on the published release commit. A
+   rebase that adds only that CSV changes nothing the relocked branch's
+   test run covered, so the result goes straight to `main`, whose own run
+   then tests the published wheel. If it adds anything else, push the
+   branch and wait for its tests. Then delete the branch.
 
 A manual dispatch of either workflow is a rehearsal: `cargo publish
 --dry-run`, or wheels uploaded as workflow artifacts only.
