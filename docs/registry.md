@@ -274,7 +274,10 @@ that every `members`, `inputs` and `derivation.inputs` id is a variable;
 that every bundle id a source lists is a variable or a `bundles` entry;
 that a `vector` has two members; that a published variable (one with
 `quantization`) has every profile the reader is asked for. Any failure
-refuses the whole build.
+refuses the whole build. A build is handed one source's part of the document:
+that source, the bundles it publishes and the variables they read
+(`registry.source_document_json`), so these checks stop only the sources
+that reach the problem.
 
 ---
 

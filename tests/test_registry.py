@@ -7,7 +7,7 @@ import json
 import unittest
 
 from tests._support import FIXTURES
-from xuebuild.registry import REGISTRY_SCHEMA, document, document_json, shell_document, shell_module
+from xuebuild.registry import REGISTRY_SCHEMA, _source_slice, document, document_json, source_document_json, shell_document, shell_module
 
 # Inside the crate, so the native encoder can embed it; one copy only.
 SNAPSHOT = FIXTURES.parents[1] / "rust" / "xue" / "registry.json"
@@ -139,6 +139,30 @@ class RegistryDocumentTests(unittest.TestCase):
             if "quantization" in entry:
                 with self.subTest(variable=variable_id):
                     self.assertEqual(set(entry["quantization"]), {"quality", "compact", "balanced"})
+
+
+class SourceSliceTests(unittest.TestCase):
+    def test_a_slice_names_only_what_its_source_reaches(self) -> None:
+        whole = document()
+        for source_id, source in whole["sources"].items():
+            with self.subTest(source=source_id):
+                part = json.loads(source_document_json(source_id))
+                self.assertEqual(part["sources"], {source_id: source})
+                self.assertEqual(part["registrySchema"], whole["registrySchema"])
+                for id_ in source["inputVariableIds"]:
+                    self.assertIn(id_, part["variables"])
+                known = part["variables"].keys() | part["bundles"].keys()
+                for key in ("bundleScalarIds", "bundleVectorIds", "bundleCompositeIds", "bundleVolumeIds", "coreBundleIds", "seriesBundleIds"):
+                    self.assertLessEqual(set(source[key]), known, key)
+                for bundle in part["bundles"].values():
+                    named = {*bundle.get("members", []), *bundle.get("inputs", []), *bundle.get("optionalInputs", []), *bundle.get("derivation", {}).get("inputs", [])}
+                    self.assertLessEqual(named, part["variables"].keys() | part["bundles"].keys())
+
+    def test_a_rule_one_source_needs_stays_out_of_the_others(self) -> None:
+        whole = document()
+        whole["variables"]["aod"]["conversion"] = {"rule": "a-rule-no-wheel-has"}
+        self.assertNotIn("a-rule-no-wheel-has", json.dumps(_source_slice(whole, "gfs")))
+        self.assertIn("a-rule-no-wheel-has", json.dumps(_source_slice(whole, "gefsaero")))
 
 
 if __name__ == "__main__":

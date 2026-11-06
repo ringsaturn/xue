@@ -116,7 +116,7 @@ class RegistryHandoverTests(unittest.TestCase):
         self.assertEqual(call["inputs"], [])
         self.assertEqual(call["model"], "gfs")
         self.assertEqual(call["bundle_ids"], list(published_bundle_ids(source_spec("gfs"))))
-        self.assertEqual(call["registry"], registry.document_json())
+        self.assertEqual(call["registry"], registry.source_document_json("gfs"))
         self.assertEqual(json.loads(call["registry"])["registrySchema"], registry.REGISTRY_SCHEMA)
 
     def test_a_wheel_that_refuses_the_document_does_not_know_the_source(self) -> None:
@@ -142,7 +142,7 @@ class RegistryHandoverTests(unittest.TestCase):
         with mock.patch.object(native, "require", return_value=module), self.assertRaises(RuntimeError):
             native.convert_bin(FIXTURE_GRIB, Path("out"), model="gfs")
         (call,) = calls
-        self.assertEqual(call["registry"], registry.document_json())
+        self.assertEqual(call["registry"], registry.source_document_json("gfs"))
         self.assertEqual(call["series_bundle_ids"], list(source_spec("gfs").series_bundle_ids))
 
 
