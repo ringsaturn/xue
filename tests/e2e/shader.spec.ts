@@ -846,6 +846,7 @@ test("the shader and the CPU find a projected grid's cells in the same place", a
   const rows = await renderCells(page, "row");
   let painted = 0;
   let blank = 0;
+  const wrong: string[] = [];
   for (let py = 0; py < VIEW_PIXELS; py += 1) {
     for (let px = 0; px < VIEW_PIXELS; px += 1) {
       const mercatorX = VIEW.x0 + ((px + 0.5) / VIEW_PIXELS) * (VIEW.x1 - VIEW.x0);
@@ -858,7 +859,7 @@ test("the shader and the CPU find a projected grid's cells in the same place", a
         // Just outside a half cell the two may differ by a float's error; well
         // outside, the shader must have discarded it.
         const near = [-0.002, 0.002].some((d) => map.lonLatToCell(longitude + d, latitude + d));
-        if (!near) expect(columns[pixel + 3], `pixel ${px},${py}`).toBe(0);
+        if (!near && columns[pixel + 3] !== 0) wrong.push(`pixel ${px},${py} painted off the grid`);
         blank += 1;
         continue;
       }
@@ -869,12 +870,15 @@ test("the shader and the CPU find a projected grid's cells in the same place", a
       const edge = (value: number) => Math.abs(value - Math.floor(value) - 0.5) < 0.002;
       if (edge(at[0]) || edge(at[1])) continue;
       if (at[0] > LAMBERT_GRID.width - 0.502 || at[1] > LAMBERT_GRID.height - 0.502 || at[0] < -0.498 || at[1] < -0.498) continue;
-      expect(columns[pixel + 3], `pixel ${px},${py}`).toBeGreaterThan(0);
-      expect(columns[pixel], `column at pixel ${px},${py}`).toBe(Math.round(at[0]) + 0);
-      expect(rows[pixel], `row at pixel ${px},${py}`).toBe(Math.round(at[1]) + 0);
+      if (columns[pixel + 3] === 0) wrong.push(`pixel ${px},${py} unpainted`);
+      if (columns[pixel] !== Math.round(at[0])) wrong.push(`column at pixel ${px},${py}: ${columns[pixel]} for ${at[0]}`);
+      if (rows[pixel] !== Math.round(at[1])) wrong.push(`row at pixel ${px},${py}: ${rows[pixel]} for ${at[1]}`);
       painted += 1;
     }
   }
+  // One assertion for the whole picture: an `expect` a pixel, each its own step
+  // in the trace, took this test ten minutes.
+  expect(wrong.slice(0, 20)).toEqual([]);
   // The view holds the footprint and ground outside it.
   expect(painted).toBeGreaterThan(1000);
   expect(blank).toBeGreaterThan(1000);
