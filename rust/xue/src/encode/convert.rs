@@ -21,7 +21,8 @@ use crate::encode::variables::VariableSpec;
 use crate::encode::gdalio::{needs_serial_access, netcdf_guard, Dataset};
 use crate::encode::gribpng::GribPngFile;
 use crate::encode::grid::{
-    crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps, GridInfo,
+    crop_grid, gaussian_rows, normalize_longitudes, snap_global_longitudes, snap_regional_steps,
+    GridInfo,
 };
 use crate::encode::metadata::{axis_unit_seconds, build_metadata};
 use crate::encode::pyjson::dumps_default;
@@ -30,7 +31,7 @@ use crate::encode::parallel::for_each_ordered;
 use crate::encode::poster::encode_poster;
 use crate::encode::quantize::Book;
 use crate::encode::registry::{Companion, DerivationKind, Registry};
-use crate::encode::reproject::{build_resampler, lambert_conformal_from_wkt, ProjectedGrid};
+use crate::encode::reproject::{lambert_conformal_from_wkt, rotate_winds, ProjectedGrid};
 use crate::encode::sources::{family_frame_path, SourceSpec};
 use crate::encode::temporal::build_chunks;
 use crate::encode::zarrstore;
@@ -160,7 +161,9 @@ pub fn bundle_grid_family<'a>(
 /// `time_<bundle id>` for a published scalar whose series has no analysis
 /// frame (`Registry::analysis_optional_ids`) and for a static field;
 /// `latitude_<family>` / `longitude_<family>` for a bundle on a grid family
-/// of its own, `<family>` being exactly what [`bundle_grid_family`] returns.
+/// of its own, `<family>` being exactly what [`bundle_grid_family`] returns;
+/// `y` and `x` in place of the latitude and longitude names throughout on a
+/// source published on a map projection.
 /// The decision is the rule, not a comparison of axes, so it is a pure
 /// function of the source and the bundle id: a fan-out job building a subset
 /// of the bundles and a whole build write the same objects.
@@ -178,10 +181,11 @@ pub fn store_dimensions(registry: &Registry, source: &SourceSpec, bundle_id: &st
             )));
         }
     }
+    let (row, column) = if source.grid_relative_winds { ("y", "x") } else { ("latitude", "longitude") };
     Ok([
         if own_axis { format!("time_{bundle_id}") } else { "time".to_owned() },
-        family.map_or_else(|| "latitude".to_owned(), |family| format!("latitude_{family}")),
-        family.map_or_else(|| "longitude".to_owned(), |family| format!("longitude_{family}")),
+        family.map_or_else(|| row.to_owned(), |family| format!("{row}_{family}")),
+        family.map_or_else(|| column.to_owned(), |family| format!("{column}_{family}")),
     ])
 }
 
@@ -201,12 +205,12 @@ pub fn store_dimensions(registry: &Registry, source: &SourceSpec, bundle_id: &st
 /// grid, whose step is a hair over 0.25° — while the clean 0.25° origins
 /// every published grid has never noticed either way.
 ///
-/// A file on a map projection describes the projected grid, and the
-/// published one is the regular grid `source.regrid` asks for over its
-/// footprint (`reproject.rs`); a source that declares no regrid must not be
-/// projected, and one that does must be, so a file of the wrong kind is
-/// refused rather than misread.
-fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
+/// A file on a map projection describes its grid in projected metres. A source
+/// declares which it reads (`SourceSpec::grid_relative_winds`), so a file of the
+/// wrong kind is refused rather than misread. `family` is the grid family the
+/// file was read for: a family on a grid of its own (CFSv2's 1° pressure levels)
+/// is not the model's Gaussian grid.
+fn grid_info(path: &Path, source: &SourceSpec, family: Option<&str>) -> Result<GridInfo> {
     let dataset = Dataset::open(path)?;
     let (width, height) = dataset.size();
     let transform = dataset.geo_transform()?;
@@ -218,12 +222,12 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
     }
     let projection = lambert_conformal_from_wkt(&dataset.projection_wkt())?;
     if let Some(projection) = projection {
-        let Some(regrid) = source.regrid else {
+        if !source.grid_relative_winds {
             return Err(EncodeError::conversion(format!(
                 "{} is on a map projection, which this source does not declare",
                 path.display()
             )));
-        };
+        }
         if transform[1] <= 0.0 || transform[5] >= 0.0 {
             return Err(EncodeError::conversion(format!(
                 "grid must run west-to-east and north-to-south: {}",
@@ -232,9 +236,10 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
         }
         // To the millimetre, as the reference encoder takes them: GDAL
         // releases place a projected grid's origin a few nanometres apart,
-        // and every resampled coordinate descends from these four numbers.
+        // and the published grid and every rotated wind descend from these
+        // four numbers.
         let [x0, dx, y0, dy] = [transform[0], transform[1], transform[3], transform[5]].map(round3);
-        let resampler = build_resampler(
+        return Ok(GridInfo::projected(
             ProjectedGrid {
                 projection,
                 width,
@@ -242,22 +247,12 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
                 x0: x0 + dx / 2.0,
                 y0: y0 + dy / 2.0,
                 dx,
-                dy: -dy,
+                dy,
             },
-            regrid,
-        )?;
-        let mut grid = GridInfo::new(
-            resampler.width,
-            resampler.height,
-            resampler.first_longitude,
-            resampler.first_latitude,
-            resampler.step,
-            -resampler.step,
-        );
-        grid.resample = Some(Arc::new(resampler));
-        return Ok(grid);
+            None,
+        ));
     }
-    if source.regrid.is_some() {
+    if source.grid_relative_winds {
         return Err(EncodeError::conversion(format!(
             "{} is a regular grid, but this source declares a projected one",
             path.display()
@@ -270,7 +265,7 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
             path.display()
         )));
     }
-    let grid = normalize_longitudes(snap_regional_steps(snap_global_longitudes(GridInfo::new(
+    let mut grid = normalize_longitudes(snap_regional_steps(snap_global_longitudes(GridInfo::new(
         width,
         height,
         transform[0] + longitude_step / 2.0,
@@ -278,10 +273,36 @@ fn grid_info(path: &Path, source: &SourceSpec) -> Result<GridInfo> {
         longitude_step,
         latitude_step,
     ))));
-    match source.downsample {
-        Some(downsample) => grid.downsampled(downsample.factor, path),
-        None => Ok(grid),
+    if let Some(downsample) = source.downsample {
+        grid = grid.downsampled(downsample.factor, path)?;
     }
+    if let (Some(n), None) = (source.gaussian_n, family) {
+        grid.gaussian = Some(gaussian_rows(&grid, n, path)?);
+    }
+    Ok(grid)
+}
+
+/// The vector bundles of this build whose pairs must be turned to east and
+/// north: all of them on a source with grid-relative winds. A derived one would
+/// read winds that are not its own pair's, and no such source publishes one, so
+/// a registry that lists one is refused rather than half-rotated. Mirrors
+/// `_grid_relative_vectors` in `xuebuild/binconvert.py`.
+fn grid_relative_vectors<'a>(
+    registry: &Registry,
+    source: &SourceSpec,
+    vector_ids: &[&'a str],
+) -> Result<Vec<&'a str>> {
+    if !source.grid_relative_winds {
+        return Ok(Vec::new());
+    }
+    let derived: Vec<&str> = vector_ids.iter().copied().filter(|id| registry.is_derived_vector(id)).collect();
+    if !derived.is_empty() {
+        return Err(EncodeError::conversion(format!(
+            "{} has grid-relative winds, so it cannot derive {derived:?}",
+            source.manifest_model
+        )));
+    }
+    Ok(vector_ids.to_vec())
 }
 
 /// Round to three decimal places the way Python's `round(value, 3)` does:
@@ -453,8 +474,7 @@ fn extract_planes(
 
 /// One extracted plane through the per-plane chain, into the published
 /// layout and physical units: the column roll, the fill values, the missing
-/// points, the resampling of a projected grid, the block thinning, the
-/// regional crop, the completeness check and the unit conversion, in that
+/// points, the block thinning, the regional crop, the completeness check and the unit conversion, in that
 /// order. With `keep_whole` on a cropped grid, the plane as it was before
 /// the crop also comes back, unit-converted and never checked for
 /// completeness, as `_extract_planes` keeps it.
@@ -482,14 +502,10 @@ fn finish_plane(
         }
         plane = rolled;
     }
-    // Missing data becomes a value before the plane is resampled, so a
-    // fill never blends into its neighbours; then the projected plane
-    // lands on the regular grid, and only then is a regional window cut.
+    // Missing data becomes a value before the plane is thinned, so a fill
+    // never decides a block, and only then is a regional window cut.
     plane_sources.for_variable(variable_id)?.apply_fill(&mut plane);
     fill_missing(spec, &mut plane);
-    if let Some(resample) = &grid.resample {
-        plane = resample.take(&plane)?;
-    }
     if let Some(downsample) = &grid.downsample {
         plane = downsample.take(&plane)?;
     }
@@ -591,6 +607,7 @@ fn quantize_file(
     derived_vector_ids: &[&str],
     drop_ids: &[String],
     derived_scalar_ids: &[&str],
+    rotated_vector_ids: &[&str],
     registry: &Registry,
 ) -> Result<QuantizedFile> {
     let lead = frames[0].1.lead_seconds;
@@ -683,6 +700,32 @@ fn quantize_file(
             )?
         };
         values.insert(position, (bundle_id.clone(), derived));
+    }
+
+    // Grid-relative pairs turned to east and north once the extraction has cut
+    // any window: the rotation reads the plane's own grid, so it is the same
+    // cell's wind whichever window it is cut from, and everything from
+    // quantization on, the ladder's decimation among it, sees a wind in earth
+    // terms.
+    for bundle_id in rotated_vector_ids {
+        let (u_id, v_id) = registry
+            .vector_components(bundle_id)
+            .ok_or_else(|| EncodeError::conversion(format!("{bundle_id} is not a vector bundle")))?;
+        let projection = grids.for_variable(u_id)?.projection.ok_or_else(|| {
+            EncodeError::conversion(format!("{bundle_id} has grid-relative winds on a regular grid"))
+        })?;
+        let position = |name: &str| {
+            values
+                .iter()
+                .position(|(id, _)| id == name)
+                .ok_or_else(|| EncodeError::conversion(format!("missing {name} plane for {bundle_id}")))
+        };
+        let (u_at, v_at) = (position(u_id)?, position(v_id)?);
+        let mut u = std::mem::take(&mut values[u_at].1);
+        let mut v = std::mem::take(&mut values[v_at].1);
+        rotate_winds(&projection, &mut u, &mut v)?;
+        values[u_at].1 = u;
+        values[v_at].1 = v;
     }
 
     // The derived vector bundles — the vapour flux, the wave vector — from
@@ -1168,7 +1211,7 @@ pub fn convert_bin(
     }
     let mut grids: Vec<(Option<&str>, GridInfo)> = Vec::new();
     for family in &family_order {
-        let mut family_grid = grid_info(&family_frame_path(&grid_path, *family), source)?;
+        let mut family_grid = grid_info(&family_frame_path(&grid_path, *family), source, *family)?;
         if options.require_complete {
             let (production_grid, _) = source.family_grid(*family)?;
             if (family_grid.width, family_grid.height) != production_grid {
@@ -1186,12 +1229,10 @@ pub fn convert_bin(
             family_grid = crop_grid(family_grid, bbox)?;
             log!(
                 options,
-                "cropped {} to {}x{} from {:.4},{:.4}",
+                "cropped {} to {}x{} ({bbox:?})",
                 family.unwrap_or("the run"),
                 family_grid.width,
-                family_grid.height,
-                family_grid.first_longitude,
-                family_grid.first_latitude
+                family_grid.height
             );
         }
         grids.push((*family, family_grid));
@@ -1233,6 +1274,7 @@ pub fn convert_bin(
         .filter(|bundle_id| registry.is_derived_vector(bundle_id))
         .collect();
     let derived_scalar_ids: Vec<&str> = available_derived_ids.clone();
+    let rotated_vector_ids = grid_relative_vectors(registry, source, &available_vector_ids)?;
     let results = for_each_ordered(per_file.len(), options.extract_workers, |index| {
         let (previous, own) = plan[index].clone();
         quantize_file(
@@ -1247,6 +1289,7 @@ pub fn convert_bin(
             &derived_vector_ids,
             &drop_ids,
             &derived_scalar_ids,
+            &rotated_vector_ids,
             registry,
         )
     })?;
@@ -1811,7 +1854,7 @@ mod grid_family_tests {
         for variable_id in &cfs.companion_files[0].variable_ids {
             assert_eq!(grid_family_of(cfs, variable_id), Some("pgb"), "{variable_id}");
         }
-        for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "gefsaero", "ifshres", "mrms", "mrms3d"] {
+        for model in ["gfs", "ecmwf", "ifs", "aifs", "sflux", "hrrr", "rrfs", "gefsaero", "ifshres", "mrms", "mrms3d"] {
             let source = registry.source(model).expect(model);
             for bundle_id in source
                 .bundle_scalar_ids
@@ -1969,7 +2012,7 @@ mod volume_tests {
                 "dswrf", "orog", "prmsl", "wind10m", "wind80m", "cloud3d",
             ]
         );
-        for model in ["gfs", "ecmwf", "hrrr", "ifshres", "mrms3d", "himawari"] {
+        for model in ["gfs", "ecmwf", "hrrr", "rrfs", "ifshres", "mrms3d", "himawari"] {
             assert!(
                 !registry.published_bundle_ids(registry.source(model).expect(model)).contains(&"cloud3d"),
                 "{model}"
@@ -1992,7 +2035,8 @@ mod store_dimension_tests {
     /// The reference's `store_dimensions` over the same registry: the run's
     /// axis and grid for most bundles, a time of its own where a rule cuts
     /// the axis (a rate without its analysis frame, an interval maximum, a
-    /// static field), and a grid family's pair for the CFSv2 pressure levels.
+    /// static field), a grid family's pair for the CFSv2 pressure levels, and
+    /// `y` / `x` on a source published on a projection.
     #[test]
     fn a_bundle_takes_its_own_names_only_where_a_rule_cuts_it() {
         assert_eq!(names("gfs", "tmp2m"), ["time", "latitude", "longitude"]);
@@ -2005,5 +2049,9 @@ mod store_dimension_tests {
         assert_eq!(names("cfs", "tmp2m"), ["time", "latitude", "longitude"]);
         assert_eq!(names("cfs", "hgt500"), ["time", "latitude_pgb", "longitude_pgb"]);
         assert_eq!(names("cfs", "wind850"), ["time", "latitude_pgb", "longitude_pgb"]);
+        assert_eq!(names("hrrr", "tmp2m"), ["time", "y", "x"]);
+        assert_eq!(names("hrrr", "wind10m"), ["time", "y", "x"]);
+        assert_eq!(names("hrrr", "orog"), ["time_orog", "y", "x"]);
+        assert_eq!(names("rrfs", "smokesfc"), ["time", "y", "x"]);
     }
 }

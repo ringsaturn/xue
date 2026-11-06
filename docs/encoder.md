@@ -368,7 +368,10 @@ comparisons still skip when the two link different libzstd versions
 
 A model on its own grid (`docs/format.md`, "Projected Sources", "Gaussian rows")
 adds three pieces of arithmetic on top of what a regular grid does. The operation
-order is normative: both encoders land on the same doubles.
+order is normative: both encoders land on the same doubles. On the native side
+`rust/xue/src/projection.rs` holds the projection and the Gaussian iteration,
+`encode/reproject.rs` the published grid, the rotation and the `crs` array's text,
+and `encode/grid.rs` the window and the rows.
 
 **Reading the grid.** `round3` of the geotransform's origin and steps, then half a
 step in: `x0 = round3(gt0) + dx / 2`, `y0 = round3(gt3) + dy / 2`, `dy < 0`. A file
@@ -394,7 +397,8 @@ v_e   = −sin α × u + cos α × v
 The sign is the cone's, as in the inverse projection; it changes nothing on a
 northern cone. Decimation works on the codes of the turned planes, so a tier keeps
 sample sites and rotation. A derived vector bundle on such a source is refused
-(`binconvert._grid_relative_vectors`).
+(`binconvert._grid_relative_vectors`, `convert::grid_relative_vectors`), and so is
+clear-air turbulence on any projected grid.
 
 **A box on a projected grid.** `crop_grid` walks each edge of `(west, south, east,
 north)` in 64 points, ends included, with latitudes clamped to ±89.9:

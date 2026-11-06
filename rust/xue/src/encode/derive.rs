@@ -449,6 +449,11 @@ pub(super) fn derive_cat_plane<'a>(
     grid: &GridInfo,
     calibration: &[(u32, f64, f64)],
 ) -> Result<Vec<f64>> {
+    if grid.projection.is_some() {
+        return Err(EncodeError::conversion(format!(
+            "{bundle_id} is derived on a regular grid, and this one is on a map projection"
+        )));
+    }
     let &(_, mean, std) = calibration.iter().find(|(at, _, _)| *at == level).ok_or_else(|| {
         EncodeError::conversion(format!(
             "the source publishes {bundle_id} without a ln TI1 calibration for {level} hPa"

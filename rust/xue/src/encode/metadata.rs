@@ -1,4 +1,4 @@
-//! Bundle metadata JSON — schema version 3.
+//! Bundle metadata JSON: schema version 3, or 4 on a projected grid.
 //!
 //! Key order and number formatting matter: the Python encoder writes this with
 //! `json.dumps(..., ensure_ascii=False, separators=(",", ":"))`, and the two
@@ -20,6 +20,11 @@ use crate::format::gcd;
 /// carries its GRIB2 parameter identity. Earlier versions remain readable;
 /// nothing new is written at them.
 pub const METADATA_SCHEMA_VERSION: u32 = 3;
+
+/// The one version a grid can raise it to: a bundle on a map projection, whose
+/// `grid` block has no regular fields for an older reader to place it by. Every
+/// other bundle stays at [`METADATA_SCHEMA_VERSION`], the lowest that fits.
+pub const PROJECTED_METADATA_SCHEMA_VERSION: u32 = 4;
 
 /// `2026-08-14T06:00:00Z`, the shape every timestamp in the published
 /// contract takes.
@@ -150,7 +155,12 @@ pub fn build_metadata(
     registry: &Registry,
 ) -> Result<Value> {
     let mut block = Map::new();
-    block.insert("schemaVersion".into(), json!(METADATA_SCHEMA_VERSION));
+    let schema_version = if grid.projection.is_some() {
+        PROJECTED_METADATA_SCHEMA_VERSION
+    } else {
+        METADATA_SCHEMA_VERSION
+    };
+    block.insert("schemaVersion".into(), json!(schema_version));
     block.insert("model".into(), json!(source.manifest_model));
     block.insert("product".into(), json!(source.product));
     block.insert("runTime".into(), json!(iso_z(run_time)));
@@ -181,7 +191,9 @@ mod tests {
     use super::{axis_unit_seconds, build_metadata, lead_hours};
     use crate::encode::grid::GridInfo;
     use crate::encode::registry::Registry;
+    use crate::encode::reproject::{LambertConformal, ProjectedGrid};
     use crate::encode::sources::SatelliteBand;
+    use crate::projection::GaussianRows;
 
     #[test]
     fn the_axis_unit_is_the_coarsest_that_fits() {
@@ -262,6 +274,49 @@ mod tests {
         assert!(!serde_json::to_string(&plain).unwrap().contains("aerosol"));
     }
 
+    /// Only a projected grid raises the version, and the decoder reads the
+    /// document back; a Gaussian block sits beside the regular fields at 3.
+    #[test]
+    fn a_projected_grid_raises_the_version_and_nothing_else_does() {
+        let registry = Registry::embedded();
+        let source = registry.source("hrrr").expect("hrrr");
+        let run_time = time::macros::datetime!(2026-09-11 00:00:00 UTC);
+        let grid = GridInfo::projected(
+            ProjectedGrid {
+                projection: LambertConformal {
+                    radius: 6371229.0,
+                    standard_parallel_1: 38.5,
+                    standard_parallel_2: 38.5,
+                    latitude_of_origin: 38.5,
+                    central_meridian: -97.5,
+                },
+                width: 16,
+                height: 8,
+                x0: -1500.0,
+                y0: 1500.0,
+                dx: 3000.0,
+                dy: -3000.0,
+            },
+            None,
+        );
+        let metadata = build_metadata(run_time, &[0, 1], &grid, "quality", &["tmp2m"], source, 3600, &[], &registry)
+            .expect("metadata");
+        let text = serde_json::to_string(&metadata).expect("json");
+        assert!(text.starts_with(r#"{"schemaVersion":4,"#));
+        assert!(text.contains(r#""wrapLongitude":false,"projection":{"kind":"lambert-conformal","radius":6371229.0,"#));
+        assert!(!text.contains("firstLongitude"));
+        crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
+
+        let mut gaussian = GridInfo::new(16, 8, -180.0, 89.0, 22.5, -1.0);
+        gaussian.gaussian = Some(GaussianRows { n: 95, first_row: 0, row_stride: 1 });
+        let metadata = build_metadata(run_time, &[0, 1], &gaussian, "quality", &["tmp2m"], source, 3600, &[], &registry)
+            .expect("metadata");
+        let text = serde_json::to_string(&metadata).expect("json");
+        assert!(text.starts_with(r#"{"schemaVersion":3,"#));
+        assert!(text.contains(r#""wrapLongitude":true,"gaussian":{"n":95,"firstRow":0,"rowStride":1}}"#));
+        crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
+    }
+
     #[test]
     fn a_derived_rate_declares_its_statistical_process() {
         let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
@@ -294,6 +349,23 @@ mod schema_tie_tests {
     #[test]
     fn the_fields_written_are_the_schemas() {
         assert_named(SCHEMA, "", &["schemaVersion", "model", "product", "runTime", "profile", "time", "grid", "variables"]);
+        assert_named(
+            SCHEMA,
+            "/$defs/Grid",
+            &[
+                "width", "height", "layout", "rowOrder", "columnOrder", "firstLongitude", "firstLatitude",
+                "longitudeStep", "latitudeStep", "wrapLongitude", "projection", "gaussian",
+            ],
+        );
+        assert_named(
+            SCHEMA,
+            "/$defs/Projection",
+            &[
+                "kind", "radius", "standardParallel1", "standardParallel2", "latitudeOfOrigin", "centralMeridian",
+                "x0", "y0", "dx", "dy",
+            ],
+        );
+        assert_named(SCHEMA, "/$defs/Gaussian", &["n", "firstRow", "rowStride"]);
         assert_named(SCHEMA, "/$defs/Time", &["unitSeconds", "firstFrameOffset", "frameCount", "frameStep", "frameOffsets"]);
         assert_named(
             SCHEMA,

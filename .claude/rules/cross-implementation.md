@@ -33,10 +33,10 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 
 | Concern | Schema (`docs/schemas/`) | Python | Rust | Web |
 |---|---|---|---|---|
-| Bundle metadata (schema v3) | `bundle-metadata` | `metadata.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
+| Bundle metadata (schema v3, v4 on a projected grid) | `bundle-metadata` | `metadata.py::build_metadata`, `binformat.py::_parse_metadata` | `decode/metadata.rs` | `manifest.ts::parseBundleMetadata` |
 | Container byte layout | — | `binformat.py` | `format.rs` (the only place it is packed or unpacked) | via wasm |
 | Manifest / pointer validation (all three validators) | `manifest`, `pointer` | `manifest.py` | `encode/manifest.rs` | `manifest.ts` |
-| Grid snapping, regrid, downsample | — | `grid.py`, `reproject.py` | `encode/grid.rs`, `reproject.rs` | `domain.ts` |
+| Grid snapping, native grids (Lambert window and winds, Gaussian rows), downsample | — | `grid.py`, `reproject.py` | `encode/grid.rs`, `encode/reproject.rs`, `projection.rs` | `domain.ts` |
 | Observation ingest | — | `observation.py` | `encode/observation.rs` | — |
 | Composite inputs, analysis-optional ids | — | `discover.py` | `encode/convert.rs` | — |
 | GRIB matching / template parsing | — | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |

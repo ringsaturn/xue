@@ -33,6 +33,7 @@ use serde_json::{json, Map, Value};
 use crate::encode::binformat::crc32_plane;
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::pyjson::dumps_indented;
+use crate::encode::reproject::cf_attributes;
 use crate::format::TileGeometry;
 use crate::zarr;
 
@@ -55,6 +56,12 @@ const DELTA_CODEC: &str = "xue.delta";
 /// The primary dimension names, which are also the store's primary
 /// coordinate arrays.
 pub const DIMENSIONS: [&str; 3] = ["time", "latitude", "longitude"];
+/// A projected store's primary dimensions.
+const PROJECTED_DIMENSIONS: [&str; 3] = ["time", "y", "x"];
+/// The scalar array a projected bundle's variables name as their `grid_mapping`.
+const CRS_ARRAY: &str = "crs";
+/// The coordinates a group document lists first, in this order.
+const PRIMARY_COORDINATES: [&str; 6] = ["time", "latitude", "longitude", "y", "x", CRS_ARRAY];
 
 /// One variable's codes: its planes in axis order, each `width * height`.
 pub struct StoreVariable<'a> {
@@ -178,7 +185,8 @@ fn io_error(path: &Path, error: &std::io::Error) -> EncodeError {
 
 /// One variable array's document. `bundle` is set in a shared store only,
 /// where it leads the `xue` block so an array opened alone knows which
-/// bundle's metadata describes it.
+/// bundle's metadata describes it. On a `projected` grid the array names the
+/// `crs` array, last among its attributes.
 fn array_metadata(
     geometry: &Geometry,
     variable: &Value,
@@ -186,6 +194,7 @@ fn array_metadata(
     delta: bool,
     bundle: Option<&str>,
     dimensions: &[String; 3],
+    projected: bool,
 ) -> Value {
     let quantization = &variable["quantization"];
     let mut xue = Map::new();
@@ -201,6 +210,9 @@ fn array_metadata(
         attributes.insert("add_offset".into(), quantization["offset"].clone());
     }
     attributes.insert("_FillValue".into(), quantization["nodataCode"].clone());
+    if projected {
+        attributes.insert("grid_mapping".into(), json!(CRS_ARRAY));
+    }
     let mut inner = Vec::new();
     if delta {
         inner.push(json!({"name": DELTA_CODEC, "configuration": {"axis": 0}}));
@@ -251,6 +263,23 @@ fn coordinate_metadata(length: usize, data_type: &str, fill_value: Value, attrib
     })
 }
 
+/// The `crs` array's document (`docs/zarr-profile.md`, "Coordinates"): a scalar
+/// with no chunk, there for the grid mapping in its attributes.
+fn crs_metadata(attributes: Value) -> Value {
+    json!({
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [],
+        "data_type": "int32",
+        "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": []}},
+        "chunk_key_encoding": {"name": "default"},
+        "fill_value": 0,
+        "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}],
+        "attributes": attributes,
+        "dimension_names": [],
+    })
+}
+
 fn number(value: &Value, what: &str) -> Result<f64> {
     value
         .as_f64()
@@ -285,7 +314,9 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> Result<u64> {
 /// and its kind, never read by the viewer. `names` are the bundle's
 /// dimension names (`time` or `time_<bundle>`, and so on): a coordinate array
 /// is named by the dimension it labels, and its encoding does not depend on
-/// the name. `atomic` writes by rename, for a shared store.
+/// the name. A projected grid's two are in metres and the `crs` array follows
+/// them; a Gaussian grid's latitudes are its true rows, not the regular fields'
+/// even ones. `atomic` writes by rename, for a shared store.
 fn write_coordinates(
     metadata: &Value,
     geometry: &Geometry,
@@ -315,16 +346,49 @@ fn write_coordinates(
         }
         bytes
     };
-    let latitude = axis(
-        number(&grid["firstLatitude"], "firstLatitude")?,
-        number(&grid["latitudeStep"], "latitudeStep")?,
-        geometry.height,
-    );
-    let longitude = axis(
-        number(&grid["firstLongitude"], "firstLongitude")?,
-        number(&grid["longitudeStep"], "longitudeStep")?,
-        geometry.width,
-    );
+    let layout = zarr::Grid::from_metadata(metadata)
+        .map_err(|error| EncodeError::bundle(format!("store metadata is invalid: {}", error.0)))?;
+    let mut crs = None;
+    let (rows, row_attributes, columns, column_attributes) = match layout {
+        zarr::Grid::Lambert(grid) => {
+            crs = Some(grid.projection);
+            (
+                axis(grid.y0, grid.dy, geometry.height),
+                json!({"units": "m", "standard_name": "projection_y_coordinate"}),
+                axis(grid.x0, grid.dx, geometry.width),
+                json!({"units": "m", "standard_name": "projection_x_coordinate"}),
+            )
+        }
+        zarr::Grid::Regular(regular) => {
+            let rows = match regular.gaussian {
+                Some(gaussian) => {
+                    let mut bytes = Vec::with_capacity(geometry.height * 8);
+                    for row in 0..geometry.height {
+                        let latitude = gaussian
+                            .latitude(row as u32)
+                            .ok_or_else(|| EncodeError::bundle("a row runs past the Gaussian grid"))?;
+                        bytes.extend_from_slice(&latitude.to_le_bytes());
+                    }
+                    bytes
+                }
+                None => axis(
+                    number(&grid["firstLatitude"], "firstLatitude")?,
+                    number(&grid["latitudeStep"], "latitudeStep")?,
+                    geometry.height,
+                ),
+            };
+            (
+                rows,
+                json!({"units": "degrees_north", "standard_name": "latitude"}),
+                axis(
+                    number(&grid["firstLongitude"], "firstLongitude")?,
+                    number(&grid["longitudeStep"], "longitudeStep")?,
+                    geometry.width,
+                ),
+                json!({"units": "degrees_east", "standard_name": "longitude"}),
+            )
+        }
+    };
     let coordinates = [
         (
             names[0].as_str(),
@@ -340,19 +404,19 @@ fn write_coordinates(
         ),
         (
             names[1].as_str(),
-            latitude,
+            rows,
             geometry.height,
             "float64",
             json!("NaN"),
-            json!({"units": "degrees_north", "standard_name": "latitude"}),
+            row_attributes,
         ),
         (
             names[2].as_str(),
-            longitude,
+            columns,
             geometry.width,
             "float64",
             json!("NaN"),
-            json!({"units": "degrees_east", "standard_name": "longitude"}),
+            column_attributes,
         ),
     ];
     let write = if atomic { write_file_atomic } else { write_file };
@@ -364,6 +428,12 @@ fn write_coordinates(
             + write(&directory.join("c").join("0"), &values)?;
         documents.push((name.to_owned(), document));
         sizes.push((name.to_owned(), written));
+    }
+    if let Some(projection) = crs {
+        let document = crs_metadata(cf_attributes(&projection));
+        let written = write(&store.join(CRS_ARRAY).join("zarr.json"), &dumps_indented(&document).into_bytes())?;
+        documents.push((CRS_ARRAY.to_owned(), document));
+        sizes.push((CRS_ARRAY.to_owned(), written));
     }
     Ok(sizes)
 }
@@ -428,6 +498,7 @@ fn write_array(
     pool: &rayon::ThreadPool,
     bundle: Option<&str>,
     dimensions: &[String; 3],
+    projected: bool,
 ) -> Result<(u64, u64, Value)> {
     let predictor = if variable.previous { "previous" } else { "raw" };
     let use_delta = delta && variable.previous;
@@ -452,7 +523,7 @@ fn write_array(
             geometry.height
         )));
     }
-    let document = array_metadata(geometry, document_variable, predictor, use_delta, bundle, dimensions);
+    let document = array_metadata(geometry, document_variable, predictor, use_delta, bundle, dimensions, projected);
     let text = dumps_indented(&document).into_bytes();
     zarr::parse_array_metadata(std::str::from_utf8(&text).expect("UTF-8 JSON"))
         .map_err(|error| EncodeError::bundle(format!("{}: array document is invalid: {}", variable.id, error.0)))?;
@@ -547,8 +618,12 @@ pub fn compression_pool(workers: usize) -> Result<rayon::ThreadPool> {
         .map_err(|error| EncodeError::conversion(format!("cannot start zstd pool: {error}")))
 }
 
-fn primary_dimensions() -> [String; 3] {
-    DIMENSIONS.map(str::to_owned)
+fn is_projected(metadata: &Value) -> bool {
+    metadata["grid"].get("projection").is_some()
+}
+
+fn primary_dimensions(projected: bool) -> [String; 3] {
+    if projected { PROJECTED_DIMENSIONS } else { DIMENSIONS }.map(str::to_owned)
 }
 
 /// The geometry a bundle's codes are cut with, and the metadata's variable
@@ -608,7 +683,8 @@ pub fn write_store(
 ) -> Result<StoreReport> {
     let metadata = codes.metadata;
     let (geometry, document_variables) = store_geometry(codes, series)?;
-    let dimensions = primary_dimensions();
+    let projected = is_projected(metadata);
+    let dimensions = primary_dimensions(projected);
 
     if store.exists() {
         if !store.is_dir() {
@@ -637,6 +713,7 @@ pub fn write_store(
             pool,
             None,
             &dimensions,
+            projected,
         )?;
         report.arrays.push((variable.id.clone(), written));
         report.byte_length += written;
@@ -709,13 +786,18 @@ fn grid_suffix<'a>(name: &'a str, primary: &str) -> Option<&'a str> {
 }
 
 /// A bundle's dimension names (`docs/zarr-profile.md`, "Coordinates"): `time`
-/// or `time_<bundle id>`, and `latitude` / `longitude` or `latitude_<family>`
-/// / `longitude_<family>` of one family id.
-fn check_dimensions(bundle_id: &str, dimensions: &[String]) -> Result<()> {
+/// or `time_<bundle id>`, then `latitude` / `longitude` or `latitude_<family>`
+/// / `longitude_<family>` of one family id, or on a projected grid `y` / `x` or
+/// `y_<family>` / `x_<family>`. `projected` is what the bundle's `grid` block
+/// says, when the caller has it: the names must agree with it.
+fn check_dimensions(bundle_id: &str, dimensions: &[String], projected: Option<bool>) -> Result<()> {
+    let named = |row: &str, column: &str| {
+        grid_suffix(&dimensions[1], row).is_some_and(|suffix| grid_suffix(&dimensions[2], column) == Some(suffix))
+    };
     let valid = dimensions.len() == 3
         && (dimensions[0] == "time" || dimensions[0] == format!("time_{bundle_id}"))
-        && grid_suffix(&dimensions[1], "latitude")
-            .is_some_and(|latitude| grid_suffix(&dimensions[2], "longitude") == Some(latitude));
+        && ((projected != Some(true) && named("latitude", "longitude"))
+            || (projected != Some(false) && named("y", "x")));
     if valid {
         Ok(())
     } else {
@@ -723,6 +805,28 @@ fn check_dimensions(bundle_id: &str, dimensions: &[String]) -> Result<()> {
             "{bundle_id}: dimension names {dimensions:?} are not the profile's"
         )))
     }
+}
+
+/// A variable array names the `crs` array exactly when its bundle's grid is
+/// projected, so xarray and rioxarray find the CRS the metadata declares.
+fn check_grid_mapping(bundle_id: &str, name: &str, document: &Value, projected: bool) -> Result<()> {
+    let mapping = document["attributes"].get("grid_mapping").and_then(Value::as_str);
+    if mapping != projected.then_some(CRS_ARRAY) {
+        return Err(EncodeError::bundle(format!(
+            "{bundle_id}: array {name} has grid_mapping {mapping:?} on a grid that says otherwise"
+        )));
+    }
+    Ok(())
+}
+
+/// The `crs` array: zero-dimensional, holding only its attributes.
+fn check_crs(bundle_id: &str, document: Option<&Value>) -> Result<()> {
+    let document =
+        document.ok_or_else(|| EncodeError::bundle(format!("{bundle_id}: no array document for {CRS_ARRAY}")))?;
+    if document.get("shape") != Some(&json!([])) {
+        return Err(EncodeError::bundle(format!("{bundle_id}: {CRS_ARRAY} must be a scalar array")));
+    }
+    Ok(())
 }
 
 /// One bundle written into a shared store (`BundleWrite` in the reference).
@@ -792,8 +896,9 @@ pub fn write_bundle_arrays(
             "{bundle_id:?} cannot name a bundle of a shared store"
         )));
     }
-    check_dimensions(bundle_id, dimensions)?;
     let metadata = codes.metadata;
+    let projected = is_projected(metadata);
+    check_dimensions(bundle_id, dimensions, Some(projected))?;
     let (geometry, document_variables) = store_geometry(codes, None)?;
     if store.exists() && !store.is_dir() {
         return Err(EncodeError::conversion(format!("{} exists and is not a directory", store.display())));
@@ -812,7 +917,7 @@ pub fn write_bundle_arrays(
         crc32: String::new(),
     };
     for (variable, document_variable) in codes.variables.iter().zip(document_variables) {
-        if dimensions.contains(&variable.id) {
+        if dimensions.contains(&variable.id) || variable.id == CRS_ARRAY {
             return Err(EncodeError::bundle(format!(
                 "{bundle_id}: variable {} is named like a coordinate",
                 variable.id
@@ -827,6 +932,7 @@ pub fn write_bundle_arrays(
             pool,
             Some(bundle_id),
             dimensions,
+            projected,
         )?;
         report.arrays.push((variable.id.clone(), written));
         report.chunk_count += chunks;
@@ -866,6 +972,7 @@ pub fn group_document(bundles: &[&BundleWrite]) -> Result<Value> {
         let variables = bundle.metadata["variables"]
             .as_array()
             .ok_or_else(|| EncodeError::bundle(format!("{bundle_id}: metadata variables missing")))?;
+        let projected = is_projected(&bundle.metadata);
         let mut dimensions: Option<Vec<String>> = None;
         for variable in variables {
             let name = variable["id"].as_str().unwrap_or_default();
@@ -887,10 +994,15 @@ pub fn group_document(bundles: &[&BundleWrite]) -> Result<Value> {
                 }
                 Some(_) => {}
             }
+            check_grid_mapping(bundle_id, name, document, projected)?;
             variable_arrays.insert(name.to_owned(), document.clone());
         }
-        let dimensions = dimensions.unwrap_or_default();
-        check_dimensions(bundle_id, &dimensions)?;
+        let mut dimensions = dimensions.unwrap_or_default();
+        check_dimensions(bundle_id, &dimensions, Some(projected))?;
+        if projected {
+            check_crs(bundle_id, document_of(CRS_ARRAY))?;
+            dimensions.push(CRS_ARRAY.to_owned());
+        }
         for name in &dimensions {
             let document = document_of(name).ok_or_else(|| {
                 EncodeError::bundle(format!("{bundle_id}: no array document for its coordinate {name}"))
@@ -912,13 +1024,13 @@ pub fn group_document(bundles: &[&BundleWrite]) -> Result<Value> {
         }
     }
     let mut ordered = variable_arrays;
-    for name in DIMENSIONS {
+    for name in PRIMARY_COORDINATES {
         if let Some(document) = coordinates.get(name) {
             ordered.insert(name.to_owned(), document.clone());
         }
     }
     for (name, document) in &coordinates {
-        if !DIMENSIONS.contains(&name.as_str()) {
+        if !PRIMARY_COORDINATES.contains(&name.as_str()) {
             ordered.insert(name.clone(), document.clone());
         }
     }
@@ -1111,13 +1223,116 @@ mod tests {
 
     #[test]
     fn names_outside_the_profile_are_refused() {
-        assert!(check_dimensions("prate", &dimensions(["time_prate", "latitude", "longitude"])).is_ok());
-        assert!(check_dimensions("prate", &dimensions(["time_gust", "latitude", "longitude"])).is_err());
-        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude_pgb"])).is_ok());
-        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude"])).is_err());
-        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_", "longitude_"])).is_err());
-        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_Pgb", "longitude_Pgb"])).is_err());
+        assert!(check_dimensions("prate", &dimensions(["time_prate", "latitude", "longitude"]), None).is_ok());
+        assert!(check_dimensions("prate", &dimensions(["time_gust", "latitude", "longitude"]), None).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude_pgb"]), None).is_ok());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_pgb", "longitude"]), None).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_", "longitude_"]), None).is_err());
+        assert!(check_dimensions("hgt500", &dimensions(["time", "latitude_Pgb", "longitude_Pgb"]), None).is_err());
+        // The names must agree with the grid block when the caller has it.
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "y", "x"]), None).is_ok());
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "y", "x"]), Some(true)).is_ok());
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "y_pgb", "x_pgb"]), Some(true)).is_ok());
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "y", "x"]), Some(false)).is_err());
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "latitude", "longitude"]), Some(true)).is_err());
+        assert!(check_dimensions("tmp2m", &dimensions(["time", "y", "longitude"]), None).is_err());
         assert_eq!(shared_store_name(Some("half")), "bundles.half.zarr");
+    }
+
+    /// One `tmp2m` bundle of three frames at the schema the two native grid
+    /// blocks need.
+    fn native_grid_metadata(schema_version: u64, grid: Value) -> Value {
+        json!({
+            "schemaVersion": schema_version,
+            "model": "TEST",
+            "product": "test",
+            "runTime": "2026-08-14T06:00:00Z",
+            "profile": "quality",
+            "time": {"unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 3, "frameStep": 1},
+            "grid": grid,
+            "variables": [{
+                "numericId": 1, "id": "tmp2m", "label": "T", "unit": "°C",
+                "parameter": {"discipline": 0, "parameterCategory": 0, "parameterNumber": 0,
+                              "typeOfFirstFixedSurface": 103, "scaleFactorOfFirstFixedSurface": 0,
+                              "scaledValueOfFirstFixedSurface": 2},
+                "quantization": {"type": "linear", "offset": -60.0, "scale": 0.5,
+                                 "minimumCode": 0, "maximumCode": 220, "nodataCode": 255},
+            }],
+        })
+    }
+
+    /// A projected bundle's coordinates are in metres, its `crs` array is a
+    /// document with no chunk, every variable names it, and the part lists it
+    /// after `y` and `x`.
+    #[test]
+    fn a_projected_bundle_writes_y_x_and_its_crs() {
+        let root = std::env::temp_dir().join(format!("xue-projected-store-{}", std::process::id()));
+        let store = root.join(shared_store_name(None));
+        let metadata = native_grid_metadata(4, json!({
+            "width": 5, "height": 3, "wrapLongitude": false,
+            "projection": {"kind": "lambert-conformal", "radius": 6371229.0, "standardParallel1": 38.5,
+                           "standardParallel2": 38.5, "latitudeOfOrigin": 38.5, "centralMeridian": -97.5,
+                           "x0": -1500.0, "y0": 1500.0, "dx": 3000.0, "dy": -3000.0},
+        }));
+        let planes: Vec<Vec<u8>> = (0..3u8).map(|frame| vec![frame; 15]).collect();
+        let codes = StoreCodes {
+            metadata: &metadata,
+            variables: vec![StoreVariable {
+                id: "tmp2m".into(),
+                previous: true,
+                planes: planes.iter().map(Vec::as_slice).collect(),
+            }],
+            tile: (2, 2),
+        };
+        let bundle = write_bundle_arrays(&codes, &store, "tmp2m", &dimensions(["time", "y", "x"]), &pool()).expect("bundle");
+        let (path, _) = write_part(&store, &[&bundle]).expect("part");
+        let part: Value = serde_json::from_slice(&fs::read(&path).expect("part")).expect("JSON");
+        let held = &part["consolidated_metadata"]["metadata"];
+        assert_eq!(
+            held.as_object().expect("object").keys().map(String::as_str).collect::<Vec<_>>(),
+            ["tmp2m", "time", "y", "x", "crs"]
+        );
+        assert_eq!(held["tmp2m"]["attributes"]["grid_mapping"], "crs");
+        assert_eq!(held["y"]["attributes"]["standard_name"], "projection_y_coordinate");
+        assert_eq!(held["crs"]["shape"], json!([]));
+        assert_eq!(held["crs"]["attributes"]["earth_radius"], 6371229.0);
+        let y = fs::read(store.join("y").join("c").join("0")).expect("y");
+        assert_eq!(y[8..16], (-1500.0_f64).to_le_bytes());
+        assert!(store.join("crs").join("zarr.json").is_file());
+        assert!(!store.join("crs").join("c").exists());
+        assert_eq!(bundle.byte_length, ["tmp2m", "time", "y", "x", "crs"].iter().map(|name| walk(&store.join(name))).sum::<u64>());
+
+        // A latitude pair on this grid, or y and x on a regular one, is refused.
+        assert!(write_bundle_arrays(&codes, &store, "tmp2m", &dimensions(["time", "latitude", "longitude"]), &pool()).is_err());
+        let series = write_store(&codes, &root.join("tmp2m.series.zarr"), true, Some(SERIES_BLOCK), &pool()).expect("series");
+        assert!(series.arrays.iter().any(|(name, _)| name == "crs"));
+        assert!(root.join("tmp2m.series.zarr").join("y").is_dir());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A Gaussian grid's `latitude` holds its true rows.
+    #[test]
+    fn a_gaussian_grid_writes_its_true_latitudes() {
+        let root = std::env::temp_dir().join(format!("xue-gaussian-store-{}", std::process::id()));
+        let metadata = native_grid_metadata(3, json!({
+            "width": 5, "height": 3, "firstLongitude": -180.0, "firstLatitude": 86.0,
+            "longitudeStep": 72.0, "latitudeStep": -2.0, "wrapLongitude": true,
+            "gaussian": {"n": 95, "firstRow": 4, "rowStride": 2},
+        }));
+        let planes: Vec<Vec<u8>> = (0..3u8).map(|frame| vec![frame; 15]).collect();
+        let codes = StoreCodes {
+            metadata: &metadata,
+            variables: vec![StoreVariable {
+                id: "tmp2m".into(),
+                previous: true,
+                planes: planes.iter().map(Vec::as_slice).collect(),
+            }],
+            tile: (2, 2),
+        };
+        write_store(&codes, &root.join("tmp2m.zarr"), false, None, &pool()).expect("store");
+        let latitude = fs::read(root.join("tmp2m.zarr").join("latitude").join("c").join("0")).expect("latitude");
+        assert_eq!(latitude[8..16], crate::projection::gaussian_latitude(95, 6).to_le_bytes());
+        let _ = fs::remove_dir_all(&root);
     }
 
     fn walk(path: &Path) -> u64 {
@@ -1132,5 +1347,29 @@ mod tests {
                 }
             })
             .sum()
+    }
+}
+
+#[cfg(test)]
+mod schema_tie_tests {
+    //! The attributes a projected store writes are the ones
+    //! `docs/schemas/store-array.schema.json` names.
+    use crate::schematie::assert_named;
+
+    #[test]
+    fn the_projected_attributes_are_the_schemas() {
+        assert_named(
+            "store-array",
+            "/$defs/Attributes",
+            &[
+                "grid_mapping",
+                "grid_mapping_name",
+                "latitude_of_projection_origin",
+                "longitude_of_central_meridian",
+                "standard_parallel",
+                "earth_radius",
+                "crs_wkt",
+            ],
+        );
     }
 }

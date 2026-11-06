@@ -2,12 +2,12 @@
 //! port of `xuebuild/grid.py`.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
 
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::reproject::Resampler;
+use crate::encode::reproject::ProjectedGrid;
+use crate::projection::{gaussian_latitude, GaussianRows};
 
 /// A rectangular window cut out of every extracted plane, indexed in the
 /// -180-first layout the column roll produces.
@@ -41,8 +41,8 @@ impl CropWindow {
 
 /// The thinning a source's `Downsample` asks for, fixed to one file's grid:
 /// every `factor` x `factor` block of the `(source_height, source_width)`
-/// plane becomes its maximum. Carried on the grid the way a `Resampler` is,
-/// and like it never serialized — the bundle's grid is the thinned one.
+/// plane becomes its maximum. Never serialized: the bundle's grid is the
+/// thinned one.
 /// Mirrors `BlockReduction` in `xuebuild/grid.py`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlockReduction {
@@ -107,20 +107,21 @@ pub struct GridInfo {
     pub column_roll: usize,
     /// Regional window applied after the roll (showcase cases). When set,
     /// every field above describes the *cropped* planes, and the window
-    /// carries the source dimensions the extraction actually reads — or, on
-    /// a projected source, the regular grid the resampler produces. Never
+    /// carries the source dimensions the extraction actually reads. Never
     /// serialized: the cropped origin and extent already say where the data is.
     pub crop: Option<CropWindow>,
-    /// Set for a source on a map projection (HRRR): the extracted planes are
-    /// the projected grid, and every field above describes the regular grid
-    /// they are resampled onto (`reproject.rs`), before any crop. Shared by
-    /// every extraction worker, hence the `Arc`. Never serialized either.
-    pub resample: Option<Arc<Resampler>>,
     /// Set for a source published coarser than it arrives (MRMS): the
     /// extracted planes are the source grid, and every field above describes
     /// the thinned grid their block maxima land on, before any crop. Never
     /// serialized either.
     pub downsample: Option<BlockReduction>,
+    /// Set on a grid on a map projection ([`GridInfo::projected`]), which has
+    /// none of the regular fields: this says where its cells are, and a window's
+    /// or a tier's is that window's or tier's own.
+    pub projection: Option<ProjectedGrid>,
+    /// Set on a regular Gaussian grid, beside the regular fields every other
+    /// number here still comes from.
+    pub gaussian: Option<GaussianRows>,
 }
 
 impl GridInfo {
@@ -141,8 +142,19 @@ impl GridInfo {
             latitude_step,
             column_roll: 0,
             crop: None,
-            resample: None,
             downsample: None,
+            projection: None,
+            gaussian: None,
+        }
+    }
+
+    /// The grid a projected file's planes are published on. Its regular fields
+    /// are NaN, so arithmetic on them cannot pass for a place.
+    pub fn projected(projection: ProjectedGrid, crop: Option<CropWindow>) -> Self {
+        Self {
+            crop,
+            projection: Some(projection),
+            ..Self::new(projection.width, projection.height, f64::NAN, f64::NAN, f64::NAN, f64::NAN)
         }
     }
 
@@ -152,9 +164,6 @@ impl GridInfo {
 
     /// `(height, width)` of the plane the extraction reads.
     pub fn source_shape(&self) -> (usize, usize) {
-        if let Some(resample) = &self.resample {
-            return resample.source_shape();
-        }
         if let Some(downsample) = &self.downsample {
             return downsample.source_shape();
         }
@@ -166,8 +175,13 @@ impl GridInfo {
 
     /// The grid produced by keeping every second row and column. For the
     /// 721-row production grid the last kept row still lands exactly on the
-    /// south pole, and 720 columns at a doubled step still cover 360 degrees.
+    /// south pole, and 720 columns at a doubled step still cover 360 degrees. A
+    /// projected grid's first cell stays where it is at twice the spacing, and a
+    /// Gaussian grid's rows are every second one of those it had.
     pub fn decimated(&self) -> Self {
+        if let Some(projection) = &self.projection {
+            return Self::projected(projection.decimated(), None);
+        }
         Self {
             width: self.width.div_ceil(2),
             height: self.height.div_ceil(2),
@@ -177,8 +191,9 @@ impl GridInfo {
             latitude_step: self.latitude_step * 2.0,
             column_roll: 0,
             crop: None,
-            resample: None,
             downsample: None,
+            projection: None,
+            gaussian: self.gaussian.map(|rows| GaussianRows { row_stride: rows.row_stride * 2, ..rows }),
         }
     }
 
@@ -218,12 +233,13 @@ impl GridInfo {
             latitude_step: self.latitude_step * k,
             column_roll: 0,
             crop: None,
-            resample: None,
             downsample: Some(BlockReduction {
                 factor,
                 source_width: self.width,
                 source_height: self.height,
             }),
+            projection: None,
+            gaussian: None,
         })
     }
 
@@ -234,13 +250,52 @@ impl GridInfo {
         block.insert("layout".into(), json!("row-major"));
         block.insert("rowOrder".into(), json!("north-to-south"));
         block.insert("columnOrder".into(), json!("west-to-east"));
+        if let Some(projection) = &self.projection {
+            block.insert("wrapLongitude".into(), json!(false));
+            block.insert("projection".into(), Value::Object(projection.metadata()));
+            return block;
+        }
         block.insert("firstLongitude".into(), json!(self.first_longitude));
         block.insert("firstLatitude".into(), json!(self.first_latitude));
         block.insert("longitudeStep".into(), json!(self.longitude_step));
         block.insert("latitudeStep".into(), json!(self.latitude_step));
         block.insert("wrapLongitude".into(), json!(self.wraps()));
+        if let Some(rows) = &self.gaussian {
+            block.insert(
+                "gaussian".into(),
+                json!({"n": rows.n, "firstRow": rows.first_row, "rowStride": rows.row_stride}),
+            );
+        }
         block
     }
+}
+
+/// How far a file's first latitude may lie from the Gaussian row it is taken
+/// for, as a fraction of a row. GDAL's even spacing is within 0.014 of one of the
+/// true rows on sflux; on CFSv2, whose step is 180°/190, it starts true and a
+/// window cut from the northern hemisphere is at most this far off.
+const GAUSSIAN_ROW_TOLERANCE: f64 = 0.25;
+
+/// Which rows of the Gaussian grid of `n` a file's are: the inverse of the
+/// iteration's first guess, rounded, so a whole file's are all of them and a file
+/// cut out of one starts wherever its first latitude says, its rows still
+/// consecutive. A file that is not on the grid is refused. Mirrors
+/// `gaussian_rows` in `xuebuild/grid.py`.
+pub fn gaussian_rows(grid: &GridInfo, n: u32, path: &Path) -> Result<GaussianRows> {
+    let order = 2.0 * f64::from(n);
+    let first_row = ((90.0 - grid.first_latitude) * (order + 0.5) / 180.0 - 0.25).floor();
+    let step = grid.latitude_step.abs();
+    if first_row < 0.0
+        || first_row + grid.height as f64 > order
+        || (step * 2.0 * f64::from(n) - 180.0).abs() > 1.8
+        || (gaussian_latitude(n, first_row as u32) - grid.first_latitude).abs() > step * GAUSSIAN_ROW_TOLERANCE
+    {
+        return Err(EncodeError::conversion(format!(
+            "{} is not on the Gaussian grid of {n} latitudes per hemisphere",
+            path.display()
+        )));
+    }
+    Ok(GaussianRows { n, first_row: first_row as u32, row_stride: 1 })
 }
 
 /// How far short of (or past) a full circle a grid's columns may fall, as a
@@ -381,6 +436,9 @@ fn round10(value: f64) -> f64 {
 /// the requested box outright. On a wrapping source grid `west > east` crosses
 /// the antimeridian; the returned origin is renormalized into [-180, 180) and
 /// the window, not the metadata, carries the wrap.
+///
+/// On a projected grid the box is a curved patch: see [`crop_projected`]. A
+/// Gaussian grid is cropped by its regular fields, and its rows follow.
 pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo> {
     if grid.crop.is_some() {
         return Err(EncodeError::conversion("a grid can only be cropped once"));
@@ -410,6 +468,9 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
             )));
         }
         span = 360.0;
+    }
+    if let Some(projection) = grid.projection {
+        return crop_projected(&grid, &projection, west, south, east, north);
     }
 
     // Degrees east of the grid's origin. A wrapping grid has every longitude
@@ -478,18 +539,173 @@ pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo>
             width,
             height,
         }),
-        resample: grid.resample.clone(),
         downsample: grid.downsample,
+        projection: None,
+        gaussian: grid.gaussian.map(|rows| GaussianRows {
+            first_row: rows.first_row + row_start as u32 * rows.row_stride,
+            ..rows
+        }),
     })
+}
+
+/// Points walked along each edge of a box, ends included: an edge is a curve on
+/// the projected plane, and these bound it to well under a cell of any window a
+/// case asks for.
+const BBOX_EDGE_POINTS: usize = 64;
+/// Past this the cone's radius runs away, and a box reaching a pole is the whole
+/// grid in any case.
+const BBOX_LATITUDE_LIMIT: f64 = 89.9;
+
+/// The smallest whole-cell window covering a box's edges. Each of the four edges
+/// is walked in [`BBOX_EDGE_POINTS`] points and projected; the window takes the
+/// cell at or before the lowest column and row they reach and the one at or after
+/// the highest, the rule a regular grid's crop has, clamped to the grid. A box
+/// wholly off the grid is refused.
+fn crop_projected(
+    grid: &GridInfo,
+    projected: &ProjectedGrid,
+    west: f64,
+    south: f64,
+    east: f64,
+    north: f64,
+) -> Result<GridInfo> {
+    let south = south.max(-BBOX_LATITUDE_LIMIT);
+    let north = north.min(BBOX_LATITUDE_LIMIT);
+    let (mut lowest_column, mut highest_column) = (f64::INFINITY, f64::NEG_INFINITY);
+    let (mut lowest_row, mut highest_row) = (f64::INFINITY, f64::NEG_INFINITY);
+    let last = (BBOX_EDGE_POINTS - 1) as f64;
+    for index in 0..BBOX_EDGE_POINTS {
+        let longitude = west + (east - west) * index as f64 / last;
+        let latitude = south + (north - south) * index as f64 / last;
+        for (point_longitude, point_latitude) in
+            [(longitude, south), (longitude, north), (west, latitude), (east, latitude)]
+        {
+            let (x, y) = projected.projection.forward_wrapped(point_longitude, point_latitude);
+            let column = (x - projected.x0) / projected.dx;
+            let row = (y - projected.y0) / projected.dy;
+            lowest_column = lowest_column.min(column);
+            highest_column = highest_column.max(column);
+            lowest_row = lowest_row.min(row);
+            highest_row = highest_row.max(row);
+        }
+    }
+    let column_start = ((lowest_column + 1e-9).floor() as i64).max(0);
+    let column_end = ((highest_column - 1e-9).ceil() as i64).min(grid.width as i64 - 1);
+    let row_start = ((lowest_row + 1e-9).floor() as i64).max(0);
+    let row_end = ((highest_row - 1e-9).ceil() as i64).min(grid.height as i64 - 1);
+    let width = column_end - column_start + 1;
+    let height = row_end - row_start + 1;
+    if width <= 0 || height <= 0 {
+        return Err(EncodeError::conversion(format!(
+            "bbox does not overlap the source grid: ({west}, {south}, {east}, {north})"
+        )));
+    }
+    let (row_start, column_start) = (row_start as usize, column_start as usize);
+    let (height, width) = (height as usize, width as usize);
+    Ok(GridInfo::projected(
+        projected.window(row_start, column_start, height, width),
+        Some(CropWindow {
+            source_width: grid.width,
+            source_height: grid.height,
+            row_start,
+            column_start,
+            width,
+            height,
+        }),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        crop_grid, normalize_longitudes, snap_global_longitudes, snap_regional_steps,
+        crop_grid, gaussian_rows, normalize_longitudes, snap_global_longitudes, snap_regional_steps,
         BlockReduction, GridInfo,
     };
+    use crate::encode::reproject::{LambertConformal, ProjectedGrid};
+    use crate::projection::GaussianRows;
     use std::path::Path;
+
+    fn hrrr() -> ProjectedGrid {
+        ProjectedGrid {
+            projection: LambertConformal {
+                radius: 6371229.0,
+                standard_parallel_1: 38.5,
+                standard_parallel_2: 38.5,
+                latitude_of_origin: 38.5,
+                central_meridian: -97.5,
+            },
+            width: 1799,
+            height: 1059,
+            x0: -2697520.143,
+            y0: 1587306.153,
+            dx: 3000.0,
+            dy: -3000.0,
+        }
+    }
+
+    #[test]
+    fn a_box_on_a_projected_grid_is_the_window_around_its_edges() {
+        let grid = hrrr();
+        let cropped = crop_grid(GridInfo::projected(grid, None), (-100.0, 35.0, -95.0, 40.0)).expect("window");
+        let crop = cropped.crop.expect("a window");
+        assert_eq!((crop.source_width, crop.source_height), (1799, 1059));
+        assert_eq!((crop.width, crop.height), (cropped.width, cropped.height));
+        assert_eq!(cropped.source_shape(), (1059, 1799));
+        let window = cropped.projection.expect("projected");
+        assert_eq!(window.x0, grid.x0 + crop.column_start as f64 * grid.dx);
+        assert_eq!(window.y0, grid.y0 + crop.row_start as f64 * grid.dy);
+        // Every corner of the box lies inside the window, spelled either way.
+        for (longitude, latitude) in [(-100.0, 35.0), (-95.0, 35.0), (-100.0, 40.0), (260.0, 40.0)] {
+            let (x, y) = grid.projection.forward_wrapped(longitude, latitude);
+            let (column, row) = ((x - window.x0) / window.dx, (y - window.y0) / window.dy);
+            assert!(column >= 0.0 && column <= (window.width - 1) as f64, "{longitude} {column}");
+            assert!(row >= 0.0 && row <= (window.height - 1) as f64, "{latitude} {row}");
+        }
+        assert!(crop_grid(GridInfo::projected(grid, None), (-95.0, 35.0, -100.0, 40.0)).is_err());
+        assert!(crop_grid(GridInfo::projected(grid, None), (100.0, 35.0, 110.0, 40.0)).is_err());
+        assert!(crop_grid(cropped, (-100.0, 35.0, -95.0, 40.0)).is_err(), "cropped once");
+    }
+
+    #[test]
+    fn a_projected_grid_says_nothing_regular() {
+        let block = GridInfo::projected(hrrr(), None).decimated().metadata();
+        assert_eq!(
+            block.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["width", "height", "layout", "rowOrder", "columnOrder", "wrapLongitude", "projection"]
+        );
+        assert_eq!(block["width"], 900);
+        assert_eq!(block["projection"]["dy"], -6000.0);
+    }
+
+    /// The whole CFSv2 grid is all the rows; a window is wherever its first
+    /// latitude says, and a file that is not on the grid is refused.
+    #[test]
+    fn a_gaussian_grid_finds_its_rows() {
+        let path = Path::new("x");
+        let step = -180.0 / 190.0;
+        let whole = GridInfo::new(384, 190, -180.0, 89.7507 + step / 2.0, 0.9375, step);
+        assert_eq!(gaussian_rows(&whole, 95, path).unwrap(), GaussianRows { n: 95, first_row: 0, row_stride: 1 });
+        let first = crate::projection::gaussian_latitude(95, 30);
+        let window = GridInfo::new(48, 40, 90.0, first, 0.9375, step);
+        assert_eq!(gaussian_rows(&window, 95, path).unwrap().first_row, 30);
+        // Half a row off, past the last row, or at another grid's step.
+        assert!(gaussian_rows(&GridInfo::new(48, 40, 90.0, first + step / 2.0, 0.9375, step), 95, path).is_err());
+        assert!(gaussian_rows(&GridInfo::new(48, 170, 90.0, first, 0.9375, step), 95, path).is_err());
+        assert!(gaussian_rows(&GridInfo::new(48, 40, 90.0, first, 0.9375, -0.5), 95, path).is_err());
+    }
+
+    #[test]
+    fn a_crop_and_a_tier_keep_a_gaussian_grid_s_rows() {
+        let step = -180.0 / 190.0;
+        let mut grid = GridInfo::new(384, 190, -180.0, 89.277, 0.9375, step);
+        grid.gaussian = Some(GaussianRows { n: 95, first_row: 0, row_stride: 1 });
+        let cropped = crop_grid(grid, (0.0, 0.0, 30.0, 30.0)).expect("window");
+        let row_start = cropped.crop.expect("a window").row_start as u32;
+        assert_eq!(cropped.gaussian, Some(GaussianRows { n: 95, first_row: row_start, row_stride: 1 }));
+        let tier = cropped.decimated();
+        assert_eq!(tier.gaussian, Some(GaussianRows { n: 95, first_row: row_start, row_stride: 2 }));
+        assert_eq!(tier.metadata()["gaussian"]["rowStride"], 2);
+    }
 
     const WAVE_STEP: f64 = 0.2500000111188325;
     const WAVE_ORIGIN: f64 = -180.12500000555943;

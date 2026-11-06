@@ -809,7 +809,13 @@ mod tests {
         assert_eq!(cfs.companion_files[0].production_grid, Some((360, 181)));
         assert!(cfs.companion_files[0].own_grid());
         assert_eq!(registry.source("mrms").unwrap().downsample.map(|downsample| downsample.factor), Some(2));
-        assert_eq!(registry.source("hrrr").unwrap().regrid.map(|regrid| regrid.step), Some(0.03));
+        assert!(registry.source("hrrr").unwrap().grid_relative_winds);
+        assert_eq!(registry.source("hrrr").unwrap().production_grid, (1799, 1059));
+        assert!(registry.source("rrfs").unwrap().grid_relative_winds);
+        assert!(!gfs.grid_relative_winds);
+        assert_eq!(cfs.gaussian_n, Some(95));
+        assert_eq!(registry.source("sflux").unwrap().gaussian_n, Some(768));
+        assert_eq!(gfs.gaussian_n, None);
         assert_eq!(registry.source("efas").unwrap().latest_filename, None);
         assert_eq!(registry.source_by_manifest_model("HRRR").unwrap().id, "hrrr");
         assert!(registry.source("nothing").is_err());
