@@ -60,14 +60,24 @@ scheduled publishes do not fail during the release window.
    with `relock_tag=v0.N.0` or run `scripts/relock_release.sh v0.N.0` from
    a fetched checkout. Never write the relock commit by hand while the job
    may still push one.
-6. **Merge into `main`** as a fast-forward, which keeps the history:
+6. **Merge into `main`** as a fast-forward, which keeps the history. CI has
+   already committed the wheel CSV to `main` (step 5), so rebase first; the
+   tag stays on the published release commit:
    ```sh
-   git checkout main && git merge --ff-only release/0.N && git push origin main
+   git fetch origin
+   tested=$(git rev-parse HEAD)   # the relocked head whose test run passed
+   git rebase origin/main
+   git diff --name-only "$tested" HEAD
+   ```
+   If that names only `.github/release_wheels.csv`, publish it directly. It
+   needs no re-test, and `main`'s own run tests the published wheel:
+   ```sh
+   git push origin HEAD:main
+   git checkout main && git pull --ff-only
    git branch -d release/0.N && git push origin --delete release/0.N
    ```
-   If `main` moved on in the meantime, rebase the branch onto `main` first
-   (the tag stays on the published release commit), re-run the tests, then
-   fast-forward.
+   If it names anything else, push the branch with `--force-with-lease`, wait
+   for `test.yml`, and then do the same.
 
 ## Rules
 
