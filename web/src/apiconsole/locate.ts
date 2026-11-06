@@ -13,16 +13,10 @@
  * `/v1/catalog`; only the request itself reaches the API.
  */
 
-/** A bundle's grid as the manifest declares it, defaults filled in. */
-export interface CellGrid {
-  width: number;
-  height: number;
-  firstLongitude: number;
-  firstLatitude: number;
-  longitudeStep: number;
-  latitudeStep: number;
-  wrapLongitude: boolean;
-}
+import { gridMapFor, parseGrid as parseBundleGrid, sameGrid, wrap, type GeoGrid } from "../gridmap";
+
+/** A bundle's grid as the manifest declares it. */
+export type CellGrid = GeoGrid;
 
 export interface Cell {
   row: number;
@@ -49,35 +43,14 @@ export interface CellRequest {
   time?: string;
 }
 
-function finiteOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-/** The grid record of `docs/zarr-profile.md`, with the reference defaults
- * for missing fields. Null for an order the rule does not cover (a future
- * projected or reordered grid), so that bundle is reported, not misread. */
+/** The grid record of `docs/zarr-profile.md`, or null for one the rule does
+ * not cover or that is malformed, so that bundle is reported, not misread. */
 export function parseGrid(input: unknown): CellGrid | null {
-  if (typeof input !== "object" || input === null) return null;
-  const grid = input as Record<string, unknown>;
-  if (grid.layout !== undefined && grid.layout !== "row-major") return null;
-  if (grid.rowOrder !== undefined && grid.rowOrder !== "north-to-south") return null;
-  if (grid.columnOrder !== undefined && grid.columnOrder !== "west-to-east") return null;
-  const width = finiteOr(grid.width, 0);
-  const longitudeStep = finiteOr(grid.longitudeStep, 0.25);
-  return {
-    width,
-    height: finiteOr(grid.height, 0),
-    firstLongitude: finiteOr(grid.firstLongitude, -180),
-    firstLatitude: finiteOr(grid.firstLatitude, 90),
-    longitudeStep,
-    latitudeStep: finiteOr(grid.latitudeStep, -0.25),
-    wrapLongitude:
-      typeof grid.wrapLongitude === "boolean" ? grid.wrapLongitude : Math.abs(width * longitudeStep - 360) < 1e-6,
-  };
-}
-
-function wrap(value: number, modulus: number): number {
-  return ((value % modulus) + modulus) % modulus;
+  try {
+    return parseBundleGrid(input);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeLongitude(longitude: number): number {
@@ -87,20 +60,21 @@ function normalizeLongitude(longitude: number): number {
 /** The cell holding a coordinate, or null off the grid (a regional model's
  * rectangle, a satellite disk). */
 export function cellOf(grid: CellGrid, latitude: number, longitude: number): Cell | null {
-  if (grid.width === 0 || grid.height === 0 || grid.longitudeStep === 0 || grid.latitudeStep === 0) return null;
-  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
-  const delta = wrap(longitude - grid.firstLongitude, 360);
-  let column = Math.floor(delta / grid.longitudeStep + 0.5);
-  if (grid.wrapLongitude) column = wrap(column, grid.width);
+  const map = gridMapFor(grid);
+  const at = map.lonLatToCell(longitude, latitude);
+  if (!at) return null;
+  let column = Math.floor(at[0] + 0.5);
+  if (grid.wraps) column = wrap(column, grid.width);
   else if (column < 0 || column >= grid.width) return null;
-  const row = Math.floor((latitude - grid.firstLatitude) / grid.latitudeStep + 0.5);
+  const row = Math.floor(at[1] + 0.5);
   if (row < 0 || row >= grid.height) return null;
+  const [cellLongitude, cellLatitude] = map.cellToLonLat(column, row);
   return {
     // `+ 0` folds a negative zero (a point on the first row or column).
     row: row + 0,
     column: column + 0,
-    longitude: normalizeLongitude(grid.firstLongitude + column * grid.longitudeStep),
-    latitude: grid.firstLatitude + row * grid.latitudeStep,
+    longitude: normalizeLongitude(cellLongitude),
+    latitude: cellLatitude,
   };
 }
 
@@ -111,16 +85,8 @@ export function coordinateError(latitude: number, longitude: number): string | n
   return null;
 }
 
-export function sameGrid(a: CellGrid, b: CellGrid): boolean {
-  return (
-    a.width === b.width &&
-    a.height === b.height &&
-    a.firstLongitude === b.firstLongitude &&
-    a.firstLatitude === b.firstLatitude &&
-    a.longitudeStep === b.longitudeStep &&
-    a.latitudeStep === b.latitudeStep &&
-    a.wrapLongitude === b.wrapLongitude
-  );
+export function sameCellGrid(a: CellGrid, b: CellGrid): boolean {
+  return sameGrid(a, b) && a.wraps === b.wraps;
 }
 
 /** Each bundle's grid from a manifest's `bundles[]`, the first entry of a
@@ -143,7 +109,7 @@ export function groupByGrid(grids: ReadonlyMap<string, CellGrid | null>, bundles
   for (const bundle of bundles) {
     const grid = grids.get(bundle);
     if (!grid) continue;
-    const group = groups.find((candidate) => sameGrid(candidate.grid, grid));
+    const group = groups.find((candidate) => sameCellGrid(candidate.grid, grid));
     if (group) {
       if (!group.bundles.includes(bundle)) group.bundles.push(bundle);
     } else {

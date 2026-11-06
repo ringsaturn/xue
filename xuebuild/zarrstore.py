@@ -83,6 +83,10 @@ export writes every chunk, so it never appears, but a reader honours it."""
 _INDEX_ENTRY = struct.Struct("<QQ")
 _INDEX_CHECKSUM = struct.Struct("<I")
 _DIMENSIONS = ("time", "latitude", "longitude")
+# The scalar array a projected bundle's variables name as their grid_mapping.
+CRS_ARRAY = "crs"
+# The coordinates a group document lists first, in this order.
+_PRIMARY_COORDINATES = (*_DIMENSIONS, "y", "x", CRS_ARRAY)
 
 _CODEC_BYTES = {"name": "bytes"}
 _CODEC_BYTES_LITTLE = {"name": "bytes", "configuration": {"endian": "little"}}
@@ -789,16 +793,46 @@ def _grid_suffix(name: str, primary: str) -> str | None:
     return family if family != name and _BUNDLE_ID.fullmatch(family) else None
 
 
-def _check_dimensions(bundle_id: str, dimensions: tuple[str, str, str]) -> tuple[str, str, str]:
+def _check_dimensions(
+    bundle_id: str, dimensions: tuple[str, str, str], *, projected: bool | None = None
+) -> tuple[str, str, str]:
     """A bundle's dimension names (docs/zarr-profile.md, "Coordinates"):
-    ``time`` or ``time_<bundle id>``, and ``latitude`` / ``longitude`` or
-    ``latitude_<family>`` / ``longitude_<family>`` of one family id."""
+    ``time`` or ``time_<bundle id>``, then ``latitude`` / ``longitude`` or
+    ``latitude_<family>`` / ``longitude_<family>`` of one family id, or on a
+    projected grid ``y`` / ``x`` or ``y_<family>`` / ``x_<family>``.
+    ``projected`` is what the bundle's ``grid`` block says, when the caller
+    has it: the names must agree with it."""
     dimensions = tuple(dimensions)  # type: ignore[assignment]
     if len(dimensions) == 3 and dimensions[0] in ("time", f"time_{bundle_id}"):
-        latitude, longitude = _grid_suffix(dimensions[1], "latitude"), _grid_suffix(dimensions[2], "longitude")
-        if latitude is not None and latitude == longitude:
-            return dimensions
+        for names_projected, row, column in ((False, "latitude", "longitude"), (True, "y", "x")):
+            if projected is not None and projected != names_projected:
+                continue
+            suffix = _grid_suffix(dimensions[1], row)
+            if suffix is not None and suffix == _grid_suffix(dimensions[2], column):
+                return dimensions
     raise BundleError(f"{bundle_id}: dimension names {list(dimensions)} are not the profile's")
+
+
+def _is_projected(metadata: dict[str, Any]) -> bool:
+    grid = metadata.get("grid")
+    return isinstance(grid, dict) and "projection" in grid
+
+
+def _check_grid_mapping(bundle_id: str, name: str, document: dict[str, Any], projected: bool) -> None:
+    """A variable array names the ``crs`` array exactly when its bundle's grid
+    is projected, so xarray and rioxarray find the CRS the metadata declares."""
+    attributes = document.get("attributes")
+    mapping = attributes.get("grid_mapping") if isinstance(attributes, dict) else None
+    if mapping != (CRS_ARRAY if projected else None):
+        raise BundleError(f"{bundle_id}: array {name} has grid_mapping {mapping!r} on a grid that says otherwise")
+
+
+def _check_crs(bundle_id: str, document: dict[str, Any] | None) -> None:
+    """The ``crs`` array: zero-dimensional, holding only its attributes."""
+    if document is None:
+        raise BundleError(f"{bundle_id}: no array document for {CRS_ARRAY}")
+    if document.get("shape") != []:
+        raise BundleError(f"{bundle_id}: {CRS_ARRAY} must be a scalar array")
 
 
 @dataclass
@@ -930,11 +964,13 @@ def group_document(
     ``attributes`` holds ``xue_profile`` then ``xue_bundles``, the bundles in
     the given order; ``consolidated_metadata.metadata`` holds every variable
     array, bundle by bundle and in each bundle's ``variables`` order, then
-    the primary coordinates ``time``, ``latitude``, ``longitude`` that some
-    bundle uses, then every other coordinate in the order its first bundle
-    names it. A bundle's coordinates are the ``dimension_names`` of its
-    variable arrays, so the document alone says which arrays a bundle uses.
-    Two bundles naming one coordinate must carry the same document for it."""
+    the primary coordinates ``time``, ``latitude``, ``longitude``, ``y``,
+    ``x``, ``crs`` that some bundle uses, then every other coordinate in the
+    order its first bundle names it. A bundle's coordinates are the
+    ``dimension_names`` of its variable arrays and, on a projected grid, the
+    ``crs`` array they name, so the document alone says which arrays a bundle
+    uses. Two bundles naming one coordinate must carry the same document for
+    it."""
     if not bundles:
         raise BundleError("a shared store holds at least one bundle")
     metadata_by_bundle: dict[str, dict[str, Any]] = {}
@@ -944,6 +980,7 @@ def group_document(
         if bundle_id in metadata_by_bundle:
             raise BundleError(f"bundle {bundle_id} appears twice in one shared store")
         metadata_by_bundle[bundle_id] = metadata
+        projected = _is_projected(metadata)
         dimensions: tuple[str, ...] | None = None
         for variable in metadata["variables"]:
             name = variable["id"]
@@ -957,10 +994,13 @@ def group_document(
                 dimensions = names
             elif names != dimensions:
                 raise BundleError(f"{bundle_id}: its arrays do not share one set of dimension names")
+            _check_grid_mapping(bundle_id, name, document, projected)
             variable_arrays[name] = document
         assert dimensions is not None
-        _check_dimensions(bundle_id, dimensions)  # type: ignore[arg-type]
-        for name in dimensions:
+        _check_dimensions(bundle_id, dimensions, projected=projected)  # type: ignore[arg-type]
+        if projected:
+            _check_crs(bundle_id, documents.get(CRS_ARRAY))
+        for name in (*dimensions, CRS_ARRAY) if projected else dimensions:
             document = documents.get(name)
             if document is None:
                 raise BundleError(f"{bundle_id}: no array document for its coordinate {name}")
@@ -970,8 +1010,8 @@ def group_document(
                 raise BundleError(f"coordinate {name} differs between the bundles that use it")
             coordinates.setdefault(name, document)
     ordered = dict(variable_arrays)
-    ordered.update({name: coordinates[name] for name in _DIMENSIONS if name in coordinates})
-    ordered.update({name: document for name, document in coordinates.items() if name not in _DIMENSIONS})
+    ordered.update({name: coordinates[name] for name in _PRIMARY_COORDINATES if name in coordinates})
+    ordered.update({name: document for name, document in coordinates.items() if name not in _PRIMARY_COORDINATES})
     return {
         "zarr_format": 3,
         "node_type": "group",
@@ -1031,7 +1071,7 @@ def _document_bundles(document: dict[str, Any]) -> dict[str, tuple[str, dict[str
         if missing:
             raise BundleError(f"{bundle_id}: the group document carries no array {missing[0]}")
         dimensions = arrays[names[0]].get("dimension_names") or []
-        documents = {name: arrays[name] for name in [*names, *dimensions] if name in arrays}
+        documents = {name: arrays[name] for name in [*names, *dimensions, CRS_ARRAY] if name in arrays}
         found[bundle_id] = (bundle_id, metadata, documents)
     return found
 
@@ -1190,7 +1230,8 @@ def bundle_metadata(zarr_dir: Path, bundle_id: str | None = None) -> dict[str, A
 
 def array_dimensions(zarr_dir: Path, variable_id: str) -> tuple[str, str, str]:
     """The dimension names one array declares: ``time`` / ``latitude`` /
-    ``longitude``, or a shared store's bundle-suffixed ones."""
+    ``longitude``, ``time`` / ``y`` / ``x`` on a projected grid, or a shared
+    store's bundle-suffixed ones."""
     names = read_json(zarr_dir / variable_id / "zarr.json").get("dimension_names")
     if not isinstance(names, list) or len(names) != 3 or not all(isinstance(name, str) for name in names):
         raise BundleError(f"{zarr_dir / variable_id}: dimension_names must be three names")

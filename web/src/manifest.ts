@@ -2,7 +2,7 @@ import { HRRR_DOMAIN, type LambertDomain } from "./domain";
 import { fetchImmutable } from "./fetchimmutable";
 import { t } from "./i18n";
 // Type-only: both modules import this one at runtime.
-import type { GeoGrid } from "./probe";
+import { gridMapFor, parseGrid, type LambertGrid, type RegularGrid } from "./gridmap";
 import type { ViewportBounds } from "./tiles";
 import { REGISTRY } from "./registry";
 import { checkBundleMetadataV3 } from "./schema/generated/bundle-metadata";
@@ -75,8 +75,8 @@ interface ForecastModelInfo {
    * north] in degrees: where the camera goes when the model is opened on a
    * view that shows none of it. A global model has none. */
   region?: readonly [number, number, number, number];
-  /** The model's own grid on its map projection, for a model the encoder
-   * resampled onto the regular grid the bundles carry (`domain.ts`): the
+  /** The model's own grid on its map projection, for a model some of whose
+   * runs the encoder resampled onto a regular grid (`domain.ts`): the
    * renderers clip to it, since the rectangle around a conic footprint
    * holds corners the model never forecast. */
   domain?: LambertDomain;
@@ -145,8 +145,8 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     railCore: ["tmp2m", "prate", "wind10m", "tmpsfc"],
   },
   // NOAA HRRR, 3 km over the contiguous United States, a new cycle every
-  // hour: a regional model, resampled by the encoder from its Lambert
-  // conformal grid onto a 0.03° one over the domain's footprint.
+  // hour. Older runs and published cases are resampled off its Lambert
+  // conformal grid onto a 0.03° rectangle, and only those need `domain`.
   hrrr: {
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
@@ -732,6 +732,7 @@ type AerosolId = (typeof AEROSOL_IDS)[number];
  * above, but no GEFS-Aerosols field, so outside that set. */
 type DustId = "dustsfc";
 export const DUST_IDS: readonly DustId[] = ["dustsfc"];
+
 
 /** The hydrology set — EFAS river discharge, the mean over each six-hour
  * step (`dis06`), the return-period class the encoder derives from it
@@ -1430,9 +1431,16 @@ export function settleBundleVariant(
  * shows every longitude. A degenerate grid or bounds count as fully shown,
  * the answer that spends the least memory. */
 export function visibleGridShare(
-  grid: Pick<GeoGrid, "width" | "height" | "firstLongitude" | "firstLatitude" | "longitudeStep" | "latitudeStep">,
+  grid: (Pick<RegularGrid, "width" | "height" | "firstLongitude" | "firstLatitude" | "longitudeStep" | "latitudeStep"> & { projection?: undefined }) | LambertGrid,
   bounds: ViewportBounds,
 ): number {
+  if (grid.projection) {
+    // The cells around the view over all of them: a view is a curved patch
+    // of a projected grid, and only its size matters here.
+    const cover = gridMapFor(grid).coverOfBounds(bounds);
+    if (!cover) return 0;
+    return ((cover.lastColumn - cover.firstColumn + 1) * (cover.lastRow - cover.firstRow + 1)) / (grid.width * grid.height);
+  }
   const longitudeSpan = Math.abs(grid.width * grid.longitudeStep);
   const latitudeSpan = Math.abs(grid.height * grid.latitudeStep);
   const viewSpan = bounds.east - bounds.west;
@@ -1713,10 +1721,12 @@ export interface BundleTimeAxis {
 export const HOUR_SECONDS = 3600;
 
 export interface BundleMetadata {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   model: string;
   runTime: string;
   time: BundleTimeAxis;
+  /** Read through `gridmap.ts::geoGrid`; only its size is the same on every
+   * shape of grid. */
   grid: { width: number; height: number };
   variables: BundleVariable[];
 }
@@ -2028,21 +2038,20 @@ function validateAerosol(variable: Record<string, unknown>, schemaVersion: numbe
 export function parseBundleMetadata(json: string): BundleMetadata {
   const value = object(JSON.parse(json));
   const schemaVersion = value.schemaVersion;
-  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3) {
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3 && schemaVersion !== 4) {
     throw new Error("unsupported bundle metadata schema version");
   }
-  // Version 3, what every writer produces, has a schema
+  // Versions 3 and 4, what the writers produce, have a schema
   // (docs/schemas/bundle-metadata.schema.json); versions 1 and 2 are held
   // to the hand checks below alone. Those then add what a schema cannot
   // say, for every version: the lowest version that fits, the one encoding
   // of an axis, and the pairs that are null together.
-  if (schemaVersion === 3) checkBundleMetadataV3(value, "bundle metadata");
+  if (schemaVersion >= 3) checkBundleMetadataV3(value, "bundle metadata");
   const time = object(value.time);
   const grid = object(value.grid);
   const axisVersion = validateTimeAxis(time, schemaVersion);
-  if (typeof grid.width !== "number" || typeof grid.height !== "number") {
-    throw new Error("invalid bundle grid");
-  }
+  const parsedGrid = parseGrid(grid);
+  if (parsedGrid.gaussian && schemaVersion !== 3) throw new Error("a gaussian block requires schema version 3");
   const variables = value.variables;
   if (!Array.isArray(variables) || variables.length === 0) throw new Error("bundle metadata has no variables");
   let parameters = 0;
@@ -2063,7 +2072,7 @@ export function parseBundleMetadata(json: string): BundleMetadata {
   }
   // Every axis and every variable set has exactly one valid encoding: the
   // declared version must be the lowest able to express both.
-  const requiredVersion = Math.max(axisVersion, parameters > 0 ? 3 : 1);
+  const requiredVersion = Math.max(axisVersion, parameters > 0 ? 3 : 1, parsedGrid.projection ? 4 : 1);
   if (schemaVersion !== requiredVersion) {
     throw new Error(`bundle metadata must declare schema version ${requiredVersion}`);
   }

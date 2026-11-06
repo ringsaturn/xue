@@ -75,8 +75,18 @@ describe("parseGrid", () => {
       firstLatitude: 90,
       longitudeStep: 0.25,
       latitudeStep: -0.25,
-      wrapLongitude: true,
+      wraps: true,
     });
+  });
+
+  it("reads a projected grid and reports a malformed one as no grid", () => {
+    const projection = { kind: "lambert-conformal", radius: 6371229, standardParallel1: 38.5, standardParallel2: 38.5, latitudeOfOrigin: 38.5, centralMeridian: -97.5, x0: -2697520.14, y0: 1586693.85, dx: 3000, dy: -3000 };
+    const lambert = parseGrid({ width: 1799, height: 1059, wrapLongitude: false, projection })!;
+    expect(cellOf(lambert, 38.5, -97.5)).toMatchObject({ column: 899, latitude: expect.closeTo(38.5, 1) });
+    expect(cellOf(lambert, 35.68, 139.77)).toBeNull();
+    expect(parseGrid({ width: 1799, height: 1059, wrapLongitude: false, projection: { ...projection, kind: "polar" } })).toBeNull();
+    expect(parseGrid({ width: 1440, height: 721, longitudeStep: "0.25" })).toBeNull();
+    expect(parseGrid(null)).toBeNull();
   });
 
   it("refuses an order the rule does not cover", () => {

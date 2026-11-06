@@ -10,6 +10,8 @@ import type { ContourStyle } from "./layer";
 import type { BundleVariable } from "./manifest";
 import { firstSymbolLayerId } from "./marks";
 import { pressureLevelForIdentity } from "./pressure";
+import { gridMapFor } from "./gridmap";
+import type { BundleMetadata } from "./manifest";
 import { geoGrid, wrap } from "./probe";
 import type { DecodedFrame, VariableSession } from "./session";
 import type { CoverageBox, TileRect } from "./tiles";
@@ -22,7 +24,7 @@ export interface ContourLabelsDeps {
   readonly layersAdded: boolean;
   readonly activeSession: VariableSession | null;
   readonly playing: boolean;
-  readonly modelDomain: () => LambertDomain | null;
+  readonly modelDomain: (metadata: BundleMetadata) => LambertDomain | null;
   readonly sessionCoverage: (session: VariableSession, tiles: TileRect[] | null) => CoverageBox;
   readonly cachedFrame: (key: string, session: VariableSession) => DecodedFrame | undefined;
   readonly contourStyleFor: (variable: BundleVariable, identity?: VariableIdentity | null, overlay?: boolean, longitudeStep?: number) => ContourStyle | null;
@@ -216,6 +218,22 @@ export function createContourLabels(deps: ContourLabelsDeps) {
     const spanLatitude = (north - south) * (1 + 2 * LABELS_VIEW_MARGIN);
     const centerLongitude = (west + east) / 2;
     const centerLatitude = (north + south) / 2;
+    if (grid.projection) {
+      // The view is no rectangle of cells here: the cells around it are.
+      const cover = gridMapFor(grid).coverOfBounds({
+        west: centerLongitude - spanLongitude / 2,
+        east: centerLongitude + spanLongitude / 2,
+        south: Math.max(-90, centerLatitude - spanLatitude / 2),
+        north: Math.min(90, centerLatitude + spanLatitude / 2),
+      });
+      if (!cover) return null;
+      return {
+        column0: cover.firstColumn,
+        row0: cover.firstRow,
+        columns: cover.lastColumn - cover.firstColumn + 1,
+        rows: cover.lastRow - cover.firstRow + 1,
+      };
+    }
     const columnSpan = Math.ceil(spanLongitude / grid.longitudeStep) + 1;
     const rowSpan = Math.ceil(spanLatitude / Math.abs(grid.latitudeStep)) + 1;
     // Degrees east of the grid origin, signed: a view west of a regional
@@ -247,7 +265,7 @@ export function createContourLabels(deps: ContourLabelsDeps) {
     const grid = geoGrid(session.metadata);
     // The labels are traced from the same smoothed field the shader draws,
     // so they read the width off the session's own grid too.
-    const style = contourStyleFor(session.variable, session.identity, false, grid.longitudeStep);
+    const style = contourStyleFor(session.variable, session.identity, false, gridMapFor(grid).nominalStepDegrees());
     const level = pressureLevelForIdentity(session.identity);
     if (!style || !level || !ensureLabelLayers()) return;
     const window = viewportCellWindow(grid);
@@ -256,7 +274,7 @@ export function createContourLabels(deps: ContourLabelsDeps) {
       grid,
       window,
       coverage: sessionCoverage(session, frame.tiles),
-      domain: modelDomain() ?? undefined,
+      domain: modelDomain(session.metadata) ?? undefined,
       stride: strideFor(window.columns * window.rows),
       smoothingCells: style.smoothing,
       offset: style.offset,

@@ -37,8 +37,10 @@ import {
 import { decodeValue } from "./palettes";
 import {
   bilinearCells,
+  geoGrid,
   blendValues,
   normalizeLongitude,
+  probeCell,
   ProbeSeries,
   probeSeriesValues,
   type ProbeValue,
@@ -135,7 +137,7 @@ export interface ProbePanelDeps {
   readonly memberOffsetForFrame: (session: VariableSession, index: number) => number | null;
   readonly accumulationOn: (session: VariableSession) => { window: number; kind: RateKind } | null;
   readonly variableUi: (session: VariableSession) => { code: string };
-  readonly modelDomain: () => LambertDomain | null;
+  readonly modelDomain: (metadata: BundleMetadata) => LambertDomain | null;
 
   // The time axis and the playhead.
   readonly frameCount: () => number;
@@ -575,10 +577,15 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * to sample against, so a click is simply ignored. */
   function setProbe(longitude: number, latitude: number, gauge: RiverGauge | null = null): void {
     if (!deps.activeSession) return;
-    // Off a regional model's own footprint the grid still holds a value — the
-    // encoder's edge extension — but no forecast; there is nothing to pin.
-    const domain = modelDomain();
-    if (domain && !domainContains(domain, lambertCone(domain), longitude, latitude)) {
+    // Off a regional model's own footprint a resampled grid still holds a
+    // value — the encoder's edge extension — but no forecast, and a native grid
+    // holds nothing; either way there is nothing to pin.
+    const metadata = deps.activeSession.metadata;
+    const domain = modelDomain(metadata);
+    if (
+      (domain && !domainContains(domain, lambertCone(domain), longitude, latitude)) ||
+      (geoGrid(metadata).projection && !probeCell(metadata, longitude, latitude))
+    ) {
       closeProbe();
       return;
     }

@@ -520,10 +520,10 @@ async fn read_series(
                         "invalid_parameter",
                         format!(
                             "cell ({row}, {column}) is outside the {source}/{bundle_id} grid of {} rows × {} columns",
-                            grid.height, grid.width
+                            grid.height(), grid.width()
                         ),
                     )
-                    .with_detail(json!({ "rows": grid.height, "columns": grid.width }))
+                    .with_detail(json!({ "rows": grid.height(), "columns": grid.width() }))
                 })?
             }
         };

@@ -59,7 +59,7 @@ export interface DerivedDeps {
   readonly frameValidTime: (index: number) => number;
   readonly cacheKey: (session: VariableSession, variable: BundleVariable, offset: number) => string;
   readonly showError: (message: string) => void;
-  readonly modelDomain: () => LambertDomain | null;
+  readonly modelDomain: (metadata: BundleMetadata) => LambertDomain | null;
   readonly ensureWindGrid: (session: VariableSession) => void;
   readonly refreshViewportTiles: () => void;
   readonly sendPrefetchWindow: (index: number) => void;
@@ -452,7 +452,7 @@ export function createDerived(deps: DerivedDeps) {
     if (!map.getLayer(derived.layer.id)) map.addLayer(derived.layer, slots.lines.layer.id);
     if (derived.gridSource !== source.metadata) {
       derived.layer.configureGrid(source.metadata);
-      derived.layer.setDomain(modelDomain());
+      derived.layer.setDomain(modelDomain(source.metadata));
       derived.layer.setContours(derivedContourStyle(derived.id));
       derived.layer.setVectorField(null);
       derived.layer.setPalette(derivedPalette(derived.id));

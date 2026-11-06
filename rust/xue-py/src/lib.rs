@@ -225,7 +225,8 @@ impl Bundle {
     /// single tile holding the cell — a few tens of KB for a whole 240-hour
     /// series — rather than a decode of every plane, which is the reason the
     /// container is tiled at all. `column` and `row` index the metadata grid,
-    /// column 0 being its `firstLongitude`.
+    /// column 0 and row 0 being its first cell (`firstLongitude` and
+    /// `firstLatitude`, or `x0` and `y0` of a projected grid).
     fn series<'py>(
         &mut self,
         python: Python<'py>,

@@ -19,7 +19,9 @@
 
 use serde_json::Value;
 
+use crate::decode::metadata::{parse_gaussian, parse_projection};
 use crate::format::{err, DecodeError, TileGeometry};
+use crate::projection::{GaussianRows, LambertConformal};
 
 /// Bytes of one `(offset, nbytes)` pair in a shard index.
 pub(crate) const INDEX_ENTRY_BYTES: usize = 16;
@@ -32,10 +34,11 @@ const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 // -- grid ----------------------------------------------------------------------
 
-/// The bundle's regular grid, in the container's row-major, north-to-south,
-/// west-to-east order.
+/// A regular latitude/longitude grid. With `gaussian`, the rows are really a
+/// Gaussian grid's: the regular fields stay the equidistant approximation a
+/// renderer samples with, and the true latitudes are what a point read reports.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Grid {
+pub struct RegularGrid {
     pub width: u32,
     pub height: u32,
     pub first_longitude: f64,
@@ -45,27 +48,84 @@ pub struct Grid {
     /// Whether a longitude wraps around the antimeridian (a global or
     /// antimeridian-crossing grid).
     pub wraps: bool,
+    pub gaussian: Option<GaussianRows>,
+}
+
+/// A grid on a map projection: the first cell's centre and the steps, in
+/// projected metres, `dy` negative because rows run north to south.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LambertGrid {
+    pub width: u32,
+    pub height: u32,
+    pub projection: LambertConformal,
+    pub x0: f64,
+    pub y0: f64,
+    pub dx: f64,
+    pub dy: f64,
+}
+
+/// The bundle's grid, in the container's row-major, north-to-south,
+/// west-to-east order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Grid {
+    Regular(RegularGrid),
+    Lambert(LambertGrid),
 }
 
 impl Grid {
-    /// The defaults `web/src/probe.ts::geoGrid` applies to a missing field.
-    pub fn from_metadata(value: &Value) -> Grid {
+    pub fn width(&self) -> u32 {
+        match self {
+            Grid::Regular(grid) => grid.width,
+            Grid::Lambert(grid) => grid.width,
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        match self {
+            Grid::Regular(grid) => grid.height,
+            Grid::Lambert(grid) => grid.height,
+        }
+    }
+
+    /// The grid a metadata document declares. A projected grid is complete or
+    /// refused. A regular grid takes the defaults `web/src/probe.ts::geoGrid`
+    /// applies to a missing field, since metadata published before the fields
+    /// were all written must keep reading.
+    pub fn from_metadata(value: &Value) -> Result<Grid, DecodeError> {
         let grid = value.get("grid").unwrap_or(&Value::Null);
         let width = number(grid, "width").unwrap_or(0.0);
+        let height = number(grid, "height").unwrap_or(0.0);
+        if let Some(block) = grid.get("projection") {
+            let block = parse_projection(block)?;
+            return Ok(Grid::Lambert(LambertGrid {
+                width: width as u32,
+                height: height as u32,
+                projection: block.projection,
+                x0: block.x0,
+                y0: block.y0,
+                dx: block.dx,
+                dy: block.dy,
+            }));
+        }
         let longitude_step = number(grid, "longitudeStep").unwrap_or(0.25);
         let wraps = grid
             .get("wrapLongitude")
             .and_then(|v| v.as_bool())
             .unwrap_or_else(|| (width * longitude_step - 360.0).abs() < 1e-6);
-        Grid {
+        let gaussian = grid
+            .get("gaussian")
+            .map(|block| parse_gaussian(block, height as u64))
+            .transpose()?;
+        Ok(Grid::Regular(RegularGrid {
             width: width as u32,
-            height: number(grid, "height").unwrap_or(0.0) as u32,
+            height: height as u32,
             first_longitude: number(grid, "firstLongitude").unwrap_or(-180.0),
             first_latitude: number(grid, "firstLatitude").unwrap_or(90.0),
             longitude_step,
             latitude_step: number(grid, "latitudeStep").unwrap_or(-0.25),
             wraps,
-        }
+            gaussian,
+        }))
     }
 }
 
@@ -91,16 +151,21 @@ fn normalize_longitude(longitude: f64) -> f64 {
 }
 
 /// The cell a point reads, or `None` when it is off the grid (a regional
-/// model's rectangle, a satellite disk). The rules are the shell probe's and
-/// the fragment shader's (`web/src/probe.ts::probeCell`).
+/// model's rectangle, a projected footprint, a satellite disk). On a regular
+/// grid the rules are the shell probe's and the fragment shader's
+/// (`web/src/probe.ts::probeCell`).
 pub fn probe_cell(grid: &Grid, longitude: f64, latitude: f64) -> Option<ProbeCell> {
-    if grid.width == 0
-        || grid.height == 0
-        || grid.longitude_step == 0.0
-        || grid.latitude_step == 0.0
-        || !longitude.is_finite()
-        || !latitude.is_finite()
-    {
+    if !longitude.is_finite() || !latitude.is_finite() {
+        return None;
+    }
+    match grid {
+        Grid::Regular(regular) => probe_regular(regular, longitude, latitude),
+        Grid::Lambert(lambert) => probe_lambert(lambert, longitude, latitude),
+    }
+}
+
+fn probe_regular(grid: &RegularGrid, longitude: f64, latitude: f64) -> Option<ProbeCell> {
+    if grid.width == 0 || grid.height == 0 || grid.longitude_step == 0.0 || grid.latitude_step == 0.0 {
         return None;
     }
     let delta = wrap(longitude - grid.first_longitude, 360.0);
@@ -114,25 +179,101 @@ pub fn probe_cell(grid: &Grid, longitude: f64, latitude: f64) -> Option<ProbeCel
         column
     };
     let row = ((latitude - grid.first_latitude) / grid.latitude_step + 0.5).floor();
-    if row < 0.0 || row >= f64::from(grid.height) {
+    let row = match grid.gaussian {
+        Some(gaussian) => gaussian_row(grid, gaussian, row, latitude)?,
+        None if row < 0.0 || row >= f64::from(grid.height) => return None,
+        None => row as u32,
+    };
+    regular_cell(grid, column as u32, row)
+}
+
+/// The Gaussian row nearest `latitude`. `guess` is the row the equidistant
+/// fields give, within a small fraction of a row of the true one, so its
+/// neighbours settle it without building the latitude table. Past a grid edge
+/// a point belongs to the edge row for half a row's spacing, as on a regular
+/// grid, except that the whole Gaussian grid's outer rows own the polar caps.
+fn gaussian_row(grid: &RegularGrid, gaussian: GaussianRows, guess: f64, latitude: f64) -> Option<u32> {
+    if !(-90.0..=90.0).contains(&latitude) {
         return None;
     }
-    grid_cell(grid, column as u32, row as u32)
+    let last = grid.height - 1;
+    let centre = guess.clamp(0.0, f64::from(last)) as u32;
+    let mut nearest = (centre, gaussian.latitude(centre)?);
+    for row in [centre.saturating_sub(1), centre.saturating_add(1).min(last)] {
+        let candidate = gaussian.latitude(row)?;
+        if (latitude - candidate).abs() < (latitude - nearest.1).abs() {
+            nearest = (row, candidate);
+        }
+    }
+    let (row, centre_latitude) = nearest;
+    let north = latitude > centre_latitude;
+    let outer = (north && row == 0) || (!north && row == last);
+    if !outer || gaussian.reaches_pole(row, north) {
+        return Some(row);
+    }
+    let half_row = if last == 0 {
+        (grid.latitude_step / 2.0).abs()
+    } else {
+        let inner = if row == 0 { 1 } else { last - 1 };
+        (centre_latitude - gaussian.latitude(inner)?).abs() / 2.0
+    };
+    ((latitude - centre_latitude).abs() <= half_row).then_some(row)
+}
+
+fn probe_lambert(grid: &LambertGrid, longitude: f64, latitude: f64) -> Option<ProbeCell> {
+    if !(-90.0..=90.0).contains(&latitude) {
+        return None;
+    }
+    let (x, y) = grid.projection.forward_wrapped(longitude, latitude);
+    let column = ((x - grid.x0) / grid.dx + 0.5).floor();
+    let row = ((y - grid.y0) / grid.dy + 0.5).floor();
+    // Written to refuse a NaN too: the far pole of a cone projects to infinity.
+    if !(column >= 0.0 && column < f64::from(grid.width) && row >= 0.0 && row < f64::from(grid.height)) {
+        return None;
+    }
+    lambert_cell(grid, column as u32, row as u32)
 }
 
 /// A cell addressed by its indices, with its centre; `None` outside the grid.
 /// The inverse of [`probe_cell`]: probing the centre returns the same cell.
 pub fn grid_cell(grid: &Grid, column: u32, row: u32) -> Option<ProbeCell> {
+    match grid {
+        Grid::Regular(regular) => regular_cell(regular, column, row),
+        Grid::Lambert(lambert) => lambert_cell(lambert, column, row),
+    }
+}
+
+fn regular_cell(grid: &RegularGrid, column: u32, row: u32) -> Option<ProbeCell> {
     if column >= grid.width || row >= grid.height {
         return None;
     }
+    let latitude = match grid.gaussian {
+        Some(gaussian) => gaussian.latitude(row)?,
+        None => grid.first_latitude + f64::from(row) * grid.latitude_step,
+    };
     Some(ProbeCell {
         column,
         row,
         longitude: normalize_longitude(
             grid.first_longitude + f64::from(column) * grid.longitude_step,
         ),
-        latitude: grid.first_latitude + f64::from(row) * grid.latitude_step,
+        latitude,
+    })
+}
+
+fn lambert_cell(grid: &LambertGrid, column: u32, row: u32) -> Option<ProbeCell> {
+    if column >= grid.width || row >= grid.height {
+        return None;
+    }
+    let (longitude, latitude) = grid.projection.inverse(
+        grid.x0 + f64::from(column) * grid.dx,
+        grid.y0 + f64::from(row) * grid.dy,
+    );
+    Some(ProbeCell {
+        column,
+        row,
+        longitude: normalize_longitude(longitude),
+        latitude,
     })
 }
 
@@ -324,7 +465,7 @@ pub fn parse_bundle_metadata(text: &str) -> Result<BundleMetadata, DecodeError> 
             .map(str::to_owned),
         unit_seconds: validated.unit_seconds,
         offsets: validated.offsets.clone(),
-        grid: Grid::from_metadata(&value),
+        grid: Grid::from_metadata(&value)?,
         variables: parsed,
     })
 }
@@ -1231,7 +1372,7 @@ mod tests {
 
     #[test]
     fn probes_cells_as_the_shell_does() {
-        let grid = Grid {
+        let grid = Grid::Regular(RegularGrid {
             width: 1440,
             height: 721,
             first_longitude: -180.0,
@@ -1239,7 +1380,8 @@ mod tests {
             longitude_step: 0.25,
             latitude_step: -0.25,
             wraps: true,
-        };
+            gaussian: None,
+        });
         let cell = probe_cell(&grid, 139.7, 35.7).unwrap();
         assert_eq!(cell.column, 1279);
         assert_eq!(cell.row, 217);
@@ -1255,6 +1397,147 @@ mod tests {
         );
         assert!(grid_cell(&grid, 1440, 0).is_none());
         assert!(grid_cell(&grid, 0, 721).is_none());
+    }
+
+    fn hrrr() -> Grid {
+        Grid::Lambert(LambertGrid {
+            width: 1799,
+            height: 1059,
+            projection: LambertConformal {
+                radius: 6371229.0,
+                standard_parallel_1: 38.5,
+                standard_parallel_2: 38.5,
+                latitude_of_origin: 38.5,
+                central_meridian: -97.5,
+            },
+            x0: -2697520.143,
+            y0: 1586693.847,
+            dx: 3000.0,
+            dy: -3000.0,
+        })
+    }
+
+    #[test]
+    fn probes_a_lambert_grid_through_the_projection() {
+        let grid = hrrr();
+        for (column, row) in [(0, 0), (1798, 0), (0, 1058), (1798, 1058), (899, 529), (1200, 300)] {
+            let cell = grid_cell(&grid, column, row).unwrap();
+            assert_eq!((cell.column, cell.row), (column, row));
+            assert_eq!(probe_cell(&grid, cell.longitude, cell.latitude), Some(cell));
+        }
+        // Denver is well inside, whichever way its longitude is spelled.
+        let denver = probe_cell(&grid, -104.99, 39.74).unwrap();
+        assert!((denver.longitude + 104.99).abs() < 0.03);
+        assert!((denver.latitude - 39.74).abs() < 0.03);
+        assert_eq!(probe_cell(&grid, 255.01, 39.74), Some(denver));
+        // The corner of the old rectangle the cone never covered, the other
+        // side of the world, both poles and a latitude that is none.
+        for (longitude, latitude) in [(-134.0, 21.2), (139.7, 35.7), (0.0, 90.0), (0.0, -90.0), (-97.5, 91.0)] {
+            assert_eq!(probe_cell(&grid, longitude, latitude), None, "{longitude} {latitude}");
+        }
+        assert!(grid_cell(&grid, 1799, 0).is_none());
+        assert!(grid_cell(&grid, 0, 1059).is_none());
+    }
+
+    /// A crop of the n = 95 grid, its regular fields the equidistant ones GDAL
+    /// reports: the true end rows and an even step between them.
+    fn gaussian_grid(first_row: u32, row_stride: u32, height: u32) -> Grid {
+        let first = crate::projection::gaussian_latitude(95, 0);
+        let step = -2.0 * first / 189.0;
+        Grid::Regular(RegularGrid {
+            width: 384,
+            height,
+            first_longitude: 0.0,
+            first_latitude: first + f64::from(first_row) * step,
+            longitude_step: 0.9375,
+            latitude_step: step * f64::from(row_stride),
+            wraps: true,
+            gaussian: Some(GaussianRows { n: 95, first_row, row_stride }),
+        })
+    }
+
+    #[test]
+    fn a_gaussian_grid_reports_and_selects_true_latitudes() {
+        let grid = gaussian_grid(0, 1, 190);
+        let Grid::Regular(regular) = grid else { unreachable!() };
+        let cell = grid_cell(&grid, 0, 47).unwrap();
+        assert_eq!(cell.latitude, crate::projection::gaussian_latitude(95, 47));
+        assert_ne!(cell.latitude, regular.first_latitude + 47.0 * regular.latitude_step);
+        for row in [0, 1, 94, 95, 188, 189] {
+            let cell = grid_cell(&grid, 7, row).unwrap();
+            assert_eq!(probe_cell(&grid, cell.longitude, cell.latitude), Some(cell));
+        }
+        // The outer rows own the polar caps.
+        assert_eq!(probe_cell(&grid, 10.0, 90.0).unwrap().row, 0);
+        assert_eq!(probe_cell(&grid, 10.0, -90.0).unwrap().row, 189);
+        assert_eq!(probe_cell(&grid, 10.0, 90.5), None);
+    }
+
+    #[test]
+    fn a_cropped_gaussian_grid_stops_half_a_row_past_its_edge() {
+        let grid = gaussian_grid(10, 2, 20);
+        let first = grid_cell(&grid, 0, 0).unwrap();
+        assert_eq!(first.latitude, crate::projection::gaussian_latitude(95, 10));
+        let last = grid_cell(&grid, 0, 19).unwrap();
+        assert_eq!(last.latitude, crate::projection::gaussian_latitude(95, 48));
+        assert_eq!(probe_cell(&grid, 0.0, first.latitude + 0.9).unwrap().row, 0);
+        assert_eq!(probe_cell(&grid, 0.0, first.latitude + 1.0), None);
+        assert_eq!(probe_cell(&grid, 0.0, last.latitude - 0.9).unwrap().row, 19);
+        assert_eq!(probe_cell(&grid, 0.0, last.latitude - 1.0), None);
+        assert_eq!(probe_cell(&grid, 0.0, 89.0), None);
+    }
+
+    #[test]
+    fn a_grid_is_read_from_its_metadata() {
+        let projected: Value = serde_json::from_str(
+            r#"{"grid": {"width": 1799, "height": 1059, "wrapLongitude": false, "projection": {
+                "kind": "lambert-conformal", "radius": 6371229.0,
+                "standardParallel1": 38.5, "standardParallel2": 38.5,
+                "latitudeOfOrigin": 38.5, "centralMeridian": -97.5,
+                "x0": -2697520.143, "y0": 1586693.847, "dx": 3000.0, "dy": -3000.0}}}"#,
+        )
+        .unwrap();
+        assert_eq!(Grid::from_metadata(&projected).unwrap(), hrrr());
+
+        let mut incomplete = projected.clone();
+        incomplete["grid"]["projection"].as_object_mut().unwrap().remove("x0");
+        assert!(Grid::from_metadata(&incomplete).is_err());
+
+        let older: Value = serde_json::from_str(r#"{"grid": {"width": 1440, "height": 721}}"#).unwrap();
+        let Grid::Regular(regular) = Grid::from_metadata(&older).unwrap() else {
+            panic!("a grid without a projection is regular");
+        };
+        assert_eq!((regular.first_longitude, regular.latitude_step), (-180.0, -0.25));
+        assert!(regular.wraps);
+        assert_eq!(regular.gaussian, None);
+    }
+
+    #[test]
+    fn a_v4_group_opens_and_a_v3_labelled_one_does_not() {
+        let metadata = |version: u64| -> String {
+            format!(
+                r#"{{"zarr_format": 3, "node_type": "group", "attributes": {{"xue_profile": 1, "xue": {{
+                    "schemaVersion": {version}, "runTime": "2026-11-05T00:00:00Z",
+                    "time": {{"unitSeconds": 3600, "firstFrameOffset": 0, "frameStep": 1, "frameCount": 2}},
+                    "grid": {{"width": 1799, "height": 1059, "wrapLongitude": false, "projection": {{
+                        "kind": "lambert-conformal", "radius": 6371229.0,
+                        "standardParallel1": 38.5, "standardParallel2": 38.5,
+                        "latitudeOfOrigin": 38.5, "centralMeridian": -97.5,
+                        "x0": -2697520.143, "y0": 1586693.847, "dx": 3000.0, "dy": -3000.0}}}},
+                    "variables": [{{"numericId": 1, "id": "tmp2m", "label": "t", "unit": "C",
+                        "parameter": {{"discipline": 0, "parameterCategory": 0, "parameterNumber": 0,
+                            "typeOfFirstFixedSurface": 103, "scaleFactorOfFirstFixedSurface": 0,
+                            "scaledValueOfFirstFixedSurface": 2}},
+                        "quantization": {{"type": "linear", "offset": -60.0, "scale": 0.5,
+                            "minimumCode": 0, "maximumCode": 220, "nodataCode": 255}}}}]
+                }}}}}}"#
+            )
+        };
+        let group = parse_group_metadata(&metadata(4)).unwrap();
+        assert_eq!(group.metadata.schema_version, 4);
+        assert_eq!(group.metadata.grid, hrrr());
+        assert_eq!(group.metadata.grid.width(), 1799);
+        assert!(parse_group_metadata(&metadata(3)).is_err());
     }
 
     #[test]
@@ -1395,7 +1678,7 @@ mod schema_tie_tests {
         assert_named(
             "bundle-metadata",
             "/$defs/Grid",
-            &["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+            &["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude", "projection", "gaussian"],
         );
         assert_named("bundle-metadata", "/$defs/Variable", &["numericId", "id", "label", "unit", "quantization"]);
         assert_named(

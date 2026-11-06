@@ -2,6 +2,7 @@
 // change the schema and run `make schemas`.
 
 import { field, isAnyOf, isBoolean, isInteger, isList, isNumber, isObject, isOneOf, isString } from "../check";
+import { checkGaussian, type Gaussian, checkProjection, type Projection } from "./bundle-metadata";
 
 const PATTERN_1 = new RegExp("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "u");
 const PATTERN_2 = new RegExp("^[0-9a-f]{8}$", "u");
@@ -200,8 +201,8 @@ export function checkSeriesStore(v: unknown, at: string): asserts v is SeriesSto
   checkCrc32(v37, at + ".crc32");
 }
 
-/** The bundle's full grid, as its metadata's grid block says it: written on entries whose readers locate a cell without opening the store. */
-export type Grid = { width: number; height: number; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number; wrapLongitude: boolean };
+/** The bundle's full grid, as its metadata's grid block says it: written on entries whose readers locate a cell without opening the store. Regular or projected, by the rule of bundle-metadata.schema.json#/$defs/Grid. */
+export type Grid = { width: number; height: number; firstLongitude?: number; firstLatitude?: number; longitudeStep?: number; latitudeStep?: number; wrapLongitude: boolean; gaussian?: Gaussian; projection?: Projection };
 
 export function checkGrid(v: unknown, at: string): asserts v is Grid {
   isObject(v, at);
@@ -209,38 +210,95 @@ export function checkGrid(v: unknown, at: string): asserts v is Grid {
   isInteger(v38, at + ".width", 1);
   const v39 = field(v, "height", at);
   isInteger(v39, at + ".height", 1);
-  const v40 = field(v, "firstLongitude", at);
-  isNumber(v40, at + ".firstLongitude");
-  const v41 = field(v, "firstLatitude", at);
-  isNumber(v41, at + ".firstLatitude");
-  const v42 = field(v, "longitudeStep", at);
-  isNumber(v42, at + ".longitudeStep");
-  const v43 = field(v, "latitudeStep", at);
-  isNumber(v43, at + ".latitudeStep");
+  const v40 = v["firstLongitude"];
+  if (v40 !== undefined) {
+    isNumber(v40, at + ".firstLongitude");
+  }
+  const v41 = v["firstLatitude"];
+  if (v41 !== undefined) {
+    isNumber(v41, at + ".firstLatitude");
+  }
+  const v42 = v["longitudeStep"];
+  if (v42 !== undefined) {
+    isNumber(v42, at + ".longitudeStep");
+  }
+  const v43 = v["latitudeStep"];
+  if (v43 !== undefined) {
+    isNumber(v43, at + ".latitudeStep");
+  }
   const v44 = field(v, "wrapLongitude", at);
   isBoolean(v44, at + ".wrapLongitude");
+  const v45 = v["gaussian"];
+  if (v45 !== undefined) {
+    checkGaussian(v45, at + ".gaussian");
+  }
+  const v46 = v["projection"];
+  if (v46 !== undefined) {
+    checkProjection(v46, at + ".projection");
+  }
+  isAnyOf(v, at, [
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      field(x, "firstLongitude", a);
+      field(x, "firstLatitude", a);
+      field(x, "longitudeStep", a);
+      field(x, "latitudeStep", a);
+      const v47 = x["projection"];
+      if (v47 !== undefined) {
+        isOneOf(v47, a + ".projection", [null]);
+      }
+    },
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      field(x, "projection", a);
+      const v48 = x["firstLongitude"];
+      if (v48 !== undefined) {
+        isOneOf(v48, a + ".firstLongitude", [null]);
+      }
+      const v49 = x["firstLatitude"];
+      if (v49 !== undefined) {
+        isOneOf(v49, a + ".firstLatitude", [null]);
+      }
+      const v50 = x["longitudeStep"];
+      if (v50 !== undefined) {
+        isOneOf(v50, a + ".longitudeStep", [null]);
+      }
+      const v51 = x["latitudeStep"];
+      if (v51 !== undefined) {
+        isOneOf(v51, a + ".latitudeStep", [null]);
+      }
+      const v52 = x["gaussian"];
+      if (v52 !== undefined) {
+        isOneOf(v52, a + ".gaussian", [null]);
+      }
+      const v53 = x["wrapLongitude"];
+      if (v53 !== undefined) {
+        isOneOf(v53, a + ".wrapLongitude", [false]);
+      }
+    },
+  ]);
 }
 
-/** A run's, a round's or a case's manifest.json, schema v5 (docs/zarr-profile.md, "Manifest"; docs/contribution/delivery.md): one entry per bundle naming its deliveries, every path relative to the manifest. The readers' own checks: that model and product name a registered dataset and forecastHours is the run's, that the core bundles are present on a live run, that variable names are unique, that every artifact path is unique in the manifest except a shared store's (a map store or segment whose final path component is bundles.zarr or bundles.<tier>.zarr, <tier> lowercase letters other than series), that an entry or a tier carries its container (path, byteLength and crc32 together) or a zarr store or both, that a segmented store carries no path or crc32 of its own and its byteLength is its segments' sum, and that a poster's metadataJson parses (as bundle-metadata.schema.json). */
+/** A run's, a round's or a case's manifest.json, schema v5 (docs/zarr-profile.md, "Manifest"; docs/contribution/delivery.md): one entry per bundle naming its deliveries, every path relative to the manifest. The readers' own checks: that model and product name a registered dataset and forecastHours is the run's, that the core bundles are present on a live run, that variable names are unique, that every artifact path is unique in the manifest except a shared store's (a map store or segment whose final path component is bundles.zarr or bundles.<tier>.zarr, <tier> lowercase letters other than series), that an entry or a tier carries its container (path, byteLength and crc32 together) or a zarr store or both, that a segmented store carries no path or crc32 of its own and its byteLength is its segments' sum, that a poster's metadataJson parses (as bundle-metadata.schema.json), and a bundle grid's rules beyond shape (bundle-metadata.schema.json). */
 export type RunManifest = { schemaVersion: 5; model: string; product: string; runTime: Timestamp; forecastHours: number; bundles: Bundle[] };
 
 export function checkRunManifest(v: unknown, at: string): asserts v is RunManifest {
   isObject(v, at);
-  const v45 = field(v, "schemaVersion", at);
-  isInteger(v45, at + ".schemaVersion");
-  isOneOf(v45, at + ".schemaVersion", [5]);
-  const v46 = field(v, "model", at);
-  isString(v46, at + ".model", undefined, 1);
-  const v47 = field(v, "product", at);
-  isString(v47, at + ".product", undefined, 1);
-  const v48 = field(v, "runTime", at);
-  checkTimestamp(v48, at + ".runTime");
-  const v49 = field(v, "forecastHours", at);
-  isInteger(v49, at + ".forecastHours", 1, 8760);
-  const v50 = field(v, "bundles", at);
-  isList(v50, at + ".bundles", 1);
-  for (let i51 = 0; i51 < v50.length; i51++) {
-    const v52: unknown = v50[i51];
-    checkBundle(v52, at + ".bundles[" + i51 + "]");
+  const v54 = field(v, "schemaVersion", at);
+  isInteger(v54, at + ".schemaVersion");
+  isOneOf(v54, at + ".schemaVersion", [5]);
+  const v55 = field(v, "model", at);
+  isString(v55, at + ".model", undefined, 1);
+  const v56 = field(v, "product", at);
+  isString(v56, at + ".product", undefined, 1);
+  const v57 = field(v, "runTime", at);
+  checkTimestamp(v57, at + ".runTime");
+  const v58 = field(v, "forecastHours", at);
+  isInteger(v58, at + ".forecastHours", 1, 8760);
+  const v59 = field(v, "bundles", at);
+  isList(v59, at + ".bundles", 1);
+  for (let i60 = 0; i60 < v59.length; i60++) {
+    const v61: unknown = v59[i60];
+    checkBundle(v61, at + ".bundles[" + i60 + "]");
   }
 }

@@ -12,12 +12,11 @@
  * touches every tile is better expressed as "the whole plane" — `null` here —
  * because that is the path with no coverage bookkeeping at all.
  *
- * The degree-to-cell arithmetic is the same as `probe.ts` (and the fragment
- * shader): longitude wrapped into [0, 360) east of the grid origin, then
- * divided by the step.
+ * Which cells a view touches is the grid's own question (`gridmap.ts`); what
+ * is left here is cutting them into tiles.
  */
 
-import { geoGrid, wrap, type GeoGrid } from "./probe";
+import { geoGrid, gridMapFor, wrap } from "./gridmap";
 import type { BundleMetadata } from "./manifest";
 
 /** A bundle's tiling, as `WasmBundle.tileGeometry()` reports it. */
@@ -69,39 +68,6 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** The inclusive cell rows a latitude band touches, clamped to the grid, or
- * null when the band misses it entirely. */
-function rowRange(grid: GeoGrid, south: number, north: number): [number, number] | null {
-  const edges = [
-    (north - grid.firstLatitude) / grid.latitudeStep,
-    (south - grid.firstLatitude) / grid.latitudeStep,
-  ];
-  const first = Math.floor(Math.min(...edges));
-  const last = Math.ceil(Math.max(...edges));
-  if (last < 0 || first > grid.height - 1) return null;
-  return [clamp(first, 0, grid.height - 1), clamp(last, 0, grid.height - 1)];
-}
-
-/** The inclusive cell columns a longitude band touches on a grid whose
- * columns do not wrap, or null when the band misses it entirely. The band
- * is tried in every copy of the world that can reach the grid — a view west
- * of a cropped window is at a negative cell, not most of the way around the
- * world — and a view wider than the world (zoomed out on a wide screen) can
- * reach it from two copies at once, which together may cover all of it. */
-function croppedColumnRange(grid: GeoGrid, west: number, span: number): [number, number] | null {
-  const extent = grid.width * grid.longitudeStep;
-  const base = wrap(west - grid.firstLongitude, 360);
-  let first = Number.POSITIVE_INFINITY;
-  let last = Number.NEGATIVE_INFINITY;
-  for (let start = base - 360 * Math.ceil(span / 360 + 1); start <= extent; start += 360) {
-    if (start + span < 0) continue;
-    first = Math.min(first, Math.floor(start / grid.longitudeStep));
-    last = Math.max(last, Math.ceil((start + span) / grid.longitudeStep));
-  }
-  if (last < 0 || first > grid.width - 1) return null;
-  return [clamp(first, 0, grid.width - 1), clamp(last, 0, grid.width - 1)];
-}
-
 /**
  * The tiles a viewport covers, or `null` when the whole plane is the better
  * answer — the view spans every tile, the bundle has no tiling, or the view
@@ -118,25 +84,17 @@ export function viewportTileRects(
   pad = 1,
 ): TileRect[] | null {
   const grid = geoGrid(metadata);
-  if (grid.width <= 0 || grid.height <= 0 || grid.longitudeStep === 0 || grid.latitudeStep === 0) {
-    return null;
-  }
-  const rows = rowRange(grid, bounds.south, bounds.north);
-  if (!rows) return null;
-  const firstRow = clamp(Math.floor(rows[0] / geometry.tileHeight) - pad, 0, geometry.rows - 1);
-  const lastRow = clamp(Math.floor(rows[1] / geometry.tileHeight) + pad, 0, geometry.rows - 1);
-
-  const span = bounds.east - bounds.west;
-  if (!Number.isFinite(span) || span < 0) return null;
+  const cover = gridMapFor(grid).coverOfBounds(bounds);
+  if (!cover) return null;
+  const firstRow = clamp(Math.floor(cover.firstRow / geometry.tileHeight) - pad, 0, geometry.rows - 1);
+  const lastRow = clamp(Math.floor(cover.lastRow / geometry.tileHeight) + pad, 0, geometry.rows - 1);
 
   if (!grid.wraps) {
-    const columns = croppedColumnRange(grid, bounds.west, span);
-    if (!columns) return null;
     return rectsOrNull(geometry, [
       {
-        firstColumn: clamp(Math.floor(columns[0] / geometry.tileWidth) - pad, 0, geometry.columns - 1),
+        firstColumn: clamp(Math.floor(cover.firstColumn / geometry.tileWidth) - pad, 0, geometry.columns - 1),
         firstRow,
-        lastColumn: clamp(Math.floor(columns[1] / geometry.tileWidth) + pad, 0, geometry.columns - 1),
+        lastColumn: clamp(Math.floor(cover.lastColumn / geometry.tileWidth) + pad, 0, geometry.columns - 1),
         lastRow,
       },
     ]);
@@ -146,13 +104,9 @@ export function viewportTileRects(
   // the view matters: an origin tile plus how many tiles the span reaches.
   // Counting rather than comparing wrapped endpoints is what keeps a view one
   // degree short of the whole world from reading as a two-tile sliver.
-  const origin = wrap(bounds.west - grid.firstLongitude, 360) / grid.longitudeStep;
-  const first = Math.floor(origin / geometry.tileWidth) - pad;
-  const reach =
-    Math.floor((origin + span / grid.longitudeStep) / geometry.tileWidth) -
-    Math.floor(origin / geometry.tileWidth) +
-    1 +
-    2 * pad;
+  const firstTile = Math.floor(cover.firstColumn / geometry.tileWidth);
+  const first = firstTile - pad;
+  const reach = Math.floor(cover.lastColumn / geometry.tileWidth) - firstTile + 1 + 2 * pad;
   if (reach >= geometry.columns) {
     return rectsOrNull(geometry, [
       { firstColumn: 0, firstRow, lastColumn: geometry.columns - 1, lastRow },

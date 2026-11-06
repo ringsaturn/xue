@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .binformat import validate_gaussian, validate_projected_grid
 from .common import crc32_hex, iso_z
-from .errors import ManifestError
+from .errors import BundleError, ManifestError
 from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 
 
@@ -230,15 +231,27 @@ def _validate_segmented_descriptor(store: dict[str, Any], variable: str, paths: 
 def _validate_grid(grid: object, variable: str) -> None:
     """The optional full grid a bundle entry carries — the same block a store's
     ``attributes.xue.grid`` holds: where the run's cells start, how they step,
-    and whether longitude wraps. Optional, so an entry written before the field
-    reads absent, and a validator that does not know it skips the key rather
-    than rejecting it."""
+    and whether longitude wraps, or on a projected grid its ``projection``
+    instead of the regular fields. Optional, so an entry written before the
+    field reads absent, and a validator that does not know it skips the key
+    rather than rejecting it."""
     if not isinstance(grid, dict):
         raise ManifestError(f"manifest bundle grid must be an object for {variable}")
     for key in ("width", "height"):
         value = grid.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ManifestError(f"manifest bundle grid {key} must be a positive integer for {variable}")
+    if "projection" in grid:
+        try:
+            validate_projected_grid(grid)
+        except BundleError as error:
+            raise ManifestError(f"manifest bundle {error} for {variable}") from error
+        return
+    if "gaussian" in grid:
+        try:
+            validate_gaussian(grid["gaussian"], grid["height"])
+        except BundleError as error:
+            raise ManifestError(f"manifest bundle {error} for {variable}") from error
     for key in ("firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"):
         value = grid.get(key)
         if not isinstance(value, (int, float)) or isinstance(value, bool):

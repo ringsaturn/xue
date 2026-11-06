@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/manifest.schema.json",
   "title": "RunManifest",
-  "description": "A run's, a round's or a case's manifest.json, schema v5 (docs/zarr-profile.md, \"Manifest\"; docs/contribution/delivery.md): one entry per bundle naming its deliveries, every path relative to the manifest. The readers' own checks: that model and product name a registered dataset and forecastHours is the run's, that the core bundles are present on a live run, that variable names are unique, that every artifact path is unique in the manifest except a shared store's (a map store or segment whose final path component is bundles.zarr or bundles.<tier>.zarr, <tier> lowercase letters other than series), that an entry or a tier carries its container (path, byteLength and crc32 together) or a zarr store or both, that a segmented store carries no path or crc32 of its own and its byteLength is its segments' sum, and that a poster's metadataJson parses (as bundle-metadata.schema.json).",
+  "description": "A run's, a round's or a case's manifest.json, schema v5 (docs/zarr-profile.md, \"Manifest\"; docs/contribution/delivery.md): one entry per bundle naming its deliveries, every path relative to the manifest. The readers' own checks: that model and product name a registered dataset and forecastHours is the run's, that the core bundles are present on a live run, that variable names are unique, that every artifact path is unique in the manifest except a shared store's (a map store or segment whose final path component is bundles.zarr or bundles.<tier>.zarr, <tier> lowercase letters other than series), that an entry or a tier carries its container (path, byteLength and crc32 together) or a zarr store or both, that a segmented store carries no path or crc32 of its own and its byteLength is its segments' sum, that a poster's metadataJson parses (as bundle-metadata.schema.json), and a bundle grid's rules beyond shape (bundle-metadata.schema.json).",
   "type": "object",
   "required": ["schemaVersion", "model", "product", "runTime", "forecastHours", "bundles"],
   "properties": {
@@ -114,9 +114,28 @@
       }
     },
     "Grid": {
-      "description": "The bundle's full grid, as its metadata's grid block says it: written on entries whose readers locate a cell without opening the store.",
+      "description": "The bundle's full grid, as its metadata's grid block says it: written on entries whose readers locate a cell without opening the store. Regular or projected, by the rule of bundle-metadata.schema.json#/$defs/Grid.",
       "type": "object",
-      "required": ["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+      "required": ["width", "height", "wrapLongitude"],
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"],
+          "properties": {"projection": {"type": "null"}}
+        },
+        {
+          "type": "object",
+          "required": ["projection"],
+          "properties": {
+            "firstLongitude": {"type": "null"},
+            "firstLatitude": {"type": "null"},
+            "longitudeStep": {"type": "null"},
+            "latitudeStep": {"type": "null"},
+            "gaussian": {"type": "null"},
+            "wrapLongitude": {"const": false}
+          }
+        }
+      ],
       "properties": {
         "width": {"type": "integer", "minimum": 1},
         "height": {"type": "integer", "minimum": 1},
@@ -124,7 +143,9 @@
         "firstLatitude": {"type": "number"},
         "longitudeStep": {"type": "number"},
         "latitudeStep": {"type": "number"},
-        "wrapLongitude": {"type": "boolean"}
+        "wrapLongitude": {"type": "boolean"},
+        "gaussian": {"$ref": "bundle-metadata.schema.json#/$defs/Gaussian"},
+        "projection": {"$ref": "bundle-metadata.schema.json#/$defs/Projection"}
       }
     }
   }

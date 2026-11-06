@@ -88,9 +88,11 @@ export function comparableModels(): ForecastModelId[] {
   });
 }
 
-/** Whether a model can say anything about the point: a regional model only
- * inside its domain proper, since the encoder's rectangle repeats edge
- * cells into the corners the conic grid never covered. */
+/** Whether a model can say anything about the point, as far as is known
+ * before opening it: a resampled regional model only inside its domain proper,
+ * since the encoder's rectangle repeats edge cells into the corners the conic
+ * grid never covered. Any other grid answers for itself once open
+ * (`probeCell`). */
 export function modelCoversPoint(model: ForecastModelId, longitude: number, latitude: number): boolean {
   const domain = FORECAST_MODELS[model].domain;
   if (!domain) return true;

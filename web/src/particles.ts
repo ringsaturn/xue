@@ -1,6 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
-import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, GRID_GLSL, setDomainUniforms, type LambertDomain } from "./domain";
+import { geoGrid, gridForm, gridMapFor, type GeoGrid, type GridForm } from "./gridmap";
 import { t } from "./i18n";
 import {
   bindSurfaceTile,
@@ -136,22 +137,22 @@ float latitudeOf(vec2 pos) {
   return 90.0 - (360.0 / PI) * atan(exp((pos.y * 2.0 - 1.0) * PI));
 }
 
+uniform vec4 u_grid_cone;
+${GRID_GLSL}
+
 // Grid coordinates of a world position. The longitude offset wraps into
 // [0, 360) so a global grid indexes from -180 and a regional
 // window that crosses the antimeridian stays contiguous.
 vec2 gridUv(vec2 pos) {
   float longitude = fract(pos.x) * 360.0 - 180.0;
   float latitude = latitudeOf(pos);
-  return vec2(
-    (mod(longitude - u_first.x, 360.0) / u_step.x + 0.5) / u_size.x,
-    ((latitude - u_first.y) / u_step.y + 0.5) / u_size.y
-  );
+  return (gridCell(u_grid_cone, u_first, u_step, longitude, latitude) + 0.5) / u_size;
 }
 
 ${DOMAIN_GLSL}
 
 // A regional grid (a showcase case) has no wind outside its window, and a
-// regional model none outside its own footprint (domain.ts); a particle
+// resampled regional run none outside its own footprint (domain.ts); a particle
 // that drifts out has to be respawned rather than pushed by the clamped
 // edge texel forever.
 bool inGrid(vec2 pos) {
@@ -394,6 +395,26 @@ function isLinear(quantization: BundleVariable["quantization"]): quantization is
   return quantization.type === "linear";
 }
 
+/** `spawnRectangle` for any grid: a projected grid's cells are no rectangle
+ * of the map, so it takes the box around them, and a particle seeded in a
+ * corner of the box outside the grid is dropped on its next step. */
+export function gridSpawnRectangle(grid: GeoGrid): [number, number, number, number] {
+  if (grid.projection) {
+    const box = gridMapFor(grid).bounds();
+    const north = mercatorY(box.north);
+    return [(((box.west + 180) / 360) % 1 + 1) % 1, north, (box.east - box.west) / 360, mercatorY(box.south) - north];
+  }
+  return spawnRectangle(
+    grid.firstLongitude,
+    grid.firstLatitude,
+    grid.longitudeStep,
+    grid.latitudeStep,
+    grid.width,
+    grid.height,
+    grid.wraps,
+  );
+}
+
 /** The grid's own footprint in world Mercator units, (x, y, width, height) —
  * where the update shader respawns particles. A global grid returns the whole
  * world square; a regional one returns just its window, with the x origin
@@ -470,10 +491,7 @@ export class WindParticleLayer implements CustomLayerInterface {
   // Grid + quantization of the wind bundle currently configured.
   private width = 0;
   private height = 0;
-  private firstLongitude = -180;
-  private firstLatitude = 90;
-  private longitudeStep = 0.25;
-  private latitudeStep = -0.25;
+  private form: GridForm = { first: [0, 0], step: [1, 1], cone: [0, 0, 0, 0] };
   private wraps = true;
   /** The model's own footprint when the grid extends past it (domain.ts):
    * no particle is drawn or kept outside. */
@@ -536,23 +554,12 @@ export class WindParticleLayer implements CustomLayerInterface {
    * `components` names the u/v pair inside the metadata; the 10 m wind's by
    * default. */
   configureGrid(metadata: BundleMetadata, components: readonly [DataVariableId, DataVariableId] = [WIND_COMPONENT_IDS[0]!, WIND_COMPONENT_IDS[1]!]): void {
-    const grid = metadata.grid as Record<string, number | boolean>;
-    this.width = (grid.width as number) ?? 0;
-    this.height = (grid.height as number) ?? 0;
-    this.firstLongitude = (grid.firstLongitude as number) ?? -180;
-    this.firstLatitude = (grid.firstLatitude as number) ?? 90;
-    this.longitudeStep = (grid.longitudeStep as number) ?? 0.25;
-    this.latitudeStep = (grid.latitudeStep as number) ?? -0.25;
-    this.wraps = (grid.wrapLongitude as boolean) ?? Math.abs(this.width * this.longitudeStep - 360) < 1e-6;
-    this.spawn = spawnRectangle(
-      this.firstLongitude,
-      this.firstLatitude,
-      this.longitudeStep,
-      this.latitudeStep,
-      this.width,
-      this.height,
-      this.wraps,
-    );
+    const grid = geoGrid(metadata);
+    this.width = grid.width;
+    this.height = grid.height;
+    this.form = gridForm(grid);
+    this.wraps = grid.wraps;
+    this.spawn = gridSpawnRectangle(grid);
     const [u, v] = components.map((id) => metadata.variables.find((item) => item.id === id));
     if (!u || !v || !isLinear(u.quantization) || !isLinear(v.quantization)) {
       throw new Error("vector bundle is missing linear-quantized u/v components");
@@ -631,7 +638,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     // 600 m on the ground, a step a particle at a valley's zoom never makes.
     this.floatState = gl.getExtension("EXT_color_buffer_float") !== null;
     this.updateProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, withDefines(UPDATE_FRAGMENT_SHADER, this.stateDefines()), [
-      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap", "u_spawn",
+      "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_grid_cone", "u_size", "u_wrap", "u_spawn",
       "u_rand_seed", "u_speed_factor", "u_elapsed", "u_drop_rate", "u_drop_rate_bump", "u_max_speed",
       "u_screen_spawn", "u_seeds", "u_forward", "u_plane", "u_reseed",
       ...DOMAIN_UNIFORM_NAMES,
@@ -731,7 +738,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       withDefines(drawVertexShader(projectionPrelude(args)), defines),
       DRAW_FRAGMENT_SHADER,
       [
-        "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_size", "u_wrap",
+        "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_grid_cone", "u_size", "u_wrap",
         "u_particles_res", "u_point_size", "u_max_speed", "u_palette",
         "u_ink", "u_monochrome", "u_depth_ref", ...DOMAIN_UNIFORM_NAMES,
         ...PROJECTION_UNIFORM_NAMES, ...TERRAIN_UNIFORM_NAMES,
@@ -863,8 +870,9 @@ export class WindParticleLayer implements CustomLayerInterface {
     gl.uniform1i(info.uniforms.u_wind!, windUnit);
     gl.uniform2f(info.uniforms.u_wind_offset!, this.windOffset[0], this.windOffset[1]);
     gl.uniform2f(info.uniforms.u_wind_scale!, this.windScale[0], this.windScale[1]);
-    gl.uniform2f(info.uniforms.u_first!, this.firstLongitude, this.firstLatitude);
-    gl.uniform2f(info.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
+    gl.uniform2f(info.uniforms.u_first!, this.form.first[0], this.form.first[1]);
+    gl.uniform2f(info.uniforms.u_step!, this.form.step[0], this.form.step[1]);
+    gl.uniform4f(info.uniforms.u_grid_cone!, this.form.cone[0], this.form.cone[1], this.form.cone[2], this.form.cone[3]);
     gl.uniform2f(info.uniforms.u_size!, this.width, this.height);
     gl.uniform1f(info.uniforms.u_wrap!, this.wraps ? 1 : 0);
     setDomainUniforms(gl, info.uniforms, this.domain);

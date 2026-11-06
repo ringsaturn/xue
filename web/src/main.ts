@@ -156,7 +156,8 @@ import { WindParticleLayer } from "./particles";
 import { regionShareOfView, type LambertDomain } from "./domain";
 import { installEmbedApi, type EmbedHub, type EmbedOpenCase, type EmbedSource } from "./embed";
 import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
-import { geoGrid, type ProbeVariable } from "./probe";
+import { clipDomain, geoGrid, gridMapFor, type RegularGrid } from "./gridmap";
+import type { ProbeVariable } from "./probe";
 import { displayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
@@ -353,7 +354,7 @@ function posterGrid(
 function bundleLongitudeSpan(descriptor: ForecastManifest["bundles"][number]): number {
   const grid = posterGrid(descriptor);
   if (!grid) return 360;
-  return Math.min(360, Math.abs(grid.width * grid.longitudeStep));
+  return Math.min(360, grid.width * gridMapFor(grid).nominalStepDegrees());
 }
 
 /** True on a device that reports four gigabytes of memory or less. Only
@@ -2490,16 +2491,27 @@ function syncFrameMarks(): void {
 function ensureSlotGrid(slot: RasterSlot, session: VariableSession): void {
   if (slot.gridSource === session.metadata) return;
   slot.layer.configureGrid(session.metadata);
-  slot.layer.setDomain(modelDomain());
+  slot.layer.setDomain(modelDomain(session.metadata));
   slot.layer.setBand(slot.band);
   slot.gridSource = session.metadata;
 }
 
-/** The dataset's own footprint on its map projection, for a regional model
- * whose regular grid extends past it (domain.ts); null for every other. A
- * case pins its own model, so this follows whichever is selected. */
-function modelDomain(): LambertDomain | null {
-  return FORECAST_MODELS[selectedModelId].domain ?? null;
+/** The footprint a bundle is clipped to: a regional model's own on its map
+ * projection, where this bundle's regular grid extends past it (domain.ts);
+ * null for every other, a native grid included. A case pins its own model, so
+ * this follows whichever is selected. */
+function modelDomain(metadata: BundleMetadata): LambertDomain | null {
+  return clipDomain(geoGrid(metadata), FORECAST_MODELS[selectedModelId].domain);
+}
+
+/** A session's grid for the volume layer, or null with a warning: the layer
+ * marches a box aligned to the map's meridians and parallels, which a projected
+ * grid's rows and columns are not. */
+function volumeGridOf(session: VariableSession): RegularGrid | null {
+  const grid = geoGrid(session.metadata);
+  if (!grid.projection) return grid;
+  console.warn(`volume ${session.id} is on a projected grid, which the volume layer cannot draw`);
+  return null;
 }
 
 /** Same for the particle layer: adopt the vector session's grid, its u/v
@@ -2510,7 +2522,7 @@ function ensureWindGrid(session: VariableSession): void {
   // the order its parameter blocks put them.
   const [u, v] = session.variables;
   windLayer.configureGrid(session.metadata, u && v ? [u.id, v.id] : undefined);
-  windLayer.setDomain(modelDomain());
+  windLayer.setDomain(modelDomain(session.metadata));
   windLayer.setMaxSpeed(sessionMaxMagnitude(session));
   windLayer.setPace(sessionParticlePace(session));
   windLayerGridSource = session.metadata;
@@ -5025,8 +5037,11 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setPalette(buildPalette(session.variable, session.identity));
     layer.setVisible(false);
     const volumeView = ensureVolumeLayer();
-    volumeView.configure(geoGrid(session.metadata), session.volume);
-    volumeView.setPalette(buildPalette(session.variable, session.identity));
+    const volumeGrid = volumeGridOf(session);
+    if (volumeGrid) {
+      volumeView.configure(volumeGrid, session.volume);
+      volumeView.setPalette(buildPalette(session.variable, session.identity));
+    }
   } else if (session.composite) {
     // A composite is a picture: its three guns drawn straight as colour
     // through the same projection, blend and coverage clip, no palette.
@@ -5059,7 +5074,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setVectorField(null);
     layer.setPalette(scalarPalette(session));
     if (!overlay) paletteWindow = null;
-    layer.setContours(contourStyleFor(session.variable, session.identity, overlay, geoGrid(session.metadata).longitudeStep));
+    layer.setContours(contourStyleFor(session.variable, session.identity, overlay, gridMapFor(geoGrid(session.metadata)).nominalStepDegrees()));
     layer.setFloorNoData(floorIsNoData(session.chartId));
     layer.setSampling(samplingFor(session.chartId, session.variable.id));
     // An overlay shows nothing until its first plane lands: the slot may
@@ -5248,7 +5263,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     ensureLayers();
     const target = slot.layer;
     target.configureGrid(posterMetadata);
-    target.setDomain(modelDomain());
+    target.setDomain(modelDomain(posterMetadata));
     slot.gridSource = posterMetadata;
     slot.displayedReal = null;
     slot.shownKey = null;
@@ -5257,7 +5272,7 @@ async function showPoster(variableId: ForecastBundleId, sequence: number): Promi
     // away from wind has to leave magnitude mode before this uploads.
     target.setVectorField(null);
     target.setPalette(buildPalette(variable));
-    target.setContours(contourStyleFor(variable, undefined, false, geoGrid(posterMetadata).longitudeStep));
+    target.setContours(contourStyleFor(variable, undefined, false, gridMapFor(geoGrid(posterMetadata)).nominalStepDegrees()));
     target.setFloorNoData(floorIsNoData(registeredBundleId(identityForBundleId(variable.id))));
     target.setSampling(samplingFor(registeredBundleId(identityForBundleId(variable.id)), variable.id));
     target.setFrame(plane);
@@ -5742,7 +5757,7 @@ function frostLineStyle(): ContourStyle {
     emphasisWidth: 0,
     lineColor: frostLineInk(),
     fillAlpha: 0,
-    smoothing: precipPhase.height.session ? contourSmoothingCells(geoGrid(precipPhase.height.session.metadata).longitudeStep) : 0,
+    smoothing: precipPhase.height.session ? contourSmoothingCells(gridMapFor(geoGrid(precipPhase.height.session.metadata)).nominalStepDegrees()) : 0,
   };
 }
 
@@ -5916,7 +5931,7 @@ function showFrostLine(height: PhasePlane, ground: PhasePlane): PhasePlane {
   const layer = precipPhase.frostLayer;
   if (precipPhase.frostGrid !== session.metadata) {
     layer.configureGrid(session.metadata);
-    layer.setDomain(modelDomain());
+    layer.setDomain(modelDomain(session.metadata));
     // Nothing is filled: the lines are the whole layer.
     layer.setPalette(new Uint8Array(256 * 4));
     precipPhase.frostGrid = session.metadata;
@@ -6146,8 +6161,10 @@ function applyVolumeOverlay(): void {
  * palette, the whole volume (the close-up and the section are the primary
  * volume's tools). */
 function configureVolumeOverlay(session: VariableSession): void {
+  const volumeGrid = volumeGridOf(session);
+  if (!volumeGrid) return;
   const layer = ensureVolumeLayer();
-  layer.configure(geoGrid(session.metadata), session.volume!);
+  layer.configure(volumeGrid, session.volume!);
   layer.setPalette(buildPalette(session.variable, session.identity));
   layer.setRegion(null);
   layer.setSection(null);
@@ -6679,7 +6696,7 @@ function applyAppearance(): void {
     const session = slot.session;
     if (!session || session.vector) continue;
     slot.layer.setContours(
-      contourStyleFor(session.variable, session.identity, session !== activeSession, geoGrid(session.metadata).longitudeStep),
+      contourStyleFor(session.variable, session.identity, session !== activeSession, gridMapFor(geoGrid(session.metadata)).nominalStepDegrees()),
     );
   }
   precipPhase.frostLayer.setContours(frostLineStyle());

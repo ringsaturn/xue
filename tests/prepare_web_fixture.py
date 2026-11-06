@@ -72,6 +72,33 @@ SHOWCASE_HOURS = list(range(25))
 SHOWCASE_GRID = GridInfo(
     width=40, height=30, first_longitude=110.0, first_latitude=35.0, longitude_step=0.5, latitude_step=-0.5
 )
+# The native-grid fixtures: stores only, a short axis. The Lambert grid is
+# HRRR's own cone and origin at twenty times its spacing, schemaVersion 4; the
+# Gaussian one a T47-sized grid whose rows declare their Legendre roots.
+NATIVE_RUN_TIME = datetime(2026, 8, 15, 6, tzinfo=UTC)
+NATIVE_HOURS = list(range(13))
+LAMBERT_SIZE = (90, 53)
+LAMBERT_PROJECTION = {
+    "kind": "lambert-conformal",
+    "radius": 6371229.0,
+    "standardParallel1": 38.5,
+    "standardParallel2": 38.5,
+    "latitudeOfOrigin": 38.5,
+    "centralMeridian": -97.5,
+    "x0": -2697520.142,
+    "y0": 1586693.847,
+    "dx": 60000.0,
+    "dy": -60000.0,
+}
+GAUSSIAN_N = 36
+GAUSSIAN_GRID = GridInfo(
+    width=144,
+    height=2 * GAUSSIAN_N,
+    first_longitude=-180.0,
+    first_latitude=88.75,
+    longitude_step=2.5,
+    latitude_step=-2.5,
+)
 
 
 
@@ -471,6 +498,7 @@ def prepare_web_fixture() -> Path:
     _prepare_ecmwf_fixture(grid, level)
     _prepare_sflux_fixture(grid, level)
     _prepare_showcase_fixture(level)
+    _prepare_native_grid_fixtures()
     return WEB_FIXTURE_ROOT
 
 
@@ -574,6 +602,125 @@ def _prepare_sflux_fixture(grid: GridInfo, level: int) -> None:
         product="sfluxgrb",
     )
     (WEB_FIXTURE_ROOT / "latest-sflux.json").write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
+
+
+def _native_planes(width: int, height: int, variable_id: str) -> dict[int, dict[str, np.ndarray]]:
+    """A field that moves and has some shape on any grid: the planes are only
+    ever read as cells, so they need no geography."""
+    column, row = np.meshgrid(np.arange(width), np.arange(height))
+    planes = {}
+    for hour in NATIVE_HOURS:
+        wave = np.sin((column + 2 * hour) * 0.2) * np.cos(row * 0.15)
+        if variable_id == "tmp2m":
+            codes = QUALITY_TEMPERATURE.quantize((15.0 + 12.0 * wave).ravel())
+        else:
+            codes = QUALITY_PRECIPITATION.quantize(np.where(wave > 0.3, wave * 8.0, 0.0).ravel())
+        planes[hour] = {variable_id: codes}
+    return planes
+
+
+def _declare_projected_grid(store_path: Path, grid_block: dict, schema_version: int) -> str:
+    """Point a shared store's bundles at a projected grid, returning the group's
+    new CRC-32. The store writer still writes latitude and longitude coordinates
+    from regular fields, which a projected grid has none of. The shell reads
+    neither: it takes the grid from these blocks and the cells from the arrays."""
+    group_path = store_path / "zarr.json"
+    group = json.loads(group_path.read_text(encoding="utf-8"))
+    for block in group["attributes"]["xue_bundles"].values():
+        block["schemaVersion"] = schema_version
+        block["grid"] = grid_block
+    data = json.dumps(group).encode("utf-8")
+    group_path.write_bytes(data)
+    return f"{zlib.crc32(data) & 0xFFFFFFFF:08x}"
+
+
+def _prepare_native_grid_fixture(
+    root: Path,
+    source_id: str,
+    regular: GridInfo,
+    grid_block: dict,
+    schema_version: int,
+    model: str,
+    product: str,
+    pointer_name: str,
+) -> None:
+    """One run's shared store from metadata whose ``grid`` is ``grid_block``.
+    ``regular`` sizes the planes and starts ``build_metadata``, which knows no
+    other shape of grid."""
+    root.mkdir(parents=True, exist_ok=True)
+    members = []
+    for variable_id in ("tmp2m", "prate"):
+        planes_by_hour = _native_planes(regular.width, regular.height, variable_id)
+        metadata = build_metadata(
+            NATIVE_RUN_TIME, NATIVE_HOURS, regular, "quality", (variable_id,), source=source_spec(source_id)
+        )
+        if "projection" not in grid_block:
+            metadata["grid"] = grid_block
+        members.append(
+            zarrstore.SharedMember(
+                variable_id, _store_source((variable_id,), NATIVE_HOURS, planes_by_hour, metadata, FIXTURE_TILE)
+            )
+        )
+    store_path = root / zarrstore.shared_store_name()
+    stores = zarrstore.write_shared_store(store_path, members)
+    bundles = [{"variable": member.bundle_id, "zarr": stores[member.bundle_id].descriptor(root)} for member in members]
+    if "projection" in grid_block:
+        crc32 = _declare_projected_grid(store_path, grid_block, schema_version)
+        for bundle in bundles:
+            bundle["zarr"]["crc32"] = crc32
+    manifest = build_bin_manifest(
+        NATIVE_RUN_TIME,
+        bundles=bundles,
+        expected_hours=NATIVE_HOURS[-1],
+        model=model,
+        product=product,
+        require_core_variables=False,
+    )
+    manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+    (root / "manifest.json").write_bytes(manifest_bytes)
+    pointer = build_latest_pointer(
+        NATIVE_RUN_TIME.strftime("%Y%m%d%H"),
+        NATIVE_RUN_TIME,
+        manifest_path=f"{source_id}.2026081506/manifest.json",
+        manifest_crc32=f"{zlib.crc32(manifest_bytes) & 0xFFFFFFFF:08x}",
+        model=model,
+        product=product,
+    )
+    (root / pointer_name).write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
+
+
+def _prepare_native_grid_fixtures() -> None:
+    """A schemaVersion 4 Lambert run and a Gaussian run, so a browser opens both
+    shapes of grid before any source publishes them."""
+    width, height = LAMBERT_SIZE
+    _prepare_native_grid_fixture(
+        WEB_FIXTURE_ROOT / "native" / "hrrr",
+        "hrrr",
+        GridInfo(width=width, height=height, first_longitude=0.0, first_latitude=0.0, longitude_step=1.0, latitude_step=-1.0),
+        {
+            "width": width,
+            "height": height,
+            "layout": "row-major",
+            "rowOrder": "north-to-south",
+            "columnOrder": "west-to-east",
+            "wrapLongitude": False,
+            "projection": LAMBERT_PROJECTION,
+        },
+        4,
+        "HRRR",
+        "wrfsfc",
+        "latest-hrrr.json",
+    )
+    _prepare_native_grid_fixture(
+        WEB_FIXTURE_ROOT / "native" / "sflux",
+        "sflux",
+        GAUSSIAN_GRID,
+        {**GAUSSIAN_GRID.metadata(), "gaussian": {"n": GAUSSIAN_N, "firstRow": 0, "rowStride": 1}},
+        3,
+        "GFS-SFLUX",
+        "sfluxgrb",
+        "latest-sflux.json",
+    )
 
 
 def _showcase_temperature_plane(hour: int) -> np.ndarray:

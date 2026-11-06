@@ -17,6 +17,7 @@
 
 import { DERIVED_MAX_CODE, decodeTable, nearestCell, ramp, sameGrid } from "./composite";
 import type { BundleVariable } from "./manifest";
+import { forEachCell, gridMapFor } from "./gridmap";
 import type { GeoGrid } from "./probe";
 import { hourAngle, solarEphemeris } from "./shadow";
 
@@ -117,15 +118,15 @@ export function hotspots(
   const background = new Uint8Array(cells);
   const hot = new Uint8Array(cells);
   const candidate = new Uint8Array(cells);
+  const map = gridMapFor(grid);
   for (let row = 0; row < height; row += 1) {
-    const latitude = grid.firstLatitude + row * grid.latitudeStep;
     for (let column = 0; column < width; column += 1) {
       const cell = row * width + column;
       // Code 0, the codebook's floor, is no data on a disk (outside it, a
       // missing segment), not a 180 K reading.
       const shortCode = shortwave.plane[cell]!;
       const bt39 = shortCode === 0 ? Number.NaN : shortTable[shortCode]!;
-      const source = direct ? cell : nearestCell(longwave.grid, grid.firstLongitude + column * grid.longitudeStep, latitude);
+      const source = direct ? cell : nearestCell(longwave.grid, ...map.cellToLonLat(column, row));
       const longCode = source < 0 ? 0 : longwave.plane[source]!;
       const bt104 = longCode === 0 ? Number.NaN : longTable[longCode]!;
       const isDay = day[cell] === 1;
@@ -170,12 +171,24 @@ export function dayMask(grid: GeoGrid, timeMs: number, elevation: number): Uint8
   const sinDeclination = Math.sin(ephemeris.declination);
   const cosDeclination = Math.cos(ephemeris.declination);
   const threshold = Math.sin((elevation * Math.PI) / 180);
+  if (grid.projection) {
+    // No row is one latitude and no column one longitude on a projection.
+    forEachCell(grid, (cell, longitude, latitude) => {
+      const phi = (latitude * Math.PI) / 180;
+      const cosine = Math.cos(hourAngle(ephemeris, longitude));
+      if (Math.sin(phi) * sinDeclination + Math.cos(phi) * cosDeclination * cosine > threshold) mask[cell] = 1;
+    });
+    return mask;
+  }
+  const map = gridMapFor(grid);
+  // Every plane of a disk, every frame: one hour angle per column and one
+  // latitude per row is what keeps the loop to a multiplication.
   const cosHour = new Float64Array(width);
   for (let column = 0; column < width; column += 1) {
     cosHour[column] = Math.cos(hourAngle(ephemeris, grid.firstLongitude + column * grid.longitudeStep));
   }
   for (let row = 0; row < height; row += 1) {
-    const latitude = ((grid.firstLatitude + row * grid.latitudeStep) * Math.PI) / 180;
+    const latitude = (map.cellToLonLat(0, row)[1] * Math.PI) / 180;
     const a = Math.sin(latitude) * sinDeclination;
     const b = Math.cos(latitude) * cosDeclination;
     for (let column = 0; column < width; column += 1) {
@@ -203,28 +216,26 @@ export function glintMask(grid: GeoGrid, timeMs: number, subLongitude: number, a
   const satLongitude = (subLongitude * Math.PI) / 180;
   const sat = [orbit * Math.cos(satLongitude), orbit * Math.sin(satLongitude), 0] as const;
   const threshold = Math.cos((angle * Math.PI) / 180);
-  for (let row = 0; row < height; row += 1) {
-    const latitude = ((grid.firstLatitude + row * grid.latitudeStep) * Math.PI) / 180;
+  forEachCell(grid, (cell, longitudeDegrees, latitudeDegrees) => {
+    const latitude = (latitudeDegrees * Math.PI) / 180;
     const cosLat = Math.cos(latitude);
     const z = Math.sin(latitude);
-    for (let column = 0; column < width; column += 1) {
-      const longitude = ((grid.firstLongitude + column * grid.longitudeStep) * Math.PI) / 180;
-      const x = cosLat * Math.cos(longitude);
-      const y = cosLat * Math.sin(longitude);
-      const sunNormal = x * sun[0] + y * sun[1] + z * sun[2];
-      if (sunNormal <= 0) continue;
-      // The sun's ray reflected about the surface normal.
-      const rx = 2 * sunNormal * x - sun[0];
-      const ry = 2 * sunNormal * y - sun[1];
-      const rz = 2 * sunNormal * z - sun[2];
-      const vx = sat[0] - x;
-      const vy = sat[1] - y;
-      const vz = sat[2] - z;
-      const length = Math.hypot(vx, vy, vz);
-      if (x * vx + y * vy + z * vz <= 0) continue;
-      if ((rx * vx + ry * vy + rz * vz) / length > threshold) mask[row * width + column] = 1;
-    }
-  }
+    const longitude = (longitudeDegrees * Math.PI) / 180;
+    const x = cosLat * Math.cos(longitude);
+    const y = cosLat * Math.sin(longitude);
+    const sunNormal = x * sun[0] + y * sun[1] + z * sun[2];
+    if (sunNormal <= 0) return;
+    // The sun's ray reflected about the surface normal.
+    const rx = 2 * sunNormal * x - sun[0];
+    const ry = 2 * sunNormal * y - sun[1];
+    const rz = 2 * sunNormal * z - sun[2];
+    const vx = sat[0] - x;
+    const vy = sat[1] - y;
+    const vz = sat[2] - z;
+    const length = Math.hypot(vx, vy, vz);
+    if (x * vx + y * vy + z * vz <= 0) return;
+    if ((rx * vx + ry * vy + rz * vz) / length > threshold) mask[cell] = 1;
+  });
   return mask;
 }
 

@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/store-array.schema.json",
   "title": "StoreArray",
-  "description": "An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, \"Array metadata\", \"Array attributes\", \"Coordinates\", and the polar and network branches): a variable array of uint8 codes, carrying the xue, xue_polar or xue_network block that says what its codes mean, or a coordinate or side array. The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks.",
+  "description": "An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, \"Array metadata\", \"Array attributes\", \"Coordinates\", and the polar and network branches): a variable array of uint8 codes, carrying the xue, xue_polar or xue_network block that says what its codes mean, or a coordinate or side array, or the scalar crs array of a projected grid (shape []; zarr.json only, no chunk). The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks.",
   "type": "object",
   "required": ["zarr_format", "node_type", "shape", "data_type", "chunk_grid", "chunk_key_encoding", "fill_value", "codecs"],
   "properties": {
     "zarr_format": {"type": "integer", "const": 3},
     "node_type": {"type": "string", "const": "array"},
-    "shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+    "shape": {"description": "Empty on the scalar crs array, which reads as its fill value.", "type": "array", "items": {"type": "integer", "minimum": 0}},
     "data_type": {"type": "string", "enum": ["uint8", "int32", "int64", "float32", "float64"]},
     "chunk_grid": {
       "type": "object",
@@ -18,7 +18,7 @@
         "configuration": {
           "type": "object",
           "required": ["chunk_shape"],
-          "properties": {"chunk_shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}}}
+          "properties": {"chunk_shape": {"type": "array", "items": {"type": "integer", "minimum": 1}}}
         }
       }
     },
@@ -48,7 +48,7 @@
       }
     },
     "Attributes": {
-      "description": "A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network; a coordinate carries its CF attributes only.",
+      "description": "A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network; a coordinate carries its CF attributes only. On a projected grid a variable array also names the crs array in grid_mapping, and the crs array carries the CF projection attributes.",
       "type": "object",
       "properties": {
         "xue": {"$ref": "#/$defs/GridArrayBlock"},
@@ -62,7 +62,14 @@
         "units": {"type": "string"},
         "calendar": {"type": "string"},
         "standard_name": {"type": "string"},
-        "long_name": {"type": "string"}
+        "long_name": {"type": "string"},
+        "grid_mapping": {"type": "string", "const": "crs"},
+        "grid_mapping_name": {"type": "string", "const": "lambert_conformal_conic"},
+        "latitude_of_projection_origin": {"type": "number"},
+        "longitude_of_central_meridian": {"type": "number"},
+        "standard_parallel": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "number"}},
+        "earth_radius": {"type": "number", "exclusiveMinimum": 0},
+        "crs_wkt": {"type": "string", "minLength": 1}
       }
     },
     "GridArrayBlock": {

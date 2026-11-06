@@ -22,9 +22,13 @@
  * cell — the model's own value, not an interpolation of it.
  */
 
+import { geoGrid, gridMapFor, wrap } from "./gridmap";
 import { identifyBundle } from "./identity";
 import { decodeValue, readingValue } from "./palettes";
 import type { BundleMetadata, BundleVariable } from "./manifest";
+
+export { geoGrid, wrap };
+export type { GeoGrid } from "./gridmap";
 
 /** The grid cell a probe reads, and the coordinates of its center. */
 export interface ProbeCell {
@@ -34,41 +38,6 @@ export interface ProbeCell {
   index: number;
   longitude: number;
   latitude: number;
-}
-
-/** The geographic grid a bundle declares. Metadata carries these beside
- * width/height (docs/format.md); the defaults are the global quarter-degree
- * grid, matching ForecastLayer.configureGrid. */
-export interface GeoGrid {
-  width: number;
-  height: number;
-  firstLongitude: number;
-  firstLatitude: number;
-  longitudeStep: number;
-  latitudeStep: number;
-  /** The columns cover the full 360 degrees, so they wrap at the
-   * antimeridian; a cropped grid's do not. */
-  wraps: boolean;
-}
-
-export function geoGrid(metadata: BundleMetadata): GeoGrid {
-  const grid = metadata.grid as unknown as Record<string, number | boolean | undefined>;
-  const width = (grid.width as number) ?? 0;
-  const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
-  return {
-    width,
-    height: (grid.height as number) ?? 0,
-    firstLongitude: (grid.firstLongitude as number) ?? -180,
-    firstLatitude: (grid.firstLatitude as number) ?? 90,
-    longitudeStep,
-    latitudeStep: (grid.latitudeStep as number) ?? -0.25,
-    wraps: (grid.wrapLongitude as boolean) ?? Math.abs(width * longitudeStep - 360) < 1e-6,
-  };
-}
-
-/** Positive remainder, the way GLSL's mod() and the spec's degree wrap work. */
-export function wrap(value: number, modulus: number): number {
-  return ((value % modulus) + modulus) % modulus;
 }
 
 /** Longitude in [-180, 180), the form the readout shows. */
@@ -85,31 +54,22 @@ export function probeCell(
   latitude: number,
 ): ProbeCell | null {
   const grid = geoGrid(metadata);
-  if (grid.width <= 0 || grid.height <= 0 || grid.longitudeStep === 0 || grid.latitudeStep === 0) {
-    return null;
-  }
-  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
-  // Degrees east of the grid origin, wrapped into [0, 360): a window that
-  // crosses the antimeridian stays contiguous instead of splitting in two.
-  const delta = wrap(longitude - grid.firstLongitude, 360);
-  let column = Math.round(delta / grid.longitudeStep);
-  if (grid.wraps) {
-    // The last column's east half rounds up to `width`, which is column 0
-    // again on a global grid.
-    column = wrap(column, grid.width);
-  } else if (column < 0 || column >= grid.width) {
-    return null;
-  }
-  // Adding zero folds Math.round's negative zero (a point exactly on the
-  // first row) back to zero, so neither the index nor the readout carries it.
-  const row = Math.round((latitude - grid.firstLatitude) / grid.latitudeStep) + 0;
-  if (row < 0 || row >= grid.height) return null;
+  const map = gridMapFor(grid);
+  const at = map.lonLatToCell(longitude, latitude);
+  if (!at) return null;
+  // The last column's east half rounds up to `width`, which is column 0 again
+  // on a global grid. Adding zero folds Math.round's negative zero (a point
+  // exactly on the first row) back to zero, so neither the index nor the
+  // readout carries it.
+  const column = (grid.wraps ? wrap(Math.round(at[0]), grid.width) : Math.round(at[0])) + 0;
+  const row = Math.round(at[1]) + 0;
+  const [cellLongitude, cellLatitude] = map.cellToLonLat(column, row);
   return {
     column,
     row,
     index: row * grid.width + column,
-    longitude: normalizeLongitude(grid.firstLongitude + column * grid.longitudeStep),
-    latitude: grid.firstLatitude + row * grid.latitudeStep,
+    longitude: normalizeLongitude(cellLongitude),
+    latitude: cellLatitude,
   };
 }
 
@@ -126,8 +86,8 @@ export function bilinearCells(
 ): { cells: { longitude: number; latitude: number }[]; weights: number[] } | null {
   if (!probeCell(metadata, longitude, latitude)) return null;
   const grid = geoGrid(metadata);
-  const x = wrap(longitude - grid.firstLongitude, 360) / grid.longitudeStep;
-  const y = (latitude - grid.firstLatitude) / grid.latitudeStep;
+  const map = gridMapFor(grid);
+  const [x, y] = map.lonLatToCell(longitude, latitude)!;
   const column0 = Math.floor(x);
   const row0 = Math.floor(y);
   const fx = x - column0;
@@ -138,10 +98,8 @@ export function bilinearCells(
   const weights: number[] = [];
   for (const [dr, wy] of [[0, 1 - fy], [1, fy]] as const) {
     for (const [dc, wx] of [[0, 1 - fx], [1, fx]] as const) {
-      cells.push({
-        longitude: normalizeLongitude(grid.firstLongitude + columnAt(column0 + dc) * grid.longitudeStep),
-        latitude: grid.firstLatitude + rowAt(row0 + dr) * grid.latitudeStep,
-      });
+      const [cellLongitude, cellLatitude] = map.cellToLonLat(columnAt(column0 + dc), rowAt(row0 + dr));
+      cells.push({ longitude: normalizeLongitude(cellLongitude), latitude: cellLatitude });
       weights.push(wx * wy);
     }
   }

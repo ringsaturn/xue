@@ -16,7 +16,7 @@ import {
   PHASE_SNOW,
   type PhasePlane,
 } from "../../web/src/precipphase";
-import type { GeoGrid } from "../../web/src/probe";
+import type { RegularGrid } from "../../web/src/gridmap";
 
 const TYPE: BundleVariable = {
   numericId: 1,
@@ -54,7 +54,7 @@ const RATE: BundleVariable = {
   quantization: { type: "linear", offset: 0, scale: 0.5, minimumCode: 0, maximumCode: 254, nodataCode: 255 },
 };
 
-function grid(width: number, height: number): GeoGrid {
+function grid(width: number, height: number): RegularGrid {
   return { width, height, firstLongitude: 100, firstLatitude: 40, longitudeStep: 0.25, latitudeStep: -0.25, wraps: false };
 }
 

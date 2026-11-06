@@ -240,10 +240,10 @@ A shared store's `zarr.json`:
   no `consolidated=` argument and no directory listing. Its keys are in
   this order: every variable array, bundle by bundle in `xue_bundles` order
   and within a bundle in its `variables` order; then the primary
-  coordinates `time`, `latitude`, `longitude`, those some bundle uses; then
-  every other coordinate array in the order its first bundle names it
-  (`time_<bundle id>`, `latitude_<family>`, `longitude_<family>` within
-  one bundle).
+  coordinates `time`, `latitude`, `longitude`, `y`, `x`, `crs`, those some
+  bundle uses; then every other coordinate array in the order its first bundle
+  names it (`time_<bundle id>`, `latitude_<family>`, `longitude_<family>`,
+  `y_<family>`, `x_<family>` within one bundle).
 - Key order is part of the bytes. The document is serialized as every
   document of the profile is: JSON with two-space indentation, one member
   or element per line, `": "` after a key, non-ASCII characters as raw
@@ -258,7 +258,7 @@ A shared store's `zarr.json`:
 A one-bundle store's `zarr.json` (profile 1) carries `"attributes": {"xue":
 {…the bundle's metadata…}, "xue_profile": 1}` and the same consolidated
 metadata over its own arrays (the variable arrays, then `time`, `latitude`,
-`longitude`). A store written before consolidated metadata lacks it and
+`longitude`, or `time`, `y`, `x`, `crs` on a projected grid). A store written before consolidated metadata lacks it and
 opens with `consolidated=False` from a listable store only; one written
 before that also carries an `xue_index` attribute naming a whole-store index
 object, `index.bin`, which a reader ignores, since the shard's own index is
@@ -300,8 +300,12 @@ Each variable array's `zarr.json`:
   dequantizes it (value = `code × scale + offset`); the `log1p` codebook has
   no CF spelling and is described by `xue.variable.quantization` alone.
 - Dimensions are declared in the array metadata's `dimension_names`, the
-  Zarr v3 field: `["time", "latitude", "longitude"]`, or the bundle's own
-  names (below). Every array of one bundle carries the same three.
+  Zarr v3 field: `["time", "latitude", "longitude"]`, `["time", "y", "x"]` on
+  a projected grid, or the bundle's own names (below). Every array of one
+  bundle carries the same three.
+- On a projected grid every variable array also has `grid_mapping: "crs"`,
+  naming the scalar array of *[Coordinates](#coordinates)*, and on no other
+  grid does one.
 
 ## Coordinates
 
@@ -312,6 +316,55 @@ the bundle's `runTime` in seconds (`int32`, `units: "seconds since
 fill `0`), the cell centre latitudes and longitudes (`float64`,
 `degrees_north` / `degrees_east`, fill `NaN`) from the bundle's grid. They
 are for xarray and its kind; a player reads the metadata.
+
+On a grid with a `gaussian` block the `latitude` coordinate holds the true
+Gaussian latitudes of its rows, not the regular fields' even ones. Each is
+computed alone, by this iteration in this order of operations, so that every
+writer lands on the same double (a library root finder differs by up to 1.8e-12°
+near the poles). With `N = 2n` and `i` the row on the whole Gaussian grid from
+the north:
+
+```text
+x = cos(π × (i + 0.75) / (N + 0.5))
+repeat at most 100 times:
+    p0, p1 = 1, x
+    for k = 2 … N:
+        p0, p1 = p1, ((2k − 1) × x × p1 − (k − 1) × p0) / k
+    derivative = N × (x × p1 − p0) / (x × x − 1)
+    step = p1 / derivative
+    x = x − step
+    stop when |step| < 1e-15
+latitude = degrees(asin(x))
+```
+
+For `n = 95` the first rows are 89.27671287810583, 88.33975425118209,
+87.3972623773714; for `n = 768`, 89.91032453466268, 89.79415738840316,
+89.67730421235662. `tests/test_native_grids.py` and `rust/xue/src/projection.rs`
+hold these goldens.
+
+On a grid with a `projection` block there is no latitude or longitude axis.
+The coordinates are `y` and `x`, in place of `latitude` and `longitude`:
+`float64`, fill `NaN`, `units: "m"`, `standard_name:
+"projection_y_coordinate"` and `"projection_x_coordinate"`, holding `y0 + row ×
+dy` and `x0 + column × dx`. Two-dimensional latitude and longitude arrays are
+not written; a client computes them from the `crs` array.
+
+That array, `crs`, is zero-dimensional: `shape: []`, `chunk_grid` with
+`chunk_shape: []`, `data_type: "int32"`, `fill_value: 0`, `codecs:
+[{"name": "bytes", "configuration": {"endian": "little"}}]`, `dimension_names:
+[]`. It has a `zarr.json` and no chunk, and it is written once per store. It
+exists for its attributes, the CF grid mapping, which xarray and rioxarray read:
+
+| Attribute | Value |
+|---|---|
+| `grid_mapping_name` | `lambert_conformal_conic` |
+| `latitude_of_projection_origin` | `latitudeOfOrigin` |
+| `longitude_of_central_meridian` | `centralMeridian` |
+| `standard_parallel` | `[standardParallel1, standardParallel2]` |
+| `earth_radius` | `radius` |
+| `crs_wkt` | the same projection as WKT |
+
+Whatever the grid, a dimension's coordinate array follows these rules.
 
 - The **primary coordinates** `time`, `latitude` and `longitude` are the
   run's axis and the source's primary grid at the store's tier. They are
@@ -342,8 +395,12 @@ are for xarray and its kind; a player reads the metadata.
 
 A bundle's dimension names are `time` or `time_<its bundle id>`, then
 `latitude` and `longitude`, or `latitude_<family>` and `longitude_<family>`
-with one family id matching `^[a-z][a-z0-9]*$`; any other name is
-invalid.
+with one family id matching `^[a-z][a-z0-9]*$`. On a grid with a `projection`
+block, and only there, the last two are `y` and `x`, or `y_<family>` and
+`x_<family>`. Any other name is invalid, and so is a bundle whose names
+disagree with its grid block. The array `crs` belongs to no dimension: a
+bundle uses it by its variables' `grid_mapping`, and every projected bundle
+of a store shares it, since a family differs in grid and not in projection.
 
 ## Manifest
 

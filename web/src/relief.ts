@@ -14,6 +14,7 @@ import {
 } from "./manifest";
 import type { VariableSession } from "./session";
 import { type TileRect, viewportTileRects } from "./tiles";
+import { cropGrid, geoGrid, gridMapFor } from "./gridmap";
 
 /** What the relief correction reads off the page: the map, the run and the
  * primary session (live, through getters), and the session functions it
@@ -118,18 +119,7 @@ export function createRelief(deps: ReliefDeps) {
 
   /** A session's grid as the correction's shader reads it. */
   function correctionGrid(session: VariableSession): CorrectionGrid {
-    const grid = session.metadata.grid as Record<string, number | boolean>;
-    const width = (grid.width as number) ?? 0;
-    const longitudeStep = (grid.longitudeStep as number) ?? 0.25;
-    return {
-      width,
-      height: (grid.height as number) ?? 0,
-      firstLongitude: (grid.firstLongitude as number) ?? -180,
-      firstLatitude: (grid.firstLatitude as number) ?? 90,
-      longitudeStep,
-      latitudeStep: (grid.latitudeStep as number) ?? -0.25,
-      wraps: (grid.wrapLongitude as boolean) ?? Math.abs(width * longitudeStep - 360) < 1e-6,
-    };
+    return geoGrid(session.metadata);
   }
 
   function lapseCorrection(
@@ -243,7 +233,7 @@ export function createRelief(deps: ReliefDeps) {
     if (!column || !all || deps.activeFrameIndex === null) return;
     const reference = all[0]!;
     // Nothing is decoded while the correction is off or faded out.
-    if (!lapseWanted(deps.activeSession) || lapseWeight(correctionGrid(reference).longitudeStep, map.getZoom()) <= 0) return;
+    if (!lapseWanted(deps.activeSession) || lapseWeight(gridMapFor(correctionGrid(reference)).nominalStepDegrees(), map.getZoom()) <= 0) return;
     const now = performance.now();
     if (column.inflightSince !== null && now - column.inflightSince < COLUMN_REQUEST_PATIENCE_MS) return;
     const offset = sessionOffsetForLead(reference, frameLeadSeconds(deps.activeFrameIndex));
@@ -281,6 +271,19 @@ export function createRelief(deps: ReliefDeps) {
   function viewColumnCells(session: VariableSession): ColumnCells | null {
     const grid = correctionGrid(session);
     const bounds = map.getBounds();
+    if (grid.projection) {
+      const cover = gridMapFor(grid).coverOfBounds({
+        west: bounds.getWest(),
+        east: bounds.getEast(),
+        south: bounds.getSouth(),
+        north: bounds.getNorth(),
+      });
+      if (!cover) return null;
+      const width = cover.lastColumn - cover.firstColumn + 1;
+      const height = cover.lastRow - cover.firstRow + 1;
+      if (width <= 1 || height <= 1 || width > COLUMN_WINDOW_LIMIT || height > COLUMN_WINDOW_LIMIT) return null;
+      return { column: cover.firstColumn, row: cover.firstRow, width, height };
+    }
     const firstColumn = Math.floor((bounds.getWest() - grid.firstLongitude) / grid.longitudeStep) - 1;
     const lastColumn = Math.ceil((bounds.getEast() - grid.firstLongitude) / grid.longitudeStep) + 1;
     const rowA = (bounds.getNorth() - grid.firstLatitude) / grid.latitudeStep;
@@ -399,14 +402,7 @@ export function createRelief(deps: ReliefDeps) {
       a,
       b,
       c,
-      grid: {
-        width: window.width,
-        height: window.height,
-        firstLongitude: grid.firstLongitude + window.column * grid.longitudeStep,
-        firstLatitude: grid.firstLatitude + window.row * grid.latitudeStep,
-        longitudeStep: grid.longitudeStep,
-        latitudeStep: grid.latitudeStep,
-      },
+      grid: cropGrid(grid, window.column, window.row, window.width, window.height),
     };
   }
 

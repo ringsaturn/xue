@@ -9,6 +9,7 @@
 
 import { DERIVED_MAX_CODE, decodeTable, nearestCell, sameGrid } from "./composite";
 import type { BundleVariable } from "./manifest";
+import { forEachCell } from "./gridmap";
 import type { GeoGrid } from "./probe";
 
 /** One decoded scalar plane on its own grid. */
@@ -89,16 +90,6 @@ function landTest(grid: GeoGrid, land: ScalarInput | null): (cell: number, longi
   return (cell, longitude, latitude) => read(cell, longitude, latitude) > 0;
 }
 
-/** Walk every cell of `grid` with its coordinates. */
-function eachCell(grid: GeoGrid, visit: (cell: number, longitude: number, latitude: number) => void): void {
-  for (let row = 0; row < grid.height; row += 1) {
-    const latitude = grid.firstLatitude + row * grid.latitudeStep;
-    for (let column = 0; column < grid.width; column += 1) {
-      visit(row * grid.width + column, grid.firstLongitude + column * grid.longitudeStep, latitude);
-    }
-  }
-}
-
 /** The Fosberg index on the temperature's grid, as derived codes: code 0
  * where an input is missing, over water when `land` (the soil moisture) is
  * given, or where the index is 0, else the index scaled onto
@@ -117,7 +108,7 @@ export function fosbergPlane(
   const uTable = decodeTable(wind.u);
   const vTable = decodeTable(wind.v);
   const direct = sameGrid(grid, wind.grid);
-  eachCell(grid, (cell, longitude, latitude) => {
+  forEachCell(grid, (cell, longitude, latitude) => {
     if (!isLand(cell, longitude, latitude)) return;
     const t = readT(cell, longitude, latitude);
     const td = readTd(cell, longitude, latitude);
@@ -154,7 +145,7 @@ export function fireWeatherAlert(
   const readTd = reader(grid, dewPoint);
   const readGust = reader(grid, gust);
   const isLand = landTest(grid, land);
-  eachCell(grid, (cell, longitude, latitude) => {
+  forEachCell(grid, (cell, longitude, latitude) => {
     if (!isLand(cell, longitude, latitude)) return;
     const t = readT(cell, longitude, latitude);
     const td = readTd(cell, longitude, latitude);
