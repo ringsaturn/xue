@@ -450,6 +450,16 @@ and the window shrinks to fit it.
 
 ## Native grids
 
+**No trigonometry per pixel on a raster.** GLSL does not bound the error of
+`sin`, `tan` or `pow`, and 5e-4 on a radius of 8,000 km is 4 km: half a cell of
+a 3 km grid, different on every GPU, which CI caught at 1.3 km on SwiftShader. A
+Lambert raster reads its projected metres from an RG32F table computed in
+doubles over the grid's Mercator rectangle (`gridmap.ts::gridTable`,
+`domain.ts::GRID_TABLE_GLSL`, 512 x 256, within 4 m on HRRR's domain), by
+hand-written bilinear. The particle shader keeps the analytic form: where it
+samples the wind moves by a fraction of a cell at most, and nothing is drawn
+from a single cell. `tests/e2e/shader.spec.ts` holds the raster to 120 m.
+
 A bundle's `grid` block ([`docs/format.md`](../format.md)) is read in one place,
 `gridmap.ts::parseGrid` (through `geoGrid(metadata)`, memoized on the metadata;
 `parseBundleMetadata` runs it too, so a bad block never reaches a session). It

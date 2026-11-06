@@ -9,6 +9,7 @@ import {
   gaussianLatitudes,
   geoGrid,
   gridForm,
+  gridTable,
   gridMapFor,
   parseGrid,
   sameGrid,
@@ -120,6 +121,49 @@ describe("parseGrid", () => {
     expect(() => probeCell(bad, 0, 0)).toThrow();
     expect(() => bilinearCells(bad, 0, 0)).toThrow();
     expect(() => viewportTileRects(bad, { tileWidth: 16, tileHeight: 16, columns: 90, rows: 46 }, { west: 0, east: 1, south: 0, north: 1 })).toThrow();
+  });
+});
+
+describe("gridTable", () => {
+  const conus = parseGrid({
+    width: 1799,
+    height: 1059,
+    wrapLongitude: false,
+    projection: { kind: "lambert-conformal", radius: 6371229, standardParallel1: 38.5, standardParallel2: 38.5, latitudeOfOrigin: 38.5, centralMeridian: -97.5, x0: -2697520.143, y0: 1586693.847, dx: 3000, dy: -3000 },
+  });
+  if (!conus.projection) throw new Error("a projected grid");
+
+  it("holds bilinear within a few metres of the forward projection", () => {
+    const table = gridTable(conus);
+    const map = gridMapFor(conus);
+    const [west, north, east, south] = table.box;
+    for (let index = 0; index < 4000; index += 1) {
+      // A low-discrepancy walk, so the check covers the rectangle without chance.
+      const fx = (index * 0.7548776662) % 1;
+      const fy = (index * 0.5698402910) % 1;
+      const atX = fx * (table.width - 1);
+      const atY = fy * (table.height - 1);
+      const lowX = Math.min(Math.floor(atX), table.width - 2);
+      const lowY = Math.min(Math.floor(atY), table.height - 2);
+      const read = (channel: number) => {
+        const texel = (x: number, y: number) => table.data[(y * table.width + x) * 2 + channel]!;
+        const a = texel(lowX, lowY) * (1 - (atX - lowX)) + texel(lowX + 1, lowY) * (atX - lowX);
+        const b = texel(lowX, lowY + 1) * (1 - (atX - lowX)) + texel(lowX + 1, lowY + 1) * (atX - lowX);
+        return a * (1 - (atY - lowY)) + b * (atY - lowY);
+      };
+      const mercatorX = west + fx * (east - west);
+      const mercatorY = north + fy * (south - north);
+      const longitude = mercatorX * 360 - 180;
+      const latitude = 90 - (360 / Math.PI) * Math.atan(Math.exp((mercatorY * 2 - 1) * Math.PI));
+      const cell = map.lonLatToCell(longitude, latitude);
+      if (!cell) continue;
+      expect(Math.abs((read(0) + 2697520.143) / 3000 - cell[0]) * 3000).toBeLessThan(5);
+      expect(Math.abs((read(1) - 1586693.847) / -3000 - cell[1]) * 3000).toBeLessThan(5);
+    }
+  });
+
+  it("is kept for a grid of the same cone and bounds", () => {
+    expect(gridTable(conus)).toBe(gridTable(conus));
   });
 });
 

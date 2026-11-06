@@ -1,7 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
-import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, GRID_GLSL, setDomainUniforms, type LambertDomain } from "./domain";
-import { geoGrid, gridForm, gridMapFor, type GeoGrid, type GridForm } from "./gridmap";
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, GRID_GLSL, GRID_TABLE_GLSL, setDomainUniforms, type LambertDomain } from "./domain";
+import { geoGrid, gridForm, gridMapFor, gridTable, type GeoGrid, type GridForm, type GridTable } from "./gridmap";
 import { SITE_TEMPERATURE_GLSL } from "./lapse";
 import type { LongitudeBand } from "./mosaic";
 import { t } from "./i18n";
@@ -135,6 +135,7 @@ export const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_mercator;
 ${GRID_GLSL}
+${GRID_TABLE_GLSL}
 #ifdef XUE_TERRAIN
 in vec2 v_dem;
 ${TERRAIN_SHADE_GLSL}
@@ -175,7 +176,7 @@ ${SITE_TEMPERATURE_GLSL}
 // or holds another number of surfaces.
 int columnSample(float longitude, float latitude, out float heights[COLUMN_CAPACITY], out float temperatures[COLUMN_CAPACITY]) {
   for (int k = 0; k < COLUMN_CAPACITY; k += 1) { heights[k] = 0.0; temperatures[k] = 0.0; }
-  vec2 cell = gridCell(u_column_cone, u_column_grid.xy, u_column_grid.zw, longitude, latitude);
+  vec2 cell = tableCell(u_column_cone, u_column_grid.xy, u_column_grid.zw, v_mercator, longitude, latitude);
   vec2 base = floor(cell);
   vec2 f = cell - base;
   ivec2 size = ivec2(u_column_size);
@@ -197,7 +198,7 @@ int columnSample(float longitude, float latitude, out float heights[COLUMN_CAPAC
   return count;
 }
 float lapseCodes(float longitude, float latitude, float code) {
-  vec2 uv = (gridCell(u_orog_cone, u_orog_grid.xy, u_orog_grid.zw, longitude, latitude) + 0.5) / u_orog_size;
+  vec2 uv = (tableCell(u_orog_cone, u_orog_grid.xy, u_orog_grid.zw, v_mercator, longitude, latitude) + 0.5) / u_orog_size;
   float model = u_orog_decode.x + texture(u_orog, uv).r * 255.0 * u_orog_decode.y;
   float site = surfaceSample(v_dem);
   float t2m = u_lapse_t.x + code * 255.0 * u_lapse_t.y;
@@ -525,7 +526,7 @@ vec4 phaseRow(float code, float row) {
 }
 
 vec4 phaseColor(float code, float longitude, float latitude) {
-  vec2 uv = (gridCell(u_phase_cone, u_phase_first, u_phase_step, longitude, latitude) + 0.5) / u_phase_size;
+  vec2 uv = (tableCell(u_phase_cone, u_phase_first, u_phase_step, v_mercator, longitude, latitude) + 0.5) / u_phase_size;
   vec4 weights = texture(u_phase_weights, uv);
   float zone = weights.b;
   // Taken here, where every fragment of the quad runs it.
@@ -563,7 +564,7 @@ void main() {
   // Degrees east of the grid origin, wrapped into [0, 360): a global grid
   // indexes from -180, and a regional window that crosses the
   // antimeridian stays contiguous instead of splitting in two.
-  vec2 gridUv = (gridCell(u_grid_cone, u_first, u_step, longitude, latitude) + 0.5) / u_size;
+  vec2 gridUv = (tableCell(u_grid_cone, u_first, u_step, v_mercator, longitude, latitude) + 0.5) / u_size;
   float u = gridUv.x;
   float v = gridUv.y;
   // Texels per screen pixel, taken before any fragment of the quad can
@@ -914,6 +915,9 @@ export class ForecastLayer implements CustomLayerInterface {
   private width = 0;
   private height = 0;
   private form: GridForm = { first: [0, 0], step: [1, 1], cone: [0, 0, 0, 0] };
+  private gridTable: GridTable | null = null;
+  private gridTableTexture: WebGLTexture | null = null;
+  private gridTableUploaded: GridTable | null = null;
   /** The size of a cell in degrees, for what scales with it on screen. */
   private cellDegrees = 0.25;
   /** Whether the columns cover the full 360 degrees. Drives both the
@@ -947,6 +951,8 @@ export class ForecastLayer implements CustomLayerInterface {
     this.width = grid.width;
     this.height = grid.height;
     this.form = gridForm(grid);
+    this.gridTable = grid.projection ? gridTable(grid) : null;
+    this.gridTableUploaded = null;
     this.cellDegrees = gridMapFor(grid).nominalStepDegrees();
     this.wraps = grid.wraps;
     this.hasFrame = false;
@@ -1150,6 +1156,8 @@ export class ForecastLayer implements CustomLayerInterface {
     this.tileMesh = null;
     this.demSampler = null;
     this.shadowTexture = null;
+    this.gridTableTexture = null;
+    this.gridTableUploaded = null;
     this.orographyTexture = null;
     this.columnTextures = [];
     this.emptyColumn = null;
@@ -1236,6 +1244,31 @@ export class ForecastLayer implements CustomLayerInterface {
       this.phaseUploaded = phase.field;
     }
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
+  }
+
+  /** The projected metres a Lambert grid's raster reads (`GRID_TABLE_GLSL`). A
+   * regular grid leaves the cone at zero, which `tableCell` never matches. */
+  private bindGridTable(gl: WebGL2RenderingContext): void {
+    const table = this.gridTable;
+    gl.activeTexture(gl.TEXTURE0 + GRID_TABLE_TEXTURE_UNIT);
+    if (!this.gridTableTexture) {
+      this.gridTableTexture = gl.createTexture();
+      this.gridTableUploaded = null;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.gridTableTexture);
+    if (table && this.gridTableUploaded !== table) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, table.width, table.height, 0, gl.RG, gl.FLOAT, table.data);
+      this.gridTableUploaded = table;
+    }
+    gl.uniform1i(this.uniforms.u_grid_table!, GRID_TABLE_TEXTURE_UNIT);
+    const cone = table?.cone ?? [0, 0, 0, 0];
+    gl.uniform4f(this.uniforms.u_grid_table_cone!, cone[0], cone[1], cone[2], cone[3]);
+    if (table) gl.uniform4f(this.uniforms.u_grid_table_box!, table.box[0], table.box[1], table.box[2], table.box[3]);
   }
 
   /** The phase's uniforms and samplers. The samplers are bound whatever the
@@ -1687,6 +1720,7 @@ export class ForecastLayer implements CustomLayerInterface {
     }
     this.bindShadow(gl);
     this.bindPhase(gl);
+    this.bindGridTable(gl);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -1742,6 +1776,7 @@ const COLUMN_TEXTURE_UNITS = [9, 10, 11] as const;
 const SHADOW_TEXTURE_UNIT = 12;
 const PHASE_WEIGHTS_TEXTURE_UNIT = 13;
 const PHASE_PALETTE_TEXTURE_UNIT = 14;
+const GRID_TABLE_TEXTURE_UNIT = 15;
 
 /** The terrain shadows every field layer darkens by (shadowlayer.ts): the
  * latest sunlit mask over its Mercator rectangle, how strongly a shadow
@@ -1776,6 +1811,7 @@ const MAP_UNIFORM_NAMES = [
   "u_composite", "u_composite_offset", "u_composite_scale",
   "u_phase", "u_phase_weights", "u_phase_palette", "u_phase_first", "u_phase_step", "u_phase_size", "u_phase_cone", "u_phase_ink", "u_phase_px",
   ...DOMAIN_UNIFORM_NAMES,
+  "u_grid_table", "u_grid_table_box", "u_grid_table_cone",
   "u_band",
   "u_orog", "u_orog_grid", "u_orog_cone", "u_orog_size", "u_orog_decode", "u_lapse",
   "u_lapse_t", "u_column_a", "u_column_b", "u_column_c", "u_column_grid", "u_column_cone", "u_column_size", "u_column_on",

@@ -117,8 +117,10 @@ export function domainUniforms(domain: LambertDomain): { cone: [number, number, 
  * (`n`, scale, origin radius, central meridian in radians), and `n` of 0, which
  * no cone has, says the grid is regular. The latitude is held short of the
  * poles because the far pole is a division by zero and a NaN passes every
- * bounds test. Single precision is ample: a float resolves under a metre of a
- * few thousand kilometres. */
+ * bounds test. This runs the trigonometry on the GPU, whose `sin`, `tan` and
+ * `pow` carry no precision guarantee: a 5e-4 error on a radius of 8,000 km is
+ * 4 km, so what must land on the right cell of a 3 km grid goes through
+ * `GRID_TABLE_GLSL` instead. */
 export const GRID_GLSL = `
 vec2 lambertXY(vec4 cone, float longitude, float latitude) {
   float n = cone.x;
@@ -131,6 +133,32 @@ vec2 lambertXY(vec4 cone, float longitude, float latitude) {
 vec2 gridCell(vec4 cone, vec2 first, vec2 cellStep, float longitude, float latitude) {
   if (cone.x == 0.0) return vec2(mod(longitude - first.x, 360.0) / cellStep.x, (latitude - first.y) / cellStep.y);
   return (lambertXY(cone, longitude, latitude) - first) / cellStep;
+}`;
+
+/** What a Lambert grid's raster draws through: the projected metres, computed
+ * in doubles on the CPU over a Mercator rectangle (`gridmap.ts::gridTable`),
+ * read by hand-written bilinear from an RG32F texture, so no trigonometry runs
+ * per pixel. `tableCell` falls back to `gridCell` for a grid on another
+ * projection, or a regular one. */
+export const GRID_TABLE_GLSL = `
+uniform highp sampler2D u_grid_table;
+uniform vec4 u_grid_table_box;
+uniform vec4 u_grid_table_cone;
+vec2 gridTableXY(vec2 mercator) {
+  ivec2 size = textureSize(u_grid_table, 0);
+  vec2 extent = u_grid_table_box.zw - u_grid_table_box.xy;
+  vec2 offset = vec2(fract(mercator.x - u_grid_table_box.x), mercator.y - u_grid_table_box.y);
+  if (offset.x > extent.x || offset.y < 0.0 || offset.y > extent.y) return vec2(1e30);
+  vec2 at = offset / extent * vec2(size - 1);
+  ivec2 low = min(ivec2(at), size - 2);
+  vec2 f = at - vec2(low);
+  vec2 upper = mix(texelFetch(u_grid_table, low, 0).rg, texelFetch(u_grid_table, low + ivec2(1, 0), 0).rg, f.x);
+  vec2 lower = mix(texelFetch(u_grid_table, low + ivec2(0, 1), 0).rg, texelFetch(u_grid_table, low + ivec2(1, 1), 0).rg, f.x);
+  return mix(upper, lower, f.y);
+}
+vec2 tableCell(vec4 cone, vec2 first, vec2 cellStep, vec2 mercator, float longitude, float latitude) {
+  if (cone.x != 0.0 && cone == u_grid_table_cone) return (gridTableXY(mercator) - first) / cellStep;
+  return gridCell(cone, first, cellStep, longitude, latitude);
 }`;
 
 /** The GLSL of the footprint test, for a fragment shader that already has
