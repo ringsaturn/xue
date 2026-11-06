@@ -185,7 +185,7 @@ describe("the aerosol families", () => {
     expect(familyLevels("pm")).toEqual(["pm25"]);
     expect(familyVariants("aod")).toEqual([...ODD_IDS]);
     expect(familyVariants("pm")).toEqual([...PM_IDS]);
-    expect(familyMembers("aod")).toEqual([...ODD_IDS]);
+    expect(familyMembers("aod")).toEqual([...ODD_IDS, "aotk"]);
     expect(familyMembers("pm")).toEqual([...PM_IDS]);
     expect(levelCode("aoddust")).toBe("DUST");
     expect(levelCode("pm10dust")).toBe("10 DUST");

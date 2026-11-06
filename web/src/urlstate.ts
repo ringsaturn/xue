@@ -117,6 +117,7 @@ const MODEL_ALIASES: Record<string, ForecastModelId> = {
   sflux: "sflux",
   "gfs-sflux": "sflux",
   hrrr: "hrrr",
+  rrfs: "rrfs",
   iconeu: "iconeu",
   "icon-eu": "iconeu",
   arpege: "arpege",

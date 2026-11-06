@@ -95,6 +95,7 @@ export const en = {
    * with the 2.5 µm cut — a size, so the same in every language. */
   varAod: "TOTAL",
   varPm: "2.5",
+  varSmoke: "8 M",
   /** The surface dust concentration's own tile: a surface field (SFC);
    * CJK glosses name the quantity. */
   varDustsfc: "SFC",
@@ -181,6 +182,7 @@ export const en = {
   // microgram per cubic metre a particulate concentration is read in.
   glyphAod: "τ",
   glyphPm: "µ",
+  glyphSmoke: "S",
   // D for dust: the glyph of the tile, not a WMO letter.
   glyphDustsfc: "D",
   // E is the station model's letter for the state of the ground; M the
@@ -213,6 +215,7 @@ export const en = {
    * matter, each a family whose species and size cuts are chips. */
   tipAod: "Aerosol optical depth",
   tipPm: "Particulate matter",
+  tipSmoke: "Smoke and dust",
   tipTsoil: "Soil temperature",
   tipSoilw: "Soil moisture",
   /** The satellite tile: a family tile, the infrared window and the
@@ -295,6 +298,7 @@ export const en = {
   creditsHeading: "Data & credits",
   creditsGfs: "Forecast data: GFS 0.25° and sflux",
   creditsHrrr: "Forecast data: HRRR 3 km, contiguous US",
+  creditsRrfs: "Forecast data: RRFS 3 km with smoke and dust, contiguous US",
   creditsGefsAero: "Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM",
   /** The CMA's sand-and-dust model, the WMO SDS-WAS Asian Center's,
    * carried by WMO WIS2; the model and programme names stay as written. */
@@ -607,6 +611,10 @@ export const en = {
   // The surface dust concentration of every particle size, as a dust
   // model forecasts it: not the PM10 cut above.
   varLabelDustsfc: "Surface dust concentration",
+  varLabelSmokesfc: "Near-surface smoke concentration",
+  varLabelDustfine: "Near-surface fine dust concentration",
+  varLabelDustcoarse: "Near-surface coarse dust concentration",
+  varLabelAotk: "Aerosol optical thickness",
   // The soil layers, by index from the surface down: the depths are the
   // source's (GFS 0–10/10–40/40–100/100–200 cm, IFS 0–7/7–28/28–100/
   // 100–289 cm), so no label names one.

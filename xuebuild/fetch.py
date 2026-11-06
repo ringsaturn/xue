@@ -82,6 +82,8 @@ HRRR_BASE_URLS = tuple(
     ).split(",")
     if url.strip()
 )
+# RRFS has one copy on NODD; NOMADS throttles a run's worth of ranges.
+RRFS_BASE_URL = os.environ.get("XUE_RRFS_BASE_URL", "https://noaa-rrfs-ops-pds.s3.amazonaws.com").rstrip("/")
 if not HRRR_BASE_URLS:
     raise ValueError("XUE_HRRR_BASE_URLS must contain at least one URL")
 ECMWF_BASE_URLS = tuple(
@@ -246,6 +248,11 @@ def hrrr_object_url(run: GfsRun, forecast_hour: int, *, base_url: str | None = N
     return f"{base}/hrrr.{run.date}/conus/hrrr.t{run.cycle}z.wrfsfcf{forecast_hour:02d}.grib2"
 
 
+def rrfs_object_url(run: GfsRun, forecast_hour: int, family: str = "2dfld") -> str:
+    """One forecast hour of one RRFS CONUS file family."""
+    return f"{RRFS_BASE_URL}/rrfs.{run.date}/{run.cycle}/rrfs.t{run.cycle}z.{family}.3km.f{forecast_hour:03d}.conus.grib2"
+
+
 def gefsaero_object_url(run: GfsRun, forecast_hour: int) -> str:
     """The GEFS-Aerosols two-dimensional file of one forecast hour: the
     GEFS cycle's ``chem`` member, its 0.25° product directory (the only
@@ -315,6 +322,8 @@ def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
     NOAA source publishes for one forecast hour."""
     if family == "wave":
         return wave_object_url(run, forecast_hour)
+    if family == "prslev":
+        return rrfs_object_url(run, forecast_hour, family)
     raise DownloadError(f"unknown companion file family: {family}")
 
 
@@ -2094,6 +2103,16 @@ def _hrrr_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Cal
         except DownloadError as exc:
             LOG.warning("could not probe HRRR mirror %s: %s", base_url, exc)
     return False
+
+
+def _rrfs_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:
+    # Every hour of both families, ``.idx`` included: the bucket's hours land
+    # out of order (F079 after F084 on 2026-11-05 12Z), so the ends prove nothing.
+    return all(
+        exists(url) and exists(url + ".idx")
+        for hour in spec.forecast_hours(hours, cycle=run.time.hour)
+        for url in (rrfs_object_url(run, hour), rrfs_object_url(run, hour, "prslev"))
+    )
 
 
 def _icon_eu_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Callable[[str], bool]) -> bool:

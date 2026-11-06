@@ -17,12 +17,35 @@ from typing import Literal
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .reproject import Regrid
-from .variables import AEROSOL_VARIABLE_IDS, CLOUD_WATER_VARIABLE_IDS, REFLECTIVITY_VARIABLE_IDS, RIVER_VARIABLE_IDS, VARIABLES
+from .variables import (
+    AEROSOL_VARIABLE_IDS,
+    CLOUD_WATER_VARIABLE_IDS,
+    REFLECTIVITY_VARIABLE_IDS,
+    RIVER_VARIABLE_IDS,
+    SMOKE_DUST_VARIABLE_IDS,
+    VARIABLES,
+)
 
 #: The aerosol quantities a CAMS window carries (xuebuild/cams/), in file
 #: order: GEFS-Aerosols' total and organic optical depth and its fine
 #: particulate matter.
 AEROSOL_SERIES_IDS = ("aod", "aodorg", "pm25")
+# What RRFS's ``prslev`` file adds to its ``2dfld``.
+RRFS_ISOBARIC_IDS = (
+    "hgt850",
+    "hgt700",
+    "hgt500",
+    "hgt250",
+    "tmp925",
+    "tmp850",
+    "tmp500",
+    "ugrd925",
+    "vgrd925",
+    "ugrd850",
+    "vgrd850",
+    "ugrd250",
+    "vgrd250",
+)
 
 #: How a feed packs the GRIB records a frame is cut from
 #: (:attr:`SourceSpec.packing`).
@@ -120,7 +143,7 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "gefsaero", "cfs",
+    """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "gefsaero", "cfs",
     "iconeu", "arpege", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
@@ -1465,6 +1488,76 @@ SOURCES: dict[str, SourceSpec] = {
         long_cycle_steps=((48, 1),),
         regrid=Regrid(step=0.03),
         series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m"),
+    ),
+    # NOAA RRFS, the convection-allowing model that replaced the NAM, with its
+    # smoke and dust inline (RRFS-SD): the deterministic run's CONUS output, on
+    # the very grid HRRR's is, so the same footprint, step and tile. The
+    # synoptic cycles run to F84 and the others stop at F18, which HRRR covers,
+    # so only the long ones are published. The surface set and the smoke and
+    # dust are in ``2dfld``, the isobaric levels in ``prslev`` beside it.
+    "rrfs": SourceSpec(
+        id="rrfs",
+        feed="noaa-rrfs",
+        manifest_model="RRFS",
+        product="2dfld.3km.conus",
+        latest_filename="latest-rrfs.json",
+        steps=((84, 1),),
+        companion_files=(CompanionFile(id="prslev", variable_ids=RRFS_ISOBARIC_IDS),),
+        input_variable_ids=(
+            "tmp2m",
+            "prate",
+            "ugrd10m",
+            "vgrd10m",
+            "ugrd80m",
+            "vgrd80m",
+            "prmsl",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "cpofp",
+            "fzlvl",
+            "cref",
+            "orog",
+            *SMOKE_DUST_VARIABLE_IDS,
+            *RRFS_ISOBARIC_IDS,
+        ),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prate",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "gust",
+            "tcdc",
+            "lcdc",
+            "mcdc",
+            "hcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "cpofp",
+            "fzlvl",
+            "cref",
+            "orog",
+            *SMOKE_DUST_VARIABLE_IDS,
+        ),
+        bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
+        production_grid=(2441, 1051),
+        tile=(64, 64),
+        fetch_concurrency=8,
+        regrid=Regrid(step=0.03),
+        series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m", "smokesfc"),
     ),
     # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol
     # model coupled to the GFS, whose two-dimensional output sits beside the

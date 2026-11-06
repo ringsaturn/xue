@@ -23,6 +23,7 @@ web/public/data/latest.json
 web/public/data/latest-ecmwf.json
 web/public/data/latest-sflux.json
 web/public/data/latest-hrrr.json
+web/public/data/latest-rrfs.json
 web/public/data/latest-mrms.json
 web/public/data/latest-jma.json
 web/public/data/latest-cma.json

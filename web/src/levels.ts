@@ -45,6 +45,7 @@ export type IsobaricFamily =
   | "wave"
   | "aod"
   | "pm"
+  | "smoke"
   | "tsoil"
   | "soilw";
 
@@ -63,6 +64,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "wave",
   "aod",
   "pm",
+  "smoke",
   "tsoil",
   "soilw",
 ];
@@ -241,6 +243,7 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "aodsulf", code: "SULF" },
       { id: "aodorg", code: "ORG" },
       { id: "aodbc", code: "BC" },
+      { id: "aotk", code: "COLUMN" },
     ],
   },
   // The surface particulate matter: PM2.5 heads the family, PM10 and the
@@ -257,6 +260,21 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "pm25", code: "2.5" },
       { id: "pm10", code: "10" },
       { id: "pm10dust", code: "10 DUST" },
+    ],
+  },
+  // RRFS-SD's near-surface smoke and dust, 8 m above the ground: the smoke
+  // heads the family, the model's two dust size cuts are its variants.
+  smoke: {
+    id: "smoke",
+    kind: "scalar",
+    surface: "smokesfc",
+    code: "SMOKE",
+    surfaceCode: "8 M",
+    glossKey: "varSmoke",
+    variants: [
+      { id: "smokesfc", code: "SMOKE" },
+      { id: "dustfine", code: "DUST 2.5" },
+      { id: "dustcoarse", code: "DUST 10" },
     ],
   },
   // The soil: the land surface model's four layers from the surface down,
@@ -714,6 +732,10 @@ const AEROSOL_CHART_MAX: Readonly<Record<AerosolChartFamily, number>> = {
   pm10: 1000,
   pm10dust: 1000,
   dustsfc: 50000,
+  smokesfc: 500,
+  dustfine: 500,
+  dustcoarse: 1000,
+  aotk: 5,
 };
 export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> = Object.fromEntries(
   (Object.entries(AEROSOL_CHART_MAX) as [AerosolChartFamily, number][]).map(([family, chartMax]) => [
@@ -721,7 +743,7 @@ export const AEROSOL_CHARTS: Readonly<Record<AerosolChartFamily, AerosolChart>> 
     { ...logCodebook(family), chartMax },
   ]),
 ) as Record<AerosolChartFamily, AerosolChart>;
-type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust" | "dustsfc";
+type AerosolChartFamily = "aod" | "aoddust" | "aodsalt" | "aodsulf" | "aodorg" | "aodbc" | "pm25" | "pm10" | "pm10dust" | "dustsfc" | "smokesfc" | "dustfine" | "dustcoarse" | "aotk";
 
 /** The aerosol chart of a family, or null for any other. */
 export function aerosolChart(family: ChartFamily): AerosolChart | null {
@@ -823,6 +845,7 @@ export function familyLabel(id: ForecastBundleId): string {
     wave: "varLabelHtsgw",
     aod: "varLabelAod",
     pm: "varLabelPm25",
+    smoke: "varLabelSmokesfc",
     tsoil: "varLabelTsoil1",
     soilw: "varLabelSoilw1",
   }[family!] as MessageKey;
@@ -853,6 +876,10 @@ const MEMBER_LABEL_KEYS: Record<string, MessageKey> = {
   pm25: "varLabelPm25",
   pm10: "varLabelPm10",
   pm10dust: "varLabelPm10dust",
+  smokesfc: "varLabelSmokesfc",
+  dustfine: "varLabelDustfine",
+  dustcoarse: "varLabelDustcoarse",
+  aotk: "varLabelAotk",
   tsoil1: "varLabelTsoil1",
   tsoil2: "varLabelTsoil2",
   tsoil3: "varLabelTsoil3",
@@ -884,6 +911,7 @@ export function isobaricCode(id: ForecastBundleId): string {
     wave: "WAVE",
     aod: "AOD",
     pm: "PM",
+    smoke: "SMOKE",
     tsoil: "TSOIL",
     soilw: "SOILW",
   }[family];

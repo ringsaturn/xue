@@ -96,6 +96,7 @@ compaction: lower-cased, whitespace and `*()[]` removed, `²` written `^2`.
 | `cloud-cover` | `%`; `-`, `1`, `fraction`, `proportion`, `0-1` | identity for `%`; × 100 otherwise |
 | `degrees-true` | `degreetrue`, `degtrue`, `degrees`, `degree`, `deg`, `degreestrue` | value mod 360 |
 | `geopotential-to-metres` | `gpm`, `m`; `m2/s2`, `m2s-2` (compacted further: `^` dropped too) | identity; ÷ 9.80665 for the geopotential |
+| `mass-density-to-micrograms` | `kg/m^3`, `kg/m3`, `kgm^-3`, `kgm-3` | × 10⁹, kg/m³ to µg/m³ |
 | `code-table` | `1`, `-`, empty, the entry's `table`, any spelling containing it or `0=no` (after dropping `codetable`) | identity |
 
 A GRIB record is accepted under the listed spellings alone. A series

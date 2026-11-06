@@ -106,6 +106,10 @@ export type ChartFamily =
   | "pm10"
   | "pm10dust"
   | "dustsfc"
+  | "smokesfc"
+  | "dustfine"
+  | "dustcoarse"
+  | "aotk"
   | "aurora"
   | "clw"
   | "dis06"
@@ -259,6 +263,9 @@ export function identityForParameter(parameter: BundleParameter, band?: BundleBa
     const channel = satelliteChannel(band);
     return channel === null ? null : scalar(channel, null);
   }
+  // RRFS's column optical thickness: no aerosol block, on NCEP's single-layer
+  // atmosphere where the GEFS-Aerosols fields are on the entire atmosphere.
+  if (isOnSurfaceOf(parameter, "aotk")) return scalar("aotk", null);
   if (AEROSOL_FIELDS.some((id) => isOnSurfaceOf(parameter, id))) {
     const field = aerosolField(parameter, aerosol);
     return field === null ? null : scalar(field, null);

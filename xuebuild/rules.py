@@ -43,6 +43,7 @@ CONVERSION_RULES = frozenset(
         "cloud-cover",
         "degrees-true",
         "geopotential-to-metres",
+        "mass-density-to-micrograms",
         "code-table",
     }
 )
@@ -123,6 +124,7 @@ PROPORTION_TO_PERCENT = Conversion("proportion-to-percent")
 CLOUD_COVER = Conversion("cloud-cover")
 DEGREES_TRUE = Conversion("degrees-true")
 GEOPOTENTIAL_TO_METRES = Conversion("geopotential-to-metres")
+MASS_DENSITY_TO_MICROGRAMS = Conversion("mass-density-to-micrograms")
 
 # The identity rules, named by what GDAL spells the quantity in. A list is
 # every spelling the GRIB driver, eccodes or udunits has been seen to use
@@ -183,6 +185,7 @@ _DEGREES_TRUE = ("degreetrue", "degtrue", "degrees", "degree", "deg", "degreestr
 # too, so both come out one way.
 _GEOPOTENTIAL_METRES = ("gpm", "m")
 _GEOPOTENTIAL = ("m2/s2", "m2s-2")
+_MASS_DENSITY = ("kg/m^3", "kg/m3", "kgm^-3", "kgm-3")
 
 _ACCEPTED: dict[str, tuple[str, ...]] = {
     "celsius": tuple(_TEMPERATURE_SPELLINGS),
@@ -196,6 +199,7 @@ _ACCEPTED: dict[str, tuple[str, ...]] = {
     "cloud-cover": ("%",) + _CLOUD_FRACTION,
     "degrees-true": _DEGREES_TRUE,
     "geopotential-to-metres": _GEOPOTENTIAL_METRES + _GEOPOTENTIAL,
+    "mass-density-to-micrograms": _MASS_DENSITY,
 }
 
 # What a refusal calls the quantity.
@@ -211,6 +215,7 @@ _NOUNS: dict[str, str] = {
     "cloud-cover": "cloud cover",
     "degrees-true": "direction",
     "geopotential-to-metres": "geopotential height",
+    "mass-density-to-micrograms": "mass density",
     "code-table": "code table",
 }
 
@@ -298,6 +303,8 @@ def _scaled(conversion: Conversion, unit: str) -> bool:
         return compact in _CLOUD_FRACTION
     if rule == "geopotential-to-metres":
         return compact in _GEOPOTENTIAL
+    if rule == "mass-density-to-micrograms":
+        return compact in _MASS_DENSITY
     return False
 
 
@@ -329,6 +336,8 @@ def expression(conversion: Conversion, unit: str) -> str:
         return "A/1000"
     if rule in ("proportion-to-percent", "cloud-cover"):
         return "A*100"
+    if rule == "mass-density-to-micrograms":
+        return "A*1000000000"
     assert rule == "geopotential-to-metres"
     return f"A/{STANDARD_GRAVITY:g}"
 
@@ -367,6 +376,8 @@ def convert(conversion: Conversion, unit: str, values: np.ndarray) -> np.ndarray
         values *= 1000.0
     elif rule in ("proportion-to-percent", "cloud-cover"):
         values *= 100.0
+    elif rule == "mass-density-to-micrograms":
+        values *= 1e9
     else:
         assert rule == "geopotential-to-metres"
         values /= STANDARD_GRAVITY

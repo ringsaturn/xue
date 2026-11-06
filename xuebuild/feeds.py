@@ -148,6 +148,15 @@ class NoaaHrrr(FrameFeed):
         return fetch._download_hrrr_payload(run, forecast_hour, spec, input_ids)
 
 
+class NoaaRrfs(NoaaGrib):
+    """RRFS on the bucket NODD fills out of order: every hour proves a run."""
+
+    def is_complete(
+        self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
+    ) -> bool:
+        return fetch._rrfs_run_is_complete(spec, run, hours, exists)
+
+
 class EcmwfOpenData(FrameFeed):
     """The ECMWF open data service (:data:`xuebuild.fetch.ECMWF_OPEN_DATA_MODELS`):
     ``.index`` sidecars, three mirrors, the ``wave`` stream companion."""
@@ -404,6 +413,7 @@ FEEDS: dict[str, Fetcher] = {
     "noaa-sflux": NoaaGrib(fetch.sflux_object_url),
     "noaa-gefs-aerosols": NoaaGrib(fetch.gefsaero_object_url),
     "noaa-hrrr": NoaaHrrr(),
+    "noaa-rrfs": NoaaRrfs(fetch.rrfs_object_url),
     "noaa-cfs": NoaaCfs(),
     "noaa-mrms": NoaaMrms(),
     "ecmwf-open-data": EcmwfOpenData(),

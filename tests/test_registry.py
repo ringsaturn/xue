@@ -28,6 +28,7 @@ CONVERSION_RULES = {
     "cloud-cover",
     "degrees-true",
     "geopotential-to-metres",
+    "mass-density-to-micrograms",
     "code-table",
 }
 MATCH_RULES = {

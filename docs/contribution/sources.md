@@ -20,6 +20,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `ifs` | forecast | ECMWF open data at 0.1°, `-sfc`/`-pl` objects reassembled | `tmp2m`, `prate` |
 | `aifs` | forecast | ECMWF open data (`aifs-single`) | `tmp2m`, `prate` |
 | `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | `tmp2m`, `prate` |
+| `rrfs` | forecast (regional, regridded), with smoke and dust | NOAA, every hour proves a run | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | `aod` |
 | `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | `dustsfc` |
 | `silam` | series-file forecast (air quality) | FMI open data on AWS, whole NetCDF-4 day files | `pm25` |
@@ -86,7 +87,7 @@ newest frame (`latest_slot`) and the run's download (`fetch_run`) — so
 nothing in the fetch tests a source id. A family is an upstream service and
 the shape of its objects: `noaa-gfs`, `noaa-sflux` and
 `noaa-gefs-aerosols` share the `.idx` byte-range path under their own
-object names; `noaa-hrrr`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
+object names; `noaa-hrrr`, `noaa-rrfs`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
 `dwd-icon-eu` and `meteofrance-arpege` are the other one-GRIB-per-hour
 feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
 `open-meteo`, `cmadust` and `fmi-silam` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
@@ -219,6 +220,28 @@ shell clips to the footprint (`FORECAST_MODELS[].domain`, `web/src/domain.ts`).
 surface 103 at 80 m). The 00/06/12/18Z cycles run to F48: `long_cycles`
 lets a build that names one of them ask for `--hours 48`, while the
 published axis, the `--hours` default and the live runs stay at F18.
+
+**rrfs.** NOAA's Rapid Refresh Forecast System, operational since the 2026-11-03
+12Z cycle (SCN 26-48), from its NODD bucket (`noaa-rrfs-ops-pds`,
+`XUE_RRFS_BASE_URL`, also holding the parallel feed back to 2026-08-12). The
+deterministic run's CONUS output is on HRRR's grid to the last digit of the
+origin, so `regrid`, footprint, tile and the shell's `domain` are HRRR's and no
+projection code is new. The 3 km North America output (polar stereographic)
+carries only eighteen records and the 13 km one is on a rotated grid neither
+encoder reads. A frame comes from two objects, `2dfld` and the `prslev`
+companion, about 47 MB of ranges together, and the bucket fills them out of
+order, so a run is complete only when every hour of both is there with its
+`.idx`. RRFS-SD is no separate product: smoke and dust are records of `2dfld`.
+Near-surface concentrations are template 4.48 `MASSDEN` (0/20/0) at 8 m in
+kg/m³, hence the `mass-density-to-micrograms` rule, smoke as particulate organic
+matter under 2.5 µm (62010) and dust as two size cuts (62001). Total PM2.5 and
+PM10 are hour means in template 4.46, whose records GDAL names `unknown` and no
+matcher reads, so they are not published; column masses (`COLMD`) would need a
+second rule. `AOTK` is template 4.0 on surface 200 with no species or wavelength,
+so it is `aotk` rather than `aod`. Three spellings differ from HRRR's: `PRATE`
+has a maximum beside it (excluded), `REFC` is WMO 0/16/5 on surface 200 (an
+alternate), and the sea level pressure is `MSLET`, accepted under `prmsl` as
+`MSLMA` is. `tests/test_rrfs.py`.
 
 **gefsaero.** GEFS-Aerosols, the `chem/pgrb2ap25/` `a2d_0p25` files
 (`XUE_GEFS_BASE_URL`). Nine scalars: 550 nm AOD total

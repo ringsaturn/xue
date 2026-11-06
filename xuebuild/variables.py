@@ -415,7 +415,8 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 50),
         grib_element="PRATE",
         index_field=":PRATE:surface:",
-        excluded_index_phrases=("ave fcst",),
+        # RRFS writes the hour's maximum beside the instantaneous rate.
+        excluded_index_phrases=("ave fcst", "max fcst"),
         grib2_category=1,
         grib2_number=7,
         grib2_level_type=1,
@@ -626,19 +627,20 @@ VARIABLES: dict[str, VariableSpec] = {
     # so the two sources carry the same field under one identity. HRRR
     # writes only the MAPS reduction, MSLMA (0/3/198, NCEP-local), the
     # reduction its own analysis system uses; it is the sea level pressure
-    # of that model and is accepted under the same identity. MSLET (0/3/192,
-    # the NCEP-local Shuell reduction) is a different quantity and is
-    # deliberately not registered. Surface 101 is "mean sea level", which
-    # carries no value.
+    # of that model and is accepted under the same identity. RRFS writes only
+    # NCEP's Shuell reduction, MSLET (0/3/192), the sea level pressure of that
+    # model in the same way; it is read only where a file has no PRMSL, since
+    # the index tries it after. Surface 101 is "mean sea level", which carries
+    # no value.
     "prmsl": VariableSpec(
         id="prmsl",
         # GRIB2 carries pascals; the codebook quantizes hectopascals. Only
         # Pa is accepted: a file already in hPa would divide twice, and no
         # source publishes one.
         conversion=rules.PASCAL_TO_HECTOPASCAL,
-        # GDAL names the ECMWF record PRES and HRRR's MSLMA; the surface is
-        # what makes them the same field.
-        gdal_rules=(rules.mean_sea_level("PRMSL", "PRES", "MSLMA"),),
+        # GDAL names the ECMWF record PRES, HRRR's MSLMA and RRFS's MSLET; the
+        # surface is what makes them the same field.
+        gdal_rules=(rules.mean_sea_level("PRMSL", "PRES", "MSLMA", "MSLET"),),
         companions=(),
         label="Mean sea level pressure",
         dwd_param="PMSL",
@@ -646,12 +648,12 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(870, 1125),
         grib_element="PRMSL",
         index_field=":PRMSL:mean sea level:",
-        alternate_index_fields=(":MSLMA:mean sea level:",),
+        alternate_index_fields=(":MSLMA:mean sea level:", ":MSLET:mean sea level:"),
         ecmwf_param="msl",
         open_meteo="pressure_msl",
         grib2_category=3,
         grib2_number=1,
-        grib2_aliases=((0, 3, 0), (0, 3, 198)),
+        grib2_aliases=((0, 3, 0), (0, 3, 198), (0, 3, 192)),
         grib2_level_type=101,
         gdal_unit="Pa",
     ),
@@ -678,6 +680,7 @@ VARIABLES: dict[str, VariableSpec] = {
         value_range=(0, 80),
         grib_element="REFC",
         index_field=":REFC:entire atmosphere:",
+        alternate_index_fields=(":REFC:entire atmosphere (considered as a single layer):",),
         grib2_category=16,
         grib2_number=5,
         grib2_aliases=((0, 16, 196),),
@@ -691,7 +694,11 @@ VARIABLES: dict[str, VariableSpec] = {
         # which is the value a renderer paints as nothing, and the sub-zero
         # returns that remain are clamped there by the codebook.
         mrms_product="MergedReflectivityQCComposite_00.50",
-        grib2_alternates=(RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),),
+        grib2_alternates=(
+            # RRFS: the WMO number on NCEP's single-layer atmosphere.
+            RecordAlternate(0, 16, 5, 200),
+            RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),
+        ),
         fill_values=(-999.0, -99.0),
     ),
     # The radar quality index: the MRMS mosaic's own estimate, 0 to 1 in
@@ -2083,6 +2090,75 @@ VARIABLES: dict[str, VariableSpec] = {
         grib2_aerosol=AerosolIdentity(62001),
         gdal_rules=(),
     ),
+    # RRFS-SD, the smoke and dust RRFS carries inline: mass densities 8 m above
+    # the ground, in kg/m³ under the WMO 0/20/0 of template 4.48, published in
+    # µg/m³. The aerosol type is what tells them apart: smoke is written as
+    # particulate organic matter under 2.5 µm, dust as two size cuts. RRFS has
+    # no dust record of both cuts at this height, so each is a field.
+    "smokesfc": VariableSpec(
+        id="smokesfc",
+        conversion=rules.MASS_DENSITY_TO_MICROGRAMS,
+        label="Near-surface smoke concentration",
+        output_unit="µg/m³",
+        value_range=(0, 2000),
+        grib_element="MASSDEN",
+        index_field=":MASSDEN:8 m above ground:",
+        index_qualifier=":aerosol=Particulate organic matter dry:aerosol_size <2.5e-06:",
+        grib2_category=20,
+        grib2_number=0,
+        grib2_level_type=103,
+        grib2_level_value=8.0,
+        grib2_aerosol=AerosolIdentity(62010, size_type=0, size_first=(7, 25), size_second=(0, 0)),
+        gdal_unit="kg/(m^3)",
+    ),
+    "dustfine": VariableSpec(
+        id="dustfine",
+        conversion=rules.MASS_DENSITY_TO_MICROGRAMS,
+        label="Near-surface fine dust concentration",
+        output_unit="µg/m³",
+        value_range=(0, 1000),
+        grib_element="MASSDEN",
+        index_field=":MASSDEN:8 m above ground:",
+        index_qualifier=":aerosol=Dust dry:aerosol_size <2.5e-06:",
+        grib2_category=20,
+        grib2_number=0,
+        grib2_level_type=103,
+        grib2_level_value=8.0,
+        grib2_aerosol=AerosolIdentity(62001, size_type=0, size_first=(7, 25), size_second=(0, 0)),
+        gdal_unit="kg/(m^3)",
+    ),
+    "dustcoarse": VariableSpec(
+        id="dustcoarse",
+        conversion=rules.MASS_DENSITY_TO_MICROGRAMS,
+        label="Near-surface coarse dust concentration",
+        output_unit="µg/m³",
+        value_range=(0, 2000),
+        grib_element="MASSDEN",
+        index_field=":MASSDEN:8 m above ground:",
+        index_qualifier=":aerosol=Dust dry:aerosol_size >=2.5e-06,<1e-05:",
+        grib2_category=20,
+        grib2_number=0,
+        grib2_level_type=103,
+        grib2_level_value=8.0,
+        grib2_aerosol=AerosolIdentity(62001, size_type=2, size_first=(7, 25), size_second=(7, 100)),
+        gdal_unit="kg/(m^3)",
+    ),
+    # RRFS's column optical thickness: template 4.0, so no species and no
+    # wavelength said, which is why it is not GEFS-Aerosols' ``aod``.
+    "aotk": VariableSpec(
+        id="aotk",
+        conversion=rules.DIMENSIONLESS,
+        gdal_rules=(rules.entire_atmosphere("AOTK"),),
+        label="Aerosol optical thickness",
+        output_unit="1",
+        value_range=(0, 5),
+        grib_element="AOTK",
+        index_field=":AOTK:entire atmosphere",
+        grib2_category=20,
+        grib2_number=102,
+        grib2_level_type=200,
+        gdal_unit="Numeric",
+    ),
     # The NOAA SWPC OVATION model's aurora probability: the chance, in
     # percent, that aurora is visible overhead, on a regular 1° global grid
     # (360 × 181 cells, 0–359°E, 90°S–90°N). A space weather product rather
@@ -2166,6 +2242,8 @@ AEROSOL_VARIABLE_IDS: tuple[str, ...] = (
     "pm10",
     "pm10dust",
 )
+# RRFS-SD's smoke and dust, which GEFS-Aerosols does not publish.
+SMOKE_DUST_VARIABLE_IDS: tuple[str, ...] = ("smokesfc", "dustfine", "dustcoarse", "aotk")
 # The ids the Celsius rule applies to at the surface (and in the soil below
 # it): GDAL normalizes every GRIB temperature to Celsius, and the converter
 # accepts K and F as well.

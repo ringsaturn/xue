@@ -453,6 +453,21 @@ QUALITY_DUST_SURFACE = PrecipitationCodebook(trace=1.0, scale=10.0, maximum=5000
 COMPACT_DUST_SURFACE = PrecipitationCodebook(
     trace=1.0, scale=10.0, maximum=50000.0, maximum_code=125, overflow_code=126, nodata_code=127, name="dustsfc"
 )
+# RRFS-SD: the GEFS-Aerosols shapes. A fire's own plume passes 1000 µg/m³ at the
+# ground, so the smoke takes the coarse scale's headroom; the column is coded
+# like the optical depths.
+QUALITY_SMOKE_DUST = {
+    "smokesfc": replace(QUALITY_PM10, name="smokesfc"),
+    "dustfine": replace(QUALITY_PM25, name="dustfine"),
+    "dustcoarse": replace(QUALITY_PM10, name="dustcoarse"),
+    "aotk": replace(QUALITY_AOD, name="aotk"),
+}
+COMPACT_SMOKE_DUST = {
+    "smokesfc": replace(COMPACT_PM10, name="smokesfc"),
+    "dustfine": replace(COMPACT_PM25, name="dustfine"),
+    "dustcoarse": replace(COMPACT_PM10, name="dustcoarse"),
+    "aotk": replace(COMPACT_AOD, name="aotk"),
+}
 QUALITY_SATELLITE = {
     **{channel_id: _brightness_temperature(channel_id)[0] for channel_id in SATELLITE_INFRARED_IDS},
     **{channel_id: _reflectance(channel_id)[0] for channel_id in SATELLITE_REFLECTANCE_IDS},
@@ -846,6 +861,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
         "dustsfc": QUALITY_DUST_SURFACE,
+        **QUALITY_SMOKE_DUST,
         **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
@@ -886,6 +902,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **COMPACT_SATELLITE,
         **COMPACT_AEROSOL,
         "dustsfc": COMPACT_DUST_SURFACE,
+        **COMPACT_SMOKE_DUST,
         **COMPACT_RIVER,
         **COMPACT_PRESSURE,
         **COMPACT_ISOBARIC,
@@ -938,6 +955,7 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **QUALITY_SATELLITE,
         **QUALITY_AEROSOL,
         "dustsfc": QUALITY_DUST_SURFACE,
+        **QUALITY_SMOKE_DUST,
         **QUALITY_RIVER,
         **QUALITY_PRESSURE,
         **QUALITY_ISOBARIC,
