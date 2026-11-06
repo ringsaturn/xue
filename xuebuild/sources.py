@@ -16,7 +16,6 @@ from typing import Literal
 
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
-from .reproject import Regrid
 from .variables import (
     AEROSOL_VARIABLE_IDS,
     CLOUD_WATER_VARIABLE_IDS,
@@ -132,8 +131,7 @@ class Downsample:
     whose fills are already the codebook bottom has no floating-point order
     to disagree on, so the two encoders repeat it byte for byte for free.
     Runs after the fill rules and before any crop; the grid ``production_grid``
-    and ``tile`` describe is the thinned one. Mutually exclusive with
-    ``regrid``: a projected source is resampled, not thinned."""
+    and ``tile`` describe is the thinned one."""
 
     factor: int
     """Cells per block along each axis; the source dimensions must divide
@@ -416,8 +414,8 @@ class SourceSpec:
     wrote."""
     downsample: Downsample | None = None
     """Set when the source is published on a grid coarser than it arrives
-    on (:class:`Downsample`). Like ``regrid``, ``production_grid`` and
-    ``tile`` describe the grid the bundles carry, not the source's."""
+    on (:class:`Downsample`). ``production_grid`` and ``tile`` then describe
+    the grid the bundles carry, not the source's."""
     cycle_hours: int = 6
     """Hours between the source's cycles: a run starts on a multiple of this
     (00/06/12/18 UTC for the global models, every hour for HRRR)."""
@@ -431,12 +429,21 @@ class SourceSpec:
     long_cycle_steps: tuple[tuple[int, int], ...] = ()
     """The axis segments, in :attr:`steps`'s ``(last_hour, step_hours)``
     form, that continue :attr:`steps` on a :attr:`long_cycles` cycle."""
-    regrid: Regrid | None = None
-    """Set when the source's records are on a map projection rather than a
-    regular latitude/longitude grid, and must be resampled onto one of this
-    step before anything else reads them (:mod:`xuebuild.reproject`). The
-    grid the bundles carry is then the regular one; ``production_grid`` and
-    ``tile`` describe it, not the projected source."""
+    grid_relative_winds: bool = False
+    """True for a source whose records are on a map projection, published as
+    they are (:mod:`xuebuild.reproject`), with their wind components along the
+    grid's axes (GRIB2 template 3.30, resolution and component flags 0x08). Every
+    vector bundle's pair is turned to east and north before it is quantized, so
+    what a bundle publishes means one thing on every source, and the bundle's
+    dimensions are ``y`` and ``x``. One flag for both because no source is
+    projected with earth-relative winds; ``grid.grid_info`` refuses a file whose
+    kind disagrees with it."""
+    gaussian_n: int | None = None
+    """Latitudes per hemisphere, on a source whose primary grid is a regular
+    Gaussian one: the bundles keep their regular fields and carry a
+    ``grid.gaussian`` block beside them, and a store's ``latitude`` coordinate
+    holds the true rows (:func:`~xuebuild.reproject.gaussian_latitude`). A grid
+    family of its own is not covered: CFSv2's 1° levels are regular."""
     video: bool = False
     """Always off: the H.264 companion is retired (``docs/format.md``) and
     nothing reads this. It stays a field only because the registry document
@@ -1368,8 +1375,10 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=12,
     ),
     # GFS surface flux files on the native ~13 km T1534 Gaussian grid
-    # (3072x1536; GDAL reports a uniform geoTransform whose tiny latitude
-    # deviation from the true Gaussian latitudes is far below a pixel).
+    # (3072x1536; GDAL reports a uniform geoTransform, which stays what the
+    # bundles' regular fields say, a tiny deviation from the true Gaussian
+    # latitudes below any filter's resolution, and the true ones are declared
+    # beside it for whatever names a place).
     # Adds the dswrf solar-radiation layer; prate is de-averaged from the
     # window-cumulative PRATE averages.
     "sflux": SourceSpec(
@@ -1393,15 +1402,14 @@ SOURCES: dict[str, SourceSpec] = {
         # clipped edge, at about the same 11-degree ground scale as the
         # 0p25 grid's 48 x 52.
         tile=(96, 96),
+        gaussian_n=768,
     ),
     # NOAA HRRR: the 3 km convection-allowing model over the contiguous
     # United States, a new cycle every hour, hourly to F18 (the four
     # synoptic cycles run to F48, which is not published here so every
     # cycle reads the same; a build that names one of them may ask for it). Computed on a Lambert conformal conic grid
-    # (1799 x 1059), so the encoder resamples every plane onto a regular
-    # 0.03° grid over the domain's footprint — about 3.3 km north-south and
-    # 2.6 km east-west at the domain's middle latitude — and the bundles
-    # carry that grid (xuebuild/reproject.py). The records come from the
+    # (1799 x 1059), which the bundles carry as it is, its winds turned to east
+    # and north (xuebuild/reproject.py). The records come from the
     # 2-D surface file (``wrfsfcf``), which carries the surface set and a
     # handful of pressure levels: no 250 hPa height, no isobaric humidity
     # (dew point instead), no apparent temperature. Its sea level pressure
@@ -1475,23 +1483,20 @@ SOURCES: dict[str, SourceSpec] = {
             "orog",
         ),
         bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
-        # The 0.03° grid over the footprint of the 1799 x 1059 domain: the
-        # north-west corner is at 134.10 W, 52.62 N and the grid runs to
-        # 60.90 W, 21.12 N (reproject.build_resampler snaps the footprint
-        # outwards to whole steps).
-        production_grid=(2441, 1051),
-        # 64 x 64 cells is about 1.9° at this step — 39 x 17 = 663 tiles,
-        # each a series of nineteen 4 KB planes.
+        # The model's own domain, 3 km Lambert conformal.
+        production_grid=(1799, 1059),
+        # 64 x 64 cells is 192 km: 29 x 17 = 493 tiles, each a series of
+        # nineteen 4 KB planes.
         tile=(64, 64),
         cycle_hours=1,
         long_cycles=(0, 6, 12, 18),
         long_cycle_steps=((48, 1),),
-        regrid=Regrid(step=0.03),
+        grid_relative_winds=True,
         series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m"),
     ),
     # NOAA RRFS, the convection-allowing model that replaced the NAM, with its
     # smoke and dust inline (RRFS-SD): the deterministic run's CONUS output, on
-    # the very grid HRRR's is, so the same footprint, step and tile. The
+    # the very grid HRRR's is, so the same domain and tile. The
     # synoptic cycles run to F84 and the others stop at F18, which HRRR covers,
     # so only the long ones are published. The surface set and the smoke and
     # dust are in ``2dfld``, the isobaric levels in ``prslev`` beside it.
@@ -1553,10 +1558,10 @@ SOURCES: dict[str, SourceSpec] = {
             *SMOKE_DUST_VARIABLE_IDS,
         ),
         bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
-        production_grid=(2441, 1051),
+        production_grid=(1799, 1059),
         tile=(64, 64),
         fetch_concurrency=8,
-        regrid=Regrid(step=0.03),
+        grid_relative_winds=True,
         series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m", "smokesfc"),
     ),
     # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol
@@ -1753,6 +1758,7 @@ SOURCES: dict[str, SourceSpec] = {
         # a tile is what keeps one cell's nine-month series to a few
         # hundred kilobytes rather than the whole grid's.
         tile=(96, 95),
+        gaussian_n=95,
     ),
     # DWD ICON-EU: the European nest of DWD's ICON model at 0.0625° (about
     # 7 km), already on a regular latitude/longitude grid, so nothing is

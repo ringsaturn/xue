@@ -25,6 +25,7 @@ from .bundles import VECTOR_BUNDLES, bundle_variable_ids
 from .ladder import VARIANT_TIERS
 from .errors import ManifestError, XueError
 from .manifest import is_shared_store_path, iso_z
+from .reproject import ProjectedGrid
 from .sources import SOURCES, SourceSpec, source_spec
 from .variables import VARIABLES
 
@@ -38,6 +39,7 @@ SHOWCASE_COLLECTION_ID = "showcase"
 
 FORECAST_EXTENSION = "https://stac-extensions.github.io/forecast/v0.2.0/schema.json"
 DATACUBE_EXTENSION = "https://stac-extensions.github.io/datacube/v2.3.0/schema.json"
+PROJECTION_EXTENSION = "https://stac-extensions.github.io/projection/v2.0.0/schema.json"
 FILE_EXTENSION = "https://stac-extensions.github.io/file/v2.1.0/schema.json"
 
 # `application/vnd.zarr` is the media type pystac 1.14 registers for a Zarr
@@ -183,9 +185,16 @@ def _grid_of(manifest: dict[str, Any]) -> dict[str, Any] | None:
     manifest predates the field, so the metadata blocks are the fallback: a
     video describes the full grid, a poster the decimated one, whose steps are
     halved back and whose dimensions stay decimated — the origin is then exact
-    and the far edge is right to within one full cell."""
+    and the far edge is right to within one full cell.
+
+    A grid on a map projection has none of those: it reads as ``{projection,
+    block, dx, dy, width, height, wraps}``, ``projection`` the
+    :class:`~xuebuild.reproject.ProjectedGrid` its block declares (read off the
+    block's own cell centers) and ``dx``/``dy`` its steps by the same rule."""
     for bundle in manifest["bundles"]:
         grid = bundle.get("grid")
+        if grid is not None and "projection" in grid:
+            return _projected_grid_of(grid, 1)
         if grid is not None:
             longitude_step = float(grid["longitudeStep"])
             latitude_step = float(grid["latitudeStep"])
@@ -203,6 +212,8 @@ def _grid_of(manifest: dict[str, Any]) -> dict[str, Any] | None:
     for kind, metadata in _metadata_blocks(manifest):
         grid = metadata["grid"]
         divisor = 2 if kind == "poster" else 1
+        if "projection" in grid:
+            return _projected_grid_of(grid, divisor)
         return {
             "first_longitude": float(grid["firstLongitude"]),
             "first_latitude": float(grid["firstLatitude"]),
@@ -218,11 +229,35 @@ def _grid_of(manifest: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _projected_grid_of(grid: dict[str, Any], divisor: int) -> dict[str, Any]:
+    width, height = int(grid["width"]), int(grid["height"])
+    projected = ProjectedGrid.from_metadata(grid["projection"], width, height)
+    return {
+        "projection": projected,
+        "block": grid,
+        "dx": projected.dx / divisor,
+        "dy": projected.dy / divisor,
+        "width": width,
+        "height": height,
+        "wraps": False,
+    }
+
+
 def _extent_of(grid: dict[str, Any]) -> list[float]:
     """``[west, south, east, north]`` over cell centers, the way
     ``showcase._grid_extent`` reads a cropped grid; a wrapping grid is the
     whole circle. A regional window across the antimeridian keeps its own
-    frame (east < west), the GeoJSON convention for a bbox there."""
+    frame (east < west), the GeoJSON convention for a bbox there. A projected
+    grid's are the extremes of its footprint, over a rectangle its trapezoid
+    does not fill."""
+    if "projection" in grid:
+        west, south, east, north = grid["projection"].footprint()
+        return [
+            round((west + 180.0) % 360.0 - 180.0, 6),
+            round(south, 6),
+            round((east + 180.0) % 360.0 - 180.0, 6),
+            round(north, 6),
+        ]
     west = grid["first_longitude"]
     north = grid["first_latitude"]
     south = north + (grid["height"] - 1) * grid["center_latitude_step"]
@@ -287,6 +322,8 @@ def _temporal_dimension(run_time: datetime, leads: list[int]) -> dict[str, Any]:
 
 
 def _spatial_dimensions(grid: dict[str, Any], bbox: list[float]) -> dict[str, Any]:
+    if "projection" in grid:
+        return _projected_dimensions(grid)
     return {
         "x": {
             "type": "spatial",
@@ -302,6 +339,47 @@ def _spatial_dimensions(grid: dict[str, Any], bbox: list[float]) -> dict[str, An
             "step": abs(grid["latitude_step"]),
             "reference_system": 4326,
         },
+    }
+
+
+def _projected_dimensions(grid: dict[str, Any]) -> dict[str, Any]:
+    """The cube's two axes on a map projection: the grid's own, in metres, over
+    its cell centers."""
+    projected: ProjectedGrid = grid["projection"]
+    wkt = projected.projection.wkt()
+    last_x = projected.x0 + (projected.width - 1) * projected.dx
+    last_y = projected.y0 + (projected.height - 1) * projected.dy
+    return {
+        "x": {
+            "type": "spatial",
+            "axis": "x",
+            "extent": [projected.x0, last_x],
+            "step": abs(grid["dx"]),
+            "reference_system": wkt,
+        },
+        "y": {
+            "type": "spatial",
+            "axis": "y",
+            "extent": [last_y, projected.y0],
+            "step": abs(grid["dy"]),
+            "reference_system": wkt,
+        },
+    }
+
+
+def _projection_properties(grid: dict[str, Any]) -> dict[str, Any]:
+    """The projection extension's fields of a grid on a map projection, which
+    has no EPSG code. ``proj:bbox`` and ``proj:transform`` are the outer edges of
+    the cells, where the grid block and the cube name their centers."""
+    projected: ProjectedGrid = grid["projection"]
+    left = projected.x0 - projected.dx / 2.0
+    top = projected.y0 - projected.dy / 2.0
+    return {
+        "proj:code": None,
+        "proj:wkt2": projected.projection.wkt(),
+        "proj:shape": [projected.height, projected.width],
+        "proj:bbox": [left, top + projected.height * projected.dy, left + projected.width * projected.dx, top],
+        "proj:transform": [projected.dx, 0.0, left, 0.0, projected.dy, top],
     }
 
 
@@ -575,7 +653,18 @@ def _item_properties(
         "cube:dimensions": dimensions,
         "cube:variables": _variables_of(manifest, ["time", "y", "x"] if grid is not None else ["time"]),
     }
-    if grid is not None and "width" in grid:
+    if grid is not None and "projection" in grid:
+        # The block verbatim, as the store's ``attributes.xue.grid`` has it.
+        block = grid["block"]
+        properties["xue:grid"] = {
+            "width": block["width"],
+            "height": block["height"],
+            "wrapLongitude": False,
+            "projection": block["projection"],
+        }
+        properties.update(_projection_properties(grid))
+        extensions.append(PROJECTION_EXTENSION)
+    elif grid is not None and "width" in grid:
         # The full grid a client places a point on, the same block the store's
         # ``attributes.xue.grid`` carries, so no reader has to open the store
         # (or un-decimate a poster) to probe a cell. A showcase case builds a

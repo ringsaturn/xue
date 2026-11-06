@@ -87,6 +87,28 @@ REGIONAL_POSTER_GRID = {
 }
 
 
+LAMBERT_GRID = {
+    "width": 1799,
+    "height": 1059,
+    "layout": "row-major",
+    "rowOrder": "north-to-south",
+    "columnOrder": "west-to-east",
+    "wrapLongitude": False,
+    "projection": {
+        "kind": "lambert-conformal",
+        "radius": 6371229.0,
+        "standardParallel1": 38.5,
+        "standardParallel2": 38.5,
+        "latitudeOfOrigin": 38.5,
+        "centralMeridian": -97.5,
+        "x0": -2697520.143,
+        "y0": 1586693.847,
+        "dx": 3000.0,
+        "dy": -3000.0,
+    },
+}
+
+
 def _poster(variable: str, metadata: str) -> dict:
     return {
         "path": f"{variable}.poster.bin",
@@ -239,6 +261,52 @@ class RunItemTests(unittest.TestCase):
         )
         self.assertEqual(item["bbox"], [-180.0, -90.0, 180.0, 90.0])
         self.assertEqual(properties["cube:dimensions"]["x"]["step"], 0.25)
+
+    def test_a_projected_grid_is_stated_as_it_is(self) -> None:
+        entry = _store_entry("tmp2m")
+        entry["grid"] = LAMBERT_GRID
+        item = stac.run_item(
+            _manifest([entry], model="hrrr", hours=18),
+            "0badf00d",
+            source=source_spec("hrrr"),
+            manifest_relative_path="hrrr.2026110500/manifest.json",
+        )
+        properties = item["properties"]
+        self.assertEqual(
+            properties["xue:grid"],
+            {"width": 1799, "height": 1059, "wrapLongitude": False, "projection": LAMBERT_GRID["projection"]},
+        )
+        # The footprint's extremes, over the cell centers.
+        self.assertEqual(item["bbox"], [-134.09548, 21.138123, -60.917193, 52.615653])
+        self.assertEqual(item["geometry"]["type"], "Polygon")
+        dimensions = properties["cube:dimensions"]
+        self.assertEqual(dimensions["x"]["extent"], [-2697520.143, -2697520.143 + 1798 * 3000.0])
+        self.assertEqual(dimensions["y"]["extent"], [1586693.847 + 1058 * -3000.0, 1586693.847])
+        self.assertEqual((dimensions["x"]["step"], dimensions["y"]["step"]), (3000.0, 3000.0))
+        self.assertIn("Lambert Conic Conformal", dimensions["x"]["reference_system"])
+        self.assertIn(stac.PROJECTION_EXTENSION, item["stac_extensions"])
+        self.assertIsNone(properties["proj:code"])
+        self.assertEqual(properties["proj:shape"], [1059, 1799])
+        self.assertEqual(properties["proj:transform"], [3000.0, 0.0, -2699020.143, 0.0, -3000.0, 1588193.847])
+        self.assertEqual(properties["proj:wkt2"], dimensions["x"]["reference_system"])
+        self.assertEqual(properties["cube:variables"]["tmp2m"]["dimensions"], ["time", "y", "x"])
+
+    def test_a_projected_posters_grid_is_halved_back(self) -> None:
+        half = {**LAMBERT_GRID, "width": 900, "height": 530}
+        half["projection"] = {**LAMBERT_GRID["projection"], "dx": 6000.0, "dy": -6000.0}
+        poster = _poster("tmp2m", _metadata(grid=half, count=19))
+        item = stac.run_item(
+            _manifest([_store_entry("tmp2m", poster=poster)], model="hrrr", hours=18),
+            "0badf00d",
+            source=source_spec("hrrr"),
+            manifest_relative_path="hrrr.2026110500/manifest.json",
+        )
+        self.assertEqual(item["properties"]["cube:dimensions"]["x"]["step"], 3000.0)
+        self.assertEqual(item["bbox"][0], -134.09548)
+
+    def test_a_regular_item_names_no_projection(self) -> None:
+        self.assertNotIn(stac.PROJECTION_EXTENSION, self.item["stac_extensions"])
+        self.assertNotIn("proj:wkt2", self.item["properties"])
 
     def test_assets_are_one_per_artifact(self) -> None:
         assets = self.item["assets"]

@@ -1,0 +1,60 @@
+name: publish rrfs
+
+# NOAA RRFS with its smoke and dust, 3 km over the contiguous United States:
+# the 00/06/12/18Z cycles, hourly to F84, on the model's own Lambert conformal
+# grid (1799 × 1059). Eighty-five frames of 1.9 million cells, so the run is split
+# into twice HRRR's jobs. The pipeline lives in the reusable publish.yml.
+
+on:
+  schedule:
+    # A cycle's last hour reached the bucket 2:55 to 3:30 after the cycle in
+    # the first week of operations; the second try catches a late one.
+    - cron: "45 3,9,15,21 * * *"
+    - cron: "45 4,10,16,22 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (00, 06, 12 or 18)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-rrfs-dry-{0}', github.run_id) || 'publish-rrfs' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: rrfs
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      max_jobs: 8
+    secrets: inherit

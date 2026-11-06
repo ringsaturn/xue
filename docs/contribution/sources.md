@@ -19,8 +19,8 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `ecmwf` | forecast | ECMWF open data, repacked from CCSDS | `tmp2m`, `prate` |
 | `ifs` | forecast | ECMWF open data at 0.1°, `-sfc`/`-pl` objects reassembled | `tmp2m`, `prate` |
 | `aifs` | forecast | ECMWF open data (`aifs-single`) | `tmp2m`, `prate` |
-| `hrrr` | forecast (regional, regridded) | NOAA, two mirrors | `tmp2m`, `prate` |
-| `rrfs` | forecast (regional, regridded), with smoke and dust | NOAA, every hour proves a run | `tmp2m`, `prate` |
+| `hrrr` | forecast (regional, on its own Lambert grid) | NOAA, two mirrors | `tmp2m`, `prate` |
+| `rrfs` | forecast (regional, on its own Lambert grid), with smoke and dust | NOAA, every hour proves a run | `tmp2m`, `prate` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | `aod` |
 | `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | `dustsfc` |
 | `silam` | series-file forecast (air quality) | FMI open data on AWS, whole NetCDF-4 day files | `pm25` |
@@ -129,7 +129,7 @@ them. With a `cadence_seconds`, each time is snapped to its slot and the
 first slot's whole hour is the run. `observation.series_files` accepts one
 file per window (radar) or one per variable (`<stem>.<variable>.nc`,
 satellites, `ifshres`). The fetch stage owns every projection on this path,
-so neither encoder does Gaussian or geostationary arithmetic.
+so neither encoder does reduced-Gaussian or geostationary arithmetic.
 
 **Grids.** A global grid is snapped to `360 / width` and a regional grid's
 steps to the thousandth of a degree or, failing that, the arc-minute
@@ -138,8 +138,14 @@ from the first and last coordinates and some producers write the last one
 short; the arc-minute also keeps the two encoders on one double for EFAS's
 1/60°, which `gdalinfo -json` prints short of its seventeen digits. A `downsample`
 (`BlockReduction` on the `GridInfo`) publishes coarser than the source,
-applied in `_extract_planes` after the fill rules and before the crop. A
-`regrid` resamples a projected grid (HRRR, below). `fill_values` fold
+applied in `_extract_planes` after the fill rules and before the crop. A file on
+a Lambert conformal projection is published as it is: `GridInfo.projection`
+replaces the regular fields, the bundle is schemaVersion 4, and
+`grid_relative_winds` turns its wind pairs next to `derive_vector` (HRRR, below).
+A regular Gaussian grid keeps the regular fields GDAL reports, and `gaussian_n`
+adds what its rows really are (`GridInfo.gaussian`, the `grid.gaussian` block and
+the store's `latitude` coordinate). `docs/encoder.md`, "Native grids", has the
+arithmetic. `fill_values` fold
 sentinels to the codebook bottom before unit conversion; the format has no
 bitmap.
 
@@ -167,7 +173,7 @@ companion (`series_bundle_ids`; see [../zarr-profile.md](../zarr-profile.md)).
 `XUE_GFS_BASE_URL` overrides the mirror.
 
 **sflux.** GFS's native-resolution surface flux files on the ~13 km Gaussian
-grid (3072 × 1536); `prate_ave` is a window mean de-averaged into `prate`.
+grid (3072 × 1536, `gaussian_n` 768); `prate_ave` is a window mean de-averaged into `prate`.
 `tmp2m`, `prate`, `dswrf` and `wind10m` ship series companions.
 
 **ecmwf.** ECMWF open data; CCSDS packing is repacked to `grid_simple` with
@@ -206,16 +212,17 @@ WMO 0/6/1 in percent, and the three layer clouds on the ECMWF layer
 boundaries (ground, 800 hPa, 450 hPa). No isobaric `r`, gust, CAPE, ice
 thickness or peak wave period. `tests/test_aifs.py`.
 
-**hrrr.** Computed on a Lambert conformal grid. `grid.grid_info` reads the
-projection from GDAL's WKT (`reproject.py`; the wheel's `gdal_info` reports
-`coordinateSystem.wkt`) and builds a `Resampler` onto a regular 0.03° grid
-over the footprint; `_extract_planes` resamples each plane (bilinear, edge
-cells continued into the corners the conic domain never covers) before the
-crop. `reproject.rs` repeats the arithmetic and `tests/test_hrrr.py` holds
-it identical, so the operation order is fixed. Mirrors lag each other
+**hrrr.** Computed on a Lambert conformal grid and published on it, 1799 × 1059
+cells cut into 64 × 64 tiles. `grid.grid_info` reads the projection from GDAL's
+WKT (`reproject.py`; the wheel's `gdal_info` reports `coordinateSystem.wkt`). The
+records' winds are along the grid's axes (`grid_relative_winds`), so
+`_quantize_file` turns every vector pair to east and north. `tests/test_hrrr.py`
+holds the two encoders identical, so the operation order is fixed. Mirrors lag each other
 per frame, so a frame comes from the first mirror that has it and a cycle is
-complete only when one mirror has every hour (`XUE_HRRR_BASE_URLS`). The
-shell clips to the footprint (`FORECAST_MODELS[].domain`, `web/src/domain.ts`).
+complete only when one mirror has every hour (`XUE_HRRR_BASE_URLS`). Runs and
+cases published before the native grid are resampled onto a regular 0.03° grid,
+and the shell clips those to the footprint (`FORECAST_MODELS[].domain`,
+`web/src/domain.ts`), by the bundle's metadata, never the id.
 `wind80m` is the 80 m U/V pair `wrfsfc` writes for wind power (0/2/2–3 on
 surface 103 at 80 m). The 00/06/12/18Z cycles run to F48: `long_cycles`
 lets a build that names one of them ask for `--hours 48`, while the
@@ -225,7 +232,7 @@ published axis, the `--hours` default and the live runs stay at F18.
 12Z cycle (SCN 26-48), from its NODD bucket (`noaa-rrfs-ops-pds`,
 `XUE_RRFS_BASE_URL`, also holding the parallel feed back to 2026-08-12). The
 deterministic run's CONUS output is on HRRR's grid to the last digit of the
-origin, so `regrid`, footprint, tile and the shell's `domain` are HRRR's and no
+origin, so projection, tile and `grid_relative_winds` are HRRR's and no
 projection code is new. The 3 km North America output (polar stereographic)
 carries only eighteen records and the 13 km one is on a rotated grid neither
 encoder reads. A frame comes from two objects, `2dfld` and the `prslev`
@@ -329,7 +336,7 @@ The quantities, identities and codebooks are GEFS-Aerosols' `pm25` and
 `pm10`. `tests/test_silam.py`.
 
 **cfs.** NCEP CFSv2 member 01, nine-month runs on the T126 Gaussian grid
-(384 × 190), 1092 frames. The bucket (`noaa-cfs-pds`, `XUE_CFS_BASE_URL`) is
+(384 × 190, `gaussian_n` 95, on the surface family only), 1092 frames. The bucket (`noaa-cfs-pds`, `XUE_CFS_BASE_URL`) is
 the transpose of every other source: one object per variable holding the
 whole run (`time_grib_01/<name>.01.<run>.daily.grb2` with an `.idx`),
 written as the model runs. The fetch reads each variable as a few large

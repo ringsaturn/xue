@@ -43,7 +43,7 @@ the arithmetic that reproduces GDAL is used from then on. If neither does,
 every read stays on GDAL.
 
 Each band is taken through the whole per-plane chain (column roll, fill
-values, resampling, block thinning, crop, the completeness check, unit
+values, block thinning, crop, the completeness check, unit
 conversion) as soon as it is read, before the next band is read, so a
 worker holds one full-resolution plane at a time rather than every record
 of its file. That matters for the MRMS 3D mosaic, whose frame is 33
@@ -364,6 +364,59 @@ floor of `xuebuild`), so both encoders run one-shot libzstd. The byte
 comparisons still skip when the two link different libzstd versions
 (`require_comparable_compression` in `tests/_support.py`).
 
+## Native grids
+
+A model on its own grid (`docs/format.md`, "Projected Sources", "Gaussian rows")
+adds three pieces of arithmetic on top of what a regular grid does. The operation
+order is normative: both encoders land on the same doubles.
+
+**Reading the grid.** `round3` of the geotransform's origin and steps, then half a
+step in: `x0 = round3(gt0) + dx / 2`, `y0 = round3(gt3) + dy / 2`, `dy < 0`. A file
+on a projection is only accepted for a source with `grid_relative_winds`, and that
+source only accepts such a file. Its dimensions are `y` / `x` by the same flag
+(`discover.store_dimensions`).
+
+**Winds.** After the extraction (fill, unit conversion, crop) and before any
+derivation and quantization, each vector bundle's pair on a `grid_relative_winds`
+source is turned, on the plane the published window describes. No libm call runs
+per cell. `ρ0` is the projection's `origin_radius`, computed once:
+
+```text
+x     = x0 + column × dx
+apex  = ρ0 − (y0 + row × dy)
+ρ     = copysign(1, n) × sqrt(apex × apex + x × x)
+sin α = x / ρ
+cos α = apex / ρ
+u_e   = cos α × u + sin α × v
+v_e   = −sin α × u + cos α × v
+```
+
+The sign is the cone's, as in the inverse projection; it changes nothing on a
+northern cone. Decimation works on the codes of the turned planes, so a tier keeps
+sample sites and rotation. A derived vector bundle on such a source is refused
+(`binconvert._grid_relative_vectors`).
+
+**A box on a projected grid.** `crop_grid` walks each edge of `(west, south, east,
+north)` in 64 points, ends included, with latitudes clamped to ±89.9:
+`longitude = west + (east − west) × i / 63.0`, `latitude = south + (north − south)
+× i / 63.0`, each edge's fixed side as given. A point goes through
+`LambertConformal.forward_wrapped`, then `column = (x − x0) / dx`,
+`row = (y − y0) / dy`. The window is `floor(min + 1e-9)` to `ceil(max − 1e-9)` on
+each axis, clamped to the grid, the rule a regular crop has. Empty is an error, and
+so is a box whose east is west of its west. The window's `x0` is
+`x0 + column_start × dx` and its `y0` likewise, unrounded. A tier doubles `dx` and
+`dy`, keeps `x0` and `y0`, and takes `(n + 1) // 2` on each axis.
+
+**Gaussian rows.** A source with `gaussian_n` writes the `gaussian` block on its
+primary grid, not on a grid family of its own: `firstRow = floor((90 − first
+latitude) × (2n + 0.5) / 180 − 0.25)`, the inverse of the iteration's first guess,
+rounded, `rowStride` 1. A file whose first latitude is more than a quarter of a row
+from that row, whose rows run off the grid, or whose step is more than 1 % from
+`180 / 2n` is refused. A crop adds its `row_start` to `firstRow`; a tier doubles
+`rowStride`. The regular fields are computed as ever. The column roll moves columns
+only. The store's `latitude` coordinate is the iteration of `docs/zarr-profile.md`,
+"Coordinates", one row at a time.
+
 ## Grid families
 
 One source publishes its inputs on two grids: CFSv2 writes the surface
@@ -422,11 +475,11 @@ Every source, on real runs, with every artifact compared byte for byte:
 | GFS | the plain path, the two-variable wind bundles, the derived vapour flux and the derived 850 hPa equivalent potential temperature (`exp` / `ln` / `pow` on both sides), the surface diagnostics, and the ocean fields: the wave records' bitmap fill and, on a whole frame, the WAVEWATCH III grid snapped to the exact 0.25° grid |
 | ECMWF | de-accumulating `tp`, and the shorter prate axis that follows; the records that arrive under another identity than GFS's (the interval-maximum gust on the 10 m surface and its own analysis-less axis, the cloud cover as a local parameter in a 0–1 fraction, the most-unstable CAPE on surface type 17, the skin temperature as 0/0/17, the ice thickness with a bitmap, the wave period and direction under neighbouring parameter numbers), each matched both by the GRIB2 header index and by GDAL's band metadata (`tests/test_ecmwf.py`, on the Kara Sea fixture) |
 | ECMWF 0.1° (`ifs`) | the ECMWF row's work on the model's full 0.1° grid (3600 × 1801), with the IFS HRES tile (90 × 95) and two-rung ladder; the split `sfc` / `pl` objects are reassembled by the fetch stage, so the encoder reads one GRIB per frame as for ECMWF (`tests/test_ifs.py`, on a Kara Sea crop) |
-| GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid, the -180 column roll, `dswrf` |
+| GFS-SFLUX | de-averaging `prate_ave`, the Gaussian grid and its `gaussian` block, the -180 column roll, `dswrf` |
 | RRFS | the `mass-density-to-micrograms` rule, and HRRR's projection on a frame from two file families (`tests/test_rrfs.py`) |
-| HRRR | a projected source: the Lambert conformal grid read out of GDAL's WKT, the footprint, the resampling onto the regular 0.03° grid (`sin` / `cos` / `tan` / `pow` per row and column, exact IEEE arithmetic per cell; `tests/test_hrrr.py`), and the `MSLMA` / `REFC` aliases |
+| HRRR | a projected source: the Lambert conformal grid read out of GDAL's WKT and published as it is, schemaVersion 4, the `y` / `x` coordinates and the `crs` array, the winds turned to east and north (exact IEEE arithmetic per cell; `tests/test_hrrr.py`), and the `MSLMA` / `REFC` aliases |
 | GEFS-AEROSOLS | GRIB2 product definition template 4.48: the aerosol type and the size and wavelength intervals parsed out of the template by the header index and out of GDAL's `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` by the band matcher, compared whole with the registered `AerosolIdentity` (a dozen `AOTK` records per frame share the parameter and surface), written as the metadata's `aerosol` block; the `log1p` codebooks on fields other than precipitation, NCEP's local PMTF / PMTC numbers in µg/m³ as GDAL reports them (`tests/test_aerosol.py`, on the Saharan fixture) |
-| CFSv2 | a seasonal run on two grids: the T126 Gaussian surface grid and its column roll, the 1° pressure-level **grid family** beside it (its own frame file, its own `GridInfo`, its own tile and ladder, and the vapour flux derived on it), NCEP's local "entire atmosphere" surface (type 200) accepted under the pgrb2 total cloud cover's identity, the `9999` ice-thickness fill, and an axis that begins at a step rather than at the analysis (`first_hour` 6, so every bundle carries `firstFrameOffset: 6`) with the three flux fields' `typeOfStatisticalProcessing` written into metadata although the records are the instantaneous template (`tests/test_cfs.py`, on the East Asian fixture) |
+| CFSv2 | a seasonal run on two grids: the T126 Gaussian surface grid, its column roll, its `gaussian` block and the true latitudes of its store coordinate, the 1° pressure-level **grid family** beside it (its own frame file, its own `GridInfo`, its own tile and ladder, and the vapour flux derived on it), NCEP's local "entire atmosphere" surface (type 200) accepted under the pgrb2 total cloud cover's identity, the `9999` ice-thickness fill, and an axis that begins at a step rather than at the analysis (`first_hour` 6, so every bundle carries `firstFrameOffset: 6`) with the three flux fields' `typeOfStatisticalProcessing` written into metadata although the records are the instantaneous template (`tests/test_cfs.py`, on the East Asian fixture) |
 | ICON-EU | a regional regular grid at a power-of-two step (0.0625°) that the regional snap leaves as it is, DWD's encodings under the existing alternates (the run-total `TOT_PREC` as AIFS's WMO 0/1/52 in kg/m², `VMAX_10M` as ECMWF's interval-maximum gust on the 10 m surface, `CLCT` as AIFS's 0/6/1 in percent on the ground surface, `HSURF` as the orography's 0/3/6 geometric-height alternate in metres), de-accumulation from an analysis total, the gust's analysis-less axis (`tests/test_iconeu.py`, on the Alpine fixture) |
 | ARPEGE | the ICON-EU encodings on the 0.25° global grid, with the analysis precipitation total the fetch writes as a zero record (the package has none), so the first hour's rate is that hour's total (`tests/test_arpege.py`, on the western Mediterranean fixture) |
 | WOOF-WRF | the series-file forecast path on a source with no feed: one CF NetCDF per variable from the `wrf-series` tool, an axis from f001 (`first_hour` 1, so every bundle carries `firstFrameOffset: 1`) with the hour's precipitation total on every frame (`interval_precipitation`, nothing analysis-optional), a regional 0.005° grid that one tile covers and no ladder (`variant_factors` empty), a sea level pressure series in pascals turned into hectopascals like a GRIB record, the `wind80m` pair read as two series, the `cloud3d` volume bundle (24 `clw<m>` levels from 250 m to 12 km MSL, cloud water mixing ratio 0/1/22 on surface 102 at the level in metres, g/kg on the linear 0.01 g/kg codebook, a level under the model terrain filled as 0 g/kg), and `fetched()` false — `require_complete` is refused and the source is built from a dataset directory by a showcase case alone (`tests/test_woof.py`, on the Fuji fixture) |

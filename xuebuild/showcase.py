@@ -80,6 +80,7 @@ from .errors import DownloadError, ManifestError, XueError
 from .fetch import parse_run
 from .localrun import LocalRunError, build_local_run
 from .manifest import iso_z, validate_bin_manifest
+from .reproject import ProjectedGrid
 from .sources import SourceSpec, source_spec
 from .stac import write_showcase_documents
 
@@ -925,7 +926,10 @@ def _grid_extent(grid: dict[str, Any]) -> list[float]:
 
     Longitudes stay in the grid's own frame, so a window crossing the
     antimeridian reports an east smaller than its west, exactly like the
-    requested bbox does."""
+    requested bbox does. A projected window's are read off its footprint."""
+    if "projection" in grid:
+        west, south, east, north = ProjectedGrid.from_metadata(grid["projection"], grid["width"], grid["height"]).footprint()
+        return [round(west, 6), round(south, 6), round(east, 6), round(north, 6)]
     east = grid["firstLongitude"] + (grid["width"] - 1) * grid["longitudeStep"]
     if grid["width"] * grid["longitudeStep"] < 360.0:
         east = (east + 180.0) % 360.0 - 180.0

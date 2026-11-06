@@ -152,6 +152,9 @@ def store_dimensions(source: SourceSpec, bundle_id: str) -> tuple[str, str, str]
       field (its first variable's ``VariableSpec.static``: the terrain, one
       frame at the analysis) — the two rules ``convert_bin`` shortens a
       bundle's axis by;
+    * ``y`` and ``x``, or ``y_<family>`` and ``x_<family>``, in place of the
+      latitude and longitude names throughout, on a source published on a map
+      projection (``SourceSpec.grid_relative_winds``);
     * ``latitude_<family>`` and ``longitude_<family>`` for a bundle on a grid
       family of its own, ``<family>`` being exactly the string
       :func:`bundle_grid_family` returns for it — the ``CompanionFile.id`` of
@@ -174,10 +177,11 @@ def store_dimensions(source: SourceSpec, bundle_id: str) -> tuple[str, str, str]
     family = bundle_grid_family(source, bundle_id)
     if family is not None and not _COORDINATE_SUFFIX.fullmatch(family):
         raise ConversionError(f"grid family {family!r} of {source.manifest_model} cannot name a coordinate array")
+    row, column = ("y", "x") if source.grid_relative_winds else ("latitude", "longitude")
     return (
         f"time_{bundle_id}" if own_axis else "time",
-        f"latitude_{family}" if family is not None else "latitude",
-        f"longitude_{family}" if family is not None else "longitude",
+        f"{row}_{family}" if family is not None else row,
+        f"{column}_{family}" if family is not None else column,
     )
 
 

@@ -99,6 +99,13 @@ one (the full grid), else a poster's, which is the grid decimated two to one
 back — the origin is then exact and a regional far edge is right to within
 one full cell. A wrapping grid is `[-180, -90, 180, 90]`. `bbox` and
 `geometry` follow (two polygons when a window crosses the antimeridian).
+On a grid on a map projection the block has no origin and steps in degrees:
+`bbox` is the extremes of longitude and latitude its boundary cell centers reach
+(over a rectangle its trapezoid does not fill), `cube:dimensions` `x` and `y` are
+the grid's own axes in metres with its WKT2 as `reference_system`, and the Item
+uses the [projection](https://github.com/stac-extensions/projection) extension:
+`proj:code` null, `proj:wkt2`, `proj:shape` `[height, width]`, and `proj:bbox`
+and `proj:transform` over the cells' outer edges.
 The store's own `attributes.xue` stays the decode-time authority; a manifest
 with no metadata at all (only the synthetic ones in tests) gets a null
 geometry and a time dimension alone.

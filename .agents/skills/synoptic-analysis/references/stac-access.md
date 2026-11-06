@@ -45,7 +45,11 @@ Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
   latitude slice is `slice(north, south)`. A bundle off the run's axis or
   grid has dims of its own in a shared store (`time_prate` for a rate with
   no analysis frame, `latitude_pgb` / `longitude_pgb` on the CFSv2
-  pressure levels); `xue_stac.open_store` renames them.
+  pressure levels); `xue_stac.open_store` renames them. A bundle on a map
+  projection (`hrrr`) has dims `(time, y, x)` in metres and a `crs` array holding
+  the CF grid mapping, with no latitude or longitude axis: project a place with
+  `crs` before selecting. `sflux` and the `cfs` surface fields carry true Gaussian
+  latitudes in `latitude`.
 - `time` is a datetime64 coordinate (seconds since the run). Forecast
   frames are the valid times; `.sel(time=T, method="nearest")` after
   parsing T to `numpy.datetime64` (a bare string fails on a nearest lookup).

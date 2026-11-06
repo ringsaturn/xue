@@ -109,8 +109,8 @@ thirty-one records in `xuebuild/sources.py` order — the 80 m wind pair
 orography (`:HGT:surface:`) at the end — over the Gulf coast
 (roughly 88W to 84W, 27N to 31N) and still on the model's own 3 km Lambert
 conformal grid — a crop keeps the projection, and GDAL's GRIB writer
-carries it — so the WKT parsing, the footprint, the resampling onto the
-regular 0.03° grid, the `MSLMA` / `REFC` aliases and the byte-identity
+carries it — so the WKT parsing, the footprint, the turning of the winds, the
+`MSLMA` / `REFC` aliases and the byte-identity
 parity test all run against real projected records. Complex packing keeps
 it about a third of a megabyte. Cut from the records assembled by byte
 range off the `.idx` of `hrrr.20260911/conus/hrrr.t00z.wrfsfcf00.grib2` on

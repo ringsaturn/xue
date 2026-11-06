@@ -9,8 +9,11 @@ fetches in source order.
 
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from datetime import UTC, datetime
 from unittest import mock
 
@@ -25,13 +28,18 @@ from tests._support import (
     stored_bundle,
 )
 from xuebuild import binconvert, grib2, rules
+from xuebuild.binconvert import _extract_planes
+from xuebuild.bundles import VECTOR_BUNDLES
 from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError
 from xuebuild.fetch import RRFS_BASE_URL, _download_noaa_payload, _rrfs_run_is_complete, companion_object_url, model_object_url
 from xuebuild.gdal import inspect_grib_multi
+from xuebuild.grid import grid_info
 from xuebuild.idx import field_byte_range
 from xuebuild.model import GfsRun
-from xuebuild.sources import Regrid, source_spec
+from xuebuild.quantize import PROFILES
+from xuebuild.reproject import rotate_winds
+from xuebuild.sources import source_spec
 from xuebuild.variables import SMOKE_DUST_VARIABLE_IDS, VARIABLES
 
 FIXTURE = FIXTURES / "rrfs.2026110500.f000.crop.grib2"
@@ -58,7 +66,8 @@ INDEX = "\n".join(
 
 class SourceTests(unittest.TestCase):
     def test_the_grid_is_hrrrs_and_the_axis_its_own(self) -> None:
-        self.assertEqual(RRFS.regrid, Regrid(step=0.03))
+        self.assertTrue(RRFS.grid_relative_winds)
+        self.assertEqual(RRFS.production_grid, (1799, 1059))
         self.assertEqual((RRFS.production_grid, RRFS.tile), (HRRR.production_grid, HRRR.tile))
         self.assertEqual(RRFS.cycle_hours, 6)
         self.assertEqual(RRFS.forecast_hours(84), list(range(85)))
@@ -187,11 +196,45 @@ class BuildTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
             )
 
-    def test_every_published_bundle_is_written_on_the_regular_grid(self) -> None:
+    def test_every_published_bundle_is_written_on_the_models_grid(self) -> None:
         self.assertEqual(tuple(bundle["variable"] for bundle in self.report["bundles"]), published_bundle_ids(RRFS))
-        grid = stored_bundle(self.root / "out", "smokesfc").metadata["grid"]
-        self.assertEqual((grid["width"], grid["height"]), (160, 129))
-        self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.03, -0.03))
+        bundle = stored_bundle(self.root / "out", "smokesfc")
+        grid = bundle.metadata["grid"]
+        self.assertEqual(bundle.metadata["schemaVersion"], 4)
+        self.assertEqual((grid["width"], grid["height"]), (120, 120))
+        projection = grid["projection"]
+        self.assertEqual(projection["kind"], "lambert-conformal")
+        self.assertEqual(
+            (projection["radius"], projection["latitudeOfOrigin"], projection["centralMeridian"]),
+            (6371229.0, 38.5, -97.5),
+        )
+        self.assertEqual((projection["dx"], projection["dy"]), (3000.0, -3000.0))
+        self.assertNotIn("firstLongitude", grid)
+        self.assertEqual(self.report["grid"], grid)
+
+    def test_every_wind_is_turned_to_east_and_north(self) -> None:
+        # The pairs of both file families: the surface file's and the
+        # companion's isobaric ones.
+        codebooks = PROFILES["quality"]
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}), tempfile.TemporaryDirectory() as work:
+            grid = grid_info(FIXTURE, RRFS)
+            for bundle_id in RRFS.bundle_vector_ids:
+                u_id, v_id = VECTOR_BUNDLES[bundle_id]
+                planes = _extract_planes(inspect_grib_multi(FIXTURE, (u_id, v_id)), grid, Path(work))
+                u, v = rotate_winds(grid.projection, planes[u_id], planes[v_id])
+                bundle = stored_bundle(self.root / "out", bundle_id)
+                with self.subTest(bundle_id):
+                    self.assertEqual(bundle.metadata["schemaVersion"], 4)
+                    np.testing.assert_array_equal(bundle.decode_plane(1, 0), codebooks[u_id].quantize(u))
+                    np.testing.assert_array_equal(bundle.decode_plane(2, 0), codebooks[v_id].quantize(v))
+                    # The Sierra Nevada is far enough west that the turn shows.
+                    self.assertFalse((codebooks[u_id].quantize(u) == codebooks[u_id].quantize(planes[u_id])).all())
+
+    def test_the_store_carries_the_crs(self) -> None:
+        group = json.loads((self.root / "out" / "bundles.zarr" / "zarr.json").read_text())
+        arrays = group["consolidated_metadata"]["metadata"]
+        self.assertEqual(arrays["smokesfc"]["dimension_names"], ["time", "y", "x"])
+        self.assertEqual(arrays["crs"]["attributes"]["longitude_of_central_meridian"], -97.5)
 
     def test_the_smoke_declares_what_it_is(self) -> None:
         variable = stored_bundle(self.root / "out", "smokesfc").metadata["variables"][0]

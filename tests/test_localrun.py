@@ -18,7 +18,27 @@ from tests._support import FIXTURES, ClassTempRoot, requires_gdal
 from xuebuild import cli, localrun
 from xuebuild.discover import published_bundle_ids
 from xuebuild.localrun import LocalRunError, build_local_run, parse_bbox
+from xuebuild.reproject import ProjectedGrid
 from xuebuild.sources import source_spec
+
+
+def _inner_box(grid) -> tuple[float, float, float, float]:
+    """``(west, south, east, north)`` of the part of a grid from a quarter to
+    six tenths of the way across it."""
+    if "projection" not in grid:
+        west = grid["firstLongitude"] + grid["longitudeStep"] * grid["width"] * 0.25
+        east = grid["firstLongitude"] + grid["longitudeStep"] * grid["width"] * 0.6
+        north = grid["firstLatitude"] + grid["latitudeStep"] * grid["height"] * 0.25
+        south = grid["firstLatitude"] + grid["latitudeStep"] * grid["height"] * 0.6
+        return west, south, east, north
+    projected = ProjectedGrid.from_metadata(grid["projection"], grid["width"], grid["height"])
+    west, north = projected.projection.inverse(
+        projected.x0 + projected.dx * projected.width * 0.25, projected.y0 + projected.dy * projected.height * 0.25
+    )
+    east, south = projected.projection.inverse(
+        projected.x0 + projected.dx * projected.width * 0.6, projected.y0 + projected.dy * projected.height * 0.6
+    )
+    return west, south, east, north
 
 
 class _LocalRunCase(ClassTempRoot):
@@ -39,11 +59,7 @@ class _LocalRunCase(ClassTempRoot):
         cls.whole, cls.whole_fetch = cls._build(cls.whole_dir, bbox=None, series=True)
         grid = cls.whole["grid"]
         # A box well inside the fixture's window, so the crop is a strict one.
-        west = grid["firstLongitude"] + grid["longitudeStep"] * grid["width"] * 0.25
-        east = grid["firstLongitude"] + grid["longitudeStep"] * grid["width"] * 0.6
-        north = grid["firstLatitude"] + grid["latitudeStep"] * grid["height"] * 0.25
-        south = grid["firstLatitude"] + grid["latitudeStep"] * grid["height"] * 0.6
-        cls.bbox = (west, south, east, north)
+        cls.bbox = _inner_box(grid)
         cls.cropped_dir = cls.root / "cropped"
         cls.cropped, _ = cls._build(cls.cropped_dir, bbox=cls.bbox, series=False)
 
@@ -121,6 +137,9 @@ class _LocalRunCase(ClassTempRoot):
         self.assertLess(cropped["width"], whole["width"])
         self.assertLess(cropped["height"], whole["height"])
         west, south, east, north = self.bbox
+        if "projection" in cropped:
+            self._assert_projected_window_covers_the_box(cropped)
+            return
         last_longitude = cropped["firstLongitude"] + cropped["longitudeStep"] * (cropped["width"] - 1)
         last_latitude = cropped["firstLatitude"] + cropped["latitudeStep"] * (cropped["height"] - 1)
         tolerance = 1e-6
@@ -130,6 +149,19 @@ class _LocalRunCase(ClassTempRoot):
         self.assertLessEqual(last_latitude, south + tolerance)
         for bundle in self.manifest(self.cropped_dir)["bundles"]:
             self.assertEqual((bundle["grid"]["width"], bundle["grid"]["height"]), (cropped["width"], cropped["height"]))
+
+    def _assert_projected_window_covers_the_box(self, cropped) -> None:
+        window = ProjectedGrid.from_metadata(cropped["projection"], cropped["width"], cropped["height"])
+        west, south, east, north = self.bbox
+        for longitude in (west, (west + east) / 2, east):
+            for latitude in (south, (south + north) / 2, north):
+                x, y = window.projection.forward(longitude, latitude)
+                self.assertLessEqual(window.x0, x)
+                self.assertLessEqual(x, window.x0 + (window.width - 1) * window.dx)
+                self.assertGreaterEqual(window.y0, y)
+                self.assertGreaterEqual(y, window.y0 + (window.height - 1) * window.dy)
+        for bundle in self.manifest(self.cropped_dir)["bundles"]:
+            self.assertEqual(bundle["grid"], cropped)
 
 
 @requires_gdal

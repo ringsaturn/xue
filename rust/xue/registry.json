@@ -19339,7 +19339,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": [
         [
@@ -19575,7 +19576,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": [
         [
@@ -19812,7 +19814,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": [
         [
@@ -19973,7 +19976,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20092,7 +20096,8 @@
       "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20181,7 +20186,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": 768,
       "video": false,
       "catCalibration": []
     },
@@ -20279,8 +20285,8 @@
       "bundleCompositeIds": [],
       "bundleVolumeIds": [],
       "productionGrid": [
-        2441,
-        1051
+        1799,
+        1059
       ],
       "tile": [
         64,
@@ -20316,9 +20322,8 @@
           1
         ]
       ],
-      "regrid": {
-        "step": 0.03
-      },
+      "gridRelativeWinds": true,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20448,8 +20453,8 @@
       "bundleCompositeIds": [],
       "bundleVolumeIds": [],
       "productionGrid": [
-        2441,
-        1051
+        1799,
+        1059
       ],
       "tile": [
         64,
@@ -20476,9 +20481,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": {
-        "step": 0.03
-      },
+      "gridRelativeWinds": true,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20556,7 +20560,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20622,7 +20627,8 @@
       "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20690,7 +20696,8 @@
       "cycleHours": 24,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -20883,7 +20890,8 @@
       "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": 95,
       "video": false,
       "catCalibration": []
     },
@@ -20975,7 +20983,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21067,7 +21076,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21187,7 +21197,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21256,7 +21267,8 @@
       "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21325,7 +21337,8 @@
       "cycleHours": 6,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21398,7 +21411,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21462,7 +21476,8 @@
       "cycleHours": 3,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21519,7 +21534,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21582,7 +21598,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21673,7 +21690,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21730,7 +21748,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -21894,7 +21913,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -22051,7 +22071,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -22205,7 +22226,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -22359,7 +22381,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -22501,7 +22524,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     },
@@ -22558,7 +22582,8 @@
       "cycleHours": 1,
       "longCycles": [],
       "longCycleSteps": [],
-      "regrid": null,
+      "gridRelativeWinds": false,
+      "gaussianN": null,
       "video": false,
       "catCalibration": []
     }

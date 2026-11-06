@@ -226,12 +226,15 @@ repacking is the source's `packing`, not a family's.
   "productionGrid": [1440, 721], "tile": [48, 52], "variantFactors": [2], "seriesBundleIds": [...],
   "fetchConcurrency": 4, "observation": false, "windowHours": null, "cadenceSeconds": null, "objectCadenceSeconds": null,
   "seriesFile": false, "downsample": null, "cycleHours": 6, "longCycles": [], "longCycleSteps": [],
-  "regrid": null, "video": true, "catCalibration": [[300, 0.0, 0.0], …]
+  "gridRelativeWinds": false, "gaussianN": null, "video": true, "catCalibration": [[300, 0.0, 0.0], …]
 }
 ```
 
-`downsample` is `{"factor": n}` or `null`; `regrid` is `{"step": degrees}`
-or `null`. The meaning of each field is `SourceSpec`'s docstring and
+`downsample` is `{"factor": n}` or `null`. `gridRelativeWinds` is true on a
+source published on a map projection, whose wind pairs a reader turns to east and
+north (`docs/encoder.md`, "Native grids"), and whose bundles are on `y` and `x`.
+`gaussianN` is the latitudes per hemisphere of a primary grid that is regular
+Gaussian, or `null`. The meaning of each field is `SourceSpec`'s docstring and
 `docs/contribution/sources.md`.
 
 ## The shell's copy
@@ -266,7 +269,7 @@ existing name on a new entry does not.
 | `companions[]` | `poster`, `video` |
 | `bundles.<id>.kind` | `scalar`, `vector`, `composite`, `volume` |
 | `derivation.kind` | the six algorithms above |
-| `sources.<id>.downsample`, `.regrid` | the one shape each |
+| `sources.<id>.downsample` | the one shape |
 
 ## Validation
 

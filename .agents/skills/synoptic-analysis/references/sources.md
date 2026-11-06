@@ -15,7 +15,7 @@ so never cache a run URL across a session.
 | `aifs` | ECMWF AIFS Single (data-driven) | 0.25° global | 00/06/12/18Z | 6-hourly to F360 (61) | ~5.5 h | same set, no RH |
 | `ifshres` | ECMWF IFS HRES 9 km via Open-Meteo | 0.1° global, 3600×1801 | 00/12Z only | hourly to F90, 3-hourly to F144, 6-hourly to F360 (145) | ~6.5 h | none |
 | `sflux` | GFS surface fluxes | ~0.117° Gaussian | 00/06/12/18Z | as GFS | ~4 h | none; only `tmp2m prate dswrf wind10m` |
-| `hrrr` | NOAA HRRR 3 km | 0.03° over CONUS, 2441×1051, no wrap | every hour | hourly to F18 (19) | ~1.5 h | 925/850/700/500 heights and temps |
+| `hrrr` | NOAA HRRR 3 km | 3 km Lambert conformal over CONUS, 1799×1059, no wrap (runs published earlier: 0.03°, 2441×1051) | every hour | hourly to F18 (19) | ~1.5 h | 925/850/700/500 heights and temps |
 
 Bundles (store keys) per model:
 
@@ -24,7 +24,7 @@ Bundles (store keys) per model:
 - **AIFS** (27): ECMWF less `rh850 rh700 rh500 gust cape icetk perpw`, plus `lcdc mcdc hcdc`. `prate` is a six-hour mean rate.
 - **IFS HRES** (15): `tmp2m prate dswrf prmsl gust tcdc lcdc mcdc hcdc cape vis dpt2m tmpsfc icetk wind10m`. `prate`, `dswrf`, `gust` have no analysis frame (series starts at F1).
 - **SFLUX** (4): `tmp2m prate dswrf wind10m` (the only source with solar radiation).
-- **HRRR** (22): `tmp2m prate prmsl hgt850 hgt700 hgt500 tmp925 tmp850 tmp500 gust tcdc lcdc mcdc hcdc cape vis dpt2m cref` + `wind10m wind925 wind850 wind250`. `cref` is *forecast* composite reflectivity. Corners of the rectangle outside the Lambert domain repeat the edge cell and are not forecast.
+- **HRRR** (22): `tmp2m prate prmsl hgt850 hgt700 hgt500 tmp925 tmp850 tmp500 gust tcdc lcdc mcdc hcdc cape vis dpt2m cref` + `wind10m wind925 wind850 wind250`. `cref` is *forecast* composite reflectivity. Winds are east and north. On a run published on the older regular grid, corners of the rectangle outside the Lambert domain repeat the edge cell and are not forecast.
 
 Which model to use:
 

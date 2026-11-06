@@ -15,7 +15,7 @@ code: open access only, and record the attribution the licence requires.
 | Kind | Closest existing source |
 |---|---|
 | Global GRIB forecast over HTTP byte ranges | `gfs`, `ecmwf`, `aifs` |
-| Regional / projected forecast | `hrrr` (regrid in both encoders) |
+| Regional / projected forecast | `hrrr` (`docs/encoder.md`, "Native grids") |
 | Forecast delivered as NetCDF series | `ifshres` |
 | Rolling observation window listed off a bucket | `mrms` |
 | Rolling window from an external fetch tool | `jma` |

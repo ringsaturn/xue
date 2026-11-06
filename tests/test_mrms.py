@@ -152,7 +152,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(MRMS.horizon_hours, 3)
         self.assertEqual(MRMS.cycle_hours, 1)
         self.assertEqual(MRMS.downsample, Downsample(factor=2))
-        self.assertIsNone(MRMS.regrid)
+        self.assertFalse(MRMS.grid_relative_winds)
         self.assertEqual(MRMS.production_grid, (3500, 1750))
         self.assertFalse(MRMS.video)
         with self.assertRaisesRegex(DownloadError, "publishes no forecast axis"):

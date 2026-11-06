@@ -27,6 +27,7 @@ from xuebuild.sources import SOURCES, source_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "gfs.2026081406.f000.crop.grib2"
+FIXTURE_PROJECTED_GRIB = REPOSITORY_ROOT / "tests" / "fixtures" / "hrrr.2026091100.f000.crop.grib2"
 
 
 class BundleGroupTests(unittest.TestCase):
@@ -605,6 +606,46 @@ class SharedStoreSplitIdentityTests(ClassTempRoot, unittest.TestCase):
         self.assertEqual(repeat, self.report)
         after = (group.stat().st_mtime_ns, (self.split / self.run_directory / "manifest.json").stat().st_mtime_ns)
         self.assertEqual(after, before)
+
+
+class ProjectedSplitIdentityTests(ClassTempRoot, unittest.TestCase):
+    """A source on a map projection built whole and in groups: the ``y``, ``x``
+    and ``crs`` arrays every job writes, and the group documents merged from the
+    parts, come out the same."""
+
+    root: Path
+    root_prefix = "xue-assemble-projected-"
+
+    def test_every_artifact_is_byte_identical(self) -> None:
+        run_id = "2026091100"
+        run_directory = f"hrrr.{run_id}"
+        whole, split = self.root / "whole", self.root / "split"
+        binconvert.convert_bin(
+            FIXTURE_PROJECTED_GRIB,
+            whole / run_directory,
+            work_root=self.root / "whole-work",
+            manifest_path=whole / run_directory / "manifest.json",
+            latest_path=whole / "latest-hrrr.json",
+            run_id=run_id,
+            model="hrrr",
+        )
+        for group in assemble.bundle_groups(source_spec("hrrr"), 4):
+            binconvert.convert_bin(
+                FIXTURE_PROJECTED_GRIB,
+                split / run_directory,
+                work_root=self.root / f"split-work-{assemble.bundle_group_slug(group)}",
+                manifest_path=assemble.partial_manifest_path(split / run_directory, group),
+                model="hrrr",
+                bundle_ids=group,
+                partial=True,
+            )
+        assemble.assemble_run(split, model="hrrr", run_id=run_id, expected_hours=120)
+        artifacts = _store_artifacts(whole)
+        self.assertEqual(artifacts, _store_artifacts(split))
+        self.assertIn(Path(run_directory) / "bundles.zarr" / "crs" / "zarr.json", artifacts)
+        for relative in artifacts:
+            with self.subTest(artifact=relative.as_posix()):
+                self.assertTrue(filecmp.cmp(whole / relative, split / relative, shallow=False), relative)
 
 
 class SharedStoreTopUpIdentityTests(ClassTempRoot, unittest.TestCase):

@@ -73,7 +73,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(ICONEU.production_grid, (1377, 657))
         # The tile divides the grid exactly.
         self.assertEqual((1377 % ICONEU.tile[0], 657 % ICONEU.tile[1]), (0, 0))
-        self.assertIsNone(ICONEU.regrid)
+        self.assertFalse(ICONEU.grid_relative_winds)
         self.assertEqual(ICONEU.variant_factors, (2,))
         self.assertFalse(ICONEU.video)
         prose = _PROSE["sources"]["iconeu"]

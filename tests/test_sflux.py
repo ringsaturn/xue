@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from unittest.mock import patch
 import numpy as np
 
 from xuebuild.derive import average_window_start, deaverage_precipitation
-from xuebuild.grid import GridInfo, normalize_longitudes
+from xuebuild.grid import GaussianRows, GridInfo, gaussian_rows, normalize_longitudes
 from xuebuild.errors import ConversionError, DownloadError, ManifestError
 from xuebuild.fetch import fetch_frame, resolve_run, sflux_object_url
 from xuebuild.gdal import raster_expression
@@ -141,6 +142,29 @@ class DeaverageTests(unittest.TestCase):
         ave126 = np.array([0.0015])
         rate = deaverage_precipitation(ave126, 126, ave123, 123, 6)
         np.testing.assert_allclose(rate, (6 * ave126 - 3 * ave123) / 3 * 3600.0)
+
+
+class GaussianGridTests(unittest.TestCase):
+    def test_the_source_declares_its_gaussian_grid(self) -> None:
+        self.assertEqual(source_spec("sflux").gaussian_n, 768)
+        self.assertEqual(source_spec("sflux").production_grid[1], 2 * 768)
+        self.assertEqual(source_spec("cfs").gaussian_n, 95)
+        self.assertEqual(source_spec("cfs").production_grid[1], 2 * 95)
+        self.assertIsNone(source_spec("gfs").gaussian_n)
+
+    def test_the_whole_grid_starts_at_the_first_row_and_keeps_its_regular_fields(self) -> None:
+        grid = normalize_longitudes(
+            GridInfo(3072, 1536, 0.0, 89.91032453466, 0.1171875001628134, -0.1171470019543974)
+        )
+        rows = gaussian_rows(grid, 768, Path("x"))
+        self.assertEqual(rows, GaussianRows(768, 0, 1))
+        # The roll moves columns, and the rows stay as GDAL read them.
+        block = replace(grid, gaussian=rows).metadata()
+        self.assertEqual(block["firstLatitude"], 89.91032453466)
+        self.assertEqual(block["gaussian"], {"n": 768, "firstRow": 0, "rowStride": 1})
+        half = replace(grid, gaussian=rows).decimated().metadata()
+        self.assertEqual((half["height"], half["gaussian"]["rowStride"]), (768, 2))
+        self.assertEqual(half["latitudeStep"], grid.latitude_step * 2)
 
 
 class LongitudeNormalizationTests(unittest.TestCase):
