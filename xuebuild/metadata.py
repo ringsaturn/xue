@@ -24,6 +24,11 @@ METADATA_SCHEMA_VERSION = 3
 carries its GRIB2 parameter identity (docs/format.md). Earlier versions
 remain readable; nothing new is written at them."""
 
+PROJECTED_METADATA_SCHEMA_VERSION = 4
+"""The one version a grid can raise it to: a bundle on a map projection, whose
+``grid`` block has no regular fields for an older reader to place it by. Every
+other bundle stays at :data:`METADATA_SCHEMA_VERSION`, the lowest that fits."""
+
 
 def axis_unit_seconds(lead_seconds: Sequence[int]) -> int:
     """The coarsest unit that expresses every frame's lead time exactly.
@@ -127,7 +132,7 @@ def build_metadata(
 ) -> dict[str, Any]:
     resolved = source or source_spec("gfs")
     return {
-        "schemaVersion": METADATA_SCHEMA_VERSION,
+        "schemaVersion": PROJECTED_METADATA_SCHEMA_VERSION if grid.projection is not None else METADATA_SCHEMA_VERSION,
         "model": resolved.manifest_model,
         "product": resolved.product,
         "runTime": iso_z(run_time),

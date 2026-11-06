@@ -3,9 +3,11 @@
 A file's grid is read off ``gdalinfo`` (:func:`grid_info`), snapped to the
 round step and origin GDAL's derivation misses by a hair, rolled to the
 -180-first layout, thinned where a source publishes coarser than it arrives,
-resampled where it arrives on a map projection, and cropped to a showcase
-window (:func:`crop_grid`). The two encoders must agree on every number of
-it to the bit.
+and cropped to a showcase window (:func:`crop_grid`). A file on a map projection
+is published as it is, its grid declared by :class:`~xuebuild.reproject.ProjectedGrid`
+in place of the regular fields; a regular Gaussian one keeps the regular fields
+and says what its rows really are (:class:`GaussianRows`). The two encoders must
+agree on every number of it to the bit.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import numpy as np
 
 from .errors import ConversionError
 from .gdal import dataset_info
-from .reproject import ProjectedGrid, Resampler, build_resampler, lambert_conformal_from_wkt
+from .reproject import ProjectedGrid, gaussian_latitude, lambert_conformal_from_wkt, nearest_gaussian_row
 from .sources import Downsample, SourceSpec
 
 
@@ -52,9 +54,8 @@ class CropWindow:
 class BlockReduction:
     """The thinning a source's :class:`~xuebuild.sources.Downsample` asks for,
     fixed to one file's grid: every ``factor`` x ``factor`` block of the
-    ``(source_height, source_width)`` plane becomes its maximum. Carried on
-    the grid the way a :class:`~xuebuild.reproject.Resampler` is, and like it
-    never serialized — the bundle's grid is the thinned one."""
+    ``(source_height, source_width)`` plane becomes its maximum. Never
+    serialized: the bundle's grid is the thinned one."""
 
     factor: int
     source_width: int
@@ -76,6 +77,26 @@ class BlockReduction:
 
 
 @dataclass(frozen=True)
+class GaussianRows:
+    """Which rows of a whole regular Gaussian grid a grid's rows are: its
+    ``grid.gaussian`` block (docs/format.md, "Gaussian rows"). Row ``r`` is row
+    ``first_row + r * row_stride`` of the ``2n``, counted from the north."""
+
+    n: int
+    first_row: int = 0
+    row_stride: int = 1
+
+    def metadata(self) -> dict[str, int]:
+        return {"n": self.n, "firstRow": self.first_row, "rowStride": self.row_stride}
+
+
+# What a projected grid's regular fields hold: it has none. One object, so that
+# two grids still compare equal, and NaN so that arithmetic on them cannot pass
+# for a place.
+_NO_REGULAR_FIELD = math.nan
+
+
+@dataclass(frozen=True)
 class GridInfo:
     width: int
     height: int
@@ -90,19 +111,34 @@ class GridInfo:
     crop: CropWindow | None = None
     """Regional window applied after the roll (showcase cases). When set,
     every field above describes the *cropped* planes, and the window carries
-    the source dimensions gdal_translate actually extracts — or, on a
-    projected source, the regular grid the resampler produces. Never
-    serialized: the cropped origin and extent already say where the data is."""
-    resample: Resampler | None = None
-    """Set for a source on a map projection (HRRR): the extracted planes are
-    the projected grid, and every field above describes the regular grid
-    they are resampled onto (:mod:`xuebuild.reproject`), before any crop.
-    Never serialized either — the bundle's grid is the regular one."""
+    the source dimensions gdal_translate actually extracts. Never serialized:
+    the cropped origin and extent already say where the data is."""
     downsample: BlockReduction | None = None
     """Set for a source published coarser than it arrives (MRMS): the
     extracted planes are the source grid, and every field above describes
     the thinned grid their block maxima land on, before any crop. Never
     serialized either."""
+    projection: ProjectedGrid | None = None
+    """Set on a grid on a map projection (:meth:`projected`), which has none
+    of the regular fields: this says where its cells are, and a window's or a
+    tier's is that window's or tier's own."""
+    gaussian: GaussianRows | None = None
+    """Set on a regular Gaussian grid, beside the regular fields every other
+    number here still comes from."""
+
+    @classmethod
+    def projected(cls, projection: ProjectedGrid, crop: CropWindow | None = None) -> GridInfo:
+        """The grid a projected file's planes are published on."""
+        return cls(
+            width=projection.width,
+            height=projection.height,
+            first_longitude=_NO_REGULAR_FIELD,
+            first_latitude=_NO_REGULAR_FIELD,
+            longitude_step=_NO_REGULAR_FIELD,
+            latitude_step=_NO_REGULAR_FIELD,
+            crop=crop,
+            projection=projection,
+        )
 
     @property
     def wraps(self) -> bool:
@@ -111,8 +147,6 @@ class GridInfo:
     @property
     def source_shape(self) -> tuple[int, int]:
         """(height, width) of the plane gdal_translate extracts."""
-        if self.resample is not None:
-            return self.resample.source_shape
         if self.downsample is not None:
             return self.downsample.source_shape
         if self.crop is None:
@@ -123,7 +157,11 @@ class GridInfo:
         """The grid produced by keeping every second row and column (rows and
         columns 0, 2, 4, ...). For the 721-row production grid the last kept
         row still lands exactly on the south pole, and 720 columns at a
-        doubled step still cover the full 360 degrees."""
+        doubled step still cover the full 360 degrees. A projected grid's first
+        cell stays where it is at twice the spacing, and a Gaussian grid's rows
+        are every second one of those it had."""
+        if self.projection is not None:
+            return GridInfo.projected(self.projection.decimated())
         return GridInfo(
             width=(self.width + 1) // 2,
             height=(self.height + 1) // 2,
@@ -131,52 +169,64 @@ class GridInfo:
             first_latitude=self.first_latitude,
             longitude_step=self.longitude_step * 2,
             latitude_step=self.latitude_step * 2,
+            gaussian=replace(self.gaussian, row_stride=self.gaussian.row_stride * 2) if self.gaussian else None,
         )
 
     def metadata(self) -> dict[str, Any]:
-        return {
+        block: dict[str, Any] = {
             "width": self.width,
             "height": self.height,
             "layout": "row-major",
             "rowOrder": "north-to-south",
             "columnOrder": "west-to-east",
-            "firstLongitude": self.first_longitude,
-            "firstLatitude": self.first_latitude,
-            "longitudeStep": self.longitude_step,
-            "latitudeStep": self.latitude_step,
-            "wrapLongitude": self.wraps,
         }
+        if self.projection is not None:
+            block["wrapLongitude"] = False
+            block["projection"] = self.projection.metadata()
+            return block
+        block.update(
+            {
+                "firstLongitude": self.first_longitude,
+                "firstLatitude": self.first_latitude,
+                "longitudeStep": self.longitude_step,
+                "latitudeStep": self.latitude_step,
+                "wrapLongitude": self.wraps,
+            }
+        )
+        if self.gaussian is not None:
+            block["gaussian"] = self.gaussian.metadata()
+        return block
 
 
-def grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
-    """The grid one file's planes are published on. A regular
-    latitude/longitude file describes it outright; a file on a map
-    projection describes the projected grid, and the published one is the
-    regular grid ``source.regrid`` asks for over its footprint — a source
-    that declares no regrid must not be projected, and one that does must
-    be, so a file of the wrong kind is refused rather than misread."""
+def grid_info(path: Path, source: SourceSpec | None = None, family: str | None = None) -> GridInfo:
+    """The grid one file's planes are published on, ``family`` being the grid
+    family it was read for (:meth:`SourceSpec.family_grid`). A regular
+    latitude/longitude file describes it outright; a file on a map projection
+    describes it in projected metres. A source declares which it reads
+    (``SourceSpec.grid_relative_winds``, the one thing that makes a difference
+    to the planes), so a file of the wrong kind is refused rather than misread."""
     info = dataset_info(path, description=f"inspect grid of {path}")
     width, height = (int(value) for value in info["size"])
     transform = info["geoTransform"]
     if transform[2] or transform[4]:
         raise ConversionError(f"rotated grids are unsupported: {path}")
     projection = lambert_conformal_from_wkt(str(info.get("coordinateSystem", {}).get("wkt", "")))
-    regrid = source.regrid if source is not None else None
+    declared = source is not None and source.grid_relative_winds
     if projection is not None:
-        if regrid is None:
+        if not declared:
             raise ConversionError(f"{path} is on a map projection, which this source does not declare")
         if transform[1] <= 0 or transform[5] >= 0:
             raise ConversionError(f"grid must run west-to-east and north-to-south: {path}")
         # GDAL places a projected grid by projecting the record's first
         # point itself, and two GDAL releases land that double a few
         # nanometres apart (seen between the wheel's 3.13 and Ubuntu's
-        # system GDAL). The resampler's every coordinate descends from these
-        # four numbers, and the two encoders must read the same grid, so
+        # system GDAL). The published grid and every rotated wind descend from
+        # these four numbers, and the two encoders must read the same grid, so
         # they are taken to the millimetre — far below anything a 3 km grid
         # means, far above the noise. The native encoder rounds the same
         # way (grid.rs `round3`).
         x0, dx, y0, dy = (round(float(transform[index]), 3) for index in (0, 1, 3, 5))
-        resampler = build_resampler(
+        return GridInfo.projected(
             ProjectedGrid(
                 projection=projection,
                 width=width,
@@ -184,20 +234,10 @@ def grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
                 x0=x0 + dx / 2.0,
                 y0=y0 + dy / 2.0,
                 dx=dx,
-                dy=-dy,
-            ),
-            regrid,
+                dy=dy,
+            )
         )
-        return GridInfo(
-            width=resampler.width,
-            height=resampler.height,
-            first_longitude=resampler.first_longitude,
-            first_latitude=resampler.first_latitude,
-            longitude_step=resampler.step,
-            latitude_step=-resampler.step,
-            resample=resampler,
-        )
-    if regrid is not None:
+    if declared:
         raise ConversionError(f"{path} is a regular grid, but this source declares a projected one")
     lon_step, lat_step = float(transform[1]), float(transform[5])
     if lon_step <= 0 or lat_step >= 0:
@@ -218,7 +258,35 @@ def grid_info(path: Path, source: SourceSpec | None = None) -> GridInfo:
     )
     if source is not None and source.downsample is not None:
         grid = downsample_grid(grid, source.downsample, path)
+    # A family on a grid of its own (CFSv2's 1° pressure levels) is not the
+    # model's Gaussian grid.
+    if source is not None and source.gaussian_n is not None and family is None:
+        grid = replace(grid, gaussian=gaussian_rows(grid, source.gaussian_n, path))
     return grid
+
+
+# How far a file's first latitude may lie from the Gaussian row it is taken for,
+# as a fraction of a row. GDAL's even spacing is within 0.014 of one of the true
+# rows on sflux; on CFSv2, whose step is 180°/190, it starts true and a window cut
+# from the northern hemisphere is at most this far off.
+_GAUSSIAN_ROW_TOLERANCE = 0.25
+
+
+def gaussian_rows(grid: GridInfo, n: int, path: Path) -> GaussianRows:
+    """Which rows of the Gaussian grid of ``n`` a file's are. A whole file's are
+    all of them; a file cut out of one (a fixture) starts wherever its first
+    latitude says, its rows still consecutive. Column roll and crop leave the
+    rows alone: the first moves columns, and the second adds to ``first_row``
+    (:func:`crop_grid`). A file that is not on the grid is refused."""
+    first_row = nearest_gaussian_row(n, grid.first_latitude)
+    if (
+        not 0 <= first_row
+        or first_row + grid.height > 2 * n
+        or abs(abs(grid.latitude_step) * 2 * n - 180.0) > 1.8
+        or abs(gaussian_latitude(n, first_row) - grid.first_latitude) > abs(grid.latitude_step) * _GAUSSIAN_ROW_TOLERANCE
+    ):
+        raise ConversionError(f"{path} is not on the Gaussian grid of {n} latitudes per hemisphere")
+    return GaussianRows(n=n, first_row=first_row)
 
 
 def downsample_grid(grid: GridInfo, downsample: Downsample, path: Path) -> GridInfo:
@@ -374,6 +442,9 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
     box outright. On a wrapping source grid ``west > east`` crosses the
     antimeridian; the returned origin is renormalized into [-180, 180) and the
     window, not the metadata, carries the wrap.
+
+    On a projected grid the box is a curved patch: see :func:`_crop_projected`.
+    A Gaussian grid is cropped by its regular fields, and its rows follow.
     """
     if grid.crop is not None:
         raise ConversionError("a grid can only be cropped once")
@@ -389,6 +460,8 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
         if east < west or not grid.wraps:
             raise ConversionError(f"bbox must have a positive longitude span: {bbox}")
         span = 360.0
+    if grid.projection is not None:
+        return _crop_projected(grid, grid.projection, west, south, east, north)
 
     # Degrees east of the grid's origin. A wrapping grid has every longitude
     # on some column. A regional grid is taken in the copy of the world it
@@ -437,6 +510,60 @@ def crop_grid(grid: GridInfo, bbox: tuple[float, float, float, float]) -> GridIn
             width=width,
             height=height,
         ),
-        resample=grid.resample,
         downsample=grid.downsample,
+        gaussian=(
+            replace(grid.gaussian, first_row=grid.gaussian.first_row + row_start * grid.gaussian.row_stride)
+            if grid.gaussian
+            else None
+        ),
+    )
+
+
+# Points walked along each edge of a box, ends included: an edge is a curve on
+# the projected plane, and these bound it to well under a cell of any window a
+# case asks for.
+_BBOX_EDGE_POINTS = 64
+# Past this the cone's radius runs away, and a box reaching a pole is the whole
+# grid in any case.
+_BBOX_LATITUDE_LIMIT = 89.9
+
+
+def _crop_projected(
+    grid: GridInfo, projected: ProjectedGrid, west: float, south: float, east: float, north: float
+) -> GridInfo:
+    """The smallest whole-cell window covering the box's edges. Each of the four
+    edges is walked in :data:`_BBOX_EDGE_POINTS` points and projected; the window
+    takes the cell at or before the lowest column and row they reach and the one
+    at or after the highest, the rule a regular grid's crop has, clamped to the
+    grid. A box wholly off the grid is refused."""
+    south = max(south, -_BBOX_LATITUDE_LIMIT)
+    north = min(north, _BBOX_LATITUDE_LIMIT)
+    columns: list[float] = []
+    rows: list[float] = []
+    last = float(_BBOX_EDGE_POINTS - 1)
+    for index in range(_BBOX_EDGE_POINTS):
+        longitude = west + (east - west) * index / last
+        latitude = south + (north - south) * index / last
+        for point in ((longitude, south), (longitude, north), (west, latitude), (east, latitude)):
+            x, y = projected.projection.forward_wrapped(*point)
+            columns.append((x - projected.x0) / projected.dx)
+            rows.append((y - projected.y0) / projected.dy)
+    column_start = max(math.floor(min(columns) + 1e-9), 0)
+    column_end = min(math.ceil(max(columns) - 1e-9), grid.width - 1)
+    row_start = max(math.floor(min(rows) + 1e-9), 0)
+    row_end = min(math.ceil(max(rows) - 1e-9), grid.height - 1)
+    width = column_end - column_start + 1
+    height = row_end - row_start + 1
+    if width <= 0 or height <= 0:
+        raise ConversionError(f"bbox does not overlap the source grid: {(west, south, east, north)}")
+    return GridInfo.projected(
+        projected.window(row_start, column_start, height, width),
+        crop=CropWindow(
+            source_width=grid.width,
+            source_height=grid.height,
+            row_start=row_start,
+            column_start=column_start,
+            width=width,
+            height=height,
+        ),
     )

@@ -131,7 +131,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertIsNone(SPEC.window_hours)
         self.assertIsNone(SPEC.cadence_seconds)
         self.assertIsNone(SPEC.open_meteo)
-        self.assertIsNone(SPEC.regrid)
+        self.assertFalse(SPEC.grid_relative_winds)
         self.assertFalse(SPEC.video)
         # Nothing fetches it, nor the two EFAS runs (tests/test_efas.py);
         # every other source is fetched and live.

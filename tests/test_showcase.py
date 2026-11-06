@@ -12,6 +12,7 @@ import numpy as np
 from tests._support import TempRoot
 from xuebuild.discover import bundle_input_ids, published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid
+from xuebuild.reproject import LambertConformal, ProjectedGrid
 from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import build_bin_manifest, validate_bin_manifest
 from xuebuild.showcase import (
@@ -453,6 +454,18 @@ class CatalogEntryTest(unittest.TestCase):
         self.assertEqual(east, -170.0)
         self.assertLessEqual(south, -20.0)
         self.assertGreaterEqual(north, 10.0)
+
+    def test_grid_extent_of_a_projected_window(self) -> None:
+        cone = LambertConformal(6371229.0, 38.5, 38.5, 38.5, -97.5)
+        whole = ProjectedGrid(cone, 1799, 1059, -2697520.143, 1586693.847, 3000.0, -3000.0)
+        box = (-105.0, 35.0, -95.0, 42.0)
+        window = crop_grid(GridInfo.projected(whole), box)
+        west, south, east, north = _grid_extent(window.metadata())
+        self.assertEqual([west, south, east, north], [round(value, 6) for value in window.projection.footprint()])
+        self.assertLessEqual(west, box[0])
+        self.assertGreaterEqual(east, box[2])
+        self.assertLessEqual(south, box[1])
+        self.assertGreaterEqual(north, box[3])
 
 
 class ViewBlockTest(unittest.TestCase):

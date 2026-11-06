@@ -198,7 +198,7 @@
     },
     "hrrr": {
       "title": "NOAA HRRR 3 km",
-      "description": "The NOAA High-Resolution Rapid Refresh over the contiguous United States, resampled from its 3 km Lambert conformal grid onto a regular 0.03° one, hourly to 18 hours, a new cycle every hour.",
+      "description": "The NOAA High-Resolution Rapid Refresh over the contiguous United States, on its own 3 km Lambert conformal grid (1799 × 1059 cells) with the winds turned to east and north, hourly to 18 hours, a new cycle every hour.",
       "license": "other",
       "providers": [
         {
@@ -229,7 +229,7 @@
     },
     "rrfs": {
       "title": "NOAA RRFS 3 km",
-      "description": "The NOAA Rapid Refresh Forecast System over the contiguous United States with the smoke and dust it carries inline (RRFS-SD), resampled from its 3 km Lambert conformal grid onto a regular 0.03° one, hourly to 84 hours. Four cycles a day; only the newest is kept.",
+      "description": "The NOAA Rapid Refresh Forecast System over the contiguous United States with the smoke and dust it carries inline (RRFS-SD), on its own 3 km Lambert conformal grid (1799 × 1059 cells) with the winds turned to east and north, hourly to 84 hours. Four cycles a day; only the newest is kept.",
       "license": "other",
       "providers": [
         {

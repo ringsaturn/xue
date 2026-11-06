@@ -9,18 +9,25 @@ from __future__ import annotations
 
 import copy
 import json
-import math
 import unittest
 from typing import Any
+
+from dataclasses import replace
+from datetime import UTC, datetime
 
 import numpy as np
 from jsonschema import Draft202012Validator
 
+from tests._support import TempRoot
 from tests.jsonschemas import _registry, _schema, check, errors
 from xuebuild import zarrstore
 from xuebuild.binformat import BundleMetadata
-from xuebuild.errors import BundleError, ManifestError
+from xuebuild.errors import BundleError, ConversionError, ManifestError
+from xuebuild.grid import GaussianRows, GridInfo, crop_grid, gaussian_rows
 from xuebuild.manifest import _validate_grid
+from xuebuild.metadata import build_metadata
+from xuebuild.reproject import LambertConformal, ProjectedGrid, gaussian_latitude, gaussian_latitudes, nearest_gaussian_row
+from xuebuild.sources import source_spec
 
 PROJECTION = {
     "kind": "lambert-conformal",
@@ -433,24 +440,6 @@ class GroupDocumentTest(unittest.TestCase):
             zarrstore.group_document([first, second])
 
 
-def gaussian_latitude(n: int, row: int) -> float:
-    """docs/zarr-profile.md, "Coordinates", operation for operation, the same
-    as ``rust/xue/src/projection.rs``."""
-    order = 2 * n
-    degree = float(order)
-    x = math.cos(math.pi * (row + 0.75) / (degree + 0.5))
-    for _ in range(100):
-        previous, current = 1.0, x
-        for k in range(2, order + 1):
-            previous, current = current, ((2.0 * k - 1.0) * x * current - (k - 1.0) * previous) / k
-        derivative = degree * (x * current - previous) / (x * x - 1.0)
-        step = current / derivative
-        x -= step
-        if abs(step) < 1e-15:
-            break
-    return math.degrees(math.asin(x))
-
-
 GOLDEN_LATITUDES = {
     95: {
         0: 89.27671287810583,
@@ -494,6 +483,181 @@ class GaussianLatitudesTest(unittest.TestCase):
             for row, latitude in rows.items():
                 with self.subTest(n=n, row=row):
                     self.assertAlmostEqual(float(roots[row]), latitude, delta=GOLDEN_TOLERANCE)
+
+    def test_the_table_is_the_rows_in_order(self) -> None:
+        latitudes = gaussian_latitudes(95)
+        self.assertEqual(len(latitudes), 190)
+        self.assertTrue(all(north > south for north, south in zip(latitudes, latitudes[1:])))
+        self.assertEqual(latitudes[10], gaussian_latitude(95, 10))
+
+    def test_a_latitude_finds_its_row(self) -> None:
+        for n in (47, 95, 768):
+            for row in (0, 1, n - 1, n, 2 * n - 2, 2 * n - 1):
+                with self.subTest(n=n, row=row):
+                    self.assertEqual(nearest_gaussian_row(n, gaussian_latitude(n, row)), row)
+
+
+# A window of T126 cut 20 rows down from the north: what a fixture is.
+T126_WINDOW = GridInfo(
+    width=48,
+    height=40,
+    first_longitude=100.0,
+    first_latitude=gaussian_latitude(95, 20) + 0.01,
+    longitude_step=0.9375,
+    latitude_step=-180.0 / 190.0,
+)
+
+
+class GaussianRowsTest(unittest.TestCase):
+    def test_a_window_starts_at_the_row_its_first_latitude_names(self) -> None:
+        self.assertEqual(gaussian_rows(T126_WINDOW, 95, "x"), GaussianRows(95, 20, 1))
+
+    def test_a_grid_off_the_gaussian_one_is_refused(self) -> None:
+        cases = {
+            "off a row": replace(T126_WINDOW, first_latitude=T126_WINDOW.first_latitude + 0.45),
+            "rows past the last": replace(T126_WINDOW, height=175),
+            "another spacing": replace(T126_WINDOW, latitude_step=-1.0),
+        }
+        for label, grid in cases.items():
+            with self.subTest(label), self.assertRaises(ConversionError):
+                gaussian_rows(grid, 95, "x")
+
+    def test_the_block_sits_after_the_regular_fields(self) -> None:
+        block = replace(T126_WINDOW, gaussian=GaussianRows(95, 20, 1)).metadata()
+        self.assertEqual(list(block)[-2:], ["wrapLongitude", "gaussian"])
+        self.assertEqual(block["gaussian"], {"n": 95, "firstRow": 20, "rowStride": 1})
+        self.assertEqual(block["latitudeStep"], -180.0 / 190.0)
+
+    def test_a_tier_doubles_the_stride_and_a_crop_raises_the_first_row(self) -> None:
+        whole = GridInfo(384, 190, -180.0, 89.2767, 0.9375, -180.0 / 190.0, gaussian=GaussianRows(95))
+        half = whole.decimated()
+        self.assertEqual((half.height, half.gaussian), (95, GaussianRows(95, 0, 2)))
+        self.assertEqual(half.decimated().gaussian, GaussianRows(95, 0, 4))
+        self.assertEqual(half.column_roll, 0)
+        cropped = crop_grid(whole, (100.0, 20.0, 140.0, 40.0))
+        self.assertEqual(cropped.gaussian.first_row, cropped.crop.row_start)
+        self.assertEqual(cropped.decimated().gaussian, GaussianRows(95, cropped.crop.row_start, 2))
+        # Every tier of the window still names rows of the grid.
+        for grid in (cropped, cropped.decimated(), half):
+            read(metadata(3, {**regular_grid(), "height": grid.height, "gaussian": grid.gaussian.metadata()}))
+
+    def test_a_regular_grid_has_no_block(self) -> None:
+        self.assertNotIn("gaussian", GridInfo(4, 3, -180.0, 90.0, 90.0, -90.0).metadata())
+
+
+RUN_TIME = datetime(2026, 11, 5, tzinfo=UTC)
+LAMBERT = ProjectedGrid(LambertConformal(6371229.0, 38.5, 38.5, 38.5, -97.5), 10, 7, -300000.0, 500000.0, 3000.0, -3000.0)
+LAMBERT_GRID = GridInfo.projected(LAMBERT)
+GAUSSIAN_GRID = GridInfo(16, 12, -180.0, 80.0, 22.5, -180.0 / 12.0, gaussian=GaussianRows(6))
+PROJECTED_NAMES = ("time", "y", "x")
+
+
+def codes_source(grid: GridInfo, source_id: str, bundle: str = "tmp2m") -> zarrstore.CodesSource:
+    hours = [0, 1, 2]
+    metadata = build_metadata(RUN_TIME, hours, grid, "quality", (bundle,), source=source_spec(source_id))
+    planes = {bundle: [np.full(grid.width * grid.height, hour, dtype=np.uint8) for hour in hours]}
+    return zarrstore.CodesSource(metadata, planes, {bundle: "previous"}, (4, 4))
+
+
+class StoreWriterTest(TempRoot, unittest.TestCase):
+    def documents_of(self, store) -> dict[str, Any]:
+        return json.loads((store / "zarr.json").read_text())["consolidated_metadata"]["metadata"]
+
+    def test_a_projected_bundle_is_written_on_y_and_x_with_its_crs(self) -> None:
+        store = self.root / "bundles.zarr"
+        written = zarrstore.write_shared_store(
+            store,
+            [
+                zarrstore.SharedMember("tmp2m", codes_source(LAMBERT_GRID, "hrrr"), PROJECTED_NAMES),
+                zarrstore.SharedMember("prate", codes_source(LAMBERT_GRID, "hrrr", "prate"), PROJECTED_NAMES),
+            ],
+        )
+        arrays = self.documents_of(store)
+        self.assertEqual(list(arrays), ["tmp2m", "prate", "time", "y", "x", "crs"])
+        self.assertEqual(arrays["tmp2m"]["dimension_names"], list(PROJECTED_NAMES))
+        self.assertEqual(list(arrays["tmp2m"]["attributes"])[-1], "grid_mapping")
+        for document in arrays.values():
+            check("store-array", document)
+        crs = arrays["crs"]
+        self.assertEqual(
+            list(crs["attributes"]),
+            [
+                "grid_mapping_name",
+                "latitude_of_projection_origin",
+                "longitude_of_central_meridian",
+                "standard_parallel",
+                "earth_radius",
+                "crs_wkt",
+            ],
+        )
+        self.assertEqual(sorted(path.name for path in (store / "crs").iterdir()), ["zarr.json"])
+        np.testing.assert_array_equal(
+            np.frombuffer((store / "y" / "c" / "0").read_bytes(), "<f8"), 500000.0 + np.arange(7.0) * -3000.0
+        )
+        np.testing.assert_array_equal(
+            np.frombuffer((store / "x" / "c" / "0").read_bytes(), "<f8"), -300000.0 + np.arange(10.0) * 3000.0
+        )
+        self.assertEqual(written["tmp2m"].arrays.keys(), {"tmp2m", "time", "y", "x", "crs"})
+        self.assertEqual(zarrstore.bundle_metadata(store, "tmp2m")["schemaVersion"], 4)
+
+    def test_a_split_build_merges_into_what_a_whole_one_writes(self) -> None:
+        whole = self.root / "whole" / "bundles.zarr"
+        members = [
+            zarrstore.SharedMember("tmp2m", codes_source(LAMBERT_GRID, "hrrr"), PROJECTED_NAMES),
+            zarrstore.SharedMember("prate", codes_source(LAMBERT_GRID, "hrrr", "prate"), PROJECTED_NAMES),
+        ]
+        zarrstore.write_shared_store(whole, members)
+        split = self.root / "split" / "bundles.zarr"
+        for member in members:
+            written = zarrstore.write_bundle_arrays(member.source, split, member.bundle_id, member.dimensions)
+            zarrstore.write_part(split, [written])
+        zarrstore.finalize_store(split, ["tmp2m", "prate"], remove_parts=True)
+        self.assertEqual((split / "zarr.json").read_bytes(), (whole / "zarr.json").read_bytes())
+        # A top-up: one bundle's part over the live group document.
+        topped = self.root / "topped" / "bundles.zarr"
+        again = zarrstore.write_bundle_arrays(members[0].source, topped, "tmp2m", PROJECTED_NAMES)
+        zarrstore.write_part(topped, [again])
+        zarrstore.finalize_store(topped, ["tmp2m", "prate"], base=json.loads((whole / "zarr.json").read_text()))
+        self.assertEqual((topped / "zarr.json").read_bytes(), (whole / "zarr.json").read_bytes())
+
+    def test_the_wrong_names_for_the_grid_are_refused(self) -> None:
+        with self.assertRaises(BundleError):
+            zarrstore.write_bundle_arrays(codes_source(LAMBERT_GRID, "hrrr"), self.root / "a", "tmp2m", ("time", "latitude", "longitude"))
+        with self.assertRaises(BundleError):
+            zarrstore.write_bundle_arrays(codes_source(GAUSSIAN_GRID, "sflux"), self.root / "b", "tmp2m", PROJECTED_NAMES)
+
+    def test_a_series_store_is_on_y_and_x_too(self) -> None:
+        store = self.root / "tmp2m.series.zarr"
+        zarrstore.write_store(codes_source(LAMBERT_GRID, "hrrr"), store, delta=True, series=True)
+        arrays = self.documents_of(store)
+        self.assertEqual(list(arrays), ["tmp2m", "time", "y", "x", "crs"])
+        self.assertEqual(arrays["tmp2m"]["dimension_names"], list(PROJECTED_NAMES))
+        self.assertEqual(arrays["tmp2m"]["attributes"]["grid_mapping"], "crs")
+        self.assertEqual(zarrstore.array_dimensions(store, "tmp2m"), PROJECTED_NAMES)
+
+    def test_a_gaussian_latitude_coordinate_holds_the_true_rows(self) -> None:
+        for grid, rows in (
+            (GAUSSIAN_GRID, list(range(12))),
+            (GAUSSIAN_GRID.decimated(), list(range(0, 12, 2))),
+            (replace(GAUSSIAN_GRID, height=4, gaussian=GaussianRows(6, 3, 2)), [3, 5, 7, 9]),
+        ):
+            with self.subTest(rows=rows):
+                store = self.root / f"g{rows[0]}{len(rows)}.zarr"
+                zarrstore.write_shared_store(store, [zarrstore.SharedMember("tmp2m", codes_source(grid, "sflux"))])
+                latitude = np.frombuffer((store / "latitude" / "c" / "0").read_bytes(), "<f8")
+                np.testing.assert_array_equal(latitude, [gaussian_latitude(6, row) for row in rows])
+                self.assertNotIn("crs", self.documents_of(store))
+                self.assertEqual(zarrstore.bundle_metadata(store, "tmp2m")["schemaVersion"], 3)
+                self.assertNotIn("grid_mapping", self.documents_of(store)["tmp2m"]["attributes"])
+
+    def test_a_regular_coordinate_is_the_regular_fields(self) -> None:
+        grid = replace(GAUSSIAN_GRID, gaussian=None)
+        store = self.root / "regular.zarr"
+        zarrstore.write_shared_store(store, [zarrstore.SharedMember("tmp2m", codes_source(grid, "gfs"))])
+        np.testing.assert_array_equal(
+            np.frombuffer((store / "latitude" / "c" / "0").read_bytes(), "<f8"),
+            80.0 + np.arange(12.0) * (-180.0 / 12.0),
+        )
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 name: publish hrrr
 
 # NOAA HRRR, 3 km over the contiguous United States: a new cycle every hour,
-# hourly to F18, resampled from the model's Lambert conformal grid onto a
-# 0.03° one (2441 × 1051) by the encoder. Nineteen frames of 2.6 million
-# cells is a fraction of a GFS run's work, so the run is split into a few
+# hourly to F18, on the model's own Lambert conformal grid (1799 × 1059).
+# Nineteen frames of 1.9 million cells is a fraction of a GFS run's work, so the
+# run is split into a few
 # jobs rather than sixteen — a publish every hour should not ask the runner
 # pool for much. The pipeline lives in the reusable publish.yml.
 

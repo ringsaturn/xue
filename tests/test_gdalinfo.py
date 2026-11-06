@@ -117,7 +117,7 @@ class CoordinateSystemMatchesTheCommandLine(unittest.TestCase):
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             through_cli = grid_info(FIXTURE_PROJECTED_GRIB, source_spec("hrrr"))
         self.assertEqual(through_wheel.metadata(), through_cli.metadata())
-        self.assertEqual(through_wheel.resample.source, through_cli.resample.source)
+        self.assertEqual(through_wheel.projection, through_cli.projection)
 
 
 @requires_native

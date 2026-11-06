@@ -683,8 +683,10 @@ never neither.
 ##### Gaussian rows
 
 A regular Gaussian grid is regular in longitude only: its latitudes are the
-roots of a Legendre polynomial, up to 0.014 of a row from even spacing. The
-regular fields describe it as evenly spaced, the optional `gaussian` block
+roots of a Legendre polynomial. The regular fields describe it as evenly spaced
+as GDAL reports it (within 0.014 of a row of the roots on `GFS-SFLUX`, whose step
+spans its first row to its last; on `CFSv2`, at GDAL's 180°/190 from the first
+root, drifting to half a row by the southern edge), the optional `gaussian` block
 beside them says what its rows really are, and it raises no version floor:
 
 ```json
@@ -705,9 +707,8 @@ beside them says what its rows really are, and it raises no version floor:
   from the north. A crop raises `firstRow`, a reduced-resolution tier
   `rowStride`. The last row must lie on the Gaussian grid. The block has
   exactly these three integer fields and needs schemaVersion 3.
-- A renderer keeps sampling by the regular fields: the difference is below
-  what any filter resolves, and a reader that ignores the block draws what it
-  always drew. The true latitudes are for what names a place: a point read's
+- A renderer keeps sampling by the regular fields, and a reader that ignores
+  the block draws what it always drew. The true latitudes are for what names a place: a point read's
   nearest row and the cell centre it reports, and a store's `latitude`
   coordinate. Past the edge of a crop a point belongs to the edge row for half
   a row's spacing; the first and last rows of the whole Gaussian grid own the
@@ -766,6 +767,12 @@ schemaVersion 4:
   outside coordinates of *[Regional Grids](#regional-grids)*. Cells are not
   regular in longitude or latitude: a reader that maps between them and
   geography goes through the projection.
+- Vector components are east and north, on this grid as on every other. A model
+  writes its winds along the grid's axes (GRIB2 resolution and component flags
+  `0x08`), and an encoder turns each pair before quantizing it:
+  `u_e = cos α × u + sin α × v`, `v_e = −sin α × u + cos α × v`, with `α` the
+  cone constant times the longitude's distance from `centralMeridian`. The
+  speed is the model's. *docs/encoder.md*, "Native grids", gives the arithmetic.
 
 Older files do something else, and a reader keeps reading them. Up to
 schemaVersion 3 a projected model was resampled by the encoder onto a regular
@@ -780,9 +787,7 @@ neither gaps nor a reserved code (the format has neither) but the nearest source
 cell continued outwards (the sampling coordinate is clamped to the source grid),
 so the plane is complete and no filter or contour meets an edge. Those cells are
 not a forecast: a reader that knows the source's projection clips to its
-footprint, and one that does not draws the extension. The reference pipeline
-documents the arithmetic in `xuebuild/reproject.py`; the native encoder repeats
-it and the two are held byte-identical. A reader tells the two apart by the
+footprint, and one that does not draws the extension. A reader tells the two apart by the
 `grid` block alone, never by the source: one `model` publishes both.
 
 `model` and `product` identify the source dataset. Every encoder writes
@@ -794,7 +799,8 @@ the field without requiring it. Registered pairs:
 | `GFS` | `pgrb2.0p25` | 1440 × 721, 0.25° | 1 h to f120, 3 h to f240 | All series include the analysis frame (f000). `prate` is an instantaneous rate at every step |
 | `ECMWF` | `ifs-0p25` | 1440 × 721, 0.25° | 3 h to 144 h, 6 h to 240 h | `prate` is de-accumulated from the run-total `tp`, so its series has no analysis frame and starts at `firstFrameOffset: 3`; so does `gust`, whose record (the maximum over the interval ending at the frame) is empty at the analysis. Its wave fields come from the cycle's `wave` stream |
 | `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf` |
-| `HRRR` | `wrfsfc` | 2441 × 1051, 0.03°, regional (134.10 W – 60.90 W, 52.62 N – 21.12 N) | 1 h to f18 | A new cycle every hour. Resampled by the encoder from the model's 3 km Lambert conformal grid (see "Projected sources" above); the rectangle's corners the conic domain never covered repeat the nearest source cell. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
+| `HRRR` | `wrfsfc` | 1799 × 1059, 3 km Lambert conformal, regional (see "Projected Sources" above) | 1 h to f18 | A new cycle every hour. Runs published before schemaVersion 4 are on a regular 2441 × 1051 grid at 0.03° (134.10 W – 60.90 W, 52.62 N – 21.12 N), resampled by the encoder. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
+| `RRFS` | `2dfld.3km.conus` | 1799 × 1059, 3 km Lambert conformal, regional: HRRR's grid | 1 h to f84 | The 00/06/12/18Z cycles. Isobaric records come from the `prslev` file of each hour. Carries the near-surface smoke and dust of RRFS-SD |
 | `CFSv2` | `time-grib-01` | 384 × 190 Gaussian, 0.9375° (T126) | 6 h from f6 to f6552 | The seasonal source: ensemble member 01 of the 00Z and 12Z cycles, thirty-nine weeks of a nine-month run. Its series begin at the first step, so every bundle starts at `firstFrameOffset: 6` — the cycle's analysis is in another file family and is not published. `prate`, `dswrf` and `tcdc` are means over the six hours ending at the frame (`typeOfStatisticalProcessing: 0`) although the records carry the instantaneous template |
 | `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 

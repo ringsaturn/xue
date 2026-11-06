@@ -120,7 +120,7 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertTrue(SPEC.series_file)
         self.assertFalse(SPEC.observation or SPEC.live or SPEC.fetched)
         self.assertIsNone(SPEC.open_meteo)
-        self.assertIsNone(SPEC.regrid)
+        self.assertFalse(SPEC.grid_relative_winds)
         self.assertFalse(SPEC.video)
         self.assertEqual(SPEC.variant_factors, ())
         self.assertEqual(SPEC.production_grid, (1440, 721))

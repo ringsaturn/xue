@@ -1,21 +1,20 @@
-"""The HRRR source: an hourly cycle, a Lambert conformal grid resampled onto
-a regular one, and two records that arrive under another centre's spelling.
+"""The HRRR source: an hourly cycle, a Lambert conformal grid published as the
+model computes it, and two records that arrive under another centre's spelling.
 
 Three things are new with it. A source that cycles every hour rather than
 every six (``SourceSpec.cycle_hours``, read by ``parse_run`` and
-``resolve_run``). A source on a map projection, which the encoder resamples
-onto the regular grid the format describes before anything else reads it —
-``xuebuild/reproject.py``, whose arithmetic the native encoder repeats step
-for step, so the resampled planes are checked here against GDAL's own
-georeferencing of the fixture and the two encoders against each other. And
-two registry widenings: the sea level pressure HRRR writes as ``MSLMA``
-(0/3/198) is accepted under ``prmsl``, and the composite reflectivity it
-forecasts (``REFC``, 0/16/196) is published under the radar mosaic's
-``cref``.
+``resolve_run``). A source on a map projection, whose grid the bundle declares
+in place of the regular fields and whose grid-relative winds are turned to east
+and north before they are quantized: ``xuebuild/reproject.py``, whose arithmetic
+the native encoder repeats step for step, so the cells are checked here against
+GDAL's own georeferencing of the fixture and the two encoders against each
+other. And two registry widenings: the sea level pressure HRRR writes as
+``MSLMA`` (0/3/198) is accepted under ``prmsl``, and the composite reflectivity
+it forecasts (``REFC``, 0/16/196) is published under the radar mosaic's ``cref``.
 
-``tests/fixtures/hrrr.2026091100.f000.crop.grib2`` is a 120 x 120 cell
-window of the 2026-09-11 00Z analysis over the Gulf coast, every record the
-source fetches in source order, still on the model's own projection.
+``tests/fixtures/hrrr.2026091100.f000.crop.grib2`` is a 120 x 120 cell window of
+the 2026-09-11 00Z analysis over the Gulf coast, every record the source fetches
+in source order, still on the model's own projection.
 """
 
 from __future__ import annotations
@@ -36,9 +35,12 @@ import numpy as np
 from tests._support import ClassTempRoot, FIXTURES, assert_native_matches, requires_gdalinfo, requires_native, stored_bundle
 from xuebuild import binconvert, grib2
 from xuebuild.bundles import VECTOR_BUNDLES
-from xuebuild.binconvert import _extract_planes
+from xuebuild.binconvert import _extract_planes, _grid_relative_vectors
 from xuebuild.discover import published_bundle_ids
 from xuebuild.grid import GridInfo, crop_grid, grid_info
+from xuebuild.ladder import decimate_codes
+from xuebuild.metadata import build_metadata
+from xuebuild.quantize import PROFILES
 from xuebuild.errors import ConversionError, DownloadError
 from xuebuild.fetch import (
     HRRR_BASE_URLS,
@@ -56,9 +58,9 @@ from xuebuild.model import GfsRun
 from xuebuild.reproject import (
     LambertConformal,
     ProjectedGrid,
-    Regrid,
-    build_resampler,
     lambert_conformal_from_wkt,
+    rotate_winds,
+    wind_rotation,
 )
 from xuebuild.sources import source_spec
 from xuebuild.variables import variable_spec
@@ -72,11 +74,12 @@ CONUS = ProjectedGrid(
     projection=LambertConformal(6371229.0, 38.5, 38.5, 38.5, -97.5),
     width=1799,
     height=1059,
-    x0=-2699020.14252193 + 1500.0,
-    y0=1588193.8474433357 - 1500.0,
+    x0=-2699020.143 + 1500.0,
+    y0=1588193.847 - 1500.0,
     dx=3000.0,
-    dy=3000.0,
+    dy=-3000.0,
 )
+CONUS_GRID = GridInfo.projected(CONUS)
 
 HRRR_F01_IDX = "\n".join(
     [
@@ -95,17 +98,18 @@ HRRR_F01_IDX = "\n".join(
 
 
 class SourceRegistryTests(unittest.TestCase):
-    def test_the_source_is_hourly_and_regridded(self) -> None:
+    def test_the_source_is_hourly_and_on_its_own_grid(self) -> None:
         self.assertEqual(HRRR.cycle_hours, 1)
         self.assertEqual(HRRR.horizon_hours, 18)
         self.assertEqual(HRRR.forecast_hours(18), list(range(19)))
-        self.assertEqual(HRRR.regrid, Regrid(step=0.03))
-        self.assertEqual(HRRR.production_grid, (2441, 1051))
+        self.assertTrue(HRRR.grid_relative_winds)
+        self.assertEqual(HRRR.production_grid, (1799, 1059))
+        self.assertEqual(HRRR.tile, (64, 64))
         # The global models keep their six-hourly cycles and 240-hour axes.
         for model in ("gfs", "ecmwf", "sflux"):
             self.assertEqual(source_spec(model).cycle_hours, 6, model)
             self.assertEqual(source_spec(model).horizon_hours, 240, model)
-            self.assertIsNone(source_spec(model).regrid, model)
+            self.assertFalse(source_spec(model).grid_relative_winds, model)
 
     def test_published_bundles(self) -> None:
         published = published_bundle_ids(HRRR)
@@ -335,15 +339,15 @@ class RecordMatchingTests(unittest.TestCase):
 
 
 class ProjectionTests(unittest.TestCase):
-    def test_the_first_cell_projects_where_gdal_puts_it(self) -> None:
+    def test_the_south_west_cell_projects_where_gdal_puts_it(self) -> None:
         x, y = CONUS.projection.forward(-122.719528, 21.138123)
-        self.assertAlmostEqual(x, CONUS.x0, places=6)
-        self.assertAlmostEqual(y, CONUS.y0 - 1058 * CONUS.dy, places=6)
+        self.assertAlmostEqual(x, CONUS.x0, delta=0.1)
+        self.assertAlmostEqual(y, CONUS.y0 + 1058 * CONUS.dy, delta=0.1)
         longitude, latitude = CONUS.projection.inverse(x, y)
         self.assertAlmostEqual(longitude, -122.719528, places=9)
         self.assertAlmostEqual(latitude, 21.138123, places=9)
 
-    def test_the_production_grid_is_the_footprint_at_three_hundredths(self) -> None:
+    def test_the_footprint_is_the_domains(self) -> None:
         west, south, east, north = CONUS.footprint()
         # The longitude extremes sit on the northern corners, the latitude
         # extremes at the middle of the top and the corners of the bottom.
@@ -351,30 +355,24 @@ class ProjectionTests(unittest.TestCase):
         self.assertAlmostEqual(east, -60.9172, places=4)
         self.assertAlmostEqual(south, 21.1381, places=4)
         self.assertAlmostEqual(north, 52.6157, places=4)
-        resampler = build_resampler(CONUS, HRRR.regrid)
-        self.assertEqual((resampler.width, resampler.height), HRRR.production_grid)
-        self.assertEqual((resampler.first_longitude, resampler.first_latitude), (-134.1, 52.62))
-        self.assertEqual(resampler.column.shape, (1051, 2441))
-        self.assertTrue(((resampler.fx >= 0) & (resampler.fx <= 1)).all())
-        self.assertTrue(((resampler.fy >= 0) & (resampler.fy <= 1)).all())
 
-    def test_a_constant_plane_stays_constant_and_a_linear_one_is_exact(self) -> None:
-        small = ProjectedGrid(CONUS.projection, 40, 30, CONUS.x0, CONUS.y0, CONUS.dx, CONUS.dy)
-        resampler = build_resampler(small, Regrid(step=0.05))
-        constant = np.full((30, 40), 7.5)
-        np.testing.assert_allclose(resampler.take(constant), 7.5, rtol=0, atol=1e-12)
-        rows, columns = np.mgrid[0:30, 0:40]
-        linear = 2.0 * columns + 0.5 * rows
-        expected = 2.0 * (resampler.column + resampler.fx) + 0.5 * (resampler.row + resampler.fy)
-        np.testing.assert_allclose(resampler.take(linear), expected, rtol=0, atol=1e-9)
-        # Beyond the source the sampling coordinate is clamped, so every
-        # target cell — the rectangle's corners the cone never covered
-        # included — reads within the source.
-        self.assertTrue((resampler.column >= 0).all() and (resampler.column <= 38).all())
-        self.assertTrue((resampler.row >= 0).all() and (resampler.row <= 28).all())
-        self.assertTrue((resampler.column == 0).any() and (resampler.column == 38).any())
-        with self.assertRaises(ConversionError):
-            resampler.take(np.zeros((31, 40)))
+    def test_a_southern_cone_inverts_onto_itself(self) -> None:
+        south = LambertConformal(6371229.0, -30.0, -60.0, -45.0, 140.0)
+        self.assertLess(south.cone_constant, 0.0)
+        x, y = south.forward(150.0, -40.0)
+        longitude, latitude = south.inverse(x, y)
+        self.assertAlmostEqual(longitude, 150.0, places=9)
+        self.assertAlmostEqual(latitude, -40.0, places=9)
+
+    def test_a_wrapped_longitude_lands_on_the_same_point(self) -> None:
+        self.assertEqual(CONUS.projection.forward_wrapped(262.5, 38.5), CONUS.projection.forward(-97.5, 38.5))
+        self.assertEqual(CONUS.projection.forward_wrapped(620.0, 40.0), CONUS.projection.forward(-100.0, 40.0))
+
+    def test_the_wkt_reads_back_as_the_projection(self) -> None:
+        self.assertEqual(lambert_conformal_from_wkt(CONUS.projection.wkt()), CONUS.projection)
+
+    def test_the_metadata_block_reads_back_as_the_grid(self) -> None:
+        self.assertEqual(ProjectedGrid.from_metadata(CONUS.metadata(), 1799, 1059), CONUS)
 
     def test_wkt_is_read_and_a_geographic_one_is_not_a_projection(self) -> None:
         self.assertIsNone(lambert_conformal_from_wkt(""))
@@ -382,6 +380,161 @@ class ProjectionTests(unittest.TestCase):
         self.assertIsNone(lambert_conformal_from_wkt('GEOGCS["WGS 84"]'))
         with self.assertRaisesRegex(ConversionError, "unsupported map projection"):
             lambert_conformal_from_wkt('PROJCRS["x",CONVERSION["Polar Stereographic"]]')
+
+
+class GridBlockTests(unittest.TestCase):
+    def test_the_grid_block_declares_the_projection_alone(self) -> None:
+        block = CONUS_GRID.metadata()
+        self.assertEqual(
+            list(block), ["width", "height", "layout", "rowOrder", "columnOrder", "wrapLongitude", "projection"]
+        )
+        self.assertEqual((block["width"], block["height"], block["wrapLongitude"]), (1799, 1059, False))
+        self.assertEqual(
+            block["projection"],
+            {
+                "kind": "lambert-conformal",
+                "radius": 6371229.0,
+                "standardParallel1": 38.5,
+                "standardParallel2": 38.5,
+                "latitudeOfOrigin": 38.5,
+                "centralMeridian": -97.5,
+                "x0": CONUS.x0,
+                "y0": CONUS.y0,
+                "dx": 3000.0,
+                "dy": -3000.0,
+            },
+        )
+
+    def test_only_a_projected_grid_is_version_4(self) -> None:
+        run_time = datetime(2026, 9, 11, tzinfo=UTC)
+        self.assertEqual(build_metadata(run_time, [0], CONUS_GRID, "quality", ("tmp2m",), source=HRRR)["schemaVersion"], 4)
+        regular = GridInfo(4, 3, -180.0, 90.0, 90.0, -90.0)
+        self.assertEqual(build_metadata(run_time, [0], regular, "quality", ("tmp2m",))["schemaVersion"], 3)
+
+    def test_the_half_grid_keeps_its_first_cell_and_doubles_its_steps(self) -> None:
+        half = CONUS_GRID.decimated()
+        self.assertEqual((half.width, half.height), (900, 530))
+        self.assertEqual((half.projection.x0, half.projection.y0), (CONUS.x0, CONUS.y0))
+        self.assertEqual((half.projection.dx, half.projection.dy), (6000.0, -6000.0))
+        self.assertEqual(half.projection.height, half.height)
+
+    def test_the_grid_cuts_into_the_tiles_the_comment_says(self) -> None:
+        self.assertEqual((-(-1799 // HRRR.tile[0]), -(-1059 // HRRR.tile[1])), (29, 17))
+
+
+class CropTests(unittest.TestCase):
+    def test_a_crop_adds_its_offset_and_covers_the_box(self) -> None:
+        box = (-105.0, 35.0, -95.0, 42.0)
+        cropped = crop_grid(CONUS_GRID, box)
+        crop, window = cropped.crop, cropped.projection
+        self.assertEqual((cropped.width, cropped.height), (crop.width, crop.height))
+        self.assertEqual(cropped.source_shape, (1059, 1799))
+        self.assertEqual(window.x0, CONUS.x0 + crop.column_start * CONUS.dx)
+        self.assertEqual(window.y0, CONUS.y0 + crop.row_start * CONUS.dy)
+        self.assertEqual((window.dx, window.dy), (CONUS.dx, CONUS.dy))
+        # Every point of the box is inside the window, the corners and the
+        # middle of the northern edge, which bows past them on the cone.
+        for longitude in np.linspace(box[0], box[2], 41):
+            for latitude in np.linspace(box[1], box[3], 41):
+                x, y = CONUS.projection.forward(float(longitude), float(latitude))
+                self.assertLessEqual(window.x0, x)
+                self.assertLessEqual(x, window.x0 + (window.width - 1) * window.dx)
+                self.assertGreaterEqual(window.y0, y)
+                self.assertGreaterEqual(y, window.y0 + (window.height - 1) * window.dy)
+        # And it holds nothing it does not need: a cell off each side.
+        self.assertLess(window.width, 400)
+        self.assertLess(window.height, 400)
+
+    def test_a_box_past_the_domain_is_clamped_to_it(self) -> None:
+        cropped = crop_grid(CONUS_GRID, (-170.0, -89.9, -20.0, 89.9))
+        self.assertEqual((cropped.width, cropped.height), (1799, 1059))
+        self.assertEqual((cropped.projection.x0, cropped.projection.y0), (CONUS.x0, CONUS.y0))
+
+    def test_a_box_with_a_pole_in_it_stays_finite(self) -> None:
+        cropped = crop_grid(CONUS_GRID, (-120.0, -90.0, -80.0, 90.0))
+        self.assertTrue(math.isfinite(cropped.projection.x0))
+
+    def test_a_box_off_the_grid_is_refused(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "does not overlap"):
+            crop_grid(CONUS_GRID, (130.0, 30.0, 140.0, 40.0))
+
+    def test_a_box_across_the_antimeridian_is_refused(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "antimeridian"):
+            crop_grid(CONUS_GRID, (170.0, 30.0, -170.0, 40.0))
+
+    def test_a_window_decimates_like_a_grid(self) -> None:
+        cropped = crop_grid(CONUS_GRID, (-105.0, 35.0, -95.0, 42.0))
+        half = cropped.decimated()
+        self.assertIsNone(half.crop)
+        self.assertEqual((half.projection.x0, half.projection.y0), (cropped.projection.x0, cropped.projection.y0))
+        self.assertEqual(half.width, (cropped.width + 1) // 2)
+
+
+class WindRotationTests(unittest.TestCase):
+    """``u_e = cos α u + sin α v``, ``v_e = −sin α u + cos α v``, with ``α`` the
+    cone constant times the longitude's distance from the central meridian."""
+
+    @staticmethod
+    def cell(longitude: float, latitude: float) -> ProjectedGrid:
+        x, y = CONUS.projection.forward(longitude, latitude)
+        return ProjectedGrid(CONUS.projection, 1, 1, x, y, 3000.0, -3000.0)
+
+    def test_the_central_meridian_is_the_identity(self) -> None:
+        x_at_center = ProjectedGrid(CONUS.projection, 1, 7, 0.0, 400000.0, 3000.0, -100000.0)
+        sine, cosine = wind_rotation(x_at_center)
+        np.testing.assert_array_equal(sine, 0.0)
+        np.testing.assert_array_equal(cosine, 1.0)
+        u, v = np.arange(7.0), np.arange(7.0) - 3.0
+        rotated_u, rotated_v = rotate_winds(x_at_center, u, v)
+        np.testing.assert_array_equal(rotated_u, u)
+        np.testing.assert_array_equal(rotated_v, v)
+
+    def test_a_worked_example(self) -> None:
+        # 122 W at the cone of 38.5 N: n = sin 38.5° = 0.62251, Δλ = −24.5°, so
+        # α = −15.2516°, sin α = −0.26306, cos α = 0.96478. On the western side
+        # the meridians lean east toward the apex, so a wind blowing along the
+        # grid's x axis has a northward part.
+        sine, cosine = wind_rotation(self.cell(-122.0, 40.0))
+        alpha = math.sin(math.radians(38.5)) * math.radians(-24.5)
+        self.assertAlmostEqual(math.degrees(alpha), -15.2516, places=3)
+        self.assertAlmostEqual(float(sine[0]), math.sin(alpha), places=12)
+        self.assertAlmostEqual(float(cosine[0]), math.cos(alpha), places=12)
+        u, v = rotate_winds(self.cell(-122.0, 40.0), np.array([10.0]), np.array([0.0]))
+        self.assertAlmostEqual(float(u[0]), 10.0 * math.cos(alpha), places=9)
+        self.assertAlmostEqual(float(v[0]), -10.0 * math.sin(alpha), places=9)
+        self.assertGreater(float(v[0]), 2.6)
+        # The eastern side mirrors it.
+        _, east_v = rotate_winds(self.cell(-73.0, 40.0), np.array([10.0]), np.array([0.0]))
+        self.assertAlmostEqual(float(east_v[0]), -float(v[0]), places=9)
+
+    def test_the_table_is_what_the_longitudes_say_and_the_speed_is_kept(self) -> None:
+        grid = ProjectedGrid(CONUS.projection, 41, 23, CONUS.x0, CONUS.y0, 45000.0, -46000.0)
+        sine, cosine = wind_rotation(grid)
+        self.assertEqual(sine.shape, (41 * 23,))
+        n = CONUS.projection.cone_constant
+        for row, column in ((0, 0), (22, 40), (11, 20), (5, 33)):
+            longitude, _ = CONUS.projection.inverse(grid.x0 + column * grid.dx, grid.y0 + row * grid.dy)
+            alpha = n * math.radians(longitude - CONUS.projection.central_meridian)
+            self.assertAlmostEqual(float(sine[row * 41 + column]), math.sin(alpha), places=11)
+            self.assertAlmostEqual(float(cosine[row * 41 + column]), math.cos(alpha), places=11)
+        generator = np.random.default_rng(7)
+        u, v = generator.uniform(-40, 40, sine.shape), generator.uniform(-40, 40, sine.shape)
+        rotated_u, rotated_v = rotate_winds(grid, u, v)
+        np.testing.assert_allclose(np.hypot(rotated_u, rotated_v), np.hypot(u, v), rtol=1e-12)
+
+    def test_a_southern_cone_takes_its_sign(self) -> None:
+        south = LambertConformal(6371229.0, -30.0, -60.0, -45.0, 140.0)
+        x, y = south.forward(150.0, -40.0)
+        sine, cosine = wind_rotation(ProjectedGrid(south, 1, 1, x, y, 3000.0, -3000.0))
+        alpha = south.meridian_angle(150.0)
+        self.assertAlmostEqual(float(sine[0]), math.sin(alpha), places=11)
+        self.assertAlmostEqual(float(cosine[0]), math.cos(alpha), places=11)
+
+    def test_only_a_grid_relative_sources_vectors_turn(self) -> None:
+        self.assertEqual(_grid_relative_vectors(source_spec("gfs"), ("wind10m",)), ())
+        self.assertEqual(_grid_relative_vectors(HRRR, ("wind10m", "wind250")), ("wind10m", "wind250"))
+        with self.assertRaisesRegex(ConversionError, "grid-relative"):
+            _grid_relative_vectors(HRRR, ("wind10m", "qflux850"))
 
 
 @requires_gdalinfo
@@ -396,46 +549,37 @@ class FixtureGridTests(unittest.TestCase):
         cls.info = json.loads(subprocess.run(["gdalinfo", "-json", str(FIXTURE)], capture_output=True, text=True, check=True).stdout)
 
     def test_the_projection_is_read_from_the_file(self) -> None:
-        resampler = self.grid.resample
-        self.assertIsNotNone(resampler)
-        self.assertEqual(resampler.source.projection, CONUS.projection)
-        self.assertEqual((resampler.source.width, resampler.source.height), (120, 120))
+        projected = self.grid.projection
+        self.assertIsNotNone(projected)
+        self.assertEqual(projected.projection, CONUS.projection)
+        self.assertEqual((self.grid.width, self.grid.height), (120, 120))
         self.assertEqual(self.grid.source_shape, (120, 120))
         self.assertFalse(self.grid.wraps)
-        self.assertEqual((self.grid.longitude_step, self.grid.latitude_step), (0.03, -0.03))
+        self.assertEqual((projected.dx, projected.dy), (3000.0, -3000.0))
+        transform = self.info["geoTransform"]
+        self.assertEqual(projected.x0, round(transform[0], 3) + 1500.0)
+        self.assertEqual(projected.y0, round(transform[3], 3) - 1500.0)
 
-    def test_the_grid_covers_the_footprint_gdal_reports(self) -> None:
-        # gdalinfo's wgs84Extent is the cell *edges*; the grid is built from
-        # the centers, half a cell inside, and snapped outwards to the step.
+    def test_the_footprint_is_the_one_gdal_reports(self) -> None:
+        # gdalinfo's wgs84Extent is the cell *edges*; the footprint is the
+        # centers, half a cell inside.
         ring = self.info["wgs84Extent"]["coordinates"][0]
-        west = min(point[0] for point in ring)
-        east = max(point[0] for point in ring)
-        south = min(point[1] for point in ring)
-        north = max(point[1] for point in ring)
-        self.assertLessEqual(self.grid.first_longitude, west + 0.03)
-        self.assertGreaterEqual(self.grid.first_longitude, west - 0.03)
-        self.assertLessEqual(self.grid.first_latitude, north + 0.03)
-        self.assertGreaterEqual(self.grid.first_latitude, north - 0.03)
-        last_longitude = self.grid.first_longitude + (self.grid.width - 1) * 0.03
-        last_latitude = self.grid.first_latitude - (self.grid.height - 1) * 0.03
-        self.assertAlmostEqual(last_longitude, east, delta=0.03)
-        self.assertAlmostEqual(last_latitude, south, delta=0.03)
-        self.assertEqual((self.grid.width, self.grid.height), (137, 120))
+        west, south, east, north = self.grid.projection.footprint()
+        self.assertAlmostEqual(west, min(point[0] for point in ring), delta=0.04)
+        self.assertAlmostEqual(east, max(point[0] for point in ring), delta=0.04)
+        self.assertAlmostEqual(south, min(point[1] for point in ring), delta=0.04)
+        self.assertAlmostEqual(north, max(point[1] for point in ring), delta=0.04)
 
-    def test_a_resampled_plane_matches_gdal_at_the_cell_centers(self) -> None:
-        # Each target cell whose center GDAL can locate inside the source
-        # reads, to interpolation, the source value there: the resampler's
-        # own coordinates are checked against GDAL's forward projection of
-        # the same centers (through the CLI's `gdaltransform`).
+    def test_a_cell_is_where_gdal_says_it_is(self) -> None:
+        # The forward formulas against GDAL's own projection of the same
+        # places (through the CLI's `gdaltransform`).
         if shutil.which("gdaltransform") is None:
             self.skipTest("gdaltransform is not on PATH")
-        resampler = self.grid.resample
-        samples = [(10, 20), (60, 60), (119, 100), (0, 136)]
-        points = "\n".join(
-            f"{self.grid.first_longitude + column * 0.03} {self.grid.first_latitude - row * 0.03}"
-            for row, column in samples
-        )
-        projected = subprocess.run(
+        projected = self.grid.projection
+        samples = [(10, 20), (60, 60), (119, 100), (0, 119)]
+        places = [projected.projection.inverse(projected.x0 + column * projected.dx, projected.y0 + row * projected.dy) for row, column in samples]
+        points = "\n".join(f"{longitude} {latitude}" for longitude, latitude in places)
+        output = subprocess.run(
             ["gdaltransform", "-s_srs", "EPSG:4326", "-t_srs", self.info["coordinateSystem"]["wkt"], "-output_xy"],
             input=points,
             capture_output=True,
@@ -443,29 +587,24 @@ class FixtureGridTests(unittest.TestCase):
             check=True,
         ).stdout.split()
         transform = self.info["geoTransform"]
-        for (row, column), x, y in zip(samples, projected[0::2], projected[1::2]):
-            source_column = (float(x) - transform[0]) / transform[1] - 0.5
-            source_row = (float(y) - transform[3]) / transform[5] - 0.5
-            got_column = resampler.column[row, column] + resampler.fx[row, column]
-            got_row = resampler.row[row, column] + resampler.fy[row, column]
-            self.assertAlmostEqual(got_column, min(max(source_column, 0.0), 119.0), places=4, msg=(row, column))
-            self.assertAlmostEqual(got_row, min(max(source_row, 0.0), 119.0), places=4, msg=(row, column))
+        for (row, column), x, y in zip(samples, output[0::2], output[1::2]):
+            self.assertAlmostEqual((float(x) - transform[0]) / transform[1] - 0.5, column, places=3, msg=(row, column))
+            self.assertAlmostEqual((float(y) - transform[3]) / transform[5] - 0.5, row, places=3, msg=(row, column))
 
-    def test_planes_are_resampled_then_cropped(self) -> None:
+    def test_planes_are_read_as_they_are_then_cropped(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}), tempfile.TemporaryDirectory() as work:
             frames = inspect_grib_multi(FIXTURE, ("tmp2m", "cref", "prmsl"))
             planes = _extract_planes(frames, self.grid, Path(work))
-            self.assertEqual(planes["tmp2m"].shape, (137 * 120,))
+            self.assertEqual(planes["tmp2m"].shape, (120 * 120,))
             # Air temperature over the Gulf in September, in Celsius.
             self.assertTrue(((planes["tmp2m"] > 10) & (planes["tmp2m"] < 40)).all())
             self.assertTrue((planes["cref"] < 80).all())
             self.assertTrue(((planes["prmsl"] > 990) & (planes["prmsl"] < 1040)).all())
             cropped = crop_grid(self.grid, (-86.0, 28.0, -85.0, 29.0))
-            self.assertIs(cropped.resample, self.grid.resample)
             self.assertEqual(cropped.source_shape, (120, 120))
             window = _extract_planes({"tmp2m": frames["tmp2m"]}, cropped, Path(work))["tmp2m"]
             self.assertEqual(window.size, cropped.width * cropped.height)
-            full = planes["tmp2m"].reshape(120, 137)
+            full = planes["tmp2m"].reshape(120, 120)
             crop = cropped.crop
             np.testing.assert_array_equal(
                 window.reshape(cropped.height, cropped.width),
@@ -475,9 +614,9 @@ class FixtureGridTests(unittest.TestCase):
     def test_the_origin_survives_a_gdal_releases_worth_of_noise(self) -> None:
         # GDAL places a projected grid by projecting the record's first
         # point, and two releases land that double a few nanometres apart
-        # (the wheel's 3.13 against Ubuntu's system GDAL, seen on CI). Every
-        # resampled coordinate descends from the origin, so two GDALs must
-        # read one grid: the origin is taken to the millimetre.
+        # (the wheel's 3.13 against Ubuntu's system GDAL, seen on CI). The
+        # published origin and every rotated wind descend from it, so two
+        # GDALs must read one grid: the origin is taken to the millimetre.
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             original = dict(self.info)
             noisy = dict(original)
@@ -491,11 +630,9 @@ class FixtureGridTests(unittest.TestCase):
             ]
             with mock.patch("xuebuild.grid.dataset_info", return_value=noisy):
                 perturbed = grid_info(FIXTURE, HRRR)
-        self.assertEqual(perturbed.resample.source, self.grid.resample.source)
-        np.testing.assert_array_equal(perturbed.resample.fx, self.grid.resample.fx)
-        np.testing.assert_array_equal(perturbed.resample.column, self.grid.resample.column)
+        self.assertEqual(perturbed.projection, self.grid.projection)
 
-    def test_a_projected_file_needs_a_regridded_source_and_vice_versa(self) -> None:
+    def test_a_projected_file_needs_a_projected_source_and_vice_versa(self) -> None:
         with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}):
             with self.assertRaisesRegex(ConversionError, "map projection, which this source does not declare"):
                 grid_info(FIXTURE, source_spec("gfs"))
@@ -519,19 +656,26 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
                 manifest_path=cls.root / "out" / "manifest.json",
             )
 
-    def test_every_published_bundle_is_written_on_the_regular_grid(self) -> None:
+    def test_every_published_bundle_is_written_on_the_models_grid(self) -> None:
         variables = [bundle["variable"] for bundle in self.report["bundles"]]
         self.assertEqual(tuple(variables), published_bundle_ids(HRRR))
         manifest = json.loads((self.root / "out" / "manifest.json").read_text())
         self.assertEqual((manifest["model"], manifest["product"]), ("HRRR", "wrfsfc"))
         bundle = stored_bundle(self.root / "out", "cref")
         grid = bundle.metadata["grid"]
-        self.assertEqual((grid["width"], grid["height"]), (137, 120))
-        self.assertEqual((grid["longitudeStep"], grid["latitudeStep"]), (0.03, -0.03))
+        self.assertEqual(bundle.metadata["schemaVersion"], 4)
+        self.assertEqual((grid["width"], grid["height"]), (120, 120))
+        self.assertEqual((grid["projection"]["dx"], grid["projection"]["dy"]), (3000.0, -3000.0))
         self.assertFalse(grid["wrapLongitude"])
-        # The projection is the encoder's business: the bundle carries an
-        # ordinary grid block and the mosaic's identity for the reflectivity.
-        self.assertNotIn("projection", grid)
+        self.assertNotIn("firstLongitude", grid)
+        for entry in manifest["bundles"]:
+            self.assertEqual(entry["grid"], grid, entry["variable"])
+        half = json.loads((self.root / "out" / "bundles.half.zarr" / "zarr.json").read_text())
+        half_grid = half["attributes"]["xue_bundles"]["cref"]["grid"]
+        self.assertEqual((half_grid["width"], half_grid["height"]), (60, 60))
+        self.assertEqual(half_grid["projection"]["x0"], grid["projection"]["x0"])
+        self.assertEqual(half_grid["projection"]["dx"], 6000.0)
+        # The mosaic's identity for the reflectivity.
         parameter = bundle.metadata["variables"][0]["parameter"]
         self.assertEqual((parameter["parameterCategory"], parameter["parameterNumber"]), (16, 5))
         self.assertEqual(bundle.metadata["variables"][0]["unit"], "dBZ")
@@ -545,24 +689,59 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         }
         self.assertEqual(surfaces, {(103, 80)})
 
+    def test_the_store_says_where_its_cells_are(self) -> None:
+        store = self.root / "out" / "bundles.zarr"
+        group = json.loads((store / "zarr.json").read_text())
+        arrays = group["consolidated_metadata"]["metadata"]
+        self.assertEqual(arrays["tmp2m"]["dimension_names"], ["time", "y", "x"])
+        self.assertEqual(arrays["tmp2m"]["attributes"]["grid_mapping"], "crs")
+        self.assertEqual(arrays["y"]["attributes"]["standard_name"], "projection_y_coordinate")
+        self.assertEqual(arrays["x"]["attributes"], {"units": "m", "standard_name": "projection_x_coordinate"})
+        projection = group["attributes"]["xue_bundles"]["tmp2m"]["grid"]["projection"]
+        y = np.frombuffer((store / "y" / "c" / "0").read_bytes(), "<f8")
+        x = np.frombuffer((store / "x" / "c" / "0").read_bytes(), "<f8")
+        np.testing.assert_array_equal(y, projection["y0"] + np.arange(120.0) * projection["dy"])
+        np.testing.assert_array_equal(x, projection["x0"] + np.arange(120.0) * projection["dx"])
+        crs = arrays["crs"]
+        self.assertEqual((crs["shape"], crs["dimension_names"]), ([], []))
+        self.assertEqual(crs["attributes"]["grid_mapping_name"], "lambert_conformal_conic")
+        self.assertEqual(crs["attributes"]["standard_parallel"], [38.5, 38.5])
+        self.assertEqual(lambert_conformal_from_wkt(crs["attributes"]["crs_wkt"]), CONUS.projection)
+        self.assertEqual([path.name for path in (store / "crs").iterdir()], ["zarr.json"])
+        for name in ("lat", "latitude", "longitude"):
+            self.assertNotIn(name, arrays)
+
+    def test_every_published_wind_is_turned_to_east_and_north(self) -> None:
+        # The stored codes against the raw grid-relative records, each pair by
+        # its own rotation, wind10m and wind80m and the isobaric ones alike.
+        codebooks = PROFILES["quality"]
+        with mock.patch.dict(os.environ, {"XUE_ENCODER": "python"}), tempfile.TemporaryDirectory() as work:
+            grid = grid_info(FIXTURE, HRRR)
+            for bundle_id in HRRR.bundle_vector_ids:
+                u_id, v_id = VECTOR_BUNDLES[bundle_id]
+                frames = inspect_grib_multi(FIXTURE, (u_id, v_id))
+                planes = _extract_planes(frames, grid, Path(work))
+                u, v = rotate_winds(grid.projection, planes[u_id], planes[v_id])
+                bundle = stored_bundle(self.root / "out", bundle_id)
+                with self.subTest(bundle_id):
+                    np.testing.assert_array_equal(bundle.decode_plane(1, 0), codebooks[u_id].quantize(u))
+                    np.testing.assert_array_equal(bundle.decode_plane(2, 0), codebooks[v_id].quantize(v))
+                    # The window lies well east of the central meridian, so
+                    # the rotation is no accident of rounding.
+                    self.assertFalse((codebooks[u_id].quantize(u) == codebooks[u_id].quantize(planes[u_id])).all())
+                    half = stored_bundle(self.root / "out", f"{bundle_id}.half")
+                    np.testing.assert_array_equal(
+                        half.decode_plane(1, 0), decimate_codes(codebooks[u_id].quantize(u), grid)
+                    )
+
+    def test_a_series_store_is_on_the_same_axes(self) -> None:
+        group = json.loads((self.root / "out" / "wind10m.series.zarr" / "zarr.json").read_text())
+        arrays = group["consolidated_metadata"]["metadata"]
+        self.assertEqual(list(arrays), ["ugrd10m", "vgrd10m", "time", "y", "x", "crs"])
+        self.assertEqual(arrays["ugrd10m"]["dimension_names"], ["time", "y", "x"])
+        self.assertEqual(arrays["ugrd10m"]["attributes"]["grid_mapping"], "crs")
+        self.assertEqual(group["attributes"]["xue"]["schemaVersion"], 4)
+
     @requires_native
     def test_the_native_encoder_writes_the_same_bytes(self) -> None:
         assert_native_matches(self, FIXTURE, self.root / "out", self.report, self.root / "native", model="hrrr")
-
-
-class DecimationTests(unittest.TestCase):
-    def test_the_half_grid_forgets_the_resampler(self) -> None:
-        resampler = build_resampler(ProjectedGrid(CONUS.projection, 40, 30, CONUS.x0, CONUS.y0, 3000.0, 3000.0), Regrid(0.05))
-        grid = GridInfo(
-            width=resampler.width,
-            height=resampler.height,
-            first_longitude=resampler.first_longitude,
-            first_latitude=resampler.first_latitude,
-            longitude_step=0.05,
-            latitude_step=-0.05,
-            resample=resampler,
-        )
-        half = grid.decimated()
-        self.assertIsNone(half.resample)
-        self.assertEqual(half.width, math.ceil(grid.width / 2))
-        self.assertEqual(half.longitude_step, 0.1)

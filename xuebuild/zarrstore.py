@@ -34,6 +34,7 @@ import numpy as np
 
 from . import binformat, zstdcli
 from .errors import BundleError, ConversionError
+from .reproject import ProjectedGrid, gaussian_latitudes
 
 PROFILE_VERSION = 1
 """The ``xue_profile`` of a one-bundle store: every series store, and every
@@ -83,6 +84,7 @@ export writes every chunk, so it never appears, but a reader honours it."""
 _INDEX_ENTRY = struct.Struct("<QQ")
 _INDEX_CHECKSUM = struct.Struct("<I")
 _DIMENSIONS = ("time", "latitude", "longitude")
+_PROJECTED_DIMENSIONS = ("time", "y", "x")
 # The scalar array a projected bundle's variables name as their grid_mapping.
 CRS_ARRAY = "crs"
 # The coordinates a group document lists first, in this order.
@@ -413,10 +415,12 @@ def _array_metadata(
     index_location: str,
     bundle: str | None = None,
     dimensions: tuple[str, str, str] = _DIMENSIONS,
+    projected: bool = False,
 ) -> dict[str, Any]:
     """One variable array's document. ``bundle`` is set in a shared store
     only, where it leads the ``xue`` block so an array opened alone knows
-    which bundle's metadata describes it."""
+    which bundle's metadata describes it. On a ``projected`` grid the array
+    names the ``crs`` array, last among its attributes."""
     quantization = variable["quantization"]
     block: dict[str, Any] = {"bundle": bundle} if bundle is not None else {}
     block.update({"variable": variable, "predictor": predictor})
@@ -428,6 +432,8 @@ def _array_metadata(
         attributes["scale_factor"] = quantization["scale"]
         attributes["add_offset"] = quantization["offset"]
     attributes["_FillValue"] = quantization["nodataCode"]
+    if projected:
+        attributes["grid_mapping"] = CRS_ARRAY
     inner_codecs = ([_CODEC_DELTA] if delta else []) + [_CODEC_BYTES, _CODEC_ZSTD]
     return {
         "zarr_format": 3,
@@ -468,6 +474,23 @@ def _coordinate_metadata(length: int, data_type: str, fill_value: Any, attribute
     }
 
 
+def _crs_metadata(attributes: dict[str, Any]) -> dict[str, Any]:
+    """The ``crs`` array's document (docs/zarr-profile.md, "Coordinates"): a
+    scalar with no chunk, there for the grid mapping in its attributes."""
+    return {
+        "zarr_format": 3,
+        "node_type": "array",
+        "shape": [],
+        "data_type": "int32",
+        "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": []}},
+        "chunk_key_encoding": {"name": "default"},
+        "fill_value": 0,
+        "codecs": [_CODEC_BYTES_LITTLE],
+        "attributes": attributes,
+        "dimension_names": [],
+    }
+
+
 def _write_atomic(path: Path, data: bytes) -> int:
     """Write by rename: in a shared store several bundles write the same
     coordinate array concurrently, always the same bytes, and a rename never
@@ -491,13 +514,13 @@ def _write_coordinates(
     never read by the viewer, which reads the group's metadata block.
     ``names`` are the bundle's dimension names (``time`` or ``time_<bundle>``,
     and so on): a coordinate array is named by the dimension it labels, and
-    its encoding does not depend on the name."""
+    its encoding does not depend on the name. A projected grid's two are in
+    metres and the ``crs`` array follows them; a Gaussian grid's latitudes are
+    its true rows, not the regular fields' even ones."""
     grid = source.metadata["grid"]
     run_time = source.metadata["runTime"]
     unit_seconds = source.unit_seconds
     time_values = np.array([offset * unit_seconds for offset in source.frame_offsets], dtype="<i4")
-    latitude = grid["firstLatitude"] + np.arange(source.height, dtype=np.float64) * grid["latitudeStep"]
-    longitude = grid["firstLongitude"] + np.arange(source.width, dtype=np.float64) * grid["longitudeStep"]
     coordinates = {
         names[0]: (
             time_values,
@@ -505,19 +528,23 @@ def _write_coordinates(
             0,
             {"units": f"seconds since {run_time}", "calendar": "proleptic_gregorian", "standard_name": "time"},
         ),
-        names[1]: (
-            latitude.astype("<f8"),
-            "float64",
-            "NaN",
-            {"units": "degrees_north", "standard_name": "latitude"},
-        ),
-        names[2]: (
-            longitude.astype("<f8"),
-            "float64",
-            "NaN",
-            {"units": "degrees_east", "standard_name": "longitude"},
-        ),
     }
+    projection = grid.get("projection")
+    if projection is not None:
+        rows = projection["y0"] + np.arange(source.height, dtype=np.float64) * projection["dy"]
+        columns = projection["x0"] + np.arange(source.width, dtype=np.float64) * projection["dx"]
+        coordinates[names[1]] = (rows.astype("<f8"), "float64", "NaN", {"units": "m", "standard_name": "projection_y_coordinate"})
+        coordinates[names[2]] = (columns.astype("<f8"), "float64", "NaN", {"units": "m", "standard_name": "projection_x_coordinate"})
+    else:
+        if "gaussian" in grid:
+            latitudes = gaussian_latitudes(grid["gaussian"]["n"])
+            first_row, stride = grid["gaussian"]["firstRow"], grid["gaussian"]["rowStride"]
+            latitude = np.array([latitudes[first_row + row * stride] for row in range(source.height)], dtype=np.float64)
+        else:
+            latitude = grid["firstLatitude"] + np.arange(source.height, dtype=np.float64) * grid["latitudeStep"]
+        longitude = grid["firstLongitude"] + np.arange(source.width, dtype=np.float64) * grid["longitudeStep"]
+        coordinates[names[1]] = (latitude.astype("<f8"), "float64", "NaN", {"units": "degrees_north", "standard_name": "latitude"})
+        coordinates[names[2]] = (longitude.astype("<f8"), "float64", "NaN", {"units": "degrees_east", "standard_name": "longitude"})
     write = _write_atomic if atomic else _write
     sizes = {}
     for name, (values, data_type, fill_value, attributes) in coordinates.items():
@@ -526,6 +553,9 @@ def _write_coordinates(
             directory / "zarr.json",
             _dump_json(_coordinate_metadata(len(values), data_type, fill_value, attributes, name)),
         ) + write(directory / "c" / "0", values.tobytes())
+    if projection is not None:
+        attributes = ProjectedGrid.from_metadata(projection, source.width, source.height).projection.cf_attributes()
+        sizes[CRS_ARRAY] = write(zarr_dir / CRS_ARRAY / "zarr.json", _dump_json(_crs_metadata(attributes)))
     return sizes
 
 
@@ -630,6 +660,7 @@ def _write_array(
                 index_location=index_location,
                 bundle=bundle,
                 dimensions=dimensions,
+                projected=_is_projected(source.metadata),
             )
         ),
     )
@@ -709,6 +740,7 @@ def write_store(
         raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
     geometry = _store_geometry(source, series, block)
     variables = {variable["id"]: variable for variable in source.metadata["variables"]}
+    dimensions = _PROJECTED_DIMENSIONS if _is_projected(source.metadata) else _DIMENSIONS
 
     if zarr_dir.exists():
         if not zarr_dir.is_dir():
@@ -731,11 +763,12 @@ def write_store(
                 index_location=index_location,
                 executor=pool,
                 series=series,
+                dimensions=dimensions,
             )
             report.arrays[name] = written
             report.byte_length += written
             report.chunk_count += chunks
-        for name, written in _write_coordinates(source, zarr_dir).items():
+        for name, written in _write_coordinates(source, zarr_dir, dimensions).items():
             report.arrays[name] = written
             report.byte_length += written
         # The root group last: its `xue` block is the bundle's metadata
@@ -908,7 +941,7 @@ def write_bundle_arrays(
         raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
     if not _BUNDLE_ID.fullmatch(bundle_id) or bundle_id == SHARED_STORE_STEM:
         raise BundleError(f"{bundle_id!r} cannot name a bundle of a shared store")
-    dimensions = _check_dimensions(bundle_id, dimensions)
+    dimensions = _check_dimensions(bundle_id, dimensions, projected=_is_projected(source.metadata))
     geometry = _store_geometry(source, False, None)
     variables = {variable["id"]: variable for variable in source.metadata["variables"]}
     if zarr_dir.exists() and not zarr_dir.is_dir():
@@ -929,7 +962,7 @@ def write_bundle_arrays(
             index_location=index_location,
         )
         for name in source.array_names:
-            if name in dimensions:
+            if name in dimensions or name == CRS_ARRAY:
                 raise BundleError(f"{bundle_id}: variable {name} is named like a coordinate")
             written, chunks = _write_array(
                 source,

@@ -1,46 +1,36 @@
-"""Regridding a projected source onto the regular latitude/longitude grid
-the format describes.
+"""The projection arithmetic of a model published on its own map projection,
+and the true latitudes of a regular Gaussian grid.
 
-The container knows one grid: rows of equal latitude, columns of equal
-longitude (docs/format.md, "Grid Layout"). A model computed on a map
-projection — HRRR on a Lambert conformal conic, 3 km — does not arrive on
-one, so the encoder resamples every plane onto a regular grid before
-anything else looks at it: the plane is bilinearly sampled at each target
-cell center, whose projected position is found with the projection's own
-forward formulas. Every step past extraction then runs exactly as it does
-for a source that was regular to begin with, and the bundle carries an
-ordinary ``grid`` block.
-
-The target grid is the source's footprint: the extremes of longitude and
-latitude its boundary cells reach, snapped outwards to the declared step.
-A conic domain is a trapezoid on that rectangle, so the rectangle has
-corners the source never covered. They are not gaps and not a reserved
-code — the format has neither — but the nearest source cell continued
-outwards (the sampling coordinate is clamped to the source grid), so the
-plane is complete, the edge never meets a discontinuity a filter or a
-contour would draw, and the extension compresses to almost nothing. A
-renderer that knows the source's projection clips to its footprint; one
-that does not draws the extension, which is the price of a format without
-a bitmap.
+A model computed on a Lambert conformal conic keeps its grid: the bundle's
+``grid.projection`` block declares it (docs/format.md, "Projected Sources") and
+every plane stays as the model wrote it. What the encoder does with the
+projection is place the published cells (:class:`ProjectedGrid`), cut a
+geographic box out of them, and turn the model's grid-relative winds to east and
+north (:func:`wind_rotation`).
 
 Every operation here is repeated by the native encoder
-(``rust/xue/src/encode/reproject.rs``), in the same order and on the same
-doubles, and the two are held byte-identical. The per-row and per-column
-trigonometry goes through the C library's ``sin``/``cos``/``tan``/``pow`` —
-which is what Rust's ``f64`` methods call too — rather than NumPy's
-vectorised approximations; only exact IEEE multiplications, subtractions
-and divisions are done elementwise on the whole plane.
+(``rust/xue/src/projection.rs``), in the same order and on the same doubles, and
+the two are held byte-identical. Per-point trigonometry goes through the C
+library's ``sin``/``cos``/``tan``/``pow``, which is what Rust's ``f64`` methods
+call too, rather than NumPy's vectorised approximations; only exact IEEE
+multiplications, additions, divisions and square roots run elementwise on a
+whole plane.
 """
 
 from __future__ import annotations
 
+import functools
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
 
 from .errors import ConversionError
+
+LAMBERT_CONFORMAL_KIND = "lambert-conformal"
+"""``grid.projection.kind`` of :class:`LambertConformal`."""
 
 
 @dataclass(frozen=True)
@@ -99,6 +89,13 @@ class LambertConformal:
         theta = self.meridian_angle(longitude)
         return rho * math.sin(theta), self.origin_radius - rho * math.cos(theta)
 
+    def forward_wrapped(self, longitude: float, latitude: float) -> tuple[float, float]:
+        """:meth:`forward` for a longitude spelled any way a caller may spell
+        it. Without the wrap, 262.5 and -97.5 would open different angles on
+        the cone and one of them would land off a grid that holds the point."""
+        delta = (longitude - self.central_meridian + 180.0) % 360.0 - 180.0
+        return self.forward(self.central_meridian + delta, latitude)
+
     def inverse(self, x: float, y: float) -> tuple[float, float]:
         """Longitude and latitude, in degrees, of one projected point."""
         n = self.cone_constant
@@ -106,16 +103,58 @@ class LambertConformal:
         # sqrt, not hypot: Python's hypot is its own algorithm, not libm's,
         # and the native encoder must land on the same double.
         rho = math.copysign(math.sqrt(x * x + dy * dy), n)
-        theta = math.atan2(x, dy)
+        # Both arguments carry the cone's sign: on a southern cone (n < 0) the
+        # radius is negative, and the angle would land half a turn away.
+        sign = math.copysign(1.0, n)
+        theta = math.atan2(sign * x, sign * dy)
         latitude = 2.0 * math.atan((self.scale / rho) ** (1.0 / n)) - math.pi / 2.0
         return self.central_meridian + math.degrees(theta / n), math.degrees(latitude)
+
+    def wkt(self) -> str:
+        """This projection as WKT2, the ``crs_wkt`` of a store's ``crs`` array
+        (docs/zarr-profile.md, "Coordinates"). Spelled here rather than taken
+        from GDAL, whose text differs between releases: the array document is
+        part of a store's bytes. Numbers print as their shortest round trip."""
+        degree = 'ANGLEUNIT["degree",0.0174532925199433]'
+        metre = 'LENGTHUNIT["metre",1]'
+        return (
+            'PROJCRS["Lambert Conic Conformal on a sphere",'
+            'BASEGEOGCRS["Sphere",'
+            f'DATUM["Sphere",ELLIPSOID["Sphere",{self.radius!r},0,{metre}]],'
+            f'PRIMEM["Greenwich",0,{degree}]],'
+            'CONVERSION["Lambert Conic Conformal (2SP)",'
+            'METHOD["Lambert Conic Conformal (2SP)",ID["EPSG",9802]],'
+            f'PARAMETER["Latitude of false origin",{self.latitude_of_origin!r},{degree}],'
+            f'PARAMETER["Longitude of false origin",{self.central_meridian!r},{degree}],'
+            f'PARAMETER["Latitude of 1st standard parallel",{self.standard_parallel_1!r},{degree}],'
+            f'PARAMETER["Latitude of 2nd standard parallel",{self.standard_parallel_2!r},{degree}],'
+            f'PARAMETER["Easting at false origin",0,{metre}],'
+            f'PARAMETER["Northing at false origin",0,{metre}]],'
+            'CS[Cartesian,2],'
+            f'AXIS["easting",east,ORDER[1],{metre}],'
+            f'AXIS["northing",north,ORDER[2],{metre}]]'
+        )
+
+    def cf_attributes(self) -> dict[str, Any]:
+        """The CF grid mapping a store's ``crs`` array carries, in the order
+        the array document writes it."""
+        return {
+            "grid_mapping_name": "lambert_conformal_conic",
+            "latitude_of_projection_origin": self.latitude_of_origin,
+            "longitude_of_central_meridian": self.central_meridian,
+            "standard_parallel": [self.standard_parallel_1, self.standard_parallel_2],
+            "earth_radius": self.radius,
+            "crs_wkt": self.wkt(),
+        }
 
 
 @dataclass(frozen=True)
 class ProjectedGrid:
-    """A source grid in projected space: what GDAL's geotransform says about
-    a Lambert conformal GRIB, in the north-to-south row order GDAL reads it
-    in. ``x0``/``y0`` are the *center* of the first (north-west) cell."""
+    """A published grid in projected space, in the north-to-south row order
+    GDAL reads it in: the ``grid.projection`` block of a bundle's metadata.
+    ``x0``/``y0`` are the *center* of the first (north-west) cell; cell
+    (``row``, ``column``) is centered at ``x0 + column * dx``, ``y0 + row * dy``,
+    so ``dx`` is positive and ``dy`` negative."""
 
     projection: LambertConformal
     width: int
@@ -124,7 +163,58 @@ class ProjectedGrid:
     y0: float
     dx: float
     dy: float
-    """Both positive: columns run east, rows run south."""
+
+    def decimated(self) -> ProjectedGrid:
+        """Every second row and column from the first: the first cell stays
+        where it is."""
+        return replace(
+            self,
+            width=(self.width + 1) // 2,
+            height=(self.height + 1) // 2,
+            dx=self.dx * 2,
+            dy=self.dy * 2,
+        )
+
+    def window(self, row: int, column: int, height: int, width: int) -> ProjectedGrid:
+        """The ``height`` x ``width`` cells from (``row``, ``column``)."""
+        return replace(
+            self, width=width, height=height, x0=self.x0 + column * self.dx, y0=self.y0 + row * self.dy
+        )
+
+    def metadata(self) -> dict[str, Any]:
+        """The ``grid.projection`` block."""
+        projection = self.projection
+        return {
+            "kind": LAMBERT_CONFORMAL_KIND,
+            "radius": projection.radius,
+            "standardParallel1": projection.standard_parallel_1,
+            "standardParallel2": projection.standard_parallel_2,
+            "latitudeOfOrigin": projection.latitude_of_origin,
+            "centralMeridian": projection.central_meridian,
+            "x0": self.x0,
+            "y0": self.y0,
+            "dx": self.dx,
+            "dy": self.dy,
+        }
+
+    @classmethod
+    def from_metadata(cls, block: dict[str, Any], width: int, height: int) -> ProjectedGrid:
+        """The grid a validated ``grid.projection`` block declares."""
+        return cls(
+            projection=LambertConformal(
+                radius=float(block["radius"]),
+                standard_parallel_1=float(block["standardParallel1"]),
+                standard_parallel_2=float(block["standardParallel2"]),
+                latitude_of_origin=float(block["latitudeOfOrigin"]),
+                central_meridian=float(block["centralMeridian"]),
+            ),
+            width=width,
+            height=height,
+            x0=float(block["x0"]),
+            y0=float(block["y0"]),
+            dx=float(block["dx"]),
+            dy=float(block["dy"]),
+        )
 
     def footprint(self) -> tuple[float, float, float, float]:
         """``(west, south, east, north)`` in degrees: the extremes every
@@ -136,10 +226,10 @@ class ProjectedGrid:
         east = north = -math.inf
         last_column = self.width - 1
         last_row = self.height - 1
-        cells = [(column, row) for column in range(self.width) for row in (0, last_row)]
-        cells += [(column, row) for column in (0, last_column) for row in range(1, last_row)]
+        cells = [(column, row) for column in range(self.width) for row in {0, last_row}]
+        cells += [(column, row) for column in {0, last_column} for row in range(1, last_row)]
         for column, row in cells:
-            longitude, latitude = self.projection.inverse(self.x0 + column * self.dx, self.y0 - row * self.dy)
+            longitude, latitude = self.projection.inverse(self.x0 + column * self.dx, self.y0 + row * self.dy)
             west = min(west, longitude)
             east = max(east, longitude)
             south = min(south, latitude)
@@ -147,14 +237,66 @@ class ProjectedGrid:
         return west, south, east, north
 
 
-@dataclass(frozen=True)
-class Regrid:
-    """What a source declares: that its planes are projected and must be
-    resampled onto a regular grid of ``step`` degrees. The grid's extent is
-    the source's own footprint, so a cropped fixture of the same product
-    lands on a proportionally smaller grid."""
+@functools.lru_cache(maxsize=8)
+def wind_rotation(grid: ProjectedGrid) -> tuple[np.ndarray, np.ndarray]:
+    """``(sin α, cos α)`` of every cell of ``grid``, flat in row-major order,
+    where ``α = n (λ − λ0)`` is the angle from the grid's y axis to true north.
 
-    step: float
+    Read off the cell's coordinates rather than its longitude, so no libm call
+    runs per cell: with ``x = x0 + column dx``, ``y = y0 + row dy`` and
+    ``ρ = sqrt(x² + (ρ0 − y)²)``, ``sin α = x / ρ`` and ``cos α = (ρ0 − y) / ρ``.
+    Only ``ρ0`` goes through the C library, once. ``ρ`` takes the cone's sign, as
+    in :meth:`LambertConformal.inverse`, which on a northern cone is no change at
+    all. Computed once per grid and shared by every wind plane of a build."""
+    projection = grid.projection
+    apex = projection.origin_radius - (grid.y0 + np.arange(grid.height, dtype=np.float64) * grid.dy)
+    x = grid.x0 + np.arange(grid.width, dtype=np.float64) * grid.dx
+    rho = math.copysign(1.0, projection.cone_constant) * np.sqrt(np.add.outer(apex * apex, x * x))
+    return (x[np.newaxis, :] / rho).ravel(), (apex[:, np.newaxis] / rho).ravel()
+
+
+def rotate_winds(grid: ProjectedGrid, u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """One grid-relative wind pair turned to east and north, on the flat planes
+    ``grid`` describes: ``u_e = cos α u + sin α v``, ``v_e = −sin α u + cos α v``."""
+    sine, cosine = wind_rotation(grid)
+    return cosine * u + sine * v, -sine * u + cosine * v
+
+
+def gaussian_latitude(n: int, row: int) -> float:
+    """The latitude in degrees of row ``row`` of the regular Gaussian grid with
+    ``n`` latitudes per hemisphere, counted from the north: a root of the
+    Legendre polynomial of order ``2n``, by the iteration of docs/zarr-profile.md,
+    "Coordinates". Operation for operation the same as
+    ``rust/xue/src/projection.rs``: a library root finder differs by up to
+    1.8e-12° near the poles, which would move a store's ``latitude`` bytes."""
+    order = 2 * n
+    degree = float(order)
+    x = math.cos(math.pi * (row + 0.75) / (degree + 0.5))
+    for _ in range(100):
+        previous, current = 1.0, x
+        for k in range(2, order + 1):
+            previous, current = current, ((2.0 * k - 1.0) * x * current - (k - 1.0) * previous) / k
+        derivative = degree * (x * current - previous) / (x * x - 1.0)
+        step = current / derivative
+        x -= step
+        if abs(step) < 1e-15:
+            break
+    return math.degrees(math.asin(x))
+
+
+@functools.lru_cache(maxsize=4)
+def gaussian_latitudes(n: int) -> tuple[float, ...]:
+    """Every latitude of the Gaussian grid with ``n`` latitudes per hemisphere,
+    north to south. Every bundle of every tier of a run asks for it, so it is
+    kept."""
+    return tuple(gaussian_latitude(n, row) for row in range(2 * n))
+
+
+def nearest_gaussian_row(n: int, latitude: float) -> int:
+    """The row of the Gaussian grid a latitude is nearest to: the inverse of
+    the iteration's first guess, ``cos(π (row + 0.75) / (2n + 0.5))``, which
+    lies within a few hundredths of a row of the root."""
+    return math.floor((90.0 - latitude) * (2.0 * n + 0.5) / 180.0 - 0.25)
 
 
 # `PARAMETER["Latitude of false origin",38.5,` — GDAL's WKT2 spelling of each
@@ -168,8 +310,8 @@ _LAMBERT_METHOD = "Lambert Conic Conformal (2SP)"
 def lambert_conformal_from_wkt(wkt: str) -> LambertConformal | None:
     """The projection a GDAL WKT string describes, or None for a geographic
     (regular latitude/longitude) coordinate system. Anything projected that
-    is not a spherical Lambert conformal conic is an error: the resampler
-    knows one projection."""
+    is not a spherical Lambert conformal conic is an error: the format
+    declares one projection."""
     if not wkt or wkt.lstrip().startswith(("GEOGCRS", "GEOGCS")):
         return None
     if _LAMBERT_METHOD not in wkt:
@@ -191,95 +333,3 @@ def lambert_conformal_from_wkt(wkt: str) -> LambertConformal | None:
     if parameters.get("Easting at false origin", 0.0) or parameters.get("Northing at false origin", 0.0):
         raise ConversionError("Lambert conformal grids with a false origin are unsupported")
     return projection
-
-
-@dataclass(frozen=True)
-class Resampler:
-    """Bilinear sampling of every source plane at the target grid's cell
-    centers. The sampling coordinates are computed once per build and
-    shared by every plane; ``take`` is the per-plane step."""
-
-    source: ProjectedGrid
-    width: int
-    height: int
-    first_longitude: float
-    first_latitude: float
-    step: float
-    column: np.ndarray
-    """Index of the source column west of each target cell, ``(height, width)``."""
-    row: np.ndarray
-    """Index of the source row north of each target cell."""
-    fx: np.ndarray
-    """Fraction of the way east from ``column`` to the next, in ``[0, 1]``."""
-    fy: np.ndarray
-    """Fraction of the way south from ``row`` to the next."""
-
-    @property
-    def source_shape(self) -> tuple[int, int]:
-        return self.source.height, self.source.width
-
-    def take(self, plane: np.ndarray) -> np.ndarray:
-        """One source plane, ``(source.height, source.width)``, resampled to
-        ``(height, width)``. The four corner weights are applied in a fixed
-        order — the two rows blended east-west first, then north-south —
-        which the native encoder repeats."""
-        if plane.shape != self.source_shape:
-            raise ConversionError(f"resampler expected a {self.source_shape} plane, got {plane.shape}")
-        column, row = self.column, self.row
-        top = plane[row, column] * (1.0 - self.fx) + plane[row, column + 1] * self.fx
-        bottom = plane[row + 1, column] * (1.0 - self.fx) + plane[row + 1, column + 1] * self.fx
-        return top * (1.0 - self.fy) + bottom * self.fy
-
-
-def build_resampler(source: ProjectedGrid, regrid: Regrid) -> Resampler:
-    """The regular grid a projected source lands on, and how to sample it.
-
-    The extent is the footprint snapped outwards to whole steps, so the
-    grid's origin is a multiple of the step (the way the 0.25° grids' are)
-    and every source cell center lies inside it. The trigonometry is one
-    pass per row (the parallel's radius) and one per column (the meridian's
-    angle); the plane-sized arrays are products and differences of those."""
-    if source.width < 2 or source.height < 2:
-        raise ConversionError("a projected grid needs at least two rows and two columns to resample")
-    step = regrid.step
-    west, south, east, north = source.footprint()
-    first_column = math.floor(west / step)
-    last_column = math.ceil(east / step)
-    first_row = math.ceil(north / step)
-    last_row = math.floor(south / step)
-    width = last_column - first_column + 1
-    height = first_row - last_row + 1
-    first_longitude = round(first_column * step, 10)
-    first_latitude = round(first_row * step, 10)
-    if width * step > 360.0:
-        raise ConversionError("a projected source wider than the globe cannot be regridded")
-
-    projection = source.projection
-    origin_radius = projection.origin_radius
-    radius = np.array(
-        [projection.parallel_radius(first_latitude - j * step) for j in range(height)], dtype=np.float64
-    )
-    angles = [projection.meridian_angle(first_longitude + i * step) for i in range(width)]
-    sin_theta = np.array([math.sin(theta) for theta in angles], dtype=np.float64)
-    cos_theta = np.array([math.cos(theta) for theta in angles], dtype=np.float64)
-    x = np.outer(radius, sin_theta)
-    y = origin_radius - np.outer(radius, cos_theta)
-    c = (x - source.x0) / source.dx
-    r = (source.y0 - y) / source.dy
-    # Clamp into the source grid: a cell beyond its edge samples the edge.
-    c = np.clip(c, 0.0, float(source.width - 1))
-    r = np.clip(r, 0.0, float(source.height - 1))
-    column = np.minimum(np.floor(c), float(source.width - 2)).astype(np.int64)
-    row = np.minimum(np.floor(r), float(source.height - 2)).astype(np.int64)
-    return Resampler(
-        source=source,
-        width=width,
-        height=height,
-        first_longitude=first_longitude,
-        first_latitude=first_latitude,
-        step=step,
-        column=column,
-        row=row,
-        fx=c - column,
-        fy=r - row,
-    )

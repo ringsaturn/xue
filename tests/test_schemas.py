@@ -45,9 +45,15 @@ BUILT = "@built/"
 """A pattern under the scratch directory ``SchemaTest`` builds, not under
 ``tests/fixtures``."""
 
-GRID_STORES = ("indicators/store/*/*.zarr", BUILT + "web/*.zarr", BUILT + "segments/*.segments/*/*/*.zarr")
+GRID_STORES = (
+    "indicators/store/*/*.zarr",
+    BUILT + "web/*.zarr",
+    BUILT + "web/native/*/*.zarr",
+    BUILT + "segments/*.segments/*/*/*.zarr",
+)
 """Every grid store the goldens hold: profile 1 and profile 2, shared and
-one-bundle, map, series and segment stores."""
+one-bundle, map, series and segment stores, on a regular, a Gaussian and a
+projected grid."""
 
 TC_ARCHIVE = BUILT + "tc/*/tc/archive"
 """The tc archives ``build_tc_archive`` writes: one scored, one of history
@@ -313,6 +319,10 @@ class SchemaTest(unittest.TestCase):
             for name in group.get("consolidated_metadata", {}).get("metadata", {})
         ]
         self.assertIn("time_prate", arrays)
+        self.assertIn("crs", arrays)
+        self.assertIn("y", arrays)
+        grids = [metadata["grid"] for group in groups for _, metadata in group_bundles(group)]
+        self.assertTrue(any("projection" in grid for grid in grids) and any("gaussian" in grid for grid in grids))
 
     def test_the_tc_archive_goldens_cover_every_shape(self) -> None:
         """The archive goldens reach the branches its schemas name: a catalog

@@ -78,7 +78,7 @@ class SourceRegistryTests(unittest.TestCase):
                 self.assertFalse(spec.observation or spec.live or spec.fetched)
                 self.assertIsNone(spec.window_hours)
                 self.assertIsNone(spec.open_meteo)
-                self.assertIsNone(spec.regrid)
+                self.assertFalse(spec.grid_relative_winds)
                 self.assertFalse(spec.video)
                 self.assertEqual(spec.production_grid, (4530, 2970))
                 self.assertEqual(spec.tile, (64, 64))

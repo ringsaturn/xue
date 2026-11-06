@@ -303,8 +303,8 @@ Each variable array's `zarr.json`:
   Zarr v3 field: `["time", "latitude", "longitude"]`, `["time", "y", "x"]` on
   a projected grid, or the bundle's own names (below). Every array of one
   bundle carries the same three.
-- On a projected grid every variable array also has `grid_mapping: "crs"`,
-  naming the scalar array of *[Coordinates](#coordinates)*, and on no other
+- On a projected grid every variable array also has `grid_mapping: "crs"`, its
+  last attribute, naming the scalar array of *[Coordinates](#coordinates)*, and on no other
   grid does one.
 
 ## Coordinates
@@ -362,13 +362,14 @@ exists for its attributes, the CF grid mapping, which xarray and rioxarray read:
 | `longitude_of_central_meridian` | `centralMeridian` |
 | `standard_parallel` | `[standardParallel1, standardParallel2]` |
 | `earth_radius` | `radius` |
-| `crs_wkt` | the same projection as WKT |
+| `crs_wkt` | the same projection as WKT2, in the one spelling `reproject.LambertConformal.wkt` writes, each number as its shortest round trip, so that writers agree on the bytes |
 
-Whatever the grid, a dimension's coordinate array follows these rules.
+The attributes come in this order. Whatever the grid, a dimension's coordinate
+array follows these rules.
 
-- The **primary coordinates** `time`, `latitude` and `longitude` are the
-  run's axis and the source's primary grid at the store's tier. They are
-  written once per store.
+- The **primary coordinates** `time`, `latitude` and `longitude`, or `y` and
+  `x` on a source published on a projection, are the run's axis and the source's
+  primary grid at the store's tier. They are written once per store.
 - A bundle whose time axis is cut by a rule of its own takes the dimension
   `time_<bundle id>`, and the store carries a coordinate array of that name
   with that bundle's axis (same encoding as `time`). The rules are the two

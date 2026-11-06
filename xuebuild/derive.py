@@ -330,6 +330,8 @@ def derive_cat_plane(
     the uncropped planes and only then cut to the window."""
     level = cat_level(bundle_id)
     assert level is not None
+    if grid.projection is not None:
+        raise ConversionError(f"{bundle_id} is derived on a regular grid, and this one is on a map projection")
     if level not in calibration:
         raise ConversionError(f"the source publishes {bundle_id} without a ln TI1 calibration for {level} hPa")
     shape = uncropped_shape(grid)

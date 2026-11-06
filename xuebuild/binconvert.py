@@ -76,6 +76,7 @@ from .model import GRIB_PLANE_SOURCE, PlaneSource, SourceFrame
 from .poster import encode_poster
 from .quantize import PROFILES, PrecipitationCodebook, TemperatureCodebook
 from .report import build_report, delivered_byte_length, write_manifest
+from .reproject import rotate_winds
 from .sources import SourceSpec, family_frame_path, source_spec
 from .variables import VARIABLES, variable_spec
 
@@ -198,13 +199,10 @@ def _extract_planes(
         plane = values_by_id[variable_id].reshape(*variable_grid.source_shape)
         if variable_grid.column_roll:
             plane = np.roll(plane, variable_grid.column_roll, axis=1)
-        # Missing data becomes a value before the plane is resampled, so a
-        # fill never blends into its neighbours; then the projected plane
-        # lands on the regular grid, and only then is a regional window cut.
+        # Missing data becomes a value before the plane is thinned, so a fill
+        # never decides a block, and only then is a regional window cut.
         plane = _plane_source_for(plane_source, variable_id).apply_fill(plane)
         plane = _fill_missing(variable_id, plane)
-        if variable_grid.resample is not None:
-            plane = variable_grid.resample.take(plane)
         if variable_grid.downsample is not None:
             plane = variable_grid.downsample.take(plane)
         whole = plane
@@ -258,6 +256,7 @@ def _quantize_file(
     derived_scalar_ids: tuple[str, ...] = (),
     cat_calibration: Mapping[int, tuple[float, float]] | None = None,
     precipitation: tuple[str, str] | None = None,
+    rotated_vector_ids: tuple[str, ...] = (),
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
 
@@ -273,6 +272,13 @@ def _quantize_file(
     A clear-air turbulence bundle is derived on its inputs' uncropped planes
     with the source's ``cat_calibration`` (level → ln TI1 mean and standard
     deviation).
+
+    ``rotated_vector_ids`` names the vector bundles whose pairs arrive along
+    the axes of a projected grid (:func:`_grid_relative_vectors`). They are
+    turned to east and north here, in pairs, once the extraction has cut any
+    window: the rotation reads the plane's own grid, so it is the same cell's
+    wind whichever window it is cut from, and everything from quantization on,
+    the ladder's decimation among it, sees a wind in earth terms.
 
     Derived-precipitation sources (ECMWF run-total tp, sflux window-averaged
     prate_ave) difference against the previous file's raw plane. Instead of
@@ -344,6 +350,9 @@ def _quantize_file(
             previous_hour,
             average_window_hours,
         )
+    for bundle_id in rotated_vector_ids:
+        u_id, v_id = VECTOR_BUNDLES[bundle_id]
+        values[u_id], values[v_id] = rotate_winds(_grid_for(grid, u_id).projection, values[u_id], values[v_id])
     for bundle_id in derived_vector_ids:
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
         values[u_id], values[v_id] = derive_vector(values, bundle_id)
@@ -534,6 +543,19 @@ def _time_axis(
     return unit_seconds, offsets, run_time
 
 
+def _grid_relative_vectors(source: SourceSpec, vector_ids: tuple[str, ...]) -> tuple[str, ...]:
+    """The vector bundles of this build whose pairs must be turned to east and
+    north: all of them on a source with grid-relative winds. A derived one
+    would read winds that are not its own pair's, and no such source publishes
+    one, so a registry that lists one is refused rather than half-rotated."""
+    if not source.grid_relative_winds:
+        return ()
+    derived = [bundle_id for bundle_id in vector_ids if bundle_id in DERIVED_VECTORS]
+    if derived:
+        raise ConversionError(f"{source.manifest_model} has grid-relative winds, so it cannot derive {derived}")
+    return vector_ids
+
+
 def _family_grids(
     source: SourceSpec,
     variable_ids: tuple[str, ...],
@@ -552,7 +574,7 @@ def _family_grids(
     )
     grids: dict[str | None, GridInfo] = {}
     for family in family_order:
-        family_grid = grid_info(family_frame_path(grid_path, family), source)
+        family_grid = grid_info(family_frame_path(grid_path, family), source, family)
         if require_complete:
             production_grid, _ = source.family_grid(family)
             if (family_grid.width, family_grid.height) != production_grid:
@@ -563,12 +585,10 @@ def _family_grids(
         if bbox is not None:
             family_grid = crop_grid(family_grid, bbox)
             LOG.info(
-                "cropped %s to %dx%d from %.4f,%.4f (%s)",
+                "cropped %s to %dx%d (%s)",
                 family or "the run",
                 family_grid.width,
                 family_grid.height,
-                family_grid.first_longitude,
-                family_grid.first_latitude,
                 ",".join(f"{value:g}" for value in bbox),
             )
         grids[family] = family_grid
@@ -673,6 +693,7 @@ def _quantize_run(
         # Derived after the vapour flux and before the derivation-only inputs
         # are dropped: both read spfh850.
         derived_scalar_ids = available_derived_ids
+        rotated_vector_ids = _grid_relative_vectors(source, available_vector_ids)
         cat_calibration = {level: (mean, std) for level, mean, std in source.cat_calibration}
         with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as executor:
             results = executor.map(
@@ -690,6 +711,7 @@ def _quantize_run(
                     derived_scalar_ids,
                     cat_calibration,
                     precipitation,
+                    rotated_vector_ids,
                 ),
                 _sharing_plan(per_file, raw_precipitation_id, source, run_time),
             )

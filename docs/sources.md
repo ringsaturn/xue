@@ -88,24 +88,28 @@ no waves. Precipitation, radiation and gust have no analysis frame.
 
 ### GFS surface flux (`sflux`)
 
-~13 km Gaussian global, the GFS axis. 2 m temperature, precipitation
-(de-averaged from window means, from F001), 10 m wind and instantaneous
-downward shortwave radiation.
+~13 km Gaussian global (T1534, `gaussian` block `n` 768), the GFS axis. 2 m
+temperature, precipitation (de-averaged from window means, from F001), 10 m wind
+and instantaneous downward shortwave radiation.
 
 ### NOAA HRRR (`hrrr`)
 
-0.03° contiguous US, hourly to F18, a cycle every hour; the 00 / 06 / 12 /
+3 km Lambert conformal over the contiguous US (the model's own grid, 1799 × 1059),
+hourly to F18, a cycle every hour; the 00 / 06 / 12 /
 18 UTC cycles run to F48, which a local build may request but the published
 runs do not. The core pair, sea level pressure, 850 / 700 / 500 hPa heights,
 925 / 850 / 500 hPa temperature, 10 m / 80 m (`wind80m`, the hub-height
 pair) / 925 / 850 / 250 hPa winds, the surface diagnostics and forecast
-composite reflectivity (`cref`). The Lambert conformal model grid
-is resampled onto a regular 0.03° grid (bilinear); the viewer clips to the
+composite reflectivity (`cref`). Nothing is resampled; the winds are turned from
+the model's grid-relative components to east and north. Runs published earlier
+are on a regular 0.03° grid (2441 × 1051), and the viewer clips those to the
 model's footprint.
 
 ### NOAA RRFS (`rrfs`)
 
-0.03° contiguous US, hourly to F84 from the 00 / 06 / 12 / 18 UTC cycles,
+3 km Lambert conformal over the contiguous US, HRRR's grid to the last digit,
+nothing resampled and the winds turned to east and north. Hourly to F84 from the
+00 / 06 / 12 / 18 UTC cycles,
 complete about 3.5 h after the cycle (the other hourly cycles stop at F18 and
 are not published). HRRR's grid and field set plus 250 hPa height, and the
 smoke and dust the model carries inline (RRFS-SD): near-surface smoke, fine dust
@@ -160,7 +164,7 @@ Institute, SILAM, CC BY 4.0.
 
 Seasonal: ensemble member 01 of the 00Z and 12Z cycles, 6-hourly from F6 to
 F6552 (39 weeks, 1092 frames), landing about 11:30Z and 23:25Z. Surface
-fields on the T126 Gaussian grid (0.9375°): the core pair, total cloud
+fields on the T126 Gaussian grid (0.9375°, `gaussian` block `n` 95): the core pair, total cloud
 cover, shortwave radiation, surface temperature, two sea ice fields and
 10 m wind. Upper air on a regular 1° grid: sea level pressure, height,
 temperature, 500 hPa vertical velocity, wind at seven levels and water

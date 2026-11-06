@@ -63,7 +63,7 @@ from unittest import mock
 
 
 from tests._support import ClassTempRoot, FIXTURES, ParityCase, ReferenceBuild, TempRoot, assert_gdalinfo_agrees, requires_gdalinfo, store_path, stored_bundle
-from xuebuild import binconvert, fetch as fetchmod, grib2, quantize
+from xuebuild import binconvert, fetch as fetchmod, grib2, quantize, zarrstore
 from xuebuild.bundles import bundle_variable_ids
 from xuebuild.discover import (
     analysis_optional_ids,
@@ -86,6 +86,7 @@ from xuebuild.fetch import (
 )
 from xuebuild.idx import ByteRange, coalesce_ranges, series_byte_ranges
 from xuebuild.model import GfsRun
+from xuebuild.reproject import gaussian_latitude
 from xuebuild.sources import (
     CFS_PGB_IDS,
     SOURCES,
@@ -891,6 +892,25 @@ class ConversionTests(ClassTempRoot, unittest.TestCase):
         self.assertAlmostEqual(grid["longitudeStep"], 0.9375, places=5)
         self.assertNotEqual(grid["longitudeStep"], 0.938)
         self.assertAlmostEqual(grid["latitudeStep"], -0.947368, places=5)
+
+    def test_the_surface_family_declares_its_true_rows_and_the_levels_do_not(self) -> None:
+        grid = self._bundle("tmp2m").metadata["grid"]
+        gaussian = grid["gaussian"]
+        self.assertEqual((gaussian["n"], gaussian["rowStride"]), (95, 1))
+        self.assertLess(abs(gaussian_latitude(95, gaussian["firstRow"]) - grid["firstLatitude"]), 0.25)
+        self.assertNotIn("gaussian", self._bundle("hgt500").metadata["grid"])
+        store = self.output / "bundles.zarr"
+        latitude = np.frombuffer((store / "latitude" / "c" / "0").read_bytes(), "<f8")
+        np.testing.assert_array_equal(
+            latitude, [gaussian_latitude(95, gaussian["firstRow"] + row) for row in range(grid["height"])]
+        )
+        family = self._bundle("hgt500").metadata["grid"]
+        np.testing.assert_array_equal(
+            np.frombuffer((store / "latitude_pgb" / "c" / "0").read_bytes(), "<f8"),
+            family["firstLatitude"] + np.arange(family["height"], dtype=np.float64) * family["latitudeStep"],
+        )
+        half = zarrstore.bundle_metadata(self.output / "bundles.half.zarr", "tmp2m")["grid"]["gaussian"]
+        self.assertEqual(half, {"n": 95, "firstRow": gaussian["firstRow"], "rowStride": 2})
 
     def test_the_ice_thickness_nodata_becomes_the_codebook_bottom(self) -> None:
         codes = self._bundle("icetk").decode_plane(1, 6)
