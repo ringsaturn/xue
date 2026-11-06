@@ -577,7 +577,7 @@ class RollingWindowCliTests(DownloadTests):
 class RecordMatchingTests(unittest.TestCase):
     def test_the_alternates_are_matched_and_never_written(self) -> None:
         cref = variable_spec("cref")
-        self.assertEqual(len(cref.grib2_alternates), 1)
+        self.assertEqual(len(cref.grib2_alternates), 2)
         alternate = cref.grib2_alternates[0]
         self.assertEqual((alternate.triple, alternate.level_type, alternate.level_value, alternate.gdal_unit), ((209, 10, 0), 102, 500.0, "dBZ"))
         self.assertEqual(cref.fill_values, (-999.0, -99.0))

@@ -259,7 +259,9 @@ class MatcherTests(unittest.TestCase):
         self.assertTrue(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=1, level_type=101)))
         self.assertTrue(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=0, level_type=101)))
         self.assertFalse(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=0, level_type=1)))
-        self.assertFalse(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=192, level_type=101)))
+        # RRFS's only sea level pressure; the index reads it where no PRMSL is.
+        self.assertTrue(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=192, level_type=101)))
+        self.assertFalse(grib2._matches(prmsl, self._message(parameter_category=3, parameter_number=192, level_type=1)))
 
 
 if __name__ == "__main__":

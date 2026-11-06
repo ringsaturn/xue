@@ -176,9 +176,13 @@ class RecordMatchingTests(unittest.TestCase):
         self.assertTrue(
             _band_matches("prmsl", {"GRIB_ELEMENT": "PRMSL", "GRIB_SHORT_NAME": "0-MSL"}, "")
         )
-        # MSLET is NCEP's other sea level reduction and a different quantity.
-        self.assertFalse(
+        # NCEP's other reduction, RRFS's only sea level pressure: a build reads
+        # one record of the two, since the index tries it after PRMSL.
+        self.assertTrue(
             _band_matches("prmsl", {"GRIB_ELEMENT": "MSLET", "GRIB_SHORT_NAME": "0-MSL"}, "")
+        )
+        self.assertFalse(
+            _band_matches("prmsl", {"GRIB_ELEMENT": "MSLET", "GRIB_SHORT_NAME": "0-SFC"}, "")
         )
 
     def test_a_level_matches_only_itself(self) -> None:

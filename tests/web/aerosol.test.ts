@@ -183,7 +183,7 @@ describe("the aerosol families", () => {
     // sheet's chips carry the species and size cuts.
     expect(familyLevels("aod")).toEqual(["aod"]);
     expect(familyLevels("pm")).toEqual(["pm25"]);
-    expect(familyVariants("aod")).toEqual([...ODD_IDS]);
+    expect(familyVariants("aod")).toEqual([...ODD_IDS, "aotk"]);
     expect(familyVariants("pm")).toEqual([...PM_IDS]);
     expect(familyMembers("aod")).toEqual([...ODD_IDS, "aotk"]);
     expect(familyMembers("pm")).toEqual([...PM_IDS]);

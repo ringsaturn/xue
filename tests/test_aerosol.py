@@ -179,7 +179,7 @@ class RegistryTests(unittest.TestCase):
         # no GRIB (tests/test_cmadust.py).
         self.assertEqual(
             [variable_id for variable_id, spec in VARIABLES.items() if spec.grib2_aerosol is not None],
-            [*AEROSOL_VARIABLE_IDS, "dustsfc"],
+            [*AEROSOL_VARIABLE_IDS, "dustsfc", "smokesfc", "dustfine", "dustcoarse"],
         )
 
     def test_a_missing_interval_carries_no_limits(self) -> None:
