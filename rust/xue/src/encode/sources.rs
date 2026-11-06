@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::encode::errors::{EncodeError, Result};
-use crate::encode::reproject::Regrid;
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
@@ -279,11 +278,18 @@ pub struct SourceSpec {
     /// `long_cycles` cycle.
     #[serde(default)]
     pub long_cycle_steps: Vec<(i64, i64)>,
-    /// Set when the source's records are on a map projection rather than a
-    /// regular latitude/longitude grid, and must be resampled onto one of
-    /// this step before anything else reads them (`reproject.rs`).
+    /// True for a source whose records are on a map projection, published as
+    /// they are, with their wind components along the grid's axes: every vector
+    /// bundle's pair is turned to east and north before it is quantized, and the
+    /// bundle's dimensions are `y` and `x`. `convert::grid_info` refuses a file
+    /// whose kind disagrees with it.
     #[serde(default)]
-    pub regrid: Option<Regrid>,
+    pub grid_relative_winds: bool,
+    /// Latitudes per hemisphere, on a source whose primary grid is a regular
+    /// Gaussian one: its bundles carry a `grid.gaussian` block beside the regular
+    /// fields, and a store's `latitude` coordinate holds the true rows.
+    #[serde(default)]
+    pub gaussian_n: Option<u32>,
     /// Always false: the H.264 companion is retired, and the registry
     /// document carries the field until its next schema.
     #[serde(default)]

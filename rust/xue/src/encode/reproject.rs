@@ -1,30 +1,28 @@
-//! Regridding a projected source onto the regular latitude/longitude grid
-//! the format describes — the port of `xuebuild/reproject.py`, which
-//! explains the rules; the two must agree to the bit.
+//! The projection arithmetic of a model published on its own map projection:
+//! the port of `xuebuild/reproject.py`, which explains the rules; the two must
+//! agree to the bit.
 //!
-//! A model computed on a map projection (HRRR, Lambert conformal conic,
-//! 3 km) is resampled onto a regular grid before anything else reads it: the
-//! plane is bilinearly sampled at each target cell center, whose projected
-//! position is found with the projection's own forward formulas. The target
-//! grid is the source's footprint snapped outwards to the declared step, and
-//! the corners of that rectangle the conic domain never covered take the
-//! nearest source cell, continued outwards.
-//!
-//! The per-row and per-column trigonometry runs through `f64`'s methods —
-//! the C library's `sin`/`cos`/`tan`/`pow`, which is what Python's `math`
-//! module calls too — and only exact IEEE multiplications, subtractions and
-//! divisions are done on the whole plane, in the reference encoder's order.
+//! The grid's planes stay as the model wrote them. The projection places the
+//! published cells ([`ProjectedGrid`]) and turns grid-relative winds to east and
+//! north ([`rotate_winds`]). Point trigonometry runs through `f64`'s methods, the
+//! C library's `sin`/`cos`/`tan`/`pow`, which is what Python's `math` module calls
+//! too. A plane sees only exact IEEE multiplications, additions, divisions and
+//! square roots, which NumPy's vectorised loops round the same way.
 
 use regex::Regex;
+use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
 use crate::encode::errors::{EncodeError, Result};
 pub use crate::projection::LambertConformal;
 
-/// A source grid in projected space: what GDAL's geotransform says about a
-/// Lambert conformal GRIB, in the north-to-south row order GDAL reads it in.
-/// `x0`/`y0` are the *center* of the first (north-west) cell; `dx`/`dy` are
-/// both positive.
+/// `grid.projection.kind` of [`LambertConformal`].
+const LAMBERT_CONFORMAL_KIND: &str = "lambert-conformal";
+
+/// A published grid in projected space, in the north-to-south row order GDAL
+/// reads it in: the `grid.projection` block of a bundle's metadata. `x0`/`y0` are
+/// the *center* of the first (north-west) cell; cell (`row`, `column`) is centered
+/// at `x0 + column * dx`, `y0 + row * dy`, so `dx` is positive and `dy` negative.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProjectedGrid {
     pub projection: LambertConformal,
@@ -37,176 +35,133 @@ pub struct ProjectedGrid {
 }
 
 impl ProjectedGrid {
-    /// `(west, south, east, north)` in degrees: the extremes every boundary
-    /// cell center reaches — the whole boundary, in the reference encoder's
-    /// order (the top and bottom rows column by column, then the two side
-    /// columns), since `min`/`max` over the same doubles land the same.
-    pub fn footprint(&self) -> (f64, f64, f64, f64) {
-        let (mut west, mut south) = (f64::INFINITY, f64::INFINITY);
-        let (mut east, mut north) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
-        let last_column = self.width - 1;
-        let last_row = self.height - 1;
-        let mut cells: Vec<(usize, usize)> = Vec::with_capacity(2 * (self.width + self.height));
-        for column in 0..self.width {
-            cells.push((column, 0));
-            cells.push((column, last_row));
+    /// Every second row and column from the first: the first cell stays where
+    /// it is.
+    pub fn decimated(&self) -> Self {
+        Self {
+            width: self.width.div_ceil(2),
+            height: self.height.div_ceil(2),
+            dx: self.dx * 2.0,
+            dy: self.dy * 2.0,
+            ..*self
         }
-        for column in [0, last_column] {
-            for row in 1..last_row {
-                cells.push((column, row));
-            }
+    }
+
+    /// The `height` x `width` cells from (`row`, `column`).
+    pub fn window(&self, row: usize, column: usize, height: usize, width: usize) -> Self {
+        Self {
+            width,
+            height,
+            x0: self.x0 + column as f64 * self.dx,
+            y0: self.y0 + row as f64 * self.dy,
+            ..*self
         }
-        for (column, row) in cells {
-            let (longitude, latitude) = self.projection.inverse(
-                self.x0 + column as f64 * self.dx,
-                self.y0 - row as f64 * self.dy,
-            );
-            west = west.min(longitude);
-            east = east.max(longitude);
-            south = south.min(latitude);
-            north = north.max(latitude);
-        }
-        (west, south, east, north)
+    }
+
+    /// The `grid.projection` block.
+    pub fn metadata(&self) -> Map<String, Value> {
+        let projection = &self.projection;
+        let mut block = Map::new();
+        block.insert("kind".into(), json!(LAMBERT_CONFORMAL_KIND));
+        block.insert("radius".into(), json!(projection.radius));
+        block.insert("standardParallel1".into(), json!(projection.standard_parallel_1));
+        block.insert("standardParallel2".into(), json!(projection.standard_parallel_2));
+        block.insert("latitudeOfOrigin".into(), json!(projection.latitude_of_origin));
+        block.insert("centralMeridian".into(), json!(projection.central_meridian));
+        block.insert("x0".into(), json!(self.x0));
+        block.insert("y0".into(), json!(self.y0));
+        block.insert("dx".into(), json!(self.dx));
+        block.insert("dy".into(), json!(self.dy));
+        block
     }
 }
 
-/// What a source declares: that its planes are projected and must be
-/// resampled onto a regular grid of `step` degrees (the document's
-/// `{"step": degrees}`).
-#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
-pub struct Regrid {
-    pub step: f64,
-}
-
-/// Bilinear sampling of every source plane at the target grid's cell
-/// centers, computed once per build and shared by every plane.
-#[derive(Debug, Clone)]
-pub struct Resampler {
-    pub source: ProjectedGrid,
-    pub width: usize,
-    pub height: usize,
-    pub first_longitude: f64,
-    pub first_latitude: f64,
-    pub step: f64,
-    /// Per target cell, row-major: the source column west of it and the
-    /// source row north of it, and the fractions of the way east and south
-    /// to the next.
-    column: Vec<usize>,
-    row: Vec<usize>,
-    fx: Vec<f64>,
-    fy: Vec<f64>,
-}
-
-impl Resampler {
-    pub fn source_shape(&self) -> (usize, usize) {
-        (self.source.height, self.source.width)
+/// One grid-relative wind pair turned to east and north, in place, on the flat
+/// planes `grid` describes (`docs/encoder.md`, "Native grids").
+///
+/// Read off the cell's coordinates rather than its longitude, so no libm call
+/// runs per cell: only `origin_radius` goes through the C library, once. The
+/// radius takes the cone's sign, as in `LambertConformal::inverse`.
+pub fn rotate_winds(grid: &ProjectedGrid, u: &mut [f64], v: &mut [f64]) -> Result<()> {
+    let cells = grid.width * grid.height;
+    if u.len() != cells || v.len() != cells {
+        return Err(EncodeError::conversion(format!(
+            "a wind pair of {} and {} cells on a {}x{} grid",
+            u.len(),
+            v.len(),
+            grid.width,
+            grid.height
+        )));
     }
-
-    /// One source plane, `(source.height, source.width)` row-major,
-    /// resampled to `(height, width)`. The four corner weights are applied
-    /// in the reference encoder's order — the two rows blended east-west
-    /// first, then north-south.
-    pub fn take(&self, plane: &[f64]) -> Result<Vec<f64>> {
-        if plane.len() != self.source.width * self.source.height {
-            return Err(EncodeError::conversion(format!(
-                "resampler expected a {}x{} plane, got {} values",
-                self.source.width,
-                self.source.height,
-                plane.len()
-            )));
-        }
-        let stride = self.source.width;
-        let mut out = Vec::with_capacity(self.width * self.height);
-        for index in 0..self.width * self.height {
-            let column = self.column[index];
-            let row = self.row[index];
-            let fx = self.fx[index];
-            let fy = self.fy[index];
-            let base = row * stride + column;
-            let top = plane[base] * (1.0 - fx) + plane[base + 1] * fx;
-            let bottom = plane[base + stride] * (1.0 - fx) + plane[base + stride + 1] * fx;
-            out.push(top * (1.0 - fy) + bottom * fy);
-        }
-        Ok(out)
-    }
-}
-
-/// Round to ten decimal places the way Python's `round(value, 10)` does.
-fn round10(value: f64) -> f64 {
-    format!("{value:.10}").parse().unwrap_or(value)
-}
-
-/// The regular grid a projected source lands on, and how to sample it —
-/// the port of `build_resampler` in `xuebuild/reproject.py`.
-pub fn build_resampler(source: ProjectedGrid, regrid: Regrid) -> Result<Resampler> {
-    if source.width < 2 || source.height < 2 {
-        return Err(EncodeError::conversion(
-            "a projected grid needs at least two rows and two columns to resample",
-        ));
-    }
-    let step = regrid.step;
-    let (west, south, east, north) = source.footprint();
-    let first_column = (west / step).floor() as i64;
-    let last_column = (east / step).ceil() as i64;
-    let first_row = (north / step).ceil() as i64;
-    let last_row = (south / step).floor() as i64;
-    let width = (last_column - first_column + 1) as usize;
-    let height = (first_row - last_row + 1) as usize;
-    let first_longitude = round10(first_column as f64 * step);
-    let first_latitude = round10(first_row as f64 * step);
-    if width as f64 * step > 360.0 {
-        return Err(EncodeError::conversion(
-            "a projected source wider than the globe cannot be regridded",
-        ));
-    }
-
-    let projection = source.projection;
-    let origin_radius = projection.origin_radius();
-    let radius: Vec<f64> = (0..height)
-        .map(|j| projection.parallel_radius(first_latitude - j as f64 * step))
-        .collect();
-    let angles: Vec<f64> = (0..width)
-        .map(|i| projection.meridian_angle(first_longitude + i as f64 * step))
-        .collect();
-    let sin_theta: Vec<f64> = angles.iter().map(|theta| theta.sin()).collect();
-    let cos_theta: Vec<f64> = angles.iter().map(|theta| theta.cos()).collect();
-
-    let cells = width * height;
-    let mut column = Vec::with_capacity(cells);
-    let mut row = Vec::with_capacity(cells);
-    let mut fx = Vec::with_capacity(cells);
-    let mut fy = Vec::with_capacity(cells);
-    let max_column = (source.width - 1) as f64;
-    let max_row = (source.height - 1) as f64;
-    let floor_column = (source.width - 2) as f64;
-    let floor_row = (source.height - 2) as f64;
-    for j in 0..height {
-        for i in 0..width {
-            let x = radius[j] * sin_theta[i];
-            let y = origin_radius - radius[j] * cos_theta[i];
-            // Clamp into the source grid: a cell beyond its edge samples
-            // the edge. `clamp` is numpy's `clip` for finite bounds.
-            let c = ((x - source.x0) / source.dx).clamp(0.0, max_column);
-            let r = ((source.y0 - y) / source.dy).clamp(0.0, max_row);
-            let c0 = c.floor().min(floor_column);
-            let r0 = r.floor().min(floor_row);
-            column.push(c0 as usize);
-            row.push(r0 as usize);
-            fx.push(c - c0);
-            fy.push(r - r0);
+    let sign = 1.0_f64.copysign(grid.projection.cone_constant());
+    let origin_radius = grid.projection.origin_radius();
+    let columns: Vec<f64> = (0..grid.width).map(|column| grid.x0 + column as f64 * grid.dx).collect();
+    for row in 0..grid.height {
+        let apex = origin_radius - (grid.y0 + row as f64 * grid.dy);
+        let base = row * grid.width;
+        for (column, &x) in columns.iter().enumerate() {
+            let rho = sign * (apex * apex + x * x).sqrt();
+            let (sine, cosine) = (x / rho, apex / rho);
+            let (east, north) = (u[base + column], v[base + column]);
+            u[base + column] = cosine * east + sine * north;
+            v[base + column] = -sine * east + cosine * north;
         }
     }
-    Ok(Resampler {
-        source,
-        width,
-        height,
-        first_longitude,
-        first_latitude,
-        step,
-        column,
-        row,
-        fx,
-        fy,
+    Ok(())
+}
+
+/// A number the way Python's `repr` prints a float: the shortest round trip.
+/// `{:?}` spells it the same from 1e-4 up to 1e16, which holds any sphere's radius
+/// and any angle a grid's projection is declared with.
+fn shortest(value: f64) -> String {
+    format!("{value:?}")
+}
+
+/// The projection as WKT2, the `crs_wkt` of a store's `crs` array
+/// (`docs/zarr-profile.md`, "Coordinates"). Spelled here rather than taken from
+/// GDAL, whose text differs between releases: the array document is part of a
+/// store's bytes.
+fn lambert_wkt(projection: &LambertConformal) -> String {
+    let degree = r#"ANGLEUNIT["degree",0.0174532925199433]"#;
+    let metre = r#"LENGTHUNIT["metre",1]"#;
+    format!(
+        concat!(
+            r#"PROJCRS["Lambert Conic Conformal on a sphere","#,
+            r#"BASEGEOGCRS["Sphere","#,
+            r#"DATUM["Sphere",ELLIPSOID["Sphere",{radius},0,{metre}]],"#,
+            r#"PRIMEM["Greenwich",0,{degree}]],"#,
+            r#"CONVERSION["Lambert Conic Conformal (2SP)","#,
+            r#"METHOD["Lambert Conic Conformal (2SP)",ID["EPSG",9802]],"#,
+            r#"PARAMETER["Latitude of false origin",{origin},{degree}],"#,
+            r#"PARAMETER["Longitude of false origin",{meridian},{degree}],"#,
+            r#"PARAMETER["Latitude of 1st standard parallel",{first},{degree}],"#,
+            r#"PARAMETER["Latitude of 2nd standard parallel",{second},{degree}],"#,
+            r#"PARAMETER["Easting at false origin",0,{metre}],"#,
+            r#"PARAMETER["Northing at false origin",0,{metre}]],"#,
+            r#"CS[Cartesian,2],"#,
+            r#"AXIS["easting",east,ORDER[1],{metre}],"#,
+            r#"AXIS["northing",north,ORDER[2],{metre}]]"#,
+        ),
+        radius = shortest(projection.radius),
+        origin = shortest(projection.latitude_of_origin),
+        meridian = shortest(projection.central_meridian),
+        first = shortest(projection.standard_parallel_1),
+        second = shortest(projection.standard_parallel_2),
+        degree = degree,
+        metre = metre,
+    )
+}
+
+/// The CF grid mapping a store's `crs` array carries, in the order the array
+/// document writes it.
+pub fn cf_attributes(projection: &LambertConformal) -> Value {
+    json!({
+        "grid_mapping_name": "lambert_conformal_conic",
+        "latitude_of_projection_origin": projection.latitude_of_origin,
+        "longitude_of_central_meridian": projection.central_meridian,
+        "standard_parallel": [projection.standard_parallel_1, projection.standard_parallel_2],
+        "earth_radius": projection.radius,
+        "crs_wkt": lambert_wkt(projection),
     })
 }
 
@@ -290,7 +245,7 @@ mod tests {
             x0: -2699020.14252193 + 1500.0,
             y0: 1588193.8474433357 - 1500.0,
             dx: 3000.0,
-            dy: 3000.0,
+            dy: -3000.0,
         }
     }
 
@@ -299,38 +254,89 @@ mod tests {
         let grid = hrrr();
         let (x, y) = grid.projection.forward(-122.719528, 21.138123);
         assert!((x - grid.x0).abs() < 1e-6, "{x}");
-        assert!((y - (grid.y0 - 1058.0 * grid.dy)).abs() < 1e-6, "{y}");
+        assert!((y - (grid.y0 + 1058.0 * grid.dy)).abs() < 1e-6, "{y}");
         let (longitude, latitude) = grid.projection.inverse(x, y);
         assert!((longitude + 122.719528).abs() < 1e-9);
         assert!((latitude - 21.138123).abs() < 1e-9);
     }
 
+    /// The reference's `LambertConformal.wkt` for HRRR's projection, whole.
     #[test]
-    fn the_production_grid_is_the_footprint_at_three_hundredths() {
-        let resampler = build_resampler(hrrr(), Regrid { step: 0.03 }).expect("resampler");
-        assert_eq!((resampler.width, resampler.height), (2441, 1051));
-        assert_eq!((resampler.first_longitude, resampler.first_latitude), (-134.1, 52.62));
+    fn the_wkt_is_the_reference_s_spelling() {
+        assert_eq!(
+            cf_attributes(&hrrr().projection)["crs_wkt"],
+            concat!(
+                r#"PROJCRS["Lambert Conic Conformal on a sphere",BASEGEOGCRS["Sphere",DATUM["Sphere","#,
+                r#"ELLIPSOID["Sphere",6371229.0,0,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,"#,
+                r#"ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["Lambert Conic Conformal (2SP)","#,
+                r#"METHOD["Lambert Conic Conformal (2SP)",ID["EPSG",9802]],"#,
+                r#"PARAMETER["Latitude of false origin",38.5,ANGLEUNIT["degree",0.0174532925199433]],"#,
+                r#"PARAMETER["Longitude of false origin",-97.5,ANGLEUNIT["degree",0.0174532925199433]],"#,
+                r#"PARAMETER["Latitude of 1st standard parallel",38.5,ANGLEUNIT["degree",0.0174532925199433]],"#,
+                r#"PARAMETER["Latitude of 2nd standard parallel",38.5,ANGLEUNIT["degree",0.0174532925199433]],"#,
+                r#"PARAMETER["Easting at false origin",0,LENGTHUNIT["metre",1]],"#,
+                r#"PARAMETER["Northing at false origin",0,LENGTHUNIT["metre",1]]],CS[Cartesian,2],"#,
+                r#"AXIS["easting",east,ORDER[1],LENGTHUNIT["metre",1]],"#,
+                r#"AXIS["northing",north,ORDER[2],LENGTHUNIT["metre",1]]]"#,
+            )
+        );
     }
 
     #[test]
-    fn a_constant_plane_stays_constant_and_a_linear_one_is_exact() {
-        let grid = ProjectedGrid { width: 40, height: 30, ..hrrr() };
-        let resampler = build_resampler(grid, Regrid { step: 0.05 }).expect("resampler");
-        // To rounding: the weights are applied one by one, so a constant
-        // comes back within an ulp or two rather than bit-exact.
-        let constant = vec![7.5; 40 * 30];
-        assert!(resampler.take(&constant).expect("plane").iter().all(|&v| (v - 7.5).abs() < 1e-12));
-        // Bilinear interpolation reproduces a plane that is linear in the
-        // source indices, inside the source and along its clamped extension.
-        let linear: Vec<f64> = (0..30)
-            .flat_map(|row| (0..40).map(move |column| 2.0 * column as f64 + 0.5 * row as f64))
-            .collect();
-        let out = resampler.take(&linear).expect("plane");
-        for (index, &value) in out.iter().enumerate() {
-            let expected = 2.0 * (resampler.column[index] as f64 + resampler.fx[index])
-                + 0.5 * (resampler.row[index] as f64 + resampler.fy[index]);
-            assert!((value - expected).abs() < 1e-9, "{index}: {value} vs {expected}");
-        }
+    fn a_tier_keeps_the_first_cell_and_a_window_moves_it() {
+        let grid = hrrr();
+        let tier = grid.decimated();
+        assert_eq!((tier.width, tier.height), (900, 530));
+        assert_eq!((tier.x0, tier.y0, tier.dx, tier.dy), (grid.x0, grid.y0, 6000.0, -6000.0));
+        let window = grid.window(2, 3, 10, 20);
+        assert_eq!((window.width, window.height), (20, 10));
+        assert_eq!((window.x0, window.y0), (grid.x0 + 9000.0, grid.y0 - 6000.0));
+    }
+
+    #[test]
+    fn the_block_is_written_in_the_reference_s_order() {
+        let block = hrrr().metadata();
+        assert_eq!(
+            block.keys().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "kind", "radius", "standardParallel1", "standardParallel2", "latitudeOfOrigin", "centralMeridian",
+                "x0", "y0", "dx", "dy",
+            ]
+        );
+    }
+
+    /// A grid-relative `u` of one is the angle `α = n (λ − λ0)` in earth terms.
+    #[test]
+    fn a_wind_turns_by_the_cone_s_angle() {
+        let projection = hrrr().projection;
+        let (x, y) = projection.forward(-90.0, 40.0);
+        let grid = ProjectedGrid { width: 1, height: 1, x0: x, y0: y, ..hrrr() };
+        let (mut u, mut v) = (vec![1.0], vec![0.0]);
+        rotate_winds(&grid, &mut u, &mut v).expect("rotated");
+        let alpha = projection.meridian_angle(-90.0);
+        assert!((u[0] - alpha.cos()).abs() < 1e-9, "{}", u[0]);
+        assert!((v[0] + alpha.sin()).abs() < 1e-9, "{}", v[0]);
+        assert!(rotate_winds(&grid, &mut [0.0, 0.0], &mut [0.0, 0.0]).is_err());
+    }
+
+    /// A southern cone's negative radius cancels its negative `n`, so the same
+    /// `α = n (λ − λ0)` comes out.
+    #[test]
+    fn a_southern_cone_turns_by_its_own_angle() {
+        let projection = LambertConformal {
+            standard_parallel_1: -30.0,
+            standard_parallel_2: -60.0,
+            latitude_of_origin: -45.0,
+            central_meridian: 140.0,
+            ..hrrr().projection
+        };
+        let (x, y) = projection.forward(150.0, -40.0);
+        let grid = ProjectedGrid { projection, width: 1, height: 1, x0: x, y0: y, ..hrrr() };
+        let (mut u, mut v) = (vec![1.0], vec![0.0]);
+        rotate_winds(&grid, &mut u, &mut v).expect("rotated");
+        let alpha = projection.meridian_angle(150.0);
+        assert!((u[0] - alpha.cos()).abs() < 1e-9, "{}", u[0]);
+        assert!((v[0] + alpha.sin()).abs() < 1e-9, "{}", v[0]);
     }
 
     #[test]
