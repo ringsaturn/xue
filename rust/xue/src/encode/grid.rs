@@ -437,7 +437,7 @@ fn round10(value: f64) -> f64 {
 /// the antimeridian; the returned origin is renormalized into [-180, 180) and
 /// the window, not the metadata, carries the wrap.
 ///
-/// On a projected grid the box is a curved patch: see [`crop_projected`]. A
+/// On a projected grid the box is a curved patch: see `crop_projected`. A
 /// Gaussian grid is cropped by its regular fields, and its rows follow.
 pub fn crop_grid(grid: GridInfo, bbox: (f64, f64, f64, f64)) -> Result<GridInfo> {
     if grid.crop.is_some() {
