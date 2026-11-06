@@ -22,7 +22,7 @@ import {
   VERTEX_SHADER,
   gaussianWeights,
 } from "../../web/src/layer";
-import { gridForm, gridMapFor, parseGrid } from "../../web/src/gridmap";
+import { gridForm, gridMapFor, gridTable, parseGrid, type LambertGrid } from "../../web/src/gridmap";
 
 const GRID_WIDTH = 8;
 const GRID_HEIGHT = 4;
@@ -127,6 +127,15 @@ async function renderStripPixels(
       gl.uniform2f(uniform("u_first"), firstLongitude, 90);
       gl.uniform2f(uniform("u_step"), longitudeStep, -180 / (height - 1));
       gl.uniform2f(uniform("u_size"), width, height);
+      gl.activeTexture(gl.TEXTURE15);
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, table.width, table.height, 0, gl.RG, gl.FLOAT, new Float32Array(table.data));
+      gl.uniform1i(uniform("u_grid_table"), 15);
+      gl.uniform4f(uniform("u_grid_table_box"), table.box[0], table.box[1], table.box[2], table.box[3]);
+      gl.uniform4f(uniform("u_grid_table_cone"), table.cone[0], table.cone[1], table.cone[2], table.cone[3]);
+      gl.activeTexture(gl.TEXTURE0);
       gl.uniform1f(uniform("u_mix"), 0);
       gl.uniform1f(uniform("u_wrap"), wrap ? 1 : 0);
       gl.uniform4f(uniform("u_cover"), cover[0], cover[1], cover[2], cover[3]);
@@ -741,8 +750,9 @@ const VIEW_PIXELS = 256;
  * RGBA, row by row with the Mercator y growing down the array. */
 async function renderCells(page: import("@playwright/test").Page, axis: "column" | "row"): Promise<number[]> {
   const form = gridForm(LAMBERT_GRID);
+  const table = gridTable(LAMBERT_GRID as LambertGrid);
   return page.evaluate(
-    ({ vertexSource, fragmentSource, width, height, form, axis, view, size }) => {
+    ({ vertexSource, fragmentSource, width, height, form, table, axis, view, size }) => {
       const canvas = document.createElement("canvas");
       canvas.width = size;
       canvas.height = size;
@@ -822,6 +832,7 @@ async function renderCells(page: import("@playwright/test").Page, axis: "column"
       width: LAMBERT_GRID.width,
       height: LAMBERT_GRID.height,
       form,
+      table: { width: table.width, height: table.height, box: table.box, cone: table.cone, data: Array.from(table.data) },
       axis,
       view: VIEW,
       size: VIEW_PIXELS,
@@ -846,16 +857,18 @@ test("the shader and the CPU find a projected grid's cells in the same place", a
       if (!at) {
         // Just outside a half cell the two may differ by a float's error; well
         // outside, the shader must have discarded it.
-        const near = [-0.02, 0.02].some((d) => map.lonLatToCell(longitude + d, latitude + d));
+        const near = [-0.002, 0.002].some((d) => map.lonLatToCell(longitude + d, latitude + d));
         if (!near) expect(columns[pixel + 3], `pixel ${px},${py}`).toBe(0);
         blank += 1;
         continue;
       }
       // The nearest texel, unless the point is so close to a cell's edge that a
-      // float's error may choose the other; a fiftieth of a cell is 1200 m here.
-      const edge = (value: number) => Math.abs(value - Math.floor(value) - 0.5) < 0.02;
+      // float's error may choose the other: a five-hundredth of a cell, 120 m
+      // here. The tolerance is what proves no trigonometry runs per pixel, whose
+      // error on a real GPU can reach kilometres; hold it to this.
+      const edge = (value: number) => Math.abs(value - Math.floor(value) - 0.5) < 0.002;
       if (edge(at[0]) || edge(at[1])) continue;
-      if (at[0] > LAMBERT_GRID.width - 0.52 || at[1] > LAMBERT_GRID.height - 0.52 || at[0] < -0.48 || at[1] < -0.48) continue;
+      if (at[0] > LAMBERT_GRID.width - 0.502 || at[1] > LAMBERT_GRID.height - 0.502 || at[0] < -0.498 || at[1] < -0.498) continue;
       expect(columns[pixel + 3], `pixel ${px},${py}`).toBeGreaterThan(0);
       expect(columns[pixel], `column at pixel ${px},${py}`).toBe(Math.round(at[0]) + 0);
       expect(rows[pixel], `row at pixel ${px},${py}`).toBe(Math.round(at[1]) + 0);

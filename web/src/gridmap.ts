@@ -15,6 +15,7 @@
  * covers what the shader draws.
  */
 
+import { mercatorX, mercatorY } from "./mercator";
 import {
   LAMBERT_LATITUDE_LIMIT,
   lambertCone,
@@ -586,6 +587,56 @@ export function gridForm(grid: GeoGrid): GridForm {
   const { x0, y0, dx, dy, centralMeridian } = grid.projection;
   const cone = lambertCone(grid.projection);
   return { first: [x0, y0], step: [dx, dy], cone: [cone.n, cone.scale, cone.originRadius, (centralMeridian * Math.PI) / 180] };
+}
+
+/** The projected metres of a Lambert grid over a Mercator rectangle, for
+ * `GRID_TABLE_GLSL`. 512 x 256 keeps bilinear within 4 m over HRRR's domain, and
+ * costs a megabyte of texture and a few milliseconds. */
+export interface GridTable {
+  width: number;
+  height: number;
+  /** West, north, east, south in Mercator units, rows running north to south. */
+  box: [number, number, number, number];
+  cone: GridForm["cone"];
+  /** Two floats a texel, x then y in metres. */
+  data: Float32Array;
+}
+
+const GRID_TABLE_SIZE = [512, 256] as const;
+let lastTable: { key: string; table: GridTable } | null = null;
+
+export function gridTable(grid: LambertGrid): GridTable {
+  const { west, south, east, north } = gridMapFor(grid).bounds();
+  const key = JSON.stringify([gridForm(grid).cone, west, south, east, north]);
+  if (lastTable?.key === key) return lastTable.table;
+  const [width, height] = GRID_TABLE_SIZE;
+  // A margin of a hundredth, so the grid's edge never meets the table's and a
+  // point just off the grid still projects to just off the grid.
+  const marginX = (mercatorX(east) - mercatorX(west)) / 100;
+  const marginY = (mercatorY(south) - mercatorY(north)) / 100;
+  const box: GridTable["box"] = [
+    mercatorX(west) - marginX,
+    mercatorY(north) - marginY,
+    mercatorX(east) + marginX,
+    mercatorY(south) + marginY,
+  ];
+  const cone = lambertCone(grid.projection);
+  const limit = Number(LAMBERT_LATITUDE_LIMIT);
+  const data = new Float32Array(width * height * 2);
+  for (let row = 0; row < height; row += 1) {
+    const y = box[1] + (row / (height - 1)) * (box[3] - box[1]);
+    const latitude = 90 - (360 / Math.PI) * Math.atan(Math.exp((y * 2 - 1) * Math.PI));
+    const held = Math.max(-limit, Math.min(limit, latitude));
+    for (let column = 0; column < width; column += 1) {
+      const x = box[0] + (column / (width - 1)) * (box[2] - box[0]);
+      const [px, py] = lambertForward(grid.projection, cone, x * 360 - 180, held);
+      data[(row * width + column) * 2] = px;
+      data[(row * width + column) * 2 + 1] = py;
+    }
+  }
+  const table: GridTable = { width, height, box, cone: gridForm(grid).cone, data };
+  lastTable = { key, table };
+  return table;
 }
 
 /** The grid a window of `grid` is: the same steps from its own first cell. A
