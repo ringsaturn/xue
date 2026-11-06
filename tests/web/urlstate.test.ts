@@ -149,7 +149,7 @@ describe("the fields' own ?type= spellings", () => {
     ["?type=aerosol", "aod"],
     ["?type=AOD550", "aod"],
     ["?type=aoddust", "aoddust"],
-    ["?type=smoke", "aodorg"],
+    ["?type=smoke", "smokesfc"],
     ["?type=blackcarbon", "aodbc"],
     ["?type=pm25", "pm25"],
     ["?type=pm2p5", "pm25"],
