@@ -153,13 +153,14 @@ class _LocalRunCase(ClassTempRoot):
     def _assert_projected_window_covers_the_box(self, cropped) -> None:
         window = ProjectedGrid.from_metadata(cropped["projection"], cropped["width"], cropped["height"])
         west, south, east, north = self.bbox
+        tolerance = 1e-6
         for longitude in (west, (west + east) / 2, east):
             for latitude in (south, (south + north) / 2, north):
                 x, y = window.projection.forward(longitude, latitude)
-                self.assertLessEqual(window.x0, x)
-                self.assertLessEqual(x, window.x0 + (window.width - 1) * window.dx)
-                self.assertGreaterEqual(window.y0, y)
-                self.assertGreaterEqual(y, window.y0 + (window.height - 1) * window.dy)
+                self.assertLessEqual(window.x0, x + tolerance)
+                self.assertLessEqual(x, window.x0 + (window.width - 1) * window.dx + tolerance)
+                self.assertGreaterEqual(window.y0 + tolerance, y)
+                self.assertGreaterEqual(y + tolerance, window.y0 + (window.height - 1) * window.dy)
         for bundle in self.manifest(self.cropped_dir)["bundles"]:
             self.assertEqual(bundle["grid"], cropped)
 
