@@ -996,8 +996,8 @@ function buildSpecs(): readonly VariableSpec[] {
     bufferTitle: "Smoke buffer",
     labelKey: "varLabelSmokesfc",
     ground: "slate",
-    urlName: "smoke",
-    urlAliases: ["smokesfc", "wildfiresmoke"],
+    urlName: "smokesfc",
+    urlAliases: ["wildfiresmoke"],
     showcaseCode: "SMOKE",
   }),
   surface({

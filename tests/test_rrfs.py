@@ -29,10 +29,9 @@ from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError
 from xuebuild.fetch import RRFS_BASE_URL, _download_noaa_payload, _rrfs_run_is_complete, companion_object_url, model_object_url
 from xuebuild.gdal import inspect_grib_multi
-from xuebuild.grid import Regrid
 from xuebuild.idx import field_byte_range
 from xuebuild.model import GfsRun
-from xuebuild.sources import source_spec
+from xuebuild.sources import Regrid, source_spec
 from xuebuild.variables import SMOKE_DUST_VARIABLE_IDS, VARIABLES
 
 FIXTURE = FIXTURES / "rrfs.2026110500.f000.crop.grib2"

@@ -286,7 +286,7 @@ class MirrorFallbackTests(unittest.TestCase):
 class RecordMatchingTests(unittest.TestCase):
     def test_the_index_falls_back_to_the_alternate_spelling(self) -> None:
         prmsl = variable_spec("prmsl")
-        self.assertEqual(prmsl.alternate_index_fields, (":MSLMA:mean sea level:",))
+        self.assertEqual(prmsl.alternate_index_fields, (":MSLMA:mean sea level:", ":MSLET:mean sea level:"))
         byte_range = field_byte_range(
             HRRR_F01_IDX, prmsl.index_field, alternate_fields=prmsl.alternate_index_fields
         )

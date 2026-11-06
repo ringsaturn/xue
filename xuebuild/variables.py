@@ -695,9 +695,9 @@ VARIABLES: dict[str, VariableSpec] = {
         # returns that remain are clamped there by the codebook.
         mrms_product="MergedReflectivityQCComposite_00.50",
         grib2_alternates=(
+            RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),
             # RRFS: the WMO number on NCEP's single-layer atmosphere.
             RecordAlternate(0, 16, 5, 200),
-            RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),
         ),
         fill_values=(-999.0, -99.0),
     ),

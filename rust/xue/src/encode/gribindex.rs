@@ -449,7 +449,8 @@ mod tests {
         assert!(matches(prmsl, &message(3, 0, 101)));
         assert!(matches(prmsl, &message(3, 198, 101)));
         assert!(!matches(prmsl, &message(3, 0, 1)));
-        assert!(!matches(prmsl, &message(3, 192, 101)));
+        assert!(matches(prmsl, &message(3, 192, 101)));
+        assert!(!matches(prmsl, &message(3, 192, 1)));
     }
 
     /// An alternate is a whole identity: ECMWF's gust is the same parameter

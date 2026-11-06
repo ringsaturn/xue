@@ -1093,15 +1093,6 @@
         ],
         "alternates": [
           {
-            "discipline": 0,
-            "category": 16,
-            "number": 5,
-            "levelType": 200,
-            "levelValue": null,
-            "statistical": null,
-            "gdalUnit": ""
-          },
-          {
             "discipline": 209,
             "category": 10,
             "number": 0,
@@ -1109,6 +1100,15 @@
             "levelValue": 500.0,
             "statistical": null,
             "gdalUnit": "dBZ"
+          },
+          {
+            "discipline": 0,
+            "category": 16,
+            "number": 5,
+            "levelType": 200,
+            "levelValue": null,
+            "statistical": null,
+            "gdalUnit": ""
           }
         ],
         "gdal": [
