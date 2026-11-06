@@ -81,7 +81,10 @@ impl LambertConformal {
         let n = self.cone_constant();
         let dy = self.origin_radius() - y;
         let rho = (x * x + dy * dy).sqrt().copysign(n);
-        let theta = x.atan2(dy);
+        // Both arguments carry the cone's sign: on a southern cone (n < 0)
+        // the radius is negative, and the angle would land half a turn away.
+        let sign = 1.0_f64.copysign(n);
+        let theta = (sign * x).atan2(sign * dy);
         let latitude = 2.0 * (self.scale() / rho).powf(1.0 / n).atan() - std::f64::consts::PI / 2.0;
         (
             self.central_meridian + (theta / n).to_degrees(),
