@@ -224,9 +224,15 @@ jobs:
       - name: Typecheck and build frontend
         run: npm run build
 
+  # One runner per Playwright project: the tests cannot share a runner's four
+  # cores (playwright.config.ts), and the two projects take about equally long.
   e2e:
-    name: e2e
+    name: e2e ${{ matrix.project }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile]
     steps:
       - uses: actions/checkout@v4
 
@@ -265,20 +271,51 @@ jobs:
       - name: Build WASM decoder
         run: make wasm
 
+      # The Ubuntu mirror intermittently serves these packages at about 30 kB/s,
+      # which costs ten minutes. Installed from a cache the job needs it only for
+      # the package index. A partial key still helps: apt fetches what is missing.
+      - name: Keep apt's downloads in the cache directory
+        run: |
+          mkdir -p "${HOME}/.cache/apt-archives/partial"
+          printf 'Dir::Cache::archives "%s/.cache/apt-archives";\nAPT::Keep-Downloaded-Packages "true";\n' "${HOME}" \
+            | sudo tee /etc/apt/apt.conf.d/99xue-archives
+
+      - id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/apt-archives
+          key: e2e-apt-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: e2e-apt-${{ runner.os }}-
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+
+      # Saved here rather than at the end of the job, so a red test run still
+      # keeps the packages. apt leaves them root-owned and `partial` private,
+      # which the save step could not read.
+      - name: Hand apt's downloads to the cache
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf "${HOME}/.cache/apt-archives/partial" "${HOME}/.cache/apt-archives/lock"
+          sudo chown -R "$(id -u):$(id -g)" "${HOME}/.cache/apt-archives"
+
+      - if: steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/apt-archives
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
 
       # The Playwright global setup runs tests/prepare_web_fixture.py with
       # .venv/bin/python, which `uv sync` created above.
       - name: Run end-to-end tests
-        run: make test-e2e
+        run: npm run test:e2e -- --project=${{ matrix.project }}
 
       # playwright-report/ is the HTML report, test-results/ carries the
       # retain-on-failure traces.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: |
             playwright-report/
             test-results/
