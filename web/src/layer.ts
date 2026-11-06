@@ -1,6 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
-import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, setDomainUniforms, type LambertDomain } from "./domain";
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, GRID_GLSL, setDomainUniforms, type LambertDomain } from "./domain";
+import { geoGrid, gridForm, gridMapFor, type GeoGrid, type GridForm } from "./gridmap";
 import { SITE_TEMPERATURE_GLSL } from "./lapse";
 import type { LongitudeBand } from "./mosaic";
 import { t } from "./i18n";
@@ -133,6 +134,7 @@ void main() {
 export const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_mercator;
+${GRID_GLSL}
 #ifdef XUE_TERRAIN
 in vec2 v_dem;
 ${TERRAIN_SHADE_GLSL}
@@ -142,7 +144,7 @@ ${TERRAIN_SHADE_GLSL}
 // temperature belongs to a height the real slope under the fragment is not
 // at; lapse.ts moves it there, the same formula the meteogram's terrain row
 // reads. u_orog is the run's orography on its own grid (u_orog_grid: first
-// longitude, first latitude, steps; u_orog_decode: offset, metres per code),
+// and steps, u_orog_cone: gridCell's; u_orog_decode: offset, metres per code),
 // and u_lapse is (weight, codes per kelvin, highest value code), u_lapse_t
 // the temperature codebook (offset, degrees per code) — the weight fades the
 // correction in as the camera closes in. The column is the frame's isobaric
@@ -150,11 +152,12 @@ ${TERRAIN_SHADE_GLSL}
 // (main.ts::columnWindow): per cell its heights sorted (u_column_a: the
 // first four; u_column_b.x the fifth) with their temperatures (u_column_b.yzw,
 // u_column_c.xy) and how many there are (u_column_c.z, 0 where the cell was
-// not decoded); u_column_grid is the window's first longitude, first
-// latitude and steps, u_column_size its width and height, u_column_on 0
-// where the run has no column.
+// not decoded); u_column_grid and u_column_cone are the window's as
+// u_orog_grid and u_orog_cone are the orography's, u_column_size its width and
+// height, u_column_on 0 where the run has no column.
 uniform sampler2D u_orog;
 uniform vec4 u_orog_grid;
+uniform vec4 u_orog_cone;
 uniform vec2 u_orog_size;
 uniform vec2 u_orog_decode;
 uniform vec3 u_lapse;
@@ -163,6 +166,7 @@ uniform highp sampler2D u_column_a;
 uniform highp sampler2D u_column_b;
 uniform highp sampler2D u_column_c;
 uniform vec4 u_column_grid;
+uniform vec4 u_column_cone;
 uniform vec2 u_column_size;
 uniform float u_column_on;
 ${SITE_TEMPERATURE_GLSL}
@@ -171,10 +175,7 @@ ${SITE_TEMPERATURE_GLSL}
 // or holds another number of surfaces.
 int columnSample(float longitude, float latitude, out float heights[COLUMN_CAPACITY], out float temperatures[COLUMN_CAPACITY]) {
   for (int k = 0; k < COLUMN_CAPACITY; k += 1) { heights[k] = 0.0; temperatures[k] = 0.0; }
-  vec2 cell = vec2(
-    mod(longitude - u_column_grid.x, 360.0) / u_column_grid.z,
-    (latitude - u_column_grid.y) / u_column_grid.w
-  );
+  vec2 cell = gridCell(u_column_cone, u_column_grid.xy, u_column_grid.zw, longitude, latitude);
   vec2 base = floor(cell);
   vec2 f = cell - base;
   ivec2 size = ivec2(u_column_size);
@@ -196,10 +197,7 @@ int columnSample(float longitude, float latitude, out float heights[COLUMN_CAPAC
   return count;
 }
 float lapseCodes(float longitude, float latitude, float code) {
-  vec2 uv = vec2(
-    (mod(longitude - u_orog_grid.x, 360.0) / u_orog_grid.z + 0.5) / u_orog_size.x,
-    ((latitude - u_orog_grid.y) / u_orog_grid.w + 0.5) / u_orog_size.y
-  );
+  vec2 uv = (gridCell(u_orog_cone, u_orog_grid.xy, u_orog_grid.zw, longitude, latitude) + 0.5) / u_orog_size;
   float model = u_orog_decode.x + texture(u_orog, uv).r * 255.0 * u_orog_decode.y;
   float site = surfaceSample(v_dem);
   float t2m = u_lapse_t.x + code * 255.0 * u_lapse_t.y;
@@ -225,8 +223,11 @@ uniform sampler2D u_palette;
 uniform sampler2D u_shadow;
 uniform vec4 u_shadow_rect;
 uniform float u_shadow_strength;
+// The grid, as gridCell reads it: u_grid_cone all zero on a regular grid,
+// u_first and u_step in degrees there and in projected metres on a cone.
 uniform vec2 u_first;
 uniform vec2 u_step;
+uniform vec4 u_grid_cone;
 uniform vec2 u_size;
 uniform float u_mix;
 // 1.0 when the grid's columns cover the full 360 degrees. A regional grid
@@ -301,10 +302,11 @@ uniform sampler2D u_phase_palette;
 uniform vec2 u_phase_first;
 uniform vec2 u_phase_step;
 uniform vec2 u_phase_size;
+uniform vec4 u_phase_cone;
 uniform vec4 u_phase_ink;
 uniform float u_phase_px;
-// A regional model's own footprint on its map projection (domain.ts): the
-// encoder's regular grid extends past a conic domain's corners with the
+// The footprint of a regional run resampled off its map projection
+// (domain.ts): the encoder's regular grid extends past a conic domain's corners with the
 // nearest cell, and those corners are not a forecast, so they are clipped
 // here the way the cells outside the grid are.
 ${DOMAIN_GLSL}
@@ -523,11 +525,7 @@ vec4 phaseRow(float code, float row) {
 }
 
 vec4 phaseColor(float code, float longitude, float latitude) {
-  float delta = mod(longitude - u_phase_first.x, 360.0);
-  vec2 uv = vec2(
-    (delta / u_phase_step.x + 0.5) / u_phase_size.x,
-    ((latitude - u_phase_first.y) / u_phase_step.y + 0.5) / u_phase_size.y
-  );
+  vec2 uv = (gridCell(u_phase_cone, u_phase_first, u_phase_step, longitude, latitude) + 0.5) / u_phase_size;
   vec4 weights = texture(u_phase_weights, uv);
   float zone = weights.b;
   // Taken here, where every fragment of the quad runs it.
@@ -565,9 +563,9 @@ void main() {
   // Degrees east of the grid origin, wrapped into [0, 360): a global grid
   // indexes from -180, and a regional window that crosses the
   // antimeridian stays contiguous instead of splitting in two.
-  float delta = mod(longitude - u_first.x, 360.0);
-  float u = (delta / u_step.x + 0.5) / u_size.x;
-  float v = ((latitude - u_first.y) / u_step.y + 0.5) / u_size.y;
+  vec2 gridUv = (gridCell(u_grid_cone, u_first, u_step, longitude, latitude) + 0.5) / u_size;
+  float u = gridUv.x;
+  float v = gridUv.y;
   // Texels per screen pixel, taken before any fragment of the quad can
   // discard. The wrap seam of u reads as a huge footprint along one column
   // and takes the bilinear path there, which is harmless.
@@ -915,14 +913,13 @@ export class ForecastLayer implements CustomLayerInterface {
 
   private width = 0;
   private height = 0;
-  private firstLongitude = -180;
-  private firstLatitude = 90;
-  private longitudeStep = 0.25;
-  private latitudeStep = -0.25;
+  private form: GridForm = { first: [0, 0], step: [1, 1], cone: [0, 0, 0, 0] };
+  /** The size of a cell in degrees, for what scales with it on screen. */
+  private cellDegrees = 0.25;
   /** Whether the columns cover the full 360 degrees. Drives both the
    * horizontal texture wrap mode and the shader's out-of-grid clip. */
   private wraps = true;
-  /** The model's own footprint, when the grid extends past it (domain.ts);
+  /** The model's own footprint, when a resampled grid extends past it (domain.ts);
    * the shader draws nothing outside. */
   private domain: LambertDomain | null = null;
   /** The longitudes the layer draws in, or null for all of them. */
@@ -946,14 +943,12 @@ export class ForecastLayer implements CustomLayerInterface {
   ) {}
 
   configureGrid(metadata: BundleMetadata): void {
-    const grid = metadata.grid as Record<string, number | boolean>;
-    this.width = (grid.width as number) ?? 0;
-    this.height = (grid.height as number) ?? 0;
-    this.firstLongitude = (grid.firstLongitude as number) ?? -180;
-    this.firstLatitude = (grid.firstLatitude as number) ?? 90;
-    this.longitudeStep = (grid.longitudeStep as number) ?? 0.25;
-    this.latitudeStep = (grid.latitudeStep as number) ?? -0.25;
-    this.wraps = (grid.wrapLongitude as boolean) ?? Math.abs(this.width * this.longitudeStep - 360) < 1e-6;
+    const grid = geoGrid(metadata);
+    this.width = grid.width;
+    this.height = grid.height;
+    this.form = gridForm(grid);
+    this.cellDegrees = gridMapFor(grid).nominalStepDegrees();
+    this.wraps = grid.wraps;
     this.hasFrame = false;
     // Texture dimensions changed; every plane must be re-uploaded.
     this.forgetPlanes();
@@ -1257,8 +1252,10 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform1i(this.uniforms.u_phase_palette!, PHASE_PALETTE_TEXTURE_UNIT);
     if (!phase) return;
     const { grid } = phase.field;
-    gl.uniform2f(this.uniforms.u_phase_first!, grid.firstLongitude, grid.firstLatitude);
-    gl.uniform2f(this.uniforms.u_phase_step!, grid.longitudeStep, grid.latitudeStep);
+    const form = gridForm(grid);
+    gl.uniform2f(this.uniforms.u_phase_first!, form.first[0], form.first[1]);
+    gl.uniform2f(this.uniforms.u_phase_step!, form.step[0], form.step[1]);
+    gl.uniform4f(this.uniforms.u_phase_cone!, form.cone[0], form.cone[1], form.cone[2], form.cone[3]);
     gl.uniform2f(this.uniforms.u_phase_size!, grid.width, grid.height);
     gl.uniform4f(this.uniforms.u_phase_ink!, phase.ink[0], phase.ink[1], phase.ink[2], phase.ink[3]);
     gl.uniform1f(this.uniforms.u_phase_px!, window.devicePixelRatio || 1);
@@ -1527,7 +1524,7 @@ export class ForecastLayer implements CustomLayerInterface {
   private bindLapse(gl: WebGL2RenderingContext): void {
     const lapse = this.lapse;
     const ready = lapse !== null && this.uploadedOrography === lapse.orography && !this.vector && !this.composite;
-    const weight = ready && this.map ? lapseWeight(this.longitudeStep, this.map.getZoom()) : 0;
+    const weight = ready && this.map ? lapseWeight(this.cellDegrees, this.map.getZoom()) : 0;
     gl.activeTexture(gl.TEXTURE0 + OROGRAPHY_TEXTURE_UNIT);
     // A sampler is bound whatever the mode: an unbound one is a draw-time
     // error on some drivers.
@@ -1552,23 +1549,15 @@ export class ForecastLayer implements CustomLayerInterface {
     gl.uniform1i(this.uniforms.u_column_c!, COLUMN_TEXTURE_UNITS[2]);
     gl.uniform1f(this.uniforms.u_column_on!, columnReady ? 1 : 0);
     if (columnReady) {
-      gl.uniform4f(
-        this.uniforms.u_column_grid!,
-        column.grid.firstLongitude,
-        column.grid.firstLatitude,
-        column.grid.longitudeStep,
-        column.grid.latitudeStep,
-      );
+      const form = gridForm(column.grid);
+      gl.uniform4f(this.uniforms.u_column_grid!, form.first[0], form.first[1], form.step[0], form.step[1]);
+      gl.uniform4f(this.uniforms.u_column_cone!, form.cone[0], form.cone[1], form.cone[2], form.cone[3]);
       gl.uniform2f(this.uniforms.u_column_size!, column.grid.width, column.grid.height);
     }
     if (!lapse) return;
-    gl.uniform4f(
-      this.uniforms.u_orog_grid!,
-      lapse.grid.firstLongitude,
-      lapse.grid.firstLatitude,
-      lapse.grid.longitudeStep,
-      lapse.grid.latitudeStep,
-    );
+    const orogForm = gridForm(lapse.grid);
+    gl.uniform4f(this.uniforms.u_orog_grid!, orogForm.first[0], orogForm.first[1], orogForm.step[0], orogForm.step[1]);
+    gl.uniform4f(this.uniforms.u_orog_cone!, orogForm.cone[0], orogForm.cone[1], orogForm.cone[2], orogForm.cone[3]);
     gl.uniform2f(this.uniforms.u_orog_size!, lapse.grid.width, lapse.grid.height);
     gl.uniform2f(this.uniforms.u_orog_decode!, lapse.orographyOffset, lapse.orographyScale);
   }
@@ -1624,8 +1613,9 @@ export class ForecastLayer implements CustomLayerInterface {
       key !== null && slot.smoothedPlane === slot.plane && slot.smoothedKey === key ? slot.smooth : slot.raw;
 
     gl.useProgram(this.program);
-    gl.uniform2f(this.uniforms.u_first!, this.firstLongitude, this.firstLatitude);
-    gl.uniform2f(this.uniforms.u_step!, this.longitudeStep, this.latitudeStep);
+    gl.uniform2f(this.uniforms.u_first!, this.form.first[0], this.form.first[1]);
+    gl.uniform2f(this.uniforms.u_step!, this.form.step[0], this.form.step[1]);
+    gl.uniform4f(this.uniforms.u_grid_cone!, this.form.cone[0], this.form.cone[1], this.form.cone[2], this.form.cone[3]);
     gl.uniform2f(this.uniforms.u_size!, this.width, this.height);
     gl.uniform1f(this.uniforms.u_mix!, this.slots[1].plane ? this.mixWeight : 0);
     gl.uniform1f(this.uniforms.u_wrap!, this.wraps ? 1 : 0);
@@ -1779,29 +1769,21 @@ export function setFieldShadow(shadow: FieldShadow | null): void {
 }
 
 const MAP_UNIFORM_NAMES = [
-  "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_size",
+  "u_data", "u_data_b", "u_green", "u_blue", "u_green_b", "u_blue_b", "u_palette", "u_first", "u_step", "u_grid_cone", "u_size",
   "u_mix", "u_wrap", "u_cover", "u_decode", "u_floor_nodata", "u_nearest", "u_contour", "u_contour_values",
   "u_contour_value_count", "u_line_color", "u_fill_alpha",
   "u_vector", "u_vector_offset", "u_vector_scale", "u_vector_max", "u_vector_nodata",
   "u_composite", "u_composite_offset", "u_composite_scale",
-  "u_phase", "u_phase_weights", "u_phase_palette", "u_phase_first", "u_phase_step", "u_phase_size", "u_phase_ink", "u_phase_px",
+  "u_phase", "u_phase_weights", "u_phase_palette", "u_phase_first", "u_phase_step", "u_phase_size", "u_phase_cone", "u_phase_ink", "u_phase_px",
   ...DOMAIN_UNIFORM_NAMES,
   "u_band",
-  "u_orog", "u_orog_grid", "u_orog_size", "u_orog_decode", "u_lapse",
-  "u_lapse_t", "u_column_a", "u_column_b", "u_column_c", "u_column_grid", "u_column_size", "u_column_on",
+  "u_orog", "u_orog_grid", "u_orog_cone", "u_orog_size", "u_orog_decode", "u_lapse",
+  "u_lapse_t", "u_column_a", "u_column_b", "u_column_c", "u_column_grid", "u_column_cone", "u_column_size", "u_column_on",
   "u_shadow", "u_shadow_rect", "u_shadow_strength", "u_light",
 ];
 
 /** A grid a correction input is laid on. */
-export interface CorrectionGrid {
-  width: number;
-  height: number;
-  firstLongitude: number;
-  firstLatitude: number;
-  longitudeStep: number;
-  latitudeStep: number;
-  wraps: boolean;
-}
+export type CorrectionGrid = GeoGrid;
 
 /** The frame's isobaric column over a window of the grid around the view
  * (lapse.ts), three RGBA texels per cell: heights sorted with their
@@ -1812,7 +1794,7 @@ export interface ColumnWindow {
   a: Float32Array;
   b: Float32Array;
   c: Float32Array;
-  grid: { width: number; height: number; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number };
+  grid: GeoGrid;
 }
 
 /** The model's terrain, the frame's column and the temperature codebook an
@@ -1838,8 +1820,8 @@ export interface LapseCorrection {
  * the grid are then about as coarse as each other), all of it once a cell
  * spans most of a finger — GFS from about zoom 6 to 7.5, HRRR's 3 km grid
  * from about 9 to 10.5. */
-export function lapseWeight(longitudeStep: number, zoom: number): number {
-  const cellPixels = (Math.abs(longitudeStep) / 360) * 512 * 2 ** zoom;
+export function lapseWeight(cellDegrees: number, zoom: number): number {
+  const cellPixels = (Math.abs(cellDegrees) / 360) * 512 * 2 ** zoom;
   const t = Math.min(1, Math.max(0, (cellPixels - 24) / (64 - 24)));
   return t * t * (3 - 2 * t);
 }

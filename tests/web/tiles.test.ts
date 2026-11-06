@@ -173,9 +173,9 @@ describe("viewportTileRects", () => {
     expect(west?.[0]?.lastColumn).toBe(Math.floor(Math.ceil((0 + 59.98) / 0.32) / 8));
   });
 
-  it("is null for a degenerate grid or an unusable span", () => {
+  it("refuses a degenerate grid and is null for an unusable span", () => {
     const noGrid = globalGrid({ width: 0 });
-    expect(viewportTileRects(noGrid, GFS_TILES, { west: 0, east: 1, south: 0, north: 1 })).toBeNull();
+    expect(() => viewportTileRects(noGrid, GFS_TILES, { west: 0, east: 1, south: 0, north: 1 })).toThrow(/width/);
     expect(
       viewportTileRects(globalGrid(), GFS_TILES, { west: 0, east: Number.NaN, south: 0, north: 1 }),
     ).toBeNull();

@@ -55,7 +55,7 @@ fn a_shared_group_selects_each_bundle_by_id() {
     let prate = parse_group_metadata_for(&text, "prate").unwrap();
     assert_eq!(prate.metadata.variables[0].id, "prate");
     assert_eq!(prate.metadata.offsets, vec![1, 2]);
-    assert_eq!(prate.metadata.grid.width, 4);
+    assert_eq!(prate.metadata.grid.width(), 4);
 
     let mut ids = group_bundle_ids(&text).unwrap().expect("a shared group names its bundles");
     ids.sort();

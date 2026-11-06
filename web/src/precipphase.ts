@@ -13,6 +13,7 @@
  * rain and ice pellets, are the flags'. ECMWF's type names a mixture itself.
  */
 
+import { axesAlign, gridForm, gridMapFor } from "./gridmap";
 import { decodeValue } from "./palettes";
 import type { BundleVariable } from "./manifest";
 import type { GeoGrid } from "./probe";
@@ -131,10 +132,15 @@ function axisMap(
   return map;
 }
 
-/** A plane laid over the base grid: for each base cell its row and column in
- * the plane, and, as one bit per decoded rectangle, which rectangles hold that
- * row and that column. A cell is held when the two share a bit, so the test
- * costs one AND however the view's tiles are cut. */
+/** A plane laid over the base grid. Where the two grids' axes line up (the
+ * same grid, two tiers of one projection, two regular grids), `rows` and
+ * `columns` give each base cell's row and column in the plane and, as one bit
+ * per decoded rectangle, `rowBits` and `columnBits` say which rectangles hold
+ * that row and that column: a cell is held when the two share a bit, so the
+ * test costs one AND however the view's tiles are cut. Otherwise (a projected
+ * grid over a regular one, a Gaussian grid over another) no base row is one
+ * row of the plane, and `cells` gives each base cell's cell in the plane, -1
+ * where it is off it or not held. */
 interface PlaneOverlay {
   plane: Uint8Array;
   width: number;
@@ -142,11 +148,73 @@ interface PlaneOverlay {
   columns: Int32Array;
   rowBits: Int32Array;
   columnBits: Int32Array;
+  cells: Int32Array | null;
 }
 
+/** The nearest source cell of every base cell of a grid pair with no shared
+ * axes: inverse then forward projection per cell, far too dear per frame, and
+ * a pair of grids stays a pair for a whole session. */
+const crossGridCells = new WeakMap<GeoGrid, WeakMap<GeoGrid, Int32Array>>();
+
+function crossGridMap(grid: GeoGrid, target: GeoGrid): Int32Array {
+  let byTarget = crossGridCells.get(grid);
+  if (!byTarget) {
+    byTarget = new WeakMap();
+    crossGridCells.set(grid, byTarget);
+  }
+  const known = byTarget.get(target);
+  if (known) return known;
+  const cells = new Int32Array(grid.width * grid.height);
+  const from = gridMapFor(grid);
+  const to = gridMapFor(target);
+  for (let row = 0; row < grid.height; row += 1) {
+    for (let column = 0; column < grid.width; column += 1) {
+      const at = to.lonLatToCell(...from.cellToLonLat(column, row));
+      const targetColumn = at === null ? -1 : target.wraps ? wrapIndex(Math.round(at[0]), target.width) : Math.round(at[0]);
+      cells[row * grid.width + column] = at === null ? -1 : Math.round(at[1]) * target.width + targetColumn;
+    }
+  }
+  byTarget.set(target, cells);
+  return cells;
+}
+
+function heldCells(source: PhasePlane, grid: GeoGrid): Int32Array {
+  const cells = crossGridMap(grid, source.grid);
+  if (!source.tiles || !source.geometry) return cells;
+  const boxes = cellRects(source);
+  const held = new Int32Array(cells.length);
+  const width = source.grid.width;
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index]!;
+    if (cell < 0) {
+      held[index] = -1;
+      continue;
+    }
+    const row = Math.floor(cell / width);
+    const column = cell - row * width;
+    held[index] = boxes.some((box) => row >= box.firstRow && row <= box.lastRow && column >= box.firstColumn && column <= box.lastColumn) ? cell : -1;
+  }
+  return held;
+}
+
+const NO_CELLS = new Int32Array(0);
+
 function overlayOn(source: PhasePlane, grid: GeoGrid): PlaneOverlay {
-  const rows = axisMap(grid.height, grid.firstLatitude, grid.latitudeStep, source.grid.height, source.grid.firstLatitude, source.grid.latitudeStep, false);
-  const columns = axisMap(grid.width, grid.firstLongitude, grid.longitudeStep, source.grid.width, source.grid.firstLongitude, source.grid.longitudeStep, source.grid.wraps);
+  if (!axesAlign(grid, source.grid)) {
+    return {
+      plane: source.plane,
+      width: source.grid.width,
+      rows: NO_CELLS,
+      columns: NO_CELLS,
+      rowBits: NO_CELLS,
+      columnBits: NO_CELLS,
+      cells: heldCells(source, grid),
+    };
+  }
+  const base = gridForm(grid);
+  const over = gridForm(source.grid);
+  const rows = axisMap(grid.height, base.first[1], base.step[1], source.grid.height, over.first[1], over.step[1], false);
+  const columns = axisMap(grid.width, base.first[0], base.step[0], source.grid.width, over.first[0], over.step[0], source.grid.wraps);
   const boxes = cellRects(source);
   const bits = (cells: Int32Array, first: (box: (typeof boxes)[number]) => number, last: (box: (typeof boxes)[number]) => number) => {
     const out = new Int32Array(cells.length);
@@ -165,6 +233,7 @@ function overlayOn(source: PhasePlane, grid: GeoGrid): PlaneOverlay {
     columns,
     rowBits: bits(rows, (box) => box.firstRow, (box) => box.lastRow),
     columnBits: bits(columns, (box) => box.firstColumn, (box) => box.lastColumn),
+    cells: null,
   };
 }
 
@@ -207,6 +276,16 @@ function phaseTable(type: BundleVariable | null, frozen: BundleVariable | null):
   return table;
 }
 
+/** A plane's code under a base cell, or `NOT_HELD`. */
+function overlayCode(over: PlaneOverlay, row: number, column: number, width: number): number {
+  if (over.cells) {
+    const cell = over.cells[row * width + column]!;
+    return cell < 0 ? NOT_HELD : over.plane[cell]!;
+  }
+  if ((over.rowBits[row]! & over.columnBits[column]!) === 0) return NOT_HELD;
+  return over.plane[over.rows[row]! * over.width + over.columns[column]!]!;
+}
+
 /** Classify every cell the planes hold, on the type's grid or, without one, the
  * percent frozen's. A cell neither holds keeps zero weights, the plain ramp.
  * `reuse` is a previous field's buffer, taken when it is the right size. This
@@ -226,6 +305,14 @@ export function buildPhaseField(type: PhasePlane | null, frozen: PhasePlane | nu
   for (const rect of cellRects(base)) {
     for (let row = rect.firstRow; row <= rect.lastRow; row += 1) {
       const start = row * grid.width;
+      if (typeOn?.cells || frozenOn?.cells) {
+        for (let column = rect.firstColumn; column <= rect.lastColumn; column += 1) {
+          const typeCode = typeOn ? overlayCode(typeOn, row, column, grid.width) : NOT_HELD;
+          const frozenCode = frozenOn ? overlayCode(frozenOn, row, column, grid.width) : NOT_HELD;
+          words[start + column] = table[typeCode * TABLE_SIDE + frozenCode]!;
+        }
+        continue;
+      }
       const typeBits = typeOn ? typeOn.rowBits[row]! : 0;
       const typeStart = typeOn ? typeOn.rows[row]! * typeOn.width : 0;
       const frozenBits = frozenOn ? frozenOn.rowBits[row]! : 0;
@@ -273,11 +360,10 @@ export function buildFrostPlane(height: PhasePlane, ground: PhasePlane): Uint8Ar
   for (const rect of cellRects(height)) {
     for (let row = rect.firstRow; row <= rect.lastRow; row += 1) {
       const start = row * grid.width;
-      const bits = over.rowBits[row]!;
-      const groundStart = over.rows[row]! * over.width;
       for (let column = rect.firstColumn; column <= rect.lastColumn; column += 1) {
         const metres = heights[height.plane[start + column]!]!;
-        const elevation = (bits & over.columnBits[column]!) !== 0 ? grounds[over.plane[groundStart + over.columns[column]!]!]! : Number.NaN;
+        const groundCode = overlayCode(over, row, column, grid.width);
+        const elevation = groundCode === NOT_HELD ? Number.NaN : grounds[groundCode]!;
         out[start + column] = !(metres > 0) || Number.isNaN(elevation) ? frozenCode : encode(metres - elevation);
       }
     }
@@ -295,8 +381,10 @@ const MAX_ZONE_LABELS = 12;
 const FROST_LABEL_ROWS = 24;
 const MAX_FROST_ANCHORS = 240;
 
-function longitudeOf(grid: GeoGrid, column: number): number {
-  return wrapIndex(grid.firstLongitude + column * grid.longitudeStep + 180, 360) - 180;
+/** Where the chart writes at a continuous cell, its longitude in [-180, 180). */
+function anchorAt(grid: GeoGrid, column: number, row: number): { longitude: number; latitude: number } {
+  const [longitude, latitude] = gridMapFor(grid).cellToLonLat(column, row);
+  return { longitude: wrapIndex(longitude + 180, 360) - 180, latitude };
 }
 
 /** The rate past which a flagged cell counts as falling, mm/h. Both models name
@@ -312,8 +400,8 @@ function wetCells(grid: GeoGrid, rate: PhasePlane | null): (cell: number) => boo
   return (cell) => {
     const row = Math.floor(cell / grid.width);
     const column = cell - row * grid.width;
-    if ((over.rowBits[row]! & over.columnBits[column]!) === 0) return false;
-    return rates[over.plane[over.rows[row]! * over.width + over.columns[column]!]!]! > ZONE_MINIMUM_RATE;
+    const code = overlayCode(over, row, column, grid.width);
+    return code !== NOT_HELD && rates[code]! > ZONE_MINIMUM_RATE;
   };
 }
 
@@ -369,8 +457,7 @@ function zoneAnchors(field: PhaseField, rate: PhasePlane | null): PhaseAnchor[] 
     .slice(0, MAX_ZONE_LABELS)
     .map((zone) => ({
       kind: "freezing-zone",
-      longitude: longitudeOf(grid, zone.column),
-      latitude: grid.firstLatitude + zone.row * grid.latitudeStep,
+      ...anchorAt(grid, zone.column, zone.row),
     }));
 }
 
@@ -389,8 +476,7 @@ function frostAnchors(temperature: PhasePlane): PhaseAnchor[] {
         if (Number.isNaN(west) || Number.isNaN(east) || west > 0 === east > 0) continue;
         anchors.push({
           kind: "frost-line",
-          longitude: longitudeOf(grid, column + west / (west - east)),
-          latitude: grid.firstLatitude + row * grid.latitudeStep,
+          ...anchorAt(grid, column + west / (west - east), row),
         });
       }
     }

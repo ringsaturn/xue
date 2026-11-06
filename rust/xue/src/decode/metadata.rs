@@ -4,9 +4,12 @@
 //! the decoder trusts — the plane length every entry is checked against, and
 //! the materialized frame-offset axis every plane is addressed by. Both the
 //! axis and the variable set have exactly one valid encoding at exactly one
-//! schema version, so a file cannot describe the same series two ways.
+//! schema version, so a file cannot describe the same series two ways. The
+//! grid's kind is checked here too, so a container and a store refuse the same
+//! projected or Gaussian grid.
 
 use crate::format::{err, gcd, DecodeError, HOUR_SECONDS, MAX_PLANE_LENGTH};
+use crate::projection::{GaussianRows, LambertConformal};
 
 /// The schemaVersion 3 time block. Versions 1 and 2 use firstForecastHour
 /// with stepHours or hours instead; mixing the two shapes is invalid.
@@ -391,13 +394,185 @@ fn parse_aerosol(variable: &serde_json::Value, schema_version: u64) -> Result<()
     Ok(())
 }
 
+/// The fields a regular grid names and a projected one must not.
+const REGULAR_GRID_FIELDS: [&str; 4] =
+    ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"];
+/// The closed set of `projection.kind`; a grid of any other kind is one this
+/// reader cannot place on the map.
+const PROJECTION_KINDS: [&str; 1] = ["lambert-conformal"];
+const PROJECTION_NUMBER_FIELDS: [&str; 9] = [
+    "radius",
+    "standardParallel1",
+    "standardParallel2",
+    "latitudeOfOrigin",
+    "centralMeridian",
+    "x0",
+    "y0",
+    "dx",
+    "dy",
+];
+const GAUSSIAN_FIELDS: [&str; 3] = ["n", "firstRow", "rowStride"];
+/// Each latitude costs a few passes of a recurrence of order `2n`, so `n` is
+/// bounded before a point read pays for it.
+const MAX_GAUSSIAN_N: u64 = 32768;
+
+/// A validated `grid.projection` block.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ProjectionBlock {
+    pub(crate) projection: LambertConformal,
+    pub(crate) x0: f64,
+    pub(crate) y0: f64,
+    pub(crate) dx: f64,
+    pub(crate) dy: f64,
+}
+
+/// A projected grid's own fields: a closed block of known kind, finite
+/// numbers, a cone that exists (its two parallels neither at a pole nor
+/// mirrored across the equator, where the constant is zero), and steps in the
+/// grid's row and column order.
+pub(crate) fn parse_projection(block: &serde_json::Value) -> Result<ProjectionBlock, DecodeError> {
+    let block = block
+        .as_object()
+        .ok_or_else(|| err("metadata grid projection must be an object"))?;
+    let kind = block
+        .get("kind")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| err("metadata grid projection kind is invalid"))?;
+    if !PROJECTION_KINDS.contains(&kind) {
+        return Err(err("metadata grid projection kind is not one this reader implements"));
+    }
+    for key in block.keys() {
+        if key != "kind" && !PROJECTION_NUMBER_FIELDS.contains(&key.as_str()) {
+            return Err(err("metadata grid projection has an unknown field"));
+        }
+    }
+    let number = |field: &str| -> Result<f64, DecodeError> {
+        block
+            .get(field)
+            .and_then(|value| value.as_f64())
+            .filter(|value| value.is_finite())
+            .ok_or_else(|| err(format!("metadata grid projection {field} is invalid")))
+    };
+    let radius = number("radius")?;
+    let standard_parallel_1 = number("standardParallel1")?;
+    let standard_parallel_2 = number("standardParallel2")?;
+    let latitude_of_origin = number("latitudeOfOrigin")?;
+    let central_meridian = number("centralMeridian")?;
+    let dx = number("dx")?;
+    let dy = number("dy")?;
+    if radius <= 0.0 {
+        return Err(err("metadata grid projection radius must be positive"));
+    }
+    for latitude in [standard_parallel_1, standard_parallel_2, latitude_of_origin] {
+        if latitude.abs() >= 90.0 {
+            return Err(err("metadata grid projection latitudes must lie between the poles"));
+        }
+    }
+    if standard_parallel_1 + standard_parallel_2 == 0.0 {
+        return Err(err("metadata grid projection parallels leave no cone"));
+    }
+    if central_meridian.abs() > 180.0 {
+        return Err(err("metadata grid projection centralMeridian is out of range"));
+    }
+    if dx <= 0.0 || dy >= 0.0 {
+        return Err(err("metadata grid projection steps must run east and south"));
+    }
+    Ok(ProjectionBlock {
+        projection: LambertConformal {
+            radius,
+            standard_parallel_1,
+            standard_parallel_2,
+            latitude_of_origin,
+            central_meridian,
+        },
+        x0: number("x0")?,
+        y0: number("y0")?,
+        dx,
+        dy,
+    })
+}
+
+/// A `grid.gaussian` block: closed, and every one of the grid's `height` rows
+/// a row of the Gaussian grid it names.
+pub(crate) fn parse_gaussian(
+    block: &serde_json::Value,
+    height: u64,
+) -> Result<GaussianRows, DecodeError> {
+    let block = block
+        .as_object()
+        .ok_or_else(|| err("metadata grid gaussian must be an object"))?;
+    if block.len() != GAUSSIAN_FIELDS.len() {
+        return Err(err("metadata grid gaussian block must carry exactly n, firstRow and rowStride"));
+    }
+    let integer = |field: &str| -> Result<u64, DecodeError> {
+        block
+            .get(field)
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| err(format!("metadata grid gaussian {field} is invalid")))
+    };
+    let n = integer("n")?;
+    let first_row = integer("firstRow")?;
+    let row_stride = integer("rowStride")?;
+    if n == 0 || n > MAX_GAUSSIAN_N {
+        return Err(err("metadata grid gaussian n is out of range"));
+    }
+    if row_stride == 0 {
+        return Err(err("metadata grid gaussian rowStride must be positive"));
+    }
+    let last_row = height
+        .checked_sub(1)
+        .and_then(|rows| rows.checked_mul(row_stride))
+        .and_then(|rows| rows.checked_add(first_row))
+        .ok_or_else(|| err("metadata grid gaussian rows overflow"))?;
+    if last_row >= 2 * n {
+        return Err(err("metadata grid gaussian rows run past the Gaussian grid"));
+    }
+    Ok(GaussianRows {
+        n: n as u32,
+        first_row: first_row as u32,
+        row_stride: row_stride as u32,
+    })
+}
+
+/// What kind of grid the block is, and the lowest schema version that kind
+/// needs: 4 for a projection, which replaces the regular fields outright, and
+/// no floor for a regular grid. A `gaussian` block sits beside the regular
+/// fields a reader that ignores it still uses, so it needs version 3 and
+/// raises nothing. Versions up to 3 keep whatever regular fields they have.
+fn parse_grid_block(
+    grid: &serde_json::Map<String, serde_json::Value>,
+    height: u64,
+    schema_version: u64,
+) -> Result<u64, DecodeError> {
+    let Some(projection) = grid.get("projection") else {
+        if let Some(gaussian) = grid.get("gaussian") {
+            if schema_version != 3 {
+                return Err(err("a gaussian block requires schemaVersion 3"));
+            }
+            parse_gaussian(gaussian, height)?;
+        }
+        return Ok(1);
+    };
+    parse_projection(projection)?;
+    if REGULAR_GRID_FIELDS.iter().any(|field| grid.contains_key(*field)) {
+        return Err(err("a projected grid must not carry the regular grid fields"));
+    }
+    if grid.contains_key("gaussian") {
+        return Err(err("a projected grid must not carry a gaussian block"));
+    }
+    if grid.get("wrapLongitude").and_then(|value| value.as_bool()) != Some(false) {
+        return Err(err("a projected grid must declare wrapLongitude false"));
+    }
+    Ok(4)
+}
+
 pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     let text = std::str::from_utf8(raw).map_err(|_| err("metadata is not UTF-8"))?;
     let value: serde_json::Value =
         serde_json::from_str(text).map_err(|_| err("metadata is not valid JSON"))?;
     let object = value.as_object().ok_or_else(|| err("metadata must be a JSON object"))?;
     let schema_version = match object.get("schemaVersion").and_then(|v| v.as_u64()) {
-        Some(version @ (1 | 2 | 3)) => version,
+        Some(version @ (1 | 2 | 3 | 4)) => version,
         _ => return Err(err("unsupported metadata schemaVersion")),
     };
     let grid = object
@@ -413,6 +588,7 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         .checked_mul(height)
         .filter(|&points| points <= MAX_PLANE_LENGTH)
         .ok_or_else(|| err("grid exceeds the plane safety limit"))?;
+    let grid_version = parse_grid_block(grid, height, schema_version)?;
     let time = object
         .get("time")
         .and_then(|v| v.as_object())
@@ -452,9 +628,9 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
     if variable_ids.is_empty() {
         return Err(err("metadata must declare at least one variable"));
     }
-    // Every axis and every variable set has exactly one valid encoding: the
-    // declared version must be the lowest able to express both.
-    let required_version = axis_version.max(if parameters > 0 { 3 } else { 1 });
+    // Every axis, variable set and grid has exactly one valid encoding: the
+    // declared version must be the lowest able to express all three.
+    let required_version = axis_version.max(if parameters > 0 { 3 } else { 1 }).max(grid_version);
     if schema_version != required_version {
         return Err(err("metadata declares a schemaVersion other than the lowest it needs"));
     }
@@ -765,14 +941,203 @@ mod band_tests {
 }
 
 #[cfg(test)]
+mod grid_tests {
+    use super::{parse_gaussian, parse_metadata};
+    use serde_json::{json, Value};
+
+    fn regular_grid() -> Value {
+        json!({
+            "width": 4, "height": 3, "layout": "row-major", "rowOrder": "north-to-south",
+            "columnOrder": "west-to-east", "firstLongitude": -180.0, "firstLatitude": 90.0,
+            "longitudeStep": 0.25, "latitudeStep": -0.25, "wrapLongitude": false,
+        })
+    }
+
+    fn projected_grid() -> Value {
+        json!({
+            "width": 4, "height": 3, "layout": "row-major", "rowOrder": "north-to-south",
+            "columnOrder": "west-to-east", "wrapLongitude": false,
+            "projection": {
+                "kind": "lambert-conformal", "radius": 6371229.0,
+                "standardParallel1": 38.5, "standardParallel2": 38.5,
+                "latitudeOfOrigin": 38.5, "centralMeridian": -97.5,
+                "x0": -2697520.142, "y0": 1586693.847, "dx": 3000.0, "dy": -3000.0,
+            },
+        })
+    }
+
+    fn document(version: u64, grid: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "schemaVersion": version,
+            "runTime": "2026-11-05T00:00:00Z",
+            "time": {"unitSeconds": 3600, "firstFrameOffset": 0, "frameStep": 1, "frameCount": 2},
+            "grid": grid,
+            "variables": [{
+                "numericId": 1, "id": "tmp2m", "parameter": {
+                    "discipline": 0, "parameterCategory": 0, "parameterNumber": 0,
+                    "typeOfFirstFixedSurface": 103, "scaleFactorOfFirstFixedSurface": 0,
+                    "scaledValueOfFirstFixedSurface": 2,
+                },
+            }],
+        }))
+        .unwrap()
+    }
+
+    fn projection_with(field: &str, value: Value) -> Value {
+        let mut grid = projected_grid();
+        grid["projection"][field] = value;
+        grid
+    }
+
+    #[test]
+    fn a_projected_grid_is_version_4_and_only_version_4() {
+        assert_eq!(parse_metadata(&document(4, projected_grid())).unwrap().schema_version, 4);
+        assert!(parse_metadata(&document(3, projected_grid())).is_err());
+        assert!(parse_metadata(&document(5, projected_grid())).is_err());
+    }
+
+    #[test]
+    fn a_regular_grid_stays_on_version_3() {
+        assert_eq!(parse_metadata(&document(3, regular_grid())).unwrap().schema_version, 3);
+        assert!(parse_metadata(&document(4, regular_grid())).is_err());
+    }
+
+    #[test]
+    fn version_4_with_neither_shape_is_rejected() {
+        let mut neither = projected_grid();
+        neither.as_object_mut().unwrap().remove("projection");
+        assert!(parse_metadata(&document(4, neither)).is_err());
+    }
+
+    #[test]
+    fn a_projected_grid_carries_no_regular_field() {
+        for field in ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"] {
+            let mut grid = projected_grid();
+            grid[field] = json!(1.0);
+            assert!(parse_metadata(&document(4, grid)).is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn a_projected_grid_carries_no_gaussian_block_and_does_not_wrap() {
+        let mut gaussian = projected_grid();
+        gaussian["gaussian"] = json!({"n": 95, "firstRow": 0, "rowStride": 1});
+        assert!(parse_metadata(&document(4, gaussian)).is_err());
+        let mut wraps = projected_grid();
+        wraps["wrapLongitude"] = json!(true);
+        assert!(parse_metadata(&document(4, wraps)).is_err());
+        let mut silent = projected_grid();
+        silent.as_object_mut().unwrap().remove("wrapLongitude");
+        assert!(parse_metadata(&document(4, silent)).is_err());
+    }
+
+    #[test]
+    fn malformed_projections_are_rejected() {
+        for (field, value) in [
+            ("kind", json!("octahedral-gaussian")),
+            ("kind", json!(null)),
+            ("radius", json!(0.0)),
+            ("radius", json!("6371229")),
+            ("standardParallel1", json!(90.0)),
+            ("standardParallel2", json!(-38.5)),
+            ("latitudeOfOrigin", json!(-90.0)),
+            ("centralMeridian", json!(262.5)),
+            ("x0", json!(null)),
+            ("y0", json!(true)),
+            ("dx", json!(-3000.0)),
+            ("dx", json!(0.0)),
+            ("dy", json!(3000.0)),
+            ("dy", json!(0.0)),
+            ("zone", json!(12)),
+        ] {
+            let grid = projection_with(field, value.clone());
+            assert!(parse_metadata(&document(4, grid)).is_err(), "{field} = {value}");
+        }
+        for field in ["kind", "radius", "standardParallel1", "standardParallel2", "latitudeOfOrigin", "centralMeridian", "x0", "y0", "dx", "dy"] {
+            let mut grid = projected_grid();
+            grid["projection"].as_object_mut().unwrap().remove(field);
+            assert!(parse_metadata(&document(4, grid)).is_err(), "without {field}");
+        }
+        let mut null = projected_grid();
+        null["projection"] = json!(null);
+        assert!(parse_metadata(&document(4, null)).is_err());
+    }
+
+    #[test]
+    fn a_gaussian_block_stays_on_version_3_and_is_validated() {
+        let mut grid = regular_grid();
+        grid["gaussian"] = json!({"n": 95, "firstRow": 2, "rowStride": 2});
+        assert_eq!(parse_metadata(&document(3, grid.clone())).unwrap().schema_version, 3);
+        assert!(parse_metadata(&document(4, grid.clone())).is_err());
+        for block in [
+            json!(null),
+            json!({"n": 95, "firstRow": 0}),
+            json!({"n": 95, "firstRow": 0, "rowStride": 1, "rows": 190}),
+            json!({"n": 0, "firstRow": 0, "rowStride": 1}),
+            json!({"n": 32769, "firstRow": 0, "rowStride": 1}),
+            json!({"n": 95.5, "firstRow": 0, "rowStride": 1}),
+            json!({"n": 95, "firstRow": -1, "rowStride": 1}),
+            json!({"n": 95, "firstRow": 0, "rowStride": 0}),
+            // The grid's three rows run off the 190 of the Gaussian grid.
+            json!({"n": 95, "firstRow": 188, "rowStride": 1}),
+            json!({"n": 95, "firstRow": 0, "rowStride": 95}),
+            json!({"n": 95, "firstRow": 0, "rowStride": u64::MAX}),
+        ] {
+            let mut grid = regular_grid();
+            grid["gaussian"] = block.clone();
+            assert!(parse_metadata(&document(3, grid)).is_err(), "{block}");
+        }
+    }
+
+    #[test]
+    fn the_last_gaussian_row_is_in_range() {
+        let block = json!({"n": 95, "firstRow": 187, "rowStride": 1});
+        assert!(parse_gaussian(&block, 3).is_ok());
+        assert!(parse_gaussian(&block, 4).is_err());
+    }
+
+    #[test]
+    fn a_gaussian_block_needs_version_3() {
+        let mut grid = regular_grid();
+        grid["gaussian"] = json!({"n": 95, "firstRow": 0, "rowStride": 1});
+        let text = serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "time": {"firstForecastHour": 0, "stepHours": 1, "frameCount": 2},
+            "grid": grid,
+            "variables": [{"numericId": 1, "id": "tmp2m"}],
+        }))
+        .unwrap();
+        assert!(parse_metadata(&text).is_err());
+    }
+
+    #[test]
+    fn older_versions_keep_reading_without_the_regular_fields() {
+        let text = serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "time": {"firstForecastHour": 0, "stepHours": 1, "frameCount": 2},
+            "grid": {"width": 4, "height": 3},
+            "variables": [{"numericId": 1, "id": "tmp2m"}],
+        }))
+        .unwrap();
+        assert_eq!(parse_metadata(&text).unwrap().schema_version, 1);
+        let mut bare = regular_grid();
+        for field in ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"] {
+            bare.as_object_mut().unwrap().remove(field);
+        }
+        assert_eq!(parse_metadata(&document(3, bare)).unwrap().schema_version, 3);
+    }
+}
+
+#[cfg(test)]
 mod schema_tie_tests {
     //! The field names read here are the ones
     //! `docs/schemas/bundle-metadata.schema.json` names, and the blocks the
     //! format closes name exactly the fields this reader knows. Versions 1
     //! and 2 have no schema; their hour-named time fields are this reader's.
     use super::{
-        AEROSOL_INTERVALS, AEROSOL_TYPE_FIELDS, BAND_FIELDS, PARAMETER_CODE_FIELDS,
-        PARAMETER_NULLABLE_FIELDS, PRODUCER_FIELDS, V3_TIME_FIELDS,
+        AEROSOL_INTERVALS, AEROSOL_TYPE_FIELDS, BAND_FIELDS, GAUSSIAN_FIELDS, PARAMETER_CODE_FIELDS,
+        PARAMETER_NULLABLE_FIELDS, PRODUCER_FIELDS, PROJECTION_NUMBER_FIELDS, REGULAR_GRID_FIELDS,
+        V3_TIME_FIELDS,
     };
     use crate::schematie::{assert_exactly, assert_named};
 
@@ -781,7 +1146,10 @@ mod schema_tie_tests {
     #[test]
     fn the_fields_read_are_the_schemas() {
         assert_named(SCHEMA, "", &["schemaVersion", "grid", "time", "variables"]);
-        assert_named(SCHEMA, "/$defs/Grid", &["width", "height"]);
+        assert_named(SCHEMA, "/$defs/Grid", &["width", "height", "projection", "gaussian", "wrapLongitude"]);
+        assert_named(SCHEMA, "/$defs/Grid", &REGULAR_GRID_FIELDS);
+        assert_named("manifest", "/$defs/Grid", &["width", "height", "projection", "gaussian", "wrapLongitude"]);
+        assert_named("manifest", "/$defs/Grid", &REGULAR_GRID_FIELDS);
         assert_named(
             SCHEMA,
             "/$defs/Variable",
@@ -797,6 +1165,9 @@ mod schema_tie_tests {
             PARAMETER_CODE_FIELDS.iter().chain(PARAMETER_NULLABLE_FIELDS.iter()).copied().collect();
         assert_exactly(SCHEMA, "/$defs/Parameter", &parameter);
         assert_exactly(SCHEMA, "/$defs/Band", &BAND_FIELDS.map(|(field, _, _)| field));
+        let projection: Vec<&str> = PROJECTION_NUMBER_FIELDS.iter().copied().chain(["kind"]).collect();
+        assert_exactly(SCHEMA, "/$defs/Projection", &projection);
+        assert_exactly(SCHEMA, "/$defs/Gaussian", &GAUSSIAN_FIELDS);
         assert_exactly(SCHEMA, "/$defs/Producer", &PRODUCER_FIELDS);
         let mut aerosol: Vec<&str> = AEROSOL_TYPE_FIELDS.iter().map(|(field, _)| *field).collect();
         for (_, pairs) in AEROSOL_INTERVALS {

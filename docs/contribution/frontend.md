@@ -22,6 +22,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
 | `viewstate.ts`, `urlstate.ts` | `ViewState`; query and camera-hash parsing. |
 | `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
+| `gridmap.ts` | The one parser of a bundle's `grid` block and the one way between a point and a cell (`gridMapFor`, `GridMap`): regular, Gaussian and Lambert. See "Native grids" below. |
 | `tiles.ts` | Viewport to tile rectangles. |
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |
 | `contourlabels.ts` | The contour labels' controller (`createContourLabels`): the labels worker, their two symbol layers, and when the lines on screen are traced again. |
@@ -35,7 +36,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `mp4export.ts` | The MP4 export (1080P, 1440P or 4K as the canvas offers), offered only once `VideoEncoder.isConfigSupported` accepts an H.264 configuration (High, Main, then Constrained Baseline at level 4.0, hardware first). Same host and captions as the GIF, up to 240 data frames at the canvas size capped to 1920 wide (even sides), but sampled on a 30 fps clock: `mp4Schedule` gives each data frame the span `frameHoldMs` holds it for on screen, and every tick inside the span captures the shader blend swept that far toward the next frame (`GifHost.blend` → `main.ts::blendFrames`, the sweep playback itself runs), so the file keeps the rate chosen for it and the motion the viewer sees rather than a stepped loop. The bitrate is `mp4Bitrate` (9 Mbit/s at 1080p30, scaled by pixels^0.9 and fps^0.6, clamped to 1.5–45 Mbit/s); one key frame only, because a periodic I-frame re-seeds the particle trails and reads as a pulse; `mp4-muxer` writes a fast-start MP4 in memory, bundled, never from a CDN (the bucket's CORS is a whitelist). |
 | `exportsheet.ts` (`createExportSheet`, `#export-sheet`) | Both exports start here, off the timeline capsule so its row stays the level chips, the rate and play: a round trigger in the top-right row (heading the right-hand column on phones, the view tile a slot lower) opens a sheet with format, size, rate (the playback ladder; follows the playback rate until one is picked) and a FROM/TO span (default from the frame on screen, clamped to the format's ceiling), a size estimate (MP4 from `mp4Bitrate`, GIF from a rough bytes-per-pixel mean) and EXPORT/Cancel. Format, size and rate are kept in `localStorage`; the span is kept while the axis keeps its length. A long press on the trigger saves with the settings as they stand; progress fills a ring round the trigger and a bar in the sheet. |
 | `volume.ts` | The volumes (`refl3d`, `cloud3d`): a 3D texture per frame, raymarched in a Mercator box, the transfer function chosen by the levels' parameter, stopped by the terrain's depth. |
-| `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, regional footprints. |
+| `palettes.ts`, `units.ts`, `domain.ts` | Ramps, display units, Lambert conformal arithmetic and the footprints of resampled regional runs. |
 | `basemap.ts` | The basemap style: Protomaps flavor per theme, the grounds (`GROUND_TONES`), hillshade and coastline layers, and the property diff `syncBasemapStyle` applies. |
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
@@ -442,8 +443,53 @@ and the window shrinks to fit it.
   those days in `imagery.days` and `syncGibs` draws the stand-in's
   platform there (`gibsLayerOnDay`).
 - `playback.ts` dwells per frame so a mixed-step axis plays at one speed.
-- Regional models clip raster, particles, probe and labels to
-  `FORECAST_MODELS[].domain` (`domain.ts`).
+- A regional run the encoder resampled clips raster, particles, probe and
+  labels to `FORECAST_MODELS[].domain` (`domain.ts`). The clip goes by the
+  bundle (`gridmap.ts::clipDomain`): a bundle with a `projection` is its own
+  footprint, so `hrrr` keeps its `domain` for older runs and cases.
+
+## Native grids
+
+A bundle's `grid` block ([`docs/format.md`](../format.md)) is read in one place,
+`gridmap.ts::parseGrid` (through `geoGrid(metadata)`, memoized on the metadata;
+`parseBundleMetadata` runs it too, so a bad block never reaches a session). It
+throws on a malformed block. Published regular grids may leave fields out, which
+take format.md's values; a projected grid never may. `GeoGrid` is a union, so the
+regular fields cannot be read without `grid.projection` having been ruled out, and
+the compiler finds what assumes them.
+
+`GridMap` (`gridMapFor(grid)`) answers `lonLatToCell`, `cellToLonLat`, `bounds`,
+`coverOfBounds` and `nominalStepDegrees`, the last for whatever wants a scale
+rather than a coordinate.
+
+- **Gaussian** (`grid.gaussian`): the regular fields stay what the shaders and the
+  tile covers read, up to 0.014 of a row from the truth and below any filter's
+  resolution. Only cell lookups and reported cell latitudes take the true Legendre
+  roots, computed on first use, per `n`, by the iteration in
+  [`docs/zarr-profile.md`](../zarr-profile.md).
+- **Lambert** (`grid.projection`, schemaVersion 4): `GRID_GLSL`'s `gridCell` is the
+  shader's way to a cell, the cone's `n` of 0 meaning a regular grid. A layer's
+  own grid, the orography, the column and the phase weights each carry their own
+  cone, because each can be on its own grid. Filtering stays in texture space.
+  `coverOfBounds` walks the view's edges, with latitudes held short of the poles
+  (a globe's bounds can hold one) and the meridian opposite the cone's centre
+  walked too, since the projection is cut there, and adds a cell for the filter.
+- Anything taking a row for a latitude and a column for a longitude had to change
+  rather than swap accessors. `precipphase.ts` reads a second field one axis at a
+  time when `axesAlign` holds (two tiers of one projection, two regular grids) and
+  by a per-cell table, kept per grid pair, when not. `hotspot.ts::dayMask` keeps
+  its per-column hour angles for a regular grid and works per cell on a cone.
+  `composite.ts::thermalFrontZone` measures its gradient over the ground by the map
+  factor. `volume.ts` takes only a regular grid; `main.ts::volumeGridOf` refuses
+  the rest. Contours are marching squares in cell space, each vertex through
+  `cellToLonLat`, so they follow the projection.
+
+Wind on these grids is east and north already, because the encoder rotates it, so
+particles move by it as they do anywhere.
+
+Tests: `tests/web/gridmap.test.ts`, the shader against the CPU in
+`tests/e2e/shader.spec.ts`, and a whole run of each shape in
+`tests/e2e/nativegrids.spec.ts`.
 
 ## Precipitation by phase
 

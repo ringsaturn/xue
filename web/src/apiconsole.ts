@@ -316,6 +316,7 @@ let located: Located | null = null;
 let locateToken = 0;
 
 function gridLabel(grid: CellGrid): string {
+  if (grid.projection) return `${grid.width} × ${grid.height}, Lambert conformal ${grid.projection.dx / 1000} km`;
   return `${grid.width} × ${grid.height}, ${Math.abs(grid.longitudeStep)}° from ${grid.firstLongitude}, ${grid.firstLatitude}`;
 }
 

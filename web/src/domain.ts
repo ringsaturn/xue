@@ -1,30 +1,32 @@
 /**
- * The footprint of a source computed on a map projection.
+ * Lambert conformal conic arithmetic, and the footprint of a source computed
+ * on that projection.
  *
- * A bundle carries a regular latitude/longitude grid and nothing else
- * (docs/format.md). A model that runs on a projection — HRRR, Lambert
- * conformal conic, 3 km over the contiguous United States — is resampled
- * onto one by the encoder (xuebuild/reproject.py), whose target is the
- * rectangle around the model's footprint: a conic domain is a trapezoid on
- * it, and the corners the model never covered hold the nearest source cell
- * continued outwards, so the plane is complete and no filter meets an edge.
- * That extension is not a forecast, and this is what keeps it off the map:
- * the model's own grid, in the shell's registry beside the model, and one
- * test — project the point, ask whether it lands inside the grid — that the
- * raster shader, the particle overlay, the probe and the contour labels all
- * run. The shell knows the domain the way it knows a model's grid size;
- * the bundle need not say.
+ * A bundle whose metadata declares `projection` lies on its native grid and
+ * `gridmap.ts` addresses it through these formulas. A run the encoder
+ * resampled onto a regular latitude/longitude grid instead (HRRR's older
+ * runs and published cases) keeps a rectangle around the model's footprint:
+ * a conic domain is a trapezoid on it, and the corners the model never
+ * covered hold the nearest source cell continued outwards. That extension is
+ * not a forecast, and `LambertDomain` is what keeps it off the map: the
+ * model's own grid, in the shell's registry beside the model, and one test —
+ * project the point, ask whether it lands inside the grid — that the raster
+ * shader, the particle overlay, the probe and the contour labels all run.
  *
  * Snyder (1987) §15, spherical case, the same formulas the encoder uses.
  */
 
-export interface LambertDomain {
+/** The constants of a conic projection, without any grid laid on it. */
+export interface LambertParameters {
   /** Sphere radius in metres. */
   radius: number;
   standardParallel1: number;
   standardParallel2: number;
   latitudeOfOrigin: number;
   centralMeridian: number;
+}
+
+export interface LambertDomain extends LambertParameters {
   /** Projected coordinates of the *edges* of the grid, in metres: what a
    * point must fall within to be covered by some cell. */
   west: number;
@@ -35,13 +37,13 @@ export interface LambertDomain {
 
 /** The derived constants of the cone: `n` (the cone constant), `R·F` (the
  * scale) and the radius of the origin's parallel. */
-interface LambertCone {
+export interface LambertCone {
   n: number;
   scale: number;
   originRadius: number;
 }
 
-export function lambertCone(domain: LambertDomain): LambertCone {
+export function lambertCone(domain: LambertParameters): LambertCone {
   const phi1 = (domain.standardParallel1 * Math.PI) / 180;
   const phi2 = (domain.standardParallel2 * Math.PI) / 180;
   const n =
@@ -54,8 +56,13 @@ export function lambertCone(domain: LambertDomain): LambertCone {
   return { n, scale, originRadius };
 }
 
+/** How close to a pole a latitude is taken before projecting: the far pole of
+ * a cone is infinitely far away, and a view that holds it must still cover
+ * what lies on the near side. A literal in GLSL too, so one decimal place. */
+export const LAMBERT_LATITUDE_LIMIT = "89.9";
+
 /** Projected metres of one point. */
-export function lambertForward(domain: LambertDomain, cone: LambertCone, longitude: number, latitude: number): [number, number] {
+export function lambertForward(domain: LambertParameters, cone: LambertCone, longitude: number, latitude: number): [number, number] {
   const rho = cone.scale / Math.tan(Math.PI / 4 + ((latitude * Math.PI) / 180) / 2) ** cone.n;
   // The meridian's angle from the central one, the difference wrapped so a
   // longitude spelled the other way round the globe lands the same.
@@ -63,6 +70,27 @@ export function lambertForward(domain: LambertDomain, cone: LambertCone, longitu
   delta -= 360 * Math.round(delta / 360);
   const theta = cone.n * ((delta * Math.PI) / 180);
   return [rho * Math.sin(theta), cone.originRadius - rho * Math.cos(theta)];
+}
+
+/** The longitude and latitude of projected metres. The longitude is spelled
+ * within half a turn of the central meridian. */
+export function lambertInverse(domain: LambertParameters, cone: LambertCone, x: number, y: number): [number, number] {
+  const sign = Math.sign(cone.n);
+  const across = cone.originRadius - y;
+  const rho = sign * Math.hypot(x, across);
+  const theta = Math.atan2(sign * x, sign * across);
+  const longitude = domain.centralMeridian + (theta / cone.n) * (180 / Math.PI);
+  if (rho === 0) return [longitude, sign * 90];
+  const latitude = 2 * Math.atan((cone.scale / rho) ** (1 / cone.n)) - Math.PI / 2;
+  return [longitude, (latitude * 180) / Math.PI];
+}
+
+/** How much the projection stretches the ground at a latitude: projected
+ * metres per metre on the sphere, 1 on a standard parallel. */
+export function lambertMapFactor(domain: LambertParameters, cone: LambertCone, latitude: number): number {
+  const phi = (latitude * Math.PI) / 180;
+  const rho = cone.scale / Math.tan(Math.PI / 4 + phi / 2) ** cone.n;
+  return (cone.n * rho) / (domain.radius * Math.cos(phi));
 }
 
 /** Whether a point lies over the model's own grid. */
@@ -82,25 +110,40 @@ export function domainUniforms(domain: LambertDomain): { cone: [number, number, 
   };
 }
 
-/** The GLSL of the same test, for a fragment shader that already has the
- * pixel's longitude and latitude in degrees. `u_domain` is 1.0 when a
- * domain is set; the two vec4s are `domainUniforms`. Single precision is
- * ample: the box is a few thousand kilometres across and a float resolves a
- * metre of it. */
+/** A grid as GLSL addresses it (`gridmap.ts::gridUniforms` fills the
+ * uniforms): `gridCell` is the continuous cell of a longitude and latitude,
+ * cell centres on the integers. `first` and `cellStep` are degrees on a
+ * regular grid, projected metres on a Lambert one; `cone` is the projection's
+ * (`n`, scale, origin radius, central meridian in radians), and `n` of 0, which
+ * no cone has, says the grid is regular. The latitude is held short of the
+ * poles because the far pole is a division by zero and a NaN passes every
+ * bounds test. Single precision is ample: a float resolves under a metre of a
+ * few thousand kilometres. */
+export const GRID_GLSL = `
+vec2 lambertXY(vec4 cone, float longitude, float latitude) {
+  float n = cone.x;
+  float rho = cone.y / pow(tan(0.7853981633974483 + radians(clamp(latitude, -${LAMBERT_LATITUDE_LIMIT}, ${LAMBERT_LATITUDE_LIMIT})) * 0.5), n);
+  float delta = radians(longitude) - cone.w;
+  delta -= 6.283185307179586 * floor(delta / 6.283185307179586 + 0.5);
+  float theta = n * delta;
+  return vec2(rho * sin(theta), cone.z - rho * cos(theta));
+}
+vec2 gridCell(vec4 cone, vec2 first, vec2 cellStep, float longitude, float latitude) {
+  if (cone.x == 0.0) return vec2(mod(longitude - first.x, 360.0) / cellStep.x, (latitude - first.y) / cellStep.y);
+  return (lambertXY(cone, longitude, latitude) - first) / cellStep;
+}`;
+
+/** The GLSL of the footprint test, for a fragment shader that already has
+ * the pixel's longitude and latitude in degrees and includes `GRID_GLSL`.
+ * `u_domain` is 1.0 when a domain is set; the two vec4s are `domainUniforms`. */
 export const DOMAIN_GLSL = `
 uniform float u_domain;
 uniform vec4 u_domain_cone;
 uniform vec4 u_domain_box;
 bool outsideDomain(float longitude, float latitude) {
   if (u_domain < 0.5) return false;
-  float n = u_domain_cone.x;
-  float rho = u_domain_cone.y / pow(tan(0.7853981633974483 + radians(latitude) * 0.5), n);
-  float delta = radians(longitude) - u_domain_cone.w;
-  delta -= 6.283185307179586 * floor(delta / 6.283185307179586 + 0.5);
-  float theta = n * delta;
-  float x = rho * sin(theta);
-  float y = u_domain_cone.z - rho * cos(theta);
-  return x < u_domain_box.x || x > u_domain_box.y || y < u_domain_box.z || y > u_domain_box.w;
+  vec2 xy = lambertXY(u_domain_cone, longitude, latitude);
+  return xy.x < u_domain_box.x || xy.x > u_domain_box.y || xy.y < u_domain_box.z || xy.y > u_domain_box.w;
 }`;
 
 /** The names `DOMAIN_GLSL` declares, for a program's uniform lookup. */
@@ -125,8 +168,8 @@ export function setDomainUniforms(
  * parallels and the origin at 38.5 N, the central meridian at 97.5 W, the
  * first cell's center at 21.138123 N, 122.719528 W — which the projection
  * puts at (-2697520.14, -1587306.15) m. The box is that grid's outer edge,
- * half a cell beyond the outermost centers. Mirrors what
- * `xuebuild/reproject.py` reads out of the file.
+ * half a cell beyond the outermost centers. Clips a run the encoder resampled;
+ * a native grid is its own footprint.
  */
 export const HRRR_DOMAIN: LambertDomain = {
   radius: 6371229,

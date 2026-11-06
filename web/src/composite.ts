@@ -27,6 +27,8 @@
 
 import type { BundleVariable } from "./manifest";
 import { decodeValue, precipitationColor } from "./palettes";
+import { lambertCone, lambertMapFactor } from "./domain";
+import { gridMapFor, sameGrid, wrap } from "./gridmap";
 import type { GeoGrid } from "./probe";
 
 /** One decoded scalar plane on its own grid. */
@@ -104,21 +106,17 @@ export function decodeTable(variable: BundleVariable): Float32Array {
   return table;
 }
 
-/** Whether two grids place the same cells at the same coordinates. */
-export function sameGrid(a: GeoGrid, b: GeoGrid): boolean {
-  return (
-    a.width === b.width &&
-    a.height === b.height &&
-    a.firstLongitude === b.firstLongitude &&
-    a.firstLatitude === b.firstLatitude &&
-    a.longitudeStep === b.longitudeStep &&
-    a.latitudeStep === b.latitudeStep
-  );
-}
+export { sameGrid };
 
 /** The cell of `grid` nearest to a coordinate, or -1 outside it. A wrapping
  * grid takes every longitude; a cropped one only what its columns cover. */
 export function nearestCell(grid: GeoGrid, longitude: number, latitude: number): number {
+  if (grid.projection || grid.gaussian) {
+    const at = gridMapFor(grid).lonLatToCell(longitude, latitude);
+    if (!at) return -1;
+    const column = grid.wraps ? wrap(Math.round(at[0]), grid.width) : Math.round(at[0]);
+    return Math.round(at[1]) * grid.width + column;
+  }
   const row = Math.round((latitude - grid.firstLatitude) / grid.latitudeStep);
   if (row < 0 || row >= grid.height) return -1;
   let column = Math.round((longitude - grid.firstLongitude) / grid.longitudeStep);
@@ -155,15 +153,15 @@ export function warmMoistInflow(
     const v = vTable[flow.vPlane[cell]!]!;
     magnitude[cell] = Number.isNaN(u) || Number.isNaN(v) ? Number.NaN : Math.hypot(u, v);
   }
-  const sigma = smoothingDegrees / Math.abs(grid.latitudeStep);
+  const map = gridMapFor(grid);
+  const sigma = smoothingDegrees / map.nominalStepDegrees("latitude");
   if (sigma > 0) magnitude = gaussianSmooth(magnitude, grid.width, grid.height, grid.wraps, sigma);
   for (let row = 0; row < grid.height; row += 1) {
-    const latitude = grid.firstLatitude + row * grid.latitudeStep;
     for (let column = 0; column < grid.width; column += 1) {
       const cell = row * grid.width + column;
       const flux = magnitude[cell]!;
       if (Number.isNaN(flux)) continue;
-      const source = direct ? cell : nearestCell(warmth.grid, grid.firstLongitude + column * grid.longitudeStep, latitude);
+      const source = direct ? cell : nearestCell(warmth.grid, ...map.cellToLonLat(column, row));
       if (source < 0) continue;
       const value = theta[source]!;
       if (Number.isNaN(value)) continue;
@@ -190,13 +188,22 @@ export function thermalFrontZone(
   const out = new Uint8Array(cells);
   if (width < 3 || height < 3) return out;
   const smooth = smoothedField(warmth, smoothingDegrees);
-  const dy = KM_PER_DEGREE * Math.abs(grid.latitudeStep) * 2;
   const [from, to] = thresholds;
+  const map = gridMapFor(grid);
+  // On a projection the cells are the same size in projected metres and the
+  // ground under them is not: the map factor is what turns one into the other,
+  // and being conformal it is the same both ways.
+  const projection = grid.projection;
+  const cone = projection ? lambertCone(projection) : null;
   for (let row = 1; row < height - 1; row += 1) {
-    const latitude = grid.firstLatitude + row * grid.latitudeStep;
-    const cosine = Math.cos((latitude * Math.PI) / 180);
-    if (Math.abs(latitude) >= 85) continue;
-    const dx = KM_PER_DEGREE * Math.abs(grid.longitudeStep) * cosine * 2;
+    let dx = 0;
+    let dy = 0;
+    if (!projection) {
+      const latitude = map.cellToLonLat(0, row)[1];
+      if (Math.abs(latitude) >= 85) continue;
+      dy = KM_PER_DEGREE * map.nominalStepDegrees("latitude") * 2;
+      dx = KM_PER_DEGREE * map.nominalStepDegrees() * Math.cos((latitude * Math.PI) / 180) * 2;
+    }
     for (let column = 0; column < width; column += 1) {
       let left = column - 1;
       let right = column + 1;
@@ -205,6 +212,11 @@ export function thermalFrontZone(
         right %= width;
       } else if (left < 0 || right >= width) {
         continue;
+      }
+      if (projection && cone) {
+        const scale = lambertMapFactor(projection, cone, map.cellToLonLat(column, row)[1]);
+        dx = (Math.abs(projection.dx) / 1000 / scale) * 2;
+        dy = (Math.abs(projection.dy) / 1000 / scale) * 2;
       }
       const cell = row * width + column;
       const east = smooth[row * width + right]!;
@@ -227,7 +239,7 @@ function smoothedField(scalar: ScalarPlane, smoothingDegrees: number): Float32Ar
   const table = decodeTable(scalar.variable);
   const decoded = new Float32Array(cells);
   for (let cell = 0; cell < cells; cell += 1) decoded[cell] = table[scalar.plane[cell]!]!;
-  const sigma = smoothingDegrees / Math.abs(grid.latitudeStep);
+  const sigma = smoothingDegrees / gridMapFor(grid).nominalStepDegrees("latitude");
   return sigma > 0 ? gaussianSmooth(decoded, grid.width, grid.height, grid.wraps, sigma) : decoded;
 }
 

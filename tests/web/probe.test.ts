@@ -100,9 +100,9 @@ describe("probeCell", () => {
     expect(probeCell(disk, 70, 0)).toBeNull();
   });
 
-  it("rejects a grid with no extent", () => {
-    expect(probeCell(globalGrid({ width: 0 }), 0, 0)).toBeNull();
-    expect(probeCell(globalGrid({ longitudeStep: 0 }), 0, 0)).toBeNull();
+  it("refuses a grid with no extent rather than reading it", () => {
+    expect(() => probeCell(globalGrid({ width: 0 }), 0, 0)).toThrow(/width/);
+    expect(() => probeCell(globalGrid({ longitudeStep: 0 }), 0, 0)).toThrow(/longitudeStep/);
   });
 });
 

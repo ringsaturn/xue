@@ -33,6 +33,8 @@
 //!   live site's sweeps straight from the public bucket.
 //! * [`mod@network`] — the Zarr profile's network store: one value per
 //!   river reach per frame, read IO-free like [`mod@zarr`].
+//! * [`mod@projection`] — the grid geometry both directions share: the
+//!   Lambert conformal projection and true Gaussian latitudes.
 //! * `encode` — the native encoder, behind the off-by-default `encoder`
 //!   feature because it links GDAL. Not a link: on a decode-only build
 //!   the module does not exist, so linking it would dangle there.
@@ -41,6 +43,7 @@ pub mod format;
 pub mod decode;
 pub mod level3;
 pub mod network;
+pub mod projection;
 pub mod zarr;
 
 #[cfg(test)]

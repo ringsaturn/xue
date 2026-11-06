@@ -21,6 +21,7 @@
  * world and a zoomed-in coast both come to about the same number of cells.
  */
 
+import { gridMapFor } from "./gridmap";
 import type { GeoGrid } from "./probe";
 import { wrap } from "./probe";
 import { domainContains, lambertCone, type LambertDomain } from "./domain";
@@ -118,6 +119,7 @@ export function reduceField(
   // A regional model's footprint is not separable; its test runs per cell,
   // and only where a domain is set.
   const cone = domain ? lambertCone(domain) : null;
+  const map = gridMapFor(grid);
   for (let by = 0; by < rows; by += 1) {
     for (let bx = 0; bx < columns; bx += 1) {
       let sum = 0;
@@ -125,19 +127,12 @@ export function reduceField(
       for (let dy = 0; dy < stride; dy += 1) {
         const r = window.row0 + by * stride + dy;
         if (r < 0 || r >= grid.height || !masks.row[r]) continue;
-        const latitude = grid.firstLatitude + r * grid.latitudeStep;
         for (let dx = 0; dx < stride; dx += 1) {
           let c = window.column0 + bx * stride + dx;
           if (grid.wraps) c = wrap(c, grid.width);
           else if (c < 0 || c >= grid.width) continue;
           if (!masks.column[c]) continue;
-          if (
-            domain &&
-            cone &&
-            !domainContains(domain, cone, grid.firstLongitude + c * grid.longitudeStep, latitude)
-          ) {
-            continue;
-          }
+          if (domain && cone && !domainContains(domain, cone, ...map.cellToLonLat(c, r))) continue;
           sum += plane[r * grid.width + c]!;
           count += 1;
         }
@@ -433,7 +428,7 @@ export function fieldToGeo(field: Field, grid: GeoGrid, x: number, y: number): [
   // middle of that span, and a cell's center is where its value sits.
   const column = field.column0 + x * field.stride + (field.stride - 1) / 2;
   const row = field.row0 + y * field.stride + (field.stride - 1) / 2;
-  return [grid.firstLongitude + column * grid.longitudeStep, grid.firstLatitude + row * grid.latitudeStep];
+  return gridMapFor(grid).cellToLonLat(column, row);
 }
 
 /** What the worker is asked for, and everything it needs to answer. */
@@ -441,8 +436,8 @@ export interface LabelRequest {
   grid: GeoGrid;
   window: CellWindow;
   coverage: CoverageBox;
-  /** A regional model's own footprint (domain.ts): cells outside it hold
-   * the encoder's edge extension, not a forecast, and are left out. */
+  /** The footprint of a resampled regional run (domain.ts): cells outside
+   * it hold the encoder's edge extension, not a forecast, and are left out. */
   domain?: LambertDomain;
   stride: number;
   /** Standard deviation of the smoothing in full-resolution cells, matched
@@ -495,7 +490,7 @@ export function computeLabels(plane: Uint8Array, request: LabelRequest): LabelRe
     if (coordinates.length < 2) continue;
     lines.push({ value: Math.round(request.offset + polyline.level * request.scale), coordinates });
   }
-  const cellDegrees = Math.abs(grid.latitudeStep) * stride;
+  const cellDegrees = gridMapFor(grid).nominalStepDegrees("latitude") * stride;
   const radius = Math.max(1, Math.round(request.centerRadiusDegrees / cellDegrees));
   const centers: LabelCenter[] = [];
   for (const center of findCenters(field, radius, request.prominence / request.scale)) {

@@ -163,9 +163,9 @@ Unindexed gaps, overlaps, and nonzero padding bytes make the file invalid.
 
 ### Metadata JSON
 
-The shape of a schemaVersion 3 document is
+The shape of a schemaVersion 3 or 4 document is
 [`schemas/bundle-metadata.schema.json`](schemas/bundle-metadata.schema.json),
-which is normative: a document that does not match it is not version 3
+which is normative: a document that does not match it is not version 3 or 4
 metadata. The sections below give the meaning of each field and the rules
 across fields that a schema cannot say, which every reader checks after
 the shape: the lowest version that fits, the one encoding of a time axis,
@@ -250,14 +250,17 @@ versioned by the FixedHeader `version` field.
 | 1 | — | a uniform whole-hour `time` axis declaring `stepHours` |
 | 2 | Explicitly listed forecast hours | a whole-hour `time` axis listing `hours` |
 | 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` / `aerosol` beside it), and a `time` block declaring `unitSeconds` |
+| 4 | A grid on a map projection | a `grid.projection` block in place of the four regular grid fields; variables and time block as in version 3 |
 
 An encoder must emit the lowest version that can express the file: the
 highest version any single feature of the metadata requires, and no higher.
-For the versions defined so far that is 3 when the variables carry
-`parameter`, otherwise 2 when the axis lists `hours`, otherwise 1. A
-schemaVersion 3 file with a uniform axis is still version 3, since the
-parameter block sets its floor, and a `parameter` block is invalid below
-version 3.
+For the versions defined so far that is 4 when the grid carries
+`projection`, otherwise 3 when the variables carry `parameter`, otherwise 2
+when the axis lists `hours`, otherwise 1. A schemaVersion 3 file with a
+uniform axis is still version 3, since the parameter block sets its floor, and
+a `parameter` block is invalid below version 3. A file on a regular grid
+never declares version 4, and a reader that does not implement version 4
+refuses a projected file rather than misplacing it.
 
 Decoders enforce both sides of that rule: they must reject a schema version
 they do not implement, and must reject a declared version higher than the
@@ -673,26 +676,114 @@ trivially:
   Coordinates outside `[0, width)` or `[0, height)` are outside the file; a
   renderer must draw nothing there rather than clamp.
 
+The four regular fields are a regular grid's. A grid carries them or a
+`projection` block (*[Projected Sources](#projected-sources)*), never both and
+never neither.
+
+##### Gaussian rows
+
+A regular Gaussian grid is regular in longitude only: its latitudes are the
+roots of a Legendre polynomial, up to 0.014 of a row from even spacing. The
+regular fields describe it as evenly spaced, the optional `gaussian` block
+beside them says what its rows really are, and it raises no version floor:
+
+```json
+"grid": {
+  "width": 3072,
+  "height": 1536,
+  "firstLongitude": -180.0,
+  "firstLatitude": 89.9103,
+  "longitudeStep": 0.1171875,
+  "latitudeStep": -0.1171469,
+  "wrapLongitude": true,
+  "gaussian": { "n": 768, "firstRow": 0, "rowStride": 1 }
+}
+```
+
+- `n` is the number of latitudes per hemisphere (1 to 32768); row `r` of the
+  file is row `firstRow + r × rowStride` of the Gaussian grid's `2n`, counted
+  from the north. A crop raises `firstRow`, a reduced-resolution tier
+  `rowStride`. The last row must lie on the Gaussian grid. The block has
+  exactly these three integer fields and needs schemaVersion 3.
+- A renderer keeps sampling by the regular fields: the difference is below
+  what any filter resolves, and a reader that ignores the block draws what it
+  always drew. The true latitudes are for what names a place: a point read's
+  nearest row and the cell centre it reports, and a store's `latitude`
+  coordinate. Past the edge of a crop a point belongs to the edge row for half
+  a row's spacing; the first and last rows of the whole Gaussian grid own the
+  polar caps.
+- The latitudes are computed, never stored: `docs/zarr-profile.md`,
+  "Coordinates", gives the iteration.
+
 #### Projected Sources
 
-A model computed on a map projection (HRRR, Lambert conformal conic) does
-not arrive on a grid this block can describe, and the block is not widened
-for it: the encoder resamples every plane onto a regular latitude/longitude
-grid before anything else reads it, and the file is an ordinary regional
-file of that grid. The target is fixed so a product lands on one grid for
-all time: the regular grid of the source's declared step whose origin is a
-whole multiple of the step and which covers the extremes of longitude and
-latitude the source's boundary cell centers reach; each target cell center
-is projected with the source's own forward formulas and the source plane is
-bilinearly interpolated there. A conic domain is a trapezoid on that
-rectangle. The corners it never covered are neither gaps nor a reserved code
-(the format has neither) but the nearest source cell continued outwards (the
-sampling coordinate is clamped to the source grid), so the plane is
-complete and no filter or contour meets an edge. Those cells are not a
-forecast: a reader that knows the source's projection clips to its
-footprint, and one that does not draws the extension. The reference
-pipeline documents the arithmetic in `xuebuild/reproject.py`; the native
-encoder repeats it and the two are held byte-identical.
+A model computed on a map projection is published on its own grid. The `grid`
+block declares the projection in place of the regular fields, and the file is
+schemaVersion 4:
+
+```json
+"grid": {
+  "width": 1799,
+  "height": 1059,
+  "layout": "row-major",
+  "rowOrder": "north-to-south",
+  "columnOrder": "west-to-east",
+  "wrapLongitude": false,
+  "projection": {
+    "kind": "lambert-conformal",
+    "radius": 6371229.0,
+    "standardParallel1": 38.5,
+    "standardParallel2": 38.5,
+    "latitudeOfOrigin": 38.5,
+    "centralMeridian": -97.5,
+    "x0": -2697520.143,
+    "y0": 1586693.847,
+    "dx": 3000.0,
+    "dy": -3000.0
+  }
+}
+```
+
+- `kind` is a closed set, today `lambert-conformal` alone. A reader refuses a
+  kind it does not implement; a new kind is a new value, not a new field.
+- `x0` and `y0` are the centre of the first cell, the north-west one, in
+  projected metres. Cell (`row`, `column`) has its centre at
+  `x0 + column × dx`, `y0 + row × dy`. `dx` is positive, `dy` negative, and
+  `wrapLongitude` false. Since GDAL's geotransform names the first cell's
+  outer corner and different GDAL builds differ in its last digits, an encoder
+  rounds the corner to three decimal places and adds half a step:
+  `x0 = round(gt0, 3) + dx / 2`, `y0 = round(gt3, 3) + dy / 2`.
+- A crop adds `column × dx` and `row × dy` to `x0` and `y0`. A
+  reduced-resolution tier doubles `dx` and `dy` and keeps `x0` and `y0`, with
+  `width = (width + 1) // 2` and likewise `height`.
+- The formulas are the spherical Lambert conformal conic's (Snyder 1987, §15):
+  with two equal standard parallels the cone constant is `n = sin φ1`, otherwise
+  `n = ln(cos φ1 / cos φ2) / ln(tan(π/4 + φ2/2) / tan(π/4 + φ1/2))`. A longitude
+  is taken to within 180° of `centralMeridian` before it is projected. Both
+  standard parallels and `latitudeOfOrigin` lie strictly between the poles, and
+  the two parallels must not sum to zero, which leaves no cone.
+- A grid coordinate is `(x − x0) / dx`, `(y − y0) / dy`, with the rule for
+  outside coordinates of *[Regional Grids](#regional-grids)*. Cells are not
+  regular in longitude or latitude: a reader that maps between them and
+  geography goes through the projection.
+
+Older files do something else, and a reader keeps reading them. Up to
+schemaVersion 3 a projected model was resampled by the encoder onto a regular
+latitude/longitude grid before anything else read it, and the file is an
+ordinary regional file of that grid. Its target is fixed: the regular grid of
+the source's declared step whose origin is a whole multiple of the step and
+which covers the extremes of longitude and latitude the source's boundary cell
+centers reach; each target cell center is projected with the source's own
+forward formulas and the source plane is bilinearly interpolated there. A conic
+domain is a trapezoid on that rectangle. The corners it never covered are
+neither gaps nor a reserved code (the format has neither) but the nearest source
+cell continued outwards (the sampling coordinate is clamped to the source grid),
+so the plane is complete and no filter or contour meets an edge. Those cells are
+not a forecast: a reader that knows the source's projection clips to its
+footprint, and one that does not draws the extension. The reference pipeline
+documents the arithmetic in `xuebuild/reproject.py`; the native encoder repeats
+it and the two are held byte-identical. A reader tells the two apart by the
+`grid` block alone, never by the source: one `model` publishes both.
 
 `model` and `product` identify the source dataset. Every encoder writes
 `product`, and a reader accepts a document without it: the schema names
@@ -1183,10 +1274,23 @@ A decoder must reject:
   define, a type outside its range, a limit with exactly one of its scale
   factor and scaled value `null`, a `null` limit under an interval type
   other than 255, or a non-`null` limit under type 255.
+- A `grid.projection` that is not an object (`null` included), whose `kind`
+  is not one the decoder implements, missing one of its ten fields, carrying a
+  key it does not define, with a field of the wrong type or not finite, a
+  `radius` that is not positive, a standard parallel or `latitudeOfOrigin` at
+  or past a pole, standard parallels that sum to zero, a `centralMeridian`
+  outside ±180, a `dx` that is not positive or a `dy` that is not negative. A
+  grid carrying `projection` and any of the four regular fields or `gaussian`,
+  even `null`, or whose `wrapLongitude` is anything but `false`.
+- A `grid.gaussian` that is not an object (`null` included), in a file of any
+  version but 3, missing one of its three fields or carrying a key it does not
+  define, with an `n` outside 1–32768, a negative `firstRow`, a `rowStride`
+  below 1, or a last row `firstRow + (height − 1) × rowStride` at or past `2n`.
 - A declared `schemaVersion` other than the lowest able to express the
-  metadata: a schemaVersion 2 file that declares `stepHours`, or a
-  schemaVersion 1 or 2 file whose variables carry `parameter` or whose time
-  block names a unit.
+  metadata: a schemaVersion 2 file that declares `stepHours`, a schemaVersion
+  1 or 2 file whose variables carry `parameter` or whose time block names a
+  unit, a schemaVersion 4 file without `grid.projection`, or a file below
+  schemaVersion 4 with one.
 - An incomplete frame sequence for any declared variable. The expected
   sequence is `frameOffsets` when present, and
   `firstFrameOffset + i * frameStep` otherwise; a decoder must never

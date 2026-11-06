@@ -143,6 +143,104 @@ _GROUP_ENTRY_STRUCT = struct.Struct("<HBB")
 _CHUNK_ENTRY_STRUCT = struct.Struct("<II")
 
 
+# The fields a regular grid names and a projected one must not.
+_REGULAR_GRID_FIELDS = ("firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep")
+# The closed set of ``projection.kind``; a grid of any other kind is one this
+# reader cannot place on the map.
+_PROJECTION_KINDS = frozenset({"lambert-conformal"})
+_PROJECTION_NUMBER_FIELDS = (
+    "radius",
+    "standardParallel1",
+    "standardParallel2",
+    "latitudeOfOrigin",
+    "centralMeridian",
+    "x0",
+    "y0",
+    "dx",
+    "dy",
+)
+_GAUSSIAN_FIELDS = frozenset({"n", "firstRow", "rowStride"})
+# Each latitude costs a few passes of a recurrence of order 2n, so n is bounded
+# before a point read pays for it.
+_MAX_GAUSSIAN_N = 32768
+
+
+def validate_projection(projection: Any) -> None:
+    """A ``grid.projection`` block (docs/format.md, "Regional Grids"): closed,
+    of a known kind, with finite numbers, a cone that exists (its two parallels
+    neither at a pole nor mirrored across the equator, where the constant is
+    zero), and steps in the grid's column and row order."""
+    if not isinstance(projection, dict):
+        raise BundleError("metadata grid projection must be an object")
+    kind = projection.get("kind")
+    if not isinstance(kind, str) or kind not in _PROJECTION_KINDS:
+        raise BundleError("metadata grid projection kind is not one this reader implements")
+    if set(projection) != {"kind", *_PROJECTION_NUMBER_FIELDS}:
+        raise BundleError("metadata grid projection must carry exactly its ten fields")
+    for field in _PROJECTION_NUMBER_FIELDS:
+        value = projection[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise BundleError(f"metadata grid projection {field} is invalid")
+    if projection["radius"] <= 0:
+        raise BundleError("metadata grid projection radius must be positive")
+    for field in ("standardParallel1", "standardParallel2", "latitudeOfOrigin"):
+        if abs(projection[field]) >= 90:
+            raise BundleError("metadata grid projection latitudes must lie between the poles")
+    if projection["standardParallel1"] + projection["standardParallel2"] == 0:
+        raise BundleError("metadata grid projection parallels leave no cone")
+    if abs(projection["centralMeridian"]) > 180:
+        raise BundleError("metadata grid projection centralMeridian is out of range")
+    if projection["dx"] <= 0 or projection["dy"] >= 0:
+        raise BundleError("metadata grid projection steps must run east and south")
+
+
+def validate_gaussian(gaussian: Any, height: int) -> None:
+    """A ``grid.gaussian`` block: closed, and every one of the grid's ``height``
+    rows a row of the Gaussian grid it names."""
+    if not isinstance(gaussian, dict):
+        raise BundleError("metadata grid gaussian must be an object")
+    if set(gaussian) != _GAUSSIAN_FIELDS:
+        raise BundleError("metadata grid gaussian block must carry exactly n, firstRow and rowStride")
+    for field in _GAUSSIAN_FIELDS:
+        value = gaussian[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise BundleError(f"metadata grid gaussian {field} is invalid")
+    if not 1 <= gaussian["n"] <= _MAX_GAUSSIAN_N:
+        raise BundleError("metadata grid gaussian n is out of range")
+    if gaussian["rowStride"] < 1:
+        raise BundleError("metadata grid gaussian rowStride must be positive")
+    if gaussian["firstRow"] + (height - 1) * gaussian["rowStride"] >= 2 * gaussian["n"]:
+        raise BundleError("metadata grid gaussian rows run past the Gaussian grid")
+
+
+def validate_projected_grid(grid: dict[str, Any]) -> None:
+    """A grid carrying ``projection``: the block itself, which replaces the
+    regular fields outright and takes no ``gaussian`` beside it, on a grid
+    that does not wrap."""
+    validate_projection(grid["projection"])
+    if any(field in grid for field in _REGULAR_GRID_FIELDS):
+        raise BundleError("a projected grid must not carry the regular grid fields")
+    if "gaussian" in grid:
+        raise BundleError("a projected grid must not carry a gaussian block")
+    if grid.get("wrapLongitude") is not False:
+        raise BundleError("a projected grid must declare wrapLongitude false")
+
+
+def parse_grid_block(grid: dict[str, Any], height: int, schema_version: int) -> int:
+    """The lowest schema version the grid's kind needs: 4 for a projection, no
+    floor for a regular grid. A ``gaussian`` block sits beside the regular
+    fields a reader that ignores it still uses, so it needs version 3 and
+    raises nothing. Versions up to 3 keep whatever regular fields they have."""
+    if "projection" in grid:
+        validate_projected_grid(grid)
+        return 4
+    if "gaussian" in grid:
+        if schema_version != 3:
+            raise BundleError("a gaussian block requires schemaVersion 3")
+        validate_gaussian(grid["gaussian"], height)
+    return 1
+
+
 def align8(value: int) -> int:
     return (value + 7) // 8 * 8
 
@@ -560,7 +658,7 @@ class BundleMetadata:
         if not isinstance(metadata, dict):
             raise BundleError("metadata must be a JSON object")
         schema_version = metadata.get("schemaVersion")
-        if schema_version not in (1, 2, 3):
+        if schema_version not in (1, 2, 3, 4):
             raise BundleError("unsupported metadata schemaVersion")
         grid = metadata.get("grid")
         time_info = metadata.get("time")
@@ -572,6 +670,7 @@ class BundleMetadata:
             raise BundleError("metadata grid dimensions are invalid")
         if width * height > 64 * 1024 * 1024:
             raise BundleError("metadata grid exceeds the plane safety limit")
+        grid_version = parse_grid_block(grid, height, schema_version)
         frame_count = time_info.get("frameCount")
         if not isinstance(frame_count, int) or frame_count <= 0:
             raise BundleError("metadata time description is invalid")
@@ -595,9 +694,9 @@ class BundleMetadata:
             variable_ids[numeric_id] = name
         if not variable_ids:
             raise BundleError("metadata must declare at least one variable")
-        # Every axis and every variable set has exactly one valid encoding:
-        # the declared version must be the lowest able to express both.
-        required_version = max(axis_version, 3 if parameters else 1)
+        # Every axis, variable set and grid has exactly one valid encoding:
+        # the declared version must be the lowest able to express all three.
+        required_version = max(axis_version, 3 if parameters else 1, grid_version)
         if schema_version != required_version:
             raise BundleError(f"metadata must declare schemaVersion {required_version}")
 

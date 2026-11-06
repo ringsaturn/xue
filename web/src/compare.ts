@@ -37,7 +37,7 @@ import { vectorMaxMagnitude } from "./levels";
 import { FORECAST_MODELS, type ForecastBundleId, type ForecastModelId, type LoadedManifest } from "./manifest";
 import { applyPageMeta } from "./pagemeta";
 import { buildPalette, precipitationColor } from "./palettes";
-import { geoGrid } from "./probe";
+import { geoGrid, gridMapFor } from "./gridmap";
 import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
 import { formatPointDegrees, formatUtcHour } from "./format";
@@ -403,7 +403,7 @@ function modelBlock(result: ModelResult, ax: Axis, zone: string): HTMLElement {
   const info = FORECAST_MODELS[result.model];
   const meta: (HTMLElement | string)[] = [];
   const first = [...result.series.values()].find((series): series is PointSeries => series !== null);
-  if (first) meta.push(element("span", "cmp-grid-step", formatGridStep(geoGrid(first.metadata).longitudeStep)));
+  if (first) meta.push(element("span", "cmp-grid-step", formatGridStep(gridMapFor(geoGrid(first.metadata)).nominalStepDegrees())));
   if (result.run) meta.push(element("span", "cmp-run", `${t("compareRun")} ${formatUtcHour(result.run.manifest.runTime)}`));
   const { section, head, grid } = blockShell(result.model, info.label, meta);
 

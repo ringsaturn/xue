@@ -22,6 +22,7 @@ import {
   VERTEX_SHADER,
   gaussianWeights,
 } from "../../web/src/layer";
+import { gridForm, gridMapFor, parseGrid } from "../../web/src/gridmap";
 
 const GRID_WIDTH = 8;
 const GRID_HEIGHT = 4;
@@ -704,4 +705,164 @@ test("a flat plane comes back from the smoothing pass unchanged", async ({ page 
     sigma: 2,
   });
   for (const code of codes) expect(code).toBeCloseTo(128, 6);
+});
+
+// -- a projected grid ---------------------------------------------------------
+//
+// The shader and gridmap.ts each project a point to a cell, one in single
+// precision on the GPU, one in doubles. A disagreement is a field drawn beside
+// where the probe reads it, and nothing but pixels shows that.
+
+/** HRRR's own cone and origin at twenty times its spacing. */
+const LAMBERT_GRID = parseGrid({
+  width: 90,
+  height: 53,
+  wrapLongitude: false,
+  projection: {
+    kind: "lambert-conformal",
+    radius: 6371229,
+    standardParallel1: 38.5,
+    standardParallel2: 38.5,
+    latitudeOfOrigin: 38.5,
+    centralMeridian: -97.5,
+    x0: -2697520.142,
+    y0: 1586693.847,
+    dx: 60000,
+    dy: -60000,
+  },
+});
+
+/** The Mercator square the pixels below span: the whole footprint and a margin. */
+const VIEW = { x0: 0.12, x1: 0.34, y0: 0.26, y1: 0.46 };
+const VIEW_PIXELS = 256;
+
+/** The grid drawn by nearest texel with `code(column, row)` as its codes, and a
+ * palette whose red is the code: every pixel reports the cell the shader chose.
+ * RGBA, row by row with the Mercator y growing down the array. */
+async function renderCells(page: import("@playwright/test").Page, axis: "column" | "row"): Promise<number[]> {
+  const form = gridForm(LAMBERT_GRID);
+  return page.evaluate(
+    ({ vertexSource, fragmentSource, width, height, form, axis, view, size }) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: true });
+      if (!gl) throw new Error("no WebGL2 context");
+      const program = gl.createProgram()!;
+      for (const [kind, source] of [
+        [gl.VERTEX_SHADER, vertexSource],
+        [gl.FRAGMENT_SHADER, fragmentSource],
+      ] as const) {
+        const shader = gl.createShader(kind)!;
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(`compile failed: ${gl.getShaderInfoLog(shader)}`);
+        gl.attachShader(program, shader);
+      }
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`link failed: ${gl.getProgramInfoLog(program)}`);
+      gl.useProgram(program);
+      const { x0, x1, y0, y1 } = view;
+      const quad = new Float32Array([x0, y0, x1, y0, x0, y1, x0, y1, x1, y0, x1, y1]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+      const position = gl.getAttribLocation(program, "a_position");
+      gl.enableVertexAttribArray(position);
+      gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+      const uniform = (name: string) => gl.getUniformLocation(program, name);
+      // The view's Mercator rectangle onto the whole of clip space, y up so the
+      // read-back's first row is the view's y0.
+      const sx = 2 / (x1 - x0);
+      const sy = 2 / (y1 - y0);
+      gl.uniformMatrix4fv(uniform("u_matrix"), false, [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, 1, 0, -1 - x0 * sx, -1 - y0 * sy, 0, 1]);
+      gl.uniform2f(uniform("u_first"), form.first[0], form.first[1]);
+      gl.uniform2f(uniform("u_step"), form.step[0], form.step[1]);
+      gl.uniform4f(uniform("u_grid_cone"), form.cone[0], form.cone[1], form.cone[2], form.cone[3]);
+      gl.uniform2f(uniform("u_size"), width, height);
+      gl.uniform1f(uniform("u_mix"), 0);
+      gl.uniform1f(uniform("u_wrap"), 0);
+      gl.uniform4f(uniform("u_cover"), 0, 1, 0, 1);
+      gl.uniform1f(uniform("u_nearest"), 1);
+      gl.uniform1f(uniform("u_fill_alpha"), 1);
+      const plane = new Uint8Array(width * height);
+      for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) plane[row * width + column] = axis === "column" ? column : row;
+      }
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      for (const [name, value] of [
+        [gl.TEXTURE_MIN_FILTER, gl.NEAREST],
+        [gl.TEXTURE_MAG_FILTER, gl.NEAREST],
+        [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE],
+        [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE],
+      ] as const) gl.texParameteri(gl.TEXTURE_2D, name, value);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, plane);
+      gl.uniform1i(uniform("u_data"), 0);
+      gl.uniform1i(uniform("u_data_b"), 0);
+      const colors = new Uint8Array(256 * 4).fill(255);
+      for (let index = 0; index < 256; index += 1) colors[index * 4] = index;
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, colors);
+      gl.uniform1i(uniform("u_palette"), 2);
+      gl.viewport(0, 0, size, size);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      const pixels = new Uint8Array(size * size * 4);
+      gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      return Array.from(pixels);
+    },
+    {
+      vertexSource: VERTEX_SHADER,
+      fragmentSource: FRAGMENT_SHADER,
+      width: LAMBERT_GRID.width,
+      height: LAMBERT_GRID.height,
+      form,
+      axis,
+      view: VIEW,
+      size: VIEW_PIXELS,
+    },
+  );
+}
+
+test("the shader and the CPU find a projected grid's cells in the same place", async ({ page }) => {
+  const map = gridMapFor(LAMBERT_GRID);
+  const columns = await renderCells(page, "column");
+  const rows = await renderCells(page, "row");
+  let painted = 0;
+  let blank = 0;
+  for (let py = 0; py < VIEW_PIXELS; py += 1) {
+    for (let px = 0; px < VIEW_PIXELS; px += 1) {
+      const mercatorX = VIEW.x0 + ((px + 0.5) / VIEW_PIXELS) * (VIEW.x1 - VIEW.x0);
+      const mercatorY = VIEW.y0 + ((py + 0.5) / VIEW_PIXELS) * (VIEW.y1 - VIEW.y0);
+      const longitude = mercatorX * 360 - 180;
+      const latitude = 90 - (360 / Math.PI) * Math.atan(Math.exp((mercatorY * 2 - 1) * Math.PI));
+      const at = map.lonLatToCell(longitude, latitude);
+      const pixel = (py * VIEW_PIXELS + px) * 4;
+      if (!at) {
+        // Just outside a half cell the two may differ by a float's error; well
+        // outside, the shader must have discarded it.
+        const near = [-0.02, 0.02].some((d) => map.lonLatToCell(longitude + d, latitude + d));
+        if (!near) expect(columns[pixel + 3], `pixel ${px},${py}`).toBe(0);
+        blank += 1;
+        continue;
+      }
+      // The nearest texel, unless the point is so close to a cell's edge that a
+      // float's error may choose the other; a fiftieth of a cell is 1200 m here.
+      const edge = (value: number) => Math.abs(value - Math.floor(value) - 0.5) < 0.02;
+      if (edge(at[0]) || edge(at[1])) continue;
+      if (at[0] > LAMBERT_GRID.width - 0.52 || at[1] > LAMBERT_GRID.height - 0.52 || at[0] < -0.48 || at[1] < -0.48) continue;
+      expect(columns[pixel + 3], `pixel ${px},${py}`).toBeGreaterThan(0);
+      expect(columns[pixel], `column at pixel ${px},${py}`).toBe(Math.round(at[0]));
+      expect(rows[pixel], `row at pixel ${px},${py}`).toBe(Math.round(at[1]));
+      painted += 1;
+    }
+  }
+  // The view holds the footprint and ground outside it.
+  expect(painted).toBeGreaterThan(1000);
+  expect(blank).toBeGreaterThan(1000);
 });

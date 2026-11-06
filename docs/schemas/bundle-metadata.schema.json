@@ -2,11 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/bundle-metadata.schema.json",
   "title": "BundleMetadataV3",
-  "description": "A bundle's metadata JSON, schemaVersion 3 (docs/format.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, and that an aerosol interval of type 255 carries null limits and any other type integer ones.",
+  "description": "A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/format.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n.",
   "type": "object",
   "required": ["schemaVersion", "model", "runTime", "time", "grid", "variables"],
+  "anyOf": [
+    {"type": "object", "properties": {"schemaVersion": {"const": 3}, "grid": {"type": "object", "properties": {"projection": {"type": "null"}}}}},
+    {"type": "object", "properties": {"schemaVersion": {"const": 4}, "grid": {"type": "object", "required": ["projection"]}}}
+  ],
   "properties": {
-    "schemaVersion": {"type": "integer", "const": 3},
+    "schemaVersion": {"description": "4 exactly when the grid carries a projection, 3 otherwise: the lowest version that fits.", "type": "integer", "enum": [3, 4]},
     "model": {"description": "The source dataset, with product (docs/format.md, \"Projected Sources\").", "type": "string", "minLength": 1},
     "product": {"description": "Every writer writes it; no reader needs it.", "type": "string", "minLength": 1},
     "runTime": {"$ref": "#/$defs/Timestamp"},
@@ -40,9 +44,28 @@
       ]
     },
     "Grid": {
-      "description": "The regular latitude/longitude grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them.",
+      "description": "The grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them.",
       "type": "object",
-      "required": ["width", "height", "firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep", "wrapLongitude"],
+      "required": ["width", "height", "wrapLongitude"],
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"],
+          "properties": {"projection": {"type": "null"}}
+        },
+        {
+          "type": "object",
+          "required": ["projection"],
+          "properties": {
+            "firstLongitude": {"type": "null"},
+            "firstLatitude": {"type": "null"},
+            "longitudeStep": {"type": "null"},
+            "latitudeStep": {"type": "null"},
+            "gaussian": {"type": "null"},
+            "wrapLongitude": {"const": false}
+          }
+        }
+      ],
       "properties": {
         "width": {"type": "integer", "minimum": 1},
         "height": {"type": "integer", "minimum": 1},
@@ -53,7 +76,38 @@
         "firstLatitude": {"description": "The first row's centre, degrees north.", "type": "number"},
         "longitudeStep": {"type": "number", "exclusiveMinimum": 0},
         "latitudeStep": {"description": "Negative: rows run north to south.", "type": "number"},
-        "wrapLongitude": {"description": "True exactly when width x longitudeStep is 360 degrees.", "type": "boolean"}
+        "wrapLongitude": {"description": "True exactly when width x longitudeStep is 360 degrees; false on a projected grid.", "type": "boolean"},
+        "gaussian": {"$ref": "#/$defs/Gaussian"},
+        "projection": {"$ref": "#/$defs/Projection"}
+      }
+    },
+    "Gaussian": {
+      "description": "The rows are rows firstRow + row x rowStride of the regular Gaussian grid with n latitudes per hemisphere, counted from the north. The regular fields stay the equidistant approximation a renderer samples with; a reader that places a cell computes the true latitude (docs/zarr-profile.md, \"Coordinates\").",
+      "type": "object",
+      "required": ["n", "firstRow", "rowStride"],
+      "additionalProperties": false,
+      "properties": {
+        "n": {"type": "integer", "minimum": 1, "maximum": 32768},
+        "firstRow": {"type": "integer", "minimum": 0},
+        "rowStride": {"type": "integer", "minimum": 1}
+      }
+    },
+    "Projection": {
+      "description": "The grid's map projection and where its cells lie on it, on a sphere. Cell (row, column) has its centre at x0 + column x dx, y0 + row x dy, in projected metres.",
+      "type": "object",
+      "required": ["kind", "radius", "standardParallel1", "standardParallel2", "latitudeOfOrigin", "centralMeridian", "x0", "y0", "dx", "dy"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"description": "A closed set: a reader refuses a kind it does not implement.", "type": "string", "enum": ["lambert-conformal"]},
+        "radius": {"description": "The sphere's radius, metres.", "type": "number", "exclusiveMinimum": 0},
+        "standardParallel1": {"type": "number", "minimum": -90, "maximum": 90},
+        "standardParallel2": {"type": "number", "minimum": -90, "maximum": 90},
+        "latitudeOfOrigin": {"type": "number", "minimum": -90, "maximum": 90},
+        "centralMeridian": {"type": "number", "minimum": -180, "maximum": 180},
+        "x0": {"description": "The first column's centre, projected metres.", "type": "number"},
+        "y0": {"description": "The first (northern) row's centre, projected metres.", "type": "number"},
+        "dx": {"type": "number", "exclusiveMinimum": 0},
+        "dy": {"description": "Negative: rows run north to south.", "type": "number", "maximum": 0}
       }
     },
     "Variable": {

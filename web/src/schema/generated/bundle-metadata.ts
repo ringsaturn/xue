@@ -49,8 +49,8 @@ export function checkTime(v: unknown, at: string): asserts v is Time {
   ]);
 }
 
-/** The regular latitude/longitude grid the planes are on (docs/format.md, "Regional Grids"): row-major, north to south, west to east. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them. */
-export type Grid = { width: number; height: number; layout?: "row-major"; rowOrder?: "north-to-south"; columnOrder?: "west-to-east"; firstLongitude: number; firstLatitude: number; longitudeStep: number; latitudeStep: number; wrapLongitude: boolean };
+/** The grid the planes are on (docs/format.md, "Regional Grids"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them. */
+export type Grid = { width: number; height: number; layout?: "row-major"; rowOrder?: "north-to-south"; columnOrder?: "west-to-east"; firstLongitude?: number; firstLatitude?: number; longitudeStep?: number; latitudeStep?: number; wrapLongitude: boolean; gaussian?: Gaussian; projection?: Projection };
 
 export function checkGrid(v: unknown, at: string): asserts v is Grid {
   isObject(v, at);
@@ -73,17 +73,119 @@ export function checkGrid(v: unknown, at: string): asserts v is Grid {
     isString(v12, at + ".columnOrder");
     isOneOf(v12, at + ".columnOrder", ["west-to-east"]);
   }
-  const v13 = field(v, "firstLongitude", at);
-  isNumber(v13, at + ".firstLongitude");
-  const v14 = field(v, "firstLatitude", at);
-  isNumber(v14, at + ".firstLatitude");
-  const v15 = field(v, "longitudeStep", at);
-  isNumber(v15, at + ".longitudeStep");
-  isAbove(v15, at + ".longitudeStep", 0);
-  const v16 = field(v, "latitudeStep", at);
-  isNumber(v16, at + ".latitudeStep");
+  const v13 = v["firstLongitude"];
+  if (v13 !== undefined) {
+    isNumber(v13, at + ".firstLongitude");
+  }
+  const v14 = v["firstLatitude"];
+  if (v14 !== undefined) {
+    isNumber(v14, at + ".firstLatitude");
+  }
+  const v15 = v["longitudeStep"];
+  if (v15 !== undefined) {
+    isNumber(v15, at + ".longitudeStep");
+    isAbove(v15, at + ".longitudeStep", 0);
+  }
+  const v16 = v["latitudeStep"];
+  if (v16 !== undefined) {
+    isNumber(v16, at + ".latitudeStep");
+  }
   const v17 = field(v, "wrapLongitude", at);
   isBoolean(v17, at + ".wrapLongitude");
+  const v18 = v["gaussian"];
+  if (v18 !== undefined) {
+    checkGaussian(v18, at + ".gaussian");
+  }
+  const v19 = v["projection"];
+  if (v19 !== undefined) {
+    checkProjection(v19, at + ".projection");
+  }
+  isAnyOf(v, at, [
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      field(x, "firstLongitude", a);
+      field(x, "firstLatitude", a);
+      field(x, "longitudeStep", a);
+      field(x, "latitudeStep", a);
+      const v20 = x["projection"];
+      if (v20 !== undefined) {
+        isOneOf(v20, a + ".projection", [null]);
+      }
+    },
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      field(x, "projection", a);
+      const v21 = x["firstLongitude"];
+      if (v21 !== undefined) {
+        isOneOf(v21, a + ".firstLongitude", [null]);
+      }
+      const v22 = x["firstLatitude"];
+      if (v22 !== undefined) {
+        isOneOf(v22, a + ".firstLatitude", [null]);
+      }
+      const v23 = x["longitudeStep"];
+      if (v23 !== undefined) {
+        isOneOf(v23, a + ".longitudeStep", [null]);
+      }
+      const v24 = x["latitudeStep"];
+      if (v24 !== undefined) {
+        isOneOf(v24, a + ".latitudeStep", [null]);
+      }
+      const v25 = x["gaussian"];
+      if (v25 !== undefined) {
+        isOneOf(v25, a + ".gaussian", [null]);
+      }
+      const v26 = x["wrapLongitude"];
+      if (v26 !== undefined) {
+        isOneOf(v26, a + ".wrapLongitude", [false]);
+      }
+    },
+  ]);
+}
+
+/** The rows are rows firstRow + row x rowStride of the regular Gaussian grid with n latitudes per hemisphere, counted from the north. The regular fields stay the equidistant approximation a renderer samples with; a reader that places a cell computes the true latitude (docs/zarr-profile.md, "Coordinates"). */
+export type Gaussian = { n: number; firstRow: number; rowStride: number };
+
+export function checkGaussian(v: unknown, at: string): asserts v is Gaussian {
+  isObject(v, at);
+  const v27 = field(v, "n", at);
+  isInteger(v27, at + ".n", 1, 32768);
+  const v28 = field(v, "firstRow", at);
+  isInteger(v28, at + ".firstRow", 0);
+  const v29 = field(v, "rowStride", at);
+  isInteger(v29, at + ".rowStride", 1);
+  isClosed(v, at, ["n","firstRow","rowStride"]);
+}
+
+/** The grid's map projection and where its cells lie on it, on a sphere. Cell (row, column) has its centre at x0 + column x dx, y0 + row x dy, in projected metres. */
+export type Projection = { kind: "lambert-conformal"; radius: number; standardParallel1: number; standardParallel2: number; latitudeOfOrigin: number; centralMeridian: number; x0: number; y0: number; dx: number; dy: number };
+
+export function checkProjection(v: unknown, at: string): asserts v is Projection {
+  isObject(v, at);
+  const v30 = field(v, "kind", at);
+  isString(v30, at + ".kind");
+  isOneOf(v30, at + ".kind", ["lambert-conformal"]);
+  const v31 = field(v, "radius", at);
+  isNumber(v31, at + ".radius");
+  isAbove(v31, at + ".radius", 0);
+  const v32 = field(v, "standardParallel1", at);
+  isNumber(v32, at + ".standardParallel1", -90, 90);
+  const v33 = field(v, "standardParallel2", at);
+  isNumber(v33, at + ".standardParallel2", -90, 90);
+  const v34 = field(v, "latitudeOfOrigin", at);
+  isNumber(v34, at + ".latitudeOfOrigin", -90, 90);
+  const v35 = field(v, "centralMeridian", at);
+  isNumber(v35, at + ".centralMeridian", -180, 180);
+  const v36 = field(v, "x0", at);
+  isNumber(v36, at + ".x0");
+  const v37 = field(v, "y0", at);
+  isNumber(v37, at + ".y0");
+  const v38 = field(v, "dx", at);
+  isNumber(v38, at + ".dx");
+  isAbove(v38, at + ".dx", 0);
+  const v39 = field(v, "dy", at);
+  isNumber(v39, at + ".dy", undefined, 0);
+  isClosed(v, at, ["kind","radius","standardParallel1","standardParallel2","latitudeOfOrigin","centralMeridian","x0","y0","dx","dy"]);
 }
 
 /** One variable of the bundle: its file-local numericId (1..n in list order, the index's variableId), its GRIB2 identity and its codebook. */
@@ -91,30 +193,30 @@ export type Variable = { numericId: number; id: string; label: string; unit: str
 
 export function checkVariable(v: unknown, at: string): asserts v is Variable {
   isObject(v, at);
-  const v18 = field(v, "numericId", at);
-  isInteger(v18, at + ".numericId", 1, 255);
-  const v19 = field(v, "id", at);
-  isString(v19, at + ".id", undefined, 1);
-  const v20 = field(v, "label", at);
-  isString(v20, at + ".label");
-  const v21 = field(v, "unit", at);
-  isString(v21, at + ".unit");
-  const v22 = field(v, "parameter", at);
-  checkParameter(v22, at + ".parameter");
-  const v23 = v["band"];
-  if (v23 !== undefined) {
-    checkBand(v23, at + ".band");
+  const v40 = field(v, "numericId", at);
+  isInteger(v40, at + ".numericId", 1, 255);
+  const v41 = field(v, "id", at);
+  isString(v41, at + ".id", undefined, 1);
+  const v42 = field(v, "label", at);
+  isString(v42, at + ".label");
+  const v43 = field(v, "unit", at);
+  isString(v43, at + ".unit");
+  const v44 = field(v, "parameter", at);
+  checkParameter(v44, at + ".parameter");
+  const v45 = v["band"];
+  if (v45 !== undefined) {
+    checkBand(v45, at + ".band");
   }
-  const v24 = v["producer"];
-  if (v24 !== undefined) {
-    checkProducer(v24, at + ".producer");
+  const v46 = v["producer"];
+  if (v46 !== undefined) {
+    checkProducer(v46, at + ".producer");
   }
-  const v25 = v["aerosol"];
-  if (v25 !== undefined) {
-    checkAerosol(v25, at + ".aerosol");
+  const v47 = v["aerosol"];
+  if (v47 !== undefined) {
+    checkAerosol(v47, at + ".aerosol");
   }
-  const v26 = field(v, "quantization", at);
-  checkQuantization(v26, at + ".quantization");
+  const v48 = field(v, "quantization", at);
+  checkQuantization(v48, at + ".quantization");
 }
 
 /** The variable's identity in GRIB2's terms (docs/format.md, "Variable Identity"). No other key is allowed. */
@@ -122,21 +224,21 @@ export type Parameter = { discipline: number; parameterCategory: number; paramet
 
 export function checkParameter(v: unknown, at: string): asserts v is Parameter {
   isObject(v, at);
-  const v27 = field(v, "discipline", at);
-  isInteger(v27, at + ".discipline", 0, 255);
-  const v28 = field(v, "parameterCategory", at);
-  isInteger(v28, at + ".parameterCategory", 0, 255);
-  const v29 = field(v, "parameterNumber", at);
-  isInteger(v29, at + ".parameterNumber", 0, 255);
-  const v30 = field(v, "typeOfFirstFixedSurface", at);
-  isInteger(v30, at + ".typeOfFirstFixedSurface", 0, 255);
-  const v31 = field(v, "scaleFactorOfFirstFixedSurface", at);
-  checkScaleFactor(v31, at + ".scaleFactorOfFirstFixedSurface");
-  const v32 = field(v, "scaledValueOfFirstFixedSurface", at);
-  checkScaledValue(v32, at + ".scaledValueOfFirstFixedSurface");
-  const v33 = v["typeOfStatisticalProcessing"];
-  if (v33 !== undefined) {
-    isInteger(v33, at + ".typeOfStatisticalProcessing", 0, 255);
+  const v49 = field(v, "discipline", at);
+  isInteger(v49, at + ".discipline", 0, 255);
+  const v50 = field(v, "parameterCategory", at);
+  isInteger(v50, at + ".parameterCategory", 0, 255);
+  const v51 = field(v, "parameterNumber", at);
+  isInteger(v51, at + ".parameterNumber", 0, 255);
+  const v52 = field(v, "typeOfFirstFixedSurface", at);
+  isInteger(v52, at + ".typeOfFirstFixedSurface", 0, 255);
+  const v53 = field(v, "scaleFactorOfFirstFixedSurface", at);
+  checkScaleFactor(v53, at + ".scaleFactorOfFirstFixedSurface");
+  const v54 = field(v, "scaledValueOfFirstFixedSurface", at);
+  checkScaledValue(v54, at + ".scaledValueOfFirstFixedSurface");
+  const v55 = v["typeOfStatisticalProcessing"];
+  if (v55 !== undefined) {
+    isInteger(v55, at + ".typeOfStatisticalProcessing", 0, 255);
   }
   isClosed(v, at, ["discipline","parameterCategory","parameterNumber","typeOfFirstFixedSurface","scaleFactorOfFirstFixedSurface","scaledValueOfFirstFixedSurface","typeOfStatisticalProcessing"]);
 }
@@ -146,16 +248,16 @@ export type Band = { satelliteSeries: number; satelliteNumber: number; instrumen
 
 export function checkBand(v: unknown, at: string): asserts v is Band {
   isObject(v, at);
-  const v34 = field(v, "satelliteSeries", at);
-  isInteger(v34, at + ".satelliteSeries", 0, 65535);
-  const v35 = field(v, "satelliteNumber", at);
-  isInteger(v35, at + ".satelliteNumber", 0, 65535);
-  const v36 = field(v, "instrumentType", at);
-  isInteger(v36, at + ".instrumentType", 0, 65535);
-  const v37 = field(v, "scaleFactorOfCentralWaveNumber", at);
-  isInteger(v37, at + ".scaleFactorOfCentralWaveNumber", -127, 127);
-  const v38 = field(v, "scaledValueOfCentralWaveNumber", at);
-  isInteger(v38, at + ".scaledValueOfCentralWaveNumber", 0, 4294967294);
+  const v56 = field(v, "satelliteSeries", at);
+  isInteger(v56, at + ".satelliteSeries", 0, 65535);
+  const v57 = field(v, "satelliteNumber", at);
+  isInteger(v57, at + ".satelliteNumber", 0, 65535);
+  const v58 = field(v, "instrumentType", at);
+  isInteger(v58, at + ".instrumentType", 0, 65535);
+  const v59 = field(v, "scaleFactorOfCentralWaveNumber", at);
+  isInteger(v59, at + ".scaleFactorOfCentralWaveNumber", -127, 127);
+  const v60 = field(v, "scaledValueOfCentralWaveNumber", at);
+  isInteger(v60, at + ".scaledValueOfCentralWaveNumber", 0, 4294967294);
   isClosed(v, at, ["satelliteSeries","satelliteNumber","instrumentType","scaleFactorOfCentralWaveNumber","scaledValueOfCentralWaveNumber"]);
 }
 
@@ -164,10 +266,10 @@ export type Producer = { id: string; version: string };
 
 export function checkProducer(v: unknown, at: string): asserts v is Producer {
   isObject(v, at);
-  const v39 = field(v, "id", at);
-  isString(v39, at + ".id", PATTERN_2);
-  const v40 = field(v, "version", at);
-  isString(v40, at + ".version", undefined, 1);
+  const v61 = field(v, "id", at);
+  isString(v61, at + ".id", PATTERN_2);
+  const v62 = field(v, "version", at);
+  isString(v62, at + ".version", undefined, 1);
   isClosed(v, at, ["id","version"]);
 }
 
@@ -176,28 +278,28 @@ export type Aerosol = { aerosolType: number; typeOfSizeInterval: number; scaleFa
 
 export function checkAerosol(v: unknown, at: string): asserts v is Aerosol {
   isObject(v, at);
-  const v41 = field(v, "aerosolType", at);
-  isInteger(v41, at + ".aerosolType", 0, 65535);
-  const v42 = field(v, "typeOfSizeInterval", at);
-  isInteger(v42, at + ".typeOfSizeInterval", 0, 255);
-  const v43 = field(v, "scaleFactorOfFirstSize", at);
-  checkScaleFactor(v43, at + ".scaleFactorOfFirstSize");
-  const v44 = field(v, "scaledValueOfFirstSize", at);
-  checkScaledValue(v44, at + ".scaledValueOfFirstSize");
-  const v45 = field(v, "scaleFactorOfSecondSize", at);
-  checkScaleFactor(v45, at + ".scaleFactorOfSecondSize");
-  const v46 = field(v, "scaledValueOfSecondSize", at);
-  checkScaledValue(v46, at + ".scaledValueOfSecondSize");
-  const v47 = field(v, "typeOfWavelengthInterval", at);
-  isInteger(v47, at + ".typeOfWavelengthInterval", 0, 255);
-  const v48 = field(v, "scaleFactorOfFirstWavelength", at);
-  checkScaleFactor(v48, at + ".scaleFactorOfFirstWavelength");
-  const v49 = field(v, "scaledValueOfFirstWavelength", at);
-  checkScaledValue(v49, at + ".scaledValueOfFirstWavelength");
-  const v50 = field(v, "scaleFactorOfSecondWavelength", at);
-  checkScaleFactor(v50, at + ".scaleFactorOfSecondWavelength");
-  const v51 = field(v, "scaledValueOfSecondWavelength", at);
-  checkScaledValue(v51, at + ".scaledValueOfSecondWavelength");
+  const v63 = field(v, "aerosolType", at);
+  isInteger(v63, at + ".aerosolType", 0, 65535);
+  const v64 = field(v, "typeOfSizeInterval", at);
+  isInteger(v64, at + ".typeOfSizeInterval", 0, 255);
+  const v65 = field(v, "scaleFactorOfFirstSize", at);
+  checkScaleFactor(v65, at + ".scaleFactorOfFirstSize");
+  const v66 = field(v, "scaledValueOfFirstSize", at);
+  checkScaledValue(v66, at + ".scaledValueOfFirstSize");
+  const v67 = field(v, "scaleFactorOfSecondSize", at);
+  checkScaleFactor(v67, at + ".scaleFactorOfSecondSize");
+  const v68 = field(v, "scaledValueOfSecondSize", at);
+  checkScaledValue(v68, at + ".scaledValueOfSecondSize");
+  const v69 = field(v, "typeOfWavelengthInterval", at);
+  isInteger(v69, at + ".typeOfWavelengthInterval", 0, 255);
+  const v70 = field(v, "scaleFactorOfFirstWavelength", at);
+  checkScaleFactor(v70, at + ".scaleFactorOfFirstWavelength");
+  const v71 = field(v, "scaledValueOfFirstWavelength", at);
+  checkScaledValue(v71, at + ".scaledValueOfFirstWavelength");
+  const v72 = field(v, "scaleFactorOfSecondWavelength", at);
+  checkScaleFactor(v72, at + ".scaleFactorOfSecondWavelength");
+  const v73 = field(v, "scaledValueOfSecondWavelength", at);
+  checkScaledValue(v73, at + ".scaledValueOfSecondWavelength");
   isClosed(v, at, ["aerosolType","typeOfSizeInterval","scaleFactorOfFirstSize","scaledValueOfFirstSize","scaleFactorOfSecondSize","scaledValueOfSecondSize","typeOfWavelengthInterval","scaleFactorOfFirstWavelength","scaledValueOfFirstWavelength","scaleFactorOfSecondWavelength","scaledValueOfSecondWavelength"]);
 }
 
@@ -238,20 +340,20 @@ export type LinearQuantization = { type: "linear"; offset: number; scale: number
 
 export function checkLinearQuantization(v: unknown, at: string): asserts v is LinearQuantization {
   isObject(v, at);
-  const v52 = field(v, "type", at);
-  isString(v52, at + ".type");
-  isOneOf(v52, at + ".type", ["linear"]);
-  const v53 = field(v, "offset", at);
-  isNumber(v53, at + ".offset");
-  const v54 = field(v, "scale", at);
-  isNumber(v54, at + ".scale");
-  isAbove(v54, at + ".scale", 0);
-  const v55 = field(v, "minimumCode", at);
-  checkCode(v55, at + ".minimumCode");
-  const v56 = field(v, "maximumCode", at);
-  checkCode(v56, at + ".maximumCode");
-  const v57 = field(v, "nodataCode", at);
-  checkCode(v57, at + ".nodataCode");
+  const v74 = field(v, "type", at);
+  isString(v74, at + ".type");
+  isOneOf(v74, at + ".type", ["linear"]);
+  const v75 = field(v, "offset", at);
+  isNumber(v75, at + ".offset");
+  const v76 = field(v, "scale", at);
+  isNumber(v76, at + ".scale");
+  isAbove(v76, at + ".scale", 0);
+  const v77 = field(v, "minimumCode", at);
+  checkCode(v77, at + ".minimumCode");
+  const v78 = field(v, "maximumCode", at);
+  checkCode(v78, at + ".maximumCode");
+  const v79 = field(v, "nodataCode", at);
+  checkCode(v79, at + ".nodataCode");
 }
 
 /** The logarithmic codebook: zeroCode below trace, minimumCode..maximumCode on the log1p grid up to maximum, overflowCode above it, nodataCode missing. */
@@ -259,28 +361,28 @@ export type LogQuantization = { type: "log1p"; trace: number; scale: number; max
 
 export function checkLogQuantization(v: unknown, at: string): asserts v is LogQuantization {
   isObject(v, at);
-  const v58 = field(v, "type", at);
-  isString(v58, at + ".type");
-  isOneOf(v58, at + ".type", ["log1p"]);
-  const v59 = field(v, "trace", at);
-  isNumber(v59, at + ".trace");
-  isAbove(v59, at + ".trace", 0);
-  const v60 = field(v, "scale", at);
-  isNumber(v60, at + ".scale");
-  isAbove(v60, at + ".scale", 0);
-  const v61 = field(v, "maximum", at);
-  isNumber(v61, at + ".maximum");
-  isAbove(v61, at + ".maximum", 0);
-  const v62 = field(v, "minimumCode", at);
-  checkCode(v62, at + ".minimumCode");
-  const v63 = field(v, "maximumCode", at);
-  checkCode(v63, at + ".maximumCode");
-  const v64 = field(v, "zeroCode", at);
-  checkCode(v64, at + ".zeroCode");
-  const v65 = field(v, "overflowCode", at);
-  checkCode(v65, at + ".overflowCode");
-  const v66 = field(v, "nodataCode", at);
-  checkCode(v66, at + ".nodataCode");
+  const v80 = field(v, "type", at);
+  isString(v80, at + ".type");
+  isOneOf(v80, at + ".type", ["log1p"]);
+  const v81 = field(v, "trace", at);
+  isNumber(v81, at + ".trace");
+  isAbove(v81, at + ".trace", 0);
+  const v82 = field(v, "scale", at);
+  isNumber(v82, at + ".scale");
+  isAbove(v82, at + ".scale", 0);
+  const v83 = field(v, "maximum", at);
+  isNumber(v83, at + ".maximum");
+  isAbove(v83, at + ".maximum", 0);
+  const v84 = field(v, "minimumCode", at);
+  checkCode(v84, at + ".minimumCode");
+  const v85 = field(v, "maximumCode", at);
+  checkCode(v85, at + ".maximumCode");
+  const v86 = field(v, "zeroCode", at);
+  checkCode(v86, at + ".zeroCode");
+  const v87 = field(v, "overflowCode", at);
+  checkCode(v87, at + ".overflowCode");
+  const v88 = field(v, "nodataCode", at);
+  checkCode(v88, at + ".nodataCode");
 }
 
 /** A uint8 code. */
@@ -290,34 +392,63 @@ export function checkCode(v: unknown, at: string): asserts v is Code {
   isInteger(v, at, 0, 255);
 }
 
-/** A bundle's metadata JSON, schemaVersion 3 (docs/format.md, "Metadata JSON"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, and that an aerosol interval of type 255 carries null limits and any other type integer ones. */
-export type BundleMetadataV3 = { schemaVersion: 3; model: string; product?: string; runTime: Timestamp; profile?: string; time: Time; grid: Grid; variables: Variable[] };
+/** A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/format.md, "Metadata JSON"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n. */
+export type BundleMetadataV3 = { schemaVersion: 3 | 4; model: string; product?: string; runTime: Timestamp; profile?: string; time: Time; grid: Grid; variables: Variable[] };
 
 export function checkBundleMetadataV3(v: unknown, at: string): asserts v is BundleMetadataV3 {
   isObject(v, at);
-  const v67 = field(v, "schemaVersion", at);
-  isInteger(v67, at + ".schemaVersion");
-  isOneOf(v67, at + ".schemaVersion", [3]);
-  const v68 = field(v, "model", at);
-  isString(v68, at + ".model", undefined, 1);
-  const v69 = v["product"];
-  if (v69 !== undefined) {
-    isString(v69, at + ".product", undefined, 1);
+  const v89 = field(v, "schemaVersion", at);
+  isInteger(v89, at + ".schemaVersion");
+  isOneOf(v89, at + ".schemaVersion", [3,4]);
+  const v90 = field(v, "model", at);
+  isString(v90, at + ".model", undefined, 1);
+  const v91 = v["product"];
+  if (v91 !== undefined) {
+    isString(v91, at + ".product", undefined, 1);
   }
-  const v70 = field(v, "runTime", at);
-  checkTimestamp(v70, at + ".runTime");
-  const v71 = v["profile"];
-  if (v71 !== undefined) {
-    isString(v71, at + ".profile", undefined, 1);
+  const v92 = field(v, "runTime", at);
+  checkTimestamp(v92, at + ".runTime");
+  const v93 = v["profile"];
+  if (v93 !== undefined) {
+    isString(v93, at + ".profile", undefined, 1);
   }
-  const v72 = field(v, "time", at);
-  checkTime(v72, at + ".time");
-  const v73 = field(v, "grid", at);
-  checkGrid(v73, at + ".grid");
-  const v74 = field(v, "variables", at);
-  isList(v74, at + ".variables", 1, 255);
-  for (let i75 = 0; i75 < v74.length; i75++) {
-    const v76: unknown = v74[i75];
-    checkVariable(v76, at + ".variables[" + i75 + "]");
+  const v94 = field(v, "time", at);
+  checkTime(v94, at + ".time");
+  const v95 = field(v, "grid", at);
+  checkGrid(v95, at + ".grid");
+  const v96 = field(v, "variables", at);
+  isList(v96, at + ".variables", 1, 255);
+  for (let i97 = 0; i97 < v96.length; i97++) {
+    const v98: unknown = v96[i97];
+    checkVariable(v98, at + ".variables[" + i97 + "]");
   }
+  isAnyOf(v, at, [
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      const v99 = x["schemaVersion"];
+      if (v99 !== undefined) {
+        isOneOf(v99, a + ".schemaVersion", [3]);
+      }
+      const v100 = x["grid"];
+      if (v100 !== undefined) {
+        isObject(v100, a + ".grid");
+        const v101 = v100["projection"];
+        if (v101 !== undefined) {
+          isOneOf(v101, a + ".grid.projection", [null]);
+        }
+      }
+    },
+    (x: unknown, a: string): void => {
+      isObject(x, a);
+      const v102 = x["schemaVersion"];
+      if (v102 !== undefined) {
+        isOneOf(v102, a + ".schemaVersion", [4]);
+      }
+      const v103 = x["grid"];
+      if (v103 !== undefined) {
+        isObject(v103, a + ".grid");
+        field(v103, "projection", a + ".grid");
+      }
+    },
+  ]);
 }

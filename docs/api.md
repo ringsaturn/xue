@@ -126,7 +126,9 @@ The response:
   hour ahead of the clock (`docs/sources.md`).
 - `cell` is the grid cell the point falls in, by the rule the viewer's
   probe and shader use (`xue::zarr::probe_cell`): nearest cell, longitude
-  wrapped onto the grid's origin.
+  wrapped onto the grid's origin. Its `longitude` and `latitude` are the
+  cell's true centre: through the projection on a projected grid, the Gaussian
+  latitude on a Gaussian one.
 - `timezone` is the IANA zone of the requested point (not of the cell: on
   a coarse grid the cell centre can sit across a border from it), looked up
   in the `tzf-rs` polygon index compiled into the Worker. Open sea answers
@@ -149,7 +151,7 @@ and with the run fixed the answer never changes, so it caches for a day.
 |---|---|---|
 | `source` | yes | a Collection id |
 | `run` | yes | the run, spelled as for `/v1/point`; `/v1/sources/{source}` names the live one |
-| `row`, `column` | yes | the cell's indices, 0 at the grid's first latitude and longitude |
+| `row`, `column` | yes | the cell's indices on the bundle's grid, 0 at its first (north-west) cell. On a projected grid they count along the projection's axes, so neither follows a parallel or a meridian |
 | `variables` | no | as for `/v1/point`; a bundle listed twice is read once |
 | `time` | no | as for `/v1/point` |
 
@@ -160,6 +162,10 @@ The response is `/v1/point`'s, with two differences: `request` echoes
   it. A source's bundles usually share a grid; a reduced-resolution variant
   or a wave field may not (`400 grid_mismatch`). Read those separately,
   each with the cell `/v1/point` reports for it.
+- A cell's address belongs to its run's grid, which may change between runs
+  of one source (a model moved from a resampled to its native grid). Keep
+  `run`, `cell.row` and `cell.column` together, and ask `/v1/point` again for
+  a new run.
 - A `run` the prune jobs have deleted answers `404 unknown_run`: ask
   `/v1/point` again for the live run and its cell.
 
