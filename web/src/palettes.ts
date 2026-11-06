@@ -1079,8 +1079,8 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   const { family, level } = identity;
   if (family === "prate") return PRECIPITATION_STOPS;
   if (aerosolChart(family)) {
-    if (family === "pm25") return FINE_PARTICULATE_STOPS;
-    if (family === "pm10" || family === "pm10dust") return COARSE_PARTICULATE_STOPS;
+    if (family === "pm25" || family === "smokesfc" || family === "dustfine") return FINE_PARTICULATE_STOPS;
+    if (family === "pm10" || family === "pm10dust" || family === "dustcoarse") return COARSE_PARTICULATE_STOPS;
     if (family === "dustsfc") return DUST_CONCENTRATION_STOPS;
     return AEROSOL_OPTICAL_DEPTH_STOPS;
   }

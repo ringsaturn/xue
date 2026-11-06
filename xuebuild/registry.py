@@ -234,6 +234,7 @@ def shell_document() -> dict[str, Any]:
             "ocean": list(tables.OCEAN_VARIABLE_IDS + tables.WAVE_PARTITION_IDS),
             "soil": list(tables.SOIL_VARIABLE_IDS),
             "aerosol": list(tables.AEROSOL_VARIABLE_IDS),
+            "smokeDust": list(tables.SMOKE_DUST_VARIABLE_IDS),
             "river": list(tables.RIVER_VARIABLE_IDS),
             "pressure": list(quantize.PRESSURE_VARIABLE_IDS),
         },

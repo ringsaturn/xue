@@ -84,6 +84,7 @@ pub enum Conversion {
     CloudCover,
     DegreesTrue,
     GeopotentialToMetres,
+    MassDensityToMicrograms,
     CodeTable {
         table: String,
     },

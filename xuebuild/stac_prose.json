@@ -227,6 +227,37 @@
         }
       ]
     },
+    "rrfs": {
+      "title": "NOAA RRFS 3 km",
+      "description": "The NOAA Rapid Refresh Forecast System over the contiguous United States with the smoke and dust it carries inline (RRFS-SD), resampled from its 3 km Lambert conformal grid onto a regular 0.03° one, hourly to 84 hours. Four cycles a day; only the newest is kept.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "NOAA / NCEP",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.ncei.noaa.gov/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://www.noaa.gov/information-technology/open-data-dissemination",
+          "type": "text/html",
+          "title": "NOAA open data dissemination"
+        }
+      ]
+    },
     "gefsaero": {
       "title": "NOAA GEFS-Aerosols 0.25°",
       "description": "The aerosol member of the NOAA Global Ensemble Forecast System (GEFS-Aerosols, the GOCART model coupled to the GFS) at 0.25°: aerosol optical depth at 550 nm, in total and by species, and the surface concentrations of fine and coarse particulate matter, three-hourly to 120 hours. Four cycles a day; only the newest is kept.",

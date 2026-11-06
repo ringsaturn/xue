@@ -151,6 +151,13 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     region: [-134.1, 21.12, -60.9, 52.62],
     domain: HRRR_DOMAIN,
   },
+  // NOAA RRFS, over the footprint of HRRR's CONUS grid, hourly to F84 from the
+  // 00/06/12/18Z cycles, with the smoke and dust it carries inline. Its bundles
+  // are on the model's own grid, so nothing needs clipping.
+  rrfs: {
+    railCore: ["tmp2m", "prate", "wind10m", "smokesfc"],
+    region: [-134.1, 21.12, -60.9, 52.62],
+  },
   // DWD ICON-EU, the European nest of ICON at 0.0625°: a regional model
   // already on a regular latitude/longitude grid (1377 × 657 cells, centres
   // 23.5°W–62.5°E, 29.5°N–70.5°N), so the rectangle is the model's own
@@ -528,6 +535,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "ifshres",
   "cfs",
   "hrrr",
+  "rrfs",
   "iconeu",
   "arpege",
   "gefsaero",
@@ -667,6 +675,7 @@ export type KnownBundleId =
   | SatelliteId
   | AerosolId
   | DustId
+  | SmokeDustId
   | HydrologyId
   | PressureBundleId
   | IsobaricScalarBundleId
@@ -732,6 +741,10 @@ type AerosolId = (typeof AEROSOL_IDS)[number];
  * above, but no GEFS-Aerosols field, so outside that set. */
 type DustId = "dustsfc";
 export const DUST_IDS: readonly DustId[] = ["dustsfc"];
+
+/** RRFS-SD's fields, outside the GEFS-Aerosols set for the same reason. */
+export const SMOKE_DUST_IDS = REGISTRY.families.smokeDust;
+type SmokeDustId = (typeof SMOKE_DUST_IDS)[number];
 
 
 /** The hydrology set — EFAS river discharge, the mean over each six-hour
@@ -802,6 +815,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...SATELLITE_IDS,
   ...AEROSOL_IDS,
   ...DUST_IDS,
+  ...SMOKE_DUST_IDS,
   ...HYDROLOGY_IDS,
   "prmsl",
   ...perLevel("hgt"),

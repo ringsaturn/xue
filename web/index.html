@@ -158,6 +158,7 @@
             "isBasedOn": [
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
+              { "@type": "Dataset", "name": "NOAA Rapid Refresh Forecast System (RRFS)", "url": "https://registry.opendata.aws/noaa-rrfs-ops/" },
               { "@type": "Dataset", "name": "Recast WOOF (WRF-ARW nested run at 500 m over Mount Fuji; showcase cases only, no live run)" },
               { "@type": "Dataset", "name": "Copernicus Emergency Management Service EFAS v5 river discharge, forecast and water balance (1 arcmin over Europe; showcase cases only, no live run)", "url": "https://ewds.climate.copernicus.eu/datasets/efas-forecast" },
               { "@type": "Dataset", "name": "Copernicus Climate Change Service ERA5 hourly reanalysis on single levels (0.25° global; showcase cases only, no live run)", "url": "https://doi.org/10.24381/cds.adbb2d47", "license": "https://creativecommons.org/licenses/by/4.0/" },
@@ -204,6 +205,7 @@
               { "@type": "DataDownload", "name": "ECMWF AIFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-aifs.json" },
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
+              { "@type": "DataDownload", "name": "RRFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-rrfs.json" },
               { "@type": "DataDownload", "name": "CFSv2 seasonal live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cfs.json" },
               { "@type": "DataDownload", "name": "DWD ICON-EU live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-iconeu.json" },
               { "@type": "DataDownload", "name": "Météo-France ARPEGE live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-arpege.json" },
@@ -662,6 +664,13 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPm">µ</b>
           <span class="rail-name"><span>PM</span> <small data-i18n="varPm">2.5</small></span>
         </button>
+        <!-- RRFS-SD's near-surface smoke, heading its two dust size cuts:
+             a plume rising off a flame. -->
+        <button type="button" data-variable="smokesfc" data-family="smoke" data-i18n-tip="tipSmoke" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c-3 0-5-2-5-4.5 0-2.2 2-3.4 2.6-5.5 1.6 1 2 2.4 2 3.4 1-.7 1.4-1.8 1.4-2.9 2 1.4 4 3.3 4 5.2C17 20 15 22 12 22z" /><path d="M9 8c-1.5-1.5 1.5-2.5 0-4.5M14.5 9c-1.5-1.5 1.5-3 0-5.5" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphSmoke">S</b>
+          <span class="rail-name"><span>SMOKE</span> <small data-i18n="varSmoke">8 M</small></span>
+        </button>
         <!-- The surface dust concentration of every particle size, the
              CMA-CW-DUST run's own field: a tile beside the particulates,
              not one of their size cuts. Grains blown along the ground. -->
@@ -988,6 +997,11 @@
               <small>CONUS 3 km</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="rrfs" aria-pressed="false">
+              <span class="model-name">RRFS</span>
+              <small>CONUS 3 km, smoke</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <button type="button" data-model="iconeu" aria-pressed="false">
               <span class="model-name">ICON-EU</span>
               <small>DWD Europe 7 km</small>
@@ -1234,6 +1248,13 @@
                 <span class="credits-name">NOAA HRRR</span>
                 <small data-i18n="creditsHrrr">Forecast data: HRRR 3 km, contiguous US</small>
                 <span class="credits-arrow" aria-hidden="true"></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://registry.opendata.aws/noaa-rrfs-ops/" target="_blank" rel="noreferrer">
+                <span class="credits-name">NOAA RRFS</span>
+                <small data-i18n="creditsRrfs">Forecast data: RRFS 3 km with smoke and dust, contiguous US</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
             <li>

@@ -855,7 +855,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "silam"] as const)
+    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "gefsaero", "cmadust", "silam"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
 
@@ -874,7 +874,7 @@ describe("dataset kinds", () => {
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "iconeu", "arpege", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();

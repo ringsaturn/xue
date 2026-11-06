@@ -268,6 +268,20 @@ each frame's wave records, the records before them untouched. GDAL's
 writer leaves the ECMWF soil temperature in kelvin, so no offset is needed
 there.
 
+`rrfs.2026110500.f000.crop.grib2` is a 120 by 120 cell window over the
+Sierra Nevada and the Mojave (120W to 115W, 35N to 38N) of the 2026-11-05
+00:00 UTC analysis of the RRFS CONUS files, the thirty-six records the source
+fetches in `xuebuild/sources.py` order, the `prslev` ones after the `2dfld`
+ones, still on the Lambert conformal grid. The window holds surface smoke to
+139 µg/m³ and optical thickness to 1.2, and the crop reads back the same as the
+source window in every record, so the 10⁻¹⁰ kg/m³ of the dust survive the
+writer. Cut from the frame `fetch._download_noaa_payload` assembled, with:
+
+```sh
+gdal_translate -srcwin 240 480 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+  /tmp/rrfs.f000.grib2 tests/fixtures/rrfs.2026110500.f000.crop.grib2
+```
+
 `gefsaero.2026091900.f000.crop.grib2` and `gefsaero.2026091900.f003.crop.grib2`
 are an 80 by 80 cell window over the Sahara and the Gulf of Guinea
 (`-srcwin 680 240 80 80`: 10W to 10E, 10N to 30N) of the analysis and the

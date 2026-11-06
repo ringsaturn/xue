@@ -103,6 +103,18 @@ composite reflectivity (`cref`). The Lambert conformal model grid
 is resampled onto a regular 0.03° grid (bilinear); the viewer clips to the
 model's footprint.
 
+### NOAA RRFS (`rrfs`)
+
+0.03° contiguous US, hourly to F84 from the 00 / 06 / 12 / 18 UTC cycles,
+complete about 3.5 h after the cycle (the other hourly cycles stop at F18 and
+are not published). HRRR's grid and field set plus 250 hPa height, and the
+smoke and dust the model carries inline (RRFS-SD): near-surface smoke, fine dust
+(under 2.5 µm) and coarse dust (2.5–10 µm), 8 m above the ground in µg/m³
+(`smokesfc`, `dustfine`, `dustcoarse`), and the column optical thickness
+(`aotk`), whose record names no species or wavelength, so it is not `aod`. Its
+sea level pressure is the model's only one, NCEP's Shuell reduction (`MSLET`),
+published as `prmsl`. The viewer clips to the model's footprint.
+
 ### NOAA GEFS-Aerosols (`gefsaero`)
 
 0.25° global, 3-hourly to F120, complete about 6 h after the cycle. Aerosol

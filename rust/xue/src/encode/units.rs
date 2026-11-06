@@ -114,6 +114,7 @@ const DEGREES_TRUE: [&str; 6] = ["degreetrue", "degtrue", "degrees", "degree", "
 // so both come out one way.
 const GEOPOTENTIAL_METRES: [&str; 2] = ["gpm", "m"];
 const GEOPOTENTIAL: [&str; 2] = ["m2/s2", "m2s-2"];
+const MASS_DENSITY: [&str; 4] = ["kg/m^3", "kg/m3", "kgm^-3", "kgm-3"];
 
 /// What a refusal calls the quantity. Mirrors `rules._NOUNS`.
 fn noun(rule: &Conversion) -> Option<&'static str> {
@@ -130,6 +131,7 @@ fn noun(rule: &Conversion) -> Option<&'static str> {
         Conversion::CloudCover => "cloud cover",
         Conversion::DegreesTrue => "direction",
         Conversion::GeopotentialToMetres => "geopotential height",
+        Conversion::MassDensityToMicrograms => "mass density",
         Conversion::CodeTable { .. } => "code table",
     })
 }
@@ -160,6 +162,7 @@ impl Conversion {
             Self::CloudCover => std::iter::once("%").chain(CLOUD_FRACTION).collect(),
             Self::DegreesTrue => DEGREES_TRUE.to_vec(),
             Self::GeopotentialToMetres => GEOPOTENTIAL_METRES.iter().chain(&GEOPOTENTIAL).copied().collect(),
+            Self::MassDensityToMicrograms => MASS_DENSITY.to_vec(),
         })
     }
 
@@ -205,6 +208,7 @@ impl Conversion {
             Self::ProportionToPercent => within(&PROPORTION),
             Self::CloudCover => within(&CLOUD_FRACTION),
             Self::GeopotentialToMetres => within(&GEOPOTENTIAL),
+            Self::MassDensityToMicrograms => within(&MASS_DENSITY),
             _ => false,
         }
     }
@@ -236,6 +240,7 @@ impl Conversion {
             Self::MetreToKilometre => "A/1000".to_string(),
             Self::ProportionToPercent | Self::CloudCover => "A*100".to_string(),
             Self::GeopotentialToMetres => format!("A/{STANDARD_GRAVITY}"),
+            Self::MassDensityToMicrograms => "A*1000000000".to_string(),
             _ => unreachable!("a rule that scales is one of the above"),
         })
     }
@@ -290,6 +295,7 @@ impl Conversion {
                 values.iter_mut().for_each(|value| *value *= 100.0)
             }
             Self::GeopotentialToMetres => values.iter_mut().for_each(|value| *value /= STANDARD_GRAVITY),
+            Self::MassDensityToMicrograms => values.iter_mut().for_each(|value| *value *= 1e9),
             _ => unreachable!("a rule that scales is one of the above"),
         }
         Ok(())
@@ -366,6 +372,9 @@ mod tests {
         assert_eq!(expression(&accumulation, "mm"), "A");
         refused(&accumulation, "in");
 
+        assert_eq!(expression(&Conversion::MassDensityToMicrograms, "[kg/(m^3)]"), "A*1000000000");
+        refused(&Conversion::MassDensityToMicrograms, "10^-6g/m^3");
+        assert_eq!(converted(&Conversion::MassDensityToMicrograms, "kg/(m^3)", &[2.5e-8]), [2.5e-8 * 1e9]);
         assert_eq!(expression(&Conversion::PascalToHectopascal, "[Pa]"), "A/100");
         refused(&Conversion::PascalToHectopascal, "hPa");
         // A series already in the published unit is left as it is.
