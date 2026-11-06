@@ -2269,7 +2269,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xue"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "xue-py"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
  "numpy",
  "pyo3",
