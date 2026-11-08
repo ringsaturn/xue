@@ -71,17 +71,3 @@ context = ["shapely>=2"]
 indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
 # Staging the CAMEL emissivity months the dust confidence reads (xuebuild/satellite/staging.py): earthaccess behind shachen[data].
 staging = ["shachen[data]>=0.4.0", "xarray>=2025.1", "netcdf4>=1.7"]
-
-# xuepy resolves from the repository's own index alone: the wheels attached to
-# the GitHub releases, indexed on GitHub Pages (docs/contribution/releasing.md,
-# "The own index"). Every other dependency still comes from PyPI. `uv sync`
-# reads the wheel URLs from uv.lock and never asks the index; only a relock
-# does, and the release workflow runs that once the index lists the version.
-
-[[tool.uv.index]]
-name = "xuepy-index"
-url = "https://ringsaturn.github.io/xue/simple"
-explicit = true
-
-[tool.uv.sources]
-xuepy = { index = "xuepy-index" }

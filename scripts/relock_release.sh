@@ -7,14 +7,14 @@
 #
 # Run it from a checkout whose remote branches and tags are fetched. It finds
 # the branch holding the tag (`release/*`, else `main` once that branch is
-# gone), waits until the own index lists the version's wheels, raises the
+# gone), waits until PyPI lists the version's wheels, raises the
 # floor in pyproject.toml to the version's minor series, relocks xuepy, checks
 # that the lock holds exactly that version, and commits and pushes. A lock
 # that already holds the version behind the right floor is left alone (exit
 # 0, no commit, and no `uv lock`: a newer uv rewrites the lock's `revision`
 # line, which must not become a relock commit of its own on a re-run).
 #
-# Knobs: REMOTE (origin), XUEPY_INDEX (the Pages index), ATTEMPTS × SLEEP
+# Knobs: REMOTE (origin), XUEPY_INDEX (PyPI's simple API), ATTEMPTS × SLEEP
 # seconds for the index poll (40 × 30). With GITHUB_OUTPUT set it writes
 # `branch=` and `relocked=` for the workflow.
 set -euo pipefail
@@ -26,7 +26,7 @@ major="${BASH_REMATCH[1]}"
 minor="${BASH_REMATCH[2]}"
 floor="xuepy>=${major}.${minor},<${major}.$((minor + 1))"
 remote="${REMOTE:-origin}"
-index="${XUEPY_INDEX:-https://ringsaturn.github.io/xue/simple}"
+index="${XUEPY_INDEX:-https://pypi.org/simple}"
 output="${GITHUB_OUTPUT:-/dev/null}"
 
 git rev-parse -q --verify "refs/tags/${tag}^{commit}" >/dev/null || { echo "tag ${tag} is not fetched" >&2; exit 1; }
@@ -58,7 +58,8 @@ if grep -qF "\"${floor}\"" pyproject.toml && [ "$(locked_version)" = "$version" 
   exit 0
 fi
 
-# The index is rendered by a Pages deploy that the CSV job only dispatches.
+# release-xuepy.yml finishes once PyPI accepted the upload, but the simple
+# page is served through a CDN and can lag behind it.
 found=""
 for attempt in $(seq 1 "${ATTEMPTS:-40}"); do
   # Read the page whole: `curl | grep -q` lets grep close the pipe on the
