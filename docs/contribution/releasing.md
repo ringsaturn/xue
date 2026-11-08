@@ -54,9 +54,9 @@ already installed (see "Why the floor tracks the current release").
    Both authenticate with Trusted Publishing (OIDC), so no token is stored.
    No sdist is published, because a source build needs GDAL, libclang and
    cmake.
-4. **Relock commit**, made by CI. When `release-xuepy.yml` has attached
-   the wheels, [`release-wheels-csv.yml`](../../.github/workflows/release-wheels-csv.yml)
-   records them, redeploys the index and, once it lists the version, runs
+4. **Relock commit**, made by CI. When `release-xuepy.yml` has published
+   the wheels, [`release-relock.yml`](../../.github/workflows/release-relock.yml)
+   waits until PyPI's simple index lists the version, then runs
    [`scripts/relock_release.sh v0.N.0`](../../scripts/relock_release.sh)
    on the branch that holds the tag: the floor in `pyproject.toml` becomes
    `"xuepy>=0.N,<0.N+1"`, `uv lock --refresh-package xuepy` runs, the lock
@@ -68,12 +68,9 @@ already installed (see "Why the floor tracks the current release").
    (`dry_run` shows the commit without pushing).
 5. **Merge into `main`** with a fast-forward, so the change, the release
    commit and the relock land on `main` together and keep their history.
-   The CSV commit of "The own index" is already on `main`, so the branch is
-   rebased onto it first; the tag stays on the published release commit. A
-   rebase that adds only that CSV changes nothing the relocked branch's
-   test run covered, so the result goes straight to `main`, whose own run
-   then tests the published wheel. If it adds anything else, push the
-   branch and wait for its tests. Then delete the branch.
+   If `main` moved on meanwhile, rebase the branch onto it first (the tag
+   stays on the published release commit), push it and wait for its
+   tests. Then delete the branch.
 
 A manual dispatch of either workflow is a rehearsal: `cargo publish
 --dry-run`, or wheels uploaded as workflow artifacts only.
@@ -118,53 +115,12 @@ MRMS) resolve the encoder at job time with `native.knows_source`, which
 hands the wheel the document and reads its answer, and fall back to the
 reference pipeline with a warning.
 
-## The own index
+## Where xuebuild gets the wheel
 
-PyPI is the public channel for `xuepy`. The repository's own builds take
-the wheel from its own [PEP 503](https://peps.python.org/pep-0503/) index
-of the wheels attached to its GitHub releases:
-<https://ringsaturn.github.io/xue/simple/>. Each link points at the
-release asset with its `sha256`, and these are the files PyPI received, so
-both indexes resolve to the same hashes. The index starts at `v0.3.0`, the
-first release that carries wheels.
-
-`pyproject.toml` pins `xuepy` to this index (`[[tool.uv.index]]` with
-`explicit = true` and `[tool.uv.sources]`); every other dependency still
-comes from PyPI. `uv sync` reads the wheel URLs and hashes from `uv.lock`
-and never asks the index, so a Pages outage stalls only a relock.
-
-How it stays current:
-
-1. `release-xuepy.yml` attaches the wheels to the release.
-2. When it finishes, [`release-wheels-csv.yml`](../../.github/workflows/release-wheels-csv.yml)
-   runs `scripts/build_simple_index.py`, which records the new assets in
-   [`.github/release_wheels.csv`](../../.github/release_wheels.csv) (only
-   those uploaded by `github-actions[bot]`), commits the file to `main`
-   and dispatches `docs-rust.yml`.
-3. [`docs-rust.yml`](../../.github/workflows/docs-rust.yml) renders the
-   index from the CSV alone into `simple/` beside the rustdoc preview and
-   deploys both. A GitHub Pages deployment replaces the whole site, so this
-   one workflow owns every path on it. The site carries HTML only, never a
-   wheel; the build refuses an artifact that holds one.
-4. The `relock` job of `release-wheels-csv.yml` waits for the index to
-   list the version and makes the relock commit on the release branch
-   ("The flow", step 4).
-
-A dispatch of `release-wheels-csv.yml` refreshes the CSV by hand; with
-`relock_tag` it also relocks the branch holding that tag (`dry_run` only
-shows the commit). To rebuild the CSV from every release, run the script
-with the workflow's arguments plus `--full-fetch` and commit the result.
-
-To install from it:
-
-```sh
-uv pip install xuepy \
-  --index-url https://ringsaturn.github.io/xue/simple/ \
-  --extra-index-url https://pypi.org/simple
-```
-
-PyPI stays required for anyone installing `xuepy` without this index, so
-every `v*` tag still publishes there.
+`xuepy` comes from PyPI like every other dependency, and `uv.lock` holds
+its `files.pythonhosted.org` URLs and hashes. The wheels attached to the
+GitHub release are the same files, kept as a record of the release; no
+build downloads them.
 
 ## Deploy order
 

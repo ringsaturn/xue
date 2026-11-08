@@ -1,0 +1,77 @@
+name: release-relock
+
+# Makes a release's last commit (docs/contribution/releasing.md, "The flow",
+# step 4) on the branch that holds the tag once PyPI lists the wheels: floor
+# raised, xuepy relocked, pushed, and test.yml dispatched on it (a push with
+# the workflow token starts no workflow by itself). What is left for a person
+# is the fast-forward into main.
+#
+# Trigger: release-xuepy.yml finishing, which follows the PyPI upload. A
+# dispatch with relock_tag relocks by hand.
+
+on:
+  workflow_run:
+    workflows: [release-xuepy]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      relock_tag:
+        description: "Relock the branch holding this release tag (vX.Y.Z)"
+        type: string
+        required: true
+      dry_run:
+        description: "Relock without pushing: show the commit only"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  relock:
+    # A dispatch of release-xuepy.yml (workflow artifacts only) publishes
+    # nothing, and a fork has no release to relock on.
+    if: >-
+      github.repository == 'ringsaturn/xue' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push the relock commit to the release branch
+      actions: write # dispatch test.yml on it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every branch and tag: the script looks for the branch holding the tag.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # No cache: a branch that is already relocked never runs uv, and the
+      # action's post step fails on a cache directory that was never made.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: false
+
+      # For a tag push, the triggering run's head_branch is the tag.
+      - name: Relock on the published wheel
+        id: relock
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/relock_release.sh "${TAG}"
+        env:
+          TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.relock_tag }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+
+      - name: Test the relocked branch
+        if: steps.relock.outputs.relocked == '1'
+        run: gh workflow run test.yml --ref "${BRANCH}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.relock.outputs.branch }}

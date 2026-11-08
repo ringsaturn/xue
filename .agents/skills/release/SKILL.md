@@ -47,12 +47,12 @@ scheduled publishes do not fail during the release window.
 4. **Wait for the publish**: `gh run list --workflow release-xuepy.yml`,
    `gh run watch <id>`, and the same for `release-crate.yml`. Do not
    continue on a red run.
-5. **Wait for the relock**, which CI makes: `release-wheels-csv.yml` runs
-   when `release-xuepy.yml` finishes, records the wheels, redeploys the
-   index and pushes `chore: relock on the published xuepy 0.N.0` to
-   `release/0.N`, then dispatches `test.yml` on the branch. Watch both:
+5. **Wait for the relock**, which CI makes: `release-relock.yml` runs
+   when `release-xuepy.yml` finishes, waits until PyPI lists the wheels,
+   pushes `chore: relock on the published xuepy 0.N.0` to `release/0.N`,
+   then dispatches `test.yml` on the branch. Watch both:
    ```sh
-   gh run list --workflow release-wheels-csv.yml
+   gh run list --workflow release-relock.yml
    gh run list --workflow test.yml --branch release/0.N
    git pull   # the relock commit
    ```
@@ -60,24 +60,14 @@ scheduled publishes do not fail during the release window.
    with `relock_tag=v0.N.0` or run `scripts/relock_release.sh v0.N.0` from
    a fetched checkout. Never write the relock commit by hand while the job
    may still push one.
-6. **Merge into `main`** as a fast-forward, which keeps the history. CI has
-   already committed the wheel CSV to `main` (step 5), so rebase first; the
-   tag stays on the published release commit:
+6. **Merge into `main`** as a fast-forward, which keeps the history:
    ```sh
-   git fetch origin
-   tested=$(git rev-parse HEAD)   # the relocked head whose test run passed
-   git rebase origin/main
-   git diff --name-only "$tested" HEAD
-   ```
-   If that names only `.github/release_wheels.csv`, publish it directly. It
-   needs no re-test, and `main`'s own run tests the published wheel:
-   ```sh
-   git push origin HEAD:main
-   git checkout main && git pull --ff-only
+   git checkout main && git merge --ff-only release/0.N && git push origin main
    git branch -d release/0.N && git push origin --delete release/0.N
    ```
-   If it names anything else, push the branch with `--force-with-lease`, wait
-   for `test.yml`, and then do the same.
+   If `main` moved on in the meantime, rebase the branch onto `main` first
+   (the tag stays on the published release commit), push it with
+   `--force-with-lease`, wait for `test.yml`, then fast-forward.
 
 ## Rules
 
