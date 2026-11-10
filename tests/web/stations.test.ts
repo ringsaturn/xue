@@ -346,7 +346,7 @@ describe("reading one station by range", () => {
   const soundingLoaded: LoadedSoundingIndex = {
     pointer: parseSoundingPointer(soundingPointerJson),
     index: soundingIndex,
-    indexUrl: "https://data.test/sounding.2026091402/index.json?v=07fa0918",
+    indexUrl: "https://data.test/sounding.2026091402/index.json?v=0db6434a",
   };
   const airportLoaded: LoadedAirportIndex = {
     pointer: parseAirportPointer(airportPointerJson),

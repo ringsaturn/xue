@@ -60,14 +60,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=07fa0918",
+   "href": "index.json?v=0db6434a",
    "type": "application/json",
    "title": "sounding index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 5920,
-   "xue:crc32": "07fa0918",
-   "file:checksum": "b2020407fa0918"
+   "file:size": 5933,
+   "xue:crc32": "0db6434a",
+   "file:checksum": "b202040db6434a"
   },
   "soundings": {
    "href": "soundings.jsonl?v=06902ee6",
