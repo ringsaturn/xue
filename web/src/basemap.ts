@@ -134,6 +134,16 @@ const RIVER_WIDTH: NonNullable<NonNullable<LineLayer["paint"]>["line-width"]> = 
  * boundaries and the place labels legible above the data. */
 export const FORECAST_ANCHOR_LAYER = COASTLINE_LAYER;
 
+/** The relief drawn a second time, over the filled fields and under their
+ * lines: an opaque fill (the 2 m temperature) would otherwise bury the
+ * hillshade beneath it. The fills go in under this layer, everything else
+ * under the coastline above it. */
+export const RELIEF_OVER_FIELDS_LAYER = "hillshade_over_fields";
+
+/** Where a filled field (the fill slot, its mosaic members, the derived
+ * tints) is inserted: under the relief that shades it. */
+export const FIELD_ANCHOR_LAYER = RELIEF_OVER_FIELDS_LAYER;
+
 // A Protomaps key is bound to the origins it serves, so a page that builds
 // this shell on its own host brings its own (`VITE_PROTOMAPS_KEY`).
 const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY || "249bb192fefe0a77";
@@ -188,6 +198,40 @@ export function hillshadePaint(darkGround: boolean): HillshadePaint {
   return HILLSHADE_INK[darkGround ? "dark" : "light"];
 }
 
+/** The relief's ink over the fields. Neutral rather than the ground's hue,
+ * since it lands on the palette's colors and not on the land, and lighter
+ * than the ground's, so a value keeps its color on a slope. */
+const HILLSHADE_OVER_FIELDS_INK: Record<"light" | "dark", HillshadePaint> = {
+  light: {
+    "hillshade-shadow-color": "rgba(30, 24, 16, 0.38)",
+    "hillshade-highlight-color": "rgba(255, 255, 255, 0.3)",
+    "hillshade-accent-color": "rgba(30, 24, 16, 0.18)",
+    "hillshade-exaggeration": 0.35,
+  },
+  dark: {
+    "hillshade-shadow-color": "rgba(0, 0, 0, 0.45)",
+    "hillshade-highlight-color": "rgba(255, 255, 255, 0.22)",
+    "hillshade-accent-color": "rgba(0, 0, 0, 0.2)",
+    "hillshade-exaggeration": 0.3,
+  },
+};
+
+export function hillshadeOverFieldsPaint(darkGround: boolean): HillshadePaint {
+  return HILLSHADE_OVER_FIELDS_INK[darkGround ? "dark" : "light"];
+}
+
+/** Which of the two relief layers draws. On the flat map the one over the
+ * fields does, and the one under them steps aside so a translucent field
+ * (clear air in a rain map) is not shaded twice. Over the 3D relief the
+ * field shader shades itself (layer.ts `surfaceShade`), so the ground's own
+ * hillshade comes back and the one over the fields goes. */
+export function syncReliefLayers(map: MaplibreMap): void {
+  const draped = map.getTerrain() !== null;
+  if (map.getLayer(TERRAIN_LAYER)) map.setLayoutProperty(TERRAIN_LAYER, "visibility", draped ? "visible" : "none");
+  if (map.getLayer(RELIEF_OVER_FIELDS_LAYER))
+    map.setLayoutProperty(RELIEF_OVER_FIELDS_LAYER, "visibility", draped ? "none" : "visible");
+}
+
 export function buildBasemapStyle(): BasemapStyle {
   const theme = currentBasemapTheme();
   const darkGround = luminance(theme.ocean) < 0.5;
@@ -234,13 +278,16 @@ export function buildBasemapStyle(): BasemapStyle {
     // Basemap labels follow the UI locale.
     layers: withoutHiddenLayers(
       withRivers(
-        withCoastline(
-          withHillshade(
-            quietedUnderData(
-              basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+        withReliefOverFields(
+          withCoastline(
+            withHillshade(
+              quietedUnderData(
+                basemapLayers("protomaps", flavor, { lang: basemapLang }).filter((layer) => layer.id !== "landcover"),
+              ),
+              hillshadePaint(darkGround),
             ),
-            hillshadePaint(darkGround),
           ),
+          hillshadeOverFieldsPaint(darkGround),
         ),
       ),
       BASEMAP_HIDDEN,
@@ -332,6 +379,20 @@ function withCoastline(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
   const at = layers.findIndex((layer) => layer.id === "boundaries_country");
   if (at < 0) throw new Error("basemap style has no boundaries_country layer");
   return [...layers.slice(0, at), coastline, ...layers.slice(at)];
+}
+
+/** The relief over the fields, just under the coastline: the fills insert
+ * under it, the lines and particles over it. */
+function withReliefOverFields(layers: BasemapStyle["layers"], paint: HillshadePaint): BasemapStyle["layers"] {
+  const relief: BasemapStyle["layers"][number] = {
+    id: RELIEF_OVER_FIELDS_LAYER,
+    type: "hillshade",
+    source: TERRAIN_SOURCE,
+    paint,
+  };
+  const at = layers.findIndex((layer) => layer.id === COASTLINE_LAYER);
+  if (at < 0) throw new Error("basemap style has no coastline layer");
+  return [...layers.slice(0, at), relief, ...layers.slice(at)];
 }
 
 /** The rivers moved just over the coastline, which is where the fields stop,

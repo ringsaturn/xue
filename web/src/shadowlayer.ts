@@ -71,6 +71,8 @@ export interface TerrainShadowOptions {
   map: MaplibreMap;
   /** The hillshade layer the shadows sit directly above and relight. */
   hillshadeLayer: string;
+  /** Further hillshade layers relit with it (the relief over the fields). */
+  litLayers?: readonly string[];
   /** Whether the basemap's ground is a dark one, read at use. */
   darkGround: () => boolean;
   /** The switch changed (the address bar and the view tile follow). */
@@ -256,9 +258,12 @@ export class TerrainShadows {
     this.light = light;
     // Typed per property in the spec; the values are plain numbers either way.
     const set = map.setPaintProperty.bind(map) as (id: string, name: string, value: unknown) => void;
-    set(layer, "hillshade-illumination-direction", azimuth ?? undefined);
-    set(layer, "hillshade-illumination-altitude", altitude ?? undefined);
-    set(layer, "hillshade-illumination-anchor", azimuth === null ? undefined : "map");
+    for (const id of [layer, ...(this.options.litLayers ?? [])]) {
+      if (!map.getLayer(id)) continue;
+      set(id, "hillshade-illumination-direction", azimuth ?? undefined);
+      set(id, "hillshade-illumination-altitude", altitude ?? undefined);
+      set(id, "hillshade-illumination-anchor", azimuth === null ? undefined : "map");
+    }
   }
 
 }

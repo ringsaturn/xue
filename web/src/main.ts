@@ -242,7 +242,7 @@ import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId } from "./derived";
 import { createExportSheet } from "./exportsheet";
-import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, COASTLINE_LAYER, RIVER_LAYER, FORECAST_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
+import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, hillshadeOverFieldsPaint, RELIEF_OVER_FIELDS_LAYER, syncReliefLayers, COASTLINE_LAYER, RIVER_LAYER, FORECAST_ANCHOR_LAYER, FIELD_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
 import { createStats } from "./stats";
 import { createOverlays } from "./overlays";
 import { createContourLabels } from "./contourlabels";
@@ -627,6 +627,11 @@ function applyBasemapTheme(): void {
       map.setPaintProperty(TERRAIN_LAYER, name as PaintName, value as PaintValue);
     }
   }
+  if (map.getLayer(RELIEF_OVER_FIELDS_LAYER)) {
+    for (const [name, value] of Object.entries(hillshadeOverFieldsPaint(darkGround))) {
+      map.setPaintProperty(RELIEF_OVER_FIELDS_LAYER, name as PaintName, value as PaintValue);
+    }
+  }
   terrainShadows?.setDarkGround(darkGround);
   applyBasemapInk(darkGround);
   marksControl.tcLayers?.setInk(darkGround);
@@ -702,6 +707,7 @@ function startTerrainShadows(): void {
   const shadows = new TerrainShadows({
     map,
     hillshadeLayer: TERRAIN_LAYER,
+    litLayers: [RELIEF_OVER_FIELDS_LAYER],
     darkGround: () => document.body.dataset.ground === "dark",
     onChange: syncUrl,
   });
@@ -4008,7 +4014,7 @@ function syncGibs(): void {
   if (!mapStyleReady || (layer === null && gibsImagery === null)) return;
   gibsImagery ??= new GibsImagery(map);
   const fill = slots.fill.layer.id;
-  const before = map.getLayer(fill) ? fill : map.getLayer(FORECAST_ANCHOR_LAYER) ? FORECAST_ANCHOR_LAYER : undefined;
+  const before = map.getLayer(fill) ? fill : map.getLayer(FIELD_ANCHOR_LAYER) ? FIELD_ANCHOR_LAYER : undefined;
   const date = gibsDate(stationTime(), Date.now());
   gibsImagery.show(layer && gibsLayerOnDay(layer, date, activeCase?.imagery?.days), date, before);
 }
@@ -4957,29 +4963,30 @@ fireTile.addEventListener("click", () => toggleStationProduct("fire"));
 aqTile.addEventListener("click", () => toggleStationProduct("aq"));
 alertsTile.addEventListener("click", () => toggleStationProduct("alerts"));
 
-/** Add the slot layers to the map on first use, fill under lines, both under
+/** Add the slot layers to the map on first use, fill under the relief over
+ * the fields, lines over it, both under
  * the basemap's boundaries and names; the particles, created later, go over
  * both. Grid configuration is the caller's business — poster and bundle
  * planes use different grids. */
 function ensureLayers(): void {
   if (layersAdded) return;
-  map.addLayer(slots.fill.layer, FORECAST_ANCHOR_LAYER);
+  map.addLayer(slots.fill.layer, FIELD_ANCHOR_LAYER);
   // The derived fields sit over the fill and under the lines: a tint over
   // the rain, the isobars over both.
   if (composite) {
     for (const derived of Object.values(composite.layers)) {
       derived.layer.setVisible(false);
-      map.addLayer(derived.layer, FORECAST_ANCHOR_LAYER);
+      map.addLayer(derived.layer, FIELD_ANCHOR_LAYER);
     }
   }
   precipPhase.frostLayer.setVisible(false);
-  map.addLayer(precipPhase.frostLayer, FORECAST_ANCHOR_LAYER);
+  map.addLayer(precipPhase.frostLayer, FIELD_ANCHOR_LAYER);
   map.addLayer(slots.lines.layer, FORECAST_ANCHOR_LAYER);
   layersAdded = true;
-  // Member slots made before the layers were: under the lines, like every
+  // Member slots made before the layers were: under the relief, like every
   // one made after.
   for (const member of mosaic?.members ?? []) {
-    if (member.slot && !map.getLayer(member.slot.layer.id)) map.addLayer(member.slot.layer, slots.lines.layer.id);
+    if (member.slot && !map.getLayer(member.slot.layer.id)) map.addLayer(member.slot.layer, FIELD_ANCHOR_LAYER);
   }
   // The session may have been presented before there was a map to draw on.
   applyPrecipPhase();
@@ -5541,7 +5548,8 @@ function resetMosaic(): void {
 }
 
 /** The member slot for a non-primary member, made on first use and put on
- * the map under the lines, so a chart drawn over the mosaic stays on top. */
+ * the map with the fill, under the relief and the lines, so a chart drawn
+ * over the mosaic stays on top. */
 function ensureMemberSlot(member: MosaicMember): RasterSlot {
   if (member.slot) return member.slot;
   const slot = makeSlot("member", `member-${member.id}`);
@@ -5549,7 +5557,7 @@ function ensureMemberSlot(member: MosaicMember): RasterSlot {
   slot.band = member.band;
   slot.layer.setBand(member.band);
   member.slot = slot;
-  if (layersAdded) map.addLayer(slot.layer, slots.lines.layer.id);
+  if (layersAdded) map.addLayer(slot.layer, FIELD_ANCHOR_LAYER);
   return slot;
 }
 
@@ -6990,6 +6998,8 @@ map.once("load", () => {
   // into nothing; the sync is a no-op otherwise, and applies the ground.
   syncBasemapStyle();
   applySceneFromUrl();
+  syncReliefLayers(map);
+  map.on("terrain", () => syncReliefLayers(map));
   startTerrainShadows();
   startTerrainContours();
   syncGibs();
