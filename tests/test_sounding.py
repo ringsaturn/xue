@@ -20,15 +20,23 @@ import numpy as np
 from tests._support import FIXTURES
 from xuebuild.errors import DownloadError, SoundingProductError
 from xuebuild.sounding import bufr, derive
-from xuebuild.sounding.build import KEEP_TIMES, build_product, merge_soundings
+from xuebuild.sounding.build import KEEP_TIMES, _ascent_messages, build_product, merge_soundings
 from xuebuild.sounding.fetch import (
     BUCKET_BASE_URL,
+    DEFAULT_SOURCES,
     GATEWAY_PREFIX,
+    NATIVE_PREFIX,
     SOURCE_IDS,
     RemoteObject,
     fetch_gateway,
+    fetch_sources,
+    fetched_sources,
+    issue_raw_directory,
+    list_centres,
     list_objects,
     objects_to_fetch,
+    read_fetch_record,
+    source_directory,
 )
 from xuebuild.sounding.schema import (
     build_pointer,
@@ -688,6 +696,195 @@ class ListingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             with self.assertRaises(SoundingProductError):
                 fetch_gateway("somewhere-else", Path(scratch), watermark=None)
+
+
+def bufr_message(descriptors: tuple[int, ...], *, edition: int = 4, optional: bool = False) -> bytes:
+    """A BUFR message with nothing in it but its framing and Section 3's
+    descriptors — enough for the template reader, which reads no data."""
+    flag_offset = 9 if edition == 4 else 7
+    section1 = bytearray(22 if edition == 4 else 18)
+    section1[0:3] = len(section1).to_bytes(3, "big")
+    section1[flag_offset] = 0x80 if optional else 0
+    section2 = (6).to_bytes(3, "big") + bytes(3) if optional else b""
+    body = b"".join(
+        ((descriptor // 100000) << 14 | ((descriptor // 1000) % 100) << 8 | descriptor % 1000).to_bytes(2, "big")
+        for descriptor in descriptors
+    )
+    section3 = (7 + len(body)).to_bytes(3, "big") + b"\x00" + (1).to_bytes(2, "big") + b"\x80" + body
+    section4 = (4).to_bytes(3, "big") + b"\x00"
+    rest = bytes(section1) + section2 + section3 + section4 + b"7777"
+    return b"BUFR" + (8 + len(rest)).to_bytes(3, "big") + bytes([edition]) + rest
+
+
+class NativeNodeTests(unittest.TestCase):
+    """The national WIS2 nodes: discovery, the per-node fetch, the nominal
+    time from a subset's own clock, and the descent filter."""
+
+    def listing(self, keys: list[tuple[str, str, int]] = (), prefixes: list[str] = ()) -> bytes:  # type: ignore[assignment]
+        rows = "".join(
+            f"<Contents><Key>{key}</Key><LastModified>{modified}</LastModified><Size>{size}</Size></Contents>"
+            for key, modified, size in keys
+        )
+        common = "".join(f"<CommonPrefixes><Prefix>{prefix}</Prefix></CommonPrefixes>" for prefix in prefixes)
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+            f"<Name>wis2globalcache</Name><IsTruncated>false</IsTruncated>{rows}{common}"
+            "</ListBucketResult>"
+        ).encode("utf-8")
+
+    def test_the_default_sources_add_the_node_discovery(self) -> None:
+        self.assertEqual(DEFAULT_SOURCES, (*SOURCE_IDS, "wis2"))
+
+    def test_a_node_sits_under_the_selector_directory(self) -> None:
+        root = Path("/raw/sounding.2026111006")
+        self.assertEqual(source_directory(root, "wis2:fr-meteofrance"), root / "wis2" / "fr-meteofrance")
+        self.assertEqual(source_directory(root, GATEWAY), root / GATEWAY)
+
+    def test_discovery_skips_the_gateways_and_the_catalogues(self) -> None:
+        page = self.listing(
+            prefixes=[
+                "data/br-inmet/",
+                "data/de-dwd-gts-to-wis2/",
+                "data/de-dwd-global-discovery-catalogue/",
+                "data/fr-meteofrance/",
+                "data/Not_A_Node/",
+            ]
+        )
+        requested: list[str] = []
+
+        def get(url: str) -> bytes:
+            requested.append(url)
+            return page
+
+        self.assertEqual(list_centres(get=get), ["br-inmet", "fr-meteofrance"])
+        self.assertIn("delimiter=%2F", requested[0])
+
+    def test_the_clock_files_a_subset_on_its_synoptic_hour(self) -> None:
+        def clock(day: int, hour: int, minute: int) -> dict[str, object]:
+            return {"year": 2026, "month": 11, "day": day, "hour": hour, "minute": minute}
+
+        self.assertEqual(bufr.nominal_from_clock(clock(9, 23, 15)), utc(2026, 11, 10, 0))
+        self.assertEqual(bufr.nominal_from_clock(clock(10, 1, 11)), utc(2026, 11, 10, 0))
+        self.assertEqual(bufr.nominal_from_clock(clock(10, 0, 0)), utc(2026, 11, 10, 0))
+        self.assertEqual(bufr.nominal_from_clock(clock(10, 11, 40)), utc(2026, 11, 10, 12))
+        self.assertEqual(bufr.nominal_from_clock(clock(10, 5, 15)), utc(2026, 11, 10, 6))
+        self.assertEqual(bufr.nominal_from_clock(clock(30, 22, 0)), utc(2026, 12, 1, 0))
+        self.assertIsNone(bufr.nominal_from_clock({"year": 2026, "month": 11, "day": 10, "hour": 1}))
+
+    def test_a_node_name_carries_no_nominal_time(self) -> None:
+        name = bufr.native_name("WIGOS_0-20000-0-82022_20261104T233000.bufr4", utc(2026, 11, 5, 2, 48, 9))
+        self.assertIsNone(name.nominal)
+        self.assertEqual(name.header, "WIGOS_0-20000-0-82022_20261104T233000.bufr4")
+        self.assertEqual(name.arrived, utc(2026, 11, 5, 2, 48, 9))
+
+    def test_the_template_is_read_off_section_3(self) -> None:
+        self.assertEqual(bufr.unexpanded_descriptors(bufr_message((301150, 309052))), (301150, 309052))
+        self.assertEqual(
+            bufr.unexpanded_descriptors(bufr_message((309057,), edition=3, optional=True)), (309057,)
+        )
+        self.assertIsNone(bufr.unexpanded_descriptors(b"BUFR\x00\x00\x08\x02"))
+        self.assertTrue(bufr.is_descent(bufr_message((301150, 309056))))
+        self.assertFalse(bufr.is_descent(bufr_message((301150, 309052))))
+
+    def test_messages_are_split_by_their_own_length(self) -> None:
+        ascent, descent = bufr_message((309052,)), bufr_message((309056,))
+        self.assertEqual(bufr.split_messages(b"\x01\r\r\n" + ascent + b"\r\r\n" + descent), [ascent, descent])
+
+    def test_descents_are_left_out_of_the_decode(self) -> None:
+        ascent, descent = bufr_message((309052,)), bufr_message((309056,))
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / "object.bufr4"
+            path.write_bytes(ascent)
+            self.assertEqual(_ascent_messages(path), path)
+            path.write_bytes(descent)
+            self.assertIsNone(_ascent_messages(path))
+            path.write_bytes(descent + ascent)
+            kept = _ascent_messages(path)
+            assert kept is not None
+            self.assertNotEqual(kept, path)
+            self.assertEqual(kept.read_bytes(), ascent)
+
+    def bucket(self, *, discovery_fails: bool = False):
+        """Three nodes: one with a TEMP topic, one whose topic is empty, and
+        a gateway the discovery must not take for a node."""
+        prefix = NATIVE_PREFIX.format(centre="fr-meteofrance")
+        objects = [
+            (f"{prefix}WIGOS_0-20000-0-07110_20261110T014000.bufr4", "2026-11-10T01:41:00.000Z", 40),
+            (f"{prefix}WIGOS_0-20000-0-07145_20261110T004600.bufr4", "2026-11-10T00:47:00.000Z", 30),
+            (f"{prefix}WIGOS_0-20000-0-07145_20261106T004600.bufr4", "2026-11-06T00:47:00.000Z", 30),
+        ]
+        bodies = {key: b"x" * size for key, _, size in objects}
+        requested: list[str] = []
+
+        def get(url: str) -> bytes:
+            requested.append(url)
+            if "list-type=2" in url:
+                if "prefix=data%2F&" in url or url.endswith("prefix=data%2F"):
+                    if discovery_fails:
+                        raise DownloadError("HTTP Error 503: Service Unavailable")
+                    return self.listing(
+                        prefixes=["data/fr-meteofrance/", "data/kr-kma/", "data/jp-jma-gts-to-wis2/"]
+                    )
+                if "fr-meteofrance" in url:
+                    return self.listing(objects)
+                return self.listing()
+            key = url[len(BUCKET_BASE_URL) :].replace("%2F", "/")
+            return bodies[key]
+
+        return get, requested
+
+    def test_the_selector_fetches_each_node_with_a_topic(self) -> None:
+        get, requested = self.bucket()
+        issue = utc(2026, 11, 10, 2)
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch)
+            results = fetch_sources(raw, issue, ("wis2",), now=utc(2026, 11, 10, 2, 15), get=get)
+            self.assertEqual(list(results), ["wis2:fr-meteofrance"])
+            result = results["wis2:fr-meteofrance"]
+            # A node with no watermark is taken back 48 hours, not to the
+            # start of its topic.
+            self.assertEqual(
+                sorted(result.files),
+                ["WIGOS_0-20000-0-07110_20261110T014000.bufr4", "WIGOS_0-20000-0-07145_20261110T004600.bufr4"],
+            )
+            self.assertEqual(result.arrived["WIGOS_0-20000-0-07110_20261110T014000.bufr4"], "2026-11-10T01:41:00Z")
+            root = issue_raw_directory(raw, issue)
+            self.assertTrue((root / "wis2" / "fr-meteofrance" / "fetch.json").is_file())
+            self.assertFalse((root / "wis2" / "kr-kma").exists())
+            self.assertFalse((root / "wis2" / "fetch.json").exists())
+            self.assertFalse(any("jp-jma-gts-to-wis2" in url for url in requested[1:]))
+            self.assertEqual(fetched_sources(root, DEFAULT_SOURCES), (*SOURCE_IDS, "wis2:fr-meteofrance"))
+            record = read_fetch_record(root, "wis2:fr-meteofrance")
+            assert record is not None
+            self.assertEqual(record.arrived, result.arrived)
+            self.assertNotIn("arrived", record.status.to_json())
+
+    def test_a_failed_discovery_is_recorded_under_the_selector(self) -> None:
+        get, _ = self.bucket(discovery_fails=True)
+        issue = utc(2026, 11, 10, 2)
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch)
+            results = fetch_sources(raw, issue, ("wis2",), now=utc(2026, 11, 10, 2, 15), get=get)
+            self.assertFalse(results["wis2"].status.ok)
+            self.assertIn("discovery", results["wis2"].status.error or "")
+            root = issue_raw_directory(raw, issue)
+            self.assertEqual(fetched_sources(root, ("wis2",)), ("wis2",))
+
+    def test_a_node_without_a_watermark_is_bounded_by_the_lookback(self) -> None:
+        objects = [
+            RemoteObject("data/old", utc(2026, 11, 7, 0), 1),
+            RemoteObject("data/new", utc(2026, 11, 9, 12), 1),
+        ]
+        wanted = objects_to_fetch(objects, None, now=utc(2026, 11, 10, 2), lookback=timedelta(hours=48))
+        self.assertEqual([item.key for item in wanted], ["data/new"])
+
+    def test_the_selector_is_not_a_listable_source(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            with self.assertRaises(SoundingProductError):
+                fetch_gateway("wis2", Path(scratch), watermark=None)
+            with self.assertRaises(SoundingProductError):
+                fetch_gateway("wis2:Not_A_Node", Path(scratch), watermark=None)
 
 
 class ValidationTests(unittest.TestCase):

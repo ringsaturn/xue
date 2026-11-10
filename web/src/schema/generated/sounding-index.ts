@@ -16,7 +16,7 @@ export function checkTimestamp(v: unknown, at: string): asserts v is Timestamp {
   isString(v, at, PATTERN_1, undefined, true);
 }
 
-/** A gateway id (jp-jma-gts-to-wis2) or a WIS2 topic source (wis2:jp-jma), admitted on shape alone. */
+/** A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance) or the node discovery (wis2), admitted on shape alone. */
 export type SourceKey = string;
 
 export function checkSourceKey(v: unknown, at: string): asserts v is SourceKey {
@@ -121,8 +121,8 @@ export function checkSoundingStationEntry(v: unknown, at: string): asserts v is 
   checkSoundingHeadline(v21, at + ".headline");
 }
 
-/** One gateway's outcome (docs/sounding.md section 6). That ok false carries error, and that ids are unique, are the readers' own checks. */
-export type SoundingSource = { id: SourceKey; ok: boolean; error?: string; fetched?: string | null; url?: string; watermark?: string | null; listed?: number; objects?: number; reused?: number; failed?: number; bytes?: number; bulletins?: number; nil?: number; unreadable?: number; subsets?: number; dropped?: number; soundings?: number };
+/** One source's outcome (docs/sounding.md section 6). That ok false carries error, and that ids are unique, are the readers' own checks. */
+export type SoundingSource = { id: SourceKey; ok: boolean; error?: string; fetched?: string | null; url?: string; watermark?: string | null; listed?: number; objects?: number; reused?: number; failed?: number; bytes?: number; bulletins?: number; nil?: number; descents?: number; unreadable?: number; subsets?: number; dropped?: number; soundings?: number };
 
 export function checkSoundingSource(v: unknown, at: string): asserts v is SoundingSource {
   isObject(v, at);
@@ -178,21 +178,25 @@ export function checkSoundingSource(v: unknown, at: string): asserts v is Soundi
   if (v34 !== undefined) {
     isInteger(v34, at + ".nil", 0);
   }
-  const v35 = v["unreadable"];
+  const v35 = v["descents"];
   if (v35 !== undefined) {
-    isInteger(v35, at + ".unreadable", 0);
+    isInteger(v35, at + ".descents", 0);
   }
-  const v36 = v["subsets"];
+  const v36 = v["unreadable"];
   if (v36 !== undefined) {
-    isInteger(v36, at + ".subsets", 0);
+    isInteger(v36, at + ".unreadable", 0);
   }
-  const v37 = v["dropped"];
+  const v37 = v["subsets"];
   if (v37 !== undefined) {
-    isInteger(v37, at + ".dropped", 0);
+    isInteger(v37, at + ".subsets", 0);
   }
-  const v38 = v["soundings"];
+  const v38 = v["dropped"];
   if (v38 !== undefined) {
-    isInteger(v38, at + ".soundings", 0);
+    isInteger(v38, at + ".dropped", 0);
+  }
+  const v39 = v["soundings"];
+  if (v39 !== undefined) {
+    isInteger(v39, at + ".soundings", 0);
   }
 }
 
@@ -201,32 +205,32 @@ export type SoundingIndex = { schemaVersion: 1; issued: Timestamp; generated: Ti
 
 export function checkSoundingIndex(v: unknown, at: string): asserts v is SoundingIndex {
   isObject(v, at);
-  const v39 = field(v, "schemaVersion", at);
-  isInteger(v39, at + ".schemaVersion");
-  isOneOf(v39, at + ".schemaVersion", [1]);
-  const v40 = field(v, "issued", at);
-  checkTimestamp(v40, at + ".issued");
-  const v41 = field(v, "generated", at);
-  checkTimestamp(v41, at + ".generated");
-  const v42 = field(v, "watermark", at);
-  isObject(v42, at + ".watermark");
-  for (const [k43, v44] of Object.entries(v42)) {
-    if (v44 !== null) {
-      isString(v44, at + ".watermark." + k43, PATTERN_1, undefined, true);
+  const v40 = field(v, "schemaVersion", at);
+  isInteger(v40, at + ".schemaVersion");
+  isOneOf(v40, at + ".schemaVersion", [1]);
+  const v41 = field(v, "issued", at);
+  checkTimestamp(v41, at + ".issued");
+  const v42 = field(v, "generated", at);
+  checkTimestamp(v42, at + ".generated");
+  const v43 = field(v, "watermark", at);
+  isObject(v43, at + ".watermark");
+  for (const [k44, v45] of Object.entries(v43)) {
+    if (v45 !== null) {
+      isString(v45, at + ".watermark." + k44, PATTERN_1, undefined, true);
     }
   }
-  const v45 = field(v, "soundings", at);
-  checkCrcFile(v45, at + ".soundings");
-  const v46 = field(v, "stations", at);
-  isList(v46, at + ".stations");
-  for (let i47 = 0; i47 < v46.length; i47++) {
-    const v48: unknown = v46[i47];
-    checkSoundingStationEntry(v48, at + ".stations[" + i47 + "]");
+  const v46 = field(v, "soundings", at);
+  checkCrcFile(v46, at + ".soundings");
+  const v47 = field(v, "stations", at);
+  isList(v47, at + ".stations");
+  for (let i48 = 0; i48 < v47.length; i48++) {
+    const v49: unknown = v47[i48];
+    checkSoundingStationEntry(v49, at + ".stations[" + i48 + "]");
   }
-  const v49 = field(v, "sources", at);
-  isList(v49, at + ".sources");
-  for (let i50 = 0; i50 < v49.length; i50++) {
-    const v51: unknown = v49[i50];
-    checkSoundingSource(v51, at + ".sources[" + i50 + "]");
+  const v50 = field(v, "sources", at);
+  isList(v50, at + ".sources");
+  for (let i51 = 0; i51 < v50.length; i51++) {
+    const v52: unknown = v50[i51];
+    checkSoundingSource(v52, at + ".sources[" + i51 + "]");
   }
 }

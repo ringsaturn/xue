@@ -1162,7 +1162,7 @@ def point_product_item(
         "xue:sources": [{"id": source["id"], "ok": bool(source["ok"])} for source in index["sources"]],
     }
     if product == "sounding":
-        # The product's own account of how current it is, per gateway.
+        # The product's own account of how current it is, per source.
         properties["xue:watermark"] = index["watermark"]
     item: dict[str, Any] = {
         "type": "Feature",

@@ -26,7 +26,7 @@
       "format": "date-time"
     },
     "SourceKey": {
-      "description": "A gateway id (jp-jma-gts-to-wis2) or a WIS2 topic source (wis2:jp-jma), admitted on shape alone.",
+      "description": "A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance) or the node discovery (wis2), admitted on shape alone.",
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*([.:-][a-z0-9]+)*$"
     },
@@ -77,7 +77,7 @@
       }
     },
     "SoundingSource": {
-      "description": "One gateway's outcome (docs/sounding.md section 6). That ok false carries error, and that ids are unique, are the readers' own checks.",
+      "description": "One source's outcome (docs/sounding.md section 6). That ok false carries error, and that ids are unique, are the readers' own checks.",
       "type": "object",
       "required": ["id", "ok"],
       "properties": {
@@ -94,6 +94,7 @@
         "bytes": {"type": "integer", "minimum": 0},
         "bulletins": {"type": "integer", "minimum": 0},
         "nil": {"type": "integer", "minimum": 0},
+        "descents": {"type": "integer", "minimum": 0},
         "unreadable": {"type": "integer", "minimum": 0},
         "subsets": {"type": "integer", "minimum": 0},
         "dropped": {"type": "integer", "minimum": 0},

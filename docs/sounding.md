@@ -66,9 +66,9 @@ pointers (`latest.json`, `latest-<model>.json`), `latest-tc.json` and
 The publisher builds every hour at a quarter past (`publish-sounding.yml`).
 A station with no new ascent this hour is carried forward from the
 previous issue's `soundings.jsonl`, so its content is unchanged even
-though the file around it is rewritten. A gateway that is late or
+though the file around it is rewritten. A source that is late or
 unreachable is recorded (see `sources`) and the hour publishes without it.
-The pointer is withheld only when neither gateway contributed *and* there was nothing to
+The pointer is withheld only when no source contributed *and* there was nothing to
 carry forward, in which case the previous hour stays live. An hour the
 pointer already names is finished: a run that resolves to it builds
 nothing, and the workflow's `force` input is the manual rebuild.
@@ -171,11 +171,15 @@ what `soundings.jsonl` is sorted by and what the index's rows key on.
   the id took.
 - A subset with neither a WMO number nor a usable WIGOS identifier — a
   ship, a mobile station, a WIGOS local identifier that is not
-  URL-safe — is dropped and counted in its gateway's `dropped`.
+  URL-safe — is dropped and counted in its source's `dropped`.
 
 A sounding's *nominal time* is the synoptic hour it is filed under: the
 `<ddhhmm>` of the bulletin's WMO file name, dated by the month the
-gateway's arrival stamp puts it nearest. It is not the launch time. The
+gateway's arrival stamp puts it nearest. A national node's object carries
+no heading, so its subsets are filed by their own clock instead: the
+six-hourly hour at or before three hours after it, which puts a launch
+from 21:00 to 02:59 on the 00Z ascent (and a TEMP converted from text,
+whose clock is the nominal hour, on itself). It is not the launch time. The
 launch time is the subset's own clock (`timeSignificance` 18) and is
 published as `launched` when it lies between 90 minutes before the nominal
 hour and an hour after it — the window that covers both the Chinese
@@ -183,8 +187,15 @@ stations releasing at 23:15 for 00Z and the Japanese ones at 00:16.
 Anything outside is a clock the product does not trust, and `launched` is
 `null`.
 
-**Deduplication.** The same station-hour arrives more than once: the two
-gateways carry overlapping sets, a station may be filed in more than one
+**Descents.** A message whose template is Table D 3 09 056, the
+radiosonde descent, is not a sounding of this product: its levels run
+down from the burst, and its clock and position are the burst's. It is
+left out whole and counted in its source's `descents`. Météo-France's
+node publishes only descents, so France's ascents are in neither the
+gateways nor the nodes today.
+
+**Deduplication.** The same station-hour arrives more than once: the
+sources carry overlapping sets, a station may be filed in more than one
 bulletin, and corrections (`CCA`, `RRA`…) repeat a bulletin outright. One
 sounding survives per (station, nominal time): **the one with the most
 levels**, and on a tie **the one that arrived last**, which is the
@@ -245,7 +256,7 @@ This section says what the fields mean and the rules across them.
   temperature and dew point **in °C** to a tenth (`null` when that level is
   absent), `freezingLevel` and `pw` repeat the derived values (§7), and
   `levels` is that sounding's `n`.
-- `sources[]` is the build's account of its two gateways (§6).
+- `sources[]` is the build's account of its sources (§6).
 
 A station whose newest sounding is more than 48 hours older than the issue
 hour is not carried forward any further: it has stopped reporting, or its
@@ -267,9 +278,9 @@ station would cost more than the stations do.
       time:      the nominal (synoptic) time,
       launched:  the launch time | null,
       sondeType: BUFR code table 0 02 011 | null,
-      bulletin:  "IUSC01 RJTD 140000" (plus " CCA" on a correction),
+      bulletin:  "IUSC01 RJTD 140000" (plus " CCA" on a correction), or a node's object name,
       gateway:   the source id the bytes came from,
-      arrived:   when the gateway published the bulletin,
+      arrived:   when the source published the bulletin,
       n:        the published level count,
       reported: the levels the bulletin held before thinning (§2),
       p, z, t, td, wd, ws, sig:  n integers each (§2),
@@ -290,6 +301,9 @@ costs nothing worth saving.
 
 `bulletin` is the WMO abbreviated heading of the bulletin the sounding was
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
+A national node's object has no heading: `bulletin` is its object name
+(`WIGOS_0-20000-0-82022_20261104T233000.bufr4`) and `arrived` its
+`LastModified`.
 Together they say exactly which message a value came from.
 
 **Size.** Measured over one issue of the live feed, 491 stations: the
@@ -318,7 +332,8 @@ source's listing held, `objects` how many were downloaded (the ones newer
 than the previous watermark), `reused` how many were carried over from the
 previous issue's download instead, `failed` how many the cache would not
 serve, `bytes` how many bytes the objects held, `bulletins` how many
-decoded, `nil` how many were plain-text NIL bulletins, `unreadable` how
+decoded, `nil` how many were plain-text NIL bulletins, `descents` how
+many were descent profiles (§3) and left out, `unreadable` how
 many did not decode, `subsets` how many station subsets they held,
 `dropped` how many of those carried no usable station identity and
 `soundings` how many soundings the source contributed. The list lives in the index alone: a station's line does not
@@ -330,21 +345,32 @@ listing that failed, and a download not one bulletin of which decoded,
 both leave the previous hour's watermark in place, so the next hour sees
 those objects again rather than stepping past them for good.
 
-Source ids in v1 are the two GTS→WIS2 gateway directories in the WMO WIS2
-Global Cache, a public bucket that lists without credentials and keeps an
-object for 24 hours: `jp-jma-gts-to-wis2` (run by the Japan Meteorological
-Agency) and `de-dwd-gts-to-wis2` (run by the Deutscher Wetterdienst). Each
-republishes *every* country's GTS bulletins under the WMO abbreviated
-heading tree, and the two carry different sets, which is why both are
-read. The id shape `wis2:<centre>` is reserved for the national WIS2
-nodes' own topic directories, which will replace the gateways as the
-migration finishes; it is not implemented in v1.
+Source ids are of two kinds, both directories of the WMO WIS2 Global
+Cache, a public bucket that lists without credentials.
+
+- The two GTS→WIS2 gateways, which keep an object for 24 hours:
+  `jp-jma-gts-to-wis2` (run by the Japan Meteorological Agency) and
+  `de-dwd-gts-to-wis2` (run by the Deutscher Wetterdienst). Each
+  republishes *every* country's GTS bulletins under the WMO abbreviated
+  heading tree, and the two carry different sets, which is why both are
+  read.
+- `wis2:<centre>`, a national WIS2 node's TEMP topic,
+  `data/<centre>/data/core/weather/surface-based-observations/temp/`. A
+  centre that runs its own node stops sending its soundings to the
+  gateways, so these are read too. The nodes are discovered every hour
+  by listing the cache's `data/` (the gateways and the discovery
+  catalogues excepted), and a node whose topic is empty is not a source
+  of that issue: it has no entry in `sources[]`, and its `watermark`
+  entry, once it has one, is kept. A node with no watermark is taken
+  back 48 hours, the staleness limit, since its objects outlive the
+  gateways' day. A discovery that fails is the one entry `wis2`, with
+  `ok: false`.
 
 The data is WMO core data under the WMO Unified Data Policy: free and
 unrestricted, with attribution of the original source requested. The
 originating national meteorological and hydrological services are the
-source of every sounding; the WIS2 Global Cache and its two gateways are
-the distribution.
+source of every sounding; the WIS2 Global Cache, its two gateways and the
+national nodes are the distribution.
 
 ## 7. Derived quantities
 

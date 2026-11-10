@@ -585,8 +585,10 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `soundings.jsonl?v=<crc32>` — the span excludes the newline, so it
   parses alone — or stream the whole file for analysis. Sources: the TEMP
   bulletins of the WMO WIS2 Global Cache's two GTS→WIS2 gateways,
-  `jp-jma-gts-to-wis2` and `de-dwd-gts-to-wis2` — WMO core data from the
-  originating national meteorological and hydrological services. The
+  `jp-jma-gts-to-wis2` and `de-dwd-gts-to-wis2`, and of every national
+  WIS2 node with a TEMP topic (`wis2:<centre>`, discovered hourly) — WMO
+  core data from the originating national meteorological and hydrological
+  services. The
   viewer does not read it yet.
 
 - `indicators/` under the data root holds area-weighted weather indicators
