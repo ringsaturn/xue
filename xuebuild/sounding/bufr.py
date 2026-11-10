@@ -35,6 +35,13 @@ MISSING = -32768
 """The missing value of every fixed-point level array."""
 
 BUFR_MAGIC = b"BUFR"
+
+DESCENT_SEQUENCE = 309056
+"""Table D 3 09 056, the radiosonde *descent*: the profile from the burst
+down, its clock the burst's, its position and ``height`` the burst point's.
+It shares the ascent's keys, so only the message's template tells it
+apart, and a product of ascents leaves it out (Météo-France's node
+publishes nothing else)."""
 """What a BUFR message starts with, after the GTS text header the
 gateways leave in front of it (``IUSC01 RJTD 140000\\r\\r\\n``). An object
 without it somewhere near the front is not BUFR at all: the gateways
@@ -145,11 +152,14 @@ class BulletinName:
     header: str
     """``IUSC01 RJTD 140000``, plus `` CCA`` when the name carries a
     correction suffix — the WMO abbreviated heading, verbatim."""
-    nominal: datetime
-    """The bulletin's ``<ddhhmm>``, dated from the arrival stamp."""
+    nominal: datetime | None
+    """The bulletin's ``<ddhhmm>``, dated from the arrival stamp. None for
+    an object of a national WIS2 node, whose name is no heading: each
+    subset's nominal time then comes from its own clock
+    (:func:`nominal_from_clock`)."""
     arrived: datetime
     """The gateway's own timestamp in the file name (its ``LastModified``
-    is the same to within seconds)."""
+    is the same to within seconds), or a national node's ``LastModified``."""
     correction: str | None
 
 
@@ -177,6 +187,76 @@ def parse_file_name(name: str) -> BulletinName | None:
         arrived=arrived,
         correction=correction,
     )
+
+
+def split_messages(data: bytes) -> list[bytes]:
+    """The BUFR messages of one object, by each message's own length.
+    Bytes between messages (a GTS envelope) are skipped; a message whose
+    length runs past the end is taken as what is there."""
+    messages: list[bytes] = []
+    start = data.find(BUFR_MAGIC)
+    while start != -1 and start + 8 <= len(data):
+        length = int.from_bytes(data[start + 4 : start + 7], "big")
+        if length < 8:
+            start = data.find(BUFR_MAGIC, start + 4)
+            continue
+        messages.append(data[start : start + length])
+        start = data.find(BUFR_MAGIC, start + length)
+    return messages
+
+
+def unexpanded_descriptors(message: bytes) -> tuple[int, ...] | None:
+    """Section 3's descriptors as ``FXXYYY`` integers (``309052``), or None
+    for a message this reader cannot walk (edition below 3, truncated).
+    Read off the bytes because ``bufr_dump -j f`` does not carry them."""
+    try:
+        edition = message[7]
+        if edition not in (3, 4):
+            return None
+        position = 8
+        section1 = int.from_bytes(message[position : position + 3], "big")
+        optional = message[position + (9 if edition == 4 else 7)] & 0x80
+        position += section1
+        if optional:
+            position += int.from_bytes(message[position : position + 3], "big")
+        section3 = int.from_bytes(message[position : position + 3], "big")
+        body = message[position + 7 : position + section3]
+    except IndexError:
+        return None
+    if section3 < 7 or len(body) < section3 - 7:
+        return None
+    descriptors: list[int] = []
+    for offset in range(0, len(body) - 1, 2):
+        value = int.from_bytes(body[offset : offset + 2], "big")
+        descriptors.append((value >> 14) * 100000 + ((value >> 8) & 0x3F) * 1000 + (value & 0xFF))
+    return tuple(descriptors)
+
+
+def is_descent(message: bytes) -> bool:
+    descriptors = unexpanded_descriptors(message)
+    return descriptors is not None and DESCENT_SEQUENCE in descriptors
+
+
+def native_name(name: str, arrived: datetime) -> BulletinName:
+    """A national WIS2 node's object, which carries no WMO heading
+    (``WIGOS_0-20000-0-07110_20261108T011100.bufr4``, ``TEMP_AA_17351_<uuid>.bufr4``,
+    ``IUSG01WSSS060000.bufr``…): the object name stands in for the heading,
+    and the arrival is the object's ``LastModified``."""
+    return BulletinName(header=name, nominal=None, arrived=arrived.astimezone(UTC), correction=None)
+
+
+def nominal_from_clock(header: dict[str, Any]) -> datetime | None:
+    """The synoptic hour a subset with no heading is filed under, from its
+    own clock: the six-hourly hour at or before three hours after it. A
+    launch from 21:00 to 02:59 is the 00Z ascent, which is the window the
+    gateways' headings put on the same stations (Chinese stations release
+    at 23:15, French ones as late as 01:15), and a TEMP converted from text
+    carries the nominal hour itself."""
+    clock = _clock(header)
+    if clock is None:
+        return None
+    shifted = clock + timedelta(hours=3)
+    return shifted.replace(hour=shifted.hour - shifted.hour % 6, minute=0, second=0, microsecond=0)
 
 
 def _nominal_from_day(day: int, hour: int, minute: int, arrived: datetime) -> datetime | None:
@@ -365,17 +445,13 @@ def _elevation(header: dict[str, Any]) -> float | None:
     return None
 
 
-def _launch(header: dict[str, Any], nominal: datetime) -> datetime | None:
-    """The subset's clock (``timeSignificance`` 18 — radiosonde launch
-    time) when it is a plausible launch for this nominal hour: from 90
-    minutes before it to an hour after, which covers both the Chinese
-    stations releasing at 23:15 for 00Z and the Japanese ones at 00:16.
-    Anything else is a clock the product does not trust, and null."""
+def _clock(header: dict[str, Any]) -> datetime | None:
+    """The subset's ``year`` … ``minute``, or None when any is missing."""
     parts = {key: _number(header.get(key)) for key in ("year", "month", "day", "hour", "minute")}
     if any(value is None for value in parts.values()):
         return None
     try:
-        launched = datetime(
+        return datetime(
             int(parts["year"]),  # type: ignore[arg-type]
             int(parts["month"]),  # type: ignore[arg-type]
             int(parts["day"]),  # type: ignore[arg-type]
@@ -384,6 +460,17 @@ def _launch(header: dict[str, Any], nominal: datetime) -> datetime | None:
             tzinfo=UTC,
         )
     except ValueError:
+        return None
+
+
+def _launch(header: dict[str, Any], nominal: datetime) -> datetime | None:
+    """The subset's clock (``timeSignificance`` 18 — radiosonde launch
+    time) when it is a plausible launch for this nominal hour: from 90
+    minutes before it to an hour after, which covers both the Chinese
+    stations releasing at 23:15 for 00Z and the Japanese ones at 00:16.
+    Anything else is a clock the product does not trust, and null."""
+    launched = _clock(header)
+    if launched is None:
         return None
     if not -timedelta(minutes=90) <= launched - nominal <= timedelta(minutes=60):
         return None
@@ -479,7 +566,9 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
     lon = _number(header.get("longitude"))
     if lat is None or lon is None or not -90.0 <= lat <= 90.0 or not -180.0 <= lon <= 180.0:
         return None
-    nominal = name.nominal
+    nominal = name.nominal if name.nominal is not None else nominal_from_clock(header)
+    if nominal is None:
+        return None
     rows = [level for level in _levels(walked) if _fixed(level.get("pressure"), 1, "p") != MISSING]
     if not rows:
         return None

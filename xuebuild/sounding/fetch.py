@@ -19,21 +19,25 @@ and only the newer ones are fetched — typically a few dozen of the two
 thousand objects in the bucket's 24-hour retention window. A first build,
 or a gap longer than the retention, downloads everything.
 
-A source is not raised, it is recorded: a gateway that cannot be listed
-leaves ``ok: false`` with the reason and the other one publishes.
+A source is not raised, it is recorded: a source that cannot be listed
+leaves ``ok: false`` with the reason and the others publish.
 
-The gateways are transitional (WMO retires them as national WIS2 nodes
-take over), so a second kind of source is reserved for the native topic
-directories, ``wis2:<centre>``, listing
-``data/<centre>/data/core/weather/surface-based-observations/temp/`` the
-same way. It is not implemented in v1; the id shape is spoken for so that
-adding it is a configuration change.
+The gateways are transitional: a centre that runs its own WIS2 node stops
+sending its soundings to them (Météo-France's are on ``fr-meteofrance``
+and in neither gateway). So the national nodes are a third kind of
+source, ``wis2:<centre>``, one per node directory under ``data/`` that
+publishes the TEMP topic
+``data/<centre>/data/core/weather/surface-based-observations/temp/``.
+The nodes are discovered every hour by listing ``data/`` — a new node is
+picked up the hour it appears — and listed the same way as a gateway. A
+node whose topic is empty is not a source of that issue at all.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import urllib.error
 import urllib.parse
@@ -53,8 +57,30 @@ LOG = logging.getLogger(__name__)
 
 SOURCE_IDS = ("jp-jma-gts-to-wis2", "de-dwd-gts-to-wis2")
 """The two GTS→WIS2 gateway directories, in the order the build reads
-them. ``wis2:<centre>`` is reserved for a native topic source (module
-docstring) and is not implemented."""
+them."""
+
+NATIVE_SOURCE = "wis2"
+"""Every national WIS2 node with a TEMP topic, discovered at fetch time.
+It is a source selector, not a source: what is fetched and published is
+one ``wis2:<centre>`` per node. A discovery that fails is recorded under
+this id."""
+
+DEFAULT_SOURCES = (*SOURCE_IDS, NATIVE_SOURCE)
+
+NATIVE_ID = re.compile(r"^wis2:(?P<centre>[a-z0-9]+(?:-[a-z0-9]+)*)$")
+
+CENTRES_PREFIX = "data/"
+NATIVE_PREFIX = "data/{centre}/data/core/weather/surface-based-observations/temp/"
+
+NOT_NODES = ("-gts-to-wis2", "-global-discovery-catalogue")
+"""Directories under ``data/`` that are not a national node's topic tree:
+the gateways (read as sources of their own) and the catalogues."""
+
+NATIVE_LOOKBACK_HOURS = 48
+"""How far back a node with no watermark is taken. The nodes' objects
+outlive the gateways' day (five or six days when this was written), and a
+sounding older than the build's 48-hour staleness is never published, so
+a first build need not download it."""
 
 BUCKET_BASE_URL = "https://wis2globalcache.s3.us-east-1.amazonaws.com/"
 GATEWAY_PREFIX = "data/{gateway}/data/core/I/U/S/"
@@ -106,10 +132,16 @@ class SourceStatus:
 class FetchResult:
     status: SourceStatus
     files: list[str]
+    arrived: dict[str, str] = field(default_factory=dict)
+    """A national node's ``LastModified`` per file, which stands in for the
+    arrival stamp a gateway writes into the file name. Kept in
+    ``fetch.json`` for the build, never published."""
 
     def to_json(self) -> dict[str, Any]:
         payload = self.status.to_json()
         payload["files"] = self.files
+        if self.arrived:
+            payload["arrived"] = self.arrived
         return payload
 
 
@@ -126,6 +158,54 @@ class RemoteObject:
 
 def issue_raw_directory(raw_root: Path, issue: datetime) -> Path:
     return raw_root / f"sounding.{issue.astimezone(UTC).strftime('%Y%m%d%H')}"
+
+
+def is_native(source: str) -> bool:
+    return NATIVE_ID.match(source) is not None
+
+
+def is_source(source: str) -> bool:
+    """A gateway, the node selector, or one node."""
+    return source in DEFAULT_SOURCES or is_native(source)
+
+
+def source_directory(root: Path, source: str) -> Path:
+    """Where a source's objects and ``fetch.json`` sit under an issue's raw
+    directory: ``<gateway>/``, and ``wis2/<centre>/`` for a node, so the
+    selector's own record (``wis2/fetch.json``) sits beside its nodes."""
+    return root.joinpath(*source.split(":"))
+
+
+def source_prefix(source: str) -> str:
+    match = NATIVE_ID.match(source)
+    if match is not None:
+        return NATIVE_PREFIX.format(centre=match.group("centre"))
+    if source in SOURCE_IDS:
+        return GATEWAY_PREFIX.format(gateway=source)
+    raise SoundingProductError(
+        f"unknown sounding source {source!r}; choose from {', '.join(DEFAULT_SOURCES)} or wis2:<centre>"
+    )
+
+
+def fetched_sources(root: Path, sources: tuple[str, ...]) -> tuple[str, ...]:
+    """The sources an issue's raw directory holds, in build order:
+    ``sources`` as given, with the node selector expanded into the nodes
+    the fetch wrote (and itself only when its discovery failed)."""
+    found: list[str] = []
+    for source in sources:
+        if source != NATIVE_SOURCE:
+            found.append(source)
+            continue
+        directory = source_directory(root, NATIVE_SOURCE)
+        if (directory / "fetch.json").exists():
+            found.append(NATIVE_SOURCE)
+        if directory.is_dir():
+            found.extend(
+                f"{NATIVE_SOURCE}:{child.name}"
+                for child in sorted(directory.iterdir())
+                if is_native(f"{NATIVE_SOURCE}:{child.name}") and (child / "fetch.json").exists()
+            )
+    return tuple(dict.fromkeys(found))
 
 
 def _get(url: str, *, timeout: float = 60) -> bytes:
@@ -165,14 +245,41 @@ def list_objects(
     return objects
 
 
+def list_centres(*, base_url: str = BUCKET_BASE_URL, get: Callable[[str], bytes] = _get) -> list[str]:
+    """The national node directories under ``data/``: one delimited
+    listing, a page or two of ``CommonPrefixes``."""
+    centres: list[str] = []
+    pages = s3_list_pages(
+        lambda token: get(f"{base_url}?{s3_list_query(CENTRES_PREFIX, token, delimiter='/')}"),
+        f"the bucket listing for {CENTRES_PREFIX}",
+        strict=False,
+        max_pages=20,
+    )
+    for root in pages:
+        for common in root.findall(f"{S3_NAMESPACE}CommonPrefixes"):
+            prefix = common.findtext(f"{S3_NAMESPACE}Prefix") or ""
+            centre = prefix.removeprefix(CENTRES_PREFIX).strip("/")
+            if not centre or centre.endswith(NOT_NODES) or not is_native(f"{NATIVE_SOURCE}:{centre}"):
+                continue
+            centres.append(centre)
+    return sorted(set(centres))
+
+
 def objects_to_fetch(
-    objects: list[RemoteObject], watermark: datetime | None, *, now: datetime
+    objects: list[RemoteObject],
+    watermark: datetime | None,
+    *,
+    now: datetime,
+    lookback: timedelta | None = None,
 ) -> list[RemoteObject]:
     """The objects a build has not seen: those modified after the
     watermark. No watermark, or one older than the cache's retention
-    (nothing behind it survives to be compared against), takes the lot."""
+    (nothing behind it survives to be compared against), takes the lot —
+    or, given a ``lookback``, what was modified within it."""
     if watermark is None or now - watermark > timedelta(hours=RETENTION_HOURS):
         candidates = list(objects)
+        if lookback is not None:
+            candidates = [item for item in candidates if item.last_modified >= now - lookback]
     else:
         candidates = [item for item in objects if item.last_modified > watermark]
     return sorted(candidates, key=lambda item: (item.last_modified, item.key))
@@ -188,14 +295,28 @@ def fetch_gateway(
     base_url: str = BUCKET_BASE_URL,
     get: Callable[[str], bytes] = _get,
 ) -> FetchResult:
-    """List one gateway's sounding subtree and download what is new."""
+    """List one source's sounding subtree — a gateway's, or a national
+    node's TEMP topic — and download what is new."""
     now = now or datetime.now(UTC)
-    if gateway not in SOURCE_IDS:
-        raise SoundingProductError(f"unknown sounding source {gateway!r}; choose from {', '.join(SOURCE_IDS)}")
-    prefix = GATEWAY_PREFIX.format(gateway=gateway)
+    if gateway == NATIVE_SOURCE or not is_source(gateway):
+        raise SoundingProductError(
+            f"unknown sounding source {gateway!r}; choose from {', '.join(SOURCE_IDS)} or wis2:<centre>"
+        )
+    native = is_native(gateway)
+    prefix = source_prefix(gateway)
     listing = list_objects(prefix, base_url=base_url, get=get)
     newest = max((item.last_modified for item in listing), default=None)
-    wanted = [item for item in objects_to_fetch(listing, watermark, now=now) if _is_bulletin(gateway, item)]
+    lookback = timedelta(hours=NATIVE_LOOKBACK_HOURS) if native else None
+    wanted = [
+        item
+        for item in objects_to_fetch(listing, watermark, now=now, lookback=lookback)
+        if native or _is_bulletin(gateway, item)
+    ]
+    # A node's topic is flat, but nothing promises it: two objects that
+    # share a name in different subdirectories would share a file here,
+    # so only the newest of them is taken.
+    if native:
+        wanted = list({item.name: item for item in wanted}.values())
 
     failures: list[Exception] = []
 
@@ -230,6 +351,11 @@ def fetch_gateway(
     if wanted and len(failures) == len(wanted):
         raise DownloadError(f"no object under {prefix} could be downloaded: {failures[0]}")
     files = [item.name for item, outcome in zip(wanted, outcomes) if outcome != "failed"]
+    arrived = (
+        {item.name: iso_z(item.last_modified) for item, outcome in zip(wanted, outcomes) if outcome != "failed"}
+        if native
+        else {}
+    )
     downloaded = outcomes.count("downloaded")
     reused = outcomes.count("reused")
     total_bytes = sum(item.size for item, outcome in zip(wanted, outcomes) if outcome != "failed")
@@ -249,6 +375,7 @@ def fetch_gateway(
             },
         ),
         files,
+        arrived,
     )
 
 
@@ -266,7 +393,7 @@ def _reuse(reuse_root: Path | None, gateway: str, item: RemoteObject, destinatio
     directory is looked at; anything older has been pruned with the run."""
     if reuse_root is None:
         return False
-    candidate = reuse_root / gateway / item.name
+    candidate = source_directory(reuse_root, gateway) / item.name
     try:
         if not candidate.is_file() or candidate.stat().st_size != item.size:
             return False
@@ -280,58 +407,95 @@ def _reuse(reuse_root: Path | None, gateway: str, item: RemoteObject, destinatio
 def fetch_sources(
     raw_root: Path,
     issue: datetime,
-    sources: tuple[str, ...] = SOURCE_IDS,
+    sources: tuple[str, ...] = DEFAULT_SOURCES,
     *,
     watermarks: dict[str, datetime | None] | None = None,
     force: bool = False,
     now: datetime | None = None,
+    base_url: str = BUCKET_BASE_URL,
+    get: Callable[[str], bytes] = _get,
 ) -> dict[str, FetchResult]:
-    """Fetch each gateway into its directory under the issue's raw
-    directory. A gateway already fetched (its ``fetch.json`` says ok) is
-    left alone unless ``force``; a failed one is retried."""
+    """Fetch each source into its directory under the issue's raw
+    directory, the node selector expanded into the nodes it discovers. A
+    source already fetched (its ``fetch.json`` says ok) is left alone
+    unless ``force``; a failed one is retried."""
     now = now or datetime.now(UTC)
     root = issue_raw_directory(raw_root, issue)
     previous_root = issue_raw_directory(raw_root, issue - timedelta(hours=1))
     reuse_root = previous_root if previous_root.is_dir() else None
     results: dict[str, FetchResult] = {}
-    for gateway in sources:
-        directory = root / gateway
+
+    def fetch_one(source: str) -> FetchResult | None:
+        """The source's outcome, written to its ``fetch.json`` — or None for
+        a node whose topic is empty, which is no source of this issue."""
+        directory = source_directory(root, source)
         record = directory / "fetch.json"
         if not force and record.exists():
             existing = _read_record(record)
             if existing is not None and existing.status.ok:
-                LOG.info("sounding %s: already fetched", gateway)
-                results[gateway] = existing
-                continue
+                LOG.info("sounding %s: already fetched", source)
+                return existing
         try:
             result = fetch_gateway(
-                gateway,
+                source,
                 directory,
-                watermark=(watermarks or {}).get(gateway),
+                watermark=(watermarks or {}).get(source),
                 now=now,
                 reuse_root=reuse_root,
+                base_url=base_url,
+                get=get,
             )
+            if is_native(source) and not result.status.detail.get("listed"):
+                return None
             LOG.info(
                 "sounding %s: %d bulletin(s) in the window, %d downloaded",
-                gateway,
+                source,
                 len(result.files),
                 result.status.detail.get("objects", 0),
             )
         except XueError as exc:
-            LOG.warning("sounding %s: %s", gateway, exc)
-            result = FetchResult(SourceStatus(gateway, False, fetched=now, error=str(exc)), [])
+            LOG.warning("sounding %s: %s", source, exc)
+            result = FetchResult(SourceStatus(source, False, fetched=now, error=str(exc)), [])
         except (urllib.error.URLError, OSError, ValueError) as exc:
-            LOG.warning("sounding %s: %s", gateway, exc)
+            LOG.warning("sounding %s: %s", source, exc)
             result = FetchResult(
-                SourceStatus(gateway, False, fetched=now, error=f"{type(exc).__name__}: {exc}"), []
+                SourceStatus(source, False, fetched=now, error=f"{type(exc).__name__}: {exc}"), []
             )
         write_bytes_atomic(record, json.dumps(result.to_json(), indent=2).encode("utf-8"))
-        results[gateway] = result
+        return result
+
+    for source in sources:
+        if source != NATIVE_SOURCE:
+            result = fetch_one(source)
+            if result is not None:
+                results[source] = result
+            continue
+        selector_record = source_directory(root, NATIVE_SOURCE) / "fetch.json"
+        try:
+            centres = list_centres(base_url=base_url, get=get)
+        except (XueError, urllib.error.URLError, OSError, ValueError) as exc:
+            LOG.warning("sounding %s: the node discovery failed: %s", NATIVE_SOURCE, exc)
+            failed = FetchResult(
+                SourceStatus(NATIVE_SOURCE, False, fetched=now, url=base_url + CENTRES_PREFIX, error=f"discovery: {exc}"),
+                [],
+            )
+            write_bytes_atomic(selector_record, json.dumps(failed.to_json(), indent=2).encode("utf-8"))
+            results[NATIVE_SOURCE] = failed
+            continue
+        selector_record.unlink(missing_ok=True)
+        nodes = [f"{NATIVE_SOURCE}:{centre}" for centre in centres]
+        # A hundred-odd listings, nearly all of an empty topic: they go out
+        # a few at a time, like the downloads.
+        with ThreadPoolExecutor(max_workers=FETCH_CONCURRENCY) as executor:
+            outcomes = list(executor.map(fetch_one, nodes))
+        found = {node: result for node, result in zip(nodes, outcomes) if result is not None}
+        LOG.info("sounding %s: %d node(s) listed, %d with a TEMP topic", NATIVE_SOURCE, len(nodes), len(found))
+        results.update(found)
     return results
 
 
 def _result_from_record(record: dict[str, Any]) -> FetchResult:
-    known = {"id", "ok", "fetched", "url", "error", "watermark", "files"}
+    known = {"id", "ok", "fetched", "url", "error", "watermark", "files", "arrived"}
     status = SourceStatus(
         id=str(record.get("id")),
         ok=bool(record.get("ok")),
@@ -341,7 +505,12 @@ def _result_from_record(record: dict[str, Any]) -> FetchResult:
         watermark=_parse_time(record.get("watermark")),
         detail={key: value for key, value in record.items() if key not in known},
     )
-    return FetchResult(status, [str(name) for name in record.get("files", [])])
+    arrived = record.get("arrived")
+    return FetchResult(
+        status,
+        [str(name) for name in record.get("files", [])],
+        {str(name): str(value) for name, value in arrived.items()} if isinstance(arrived, dict) else {},
+    )
 
 
 def _read_record(record: Path) -> FetchResult | None:
@@ -354,7 +523,7 @@ def _read_record(record: Path) -> FetchResult | None:
 def read_fetch_record(directory: Path, gateway: str) -> FetchResult | None:
     """What a gateway's directory says about its fetch, or None when it
     was never attempted."""
-    record = directory / gateway / "fetch.json"
+    record = source_directory(directory, gateway) / "fetch.json"
     if not record.exists():
         return None
     result = _read_record(record)

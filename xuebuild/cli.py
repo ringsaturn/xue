@@ -69,7 +69,8 @@ from .synop.schema import parse_round as parse_synop_round
 from .sounding.build import build_product as build_sounding_product
 from .sounding.build import load_previous_index as load_previous_sounding_index
 from .sounding.build import previous_watermarks as sounding_watermarks
-from .sounding.fetch import SOURCE_IDS as SOUNDING_SOURCE_IDS
+from .sounding.fetch import DEFAULT_SOURCES as SOUNDING_SOURCE_IDS
+from .sounding.fetch import is_source as is_sounding_source
 from .sounding.fetch import fetch_sources as fetch_sounding_sources
 from .sounding.schema import parse_issue as parse_sounding_issue
 from .tc.build import build_product as build_tc_product
@@ -723,7 +724,8 @@ def parser() -> argparse.ArgumentParser:
     sounding_build.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
     sounding_build.add_argument(
         "--sources",
-        help=f"comma-separated subset of the gateways to build from (default: all of {','.join(SOUNDING_SOURCE_IDS)})",
+        help=f"comma-separated sources to build from: the gateways, wis2 (every national WIS2 node with a TEMP "
+        f"topic, discovered each hour) or one wis2:<centre> (default: {','.join(SOUNDING_SOURCE_IDS)})",
     )
     sounding_build.add_argument(
         "--previous-index",
@@ -1468,10 +1470,11 @@ def main(argv: list[str] | None = None) -> int:
             sources = SOUNDING_SOURCE_IDS
             if arguments.sources:
                 sources = tuple(dict.fromkeys(item.strip() for item in arguments.sources.split(",") if item.strip()))
-                unknown = [item for item in sources if item not in SOUNDING_SOURCE_IDS]
+                unknown = [item for item in sources if not is_sounding_source(item)]
                 if unknown:
                     raise XueError(
-                        f"unknown sounding sources {unknown}; choose from {', '.join(SOUNDING_SOURCE_IDS)}"
+                        f"unknown sounding sources {unknown}; choose from {', '.join(SOUNDING_SOURCE_IDS)} "
+                        "or wis2:<centre>"
                     )
             previous = load_previous_sounding_index(arguments.previous_index, arguments.output_dir)
             if not arguments.offline:

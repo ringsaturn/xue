@@ -256,7 +256,7 @@ radar; `xue:detections`, the detections in the window, for the fires;
 `xue:sources`, the
 index's own `sources[]` reduced to `{id, ok}` so a client sees which
 gateway or centre was down without reading the index. A sounding issue
-also carries `xue:watermark`, the product's account per gateway of how
+also carries `xue:watermark`, the product's account per source of how
 current it is.
 
 Assets. One per file the issue publishes, each under the `?v=<crc32>` a
@@ -292,7 +292,7 @@ The live Item at `<product>/item.json` is that Item relocated
 the URL a client bookmarks still resolves after the issue it named is
 pruned — seven days for the soundings and the tracks, three hours for the
 airport, synop and nexrad rounds, six hours for the fire rounds.
-An issue whose build withheld the pointer (no gateway contributed, both
+An issue whose build withheld the pointer (no source contributed, both
 observation sources failed, no FIRMS file arrived) gets its own Item and nothing else: the
 Collection and the live Item follow the pointer, as a source's do.
 

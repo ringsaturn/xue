@@ -1,9 +1,9 @@
-"""``sounding-build``: the fetched gateway directories of one issue hour →
+"""``sounding-build``: the fetched source directories of one issue hour →
 one immutable product directory and the live pointer. The only module
 where the sources meet.
 
 Every bulletin in the issue's raw directories is decoded, the station
-hours the two gateways and the corrections deliver more than once are
+hours the sources and the corrections deliver more than once are
 deduplicated, and each station's line is rewritten with its newest four
 nominal times — the new soundings merged onto what the previous issue
 published for it, since an hour's fetch carries only what arrived in that
@@ -17,8 +17,8 @@ station nothing new arrived for is carried forward — its line from the
 previous issue's file, re-encoded — which is why the publish workflow
 pulls that file with the index before building.
 
-A gateway that failed to list is recorded in ``sources`` and the other
-one publishes. The pointer is withheld only when neither gateway
+A source that failed to list is recorded in ``sources`` and the others
+publish. The pointer is withheld only when no source
 contributed *and* there was no previous index to carry forward, since a
 product with no stations in it would take an empty map live.
 """
@@ -36,7 +36,18 @@ from ..errors import SoundingProductError, XueError
 from ..stac import write_point_product_documents
 from . import bufr, derive
 from .bufr import BUFR_MAGIC
-from .fetch import SOURCE_IDS, FetchResult, SourceStatus, issue_raw_directory, read_fetch_record
+from .fetch import (
+    DEFAULT_SOURCES,
+    NATIVE_SOURCE,
+    FetchResult,
+    SourceStatus,
+    fetched_sources,
+    is_native,
+    is_source,
+    issue_raw_directory,
+    read_fetch_record,
+    source_directory,
+)
 from .schema import (
     INDEX_FILENAME,
     POINTER_FILENAME,
@@ -125,7 +136,7 @@ def _is_bufr(path: Path) -> bool:
 
 
 def _parse_gateway(
-    directory: Path, gateway: str, files: list[str]
+    directory: Path, gateway: str, files: list[str], arrived: dict[str, str] | None = None
 ) -> tuple[list[bufr.Sounding], dict[str, int], str | None]:
     """Decode every bulletin the gateway's fetch left, counting what went
     wrong rather than raising: one corrupt message loses one bulletin.
@@ -135,11 +146,11 @@ def _parse_gateway(
     from ..eccodescli import bufr_dump_json  # eccodes is only needed on this path
 
     soundings: list[bufr.Sounding] = []
-    counts = {"bulletins": 0, "nil": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
+    counts = {"bulletins": 0, "nil": 0, "descents": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
     error: str | None = None
     for name in sorted(files):
         path = directory / name
-        parsed_name = bufr.parse_file_name(name)
+        parsed_name = _bulletin_name(gateway, name, arrived or {})
         if parsed_name is None or not path.is_file():
             counts["unreadable"] += 1
             error = error or f"{name} is not a bulletin this build can read"
@@ -151,7 +162,18 @@ def _parse_gateway(
             counts["nil"] += 1
             continue
         try:
-            result = bufr.parse_bulletin(bufr_dump_json(path), name=parsed_name, gateway=gateway)
+            ascent = _ascent_messages(path)
+            if ascent is None:
+                counts["descents"] += 1
+                continue
+            if ascent != path:
+                try:
+                    dump = bufr_dump_json(ascent)
+                finally:
+                    ascent.unlink(missing_ok=True)
+            else:
+                dump = bufr_dump_json(path)
+            result = bufr.parse_bulletin(dump, name=parsed_name, gateway=gateway)
         except (XueError, TypeError, ValueError, OSError) as exc:
             LOG.warning("sounding %s: %s does not decode: %s", gateway, name, exc)
             counts["unreadable"] += 1
@@ -162,6 +184,39 @@ def _parse_gateway(
         counts["dropped"] += result.dropped
         soundings.extend(result.soundings)
     return soundings, counts, error
+
+
+def _ascent_messages(path: Path) -> Path | None:
+    """The object to decode once its descent messages are left out
+    (``bufr.DESCENT_SEQUENCE``): the object itself when it holds none,
+    None when it holds nothing else, and otherwise a scratch copy of its
+    other messages beside it, which the caller removes."""
+    data = path.read_bytes()
+    messages = bufr.split_messages(data)
+    descents = [message for message in messages if bufr.is_descent(message)]
+    if not descents:
+        return path
+    kept = [message for message in messages if not bufr.is_descent(message)]
+    if not kept:
+        return None
+    scratch = path.with_name(f".{path.name}.ascent")
+    scratch.write_bytes(b"".join(kept))
+    return scratch
+
+
+def _bulletin_name(gateway: str, name: str, arrived: dict[str, str]) -> bufr.BulletinName | None:
+    """A gateway's object is named by the WMO convention; a national
+    node's is not, and its arrival is the ``LastModified`` its fetch
+    recorded."""
+    if not is_native(gateway):
+        return bufr.parse_file_name(name)
+    stamp = arrived.get(name)
+    if stamp is None:
+        return None
+    try:
+        return bufr.native_name(name, datetime.fromisoformat(stamp.replace("Z", "+00:00")))
+    except ValueError:
+        return None
 
 
 def _station_payload(
@@ -227,7 +282,7 @@ def build_product(
     raw_root: Path,
     output_root: Path,
     *,
-    sources: tuple[str, ...] = SOURCE_IDS,
+    sources: tuple[str, ...] = DEFAULT_SOURCES,
     previous_index: dict[str, Any] | None = None,
     force: bool = False,
     now: datetime | None = None,
@@ -246,15 +301,20 @@ def build_product(
     soundings: list[bufr.Sounding] = []
     watermark: dict[str, Any] = dict((previous_index or {}).get("watermark", {}))
     for gateway in sources:
-        if gateway not in SOURCE_IDS:
-            raise XueError(f"unknown sounding source {gateway!r}; choose from {', '.join(SOURCE_IDS)}")
+        if not is_source(gateway):
+            raise XueError(
+                f"unknown sounding source {gateway!r}; choose from {', '.join(DEFAULT_SOURCES)} or wis2:<centre>"
+            )
+    for gateway in fetched_sources(raw_directory, sources):
         result: FetchResult | None = read_fetch_record(raw_directory, gateway)
         if result is None:
             statuses.append(SourceStatus(gateway, False, error="not fetched"))
             continue
         status = result.status
         if status.ok:
-            found, counts, error = _parse_gateway(raw_directory / gateway, gateway, result.files)
+            found, counts, error = _parse_gateway(
+                source_directory(raw_directory, gateway), gateway, result.files, result.arrived
+            )
             if counts["bulletins"] == 0 and counts["unreadable"] > 0:
                 LOG.warning("sounding %s: no bulletin decoded: %s", gateway, error)
                 status = SourceStatus(
@@ -274,7 +334,9 @@ def build_product(
                 soundings.extend(found)
                 status.detail.update(counts)
                 status.detail["soundings"] = len(found)
-        if status.watermark is not None:
+        if gateway == NATIVE_SOURCE:
+            pass  # the selector lists no objects, so it has no watermark
+        elif status.watermark is not None:
             watermark[gateway] = iso_z(status.watermark)
         elif gateway not in watermark:
             watermark[gateway] = None
@@ -359,7 +421,7 @@ def build_product(
         pointer_path = output_root / POINTER_FILENAME
         write_bytes_atomic(pointer_path, encode_json(pointer))
     else:
-        LOG.warning("sounding: no gateway contributed and nothing carried forward; the pointer is not written")
+        LOG.warning("sounding: no source contributed and nothing carried forward; the pointer is not written")
     # The STAC face of the issue just written (docs/stac.md §"Point
     # products"), a pure function of the index on disk. The Collection and
     # the live Item follow the pointer: an issue nothing took live gets its
