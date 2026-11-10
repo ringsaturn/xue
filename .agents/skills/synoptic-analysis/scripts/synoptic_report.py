@@ -268,6 +268,8 @@ def region_report(source: str, box, times, out: dict):
 
 def _grid_step(stores, cache):
     ds = _load(None, next(iter(stores)), cache)
+    if "x" in ds.dims:
+        return abs(float(ds.x[1] - ds.x[0])) / 1000 / KM_PER_DEG
     return abs(float(ds.longitude[1] - ds.longitude[0]))
 
 

@@ -46,9 +46,11 @@ Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
   grid has dims of its own in a shared store (`time_prate` for a rate with
   no analysis frame, `latitude_pgb` / `longitude_pgb` on the CFSv2
   pressure levels); `xue_stac.open_store` renames them. A bundle on a map
-  projection (`hrrr`) has dims `(time, y, x)` in metres and a `crs` array holding
-  the CF grid mapping, with no latitude or longitude axis: project a place with
-  `crs` before selecting. `sflux` and the `cfs` surface fields carry true Gaussian
+  projection (`hrrr`, `rrfs`) has dims `(time, y, x)` in metres and a `crs` array
+  holding the CF grid mapping, with no latitude or longitude axis: project a place
+  with `crs` before selecting. `xue_stac.sel_point` and `sel_box` take degrees and
+  do this; `sel_box` returns the nearest cells on regular latitude and longitude
+  axes, NaN off the domain. `sflux` and the `cfs` surface fields carry true Gaussian
   latitudes in `latitude`.
 - `time` is a datetime64 coordinate (seconds since the run). Forecast
   frames are the valid times; `.sel(time=T, method="nearest")` after

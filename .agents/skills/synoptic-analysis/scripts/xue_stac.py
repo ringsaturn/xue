@@ -99,8 +99,9 @@ def _open_one(url: str, bundle: str | None):
     """One store (or segment) as (Dataset of the bundle's arrays, metadata).
     A run's store is shared — every bundle of a tier in `bundles.zarr`, the
     metadata under `xue_bundles[<bundle>]` — and a bundle off the run's axis
-    or grid has dims of its own (`time_prate`, `latitude_pgb`), renamed here
-    to `time` / `latitude` / `longitude`. A run published before shared
+    or grid has dims of its own (`time_prate`, `latitude_pgb`, `y_<family>`),
+    renamed here to `time` / `latitude` / `longitude`, or `time` / `y` / `x`
+    on a map projection, where the axes are metres. A run published before shared
     stores has one store per bundle, its metadata under `xue`."""
     import xarray as xr
 
@@ -116,7 +117,8 @@ def _open_one(url: str, bundle: str | None):
         names = [var["id"] for var in meta["variables"]]
         ds = ds[names]
         dims = ds[names[0]].dims
-        ds = ds.rename({dim: primary for dim, primary in zip(dims, ("time", "latitude", "longitude")) if dim != primary})
+        primaries = ("time", "y", "x") if dims[1].startswith("y") else ("time", "latitude", "longitude")
+        ds = ds.rename({dim: primary for dim, primary in zip(dims, primaries) if dim != primary})
         return ds, meta
     meta = attrs["xue"]
     return ds, json.loads(meta) if isinstance(meta, str) else meta
@@ -127,7 +129,9 @@ def open_store(url: str | list[str], bundle: str | None = None):
     joined along time; `bundle` is the asset key (`store_assets`), which a
     shared store needs. Every array is dequantized to its physical unit
     (float32, NaN where nodata), including the log1p codebook that xarray's
-    CF decoding cannot express."""
+    CF decoding cannot express. A bundle on a map projection keeps its `y` / `x`
+    axes in metres and gains a scalar `crs` coordinate whose attrs are the
+    `grid.projection` block; `sel_point` and `sel_box` take degrees on any grid."""
     import xarray as xr
 
     if isinstance(url, list):
@@ -142,6 +146,9 @@ def open_store(url: str | list[str], bundle: str | None = None):
         da = ds[var["id"]]
         out[var["id"]] = _dequantize(da, var)
     res = xr.Dataset(out, coords=ds.coords, attrs={"xue": meta})
+    projection = meta.get("grid", {}).get("projection")
+    if projection:
+        res = res.assign_coords(crs=xr.DataArray(0, attrs=projection))
     return res
 
 
@@ -171,12 +178,79 @@ def open_bundle(source: str, bundle: str):
     return open_store(store_assets(item)[bundle], bundle), item
 
 
+def _lambert(p: dict) -> tuple[float, float, float]:
+    """(cone constant, scale, radius at the origin latitude) of a projection block."""
+    def t(deg):
+        return np.tan(np.pi / 4 + np.radians(deg) / 2)
+    phi1, phi2 = np.radians(p["standardParallel1"]), np.radians(p["standardParallel2"])
+    if p["standardParallel1"] == p["standardParallel2"]:
+        n = np.sin(phi1)
+    else:
+        n = np.log(np.cos(phi1) / np.cos(phi2)) / np.log(t(p["standardParallel2"]) / t(p["standardParallel1"]))
+    scale = p["radius"] * np.cos(phi1) * t(p["standardParallel1"]) ** n / n
+    return n, scale, scale / t(p["latitudeOfOrigin"]) ** n
+
+
+def lambert_forward(p: dict, lat, lon):
+    """Degrees to the projection's (x, y) in metres."""
+    n, scale, rho0 = _lambert(p)
+    rho = scale / np.tan(np.pi / 4 + np.radians(lat) / 2) ** n
+    theta = n * np.radians((np.asarray(lon) - p["centralMeridian"] + 180) % 360 - 180)
+    return rho * np.sin(theta), rho0 - rho * np.cos(theta)
+
+
+def lambert_inverse(p: dict, x, y):
+    """The projection's (x, y) in metres to (latitude, longitude) in degrees."""
+    n, scale, rho0 = _lambert(p)
+    dy = rho0 - np.asarray(y)
+    rho = np.copysign(np.hypot(x, dy), n)
+    lat = 2 * np.arctan((scale / rho) ** (1 / n)) - np.pi / 2
+    lon = p["centralMeridian"] + np.degrees(np.arctan2(np.sign(n) * x, np.sign(n) * dy) / n)
+    return np.degrees(lat), lon
+
+
+def _sel_box_projected(da, south: float, north: float, west: float, east: float):
+    """The box as a regular latitude/longitude array of the nearest cells at
+    about the native spacing, NaN outside the domain. Cells are copied, not
+    interpolated; the rectangular axes let a caller treat it like any other crop."""
+    import xarray as xr
+
+    p = da.coords["crs"].attrs
+    y, x = da.y.values, da.x.values
+    dy, dx = y[1] - y[0], x[1] - x[0]
+    if east < west:
+        east += 360
+    per_degree = np.radians(1) * p["radius"]
+    lat_step = abs(dy) / per_degree
+    lon_step = abs(dx) / (per_degree * np.cos(np.radians((south + north) / 2)))
+    lats = np.arange(north, south - lat_step / 2, -lat_step)
+    lons = np.arange(west, east + lon_step / 2, lon_step)
+    xs, ys = lambert_forward(p, lats[:, None], lons[None, :])
+    rows = np.rint((ys - y[0]) / dy).astype(int)
+    columns = np.rint((xs - x[0]) / dx).astype(int)
+    inside = (rows >= 0) & (rows < y.size) & (columns >= 0) & (columns < x.size)
+    if not inside.any():
+        raise ValueError(f"box {south},{north},{west},{east} is outside the projected domain")
+    r0, r1 = rows[inside].min(), rows[inside].max()
+    c0, c1 = columns[inside].min(), columns[inside].max()
+    dims = ("latitude", "longitude")
+    cells = da.isel(y=slice(r0, r1 + 1), x=slice(c0, c1 + 1)).isel(
+        y=xr.DataArray(np.clip(rows, r0, r1) - r0, dims=dims),
+        x=xr.DataArray(np.clip(columns, c0, c1) - c0, dims=dims),
+    )
+    cells = cells.drop_vars(["y", "x"]).assign_coords(latitude=lats, longitude=lons)
+    return cells.where(xr.DataArray(inside, dims=dims))
+
+
 def sel_box(da, south: float, north: float, west: float, east: float):
     """Crop a (time, latitude, longitude) array to a box. Latitude runs
     north-to-south in every store, so the slice is (north, south). A box that
     crosses the antimeridian is spelled with east < west on a wrapping grid
     (west=150, east=-150) and taken in two pieces; a satellite disk's
-    longitudes already continue past 180."""
+    longitudes already continue past 180. A map projection's (time, y, x) comes
+    back on latitude and longitude too (`_sel_box_projected`)."""
+    if "x" in da.dims:
+        return _sel_box_projected(da, south, north, west, east)
     lat = slice(north, south)
     lons = da.longitude.values
     if east >= west or lons.max() > 180:
@@ -209,6 +283,18 @@ def sel_time(da, t):
 
 
 def sel_point(da, lat: float, lon: float):
+    """The nearest cell. On a map projection the result's scalar `latitude` and
+    `longitude` are that cell's, and a place off the domain raises rather than
+    returning the edge."""
+    if "x" in da.dims:
+        p = da.coords["crs"].attrs
+        x, y = lambert_forward(p, lat, lon)
+        cell = da.sel(y=y, x=x, method="nearest")
+        cx, cy = float(cell.x), float(cell.y)
+        if abs(cx - x) > abs(float(da.x[1] - da.x[0])) or abs(cy - y) > abs(float(da.y[1] - da.y[0])):
+            raise ValueError(f"{lat},{lon} is outside the projected domain")
+        cell_lat, cell_lon = lambert_inverse(p, cx, cy)
+        return cell.assign_coords(latitude=float(cell_lat), longitude=float(cell_lon))
     lons = da.longitude.values
     if lons.max() > 180 and lon < lons.min():
         lon += 360
