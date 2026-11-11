@@ -248,7 +248,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   without a storm, the latest of the season running now): the centres' best
   tracks, every archived forecast started at that time (official,
   deterministic, ensemble), and the storm's track errors in km by source and
-  lead.
+  lead. It takes the viewer's `?grid=` (MGRS and/or parallels and meridians)
+  and `?units=`.
 - https://xue.ringsaturn.me/compare.html — every live forecast model at
   one point on one clock (`?lat=<deg>&lon=<deg>`, `?span=120|360` hours,
   `?fields=tmp2m,prate,wind10m,...` among `tmp2m dpt2m prate wind10m gust

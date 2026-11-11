@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { setCoordinateFormat } from "../../web/src/mapprefs";
+import { toMgrs } from "../../web/src/mgrs";
 
 import expectedIndex from "../fixtures/tc/expected/index.json";
 import expectedPointer from "../fixtures/tc/expected/latest-tc.json";
@@ -398,5 +400,14 @@ describe("the point card", () => {
     expect(card.querySelector(".tc-card-position")?.textContent).toBe(
       "17.2°N 126.6°W",
     );
+    // In MGRS a track position names its kilometre square, no finer.
+    setCoordinateFormat("mgrs");
+    try {
+      const reference = buildTcCard(data, { formatTime: (time) => time }).querySelector(".tc-card-position")?.textContent;
+      expect(reference).toBe(toMgrs(data.lat, data.lon, 2));
+      expect(reference).toMatch(/^9Q [A-Z]{2} \d{2} \d{2}$/);
+    } finally {
+      setCoordinateFormat("latlon");
+    }
   });
 });

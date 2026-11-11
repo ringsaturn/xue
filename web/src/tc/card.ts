@@ -9,6 +9,8 @@
 
 import { element } from "../dom";
 import { t } from "../i18n";
+import { coordinateFormat } from "../mapprefs";
+import { toMgrs } from "../mgrs";
 import { convertDistance, formatDistance, formatPressure, formatWind as formatSpeed, UNIT_LABELS, units } from "../units";
 import { agencyColor, TC_AGENCIES } from "./agencies";
 import type { TcPointData } from "./layers";
@@ -67,8 +69,9 @@ export function buildTcCard(
   if (data.class) headline.append(element("b", "tc-card-class", data.class));
   if (data.vmax !== null)
     headline.append(element("span", "", formatWind(data.vmax)));
+  // An agency's whole hectopascals read whole; a measured 922.8 keeps its tenth.
   if (data.pmin !== null)
-    headline.append(element("span", "", formatPressure(data.pmin, 0)));
+    headline.append(element("span", "", formatPressure(data.pmin, Number.isInteger(data.pmin) ? 0 : 1)));
   if (headline.childElementCount) root.append(headline);
 
   if (data.radii) {
@@ -97,10 +100,14 @@ export function buildTcCard(
   if (extras.length)
     root.append(element("div", "tc-card-extra", extras.join(" · ")));
 
+  // A best-track position is good to a tenth of a degree at best (a
+  // reconstructed one to about a kilometre), so its MGRS reference names the
+  // kilometre square, not the metre.
+  const mgrs = coordinateFormat === "mgrs" ? toMgrs(data.lat, data.lon, 2) : null;
   const where = element(
     "div",
     "tc-card-position",
-    `${Math.abs(data.lat).toFixed(1)}°${data.lat >= 0 ? "N" : "S"} ${Math.abs(data.lon).toFixed(1)}°${data.lon >= 0 ? "E" : "W"}`,
+    mgrs ?? `${Math.abs(data.lat).toFixed(1)}°${data.lat >= 0 ? "N" : "S"} ${Math.abs(data.lon).toFixed(1)}°${data.lon >= 0 ? "E" : "W"}`,
   );
   root.append(where);
   return root;
