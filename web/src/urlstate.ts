@@ -807,8 +807,9 @@ export function searchWithTc(search: string, state: TcUrlState): string {
 }
 
 /** The coordinate grids drawn over the map, in the order the settings
- * sheet and `?grid=` list them. */
-export const GRID_KINDS = ["mgrs", "utm", "gars", "bng", "latlon"] as const;
+ * sheet and `?grid=` list them: degrees first, as the coordinate formats
+ * (`mapprefs.ts::COORDINATE_FORMATS`) list them, so the two rows line up. */
+export const GRID_KINDS = ["latlon", "mgrs", "utm", "gars", "bng"] as const;
 export type GridKind = (typeof GRID_KINDS)[number];
 
 /** Which grids are on:
