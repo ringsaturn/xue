@@ -216,6 +216,11 @@ function planSince(leads: readonly number[], start: number, index: number, kind:
       covered += length;
     }
   }
+  // A sample at the axis's first frame has nothing before it: the run has
+  // put no precipitation down yet. That is a total of nothing, not a total
+  // of unknown, so the frame stays in with no weight and reads as dry
+  // rather than as no data.
+  if (kind === "instant" && index === 0 && weights.size === 0) weights.set(0, 0);
   const terms = [...weights].map(([frame, hours]) => ({ index: frame, hours })).sort((x, y) => x.index - y.index);
   return { terms, covered };
 }
