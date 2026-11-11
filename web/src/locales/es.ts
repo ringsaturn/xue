@@ -273,6 +273,7 @@ export const es: Record<MessageKey, string> = {
   measureSurface: "Sobre el terreno {length} · ↑{climb} ↓{descent}",
   measureStraight: "Línea recta {length}",
   measureDem: "MDE muestreado cada {resolution}",
+  measureProfileAria: "Elevación a lo largo de la línea",
   particlesToggle: "Partículas",
   particlesToggleAria: "Alternar la animación de partículas de viento",
   phaseToggle: "Fase de la precipitación y línea de {freezing}",

@@ -275,6 +275,7 @@ export const ko: Record<MessageKey, string> = {
   measureSurface: "지표면 거리 {length} · ↑{climb} ↓{descent}",
   measureStraight: "직선거리 {length}",
   measureDem: "DEM 표본 간격 {resolution}",
+  measureProfileAria: "선을 따른 고도",
   particlesToggle: "입자 애니메이션",
   particlesToggleAria: "바람 입자 애니메이션 전환",
   phaseToggle: "강수 형태와 {freezing} 선",

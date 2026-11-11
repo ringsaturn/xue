@@ -276,6 +276,7 @@ export const tr: Record<MessageKey, string> = {
   measureSurface: "Arazi üzerinde {length} · ↑{climb} ↓{descent}",
   measureStraight: "Düz çizgi {length}",
   measureDem: "DEM örnek aralığı {resolution}",
+  measureProfileAria: "Çizgi boyunca yükseklik",
   particlesToggle: "Parçacıklar",
   particlesToggleAria: "Rüzgar parçacık animasyonunu aç/kapat",
   phaseToggle: "Yağış türü ve {freezing} çizgisi",

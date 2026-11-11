@@ -2799,6 +2799,63 @@ html[lang="ja"] .rail-glyph {
   border-left-color: var(--sheet);
 }
 
+/* The elevation profile under a finished distance (measureprofile.ts):
+   the line and its fill in the measure's ink, the axis numbers muted, the
+   readout above it. */
+.measure-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.measure-profile-readout {
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.measure-profile svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  touch-action: none;
+}
+
+.measure-profile-area {
+  fill: currentColor;
+  opacity: 0.14;
+}
+
+.measure-profile-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.measure-profile-axis,
+.measure-profile-cursor {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.measure-profile-cursor {
+  stroke: var(--muted);
+  stroke-dasharray: 2 2;
+}
+
+.measure-profile-dot {
+  fill: currentColor;
+}
+
+.measure-profile-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
 .tc-card {
   --card-ink: var(--text);
   display: flex;

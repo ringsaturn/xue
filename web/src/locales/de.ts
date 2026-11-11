@@ -273,6 +273,7 @@ export const de: Record<MessageKey, string> = {
   measureSurface: "Über Grund {length} · ↑{climb} ↓{descent}",
   measureStraight: "Direkte Linie {length}",
   measureDem: "DEM alle {resolution} abgetastet",
+  measureProfileAria: "Höhenprofil entlang der Linie",
   particlesToggle: "Partikel",
   particlesToggleAria: "Windpartikel-Animation umschalten",
   phaseToggle: "Niederschlagsart und Linie bei {freezing}",

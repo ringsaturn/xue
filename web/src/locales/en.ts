@@ -484,6 +484,9 @@ export const en = {
   measureSurface: "Along the ground {length} · ↑{climb} ↓{descent}",
   measureStraight: "Straight line {length}",
   measureDem: "DEM sampled every {resolution}",
+  /** The profile card's chart, with the 3D terrain on: its accessible
+   * name. */
+  measureProfileAria: "Elevation along the line",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

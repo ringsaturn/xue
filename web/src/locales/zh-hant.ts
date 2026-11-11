@@ -270,6 +270,7 @@ export const zhHant: Record<MessageKey, string> = {
   measureSurface: "地表路程 {length} · ↑{climb} ↓{descent}",
   measureStraight: "直線距離 {length}",
   measureDem: "DEM 取樣間隔 {resolution}",
+  measureProfileAria: "沿線高程",
   particlesToggle: "粒子動畫",
   particlesToggleAria: "切換風場粒子動畫",
   phaseToggle: "降水相態與 {freezing} 線",
