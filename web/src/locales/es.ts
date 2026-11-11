@@ -519,6 +519,7 @@ export const es: Record<MessageKey, string> = {
   tcPageUseCheck: "Contraste",
   tcPageLife: "Vida",
   tcPagePeak: "Viento máximo",
+  tcPageMinPressure: "Presión mínima",
   tcPageForecasts: "Pronósticos",
   tcCardSeasons: "Temporadas",
   tcCardStorms: "Tormentas",

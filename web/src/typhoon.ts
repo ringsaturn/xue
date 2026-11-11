@@ -18,7 +18,7 @@ import { applyPageMeta } from "./pagemeta";
 import { mountSettingsSheet } from "./settingssheet";
 import { dataBaseUrl } from "./site";
 import { applyTheme, isDark, onThemeChange } from "./theme";
-import { convertDistance, formatWind, onUnitsChange, units } from "./units";
+import { convertDistance, formatPressure, formatWind, onUnitsChange, units } from "./units";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
   archiveBounds,
@@ -569,6 +569,30 @@ function renderErrors(): void {
   table.replaceChildren(head, group(t("tcPageErrorsMean"), mean, true), group(t("tcPageErrorsThis"), one, false));
 }
 
+/** The lowest central pressure the best tracks report (hPa), chosen the way
+ * the season index chooses the peak wind (docs/tc.md §8.3): the US track
+ * when it has one, else the first track with a pressure, lowered by a
+ * curated track that observed lower. A storm reconstructed from ships'
+ * logs (Cobra, 1944) has a measured pressure and no wind, so this is its
+ * only intensity. */
+function lowestPressure(best: BestRecord | null): number | null {
+  if (!best) return null;
+  const lowest = (key: string): number | null => {
+    const values = (best.best[key]?.points ?? []).map((point) => point.pmin).filter((value): value is number => value !== null);
+    return values.length > 0 ? Math.min(...values) : null;
+  };
+  const keys = Object.keys(best.best).filter((key) => key !== "curated");
+  const ordered = keys.includes("usa") ? ["usa", ...keys.filter((key) => key !== "usa")] : keys;
+  let found: number | null = null;
+  for (const key of ordered) {
+    found = lowest(key);
+    if (found !== null) break;
+  }
+  const curated = lowest("curated");
+  if (curated !== null && (found === null || curated < found)) found = curated;
+  return found;
+}
+
 /** A peak wind (m/s) in the list: the centres' knots when knots are the
  * choice, else the viewer's unit alone, as the row has room for one. */
 function peakLabel(vmax: number): string {
@@ -602,6 +626,9 @@ function renderFacts(): void {
     const knots = `${Math.round(entry.vmax / KNOT)} kt`;
     items.push(definition(t("tcPagePeak"), units.wind === "kt" ? knots : `${knots} · ${peakLabel(entry.vmax)}`));
   }
+  const pressure = lowestPressure(loaded.best);
+  // An agency's whole hectopascals read whole; a measured 922.8 keeps its tenth.
+  if (pressure !== null) items.push(definition(t("tcPageMinPressure"), formatPressure(pressure, Number.isInteger(pressure) ? 0 : 1)));
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
   renderProvenance(loaded.best?.provenance ?? []);

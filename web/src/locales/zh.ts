@@ -514,6 +514,7 @@ export const zh: Record<MessageKey, string> = {
   tcPageUseCheck: "核对",
   tcPageLife: "生命史",
   tcPagePeak: "最大风速",
+  tcPageMinPressure: "最低气压",
   tcPageForecasts: "预报数",
   tcCardSeasons: "季节",
   tcCardStorms: "风暴",
