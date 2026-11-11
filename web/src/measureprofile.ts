@@ -1,7 +1,8 @@
 /**
  * The elevation profile under a finished distance, as a small chart: the
  * DEM's height against the horizontal distance along the line, the lowest
- * and highest heights and the line's length on its axes. A pointer over
+ * and highest heights and the line's length on its axes, and the profile's
+ * readings (the ground length, the straight line) under it. A pointer over
  * the chart reads the height and the distance there and hands the point to
  * the map, which marks it on the line.
  *
@@ -64,6 +65,8 @@ export function nearestSample(track: readonly ProfilePoint[], along: number): nu
 }
 
 export interface ProfileChartOptions {
+  /** Lines read under the chart (the ground length, the straight line). */
+  details: readonly string[];
   formatDistance: (metres: number) => string;
   formatHeight: (metres: number) => string;
   /** The sample under the pointer, or null when it leaves the chart. */
@@ -79,6 +82,12 @@ export function profileChart(track: readonly ProfilePoint[], options: ProfileCha
   const chart = svg("svg", { viewBox: `0 0 ${WIDTH} ${HEIGHT}`, width: WIDTH, height: HEIGHT, role: "img" });
   chart.setAttribute("aria-label", t("measureProfileAria"));
   root.append(readout, chart);
+  for (const detail of options.details) {
+    const line = document.createElement("p");
+    line.className = "measure-profile-detail";
+    line.textContent = detail;
+    root.append(line);
+  }
   if (track.length < 2) return root;
 
   const length = track[track.length - 1]!.along || 1;
@@ -109,7 +118,9 @@ export function profileChart(track: readonly ProfilePoint[], options: ProfileCha
   const dot = svg("circle", { class: "measure-profile-dot", r: 3, cx: 0, cy: 0, visibility: "hidden" });
   chart.append(cursor, dot);
 
-  const resting = () => `${options.formatDistance(length)} · ↑${options.formatHeight(highest)} ↓${options.formatHeight(lowest)}`;
+  // At rest the readout is the line's length and the span of heights; the
+  // arrows are kept for the climb and the descent in the details.
+  const resting = () => `${options.formatDistance(length)} · ${options.formatHeight(lowest)} – ${options.formatHeight(highest)}`;
   readout.textContent = resting();
   const show = (point: ProfilePoint | null) => {
     const visibility = point ? "visible" : "hidden";
