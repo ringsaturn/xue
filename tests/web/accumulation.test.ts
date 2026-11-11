@@ -204,7 +204,8 @@ describe("a range", () => {
 describe("seriesTotals", () => {
   it("sums a probe series over the window, waiting on unread frames", () => {
     const leads = [0, 1, 2, 3].map((hour) => hour * HOUR);
-    expect(seriesTotals([2, 2, 4, undefined], leads, 2 * HOUR, "instant")).toEqual([null, 2, 5, undefined]);
+    // The first frame of an instantaneous axis has nothing before it: dry, not unknown.
+    expect(seriesTotals([2, 2, 4, undefined], leads, 2 * HOUR, "instant")).toEqual([0, 2, 5, undefined]);
     expect(seriesTotals([null, 1, null, 3], leads, HOUR, "interval")).toEqual([null, 1, null, 3]);
   });
 });

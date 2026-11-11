@@ -190,8 +190,8 @@ describe("the precipitation total", () => {
       "?model=gfs&type=precip&accum=6h",
     );
     const range = { type: "range" as const, from: Date.UTC(2026, 10, 11, 6, 30), to: Date.UTC(2026, 10, 11, 9) };
-    expect(searchForView({ ...view, field: "prate", accumulation: range }, "?model=mrms", context, "prate")).toBe(
-      "?model=mrms&type=precip&accum=202611110630-2026111109",
+    expect(searchForView({ ...view, field: "prate", accumulation: range }, "?model=gfs&type=temp", context, "prate")).toBe(
+      "?model=gfs&type=precip&accum=202611110630-2026111109",
     );
   });
 });
