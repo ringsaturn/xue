@@ -11,9 +11,13 @@
  * `onMapPrefsChange`.
  */
 
-import { parseGridFromSearch, searchWithGrid, type GridState } from "./urlstate";
+import { formatGrid, NO_GRID, parseGridFromSearch, searchWithGrid, type GridState } from "./urlstate";
 
-export type CoordinateFormat = "latlon" | "mgrs";
+/** How a point's position is written: degrees, or a reference in one of
+ * the grids (`coordinates.ts`). A BNG reference falls back to degrees
+ * outside Great Britain. */
+export const COORDINATE_FORMATS = ["latlon", "mgrs", "utm", "gars", "bng"] as const;
+export type CoordinateFormat = (typeof COORDINATE_FORMATS)[number];
 
 const GRID_KEY = "xue-grid";
 const COORDS_KEY = "xue-coords";
@@ -35,13 +39,14 @@ function write(key: string, value: string): void {
 }
 
 function detectGrid(): GridState {
-  if (typeof window === "undefined") return { mgrs: false, latlon: false };
-  return parseGridFromSearch(window.location.search) ?? parseGridFromSearch(`?grid=${read(GRID_KEY) ?? ""}`) ?? { mgrs: false, latlon: false };
+  if (typeof window === "undefined") return { ...NO_GRID };
+  return parseGridFromSearch(window.location.search) ?? parseGridFromSearch(`?grid=${read(GRID_KEY) ?? ""}`) ?? { ...NO_GRID };
 }
 
 function detectCoordinateFormat(): CoordinateFormat {
   if (typeof window === "undefined") return "latlon";
-  return read(COORDS_KEY) === "mgrs" ? "mgrs" : "latlon";
+  const stored = read(COORDS_KEY);
+  return (COORDINATE_FORMATS as readonly string[]).includes(stored ?? "") ? (stored as CoordinateFormat) : "latlon";
 }
 
 export let grid: GridState = detectGrid();
@@ -60,9 +65,8 @@ function notify(): void {
 
 /** Switch the grids: persist, write `?grid=` into the address bar, redraw. */
 export function setGrid(next: GridState): void {
-  grid = { mgrs: next.mgrs, latlon: next.latlon };
-  const tokens = [grid.mgrs ? "mgrs" : null, grid.latlon ? "latlon" : null].filter((token) => token !== null);
-  write(GRID_KEY, tokens.length === 0 ? "off" : tokens.join(","));
+  grid = { ...next };
+  write(GRID_KEY, formatGrid(grid));
   const search = searchWithGrid(window.location.search, grid);
   window.history.replaceState(null, "", `${window.location.pathname}${search === "?" ? "" : search}${window.location.hash}`);
   notify();

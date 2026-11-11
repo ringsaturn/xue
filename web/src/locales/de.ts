@@ -430,6 +430,7 @@ export const de: Record<MessageKey, string> = {
   probeOutside: "Außerhalb des Gitters dieses Datensatzes",
   probeNoData: "Keine Daten in diesem Bild",
   probeAwaiting: "Warte auf dieses Bild",
+  probeCell: "Gitterzelle {position}",
   probeModelElevationLabel: "Modell",
   probeDemLabel: "DEM",
   probeCloseAria: "Punktdaten schließen",

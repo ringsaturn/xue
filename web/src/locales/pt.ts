@@ -430,6 +430,7 @@ export const pt: Record<MessageKey, string> = {
   probeOutside: "Fora da grelha deste conjunto de dados",
   probeNoData: "Sem dados neste fotograma",
   probeAwaiting: "A aguardar este fotograma",
+  probeCell: "Célula {position}",
   probeModelElevationLabel: "Modelo",
   probeDemLabel: "DEM",
   probeCloseAria: "Fechar os dados do ponto",

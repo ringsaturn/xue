@@ -236,6 +236,22 @@ export function toMgrs(lat: number, lon: number, precision = 5): string | null {
   return `${utm.zone}${band} ${square} ${digits(utm.easting, p)} ${digits(utm.northing, p)}`;
 }
 
+/** The UTM coordinate of a point, `54N 388436E 3949294N`: the zone and
+ * hemisphere (N/S, not the MGRS band letter), and whole metres rounded to
+ * `resolution` metres. In the polar caps the UPS form, `UPS N 2000000E
+ * 2000000N`. `null` for a point that is not a coordinate. */
+export function toUtmReference(lat: number, lon: number, resolution = 1): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90) return null;
+  const step = Math.max(1, resolution);
+  const round = (value: number) => String(Math.round(Math.round(value / step) * step));
+  if (latitudeBand(lat) === null) {
+    const ups = toUps(lat, lon);
+    return `UPS ${ups.north ? "N" : "S"} ${round(ups.easting)}E ${round(ups.northing)}N`;
+  }
+  const utm = toUtm(lat, lon);
+  return `${utm.zone}${utm.north ? "N" : "S"} ${round(utm.easting)}E ${round(utm.northing)}N`;
+}
+
 /** The south-west corner of the square an MGRS reference names (spaces
  * optional), or `null` for one that does not parse or names no square. */
 export function parseMgrs(text: string): LatLon | null {

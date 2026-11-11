@@ -9,7 +9,7 @@ import type { AqStation } from "./aq/schema";
 import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import { formatPointDegrees } from "./format";
 import { coordinateFormat, onMapPrefsChange } from "./mapprefs";
-import { toMgrs } from "./mgrs";
+import { formatCoordinate } from "./coordinates";
 import { t } from "./i18n";
 import { identifyBundle } from "./identity";
 import { COLUMN_LEVELS_HPA, type ColumnLevel, siteTemperature, sortedColumn } from "./lapse";
@@ -157,11 +157,21 @@ export interface ProbePanelDeps {
   readonly trySelectFrame: (index: number) => boolean;
 }
 
-/** The pinned point as the reader writes coordinates: MGRS to the metre, or
- * degrees (also where a point has no MGRS reference). */
+/** Where the reader clicked, as they write coordinates: a grid reference to
+ * the metre (`coordinates.ts`), or degrees to about ten metres (also where
+ * the chosen grid has no reference for the point, as BNG outside Great
+ * Britain). This is not where the numbers come from — that is the model
+ * cell's centre, shown beside it (`cellCentreText`). */
 function pinnedPointText(latitude: number, longitude: number): string {
-  const mgrs = coordinateFormat === "mgrs" ? toMgrs(latitude, longitude, 5) : null;
-  return mgrs ?? `${formatPointDegrees(latitude, "NS")} ${formatPointDegrees(longitude, "EW")}`;
+  const reference = formatCoordinate(coordinateFormat, latitude, longitude, 1);
+  return reference ?? `${formatPointDegrees(latitude, "NS", 4)} ${formatPointDegrees(longitude, "EW", 4)}`;
+}
+
+/** The centre of the model cell the readings are for, in degrees: a model
+ * grid is laid out in degrees (or its own projection), never in a grid
+ * reference, and a whole cell has no metre to name. */
+function cellCentreText(latitude: number, longitude: number): string {
+  return t("probeCell", { position: `${formatPointDegrees(latitude, "NS")} ${formatPointDegrees(longitude, "EW")}` });
 }
 
 /** The probe panel's controller: builds the panel, the pin and the skew-T
@@ -406,6 +416,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
     const coords = document.createElement("span");
     coords.className = "probe-coords";
     coords.id = "probe-coords";
+    // The model cell the readings are for; empty while there is none.
+    const cell = document.createElement("span");
+    cell.className = "probe-cell";
+    cell.id = "probe-cell";
     // The pinned cell's terrain height, from the run's static orography when
     // it ships one; empty — and out of the layout — otherwise.
     const elevation = document.createElement("span");
@@ -447,7 +461,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     codeLine.className = "probe-code-line";
     codeLine.append(code, airport, aqChip, alertChip);
     headline.append(codeLine, value);
-    metaLine.append(meta, coords, elevation, zone, compare, footer, close);
+    metaLine.append(meta, coords, cell, elevation, zone, compare, footer, close);
     axis.append(metaLine, canvas);
     head.append(headline, axis);
     // The meteogram: the row labels and readouts are DOM text in the left
@@ -476,6 +490,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       aqChip,
       alertChip,
       coords,
+      cell,
       elevation,
       zone,
       compare,
@@ -1103,7 +1118,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probePanel.code.textContent = variableUi(session).code;
     renderProbeAirportChip();
     const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
-    probePanel.coords.textContent = pinnedPointText(point.latitude, point.longitude);
+    probePanel.coords.textContent = pinnedPointText(series.latitude, series.longitude);
+    probePanel.cell.textContent = cell ? cellCentreText(cell.latitude, cell.longitude) : "";
     renderProbeElevation({ latitude: series.latitude, longitude: series.longitude });
     probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(deps.activeFrameIndex ?? Number(slider.value))) : "";
     probePanel.compare.href = compareUrl(point.latitude, point.longitude);

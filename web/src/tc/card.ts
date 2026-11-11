@@ -10,7 +10,7 @@
 import { element } from "../dom";
 import { t } from "../i18n";
 import { coordinateFormat } from "../mapprefs";
-import { toMgrs } from "../mgrs";
+import { formatCoordinate } from "../coordinates";
 import { convertDistance, formatDistance, formatPressure, formatWind as formatSpeed, UNIT_LABELS, units } from "../units";
 import { agencyColor, TC_AGENCIES } from "./agencies";
 import type { TcPointData } from "./layers";
@@ -101,13 +101,13 @@ export function buildTcCard(
     root.append(element("div", "tc-card-extra", extras.join(" · ")));
 
   // A best-track position is good to a tenth of a degree at best (a
-  // reconstructed one to about a kilometre), so its MGRS reference names the
-  // kilometre square, not the metre.
-  const mgrs = coordinateFormat === "mgrs" ? toMgrs(data.lat, data.lon, 2) : null;
+  // reconstructed one to about a kilometre), so a grid reference names the
+  // kilometre, not the metre.
+  const reference = formatCoordinate(coordinateFormat, data.lat, data.lon, 1000);
   const where = element(
     "div",
     "tc-card-position",
-    mgrs ?? `${Math.abs(data.lat).toFixed(1)}°${data.lat >= 0 ? "N" : "S"} ${Math.abs(data.lon).toFixed(1)}°${data.lon >= 0 ? "E" : "W"}`,
+    reference ?? `${Math.abs(data.lat).toFixed(1)}°${data.lat >= 0 ? "N" : "S"} ${Math.abs(data.lon).toFixed(1)}°${data.lon >= 0 ? "E" : "W"}`,
   );
   root.append(where);
   return root;

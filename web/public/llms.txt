@@ -329,9 +329,12 @@ fall back to defaults rather than fail, so a constructed link always opens.
   browser from the terrain tiles (500 m at zoom 9 down to 25 m at zoom 15,
   the index line every fifth labelled in metres), from zoom 9 in (default
   off; also a switch on the view tile).
-- `?grid=mgrs|latlon|mgrs,latlon|off` — draw the MGRS grid (zones, 100 km
-  squares, 10 km lines from zoom 8, 1 km from zoom 11, as the GSI's UTM grid
-  numbers them) and/or parallels and meridians; `off` overrides the
+- `?grid=<grid>[,<grid>…]|off` — coordinate grids over the map, any of
+  `mgrs` (zones, 100 km squares, 10 km lines from zoom 8, 1 km from zoom
+  11, as the GSI's UTM grid numbers them), `utm` (the same lines numbered
+  as UTM eastings and northings), `gars` (30′ cells, 15′ quadrants, 5′
+  keypads), `bng` (the Ordnance Survey's British National Grid, over Great
+  Britain) and `latlon` (parallels and meridians); `off` overrides the
   viewer's stored choice (default: the stored choice, else none).
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.

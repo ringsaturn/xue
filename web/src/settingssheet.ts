@@ -12,7 +12,8 @@
  */
 
 import { onLocaleChange, t, type MessageKey } from "./i18n";
-import { coordinateFormat, grid, onMapPrefsChange, setCoordinateFormat, setGrid } from "./mapprefs";
+import { COORDINATE_FORMATS, coordinateFormat, grid, onMapPrefsChange, setCoordinateFormat, setGrid } from "./mapprefs";
+import { GRID_KINDS, type GridKind } from "./urlstate";
 import { createSheet, mountLanguageList } from "./sheet";
 import { isDark, onThemeChange, toggleTheme } from "./theme";
 import {
@@ -39,6 +40,9 @@ const QUANTITY_KEYS: Record<UnitQuantity, MessageKey> = {
   height: "unitHeight",
   distance: "unitDistance",
 };
+
+/** The grids by their own codes, which are never translated. */
+const GRID_CODES: Record<Exclude<GridKind, "latlon">, string> = { mgrs: "MGRS", utm: "UTM", gars: "GARS", bng: "BNG" };
 
 interface Choice {
   label: string;
@@ -122,16 +126,21 @@ export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, bod
     rows.push(
       field(
         t("settingsGrid"),
-        [
-          { label: "MGRS", checked: grid.mgrs, pick: () => setGrid({ ...grid, mgrs: !grid.mgrs }) },
-          { label: t("gridLatlon"), checked: grid.latlon, pick: () => setGrid({ ...grid, latlon: !grid.latlon }) },
-        ],
+        GRID_KINDS.map((kind) => ({
+          label: kind === "latlon" ? t("gridLatlon") : GRID_CODES[kind],
+          checked: grid[kind],
+          pick: () => setGrid({ ...grid, [kind]: !grid[kind] }),
+        })),
         true,
       ),
-      field(t("settingsCoordinates"), [
-        { label: t("coordsLatlon"), checked: coordinateFormat === "latlon", pick: () => setCoordinateFormat("latlon") },
-        { label: "MGRS", checked: coordinateFormat === "mgrs", pick: () => setCoordinateFormat("mgrs") },
-      ]),
+      field(
+        t("settingsCoordinates"),
+        COORDINATE_FORMATS.map((format) => ({
+          label: format === "latlon" ? t("coordsLatlon") : GRID_CODES[format],
+          checked: coordinateFormat === format,
+          pick: () => setCoordinateFormat(format),
+        })),
+      ),
     );
     body.replaceChildren(...rows);
     if (focused) restoreFocus(body, focused);
