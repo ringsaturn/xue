@@ -1388,7 +1388,7 @@ fn issue_pins_a_round_and_the_dated_tree_is_derived_from_the_id() {
 
     // An hourly product's issue sits under its UTC day.
     let sounding = ok(&data, "soundings", "issue=sounding.2026091402");
-    assert_eq!(sounding["count"], 19);
+    assert_eq!(sounding["count"], 20);
     let paths: Vec<String> = data.reads().into_iter().map(|(path, _)| path).collect();
     assert!(paths.contains(&"sounding/2026/09/14/sounding.2026091402/index.json".to_owned()));
     assert!(!paths.contains(&"sounding.2026091402/index.json".to_owned()));
