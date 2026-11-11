@@ -78,8 +78,15 @@ function field(caption: string, choices: readonly Choice[], switches = false): H
   return wrapper;
 }
 
-/** Wire the sheet to its trigger and fill its body. */
-export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, body: HTMLElement, languages: HTMLElement): void {
+/** Wire the sheet to its trigger and fill its body. A page without the
+ * coordinate grids (the storm map) leaves out their rows (`grids: false`). */
+export function mountSettingsSheet(
+  trigger: HTMLElement,
+  sheet: HTMLElement,
+  body: HTMLElement,
+  languages: HTMLElement,
+  { grids = true }: { grids?: boolean } = {},
+): void {
   createSheet({ trigger, sheet });
   const renderLanguages = mountLanguageList(languages);
   const languageField = languages.closest<HTMLElement>(".settings-field");
@@ -119,20 +126,22 @@ export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, bod
         ),
       );
     }
-    rows.push(
-      field(
-        t("settingsGrid"),
-        [
-          { label: "MGRS", checked: grid.mgrs, pick: () => setGrid({ ...grid, mgrs: !grid.mgrs }) },
-          { label: t("gridLatlon"), checked: grid.latlon, pick: () => setGrid({ ...grid, latlon: !grid.latlon }) },
-        ],
-        true,
-      ),
-      field(t("settingsCoordinates"), [
-        { label: t("coordsLatlon"), checked: coordinateFormat === "latlon", pick: () => setCoordinateFormat("latlon") },
-        { label: "MGRS", checked: coordinateFormat === "mgrs", pick: () => setCoordinateFormat("mgrs") },
-      ]),
-    );
+    if (grids) {
+      rows.push(
+        field(
+          t("settingsGrid"),
+          [
+            { label: "MGRS", checked: grid.mgrs, pick: () => setGrid({ ...grid, mgrs: !grid.mgrs }) },
+            { label: t("gridLatlon"), checked: grid.latlon, pick: () => setGrid({ ...grid, latlon: !grid.latlon }) },
+          ],
+          true,
+        ),
+        field(t("settingsCoordinates"), [
+          { label: t("coordsLatlon"), checked: coordinateFormat === "latlon", pick: () => setCoordinateFormat("latlon") },
+          { label: "MGRS", checked: coordinateFormat === "mgrs", pick: () => setCoordinateFormat("mgrs") },
+        ]),
+      );
+    }
     body.replaceChildren(...rows);
     if (focused) restoreFocus(body, focused);
   }

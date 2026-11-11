@@ -15,9 +15,9 @@ import { guardContextLoss } from "./glguard";
 import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i18n";
 import { cardPopup } from "./cardpopup";
 import { applyPageMeta } from "./pagemeta";
-import { mountLanguagePicker } from "./sheet";
+import { mountSettingsSheet } from "./settingssheet";
 import { dataBaseUrl } from "./site";
-import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
+import { applyTheme, isDark, onThemeChange } from "./theme";
 import { convertDistance, formatWind, onUnitsChange, units } from "./units";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
@@ -92,12 +92,13 @@ const issueLabel = document.getElementById("typhoon-issue-time") as HTMLOutputEl
 const sourcesGroup = document.getElementById("typhoon-sources") as HTMLDivElement;
 const truthsGroup = document.getElementById("typhoon-truths") as HTMLDivElement;
 const table = document.getElementById("typhoon-errors") as HTMLTableElement;
-document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());
-
-const langTrigger = document.getElementById("lang-toggle");
-const langSheet = document.getElementById("lang-sheet");
-const langList = document.getElementById("lang-list");
-if (langTrigger && langSheet && langList) onLocaleChange(mountLanguagePicker(langTrigger, langSheet, langList));
+mountSettingsSheet(
+  document.getElementById("settings-toggle")!,
+  document.getElementById("settings-sheet")!,
+  document.getElementById("settings-body")!,
+  document.getElementById("settings-languages")!,
+  { grids: false },
+);
 
 // --- the address ----------------------------------------------------------
 
@@ -568,6 +569,12 @@ function renderErrors(): void {
   table.replaceChildren(head, group(t("tcPageErrorsMean"), mean, true), group(t("tcPageErrorsThis"), one, false));
 }
 
+/** A peak wind (m/s) in the list: the centres' knots when knots are the
+ * choice, else the viewer's unit alone, as the row has room for one. */
+function peakLabel(vmax: number): string {
+  return units.wind === "kt" ? `${Math.round(vmax / KNOT)} kt` : formatWind(vmax, 0);
+}
+
 function renderFacts(): void {
   if (!loaded) return;
   const { entry } = loaded;
@@ -593,7 +600,7 @@ function renderFacts(): void {
   // The peak is the centres' knots, with the viewer's unit beside it.
   if (entry.vmax !== null) {
     const knots = `${Math.round(entry.vmax / KNOT)} kt`;
-    items.push(definition(t("tcPagePeak"), units.wind === "kt" ? knots : `${knots} · ${formatWind(entry.vmax, 0)}`));
+    items.push(definition(t("tcPagePeak"), units.wind === "kt" ? knots : `${knots} · ${peakLabel(entry.vmax)}`));
   }
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
@@ -745,7 +752,7 @@ function renderPicker(): void {
           element("span", "typhoon-row-code", storm.basin === "SH" ? `${stormCode(storm.id)} ${southernSeason(storm.id)}` : stormCode(storm.id)),
           element("span", "typhoon-row-name", name),
           element("span", "typhoon-row-span", stormSpan(storm)),
-          element("span", "typhoon-row-peak", storm.vmax === null ? "" : `${Math.round(storm.vmax / KNOT)} kt`),
+          element("span", "typhoon-row-peak", storm.vmax === null ? "" : peakLabel(storm.vmax)),
         );
         button.addEventListener("click", () => void selectStorm(storm, null));
         item.append(button);
@@ -869,8 +876,11 @@ onLocaleChange(() => {
 onUnitsChange(() => {
   // The track-error heading names the distance unit (`{distanceUnit}`).
   applyStaticMessages();
-  if (loaded) renderErrors();
-  if (loaded) renderFacts();
+  renderPicker();
+  if (loaded) {
+    renderErrors();
+    renderFacts();
+  }
 });
 
 load().catch((error: unknown) => fail(t("tcPageFailed", { message: error instanceof Error ? error.message : String(error) })));
