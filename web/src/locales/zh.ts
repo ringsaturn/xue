@@ -265,7 +265,7 @@ export const zh: Record<MessageKey, string> = {
   viewResetPitchAria: "重置俯仰",
   viewBoxAria: "风暴特写：框选一块区域",
   viewSectionAria: "垂直剖面：拖一条线",
-  viewDistanceAria: "测距：依次点击各点，再点最后一点结束",
+  viewDistanceAria: "测距：依次点击各点，再点最后一点结束；开 3D 地形时再点终点可打开高程剖面",
   viewAreaAria: "测面积：依次点击各顶点，再点首点或末点结束",
   measureSurface: "地表路程 {length} · ↑{climb} ↓{descent}",
   measureStraight: "直线距离 {length}",

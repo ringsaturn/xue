@@ -436,6 +436,9 @@ export class MeasureTool {
    * and the sample its pointer is over. */
   private card: Popup | null = null;
   private hover: LonLat | null = null;
+  /** The reader closed the card: it stays shut until they click the
+   * line's end again, rather than coming back on a units change. */
+  private cardDismissed = false;
 
   constructor(
     private readonly map: MaplibreMap,
@@ -492,6 +495,14 @@ export class MeasureTool {
    * the marks under the pointer wait until it is put away. */
   click(event: MapMouseEvent): boolean {
     if (!this.kind) return false;
+    // A click on a finished distance's end opens its profile card again;
+    // anywhere else starts a new shape.
+    const end = this.points[this.points.length - 1];
+    if (this.ended && this.kind === "distance" && this.profile && end && this.near(end, event)) {
+      this.cardDismissed = false;
+      this.syncCard();
+      return true;
+    }
     if (this.ended) {
       this.points = [];
       this.ended = false;
@@ -553,6 +564,7 @@ export class MeasureTool {
 
   private forgetProfile(): void {
     this.profile = null;
+    this.cardDismissed = false;
     this.generation += 1;
     this.syncCard();
   }
@@ -562,11 +574,14 @@ export class MeasureTool {
    * (a units or language change). */
   private syncCard(rebuild = false): void {
     const end = this.points[this.points.length - 1];
-    const wanted = this.kind === "distance" && this.profile !== null && end !== undefined && this.map.getTerrain() !== null;
+    const wanted =
+      this.kind === "distance" && this.profile !== null && end !== undefined && this.map.getTerrain() !== null && !this.cardDismissed;
     if (!wanted) {
-      const open = this.card !== null;
-      this.card?.remove();
+      const open = this.card;
+      // Let go before removing, so the close handler does not take this for
+      // the reader closing it.
       this.card = null;
+      open?.remove();
       this.setHover(null);
       // The label takes the profile's lines back.
       if (open) this.render();
@@ -587,6 +602,9 @@ export class MeasureTool {
     card.on("close", () => {
       if (this.card !== card) return;
       this.card = null;
+      // Closed by the reader (the button, Escape): stay shut. A close from
+      // syncCard has already let go of `this.card`.
+      this.cardDismissed = true;
       this.setHover(null);
       this.render();
     });

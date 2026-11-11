@@ -265,7 +265,7 @@ export const ja: Record<MessageKey, string> = {
   viewResetPitchAria: "傾きをリセット",
   viewBoxAria: "嵐のクローズアップ：範囲をドラッグ",
   viewSectionAria: "鉛直断面：線をドラッグ",
-  viewDistanceAria: "距離を測る：地点をクリック、最後の点をもう一度クリックで終了",
+  viewDistanceAria: "距離を測る：地点をクリック、最後の点をもう一度クリックで終了。3D 地形では終点をもう一度クリックで標高断面",
   viewAreaAria: "面積を測る：頂点をクリック、最初か最後の点をもう一度クリックで終了",
   measureSurface: "地表沿い {length} · ↑{climb} ↓{descent}",
   measureStraight: "直線距離 {length}",

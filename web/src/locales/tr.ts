@@ -271,7 +271,7 @@ export const tr: Record<MessageKey, string> = {
   viewResetPitchAria: "Eğimi sıfırla",
   viewBoxAria: "Fırtına yakın planı: bir kutu sürükleyin",
   viewSectionAria: "Düşey kesit: bir çizgi sürükleyin",
-  viewDistanceAria: "Mesafe ölç: noktalara tıklayın, bitirmek için sonuncuya yeniden tıklayın",
+  viewDistanceAria: "Mesafe ölç: noktalara tıklayın, bitirmek için sonuncuya yeniden tıklayın; 3B arazide yükseklik profili için uca yeniden tıklayın",
   viewAreaAria: "Alan ölç: köşelere tıklayın, bitirmek için ilk ya da son köşeye yeniden tıklayın",
   measureSurface: "Arazi üzerinde {length} · ↑{climb} ↓{descent}",
   measureStraight: "Düz çizgi {length}",

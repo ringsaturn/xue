@@ -268,7 +268,7 @@ export const es: Record<MessageKey, string> = {
   viewResetPitchAria: "Restablecer inclinación",
   viewBoxAria: "Primer plano de la tormenta: arrastra un recuadro",
   viewSectionAria: "Corte vertical: arrastra una línea",
-  viewDistanceAria: "Medir distancia: haz clic en los puntos y otra vez en el último para terminar",
+  viewDistanceAria: "Medir distancia: haz clic en los puntos y otra vez en el último para terminar; con relieve 3D, otra vez en el extremo para el perfil de elevación",
   viewAreaAria: "Medir área: haz clic en los vértices y otra vez en el primero o el último para terminar",
   measureSurface: "Sobre el terreno {length} · ↑{climb} ↓{descent}",
   measureStraight: "Línea recta {length}",
