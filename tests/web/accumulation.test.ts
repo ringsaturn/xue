@@ -3,17 +3,24 @@ import { describe, expect, it } from "vitest";
 import {
   ACCUMULATION_BOUNDS,
   ACCUMULATION_QUANTIZATION,
+  RangeSum,
   WindowTotals,
   accumulationLegend,
+  accumulationParam,
   accumulationPalette,
   accumulationPlan,
   accumulationVariable,
   accumulationWindows,
   encodeTotal,
+  parseAccumulation,
   parseWindow,
+  planTotal,
+  rangeIndices,
+  rangePlan,
   rateKind,
   seriesTotals,
   windowCode,
+  windowFits,
   windowParam,
 } from "../../web/src/accumulation";
 import type { BundleVariable } from "../../web/src/manifest";
@@ -121,6 +128,68 @@ describe("accumulationPlan", () => {
     const plan = accumulationPlan(leads, 5, 3600, "instant");
     expect(plan.terms.map((term) => term.index)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(plan.covered).toBe(480);
+  });
+});
+
+describe("windowFits", () => {
+  it("takes any window from one step to the axis's span", () => {
+    const hourly = [...Array(25).keys()].map((hour) => hour * HOUR);
+    expect(windowFits(hourly, "instant", 9 * HOUR)).toBe(true);
+    expect(windowFits(hourly, "instant", 2 * HOUR)).toBe(true);
+    expect(windowFits(hourly, "instant", 30 * 60)).toBe(false);
+    expect(windowFits(hourly, "instant", 25 * HOUR)).toBe(false);
+    // ECMWF-like three-hourly: a two-hour window is under one step.
+    const threeHourly = [3, 6, 9, 12].map((hour) => hour * HOUR);
+    expect(windowFits(threeHourly, "interval", 2 * HOUR)).toBe(false);
+    expect(windowFits(threeHourly, "interval", 12 * HOUR)).toBe(true);
+  });
+});
+
+describe("a range", () => {
+  it("is spelled by UTC valid times, to the minute only off the hour", () => {
+    const range = { type: "range" as const, from: Date.UTC(2026, 10, 11, 6), to: Date.UTC(2026, 10, 14, 0, 30) };
+    expect(accumulationParam(range)).toBe("2026111106-202611140030");
+    expect(parseAccumulation("2026111106-202611140030")).toEqual(range);
+    expect(parseAccumulation("24h")).toEqual({ type: "window", seconds: 24 * HOUR });
+    expect(parseAccumulation("2026023106-2026030100")).toBeNull();
+    expect(parseAccumulation("2026111106-2026111106")).toBeNull();
+  });
+
+  it("snaps its ends to the nearest frames, and is none when they meet", () => {
+    const times = [0, 1, 2, 3, 6].map((hour) => hour * HOUR * 1000);
+    expect(rangeIndices(times, { from: 0.4 * HOUR * 1000, to: 5 * HOUR * 1000 })).toEqual({ from: 0, to: 4 });
+    expect(rangeIndices(times, { from: 10 * HOUR * 1000, to: 12 * HOUR * 1000 })).toBeNull();
+  });
+
+  it("weights the frames between its two valid times", () => {
+    const interval = [3, 6, 9, 12, 18, 24].map((hour) => hour * HOUR);
+    expect(hours(rangePlan(interval, 1, 4, "interval"))).toEqual([
+      [2, 3],
+      [3, 3],
+      [4, 6],
+    ]);
+    const instant = [0, 1, 2, 3].map((hour) => hour * HOUR);
+    const plan = rangePlan(instant, 1, 3, "instant");
+    expect(hours(plan)).toEqual([
+      [1, 0.5],
+      [2, 1],
+      [3, 0.5],
+    ]);
+    expect(planTotal([9, 2, 4, 2], plan)).toBe(6);
+    expect(planTotal([9, 2, undefined, 2], plan)).toBeUndefined();
+  });
+
+  it("sums the frames added one at a time, each once", () => {
+    const variable = rate(false);
+    const sum = new RangeSum(variable, "range", 2);
+    // Codes are ten times the rate: 2 mm/h for an hour, no data beside it.
+    const plane = new Uint8Array([20, 255]);
+    sum.add("a", plane, 1);
+    sum.add("a", plane, 1);
+    expect(sum.count).toBe(1);
+    expect([...sum.plane()]).toEqual([encodeTotal(2), ACCUMULATION_QUANTIZATION.nodataCode]);
+    sum.add("b", new Uint8Array([10, 0]), 2);
+    expect([...sum.plane()]).toEqual([encodeTotal(4), ACCUMULATION_QUANTIZATION.zeroCode]);
   });
 });
 

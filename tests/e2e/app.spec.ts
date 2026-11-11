@@ -572,6 +572,46 @@ test("the precipitation's level row sums the rate over a window", async ({ page 
   await expect(page.locator("#legend-unit")).toHaveText("mm/h");
 });
 
+test("the precipitation's RANGE sums a span dragged out on the track", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/");
+  await waitForReady(page);
+  const range = page.locator('#level-row button[data-accum="range"]');
+  const band = page.locator("#track-range");
+  await expect(band).toBeHidden();
+  await range.click();
+  await expect(range).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/accum=\d{10}-\d{10}/);
+  await expect(band).toBeVisible();
+  await expect(page.locator("#legend-unit")).toHaveText("mm");
+  await expect(page.locator("#variable-code")).toContainText("APCP");
+  const before = new URL(page.url()).searchParams.get("accum");
+  // A drag across the middle of the track is a new range.
+  const box = (await page.locator("#frame-slider").boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.3, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.45, y, { steps: 5 });
+  await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => new URL(page.url()).searchParams.get("accum")).not.toBe(before);
+  await expect(page).toHaveURL(/accum=\d{10}-\d{10}/);
+  await expect(band).toBeVisible();
+  // A drag inside the band slides it, keeping its length.
+  const dragged = new URL(page.url()).searchParams.get("accum");
+  const code = await page.locator("#variable-code").textContent();
+  await page.mouse.move(box.x + box.width * 0.45, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.4, y, { steps: 5 });
+  await page.mouse.move(box.x + box.width * 0.35, y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => new URL(page.url()).searchParams.get("accum")).not.toBe(dragged);
+  await expect(page.locator("#variable-code")).toHaveText(code!);
+});
+
 test("a level row wider than the capsule stays where the press was", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await page.emulateMedia({ reducedMotion: "reduce" });

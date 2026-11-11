@@ -18,6 +18,7 @@
  * every parameter the shell understands.
  */
 
+import type { Accumulation } from "./accumulation";
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
@@ -74,10 +75,11 @@ export interface ViewState {
   field: ForecastBundleId | null;
   /** The pressure surface drawn as lines, over the field or alone. */
   lines: PressureBundleId | null;
-  /** The window, in seconds, the precipitation field is summed over
-   * (`?accum=`, accumulation.ts), or null for the rate. Kept while another
-   * field is on screen, so the way back to precipitation returns to it. */
-  accumulation: number | null;
+  /** What the precipitation field is summed over (`?accum=`,
+   * accumulation.ts): a window ending at the playhead or a fixed range of
+   * valid times; null for the rate. Kept while another field is on screen,
+   * so the way back to precipitation returns to it. */
+  accumulation: Accumulation | null;
   /** Whether the particle overlay is drawn where there is a flow to draw. */
   particles: boolean;
   /** Whether the precipitation is painted by phase, with the 0 °C line

@@ -1646,6 +1646,38 @@ html[lang="ja"] .rail-glyph {
   opacity: 1;
 }
 
+/* The precipitation group's typed window: a chip-shaped field beside the
+   presets, outlined in the warning colour while it refuses what was typed. */
+.level-row .level-input {
+  width: 5ch;
+  height: 28px;
+  flex: none;
+  padding: 0 8px;
+  border: var(--hair) dashed var(--line);
+  border-radius: var(--r-l);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.level-row .level-input::placeholder {
+  color: var(--muted);
+}
+
+.level-row .level-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.level-row .level-input[aria-invalid="true"] {
+  border-style: solid;
+  border-color: var(--warning);
+}
+
 .level-row button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1870,6 +1902,28 @@ html[lang="ja"] .rail-glyph {
 }
 
 .track-now[hidden] {
+  display: none;
+}
+
+/* The precipitation total's range (main.ts::syncRangeBand): a tinted span
+   over the ticks, filled from its start as its frames are summed, and
+   outlined alone while it is being dragged out. */
+.track-range {
+  position: absolute;
+  top: 0;
+  height: 18px;
+  border-inline: 2px solid var(--accent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, transparent) var(--range-progress, 100%), transparent 0)
+    color-mix(in srgb, var(--accent) 10%, transparent);
+  pointer-events: none;
+}
+
+.track-range.is-dragging {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.track-range[hidden] {
   display: none;
 }
 

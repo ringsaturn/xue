@@ -1,7 +1,7 @@
 /**
- * Sliding-window precipitation totals (`?accum=`): the depth that fell over
- * the window ending at the playhead, computed on the frontend from the
- * published precipitation rate planes. No bundle carries a total; every
+ * Precipitation totals (`?accum=`): the depth that fell over the window
+ * ending at the playhead, or over a range picked on the timeline, computed
+ * on the frontend from the published precipitation rate planes. No bundle carries a total; every
  * window is a weighted sum of rate frames the session already decodes.
  *
  * What a rate frame means decides how it is weighted. A rate the encoder
@@ -44,14 +44,21 @@ export function rateKind(variable: BundleVariable): RateKind | null {
  * shortest step, since a total over less than one step would be a rate
  * relabelled, and no longer than the span its frames cover. */
 export function accumulationWindows(leads: readonly number[], kind: RateKind, observations: boolean): number[] {
-  if (leads.length < 2) return [];
+  return (observations ? OBSERVATION_WINDOWS : FORECAST_WINDOWS).filter((window) => windowFits(leads, kind, window));
+}
+
+/** Whether a window of `window` seconds, preset or typed, makes a total on
+ * this axis: no shorter than its shortest step and no longer than the span
+ * its frames cover (see `accumulationWindows`). */
+export function windowFits(leads: readonly number[], kind: RateKind, window: number): boolean {
+  if (leads.length < 2) return false;
   let step = Infinity;
   for (let index = 1; index < leads.length; index += 1) step = Math.min(step, leads[index]! - leads[index - 1]!);
   // An interval frame covers the step before it, so the first frame's own
   // step (from the run's start) counts toward the span too.
   const first = kind === "interval" ? Math.max(0, leads[0]!) : 0;
   const span = leads[leads.length - 1]! - leads[0]! + first;
-  return (observations ? OBSERVATION_WINDOWS : FORECAST_WINDOWS).filter((window) => window >= step && window <= span);
+  return window >= step && window <= span;
 }
 
 /** A window as the level row and the instrument line spell it: "3H", "30M". */
@@ -64,7 +71,7 @@ export function windowParam(seconds: number): string {
   return windowCode(seconds).toLowerCase();
 }
 
-/** `?accum=`'s value as seconds, or null for anything that is not a whole
+/** A window's length as seconds, or null for anything that is not a whole
  * number of hours or minutes. Whether the dataset offers it is the shell's
  * question, not the parser's. */
 export function parseWindow(value: string): number | null {
@@ -73,6 +80,72 @@ export function parseWindow(value: string): number | null {
   const amount = Number(match[1]);
   if (amount <= 0) return null;
   return match[2] === "h" ? amount * 3600 : amount * 60;
+}
+
+/** What a total is summed over: a window of `seconds` ending at the
+ * playhead, or the fixed range between two valid times (epoch ms) picked on
+ * the timeline, which stays put while the playhead moves. A range is kept
+ * by valid time so it means the same hours on the next run. */
+export type Accumulation =
+  | { type: "window"; seconds: number }
+  | { type: "range"; from: number; to: number };
+
+/** A valid time as a range end spells it: `2026111106`, or `202611110630`
+ * off the hour. */
+function rangeStamp(time: number): string {
+  const iso = new Date(time).toISOString();
+  const stamp = `${iso.slice(0, 4)}${iso.slice(5, 7)}${iso.slice(8, 10)}${iso.slice(11, 13)}`;
+  return iso.slice(14, 16) === "00" ? stamp : `${stamp}${iso.slice(14, 16)}`;
+}
+
+function parseRangeStamp(value: string): number | null {
+  const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})?$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const time = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute ?? 0));
+  const back = new Date(time);
+  // Date.UTC rolls 2026-02-31 into March: a stamp that does not read back
+  // the same is not a time.
+  return back.getUTCMonth() === Number(month) - 1 && back.getUTCHours() === Number(hour) ? time : null;
+}
+
+/** `?accum=`'s value: a window (`3h`, `30m`) or a range of UTC valid times
+ * (`2026111106-2026111400`), or null for anything else. */
+export function parseAccumulation(value: string): Accumulation | null {
+  const window = parseWindow(value);
+  if (window !== null) return { type: "window", seconds: window };
+  const match = /^(\d{10}|\d{12})-(\d{10}|\d{12})$/.exec(value.trim());
+  if (!match) return null;
+  const from = parseRangeStamp(match[1]!);
+  const to = parseRangeStamp(match[2]!);
+  return from !== null && to !== null && from < to ? { type: "range", from, to } : null;
+}
+
+/** An accumulation as `?accum=` spells it. */
+export function accumulationParam(accumulation: Accumulation): string {
+  return accumulation.type === "window"
+    ? windowParam(accumulation.seconds)
+    : `${rangeStamp(accumulation.from)}-${rangeStamp(accumulation.to)}`;
+}
+
+/** The frames a range of valid times covers on an axis whose frames are
+ * valid at `validTimes` (epoch ms, ascending): its two ends snapped to the
+ * nearest frames, or null when they snap to the same one. */
+export function rangeIndices(
+  validTimes: readonly number[],
+  range: { from: number; to: number },
+): { from: number; to: number } | null {
+  if (validTimes.length < 2) return null;
+  const nearest = (time: number) => {
+    let best = 0;
+    for (let index = 1; index < validTimes.length; index += 1) {
+      if (Math.abs(validTimes[index]! - time) < Math.abs(validTimes[best]! - time)) best = index;
+    }
+    return best;
+  };
+  const from = nearest(range.from);
+  const to = nearest(range.to);
+  return from < to ? { from, to } : null;
 }
 
 /** One frame of a window and its weight: hours of its rate in the total. */
@@ -100,8 +173,18 @@ export function accumulationPlan(
   window: number,
   kind: RateKind,
 ): AccumulationPlan {
-  const end = leads[index]!;
-  const start = end - window;
+  return planSince(leads, leads[index]! - window, index, kind);
+}
+
+/** The frames, and their weights, of the range from frame `from` to frame
+ * `to`: the depth that fell between their two valid times. */
+export function rangePlan(leads: readonly number[], from: number, to: number, kind: RateKind): AccumulationPlan {
+  return planSince(leads, leads[from]!, to, kind);
+}
+
+/** The plan of the span from `start` (seconds from the run's start) to
+ * frame `index`. */
+function planSince(leads: readonly number[], start: number, index: number, kind: RateKind): AccumulationPlan {
   const weights = new Map<number, number>();
   let covered = 0;
   const add = (frame: number, seconds: number) => {
@@ -154,18 +237,23 @@ export function seriesTotals(
   window: number,
   kind: RateKind,
 ): (number | null | undefined)[] {
-  return values.map((_, index) => {
-    let total = 0;
-    let read = false;
-    for (const term of accumulationPlan(leads, index, window, kind).terms) {
-      const value = values[term.index];
-      if (value === undefined) return undefined;
-      if (value === null) continue;
-      total += value * term.hours;
-      read = true;
-    }
-    return read ? total : null;
-  });
+  return values.map((_, index) => planTotal(values, accumulationPlan(leads, index, window, kind)));
+}
+
+/** One plan's total over a rate series: a number where every frame of it
+ * is read, null where none of them has a value, undefined while any is
+ * still unread. */
+export function planTotal(values: readonly (number | null | undefined)[], plan: AccumulationPlan): number | null | undefined {
+  let total = 0;
+  let read = false;
+  for (const term of plan.terms) {
+    const value = values[term.index];
+    if (value === undefined) return undefined;
+    if (value === null) continue;
+    total += value * term.hours;
+    read = true;
+  }
+  return read ? total : null;
 }
 
 /** The codebook a total plane is written in: 0.1 mm to 1 m on a log1p grid,
@@ -346,36 +434,92 @@ class PlaneSum {
     this.updates = 0;
   }
 
-  /** Add `hours` of a plane's rate to the sum, and `count` to the number of
-   * frames reading at each cell (+1 entering the window, -1 leaving it). */
   private apply(plane: Uint8Array, hours: number, count: number): void {
-    const { rate, valid } = this.table;
-    const sum = this.sum;
-    const readings = this.valid;
-    for (let cell = 0; cell < plane.length; cell += 1) {
-      const code = plane[cell]!;
-      sum[cell] = sum[cell]! + rate[code]! * hours;
-      if (count !== 0) readings[cell] = readings[cell]! + count * valid[code]!;
-    }
+    addPlane(this.table, this.sum, this.valid, plane, hours, count);
   }
 
   encode(): Uint8Array {
-    const out = new Uint8Array(this.sum.length);
-    const q = ACCUMULATION_QUANTIZATION;
-    const lo = Math.log1p(q.trace / q.scale);
-    const span = Math.log1p(q.maximum / q.scale) - lo;
-    const codes = q.maximumCode - q.minimumCode;
-    for (let cell = 0; cell < out.length; cell += 1) {
-      if (this.valid[cell] === 0) {
-        out[cell] = q.nodataCode;
-        continue;
-      }
-      const total = this.sum[cell]!;
-      if (!(total >= q.trace)) continue;
-      const code = Math.round(q.minimumCode + ((Math.log1p(total / q.scale) - lo) / span) * codes);
-      out[cell] = code > q.overflowCode ? q.overflowCode : code;
+    return encodeSum(this.sum, this.valid);
+  }
+}
+
+/** Add `hours` of a plane's rate to a sum, and `count` to the number of
+ * frames reading at each cell (+1 entering the window, -1 leaving it). */
+function addPlane(table: RateTable, sum: Float64Array, readings: Uint16Array, plane: Uint8Array, hours: number, count: number): void {
+  const { rate, valid } = table;
+  for (let cell = 0; cell < plane.length; cell += 1) {
+    const code = plane[cell]!;
+    sum[cell] = sum[cell]! + rate[code]! * hours;
+    if (count !== 0) readings[cell] = readings[cell]! + count * valid[code]!;
+  }
+}
+
+/** A sum in millimetres written into the total codebook; a cell no frame
+ * read is no data. */
+function encodeSum(sum: Float64Array, readings: Uint16Array): Uint8Array {
+  const out = new Uint8Array(sum.length);
+  const q = ACCUMULATION_QUANTIZATION;
+  const lo = Math.log1p(q.trace / q.scale);
+  const span = Math.log1p(q.maximum / q.scale) - lo;
+  const codes = q.maximumCode - q.minimumCode;
+  for (let cell = 0; cell < out.length; cell += 1) {
+    if (readings[cell] === 0) {
+      out[cell] = q.nodataCode;
+      continue;
     }
-    return out;
+    const total = sum[cell]!;
+    if (!(total >= q.trace)) continue;
+    const code = Math.round(q.minimumCode + ((Math.log1p(total / q.scale) - lo) / span) * codes);
+    out[cell] = code > q.overflowCode ? q.overflowCode : code;
+  }
+  return out;
+}
+
+/**
+ * The total over a fixed range, gathered one frame at a time. A range is
+ * not tied to the playhead, so nothing is ever taken back out: each frame
+ * is added once as it lands and may be evicted right after, which lets a
+ * range span the whole axis without its planes fitting in the cache
+ * together. It starts over (a new instance) for another range, view or
+ * grid: the planes it summed were decoded for the old one.
+ */
+export class RangeSum {
+  private readonly table: RateTable;
+  private readonly sum: Float64Array;
+  private readonly readings: Uint16Array;
+  private readonly added = new Set<string>();
+  private encoded: Uint8Array | null = null;
+
+  constructor(
+    variable: BundleVariable,
+    /** What the sum is of: the range, the view's tiles and the grid. */
+    readonly identity: string,
+    readonly cells: number,
+  ) {
+    this.table = rateTable(variable);
+    this.sum = new Float64Array(cells);
+    this.readings = new Uint16Array(cells);
+  }
+
+  has(key: string): boolean {
+    return this.added.has(key);
+  }
+
+  get count(): number {
+    return this.added.size;
+  }
+
+  add(key: string, plane: Uint8Array, hours: number): void {
+    if (this.added.has(key) || plane.length !== this.cells) return;
+    addPlane(this.table, this.sum, this.readings, plane, hours, 1);
+    this.added.add(key);
+    this.encoded = null;
+  }
+
+  /** The total plane of what has been added so far. */
+  plane(): Uint8Array {
+    this.encoded ??= encodeSum(this.sum, this.readings);
+    return this.encoded;
   }
 }
 
