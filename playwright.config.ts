@@ -27,6 +27,14 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
+    // The browser reports en-US, which the `auto` units read as US
+    // customary; the specs read values in metric, so every page starts with
+    // metric stored, as a viewer who picked it in the settings sheet would.
+    // A spec that needs other units sets `?units=`.
+    storageState: {
+      cookies: [],
+      origins: [{ origin: "http://127.0.0.1:4173", localStorage: [{ name: "xue-units", value: "metric" }] }],
+    },
   },
   webServer: {
     command: "npm run dev -- --port 4173 --strictPort",
