@@ -48,6 +48,7 @@ import {
 import { STATION_CLICKABLE_LAYERS, stationDataOf, StationLayers, type StationPointData } from "./stations/layers";
 import { TC_MODELS } from "./tc/agencies";
 import { buildTcCard } from "./tc/card";
+import { onMapPrefsChange } from "./mapprefs";
 import { pointDataOf, StormLayers, type StormView, TC_CLICKABLE_LAYERS, type TcPointData } from "./tc/layers";
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
@@ -990,6 +991,10 @@ export function createMarks(deps: MarksDeps) {
   onUnitsChange(() => {
     if (tcCard && rebuildTcCard) tcCard.setDOMContent(rebuildTcCard());
     if (stationCard && rebuildStationCard) stationCard.setDOMContent(rebuildStationCard());
+  });
+  // A storm card writes its position in the chosen coordinate format.
+  onMapPrefsChange(() => {
+    if (tcCard && rebuildTcCard) tcCard.setDOMContent(rebuildTcCard());
   });
 
   /** Hold a card opened elsewhere (a case marker's) in the station card's

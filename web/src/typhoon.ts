@@ -18,6 +18,8 @@ import { applyPageMeta } from "./pagemeta";
 import { mountSettingsSheet } from "./settingssheet";
 import { dataBaseUrl } from "./site";
 import { applyTheme, isDark, onThemeChange } from "./theme";
+import { CoordinateGrid } from "./gridlayer";
+import { grid, onMapPrefsChange } from "./mapprefs";
 import { convertDistance, formatPressure, formatWind, onUnitsChange, units } from "./units";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
@@ -97,7 +99,6 @@ mountSettingsSheet(
   document.getElementById("settings-sheet")!,
   document.getElementById("settings-body")!,
   document.getElementById("settings-languages")!,
-  { grids: false },
 );
 
 // --- the address ----------------------------------------------------------
@@ -184,6 +185,11 @@ function basemapStyle(): StyleSpecification {
 let map: MaplibreMap | null = null;
 let storms: StormLayers | null = null;
 let card: Popup | null = null;
+/** The card on screen, rebuilt when the coordinate format changes. */
+let rebuildCard: (() => HTMLElement) | null = null;
+/** The MGRS grid and the graticule, for reading a storm's track against
+ * the references a fleet's reports used (`?grid=`, the settings sheet). */
+let coordinateGrid: CoordinateGrid | null = null;
 
 function ensureMap(): MaplibreMap {
   if (map) return map;
@@ -195,6 +201,12 @@ function ensureMap(): MaplibreMap {
     style: basemapStyle(),
   });
   created.addControl(new NavigationControl({ showCompass: false }), "top-right");
+  coordinateGrid = new CoordinateGrid({
+    map: created,
+    darkGround: () => isDark,
+    // Clear of the zoom buttons in the top-right corner.
+    edgeInsets: () => ({ top: 12, right: 56, bottom: 28, left: 12 }),
+  });
   // See main.ts: a context lost on every restore cannot draw the storm.
   guardContextLoss(created.getContainer(), () => {
     setPlaying(false);
@@ -205,6 +217,9 @@ function ensureMap(): MaplibreMap {
   // has no WebGL layers of its own, which is what the viewer's never-
   // setStyle rule protects.
   created.on("style.load", () => {
+    // The grid goes in first, under the basemap's labels; the storm layers
+    // then land above its lines and under its numbers.
+    coordinateGrid?.setState(grid);
     storms = new StormLayers(created);
     const before = (created.getStyle().layers ?? []).find((layer) => layer.type === "symbol")?.id;
     storms.ensure(before);
@@ -223,9 +238,10 @@ function ensureMap(): MaplibreMap {
     for (const feature of created.queryRenderedFeatures(box, { layers })) {
       const data = pointDataOf(feature);
       if (!data) continue;
+      rebuildCard = () => buildTcCard(data, { formatTime: formatUtcHour });
       card = cardPopup({ className: "tc-popup", maxWidth: "300px", offset: 12 })
         .setLngLat([data.lon, data.lat])
-        .setDOMContent(buildTcCard(data, { formatTime: formatUtcHour }))
+        .setDOMContent(rebuildCard())
         .addTo(created);
       return;
     }
@@ -894,6 +910,11 @@ onThemeChange(() => {
   map?.setStyle(basemapStyle());
 });
 
+onMapPrefsChange(() => {
+  coordinateGrid?.setState(grid);
+  if (card && rebuildCard) card.setDOMContent(rebuildCard());
+});
+
 onLocaleChange(() => {
   map?.setStyle(basemapStyle());
   if (loaded) renderAll();
@@ -908,6 +929,7 @@ onUnitsChange(() => {
     renderErrors();
     renderFacts();
   }
+  if (card && rebuildCard) card.setDOMContent(rebuildCard());
 });
 
 load().catch((error: unknown) => fail(t("tcPageFailed", { message: error instanceof Error ? error.message : String(error) })));
