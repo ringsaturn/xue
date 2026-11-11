@@ -18,7 +18,7 @@ import { applyPageMeta } from "./pagemeta";
 import { mountSettingsSheet } from "./settingssheet";
 import { dataBaseUrl } from "./site";
 import { applyTheme, isDark, onThemeChange } from "./theme";
-import { CoordinateGrid } from "./gridlayer";
+import { CoordinateGrid, quietGridInk } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
 import { convertDistance, formatPressure, formatWind, onUnitsChange, units } from "./units";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
@@ -206,6 +206,9 @@ function ensureMap(): MaplibreMap {
     darkGround: () => isDark,
     // Clear of the zoom buttons in the top-right corner.
     edgeInsets: () => ({ top: 12, right: 56, bottom: 28, left: 12 }),
+    // A track with no intensity class is drawn grey-white; the grid steps
+    // back so the track stays the subject.
+    ink: quietGridInk,
   });
   // See main.ts: a context lost on every restore cannot draw the storm.
   guardContextLoss(created.getContainer(), () => {
