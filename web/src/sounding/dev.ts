@@ -16,7 +16,7 @@
  * `http://localhost:5173/skewt.html`.
  */
 
-import { parcelPath, profileFromModel, profileFromSounding } from "./profile";
+import { convectiveCondensation, parcelPath, profileFromModel, profileFromSounding } from "./profile";
 import type { ModelLevel, Profile } from "./profile";
 import { SAMPLE_STATIONS, type SampleStation } from "./sample";
 import { drawSkewT, readoutAt, skewTLayout, toXY } from "./skewt";
@@ -32,10 +32,16 @@ const LIGHT: SkewTInk = {
   gridStrong: "rgba(27, 26, 23, 0.45)",
   paper: "#f3efe6",
   model: "#e8763a",
-  parcel: "rgba(27, 26, 23, 0.5)",
+  parcel: "#2f8a3a",
   temperature: "#b4441a",
   dew: "#0e7c72",
   modelDew: "#3bb8a8",
+  dryAdiabat: "rgba(58, 128, 44, 0.42)",
+  moistAdiabat: "rgba(58, 128, 44, 0.32)",
+  mixingRatio: "rgba(146, 58, 168, 0.42)",
+  tag: "rgba(27, 26, 23, 0.82)",
+  tagText: "#f3efe6",
+  halo: "#f3efe6",
 };
 
 /** And the void palette. */
@@ -46,10 +52,16 @@ const DARK: SkewTInk = {
   gridStrong: "rgba(255, 255, 255, 0.5)",
   paper: "#000000",
   model: "#f6a26b",
-  parcel: "rgba(255, 255, 255, 0.5)",
+  parcel: "#5fd36b",
   temperature: "#ff8a4c",
   dew: "#3fd6c4",
   modelDew: "#8de6da",
+  dryAdiabat: "rgba(110, 200, 92, 0.34)",
+  moistAdiabat: "rgba(110, 200, 92, 0.26)",
+  mixingRatio: "rgba(214, 112, 232, 0.38)",
+  tag: "rgba(235, 235, 235, 0.88)",
+  tagText: "#000",
+  halo: "#000",
 };
 
 /**
@@ -118,6 +130,7 @@ function paint(panel: Panel, layout: SkewTLayout, observed: Profile, model: Prof
     profile: observed,
     model,
     parcel: parcelPath(observed),
+    convective: convectiveCondensation(observed),
     font: '10px "IBM Plex Mono", ui-monospace, monospace',
   });
 }

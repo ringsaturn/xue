@@ -464,3 +464,69 @@ export function interpolateAtPressure(profile: Profile, p: number, field: Float6
   }
   return lower >= 0 && profile.p[lower]! === p ? field[lower]! : Number.NaN;
 }
+
+/** Where surface heating would first build cumulus: the convective
+ * condensation level and the temperature the ground has to reach for it. */
+export interface ConvectiveCondensation {
+  /** CCL pressure, hPa. */
+  p: number;
+  /** Temperature at the CCL, °C. */
+  t: number;
+  /** The convective temperature: the CCL's dry adiabat brought down to the
+   * surface pressure, °C. */
+  tcon: number;
+  /** The surface level the construction starts from, hPa. */
+  pSurface: number;
+  /** The isohume through the surface dew point, g/kg. */
+  w: number;
+  /** The potential temperature of the CCL's dry adiabat, K. */
+  theta: number;
+}
+
+/**
+ * The CCL: where the isohume through the surface dew point first meets the
+ * environmental temperature on the way up. A parcel that keeps the surface
+ * moisture and is heated until its dry adiabat reaches that point condenses
+ * there without being forced; the surface temperature that does it is the
+ * convective temperature.
+ *
+ * The crossing is found between the two levels that bracket it and placed
+ * linearly in `ln p`, as every other interpolation on this chart is. `null`
+ * when the ascent has no surface dew point or the isohume never meets the
+ * temperature trace (a sounding cut short, an inversion all the way up).
+ */
+export function convectiveCondensation(profile: Profile): ConvectiveCondensation | null {
+  let start = -1;
+  for (let index = 0; index < profile.n; index += 1) {
+    if (
+      Number.isFinite(profile.p[index]!) &&
+      Number.isFinite(profile.t[index]!) &&
+      Number.isFinite(profile.td[index]!)
+    ) {
+      start = index;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  const pSurface = profile.p[start]!;
+  const w = saturationMixingRatio(profile.td[start]!, pSurface) * 1000;
+  // Positive while the environment is warmer than the isohume.
+  const excess = (index: number): number => profile.t[index]! - mixingRatioLine(w, profile.p[index]!);
+  let lower = start;
+  for (let index = start + 1; index < profile.n; index += 1) {
+    if (!Number.isFinite(profile.p[index]!) || !Number.isFinite(profile.t[index]!)) continue;
+    const below = excess(lower);
+    const above = excess(index);
+    if (below > 0 && above <= 0) {
+      const weight = below / (below - above);
+      const p = Math.exp(
+        Math.log(profile.p[lower]!) + weight * (Math.log(profile.p[index]!) - Math.log(profile.p[lower]!)),
+      );
+      const t = mixingRatioLine(w, p);
+      const theta = (t + 273.15) * (REFERENCE_PRESSURE / p) ** KAPPA;
+      return { p, t, tcon: dryAdiabat(theta, pSurface), pSurface, w, theta };
+    }
+    lower = index;
+  }
+  return null;
+}

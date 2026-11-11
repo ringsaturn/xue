@@ -24,11 +24,26 @@
 
 import { element } from "../dom";
 import { t } from "../i18n";
-import { formatDistance, formatTemperature, formatWind } from "../units";
+import { formatDistance, formatHeight, formatTemperature, formatWind } from "../units";
 import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetch";
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
-import { parcelPath, profileFromSounding, type Profile } from "./profile";
-import { drawSkewT, readoutAt, skewTLayout, toXY, type SkewTInk, type SkewTLayout } from "./skewt";
+import {
+  convectiveCondensation,
+  interpolateAtPressure,
+  parcelPath,
+  profileFromSounding,
+  type Profile,
+} from "./profile";
+import {
+  drawSkewT,
+  drawSkewTCursor,
+  readoutAt,
+  skewTLayout,
+  toXY,
+  type SkewTCursor,
+  type SkewTInk,
+  type SkewTLayout,
+} from "./skewt";
 
 /** The chart's height in the panel, CSS pixels: tall enough for the
  * troposphere to read at a glance, short enough that the panel over the
@@ -123,6 +138,12 @@ function skewTInkFrom(node: Element): SkewTInk {
     temperature: read("--skewt-temperature", "#b4441a"),
     dew: read("--skewt-dew", "#0e7c72"),
     modelDew: read("--skewt-model-dew", "#3bb8a8"),
+    dryAdiabat: read("--skewt-dry", "rgba(58, 128, 44, 0.42)"),
+    moistAdiabat: read("--skewt-moist", "rgba(58, 128, 44, 0.32)"),
+    mixingRatio: read("--skewt-mixing", "rgba(146, 58, 168, 0.42)"),
+    tag: read("--skewt-tag", "rgba(27, 26, 23, 0.82)"),
+    tagText: read("--skewt-tag-text", "#f3efe6"),
+    halo: read("--skewt-halo", "#f3efe6"),
   };
 }
 
@@ -135,6 +156,11 @@ const DEGREES_PER_PIXEL = 1 / 4.4;
 const SPAN_LIMITS: readonly [number, number] = [85, 190];
 /** The midpoint of the default range, which every width keeps. */
 const SPAN_CENTRE = 2.5;
+/** An emagram has no skew to carry the top of the box to the cold side, so
+ * its range has to hold a −60 °C tropopause and a +35 °C surface at once:
+ * wider, and centred colder. */
+const EMAGRAM_SPAN_MIN = 120;
+const EMAGRAM_CENTRE = -22.5;
 
 /**
  * The plot rectangle inside a canvas of this size, and the temperature
@@ -148,9 +174,13 @@ const SPAN_CENTRE = 2.5;
  * same few pixels whatever room the chart has and the diagram reads the
  * same in the panel and in the sheet.
  */
-function layoutFor(width: number, height: number): SkewTLayout {
+function layoutFor(width: number, height: number, emagram: boolean): SkewTLayout {
   const plotWidth = Math.max(40, width - MARGIN.left - MARGIN.right);
-  const span = Math.min(SPAN_LIMITS[1], Math.max(SPAN_LIMITS[0], plotWidth * DEGREES_PER_PIXEL));
+  const span = Math.min(
+    SPAN_LIMITS[1],
+    Math.max(emagram ? EMAGRAM_SPAN_MIN : SPAN_LIMITS[0], plotWidth * DEGREES_PER_PIXEL),
+  );
+  const centre = emagram ? EMAGRAM_CENTRE : SPAN_CENTRE;
   return skewTLayout(
     {
       x: MARGIN.left,
@@ -158,7 +188,7 @@ function layoutFor(width: number, height: number): SkewTLayout {
       width: plotWidth,
       height: Math.max(40, height - MARGIN.top - MARGIN.bottom),
     },
-    { tMin: SPAN_CENTRE - span / 2, tMax: SPAN_CENTRE + span / 2 },
+    { tMin: centre - span / 2, tMax: centre + span / 2, skew: emagram ? 0 : 1 },
   );
 }
 
@@ -209,13 +239,23 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   const canvas = element("canvas", "sounding-chart");
   canvas.setAttribute("aria-hidden", "true");
   const readout = element("output", "sounding-readout");
+  const indices = element("output", "sounding-indices");
   const footer = element("div", "sounding-footer");
   const legend = element("span", "sounding-legend");
+  // The projection switch: the skew-T a forecaster reads by default, or the
+  // unskewed emagram. Both names are the diagrams' own, in every locale.
+  const projection = document.createElement("button");
+  projection.type = "button";
+  projection.className = "sounding-projection";
+  projection.textContent = "SKEW-T";
+  projection.setAttribute("aria-pressed", "true");
   const expand = document.createElement("button");
   expand.type = "button";
   expand.className = "sounding-expand";
-  footer.append(legend, expand);
-  body.append(times, canvas, readout, footer);
+  const actions = element("span", "sounding-actions");
+  actions.append(projection, expand);
+  footer.append(legend, actions);
+  body.append(times, canvas, readout, indices, footer);
   root.append(head, body);
 
   let loaded: LoadedSoundingIndex | null = null;
@@ -232,8 +272,17 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   /** The layout the panel's canvas was last drawn at — what the hover
    * readout reads against. */
   let panelLayout: SkewTLayout | null = null;
-  /** Where the pointer is on the chart, or null for the default reading. */
-  let pointer: { x: number; y: number } | null = null;
+  /** Where the pointer is, on which of the two charts, or null for the
+   * default reading and no crosshair. */
+  let pointer: { canvas: HTMLCanvasElement; x: number; y: number } | null = null;
+  /** Whether the chart is drawn unskewed. */
+  let emagram = false;
+  /** Each canvas's finished chart, kept so the crosshair repaints over a
+   * copy of its pixels instead of integrating the background again. */
+  const charts = new WeakMap<HTMLCanvasElement, { layout: SkewTLayout; ratio: number; base: HTMLCanvasElement }>();
+  const bound = new WeakSet<HTMLCanvasElement>();
+  /** What the convective line under the chart was last written for. */
+  let indicesKey = "";
   /** What each canvas last had painted on it, so a repaint that would
    * produce the same picture is skipped (`signature`). */
   const painted = new WeakMap<HTMLCanvasElement, string>();
@@ -295,15 +344,110 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
 
   head.addEventListener("click", () => setOpen(!open));
 
-  canvas.addEventListener("pointermove", (event) => {
-    const rect = canvas.getBoundingClientRect();
-    pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    writeReadout();
-  });
-  canvas.addEventListener("pointerleave", () => {
+  /** Follow the pointer over a chart — the panel's or the sheet's — with
+   * the crosshair, and over the panel's with the readout line as well. */
+  function bindPointer(target: HTMLCanvasElement): void {
+    if (bound.has(target)) return;
+    bound.add(target);
+    const move = (event: PointerEvent): void => {
+      const rect = target.getBoundingClientRect();
+      pointer = { canvas: target, x: event.clientX - rect.left, y: event.clientY - rect.top };
+      paintCursor(target);
+      if (target === canvas) writeReadout();
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerdown", move);
+    target.addEventListener("pointerleave", () => {
+      pointer = null;
+      paintCursor(target);
+      if (target === canvas) writeReadout();
+    });
+  }
+  bindPointer(canvas);
+
+  projection.addEventListener("click", () => {
+    emagram = !emagram;
+    projection.setAttribute("aria-pressed", String(!emagram));
+    projection.textContent = emagram ? "EMAGRAM" : "SKEW-T";
     pointer = null;
-    writeReadout();
+    render();
   });
+
+  /** Put the finished chart back on a canvas and, if the pointer is over
+   * it, the crosshair on top. */
+  function paintCursor(target: HTMLCanvasElement): void {
+    const chart = charts.get(target);
+    const context = target.getContext("2d");
+    if (!chart || !context) return;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, target.width, target.height);
+    context.drawImage(chart.base, 0, 0);
+    context.setTransform(chart.ratio, 0, 0, chart.ratio, 0, 0);
+    if (pointer?.canvas !== target) return;
+    const cursor = cursorAt(chart.layout, pointer.x, pointer.y);
+    if (cursor) drawSkewTCursor(context, chart.layout, skewTInkFrom(root), cursor, FONT);
+  }
+
+  /** The crosshair's content at a canvas point, every value in the
+   * viewer's units, or null off the plot or with no ascent. */
+  function cursorAt(layout: SkewTLayout, x: number, y: number): SkewTCursor | null {
+    const observed = observedProfile();
+    if (!observed) return null;
+    const model = options.modelProfile();
+    const profiles = model ? [observed, model.profile] : [observed];
+    const reading = readoutAt(layout, profiles, x, y);
+    if (!reading) return null;
+    const ink = skewTInkFrom(root);
+    const sonde = reading.profiles[0]!;
+    const marks: SkewTCursor["marks"][number][] = [];
+    if (sonde.td !== null) {
+      marks.push({ t: sonde.td, color: ink.dew ?? ink.ink, label: formatTemperature(sonde.td, 0), side: "left" });
+    }
+    if (sonde.t !== null) {
+      marks.push({ t: sonde.t, color: ink.temperature ?? ink.ink, label: formatTemperature(sonde.t, 0), side: "right" });
+    }
+    const column = reading.profiles[1];
+    if (column?.td != null) marks.push({ t: column.td, color: ink.modelDew ?? ink.model, side: "left" });
+    if (column?.t != null) marks.push({ t: column.t, color: ink.model, side: "right" });
+    const left = [`${reading.p.toFixed(0)} hPa`];
+    if (sonde.z !== null) left.unshift(formatHeight(sonde.z));
+    const right =
+      sonde.ws === null || sonde.wd === null
+        ? null
+        : `${formatWind(sonde.ws, 0)} ${String(Math.round(sonde.wd) % 360).padStart(3, "0")}°`;
+    return { p: reading.p, marks, left, right };
+  }
+
+  /** The convective numbers under the chart: the LCL and CCL as heights
+   * above the ground the ascent started on, and the convective
+   * temperature. */
+  function writeIndices(observed: Profile | null): void {
+    // The parcel is integrated, so the line is written once per ascent and
+    // unit choice rather than on every frame the panel repaints.
+    const key = observed
+      ? `${entry?.id}|${sounding()?.time}|${formatHeight(1000)}|${formatTemperature(0, 0)}`
+      : "";
+    if (key === indicesKey) return;
+    indicesKey = key;
+    if (!observed) {
+      indices.value = "";
+      return;
+    }
+    const parcel = parcelPath(observed);
+    const convective = convectiveCondensation(observed);
+    const ground = parcel ? interpolateAtPressure(observed, parcel.p[0]!, observed.z) : Number.NaN;
+    const above = (p: number): string | null => {
+      const z = interpolateAtPressure(observed, p, observed.z) - ground;
+      return Number.isFinite(z) ? formatHeight(Math.max(0, z)) : null;
+    };
+    const parts: string[] = [];
+    const lclHeight = parcel ? above(parcel.lcl.p) : null;
+    if (lclHeight) parts.push(`LCL ${lclHeight}`);
+    const cclHeight = convective ? above(convective.p) : null;
+    if (cclHeight) parts.push(`CCL ${cclHeight}`);
+    if (convective) parts.push(`Tcon ${formatTemperature(convective.tcon, 0)}`);
+    indices.value = parts.join(" · ");
+  }
 
   /** The reading under the pointer, or the 500 hPa one a forecaster names
    * first when there is nothing under it. */
@@ -320,7 +464,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     // reads 500 hPa as it does before any hover, rather than going blank:
     // an empty line collapses and the panel under it jumps.
     const home = toXY(layout, 500, 0);
-    const at = pointer ?? home;
+    const here = pointer?.canvas === canvas ? pointer : null;
+    const at = here ?? home;
     const reading = readoutAt(layout, profiles, at.x, at.y) ?? readoutAt(layout, profiles, home.x, home.y);
     if (!reading) {
       readout.value = "";
@@ -376,6 +521,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       column.toFixed(3),
       Math.round(width),
       Math.round(height),
+      emagram ? "emagram" : "skew",
       ink.ink,
       ink.paper,
     ].join("|");
@@ -400,14 +546,21 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     context.clearRect(0, 0, width, height);
     context.fillStyle = ink.paper;
     context.fillRect(0, 0, width, height);
-    const layout = layoutFor(width, height);
+    const layout = layoutFor(width, height, emagram);
     const model = options.modelProfile();
     drawSkewT(context, layout, ink, {
       profile: observed,
       model: model?.profile ?? null,
       parcel: observed ? parcelPath(observed) : null,
+      convective: observed ? convectiveCondensation(observed) : null,
       font: FONT,
     });
+    const base = charts.get(target)?.base ?? document.createElement("canvas");
+    base.width = pixelWidth;
+    base.height = pixelHeight;
+    base.getContext("2d")?.drawImage(target, 0, 0);
+    charts.set(target, { layout, ratio, base });
+    if (pointer?.canvas === target) paintCursor(target);
     return layout;
   }
 
@@ -484,6 +637,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       panelLayout = paint(canvas, width, CHART_HEIGHT);
       if (panelLayout) painted.set(canvas, mark);
     }
+    writeIndices(observedProfile());
     writeReadout();
   }
 
@@ -532,6 +686,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     },
     render,
     drawInto(target, width, height) {
+      bindPointer(target);
       const mark = signature(width, height);
       if (painted.get(target) === mark) return;
       if (paint(target, width, height)) painted.set(target, mark);
