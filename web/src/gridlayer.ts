@@ -507,6 +507,16 @@ export function gridInk(darkGround: boolean): GridInk {
     : { mgrs: "rgba(24, 28, 36, 0.75)", latlon: "rgba(160, 30, 110, 0.8)", casing: "rgba(243, 239, 230, 0.55)", halo: "rgba(243, 239, 230, 0.92)" };
 }
 
+/** A quieter ink for a map whose subject is drawn in thin grey-white
+ * lines itself (a storm track without an intensity class): a muted steel
+ * blue that reads apart from the track, at half the strength, and no
+ * casing. */
+export function quietGridInk(darkGround: boolean): GridInk {
+  return darkGround
+    ? { mgrs: "rgba(120, 165, 215, 0.6)", latlon: "rgba(220, 140, 200, 0.55)", casing: "rgba(0, 0, 0, 0)", halo: "rgba(0, 0, 0, 0.8)" }
+    : { mgrs: "rgba(40, 85, 140, 0.55)", latlon: "rgba(150, 40, 110, 0.5)", casing: "rgba(0, 0, 0, 0)", halo: "rgba(243, 239, 230, 0.92)" };
+}
+
 const kindColor = (ink: GridInk): ExpressionSpecification => ["match", ["get", "kind"], "latlon", ink.latlon, ink.mgrs];
 
 export interface EdgeInsets {
@@ -522,6 +532,9 @@ export interface CoordinateGridOptions {
   /** How far in from each side of the map the edge numbers sit, in pixels:
    * clear of the controls laid over it. */
   edgeInsets?: () => EdgeInsets;
+  /** The ink for a ground; `gridInk` unless the map's own lines need the
+   * grid quieter (`quietGridInk`). */
+  ink?: (darkGround: boolean) => GridInk;
 }
 
 export class CoordinateGrid {
@@ -543,7 +556,7 @@ export class CoordinateGrid {
   /** Ink for the ground the map is on; a no-op while the grids are off. */
   setInk(darkGround: boolean): void {
     if (!this.map.getLayer(GRID_LINE_LAYER)) return;
-    const ink = gridInk(darkGround);
+    const ink = (this.options.ink ?? gridInk)(darkGround);
     this.map.setPaintProperty(GRID_LINE_LAYER, "line-color", kindColor(ink));
     this.map.setPaintProperty(GRID_CASING_LAYER, "line-color", ink.casing);
     this.map.setPaintProperty(GRID_LABEL_LAYER, "text-color", kindColor(ink));
@@ -607,7 +620,7 @@ export class CoordinateGrid {
   private add(): void {
     const map = this.map;
     if (map.getSource(GRID_SOURCE)) return;
-    const ink = gridInk(this.options.darkGround());
+    const ink = (this.options.ink ?? gridInk)(this.options.darkGround());
     const before = firstSymbolLayerId(map);
     map.addSource(GRID_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     const isLine: ExpressionSpecification = ["==", ["geometry-type"], "LineString"];
