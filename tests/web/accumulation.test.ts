@@ -123,6 +123,14 @@ describe("accumulationPlan", () => {
     expect(half.terms.reduce((sum, term) => sum + term.hours, 0)).toBeCloseTo(1.5);
   });
 
+  it("reads a window ending at an instantaneous axis's first frame as dry, not unknown", () => {
+    const leads = [0, 1, 2].map((hour) => hour * HOUR);
+    const plan = accumulationPlan(leads, 0, 48 * HOUR, "instant");
+    expect(hours(plan)).toEqual([[0, 0]]);
+    expect(plan.covered).toBe(0);
+    expect(planTotal([44.7, 6.5, 1.7], plan)).toBe(0);
+  });
+
   it("draws no line across a hole in an observation window", () => {
     const leads = [0, 120, 240, 360, 2400, 2520].map(Number);
     const plan = accumulationPlan(leads, 5, 3600, "instant");
