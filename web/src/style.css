@@ -3324,6 +3324,10 @@ html[lang="ja"] .rail-glyph {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 12px;
+  /* Room for the close button, which sits in the head's corner rather than
+     in this row: the row wraps when a station adds to it, and the button
+     must not wrap with it. */
+  padding-right: 24px;
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--fs-1);
@@ -3349,14 +3353,16 @@ html[lang="ja"] .rail-glyph {
 }
 
 .probe-close {
+  /* Pinned to the head's top-right corner (the sticky head is its
+     containing block), whatever the meta row wraps to. */
+  position: absolute;
+  top: 1px;
+  right: -6px;
   display: flex;
   width: 28px;
   height: 28px;
-  flex: none;
   align-items: center;
   justify-content: center;
-  align-self: center;
-  margin: -6px -6px -6px 0;
   border: 0;
   background: none;
   color: var(--muted);
