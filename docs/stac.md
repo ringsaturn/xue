@@ -187,7 +187,8 @@ that `index.json` alone and from nothing else.
 `license`, `keywords` and `providers` come from the `pointProducts` entry in
 `xuebuild/stac_prose.json`; none of them has an SPDX identifier to name, so
 all are `other` with the terms linked: the WMO Unified Data Policy
-(Resolution 1, Cg-Ext(2021)) for the soundings, the NWS disclaimer for the
+(Resolution 1, Cg-Ext(2021)) for the soundings, with the Licence Ouverte
+2.0 beside it for Météo-France's, the NWS disclaimer for the
 airport caches (a work of the US government is in the public domain, which
 is not CC0), each network's terms for the surface stations (JMA's website
 terms, the Public Data License v1.0, for AMeDAS), NOAA Open Data

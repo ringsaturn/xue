@@ -4,12 +4,13 @@
  "generated": "2026-09-14T02:05:00Z",
  "watermark": {
   "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
-  "de-dwd-gts-to-wis2": null
+  "de-dwd-gts-to-wis2": null,
+  "meteofrance": "2026-09-14T01:40:31Z"
  },
  "soundings": {
   "path": "soundings.jsonl",
-  "byteLength": 105517,
-  "crc32": "06902ee6"
+  "byteLength": 110839,
+  "crc32": "df2c4f5d"
  },
  "stations": [
   {
@@ -298,13 +299,32 @@
    }
   },
   {
+   "id": "0-20000-0-91958",
+   "wmo": "91958",
+   "name": null,
+   "lat": -27.61833,
+   "lon": -144.33483,
+   "elev": 2.0,
+   "offset": 78030,
+   "length": 5321,
+   "latest": "2026-09-13T18:00:00Z",
+   "times": ["2026-09-13T18:00:00Z"],
+   "headline": {
+    "t500": -12.3,
+    "td500": -39.4,
+    "freezingLevel": 3419,
+    "pw": 36.1,
+    "levels": 129
+   }
+  },
+  {
    "id": "0-20001-0-51463",
    "wmo": "51463",
    "name": null,
    "lat": 43.78,
    "lon": 87.62,
    "elev": 919.0,
-   "offset": 78030,
+   "offset": 83352,
    "length": 6299,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
@@ -323,7 +343,7 @@
    "lat": 37.62,
    "lon": 112.58,
    "elev": 776.0,
-   "offset": 84330,
+   "offset": 89652,
    "length": 6741,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
@@ -342,7 +362,7 @@
    "lat": 36.57,
    "lon": 109.45,
    "elev": 1180.0,
-   "offset": 91072,
+   "offset": 96394,
    "length": 7412,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
@@ -361,7 +381,7 @@
    "lat": 42.3,
    "lon": 118.83,
    "elev": 668.6,
-   "offset": 98485,
+   "offset": 103807,
    "length": 7031,
    "latest": "2026-09-14T00:00:00Z",
    "times": ["2026-09-14T00:00:00Z"],
@@ -399,6 +419,25 @@
    "fetched": "2026-09-14T02:04:00Z",
    "error": "request failed for https://wis2globalcache.s3.us-east-1.amazonaws.com/?list-type=2&prefix=data/de-dwd-gts-to-wis2/data/core/I/U/S/: HTTP Error 503: Service Unavailable",
    "watermark": null
+  },
+  {
+   "id": "meteofrance",
+   "ok": true,
+   "fetched": "2026-09-14T02:04:00Z",
+   "url": "https://files.data.gouv.fr/meteofrance/data/OBS/RS/",
+   "watermark": "2026-09-14T01:40:31Z",
+   "listed": 1,
+   "objects": 1,
+   "reused": 0,
+   "failed": 0,
+   "bytes": 35456,
+   "bulletins": 1,
+   "nil": 0,
+   "descents": 0,
+   "unreadable": 0,
+   "subsets": 1,
+   "dropped": 0,
+   "soundings": 1
   }
  ]
 }

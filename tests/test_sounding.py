@@ -19,7 +19,7 @@ import numpy as np
 
 from tests._support import FIXTURES
 from xuebuild.errors import DownloadError, SoundingProductError
-from xuebuild.sounding import bufr, derive
+from xuebuild.sounding import bufr, derive, meteofrance
 from xuebuild.sounding.build import KEEP_TIMES, _ascent_messages, build_product, merge_soundings
 from xuebuild.sounding.fetch import (
     BUCKET_BASE_URL,
@@ -733,8 +733,8 @@ class NativeNodeTests(unittest.TestCase):
             "</ListBucketResult>"
         ).encode("utf-8")
 
-    def test_the_default_sources_add_the_node_discovery(self) -> None:
-        self.assertEqual(DEFAULT_SOURCES, (*SOURCE_IDS, "wis2"))
+    def test_the_default_sources_add_the_node_discovery_and_meteo_france(self) -> None:
+        self.assertEqual(DEFAULT_SOURCES, (*SOURCE_IDS, "wis2", "meteofrance"))
 
     def test_a_node_sits_under_the_selector_directory(self) -> None:
         root = Path("/raw/sounding.2026111006")
@@ -854,7 +854,7 @@ class NativeNodeTests(unittest.TestCase):
             self.assertFalse((root / "wis2" / "kr-kma").exists())
             self.assertFalse((root / "wis2" / "fetch.json").exists())
             self.assertFalse(any("jp-jma-gts-to-wis2" in url for url in requested[1:]))
-            self.assertEqual(fetched_sources(root, DEFAULT_SOURCES), (*SOURCE_IDS, "wis2:fr-meteofrance"))
+            self.assertEqual(fetched_sources(root, DEFAULT_SOURCES), (*SOURCE_IDS, "wis2:fr-meteofrance", "meteofrance"))
             record = read_fetch_record(root, "wis2:fr-meteofrance")
             assert record is not None
             self.assertEqual(record.arrived, result.arrived)
@@ -885,6 +885,197 @@ class NativeNodeTests(unittest.TestCase):
                 fetch_gateway("wis2", Path(scratch), watermark=None)
             with self.assertRaises(SoundingProductError):
                 fetch_gateway("wis2:Not_A_Node", Path(scratch), watermark=None)
+
+
+def meteofrance_object(
+    direction: str,
+    launched: str,
+    levels: list[tuple[int, int, float, float, int, float, int]],
+    *,
+    wmo: str = "07145",
+) -> dict[str, object]:
+    """One object of a Météo-France file, its levels as (pressure Pa,
+    height m, T K, Td K, direction, speed m/s, seconds since launch)."""
+    names = ("p_niv", "geop", "t", "td", "dd", "ff", "dur_dep", "dep_lat", "dep_lon")
+    return {
+        "metadata": {
+            "date": launched,
+            "station": {"geo_id_wmo": wmo, "name": "TRAPPES", "lat": 48.774333, "lon": 2.009833, "alti": 167},
+            "direction": direction,
+            "rs_type": 177,
+            "ht_sta_mer": 168,
+        },
+        "levels": {
+            "properties": [{"name": name, "index": index} for index, name in enumerate(names)],
+            "nb_levels": len(levels),
+            "observations": [[*level, 0.0, 0.0] for level in levels],
+        },
+    }
+
+
+def climbing(top_pa: int = 1000, step_pa: int = 50, start_s: int = 0) -> list[tuple[int, int, float, float, int, float, int]]:
+    """A dense synthetic ascent from 1000 hPa: a level every ``step_pa``,
+    two seconds apart."""
+    levels = []
+    for number, pressure in enumerate(range(100000, top_pa - 1, -step_pa)):
+        levels.append((pressure, number * 5, 288.0 - number * 0.01, 280.0 - number * 0.01, 270, 5.0, start_s + 2 * number))
+    return levels
+
+
+class MeteoFranceTests(unittest.TestCase):
+    PAGE = (
+        '<table id="list"><tbody><tr><td><a href="../">..</a></td></tr>'
+        '<tr>\n<td><a href="/meteofrance/data/OBS/RS/2026/11/11/07145.2026111100.json">07145.2026111100.json</a></td>\n'
+        "<td>417457</td>\n<td>2026-11-11T01:40:14.000Z</td>\n</tr>"
+        '<tr><td><a href="/x/README.txt">README.txt</a></td><td>12</td><td>2026-11-11T01:00:00.000Z</td></tr>'
+        "</tbody></table>"
+    )
+
+    def test_a_day_index_lists_its_sounding_files(self) -> None:
+        files = meteofrance.parse_listing(self.PAGE, "2026/11/11/")
+        self.assertEqual(
+            files,
+            [meteofrance.ListedFile("2026/11/11/07145.2026111100.json", utc(2026, 11, 11, 1, 40, 14), 417457)],
+        )
+        self.assertEqual(meteofrance.parse_listing("<h1>No Files Available for Listing</h1>", "2026/11/12/"), [])
+
+    def test_the_window_lists_the_days_it_touches(self) -> None:
+        self.assertEqual(
+            [str(day) for day in meteofrance.days(utc(2026, 11, 11, 6, 15))],
+            ["2026-11-09", "2026-11-10", "2026-11-11"],
+        )
+
+    def test_the_ascent_is_told_by_its_levels_not_its_label(self) -> None:
+        ascent = meteofrance_object("downward", "2026-11-10T11:15:35Z", climbing())
+        # A descent: its clock starts at the burst, at the top.
+        descent = meteofrance_object(
+            "upward",
+            "2026-11-10T12:50:10Z",
+            [(18770, 12271, 213.88, 191.57, 255, 22.2, 698), (1003, 30310, 221.69, 189.58, 268, 68.1, 0)],
+        )
+        data = json.dumps([descent, ascent]).encode()
+        result = meteofrance.parse_file(data, name="07145.2026111012.json", arrived=utc(2026, 11, 10, 13, 40))
+        self.assertEqual((result.ascents, result.descents, result.dropped), (1, 1, 0))
+        (sounding,) = result.soundings
+        self.assertEqual(sounding.p[0], 100000)
+        self.assertEqual(sounding.time, utc(2026, 11, 10, 12))
+        self.assertEqual(sounding.launched, utc(2026, 11, 10, 11, 15, 35))
+        self.assertEqual((sounding.key, sounding.wmo, sounding.wigos), ("07145", "07145", None))
+        self.assertEqual((sounding.gateway, sounding.bulletin, sounding.sonde, sounding.elev), ("meteofrance", "07145.2026111012.json", 177, 168.0))
+        self.assertEqual(sounding.arrived, utc(2026, 11, 10, 13, 40))
+
+    def test_the_launch_clock_files_the_ascent_not_the_batch(self) -> None:
+        # Rapa's 18Z ascent goes out in the next day's 00 batch.
+        data = json.dumps([meteofrance_object("upward", "2026-11-10T17:39:39Z", climbing(), wmo="91958"), {}]).encode()
+        result = meteofrance.parse_file(data, name="91958.2026111100.json", arrived=utc(2026, 11, 11, 1, 40))
+        self.assertEqual(result.soundings[0].time, utc(2026, 11, 10, 18))
+        self.assertEqual(result.descents, 0)
+
+    def test_the_standard_surfaces_survive_the_thinning_unflagged(self) -> None:
+        data = json.dumps([meteofrance_object("upward", "2026-11-10T23:15:00Z", climbing(step_pa=30)), {}]).encode()
+        (sounding,) = meteofrance.parse_file(data, name="07145.2026111100.json", arrived=utc(2026, 11, 11, 1, 40)).soundings
+        self.assertGreater(sounding.reported, 3000)
+        self.assertLess(sounding.n, 200)
+        for surface in (85000, 70000, 50000, 25000):
+            self.assertIn(surface, sounding.p)
+        self.assertTrue(all(flag == bufr.MISSING for flag in sounding.sig))
+        levels = {"p": list(sounding.p), "z": list(sounding.z), "t": list(sounding.t), "td": list(sounding.td), "sig": list(sounding.sig)}
+        self.assertIsNotNone(derive.headline(levels, derive.derive(levels))["t500"])
+
+    def test_a_relaunch_is_settled_by_the_longer_ascent(self) -> None:
+        lost = meteofrance_object("upward", "2026-11-10T11:15:33Z", climbing(top_pa=86000))
+        relaunch = meteofrance_object("downward", "2026-11-10T11:41:14Z", climbing())
+        result = meteofrance.parse_file(
+            json.dumps([lost, relaunch]).encode(), name="07761.2026111012.json", arrived=utc(2026, 11, 10, 13, 40)
+        )
+        self.assertEqual(result.ascents, 2)
+        (kept,) = bufr.deduplicate(list(result.soundings))
+        self.assertEqual(kept.launched, utc(2026, 11, 10, 11, 41, 14))
+
+    def test_a_fragment_of_one_level_is_dropped(self) -> None:
+        fragment = meteofrance_object("upward", "2026-11-09T12:53:32Z", [(66188, 3500, 270.0, 260.0, 250, 10.0, 1072)])
+        result = meteofrance.parse_file(json.dumps([fragment, {}]).encode(), name="61998.2026110912.json", arrived=utc(2026, 11, 9, 13, 40))
+        self.assertEqual((result.soundings, result.ascents, result.dropped), ((), 1, 1))
+
+    def test_a_file_that_is_not_the_documented_array_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            meteofrance.parse_file(b"<html>", name="07145.2026111100.json", arrived=utc(2026, 11, 11))
+        with self.assertRaises(ValueError):
+            meteofrance.parse_file(b'"text"', name="07145.2026111100.json", arrived=utc(2026, 11, 11))
+
+    def site(self, files: dict[str, tuple[str, bytes]]):
+        """Météo-France's directory pages and files, ``files`` keyed by
+        path under the base URL with their modification time."""
+        requested: list[str] = []
+
+        def get(url: str) -> bytes:
+            requested.append(url)
+            path = url[len(meteofrance.BASE_URL) :]
+            if path.endswith("/"):
+                rows = "".join(
+                    f'<tr><td><a href="/meteofrance/data/OBS/RS/{key}">{key.rsplit("/", 1)[1]}</a></td>'
+                    f"<td>{len(body)}</td><td>{modified}</td></tr>"
+                    for key, (modified, body) in files.items()
+                    if key.startswith(path)
+                )
+                return f"<table><tbody>{rows}</tbody></table>".encode()
+            return files[path][1]
+
+        return get, requested
+
+    def test_the_source_fetches_the_window_and_records_arrivals(self) -> None:
+        body = json.dumps([meteofrance_object("upward", "2026-11-10T23:15:00Z", climbing()), {}]).encode()
+        get, requested = self.site(
+            {
+                "2026/11/08/07145.2026110812.json": ("2026-11-08T13:40:00.000Z", body),
+                "2026/11/10/07145.2026111012.json": ("2026-11-10T13:40:00.000Z", body),
+                "2026/11/11/07145.2026111100.json": ("2026-11-11T01:40:14.000Z", body),
+            }
+        )
+        issue = utc(2026, 11, 11, 6)
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch)
+            results = fetch_sources(raw, issue, ("meteofrance",), now=utc(2026, 11, 11, 6, 15), get=get)
+            result = results["meteofrance"]
+            self.assertTrue(result.status.ok)
+            self.assertEqual(result.files, ["07145.2026111012.json", "07145.2026111100.json"])
+            self.assertEqual(result.arrived["07145.2026111100.json"], "2026-11-11T01:40:14Z")
+            self.assertEqual(result.status.watermark, utc(2026, 11, 11, 1, 40, 14))
+            self.assertEqual(result.status.url, meteofrance.BASE_URL)
+            self.assertNotIn(meteofrance.BASE_URL + "2026/11/08/", requested)
+            root = issue_raw_directory(raw, issue)
+            self.assertTrue((root / "meteofrance" / "07145.2026111100.json").is_file())
+
+            # An old watermark is still trusted: the files are kept for good,
+            # so nothing behind it has gone.
+            later = utc(2026, 11, 13, 6)
+            results = fetch_sources(
+                raw, later, ("meteofrance",), watermarks={"meteofrance": utc(2026, 11, 11, 1, 40, 14)}, now=utc(2026, 11, 13, 6, 15), get=get
+            )
+            self.assertEqual(results["meteofrance"].files, [])
+
+    def test_the_build_reads_the_files_it_fetched(self) -> None:
+        body = json.dumps([meteofrance_object("upward", "2026-11-10T23:15:00Z", climbing(step_pa=30)), {}]).encode()
+        get, _ = self.site({"2026/11/11/07145.2026111100.json": ("2026-11-11T01:40:14.000Z", body)})
+        issue = utc(2026, 11, 11, 2)
+        with tempfile.TemporaryDirectory() as scratch:
+            raw, output = Path(scratch) / "raw", Path(scratch) / "out"
+            fetch_sources(raw, issue, ("meteofrance",), now=utc(2026, 11, 11, 2, 15), get=get)
+            report = build_product(issue, raw, output, sources=("meteofrance",), now=utc(2026, 11, 11, 2, 16))
+            (status,) = report["sources"]
+            self.assertEqual((status["id"], status["ok"], status["soundings"]), ("meteofrance", True, 1))
+            self.assertEqual(report["watermark"], {"meteofrance": "2026-11-11T01:40:14Z"})
+            index = json.loads(Path(report["directory"], "index.json").read_bytes())
+            (station,) = index["stations"]
+            self.assertEqual((station["id"], station["latest"]), ("0-20000-0-07145", "2026-11-11T00:00:00Z"))
+            self.assertIsNotNone(station["headline"]["t500"])
+
+    def test_objects_with_no_retention_trust_an_old_watermark(self) -> None:
+        objects = [RemoteObject("a", utc(2026, 11, 9, 13, 40), 1), RemoteObject("b", utc(2026, 11, 11, 1, 40), 1)]
+        wanted = objects_to_fetch(objects, utc(2026, 11, 10, 1, 40), now=utc(2026, 11, 12, 6), retention=None)
+        self.assertEqual([item.key for item in wanted], ["b"])
+        wanted = objects_to_fetch(objects, utc(2026, 11, 10, 1, 40), now=utc(2026, 11, 12, 6))
+        self.assertEqual([item.key for item in wanted], ["a", "b"])
 
 
 class ValidationTests(unittest.TestCase):
@@ -1112,11 +1303,16 @@ class GoldenBuildTests(unittest.TestCase):
             self.assertEqual(pointer, json.loads((EXPECTED / "latest-sounding.json").read_text(encoding="utf-8")))
             index_bytes = (directory / "index.json").read_bytes()
             self.assertEqual((pointer["byteLength"], pointer["crc32"]), (len(index_bytes), crc32_hex(index_bytes)))
-            self.assertEqual((report["stations"], report["fresh"], report["copied"]), (19, 19, 0))
+            self.assertEqual((report["stations"], report["fresh"], report["copied"]), (20, 20, 0))
             statuses = {status["id"]: status for status in report["sources"]}
             self.assertTrue(statuses["jp-jma-gts-to-wis2"]["ok"])
             self.assertFalse(statuses["de-dwd-gts-to-wis2"]["ok"])
             self.assertIn("503", statuses["de-dwd-gts-to-wis2"]["error"])
+            # Météo-France's Rapa file of the 00 batch holds the 18Z ascent
+            # of the day before, filed by its launch clock.
+            self.assertTrue(statuses["meteofrance"]["ok"])
+            rapa = next(row for row in json.loads((directory / "index.json").read_bytes())["stations"] if row["wmo"] == "91958")
+            self.assertEqual(rapa["times"], ["2026-09-13T18:00:00Z"])
 
     def test_every_span_slices_out_its_own_station(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
@@ -1159,7 +1355,7 @@ class GoldenBuildTests(unittest.TestCase):
         blob = (EXPECTED / SOUNDINGS_FILENAME).read_bytes()
         ids = [json.loads(line)["id"] for line in blob.splitlines()]
         self.assertEqual(ids, sorted(ids))
-        self.assertEqual(len(ids), 19)
+        self.assertEqual(len(ids), 20)
 
     def test_the_watermark_carries_the_working_gateway_and_leaves_the_failed_one(self) -> None:
         index = json.loads((EXPECTED / "index.json").read_text(encoding="utf-8"))
@@ -1184,7 +1380,7 @@ class GoldenBuildTests(unittest.TestCase):
                 force=True,
                 now=utc(2026, 9, 14, 3, 5),
             )
-            self.assertEqual((report["fresh"], report["copied"]), (0, 19))
+            self.assertEqual((report["fresh"], report["copied"]), (0, 20))
             self.assertEqual(
                 (flat / SOUNDINGS_FILENAME).read_bytes(),
                 (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),
@@ -1204,7 +1400,7 @@ class GoldenBuildTests(unittest.TestCase):
                 force=True,
                 now=utc(2026, 9, 14, 3, 5),
             )
-            self.assertEqual((report["fresh"], report["copied"]), (0, 19))
+            self.assertEqual((report["fresh"], report["copied"]), (0, 20))
             self.assertIsNotNone(report["pointer"])
             # Nothing new arrived, so the file is rewritten identically —
             # every station's line and its span included.
@@ -1237,7 +1433,7 @@ class GoldenBuildTests(unittest.TestCase):
                 force=True,
                 now=utc(2026, 9, 14, 3, 5),
             )
-            self.assertEqual((report["fresh"], report["copied"]), (19, 0))
+            self.assertEqual((report["fresh"], report["copied"]), (20, 0))
             self.assertEqual(
                 (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402" / SOUNDINGS_FILENAME).read_bytes(),
                 (output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403" / SOUNDINGS_FILENAME).read_bytes(),

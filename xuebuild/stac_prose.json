@@ -1119,7 +1119,7 @@
   "pointProducts": {
     "sounding": {
       "title": "Radiosonde soundings (WIS2)",
-      "description": "The world's radiosonde ascents, aggregated every hour from the TEMP bulletins the national meteorological services exchange over the WMO Information System: one station per line of a single NDJSON file, spanned by the index beside it, each ascent thinned to the classical mandatory and significant levels in fixed point with four derived quantities. A rolling window with no fixed start — only the newest issue is published, and a station carries its newest four nominal times.",
+      "description": "The world's radiosonde ascents, aggregated every hour from the TEMP bulletins the national meteorological services exchange over the WMO Information System: one station per line of a single NDJSON file, spanned by the index beside it, each ascent thinned to the classical mandatory and significant levels in fixed point with four derived quantities. Météo-France's stations, whose ascents are not on WIS2, come from Météo-France's own open data. A rolling window with no fixed start — only the newest issue is published, and a station carries its newest four nominal times.",
       "license": "other",
       "keywords": [
         "weather",
@@ -1148,6 +1148,15 @@
           "url": "https://community.wmo.int/en/members"
         },
         {
+          "name": "Météo-France",
+          "description": "The ascents of its fifteen radiosonde stations, from its open data (data.gouv.fr dataset radiosondages) under the Licence Ouverte 2.0.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.data.gouv.fr/datasets/radiosondages"
+        },
+        {
           "name": "Xue",
           "roles": [
             "processor",
@@ -1162,6 +1171,12 @@
           "href": "https://library.wmo.int/idurl/4/58009",
           "type": "text/html",
           "title": "WMO Unified Data Policy (Resolution 1, Cg-Ext(2021)): core data, free and unrestricted, attribution of the original source requested"
+        },
+        {
+          "rel": "license",
+          "href": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+          "type": "text/html",
+          "title": "Licence Ouverte 2.0 (Etalab), Météo-France's radiosonde files: the source and the date of its last update to be named"
         }
       ]
     },

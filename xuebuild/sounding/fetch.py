@@ -31,6 +31,12 @@ publishes the TEMP topic
 The nodes are discovered every hour by listing ``data/`` — a new node is
 picked up the hour it appears — and listed the same way as a gateway. A
 node whose topic is empty is not a source of that issue at all.
+
+Météo-France's ascents are not in the cache at all — its node sends the
+descents only — so they come from Météo-France's own open data instead,
+the ``meteofrance`` source (:mod:`.meteofrance`): a directory index per
+day rather than a bucket listing, read and downloaded by the same
+watermark rule.
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ from .. import __version__
 from ..common import S3_NAMESPACE, iso_z, s3_list_pages, s3_list_query, write_bytes_atomic
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import get_ok
+from . import meteofrance
 from .bufr import parse_file_name
 
 LOG = logging.getLogger(__name__)
@@ -65,7 +72,10 @@ It is a source selector, not a source: what is fetched and published is
 one ``wis2:<centre>`` per node. A discovery that fails is recorded under
 this id."""
 
-DEFAULT_SOURCES = (*SOURCE_IDS, NATIVE_SOURCE)
+METEOFRANCE_SOURCE = meteofrance.SOURCE_ID
+"""Météo-France's open-data radiosonde files (:mod:`.meteofrance`)."""
+
+DEFAULT_SOURCES = (*SOURCE_IDS, NATIVE_SOURCE, METEOFRANCE_SOURCE)
 
 NATIVE_ID = re.compile(r"^wis2:(?P<centre>[a-z0-9]+(?:-[a-z0-9]+)*)$")
 
@@ -165,7 +175,7 @@ def is_native(source: str) -> bool:
 
 
 def is_source(source: str) -> bool:
-    """A gateway, the node selector, or one node."""
+    """A gateway, the node selector, one node, or Météo-France."""
     return source in DEFAULT_SOURCES or is_native(source)
 
 
@@ -177,6 +187,8 @@ def source_directory(root: Path, source: str) -> Path:
 
 
 def source_prefix(source: str) -> str:
+    if source == METEOFRANCE_SOURCE:
+        return ""
     match = NATIVE_ID.match(source)
     if match is not None:
         return NATIVE_PREFIX.format(centre=match.group("centre"))
@@ -271,12 +283,15 @@ def objects_to_fetch(
     *,
     now: datetime,
     lookback: timedelta | None = None,
+    retention: timedelta | None = timedelta(hours=RETENTION_HOURS),
 ) -> list[RemoteObject]:
     """The objects a build has not seen: those modified after the
-    watermark. No watermark, or one older than the cache's retention
+    watermark. No watermark, or one older than the source's ``retention``
     (nothing behind it survives to be compared against), takes the lot —
-    or, given a ``lookback``, what was modified within it."""
-    if watermark is None or now - watermark > timedelta(hours=RETENTION_HOURS):
+    or, given a ``lookback``, what was modified within it. A source that
+    keeps its files for good (Météo-France's) has no retention, and its
+    watermark is trusted however old."""
+    if watermark is None or (retention is not None and now - watermark > retention):
         candidates = list(objects)
         if lookback is not None:
             candidates = [item for item in candidates if item.last_modified >= now - lookback]
@@ -295,27 +310,43 @@ def fetch_gateway(
     base_url: str = BUCKET_BASE_URL,
     get: Callable[[str], bytes] = _get,
 ) -> FetchResult:
-    """List one source's sounding subtree — a gateway's, or a national
-    node's TEMP topic — and download what is new."""
+    """List one source's sounding subtree — a gateway's, a national
+    node's TEMP topic, or Météo-France's recent days — and download what
+    is new."""
     now = now or datetime.now(UTC)
     if gateway == NATIVE_SOURCE or not is_source(gateway):
         raise SoundingProductError(
             f"unknown sounding source {gateway!r}; choose from {', '.join(SOURCE_IDS)} or wis2:<centre>"
         )
-    native = is_native(gateway)
-    prefix = source_prefix(gateway)
-    listing = list_objects(prefix, base_url=base_url, get=get)
+    # A gateway's object names its bulletin and its arrival; a node's
+    # object and Météo-France's file do not, so they are taken whatever
+    # their name and their arrival is the listing's time.
+    unnamed = is_native(gateway) or gateway == METEOFRANCE_SOURCE
+    if gateway == METEOFRANCE_SOURCE:
+        prefix = ""
+        object_base = meteofrance.BASE_URL
+        listing = [
+            RemoteObject(key=item.key, last_modified=item.last_modified, size=item.size)
+            for item in meteofrance.list_files(now, get=get)
+        ]
+        lookback = timedelta(hours=meteofrance.LOOKBACK_HOURS)
+        retention: timedelta | None = None
+    else:
+        prefix = source_prefix(gateway)
+        object_base = base_url
+        listing = list_objects(prefix, base_url=base_url, get=get)
+        lookback = timedelta(hours=NATIVE_LOOKBACK_HOURS) if unnamed else None
+        retention = timedelta(hours=RETENTION_HOURS)
     newest = max((item.last_modified for item in listing), default=None)
-    lookback = timedelta(hours=NATIVE_LOOKBACK_HOURS) if native else None
     wanted = [
         item
-        for item in objects_to_fetch(listing, watermark, now=now, lookback=lookback)
-        if native or _is_bulletin(gateway, item)
+        for item in objects_to_fetch(listing, watermark, now=now, lookback=lookback, retention=retention)
+        if unnamed or _is_bulletin(gateway, item)
     ]
     # A node's topic is flat, but nothing promises it: two objects that
     # share a name in different subdirectories would share a file here,
     # so only the newest of them is taken.
-    if native:
+    if unnamed:
         wanted = list({item.name: item for item in wanted}.values())
 
     failures: list[Exception] = []
@@ -332,7 +363,7 @@ def fetch_gateway(
         if _reuse(reuse_root, gateway, item, destination):
             return "reused"
         try:
-            write_bytes_atomic(destination, get(base_url + urllib.parse.quote(item.key)))
+            write_bytes_atomic(destination, get(object_base + urllib.parse.quote(item.key)))
         except (XueError, urllib.error.URLError, OSError, ValueError) as exc:
             LOG.warning("sounding %s: %s did not download: %s", gateway, item.name, exc)
             failures.append(exc)
@@ -349,11 +380,11 @@ def fetch_gateway(
         with ThreadPoolExecutor(max_workers=min(FETCH_CONCURRENCY, len(wanted))) as executor:
             outcomes = list(executor.map(take, wanted))
     if wanted and len(failures) == len(wanted):
-        raise DownloadError(f"no object under {prefix} could be downloaded: {failures[0]}")
+        raise DownloadError(f"no object under {object_base + prefix} could be downloaded: {failures[0]}")
     files = [item.name for item, outcome in zip(wanted, outcomes) if outcome != "failed"]
     arrived = (
         {item.name: iso_z(item.last_modified) for item, outcome in zip(wanted, outcomes) if outcome != "failed"}
-        if native
+        if unnamed
         else {}
     )
     downloaded = outcomes.count("downloaded")
@@ -364,7 +395,7 @@ def fetch_gateway(
             gateway,
             True,
             fetched=now,
-            url=base_url + prefix,
+            url=object_base + prefix,
             watermark=newest,
             detail={
                 "listed": len(listing),

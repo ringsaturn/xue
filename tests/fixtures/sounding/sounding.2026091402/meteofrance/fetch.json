@@ -1,0 +1,18 @@
+{
+  "id": "meteofrance",
+  "ok": true,
+  "fetched": "2026-09-14T02:04:00Z",
+  "url": "https://files.data.gouv.fr/meteofrance/data/OBS/RS/",
+  "watermark": "2026-09-14T01:40:31Z",
+  "listed": 1,
+  "objects": 1,
+  "reused": 0,
+  "failed": 0,
+  "bytes": 35456,
+  "files": [
+    "91958.2026091400.json"
+  ],
+  "arrived": {
+    "91958.2026091400.json": "2026-09-14T01:40:31Z"
+  }
+}

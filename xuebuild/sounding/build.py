@@ -34,10 +34,11 @@ from typing import Any
 from .. import pointproduct
 from ..errors import SoundingProductError, XueError
 from ..stac import write_point_product_documents
-from . import bufr, derive
+from . import bufr, derive, meteofrance
 from .bufr import BUFR_MAGIC
 from .fetch import (
     DEFAULT_SOURCES,
+    METEOFRANCE_SOURCE,
     NATIVE_SOURCE,
     FetchResult,
     SourceStatus,
@@ -143,6 +144,8 @@ def _parse_gateway(
     The first failure is returned too, so a gateway whose bulletins *all*
     fail — no ``bufr_dump`` on the machine, a bucket serving HTML — is
     reported as a failed source instead of an empty one."""
+    if gateway == METEOFRANCE_SOURCE:
+        return _parse_meteofrance(directory, files, arrived or {})
     from ..eccodescli import bufr_dump_json  # eccodes is only needed on this path
 
     soundings: list[bufr.Sounding] = []
@@ -181,6 +184,37 @@ def _parse_gateway(
             continue
         counts["bulletins"] += 1
         counts["subsets"] += result.subsets
+        counts["dropped"] += result.dropped
+        soundings.extend(result.soundings)
+    return soundings, counts, error
+
+
+def _parse_meteofrance(
+    directory: Path, files: list[str], arrived: dict[str, str]
+) -> tuple[list[bufr.Sounding], dict[str, int], str | None]:
+    """:func:`_parse_gateway` for Météo-France's JSON files: a file is a
+    ``bulletin``, each ascent object in it a ``subset``, each descent
+    object a ``descent``."""
+    soundings: list[bufr.Sounding] = []
+    counts = {"bulletins": 0, "nil": 0, "descents": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
+    error: str | None = None
+    for name in sorted(files):
+        path = directory / name
+        stamp = arrived.get(name)
+        try:
+            if stamp is None:
+                raise ValueError("no arrival time in fetch.json")
+            result = meteofrance.parse_file(
+                path.read_bytes(), name=name, arrived=datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            )
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            LOG.warning("sounding %s: %s does not decode: %s", METEOFRANCE_SOURCE, name, exc)
+            counts["unreadable"] += 1
+            error = error or f"{name}: {exc}"
+            continue
+        counts["bulletins"] += 1
+        counts["subsets"] += result.ascents
+        counts["descents"] += result.descents
         counts["dropped"] += result.dropped
         soundings.extend(result.soundings)
     return soundings, counts, error

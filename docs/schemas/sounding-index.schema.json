@@ -26,7 +26,7 @@
       "format": "date-time"
     },
     "SourceKey": {
-      "description": "A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance) or the node discovery (wis2), admitted on shape alone.",
+      "description": "A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance), the node discovery (wis2) or Météo-France's open data (meteofrance), admitted on shape alone.",
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*([.:-][a-z0-9]+)*$"
     },

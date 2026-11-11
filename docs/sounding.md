@@ -134,6 +134,12 @@ at one pressure folded, a level is published when:
 - its `sig` has any of bits 1–7 set (surface, standard, tropopause,
   maximum wind, significant temperature, significant humidity,
   significant wind); or
+- the source sends its ascents unflagged (Météo-France, §6) and it is
+  the level nearest one of the standard surfaces — 1000, 925, 850, 700,
+  500, 400, 300, 250, 200, 150, 100, 70, 50, 30, 20 and 10 hPa — within
+  one hectopascal of it. It is kept as measured, at its own pressure,
+  and its `sig` stays `-32768`: it is not a level the station reported
+  as standard; or
 - it is the lowest or the highest level of the ascent; or
 - its pressure is at least **3 %** below the last published level's
   pressure — `p_last_published / p >= 1.03`, walking upward, the last
@@ -179,7 +185,10 @@ gateway's arrival stamp puts it nearest. A national node's object carries
 no heading, so its subsets are filed by their own clock instead: the
 six-hourly hour at or before three hours after it, which puts a launch
 from 21:00 to 02:59 on the 00Z ascent (and a TEMP converted from text,
-whose clock is the nominal hour, on itself). It is not the launch time. The
+whose clock is the nominal hour, on itself). Météo-France's files are
+filed the same way, by their launch time: the hour in a file's name is
+its publication batch, and an 18Z ascent from Rapa is in the next day's
+`00` file. It is not the launch time. The
 launch time is the subset's own clock (`timeSignificance` 18) and is
 published as `launched` when it lies between 90 minutes before the nominal
 hour and an hour after it — the window that covers both the Chinese
@@ -191,8 +200,15 @@ Anything outside is a clock the product does not trust, and `launched` is
 radiosonde descent, is not a sounding of this product: its levels run
 down from the burst, and its clock and position are the burst's. It is
 left out whole and counted in its source's `descents`. Météo-France's
-node publishes only descents, so France's ascents are in neither the
-gateways nor the nodes today.
+node publishes only descents, and the gateways carry none of mainland
+France's ascents; those come from Météo-France's own files (§6). A
+Météo-France file holds an ascent and a descent side by side, each
+labelled with its `direction`, but the label is not relied on: an object
+is an ascent when the level at its lowest pressure was measured later
+after launch than the level at its highest, and a descent otherwise, and
+only an object whose levels cannot say (a single level, no clock column)
+falls back on the label. An object of fewer than two levels is no
+sounding and is counted in `dropped`.
 
 **Deduplication.** The same station-hour arrives more than once: the
 sources carry overlapping sets, a station may be filed in more than one
@@ -279,6 +295,7 @@ station would cost more than the stations do.
       launched:  the launch time | null,
       sondeType: BUFR code table 0 02 011 | null,
       bulletin:  "IUSC01 RJTD 140000" (plus " CCA" on a correction), or a node's object name,
+                 or a Météo-France file name,
       gateway:   the source id the bytes came from,
       arrived:   when the source published the bulletin,
       n:        the published level count,
@@ -303,7 +320,9 @@ costs nothing worth saving.
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
 A national node's object has no heading: `bulletin` is its object name
 (`WIGOS_0-20000-0-82022_20261104T233000.bufr4`) and `arrived` its
-`LastModified`.
+`LastModified`; a Météo-France sounding's `bulletin` is its file name
+(`07145.2026111100.json`) and `arrived` the modification time its
+directory index gives.
 Together they say exactly which message a value came from.
 
 **Size.** Measured over one issue of the live feed, 491 stations: the
@@ -345,8 +364,8 @@ listing that failed, and a download not one bulletin of which decoded,
 both leave the previous hour's watermark in place, so the next hour sees
 those objects again rather than stepping past them for good.
 
-Source ids are of two kinds, both directories of the WMO WIS2 Global
-Cache, a public bucket that lists without credentials.
+Source ids are of three kinds. The first two are directories of the WMO
+WIS2 Global Cache, a public bucket that lists without credentials.
 
 - The two GTS→WIS2 gateways, which keep an object for 24 hours:
   `jp-jma-gts-to-wis2` (run by the Japan Meteorological Agency) and
@@ -365,12 +384,25 @@ Cache, a public bucket that lists without credentials.
   back 48 hours, the staleness limit, since its objects outlive the
   gateways' day. A discovery that fails is the one entry `wis2`, with
   `ok: false`.
+- `meteofrance`, Météo-France's own radiosonde files on data.gouv.fr
+  (dataset `radiosondages`),
+  `https://files.data.gouv.fr/meteofrance/data/OBS/RS/<YYYY>/<MM>/<DD>/<wmo>.<YYYYMMDDHH>.json`:
+  every ascent of its fifteen stations, mainland France, overseas and the
+  TAAF, at full resolution with no significance flags (§2). The days the
+  last 48 hours touch are listed each hour from their directory index,
+  and the files are kept for good, so the watermark is trusted however
+  old it is. Files go out in two batches a day, at about 01:40 and 13:40
+  UTC.
 
 The data is WMO core data under the WMO Unified Data Policy: free and
 unrestricted, with attribution of the original source requested. The
 originating national meteorological and hydrological services are the
 source of every sounding; the WIS2 Global Cache, its two gateways and the
-national nodes are the distribution.
+national nodes are the distribution. Météo-France's files are published
+by Météo-France under the Licence Ouverte 2.0 (Etalab), which asks that
+the source and the date of its last update be named: a sounding whose
+`gateway` is `meteofrance` is Météo-France's, and its `arrived` is that
+date.
 
 ## 7. Derived quantities
 
@@ -424,8 +456,9 @@ only significant levels.
 **`tropopause`** (gpm). The height of the first level, in descending
 pressure, whose `sig` has bit 3 (`32768`) set and which carries a height.
 A sounding may flag a secondary tropopause above the first; the lowest is
-published. `null` when no level is flagged, or when the flagged level
-reports no height — which several centres' bulletins do.
+published. `null` when no level is flagged (Météo-France's ascents
+never are), or when the flagged level reports no height — which several
+centres' bulletins do.
 
 ## 8. Validation
 
