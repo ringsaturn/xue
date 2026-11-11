@@ -306,6 +306,10 @@ export interface MeteogramRowData {
   spec: MeteogramRowSpec;
   /** One series per bundle of the spec, on the shared axis. */
   series: readonly (readonly ProbeValue[])[];
+  /** The precipitation row's running total (mm since the axis began, or
+   * across a range), drawn as a line over the rate's bars on a scale of its
+   * own: a depth and a rate share no axis. */
+  total?: readonly ProbeValue[];
   /** Meteorological wind direction per frame (degrees the wind comes from),
    * on a wind row whose bundle is a component pair. */
   directions?: readonly (number | null)[];
@@ -576,6 +580,25 @@ export function drawMeteogram(
         context.fillRect(x(index) - column / 2, barTop, Math.max(1, column - 0.5), base - barTop);
       }
       context.globalAlpha = 1;
+      if (row.total) {
+        const [totalLow, totalHigh] = fitRange([row.total], null, 0);
+        const yTotal = (value: number): number =>
+          plotBottom - ((value - totalLow) / (totalHigh - totalLow)) * (plotBottom - plotTop);
+        context.strokeStyle = ink.muted;
+        context.lineWidth = 1.25;
+        context.beginPath();
+        let pen = false;
+        for (const [index, value] of row.total.entries()) {
+          if (typeof value !== "number") {
+            pen = false;
+            continue;
+          }
+          if (pen) context.lineTo(x(index), yTotal(value));
+          else context.moveTo(x(index), yTotal(value));
+          pen = true;
+        }
+        context.stroke();
+      }
     } else {
       for (const [position, values] of row.series.entries()) {
         context.strokeStyle = position === 0 ? ink.ink : ink.muted;

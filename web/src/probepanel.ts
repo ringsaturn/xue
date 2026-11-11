@@ -2,7 +2,17 @@
 // axis, the meteogram rows, the terrain column and the station chips. The
 // arithmetic lives in probe.ts and meteogram.ts; this is the controller.
 import { type Map as MaplibreMap, Marker } from "maplibre-gl";
-import { accumulationPlan, accumulationVariable, planTotal, rangePlan, type RateKind, seriesTotals, windowCode } from "./accumulation";
+import {
+  accumulationPlan,
+  accumulationVariable,
+  planTotal,
+  rangePlan,
+  type RateKind,
+  rateKind,
+  runningTotals,
+  seriesTotals,
+  windowCode,
+} from "./accumulation";
 import { type AlertHit, type AlertLayers, alertLevelColor } from "./alerts/layer";
 import type { LoadedAqIndex } from "./aq/fetch";
 import type { AqStation } from "./aq/schema";
@@ -1352,7 +1362,45 @@ export function createProbePanel(deps: ProbePanelDeps) {
           : "--",
       );
     }
+    // The precipitation's running total follows its rate, in its own unit.
+    const rate = row.total ? sessions.get(row.spec.bundles[0]!) : undefined;
+    if (rate && row.total) {
+      const depth = accumulationVariable(rate.variable);
+      const value = row.total[index];
+      parts.push(typeof value === "number" ? formatProbeValue(depth, variableDisplayValue(depth, value)) : "--");
+      unit = `${unit} · ${variableDisplayUnit(depth)}`;
+    }
     return { values: parts.join(" · "), unit };
+  }
+
+  /**
+   * The precipitation row's running total on the primary axis: the depth
+   * since the rate's axis began, or across the range the map is summing
+   * while the precipitation is the field. It is summed over the rate's own
+   * frames, not the primary's: a column the rate's axis lacks (a forecast's
+   * analysis hour) is a gap in the line, not a frame the sum waits for.
+   */
+  function precipitationRunningTotal(rates: readonly ProbeValue[], leads: readonly number[]): ProbeValue[] | null {
+    const session = sessions.get("prate");
+    if (!session) return null;
+    const kind = rateKind(session.variable);
+    if (kind === null) return null;
+    const present = leads.flatMap((lead, position) => (sessionOffsetForLead(session, lead) === null ? [] : [position]));
+    if (present.length === 0) return null;
+    const values = present.map((position) => rates[position]);
+    const on = deps.activeSession?.id === "prate" ? accumulationOn(deps.activeSession) : null;
+    let range: { from: number; to: number } | null = null;
+    if (on?.range) {
+      const from = present.findIndex((position) => position >= on.range!.from);
+      let to = present.length - 1;
+      while (to >= 0 && present[to]! > on.range.to) to -= 1;
+      if (from < 0 || to < from) return null;
+      range = { from, to };
+    }
+    const totals = runningTotals(values, present.map((position) => leads[position]!), kind, range);
+    const out: ProbeValue[] = leads.map(() => null);
+    for (const [compact, position] of present.entries()) out[position] = totals[compact];
+    return out;
   }
 
   /** The day marks, read off the same plan the capsule's strip is built from
@@ -1440,6 +1488,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
             : item.values,
         ),
       };
+      if (spec.id === "precipitation") {
+        const total = precipitationRunningTotal(row.series[0]!, leads);
+        if (total) row.total = total;
+      }
       const fromStation = station !== null && synopTakesRow(spec.id, hasTerrainRow);
       if (fromStation && axis) {
         const marks = synopRowObservations(spec.id, station.series, axis);
@@ -1484,7 +1536,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       // to the code line for that row, and the direction is already drawn
       // as an arrow under every column of the row. The measurement is
       // nowhere else, so it is what the line keeps.
-      const code = meteogramRowCode(spec);
+      const code = row.total ? `${meteogramRowCode(spec)} · APCP` : meteogramRowCode(spec);
       element.code.textContent = reported !== null && readout.unit ? `${code} · ${readout.unit}` : code;
       const parts = [
         reported !== null ? null : readout.unit,

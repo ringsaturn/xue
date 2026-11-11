@@ -1194,8 +1194,10 @@ test("clicking the map pins a point and reads its whole series at once", async (
   await expect(rows.nth(0).locator(".probe-row-code")).toHaveText("TMP 2M");
   await expect(rows.nth(2).locator(".probe-row-code")).toHaveText("WIND · GUST 10M");
   await expect(rows.nth(1)).toHaveAttribute("data-state", "complete");
-  await expect(rows.nth(1).locator(".probe-row-value")).toHaveText(/^\d+\.\d+$/);
-  await expect(rows.nth(1).locator(".probe-row-note")).toHaveText("mm/h");
+  // The rate, then the running total since the axis began, in their units.
+  await expect(rows.nth(1).locator(".probe-row-code")).toHaveText("PRATE · APCP");
+  await expect(rows.nth(1).locator(".probe-row-value")).toHaveText(/^\d+\.\d+ · \d+(\.\d+)?$/);
+  await expect(rows.nth(1).locator(".probe-row-note")).toHaveText("mm/h · mm");
   await expect(rows.nth(0)).toHaveAttribute("data-state", "empty");
   await expect(rows.nth(0).locator(".probe-row-value")).toHaveText("--");
   // Pinning a second point re-reads the series there: the panel follows the

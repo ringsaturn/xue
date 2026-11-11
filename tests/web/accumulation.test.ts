@@ -18,6 +18,7 @@ import {
   rangeIndices,
   rangePlan,
   rateKind,
+  runningTotals,
   seriesTotals,
   windowCode,
   windowFits,
@@ -207,6 +208,34 @@ describe("seriesTotals", () => {
     // The first frame of an instantaneous axis has nothing before it: dry, not unknown.
     expect(seriesTotals([2, 2, 4, undefined], leads, 2 * HOUR, "instant")).toEqual([0, 2, 5, undefined]);
     expect(seriesTotals([null, 1, null, 3], leads, HOUR, "interval")).toEqual([null, 1, null, 3]);
+  });
+});
+
+describe("runningTotals", () => {
+  it("adds up from the axis's start, an interval frame counting its own step", () => {
+    const leads = [3, 6, 9].map((hour) => hour * HOUR);
+    expect(runningTotals([1, 2, 3], leads, "interval")).toEqual([3, 9, 18]);
+    expect(runningTotals([2, 2, 4, 4], [0, 1, 2, 3].map((hour) => hour * HOUR), "instant")).toEqual([0, 2, 5, 9]);
+  });
+
+  it("reads a range as the sum the range plan makes at every frame", () => {
+    const leads = [1, 2, 3, 4, 6].map((hour) => hour * HOUR);
+    const values = [1, 2, 3, 4, 5];
+    for (const kind of ["interval", "instant"] as const) {
+      const totals = runningTotals(values, leads, kind, { from: 1, to: 3 });
+      expect(totals[0]).toBeNull();
+      expect(totals[4]).toBeNull();
+      for (const index of [1, 2, 3]) {
+        const planned = index === 1 ? 0 : planTotal(values, rangePlan(leads, 1, index, kind));
+        expect(totals[index]).toBeCloseTo(planned as number);
+      }
+    }
+  });
+
+  it("waits from the first unread frame on and passes over missing ones", () => {
+    const leads = [1, 2, 3, 4].map((hour) => hour * HOUR);
+    expect(runningTotals([1, undefined, 1, 1], leads, "interval")).toEqual([1, undefined, undefined, undefined]);
+    expect(runningTotals([null, null, 2, 1], leads, "interval")).toEqual([null, null, 2, 3]);
   });
 });
 

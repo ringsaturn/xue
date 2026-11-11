@@ -245,6 +245,60 @@ export function seriesTotals(
   return values.map((_, index) => planTotal(values, accumulationPlan(leads, index, window, kind)));
 }
 
+/**
+ * The running total of a rate series: at every frame, the depth since the
+ * axis began (or, given a range, since its first frame, with nothing outside
+ * it). It is what `rangePlan` sums frame by frame, kept as one running sum
+ * so a whole axis is one pass. A number where every frame so far is read,
+ * null where none has a value, undefined from the first unread frame on.
+ */
+export function runningTotals(
+  values: readonly (number | null | undefined)[],
+  leads: readonly number[],
+  kind: RateKind,
+  range: { from: number; to: number } | null = null,
+): (number | null | undefined)[] {
+  const from = range?.from ?? 0;
+  const to = Math.min(range?.to ?? values.length - 1, values.length - 1);
+  // Without a range the first interval frame counts its own step from the
+  // run's start, the way a window does; a range starts at its first frame's
+  // valid time, which that frame's step ends at.
+  const start = range ? leads[from]! : -Infinity;
+  const gap = GAP_STEPS * medianStep(leads);
+  const out: (number | null | undefined)[] = values.map(() => null);
+  let total = 0;
+  let read = false;
+  let unread = false;
+  const add = (frame: number, hours: number) => {
+    const value = values[frame];
+    if (value === undefined) unread = true;
+    else if (value !== null) {
+      total += value * hours;
+      read = true;
+    }
+  };
+  for (let index = from; index <= to; index += 1) {
+    const b = leads[index]!;
+    if (index === from) {
+      // The start reads as nothing fallen yet, given its frame is read.
+      add(index, 0);
+      if (kind === "interval" && !range) add(index, Math.max(0, b - Math.min(0, b)) / 3600);
+    } else if (kind === "interval") {
+      add(index, (b - Math.max(leads[index - 1]!, start)) / 3600);
+    } else {
+      const a = leads[index - 1]!;
+      if (b - a <= gap) {
+        // The trapezoid between the two samples, as `planSince` splits it.
+        const hours = (b - a) / 3600 / 2;
+        add(index, hours);
+        add(index - 1, hours);
+      }
+    }
+    out[index] = unread ? undefined : read ? total : null;
+  }
+  return out;
+}
+
 /** One plan's total over a rate series: a number where every frame of it
  * is read, null where none of them has a value, undefined while any is
  * still unread. */
