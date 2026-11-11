@@ -805,3 +805,31 @@ export function searchWithTc(search: string, state: TcUrlState): string {
   else params.delete("tcmembers");
   return `?${params.toString()}`;
 }
+
+/** The coordinate grids drawn over the map. */
+export interface GridState {
+  /** The Military Grid Reference System: zones, 100 km squares and their
+   * kilometre lines, as the GSI's UTM grid draws them. */
+  mgrs: boolean;
+  /** Parallels and meridians. */
+  latlon: boolean;
+}
+
+/** `?grid=mgrs`, `?grid=latlon`, `?grid=mgrs,latlon`; `null` when the link
+ * names no grid, so the viewer's stored choice decides, and `?grid=off`
+ * draws none. Unknown tokens are skipped. */
+export function parseGridFromSearch(search: string): GridState | null {
+  const value = new URLSearchParams(search).get("grid");
+  if (value === null) return null;
+  const tokens = value.split(",").map((token) => token.trim().toLowerCase());
+  return { mgrs: tokens.includes("mgrs"), latlon: tokens.includes("latlon") };
+}
+
+/** The given query string carrying the grids; none writes nothing. */
+export function searchWithGrid(search: string, grid: GridState): string {
+  const params = new URLSearchParams(search);
+  const tokens = [grid.mgrs ? "mgrs" : null, grid.latlon ? "latlon" : null].filter((token) => token !== null);
+  if (tokens.length === 0) params.delete("grid");
+  else params.set("grid", tokens.join(","));
+  return `?${params.toString()}`;
+}
