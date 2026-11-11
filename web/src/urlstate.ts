@@ -1,4 +1,4 @@
-import { parseWindow, windowParam } from "./accumulation";
+import { type Accumulation, accumulationParam, parseAccumulation } from "./accumulation";
 import { gibsLayer } from "./gibs";
 import {
   FORECAST_MODELS,
@@ -338,21 +338,22 @@ export function searchWithParticles(search: string, particles: boolean): string 
   return `?${params.toString()}`;
 }
 
-/** The precipitation total's window from `?accum=` (`3h`, `30m`), in
- * seconds, or null for the rate itself — no param, or a spelling that is
- * not a window. Whether the dataset offers that window is the shell's to
- * decide; one it does not falls back to the rate. */
-export function parseAccumulationFromSearch(search: string): number | null {
+/** What the precipitation total is summed over, from `?accum=`: a window
+ * (`3h`, `30m`) or a range of UTC valid times (`2026111106-2026111400`), or
+ * null for the rate itself — no param, or a spelling that is neither.
+ * Whether the dataset offers it is the shell's to decide; one it does not
+ * falls back to the rate. */
+export function parseAccumulationFromSearch(search: string): Accumulation | null {
   const value = new URLSearchParams(search).get("accum");
-  return value === null ? null : parseWindow(value);
+  return value === null ? null : parseAccumulation(value);
 }
 
-/** The given query string carrying the total's window, or none for the
+/** The given query string carrying the total's span, or none for the
  * rate. */
-export function searchWithAccumulation(search: string, window: number | null): string {
+export function searchWithAccumulation(search: string, accumulation: Accumulation | null): string {
   const params = new URLSearchParams(search);
-  if (window === null) params.delete("accum");
-  else params.set("accum", windowParam(window));
+  if (accumulation === null) params.delete("accum");
+  else params.set("accum", accumulationParam(accumulation));
   return `?${params.toString()}`;
 }
 

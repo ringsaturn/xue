@@ -170,18 +170,28 @@ describe("an old day-night link", () => {
 
 describe("the precipitation total", () => {
   it("is parsed from ?accum=, a spelling that is no window reading as the rate", () => {
-    expect(parseView("?type=precip&accum=24h", DEFAULTS).view.accumulation).toBe(24 * 3600);
-    expect(parseView("?type=precip&accum=30m", DEFAULTS).view.accumulation).toBe(1800);
+    expect(parseView("?type=precip&accum=24h", DEFAULTS).view.accumulation).toEqual({ type: "window", seconds: 24 * 3600 });
+    expect(parseView("?type=precip&accum=30m", DEFAULTS).view.accumulation).toEqual({ type: "window", seconds: 1800 });
+    expect(parseView("?type=precip&accum=2026111106-2026111400", DEFAULTS).view.accumulation).toEqual({
+      type: "range",
+      from: Date.UTC(2026, 10, 11, 6),
+      to: Date.UTC(2026, 10, 14, 0),
+    });
+    expect(parseView("?type=precip&accum=2026111400-2026111106", DEFAULTS).view.accumulation).toBeNull();
     expect(parseView("?type=precip&accum=soon", DEFAULTS).view.accumulation).toBeNull();
     expect(parseView("?type=precip", DEFAULTS).view.accumulation).toBeNull();
   });
 
   it("is written only while the precipitation is the field", () => {
-    const view = { ...parseView("?model=gfs&type=temp", DEFAULTS).view, accumulation: 6 * 3600 };
+    const view = { ...parseView("?model=gfs&type=temp", DEFAULTS).view, accumulation: { type: "window" as const, seconds: 6 * 3600 } };
     const context = { model: "gfs" as const, caseId: null, experimentEnabled: false, particlesChosen: false };
     expect(searchForView(view, "?model=gfs&type=temp", context, "prate")).toBe("?model=gfs&type=temp");
     expect(searchForView({ ...view, field: "prate" }, "?model=gfs&type=temp", context, "prate")).toBe(
       "?model=gfs&type=precip&accum=6h",
+    );
+    const range = { type: "range" as const, from: Date.UTC(2026, 10, 11, 6, 30), to: Date.UTC(2026, 10, 11, 9) };
+    expect(searchForView({ ...view, field: "prate", accumulation: range }, "?model=mrms", context, "prate")).toBe(
+      "?model=mrms&type=precip&accum=202611110630-2026111109",
     );
   });
 });

@@ -45,7 +45,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `precipphase.ts` | The precipitation by phase: classes from `ptype`, `ptypeec` and `cpofp`, the freezing line from `fzlvl` and `orog`, the weights `ForecastLayer.setPhase` paints by, and where the chart writes its labels. Plain arithmetic on decoded planes. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
 | `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the `?x=` experiment's composite and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
-| `accumulation.ts` | Sliding-window precipitation totals (`?accum=`) from the published rate frames; see "Precipitation totals" below. |
+| `accumulation.ts` | Precipitation totals (`?accum=`) over a window or a dragged range, from the published rate frames; see "Precipitation totals" below. |
 | `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `derived.ts` (`fireDerived`). |
 | `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
@@ -297,6 +297,19 @@ and the window shrinks to fit it.
   precipitation is the field; the probe sums the same series over the
   same plan (`seriesTotals`) and says how much of a window the axis could
   fill (`6H/24H`).
+  A typed window (the level row's field: `9h`, `2h`, `20m`, a bare
+  number is hours) passes the same test as a preset (`windowFits` and the
+  cache cap, `offeredWindows().frames`) and sits among the presets while
+  shown.
+  A range (`?accum=<from>-<to>`, UTC valid times snapped to frames; RANGE
+  on the level row, then a drag on the track — on a band end it moves that
+  end, inside the band it slides the range keeping its hours, elsewhere it
+  starts a new one) is one total whatever the playhead. It keeps nothing
+  resident: `RangeSum` adds each frame once as it lands (any landing in
+  `rangeWanted`, not only the desired key) and starts over for another
+  range, run or view tiles, so a range can span the whole axis. The band
+  over the track fills as its frames are summed; the probe reads the range
+  total and keeps the rate chart.
 - Altitude correction (`layer.ts::lapseCodes`, formula in `lapse.ts`, controller in `relief.ts`):
   with relief on, a 2 m temperature is moved from the model's ground (the
   run's `orog` plane, decoded whole once and uploaded on its own grid) to

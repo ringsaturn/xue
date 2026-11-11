@@ -233,6 +233,14 @@ export const en = {
   accumRateGloss: "rate",
   /** A window button's gloss; `{window}` is its instrument code ("24H"). */
   accumTotalGloss: "{window} total",
+  /** The RANGE button's gloss in that group, before a range is on screen:
+   * how to pick one (`?accum=<from>-<to>`). */
+  accumRangeGloss: "drag on the track",
+  /** The typed window field's label and tooltip: what it takes. */
+  accumWindowInputAria: "window length: 9h, 2h, 20m",
+  /** Its tooltip when the typed window is shorter than a step, longer
+   * than the axis or more frames than the cache holds. */
+  accumWindowUnavailable: "this dataset cannot sum over that window",
   modelHeading: "Datasets",
   /** The pressed lines member over a filled field is the overlay's off
    * switch; the tooltip says so, since the × alone is a hint. */

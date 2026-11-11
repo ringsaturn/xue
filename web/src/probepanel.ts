@@ -2,7 +2,7 @@
 // axis, the meteogram rows, the terrain column and the station chips. The
 // arithmetic lives in probe.ts and meteogram.ts; this is the controller.
 import { type Map as MaplibreMap, Marker } from "maplibre-gl";
-import { accumulationPlan, accumulationVariable, type RateKind, seriesTotals, windowCode } from "./accumulation";
+import { accumulationPlan, accumulationVariable, planTotal, rangePlan, type RateKind, seriesTotals, windowCode } from "./accumulation";
 import { type AlertHit, type AlertLayers, alertLevelColor } from "./alerts/layer";
 import type { LoadedAqIndex } from "./aq/fetch";
 import type { AqStation } from "./aq/schema";
@@ -137,7 +137,9 @@ export interface ProbePanelDeps {
   readonly memberProbeOffsets: (session: VariableSession) => number[];
   readonly sessionOffsetForLead: (session: VariableSession, seconds: number) => number | null;
   readonly memberOffsetForFrame: (session: VariableSession, index: number) => number | null;
-  readonly accumulationOn: (session: VariableSession) => { window: number; kind: RateKind } | null;
+  readonly accumulationOn: (
+    session: VariableSession,
+  ) => { span: number; range: { from: number; to: number } | null; kind: RateKind } | null;
   readonly variableUi: (session: VariableSession) => { code: string };
   readonly modelDomain: (metadata: BundleMetadata) => LambertDomain | null;
 
@@ -1133,11 +1135,15 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // them: the readout names the three as they are and draws no trace.
     const rates = cell ? (session.composite ? [] : probeSeriesValues(series, probed, offsets)) : [];
     // A total reads the same series summed over its window at every frame.
+    // A range is one total, whatever the playhead: the readout says it and
+    // the chart keeps the rate it is summed from.
     const total = member ? null : accumulationOn(session);
-    const values = total ? seriesTotals(rates, frameLeads(), total.window, total.kind) : rates;
-    const variable = total ? accumulationVariable(session.variable) : session.variable;
-    if (total) probePanel.code.textContent = `APCP ${windowCode(total.window)}`;
-    const current = values[index];
+    const range = total?.range ?? null;
+    const values = total && !range ? seriesTotals(rates, frameLeads(), total.span, total.kind) : rates;
+    const variable = total && !range ? accumulationVariable(session.variable) : session.variable;
+    const readoutVariable = total ? accumulationVariable(session.variable) : session.variable;
+    if (total) probePanel.code.textContent = `APCP ${windowCode(total.span)}`;
+    const current = total && range ? planTotal(rates, rangePlan(frameLeads(), range.from, range.to, total.kind)) : values[index];
 
     if (!cell) {
       probePanel.value.value = "--";
@@ -1148,7 +1154,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     } else {
       probePanel.value.value =
         typeof current === "number"
-          ? `${formatProbeValue(variable, variableDisplayValue(variable, current))} ${variableDisplayUnit(variable)}`.trimEnd()
+          ? `${formatProbeValue(readoutVariable, variableDisplayValue(readoutVariable, current))} ${variableDisplayUnit(readoutVariable)}`.trimEnd()
           : "--";
       const lead = probeStampLine(index, member ? session : null);
       if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
@@ -1161,9 +1167,9 @@ export function createProbePanel(deps: ProbePanelDeps) {
           ? lead
           : `${lead} · ${String(Math.round(direction)).padStart(3, "0")}°`;
         // A window the axis cannot fill yet says how much of it the total is.
-        const covered = total ? accumulationPlan(frameLeads(), index, total.window, total.kind).covered : null;
-        if (total && covered !== null && covered < total.window) {
-          probePanel.meta.textContent += ` · ${windowCode(covered)}/${windowCode(total.window)}`;
+        const covered = total && !range ? accumulationPlan(frameLeads(), index, total.span, total.kind).covered : null;
+        if (total && covered !== null && covered < total.span) {
+          probePanel.meta.textContent += ` · ${windowCode(covered)}/${windowCode(total.span)}`;
         }
       }
     }

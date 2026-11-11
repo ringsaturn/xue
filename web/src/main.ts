@@ -43,11 +43,18 @@ import {
 import {
   accumulationLegend,
   accumulationPalette,
+  accumulationParam,
   accumulationPlan,
   accumulationWindows,
+  parseWindow,
+  rangeIndices,
+  rangePlan,
+  RangeSum,
   rateKind,
   windowCode,
+  windowFits,
   WindowTotals,
+  type Accumulation,
   type RateKind,
   type TermPlane,
 } from "./accumulation";
@@ -493,29 +500,51 @@ function zarrPayloadBudgetBytes(): number {
 }
 
 
-/** The precipitation total on screen (`?accum=`, accumulation.ts): its
- * window, how the session's frames are weighted, and about how many frames
- * one window reads — or null while the primary is drawn as it is (another
- * field, a fire field over it, a window this dataset does not offer). */
+/** The precipitation total on screen (`?accum=`, accumulation.ts): a
+ * window ending at the playhead or a fixed range of frames, the seconds it
+ * spans, how the session's frames are weighted, and how many frames it
+ * keeps resident — or null while the primary is drawn as it is (another
+ * field, a fire field over it, a window this dataset does not offer, a
+ * range off this axis). */
 interface TotalOn {
-  window: number;
+  /** The window's seconds; null for a range. */
+  window: number | null;
+  /** The range's first and last frames; null for a window. */
+  range: { from: number; to: number } | null;
+  span: number;
   kind: RateKind;
   frames: number;
 }
 
+/** Frames of a range decoded ahead of the one being summed. A range keeps
+ * nothing resident (`RangeSum` adds each frame as it lands), so this only
+ * sizes the pipeline and the cache room for frames still to be added. */
+const RANGE_PIPELINE = 4;
+
 function accumulationOn(session: VariableSession | null = activeSession): TotalOn | null {
-  const window = view.accumulation;
-  if (window === null || !session || session !== activeSession || fireField() !== null) return null;
+  const accumulation = view.accumulation;
+  if (accumulation === null || !session || session !== activeSession || fireField() !== null) return null;
   const offered = offeredWindows(session);
-  const frames = offered?.windows.get(window);
-  return offered && frames !== undefined ? { window, kind: offered.kind, frames } : null;
+  if (!offered) return null;
+  if (accumulation.type === "range") {
+    const leads = frameLeads();
+    const base = metadata ? Date.parse(metadata.runTime) : 0;
+    const range = rangeIndices(leads.map((lead) => base + lead * 1000), accumulation);
+    if (!range) return null;
+    return { window: null, range, span: leads[range.to]! - leads[range.from]!, kind: offered.kind, frames: RANGE_PIPELINE };
+  }
+  const window = accumulation.seconds;
+  const frames = offered.frames(window);
+  return frames !== null ? { window, range: null, span: window, kind: offered.kind, frames } : null;
 }
 
 /** The windows the primary session offers a total over, each with the
  * frames it reads, or null for a field no total is made of. A window
  * whose frames would not fit in the plane cache beside the playback's own
  * is not offered: gathering it would evict its own planes forever. */
-function offeredWindows(session: VariableSession): { kind: RateKind; windows: Map<number, number> } | null {
+function offeredWindows(
+  session: VariableSession,
+): { kind: RateKind; windows: Map<number, number>; frames: (window: number) => number | null } | null {
   if (session.chartId !== "prate" || session.vector || session.composite || session.volume) return null;
   const kind = rateKind(session.variable);
   if (kind === null) return null;
@@ -524,12 +553,18 @@ function offeredWindows(session: VariableSession): { kind: RateKind; windows: Ma
   for (let index = 1; index < leads.length; index += 1) step = Math.min(step, leads[index]! - leads[index - 1]!);
   const grid = session.metadata.grid;
   const frameBytes = grid.width * grid.height;
+  // Any window, a preset or one typed in, on the same terms.
+  const frames = (window: number): number | null => {
+    if (!windowFits(leads, kind, window)) return null;
+    const count = Math.ceil(window / step) + 1;
+    return (count + 4) * frameBytes <= planeCache.capBytes() ? count : null;
+  };
   const windows = new Map<number, number>();
   for (const window of accumulationWindows(leads, kind, showingObservations())) {
-    const frames = Math.ceil(window / step) + 1;
-    if ((frames + 4) * frameBytes <= planeCache.capBytes()) windows.set(window, frames);
+    const count = frames(window);
+    if (count !== null) windows.set(window, count);
   }
-  return { kind, windows };
+  return { kind, windows, frames };
 }
 
 /** Frames the total on screen keeps resident behind the playhead. */
@@ -556,7 +591,11 @@ interface WindowTerm {
 }
 
 function totalTerms(session: VariableSession, index: number, on: TotalOn): WindowTerm[] {
-  return accumulationPlan(frameLeads(), index, on.window, on.kind).terms.map((term) => {
+  const leads = frameLeads();
+  const plan = on.range
+    ? rangePlan(leads, on.range.from, on.range.to, on.kind)
+    : accumulationPlan(leads, index, on.span, on.kind);
+  return plan.terms.map((term) => {
     const hour = frameOffset(term.index);
     return { key: cacheKey(session, session.variable, hour), hour, hours: term.hours };
   });
@@ -565,9 +604,26 @@ function totalTerms(session: VariableSession, index: number, on: TotalOn): Windo
 /** The running sums of each rate session that has drawn a total. */
 const windowTotals = new WeakMap<VariableSession, WindowTotals>();
 
+/** The running sums of each rate session that has drawn a range. */
+const rangeSums = new WeakMap<VariableSession, RangeSum>();
+
+/** The range frames whose landing the range on screen waits on. */
+let rangeWanted = new Set<string>();
+
+/** What a range's sum is of: the run, the frames, and the tiles its planes
+ * were decoded for. */
+function rangeIdentity(session: VariableSession, range: { from: number; to: number }): string {
+  return `${session.metadata.runTime}|${range.from}-${range.to}|${JSON.stringify(session.viewTiles)}`;
+}
+
 /** The total plane for frame `index`, or null while a plane of its window
- * is not decoded for the view. */
+ * is not decoded for the view (or a range is not summed yet). */
 function totalPlane(session: VariableSession, index: number, on: TotalOn): Uint8Array | null {
+  if (on.range) {
+    const sum = rangeSums.get(session);
+    if (!sum || sum.identity !== rangeIdentity(session, on.range)) return null;
+    return totalTerms(session, index, on).every((term) => sum.has(term.key)) ? sum.plane() : null;
+  }
   const planes: TermPlane[] = [];
   for (const term of totalTerms(session, index, on)) {
     const frame = cachedFrame(term.key, session);
@@ -583,16 +639,16 @@ function totalPlane(session: VariableSession, index: number, on: TotalOn): Uint8
   return totals.plane(String(index), planes, grid.width * grid.height);
 }
 
-/** The window the primary layer's palette is the total key for, or null
- * while it holds the field's own: swapped with the plane it colours, so a
- * rate plane is never drawn in the totals' colours, or a total in the
- * rate's, while the other is still decoding. */
-let paletteWindow: number | null = null;
+/** Whether the primary layer's palette is the totals' key rather than the
+ * field's own: swapped with the plane it colours, so a rate plane is never
+ * drawn in the totals' colours, or a total in the rate's, while the other
+ * is still decoding. */
+let paletteTotals = false;
 
-function syncPrimaryPalette(slot: RasterSlot, session: VariableSession, window: number | null): void {
-  if (paletteWindow === window) return;
-  paletteWindow = window;
-  slot.layer.setPalette(window === null ? scalarPalette(session) : accumulationPalette());
+function syncPrimaryPalette(slot: RasterSlot, session: VariableSession, totals: boolean): void {
+  if (paletteTotals === totals) return;
+  paletteTotals = totals;
+  slot.layer.setPalette(totals ? accumulationPalette() : scalarPalette(session));
 }
 
 /** The cache keys of the total on screen, kept from eviction like the
@@ -916,6 +972,7 @@ const validTimeLabel = required<HTMLElement>("valid-time-label");
 const loadStatus = required<HTMLElement>("load-status");
 const tickMarks = required<HTMLElement>("tick-marks");
 const trackNow = required<HTMLElement>("track-now");
+const trackRange = required<HTMLElement>("track-range");
 const errorPanel = required<HTMLElement>("error-panel");
 const errorMessage = required<HTMLElement>("error-message");
 
@@ -1566,7 +1623,9 @@ const planeCache = createPlaneCache({
   },
   totalHours: (session, index) => {
     const shownTotal = accumulationOn(session);
-    return shownTotal ? totalTerms(session, index, shownTotal).map((term) => term.hour) : [];
+    // A range is summed as it lands, not kept: its frames are asked for by
+    // trySelectRange, not held in the prefetch window.
+    return shownTotal && !shownTotal.range ? totalTerms(session, index, shownTotal).map((term) => term.hour) : [];
   },
 });
 const decodeQueue = createDecodeQueue({
@@ -2433,7 +2492,7 @@ function blendFrames(index: number, next: number, weight: number): boolean {
   if (total) {
     const from = totalPlane(session, index, total);
     const to = from ? totalPlane(session, next, total) : null;
-    if (from && to && paletteWindow === total.window) {
+    if (from && to && paletteTotals) {
       ensureSlotGrid(slot, session);
       slot.layer.setBlend(from, to, weight, sessionCoverage(session, session.viewTiles));
       blended = true;
@@ -2527,6 +2586,7 @@ function updateFrameReadout(index: number): void {
   // Read by the tooltip and by the track's playhead, so it is set on the
   // capsule both of them sit in.
   timelinePanel.style.setProperty("--frame-progress", `${(index / Math.max(1, frameCount() - 1)) * 100}%`);
+  syncRangeBand();
   updateTicks(index);
   updateForecastDay(index);
   scheduleProbeRender();
@@ -2827,8 +2887,9 @@ function trySelectFrame(index: number): boolean {
   updateFrameReadout(index);
   planeCache.sendPrefetchWindow(index);
   const total = accumulationOn(session);
-  if (total) return trySelectTotal(session, slot, index, total);
+  if (total) return total.range ? trySelectRange(session, slot, index, total, total.range) : trySelectTotal(session, slot, index, total);
   totalShownKeys = [];
+  rangeWanted = new Set();
   const keys = session.variables.map((variable) => cacheKey(session, variable, hour));
   const planes = keys.map((key) => cachedFrame(key, session));
   if (planes.every((plane) => plane !== undefined)) {
@@ -2861,7 +2922,7 @@ function trySelectFrame(index: number): boolean {
         windLayer.setWindPlanes(planes[0]!.plane, planes[1]!.plane);
       }
     } else {
-      if (slot === primarySlot()) syncPrimaryPalette(slot, session, null);
+      if (slot === primarySlot()) syncPrimaryPalette(slot, session, false);
       slot.layer.setFrame(planes[0]!.plane, sessionCoverage(session, planes[0]!.tiles));
       if (slot === slots.lines) scheduleLabels(planes[0]!, false);
     }
@@ -2894,18 +2955,64 @@ function trySelectTotal(session: VariableSession, slot: RasterSlot, index: numbe
       const frame = planeCache.get(term.key)!;
       planeCache.refresh(term.key, frame);
     }
-    ensureSlotGrid(slot, session);
-    syncPrimaryPalette(slot, session, on.window);
-    slot.layer.setFrame(plane, sessionCoverage(session, session.viewTiles));
-    slot.displayedReal = session.id;
-    slot.shownKey = cacheKey(session, session.variable, frameOffset(index));
-    slot.shownGuns = [];
-    frameShown(index);
+    showTotalPlane(session, slot, index, plane);
     return true;
   }
   const missing = terms.filter((term) => !cachedFrame(term.key, session)).reverse();
   decodeQueue.desiredKey = missing[0]?.key ?? null;
   for (const term of missing) decodeQueue.request(session, session.variable, term.hour);
+  frameMissing(index);
+  return false;
+}
+
+function showTotalPlane(session: VariableSession, slot: RasterSlot, index: number, plane: Uint8Array): void {
+  ensureSlotGrid(slot, session);
+  syncPrimaryPalette(slot, session, true);
+  slot.layer.setFrame(plane, sessionCoverage(session, session.viewTiles));
+  slot.displayedReal = session.id;
+  slot.shownKey = cacheKey(session, session.variable, frameOffset(index));
+  slot.shownGuns = [];
+  frameShown(index);
+}
+
+/** Show the total over a fixed range once every frame of it has been
+ * added to its sum; meanwhile add the ones decoded for the view, ask for
+ * the rest oldest first, and keep the picture on screen. The playhead
+ * moves the overlays, not the total. */
+function trySelectRange(
+  session: VariableSession,
+  slot: RasterSlot,
+  index: number,
+  on: TotalOn,
+  range: { from: number; to: number },
+): boolean {
+  totalShownKeys = [];
+  const grid = session.metadata.grid;
+  const cells = grid.width * grid.height;
+  const identity = rangeIdentity(session, range);
+  let sum = rangeSums.get(session);
+  if (!sum || sum.identity !== identity || sum.cells !== cells) {
+    sum = new RangeSum(session.variable, identity, cells);
+    rangeSums.set(session, sum);
+  }
+  const terms = totalTerms(session, index, on);
+  for (const term of terms) {
+    if (sum.has(term.key)) continue;
+    const frame = cachedFrame(term.key, session);
+    if (frame) sum.add(term.key, frame.plane, term.hours);
+  }
+  const added = sum;
+  const missing = terms.filter((term) => !added.has(term.key));
+  rangeWanted = new Set(missing.map((term) => term.key));
+  syncRangeBand(terms.length > 0 ? sum.count / terms.length : 1);
+  if (missing.length === 0) {
+    showTotalPlane(session, slot, index, sum.plane());
+    return true;
+  }
+  decodeQueue.desiredKey = missing[0]!.key;
+  // The queue holds back what is over its in-flight cap; each landing
+  // comes back here and asks for the next.
+  for (const term of missing.slice(0, 2 * (RANGE_PIPELINE + 1))) decodeQueue.request(session, session.variable, term.hour);
   frameMissing(index);
   return false;
 }
@@ -3094,7 +3201,7 @@ function prefetchNext(index: number): void {
     const frame = (index + step) % frameCount();
     const hour = frameOffset(frame);
     const total = accumulationOn(session);
-    if (total) {
+    if (total && !total.range) {
       for (const term of totalTerms(session, frame, total)) {
         if (!cachedFrame(term.key, session)) decodeQueue.request(session, session.variable, term.hour);
       }
@@ -3144,6 +3251,13 @@ function planeArrived(session: VariableSession, variable: BundleVariable, plane:
 
 /** What a landed plane puts on screen. */
 function frameLanded(key: string, frameOffset: number, wanted: boolean): void {
+  // Any frame of the range on screen is added as it lands, the one asked
+  // for or not: the range does not keep its planes.
+  if (rangeWanted.has(key) && activeVariable && requestedFrameIndex !== null) {
+    const shown = trySelectFrame(requestedFrameIndex);
+    if (shown && playing) restartCadence(requestedFrameIndex);
+    return;
+  }
   // Display only the newest requested target; stale decodes stay cached.
   if (wanted && activeVariable) {
     // A total's missing plane is another frame of the window than the one
@@ -3222,6 +3336,142 @@ function placeNowMark(): void {
   }
   trackNow.hidden = position === null;
   if (position !== null) trackNow.style.left = `${((position / (count - 1)) * 100).toFixed(2)}%`;
+}
+
+/** A drag on the track while a range is the total. `span` drags out a new
+ * range, or moves one end, from `anchor`; `move` slides the whole range by
+ * the frames between where it was grabbed and where the pointer is now.
+ * Either waits (null) until the slider has taken the pointer's frame, and
+ * `end` / `at` stay null until the pointer has moved off it. */
+type RangeDrag =
+  | { mode: "span"; anchor: number | null; end: number | null }
+  | { mode: "move"; grab: number | null; at: number | null; range: { from: number; to: number } };
+let rangeDrag: RangeDrag | null = null;
+
+/** The pointer that grabs a range's end within this many pixels moves that
+ * end; inside the band it moves the whole range; anywhere else it drags
+ * out a new one. */
+const RANGE_EDGE_PX = 10;
+
+/** What a press at `clientX` on the track would grab of the range on
+ * screen: one of its ends (the other is the anchor), its body, or nothing. */
+function rangeGrip(
+  clientX: number,
+  range: { from: number; to: number },
+): { kind: "end"; anchor: number } | { kind: "body" } | null {
+  const rect = slider.getBoundingClientRect();
+  const last = Math.max(1, frameCount() - 1);
+  const x = clientX - rect.left;
+  const from = (range.from / last) * rect.width;
+  const to = (range.to / last) * rect.width;
+  if (Math.abs(x - from) <= RANGE_EDGE_PX) return { kind: "end", anchor: range.to };
+  if (Math.abs(x - to) <= RANGE_EDGE_PX) return { kind: "end", anchor: range.from };
+  return x > from && x < to ? { kind: "body" } : null;
+}
+
+/** While a range is the total on screen, pressing the track starts a drag:
+ * on one of its ends, that end moves; inside it, the whole range slides,
+ * keeping its length in hours; elsewhere a new range runs from there. A
+ * press that does not move only moves the playhead. */
+function startRangeDrag(event: PointerEvent): void {
+  rangeDrag = null;
+  const range = accumulationOn()?.range;
+  if (!range) return;
+  const grip = rangeGrip(event.clientX, range);
+  const drag: RangeDrag =
+    grip?.kind === "body"
+      ? { mode: "move", grab: null, at: null, range: { ...range } }
+      : { mode: "span", anchor: grip?.kind === "end" ? grip.anchor : null, end: null };
+  rangeDrag = drag;
+  // A press on the thumb itself moves no value, so no input says where it
+  // started: read it once the press has been handled.
+  setTimeout(() => {
+    if (rangeDrag !== drag) return;
+    if (drag.mode === "move") drag.grab ??= Number(slider.value);
+    else drag.anchor ??= Number(slider.value);
+  }, 0);
+}
+
+function extendRangeDrag(): void {
+  const drag = rangeDrag;
+  if (!drag) return;
+  const value = Number(slider.value);
+  if (drag.mode === "move") {
+    if (drag.grab === null) drag.grab = value;
+    else drag.at = value;
+  } else if (drag.anchor === null) drag.anchor = value;
+  else drag.end = value;
+  syncRangeBand();
+}
+
+/** `range` slid by `delta` frames, its length kept in hours (the axis may
+ * coarsen past a lead, so not in frames) and held inside the axis. */
+function slidRange(range: { from: number; to: number }, delta: number): { from: number; to: number } | null {
+  const last = frameCount() - 1;
+  if (last < 1) return null;
+  const span = frameLeadSeconds(range.to) - frameLeadSeconds(range.from);
+  let from = Math.max(0, Math.min(last, range.from + delta));
+  let to = nearestFrameIndex(frameLeadSeconds(from) + span);
+  if (frameLeadSeconds(from) + span > frameLeadSeconds(last)) {
+    to = last;
+    from = nearestFrameIndex(frameLeadSeconds(last) - span);
+  }
+  if (from >= to) from = Math.max(0, to - 1);
+  return from < to ? { from, to } : null;
+}
+
+/** The range a drag in progress would set, or null while it sets none. */
+function draggedRange(): { from: number; to: number } | null {
+  const drag = rangeDrag;
+  if (!drag) return null;
+  if (drag.mode === "move") {
+    return drag.grab !== null && drag.at !== null && drag.at !== drag.grab ? slidRange(drag.range, drag.at - drag.grab) : null;
+  }
+  return drag.anchor !== null && drag.end !== null && drag.end !== drag.anchor
+    ? { from: Math.min(drag.anchor, drag.end), to: Math.max(drag.anchor, drag.end) }
+    : null;
+}
+
+function endRangeDrag(): void {
+  const range = draggedRange();
+  rangeDrag = null;
+  if (range) {
+    setAccumulation({ type: "range", from: frameValidTime(range.from), to: frameValidTime(range.to) });
+    return;
+  }
+  syncRangeBand();
+}
+
+/** The track's cursor over a range: a hand over its body, the resize
+ * arrows on its ends, the slider's own anywhere else. */
+function syncRangeCursor(event: PointerEvent): void {
+  if (rangeDrag?.mode === "move") {
+    slider.style.cursor = "grabbing";
+    return;
+  }
+  const range = accumulationOn()?.range;
+  const grip = range ? rangeGrip(event.clientX, range) : null;
+  slider.style.cursor = grip?.kind === "body" ? "grab" : grip?.kind === "end" ? "col-resize" : "";
+}
+
+/** How much of the range on screen is summed, kept for the band between
+ * the calls that know it. */
+let rangeProgress = 1;
+
+/** The band over the track that marks the range on screen — or the one
+ * being dragged out — filled as far as its frames have been summed. */
+function syncRangeBand(progress?: number): void {
+  if (progress !== undefined) rangeProgress = progress;
+  const shown = accumulationOn()?.range ?? null;
+  const dragged = draggedRange();
+  const range = dragged ?? shown;
+  trackRange.hidden = range === null;
+  if (!range) return;
+  const last = Math.max(1, frameCount() - 1);
+  trackRange.style.left = `${((range.from / last) * 100).toFixed(2)}%`;
+  trackRange.style.width = `${(((range.to - range.from) / last) * 100).toFixed(2)}%`;
+  trackRange.classList.toggle("is-dragging", dragged !== null);
+  trackRange.style.setProperty("--range-progress", `${((dragged ? 1 : rangeProgress) * 100).toFixed(1)}%`);
 }
 
 /** One `<i>` per tick. On an axis of days that is one per frame, with the
@@ -3313,7 +3563,7 @@ function setVariableButtonsDisabled(disabled: boolean): void {
   variableButtonsDisabled = disabled;
   for (const button of variableButtons()) button.disabled = disabled;
   for (const button of modelButtons) button.disabled = disabled;
-  for (const button of levelRow.querySelectorAll("button")) button.disabled = disabled;
+  for (const button of levelRow.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) button.disabled = disabled;
   for (const button of fieldList.querySelectorAll("button")) button.disabled = disabled;
 }
 
@@ -3523,8 +3773,10 @@ function renderTotalGroup(): void {
   const session = activeSession;
   if (!session || view.field !== session.id || fireField() !== null) return;
   const offered = offeredWindows(session);
-  if (!offered || offered.windows.size === 0) return;
-  const shown = accumulationOn(session)?.window ?? null;
+  // A range needs two frames; a window, one the dataset offers.
+  if (!offered || frameCount() < 2) return;
+  const on = accumulationOn(session);
+  const shown = on?.window ?? null;
   const container = document.createElement("div");
   container.className = "level-group";
   container.dataset.slot = "fill";
@@ -3533,7 +3785,11 @@ function renderTotalGroup(): void {
   caption.className = "level-caption";
   caption.textContent = t("accumCaption");
   container.append(caption);
-  for (const window of [null, ...offered.windows.keys()]) {
+  // A typed window that is not a preset sits among them while it is shown.
+  const windows = [...offered.windows.keys()];
+  if (shown !== null && !windows.includes(shown)) windows.push(shown);
+  windows.sort((a, b) => a - b);
+  for (const window of [null, ...windows]) {
     const code = window === null ? "RATE" : windowCode(window);
     const button = document.createElement("button");
     button.type = "button";
@@ -3551,21 +3807,126 @@ function renderTotalGroup(): void {
     glossSmall.textContent = window === null ? t("accumRateGloss") : t("accumTotalGloss", { window: code });
     name.append(codeSpan, " ", glossSmall);
     button.append(glyph, name);
-    button.addEventListener("click", () => setAccumulation(window));
+    button.addEventListener("click", () => setAccumulation(window === null ? null : { type: "window", seconds: window }));
     container.append(button);
   }
+  container.append(windowInput(offered.frames), rangeButton(on));
   levelRow.append(container);
   levelRow.hidden = false;
 }
 
-/** Draw the precipitation as the rate or as the total over `window`. */
-function setAccumulation(window: number | null): void {
-  if (view.accumulation === window) return;
-  view.accumulation = window;
+/** The level row's field for a window of any length (`9h`, `2h`, `20m`; a
+ * bare number is hours), ending at the playhead like the presets. One the
+ * dataset cannot make — shorter than a step, longer than the axis, more
+ * frames than the cache holds — is refused where it was typed. */
+function windowInput(frames: (window: number) => number | null): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "level-input";
+  input.inputMode = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.size = 4;
+  input.placeholder = showingObservations() ? "20M" : "9H";
+  input.disabled = switchingVariable;
+  input.setAttribute("aria-label", t("accumWindowInputAria"));
+  input.title = t("accumWindowInputAria");
+  const commit = () => {
+    const text = input.value.trim();
+    if (text === "") {
+      input.removeAttribute("aria-invalid");
+      return;
+    }
+    const window = parseWindow(/^\d+$/.test(text) ? `${text}h` : text);
+    if (window === null || frames(window) === null) {
+      input.setAttribute("aria-invalid", "true");
+      input.title = t("accumWindowUnavailable");
+      return;
+    }
+    setAccumulation({ type: "window", seconds: window });
+  };
+  input.addEventListener("keydown", (event) => {
+    // The track's arrow keys and the page's shortcuts stay out of a field
+    // being typed in.
+    event.stopPropagation();
+    if (event.key === "Enter") commit();
+    if (event.key === "Escape") input.blur();
+  });
+  input.addEventListener("change", commit);
+  input.addEventListener("input", () => {
+    input.removeAttribute("aria-invalid");
+    input.title = t("accumWindowInputAria");
+  });
+  return input;
+}
+
+/** The level row's RANGE: the total over a span dragged out on the track.
+ * Pressed, it names the span; pressing it opens the span the window on
+ * screen covered, or a day (an hour of an observation window) up to the
+ * playhead. */
+function rangeButton(on: TotalOn | null): HTMLButtonElement {
+  const pressed = on?.range != null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.accum = "range";
+  button.disabled = switchingVariable;
+  button.setAttribute("aria-pressed", String(pressed));
+  const glyph = document.createElement("b");
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = "RANGE";
+  const name = document.createElement("span");
+  name.className = "rail-name";
+  const codeSpan = document.createElement("span");
+  codeSpan.textContent = "RANGE";
+  const glossSmall = document.createElement("small");
+  glossSmall.textContent = pressed ? t("accumTotalGloss", { window: windowCode(on!.span) }) : t("accumRangeGloss");
+  name.append(codeSpan, " ", glossSmall);
+  button.append(glyph, name);
+  button.addEventListener("click", () => {
+    if (!pressed) setAccumulation(defaultRange());
+  });
+  return button;
+}
+
+/** The range RANGE opens: the window on screen's span, or a day (an hour
+ * on an observation window), ending at the playhead — or starting there
+ * when the axis has no room before it. */
+function defaultRange(): Accumulation | null {
+  const count = frameCount();
+  if (count < 2) return null;
+  const span =
+    view.accumulation?.type === "window" ? view.accumulation.seconds : showingObservations() ? HOUR_SECONDS : DAY_SECONDS;
+  let to = Math.min(count - 1, activeFrameIndex ?? Number(slider.value));
+  let from = nearestFrameIndex(frameLeadSeconds(to) - span);
+  if (from >= to) {
+    from = to;
+    to = nearestFrameIndex(frameLeadSeconds(from) + span);
+  }
+  if (from >= to) {
+    if (to < count - 1) to += 1;
+    else from = to - 1;
+  }
+  return { type: "range", from: frameValidTime(from), to: frameValidTime(to) };
+}
+
+function sameAccumulation(a: Accumulation | null, b: Accumulation | null): boolean {
+  return (a === null ? null : accumulationParam(a)) === (b === null ? null : accumulationParam(b));
+}
+
+/** Draw the precipitation as the rate or as the total over a window or a
+ * range. */
+function setAccumulation(accumulation: Accumulation | null): void {
+  if (sameAccumulation(view.accumulation, accumulation)) return;
+  const fromRange = view.accumulation?.type === "range";
+  view.accumulation = accumulation;
+  rangeWanted = new Set();
   syncUrl();
+  syncRangeBand();
   const session = activeSession;
   if (!session) return;
-  planeCache.forgetSession(session.key);
+  // A range keeps nothing resident, so moving one keeps the cache: the
+  // frames the two share and still hold are not decoded again.
+  if (!(fromRange && accumulation?.type === "range")) planeCache.forgetSession(session.key);
   updateVariablePresentation(session);
   trySelectFrame(activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value));
   if (probePanelControl.probe) scheduleProbeRender();
@@ -4418,7 +4779,7 @@ function updateVariablePresentation(session: VariableSession): void {
   const total = accumulationOn(session);
   if (total) {
     const key = accumulationLegend();
-    const code = windowCode(total.window);
+    const code = windowCode(total.span);
     variableCode.textContent = `${model.label} / APCP ${code}`;
     variableTitle.textContent = `Precipitation ${code} Total`;
     legend.setAttribute("aria-label", t("legendAria", { label: t("accumTotalGloss", { window: code }) }));
@@ -5140,7 +5501,7 @@ function configureSlotLayer(slot: RasterSlot, session: VariableSession, overlay:
     layer.setCompositeField(null);
     layer.setVectorField(null);
     layer.setPalette(scalarPalette(session));
-    if (!overlay) paletteWindow = null;
+    if (!overlay) paletteTotals = false;
     layer.setContours(contourStyleFor(session.variable, session.identity, overlay, gridMapFor(geoGrid(session.metadata)).nominalStepDegrees()));
     layer.setFloorNoData(floorIsNoData(session.chartId));
     layer.setSampling(samplingFor(session.chartId, session.variable.id));
@@ -6675,11 +7036,21 @@ function reloadForNewerShell(manifestCrc32: string): boolean {
 }
 
 slider.addEventListener("input", () => {
+  extendRangeDrag();
   stopPlayback();
   generation += 1;
   trySelectFrame(Number(slider.value));
 });
-slider.addEventListener("pointerdown", () => timelinePanel.classList.add("is-scrubbing"));
+slider.addEventListener("pointerdown", (event) => {
+  timelinePanel.classList.add("is-scrubbing");
+  startRangeDrag(event);
+});
+slider.addEventListener("pointermove", syncRangeCursor);
+window.addEventListener("pointerup", endRangeDrag);
+window.addEventListener("pointercancel", () => {
+  rangeDrag = null;
+  syncRangeBand();
+});
 window.addEventListener("pointerup", () => timelinePanel.classList.remove("is-scrubbing"));
 slider.addEventListener("blur", () => timelinePanel.classList.remove("is-scrubbing"));
 slider.addEventListener("keydown", (event) => {

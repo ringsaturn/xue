@@ -311,10 +311,18 @@ fall back to defaults rather than fail, so a constructed link always opens.
   viewport and connection.
 - `?accum=<window>` — with `type=precip`, draw the precipitation total over
   the window ending at the playhead instead of the rate, summed in the
-  browser from the rate frames: `3h`, `6h`, `12h`, `24h`, `48h` or `72h` on
-  a forecast, `10m`, `30m`, `1h` or `3h` on a radar or nowcast window
-  (each where the dataset's axis is long enough). A window the dataset does
-  not offer shows the rate.
+  browser from the rate frames. Presets are `3h`, `6h`, `12h`, `24h`, `48h`
+  and `72h` on a forecast, `10m`, `30m`, `1h` and `3h` on a radar or
+  nowcast window; any whole number of hours or minutes (`9h`, `20m`) works
+  too, from one step of the axis up to its span, as long as its frames fit
+  the browser's plane cache. A window the dataset cannot make shows the
+  rate.
+- `?accum=<from>-<to>` — with `type=precip`, the precipitation total over a
+  fixed range of UTC valid times, `YYYYMMDDHH` or `YYYYMMDDHHMM` each
+  (`2026111106-2026111400`), whatever the playhead; each end snaps to the
+  nearest frame, and a range off the axis shows the rate. In the viewer:
+  RANGE on the level row, then drag on the timeline (inside the band to
+  slide it, on an end to move that end).
 - `?particles=off` — hide the wind particle animation (default on, off under
   prefers-reduced-motion).
 - `?projection=globe` — draw the map as a globe (default: the flat Web
