@@ -178,7 +178,7 @@ export const ru: Record<MessageKey, string> = {
   creditsHimawari: "Спутниковые снимки: Himawari-9 AHI, JMA, через NOAA Open Data (перепроецировано)",
   creditsGoes: "Спутниковые снимки: GOES-19 Восток и GOES-18 Запад ABI, NOAA NESDIS, через NOAA Open Data (перепроецировано)",
   creditsMeteosat: "Спутниковые снимки: содержит изменённые данные EUMETSAT Meteosat {year}; Meteosat-12 FCI, ежечасный цикл, CC-BY-4.0 (перепроецировано)",
-  creditsSounding: "Радиозондирование: GTS TEMP через WIS2, национальные метеослужбы",
+  creditsSounding: "Радиозондирование: GTS TEMP через WIS2, национальные метеослужбы; Франция: открытые данные Météo-France (Licence Ouverte 2.0)",
   creditsAirport: "METAR и TAF аэропортов: метеослужбы мира через NOAA/NWS AWC",
   creditsFirms: "Активные пожары: LANCE FIRMS NRT, VIIRS 375 м и MODIS, NASA ESDIS",
   creditsGibs: "Ежедневные снимки: исправленное отражение MODIS и VIIRS, NASA ESDIS",

@@ -173,7 +173,7 @@ export const ja: Record<MessageKey, string> = {
   creditsHimawari: "衛星画像：ひまわり9号 AHI、気象庁、NOAA オープンデータ経由（再投影）",
   creditsGoes: "衛星画像：GOES-19 東・GOES-18 西 ABI、NOAA NESDIS、NOAA オープンデータ経由（再投影）",
   creditsMeteosat: "衛星画像：EUMETSAT Meteosat データを加工して使用 {year}、Meteosat-12 FCI、毎正時の走査、CC-BY-4.0（再投影）",
-  creditsSounding: "ラジオゾンデ観測：GTS TEMP 電文（WIS2 経由）、各国気象機関",
+  creditsSounding: "ラジオゾンデ観測：GTS TEMP 電文（WIS2 経由）、各国気象機関；フランスの地点：Météo-France オープンデータ（Licence Ouverte 2.0）",
   creditsAirport: "空港 METAR・TAF：各国気象機関（NOAA/NWS AWC 経由）",
   creditsFirms: "アクティブ火災：LANCE FIRMS NRT、VIIRS 375 m と MODIS、NASA ESDIS",
   creditsGibs: "日次画像：MODIS・VIIRS 補正反射率、NASA ESDIS",

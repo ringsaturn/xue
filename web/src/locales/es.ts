@@ -176,7 +176,7 @@ export const es: Record<MessageKey, string> = {
   creditsHimawari: "Imágenes de satélite: Himawari-9 AHI, JMA, vía NOAA Open Data (reproyectado)",
   creditsGoes: "Imágenes de satélite: GOES-19 Este y GOES-18 Oeste ABI, NOAA NESDIS, vía NOAA Open Data (reproyectado)",
   creditsMeteosat: "Imágenes de satélite: contiene datos Meteosat de EUMETSAT modificados {year}; Meteosat-12 FCI, ciclo horario, CC-BY-4.0 (reproyectado)",
-  creditsSounding: "Radiosondeos: TEMP GTS vía WIS2, servicios meteorológicos nacionales",
+  creditsSounding: "Radiosondeos: TEMP GTS vía WIS2, servicios meteorológicos nacionales; Francia: datos abiertos de Météo-France (Licence Ouverte 2.0)",
   creditsAirport: "METAR y TAF de aeropuertos: servicios meteorológicos vía NOAA/NWS AWC",
   creditsFirms: "Incendios activos: LANCE FIRMS NRT, VIIRS 375 m y MODIS, NASA ESDIS",
   creditsGibs: "Imágenes diarias: reflectancia corregida MODIS y VIIRS, NASA ESDIS",

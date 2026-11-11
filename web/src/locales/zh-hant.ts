@@ -173,7 +173,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsHimawari: "衛星影像：向日葵 9 號 AHI，日本氣象廳，經 NOAA 開放資料（重投影）",
   creditsGoes: "衛星影像：GOES-19 東、GOES-18 西 ABI，NOAA NESDIS，經 NOAA 開放資料（重投影）",
   creditsMeteosat: "衛星影像：含經修改的 EUMETSAT Meteosat 資料 {year}；Meteosat-12 FCI，整點掃描週期，CC-BY-4.0（重投影）",
-  creditsSounding: "探空觀測：GTS TEMP 報文經 WIS2 轉發，各國氣象部門",
+  creditsSounding: "探空觀測：GTS TEMP 報文經 WIS2 轉發，各國氣象部門；法國站點：Météo-France 開放資料（Licence Ouverte 2.0）",
   creditsAirport: "機場 METAR 與 TAF：各國氣象部門經 NOAA/NWS 航空氣象中心轉發",
   creditsFirms: "活躍火點：LANCE FIRMS 近即時，VIIRS 375 m 與 MODIS，NASA ESDIS",
   creditsGibs: "逐日影像：MODIS 與 VIIRS 校正反射率，NASA ESDIS",

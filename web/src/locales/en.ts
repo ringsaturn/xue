@@ -342,7 +342,10 @@ export const en = {
   creditsEra5: "Reanalysis: Copernicus C3S ERA5 (ECMWF), global 0.25°, hourly, CC-BY-4.0; cases only",
   /** CAMS is CC-BY-4.0 on the Atmosphere Data Store, credited like ERA5. */
   creditsCams: "Aerosol analysis: Copernicus CAMS (ECMWF), global 0.4°, 3-hourly, CC-BY-4.0; cases only",
-  creditsSounding: "Radiosonde soundings: GTS TEMP via WIS2, national met services",
+  /** Météo-France's radiosonde files are under Licence Ouverte 2.0,
+   * which asks for the source to be named; the date of the last
+   * update is each sounding's own observation time. */
+  creditsSounding: "Radiosonde soundings: GTS TEMP via WIS2, national met services; France: Météo-France open data (Licence Ouverte 2.0)",
   creditsAirport: "Airport METAR & TAF: world met services via NOAA/NWS AWC",
   creditsFirms: "Active fires: LANCE FIRMS NRT, VIIRS 375 m and MODIS, NASA ESDIS",
   creditsGibs: "Daily imagery: MODIS and VIIRS corrected reflectance, NASA ESDIS",
