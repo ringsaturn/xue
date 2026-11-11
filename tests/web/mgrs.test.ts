@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromUps, fromUtm, gzdCells, parseMgrs, toMgrs, toUps, toUtm, utmZone } from "../../web/src/mgrs";
+import { fromUps, fromUtm, gzdCells, parseMgrs, toMgrs, toUps, toUtm, toUtmReference, utmZone } from "../../web/src/mgrs";
 
 // Expected eastings and northings are PROJ's (`+proj=utm` / `+proj=ups`,
 // WGS84); the letters follow NGA's MGRS tables.
@@ -117,6 +117,35 @@ function metresBetween(lat1: number, lon1: number, lat2: number, lon2: number): 
     Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
   return 2 * 6371008.8 * Math.asin(Math.sqrt(h));
 }
+
+describe("toUtmReference", () => {
+  // PROJ: EPSG:32654 Tokyo 388435.6871 3949293.9781, EPSG:32630 Big Ben
+  // 699565.6780 5709430.7186, EPSG:32756 Sydney 334900.5697 6252288.7529,
+  // EPSG:32661 (UPS N) 89.5°N 45°E 2039253.0855 1960746.9145, EPSG:32761
+  // (UPS S) 89°S 0° 2000000 2111026.5201.
+  it("names the zone and hemisphere, not the band", () => {
+    expect(toUtmReference(35.681236, 139.767125)).toBe("54N 388436E 3949294N");
+    expect(toUtmReference(51.500729, -0.124625)).toBe("30N 699566E 5709431N");
+    expect(toUtmReference(-33.8568, 151.2153)).toBe("56S 334901E 6252289N");
+  });
+
+  it("rounds to the resolution", () => {
+    expect(toUtmReference(35.681236, 139.767125, 10)).toBe("54N 388440E 3949290N");
+    expect(toUtmReference(35.681236, 139.767125, 1000)).toBe("54N 388000E 3949000N");
+    expect(toUtmReference(51.500729, -0.124625, 1000)).toBe("30N 700000E 5709000N");
+  });
+
+  it("gives the UPS form in the caps", () => {
+    expect(toUtmReference(89.5, 45)).toBe("UPS N 2039253E 1960747N");
+    expect(toUtmReference(90, 0)).toBe("UPS N 2000000E 2000000N");
+    expect(toUtmReference(-89, 0)).toBe("UPS S 2000000E 2111027N");
+  });
+
+  it("refuses what is not a coordinate", () => {
+    expect(toUtmReference(Number.NaN, 0)).toBeNull();
+    expect(toUtmReference(95, 0)).toBeNull();
+  });
+});
 
 describe("parseMgrs", () => {
   it("round-trips to the square's south-west corner", () => {

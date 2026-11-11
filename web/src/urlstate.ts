@@ -806,30 +806,48 @@ export function searchWithTc(search: string, state: TcUrlState): string {
   return `?${params.toString()}`;
 }
 
-/** The coordinate grids drawn over the map. */
-export interface GridState {
-  /** The Military Grid Reference System: zones, 100 km squares and their
-   * kilometre lines, as the GSI's UTM grid draws them. */
-  mgrs: boolean;
-  /** Parallels and meridians. */
-  latlon: boolean;
+/** The coordinate grids drawn over the map, in the order the settings
+ * sheet and `?grid=` list them. */
+export const GRID_KINDS = ["mgrs", "utm", "gars", "bng", "latlon"] as const;
+export type GridKind = (typeof GRID_KINDS)[number];
+
+/** Which grids are on:
+ * - `mgrs`, the Military Grid Reference System: zones, 100 km squares and
+ *   their kilometre lines, as the GSI's UTM grid draws them;
+ * - `utm`, the same zones and lines numbered as UTM eastings and northings;
+ * - `gars`, the Global Area Reference System: 30′ cells, 15′ quadrants and
+ *   5′ keypads;
+ * - `bng`, the Ordnance Survey's British National Grid, over Great Britain;
+ * - `latlon`, parallels and meridians. */
+export type GridState = Record<GridKind, boolean>;
+
+export const NO_GRID: GridState = { mgrs: false, utm: false, gars: false, bng: false, latlon: false };
+
+/** Whether any grid is on. */
+export function anyGrid(grid: GridState): boolean {
+  return GRID_KINDS.some((kind) => grid[kind]);
 }
 
-/** `?grid=mgrs`, `?grid=latlon`, `?grid=mgrs,latlon`; `null` when the link
- * names no grid, so the viewer's stored choice decides, and `?grid=off`
- * draws none. Unknown tokens are skipped. */
+/** `?grid=mgrs`, `?grid=utm,latlon`, … (any of `GRID_KINDS`, comma
+ * joined); `null` when the link names no grid, so the viewer's stored
+ * choice decides, and `?grid=off` draws none. Unknown tokens are skipped. */
 export function parseGridFromSearch(search: string): GridState | null {
   const value = new URLSearchParams(search).get("grid");
   if (value === null) return null;
-  const tokens = value.split(",").map((token) => token.trim().toLowerCase());
-  return { mgrs: tokens.includes("mgrs"), latlon: tokens.includes("latlon") };
+  const tokens = new Set(value.split(",").map((token) => token.trim().toLowerCase()));
+  return Object.fromEntries(GRID_KINDS.map((kind) => [kind, tokens.has(kind)])) as GridState;
+}
+
+/** The grids as `?grid=` writes them (`off` for none). */
+export function formatGrid(grid: GridState): string {
+  const tokens = GRID_KINDS.filter((kind) => grid[kind]);
+  return tokens.length === 0 ? "off" : tokens.join(",");
 }
 
 /** The given query string carrying the grids; none writes nothing. */
 export function searchWithGrid(search: string, grid: GridState): string {
   const params = new URLSearchParams(search);
-  const tokens = [grid.mgrs ? "mgrs" : null, grid.latlon ? "latlon" : null].filter((token) => token !== null);
-  if (tokens.length === 0) params.delete("grid");
-  else params.set("grid", tokens.join(","));
+  if (!anyGrid(grid)) params.delete("grid");
+  else params.set("grid", formatGrid(grid));
   return `?${params.toString()}`;
 }

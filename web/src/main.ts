@@ -126,6 +126,7 @@ import {
   type PlaybackFps,
 } from "./playback";
 import {
+  anyGrid,
   DEFAULT_VARIABLE,
   parseBackendFromSearch,
   parseCameraFromHash,
@@ -704,7 +705,7 @@ let coordinateGrid: CoordinateGrid | null = null;
  * screen; under a coordinate grid it reads as one more set of lines that
  * do not move with the map, so it steps aside while either grid is on. */
 function syncInstrumentGrid(): void {
-  document.body.toggleAttribute("data-coordinate-grid", grid.mgrs || grid.latlon);
+  document.body.toggleAttribute("data-coordinate-grid", anyGrid(grid));
 }
 syncInstrumentGrid();
 onMapPrefsChange(syncInstrumentGrid);

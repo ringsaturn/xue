@@ -12,8 +12,8 @@ export function formatBboxDegrees(value: number, axis: "NS" | "EW"): string {
 }
 
 /** A point, at the precision a grid cell center needs. */
-export function formatPointDegrees(value: number, axis: "NS" | "EW"): string {
-  return `${Math.abs(value).toFixed(2)}°${hemisphere(value, axis)}`;
+export function formatPointDegrees(value: number, axis: "NS" | "EW", decimals = 2): string {
+  return `${Math.abs(value).toFixed(decimals)}°${hemisphere(value, axis)}`;
 }
 
 /** A `[west, south, east, north]` box as its north-west → south-east corners. */

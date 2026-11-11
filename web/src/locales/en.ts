@@ -691,6 +691,9 @@ export const en = {
   probeOutside: "Outside this dataset's grid",
   probeNoData: "No data at this frame",
   probeAwaiting: "Waiting for this frame",
+  /** The centre of the model cell the probe's readings are for, beside the
+   * clicked point's own coordinates: the two are different places. */
+  probeCell: "Cell {position}",
   /** The model's own terrain height, read beside the DEM's (`probeDemLabel`):
    * the two elevations the pin stands together, and the pair a terrain
    * correction is the difference of. Each names its source so neither is

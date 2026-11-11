@@ -2278,6 +2278,12 @@ html[lang="ja"] .rail-glyph {
   padding-bottom: 0;
 }
 
+/* A row of five (the grids) wraps rather than squeezing "Lat / lon" or a
+   longer translation of it to nothing. */
+.settings-field .export-choices button {
+  flex: 1 0 auto;
+}
+
 .settings-body {
   display: flex;
   max-height: min(70vh, 640px);
@@ -3247,7 +3253,8 @@ html[lang="ja"] .rail-glyph {
   margin-left: auto;
 }
 
-.probe-elevation:empty {
+.probe-elevation:empty,
+.probe-cell:empty {
   display: none;
 }
 

@@ -1,6 +1,8 @@
 import type { ExpressionSpecification, GeoJSONSource, Map as MaplibreMap } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 
+import { BNG_ENVELOPE, BNG_MAX_EASTING, BNG_MAX_NORTHING, bngMajorSquare, bngSquareId, fromBng, toBng } from "./bng";
+import { toGars, type GarsPrecision } from "./gars";
 import { firstSymbolLayerId } from "./marks";
 import {
   centralMeridian,
@@ -18,12 +20,13 @@ import {
   UTM_SOUTH_LIMIT,
   wrapLongitude,
 } from "./mgrs";
-import type { GridState } from "./urlstate";
+import { anyGrid, NO_GRID, type GridKind, type GridState } from "./urlstate";
 
 /**
  * The coordinate grids over the map: the MGRS grid as the GSI's UTM grid
- * draws it, and parallels and meridians. Both are GeoJSON recomputed for
- * the viewport on every `moveend`, so they follow the plane and the globe
+ * draws it, the same lines numbered as UTM, GARS, the British National
+ * Grid, and parallels and meridians. All are GeoJSON recomputed for the
+ * viewport on every `moveend`, so they follow the plane and the globe
  * alike and cost nothing while they are off.
  *
  * MGRS draws by zoom: the grid zone boundaries (6° × 8°, the Norway and
@@ -36,6 +39,22 @@ import type { GridState } from "./urlstate";
  * caps' lines likewise in the polar stereographic. A level whose line count
  * would pass `MAX_LINES` for the viewport is skipped with every finer one.
  *
+ * UTM draws the same lines (once, when MGRS is on too) and names them as
+ * UTM does: the zone and hemisphere (`54N`) in each zone, and the edge
+ * numbers as whole kilometre eastings and northings (`385`, `3950`), on
+ * the top and right edges when MGRS's numbers hold the bottom and left.
+ *
+ * GARS is a lat/lon grid: its 30′ cells from z5 and their names from z6,
+ * the 15′ quadrants and their numbers from z7, the 5′ keypads from z9,
+ * each keypad named by quadrant and key (`39`).
+ *
+ * The British National Grid draws only over its own 700 km × 1 300 km box:
+ * the box and its 500 km squares always, with their letters from z3; the
+ * 100 km squares from z5 and their letters from z6; the 10 km and 1 km
+ * lines at MGRS's zooms, numbered along the bottom and left edges as MGRS
+ * numbers its own. Its lines are straight in the National Grid's
+ * projection on OSGB36 and are sampled there.
+ *
  * Everything sits under the basemap's first symbol layer, as the marks do:
  * above every field and line slot (those attach under the coast), under
  * the place labels.
@@ -46,13 +65,20 @@ export const GRID_CASING_LAYER = "coordinate-grid-casing";
 export const GRID_LINE_LAYER = "coordinate-grid-lines";
 export const GRID_LABEL_LAYER = "coordinate-grid-labels";
 
-/** The zooms each MGRS level appears from. */
+/** The zooms each MGRS (and UTM and National Grid) level appears from. */
 export const GZD_LABEL_MIN_ZOOM = 3;
 export const SQUARE_MIN_ZOOM = 5;
 export const SQUARE_LABEL_MIN_ZOOM = 6;
 export const SQUARE_PREFIX_MIN_ZOOM = 7;
 export const TEN_KM_MIN_ZOOM = 8;
 export const ONE_KM_MIN_ZOOM = 11;
+
+/** The zooms each GARS level appears from. */
+export const GARS_MIN_ZOOM = 5;
+/** A 30′ cell is ~22 px wide at z5, too narrow for its five characters. */
+export const GARS_LABEL_MIN_ZOOM = 6;
+export const GARS_QUADRANT_MIN_ZOOM = 7;
+export const GARS_KEYPAD_MIN_ZOOM = 9;
 
 const MAX_LINES = 2500;
 const MAX_LABELS = 3000;
@@ -64,11 +90,14 @@ const GRATICULE_MIN_SPACING_PX = 100;
 const GRATICULE_STEPS = [30, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05, 0.02, 0.01];
 const EDGE_SAMPLE_PX = 8;
 
-/** Line rank: 0 grid zone, 1 100 km, 2 10 km, 3 1 km; parallels and
- * meridians are their own kind. */
+/** Line rank: 0 grid zone (or the National Grid's box and 500 km
+ * squares), 1 100 km, 2 10 km, 3 1 km; GARS 1 30′, 2 15′, 3 5′;
+ * parallels and meridians are their own kind. */
 type Rank = 0 | 1 | 2 | 3;
-type Kind = "mgrs" | "latlon";
-type Anchor = "center" | "bottom" | "left" | "top" | "right";
+type Kind = GridKind;
+/** Where a label sits on its point; `below` is centred under it, clear
+ * of a `center` label on the same spot. */
+type Anchor = "center" | "below" | "bottom" | "left" | "top" | "right";
 
 interface LineProps {
   kind: Kind;
@@ -125,6 +154,15 @@ function upsFrame(north: boolean): Frame {
   };
 }
 
+/** The National Grid's plane, through the Helmert shift to OSGB36. */
+const BNG_FRAME: Frame = {
+  forward: (lat, lon) => {
+    const point = toBng(lat, lon);
+    return [point.easting, point.northing];
+  },
+  inverse: (x, y) => fromBng(x, y),
+};
+
 const EPS = 1e-9;
 
 /** The point's longitude as the rect counts it (180 for -180 on an east
@@ -136,7 +174,7 @@ function inside(rect: Rect, point: LatLon): number | null {
   return lon >= rect.west - EPS && lon <= rect.east + EPS ? lon : null;
 }
 
-function intersect(cell: GzdCell, view: GridView): Rect[] {
+function intersect(cell: Rect, view: GridView): Rect[] {
   const out: Rect[] = [];
   const south = Math.max(cell.south, view.south);
   const north = Math.min(cell.north, view.north);
@@ -155,7 +193,7 @@ function frameOf(cell: GzdCell): Frame {
 
 /** The projected box a rect covers: its edges sampled, the central meridian
  * (where a parallel's northing turns) included. */
-function extent(frame: Frame, rect: Rect, zone: number): [number, number, number, number] {
+function extent(frame: Frame, rect: Rect, steps: number, centralLon: number | null): [number, number, number, number] {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -168,7 +206,6 @@ function extent(frame: Frame, rect: Rect, zone: number): [number, number, number
     minY = Math.min(minY, y);
     maxY = Math.max(maxY, y);
   };
-  const steps = zone === 0 ? 48 : 16;
   for (let i = 0; i <= steps; i += 1) {
     const lon = rect.west + ((rect.east - rect.west) * i) / steps;
     const lat = rect.south + ((rect.north - rect.south) * i) / steps;
@@ -177,12 +214,9 @@ function extent(frame: Frame, rect: Rect, zone: number): [number, number, number
     add(lat, rect.west);
     add(lat, rect.east);
   }
-  if (zone !== 0) {
-    const cm = centralMeridian(zone);
-    if (cm > rect.west && cm < rect.east) {
-      add(rect.south, cm);
-      add(rect.north, cm);
-    }
+  if (centralLon !== null && centralLon > rect.west && centralLon < rect.east) {
+    add(rect.south, centralLon);
+    add(rect.north, centralLon);
   }
   return [minX, minY, maxX, maxY];
 }
@@ -246,10 +280,10 @@ function densify(a: [number, number], b: [number, number], step: number): [numbe
 
 const BAND_EDGES = [-80, -72, -64, -56, -48, -40, -32, -24, -16, -8, 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, UTM_NORTH_LIMIT];
 
-function zoneBoundaries(view: GridView, out: GridFeature[]): void {
+function zoneBoundaries(view: GridView, kind: Kind, out: GridFeature[]): void {
   for (const lat of BAND_EDGES) {
     if (lat < view.south || lat > view.north) continue;
-    for (const [west, east] of view.ranges) out.push(line(densify([west, lat], [east, lat], 2), "mgrs", 0));
+    for (const [west, east] of view.ranges) out.push(line(densify([west, lat], [east, lat], 2), kind, 0));
   }
   const meridians: [number, number, number][] = [];
   for (const cell of gzdCells()) if (cell.zone !== 0) meridians.push([cell.west, cell.south, cell.north]);
@@ -264,7 +298,7 @@ function zoneBoundaries(view: GridView, out: GridFeature[]): void {
     if (south >= north) continue;
     for (const [west, east] of view.ranges) {
       const x = lon >= west - EPS && lon <= east + EPS ? lon : lon === -180 && east >= 180 - EPS ? 180 : null;
-      if (x !== null) out.push(line(densify([x, south], [x, north], 2), "mgrs", 0));
+      if (x !== null) out.push(line(densify([x, south], [x, north], 2), kind, 0));
     }
   }
 }
@@ -274,20 +308,60 @@ interface Level {
   step: number;
 }
 
+interface Visible {
+  cell: GzdCell;
+  rect: Rect;
+  frame: Frame;
+  box: [number, number, number, number];
+}
+
+/** How one of the two grids on the UTM lines is drawn: MGRS names the
+ * squares, UTM the zones and whole eastings and northings. `lines` is off
+ * for UTM when MGRS has drawn them; `beside` moves UTM's numbers off the
+ * spots MGRS's take. */
+interface UtmStyle {
+  kind: "mgrs" | "utm";
+  lines: boolean;
+  beside: boolean;
+}
+
 /** The MGRS grid for a view. */
 export function mgrsFeatures(view: GridView): GridFeature[] {
+  return utmLineFeatures(view, { kind: "mgrs", lines: true, beside: false });
+}
+
+/** The UTM grid for a view; with `withMgrs` only its names, over the lines
+ * `mgrsFeatures` draws. */
+export function utmFeatures(view: GridView, withMgrs = false): GridFeature[] {
+  return utmLineFeatures(view, { kind: "utm", lines: !withMgrs, beside: withMgrs });
+}
+
+function zoneName(cell: GzdCell): string {
+  if (cell.zone === 0) return cell.north > 0 ? "UPS N" : "UPS S";
+  return `${cell.zone}${cell.south >= 0 ? "N" : "S"}`;
+}
+
+function utmLineFeatures(view: GridView, style: UtmStyle): GridFeature[] {
   const out: GridFeature[] = [];
-  zoneBoundaries(view, out);
+  const { kind } = style;
+  if (style.lines) zoneBoundaries(view, kind, out);
   const z = view.zoom;
-  const visible: { cell: GzdCell; rect: Rect; frame: Frame; box: [number, number, number, number] }[] = [];
+  const visible: Visible[] = [];
   for (const cell of gzdCells()) {
     for (const rect of intersect(cell, view)) {
-      if (z >= GZD_LABEL_MIN_ZOOM && z < SQUARE_PREFIX_MIN_ZOOM) {
-        out.push(label((rect.west + rect.east) / 2, (rect.south + rect.north) / 2, cell.name, "mgrs", 0, "center"));
+      const middle: [number, number] = [(rect.west + rect.east) / 2, (rect.south + rect.north) / 2];
+      if (kind === "mgrs" && z >= GZD_LABEL_MIN_ZOOM && z < SQUARE_PREFIX_MIN_ZOOM) {
+        out.push(label(middle[0], middle[1], cell.name, kind, 0, "center"));
+      }
+      // UTM has no square names to carry the zone, so it keeps it at every
+      // zoom.
+      if (kind === "utm" && z >= GZD_LABEL_MIN_ZOOM) {
+        out.push(label(middle[0], middle[1], zoneName(cell), kind, 0, style.beside && z < SQUARE_PREFIX_MIN_ZOOM ? "below" : "center"));
       }
       if (z >= SQUARE_MIN_ZOOM) {
         const frame = frameOf(cell);
-        visible.push({ cell, rect, frame, box: extent(frame, rect, cell.zone) });
+        const box = cell.zone === 0 ? extent(frame, rect, 48, null) : extent(frame, rect, 16, centralMeridian(cell.zone));
+        visible.push({ cell, rect, frame, box });
       }
     }
   }
@@ -301,6 +375,8 @@ export function mgrsFeatures(view: GridView): GridFeature[] {
     let count = 0;
     for (const { box } of visible) count += (box[2] - box[0] + box[3] - box[1]) / level.step + 4;
     if (count > MAX_LINES) break;
+    drawn = level;
+    if (!style.lines) continue;
     for (const { cell, rect, frame, box } of visible) {
       const segments = cell.zone === 0 ? (level.rank === 1 ? 32 : 12) : level.rank === 1 ? 16 : 8;
       // A line is straight in its frame, so the sampled box is padded by a
@@ -315,22 +391,22 @@ export function mgrsFeatures(view: GridView): GridFeature[] {
           const runs = vertical
             ? trace(frame, rect, true, k * level.step, minY, maxY, segments)
             : trace(frame, rect, false, k * level.step, minX, maxX, segments);
-          for (const run of runs) out.push(line(run, "mgrs", level.rank));
+          for (const run of runs) out.push(line(run, kind, level.rank));
         }
       }
     }
-    drawn = level;
   }
-  if (z >= SQUARE_LABEL_MIN_ZOOM) squareLabels(visible, z, out);
-  if (drawn !== null && drawn.rank >= 2) edgeLabels(view, drawn, out);
+  if (kind === "mgrs") {
+    if (z >= SQUARE_LABEL_MIN_ZOOM) squareLabels(visible, z, out);
+    if (drawn !== null && drawn.rank >= 2) edgeLabels(view, drawn, out);
+  } else if (drawn !== null) {
+    // Without square names, the 100 km lines are numbered too.
+    utmEdgeLabels(view, drawn, style.beside, out);
+  }
   return out;
 }
 
-function squareLabels(
-  visible: { cell: GzdCell; rect: Rect; frame: Frame; box: [number, number, number, number] }[],
-  zoom: number,
-  out: GridFeature[],
-): void {
+function squareLabels(visible: Visible[], zoom: number, out: GridFeature[]): void {
   let count = 0;
   for (const { box } of visible) count += Math.ceil((box[2] - box[0]) / 100_000 + 1) * Math.ceil((box[3] - box[1]) / 100_000 + 1);
   if (count > MAX_LABELS) return;
@@ -391,6 +467,7 @@ function crossings(
   }
 }
 
+/** Kilometres within the 100 km square, `07`. */
 function kilometres(value: number): string {
   const within = (((Math.round(value) % 100_000) + 100_000) % 100_000) / 1000;
   return String(Math.floor(within + 1e-6)).padStart(2, "0");
@@ -403,6 +480,234 @@ function edgeLabels(view: GridView, level: Level, out: GridFeature[]): void {
   crossings(view.edges.left, (p) => mgrsAxisAt(p, false), level.step, (p, v) =>
     out.push(label(p.lon, p.lat, kilometres(v), "mgrs", level.rank, "left")),
   );
+}
+
+/** UTM's numbers: whole kilometres from the zone's origin, `385` and
+ * `3950`, along the bottom and left edges, or the top and right `beside`
+ * MGRS's. */
+function utmEdgeLabels(view: GridView, level: Level, beside: boolean, out: GridFeature[]): void {
+  const km = (value: number) => String(Math.round(value / 1000));
+  crossings(beside ? view.edges.top : view.edges.bottom, (p) => mgrsAxisAt(p, true), level.step, (p, v) =>
+    out.push(label(p.lon, p.lat, km(v), "utm", level.rank, beside ? "top" : "bottom")),
+  );
+  crossings(beside ? view.edges.right : view.edges.left, (p) => mgrsAxisAt(p, false), level.step, (p, v) =>
+    out.push(label(p.lon, p.lat, km(v), "utm", level.rank, beside ? "right" : "left")),
+  );
+}
+
+/** A GARS level: its rank, its step in minutes and the precision its
+ * names carry. */
+interface GarsLevel {
+  rank: Rank;
+  minutes: number;
+  precision: GarsPrecision;
+}
+
+const GARS_LEVELS: readonly GarsLevel[] = [
+  { rank: 1, minutes: 30, precision: 30 },
+  { rank: 2, minutes: 15, precision: 15 },
+  { rank: 3, minutes: 5, precision: 5 },
+];
+
+/** The GARS grid for a view. */
+export function garsFeatures(view: GridView): GridFeature[] {
+  const out: GridFeature[] = [];
+  const z = view.zoom;
+  if (z < GARS_MIN_ZOOM) return out;
+  const south = Math.max(-90, view.south);
+  const north = Math.min(90, view.north);
+  if (south >= north) return out;
+  const levels = GARS_LEVELS.filter(
+    (level) => level.rank === 1 || (level.rank === 2 && z >= GARS_QUADRANT_MIN_ZOOM) || (level.rank === 3 && z >= GARS_KEYPAD_MIN_ZOOM),
+  );
+  // Lines are counted in whole minutes from 90°S and 180°W, so a 5′ line
+  // lands on the minute and the coarser lines are skipped exactly.
+  const minuteSpan = (lo: number, hi: number, minutes: number): [number, number] => [Math.ceil((lo * 60) / minutes - EPS), Math.floor((hi * 60) / minutes + EPS)];
+  let drawn: GarsLevel | null = null;
+  for (const [at, level] of levels.entries()) {
+    const coarser = levels[at - 1]?.minutes ?? null;
+    let count = ((north - south) * 60) / level.minutes;
+    for (const [west, east] of view.ranges) count += ((east - west) * 60) / level.minutes;
+    if (count > MAX_LINES) break;
+    drawn = level;
+    const along = Math.min(2, level.minutes / 15);
+    const [k0, k1] = minuteSpan(south + 90, north + 90, level.minutes);
+    for (let k = k0; k <= k1; k += 1) {
+      const minute = k * level.minutes;
+      if (coarser !== null && minute % coarser === 0) continue;
+      const lat = minute / 60 - 90;
+      if (Math.abs(lat) >= 90 - EPS) continue;
+      for (const [west, east] of view.ranges) out.push(line(densify([west, lat], [east, lat], along), "gars", level.rank));
+    }
+    for (const [west, east] of view.ranges) {
+      const [j0, j1] = minuteSpan(west + 180, east + 180, level.minutes);
+      for (let j = j0; j <= j1; j += 1) {
+        const minute = j * level.minutes;
+        if (coarser !== null && minute % coarser === 0) continue;
+        // -180 and 180 are the one meridian.
+        if (minute >= 360 * 60 && west <= -180 + EPS) continue;
+        out.push(line(densify([minute / 60 - 180, south], [minute / 60 - 180, north], along), "gars", level.rank));
+      }
+    }
+  }
+  if (drawn !== null && z >= GARS_LABEL_MIN_ZOOM) garsLabels(view, south, north, drawn, out);
+  return out;
+}
+
+/** The 30′ cells' names, and the quadrant numbers or the keypads' (by
+ * quadrant and key, `39`) at the finest level drawn. The names sit on the
+ * cell's middle, where its quadrant lines cross, or the middle of its
+ * visible part when that is off screen; a number on its own cell's. */
+function garsLabels(view: GridView, south: number, north: number, finest: GarsLevel, out: GridFeature[]): void {
+  const cellsIn = (minutes: number) => {
+    let count = Math.ceil(((north - south) * 60) / minutes + 1);
+    let across = 0;
+    for (const [west, east] of view.ranges) across += Math.ceil(((east - west) * 60) / minutes + 1);
+    count *= across;
+    return count;
+  };
+  if (cellsIn(30) + (finest.rank === 1 ? 0 : cellsIn(finest.minutes)) > MAX_LABELS) return;
+  const each = (minutes: number, visit: (west: number, south: number, size: number) => void) => {
+    const size = minutes / 60;
+    const i0 = Math.floor((south + 90) / size + EPS);
+    const i1 = Math.ceil((north + 90) / size - EPS);
+    for (const [west, east] of view.ranges) {
+      const j0 = Math.floor((west + 180) / size + EPS);
+      const j1 = Math.ceil((east + 180) / size - EPS);
+      for (let i = i0; i < i1; i += 1) for (let j = j0; j < j1; j += 1) visit(j * size - 180, i * size - 90, size);
+    }
+  };
+  const ranges = view.ranges;
+  const shown = (lat: number, lon: number) => lat >= south && lat <= north && ranges.some(([w, e]) => lon >= w && lon <= e);
+  each(30, (west, cellSouth, size) => {
+    const name = toGars(cellSouth + size / 2, west + size / 2, 30);
+    if (name === null) return;
+    let lon = west + size / 2;
+    let lat = cellSouth + size / 2;
+    if (!shown(lat, lon)) {
+      const range = ranges.find(([w, e]) => w < west + size && e > west);
+      if (range === undefined) return;
+      lon = (Math.max(west, range[0]) + Math.min(west + size, range[1])) / 2;
+      lat = (Math.max(cellSouth, south) + Math.min(cellSouth + size, north)) / 2;
+    }
+    out.push(label(lon, lat, name, "gars", 1, "center"));
+  });
+  if (finest.rank === 1) return;
+  each(finest.minutes, (west, cellSouth, size) => {
+    const lat = cellSouth + size / 2;
+    const lon = west + size / 2;
+    if (!shown(lat, lon)) return;
+    const reference = toGars(lat, lon, finest.precision);
+    if (reference !== null) out.push(label(lon, lat, reference.slice(5), "gars", finest.rank, "center"));
+  });
+}
+
+const BNG_MAJOR_EASTINGS = [0, 500_000, BNG_MAX_EASTING];
+const BNG_MAJOR_NORTHINGS = [0, 500_000, 1_000_000, BNG_MAX_NORTHING];
+
+/** The British National Grid for a view; nothing where the view is clear
+ * of the grid's box. */
+export function bngFeatures(view: GridView): GridFeature[] {
+  const out: GridFeature[] = [];
+  const rects = intersect(BNG_ENVELOPE, view);
+  if (rects.length === 0) return out;
+  const z = view.zoom;
+  let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const rect of rects) {
+    const [x0, y0, x1, y1] = extent(BNG_FRAME, rect, 16, -2);
+    [minX, minY, maxX, maxY] = [Math.min(minX, x0), Math.min(minY, y0), Math.max(maxX, x1), Math.max(maxY, y1)];
+  }
+  // The box padded by a hundredth for the curvature missed between
+  // samples, then clipped to the grid.
+  const pad = 0.01 * Math.max(maxX - minX, maxY - minY);
+  const box: [number, number, number, number] = [
+    Math.max(0, minX - pad),
+    Math.max(0, minY - pad),
+    Math.min(BNG_MAX_EASTING, maxX + pad),
+    Math.min(BNG_MAX_NORTHING, maxY + pad),
+  ];
+  if (!(box[0] < box[2] && box[1] < box[3])) return out;
+  const run = (vertical: boolean, value: number, segments: number): [number, number][] => {
+    const from = vertical ? box[1] : box[0];
+    const to = vertical ? box[3] : box[2];
+    const points: [number, number][] = [];
+    for (let i = 0; i <= segments; i += 1) {
+      const t = from + ((to - from) * i) / segments;
+      const point = vertical ? fromBng(value, t) : fromBng(t, value);
+      points.push([point.lon, point.lat]);
+    }
+    return points;
+  };
+  for (const x of BNG_MAJOR_EASTINGS) if (x >= box[0] && x <= box[2]) out.push(line(run(true, x, 32), "bng", 0));
+  for (const y of BNG_MAJOR_NORTHINGS) if (y >= box[1] && y <= box[3]) out.push(line(run(false, y, 32), "bng", 0));
+  const levels: Level[] = [];
+  if (z >= SQUARE_MIN_ZOOM) levels.push({ rank: 1, step: 100_000 });
+  if (z >= TEN_KM_MIN_ZOOM) levels.push({ rank: 2, step: 10_000 });
+  if (z >= ONE_KM_MIN_ZOOM) levels.push({ rank: 3, step: 1_000 });
+  let drawn: Level | null = null;
+  for (const [at, level] of levels.entries()) {
+    const coarser = levels[at - 1]?.step ?? null;
+    if ((box[2] - box[0] + box[3] - box[1]) / level.step + 4 > MAX_LINES) break;
+    drawn = level;
+    const segments = level.rank === 1 ? 16 : 8;
+    for (const vertical of [true, false]) {
+      const lo = vertical ? box[0] : box[1];
+      const hi = vertical ? box[2] : box[3];
+      const majors = vertical ? BNG_MAJOR_EASTINGS : BNG_MAJOR_NORTHINGS;
+      for (let k = Math.ceil(lo / level.step); k * level.step <= hi; k += 1) {
+        const value = k * level.step;
+        if (majors.includes(value) || (coarser !== null && value % coarser === 0)) continue;
+        out.push(line(run(vertical, value, segments), "bng", level.rank));
+      }
+    }
+  }
+  bngSquareLabels(box, z, out);
+  if (drawn !== null && drawn.rank >= 2) {
+    const axis = (point: LatLon, easting: boolean) => {
+      const lon = wrapLongitude(point.lon);
+      if (!Number.isFinite(point.lat) || point.lat < BNG_ENVELOPE.south || point.lat > BNG_ENVELOPE.north) return null;
+      if (lon < BNG_ENVELOPE.west || lon > BNG_ENVELOPE.east) return null;
+      const grid = toBng(point.lat, lon);
+      if (bngSquareId(grid.easting, grid.northing) === null) return null;
+      return { key: "bng", value: easting ? grid.easting : grid.northing };
+    };
+    const step = drawn.step;
+    const rank = drawn.rank;
+    crossings(view.edges.bottom, (p) => axis(p, true), step, (p, v) => out.push(label(p.lon, p.lat, kilometres(v), "bng", rank, "bottom")));
+    crossings(view.edges.left, (p) => axis(p, false), step, (p, v) => out.push(label(p.lon, p.lat, kilometres(v), "bng", rank, "left")));
+  }
+  return out;
+}
+
+/** The 500 km letters out to z6, the 100 km squares' two letters from
+ * there, each in the middle of the square's part inside `box`. */
+function bngSquareLabels(box: [number, number, number, number], zoom: number, out: GridFeature[]): void {
+  if (zoom < GZD_LABEL_MIN_ZOOM) return;
+  const name = (minX: number, minY: number, maxX: number, maxY: number, text: (x: number, y: number) => string | null, rank: Rank) => {
+    const x0 = Math.max(minX, box[0]);
+    const x1 = Math.min(maxX, box[2]);
+    const y0 = Math.max(minY, box[1]);
+    const y1 = Math.min(maxY, box[3]);
+    if (x0 >= x1 || y0 >= y1) return;
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const value = text(cx, cy);
+    if (value === null) return;
+    const point = fromBng(cx, cy);
+    out.push(label(point.lon, point.lat, value, "bng", rank, "center"));
+  };
+  if (zoom < SQUARE_LABEL_MIN_ZOOM) {
+    for (const [i, x] of BNG_MAJOR_EASTINGS.slice(0, -1).entries()) {
+      for (const [j, y] of BNG_MAJOR_NORTHINGS.slice(0, -1).entries()) {
+        name(x, y, BNG_MAJOR_EASTINGS[i + 1] ?? x, BNG_MAJOR_NORTHINGS[j + 1] ?? y, bngMajorSquare, 0);
+      }
+    }
+    return;
+  }
+  if (Math.ceil((box[2] - box[0]) / 100_000 + 1) * Math.ceil((box[3] - box[1]) / 100_000 + 1) > MAX_LABELS) return;
+  for (let x = Math.floor(box[0] / 100_000) * 100_000; x < box[2]; x += 100_000) {
+    for (let y = Math.floor(box[1] / 100_000) * 100_000; y < box[3]; y += 100_000) name(x, y, x + 100_000, y + 100_000, bngSquareId, 1);
+  }
 }
 
 /** The parallels' and meridians' spacing in degrees at a zoom: the finest
@@ -493,18 +798,38 @@ export function graticuleFeatures(view: GridView): GridFeature[] {
 
 export interface GridInk {
   mgrs: string;
+  utm: string;
+  gars: string;
+  bng: string;
   latlon: string;
   casing: string;
   halo: string;
 }
 
 /** Thin ink for the ground the map is on: near-black or near-white for the
- * MGRS grid, a magenta for the parallels and meridians so the two read
- * apart where both are on. */
+ * MGRS grid and UTM (the same lines), an amber for GARS, a teal for the
+ * National Grid and a magenta for the parallels and meridians, so any two
+ * read apart where both are on. */
 export function gridInk(darkGround: boolean): GridInk {
   return darkGround
-    ? { mgrs: "rgba(236, 240, 246, 0.8)", latlon: "rgba(255, 170, 225, 0.85)", casing: "rgba(0, 0, 0, 0.55)", halo: "rgba(0, 0, 0, 0.75)" }
-    : { mgrs: "rgba(24, 28, 36, 0.75)", latlon: "rgba(160, 30, 110, 0.8)", casing: "rgba(243, 239, 230, 0.55)", halo: "rgba(243, 239, 230, 0.92)" };
+    ? {
+        mgrs: "rgba(236, 240, 246, 0.8)",
+        utm: "rgba(236, 240, 246, 0.8)",
+        gars: "rgba(255, 196, 92, 0.85)",
+        bng: "rgba(96, 222, 200, 0.85)",
+        latlon: "rgba(255, 170, 225, 0.85)",
+        casing: "rgba(0, 0, 0, 0.55)",
+        halo: "rgba(0, 0, 0, 0.75)",
+      }
+    : {
+        mgrs: "rgba(24, 28, 36, 0.75)",
+        utm: "rgba(24, 28, 36, 0.75)",
+        gars: "rgba(165, 95, 0, 0.85)",
+        bng: "rgba(0, 118, 108, 0.85)",
+        latlon: "rgba(160, 30, 110, 0.8)",
+        casing: "rgba(243, 239, 230, 0.55)",
+        halo: "rgba(243, 239, 230, 0.92)",
+      };
 }
 
 /** A quieter ink for a map whose subject is drawn in thin grey-white
@@ -513,11 +838,39 @@ export function gridInk(darkGround: boolean): GridInk {
  * casing. */
 export function quietGridInk(darkGround: boolean): GridInk {
   return darkGround
-    ? { mgrs: "rgba(120, 165, 215, 0.6)", latlon: "rgba(220, 140, 200, 0.55)", casing: "rgba(0, 0, 0, 0)", halo: "rgba(0, 0, 0, 0.8)" }
-    : { mgrs: "rgba(40, 85, 140, 0.55)", latlon: "rgba(150, 40, 110, 0.5)", casing: "rgba(0, 0, 0, 0)", halo: "rgba(243, 239, 230, 0.92)" };
+    ? {
+        mgrs: "rgba(120, 165, 215, 0.6)",
+        utm: "rgba(120, 165, 215, 0.6)",
+        gars: "rgba(215, 170, 95, 0.55)",
+        bng: "rgba(105, 195, 180, 0.55)",
+        latlon: "rgba(220, 140, 200, 0.55)",
+        casing: "rgba(0, 0, 0, 0)",
+        halo: "rgba(0, 0, 0, 0.8)",
+      }
+    : {
+        mgrs: "rgba(40, 85, 140, 0.55)",
+        utm: "rgba(40, 85, 140, 0.55)",
+        gars: "rgba(145, 90, 15, 0.5)",
+        bng: "rgba(15, 110, 100, 0.5)",
+        latlon: "rgba(150, 40, 110, 0.5)",
+        casing: "rgba(0, 0, 0, 0)",
+        halo: "rgba(243, 239, 230, 0.92)",
+      };
 }
 
-const kindColor = (ink: GridInk): ExpressionSpecification => ["match", ["get", "kind"], "latlon", ink.latlon, ink.mgrs];
+const kindColor = (ink: GridInk): ExpressionSpecification => [
+  "match",
+  ["get", "kind"],
+  "latlon",
+  ink.latlon,
+  "utm",
+  ink.utm,
+  "gars",
+  ink.gars,
+  "bng",
+  ink.bng,
+  ink.mgrs,
+];
 
 export interface EdgeInsets {
   top: number;
@@ -539,7 +892,7 @@ export interface CoordinateGridOptions {
 
 export class CoordinateGrid {
   private readonly map: MaplibreMap;
-  private state: GridState = { mgrs: false, latlon: false };
+  private state: GridState = { ...NO_GRID };
 
   constructor(private readonly options: CoordinateGridOptions) {
     this.map = options.map;
@@ -548,8 +901,8 @@ export class CoordinateGrid {
   }
 
   setState(state: GridState): void {
-    this.state = { mgrs: state.mgrs, latlon: state.latlon };
-    if (!this.state.mgrs && !this.state.latlon) this.remove();
+    this.state = { ...state };
+    if (!anyGrid(this.state)) this.remove();
     else this.refresh();
   }
 
@@ -564,11 +917,14 @@ export class CoordinateGrid {
   }
 
   private readonly refresh = (): void => {
-    if (!this.state.mgrs && !this.state.latlon) return;
+    if (!anyGrid(this.state)) return;
     const view = this.view();
     const features: GridFeature[] = [];
     if (this.state.latlon) features.push(...graticuleFeatures(view));
     if (this.state.mgrs) features.push(...mgrsFeatures(view));
+    if (this.state.utm) features.push(...utmFeatures(view, this.state.mgrs));
+    if (this.state.bng) features.push(...bngFeatures(view));
+    if (this.state.gars) features.push(...garsFeatures(view));
     this.add();
     const collection: FeatureCollection = { type: "FeatureCollection", features };
     (this.map.getSource(GRID_SOURCE) as GeoJSONSource | undefined)?.setData(collection);
@@ -631,7 +987,7 @@ export class CoordinateGrid {
         id: GRID_CASING_LAYER,
         type: "line",
         source: GRID_SOURCE,
-        filter: ["all", isLine, ["==", ["get", "kind"], "mgrs"], ["<=", ["get", "rank"], 1]],
+        filter: ["all", isLine, ["match", ["get", "kind"], ["mgrs", "utm", "bng"], true, false], ["<=", ["get", "rank"], 1]],
         layout: { "line-join": "round" },
         paint: { "line-color": ink.casing, "line-width": ["match", ["get", "rank"], 0, 3.6, 3], "line-blur": 0.6 },
       },
@@ -661,11 +1017,12 @@ export class CoordinateGrid {
         layout: {
           "text-field": ["get", "label"],
           "text-font": ["Noto Sans Medium"],
-          "text-size": ["case", ["==", ["get", "anchor"], "center"], ["match", ["get", "rank"], 0, 13, 12], 10],
-          "text-anchor": ["get", "anchor"] as ExpressionSpecification,
+          "text-size": ["match", ["get", "anchor"], ["center", "below"], ["match", ["get", "rank"], 0, 13, 12], 10],
+          "text-anchor": ["match", ["get", "anchor"], "below", "top", ["get", "anchor"]] as ExpressionSpecification,
           "text-offset": [
             "match",
             ["get", "anchor"],
+            "below", ["literal", [0, 0.8]],
             "bottom", ["literal", [0, -0.2]],
             "top", ["literal", [0, 0.2]],
             "left", ["literal", [0.3, 0]],

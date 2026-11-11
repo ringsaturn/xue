@@ -1128,9 +1128,11 @@ test("clicking the map pins a point and reads its whole series at once", async (
   // both, where a second click still reaches the map.
   await page.locator("#map").click({ position: { x: 100, y: 300 } });
   await expect(panel).toBeVisible();
-  // The probe names the variable it reads and the grid cell it reads it at.
+  // The probe names the variable it reads, the point clicked and, apart
+  // from it, the model cell whose numbers those are.
   await expect(page.locator("#probe-code")).toHaveText("PRATE SFC");
   await expect(page.locator("#probe-coords")).toContainText("°");
+  await expect(page.locator("#probe-cell")).toHaveText(/^Cell \d+\.\d{2}°[NS] \d+\.\d{2}°[EW]$/);
   await expect(page.locator("#probe-value")).toContainText("mm/h");
   // The container is tiled, so the whole series comes out of the one tile
   // holding the cell rather than filling in frame by frame as playback walks
