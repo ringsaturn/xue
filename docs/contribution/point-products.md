@@ -270,7 +270,12 @@ highest one under the pin is a chip only while the warnings are drawn.
   `probeBundleIds`). The model column is read at the frame nearest the
   ascent's nominal time, within 3 h, else the legend says there is none.
   `SkewTInk` is read from `--skewt-*` at every draw so a theme switch
-  repaints in place.
+  repaints in place. Each canvas keeps a copy of its finished chart, and
+  the pointer's crosshair (`drawSkewTCursor`) repaints over that copy, so
+  hovering never re-integrates the pseudoadiabats. The LCL, the CCL and the
+  convective temperature are computed from the ascent in the browser
+  (`convectiveCondensation`). The skew-T / emagram switch only changes the
+  skew and the temperature range.
 - **Airport** (`stations/observations.ts`): each METAR is a mark at its own
   lead seconds (`axisPosition`), the TAF a `taf` row of bands hatched for
   `TEMPO` / `PROB`, and readouts gain the nearest report within 90 minutes.

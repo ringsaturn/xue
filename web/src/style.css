@@ -43,14 +43,20 @@
   --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
   --scrim: rgba(27, 26, 23, 0.28);
   /* The skew-T's own ink (sounding/section.ts reads these at every draw):
-     a paper it is drawn on, the two weights its background families use,
-     and the model profile and lifted parcel, which are told apart from the
-     ascent by dash and weight rather than by hue. */
+     a paper it is drawn on, the grid, a hue per background family (dry
+     adiabats green, pseudoadiabats green and dashed, isohumes purple), the
+     lifted parcel's green, the model profile, and the crosshair's tags. */
   --skewt-paper: rgba(27, 26, 23, 0.04);
   --skewt-grid: rgba(27, 26, 23, 0.2);
   --skewt-grid-strong: rgba(27, 26, 23, 0.45);
   --skewt-model: #e8763a;
-  --skewt-parcel: rgba(27, 26, 23, 0.5);
+  --skewt-parcel: #2f8a3a;
+  --skewt-dry: rgba(58, 128, 44, 0.42);
+  --skewt-moist: rgba(58, 128, 44, 0.32);
+  --skewt-mixing: rgba(146, 58, 168, 0.42);
+  --skewt-tag: rgba(27, 26, 23, 0.82);
+  --skewt-tag-text: #f3efe6;
+  --skewt-halo: #f3efe6;
   /* The two quantities' hues: temperature warm, dew point cool; the model's
      traces are the same hues a step lighter, and dotted. */
   --skewt-temperature: #b4441a;
@@ -138,7 +144,13 @@
     --skewt-grid: rgba(255, 255, 255, 0.2);
     --skewt-grid-strong: rgba(255, 255, 255, 0.5);
     --skewt-model: #f6a26b;
-    --skewt-parcel: rgba(255, 255, 255, 0.5);
+    --skewt-parcel: #5fd36b;
+    --skewt-dry: rgba(110, 200, 92, 0.34);
+    --skewt-moist: rgba(110, 200, 92, 0.26);
+    --skewt-mixing: rgba(214, 112, 232, 0.38);
+    --skewt-tag: rgba(235, 235, 235, 0.88);
+    --skewt-tag-text: #000;
+    --skewt-halo: #0a0a0a;
     --skewt-temperature: #ff8a4c;
     --skewt-dew: #3fd6c4;
     --skewt-model-dew: #8de6da;
@@ -169,7 +181,13 @@
   --skewt-grid: rgba(255, 255, 255, 0.2);
   --skewt-grid-strong: rgba(255, 255, 255, 0.5);
   --skewt-model: #f6a26b;
-  --skewt-parcel: rgba(255, 255, 255, 0.5);
+  --skewt-parcel: #5fd36b;
+  --skewt-dry: rgba(110, 200, 92, 0.34);
+  --skewt-moist: rgba(110, 200, 92, 0.26);
+  --skewt-mixing: rgba(214, 112, 232, 0.38);
+  --skewt-tag: rgba(235, 235, 235, 0.88);
+  --skewt-tag-text: #000;
+  --skewt-halo: #0a0a0a;
   --skewt-temperature: #ff8a4c;
   --skewt-dew: #3fd6c4;
   --skewt-model-dew: #8de6da;
@@ -3738,6 +3756,16 @@ html[lang="ja"] .rail-glyph {
   white-space: nowrap;
 }
 
+.sounding-indices {
+  display: block;
+  min-height: 1.6em;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
 .sounding-footer {
   display: flex;
   align-items: baseline;
@@ -3761,6 +3789,13 @@ html[lang="ja"] .rail-glyph {
   white-space: nowrap;
 }
 
+.sounding-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.sounding-projection,
 .sounding-expand {
   flex: none;
   padding: 2px 8px;
@@ -3774,6 +3809,12 @@ html[lang="ja"] .rail-glyph {
   font-weight: 400;
 }
 
+.sounding-projection {
+  font-family: var(--font-mono);
+}
+
+.sounding-projection:hover,
+.sounding-projection:focus-visible,
 .sounding-expand:hover,
 .sounding-expand:focus-visible {
   color: var(--text);
@@ -3795,6 +3836,8 @@ html[lang="ja"] .rail-glyph {
   display: block;
   width: 100%;
   border-radius: var(--r-m);
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .skewt-sheet-close {

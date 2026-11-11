@@ -24,9 +24,13 @@
  * parcel and the environment. They are a later phase; `parcelPath` gives the
  * curve, and the areas want a sounding-quality integration and a story about
  * which parcel, which is more than a chart.
+ *
+ * The pointer's crosshair is a second, cheap pass (`drawSkewTCursor`) over a
+ * finished chart, so a caller can keep the chart's pixels and repaint only
+ * the crosshair as the pointer moves.
  */
 
-import type { ParcelPath, Profile } from "./profile";
+import type { ConvectiveCondensation, ParcelPath, Profile } from "./profile";
 import {
   MOIST_STEP_HPA,
   SIG,
@@ -178,6 +182,19 @@ export interface SkewTInk {
   dew?: string;
   /** The model's dew-point trace. */
   modelDew?: string;
+  /** The background families, each in a hue of its own so a reader can tell
+   * which line to follow: the dry adiabats, the pseudoadiabats and the
+   * saturation mixing-ratio lines. Without them all three are `grid` and
+   * told apart by dash and weight alone. */
+  dryAdiabat?: string;
+  moistAdiabat?: string;
+  mixingRatio?: string;
+  /** The crosshair's value tags: their ground and their text. */
+  tag?: string;
+  tagText?: string;
+  /** An opaque ground the crosshair's readings are haloed in, so they read
+   * over the lines under them. */
+  halo?: string;
 }
 
 interface SkewTOptions {
@@ -186,8 +203,12 @@ interface SkewTOptions {
   /** A second profile — a model column at the same point — dotted, in the
    * model's own hues: dash says which source, hue says which quantity. */
   model?: Profile | null;
-  /** A lifted parcel, thin and muted. */
+  /** A lifted parcel, dashed in its own hue, with its LCL on the left axis. */
   parcel?: ParcelPath | null;
+  /** The convective condensation level: the isohume up to it, the dry
+   * adiabat down from it to the convective temperature, and the CCL on the
+   * left axis. */
+  convective?: ConvectiveCondensation | null;
   /** The font for every label; the caller's instrument face. */
   font?: string;
   /** Draw the wind column (default true when the profile carries wind). */
@@ -438,9 +459,10 @@ export function drawSkewT(
   context.clip();
 
   // Dry adiabats: every 10 K of potential temperature that crosses the box.
-  context.strokeStyle = ink.grid;
+  // A family with a hue of its own carries its weight in that colour's alpha.
+  context.strokeStyle = ink.dryAdiabat ?? ink.grid;
   context.lineWidth = 0.75;
-  context.globalAlpha = 0.85;
+  context.globalAlpha = ink.dryAdiabat ? 1 : 0.85;
   for (let theta = 230; theta <= 500; theta += DRY_ADIABAT_STEP) {
     strokeSamples(
       context,
@@ -450,15 +472,17 @@ export function drawSkewT(
   }
 
   // Pseudoadiabats: fainter still, and dashed, so they never read as data.
-  context.globalAlpha = 0.5;
-  context.setLineDash([1, 3]);
+  context.strokeStyle = ink.moistAdiabat ?? ink.grid;
+  context.globalAlpha = ink.moistAdiabat ? 1 : 0.5;
+  context.setLineDash([3, 3]);
   for (const thetaW of MOIST_ADIABATS) {
     strokeSamples(context, layout, sampleMoistAdiabat(layout, thetaW));
   }
   context.setLineDash([]);
 
   // Saturation mixing ratio: the lower troposphere only, dashed.
-  context.globalAlpha = 0.55;
+  context.strokeStyle = ink.mixingRatio ?? ink.grid;
+  context.globalAlpha = ink.mixingRatio ? 1 : 0.55;
   context.setLineDash([4, 4]);
   for (const w of MIXING_RATIO_LINES) {
     const samples: { p: number; t: number }[] = [];
@@ -503,10 +527,31 @@ export function drawSkewT(
     strokeProfile(context, layout, model, model.t);
     context.setLineDash([]);
   }
+  const { convective } = options;
+  if (convective) {
+    // The construction: the surface isohume up to the CCL, then the CCL's
+    // dry adiabat back down to the convective temperature at the ground.
+    context.lineWidth = 1;
+    context.strokeStyle = ink.dew ?? ink.ink;
+    context.globalAlpha = 0.6;
+    context.setLineDash([1, 2.5]);
+    const { w, theta } = convective;
+    const up: { p: number; t: number }[] = [];
+    for (let p = convective.pSurface; p > convective.p; p -= CURVE_SAMPLE_HPA) up.push({ p, t: mixingRatioLine(w, p) });
+    up.push({ p: convective.p, t: convective.t });
+    strokeSamples(context, layout, up);
+    context.strokeStyle = ink.parcel;
+    const down: { p: number; t: number }[] = [];
+    for (let p = convective.p; p < convective.pSurface; p += CURVE_SAMPLE_HPA) down.push({ p, t: dryAdiabat(theta, p) });
+    down.push({ p: convective.pSurface, t: convective.tcon });
+    strokeSamples(context, layout, down);
+    context.setLineDash([]);
+    context.globalAlpha = 1;
+  }
   if (parcel) {
     context.strokeStyle = ink.parcel;
-    context.lineWidth = 1;
-    context.setLineDash([5, 3]);
+    context.lineWidth = 1.4;
+    context.setLineDash([6, 3]);
     context.beginPath();
     let pen = false;
     for (let index = 0; index < parcel.p.length; index += 1) {
@@ -571,26 +616,37 @@ export function drawSkewT(
   context.globalAlpha = 1;
 
   // --- the derived heights, as ticks on the left axis ----------------------
-  if (profile?.derived) {
+  {
     context.strokeStyle = ink.ink;
     context.fillStyle = ink.inkMuted;
     context.lineWidth = 1;
     context.textAlign = "left";
-    const marks: [number | null, string][] = [
-      [profile.derived.freezingLevel, "0°"],
-      [profile.derived.tropopause, "TRP"],
-    ];
-    for (const [height, label] of marks) {
-      if (height === null) continue;
-      const p = pressureAtHeight(profile, height);
+    const marks: [number, string][] = [];
+    if (profile?.derived) {
+      if (profile.derived.freezingLevel !== null) marks.push([pressureAtHeight(profile, profile.derived.freezingLevel), "0°"]);
+      if (profile.derived.tropopause !== null) marks.push([pressureAtHeight(profile, profile.derived.tropopause), "TRP"]);
+    }
+    if (parcel) marks.push([parcel.lcl.p, "LCL"]);
+    if (convective) marks.push([convective.p, "CCL"]);
+    // Two levels close together (an LCL and a CCL a few hectopascals apart)
+    // keep their ticks where they are and put the second label beside the
+    // first rather than over it.
+    const placed: { y: number; x: number }[] = [];
+    const labelWidth = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "10") * 2.4;
+    for (const [p, label] of marks) {
       if (!Number.isFinite(p) || p > layout.pBottom || p < layout.pTop) continue;
       const y = Math.round(toXY(layout, p, layout.tMin).y) + 0.5;
       context.beginPath();
       context.moveTo(layout.x, y);
       context.lineTo(layout.x + 7, y);
       context.stroke();
+      let x = layout.x + 9;
+      for (const other of placed) {
+        if (Math.abs(other.y - y) < 10 && other.x + labelWidth > x) x = other.x + labelWidth;
+      }
+      placed.push({ y, x });
       context.globalAlpha = 0.8;
-      context.fillText(label, layout.x + 9, y - 5);
+      context.fillText(label, x, y - 5);
       context.globalAlpha = 1;
     }
   }
@@ -701,3 +757,98 @@ export function readoutAt(
 /** The pseudoadiabats' integration step, re-exported so a caller documenting
  * the chart does not have to reach into `profile.ts` for it. */
 export { MOIST_STEP_HPA };
+
+/** One value pinned to the crosshair: a dot on a trace and its reading. */
+interface SkewTCursorMark {
+  /** °C on the trace at the cursor's pressure. */
+  t: number;
+  color: string;
+  /** The text beside the dot; none draws the dot alone. */
+  label?: string;
+  /** Which side of the dot the text goes. */
+  side: "left" | "right";
+}
+
+/** What the crosshair says at one pressure. */
+export interface SkewTCursor {
+  /** hPa. */
+  p: number;
+  marks: readonly SkewTCursorMark[];
+  /** The lines of the tag on the left axis — height and pressure. */
+  left: readonly string[];
+  /** The tag over the wind column, or null for none. */
+  right: string | null;
+}
+
+/**
+ * The pointer's crosshair over a finished chart: an isobar at the pointer,
+ * a dot where it crosses each trace with the reading beside it, the height
+ * and pressure in a tag on the left axis and the wind in one over the barb
+ * column. The caller has already formatted every string in the viewer's
+ * units, so the chart still never asks what a unit is.
+ */
+export function drawSkewTCursor(
+  context: CanvasRenderingContext2D,
+  layout: SkewTLayout,
+  ink: SkewTInk,
+  cursor: SkewTCursor,
+  font = "10px ui-monospace, monospace",
+): void {
+  if (!(cursor.p <= layout.pBottom && cursor.p >= layout.pTop)) return;
+  context.save();
+  context.font = font;
+  context.textBaseline = "middle";
+  const y = Math.round(toXY(layout, cursor.p, layout.tMin).y) + 0.5;
+  const right = layout.x + layout.width + layout.barbWidth;
+  context.strokeStyle = ink.ink;
+  context.globalAlpha = 0.55;
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(layout.x, y);
+  context.lineTo(right, y);
+  context.stroke();
+  context.globalAlpha = 1;
+
+  const size = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "10");
+  for (const mark of cursor.marks) {
+    if (!Number.isFinite(mark.t)) continue;
+    const point = toXY(layout, cursor.p, mark.t);
+    if (point.x < layout.x || point.x > layout.x + layout.width) continue;
+    context.fillStyle = mark.color;
+    context.beginPath();
+    context.arc(point.x, y, 3, 0, Math.PI * 2);
+    context.fill();
+    if (!mark.label) continue;
+    context.textAlign = mark.side === "left" ? "right" : "left";
+    const textX = point.x + (mark.side === "left" ? -6 : 6);
+    // Just above the isobar, haloed, so it reads over the lines under it.
+    const textY = y - size * 0.8;
+    if (ink.halo) {
+      context.strokeStyle = ink.halo;
+      context.lineWidth = 3;
+      context.lineJoin = "round";
+      context.strokeText(mark.label, textX, textY);
+    }
+    context.fillStyle = mark.color;
+    context.fillText(mark.label, textX, textY);
+  }
+
+  const tag = (lines: readonly string[], anchor: number, align: "left" | "right"): void => {
+    if (lines.length === 0) return;
+    const lineHeight = Math.round(size * 1.3);
+    const width = Math.max(...lines.map((text) => context.measureText(text).width)) + 8;
+    const height = lines.length * lineHeight + 4;
+    const left = align === "left" ? anchor : anchor - width;
+    const top = Math.min(layout.y + layout.height - height, Math.max(layout.y, y - height / 2));
+    context.fillStyle = ink.tag ?? ink.ink;
+    context.fillRect(left, top, width, height);
+    context.fillStyle = ink.tagText ?? ink.paper;
+    context.textAlign = "left";
+    for (const [index, text] of lines.entries()) {
+      context.fillText(text, left + 4, top + 2 + lineHeight * (index + 0.5));
+    }
+  };
+  tag(cursor.left, Math.max(0, layout.x - 2), "left");
+  if (cursor.right) tag([cursor.right], right, "right");
+  context.restore();
+}

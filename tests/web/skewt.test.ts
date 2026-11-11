@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   SIG,
+  convectiveCondensation,
   dryAdiabat,
   dewPointFromRelativeHumidity,
   hasSig,
@@ -18,6 +19,7 @@ import { SAMPLE_URUMQI, SAMPLE_WAKKANAI } from "../../web/src/sounding/sample";
 import {
   barbLevels,
   drawSkewT,
+  drawSkewTCursor,
   fromXY,
   insideChart,
   knots,
@@ -130,6 +132,32 @@ describe("the background curves", () => {
     expect([...path.p]).toContain(path.lcl.p);
     const theta = (profile.t[0]! + 273.15) * (1000 / profile.p[0]!) ** (287.04 / 1005.7);
     expect(path.t[path.t.length - 1]!).toBeGreaterThan(dryAdiabat(theta, path.p[path.p.length - 1]!));
+  });
+});
+
+describe("convectiveCondensation", () => {
+  it("meets the temperature trace on the surface dew point's isohume", () => {
+    const profile = profileFromSounding(WAKKANAI);
+    const ccl = convectiveCondensation(profile)!;
+    expect(ccl.pSurface).toBeCloseTo(1008, 6);
+    expect(ccl.p).toBeLessThan(ccl.pSurface);
+    // On the isohume, on the environment within the interpolation's slack,
+    // and on its own dry adiabat at both ends.
+    expect(ccl.t).toBeCloseTo(mixingRatioLine(ccl.w, ccl.p), 6);
+    expect(Math.abs(interpolateAtPressure(profile, ccl.p, profile.t) - ccl.t)).toBeLessThan(0.5);
+    expect(dryAdiabat(ccl.theta, ccl.p)).toBeCloseTo(ccl.t, 6);
+    expect(dryAdiabat(ccl.theta, ccl.pSurface)).toBeCloseTo(ccl.tcon, 6);
+    // Heating the ground is what it takes: the convective temperature is
+    // warmer than the CCL by the dry lapse over the depth.
+    expect(ccl.tcon).toBeGreaterThan(ccl.t);
+  });
+
+  it("says nothing for an ascent without a dew point", () => {
+    const dry = profileFromModel([
+      { p: 1000, t: 20, u: 0, v: 0 },
+      { p: 850, t: 10, u: 0, v: 0 },
+    ]);
+    expect(convectiveCondensation(dry)).toBeNull();
   });
 });
 
@@ -392,6 +420,8 @@ describe("drawSkewT", () => {
       strokeRect: record("strokeRect"),
       fillText: record("fillText"),
       setLineDash: record("setLineDash"),
+      strokeText: record("strokeText"),
+      measureText: (text: string) => ({ width: text.length * 6 }),
     } as unknown as CanvasRenderingContext2D;
     return { context, calls, points };
   }
@@ -405,7 +435,13 @@ describe("drawSkewT", () => {
       { p: 250, t: -48, rh: 15, u: 28, v: 6 },
     ]);
     const { context, calls, points } = stubContext();
-    drawSkewT(context, LAYOUT, ink, { profile, model, parcel: parcelPath(profile), font: "10px mono" });
+    drawSkewT(context, LAYOUT, ink, {
+      profile,
+      model,
+      parcel: parcelPath(profile),
+      convective: convectiveCondensation(profile),
+      font: "10px mono",
+    });
     expect(calls.filter((call) => call === "stroke").length).toBeGreaterThan(40);
     expect(calls).toContain("fillText");
     // Every save is matched, so a caller's own state survives the chart.
@@ -423,6 +459,28 @@ describe("drawSkewT", () => {
     }
     // The wind column was drawn: some points sit to the right of the box.
     expect(points.some(([x]) => x > LAYOUT.x + LAYOUT.width)).toBe(true);
+  });
+
+  it("draws the crosshair inside the chart and its tags beside it", () => {
+    const { context, calls, points } = stubContext();
+    drawSkewTCursor(context, LAYOUT, ink, {
+      p: 700,
+      marks: [
+        { t: -10, color: "#0aa", label: "-10 °C", side: "left" },
+        { t: 2, color: "#a50", label: "2 °C", side: "right" },
+      ],
+      left: ["3048 m", "700 hPa"],
+      right: "16 m/s 250°",
+    });
+    expect(calls.filter((call) => call === "arc").length).toBe(2);
+    expect(calls.filter((call) => call === "fillText").length).toBe(5);
+    expect(calls.filter((call) => call === "save").length).toBe(calls.filter((call) => call === "restore").length);
+    const y = Math.round(toXY(LAYOUT, 700, 0).y) + 0.5;
+    expect(points).toContainEqual([LAYOUT.x, y]);
+    // Above the top of the chart there is nothing to point at.
+    const above = stubContext();
+    drawSkewTCursor(above.context, LAYOUT, ink, { p: 50, marks: [], left: [], right: null });
+    expect(above.calls).toEqual([]);
   });
 
   it("draws an empty chart when there is nothing to plot", () => {
