@@ -564,13 +564,17 @@ export class MeasureTool {
     const end = this.points[this.points.length - 1];
     const wanted = this.kind === "distance" && this.profile !== null && end !== undefined && this.map.getTerrain() !== null;
     if (!wanted) {
+      const open = this.card !== null;
       this.card?.remove();
       this.card = null;
       this.setHover(null);
+      // The label takes the profile's lines back.
+      if (open) this.render();
       return;
     }
     if (this.card && !rebuild) return;
     const chart = profileChart(this.profile!.track, {
+      details: profileLines(this.profile!),
       formatDistance,
       formatHeight: (metres) => formatHeight(metres),
       onHover: (point) => this.setHover(point ? [point.lon, point.lat] : null),
@@ -581,10 +585,13 @@ export class MeasureTool {
     }
     const card = cardPopup({ className: "station-popup measure-popup", maxWidth: "320px", offset: 14 }).setLngLat(end!).setDOMContent(chart);
     card.on("close", () => {
-      if (this.card === card) this.card = null;
+      if (this.card !== card) return;
+      this.card = null;
       this.setHover(null);
+      this.render();
     });
     this.card = card.addTo(this.map);
+    this.render();
   }
 
   private setHover(point: LonLat | null): void {
@@ -632,7 +639,10 @@ export class MeasureTool {
 
   private render(): void {
     if (!this.kind) return;
-    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor, this.ended ? this.profile : null, this.hover);
+    // With the card open the profile's lines are read there, under the
+    // chart; the label at the end keeps the length alone.
+    const profile = this.ended && !this.card ? this.profile : null;
+    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor, profile, this.hover);
     const source = this.map.getSource(SOURCE) as { setData?: (data: unknown) => void } | undefined;
     if (source?.setData) {
       source.setData(data);
