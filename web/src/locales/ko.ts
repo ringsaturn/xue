@@ -270,7 +270,7 @@ export const ko: Record<MessageKey, string> = {
   viewResetPitchAria: "기울기 재설정",
   viewBoxAria: "폭풍 확대: 영역을 드래그",
   viewSectionAria: "연직 단면: 선을 드래그",
-  viewDistanceAria: "거리 측정: 지점을 클릭하고 마지막 점을 다시 클릭하면 끝",
+  viewDistanceAria: "거리 측정: 지점을 클릭하고 마지막 점을 다시 클릭하면 끝. 3D 지형에서는 끝점을 다시 클릭하면 고도 단면",
   viewAreaAria: "면적 측정: 꼭짓점을 클릭하고 첫 점이나 마지막 점을 다시 클릭하면 끝",
   measureSurface: "지표면 거리 {length} · ↑{climb} ↓{descent}",
   measureStraight: "직선거리 {length}",

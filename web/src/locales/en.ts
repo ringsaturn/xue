@@ -474,7 +474,7 @@ export const en = {
   viewResetPitchAria: "Reset tilt",
   viewBoxAria: "Storm close-up: drag a box over it",
   viewSectionAria: "Vertical section: drag a line",
-  viewDistanceAria: "Measure distance: click points, click the last again to finish",
+  viewDistanceAria: "Measure distance: click points, click the last again to finish; with 3D terrain, click the end again for the elevation profile",
   viewAreaAria: "Measure area: click corners, click the first or last again to finish",
   /** A finished distance's reading on the map, under its length (the
    * horizontal distance on the WGS84 ellipsoid): the length along the

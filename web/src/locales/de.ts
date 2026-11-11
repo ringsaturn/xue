@@ -268,7 +268,7 @@ export const de: Record<MessageKey, string> = {
   viewResetPitchAria: "Neigung zurücksetzen",
   viewBoxAria: "Sturm-Nahansicht: Rechteck aufziehen",
   viewSectionAria: "Vertikalschnitt: Linie ziehen",
-  viewDistanceAria: "Strecke messen: Punkte anklicken, letzten erneut anklicken zum Beenden",
+  viewDistanceAria: "Strecke messen: Punkte anklicken, letzten erneut anklicken zum Beenden; mit 3D-Gelände den Endpunkt erneut anklicken für das Höhenprofil",
   viewAreaAria: "Fläche messen: Ecken anklicken, ersten oder letzten erneut anklicken zum Beenden",
   measureSurface: "Über Grund {length} · ↑{climb} ↓{descent}",
   measureStraight: "Direkte Linie {length}",
