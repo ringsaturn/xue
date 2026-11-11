@@ -278,6 +278,11 @@ body.is-data-loading #map {
   background-size: 120px 120px;
 }
 
+/* A coordinate grid on the map replaces it (main.ts, syncInstrumentGrid). */
+body[data-coordinate-grid] .atmosphere {
+  display: none;
+}
+
 .title-block,
 .top-actions,
 .case-banner,
