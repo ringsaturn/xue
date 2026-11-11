@@ -63,7 +63,6 @@ export interface ChunkKey {
 interface VariableArray {
   id: string;
   layout: ZarrArrayLayout;
-  plane: Uint8Array;
   /** The time chunk whose decoded tiles `decoded` holds. */
   decodedTimeChunk: number;
   decoded: Map<number, Uint8Array | null>;
@@ -144,7 +143,12 @@ export interface ZarrReader {
   isFetching(key: ChunkKey): boolean;
   ensureChunks(keys: readonly ChunkKey[]): Promise<void>;
   frameResident(variableId: number, frameOffset: number, rects: readonly TileRect[] | null): boolean;
-  decodeFrame(variableId: number, frameOffset: number, rects?: readonly TileRect[] | null): Promise<Uint8Array>;
+  decodeFrame(
+    variableId: number,
+    frameOffset: number,
+    rects?: readonly TileRect[] | null,
+    into?: Uint8Array,
+  ): Promise<Uint8Array>;
   decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array>;
 }
 
@@ -207,7 +211,6 @@ export class ZarrSession implements ZarrReader, PoolMember {
       this.arrays.set(array.numericId, {
         id: array.id,
         layout: array.layout,
-        plane: new Uint8Array(array.layout.height * array.layout.width),
         decodedTimeChunk: -1,
         decoded: new Map(),
       });
@@ -501,10 +504,20 @@ export class ZarrSession implements ZarrReader, PoolMember {
     );
   }
 
-  /** Assemble one frame into the variable's plane buffer and return the
-   * buffer. With `rects` only those tiles are fetched and written; the rest
-   * of the buffer is whatever earlier decodes left there. */
-  async decodeFrame(variableId: number, frameOffset: number, rects: readonly TileRect[] | null = null): Promise<Uint8Array> {
+  /** Assemble one frame into `into` (a new plane when none is given) and
+   * return it. With `rects` only those tiles are fetched and written; the
+   * rest of the buffer is whatever it held.
+   *
+   * Each decode writes a buffer of its own. Decodes run concurrently, and
+   * those whose chunks are already local all resume in one burst of
+   * microtasks: a plane shared between them would hold whichever frame was
+   * assembled last by the time each caller copied it out. */
+  async decodeFrame(
+    variableId: number,
+    frameOffset: number,
+    rects: readonly TileRect[] | null = null,
+    into?: Uint8Array,
+  ): Promise<Uint8Array> {
     const array = this.array(variableId);
     const { layout } = array;
     const index = this.frameIndex(frameOffset);
@@ -520,9 +533,11 @@ export class ZarrSession implements ZarrReader, PoolMember {
       if (missing.length === 0) break;
       if (attempt >= 3) throw new Error("chunks evicted faster than a frame assembles; raise the payload budget");
     }
+    const plane = into ?? new Uint8Array(layout.height * layout.width);
+    if (plane.length !== layout.height * layout.width) throw new Error("plane buffer does not fit the grid");
     const frameInChunk = index % layout.timeChunk;
-    for (const key of keys) placeTile(array.plane, layout, key.tile, this.decodedChunk(array, key), frameInChunk);
-    return array.plane;
+    for (const key of keys) placeTile(plane, layout, key.tile, this.decodedChunk(array, key), frameInChunk);
+    return plane;
   }
 
   /** The chunks one cell's series needs: one per time chunk of its tile. */
