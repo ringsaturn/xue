@@ -522,6 +522,7 @@ export const tr: Record<MessageKey, string> = {
   tcPageUseCheck: "Doğrulama",
   tcPageLife: "Ömür",
   tcPagePeak: "En yüksek rüzgâr",
+  tcPageMinPressure: "En düşük basınç",
   tcPageForecasts: "Tahminler",
   tcCardSeasons: "Sezonlar",
   tcCardStorms: "Fırtınalar",

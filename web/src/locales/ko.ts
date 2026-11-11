@@ -521,6 +521,7 @@ export const ko: Record<MessageKey, string> = {
   tcPageUseCheck: "대조",
   tcPageLife: "생애",
   tcPagePeak: "최대 풍속",
+  tcPageMinPressure: "최저 기압",
   tcPageForecasts: "예보 수",
   tcCardSeasons: "시즌",
   tcCardStorms: "폭풍",

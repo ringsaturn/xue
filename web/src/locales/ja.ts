@@ -516,6 +516,7 @@ export const ja: Record<MessageKey, string> = {
   tcPageUseCheck: "照合",
   tcPageLife: "存続期間",
   tcPagePeak: "最大風速",
+  tcPageMinPressure: "最低気圧",
   tcPageForecasts: "予報数",
   tcCardSeasons: "シーズン",
   tcCardStorms: "嵐",

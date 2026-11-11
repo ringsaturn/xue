@@ -811,6 +811,7 @@ export const en = {
   tcPageUseCheck: "Cross-check",
   tcPageLife: "Life",
   tcPagePeak: "Peak wind",
+  tcPageMinPressure: "Lowest pressure",
   tcPageForecasts: "Forecasts",
   tcCardSeasons: "Seasons",
   tcCardStorms: "Storms",
