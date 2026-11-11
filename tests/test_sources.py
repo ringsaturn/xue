@@ -32,6 +32,7 @@ IDENTITIES = {
     "cfs": ("CFSv2", "time-grib-01", "latest-cfs.json", FORECAST_CORE),
     "iconeu": ("ICON-EU", "iconeu", "latest-iconeu.json", FORECAST_CORE),
     "arpege": ("ARPEGE", "arpege", "latest-arpege.json", FORECAST_CORE),
+    "cmageps": ("CMA-GEPS", "cma-geps-0p25", "latest-cmageps.json", FORECAST_CORE),
     # No live feed: a forecast reached through showcase cases alone.
     "woof": ("WOOF-WRF", "nest", None, ("tmp2m",)),
     "efas": ("EFAS-v5", "hres", None, ("dis06",)),

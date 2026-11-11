@@ -170,6 +170,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "thirty-nine weeks; 00Z and 12Z), "
             "iconeu, DWD ICON-EU over Europe at 0.0625 degree (hourly to 78, 3-hourly to 120), "
             "arpege, Meteo-France ARPEGE at 0.25 degree (hourly to 48, 3-hourly to 102), "
+            "cmageps, the CMA GRAPES GEPS ensemble's median and mean at 0.25 degree (6-hourly to 360; "
+            "00Z and 12Z, from the WMO WIS2 global caches), "
             "NOAA MRMS, the radar mosaic over the contiguous US (an observation every "
             "two minutes; --run names the window's first hour and --hours its length, 3 by default), "
             "mrms3d, its reflectivity volume on 33 levels from 0.5 to 19 km (a frame every ten "

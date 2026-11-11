@@ -50,10 +50,10 @@ def partial_manifest_path(run_directory: Path, bundle_ids: tuple[str, ...]) -> P
 
 def group_needs_eccodes(source: SourceSpec, bundle_ids: tuple[str, ...]) -> bool:
     """Whether a group's job needs the eccodes tools installed: every group
-    of a source whose feed arrives CCSDS packed, since the fetch repacks
-    each frame with ``grib_set`` (:attr:`SourceSpec.packing`) whichever
-    records the group asks for."""
-    return source.packing == "ccsds"
+    of a source whose feed arrives in a packing the fetch repacks (CCSDS,
+    JPEG2000), since it repacks each frame with ``grib_set``
+    (:attr:`SourceSpec.packing`) whichever records the group asks for."""
+    return source.packing != "published"
 
 
 def _bundle_weight(source: SourceSpec, bundle_id: str) -> int:

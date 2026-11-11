@@ -3,7 +3,7 @@ name: publish run
 # Reusable publishing pipeline, one call per source. Callers
 # (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-ifs.yml, publish-aifs.yml,
 # publish-ifshres.yml, publish-hrrr.yml, publish-rrfs.yml, publish-gefsaero.yml, publish-cmadust.yml,
-# publish-silam.yml, publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml) own the schedule
+# publish-silam.yml, publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml, publish-cmageps.yml) own the schedule
 # and the manual dispatch; this file owns the work, fanned out over three
 # jobs:
 #
@@ -46,7 +46,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, rrfs, gefsaero, cmadust, silam, cfs, iconeu or arpege"
+        description: "Forecast source: gfs, sflux, ecmwf, ifs, aifs, ifshres, hrrr, rrfs, gefsaero, cmadust, silam, cfs, iconeu, arpege or cmageps"
         required: true
         type: string
       run:
@@ -144,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODEL" in
-            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|gefsaero|cmadust|silam|cfs|iconeu|arpege) ;;
+            gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|gefsaero|cmadust|silam|cfs|iconeu|arpege|cmageps) ;;
             *) echo "::error::unknown source: $MODEL"; exit 1 ;;
           esac
           case "$PROFILE" in
@@ -288,8 +288,10 @@ jobs:
       # A source whose feed arrives CCSDS packed (`SourceSpec.packing`: the
       # ECMWF open data, DWD ICON-EU, Météo-France ARPEGE) is repacked with
       # eccodes at fetch time because GDAL builds usually lack libaec (and
-      # ARPEGE's zero analysis accumulation is written with it), so the
-      # matrix flags every job of such a source `eccodes`.
+      # ARPEGE's zero analysis accumulation is written with it), and one
+      # that arrives JPEG2000 packed (CMA GRAPES GEPS, whose ensemble
+      # products are also rewritten to plain templates with it) likewise,
+      # so the matrix flags every job of such a source `eccodes`.
       - name: Install eccodes
         if: ${{ matrix.eccodes }}
         run: |

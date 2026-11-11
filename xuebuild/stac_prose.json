@@ -466,6 +466,44 @@
         }
       ]
     },
+    "cmageps": {
+      "title": "CMA GRAPES GEPS ensemble median 0.25°",
+      "description": "The centre of the China Meteorological Administration's global ensemble CMA GRAPES GEPS v1.3 (30 perturbed members and the control) on its 0.25° grid, six-hourly to 360 hours from the 00Z and 12Z cycles; only the newest is kept. CMA exchanges ensemble products, not members, so every field here is a statistic of the 31 members, not a forecast any one of them made: the ensemble mean of the 500 hPa geopotential height and the mean sea level pressure, and the ensemble median (50th percentile) of the 2 m and 850 hPa temperature, the precipitation (the median of the total over the six hours ending at each frame, published as its mean rate), the 10 m wind gust, the total cloud cover and the CAPE. A median field is smoother than any member, and a precipitation median is drier than the mean wherever only some members rain. Obtained through the WMO Information System (WIS2) global caches, where it is exchanged as core data under the WMO Unified Data Policy, free and unrestricted. Source: China Meteorological Administration (CMA), via WMO WIS2; the published bundles are a quantized derivative.",
+      "license": "other",
+      "providers": [
+        {
+          "name": "China Meteorological Administration",
+          "description": "CMA GRAPES GEPS v1.3, the global ensemble prediction system.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.cma.gov.cn/en/"
+        },
+        {
+          "name": "Xue",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://github.com/ringsaturn/xue"
+        }
+      ],
+      "links": [
+        {
+          "rel": "license",
+          "href": "https://library.wmo.int/idurl/4/58009",
+          "type": "text/html",
+          "title": "WMO Unified Data Policy (Resolution 1, Cg-Ext(2021)): core data, free and unrestricted"
+        },
+        {
+          "rel": "describedby",
+          "href": "https://wis2-gdc.weather.gc.ca/collections/wis2-discovery-metadata/items/urn:wmo:md:cn-cma:data.core.weather.prediction.forecast.medium-range.probabilistic.global",
+          "type": "text/html",
+          "title": "WIS2 discovery metadata record of the CMA GRAPES GEPS ensemble products"
+        }
+      ]
+    },
     "woof": {
       "title": "Recast WOOF (WRF-ARW) nested run",
       "description": "A WRF-ARW run commissioned by the author on Recast Systems' WOOF service (gpuwm), nested 12 → 3 → 1 → 0.5 km from the NOAA GFS analysis, with the model terrain from the Copernicus DEM GLO-30. Published is the innermost 500 m domain over Mount Fuji, resampled bilinearly from its Lambert conformal grid onto a regular 0.005° grid (79 × 61 cells, 138.54°E–138.93°E, 35.22°N–35.52°N) by the wrf-series tool, as an hourly forecast from the cycle's first hour. The cloud water volume carries the model's liquid cloud water interpolated onto 24 altitudes from 0.25 to 12 km above mean sea level. There is no live feed: the run exists as showcase cases only. Driving data: NOAA GFS; terrain: Copernicus DEM GLO-30, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",

@@ -855,7 +855,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
-    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "gefsaero", "cmadust", "silam"] as const)
+    for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
 
@@ -874,7 +874,7 @@ describe("dataset kinds", () => {
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -895,6 +895,11 @@ describe("dataset kinds", () => {
     expect(FORECAST_MODELS.iconeu.domain).toBeUndefined();
     expect(FORECAST_MODELS.arpege.region).toBeUndefined();
     for (const model of ["iconeu", "arpege"] as const) expect(FORECAST_MODELS[model].coreBundles).toBeUndefined();
+    // CMA's ensemble centre is global and ships the forecast core, but no
+    // wind components: the gust stands where the wind does elsewhere.
+    expect(FORECAST_MODELS.cmageps.region).toBeUndefined();
+    expect(FORECAST_MODELS.cmageps.coreBundles).toBeUndefined();
+    expect(FORECAST_MODELS.cmageps.railCore).toEqual(["tmp2m", "prate", "gust", "tcdc"]);
     // The aerosol run ships no temperature and no precipitation: its core
     // is the total optical depth, which it opens on.
     expect(FORECAST_MODELS.gefsaero).toMatchObject({

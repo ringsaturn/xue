@@ -27,6 +27,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `cfs` | forecast (seasonal) | one object per variable per run | `tmp2m`, `prate` |
 | `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | `tmp2m`, `prate` |
 | `arpege` | forecast | Météo-France packages, whole objects cut by identity | `tmp2m`, `prate` |
+| `cmageps` | forecast (ensemble centre) | WMO WIS2 caches, message heads walked by Range, products rewritten to plain templates | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | `tmp2m` |
 | `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | `dis06` |
@@ -88,7 +89,7 @@ nothing in the fetch tests a source id. A family is an upstream service and
 the shape of its objects: `noaa-gfs`, `noaa-sflux` and
 `noaa-gefs-aerosols` share the `.idx` byte-range path under their own
 object names; `noaa-hrrr`, `noaa-rrfs`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
-`dwd-icon-eu` and `meteofrance-arpege` are the other one-GRIB-per-hour
+`dwd-icon-eu`, `meteofrance-arpege` and `cmageps` are the other one-GRIB-per-hour
 feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
 `open-meteo`, `cmadust` and `fmi-silam` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
 `jma-nowcast`, `cma-archive`, `ovation` and `satellite` (every disk) are
@@ -100,12 +101,15 @@ code stays in `fetch.py` beside the request, range and index helpers;
 `feeds.py` only says which of it serves which question.
 
 **Packing.** `SourceSpec.packing` is `published` (GDAL reads the records as
-they come) or `ccsds`: CCSDS/AEC (DRS template 5.42), which GDAL builds
-without libaec cannot decode, so `fetch_frame` repacks every frame to
-`grid_simple` with eccodes' `grib_set` before writing it. `ecmwf`, `ifs`,
-`aifs`, `iconeu` and `arpege` are `ccsds`; `assemble.group_needs_eccodes`
-flags every build job of such a source `eccodes`, which is all
-`publish.yml` reads to install the tools. Both fields are the fetch's
+they come), `ccsds`: CCSDS/AEC (DRS template 5.42), which GDAL builds
+without libaec cannot decode, or `jpeg2000` (DRS 5.40), which GDAL builds
+without OpenJPEG cannot; `fetch_frame` repacks every frame of the last
+two to `grid_simple` with eccodes' `grib_set` before writing it. `ecmwf`,
+`ifs`, `aifs`, `iconeu` and `arpege` are `ccsds`, `cmageps` is `jpeg2000`
+(and its fetch rewrites each record's template with `grib_set` too);
+`assemble.group_needs_eccodes` flags every build job of a source that is
+not `published` `eccodes`, which is all `publish.yml` reads to install the
+tools. Both fields are the fetch's
 alone: the registry document leaves them out.
 
 **Frame caches.** A feed without an archive deep enough for a whole window
@@ -401,6 +405,55 @@ metres, as DWD's) is in no `SP1` package: the first `SP2` package
 walks that object's messages over Range, a 512-byte head each
 (`grib2.message_head`), and reads the one matching record whole; a run is
 complete only once that package is on the bucket too. `tests/test_arpege.py`.
+
+**cmageps.** CMA GRAPES GEPS v1.3, the China Meteorological
+Administration's global ensemble (30 perturbed members and the control), as
+WMO WIS2 exchanges it (`urn:wmo:md:cn-cma:data.core.weather.prediction.forecast.medium-range.probabilistic.global`,
+`core` data). CMA exchanges no members: one GRIB2 file per lead time,
+`Z_NAFP_C_BABJ_<YYYYMMDDHH>0000_P_CMA-WIPPSGEPS-GLB-<HHH>.grib2`, about
+80 MB of JPEG2000-packed **ensemble products**, three-hourly to +78 h and
+six-hourly to +360 h; only the six-hourly files are read (61 frames). A
+file's 87 messages are the mean and spread (template 4.2,
+`derivedForecast` 0 and 4) of the 500 hPa height and the sea-level
+pressure; the 0/25/50/75/100th percentiles (4.6) of the 2 m and 850 hPa
+temperature, the 10 m, 850 hPa and 250 hPa wind speeds, the instantaneous
+10 m gust (`i10fg`, 0/2/22 at 10 m), the total cloud cover, the CAPE and
+two wind shears; the percentiles (4.10) of the precipitation over the six
+hours ending at the step and over a longer window, and of the six-hour
+snowfall; and exceedance probabilities (4.5, 4.9). `xuebuild/cmageps.py`
+publishes the ensemble's centre under the deterministic identities: the
+mean where it is the only statistic (height, pressure), the median
+elsewhere, and for the precipitation the median of the window that ends at
+the step and starts at the axis's previous step. The files have no index,
+so a frame is a walk of the message heads over Range (512 bytes each:
+section 0 gives the message's length, sections 1 and 4 its identity),
+stopping once every input is found — about eighty reads — and one Range
+read of each record. Each record is then rewritten with `grib_set`
+(`eccodescli.set_keys`) to the plain template its identity is matched on
+(4.2 and 4.6 → 4.0, 4.10 → 4.8, eccodes carrying the interval and the
+statistical process across), the ground surface's missing value is written
+as 0, and the gust is moved from 10 m to the ground surface, the identity
+GFS's instantaneous gust has (`SURFACE_ALIASES`); the frame is then
+repacked to `grid_simple` (`packing="jpeg2000"`). GDAL names the
+rewritten six-hour total `APCP06`, which is the `surface` rule the
+registry's `apcp` carries; it is the interval-precipitation path, as on
+Open-Meteo's series, but on GRIB frames: the rate is the total over six.
+The analysis file has no precipitation, and its gust and cloud cover are
+fields of zeros, so all three are `optional_at_analysis` and never read
+at +0. The grid is the 0.25° grid without the pole rows (1440 × 720, first
+centre 89.875°N, 0°E), which the global snap takes as it is; tile 48 × 48
+(30 × 15, no clipped edge), the half tier. The caches are data
+(`cmageps.CACHES`, `xuebuild/wis2.py`): the Met Office/NOAA one and JMA's
+are listed, and a run is complete when their listings together name
+every lead time (neither does on its own, and the NOAA one carries
+partial uploads under a numeric suffix, which are skipped); CMA's own
+cache (`XUE_CMAGEPS_CMA_CACHE_URL`) cannot be listed but serves a file by
+Range under the UTC day it arrived, so the cycle's day and the next are
+tried, last, as a fallback (it keeps files for days, KMA's and DWD's,
+which work the same way, about one). The caches take a run in batches: a
+00Z run's leads to about +72 h at 05:20Z and the rest at 18:04Z, a 12Z
+run's between 18:01Z and 19:01Z (20:01Z some days, a few leads now and
+then held to 03:02Z the next day). `tests/test_cmageps.py`.
 
 **ifshres.** ECMWF IFS HRES (~9 km) as Open-Meteo forwards the real-time
 archive. The fetch stage is om2nc (`xuebuild/om2nccli.py`, `XUE_OM2NC`): it

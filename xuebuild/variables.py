@@ -465,11 +465,14 @@ VARIABLES: dict[str, VariableSpec] = {
     # tp and prate_ave it is an input-only variable: the converter divides it
     # by the interval into prate (``SourceSpec.interval_precipitation``) and
     # apcp itself never reaches a bundle. GFS pgrb2 carries APCP records too;
-    # no source fetches them.
+    # no source fetches them. CMA GRAPES GEPS's ensemble median of the total
+    # over the six hours ending at each step is read as a GRIB band, once
+    # the fetch has rewritten it to template 4.8 (xuebuild/cmageps.py).
     "apcp": VariableSpec(
         id="apcp",
-        # Read off an Open-Meteo series, never a GRIB band.
-        gdal_rules=(),
+        # GDAL names an interval total by its length in hours: a six-hour
+        # one is ``APCP06``, the only length a source reads off a band.
+        gdal_rules=(rules.surface("APCP06"),),
         label="Total precipitation",
         output_unit="mm",
         value_range=(0, 1000),

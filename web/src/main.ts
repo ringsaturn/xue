@@ -1155,6 +1155,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   rrfs: "NOAA / RRFS CONUS (3 KM)",
   iconeu: "DWD / ICON-EU EUROPE (0.0625°)",
   arpege: "MÉTÉO-FRANCE / ARPEGE (0.25°)",
+  cmageps: "CMA / GRAPES GEPS ENSEMBLE MEDIAN (0.25°)",
   woof: "RECAST / WOOF WRF-ARW NEST FUJI",
   efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
   efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",

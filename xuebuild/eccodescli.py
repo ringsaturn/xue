@@ -1,11 +1,14 @@
 """eccodes CLI subprocess wrapper (same pattern as gdal.py / zstdcli.py).
 
-Two callers. The CCSDS GRIB path: ECMWF open data, DWD ICON-EU and
-Météo-France ARPEGE messages are CCSDS/AEC packed (DRS template 5.42),
-which many GDAL builds cannot decode, so ``grib_set`` repacks the
-downloaded messages to ``grid_simple`` before GDAL reads them (and writes
-the zero accumulation ARPEGE lacks at the analysis). And the tropical cyclone product (``xuebuild.tc``): ECMWF's
-track files are BUFR, and ``bufr_dump`` is how they become JSON.
+Two callers. The repacked GRIB path: ECMWF open data, DWD ICON-EU and
+Météo-France ARPEGE messages are CCSDS/AEC packed (DRS template 5.42) and
+CMA GRAPES GEPS ones JPEG2000 packed (5.40), which many GDAL builds cannot
+decode, so ``grib_set`` repacks the downloaded messages to ``grid_simple``
+before GDAL reads them (and writes the zero accumulation ARPEGE lacks at
+the analysis, and turns a CMA ensemble product into the plain template of
+the field it stands in for). And the tropical cyclone product
+(``xuebuild.tc``): ECMWF's track files are BUFR, and ``bufr_dump`` is how
+they become JSON.
 """
 
 from __future__ import annotations
@@ -22,6 +25,17 @@ def repack_grid_simple(source: Path, destination: Path) -> None:
     run_command(
         [require_command("grib_set"), "-r", "-s", "packingType=grid_simple", str(source), str(destination)],
         description=f"repack {source} to grid_simple",
+    )
+
+
+def set_keys(source: Path, destination: Path, keys: dict[str, int]) -> None:
+    """``source``'s records with ``keys`` set and nothing repacked: the
+    header rewrite that makes a CMA ensemble product the plain template it
+    stands in for (:func:`xuebuild.cmageps.rewrite_keys`)."""
+    assignments = ",".join(f"{key}={value}" for key, value in keys.items())
+    run_command(
+        [require_command("grib_set"), "-s", assignments, str(source), str(destination)],
+        description=f"set {assignments} on {source}",
     )
 
 

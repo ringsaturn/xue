@@ -18,15 +18,18 @@ module attribute at call time, so a test that patches
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from . import cmadust, fetch, silam
+from . import cmadust, cmageps, fetch, silam
 from .errors import DownloadError
 from .model import GfsRun
 from .sources import SourceSpec
+
+LOG = logging.getLogger(__name__)
 
 Exists = Callable[[str], bool]
 InputIds = tuple[str, ...] | None
@@ -225,6 +228,60 @@ class MeteoFranceArpege(FrameFeed):
         return fetch._download_arpege_payload(run, forecast_hour, spec, destination, input_ids)
 
 
+class CmaGeps(FrameFeed):
+    """CMA GRAPES GEPS's ensemble product files off two WIS2 caches
+    (:mod:`xuebuild.cmageps`): one file per lead time with no index, whose
+    central records are found by walking the message heads over Range and
+    rewritten to the plain templates."""
+
+    def __init__(self) -> None:
+        # The run's listing, taken once before the frames: every frame
+        # reads its file from it.
+        self._listings: dict[tuple[str, str], dict[int, list[cmageps.CacheObject]]] = {}
+
+    def object_url(self, spec: SourceSpec, run: GfsRun, forecast_hour: int) -> str:
+        return cmageps.object_url(run, forecast_hour)
+
+    def is_complete(
+        self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
+    ) -> bool:
+        # Neither cache holds every file of a run; their listings together
+        # must name every lead time.
+        return cmageps.run_is_complete(spec, run, hours, fetch=fetch.fetch_text)
+
+    def prepare(self, spec: SourceSpec, run: GfsRun, forecast_hours: list[int], destination: Path, *, force: bool) -> None:
+        objects = cmageps.list_run(run, fetch=fetch.fetch_text)
+        missing = [hour for hour in forecast_hours if not objects.get(hour)]
+        if missing:
+            # A cache read by name may still hold them; a frame no cache
+            # serves fails the run.
+            LOG.warning(
+                "%s run %s: no listing names +%s h; trying the caches read by name",
+                spec.manifest_model,
+                run.id,
+                ", +".join(map(str, missing[:8])) + (" ..." if len(missing) > 8 else ""),
+            )
+        self._listings[(spec.id, run.id)] = objects
+
+    def frame_payload(
+        self, spec: SourceSpec, run: GfsRun, forecast_hour: int, destination: Path, input_ids: InputIds
+    ) -> bytes:
+        from .eccodescli import set_keys
+
+        objects = self._listings.get((spec.id, run.id))
+        if objects is None:
+            objects = cmageps.list_run(run, fetch=fetch.fetch_text)
+        return cmageps.frame_records(
+            spec,
+            run,
+            forecast_hour,
+            fetch._frame_variable_ids(spec, forecast_hour, input_ids),
+            cmageps.candidates(run, forecast_hour, objects),
+            fetch.fetch_range,
+            set_keys,
+        )
+
+
 # -- one series per variable ---------------------------------------------------
 
 
@@ -419,6 +476,7 @@ FEEDS: dict[str, Fetcher] = {
     "ecmwf-open-data": EcmwfOpenData(),
     "dwd-icon-eu": DwdIconEu(),
     "meteofrance-arpege": MeteoFranceArpege(),
+    "cmageps": CmaGeps(),
     "open-meteo": OpenMeteo(),
     "cmadust": CmaDust(),
     "fmi-silam": FmiSilam(),

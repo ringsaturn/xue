@@ -302,6 +302,7 @@ export const REGISTRY = {
     "cfs": {"label": "CFSv2", "product": "time-grib-01", "latestFilename": "latest-cfs.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "iconeu": {"label": "ICON-EU", "product": "iconeu", "latestFilename": "latest-iconeu.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "arpege": {"label": "ARPEGE", "product": "arpege", "latestFilename": "latest-arpege.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
+    "cmageps": {"label": "CMA-GEPS", "product": "cma-geps-0p25", "latestFilename": "latest-cmageps.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "woof": {"label": "WOOF-WRF", "product": "nest", "latestFilename": null, "observation": false, "coreBundleIds": ["tmp2m"], "cadenceSeconds": null},
     "efas": {"label": "EFAS-v5", "product": "hres", "latestFilename": null, "observation": false, "coreBundleIds": ["dis06"], "cadenceSeconds": null},
     "efaswb": {"label": "EFAS-v5-WB", "product": "water_balance", "latestFilename": null, "observation": false, "coreBundleIds": ["dis06"], "cadenceSeconds": null},

@@ -168,6 +168,15 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // Météo-France ARPEGE, the global model on its 0.25° grid: hourly to F048,
   // three-hourly to F102.
   arpege: {},
+  // CMA GRAPES GEPS, the China Meteorological Administration's global
+  // ensemble, as WMO WIS2 carries it: not a member but the ensemble's centre,
+  // the median (the mean for the 500 hPa height and the sea-level pressure),
+  // on the 0.25° grid without its pole rows (1440 × 720). Six-hourly to F360
+  // from the 00Z and 12Z cycles. No wind components exist, only speeds, so
+  // the gust takes the wind's tile.
+  cmageps: {
+    railCore: ["tmp2m", "prate", "gust", "tcdc"],
+  },
   // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
   // Not a live feed: the run is a fixed archive published as showcase
@@ -518,7 +527,7 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
   return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
-/** The datasets in the model switch's order: the eleven live forecasts, the
+/** The datasets in the model switch's order: the twelve live forecasts, the
  * ten rolling observation windows (MRMS and its 3D volume, the JMA
  * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
  * Japan box, and the SWPC aurora probability) and the geostationary
@@ -538,6 +547,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "rrfs",
   "iconeu",
   "arpege",
+  "cmageps",
   "gefsaero",
   "cmadust",
   "silam",

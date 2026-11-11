@@ -191,6 +191,27 @@ UTC ones about 5 h. The same basic set as `iconeu`; the gust is the
 maximum over the hour ending at the frame. Data: Météo-France, Licence
 Ouverte / Etalab 2.0.
 
+### CMA GRAPES GEPS ensemble median (`cmageps`)
+
+0.25° global without the pole rows (1440 × 720 cells, centres 89.875°N to
+89.875°S), 6-hourly to F360 from the 00 / 12 UTC cycles. **Not a member
+and not a deterministic run: the centre of the ensemble** (CMA GRAPES GEPS
+v1.3, 30 perturbed members and the control), which is all CMA exchanges —
+the ensemble mean of the 500 hPa geopotential height and the mean sea
+level pressure (the only statistic it publishes of those two), and the
+ensemble median (50th percentile) of everything else: 2 m and 850 hPa
+temperature, precipitation rate (the median of the total over the six
+hours ending at the frame, divided by six; from F006), 10 m gust (the
+instantaneous gust, published under GFS's gust identity; from F006), total
+cloud cover (from F006, since the analysis file's is a field of zeros) and
+CAPE. Every field keeps the identity the deterministic sources use, so it
+compares with them directly, but a median is smoother than any member, and
+a precipitation median is drier than the mean wherever only some members
+rain. No wind components (CMA exchanges only speeds). A run is complete on
+the caches about 18–20 UTC the same day for both cycles. Data: China
+Meteorological Administration (CMA), via WMO WIS2, core data under the WMO
+Unified Data Policy, free and unrestricted.
+
 ## Observations (rolling windows)
 
 A rolling window is rebuilt every few minutes; each build is a round under

@@ -48,7 +48,7 @@ RRFS_ISOBARIC_IDS = (
 
 #: How a feed packs the GRIB records a frame is cut from
 #: (:attr:`SourceSpec.packing`).
-Packing = Literal["published", "ccsds"]
+Packing = Literal["published", "ccsds", "jpeg2000"]
 
 
 @dataclass(frozen=True)
@@ -142,7 +142,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "gefsaero", "cfs",
-    "iconeu", "arpege", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -346,14 +346,16 @@ class SourceSpec:
     side, so the wheel's own source table carries nothing for it."""
     packing: Packing = "published"
     """How the feed packs the GRIB records a frame is cut from.
-    ``published``, every feed but five, is a packing the GDAL a build
+    ``published``, every feed but six, is a packing the GDAL a build
     converts through reads as it comes. ``ccsds`` is CCSDS/AEC (DRS
     template 5.42) — the ECMWF open data, DWD's ICON-EU and Météo-France's
-    ARPEGE — which GDAL builds without libaec cannot decode, so the fetch
-    repacks every frame to ``grid_simple`` with eccodes' ``grib_set``
-    before writing it, and every build job of the source installs the
-    eccodes tools (``assemble.group_needs_eccodes``, the matrix's
-    ``eccodes``). Read on the Python side only, like :attr:`feed`."""
+    ARPEGE — which GDAL builds without libaec cannot decode, and
+    ``jpeg2000`` is DRS 5.40 — CMA GRAPES GEPS — which GDAL builds without
+    OpenJPEG cannot; the fetch repacks every frame of either to
+    ``grid_simple`` with eccodes' ``grib_set`` before writing it, and
+    every build job of the source installs the eccodes tools
+    (``assemble.group_needs_eccodes``, the matrix's ``eccodes``). Read on
+    the Python side only, like :attr:`feed`."""
     fetch_concurrency: int = 4
     """Frames fetched in parallel. Each frame costs several fresh HTTPS
     round-trips, so sequential fetching is latency-bound. NOAA's bucket and
@@ -1829,6 +1831,47 @@ SOURCES: dict[str, SourceSpec] = {
         statistical_processes=(("prate", 0), ("gust", 2)),
         bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "orog"),
         bundle_vector_ids=("wind10m",),
+    ),
+    # CMA GRAPES GEPS v1.3, the China Meteorological Administration's
+    # global ensemble (30 perturbed members and the control), as WMO WIS2
+    # exchanges it: no members, one file of ensemble products per lead time
+    # on the two global caches (xuebuild/cmageps.py). What is published is
+    # the ensemble's centre under the deterministic identities: the mean of
+    # the 500 hPa height and the sea-level pressure, the only statistics
+    # CMA writes of them, and the median (50th percentile) of every other
+    # field. The precipitation is the median of the total over the six
+    # hours ending at each step (``interval_precipitation``, the registry's
+    # ``apcp``), which no analysis carries; the gust is the median of the
+    # instantaneous 10 m gust, published on GFS's instantaneous gust
+    # identity. The files are on the 0.25° grid without its pole rows
+    # (cell centres 89.875°N to 89.875°S), JPEG2000 packed. The 00Z and
+    # 12Z cycles run to 360 hours, three-hourly to 78 and six-hourly after;
+    # only the six-hourly files are read.
+    "cmageps": SourceSpec(
+        id="cmageps",
+        feed="cmageps",
+        packing="jpeg2000",
+        manifest_model="CMA-GEPS",
+        product="cma-geps-0p25",
+        latest_filename="latest-cmageps.json",
+        # Six-hourly through 360 hours: 61 frames.
+        steps=((360, 6),),
+        input_variable_ids=("hgt500", "prmsl", "apcp", "tmp2m", "tmp850", "gust", "cape", "tcdc"),
+        accumulated_precipitation=False,
+        interval_precipitation=True,
+        # The analysis file carries the gust and the cloud cover as fields of
+        # zeros (the analysis has no such diagnostic), so neither is read
+        # there: their series start at the first step, like the rate's.
+        optional_at_analysis=("apcp", "gust", "tcdc"),
+        statistical_processes=(("prate", 0),),
+        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "cape", "tmp850", "hgt500"),
+        production_grid=(1440, 720),
+        # 48 x 48 cells is 12° x 12°: 30 x 15 = 450 tiles, no clipped edge.
+        tile=(48, 48),
+        # Each frame is a walk of some eighty message heads over Range and
+        # eight record reads, on public S3 buckets.
+        fetch_concurrency=8,
+        cycle_hours=12,
     ),
     # Recast Systems' WOOF service: a WRF-ARW run commissioned for the Mount
     # Fuji showcase, nested 12 → 3 → 1 → 0.5 km from the GFS analysis, read
