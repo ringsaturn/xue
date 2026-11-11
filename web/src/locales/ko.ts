@@ -178,7 +178,7 @@ export const ko: Record<MessageKey, string> = {
   creditsHimawari: "위성 영상: 히마와리 9호 AHI, 일본 기상청, NOAA 오픈 데이터 경유 (재투영)",
   creditsGoes: "위성 영상: GOES-19 동부·GOES-18 서부 ABI, NOAA NESDIS, NOAA 오픈 데이터 경유 (재투영)",
   creditsMeteosat: "위성 영상: EUMETSAT Meteosat 데이터를 가공하여 사용 {year}; Meteosat-12 FCI, 매 정시 주기, CC-BY-4.0 (재투영)",
-  creditsSounding: "라디오존데 관측: GTS TEMP 전문 (WIS2 경유), 각국 기상기관",
+  creditsSounding: "라디오존데 관측: GTS TEMP 전문 (WIS2 경유), 각국 기상기관; 프랑스 지점: Météo-France 공개 데이터 (Licence Ouverte 2.0)",
   creditsAirport: "공항 METAR·TAF: 각국 기상기관 (NOAA/NWS AWC 경유)",
   creditsFirms: "활성 화재: LANCE FIRMS NRT, VIIRS 375 m 및 MODIS, NASA ESDIS",
   creditsGibs: "일별 영상: MODIS·VIIRS 보정 반사도, NASA ESDIS",

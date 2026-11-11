@@ -179,7 +179,7 @@ export const tr: Record<MessageKey, string> = {
   creditsHimawari: "Uydu görüntüleri: Himawari-9 AHI, JMA, NOAA açık veri üzerinden (yeniden projeksiyon)",
   creditsGoes: "Uydu görüntüleri: GOES-19 Doğu ve GOES-18 Batı ABI, NOAA NESDIS, NOAA açık veri üzerinden (yeniden projeksiyon)",
   creditsMeteosat: "Uydu görüntüleri: değiştirilmiş EUMETSAT Meteosat verisi içerir {year}; Meteosat-12 FCI, saatlik döngü, CC-BY-4.0 (yeniden projeksiyon)",
-  creditsSounding: "Radyosonda gözlemleri: WIS2 üzerinden GTS TEMP, ulusal meteoroloji servisleri",
+  creditsSounding: "Radyosonda gözlemleri: WIS2 üzerinden GTS TEMP, ulusal meteoroloji servisleri; Fransa: Météo-France açık verisi (Licence Ouverte 2.0)",
   creditsAirport: "Havalimanı METAR ve TAF: dünya meteoroloji servisleri, NOAA/NWS AWC üzerinden",
   creditsFirms: "Aktif yangınlar: LANCE FIRMS NRT, VIIRS 375 m ve MODIS, NASA ESDIS",
   creditsGibs: "Günlük görüntüler: MODIS ve VIIRS düzeltilmiş yansıtma, NASA ESDIS",
