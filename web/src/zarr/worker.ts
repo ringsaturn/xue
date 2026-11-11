@@ -140,12 +140,13 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   pumpPrefetch();
 }
 
-async function decodeFrame(message: ZarrDecodeMessage): Promise<Uint8Array> {
+/** Decode one frame into `into`, the buffer that is posted back. */
+async function decodeFrame(message: ZarrDecodeMessage, into: Uint8Array): Promise<Uint8Array> {
   const active = session;
   if (!active) throw new Error("store is not initialized");
   decodeFetchCount += 1;
   try {
-    return await active.decodeFrame(message.variableId, message.frameOffset, message.tiles ?? null);
+    return await active.decodeFrame(message.variableId, message.frameOffset, message.tiles ?? null, into);
   } finally {
     decodeFetchCount -= 1;
     postProgress();
@@ -178,10 +179,13 @@ self.onmessage = async (event: MessageEvent<ZarrWorkerRequest>) => {
     }
     if (message.type === "decode") {
       const started = performance.now();
-      const plane = await decodeFrame(message);
+      const active = session;
+      if (!active) throw new Error("store is not initialized");
+      // The plane is assembled straight into the buffer posted back, taken
+      // before any await: concurrent decodes never share one.
       let buffer = recycled.pop();
-      if (!buffer || buffer.byteLength !== plane.byteLength) buffer = new ArrayBuffer(plane.byteLength);
-      new Uint8Array(buffer).set(plane);
+      if (!buffer || buffer.byteLength !== active.planeLength) buffer = new ArrayBuffer(active.planeLength);
+      await decodeFrame(message, new Uint8Array(buffer));
       post(
         {
           type: "frame",

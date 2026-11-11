@@ -701,6 +701,22 @@ describe("ZarrSession", () => {
     expect(session.residentBytes).toBeGreaterThanOrEqual(session.payloadBytes);
   });
 
+  it("gives every concurrent decode of one time chunk its own frame", async () => {
+    const { session, bundle } = await open("bundles.zarr", "tmp2m", "tmp2m.xue");
+    // The chunk local first, so the decodes below all resume in one burst
+    // of microtasks, as a precipitation total's window asks for them.
+    await session.decodeFrame(1, 0);
+    const offsets = [5, 4, 3, 2, 1, 0];
+    const planes = await Promise.all(offsets.map((offset) => session.decodeFrame(1, offset)));
+    for (const [at, offset] of offsets.entries()) {
+      expect(Buffer.from(planes[at]!)).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+    }
+    // A buffer handed in is the one written and returned.
+    const into = new Uint8Array(session.planeLength);
+    expect(await session.decodeFrame(1, 3, null, into)).toBe(into);
+    expect(Buffer.from(into)).toEqual(Buffer.from(bundle.decodeFrame(1, 3)));
+  });
+
   it("assembles the same frames and series over whole objects, one GET per shard", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });

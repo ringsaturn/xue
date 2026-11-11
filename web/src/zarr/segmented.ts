@@ -199,9 +199,14 @@ export class SegmentedZarrSession implements ZarrReader {
     return this.segments[segment]!.frameResident(variableId, offset, rects);
   }
 
-  async decodeFrame(variableId: number, frameOffset: number, rects: readonly TileRect[] | null = null): Promise<Uint8Array> {
+  async decodeFrame(
+    variableId: number,
+    frameOffset: number,
+    rects: readonly TileRect[] | null = null,
+    into?: Uint8Array,
+  ): Promise<Uint8Array> {
     const { segment, offset } = this.locate(frameOffset);
-    return this.segments[segment]!.decodeFrame(variableId, offset, rects);
+    return this.segments[segment]!.decodeFrame(variableId, offset, rects, into);
   }
 
   /** One cell's codes on every frame of the joined axis, segment after
