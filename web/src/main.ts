@@ -700,6 +700,15 @@ let terrainContours: TerrainContours | null = null;
  * once the style has loaded, since they go in under its first label. */
 let coordinateGrid: CoordinateGrid | null = null;
 
+/** The shell's decorative instrument grid (`.atmosphere`) is fixed to the
+ * screen; under a coordinate grid it reads as one more set of lines that
+ * do not move with the map, so it steps aside while either grid is on. */
+function syncInstrumentGrid(): void {
+  document.body.toggleAttribute("data-coordinate-grid", grid.mgrs || grid.latlon);
+}
+syncInstrumentGrid();
+onMapPrefsChange(syncInstrumentGrid);
+
 function startCoordinateGrid(): void {
   const mapBox = () => map.getContainer().getBoundingClientRect();
   // The edge numbers sit clear of the controls laid over the map's edges.
