@@ -3,10 +3,10 @@
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
 > forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES,
 > NOAA HRRR, NOAA RRFS, NOAA GEFS-Aerosols, NCEP CFSv2, DWD ICON-EU and Météo-France
-> ARPEGE runs — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
+> ARPEGE runs and the centre of the CMA GRAPES GEPS ensemble — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
 > level pressure, isobaric geopotential height, temperature, humidity and
 > water vapour flux, aerosol optical depth and particulate matter, out to
-> 240 hours (360 for AIFS and IFS HRES, 18 for HRRR, 84 for RRFS, 120 for
+> 240 hours (360 for AIFS, IFS HRES and CMA GRAPES GEPS, 18 for HRRR, 84 for RRFS, 120 for
 > GEFS-Aerosols and ICON-EU, 102 for ARPEGE, 6552 — thirty-nine weeks —
 > for CFSv2) — as
 > smooth animations over a
@@ -20,7 +20,7 @@ Facts worth getting right:
 
 - Live sources, one shell (the ids are the `?model=` and `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`, `rrfs`,
-  `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`. Observations:
+  `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
   `mrms`, `jma`, `aurora` and the satellites `himawari`, `himawarijp`,
   `goeseast`, `goeswest`, `meteosat`. Cases only (no live pointer, no place
   in the model switch): `mrms3d`, `woof`, `efas`, `efaswb`, `era5`, `cams`.
@@ -130,7 +130,16 @@ Facts worth getting right:
   `tmp2m`, `prate`, `prmsl`, `gust`, `tcdc` and the vector pair `wind10m`,
   six each; `prate` is de-accumulated from the run total and, like `gust`
   (the maximum over the step, or the hour on ARPEGE, ending at the frame),
-  has no analysis frame. CMA:
+  has no analysis frame. CMA GRAPES GEPS (`cmageps`): the ensemble's
+  centre, not a member — `hgt500` and `prmsl` are the ensemble mean (the
+  only statistic CMA exchanges of them), `tmp2m`, `tmp850`, `prate`,
+  `gust` (the 10 m instantaneous gust), `tcdc` and `cape` the ensemble
+  median (50th percentile); `prate` is the median six-hour total ending at
+  the frame over six, and it, `gust` and `tcdc` have no analysis frame (the
+  analysis file's gust and cloud cover are zeros). No wind components:
+  only speeds are exchanged. A median is smoother than any member and a
+  precipitation median drier than the mean where only some members rain.
+  CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ), `prate`
   (the MRMS precipitation rate, mm/h) and `rqi` (the radar quality index,
   0–1; code 0 is outside radar coverage, which `cref` code 0 does not tell
@@ -182,7 +191,10 @@ Facts worth getting right:
   what is served is a converted derivative ("Contains modified ECMWF open
   data"); `iconeu` is DWD open data under CC BY 4.0 ("Source: Deutscher
   Wetterdienst", quantized); `arpege` is Météo-France data from data.gouv.fr
-  under the Licence Ouverte / Etalab 2.0 ("Source: Météo-France"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
+  under the Licence Ouverte / Etalab 2.0 ("Source: Météo-France");
+  `cmageps` is CMA data exchanged through WMO WIS2 as core data under the
+  WMO Unified Data Policy, free and unrestricted, attribution requested
+  ("Source: China Meteorological Administration (CMA), via WMO WIS2"); `cma` is a CMA product (中国气象局国家气象中心, www.nmc.cn) and `mrms` a
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
@@ -264,7 +276,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|iconeu|arpege|gefsaero|cmadust|silam|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
@@ -474,7 +486,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-mrms.json`, `latest-jma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),

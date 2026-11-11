@@ -2623,11 +2623,11 @@ def fetch_frame(
     LOG.info("downloading GRIB %s", output)
     url = feed.object_url(spec, run, forecast_hour)
     payload = feed.frame_payload(spec, run, forecast_hour, destination, input_ids)
-    if spec.packing == "ccsds":
+    if spec.packing != "published":
         # CCSDS/AEC packed messages (DRS 5.42: the ECMWF open data, DWD's
-        # and Météo-France's) are repacked to grid_simple so any GDAL build
-        # can read the stored file.
-        raw = output.with_suffix(".ccsds.grib2")
+        # and Météo-France's) and JPEG2000 packed ones (5.40: CMA's) are
+        # repacked to grid_simple so any GDAL build can read the stored file.
+        raw = output.with_suffix(f".{spec.packing}.grib2")
         repacked = output.with_suffix(".repack.grib2")
         write_bytes_atomic(raw, payload)
         try:

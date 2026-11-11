@@ -418,12 +418,14 @@ class FeedTests(unittest.TestCase):
                 self.assertEqual(spec.feed == "satellite", spec.platform is not None)
                 self.assertEqual(spec.feed == "open-meteo", spec.open_meteo is not None)
                 self.assertEqual(spec.feed == "ecmwf-open-data", source_id in ECMWF_OPEN_DATA_MODELS)
-                self.assertIn(spec.packing, ("published", "ccsds"))
+                self.assertIn(spec.packing, ("published", "ccsds", "jpeg2000"))
 
     def test_only_one_grib_per_hour_feeds_are_repacked(self) -> None:
         ccsds = {source_id for source_id, spec in SOURCES.items() if spec.packing == "ccsds"}
         self.assertEqual(ccsds, {"ecmwf", "ifs", "aifs", "iconeu", "arpege"})
-        for source_id in ccsds:
+        jpeg2000 = {source_id for source_id, spec in SOURCES.items() if spec.packing == "jpeg2000"}
+        self.assertEqual(jpeg2000, {"cmageps"})
+        for source_id in ccsds | jpeg2000:
             self.assertIsInstance(fetcher(SOURCES[source_id]), FrameFeed)
 
     def test_a_local_source_is_not_fetched(self) -> None:

@@ -29,7 +29,6 @@ import math
 import os
 import re
 import struct
-import urllib.parse
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -40,11 +39,13 @@ from xml.etree import ElementTree
 
 import numpy as np
 
-from .common import S3_NAMESPACE, s3_list_pages, s3_list_query
+from . import wis2
 from .errors import DownloadError
 from .idx import ByteRange
 from .model import GfsRun
 from .sources import SourceSpec
+from .wis2 import Cache, CacheObject
+from .wis2 import object_url as object_url
 
 LOG = logging.getLogger(__name__)
 
@@ -54,21 +55,10 @@ MODEL = "cmadust"
 #: The Met Office/NOAA cache keys a file by its name under a fixed prefix;
 #: JMA's puts a directory named for the file and an upload stamp between
 #: the prefix and the name, so a key is only ever learnt from a listing.
-NOAA_CACHE_URL = os.environ.get("XUE_CMADUST_NOAA_CACHE_URL", "https://wis2globalcache.s3.amazonaws.com").rstrip("/")
+NOAA_CACHE_URL = os.environ.get("XUE_CMADUST_NOAA_CACHE_URL", wis2.NOAA_CACHE_URL).rstrip("/")
 NOAA_CACHE_PREFIX = "data/cn-cma/data/core/weather/prediction/forecast/medium-range/deterministic/limited-area/"
-JMA_CACHE_URL = os.environ.get(
-    "XUE_CMADUST_JMA_CACHE_URL", "https://global-cache-of-japan.s3.ap-northeast-1.amazonaws.com"
-).rstrip("/")
+JMA_CACHE_URL = os.environ.get("XUE_CMADUST_JMA_CACHE_URL", wis2.JMA_CACHE_URL).rstrip("/")
 JMA_CACHE_PREFIX = "wis2/data/cn-cma:data.core.weather.prediction.forecast.medium-range.deterministic.limited-area/"
-
-
-@dataclass(frozen=True)
-class Cache:
-    name: str
-    base_url: str
-    prefix: str
-
-
 CACHES = (Cache("noaa", NOAA_CACHE_URL, NOAA_CACHE_PREFIX), Cache("jma", JMA_CACHE_URL, JMA_CACHE_PREFIX))
 
 #: The file's name for each published variable, and the unit it is in.
@@ -99,7 +89,6 @@ HEAD_LIMIT = 1 << 20
 FETCH_FILENAME = "fetch.json"
 
 _NAME_RE = re.compile(r"^Z_NAFP_C_BABJ_(\d{10})0000_P_CEMC-CMA-CW-DUST_15KM_ASIA-(\d{5})\.nc$")
-_LISTING = "WIS2 cache listing"
 
 
 def file_name(run: GfsRun, hour: int) -> str:
@@ -126,49 +115,19 @@ def parse_file_name(name: str) -> tuple[datetime, int] | None:
 
 def run_prefix(cache: Cache, run: GfsRun) -> str:
     """The listing prefix of every file of one run on one cache."""
-    return f"{cache.prefix}Z_NAFP_C_BABJ_{run.time:%Y%m%d%H}0000"
-
-
-def object_url(cache: Cache, key: str) -> str:
-    return f"{cache.base_url}/{urllib.parse.quote(key, safe='/')}"
-
-
-@dataclass(frozen=True)
-class CacheObject:
-    cache: str
-    url: str
-    size: int
+    return wis2.run_prefix(cache, run)
 
 
 def parse_listing(root: ElementTree.Element, cache: Cache, run: GfsRun) -> dict[int, list[CacheObject]]:
-    """The run's files on one listing page, by lead hour. A key counts when
-    its last segment is a file of this run; on the JMA cache two uploads of
-    one file may both be listed, the newer (the larger stamp) first."""
-    found: dict[int, list[tuple[str, CacheObject]]] = {}
-    for contents in root.iter(f"{S3_NAMESPACE}Contents"):
-        key = contents.findtext(f"{S3_NAMESPACE}Key") or ""
-        parsed = parse_file_name(key.rsplit("/", 1)[-1])
-        if parsed is None or parsed[0] != run.time:
-            continue
-        try:
-            size = int(contents.findtext(f"{S3_NAMESPACE}Size") or "")
-        except ValueError:
-            continue
-        found.setdefault(parsed[1], []).append((key, CacheObject(cache.name, object_url(cache, key), size)))
-    return {hour: [item for _, item in sorted(items, key=lambda pair: pair[0], reverse=True)] for hour, items in found.items()}
+    """The run's files on one listing page, by lead hour
+    (:func:`xuebuild.wis2.parse_listing`)."""
+    return wis2.parse_listing(root, cache, run, parse_file_name)
 
 
 def list_run(run: GfsRun, *, fetch: Callable[[str], str]) -> dict[int, list[CacheObject]]:
     """Every file of one run on both caches, by lead hour, in the order to
-    try them. A cache that cannot be listed is an error, not an empty
-    cache: a run must never read as incomplete because a listing failed."""
-    objects: dict[int, list[CacheObject]] = {}
-    for cache in CACHES:
-        prefix = run_prefix(cache, run)
-        for root in s3_list_pages(lambda token: fetch(f"{cache.base_url}/?{s3_list_query(prefix, token)}"), _LISTING):
-            for hour, items in parse_listing(root, cache, run).items():
-                objects.setdefault(hour, []).extend(items)
-    return objects
+    try them (:func:`xuebuild.wis2.list_run`)."""
+    return wis2.list_run(CACHES, run, parse_file_name, fetch=fetch)
 
 
 def missing_hours(spec: SourceSpec, hours: int, objects: dict[int, list[CacheObject]]) -> list[int]:

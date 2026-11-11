@@ -260,6 +260,25 @@ fetched for `orog` alone (`fetch_frame(run, 0, …, input_ids=("orog",))`),
 cut with the window above and appended to each `f000` crop, the records
 before them untouched.
 
+`cmageps.2026111012.f000.crop.grib2` and `cmageps.2026111012.f006.crop.grib2`
+are an 80 by 80 cell window of the analysis and the first six-hourly step
+of the 2026-11-10 12:00 UTC CMA GRAPES GEPS cycle, 130°E to 149.75°E and
+49.875°N to 30.125°N (Japan and the Pacific east of it, with up to 16 mm of
+median precipitation in the six hours), every record the fetcher writes in
+source order, already rewritten to the plain templates and repacked: five
+at the analysis (no precipitation, gust or cloud cover is read there) and
+eight at the step. GDAL reads the global grid from 180°W, hence the column
+offset; the grid has no pole rows, so the first row is 89.875°N. Cut with:
+
+```sh
+python -m xuebuild fetch --model cmageps --run 2026111012 --hours 6 --raw-dir /tmp/raw
+for h in 000 006; do
+  gdal_translate -srcwin 1240 160 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/cmageps.2026111012/cmageps.2026111012.f$h.grib2 \
+    tests/fixtures/cmageps.2026111012.f$h.crop.grib2
+done
+```
+
 The soil records of both ECMWF sources were added later the way the GFS
 ones were: fetched alone by byte range off each frame's `.index` (the
 Google mirror still served the September cycles), repacked to grid_simple

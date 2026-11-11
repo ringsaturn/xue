@@ -8,7 +8,8 @@
 **Live weather models, radar and satellite, played back in the browser:
 <https://xue.ringsaturn.me>**
 
-- Forecasts from GFS, ECMWF IFS and AIFS, HRRR, ICON-EU, ARPEGE and CFSv2: temperature,
+- Forecasts from GFS, ECMWF IFS and AIFS, HRRR, ICON-EU, ARPEGE, the CMA GRAPES GEPS
+  ensemble median and CFSv2: temperature,
   precipitation, wind particles, isobars, upper-air charts, clear-air
   turbulence; skew-T soundings and point meteograms anywhere.
 - Observations: MRMS, NEXRAD and JMA radar; Himawari, GOES and
@@ -43,6 +44,7 @@ is no longer published and every decoder still reads it.
 | NOAA RRFS with smoke and dust (`rrfs`) | 3 km Lambert contiguous US · hourly to F84 | <a href="https://dataset.ringsaturn.me/xue/latest-rrfs.json"><img alt="the newest rrfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-rrfs.json&query=%24.runTime&label=&color=8e5fb0&style=flat-square&cacheSeconds=600" width="170"></a> |
 | DWD ICON-EU (`iconeu`) | 0.0625° Europe · hourly to F78, 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-iconeu.json"><img alt="the newest iconeu run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-iconeu.json&query=%24.runTime&label=&color=5a6b8c&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Météo-France ARPEGE (`arpege`) | 0.25° global · hourly to F48, 3-hourly to F102 | <a href="https://dataset.ringsaturn.me/xue/latest-arpege.json"><img alt="the newest arpege run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-arpege.json&query=%24.runTime&label=&color=3d5a98&style=flat-square&cacheSeconds=600" width="170"></a> |
+| CMA GRAPES GEPS ensemble median (`cmageps`) | 0.25° global · 6-hourly to F360; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cmageps.json"><img alt="the newest cmageps run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cmageps.json&query=%24.runTime&label=&color=b5523b&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Recast WOOF-WRF (`woof`) | 0.005° (500 m) nest over Mount Fuji · hourly from F1 | showcase cases only, no live run |
 | NOAA GEFS-Aerosols (`gefsaero`) | 0.25° global · 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-gefsaero.json"><img alt="the newest gefsaero run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-gefsaero.json&query=%24.runTime&label=&color=8a6d3b&style=flat-square&cacheSeconds=600" width="170"></a> |
 | CMA-CW/DUST sand and dust (`cmadust`) | 0.15° Asia · hourly to F72, 3-hourly to F168; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cmadust.json"><img alt="the newest cmadust run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cmadust.json&query=%24.runTime&label=&color=a0703c&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -73,7 +75,7 @@ driver. Some sources need more (eccodes, om2nc, credentials); see
 uv sync                   # creates .venv with NumPy and the xuepy wheel
 make check                # verifies tool versions
 make mvp                  # builds the latest GFS run and the frontend
-make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, rrfs, gefsaero, cmadust, silam, cfs, iconeu, arpege
+make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, rrfs, gefsaero, cmadust, silam, cfs, iconeu, arpege, cmageps
 make serve                # serves the result on 127.0.0.1
 ```
 
@@ -218,6 +220,11 @@ The other sources:
   [jma-radar](https://github.com/ringsaturn/jma-radar).
 - CMA radar mosaic: a product of the China Meteorological Administration
   (中国气象局国家气象中心, www.nmc.cn).
+- CMA GRAPES GEPS (`cmageps`): Source: China Meteorological Administration
+  (CMA), via WMO WIS2, where its ensemble products are exchanged as core
+  data under the WMO Unified Data Policy (free and unrestricted); what is
+  published is the ensemble median (the mean for the 500 hPa height and the
+  sea-level pressure), not a member.
 - CMA-CW/DUST sand and dust forecast: the China Meteorological
   Administration's CMA-CW v1.0/DUST, run for the WMO SDS-WAS Asian Center,
   obtained through the WMO WIS2 global caches, where it is exchanged as

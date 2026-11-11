@@ -278,7 +278,14 @@
         "statistical": 1,
         "aliases": [],
         "alternates": [],
-        "gdal": []
+        "gdal": [
+          {
+            "rule": "surface",
+            "elements": [
+              "APCP06"
+            ]
+          }
+        ]
       }
     },
     "prate_ave": {
@@ -21074,6 +21081,93 @@
       "seriesFile": false,
       "downsample": null,
       "cycleHours": 6,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "gridRelativeWinds": false,
+      "gaussianN": null,
+      "video": false,
+      "catCalibration": []
+    },
+    "cmageps": {
+      "id": "cmageps",
+      "manifestModel": "CMA-GEPS",
+      "product": "cma-geps-0p25",
+      "latestFilename": "latest-cmageps.json",
+      "steps": [
+        [
+          360,
+          6
+        ]
+      ],
+      "inputVariableIds": [
+        "hgt500",
+        "prmsl",
+        "apcp",
+        "tmp2m",
+        "tmp850",
+        "gust",
+        "cape",
+        "tcdc"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": true,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [
+        "apcp",
+        "gust",
+        "tcdc"
+      ],
+      "statisticalProcesses": [
+        [
+          "prate",
+          0
+        ]
+      ],
+      "bands": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "tmp2m",
+        "prate",
+        "prmsl",
+        "gust",
+        "tcdc",
+        "cape",
+        "tmp850",
+        "hgt500"
+      ],
+      "coreBundleIds": [
+        "tmp2m",
+        "prate"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        1440,
+        720
+      ],
+      "tile": [
+        48,
+        48
+      ],
+      "variantFactors": [
+        2
+      ],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 8,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": false,
+      "downsample": null,
+      "cycleHours": 12,
       "longCycles": [],
       "longCycleSteps": [],
       "gridRelativeWinds": false,

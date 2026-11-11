@@ -1,0 +1,79 @@
+name: publish cmageps
+
+# CMA GRAPES GEPS, the China Meteorological Administration's global
+# ensemble, on its 0.25° grid, six-hourly to F360 from the 00Z and 12Z
+# cycles: not a member but the ensemble's centre — the mean of the 500 hPa
+# height and the sea-level pressure, the median of the 2 m and 850 hPa
+# temperature, the six-hour precipitation, the gust, the cloud cover and
+# the CAPE. It is read from the WMO WIS2 global caches (Met Office/NOAA and
+# JMA, listed, then CMA's own by name); the fetch walks each file's message
+# heads by byte range, takes the central records and rewrites them to the
+# plain templates with eccodes. The pipeline lives in the reusable
+# publish.yml; this file only owns the schedule and the manual knobs.
+
+on:
+  schedule:
+    # The caches take a run in batches (measured 2026-11-06 to 11-11 off
+    # the objects' LastModified): a 00Z run's leads to about F072 land at
+    # 05:21Z and the rest at 18:04Z, a 12Z run's between 18:01Z and
+    # 19:01Z (20:01Z some days), with a few leads now and then held back
+    # to 03:02Z the next day. So both cycles are complete at about the same
+    # time in the evening, and the first pass takes the newer. `--run
+    # latest` walks back over the 12-hourly cycle grid and takes a run only
+    # once the listings together name every lead time, so a late run is
+    # skipped rather than half-published and picked up by the next pass.
+    - cron: "30 20 * * *"
+    # Idempotent second passes: a late batch, and the next-morning
+    # stragglers (until then the first pass falls back to the 00Z run).
+    # publish.yml exits early when an earlier pass already made the run live.
+    - cron: "30 22 * * *"
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (00Z or 12Z)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-cmageps-dry-{0}', github.run_id) || 'publish-cmageps' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: cmageps
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      # Every job walks each file's message heads to find its own records,
+      # some eighty Range reads a frame, so few jobs.
+      max_jobs: 2
+    secrets: inherit

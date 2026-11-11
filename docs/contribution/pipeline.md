@@ -108,8 +108,8 @@ commit). Widening a source's inputs means recutting its crop fixture
   records, one `.idx` + range set per family. Which code fetches a source
   is its `SourceSpec.feed`, looked up in `feeds.py`
   ([sources.md](sources.md), "Feeds"). A source whose `packing` is `ccsds`
-  (ECMWF open data, ICON-EU, ARPEGE) is repacked to `grid_simple` with
-  `grib_set` at fetch time.
+  (ECMWF open data, ICON-EU, ARPEGE) or `jpeg2000` (CMA GRAPES GEPS) is
+  repacked to `grid_simple` with `grib_set` at fetch time.
 - **The conversion**, one Python module per module of
   `rust/xue/src/encode/`, each mirrored by its namesake there:
   - `binconvert.py` (`convert.rs`): `convert_bin` as a run of named stages,
