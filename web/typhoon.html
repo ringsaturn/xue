@@ -58,16 +58,10 @@
             <span data-i18n="showcaseHome">Live forecast</span>
           </a>
           <div class="showcase-actions">
-            <button id="lang-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="langPickerAria" aria-label="Language">
+            <button id="settings-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="settingsAria" aria-label="Settings">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 5h8M7 5V3.5M9.2 5c0 3.4-2.4 6.2-6.2 7.6M5 8.4c1 1.9 2.8 3.4 5.2 4.1" />
-                <path d="M12.4 20l4-9.5 4 9.5M13.9 16.6h5" />
-              </svg>
-            </button>
-            <button id="theme-toggle" class="icon-button" type="button" data-i18n-aria="themeToggleAria" aria-label="Toggle light and dark">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M10 2a8 8 0 1 0 0 16z" />
-                <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </button>
           </div>
@@ -164,12 +158,19 @@
       </aside>
     </div>
 
-    <div id="lang-sheet" class="model-sheet lang-sheet" hidden>
+    <!-- The settings sheet: theme, language and units (no grids on this
+         map); rows written by settingssheet.ts. -->
+    <div id="settings-sheet" class="model-sheet settings-sheet" hidden>
       <div class="model-sheet-scrim" data-sheet-dismiss></div>
-      <div class="model-sheet-panel lang-panel" role="dialog" aria-modal="true" data-i18n-aria="langPickerAria" aria-label="Language">
+      <div class="model-sheet-panel settings-panel" role="dialog" aria-modal="true" data-i18n-aria="settingsAria" aria-label="Settings">
         <span class="sheet-grip" aria-hidden="true"></span>
-        <p class="sheet-heading" data-i18n="langPickerHeading">Language</p>
-        <div id="lang-list" class="lang-list" role="group"></div>
+        <p class="sheet-heading" data-i18n="settingsHeading">Settings</p>
+        <div id="settings-body" class="settings-body">
+          <div class="export-field settings-field">
+            <span class="export-caption" id="settings-language-caption" data-i18n="settingsLanguage">Language</span>
+            <div id="settings-languages" class="settings-languages" role="group" aria-labelledby="settings-language-caption"></div>
+          </div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/typhoon.ts"></script>
