@@ -9,10 +9,20 @@
  * Clicks, not a sheet over the canvas as the volume tools use: a measure
  * takes many vertices, and the map has to keep panning between them.
  *
- * Lengths and areas are on the sphere, and the edges are drawn as the great
- * circles they are measured along, so a line across an ocean bows on the
- * Mercator map as the distance it reads says it should. The geometry is
- * plain functions so the tests can read it without a map. */
+ * A length is the WGS84 ellipsoid's (`geodesy.ts`): the horizontal distance
+ * along the sea-level surface, what a chart or a route reads, not a path
+ * over the hills. Areas are on the sphere of the ellipsoid's area. The
+ * edges are drawn as great circles, within a hair of the ellipsoid's
+ * geodesics at the map's scale, so a line across an ocean bows on the
+ * Mercator map as the distance it reads says it should.
+ *
+ * A finished distance also reads the ground under it off the DEM
+ * (`terrain.ts`): the length along the surface with the climb and the
+ * descent, and the straight line between its two ends at their heights.
+ * A surface length depends on the resolution it is sampled at — the finer
+ * the DEM, the longer the path — so the reading names the resolution.
+ *
+ * The geometry is plain functions so the tests can read it without a map. */
 
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type {
@@ -25,14 +35,18 @@ import type {
 } from "maplibre-gl";
 
 import { contextInk } from "./casecontext";
-import { convertDistance, convertHeight, onUnitsChange, UNIT_LABELS, units } from "./units";
+import { AUTHALIC_RADIUS, geodesicDistance, straightLineDistance } from "./geodesy";
+import { onLocaleChange, t } from "./i18n";
+import { demElevationsAt, demPixelMetres, TERRAIN_MAX_ZOOM } from "./terrain";
+import { convertDistance, convertHeight, formatHeight, onUnitsChange, UNIT_LABELS, units } from "./units";
 
 export type MeasureKind = "distance" | "area";
 
 /** A longitude/latitude pair. */
 export type LonLat = [number, number];
 
-/** The mean Earth radius (IUGG), metres. */
+/** The mean Earth radius (IUGG), metres: the sphere the edges are drawn
+ * on. */
 export const EARTH_RADIUS = 6371008.8;
 
 /** A great-circle edge is drawn in steps no longer than this. */
@@ -44,14 +58,18 @@ export const SNAP_PIXELS = 8;
 
 const RADIANS = Math.PI / 180;
 
-/** The great-circle distance between two points, metres. */
+/** The ellipsoid distance between two points, metres. */
 export function distance(a: LonLat, b: LonLat): number {
+  return geodesicDistance(a[0], a[1], b[0], b[1]);
+}
+
+/** The great-circle angle between two points, radians: what the drawn
+ * edges are interpolated along. */
+function arc(a: LonLat, b: LonLat): number {
   const phi1 = a[1] * RADIANS;
   const phi2 = b[1] * RADIANS;
-  const dPhi = phi2 - phi1;
-  const dLambda = (b[0] - a[0]) * RADIANS;
-  const h = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) ** 2;
-  return 2 * EARTH_RADIUS * Math.asin(Math.min(1, Math.sqrt(h)));
+  const h = Math.sin((phi2 - phi1) / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(((b[0] - a[0]) * RADIANS) / 2) ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /** The length of a path through `points`, metres. */
@@ -69,11 +87,10 @@ export function unwrapLongitude(lon: number, reference: number): number {
 
 /** The great circle from `a` to `b` as points, `a` first and `b` last,
  * longitudes continuous from `a`'s. */
-export function greatCircle(a: LonLat, b: LonLat): LonLat[] {
-  const d = distance(a, b);
-  const steps = Math.min(MAX_STEPS, Math.max(1, Math.ceil(d / STEP_METRES)));
+export function greatCircle(a: LonLat, b: LonLat, stepMetres = STEP_METRES, maxSteps = MAX_STEPS): LonLat[] {
+  const delta = arc(a, b);
+  const steps = Math.min(maxSteps, Math.max(1, Math.ceil((delta * EARTH_RADIUS) / stepMetres)));
   if (steps === 1) return [a, [unwrapLongitude(b[0], a[0]), b[1]]];
-  const delta = d / EARTH_RADIUS;
   const vector = ([lon, lat]: LonLat): [number, number, number] => [
     Math.cos(lat * RADIANS) * Math.cos(lon * RADIANS),
     Math.cos(lat * RADIANS) * Math.sin(lon * RADIANS),
@@ -111,7 +128,8 @@ export function densify(points: readonly LonLat[], closed = false): LonLat[] {
   return out;
 }
 
-/** The area a ring encloses on the sphere, square metres, whichever way it
+/** The area a ring encloses on the authalic sphere, square metres (within
+ * a fraction of a percent of the ellipsoid's), whichever way it
  * winds (the line-integral form for a ring of short edges, which is why it
  * is taken over the densified ring). */
 export function ringArea(points: readonly LonLat[]): number {
@@ -125,7 +143,7 @@ export function ringArea(points: readonly LonLat[]): number {
     const after = ring[(i + 1) % n]!;
     total += (after[0] - before[0]) * RADIANS * Math.sin(ring[i]![1] * RADIANS);
   }
-  return Math.abs((total * EARTH_RADIUS * EARTH_RADIUS) / 2);
+  return Math.abs((total * AUTHALIC_RADIUS * AUTHALIC_RADIUS) / 2);
 }
 
 function grouped(value: number, digits: number): string {
@@ -160,6 +178,96 @@ function shortLabel(): string {
   return units.distance === "km" ? "m" : "ft";
 }
 
+/** What a finished distance reads off the DEM: the length along the
+ * ground, the climb and the descent on the way, and the straight line
+ * between its two ends at their heights (null where the DEM has no height
+ * for one), all in metres, and the DEM resolution they were sampled at. */
+export interface GroundProfile {
+  surface: number;
+  climb: number;
+  descent: number;
+  straight: number | null;
+  resolution: number;
+}
+
+/** At most this many heights in a profile, and about this many DEM tiles. */
+const MAX_PROFILE_SAMPLES = 4000;
+const MAX_PROFILE_TILES = 24;
+
+/** The points a profile of `points` reads, one a DEM pixel at the finest
+ * zoom that keeps it within the sample and tile budget, and that zoom and
+ * the spacing. A longer line is read off a coarser DEM, and says so. */
+export function profilePlan(points: readonly LonLat[]): { samples: LonLat[]; zoom: number; resolution: number } {
+  const length = pathLength(points);
+  const latitude = points.reduce((sum, point) => sum + point[1], 0) / Math.max(1, points.length);
+  let zoom = TERRAIN_MAX_ZOOM;
+  for (; zoom > 0; zoom -= 1) {
+    const count = length / demPixelMetres(zoom, latitude);
+    if (count <= MAX_PROFILE_SAMPLES && count / 512 + points.length <= MAX_PROFILE_TILES) break;
+  }
+  const resolution = Math.max(demPixelMetres(zoom, latitude), length / MAX_PROFILE_SAMPLES);
+  const samples: LonLat[] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const run = greatCircle(samples[samples.length - 1] ?? points[0]!, points[i]!, resolution, MAX_PROFILE_SAMPLES);
+    samples.push(...(samples.length === 0 ? run : run.slice(1)));
+  }
+  return { samples, zoom, resolution };
+}
+
+/** A profile from heights read at `samples`: each step's ground length is
+ * the hypotenuse of its horizontal length and its rise. A sample the DEM
+ * has no height for keeps the last one's, so a hole in the tiles reads as
+ * level ground rather than a cliff. */
+export function profileFromHeights(samples: readonly LonLat[], heights: readonly (number | null)[], resolution: number): GroundProfile {
+  let surface = 0;
+  let climb = 0;
+  let descent = 0;
+  let previous: number | null = null;
+  for (let i = 0; i < samples.length; i += 1) {
+    const height: number | null = heights[i] ?? previous;
+    if (i > 0) {
+      const run = distance(samples[i - 1]!, samples[i]!);
+      const rise = height !== null && previous !== null ? height - previous : 0;
+      surface += Math.hypot(run, rise);
+      if (rise > 0) climb += rise;
+      else descent -= rise;
+    }
+    previous = height;
+  }
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const start = heights[0] ?? null;
+  const end = heights[heights.length - 1] ?? null;
+  // The DEM's heights are above the geoid, not the ellipsoid; between two
+  // ends the geoid differs by metres, which moves the chord by less.
+  const straight =
+    first && last && start !== null && end !== null
+      ? straightLineDistance({ lon: first[0], lat: first[1], height: start }, { lon: last[0], lat: last[1], height: end })
+      : null;
+  return { surface, climb, descent, straight, resolution };
+}
+
+/** The ground under a path, read off the DEM. */
+export async function groundProfile(points: readonly LonLat[]): Promise<GroundProfile> {
+  const { samples, zoom, resolution } = profilePlan(points);
+  const heights = await demElevationsAt(
+    samples.map(([longitude, latitude]) => ({ latitude, longitude })),
+    zoom,
+  );
+  // Mapterhorn publishes no tile over the open sea, so a missing height is
+  // the sea surface; a ground below it (the Dead Sea) has its own tile.
+  return profileFromHeights(samples, heights.map((height) => height ?? 0), resolution);
+}
+
+/** The lines a finished distance's reading adds under its length. */
+export function profileLines(profile: GroundProfile): string[] {
+  const resolution = `${grouped(Math.round(shortLength(profile.resolution)), 0)} ${shortLabel()}`;
+  const lines = [t("measureSurface", { length: formatDistance(profile.surface), climb: formatHeight(profile.climb), descent: formatHeight(profile.descent) })];
+  if (profile.straight !== null) lines.push(t("measureStraight", { length: formatDistance(profile.straight) }));
+  lines.push(t("measureDem", { resolution }));
+  return lines;
+}
+
 type MeasureProperties = { role: "edge" | "fill" | "vertex" | "label"; label?: string };
 
 /** What the layers draw for a shape: its edges (to the pointer while it is
@@ -170,6 +278,7 @@ export function measureFeatures(
   kind: MeasureKind,
   points: readonly LonLat[],
   cursor: LonLat | null,
+  profile: GroundProfile | null = null,
 ): FeatureCollection<Geometry, MeasureProperties> {
   const features: Feature<Geometry, MeasureProperties>[] = [];
   const path = cursor ? [...points, cursor] : [...points];
@@ -198,7 +307,8 @@ export function measureFeatures(
     let total = 0;
     for (let i = 1; i < path.length; i += 1) {
       total += distance(path[i - 1]!, path[i]!);
-      label(path[i]!, formatDistance(total));
+      const last = i === path.length - 1;
+      label(path[i]!, last && profile ? [formatDistance(total), ...profileLines(profile)].join("\n") : formatDistance(total));
     }
   } else if (path.length >= 3) {
     label(path[path.length - 1]!, formatArea(ringArea(path)));
@@ -267,6 +377,9 @@ export function measureLayerSpecs(
         "text-size": 12,
         "text-anchor": "left",
         "text-offset": [0.8, 0],
+        // A finished distance reads on several lines of its own; none wraps.
+        "text-max-width": 40,
+        "text-justify": "left",
         "text-allow-overlap": true,
         "text-ignore-placement": true,
       },
@@ -288,13 +401,19 @@ export class MeasureTool {
   private ended = false;
   private darkGround = false;
   private frame = 0;
+  /** The ground under the finished distance, once read; `generation`
+   * drops a reading that comes back for a shape since changed. */
+  private profile: GroundProfile | null = null;
+  private generation = 0;
 
   constructor(
     private readonly map: MaplibreMap,
     private readonly onArm: (kind: MeasureKind | null) => void,
   ) {
-    // The readings are written in the viewer's distance unit.
+    // The readings are written in the viewer's distance unit, and the
+    // profile's words in the viewer's language.
     onUnitsChange(() => this.render());
+    onLocaleChange(() => this.render());
   }
 
   get armed(): MeasureKind | null {
@@ -308,6 +427,7 @@ export class MeasureTool {
     this.points = [];
     this.cursor = null;
     this.ended = false;
+    this.forgetProfile();
     const container = this.map.getContainer();
     if (kind && !was) {
       // A double click ends a shape here; it must not also zoom.
@@ -335,6 +455,7 @@ export class MeasureTool {
     if (this.ended) {
       this.points = [];
       this.ended = false;
+      this.forgetProfile();
     }
     const last = this.points[this.points.length - 1];
     if (last && this.near(last, event)) {
@@ -376,6 +497,22 @@ export class MeasureTool {
     this.ended = true;
     this.cursor = null;
     this.render();
+    if (this.kind === "distance" && this.points.length >= 2) {
+      const generation = ++this.generation;
+      groundProfile(this.points)
+        .then((profile) => {
+          if (generation !== this.generation) return;
+          this.profile = profile;
+          this.render();
+        })
+        // No DEM (offline, a tile server down): the length stands alone.
+        .catch(() => undefined);
+    }
+  }
+
+  private forgetProfile(): void {
+    this.profile = null;
+    this.generation += 1;
   }
 
   private readonly move = (event: MapMouseEvent): void => {
@@ -417,7 +554,7 @@ export class MeasureTool {
 
   private render(): void {
     if (!this.kind) return;
-    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor);
+    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor, this.ended ? this.profile : null);
     const source = this.map.getSource(SOURCE) as { setData?: (data: unknown) => void } | undefined;
     if (source?.setData) {
       source.setData(data);

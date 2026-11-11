@@ -476,6 +476,14 @@ export const en = {
   viewSectionAria: "Vertical section: drag a line",
   viewDistanceAria: "Measure distance: click points, click the last again to finish",
   viewAreaAria: "Measure area: click corners, click the first or last again to finish",
+  /** A finished distance's reading on the map, under its length (the
+   * horizontal distance on the WGS84 ellipsoid): the length along the
+   * ground with the climb and the descent, the straight line between the
+   * two ends at their heights, and the spacing the DEM was read at — a
+   * surface length depends on it. Short: they are map labels. */
+  measureSurface: "Along the ground {length} · ↑{climb} ↓{descent}",
+  measureStraight: "Straight line {length}",
+  measureDem: "DEM sampled every {resolution}",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

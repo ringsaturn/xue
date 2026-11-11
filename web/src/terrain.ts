@@ -140,3 +140,47 @@ export async function demElevationAt(latitude: number, longitude: number): Promi
   const pixel = context.getImageData(0, 0, 1, 1).data;
   return terrariumElevation(pixel[0] ?? 0, pixel[1] ?? 0, pixel[2] ?? 0);
 }
+
+/** Whole decoded tiles' pixels by `z/x/y`, for a profile that reads many
+ * points off each: one `getImageData` per tile rather than one per point. */
+const tilePixels = new Map<string, Promise<Uint8ClampedArray | null>>();
+const MAX_TILE_PIXELS = 32;
+
+async function loadTilePixels(sample: DemSample): Promise<Uint8ClampedArray | null> {
+  const key = `${sample.zoom}/${sample.x}/${sample.y}`;
+  const cached = tilePixels.get(key);
+  if (cached) return cached;
+  const pending = (async () => {
+    const bitmap = await loadTile(sample);
+    if (!bitmap) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return null;
+    context.drawImage(bitmap, 0, 0);
+    return context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+  })();
+  tilePixels.set(key, pending);
+  if (tilePixels.size > MAX_TILE_PIXELS) {
+    const oldest = tilePixels.keys().next().value;
+    if (oldest !== undefined) tilePixels.delete(oldest);
+  }
+  return pending;
+}
+
+/** The DEM's ground size of one pixel at `zoom` and `latitude`, metres. */
+export function demPixelMetres(zoom: number, latitude: number): number {
+  return (40_075_016.686 * Math.cos((latitude * Math.PI) / 180)) / (TERRAIN_TILE_SIZE * 2 ** zoom);
+}
+
+/** The DEM's elevation under each point at `zoom`, metres, `null` where a
+ * tile does not answer. Points sharing a tile share one fetch and one read. */
+export async function demElevationsAt(points: readonly { latitude: number; longitude: number }[], zoom: number): Promise<(number | null)[]> {
+  const samples = points.map((point) => demSampleFor(point.latitude, point.longitude, Math.min(TERRAIN_MAX_ZOOM, Math.max(0, Math.round(zoom)))));
+  const pixels = await Promise.all(samples.map((sample) => loadTilePixels(sample)));
+  return samples.map((sample, index) => {
+    const data = pixels[index];
+    return data ? elevationFromRgba(data, TERRAIN_TILE_SIZE, sample.pixelX, sample.pixelY) : null;
+  });
+}
