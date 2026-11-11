@@ -7,7 +7,7 @@ import type { PlaybackFps } from "./playback";
 import type { ProbePanel } from "./probepanel";
 import type { VariableSession } from "./session";
 import { tileCount } from "./tiles";
-import { displayZone } from "./timezone";
+import { displayZone, zonePref } from "./timezone";
 
 /** What the stats card and the debug copy read off the page: the card's
  * own elements, the run and the session on screen (live, through
@@ -247,7 +247,7 @@ export function createStats(deps: StatsDeps) {
       `decode: ${deps.lastDecodeMs === null ? "--" : `${deps.lastDecodeMs.toFixed(1)} ms`} · ${formatBytes(decodeRateBytesPerSec())}/s`,
       `viewport: ${Math.round(neededGridWidth())} col${tileShare()} · zoom ${map.getZoom().toFixed(2)} · dpr ${window.devicePixelRatio || 1}`,
       `connection: ${connectionLabel()}`,
-      `clock: ${displayZone}${deps.probePanelControl.probeZone ? " (pinned)" : ""}`,
+      `clock: ${displayZone} · ${zonePref}${deps.probePanelControl.probeZone ? " (pinned)" : ""}`,
       `ua: ${navigator.userAgent}`,
     ];
     return lines.join("\n");

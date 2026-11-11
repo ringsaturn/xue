@@ -96,7 +96,7 @@ import type { AirportStation, AirportStationHistory, SynopStation, SynopStationS
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
-import { setDisplayZone, zoneAt, zoneDisplayName } from "./timezone";
+import { setPinnedZone, zoneAt, zoneDisplayName } from "./timezone";
 import { formatDistance, formatHeight, formatValueReadout, variableDisplayUnit, variableDisplayValue } from "./units";
 import type { ViewState } from "./viewstate";
 
@@ -739,7 +739,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probePinSequence += 1;
     probeZone = null;
     probeDem = null;
-    setDisplayZone(null);
+    setPinnedZone(null);
   }
 
   /** Read the pinned point's zone and move every valid time onto it. Until
@@ -752,7 +752,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     const zone = await zoneAt(longitude, latitude);
     if (sequence !== probePinSequence) return;
     probeZone = zone;
-    setDisplayZone(zone);
+    setPinnedZone(zone);
     renderProbe();
   }
 

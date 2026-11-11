@@ -815,9 +815,11 @@ Typhoon Committee adds is added there by hand.
 - Observation datasets (`isObservationModel`) read "OBSERVED" and the
   frame's clock time instead of "FORECAST HOUR" / `F058`: an observation
   has no run to count from.
-- Valid times use one display zone (`timezone.ts`): the browser's, or the
-  pinned point's (`tzf-wasm`, a 4 MB index loaded on first pin). Run cycles
-  and showcase cards stay UTC.
+- Valid times use one display zone (`timezone.ts`). Under the default
+  `auto` it is the browser's, or the pinned point's (`tzf-wasm`, a 4 MB
+  index loaded on first pin); the settings sheet can hold it on the
+  browser's zone, UTC or any IANA zone instead (`xue-zone` in storage, not
+  in the URL). Run cycles and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
   `?case=`, `?res=`, `?particles=`, `?backend=`, `?x=`, `?gibs=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
