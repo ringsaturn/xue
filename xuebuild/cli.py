@@ -725,7 +725,8 @@ def parser() -> argparse.ArgumentParser:
     sounding_build.add_argument(
         "--sources",
         help=f"comma-separated sources to build from: the gateways, wis2 (every national WIS2 node with a TEMP "
-        f"topic, discovered each hour) or one wis2:<centre> (default: {','.join(SOUNDING_SOURCE_IDS)})",
+        f"topic, discovered each hour), one wis2:<centre>, or meteofrance (Météo-France's open-data files) "
+        f"(default: {','.join(SOUNDING_SOURCE_IDS)})",
     )
     sounding_build.add_argument(
         "--previous-index",
@@ -739,7 +740,7 @@ def parser() -> argparse.ArgumentParser:
     )
     sounding_build.add_argument("--force", action="store_true", help="rebuild an issue whose directory exists")
     sounding_build.add_argument(
-        "--force-download", action="store_true", help="list and fetch each gateway again, ignoring the watermark"
+        "--force-download", action="store_true", help="list and fetch each source again, ignoring the watermark"
     )
 
     indicators_build = commands.add_parser(

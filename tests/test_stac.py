@@ -775,12 +775,16 @@ class PointProductTests(unittest.TestCase):
         self.assertEqual(properties["xue:product"], "sounding")
         self.assertEqual(properties["xue:schemaVersion"], 1)
         self.assertEqual(properties["datetime"], "2026-09-14T02:00:00Z")
-        self.assertEqual(properties["xue:stations"], 19)
+        self.assertEqual(properties["xue:stations"], 20)
         # The index's own account of its gateways, reduced to the two
         # fields a catalog client can act on.
         self.assertEqual(
             properties["xue:sources"],
-            [{"id": "jp-jma-gts-to-wis2", "ok": True}, {"id": "de-dwd-gts-to-wis2", "ok": False}],
+            [
+                {"id": "jp-jma-gts-to-wis2", "ok": True},
+                {"id": "de-dwd-gts-to-wis2", "ok": False},
+                {"id": "meteofrance", "ok": True},
+            ],
         )
         self.assertEqual(properties["xue:watermark"]["de-dwd-gts-to-wis2"], None)
         # A set of stations is not a cube and not a forecast.

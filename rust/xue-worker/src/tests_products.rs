@@ -191,7 +191,7 @@ fn the_sounding_list_is_the_index_without_its_byte_spans() {
     assert_eq!(body["product"], "sounding");
     assert_eq!(body["issue"], "sounding.2026091402");
     assert_eq!(body["issued"], "2026-09-14T02:00:00Z");
-    assert_eq!(body["count"], 19);
+    assert_eq!(body["count"], 20);
     let first = &body["stations"][0];
     assert_eq!(first["id"], "0-20000-0-47401");
     assert_eq!(first["headline"]["t500"], -13.7);

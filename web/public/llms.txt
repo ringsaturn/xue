@@ -600,7 +600,8 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   `jp-jma-gts-to-wis2` and `de-dwd-gts-to-wis2`, and of every national
   WIS2 node with a TEMP topic (`wis2:<centre>`, discovered hourly) — WMO
   core data from the originating national meteorological and hydrological
-  services. The
+  services — and Météo-France's own open-data files (`meteofrance`,
+  Licence Ouverte 2.0), which carry France's ascents. The
   viewer does not read it yet.
 
 - `indicators/` under the data root holds area-weighted weather indicators

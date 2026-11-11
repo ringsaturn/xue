@@ -8,24 +8,24 @@
   "type": "Polygon",
   "coordinates": [
    [
-    [87.62, 13.46],
-    [144.78, 13.46],
+    [-144.33483, -27.61833],
+    [144.78, -27.61833],
     [144.78, 45.415],
-    [87.62, 45.415],
-    [87.62, 13.46]
+    [-144.33483, 45.415],
+    [-144.33483, -27.61833]
    ]
   ]
  },
- "bbox": [87.62, 13.46, 144.78, 45.415],
+ "bbox": [-144.33483, -27.61833, 144.78, 45.415],
  "properties": {
   "title": "Radiosonde soundings (WIS2) · 2026-09-14 02Z issue",
   "datetime": "2026-09-14T02:00:00Z",
-  "start_datetime": "2026-09-14T00:00:00Z",
+  "start_datetime": "2026-09-13T18:00:00Z",
   "end_datetime": "2026-09-14T00:00:00Z",
   "xue:product": "sounding",
   "xue:schemaVersion": 1,
   "xue:issued": "2026-09-14T02:00:00Z",
-  "xue:stations": 19,
+  "xue:stations": 20,
   "xue:sources": [
    {
     "id": "jp-jma-gts-to-wis2",
@@ -34,11 +34,16 @@
    {
     "id": "de-dwd-gts-to-wis2",
     "ok": false
+   },
+   {
+    "id": "meteofrance",
+    "ok": true
    }
   ],
   "xue:watermark": {
    "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
-   "de-dwd-gts-to-wis2": null
+   "de-dwd-gts-to-wis2": null,
+   "meteofrance": "2026-09-14T01:40:31Z"
   }
  },
  "links": [
@@ -60,25 +65,25 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=0db6434a",
+   "href": "index.json?v=20f824d1",
    "type": "application/json",
    "title": "sounding index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 5933,
-   "xue:crc32": "0db6434a",
-   "file:checksum": "b202040db6434a"
+   "file:size": 6550,
+   "xue:crc32": "20f824d1",
+   "file:checksum": "b2020420f824d1"
   },
   "soundings": {
-   "href": "soundings.jsonl?v=06902ee6",
+   "href": "soundings.jsonl?v=df2c4f5d",
    "type": "application/x-ndjson",
    "title": "Soundings by station",
    "description": "One station per line, sorted by id. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
-   "file:size": 105517,
-   "xue:crc32": "06902ee6",
-   "file:checksum": "b2020406902ee6"
+   "file:size": 110839,
+   "xue:crc32": "df2c4f5d",
+   "file:checksum": "b20204df2c4f5d"
   }
  }
 }

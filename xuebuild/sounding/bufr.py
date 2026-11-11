@@ -35,13 +35,6 @@ MISSING = -32768
 """The missing value of every fixed-point level array."""
 
 BUFR_MAGIC = b"BUFR"
-
-DESCENT_SEQUENCE = 309056
-"""Table D 3 09 056, the radiosonde *descent*: the profile from the burst
-down, its clock the burst's, its position and ``height`` the burst point's.
-It shares the ascent's keys, so only the message's template tells it
-apart, and a product of ascents leaves it out (Météo-France's node
-publishes nothing else)."""
 """What a BUFR message starts with, after the GTS text header the
 gateways leave in front of it (``IUSC01 RJTD 140000\\r\\r\\n``). An object
 without it somewhere near the front is not BUFR at all: the gateways
@@ -49,6 +42,13 @@ republish the GTS stream as it is, and a station with nothing to report
 sends a plain-text NIL bulletin of a few dozen bytes. Those are normal
 traffic, not corruption, and are counted apart from what fails to
 decode."""
+
+DESCENT_SEQUENCE = 309056
+"""Table D 3 09 056, the radiosonde *descent*: the profile from the burst
+down, its clock the burst's, its position and ``height`` the burst point's.
+It shares the ascent's keys, so only the message's template tells it
+apart, and a product of ascents leaves it out (Météo-France's node
+publishes nothing else)."""
 
 VALUE_BOUNDS = {
     "p": (1, 120000),
@@ -110,6 +110,22 @@ properly flagged ascent passes through this rule untouched; an unflagged
 run is capped at about 150 levels between 1000 and 10 hPa. The count
 before thinning is published as ``reported`` beside ``n``, so nothing is
 hidden."""
+
+STANDARD_PRESSURES = (
+    100000, 92500, 85000, 70000, 50000, 40000, 30000, 25000, 20000, 15000, 10000, 7000, 5000, 3000, 2000, 1000
+)
+"""The standard isobaric surfaces of a TEMP, pascals. A source that sends
+the full-resolution ascent with no significance flags (Météo-France's
+open data) keeps the measured level nearest each, so the thinned profile
+still has a level at 850 and 500 hPa for the derived quantities and the
+headline to read. The level is kept as measured and is not flagged: it is
+not a level the station reported as standard."""
+
+ANCHOR_TOLERANCE_PA = 100
+"""How far from a standard surface the nearest level may lie and still be
+kept for it — the same hectopascal ``derive`` reads a surface within. A
+one- or two-second ascent has a level every hectopascal or less at 850
+hPa, so it always has one."""
 
 LEVEL_KEYS = frozenset(
     {
@@ -253,9 +269,13 @@ def nominal_from_clock(header: dict[str, Any]) -> datetime | None:
     at 23:15, French ones as late as 01:15), and a TEMP converted from text
     carries the nominal hour itself."""
     clock = _clock(header)
-    if clock is None:
-        return None
-    shifted = clock + timedelta(hours=3)
+    return None if clock is None else synoptic_hour(clock)
+
+
+def synoptic_hour(clock: datetime) -> datetime:
+    """The six-hourly hour at or before three hours after ``clock``
+    (:func:`nominal_from_clock`)."""
+    shifted = clock.astimezone(UTC) + timedelta(hours=3)
     return shifted.replace(hour=shifted.hour - shifted.hour % 6, minute=0, second=0, microsecond=0)
 
 
@@ -469,7 +489,12 @@ def _launch(header: dict[str, Any], nominal: datetime) -> datetime | None:
     minutes before it to an hour after, which covers both the Chinese
     stations releasing at 23:15 for 00Z and the Japanese ones at 00:16.
     Anything else is a clock the product does not trust, and null."""
-    launched = _clock(header)
+    return plausible_launch(_clock(header), nominal)
+
+
+def plausible_launch(launched: datetime | None, nominal: datetime) -> datetime | None:
+    """``launched`` when it lies in the window :func:`_launch` describes,
+    else None."""
     if launched is None:
         return None
     if not -timedelta(minutes=90) <= launched - nominal <= timedelta(minutes=60):
@@ -501,28 +526,50 @@ def _fold_repeated_pressures(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     return folded
 
 
-def _thin(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _thin(rows: list[dict[str, Any]], anchors: tuple[int, ...] = ()) -> list[dict[str, Any]]:
     """Drop the levels a reader would never draw (``THINNING_RATIO``).
 
     The rows arrive in descending pressure. The lowest and the highest are
     always kept, and so is every level flagged as part of the classical
-    TEMP set. Anything else survives only if it stands at least
-    ``THINNING_RATIO`` below the last level kept — flagged levels included,
-    so a dense patch after a standard level is thinned from that level.
+    TEMP set, and the level nearest each of ``anchors`` (pascals) within
+    ``ANCHOR_TOLERANCE_PA``. Anything else survives only if it stands at
+    least ``THINNING_RATIO`` below the last level kept — kept levels
+    included, so a dense patch after a standard level is thinned from that
+    level.
     """
     if len(rows) <= 2:
         return rows
+    anchored = _nearest_rows(rows, anchors)
     kept = [rows[0]]
     last_pressure = float(_fixed(rows[0].get("pressure"), 1, "p"))
-    for row in rows[1:-1]:
+    for position, row in enumerate(rows[1:-1], start=1):
         flags = _fixed(row.get("extendedVerticalSoundingSignificance"), 1, "sig")
         pressure = float(_fixed(row.get("pressure"), 1, "p"))
-        flagged = flags != MISSING and bool(flags & SIGNIFICANT_BITS)
+        flagged = (flags != MISSING and bool(flags & SIGNIFICANT_BITS)) or position in anchored
         if flagged or (pressure > 0 and last_pressure / pressure >= 1.0 + THINNING_RATIO):
             kept.append(row)
             last_pressure = pressure
     kept.append(rows[-1])
     return kept
+
+
+def _nearest_rows(rows: list[dict[str, Any]], anchors: tuple[int, ...]) -> set[int]:
+    """The position of the row nearest each anchor pressure, when one lies
+    within ``ANCHOR_TOLERANCE_PA`` of it."""
+    found: set[int] = set()
+    pressures = [_fixed(row.get("pressure"), 1, "p") for row in rows]
+    for anchor in anchors:
+        best: int | None = None
+        best_gap = ANCHOR_TOLERANCE_PA
+        for position, pressure in enumerate(pressures):
+            if pressure == MISSING:
+                continue
+            gap = abs(pressure - anchor)
+            if gap <= best_gap:
+                best, best_gap = position, gap
+        if best is not None:
+            found.add(best)
+    return found
 
 
 @dataclass(frozen=True)
@@ -570,6 +617,44 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
     if nominal is None:
         return None
     rows = [level for level in _levels(walked) if _fixed(level.get("pressure"), 1, "p") != MISSING]
+    sonde = _number(header.get("radiosondeType"))
+    return assemble(
+        rows,
+        key=key,
+        wigos=wigos,
+        wmo=wmo,
+        time=nominal,
+        launched=_launch(header, nominal),
+        lat=lat,
+        lon=lon,
+        elev=_elevation(header),
+        sonde=None if sonde is None else int(sonde),
+        name=name,
+        gateway=gateway,
+    )
+
+
+def assemble(
+    rows: list[dict[str, Any]],
+    *,
+    key: str,
+    wigos: str | None,
+    wmo: str | None,
+    time: datetime,
+    launched: datetime | None,
+    lat: float,
+    lon: float,
+    elev: float | None,
+    sonde: int | None,
+    name: BulletinName,
+    gateway: str,
+    anchors: tuple[int, ...] = (),
+) -> Sounding | None:
+    """One sounding from its levels, each a dict under the BUFR keys
+    (``pressure``, ``airTemperature``…): ordered, folded, thinned and put
+    in the product's fixed point. Every source's levels pass through here,
+    so they are published by one rule. None when no level has a pressure."""
+    rows = [level for level in rows if _fixed(level.get("pressure"), 1, "p") != MISSING]
     if not rows:
         return None
     # The subset's own order first (it is the ascent), then by pressure
@@ -578,18 +663,17 @@ def _parse_subset(walked: list[tuple[str, Any]], *, name: BulletinName, gateway:
     rows.sort(key=lambda level: -float(_number(level.get("pressure")) or 0.0))
     rows = _fold_repeated_pressures(rows)
     reported = len(rows)
-    rows = _thin(rows)
-    sonde = _number(header.get("radiosondeType"))
+    rows = _thin(rows, anchors)
     return Sounding(
         key=key,
         wigos=wigos,
         wmo=wmo,
-        time=nominal,
-        launched=_launch(header, nominal),
+        time=time,
+        launched=launched,
         lat=round(lat, 5),
         lon=round(lon, 5),
-        elev=_elevation(header),
-        sonde=None if sonde is None else int(sonde),
+        elev=elev,
+        sonde=sonde,
         reported=reported,
         bulletin=name.header,
         gateway=gateway,

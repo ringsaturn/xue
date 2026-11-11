@@ -16,7 +16,7 @@ export function checkTimestamp(v: unknown, at: string): asserts v is Timestamp {
   isString(v, at, PATTERN_1, undefined, true);
 }
 
-/** A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance) or the node discovery (wis2), admitted on shape alone. */
+/** A gateway id (jp-jma-gts-to-wis2), a national WIS2 node (wis2:fr-meteofrance), the node discovery (wis2) or Météo-France's open data (meteofrance), admitted on shape alone. */
 export type SourceKey = string;
 
 export function checkSourceKey(v: unknown, at: string): asserts v is SourceKey {
