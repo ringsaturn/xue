@@ -976,8 +976,13 @@ class MeteoFranceTests(unittest.TestCase):
         (sounding,) = meteofrance.parse_file(data, name="07145.2026111100.json", arrived=utc(2026, 11, 11, 1, 40)).soundings
         self.assertGreater(sounding.reported, 3000)
         self.assertLess(sounding.n, 200)
+        # The level nearest each surface is kept as measured, within a
+        # hectopascal: 30 Pa steps from 1000 hPa put one exactly on 850
+        # hPa and the nearest to 500 hPa at 499.9.
         for surface in (85000, 70000, 50000, 25000):
-            self.assertIn(surface, sounding.p)
+            self.assertLessEqual(min(abs(pressure - surface) for pressure in sounding.p), 15)
+        self.assertIn(85000, sounding.p)
+        self.assertIn(49990, sounding.p)
         self.assertTrue(all(flag == bufr.MISSING for flag in sounding.sig))
         levels = {"p": list(sounding.p), "z": list(sounding.z), "t": list(sounding.t), "td": list(sounding.td), "sig": list(sounding.sig)}
         self.assertIsNotNone(derive.headline(levels, derive.derive(levels))["t500"])
@@ -1264,7 +1269,10 @@ class BuildFailureTests(unittest.TestCase):
             report = build_product(
                 ISSUE, Path(scratch) / "raw", Path(scratch) / "out", force=True, now=utc(2026, 9, 14, 2, 5)
             )
-            self.assertEqual([status["error"] for status in report["sources"]], ["not fetched"] * 2)
+            # The gateways and Météo-France; the node selector expands into
+            # nothing when its discovery never ran.
+            self.assertEqual([status["id"] for status in report["sources"]], [*SOURCE_IDS, "meteofrance"])
+            self.assertEqual([status["error"] for status in report["sources"]], ["not fetched"] * 3)
             self.assertIsNone(report["pointer"])
 
 
