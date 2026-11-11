@@ -1,7 +1,8 @@
 /**
  * The settings sheet behind the gear in the viewer's top-right row: the
- * theme, the language, the display units (`units.ts`), the coordinate grids
- * and the format a pinned point's coordinates are written in
+ * theme, the language, the clock valid times read in (`timezone.ts`, on
+ * pages that stamp them), the display units (`units.ts`), the coordinate
+ * grids and the format a pinned point's coordinates are written in
  * (`mapprefs.ts`).
  *
  * Every row is a radio group or a pair of switches built from the live
@@ -16,6 +17,7 @@ import { COORDINATE_FORMATS, coordinateFormat, grid, onMapPrefsChange, setCoordi
 import { GRID_KINDS, type GridKind } from "./urlstate";
 import { createSheet, mountLanguageList } from "./sheet";
 import { isDark, onThemeChange, toggleTheme } from "./theme";
+import { browserZone, displayZone, knownZones, onDisplayZoneChange, setZonePref, zoneOffsetLabel, zonePref } from "./timezone";
 import {
   browserRegion,
   onUnitsChange,
@@ -48,6 +50,7 @@ interface Choice {
   label: string;
   checked: boolean;
   pick: () => void;
+  title?: string;
 }
 
 /** One captioned row of choices: a radio group, or (`switches`) buttons
@@ -75,6 +78,7 @@ function field(caption: string, choices: readonly Choice[], switches = false): H
       button.setAttribute("role", "radio");
       button.setAttribute("aria-checked", String(choice.checked));
     }
+    if (choice.title) button.title = choice.title;
     button.addEventListener("click", choice.pick);
     group.append(button);
   }
@@ -82,8 +86,50 @@ function field(caption: string, choices: readonly Choice[], switches = false): H
   return wrapper;
 }
 
-/** Wire the sheet to its trigger and fill its body. */
-export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, body: HTMLElement, languages: HTMLElement): void {
+const ZONE_MODE_KEYS: Record<string, MessageKey> = { auto: "zoneAuto", local: "zoneLocal" };
+
+/** The clock row: the three modes as chips, and every other zone in a list
+ * under them. A zone picked from the list unchecks the chips. The list is
+ * the engine's own (some four hundred ids), built when the row is. */
+function zoneField(): HTMLElement {
+  const now = Date.now();
+  const wrapper = field(
+    t("settingsZone"),
+    (["auto", "local", "utc"] as const).map((mode) => ({
+      // Local says which offset it reads, as an instrument code.
+      label: mode === "utc" ? "UTC" : mode === "local" ? `${t(ZONE_MODE_KEYS[mode]!)} · ${zoneOffsetLabel(browserZone(), now)}` : t(ZONE_MODE_KEYS[mode]!),
+      checked: zonePref === mode,
+      pick: () => setZonePref(mode),
+      ...(mode === "auto" ? { title: t("zoneAutoHint") } : mode === "local" ? { title: browserZone() } : {}),
+    })),
+  );
+  const select = document.createElement("select");
+  select.className = "settings-select";
+  select.setAttribute("aria-label", t("zoneOther"));
+  const custom = !["auto", "local", "utc"].includes(zonePref);
+  const placeholder = new Option(`${t("zoneOther")}…`, "");
+  placeholder.disabled = true;
+  select.append(placeholder);
+  for (const zone of knownZones()) {
+    select.append(new Option(zone === displayZone && custom ? `${zone} · ${zoneOffsetLabel(zone, now)}` : zone, zone));
+  }
+  select.value = custom ? zonePref : "";
+  select.addEventListener("change", () => {
+    if (select.value) setZonePref(select.value);
+  });
+  wrapper.append(select);
+  return wrapper;
+}
+
+/** Wire the sheet to its trigger and fill its body. `zone` adds the clock
+ * row, on a page whose times follow it. */
+export function mountSettingsSheet(
+  trigger: HTMLElement,
+  sheet: HTMLElement,
+  body: HTMLElement,
+  languages: HTMLElement,
+  options: { zone?: boolean } = {},
+): void {
   createSheet({ trigger, sheet });
   const renderLanguages = mountLanguageList(languages);
   const languageField = languages.closest<HTMLElement>(".settings-field");
@@ -99,6 +145,7 @@ export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, bod
       ]),
     ];
     if (languageField) rows.push(languageField);
+    if (options.zone) rows.push(zoneField());
     rows.push(
       field(
         t("settingsUnits"),
@@ -150,6 +197,7 @@ export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, bod
   onThemeChange(render);
   onUnitsChange(render);
   onMapPrefsChange(render);
+  if (options.zone) onDisplayZoneChange(render);
   onLocaleChange(() => {
     renderLanguages();
     render();
@@ -160,10 +208,10 @@ export function mountSettingsSheet(trigger: HTMLElement, sheet: HTMLElement, bod
 function focusPath(element: HTMLElement): [number, number] | null {
   const row = element.closest(".settings-field");
   if (!row?.parentElement) return null;
-  const buttons = [...row.querySelectorAll("button")];
-  return [[...row.parentElement.children].indexOf(row), buttons.indexOf(element as HTMLButtonElement)];
+  const buttons = [...row.querySelectorAll<HTMLElement>("button, select")];
+  return [[...row.parentElement.children].indexOf(row), buttons.indexOf(element)];
 }
 
 function restoreFocus(body: HTMLElement, [row, index]: [number, number]): void {
-  body.children[row]?.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
+  body.children[row]?.querySelectorAll<HTMLElement>("button, select")[index]?.focus();
 }

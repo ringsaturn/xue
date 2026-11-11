@@ -2365,6 +2365,25 @@ html[lang="ja"] .rail-glyph {
   overscroll-behavior: contain;
 }
 
+/* The time zone list under the clock chips: the API console's field. */
+.settings-select {
+  width: 100%;
+  height: 32px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.settings-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* The languages as chips, wrapped: eleven endonyms in two or three lines
    rather than eleven rows. */
 .settings-languages {

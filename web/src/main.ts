@@ -1250,13 +1250,14 @@ const tcSheetControl = createSheet({
   canOpen: () => marksControl.tcLoaded !== null && activeCase === null,
 });
 
-/** The settings sheet: theme, language, units, grids, coordinates. It
- * rebuilds its own rows on every change (settingssheet.ts). */
+/** The settings sheet: theme, language, time zone, units, grids,
+ * coordinates. It rebuilds its own rows on every change (settingssheet.ts). */
 mountSettingsSheet(
   required<HTMLButtonElement>("settings-toggle"),
   required<HTMLElement>("settings-sheet"),
   required<HTMLElement>("settings-body"),
   required<HTMLElement>("settings-languages"),
+  { zone: true },
 );
 
 
@@ -7223,7 +7224,8 @@ function applyUnits(): void {
 // here.
 onThemeChange(applyAppearance);
 onLocaleChange(applyLocale);
-// The display zone moves with the pin; every valid-time stamp follows it.
+// The display zone moves with the pin or the settings sheet's choice;
+// every valid-time stamp follows it.
 onDisplayZoneChange(applyDisplayZone);
 onUnitsChange(applyUnits);
 // Right-click (long-press on touch) over the map opens the custom menu:

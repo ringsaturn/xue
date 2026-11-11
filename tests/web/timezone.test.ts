@@ -8,7 +8,10 @@ import {
   formatStamp,
   isKnownZone,
   onDisplayZoneChange,
-  setDisplayZone,
+  parseZonePref,
+  resolveZone,
+  setPinnedZone,
+  setZonePref,
   useZoneFinder,
   zoneAt,
   zoneDisplayName,
@@ -89,7 +92,8 @@ describe("display zone", () => {
   const other = browserZone() === "America/New_York" ? "Asia/Tokyo" : "America/New_York";
 
   afterEach(() => {
-    setDisplayZone(null);
+    setZonePref("auto");
+    setPinnedZone(null);
     useZoneFinder(null);
   });
 
@@ -101,20 +105,40 @@ describe("display zone", () => {
   it("switches in place and tells its listeners, once per change", async () => {
     let changes = 0;
     onDisplayZoneChange(() => (changes += 1));
-    setDisplayZone(other);
+    setPinnedZone(other);
     const { displayZone: after } = await import("../../web/src/timezone");
     expect(after).toBe(other);
     expect(changes).toBe(1);
-    setDisplayZone(other);
+    setPinnedZone(other);
     expect(changes).toBe(1);
-    setDisplayZone(null);
+    setPinnedZone(null);
     const { displayZone: reset } = await import("../../web/src/timezone");
     expect(reset).toBe(browserZone());
   });
 
+  it("holds the clock under a choice other than auto, whatever is pinned", async () => {
+    setPinnedZone(other);
+    setZonePref("utc");
+    expect((await import("../../web/src/timezone")).displayZone).toBe("UTC");
+    setZonePref("local");
+    expect((await import("../../web/src/timezone")).displayZone).toBe(browserZone());
+    setZonePref("Asia/Kolkata");
+    expect((await import("../../web/src/timezone")).displayZone).toBe("Asia/Kolkata");
+    setZonePref("auto");
+    expect((await import("../../web/src/timezone")).displayZone).toBe(other);
+  });
+
+  it("reads a stored choice leniently", () => {
+    expect(parseZonePref("UTC")).toBe("utc");
+    expect(parseZonePref("Asia/Tokyo")).toBe("Asia/Tokyo");
+    expect(parseZonePref("Mars/Olympus_Mons")).toBe("auto");
+    expect(parseZonePref(null)).toBe("auto");
+    expect(resolveZone("auto", null)).toBe(browserZone());
+  });
+
   it("ignores a zone the engine cannot format in", async () => {
-    setDisplayZone(other);
-    setDisplayZone("Mars/Olympus_Mons");
+    setPinnedZone(other);
+    setPinnedZone("Mars/Olympus_Mons");
     const { displayZone: after } = await import("../../web/src/timezone");
     expect(after).toBe(browserZone());
   });

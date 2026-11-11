@@ -459,6 +459,12 @@ export const en = {
   settingsThemeLight: "Light",
   settingsThemeDark: "Dark",
   settingsLanguage: "Language",
+  /** The clock row: `Auto` follows the pinned point (the hint is its tooltip), `Local` holds the device's zone and is followed by its offset, UTC is a code; `zoneOther` heads the list of every IANA zone. */
+  settingsZone: "Time zone",
+  zoneAuto: "Auto",
+  zoneAutoHint: "Your device's zone; the pinned point's while a point is pinned",
+  zoneLocal: "Local",
+  zoneOther: "Other zone",
   settingsUnits: "Units",
   unitsAuto: "Auto",
   unitsMetric: "Metric",
