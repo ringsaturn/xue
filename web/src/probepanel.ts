@@ -1374,33 +1374,40 @@ export function createProbePanel(deps: ProbePanelDeps) {
   }
 
   /**
-   * The precipitation row's running total on the primary axis: the depth
-   * since the rate's axis began, or across the range the map is summing
-   * while the precipitation is the field. It is summed over the rate's own
-   * frames, not the primary's: a column the rate's axis lacks (a forecast's
-   * analysis hour) is a gap in the line, not a frame the sum waits for.
+   * The precipitation row's total on the primary axis, following the
+   * timeline's window while the precipitation is the field and a total is
+   * on: at every frame the window ending there (`?accum=24h`), or across a
+   * range, the depth since its first frame and nothing outside it. Null with
+   * no total on. It is summed over the rate's own frames, not the primary's:
+   * a column the rate's axis lacks (a forecast's analysis hour) is a gap in
+   * the line, not a frame the sum waits for.
    */
-  function precipitationRunningTotal(rates: readonly ProbeValue[], leads: readonly number[]): ProbeValue[] | null {
+  function precipitationTotal(
+    rates: readonly ProbeValue[],
+    leads: readonly number[],
+  ): { values: ProbeValue[]; code: string } | null {
     const session = sessions.get("prate");
-    if (!session) return null;
+    const on = deps.activeSession?.id === "prate" ? accumulationOn(deps.activeSession) : null;
+    if (!session || !on) return null;
     const kind = rateKind(session.variable);
     if (kind === null) return null;
     const present = leads.flatMap((lead, position) => (sessionOffsetForLead(session, lead) === null ? [] : [position]));
     if (present.length === 0) return null;
     const values = present.map((position) => rates[position]);
-    const on = deps.activeSession?.id === "prate" ? accumulationOn(deps.activeSession) : null;
-    let range: { from: number; to: number } | null = null;
-    if (on?.range) {
+    const presentLeads = present.map((position) => leads[position]!);
+    let totals: ProbeValue[];
+    if (on.range) {
       const from = present.findIndex((position) => position >= on.range!.from);
       let to = present.length - 1;
       while (to >= 0 && present[to]! > on.range.to) to -= 1;
       if (from < 0 || to < from) return null;
-      range = { from, to };
+      totals = runningTotals(values, presentLeads, kind, { from, to });
+    } else {
+      totals = seriesTotals(values, presentLeads, on.span, kind);
     }
-    const totals = runningTotals(values, present.map((position) => leads[position]!), kind, range);
     const out: ProbeValue[] = leads.map(() => null);
     for (const [compact, position] of present.entries()) out[position] = totals[compact];
-    return out;
+    return { values: out, code: `APCP ${windowCode(on.span)}` };
   }
 
   /** The day marks, read off the same plan the capsule's strip is built from
@@ -1488,10 +1495,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
             : item.values,
         ),
       };
-      if (spec.id === "precipitation") {
-        const total = precipitationRunningTotal(row.series[0]!, leads);
-        if (total) row.total = total;
-      }
+      const total = spec.id === "precipitation" ? precipitationTotal(row.series[0]!, leads) : null;
+      if (total) row.total = total.values;
       const fromStation = station !== null && synopTakesRow(spec.id, hasTerrainRow);
       if (fromStation && axis) {
         const marks = synopRowObservations(spec.id, station.series, axis);
@@ -1536,7 +1541,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       // to the code line for that row, and the direction is already drawn
       // as an arrow under every column of the row. The measurement is
       // nowhere else, so it is what the line keeps.
-      const code = row.total ? `${meteogramRowCode(spec)} · APCP` : meteogramRowCode(spec);
+      const code = total ? `${meteogramRowCode(spec)} · ${total.code}` : meteogramRowCode(spec);
       element.code.textContent = reported !== null && readout.unit ? `${code} · ${readout.unit}` : code;
       const parts = [
         reported !== null ? null : readout.unit,

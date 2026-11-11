@@ -306,9 +306,9 @@ export interface MeteogramRowData {
   spec: MeteogramRowSpec;
   /** One series per bundle of the spec, on the shared axis. */
   series: readonly (readonly ProbeValue[])[];
-  /** The precipitation row's running total (mm since the axis began, or
-   * across a range), drawn as a line over the rate's bars on a scale of its
-   * own: a depth and a rate share no axis. */
+  /** The precipitation row's total (mm over the timeline's window ending at
+   * each frame, or across its range), drawn as a line over the rate's bars
+   * on a scale of its own: a depth and a rate share no axis. */
   total?: readonly ProbeValue[];
   /** Meteorological wind direction per frame (degrees the wind comes from),
    * on a wind row whose bundle is a component pair. */

@@ -316,11 +316,11 @@ and the window shrinks to fit it.
   range, run or view tiles, so a range can span the whole axis. The band
   over the track fills as its frames are summed; the probe reads the range
   total and keeps the rate chart.
-  The meteogram's precipitation row draws the running total over the rate's
-  bars, on a scale of its own (`runningTotals`, "PRATE · APCP"): the depth
-  since the rate's axis began, or across the range while the precipitation
-  is the field and a range is on. It is summed over the rate's own frames,
-  so a column the rate's axis lacks is a gap, not a frame it waits for.
+  While a total is on, the meteogram's precipitation row draws it over the
+  rate's bars on a scale of its own ("PRATE · APCP 24H"): the window ending
+  at each frame (`seriesTotals`), or across a range the depth since its
+  first frame (`runningTotals`). It is summed over the rate's own frames, so
+  a column the rate's axis lacks is a gap, not a frame it waits for.
 - Altitude correction (`layer.ts::lapseCodes`, formula in `lapse.ts`, controller in `relief.ts`):
   with relief on, a 2 m temperature is moved from the model's ground (the
   run's `orog` plane, decoded whole once and uploaded on its own grid) to
