@@ -47,7 +47,7 @@ import { cloudCoverPercent } from "./stations/observations";
 import type { AirportStationHistory, Metar } from "./stations/schema";
 import { applyTheme, onThemeChange, toggleTheme } from "./theme";
 import { browserZone } from "./timezone";
-import { displayUnit, displayValue } from "./units";
+import { convertPrecipitation, displayDecimals, displayUnit, displayValue, formatDistance, onUnitsChange, variableDisplayUnit, variableDisplayValue } from "./units";
 import { variableSpec } from "./variables";
 
 /**
@@ -229,18 +229,22 @@ function formatGridStep(step: number): string {
   return `${text}°`;
 }
 
-/** The text a cell shows for a field's value. A dry hour is blank, as on
- * every such table: a column of zeros hides the rain among them. */
+/** The text a cell shows for a field's value, already in the display
+ * unit. A dry hour (under 0.05 mm/h) is blank, as on every such table: a
+ * column of zeros hides the rain among them. */
 function formatCell(field: FieldId, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "";
   switch (field) {
     case "tmp2m":
     case "dpt2m":
       return `${Math.round(value)}°`;
-    case "prate":
-      return value < 0.05 ? "" : value < 10 ? value.toFixed(1) : String(Math.round(value));
+    case "prate": {
+      if (value < convertPrecipitation(0.05)) return "";
+      const decimals = displayDecimals("mm/h", 1);
+      return value < convertPrecipitation(10) ? value.toFixed(decimals) : value.toFixed(Math.max(0, decimals - 1));
+    }
     case "prmsl":
-      return String(Math.round(value));
+      return value.toFixed(displayDecimals("hPa", 0));
     default:
       return String(Math.round(value));
   }
@@ -472,10 +476,10 @@ function modelBlock(result: ModelResult, ax: Axis, zone: string): HTMLElement {
     }
     const values = seriesValues(series);
     const directions = field === "wind10m" ? seriesDirections(series) : [];
-    const unit = displayUnit(series.variables[0]!.unit);
+    const unit = variableDisplayUnit(series.variables[0]!);
     const cells = layoutFrames(ax, series.validTimesMs).map((frame) => {
       const raw = values[frame.index] ?? null;
-      const value = raw === null ? null : displayValue(series.variables[0]!.unit, raw);
+      const value = raw === null ? null : variableDisplayValue(series.variables[0]!, raw);
       return cell(frame, formatCell(field, value), tintFor(field, series, frame.index, raw), directions[frame.index] ?? null);
     });
     grid.append(row(`cmp-field cmp-${field}`, fieldLabelNode(field, unit), cells, ax.widthPx));
@@ -490,7 +494,7 @@ function airportBlock(ax: Axis, zone: string): HTMLElement | null {
   const reports = [...station.metars].reverse();
   const frames = layoutReports(ax, reports.map((metar) => Date.parse(metar.time)));
   if (frames.length === 0) return null;
-  const meta: (HTMLElement | string)[] = [element("span", "cmp-grid-step", `${Math.round(distanceKm)} km`)];
+  const meta: (HTMLElement | string)[] = [element("span", "cmp-grid-step", formatDistance(distanceKm, 0))];
   if (station.name) meta.push(element("span", "cmp-run", station.name));
   const { section, grid } = blockShell("airport", t("compareObservationsFrom", { icao: station.icao }), meta);
   section.classList.add("is-observed");
@@ -504,10 +508,10 @@ function airportBlock(ax: Axis, zone: string): HTMLElement | null {
       const value = spec.observed!(metar);
       if (value === null) return [];
       const direction = field === "wind10m" ? metar.wd : null;
-      return [cell(frame, formatCell(field, value), null, direction)];
+      return [cell(frame, formatCell(field, displayValue(spec.observedUnit, value)), null, direction)];
     });
     if (cells.length === 0) continue;
-    grid.append(row(`cmp-field cmp-${field}`, fieldLabelNode(field, spec.observedUnit), cells, ax.widthPx));
+    grid.append(row(`cmp-field cmp-${field}`, fieldLabelNode(field, displayUnit(spec.observedUnit)), cells, ax.widthPx));
   }
   return section;
 }
@@ -775,6 +779,10 @@ onLocaleChange(() => {
   render();
 });
 onThemeChange(() => render());
+onUnitsChange(() => {
+  applyStaticMessages();
+  render();
+});
 
 renderControls();
 syncUrl();

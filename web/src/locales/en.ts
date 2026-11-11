@@ -437,6 +437,31 @@ export const en = {
   langPickerAria: "Language",
   langPickerHeading: "Language",
   themeToggleAria: "Toggle light / dark",
+  /** The settings sheet behind the gear in the top-right row: the theme,
+   * the language, the display units (a preset, then one row per quantity
+   * whose unit symbols are never translated), the coordinate grids (MGRS is
+   * a code and stays as is) and the format a pinned point's coordinates are
+   * written in. Captions are short sheet captions, sentence case. */
+  settingsAria: "Settings",
+  settingsHeading: "Settings",
+  settingsTheme: "Appearance",
+  settingsThemeLight: "Light",
+  settingsThemeDark: "Dark",
+  settingsLanguage: "Language",
+  settingsUnits: "Units",
+  unitsAuto: "Auto",
+  unitsMetric: "Metric",
+  unitsImperial: "Imperial",
+  unitTemperature: "Temperature",
+  unitWind: "Wind",
+  unitPressure: "Pressure",
+  unitPrecipitation: "Precipitation",
+  unitHeight: "Height",
+  unitDistance: "Distance",
+  settingsGrid: "Grid",
+  gridLatlon: "Lat / lon",
+  settingsCoordinates: "Coordinates",
+  coordsLatlon: "Lat / lon",
   /** The view tile under the zoom buttons (viewcontrol.ts): the globe, the
    * 3D relief and its cast shadows as switches, then back to north and back to a flat camera —
    * the last two shown only while the map is turned or tilted — and the
@@ -457,8 +482,11 @@ export const en = {
    * carried by the accessible label and a visually hidden word. */
   particlesToggle: "Particles",
   particlesToggleAria: "Toggle wind particle animation",
-  phaseToggle: "Precipitation phase and 0 °C line",
-  phaseToggleAria: "Toggle precipitation phase and the 0 °C line",
+  /** `{freezing}`, `{fwGust}` and `{distanceUnit}` are filled by `t` in
+   * the viewer's units (0 °C or 32 °F, 10 m/s or 22 mph, km or mi): keep
+   * them as whole words a number-and-unit can stand in for. */
+  phaseToggle: "Precipitation phase and {freezing} line",
+  phaseToggleAria: "Toggle precipitation phase and the {freezing} line",
   glyphPhase: "P",
   varPhase: "RAIN/SNOW",
 
@@ -494,7 +522,7 @@ export const en = {
   legendFront: "Frontal zone (θe gradient)",
   legendHotspot: "Fire hotspot (3.9 µm contextual test)",
   legendFfwi: "Fosberg fire weather index",
-  legendFwalert: "RH under 30 % with gusts of 10 m/s or more",
+  legendFwalert: "RH under 30 % with gusts of {fwGust} or more",
   /** The Dust RGB's key: what each colour of the composite is a sign
    * of, one row per swatch in place of the bar (the GOES-R Quick Guide's
    * reading). Short noun phrases, one line at 10px mono. */
@@ -520,7 +548,7 @@ export const en = {
   legendPtypeWetSnow: "Wet snow",
   legendPtypeFreezingDrizzle: "Freezing drizzle",
   legendPhaseMix: "Sleet / rain to snow",
-  legendPhaseFrostLine: "Freezing line (0 °C)",
+  legendPhaseFrostLine: "Freezing line ({freezing})",
   legendPhaseFreezingZone: "Freezing rain zone",
   /** The EFAS return-period classes, each the flood level a river cell's
    * discharge has reached; the years stay numerals. */
@@ -574,7 +602,7 @@ export const en = {
   varLabelHpbl: "Planetary boundary layer height",
   varLabelPtype: "Precipitation type",
   varLabelCpofp: "Percent of frozen precipitation",
-  varLabelFzlvl: "Height of the 0 °C level",
+  varLabelFzlvl: "Height of the {freezing} level",
   // The ocean set. The skin temperature is one field that is the SST over
   // water and the ground's skin over land; the label says both, since the
   // tile reads "SST".
@@ -766,7 +794,7 @@ export const en = {
   tcPagePrev: "Earlier forecast",
   tcPageNext: "Later forecast",
   tcPageSources: "Tracks shown",
-  tcPageErrorsHeading: "Track error, km",
+  tcPageErrorsHeading: "Track error, {distanceUnit}",
   tcPageTruth: "Against the best track of",
   tcPageSource: "Source",
   tcPageErrorsMean: "Mean over the storm",
@@ -882,7 +910,7 @@ export const en = {
   aqNetwork: "Network",
   aqPreliminary: "Preliminary data: not validated, subject to change",
   aqDayRange: "PM2.5, last 24 h",
-  aqNearest: "Nearest air-quality station, {km} km",
+  aqNearest: "Nearest air-quality station, {distance}",
   /** The weather warnings (`docs/alerts.md`): every warning a national
    * service (US NWS, JMA, ECCC, Europe's through MeteoAlarm) has in force
    * now, drawn as areas on one 1–5 level scale; a snapshot of now, not of

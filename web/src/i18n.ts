@@ -31,6 +31,7 @@ import { ru } from "./locales/ru";
 import { tr } from "./locales/tr";
 import { zh } from "./locales/zh";
 import { zhHant } from "./locales/zh-hant";
+import { convertTemperature, formatWind, UNIT_LABELS, units } from "./units";
 
 export type { MessageKey };
 
@@ -141,12 +142,24 @@ export function onLocaleChange(listener: () => void): void {
   listeners.add(listener);
 }
 
+/** The quantities copy names with a unit, in the viewer's units
+ * (`units.ts`): the freezing point, the fire-weather gust threshold
+ * (10 m/s) and the distance unit. Filled into any message that names them,
+ * so a caller never passes them and a units change only has to re-run `t`. */
+function unitParams(): Record<string, string> {
+  const freezing = convertTemperature(0);
+  return {
+    freezing: `${freezing} ${UNIT_LABELS.temperature[units.temperature]}`,
+    fwGust: formatWind(10, 0),
+    distanceUnit: UNIT_LABELS.distance[units.distance],
+  };
+}
+
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
   let text: string = active.messages[key];
-  if (params) {
-    for (const [name, value] of Object.entries(params)) {
-      text = text.replace(`{${name}}`, String(value));
-    }
+  if (!text.includes("{")) return text;
+  for (const [name, value] of Object.entries({ ...unitParams(), ...params })) {
+    text = text.replace(`{${name}}`, String(value));
   }
   return text;
 }

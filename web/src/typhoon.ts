@@ -18,6 +18,7 @@ import { applyPageMeta } from "./pagemeta";
 import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
 import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
+import { convertDistance, formatWind, onUnitsChange, units } from "./units";
 import { agencyCode, TC_AGENCIES, TC_MODELS } from "./tc/agencies";
 import {
   archiveBounds,
@@ -556,7 +557,7 @@ function renderErrors(): void {
       row.append(name);
       for (const lead of LEADS) {
         const value = cells.get(source)?.get(lead);
-        const cell = element("td", "", value ? String(Math.round(value.km)) : "—");
+        const cell = element("td", "", value ? String(Math.round(convertDistance(value.km))) : "—");
         if (value && withCount) cell.append(element("span", "typhoon-n", String(value.n)));
         row.append(cell);
       }
@@ -589,7 +590,11 @@ function renderFacts(): void {
         : definition(t("tcPageArchiveId"), entry.id),
   ];
   if (entry.first && entry.last) items.push(definition(t("tcPageLife"), `${formatUtcHour(entry.first)} → ${formatUtcHour(entry.last)}`));
-  if (entry.vmax !== null) items.push(definition(t("tcPagePeak"), `${Math.round(entry.vmax / KNOT)} kt`));
+  // The peak is the centres' knots, with the viewer's unit beside it.
+  if (entry.vmax !== null) {
+    const knots = `${Math.round(entry.vmax / KNOT)} kt`;
+    items.push(definition(t("tcPagePeak"), units.wind === "kt" ? knots : `${knots} · ${formatWind(entry.vmax, 0)}`));
+  }
   items.push(definition(t("tcPageForecasts"), String(loaded.records.length)));
   facts.replaceChildren(...items);
   renderProvenance(loaded.best?.provenance ?? []);
@@ -859,6 +864,13 @@ onLocaleChange(() => {
   map?.setStyle(basemapStyle());
   if (loaded) renderAll();
   renderPicker();
+});
+
+onUnitsChange(() => {
+  // The track-error heading names the distance unit (`{distanceUnit}`).
+  applyStaticMessages();
+  if (loaded) renderErrors();
+  if (loaded) renderFacts();
 });
 
 load().catch((error: unknown) => fail(t("tcPageFailed", { message: error instanceof Error ? error.message : String(error) })));

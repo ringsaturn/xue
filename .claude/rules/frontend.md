@@ -14,11 +14,11 @@ Background: [`docs/contribution/frontend.md`](../../docs/contribution/frontend.m
 
 - `web/src/wasm/` is generated (`make wasm`). Nothing typechecks or builds
   without it.
-- **Live bindings**: `isDark`, `locale`, `htmlLang`, `basemapLang` and
-  `displayZone` change in place. Read them at the point of use and never
+- **Live bindings**: `isDark`, `locale`, `htmlLang`, `basemapLang`,
+  `displayZone`, `units` and `grid` / `coordinateFormat` change in place. Read them at the point of use and never
   capture them in a module-level constant. Theme and locale switch without a
   reload: subscribe through `onThemeChange` / `onLocaleChange` /
-  `onDisplayZoneChange`.
+  `onDisplayZoneChange` / `onUnitsChange` / `onMapPrefsChange`.
 - Never call `map.setStyle`, because it drops the custom WebGL layers. Use
   `syncBasemapStyle`'s property diff.
 - Never animate raster opacity. Blend frames through `u_mix`.
@@ -33,9 +33,9 @@ Background: [`docs/contribution/frontend.md`](../../docs/contribution/frontend.m
   English. Long-lived status copy goes through `say()`. Showcase `title` /
   `summary` carry all eleven locales (`tests/fixtures/locales.json`).
 - **URL state** is parsed only in `urlstate.ts` (`?lang=` in `i18n.ts`,
-  `?theme=` in `theme.ts`). Unknown values fall back to defaults. The camera
-  is in the fragment (`#map=`). A new parameter also goes into
-  `web/public/llms.txt`.
+  `?theme=` in `theme.ts`, `?units=` in `units.ts`). Unknown values fall
+  back to defaults. The camera is in the fragment (`#map=`). A new
+  parameter also goes into `web/public/llms.txt`.
 - What is on screen is one `ViewState` (`viewstate.ts`). The rail, the level
   row and the URL are projections of it. Never keep a second copy.
 - The primary session gates the playhead. Overlays, marks (storms,

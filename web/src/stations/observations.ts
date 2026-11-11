@@ -26,6 +26,7 @@
 
 import type { MeteogramBand, MeteogramObservation, MeteogramRowId } from "../meteogram";
 import type { CloudLayer, Metar, Taf, TafPeriod } from "./schema";
+import { formatWind as formatWindSpeed } from "../units";
 
 /**
  * Sky cover in eighths, by the code a layer is reported under.
@@ -198,7 +199,7 @@ export function nearestObservation(
 export function formatWind(wd: number | null, ws: number | null): string | null {
   if (ws === null || !Number.isFinite(ws)) return null;
   const from = wd === null ? "VRB" : `${String(Math.round(wd)).padStart(3, "0")}°`;
-  return `${from} ${Math.round(ws)} m/s`;
+  return `${from} ${formatWindSpeed(ws, 0)}`;
 }
 
 /**
