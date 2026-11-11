@@ -275,6 +275,7 @@ export const ru: Record<MessageKey, string> = {
   measureSurface: "По поверхности {length} · ↑{climb} ↓{descent}",
   measureStraight: "По прямой {length}",
   measureDem: "Шаг выборки ЦМР {resolution}",
+  measureProfileAria: "Высота вдоль линии",
   particlesToggle: "Частицы",
   particlesToggleAria: "Включить или выключить анимацию частиц ветра",
   phaseToggle: "Фаза осадков и линия {freezing}",

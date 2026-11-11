@@ -21,6 +21,7 @@ import {
   unwrapLongitude,
   type LonLat,
 } from "../../web/src/measure";
+import { heightRange, nearestSample } from "../../web/src/measureprofile";
 
 describe("distance", () => {
   it("reads a degree of a meridian at the equator on the ellipsoid, not the sphere", () => {
@@ -79,6 +80,22 @@ describe("ground profile", () => {
     expect(profile.descent).toBe(20);
     expect(profile.straight).toBeCloseTo(Math.hypot(pathLength(samples), 10), 0);
     expect(profile.resolution).toBe(110);
+    // The track carries every sample with its distance along the line.
+    expect(profile.track.map((point) => point.height)).toEqual([0, 30, 10, 10]);
+    expect(profile.track[0]!.along).toBe(0);
+    expect(profile.track[3]!.along).toBeCloseTo(pathLength(samples), 6);
+  });
+
+  it("sizes the chart's height axis and finds the sample under a distance", () => {
+    const track = [0, 100, 200, 300].map((along, i) => ({ lon: 0, lat: 0, along, height: [10, 50, 30, 20][i]! }));
+    const [low, high] = heightRange(track);
+    expect(low).toBeLessThan(10);
+    expect(high).toBeGreaterThan(50);
+    expect(heightRange([{ lon: 0, lat: 0, along: 0, height: 7 }])).toEqual([2, 12]);
+    expect(nearestSample(track, 0)).toBe(0);
+    expect(nearestSample(track, 140)).toBe(1);
+    expect(nearestSample(track, 160)).toBe(2);
+    expect(nearestSample(track, 999)).toBe(3);
   });
 
   it("reads a hole in the DEM as level ground, and no straight line without both ends", () => {

@@ -270,6 +270,7 @@ export const ja: Record<MessageKey, string> = {
   measureSurface: "地表沿い {length} · ↑{climb} ↓{descent}",
   measureStraight: "直線距離 {length}",
   measureDem: "DEM サンプル間隔 {resolution}",
+  measureProfileAria: "線に沿った標高",
   particlesToggle: "粒子アニメーション",
   particlesToggleAria: "風の粒子アニメーションを切り替え",
   phaseToggle: "降水の相と {freezing} 線",

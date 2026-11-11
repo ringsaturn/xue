@@ -21,11 +21,15 @@
  * descent, and the straight line between its two ends at their heights.
  * A surface length depends on the resolution it is sampled at — the finer
  * the DEM, the longer the path — so the reading names the resolution.
+ * With the 3D terrain on, a card at its end draws the profile itself
+ * (`measureprofile.ts`), and the point under the pointer is marked on the
+ * line.
  *
  * The geometry is plain functions so the tests can read it without a map. */
 
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type {
+  Popup,
   CircleLayerSpecification,
   FillLayerSpecification,
   LineLayerSpecification,
@@ -34,7 +38,9 @@ import type {
   SymbolLayerSpecification,
 } from "maplibre-gl";
 
+import { cardPopup } from "./cardpopup";
 import { contextInk } from "./casecontext";
+import { profileChart, type ProfilePoint } from "./measureprofile";
 import { AUTHALIC_RADIUS, geodesicDistance, straightLineDistance } from "./geodesy";
 import { onLocaleChange, t } from "./i18n";
 import { demElevationsAt, demPixelMetres, TERRAIN_MAX_ZOOM } from "./terrain";
@@ -188,6 +194,8 @@ export interface GroundProfile {
   descent: number;
   straight: number | null;
   resolution: number;
+  /** Every sample, with the horizontal distance to it along the line. */
+  track: ProfilePoint[];
 }
 
 /** At most this many heights in a profile, and about this many DEM tiles. */
@@ -223,15 +231,19 @@ export function profileFromHeights(samples: readonly LonLat[], heights: readonly
   let climb = 0;
   let descent = 0;
   let previous: number | null = null;
+  let along = 0;
+  const track: ProfilePoint[] = [];
   for (let i = 0; i < samples.length; i += 1) {
     const height: number | null = heights[i] ?? previous;
     if (i > 0) {
       const run = distance(samples[i - 1]!, samples[i]!);
+      along += run;
       const rise = height !== null && previous !== null ? height - previous : 0;
       surface += Math.hypot(run, rise);
       if (rise > 0) climb += rise;
       else descent -= rise;
     }
+    if (height !== null) track.push({ lon: samples[i]![0], lat: samples[i]![1], along, height });
     previous = height;
   }
   const first = samples[0];
@@ -244,7 +256,7 @@ export function profileFromHeights(samples: readonly LonLat[], heights: readonly
     first && last && start !== null && end !== null
       ? straightLineDistance({ lon: first[0], lat: first[1], height: start }, { lon: last[0], lat: last[1], height: end })
       : null;
-  return { surface, climb, descent, straight, resolution };
+  return { surface, climb, descent, straight, resolution, track };
 }
 
 /** The ground under a path, read off the DEM. */
@@ -268,7 +280,7 @@ export function profileLines(profile: GroundProfile): string[] {
   return lines;
 }
 
-type MeasureProperties = { role: "edge" | "fill" | "vertex" | "label"; label?: string };
+type MeasureProperties = { role: "edge" | "fill" | "vertex" | "label" | "hover"; label?: string };
 
 /** What the layers draw for a shape: its edges (to the pointer while it is
  * being drawn), an area's fill, the vertices, and the readings — a
@@ -279,6 +291,7 @@ export function measureFeatures(
   points: readonly LonLat[],
   cursor: LonLat | null,
   profile: GroundProfile | null = null,
+  hover: LonLat | null = null,
 ): FeatureCollection<Geometry, MeasureProperties> {
   const features: Feature<Geometry, MeasureProperties>[] = [];
   const path = cursor ? [...points, cursor] : [...points];
@@ -313,6 +326,7 @@ export function measureFeatures(
   } else if (path.length >= 3) {
     label(path[path.length - 1]!, formatArea(ringArea(path)));
   }
+  if (hover) features.push({ type: "Feature", geometry: { type: "Point", coordinates: hover }, properties: { role: "hover" } });
   return { type: "FeatureCollection", features };
 }
 
@@ -322,6 +336,7 @@ const LAYERS = {
   casing: "measure-casing",
   edge: "measure-edge",
   vertex: "measure-vertex",
+  hover: "measure-hover",
   label: "measure-label",
 } as const;
 
@@ -367,6 +382,18 @@ export function measureLayerSpecs(
       },
     },
     {
+      id: LAYERS.hover,
+      type: "circle",
+      source: SOURCE,
+      filter: ["==", ["get", "role"], "hover"],
+      paint: {
+        "circle-radius": 5,
+        "circle-color": ink.measure,
+        "circle-stroke-color": ink.halo,
+        "circle-stroke-width": 2,
+      },
+    },
+    {
       id: LAYERS.label,
       type: "symbol",
       source: SOURCE,
@@ -405,6 +432,10 @@ export class MeasureTool {
    * drops a reading that comes back for a shape since changed. */
   private profile: GroundProfile | null = null;
   private generation = 0;
+  /** The profile card at the line's end, open while the 3D terrain is on,
+   * and the sample its pointer is over. */
+  private card: Popup | null = null;
+  private hover: LonLat | null = null;
 
   constructor(
     private readonly map: MaplibreMap,
@@ -412,8 +443,17 @@ export class MeasureTool {
   ) {
     // The readings are written in the viewer's distance unit, and the
     // profile's words in the viewer's language.
-    onUnitsChange(() => this.render());
-    onLocaleChange(() => this.render());
+    onUnitsChange(() => {
+      this.render();
+      this.syncCard(true);
+    });
+    onLocaleChange(() => {
+      this.render();
+      this.syncCard(true);
+    });
+    // The profile is drawn while the ground is: the terrain switch opens
+    // and closes it.
+    map.on("terrain", () => this.syncCard());
   }
 
   get armed(): MeasureKind | null {
@@ -504,6 +544,7 @@ export class MeasureTool {
           if (generation !== this.generation) return;
           this.profile = profile;
           this.render();
+          this.syncCard();
         })
         // No DEM (offline, a tile server down): the length stands alone.
         .catch(() => undefined);
@@ -513,6 +554,43 @@ export class MeasureTool {
   private forgetProfile(): void {
     this.profile = null;
     this.generation += 1;
+    this.syncCard();
+  }
+
+  /** Open the profile card at the line's end while there is a profile and
+   * the 3D terrain is on, close it otherwise; `rebuild` redraws an open one
+   * (a units or language change). */
+  private syncCard(rebuild = false): void {
+    const end = this.points[this.points.length - 1];
+    const wanted = this.kind === "distance" && this.profile !== null && end !== undefined && this.map.getTerrain() !== null;
+    if (!wanted) {
+      this.card?.remove();
+      this.card = null;
+      this.setHover(null);
+      return;
+    }
+    if (this.card && !rebuild) return;
+    const chart = profileChart(this.profile!.track, {
+      formatDistance,
+      formatHeight: (metres) => formatHeight(metres),
+      onHover: (point) => this.setHover(point ? [point.lon, point.lat] : null),
+    });
+    if (this.card) {
+      this.card.setDOMContent(chart);
+      return;
+    }
+    const card = cardPopup({ className: "station-popup measure-popup", maxWidth: "320px", offset: 14 }).setLngLat(end!).setDOMContent(chart);
+    card.on("close", () => {
+      if (this.card === card) this.card = null;
+      this.setHover(null);
+    });
+    this.card = card.addTo(this.map);
+  }
+
+  private setHover(point: LonLat | null): void {
+    if (this.hover === point) return;
+    this.hover = point;
+    this.schedule();
   }
 
   private readonly move = (event: MapMouseEvent): void => {
@@ -554,7 +632,7 @@ export class MeasureTool {
 
   private render(): void {
     if (!this.kind) return;
-    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor, this.ended ? this.profile : null);
+    const data = measureFeatures(this.kind, this.points, this.ended ? null : this.cursor, this.ended ? this.profile : null, this.hover);
     const source = this.map.getSource(SOURCE) as { setData?: (data: unknown) => void } | undefined;
     if (source?.setData) {
       source.setData(data);

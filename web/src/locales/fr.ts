@@ -273,6 +273,7 @@ export const fr: Record<MessageKey, string> = {
   measureSurface: "Au sol {length} · ↑{climb} ↓{descent}",
   measureStraight: "Ligne droite {length}",
   measureDem: "MNT échantillonné tous les {resolution}",
+  measureProfileAria: "Altitude le long de la ligne",
   particlesToggle: "Particules",
   particlesToggleAria: "Activer ou désactiver l'animation des particules de vent",
   phaseToggle: "Phase des précipitations et ligne de {freezing}",
