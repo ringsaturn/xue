@@ -2257,6 +2257,69 @@ html[lang="ja"] .rail-glyph {
   opacity: 0.5;
 }
 
+/* The settings sheet: the export sheet's shape under the gear. Its rows
+   are the export sheet's captioned chips; the body scrolls when the
+   viewport is short, the heading stays. */
+.settings-sheet .model-sheet-panel {
+  top: 80px;
+  right: 20px;
+  left: auto;
+  width: 360px;
+  gap: 12px;
+}
+
+.settings-sheet .sheet-heading {
+  padding-bottom: 0;
+}
+
+.settings-body {
+  display: flex;
+  max-height: min(70vh, 640px);
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The languages as chips, wrapped: eleven endonyms in two or three lines
+   rather than eleven rows. */
+.settings-languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-languages button {
+  height: 32px;
+  padding: 0 10px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-l);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+}
+
+.settings-languages button[aria-current] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.settings-languages button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-languages .lang-name {
+  font-size: inherit;
+}
+
+.settings-languages .model-check {
+  display: none;
+}
+
 /* The span: two sliders over the same axis, each with the frame it sits
    on, the way the capsule reads the frame on screen. */
 .export-bound {
@@ -4315,6 +4378,7 @@ body[data-context] .source-credit[data-credit-context] {
   .showcase-page .lang-sheet .model-sheet-panel,
   .tc-sheet .model-sheet-panel,
   .export-sheet .model-sheet-panel,
+  .settings-sheet .model-sheet-panel,
   .field-sheet .model-sheet-panel {
     top: auto;
     right: 0;

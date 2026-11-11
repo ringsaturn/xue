@@ -120,3 +120,17 @@ export function mountLanguagePicker(trigger: HTMLElement, sheet: HTMLElement, li
   render();
   return render;
 }
+
+/** The language rows alone, for a sheet that carries them among other
+ * settings: picking one switches the language in place. Hands back the row
+ * builder, to run again after a switch so the check moves. */
+export function mountLanguageList(list: HTMLElement): () => void {
+  const render = () =>
+    fillLanguageList(list, LOCALES, {
+      current: locale,
+      htmlLang: localeHtmlLang,
+      onPick: (next: Locale) => setLocale(next),
+    });
+  render();
+  return render;
+}

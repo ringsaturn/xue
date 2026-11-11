@@ -1,13 +1,15 @@
 /** The card a clicked storm point opens: the centre's own numbers for that
  * time, as the product carries them — its class as it spells it, the
- * sustained wind in the knots the centres speak and in m/s, the central
- * pressure, the four quadrant radii at each threshold, the radius of
- * maximum wind and the gust when reported. Codes (`NHC`, `34KT`, `RMW`)
- * are instrument text and stay English; the valid time is the shell's,
- * read in its display zone. */
+ * sustained wind in the knots the centres speak and in the viewer's wind
+ * unit, the central pressure, the four quadrant radii at each threshold,
+ * the radius of maximum wind and the gust when reported, each in the
+ * viewer's units (`units.ts`). Codes (`NHC`, `34KT`, `RMW`) are instrument
+ * text and stay English — a threshold is named in knots whatever the wind
+ * unit; the valid time is the shell's, read in its display zone. */
 
 import { element } from "../dom";
 import { t } from "../i18n";
+import { convertDistance, formatDistance, formatPressure, formatWind as formatSpeed, UNIT_LABELS, units } from "../units";
 import { agencyColor, TC_AGENCIES } from "./agencies";
 import type { TcPointData } from "./layers";
 import { QUADRANT_CODES } from "./schema";
@@ -25,11 +27,12 @@ function formatLead(seconds: number): string {
 }
 
 function formatWind(value: number): string {
-  return `${Math.round(value / KNOT)} kt · ${Math.round(value)} m/s`;
+  const knots = `${Math.round(value / KNOT)} kt`;
+  return units.wind === "kt" ? knots : `${knots} · ${formatSpeed(value, 0)}`;
 }
 
 function formatKm(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value)}`;
+  return value === null ? "—" : `${Math.round(convertDistance(value))}`;
 }
 
 export function buildTcCard(
@@ -65,7 +68,7 @@ export function buildTcCard(
   if (data.vmax !== null)
     headline.append(element("span", "", formatWind(data.vmax)));
   if (data.pmin !== null)
-    headline.append(element("span", "", `${Math.round(data.pmin)} hPa`));
+    headline.append(element("span", "", formatPressure(data.pmin, 0)));
   if (headline.childElementCount) root.append(headline);
 
   if (data.radii) {
@@ -74,7 +77,7 @@ export function buildTcCard(
     header.append(element("th", "", ""));
     for (const quadrant of QUADRANT_CODES)
       header.append(element("th", "", quadrant));
-    header.append(element("th", "tc-card-unit", "km"));
+    header.append(element("th", "tc-card-unit", UNIT_LABELS.distance[units.distance]));
     const body = table.createTBody();
     for (const threshold of ["34", "50", "64"] as const) {
       const quadrants = data.radii[threshold];
@@ -89,7 +92,7 @@ export function buildTcCard(
   }
 
   const extras: string[] = [];
-  if (data.rmw !== null) extras.push(`RMW ${Math.round(data.rmw)} km`);
+  if (data.rmw !== null) extras.push(`RMW ${formatDistance(data.rmw, 0)}`);
   if (data.gust !== null) extras.push(`GUST ${formatWind(data.gust)}`);
   if (extras.length)
     root.append(element("div", "tc-card-extra", extras.join(" · ")));

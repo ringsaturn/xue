@@ -15,7 +15,8 @@
  * flat map.
  */
 
-import type { Map as MaplibreMap, SymbolLayerSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, Map as MaplibreMap, SymbolLayerSpecification } from "maplibre-gl";
+import { convertHeight, UNIT_LABELS, units } from "./units";
 
 const PEAK_SOURCE = "peaks";
 export const PEAK_LAYER = "peaks";
@@ -55,8 +56,12 @@ function peakIcon(pixelRatio: number): ImageData {
 }
 
 /** The label: the name in the basemap language (English when Wikidata has
- * none), and the height on a second, smaller line. */
+ * none), and the height on a second, smaller line, in the viewer's height
+ * unit to the whole unit. */
 function peakText(basemapLang: string, htmlLang: string): SymbolLayerSpecification["layout"] {
+  const factor = convertHeight(1);
+  const elevation: ExpressionSpecification = ["get", "elevation"];
+  const height: ExpressionSpecification = factor === 1 ? elevation : ["round", ["*", elevation, factor]];
   return {
     "text-field": [
       "format",
@@ -64,7 +69,7 @@ function peakText(basemapLang: string, htmlLang: string): SymbolLayerSpecificati
       {},
       "\n",
       {},
-      ["concat", ["number-format", ["get", "elevation"], { locale: htmlLang }], " m"],
+      ["concat", ["number-format", height, { locale: htmlLang }], ` ${UNIT_LABELS.height[units.height]}`],
       { "font-scale": 0.85 },
     ],
   };
@@ -124,7 +129,8 @@ export class PeakLabels {
     return addedNow;
   }
 
-  /** Follow the UI language: the name key and the digit grouping. */
+  /** Follow the UI language (the name key and the digit grouping) and the
+   * height unit. */
   syncLanguage(): void {
     if (!this.added) return;
     const { basemapLang, htmlLang } = this.language();

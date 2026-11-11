@@ -88,6 +88,9 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: "jsdom",
     include: ["../tests/web/**/*.test.ts"],
+    // jsdom's browser reads en-US, which would put every expectation in
+    // Fahrenheit and miles; the suite reads in metric unless a test says.
+    setupFiles: ["../tests/web/setup.ts"],
   },
 }));
 

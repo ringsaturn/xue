@@ -24,7 +24,8 @@ import {
   t,
   type MessageKey,
 } from "./i18n";
-import { createSheet, mountLanguagePicker } from "./sheet";
+import { createSheet } from "./sheet";
+import { mountSettingsSheet } from "./settingssheet";
 import { cardPopup } from "./cardpopup";
 import { formatBytes, formatRegion } from "./format";
 import { dataBaseUrl } from "./site";
@@ -158,7 +159,7 @@ import { installEmbedApi, type EmbedHub, type EmbedOpenCase, type EmbedSource } 
 import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
 import { clipDomain, geoGrid, gridMapFor, type RegularGrid } from "./gridmap";
 import type { ProbeVariable } from "./probe";
-import { displayUnit } from "./units";
+import { convertFileLegendLabel, convertLegendLabel, displayUnit, formatTemperature, onUnitsChange, variableDisplayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { globeProjection, isGlobeProjection } from "./projection";
 import { cacheKey, createPlaneCache, MEBIBYTE } from "./planecache";
@@ -178,7 +179,7 @@ import {
   type PhaseField,
   type PhasePlane,
 } from "./precipphase";
-import { applyTheme, isDark, onThemeChange, toggleTheme } from "./theme";
+import { applyTheme, isDark, onThemeChange } from "./theme";
 import { timelinePlan, type TimelinePlan, type TimelineSegment } from "./timeline";
 import {
   displayZone,
@@ -206,6 +207,8 @@ import { registerTerrainProtocol } from "./terrainprotocol";
 import { PeakLabels } from "./peaks";
 import { TerrainShadows } from "./shadowlayer";
 import { TerrainContours } from "./terraincontours";
+import { CoordinateGrid } from "./gridlayer";
+import { grid, onMapPrefsChange } from "./mapprefs";
 import { applyPageMeta } from "./pagemeta";
 import {
   caseCameraLimits,
@@ -604,6 +607,10 @@ interface VariableUi {
   bufferTitle: string;
   label: string;
   legend: readonly string[];
+  /** Whether the ticks read in the file's own unit (a codebook's or a host
+   * palette's) rather than the chart's hand-written one, which writes a
+   * kelvin field in °C. */
+  legendInFileUnit: boolean;
   /** A swatch key in place of the bar, for a picture (the Dust RGB). */
   legendKey: readonly LegendSwatch[] | null;
 }
@@ -680,6 +687,7 @@ function applyBasemapInk(darkGround: boolean): void {
   }
   applyLabelInk();
   terrainContours?.setInk(darkGround);
+  coordinateGrid?.setInk(darkGround);
 }
 
 /** The relief's cast shadows (`shadowlayer.ts`), built once the style has
@@ -687,6 +695,39 @@ function applyBasemapInk(darkGround: boolean): void {
 let terrainShadows: TerrainShadows | null = null;
 /** The relief's contour lines (`terraincontours.ts`), likewise. */
 let terrainContours: TerrainContours | null = null;
+
+/** The MGRS grid and the parallels and meridians (`gridlayer.ts`), built
+ * once the style has loaded, since they go in under its first label. */
+let coordinateGrid: CoordinateGrid | null = null;
+
+function startCoordinateGrid(): void {
+  const mapBox = () => map.getContainer().getBoundingClientRect();
+  // The edge numbers sit clear of the controls laid over the map's edges.
+  const clearOf = (selector: string) => {
+    const box = document.querySelector(selector)?.getBoundingClientRect();
+    return box && box.width > 0 && box.height > 0 ? box : null;
+  };
+  coordinateGrid = new CoordinateGrid({
+    map,
+    darkGround: () => document.body.dataset.ground === "dark",
+    edgeInsets: () => {
+      const outer = mapBox();
+      const title = clearOf(".title-block");
+      const actions = clearOf(".top-actions");
+      const capsule = clearOf(".timeline-panel");
+      const rail = clearOf(".variable-rail");
+      const key = clearOf(".legend");
+      return {
+        top: Math.max(12, (title?.bottom ?? 0) - outer.top + 6, (actions?.bottom ?? 0) - outer.top + 6),
+        right: Math.max(12, rail ? outer.right - rail.left + 6 : 0),
+        bottom: Math.max(12, capsule ? outer.bottom - capsule.top + 6 : 0),
+        left: Math.max(12, key ? key.right - outer.left + 6 : 0),
+      };
+    },
+  });
+  coordinateGrid.setState(grid);
+  onMapPrefsChange(() => coordinateGrid?.setState(grid));
+}
 
 function startTerrainContours(): void {
   const contours = new TerrainContours({
@@ -946,8 +987,6 @@ const modelTrigger = required<HTMLButtonElement>("model-trigger");
 const modelSheet = required<HTMLElement>("model-sheet");
 const creditsTrigger = required<HTMLButtonElement>("credits-trigger");
 const creditsSheet = required<HTMLElement>("credits-sheet");
-const langTrigger = required<HTMLButtonElement>("lang-toggle");
-const langSheet = required<HTMLElement>("lang-sheet");
 const tcTile = required<HTMLButtonElement>("tc-tile");
 const soundingTile = required<HTMLButtonElement>("sounding-tile");
 const airportTile = required<HTMLButtonElement>("airport-tile");
@@ -1143,9 +1182,15 @@ const tcSheetControl = createSheet({
   canOpen: () => marksControl.tcLoaded !== null && activeCase === null,
 });
 
-/** The language picker; `renderLanguageList` rebuilds its rows after a
- * switch so the check moves. */
-const renderLanguageList = mountLanguagePicker(langTrigger, langSheet, required<HTMLElement>("lang-list"));
+/** The settings sheet: theme, language, units, grids, coordinates. It
+ * rebuilds its own rows on every change (settingssheet.ts). */
+mountSettingsSheet(
+  required<HTMLButtonElement>("settings-toggle"),
+  required<HTMLElement>("settings-sheet"),
+  required<HTMLElement>("settings-body"),
+  required<HTMLElement>("settings-languages"),
+);
+
 
 /** The field sheet: every field the run publishes, hung from the rail's
  * MORE tile; its rows are written by `renderFieldSheet` whenever the run
@@ -4228,6 +4273,7 @@ function variableUi(session: VariableSession): VariableUi {
       bufferTitle: spec.bufferTitle,
       label: cloud ? spec.label() : t("varLabelRefl3d"),
       legend: spec.legend(),
+      legendInFileUnit: false,
       legendKey: spec.legendKey?.() ?? null,
     };
   }
@@ -4242,6 +4288,7 @@ function variableUi(session: VariableSession): VariableUi {
       bufferTitle: spec.bufferTitle,
       label: spec.label(),
       legend: declared ?? spec.legend(),
+      legendInFileUnit: declared !== null,
       legendKey: declared ? null : (spec.legendKey?.() ?? null),
     };
   }
@@ -4264,6 +4311,7 @@ function variableUi(session: VariableSession): VariableUi {
     bufferTitle: "Data buffer",
     label: variable.label,
     legend,
+    legendInFileUnit: true,
     legendKey: null,
   };
 }
@@ -4322,10 +4370,11 @@ function updateVariablePresentation(session: VariableSession): void {
   // serif headline there fights the data underneath it.
   variableTitle.textContent = ui.title.join(" ");
   legend.setAttribute("aria-label", t("legendAria", { label: ui.label }));
-  legendUnit.textContent = displayUnit(session.variable.unit);
+  const { unit, parameter } = session.variable;
+  legendUnit.textContent = variableDisplayUnit(session.variable);
   legendLabels.replaceChildren(...ui.legend.map((label) => {
     const span = document.createElement("span");
-    span.textContent = label;
+    span.textContent = ui.legendInFileUnit ? convertFileLegendLabel(unit, label, parameter) : convertLegendLabel(unit, label, parameter);
     return span;
   }));
   legendBar.style.background = legendGradientFor(session);
@@ -4352,7 +4401,7 @@ function updateVariablePresentation(session: VariableSession): void {
     legendBar.style.background = key.gradient;
     legendLabels.replaceChildren(...key.labels.map((label) => {
       const span = document.createElement("span");
-      span.textContent = label;
+      span.textContent = convertLegendLabel("mm/h", label);
       return span;
     }));
   }
@@ -4363,11 +4412,11 @@ function updateVariablePresentation(session: VariableSession): void {
     variableCode.textContent = `${model.label} / APCP ${code}`;
     variableTitle.textContent = `Precipitation ${code} Total`;
     legend.setAttribute("aria-label", t("legendAria", { label: t("accumTotalGloss", { window: code }) }));
-    legendUnit.textContent = "mm";
+    legendUnit.textContent = displayUnit("mm");
     legendBar.style.background = key.gradient;
     legendLabels.replaceChildren(...key.labels.map((label) => {
       const span = document.createElement("span");
-      span.textContent = label;
+      span.textContent = convertLegendLabel("mm", label);
       return span;
     }));
   }
@@ -6027,7 +6076,7 @@ function renderPhaseLabels(): void {
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [anchor.longitude, anchor.latitude] },
-        properties: { zone, label: zone ? zoneName : "0 °C", color: zone ? zoneInk : lineInk },
+        properties: { zone, label: zone ? zoneName : formatTemperature(0, 0), color: zone ? zoneInk : lineInk },
       };
     }),
   });
@@ -6721,7 +6770,6 @@ function applyAppearance(): void {
  * level row and legend, the page's own metadata, the long-lived status
  * lines — and the basemap's label language. */
 function applyLocale(): void {
-  renderLanguageList();
   if (imageryMode()) {
     renderImageryLevelRow();
     applyImageryTitle();
@@ -6759,14 +6807,29 @@ function applyDisplayZone(): void {
   buildTimeline();
 }
 
-// Neither the locale nor the theme reloads: the picker and the toggle each
-// persist the choice and repaint in place through the two listeners here.
-// The language picker is wired where it is built, beside the other sheets.
+/** Rewrite every value and unit this module shows in the viewer's units:
+ * the legend's unit and ticks, the probe's readouts, rows and sounding, the
+ * peaks' heights and the freezing line's name. Nothing drawn by a shader
+ * changes: the conversion is display only. The cards, the ruler and the
+ * fire wind arrow follow through their own listeners. */
+function applyUnits(): void {
+  // Copy that names a quantity (`{freezing}`, `{fwGust}`, `{distanceUnit}`,
+  // i18n.ts) is rewritten the way a language switch rewrites it; the
+  // legend, the probe and the peaks are redrawn there too.
+  applyStaticMessages();
+  applyLocale();
+  soundingSection.render();
+  renderPhaseLabels();
+}
+
+// Neither the locale nor the theme reloads: the settings sheet persists
+// each choice and the shell repaints in place through the two listeners
+// here.
 onThemeChange(applyAppearance);
 onLocaleChange(applyLocale);
 // The display zone moves with the pin; every valid-time stamp follows it.
 onDisplayZoneChange(applyDisplayZone);
-required<HTMLButtonElement>("theme-toggle").addEventListener("click", toggleTheme);
+onUnitsChange(applyUnits);
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text
 // snapshot. The map-level event (not a DOM listener) is what makes this
@@ -7002,6 +7065,7 @@ map.once("load", () => {
   map.on("terrain", () => syncReliefLayers(map));
   startTerrainShadows();
   startTerrainContours();
+  startCoordinateGrid();
   syncGibs();
   // A link that fixed the view is opened on that view; every other opens
   // on the dataset's own region.

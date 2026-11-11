@@ -7,13 +7,16 @@
  * newest observation decoded: the raw METAR is not in the index, so the
  * card shows the values rather than the line.
  *
- * Station identifiers (`RJTT`, a WMO number), units (`hPa`, `m/s`, `gpm`)
- * and the flight categories (`VFR`) are instrument text and stay English;
- * the row labels and the valid time are the shell's. */
+ * Station identifiers (`RJTT`, a WMO number), unit symbols and the flight
+ * categories (`VFR`) are instrument text and stay English; the row labels
+ * and the valid time are the shell's. Values read in the viewer's units
+ * (`units.ts`); the level a sounding's headline is read at (500 hPa) is
+ * the level's name, not a measurement, and stays in hPa. */
 
 import { element } from "../dom";
 import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
+import { convertHeight, convertPrecipitation, formatDistance, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
 import { categoryColor } from "./layers";
 import type { AirportStation, SoundingStationEntry, SynopNetwork, SynopStation } from "./schema";
 
@@ -63,16 +66,28 @@ function position(lat: number, lon: number): HTMLElement {
 }
 
 function celsius(value: number | null): string | null {
-  return value === null ? null : `${value.toFixed(1)} °C`;
+  return value === null ? null : formatTemperature(value);
 }
 
 /** Metres, as the product means them: ten kilometres is the service's
- * "ten or more" ceiling and reads as such. */
+ * "ten or more" ceiling and reads as such (≥ 6 mi, ≥ 5 NM). */
 function visibility(value: number | null): string | null {
   if (value === null) return null;
-  if (value >= 10000) return "≥ 10 km";
-  if (value >= 1000) return `${(value / 1000).toFixed(1)} km`;
+  if (value >= 10000) return `≥ ${formatDistance(10, 0)}`;
+  if (units.distance !== "km") return formatDistance(value / 1000, 1);
+  if (value >= 1000) return formatDistance(value / 1000, 1);
   return `${value} m`;
+}
+
+/** A geopotential height a sounding reports (the freezing level): gpm,
+ * or feet where heights read in feet. */
+function geopotential(metres: number): string {
+  return units.height === "m" ? `${Math.round(metres)} gpm` : `${Math.round(convertHeight(metres))} ft`;
+}
+
+/** A snow depth in centimetres, or inches where depths read in inches. */
+function snowDepth(centimetres: number): string {
+  return units.precipitation === "in" ? `${convertPrecipitation(centimetres * 10).toFixed(1)} in` : `${centimetres} cm`;
 }
 
 /** The wind as one line: the direction it comes from, the speed, and the
@@ -81,8 +96,9 @@ function visibility(value: number | null): string | null {
 function wind(wd: number | null, ws: number | null, gust: number | null): string | null {
   if (ws === null) return null;
   const from = wd === null ? "VRB" : `${String(Math.round(wd)).padStart(3, "0")}°`;
-  const speed = `${ws.toFixed(1)} m/s`;
-  return gust === null ? `${from} ${speed}` : `${from} ${speed} G ${gust.toFixed(1)}`;
+  const speed = formatWind(ws);
+  // The gust shares the speed's unit, written once after the speed.
+  return gust === null ? `${from} ${speed}` : `${from} ${speed} G ${formatWind(gust).split(" ")[0]}`;
 }
 
 export function buildSoundingCard(
@@ -118,11 +134,11 @@ export function buildSoundingCard(
       t("stationFreezingLevel"),
       station.headline.freezingLevel === null
         ? null
-        : `${Math.round(station.headline.freezingLevel)} gpm`,
+        : geopotential(station.headline.freezingLevel),
     ],
     [
       t("stationPw"),
-      station.headline.pw === null ? null : `${station.headline.pw.toFixed(1)} mm`,
+      station.headline.pw === null ? null : formatPrecipitation(station.headline.pw),
     ],
     [t("stationLevels"), String(station.headline.levels)],
   ]);
@@ -166,7 +182,7 @@ export function buildAirportCard(
   const table = rows([
     [t("stationCategory"), station.category],
     [t("stationVisibility"), visibility(station.vis)],
-    [t("stationQnh"), station.qnh === null ? null : `${station.qnh.toFixed(1)} hPa`],
+    [t("stationQnh"), station.qnh === null ? null : formatPressure(station.qnh)],
   ]);
   if (table) root.append(table);
 
@@ -182,8 +198,8 @@ function period(seconds: number | null): string {
   return seconds % 3600 === 0 ? ` · ${seconds / 3600} h` : ` · ${Math.round(seconds / 60)} min`;
 }
 
-function fixed(value: number | null | undefined, digits: number, unit: string): string | null {
-  return value === null || value === undefined ? null : `${value.toFixed(digits)} ${unit}`;
+function present(value: number | null | undefined, format: (value: number) => string): string | null {
+  return value === null || value === undefined ? null : format(value);
 }
 
 /** A surface station's card: its current values from the index — each
@@ -217,14 +233,14 @@ export function buildSynopCard(
 
   const table = rows([
     [t("stationHumidity"), values.rh === null || values.rh === undefined ? null : `${values.rh} %`],
-    [t("stationPrecipitation") + period(network.prPeriod), fixed(values.pr, 1, "mm")],
-    [t("stationPrecipitation") + period(3600), fixed(values.pr1h, 1, "mm")],
-    [t("stationPressure"), fixed(values.p, 1, "hPa")],
-    [t("stationSeaLevelPressure"), fixed(values.slp, 1, "hPa")],
+    [t("stationPrecipitation") + period(network.prPeriod), present(values.pr, (value) => formatPrecipitation(value))],
+    [t("stationPrecipitation") + period(3600), present(values.pr1h, (value) => formatPrecipitation(value))],
+    [t("stationPressure"), present(values.p, (value) => formatPressure(value))],
+    [t("stationSeaLevelPressure"), present(values.slp, (value) => formatPressure(value))],
     [t("stationSunshine") + period(network.prPeriod), values.sun === null || values.sun === undefined ? null : `${Math.round(values.sun)} min`],
-    [t("stationSnowDepth"), values.snow === null || values.snow === undefined ? null : `${values.snow} cm`],
+    [t("stationSnowDepth"), present(values.snow, snowDepth)],
     [t("stationVisibility"), visibility(values.vis ?? null)],
-    [t("stationElevation"), station.elev === null ? null : `${Math.round(station.elev)} m`],
+    [t("stationElevation"), station.elev === null ? null : formatHeight(station.elev)],
   ]);
   if (table) root.append(table);
 

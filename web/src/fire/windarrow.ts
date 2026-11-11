@@ -11,6 +11,7 @@
 
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type { GeoJSONSource, Map as MaplibreMap } from "maplibre-gl";
+import { formatWind, onUnitsChange } from "../units";
 
 const SOURCE = "fire-wind-arrow";
 const LAYERS = {
@@ -78,7 +79,7 @@ export function arrowFeatures(mean: FireWindMean): FeatureCollection {
   features.push({
     type: "Feature",
     geometry: { type: "Point", coordinates: labelAt },
-    properties: { label: `${speed.toFixed(1)} m/s · ${clock(mean.from)} →` },
+    properties: { label: `${formatWind(speed)} · ${clock(mean.from)} →` },
   } satisfies Feature<Point>);
   return { type: "FeatureCollection", features };
 }
@@ -87,8 +88,15 @@ export class FireWindArrow {
   private added = false;
   /** What is drawn, so a repeat of the same mean is not a rebuild. */
   private shownKey: string | null = null;
+  private shownMean: FireWindMean | null = null;
 
-  constructor(private readonly map: MaplibreMap) {}
+  constructor(private readonly map: MaplibreMap) {
+    // The label carries the speed in the viewer's wind unit.
+    onUnitsChange(() => {
+      this.shownKey = null;
+      this.show(this.shownMean);
+    });
+  }
 
   ensure(before?: string): void {
     if (this.added) return;
@@ -150,6 +158,7 @@ export class FireWindArrow {
     const key = mean
       ? `${mean.center.join(",")}|${mean.u.toFixed(2)}|${mean.v.toFixed(2)}|${mean.from}`
       : null;
+    this.shownMean = mean;
     if (key === this.shownKey) return;
     this.shownKey = key;
     const source = this.map.getSource(SOURCE) as GeoJSONSource | undefined;

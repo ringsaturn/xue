@@ -328,8 +328,16 @@ fall back to defaults rather than fail, so a constructed link always opens.
   browser from the terrain tiles (500 m at zoom 9 down to 25 m at zoom 15,
   the index line every fifth labelled in metres), from zoom 9 in (default
   off; also a switch on the view tile).
+- `?grid=mgrs|latlon|mgrs,latlon|off` — draw the MGRS grid (zones, 100 km
+  squares, 10 km lines from zoom 8, 1 km from zoom 11, as the GSI's UTM grid
+  numbers them) and/or parallels and meridians; `off` overrides the
+  viewer's stored choice (default: the stored choice, else none).
 - `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
+- `?units=auto|metric|imperial[,<unit>…]` — display units, a preset then
+  any per-quantity units (`c|f`, `ms|kmh|kt|mph`, `hpa|kpa|inhg|mmhg`,
+  `mm|in`, `m|ft`, `km|mi|nmi`), e.g. `?units=metric,kt`. Display only;
+  otherwise the viewer's stored choice, then the browser's region, decides.
 - `?tc=<storm id>` — focus one tropical cyclone (an ATCF id such as
   `EP142026`, or the product's `x-<basin>-<hour>-<n>` id for an unnumbered
   system) and frame it; `?tc=off` hides the storm tracks; absent, every

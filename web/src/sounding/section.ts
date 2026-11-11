@@ -24,6 +24,7 @@
 
 import { element } from "../dom";
 import { t } from "../i18n";
+import { formatDistance, formatTemperature, formatWind } from "../units";
 import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetch";
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
 import { parcelPath, profileFromSounding, type Profile } from "./profile";
@@ -325,15 +326,17 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       readout.value = "";
       return;
     }
+    // The pressure is the diagram's own vertical coordinate and stays in
+    // hPa, as its axis does; the values read in the viewer's units.
     const parts = [`${reading.p.toFixed(0)} hPa`];
     for (const [index, values] of reading.profiles.entries()) {
       const name = index === 0 ? t("soundingObserved") : t("soundingModel");
-      const temperature = values.t === null ? "--" : `${values.t.toFixed(1)} °C`;
-      const dew = values.td === null ? "--" : `${values.td.toFixed(1)} °C`;
+      const temperature = values.t === null ? "--" : formatTemperature(values.t);
+      const dew = values.td === null ? "--" : formatTemperature(values.td);
       const wind =
         values.ws === null || values.wd === null
           ? "--"
-          : `${String(Math.round(values.wd)).padStart(3, "0")}° ${values.ws.toFixed(0)} m/s`;
+          : `${String(Math.round(values.wd)).padStart(3, "0")}° ${formatWind(values.ws, 0)}`;
       parts.push(`${name} ${temperature} / ${dew} · ${wind}`);
     }
     readout.value = parts.join("   ");
@@ -445,7 +448,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     const time = ascent?.time ?? entry.latest;
     line.textContent = [
       stationCode(entry),
-      `${distanceKm < 10 ? distanceKm.toFixed(1) : Math.round(distanceKm)} km`,
+      formatDistance(distanceKm, distanceKm < 10 ? 1 : 0),
       options.formatTime(time),
     ].join(" · ");
     expand.textContent = t("soundingExpand");

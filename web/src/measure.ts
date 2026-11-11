@@ -25,6 +25,7 @@ import type {
 } from "maplibre-gl";
 
 import { contextInk } from "./casecontext";
+import { convertDistance, convertHeight, onUnitsChange, UNIT_LABELS, units } from "./units";
 
 export type MeasureKind = "distance" | "area";
 
@@ -131,20 +132,32 @@ function grouped(value: number, digits: number): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-/** A length as the ruler reads it: metres under a kilometre, a tenth of a
- * kilometre under a hundred, whole kilometres beyond. */
+/** A length as the ruler reads it, in the viewer's distance unit: the
+ * short unit (metres, or feet in miles and nautical miles) under a tenth
+ * of the long one — under a kilometre in kilometres — a tenth of the long
+ * unit under a hundred, whole ones beyond. */
 export function formatDistance(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  const km = metres / 1000;
-  return `${grouped(km, km < 100 ? 1 : 0)} km`;
+  const unit = units.distance;
+  const long = convertDistance(metres / 1000);
+  if (unit === "km" ? metres < 1000 : long < 0.1) return `${grouped(Math.round(shortLength(metres)), 0)} ${shortLabel()}`;
+  return `${grouped(long, long < 100 ? 1 : 0)} ${UNIT_LABELS.distance[unit]}`;
 }
 
-/** An area as the tool reads it: square metres under a hectare, then km²
- * with fewer decimals as it grows. */
+/** An area as the tool reads it: the short unit squared under a hectare's
+ * worth, then the long unit squared with fewer decimals as it grows. */
 export function formatArea(squareMetres: number): string {
-  if (squareMetres < 10_000) return `${grouped(Math.round(squareMetres), 0)} m²`;
-  const km2 = squareMetres / 1e6;
-  return `${grouped(km2, km2 < 10 ? 2 : km2 < 1000 ? 1 : 0)} km²`;
+  if (squareMetres < 10_000) return `${grouped(Math.round(shortLength(Math.sqrt(squareMetres)) ** 2), 0)} ${shortLabel()}²`;
+  const long = convertDistance(Math.sqrt(squareMetres) / 1000) ** 2;
+  return `${grouped(long, long < 10 ? 2 : long < 1000 ? 1 : 0)} ${UNIT_LABELS.distance[units.distance]}²`;
+}
+
+/** Metres, or feet where distances read in miles or nautical miles. */
+function shortLength(metres: number): number {
+  return units.distance === "km" ? metres : convertHeight(metres, "ft");
+}
+
+function shortLabel(): string {
+  return units.distance === "km" ? "m" : "ft";
 }
 
 type MeasureProperties = { role: "edge" | "fill" | "vertex" | "label"; label?: string };
@@ -279,7 +292,10 @@ export class MeasureTool {
   constructor(
     private readonly map: MaplibreMap,
     private readonly onArm: (kind: MeasureKind | null) => void,
-  ) {}
+  ) {
+    // The readings are written in the viewer's distance unit.
+    onUnitsChange(() => this.render());
+  }
 
   get armed(): MeasureKind | null {
     return this.kind;

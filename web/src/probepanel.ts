@@ -8,6 +8,8 @@ import type { LoadedAqIndex } from "./aq/fetch";
 import type { AqStation } from "./aq/schema";
 import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import { formatPointDegrees } from "./format";
+import { coordinateFormat, onMapPrefsChange } from "./mapprefs";
+import { toMgrs } from "./mgrs";
 import { t } from "./i18n";
 import { identifyBundle } from "./identity";
 import { COLUMN_LEVELS_HPA, type ColumnLevel, siteTemperature, sortedColumn } from "./lapse";
@@ -85,7 +87,7 @@ import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stati
 import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
 import { setDisplayZone, zoneAt, zoneDisplayName } from "./timezone";
-import { displayUnit, displayValue, formatValueReadout } from "./units";
+import { formatDistance, formatHeight, formatValueReadout, variableDisplayUnit, variableDisplayValue } from "./units";
 import type { ViewState } from "./viewstate";
 
 /** What the probe panel reads off the page. Its own state (the pin, the
@@ -153,6 +155,13 @@ export interface ProbePanelDeps {
   readonly formatCompactDate: (value: number) => string;
   readonly stopPlayback: () => void;
   readonly trySelectFrame: (index: number) => boolean;
+}
+
+/** The pinned point as the reader writes coordinates: MGRS to the metre, or
+ * degrees (also where a point has no MGRS reference). */
+function pinnedPointText(latitude: number, longitude: number): string {
+  const mgrs = coordinateFormat === "mgrs" ? toMgrs(latitude, longitude, 5) : null;
+  return mgrs ?? `${formatPointDegrees(latitude, "NS")} ${formatPointDegrees(longitude, "EW")}`;
 }
 
 /** The probe panel's controller: builds the panel, the pin and the skew-T
@@ -1053,8 +1062,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
     const session = sessions.get("orog");
     const value = modelElevationValue();
     if (!session || value === null) return "";
-    const unit = displayUnit(session.variable.unit);
-    return `${t("probeModelElevationLabel")} ${formatProbeValue(session.variable, displayValue(session.variable.unit, value))} ${unit}`.trimEnd();
+    const unit = variableDisplayUnit(session.variable);
+    return `${t("probeModelElevationLabel")} ${formatProbeValue(session.variable, variableDisplayValue(session.variable, value))} ${unit}`.trimEnd();
   }
 
   /** The DEM's own elevation under the pin, to whole metres: the samples carry a
@@ -1062,8 +1071,11 @@ export function createProbePanel(deps: ProbePanelDeps) {
   function demElevationText(): string {
     const value = probeDem?.value;
     if (value === null || value === undefined) return "";
-    return `${t("probeDemLabel")} ${Math.round(value)} m`;
+    return `${t("probeDemLabel")} ${formatHeight(value)}`;
   }
+
+  // The coordinate format is the reader's; the pin's readout follows it.
+  onMapPrefsChange(() => renderProbe());
 
   function renderProbe(): void {
     const series = probe;
@@ -1091,8 +1103,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probePanel.code.textContent = variableUi(session).code;
     renderProbeAirportChip();
     const point = cell ?? { longitude: series.longitude, latitude: series.latitude };
-    probePanel.coords.textContent =
-      `${formatPointDegrees(point.latitude, "NS")} ${formatPointDegrees(point.longitude, "EW")}`;
+    probePanel.coords.textContent = pinnedPointText(point.latitude, point.longitude);
     renderProbeElevation({ latitude: series.latitude, longitude: series.longitude });
     probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(deps.activeFrameIndex ?? Number(slider.value))) : "";
     probePanel.compare.href = compareUrl(point.latitude, point.longitude);
@@ -1121,7 +1132,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     } else {
       probePanel.value.value =
         typeof current === "number"
-          ? `${formatProbeValue(variable, displayValue(variable.unit, current))} ${displayUnit(variable.unit)}`.trimEnd()
+          ? `${formatProbeValue(variable, variableDisplayValue(variable, current))} ${variableDisplayUnit(variable)}`.trimEnd()
           : "--";
       const lead = probeStampLine(index, member ? session : null);
       if (current === undefined) probePanel.meta.textContent = `${lead} · ${t("probeAwaiting")}`;
@@ -1177,7 +1188,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       value.textContent = `PM2.5 ${pm25.toFixed(1)}`;
       aqChip.style.setProperty("--card-ink", pm25Color(pm25) ?? "");
       aqChip.replaceChildren(value);
-      aqChip.title = t("aqNearest", { km: aq.distanceKm.toFixed(0) });
+      aqChip.title = t("aqNearest", { distance: formatDistance(aq.distanceKm, 0) });
     }
     const alert = probeAlert;
     const alertChip = probePanel.alertChip;
@@ -1311,11 +1322,11 @@ export function createProbePanel(deps: ProbePanelDeps) {
     let unit = "";
     for (const [position, id] of row.spec.bundles.entries()) {
       const session = sessions.get(id);
-      if (session) unit ||= displayUnit(session.variable.unit);
+      if (session) unit ||= variableDisplayUnit(session.variable);
       const value = row.series[position]![index];
       parts.push(
         session && typeof value === "number"
-          ? formatProbeValue(session.variable, displayValue(session.variable.unit, value))
+          ? formatProbeValue(session.variable, variableDisplayValue(session.variable, value))
           : "--",
       );
     }
@@ -1444,7 +1455,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       const reported =
         observed === null || !session
           ? null
-          : `${t("soundingObserved")} ${formatProbeValue(session.variable, observed)}`;
+          : `${t("soundingObserved")} ${formatProbeValue(session.variable, variableDisplayValue(session.variable, observed))}`;
       // The label column is the capsule's and cannot grow, so the line holds
       // two things at most. Where an observation is in hand it takes the
       // place of both the unit and the wind's direction: the unit moves up
@@ -1688,8 +1699,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // column, under the headline's code and below its value.
     context.fillStyle = mutedColor;
     context.textAlign = "right";
-    context.fillText(formatProbeValue(variable, highest), gutter - 8, top);
-    if (!flat) context.fillText(formatProbeValue(variable, lowest), gutter - 8, bottom);
+    context.fillText(formatProbeValue(variable, variableDisplayValue(variable, highest)), gutter - 8, top);
+    if (!flat) context.fillText(formatProbeValue(variable, variableDisplayValue(variable, lowest)), gutter - 8, bottom);
   }
 
   return {

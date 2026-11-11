@@ -22,6 +22,7 @@ import { fetchRiverIndex } from "./river/index";
 import type { VariableSession } from "./session";
 import type { ShowcaseCase } from "./showcase-catalog";
 import { dataBaseUrl } from "./site";
+import { convertLegendLabel, displayUnit } from "./units";
 import { displayZone, formatStamp } from "./timezone";
 import type { DerivedFireId } from "./urlstate";
 import type { LegendSwatch } from "./variables";
@@ -525,10 +526,10 @@ export function createOverlays(deps: OverlaysDeps) {
     if (legend.dataset.radar === product && !force) return;
     legend.dataset.radar = product;
     renderLegendKey(null);
-    legendUnit.textContent = scale.unit;
+    legendUnit.textContent = displayUnit(scale.unit);
     legendLabels.replaceChildren(...scale.labels.map((label) => {
       const span = document.createElement("span");
-      span.textContent = label;
+      span.textContent = convertLegendLabel(scale.unit, label);
       return span;
     }));
     legendBar.style.background = scale.gradient;

@@ -53,6 +53,7 @@ import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, type LoadedTcIndex, resolveTcStormId, stormBounds } from "./tc/tracks";
 import type { TileRect } from "./tiles";
+import { onUnitsChange } from "./units";
 import type { StationsUrlState } from "./urlstate";
 import type { ViewState } from "./viewstate";
 
@@ -237,17 +238,23 @@ export function createMarks(deps: MarksDeps) {
     return null;
   }
 
+  /** Builds the open storm card again, so a change of units reaches it. */
+  let rebuildTcCard: (() => HTMLElement) | null = null;
+
   function showTcCard(data: TcPointData, lngLat: [number, number]): void {
     closeTcCard();
+    const build = () => buildTcCard(data, { formatTime: (time) => formatDate(time) });
     tcCard = cardPopup({ className: "tc-popup", maxWidth: "300px", offset: 12 })
       .setLngLat(lngLat)
-      .setDOMContent(buildTcCard(data, { formatTime: (time) => formatDate(time) }))
+      .setDOMContent(build())
       .addTo(map);
+    rebuildTcCard = build;
   }
 
   function closeTcCard(): void {
     tcCard?.remove();
     tcCard = null;
+    rebuildTcCard = null;
   }
 
   function ensureTcLayers(): StormLayers | null {
@@ -499,6 +506,9 @@ export function createMarks(deps: MarksDeps) {
   /** The card open on a clicked mark, one at a time — and the storm card's
    * sibling: opening either closes the other. */
   let stationCard: Popup | null = null;
+  /** Builds the open station card again, so a change of units reaches it;
+   * null for a card with no units of the viewer's (air quality, warnings). */
+  let rebuildStationCard: (() => HTMLElement) | null = null;
 
   /** The live indexes, or none. Each product is fetched on its own: one
    * that is not published yet, or an hour that failed, leaves the other
@@ -922,6 +932,7 @@ export function createMarks(deps: MarksDeps) {
       },
     };
     let content: HTMLElement;
+    let rebuild: (() => HTMLElement) | null = null;
     if (data.kind === "aq") {
       const loaded = aqLoaded;
       if (!loaded) return;
@@ -938,17 +949,20 @@ export function createMarks(deps: MarksDeps) {
           });
       }
     } else {
-      content =
+      const build = () =>
         data.kind === "sounding"
           ? buildSoundingCard(data.station, options)
           : data.kind === "synop"
             ? buildSynopCard(data.station, data.network, options)
             : buildAirportCard(data.station, options);
+      content = build();
+      rebuild = build;
     }
     stationCard = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 10 })
       .setLngLat(lngLat)
       .setDOMContent(content)
       .addTo(map);
+    rebuildStationCard = rebuild;
   }
 
   /** The warnings card at a clicked point: every warning drawn there. */
@@ -970,12 +984,19 @@ export function createMarks(deps: MarksDeps) {
   function closeStationCard(): void {
     stationCard?.remove();
     stationCard = null;
+    rebuildStationCard = null;
   }
+
+  onUnitsChange(() => {
+    if (tcCard && rebuildTcCard) tcCard.setDOMContent(rebuildTcCard());
+    if (stationCard && rebuildStationCard) stationCard.setDOMContent(rebuildStationCard());
+  });
 
   /** Hold a card opened elsewhere (a case marker's) in the station card's
    * place, so the next mark or storm card closes it. */
   function adoptStationCard(card: Popup): void {
     stationCard = card;
+    rebuildStationCard = null;
   }
 
   /** Each tile is its own switch: pressing it draws that product, pressing

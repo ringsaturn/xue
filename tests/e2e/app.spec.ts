@@ -1036,12 +1036,12 @@ test("?lang=zh renders the Chinese UI and the picker switches back", async ({ pa
   const tempLabel = page.locator('button[data-variable="tmp2m"] small');
   await expect(tempLabel).toHaveText("气温");
   await expect(page.locator('button[data-variable="tmp2m"] .rail-glyph')).toHaveText("温");
-  // The trigger is a glyph and an accessible name; the panel under it lists
-  // the endonyms, with the current language checked.
-  const trigger = page.locator("#lang-toggle");
+  // The gear opens the settings sheet; its language row lists the
+  // endonyms, with the current language checked.
+  const trigger = page.locator("#settings-toggle");
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
   await trigger.click();
-  const sheet = page.locator("#lang-sheet");
+  const sheet = page.locator("#settings-sheet");
   await expect(sheet).toBeVisible();
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(sheet.locator('button[data-locale="zh"]')).toHaveAttribute("aria-current", "true");
@@ -1076,18 +1076,18 @@ test("?lang=ja renders the Japanese UI", async ({ page }) => {
   await expect(page.locator("#preload-state")).toHaveText("バンドルをすべて保持しました", { timeout: 20_000 });
   await expect(page.locator('button[data-variable="tmp2m"] small')).toHaveText("気温");
   await expect(page.locator('button[data-variable="tmp2m"] .rail-glyph')).toHaveText("温");
-  // Escape closes the picker and hands focus back to the trigger it came from.
-  const trigger = page.locator("#lang-toggle");
-  await expect(trigger).toHaveAttribute("aria-label", "言語");
+  // Escape closes the settings sheet and hands focus back to the gear.
+  const trigger = page.locator("#settings-toggle");
+  await expect(trigger).toHaveAttribute("aria-label", "設定");
   await trigger.click();
-  await expect(page.locator("#lang-sheet")).toBeVisible();
+  await expect(page.locator("#settings-sheet")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator("#lang-sheet")).toBeHidden();
+  await expect(page.locator("#settings-sheet")).toBeHidden();
   await expect(trigger).toBeFocused();
 });
 
 // Appearance is resolved before the first paint (an inline script in the
-// shell); the round toggle persists the other side and restamps the document
+// shell); the settings sheet persists the other side and restamps the document
 // in place — the session, its decoded frames and the playhead all stay.
 test("the appearance toggle round-trips between paper and void", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
@@ -1100,7 +1100,8 @@ test("the appearance toggle round-trips between paper and void", async ({ page }
   await page.evaluate(() => {
     (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
   });
-  await page.locator("#theme-toggle").click();
+  await page.locator("#settings-toggle").click();
+  await page.locator("#settings-sheet").getByRole("radio", { name: "Dark" }).click();
   await expect(page).toHaveURL(/theme=dark/);
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered");
