@@ -92,6 +92,7 @@ import {
   type ForecastModelId,
   type KnownBundleId,
   type VariantBudget,
+  type ResolutionPreference,
   type VariantDescriptor,
 } from "./manifest";
 import {
@@ -1531,6 +1532,16 @@ const dataBackend = parseBackendFromSearch(window.location.search);
  * the ladder, for a metered link or for a look at the full grid regardless of
  * what the view needs. */
 const resolutionPreference = parseResolutionFromSearch(window.location.search);
+/** The tier the primary asks for: the session's own preference, except
+ * that a precipitation total takes the full grid while `?res=` leaves the
+ * choice open. A reduced tier keeps every second (fourth) cell, not their
+ * mean, so a total summed on it loses the narrow bands and the peaks the
+ * full grid has — and the picture would change each time a zoom moves the
+ * tier. */
+function primaryResolutionPreference(variableId: string): ResolutionPreference {
+  if (resolutionPreference !== "auto") return resolutionPreference;
+  return variableId === "prate" && view.accumulation !== null ? "full" : "auto";
+}
 let activeCase: ShowcaseCase | null = null;
 /** The parts of the event the open case is one part of, when it is. */
 let activeCaseParts: ShowcasePart[] | null = null;
@@ -1584,7 +1595,9 @@ const sessionRegistry = createSessionRegistry({
       descriptor.variants,
       neededGridWidth(),
       slowConnection(),
-      role === "overlay" ? overlayResolutionPreference(resolutionPreference, budget?.fullGrid) : resolutionPreference,
+      role === "overlay"
+        ? overlayResolutionPreference(resolutionPreference, budget?.fullGrid)
+        : primaryResolutionPreference(variableId),
       bundleLongitudeSpan(descriptor),
       budget,
     );
@@ -2767,7 +2780,7 @@ async function retierPrimary(): Promise<void> {
     descriptor.variants,
     neededGridWidth(),
     slowConnection(),
-    resolutionPreference,
+    primaryResolutionPreference(session.id),
     bundleLongitudeSpan(descriptor),
     mosaicBudget(
       session.id,
@@ -3927,6 +3940,8 @@ function setAccumulation(accumulation: Accumulation | null): void {
   // A range keeps nothing resident, so moving one keeps the cache: the
   // frames the two share and still hold are not decoded again.
   if (!(fromRange && accumulation?.type === "range")) planeCache.forgetSession(session.key);
+  // Turning a total on or off moves the tier it is drawn on.
+  scheduleRetier();
   updateVariablePresentation(session);
   trySelectFrame(activeFrameIndex ?? requestedFrameIndex ?? Number(slider.value));
   if (probePanelControl.probe) scheduleProbeRender();

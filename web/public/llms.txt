@@ -316,7 +316,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
   nowcast window; any whole number of hours or minutes (`9h`, `20m`) works
   too, from one step of the axis up to its span, as long as its frames fit
   the browser's plane cache. A window the dataset cannot make shows the
-  rate.
+  rate. A total, window or range, is always summed on the full-resolution
+  grid unless `?res=` pins a tier.
 - `?accum=<from>-<to>` — with `type=precip`, the precipitation total over a
   fixed range of UTC valid times, `YYYYMMDDHH` or `YYYYMMDDHHMM` each
   (`2026111106-2026111400`), whatever the playhead; each end snaps to the

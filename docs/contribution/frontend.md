@@ -297,6 +297,12 @@ and the window shrinks to fit it.
   precipitation is the field; the probe sums the same series over the
   same plan (`seriesTotals`) and says how much of a window the axis could
   fill (`6H/24H`).
+  A total is drawn on the full tier (`primaryResolutionPreference`, unless
+  `?res=` pins one): a reduced tier keeps every second or fourth cell, not
+  their mean, so a total on it drops narrow bands and peaks and would change
+  each time a zoom moved the tier. Turning a total on or off reweighs the
+  tier (`scheduleRetier`), and the cache cap that decides which windows are
+  offered is the full grid's.
   A typed window (the level row's field: `9h`, `2h`, `20m`, a bare
   number is hours) passes the same test as a preset (`windowFits` and the
   cache cap, `offeredWindows().frames`) and sits among the presets while
