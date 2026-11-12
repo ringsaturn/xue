@@ -1138,7 +1138,7 @@ body.is-pressure .legend {
   display: none;
 }
 
-/* The experimental composite's key: the two derived layers named beside
+/* The derived layers' key: the precipitation setup's two and the fire fields named beside
    their tints, under the fill's bar, in the same ink as the bar's labels.
    Left-aligned so the swatches line up under the bar. */
 .legend-derived {

@@ -204,46 +204,53 @@ export function parseCaseFromSearch(search: string): string | null {
   return id;
 }
 
-/** The experimental synoptic composite (`?x=`): whether it is on at all
- * — the stepped precipitation key on chart paper, the sea level pressure
- * lines, the particles run by the 850 hPa vapour flux — and which of the
- * two fields the frontend computes from several bundles (composite.ts)
- * are drawn. Nothing is remembered between sessions. */
-interface ExperimentState {
-  enabled: boolean;
-  inflow: boolean;
-  front: boolean;
+/** The precipitation setup (`?type=precipsetup`): the precipitation rate
+ * on a stepped key with what makes it — the sea level pressure lines, the
+ * particles run by a flow (the 850 hPa vapour flux unless `?flow=` names a
+ * wind or another flux surface) and the warm moist inflow and frontal zone
+ * the frontend computes (composite.ts). A field of its own, drawn on the
+ * rate's session. */
+export const SETUP_TYPE = "precipsetup";
+/** The bundle the setup is drawn on and timed by. */
+export const SETUP_ANCHOR: ForecastBundleId = "prate";
+/** What the setup's particles run on when `?flow=` names nothing. */
+export const SETUP_DEFAULT_FLOW: ForecastBundleId = "qflux850";
+/** Every bundle the setup reads besides its anchor: a run that ships them
+ * all offers it. */
+export const SETUP_INPUTS: readonly ForecastBundleId[] = ["prmsl", "qflux850", "thetae850"];
+
+/** Whether the link names the setup as its field. */
+export function parseSetupFromSearch(search: string): boolean {
+  return (new URLSearchParams(search).get("type") ?? "").trim().toLowerCase() === SETUP_TYPE;
 }
 
-export const EXPERIMENT_OFF: ExperimentState = { enabled: false, inflow: false, front: false };
-
-/** `?x=true` (or any on-spelling) draws both derived fields; `?x=inflow`,
- * `?x=front` or `?x=inflow,front` names the ones to draw; `?x=none` is the
- * experiment with neither. Anything else — no param included — is off. */
-export function parseExperimentFromSearch(search: string): ExperimentState {
-  const value = new URLSearchParams(search).get("x");
-  if (value === null) return EXPERIMENT_OFF;
-  const normalized = value.trim().toLowerCase();
-  const on = SWITCH_ALIASES[normalized];
-  if (on === true) return { enabled: true, inflow: true, front: true };
-  if (on === false) return EXPERIMENT_OFF;
-  if (normalized === "none") return { enabled: true, inflow: false, front: false };
-  const parts = normalized.split(",").map((part) => part.trim());
-  const inflow = parts.includes("inflow");
-  const front = parts.includes("front");
-  return inflow || front ? { enabled: true, inflow, front } : EXPERIMENT_OFF;
+/** The setup's flow from `?flow=`: a wind or vapour flux bundle id
+ * (`wind500`, `qflux700`), or null for the default. Whether the run ships
+ * it is the manifest's answer. */
+export function parseFlowFromSearch(search: string): ForecastBundleId | null {
+  const value = new URLSearchParams(search).get("flow")?.trim().toLowerCase();
+  if (value === undefined || !/^(wind|qflux)[0-9]+m?$/.test(value)) return null;
+  return value === SETUP_DEFAULT_FLOW ? null : value;
 }
 
-/** The given query string carrying the experiment: `x=true` with both
- * fields, the named field alone, `x=none` with neither, and nothing at all
- * when the experiment is off. */
-export function searchWithExperiment(search: string, state: ExperimentState): string {
+/** The lines a setup link draws when it names none. */
+export const SETUP_DEFAULT_LINES: PressureBundleId = "prmsl";
+
+/** The given query string carrying the setup: `type=precipsetup`, the flow
+ * where it is not the default, and the lines only where they are not the
+ * sea level pressure a bare setup link draws (`lines=none` for none). Off,
+ * the flow goes. */
+export function searchWithSetup(search: string, setup: boolean, flow: ForecastBundleId | null, lines: PressureBundleId | null): string {
   const params = new URLSearchParams(search);
-  if (!state.enabled) params.delete("x");
-  else if (state.inflow && state.front) params.set("x", "true");
-  else if (state.inflow) params.set("x", "inflow");
-  else if (state.front) params.set("x", "front");
-  else params.set("x", "none");
+  if (!setup) {
+    params.delete("flow");
+    return `?${params.toString()}`;
+  }
+  params.set("type", SETUP_TYPE);
+  if (lines === null) params.set("lines", "none");
+  else if (lines === SETUP_DEFAULT_LINES) params.delete("lines");
+  if (flow === null || flow === SETUP_DEFAULT_FLOW) params.delete("flow");
+  else params.set("flow", flow);
   return `?${params.toString()}`;
 }
 

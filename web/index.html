@@ -409,8 +409,8 @@
              composite makes a colour of, in place of the bar and its ticks;
              written by main.ts, hidden for every ramp. -->
         <ul id="legend-key" class="legend-key" hidden></ul>
-        <!-- The derived layers drawn over the field — the experimental
-             composite's (?x=true) and the fire fields — each a
+        <!-- The derived layers drawn over the field — the precipitation
+             setup's and the fire fields — each a
              swatch in its own tint beside its name; hidden otherwise. -->
         <ul id="legend-derived" class="legend-derived" hidden>
           <li id="legend-inflow" hidden><span class="legend-swatch legend-swatch-inflow" aria-hidden="true"></span><span data-i18n="legendInflow">Warm moist inflow</span></li>
@@ -432,7 +432,7 @@
            opens the sheet listing every field the run publishes. The
            overlay section is a set of switches drawn over the field and
            following the playhead (the pressure lines, the particles, the
-           experiment's derived layers). The mark section is switches too,
+           setup's derived layers). The mark section is switches too,
            for the products that take no session (storms, soundings,
            airports). A tile is an icon over the layer's glyph, the code and
            its gloss riding along visually hidden so the button still names
@@ -465,6 +465,16 @@
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 13.5a3.5 3.5 0 0 0-.4-7A5.5 5.5 0 0 0 6.6 7.6 3 3 0 0 0 7 13.5h10.5z" /><circle cx="12" cy="16.6" r="1.3" fill="currentColor" stroke="none" /><circle cx="9.6" cy="20.2" r="1.3" fill="currentColor" stroke="none" /><circle cx="14.4" cy="20.2" r="1.3" fill="currentColor" stroke="none" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrate">R</b>
           <span class="rail-name"><span>PRECIP</span> <small data-i18n="varPrecip">RATE</small></span>
+        </button>
+        <!-- The precipitation setup (?type=precipsetup): the rate on a
+             stepped key with what makes it — the sea level pressure, the
+             flow the particles run on, the warm moist inflow and the
+             frontal zone. A raincloud fed by a curling stream. Shown on a
+             run that ships its inputs (derived.ts::setupPublished). -->
+        <button id="setup-tile" type="button" data-i18n-tip="varLabelPrecipSetup" aria-pressed="false" hidden>
+          <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 10.5a3 3 0 0 0-.3-6 4.5 4.5 0 0 0-8.6 1.1 2.5 2.5 0 0 0 .4 4.9h8.5z" /><circle cx="14" cy="14" r="1.2" fill="currentColor" stroke="none" /><circle cx="17.5" cy="16.5" r="1.2" fill="currentColor" stroke="none" /><path d="M3 20.5c2.5-4 5.5-6.5 9-7.5" /><path d="M9.5 11.5l2.5 1.5-1.2 2.6" /></svg>
+          <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPrecipSetup">S</b>
+          <span class="rail-name"><span>SETUP</span> <small data-i18n="varPrecipSetup">PRECIP</small></span>
         </button>
         <!-- The ensemble's probability of the precipitation total past a
              threshold: a raincloud over a percent sign. One tile for the
@@ -786,8 +796,8 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphPressure">P</b>
           <span class="rail-name"><span>PRESSURE</span> <small data-i18n="linesCaption">Lines</small></span>
         </button>
-        <!-- The particle animation over a vector field (and, under the
-             experiment, the vapour flux's over a scalar one): the coloured
+        <!-- The particle animation over a vector field (and, in the
+             precipitation setup, its flow's over the rate): the coloured
              speed field is the layer, this switches the moving ink over
              it. Hidden where there is nothing to animate. -->
         <button id="particles-toggle" type="button" data-toggle aria-pressed="true" data-i18n-tip="particlesToggle" data-i18n-aria="particlesToggleAria" aria-label="Toggle wind particle animation" hidden>
@@ -811,12 +821,11 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphVolume">Q</b>
           <span class="rail-name"><span>CLW3D</span> <small data-i18n="varVolume">3D CLOUD</small></span>
         </button>
-        <!-- The experimental composite's derived layers (?x=): switches
-             like the one above — each draws over whatever the fill is. A
-             curling stream for the warm moist inflow, a line with the
-             front's bumps for the frontal zone. Shown only under the
-             experiment, on a run that ships the inputs
-             (main.ts::syncDerivedTiles). -->
+        <!-- The precipitation setup's derived layers: switches like the one
+             above, shown while the setup is the field
+             (derived.ts::syncDerivedTiles). A curling stream for the warm
+             moist inflow, a line with the front's bumps for the frontal
+             zone. -->
         <button type="button" data-derived="inflow" data-toggle data-i18n-tip="legendInflow" aria-pressed="false" hidden>
           <svg class="rail-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19c3-6 6-9 12-10" /><path d="M12.5 7.5L17 9l-1.5 4.5" /><path d="M4 13c2-3 4-4.5 7-5.5" /></svg>
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphInflow">M</b>

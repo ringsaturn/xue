@@ -44,10 +44,10 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `probepanel.ts` | The probe panel's controller (`createProbePanel`): the pin, series requests, probe sessions, rows, terrain column, station chips, skew-T sheet. |
 | `precipphase.ts` | The precipitation by phase: classes from `ptype`, `ptypeec` and `cpofp`, the freezing line from `fzlvl` and `orog`, the weights `ForecastLayer.setPhase` paints by, and where the chart writes its labels. Plain arithmetic on decoded planes. |
-| `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the `?x=` experiment. |
-| `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the `?x=` experiment's composite and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
+| `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the precipitation setup's derived fields and stepped keys. |
+| `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the precipitation setup and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
 | `accumulation.ts` | Precipitation totals (`?accum=`) over a window or a dragged range, from the published rate frames; see "Precipitation totals" below. |
-| `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the experiment's derived-layer machinery in `derived.ts` (`fireDerived`). |
+| `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the setup's derived-layer machinery in `derived.ts` (`fireDerived`). |
 | `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
 | `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
@@ -448,7 +448,7 @@ and the window shrinks to fit it.
   compares a cell with its neighbours; its day/night split is the sun's
   elevation at each cell (`shadow.ts::solarEphemeris`). The hotspot is a
   CPU pass, not a fragment shader, so it can be unit-tested and shares
-  the experiment's input plumbing: separable box sums keep it linear in
+  the setup's input plumbing: separable box sums keep it linear in
   the cells whatever the window.
 - NASA GIBS (`gibs.ts`, `?model=gibs&gibs=`): a dataset in the model
   switch beside the models and the disks, and the only one whose tiles do
@@ -555,6 +555,30 @@ loads until it is pressed. It is computed in the browser from published bundles
   from the freezing rain weight. The class steps with the frame while the rate
   blends through `u_mix`.
 
+## Precipitation setup
+
+A field tile (`?type=precipsetup`, beside the rate) draws `prate` with what
+makes it: the rate on a stepped key (`composite.ts`), the sea level pressure
+lines, particles run by a flow, and two fields computed in the browser — the
+warm moist inflow (`qflux850` × `thetae850`) and the frontal zone (the
+`thetae850` gradient). It is drawn on the rate's own session, so the timeline,
+the probe and the phase switch are the rate's; `ViewState.setup` holds it and
+`setupInView` says when it applies. The tile shows on a run that ships `prate`,
+`prmsl`, `qflux850` and `thetae850` (`derived.ts::setupPublished`); elsewhere a
+setup link opens the plain rate.
+
+- The flow is the 850 hPa vapour flux unless `?flow=` names another flux or
+  wind surface; the level row lists the ones the run ships under FLUX and
+  WIND. A wind runs the particles in the wind's ink, a flux in the inflow's.
+- The lines are the view's own: a bare setup link draws `prmsl`, `lines=none`
+  none, and the level row changes them as over any field.
+- The two derived layers are switches in the overlay section, remembered on
+  the device (`xue-setup-layers`), not in the link.
+- No total is made of it: the level row's Total group hides and a stored
+  `?accum=` gives way.
+- The phase switch stacks on it: `steppedPhasePalette` bands each class's ramp
+  as the rain's, so the key stays stepped.
+
 ## Borrowed bundles
 
 `sflux` publishes no pressure level and no phase. Once its manifest is read, the
@@ -657,7 +681,7 @@ Three rail sections, one kind of press each: **fields** (a radio: core
 tiles from `FORECAST_MODELS[].railCore`, the on-screen tile, and MORE →
 `#field-sheet`, whose fire group lists the three fire fields — only the
 hotspot is a core tile; on NASA GIBS its two colour tiles alone), **overlays** (switches: pressure lines, particles, a
-volume, the experiment's derived layers), **marks** (switches: storms,
+volume, the precipitation setup's derived layers), **marks** (switches: storms,
 soundings, airports, stations, fires; the storms' options hang from a TC
 chip on the level row while tracks are drawn). Switches carry
 `data-toggle` and a ring, sheet triggers `data-dialog` and a chevron.
@@ -842,7 +866,7 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   browser's zone, UTC or any IANA zone instead (`xue-zone` in storage, not
   in the URL). Run cycles and showcase cards stay UTC.
 - Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
-  `?case=`, `?res=`, `?particles=`, `?backend=`, `?x=`, `?gibs=`,
+  `?case=`, `?res=`, `?particles=`, `?backend=`, `?flow=`, `?gibs=`,
   `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
   Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never

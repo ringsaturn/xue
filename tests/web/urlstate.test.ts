@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 import { FORECAST_MODELS, isCaseOnlyModel, type ForecastModelId } from "../../web/src/manifest";
 
 import {
-  EXPERIMENT_OFF,
   parseBackendFromSearch,
   parseCameraFromHash,
-  parseExperimentFromSearch,
+  parseFlowFromSearch,
   parseLinesFromSearch,
   parseModelFromSearch,
   parseParticlesFromSearch,
   parseResolutionFromSearch,
   parseSceneFromSearch,
+  parseSetupFromSearch,
   parseVariableFromSearch,
   parseVerticalExaggerationFromSearch,
   parseVolumeFromSearch,
   searchForVariable,
-  searchWithExperiment,
+  searchWithSetup,
   searchWithLines,
   searchWithParticles,
   searchWithScene,
@@ -306,41 +306,30 @@ describe("searchForVariable", () => {
   });
 });
 
-describe("parseExperimentFromSearch", () => {
-  it("is off unless the URL opts in", () => {
-    expect(parseExperimentFromSearch("")).toEqual(EXPERIMENT_OFF);
-    expect(parseExperimentFromSearch("?model=gfs&type=precip")).toEqual(EXPERIMENT_OFF);
-    expect(parseExperimentFromSearch("?x=off")).toEqual(EXPERIMENT_OFF);
-    expect(parseExperimentFromSearch("?x=")).toEqual(EXPERIMENT_OFF);
-    expect(parseExperimentFromSearch("?x=maybe")).toEqual(EXPERIMENT_OFF);
+describe("the precipitation setup in the link", () => {
+  it("is the field `type=precipsetup` names, case-insensitively", () => {
+    expect(parseSetupFromSearch("")).toBe(false);
+    expect(parseSetupFromSearch("?type=precip")).toBe(false);
+    expect(parseSetupFromSearch("?type=precipsetup")).toBe(true);
+    expect(parseSetupFromSearch("?model=gfs&type=PRECIPSETUP")).toBe(true);
   });
 
-  it("draws both derived layers for the on-spellings, case-insensitively", () => {
-    const both = { enabled: true, inflow: true, front: true };
-    expect(parseExperimentFromSearch("?x=true")).toEqual(both);
-    expect(parseExperimentFromSearch("?x=1")).toEqual(both);
-    expect(parseExperimentFromSearch("?x=ON")).toEqual(both);
-    expect(parseExperimentFromSearch("?model=gfs&x=true&type=precip")).toEqual(both);
+  it("reads a wind or flux flow, and the default as none", () => {
+    expect(parseFlowFromSearch("?flow=wind500")).toBe("wind500");
+    expect(parseFlowFromSearch("?flow=Wind10m")).toBe("wind10m");
+    expect(parseFlowFromSearch("?flow=qflux700")).toBe("qflux700");
+    expect(parseFlowFromSearch("?flow=qflux850")).toBeNull();
+    expect(parseFlowFromSearch("?flow=tmp2m")).toBeNull();
+    expect(parseFlowFromSearch("")).toBeNull();
   });
 
-  it("names the derived layers to draw, or none", () => {
-    expect(parseExperimentFromSearch("?x=inflow")).toEqual({ enabled: true, inflow: true, front: false });
-    expect(parseExperimentFromSearch("?x=front")).toEqual({ enabled: true, inflow: false, front: true });
-    expect(parseExperimentFromSearch("?x=front,inflow")).toEqual({ enabled: true, inflow: true, front: true });
-    expect(parseExperimentFromSearch("?x=none")).toEqual({ enabled: true, inflow: false, front: false });
-    expect(parseExperimentFromSearch("?x=inflow,bogus")).toEqual({ enabled: true, inflow: true, front: false });
-  });
-
-  it("writes the shortest spelling and drops the param when off", () => {
-    expect(searchWithExperiment("?type=precip", { enabled: true, inflow: true, front: true })).toBe("?type=precip&x=true");
-    expect(searchWithExperiment("?type=precip&x=true", { enabled: true, inflow: true, front: false })).toBe("?type=precip&x=inflow");
-    expect(searchWithExperiment("?x=true", { enabled: true, inflow: false, front: true })).toBe("?x=front");
-    expect(searchWithExperiment("?x=true", { enabled: true, inflow: false, front: false })).toBe("?x=none");
-    expect(searchWithExperiment("?x=true&type=precip", EXPERIMENT_OFF)).toBe("?type=precip");
-  });
-
-  it("survives a layer switch, which preserves unrelated params", () => {
-    expect(parseExperimentFromSearch(searchForVariable("tmp2m", "?x=inflow&type=precip")).inflow).toBe(true);
+  it("writes the setup, its flow and lines other than the sea level pressure", () => {
+    expect(searchWithSetup("?model=gfs&type=precip&lines=prmsl", true, null, "prmsl")).toBe("?model=gfs&type=precipsetup");
+    expect(searchWithSetup("?model=gfs&type=precip", true, null, null)).toBe("?model=gfs&type=precipsetup&lines=none");
+    expect(searchWithSetup("?model=gfs&type=precip&lines=hgt500", true, "wind500", "hgt500")).toBe(
+      "?model=gfs&type=precipsetup&lines=hgt500&flow=wind500",
+    );
+    expect(searchWithSetup("?model=gfs&type=temp&flow=wind500", false, "wind500", null)).toBe("?model=gfs&type=temp");
   });
 });
 

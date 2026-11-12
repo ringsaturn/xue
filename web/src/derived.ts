@@ -21,18 +21,24 @@ import {
   type VariantDescriptor,
 } from "./manifest";
 import type { WindParticleLayer } from "./particles";
+import { familyLevels } from "./levels";
 import { geoGrid } from "./probe";
 import type { DecodedFrame, VariableSession } from "./session";
-import { DERIVED_FIRE_IDS, type DerivedFireId, FIRE_FIELD_ANCHOR, fireFieldOf } from "./urlstate";
-import type { ViewState } from "./viewstate";
+import {
+  DERIVED_FIRE_IDS,
+  type DerivedFireId,
+  FIRE_FIELD_ANCHOR,
+  fireFieldOf,
+  SETUP_ANCHOR,
+  SETUP_DEFAULT_FLOW,
+  SETUP_INPUTS,
+} from "./urlstate";
+import { setupInView, type ViewState } from "./viewstate";
 
 /** What the derived layers read off the page: the map, the legend rows
  * and rail tiles they drive, the run and the playhead (live, through
  * getters), and the session functions they open and decode inputs with. */
 export interface DerivedDeps {
-  readonly experimentEnabled: boolean;
-  readonly EXPERIMENT_FLOW_ID: ForecastBundleId;
-  readonly EXPERIMENT_WARMTH_ID: ForecastBundleId;
   readonly map: MaplibreMap;
   readonly slider: HTMLInputElement;
   readonly particlesToggle: HTMLButtonElement;
@@ -54,7 +60,7 @@ export interface DerivedDeps {
   readonly initializeSequence: number;
   readonly planeCache: Map<string, DecodedFrame>;
   readonly view: ViewState;
-  readonly experimentFlowInk: () => readonly [number, number, number, number];
+  readonly flowInk: (flow: ForecastBundleId) => readonly [number, number, number, number];
   readonly frameLeadSeconds: (index: number) => number;
   readonly frameValidTime: (index: number) => number;
   readonly cacheKey: (session: VariableSession, variable: BundleVariable, offset: number) => string;
@@ -79,7 +85,7 @@ export interface DerivedDeps {
   readonly ensureWindLayer: () => WindParticleLayer;
 }
 
-/** One field the experiment computes: its layer, the grid it was last
+/** One field the shell computes: its layer, the grid it was last
  * configured for, and the input planes the plane on screen was built from
  * (their joined cache keys), so a repeat select never recomputes. */
 export type DerivedId = "inflow" | "front" | DerivedFireId;
@@ -91,12 +97,15 @@ interface DerivedLayer {
   builtFrom: string | null;
 }
 
-/** The experiment's state: the two input sessions, opened beside the
- * composition's own like overlays, the derived layers, and the cache keys
- * they are waiting on or showing. Null unless `?x=true`. */
+/** The precipitation setup's state: its input sessions, opened beside the
+ * composition's own like overlays and kept for the dataset (the flux and
+ * the θe for the derived layers, the flow the particles run on, which may be
+ * the flux), the derived layers, and the cache keys they are waiting on or
+ * showing. */
 interface Composite {
+  inputs: Map<ForecastBundleId, VariableSession>;
+  /** The flow the particles run on while the setup is up; null otherwise. */
   flow: VariableSession | null;
-  warmth: VariableSession | null;
   layers: Record<"inflow" | "front", DerivedLayer>;
   /** Input planes not decoded yet for the frame on screen: a decode landing
    * on one of these retries the composite. */
@@ -106,8 +115,7 @@ interface Composite {
   shownKeys: string[];
 }
 
-/** The fire layers' state, the experiment's machinery without the
- * experiment: input sessions opened beside the composition while a layer
+/** The fire layers' state, the setup's machinery: input sessions opened beside the composition while a layer
  * that reads them is on, a derived layer each (added to the map the first
  * time it is drawn), and the cache keys waited on or shown. */
 interface FireDerived {
@@ -117,15 +125,12 @@ interface FireDerived {
   shownKeys: string[];
 }
 
-/** The derived-layer controller: the `?x=` experiment's composite (the
- * inflow and the frontal zone) and the fire fields, each computed from
+/** The derived-layer controller: the precipitation setup's composite (the
+ * inflow, the frontal zone and the flow) and the fire fields, each computed from
  * input sessions opened beside the composition and drawn on a layer of
  * its own. */
 export function createDerived(deps: DerivedDeps) {
   const {
-    experimentEnabled,
-    EXPERIMENT_FLOW_ID,
-    EXPERIMENT_WARMTH_ID,
     map,
     slider,
     particlesToggle,
@@ -139,7 +144,7 @@ export function createDerived(deps: DerivedDeps) {
     overlaySlots,
     planeCache,
     view,
-    experimentFlowInk,
+    flowInk,
     frameLeadSeconds,
     frameValidTime,
     cacheKey,
@@ -151,7 +156,6 @@ export function createDerived(deps: DerivedDeps) {
     requestDecode,
     syncRailDensity,
     syncRail,
-    syncUrl,
     loadVariable,
     fireWind,
     syncFillSuppressed,
@@ -169,15 +173,44 @@ export function createDerived(deps: DerivedDeps) {
     };
   }
 
-  const composite: Composite | null = experimentEnabled
-    ? {
-        flow: null,
-        warmth: null,
-        layers: { inflow: makeDerivedLayer("inflow"), front: makeDerivedLayer("front") },
-        wantedKeys: new Set(),
-        shownKeys: [],
-      }
-    : null;
+  const composite: Composite = {
+    inputs: new Map(),
+    flow: null,
+    layers: { inflow: makeDerivedLayer("inflow"), front: makeDerivedLayer("front") },
+    wantedKeys: new Set(),
+    shownKeys: [],
+  };
+  /** The setup's inputs being opened, so a second reconcile does not open
+   * them twice. */
+  const setupLoading = new Set<ForecastBundleId>();
+  /** The bundles the derived layers read: the vapour flux and the θe. */
+  const FLUX_ID: ForecastBundleId = "qflux850";
+  const WARMTH_ID: ForecastBundleId = "thetae850";
+
+  /** Whether a run ships everything the setup draws. */
+  function setupPublished(run: ForecastManifest | null): boolean {
+    return run !== null && hasBundle(run, SETUP_ANCHOR) && SETUP_INPUTS.every((id) => hasBundle(run, id));
+  }
+
+  /** Whether the setup is the field on screen: the view's switch on the
+   * rate, on a run that ships its inputs. */
+  function setupOn(): boolean {
+    return setupInView(view) && setupPublished(deps.manifest);
+  }
+
+  /** The flows the setup's particles can run on in a run: the vapour flux
+   * surfaces, then the wind's, each one it ships. */
+  function setupFlows(run: ForecastManifest): ForecastBundleId[] {
+    return [...familyLevels("qflux"), ...familyLevels("wind")].filter((id) => hasBundle(run, id));
+  }
+
+  /** The flow the setup's particles run on: the view's, where the run ships
+   * it, else the default. */
+  function setupFlow(): ForecastBundleId {
+    const run = deps.manifest;
+    const chosen = view.flow;
+    return chosen !== null && run !== null && hasBundle(run, chosen) ? chosen : SETUP_DEFAULT_FLOW;
+  }
 
   /** The bundles each fire layer is computed from, the first being the grid
    * it is drawn on (hotspot.ts, firewx.ts). A run that ships them all shows
@@ -204,13 +237,25 @@ export function createDerived(deps: DerivedDeps) {
     shownKeys: [],
   };
 
-  /** Whether a session feeds a derived field — the experiment's or a fire
+  /** Whether a session feeds a derived field — the setup's or a fire
    * layer's. Such a session always decodes whole planes: the fields are
    * computed over the grid, and the particles the flow runs respawn
    * anywhere on it. */
   function isCompositeInput(session: VariableSession): boolean {
-    if (composite !== null && (session === composite.flow || session === composite.warmth)) return true;
+    if (shownSetupInputs().has(session)) return true;
     return shownFireInputs().has(session);
+  }
+
+  /** The setup's input sessions the view reads: none while it is off. */
+  function shownSetupInputs(): Set<VariableSession> {
+    const inputs = new Set<VariableSession>();
+    if (!setupOn()) return inputs;
+    for (const id of [FLUX_ID, WARMTH_ID]) {
+      const session = composite.inputs.get(id);
+      if (session) inputs.add(session);
+    }
+    if (composite.flow) inputs.add(composite.flow);
+    return inputs;
   }
 
   /** The fire layers' input sessions a layer on screen reads: one whose
@@ -233,20 +278,17 @@ export function createDerived(deps: DerivedDeps) {
     if (deps.activeSession) shown.add(deps.activeSession);
     for (const slot of overlaySlots()) shown.add(slot.session!);
     const inputs = shownFireInputs();
-    if (composite?.flow) inputs.add(composite.flow);
-    if (composite?.warmth) inputs.add(composite.warmth);
+    for (const session of shownSetupInputs()) inputs.add(session);
     return [...inputs].filter((session) => !shown.has(session));
   }
 
   /** The derived key under the colour scale: a row per derived layer the
-   * run can feed and the view draws — the frontal zone needs the θe, the
-   * inflow both experiment inputs, a fire layer all of its own — and the
-   * experiment's rows nothing at all outside it. */
+   * view draws — the setup's while it is up, a fire layer's where the run
+   * ships all of its inputs. */
   function syncDerivedLegend(): void {
-    const warmth = experimentEnabled && deps.manifest !== null && hasBundle(deps.manifest, EXPERIMENT_WARMTH_ID);
-    const flow = warmth && compositeFlowPublished();
-    legendInflow.hidden = !(flow && view.derived.inflow);
-    legendFront.hidden = !(warmth && view.derived.front);
+    const setup = setupOn();
+    legendInflow.hidden = !(setup && view.derived.inflow);
+    legendFront.hidden = !(setup && view.derived.front);
     for (const id of DERIVED_FIRE_IDS) {
       legendFire[id].hidden = !(deps.manifest !== null && fireInputsPublished(deps.manifest, id) && view.derived[id]);
     }
@@ -285,30 +327,32 @@ export function createDerived(deps: DerivedDeps) {
     return (DERIVED_FIRE_IDS as readonly string[]).includes(id);
   }
 
-  /** The rail's derived-layer tiles, all under the experiment: its own on a
-   * run that ships their inputs, a fire layer's wherever the run ships its
-   * inputs; pressed while the layer is drawn. */
+  /** The rail's derived-layer tiles: the setup's two while it is up, a
+   * fire layer's wherever the run ships its inputs; pressed while the layer
+   * is drawn. */
   function syncDerivedTiles(run: ForecastManifest): void {
-    const warmth = experimentEnabled && hasBundle(run, EXPERIMENT_WARMTH_ID);
-    const flow = warmth && hasBundle(run, EXPERIMENT_FLOW_ID);
+    const setup = setupOn();
     for (const button of derivedButtons()) {
       const id = button.dataset.derived as DerivedId;
       if (isFireDerivedId(id)) button.hidden = !fireTileShown(run, id);
-      else button.hidden = id === "inflow" ? !flow : !warmth;
+      else button.hidden = !setup;
     }
     syncRail();
   }
 
-  /** Flip one of the experiment's derived layers: off hides it at once, on
+  /** Flip one of the setup's derived layers: off hides it at once, on
    * shows it from the frame on screen (computing it if its inputs are
-   * decoded). */
+   * decoded). The choice is the device's, not the link's. */
   function setDerivedShown(id: "inflow" | "front", shown: boolean): void {
     if (view.derived[id] === shown) return;
     view.derived[id] = shown;
+    try {
+      localStorage.setItem(SETUP_LAYERS_KEY, JSON.stringify({ inflow: view.derived.inflow, front: view.derived.front }));
+    } catch {
+      // Storage can be unavailable (privacy modes); the choice holds for the page.
+    }
     syncRail();
     syncDerivedLegend();
-    syncUrl();
-    if (!composite) return;
     if (!shown) composite.layers[id].layer.setVisible(false);
     else if (deps.activeFrameIndex !== null) trySelectComposite(deps.activeFrameIndex);
   }
@@ -332,29 +376,41 @@ export function createDerived(deps: DerivedDeps) {
     }
   }
 
-  /** Whether the run on screen ships the experiment's flow bundle — the
-   * particle switch shows over a scalar fill when it does. */
+  /** Whether the setup is up with a flow to run the particles on — the
+   * particle switch shows over its scalar fill when it is. */
   function compositeFlowPublished(): boolean {
-    return composite !== null && deps.manifest !== null && hasBundle(deps.manifest, EXPERIMENT_FLOW_ID);
+    return setupOn();
   }
 
-  /** Open the experiment's input sessions beside the composition — after the
-   * primary, never blocking it, at the overlay tier — and hand each the frame
-   * on screen as it lands. A run that does not ship an input leaves that
-   * field off: the frontal zone needs the θe alone, the inflow both. */
+  /** Reconcile the setup with the view: up, open its input sessions beside
+   * the composition — after the primary, never blocking it, at the overlay
+   * tier — and hand each the frame on screen as it lands; down, take its
+   * layers and its flow off. */
   function applyComposite(): void {
-    if (!composite || !deps.manifest) return;
+    if (!deps.manifest) return;
+    syncDerivedLegend();
+    syncDerivedTiles(deps.manifest);
+    if (!setupOn()) {
+      const ran = composite.flow !== null;
+      composite.flow = null;
+      composite.shownKeys = [];
+      for (const derived of Object.values(composite.layers)) derived.layer.setVisible(false);
+      // The particles were the setup's flow over a scalar: they go with it.
+      if (ran && deps.activeSession && !deps.activeSession.vector && !fireWind.borrowed) deps.windLayer?.setVisible(false);
+      return;
+    }
     const sequence = deps.initializeSequence;
-    const inputs: Array<["flow" | "warmth", ForecastBundleId]> = [
-      ["flow", EXPERIMENT_FLOW_ID],
-      ["warmth", EXPERIMENT_WARMTH_ID],
-    ];
-    for (const [role, id] of inputs) {
-      if (composite[role]?.id === id || !hasBundle(deps.manifest, id)) continue;
+    const flowId = setupFlow();
+    composite.flow = composite.inputs.get(flowId) ?? null;
+    for (const id of new Set([FLUX_ID, WARMTH_ID, flowId])) {
+      if (composite.inputs.has(id) || setupLoading.has(id) || !hasBundle(deps.manifest, id)) continue;
+      setupLoading.add(id);
       loadVariable(id, sequence, "overlay")
         .then((session) => {
-          if (sequence !== deps.initializeSequence || !composite) return;
-          composite[role] = session;
+          if (sequence !== deps.initializeSequence) return;
+          setupLoading.delete(id);
+          composite.inputs.set(id, session);
+          if (id === setupFlow()) composite.flow = session;
           refreshViewportTiles();
           const index = deps.activeFrameIndex ?? deps.requestedFrameIndex ?? Number(slider.value);
           sendPrefetchWindow(index);
@@ -367,17 +423,18 @@ export function createDerived(deps: DerivedDeps) {
         })
         .catch((error: unknown) => {
           if (sequence !== deps.initializeSequence) return;
+          setupLoading.delete(id);
           if (error instanceof DOMException && error.name === "AbortError") return;
-          console.warn(`composite input ${id} unavailable`, error);
+          console.warn(`setup input ${id} unavailable`, error);
         });
     }
   }
 
-  /** Forget the experiment's sessions and blank its layers: a new dataset. */
+  /** Forget the setup's sessions and blank its layers: a new dataset. */
   function resetComposite(): void {
-    if (!composite) return;
+    composite.inputs.clear();
+    setupLoading.clear();
     composite.flow = null;
-    composite.warmth = null;
     composite.wantedKeys.clear();
     composite.shownKeys = [];
     for (const derived of Object.values(composite.layers)) {
@@ -447,8 +504,8 @@ export function createDerived(deps: DerivedDeps) {
       derived.layer.setVisible(true);
       return;
     }
-    // A fire layer joins the map the first time it is drawn, over the fill
-    // and under the lines like the experiment's.
+    // A derived layer joins the map the first time it is drawn, over the
+    // fill and under the lines.
     if (!map.getLayer(derived.layer.id)) map.addLayer(derived.layer, slots.lines.layer.id);
     if (derived.gridSource !== source.metadata) {
       derived.layer.configureGrid(source.metadata);
@@ -517,43 +574,43 @@ export function createDerived(deps: DerivedDeps) {
     return fireWeatherAlertPalette();
   }
 
-  /** Compute and show the experiment's fields for the primary frame at
-   * `index`, and run the particles off the flow, from whatever input planes
-   * are decoded: a field whose inputs are not all there yet keeps its last
-   * plane up, the way an overlay does, and a field whose input the run does
-   * not ship stays off. The fill's own vector, when the fill is one, keeps
-   * the particles; the flow only drives them over a scalar. */
+  /** Compute and show the setup's fields for the primary frame at `index`,
+   * and run the particles off its flow, from whatever input planes are
+   * decoded: a field whose inputs are not all there yet keeps its last plane
+   * up, the way an overlay does. */
   function trySelectComposite(index: number): void {
-    if (!composite || !deps.layersAdded) return;
+    if (!deps.layersAdded || !setupOn()) return;
     const lead = frameLeadSeconds(index);
-    const flow = composite.flow ? compositeInputPlanes(composite.flow, lead, composite.wantedKeys) : null;
-    const warmth = composite.warmth ? compositeInputPlanes(composite.warmth, lead, composite.wantedKeys) : null;
-    composite.shownKeys = [...(flow?.keys ?? []), ...(warmth?.keys ?? [])];
+    const fluxSession = composite.inputs.get(FLUX_ID) ?? null;
+    const warmthSession = composite.inputs.get(WARMTH_ID) ?? null;
+    const fluxPlanes = fluxSession ? compositeInputPlanes(fluxSession, lead, composite.wantedKeys) : null;
+    const warmth = warmthSession ? compositeInputPlanes(warmthSession, lead, composite.wantedKeys) : null;
+    const flowSession = composite.flow;
+    const flow = flowSession === fluxSession ? fluxPlanes : flowSession ? compositeInputPlanes(flowSession, lead, composite.wantedKeys) : null;
+    composite.shownKeys = [...new Set([...(fluxPlanes?.keys ?? []), ...(warmth?.keys ?? []), ...(flow?.keys ?? [])])];
     for (const key of composite.shownKeys) composite.wantedKeys.delete(key);
-    if (warmth && composite.warmth && view.derived.front) {
-      const session = composite.warmth;
+    if (warmth && warmthSession && view.derived.front) {
+      const session = warmthSession;
       const plane = warmth.frames[0]!.plane;
       showDerived(composite.layers.front, session, warmth.keys.join("|"), () =>
         thermalFrontZone({ grid: geoGrid(session.metadata), variable: session.variable, plane }),
       );
     }
-    if (flow && warmth && composite.flow && composite.warmth && view.derived.inflow) {
-      const flowSession = composite.flow;
-      const warmthSession = composite.warmth;
-      const [u, v] = flowSession.variables;
-      if (u && v && flow.frames.length >= 2) {
-        showDerived(composite.layers.inflow, flowSession, [...flow.keys, ...warmth.keys].join("|"), () =>
+    if (fluxPlanes && warmth && fluxSession && warmthSession && view.derived.inflow) {
+      const [u, v] = fluxSession.variables;
+      if (u && v && fluxPlanes.frames.length >= 2) {
+        showDerived(composite.layers.inflow, fluxSession, [...fluxPlanes.keys, ...warmth.keys].join("|"), () =>
           warmMoistInflow(
-            { grid: geoGrid(flowSession.metadata), u, v, uPlane: flow.frames[0]!.plane, vPlane: flow.frames[1]!.plane },
+            { grid: geoGrid(fluxSession.metadata), u, v, uPlane: fluxPlanes.frames[0]!.plane, vPlane: fluxPlanes.frames[1]!.plane },
             { grid: geoGrid(warmthSession.metadata), variable: warmthSession.variable, plane: warmth.frames[0]!.plane },
           ),
         );
       }
     }
-    if (flow && composite.flow && flow.frames.length >= 2 && view.particles && deps.activeSession && !deps.activeSession.vector) {
+    if (flow && flowSession && flow.frames.length >= 2 && view.particles && deps.activeSession && !deps.activeSession.vector) {
       ensureWindLayer();
-      ensureWindGrid(composite.flow);
-      deps.windLayer!.setInk(experimentFlowInk());
+      ensureWindGrid(flowSession);
+      deps.windLayer!.setInk(flowInk(flowSession.id));
       deps.windLayer!.setWindPlanes(flow.frames[0]!.plane, flow.frames[1]!.plane);
       deps.windLayer!.setVisible(true);
     }
@@ -580,7 +637,7 @@ export function createDerived(deps: DerivedDeps) {
   const HOTSPOT_CELL_BUDGET = 4_000_000;
 
   /** Open the inputs of every fire layer the view draws and the run can
-   * feed, beside the composition like the experiment's — after the primary,
+   * feed, beside the composition like the setup's — after the primary,
    * never blocking it — and hand each the frame on screen as it lands. */
   function applyFireDerived(): void {
     if (!deps.manifest) return;
@@ -720,5 +777,27 @@ export function createDerived(deps: DerivedDeps) {
     resetFireDerived,
     syncDerivedTiles,
     setDerivedShown,
+    setupOn,
+    setupPublished,
+    setupFlows,
+    setupFlow,
   };
+}
+
+/** Where the setup's two derived layers are remembered on the device. */
+const SETUP_LAYERS_KEY = "xue-setup-layers";
+
+/** The setup's derived layers as this device last left them: both on
+ * unless the viewer took one off. */
+export function storedSetupLayers(): { inflow: boolean; front: boolean } {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SETUP_LAYERS_KEY) ?? "null") as unknown;
+    if (stored && typeof stored === "object") {
+      const { inflow, front } = stored as { inflow?: unknown; front?: unknown };
+      return { inflow: inflow !== false, front: front !== false };
+    }
+  } catch {
+    // Storage can be unavailable (privacy modes), or hold something else.
+  }
+  return { inflow: true, front: true };
 }
