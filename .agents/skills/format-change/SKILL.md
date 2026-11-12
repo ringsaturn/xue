@@ -12,7 +12,7 @@ first.
 
 | Change | Readers affected | Deploy order |
 |---|---|---|
-| New optional metadata block (like `band`, `producer`, `aerosol`) | all three validate it when present; old readers ignore it | one-sided: data may ship any time |
+| New optional metadata block (like `band`, `producer`, `aerosol`, `ensemble`) | all three validate it when present; old readers ignore it | one-sided: data may ship any time |
 | New required field, new `schemaVersion`, container version bump | all three must implement it **and keep reading every older version** | **shell first**, then data |
 | Manifest schema widened | `manifest.py`, `encode/manifest.rs`, `manifest.ts` | **shell first** |
 | Encoding change with no schema change (codebook, predictor, chunking) | encoders only; golden fixtures move | either, but goldens regenerate |

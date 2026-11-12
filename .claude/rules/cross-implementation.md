@@ -78,7 +78,8 @@ and change every implementation that reads them, never only a snapshot.
   so each file has exactly one valid encoding.
 - `numericId` / `variableId` is **file-local** (1..n in bundle order). Never
   key anything across sessions or bundles by it. Identity is the GRIB2
-  `parameter` block, plus `aerosol` / `band` / `producer` where present.
+  `parameter` block, plus `aerosol` / `band` / `producer` / `ensemble`
+  where present.
 - Nothing cross-variable may enter a bundle or its manifest entry. Split
   builds and top-ups are held byte-identical to whole builds
   (`tests/test_assemble.py`).

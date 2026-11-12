@@ -36,6 +36,19 @@ defaults and the rest follows. It feeds both record matching and the v3
   surface, value, statistical process, GDAL unit). Both encoders match by
   GRIB2 header index and by GDAL band metadata (`gdal_rules`, evaluated in
   `gdal.py` and `inspect.rs`); aliases are never written.
+- An ensemble product (templates 4.2/4.12 derived, 4.6/4.10 percentile,
+  4.5/4.9 probability) is accepted by a `template-ensemble` rule alone,
+  which compares the record's statistic with the rule's `ensemble` block;
+  every other rule refuses those templates, so a deterministic source never
+  picks up an ensemble record by its triple. A statistic of its own (a
+  quartile, a spread, a probability) is a variable carrying an `ensemble`
+  block (`grib2_ensemble`); a shared id read as an ensemble's centre
+  (`tmp2m` as the median) gets the block from the source
+  (`SourceSpec.ensembles`, `metadata.py`), so GFS's `tmp2m` stays without
+  one. GDAL converts nothing in a derived record that is not a mean and
+  writes a label (`[spread]`, …) in place of the unit
+  (`gdal.DERIVED_UNIT_LABELS`, mirrored in `inspect.rs`): its values are
+  in the parameter's GRIB unit, read as the variable's `gdal_unit`.
 - Input-only entries are read, never published: ECMWF `tp` and sflux
   `prate_ave` (into `prate`), `dirpw`, `spfh<level>`, and GFS's
   `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `derive.derive_ptype`).
@@ -78,7 +91,14 @@ ships, and a listed bundle ships only when its inputs were fetched:
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by
 `discover.analysis_optional_ids` (mirrored in `convert.rs`) and starts at
-the first step.
+the first step. A variable a source writes only from some hour on
+(`SourceSpec.variable_first_hours`: CMA-GEPS's 24-hour probabilities, from
+F024) is listed there too and starts at that hour: earlier frames are
+neither asked for it (`fetch.py`, `assemble.py`) nor read, and a build
+whose hours end before it leaves the bundle out with a warning.
+`SourceSpec.interval_precipitation_pairs` derives further rates from
+totals exactly as `interval_precipitation` derives `prate` from `apcp`
+(the precipitation quartiles).
 
 ## Companion files and fill values
 
@@ -166,7 +186,8 @@ commit). Widening a source's inputs means recutting its crop fixture
   `partial`, the group document from it (`finalize_store`), whose CRC-32
   every entry naming the store carries. The dimension names are
   `discover.store_dimensions`, a function of the source registry alone
-  (`time_<bundle id>` for an analysis-optional scalar or a static field,
+  (`time_<bundle id>` for an analysis-optional scalar, including one with
+  a first hour, or a static field,
   `latitude_<family>` / `longitude_<family>` off the primary grid), so a
   subset build writes the objects a whole build does. Series stores stay
   one-bundle (profile 1, `write_store`); the readers open both profiles,

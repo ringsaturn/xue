@@ -83,7 +83,8 @@ and [`encoder.md`](../encoder.md).
   generically.
 - **`numericId` / `variableId` is file-local:** variables are numbered 1..n
   in bundle order (vector: 1 = u, 2 = v). Identity is the GRIB2 `parameter`
-  block (plus `aerosol` where species share a triple), read by
+  block (plus `aerosol` where species share a triple, `ensemble` where a
+  statistic of an ensemble shares its field's), read by
   `web/src/identity.ts`; the id string is only a naming convention. Never key
   across sessions by `numericId` (`web/src/sessionkeys.ts` scopes keys per
   session).
@@ -113,7 +114,7 @@ unit-neutral axis (`unitSeconds` + `firstFrameOffset` + `frameStep` |
 - `unitSeconds` must be the coarsest unit that fits (3600 for forecasts, an
   observation's `cadence_seconds` otherwise). Decoders reject unimplemented
   **and** overdeclared versions, so each file has exactly one valid encoding.
-- Optional v3 blocks `band`, `producer`, `aerosol` are validated by all
+- Optional v3 blocks `band`, `producer`, `aerosol`, `ensemble` are validated by all
   readers when present, raise no floor and are ignored by older readers, so
   adding such a block is one-sided.
 - A plane is keyed by frame offset, never forecast hour
