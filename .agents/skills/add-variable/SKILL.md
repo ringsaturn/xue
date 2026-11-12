@@ -24,6 +24,18 @@ Read `.claude/rules/encoder.md` and
   the closed sets of `xuebuild/rules.py`, `docs/registry.md`), a codebook
   in `quantize.py`, and optionally frontend chart knowledge. Never a
   branch on the id: the encoders read the entry.
+- **An ensemble statistic** (a percentile, a spread or an exceedance
+  probability of a quantity the source already reads): a variable with
+  the base field's `parameter` block and its own `ensemble` block
+  (`grib2_ensemble`), matched by a `template-ensemble` rule; the base
+  codebook for a percentile, one of its own for a spread or a
+  probability. A centre published under the field's existing id gets its
+  block from `SourceSpec.ensembles`, never on the shared entry. A field
+  the source writes only from some hour on goes into
+  `SourceSpec.variable_first_hours`. The frontend groups a field's
+  statistics off the registry (`web/src/statistics.ts`,
+  `docs/contribution/frontend.md`). The `cmageps` entries are the worked
+  example.
 - **Derived**: a `BundleSpec` in `xuebuild/bundles.py` with a `derivation`
   (one of the six kinds; its arithmetic in `derive.py` has a fixed
   operation order, mirrored in `rust/xue/src/encode/derive.rs`). It
