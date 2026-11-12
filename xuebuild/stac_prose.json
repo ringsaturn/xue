@@ -1346,7 +1346,7 @@
     },
     "tc": {
       "title": "Tropical cyclone tracks",
-      "description": "Every tropical cyclone the warning centres and the models are tracking, aggregated every hour: the official forecasts of the National Hurricane Center and the Joint Typhoon Warning Center, the multi-agency best tracks, the NCEP tracker's GFS and GEFS tracks and ECMWF's deterministic and ensemble tracks — one JSON file per system beside an index that names the systems and their headline positions. A rolling window with no fixed start: only the newest issue is published.",
+      "description": "Every tropical cyclone the warning centres and the models are tracking, aggregated every hour: the official forecasts of the National Hurricane Center, the Joint Typhoon Warning Center and the Hong Kong Observatory, the multi-agency best tracks, the NCEP tracker's GFS and GEFS tracks and ECMWF's deterministic and ensemble tracks — one JSON file per system beside an index that names the systems and their headline positions. A rolling window with no fixed start: only the newest issue is published.",
       "license": "other",
       "keywords": [
         "weather",
@@ -1372,6 +1372,15 @@
             "licensor"
           ],
           "url": "https://www.metoc.navy.mil/jtwc/jtwc.html"
+        },
+        {
+          "name": "Hong Kong Observatory",
+          "description": "The Observatory's tropical cyclone track information as published on DATA.GOV.HK, reused under its terms of use: Hong Kong Observatory (DATA.GOV.HK).",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://data.gov.hk/en-data/dataset/hk-hko-rss-tc-track-info"
         },
         {
           "name": "NOAA / NCEP",
@@ -1421,6 +1430,12 @@
           "href": "https://creativecommons.org/licenses/by/4.0/",
           "type": "text/html",
           "title": "Creative Commons Attribution 4.0, for the ECMWF open data tracks"
+        },
+        {
+          "rel": "license",
+          "href": "https://data.gov.hk/en/terms-and-conditions",
+          "type": "text/html",
+          "title": "DATA.GOV.HK terms and conditions of use, for the Hong Kong Observatory's tracks"
         }
       ]
     },

@@ -12,7 +12,8 @@ The model sources are by cycle: the newest cycle at or before the issue
 hour whose key file has landed (the tracker's ``avno`` file, GEFS'
 ``aemn`` mean, ECMWF's ``tf`` BUFR), looked for back over the last day.
 The agencies are "whatever is current": JTWC's RSS names its live
-products, NHC's ``CurrentStorms.json`` its active storms.
+products, NHC's ``CurrentStorms.json`` its active storms, the Hong Kong
+Observatory's ``tc_list.xml`` the systems it issues tracks for.
 """
 
 from __future__ import annotations
@@ -30,17 +31,20 @@ from typing import Any
 from ..common import write_bytes_atomic
 from ..errors import DownloadError, XueError
 from ..fetch import ECMWF_BASE_URLS, _http_error_code, get_ok
+from . import hko
 from .track import SourceStatus
 
 LOG = logging.getLogger(__name__)
 
-SOURCE_IDS = ("jtwc", "nhc", "gfs", "gefs", "ecmwf", "ecmwfens", "ibtracs")
+SOURCE_IDS = ("jtwc", "nhc", "hko", "gfs", "gefs", "ecmwf", "ecmwfens", "ibtracs")
 
 JTWC_RSS_URL = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss"
 # JTWC's server answers a non-browser User-Agent with 403.
 JTWC_USER_AGENT = "Mozilla/5.0 (compatible; xue/0.1; +https://github.com/ringsaturn/xue)"
 NHC_CURRENT_STORMS_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
 NHC_ATCF_URL = "https://ftp.nhc.noaa.gov/atcf"
+HKO_LIST_URL = "https://www.weather.gov.hk/wxinfo/currwx/tc_list.xml"
+HKO_TRACK_URL = "https://www.weather.gov.hk/wxinfo/currwx/hko_tctrack_{tcid}.xml"
 NCEP_TRACKER_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/ens_tracker/prod"
 IBTRACS_URL = (
     "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs"
@@ -138,6 +142,29 @@ def fetch_nhc(directory: Path) -> FetchResult:
     )
 
 
+def fetch_hko(directory: Path) -> FetchResult:
+    now = datetime.now(UTC)
+    listing = _get(HKO_LIST_URL)
+    write_bytes_atomic(directory / "tc_list.xml", listing)
+    files = ["tc_list.xml"]
+    try:
+        entries = hko.parse_list(listing)
+    except ValueError as exc:
+        raise DownloadError(f"tc_list.xml is not the expected XML: {exc}") from exc
+    for entry in entries:
+        # The track URL is built from the id the data dictionary names it
+        # by rather than followed from the list, which has carried http links.
+        url = HKO_TRACK_URL.format(tcid=entry.tcid)
+        body = _get_optional(url)
+        if body is None:
+            LOG.warning("hko: %s listed but not served", url)
+            continue
+        name = f"hko_tctrack_{entry.tcid}.xml"
+        write_bytes_atomic(directory / name, body)
+        files.append(name)
+    return FetchResult(SourceStatus("hko", True, fetched=now, url=HKO_LIST_URL, detail={"storms": len(entries)}), files)
+
+
 def _tracker_file(cycle: datetime, model: str, member: str) -> str:
     return f"{NCEP_TRACKER_URL}/{model}.{cycle:%Y%m%d}/{cycle:%H}/tctrack/{member}.t{cycle:%H}z.cyclone.trackatcfunix"
 
@@ -227,6 +254,8 @@ def fetch_source(source_id: str, directory: Path, issue: datetime) -> FetchResul
         return fetch_jtwc(directory)
     if source_id == "nhc":
         return fetch_nhc(directory)
+    if source_id == "hko":
+        return fetch_hko(directory)
     if source_id == "gfs":
         return fetch_gfs(directory, issue)
     if source_id == "gefs":

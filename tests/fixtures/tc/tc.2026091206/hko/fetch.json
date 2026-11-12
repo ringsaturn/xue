@@ -1,0 +1,10 @@
+{
+  "id": "hko",
+  "ok": true,
+  "fetched": "2026-09-12T07:03:00Z",
+  "url": "https://www.weather.gov.hk/wxinfo/currwx/tc_list.xml",
+  "storms": 0,
+  "files": [
+    "tc_list.xml"
+  ]
+}

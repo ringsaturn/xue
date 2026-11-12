@@ -815,7 +815,24 @@ base wins" has two to choose from); the NCEP tracker's `avno` file of the
 `ap01`, `ap02`) of the same cycle; ECMWF's 2026-09-12 00Z `oper` `tf`
 BUFR cut to `14E` and `70W` and the 2026-09-11 00Z `enfo` file cut to
 `14E` (51 subsets, compressed), both with `bufr_filter`; and the IBTrACS
-active list cut to Norbert and one other system. About 180 KB.
+active list cut to Norbert and one other system. Its `hko/tc_list.xml` is
+the Hong Kong Observatory's list as served on 2026-11-12 with no system
+active, which is byte for byte what it serves whenever none is. About 180 KB.
+
+`tc/hko/` holds real Observatory track documents, which the Observatory
+does not archive and the Wayback Machine never captured: `tc_list_2102.xml`
+(the list naming SURIGAE) and `hko_tctrack_2102.xml` (its last bulletin,
+2021-04-25 05Z, extratropical, no forecast) and `hko_tctrack_2206.xml`
+(CHABA, 2022-07-02 00Z, nearing landfall, with interpolated and timed
+forecast positions). They are the copies an open-source client of the
+feed committed as its test resources (`test/resources/` of
+`github.com/chilicizz/chilicizz`, `typhoonExample.xml`,
+`typhoonTrackExample.xml`, `typhoonTrackExample2.xml`). They were
+re-indented there, and the second has lost its header's copyright and
+disclaimer text, so whitespace and that block may differ from the bytes
+served. The data are the Observatory's,
+reused under the DATA.GOV.HK terms with the attribution "Hong Kong
+Observatory (DATA.GOV.HK)".
 
 `tc/expected/` is the product built from it, offline, pretty-printed
 with scalar arrays kept on one line; `tests/prepare_tc_golden.py`

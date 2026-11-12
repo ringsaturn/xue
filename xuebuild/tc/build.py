@@ -24,7 +24,7 @@ from typing import Any
 from .. import pointproduct
 from ..errors import TcProductError, XueError
 from ..stac import write_point_product_documents
-from . import atcf, bufrtracks, ibtracs, tcw
+from . import atcf, bufrtracks, hko, ibtracs, tcw
 from .bufrtracks import BufrStorm
 from .fetch import SOURCE_IDS, FetchResult, issue_raw_directory, read_fetch_record
 from .identity import PreviousSystem, Sighting, System, dominant_cluster, resolve, sighting_kind
@@ -53,9 +53,11 @@ hour is over — IBTrACS keeps a storm in its active file for days after
 the last advisory."""
 
 # ``best`` keys are the IBTrACS agency keys; the working best tracks of
-# the two US centres both land under ``usa``, the fresher file first.
-_BEST_PRIORITY = {"nhc": 0, "jtwc": 1, "ibtracs": 2}
+# the two US centres both land under ``usa``, the fresher file first; a
+# centre's own working track (``hko``) goes before IBTrACS' under its key.
+_BEST_PRIORITY = {"nhc": 0, "jtwc": 1, "hko": 1, "ibtracs": 2}
 _TCW_NAME = re.compile(r"^([a-z]{2})(\d{2})(\d{2})\.tcw$")
+_HKO_TRACK = re.compile(r"^hko_tctrack_(\d{4})\.xml$")
 _NHC_DECK = re.compile(r"^([ab])([a-z]{2}\d{6})\.dat$")
 ATCF_KEY = re.compile(r"^[A-Z]{2}\d{6}$")
 _GEFS_MEMBER = re.compile(r"^(ac00|aemn|ap\d{2})\.t\d{2}z\.cyclone\.trackatcfunix$")
@@ -79,11 +81,12 @@ def _sighting(
     *,
     name: str | None = None,
     first_seen: datetime | None = None,
+    kind: str | None = None,
 ) -> Sighting:
     return Sighting(
         source=source,
         key=key,
-        kind=sighting_kind(key),
+        kind=kind or sighting_kind(key),
         basin=basin,
         time=point.time,
         lat=point.lat,
@@ -187,6 +190,42 @@ def _parse_nhc(directory: Path, files: list[str]) -> list[Sighting]:
         if anchor is None:
             continue
         sightings.append(_sighting("nhc", key, basin, anchor, contributions, name=name, first_seen=first_seen))
+    return sightings
+
+
+def _parse_hko(directory: Path, files: list[str]) -> list[Sighting]:
+    """The Observatory numbers systems its own way (``2206``), so a
+    sighting attaches by position, as an ECMWF system does; the number is
+    kept as the alias ``hko:<TCID>``. Every system it tracks is in the
+    western North Pacific or the South China Sea."""
+    sightings = []
+    for name in files:
+        if not _HKO_TRACK.match(name):
+            continue
+        product = hko.parse_track((directory / name).read_bytes())
+        contributions = []
+        if product.history.points:
+            contributions.append(Contribution("best", "hko", product.history, "hko"))
+        if product.forecast is not None and product.forecast.points:
+            contributions.append(Contribution("agency", "hko", product.forecast, "hko"))
+            anchor = product.forecast.points[0]
+        elif product.history.points:
+            anchor = product.history.points[-1]
+        else:
+            continue
+        first_seen = product.history.points[0].time if product.history.points else None
+        sightings.append(
+            _sighting(
+                "hko",
+                product.tcid,
+                "WP",
+                anchor,
+                contributions,
+                name=product.name,
+                first_seen=first_seen,
+                kind="unnumbered",
+            )
+        )
     return sightings
 
 
@@ -396,6 +435,7 @@ def _parse_ibtracs(directory: Path, files: list[str]) -> list[Sighting]:
 _PARSERS = {
     "jtwc": _parse_jtwc,
     "nhc": _parse_nhc,
+    "hko": _parse_hko,
     "gfs": _parse_gfs,
     "gefs": _parse_gefs,
     "ecmwf": lambda directory, files: _parse_ecmwf(directory, files, ensemble=False),
