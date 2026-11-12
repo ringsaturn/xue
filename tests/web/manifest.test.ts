@@ -899,7 +899,7 @@ describe("dataset kinds", () => {
     // wind components: the gust stands where the wind does elsewhere.
     expect(FORECAST_MODELS.cmageps.region).toBeUndefined();
     expect(FORECAST_MODELS.cmageps.coreBundles).toBeUndefined();
-    expect(FORECAST_MODELS.cmageps.railCore).toEqual(["tmp2m", "prate", "gust", "tcdc"]);
+    expect(FORECAST_MODELS.cmageps.railCore).toEqual(["tmp2m", "prate", "apcp24gt1", "gust", "tcdc"]);
     // The aerosol run ships no temperature and no precipitation: its core
     // is the total optical depth, which it opens on.
     expect(FORECAST_MODELS.gefsaero).toMatchObject({

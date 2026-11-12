@@ -169,13 +169,17 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // three-hourly to F102.
   arpege: {},
   // CMA GRAPES GEPS, the China Meteorological Administration's global
-  // ensemble, as WMO WIS2 carries it: not a member but the ensemble's centre,
-  // the median (the mean for the 500 hPa height and the sea-level pressure),
-  // on the 0.25° grid without its pole rows (1440 × 720). Six-hourly to F360
-  // from the 00Z and 12Z cycles. No wind components exist, only speeds, so
-  // the gust takes the wind's tile.
+  // ensemble, as WMO WIS2 carries it: no member, but the ensemble's
+  // statistics — the median under each quantity's own id (the mean for the
+  // 500 hPa height and the sea-level pressure), the quartiles and the
+  // spreads beside it (the level row's statistic group), and the
+  // probability of 24-hour precipitation past six thresholds (a family
+  // tile of its own, from the 24th hour) — on the 0.25° grid without its
+  // pole rows (1440 × 720). Six-hourly to F360 from the 00Z and 12Z
+  // cycles. No wind components exist, only speeds, so the gust takes the
+  // wind's tile.
   cmageps: {
-    railCore: ["tmp2m", "prate", "gust", "tcdc"],
+    railCore: ["tmp2m", "prate", "apcp24gt1", "gust", "tcdc"],
   },
   // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
@@ -687,6 +691,7 @@ export type KnownBundleId =
   | DustId
   | SmokeDustId
   | HydrologyId
+  | EnsembleId
   | PressureBundleId
   | IsobaricScalarBundleId
   | VectorBundleId;
@@ -765,6 +770,28 @@ type SmokeDustId = (typeof SMOKE_DUST_IDS)[number];
 export const HYDROLOGY_IDS = REGISTRY.families.river;
 type HydrologyId = (typeof HYDROLOGY_IDS)[number];
 
+type RegistryVariables = typeof REGISTRY.variables;
+
+/** The ensemble statistics published as bundles of their own — a
+ * quantity's quartiles, the spread of the pressure family, the probability
+ * of a precipitation total past a threshold: the registry's published
+ * variables (the shell's copy lists no input-only one) whose entry carries
+ * an `ensemble` block (`BundleEnsemble`), each a one-variable bundle under
+ * its own id. An ensemble's centre (its median or mean) keeps the
+ * quantity's own id and gets the block from the source, so it is not one
+ * of these. */
+type EnsembleId = {
+  [Id in keyof RegistryVariables]: RegistryVariables[Id] extends { ensemble: object } ? Id : never;
+}[keyof RegistryVariables];
+export const ENSEMBLE_IDS: readonly EnsembleId[] = (Object.keys(REGISTRY.variables) as (keyof RegistryVariables)[]).filter(
+  (id) => "ensemble" in REGISTRY.variables[id],
+) as EnsembleId[];
+
+/** The `ensemble` block a registered variable carries, or null. */
+export function registeredEnsemble(id: string): BundleEnsemble | null {
+  return ((REGISTRY.variables as Record<string, { ensemble?: BundleEnsemble }>)[id]?.ensemble) ?? null;
+}
+
 /** A well-formed bundle/variable name: lowercase alphanumeric, starting with
  * a letter. This is the whole admission rule — a manifest is rejected for
  * naming a bundle badly, never for naming one this build does not know. */
@@ -827,6 +854,7 @@ export const KNOWN_BUNDLE_IDS: readonly KnownBundleId[] = [
   ...DUST_IDS,
   ...SMOKE_DUST_IDS,
   ...HYDROLOGY_IDS,
+  ...ENSEMBLE_IDS,
   "prmsl",
   ...perLevel("hgt"),
   ...perLevel("tmp"),
@@ -1703,6 +1731,25 @@ export interface BundleAerosol {
   scaledValueOfSecondWavelength: number | null;
 }
 
+/** Which statistic of an ensemble of forecasts a variable is, in the
+ * fields of GRIB2 product definition templates 4.2/4.12 (a derived
+ * forecast, code table 4.7: 0 the mean, 4 the spread), 4.6/4.10 (a
+ * percentile) and 4.5/4.9 (a probability, code table 4.9, with limits as
+ * `scaledValue × 10^-scaleFactor` in the GRIB2 unit of the parameter's
+ * quantity). Exactly one shape is present; a probability carries the limits
+ * its type uses as integers and the others null. Optional beside
+ * `parameter` from schemaVersion 3 (docs/format.md, "Ensemble"). */
+export type BundleEnsemble =
+  | { derivedForecast: number }
+  | { percentileValue: number }
+  | {
+      probabilityType: number;
+      scaleFactorOfLowerLimit: number | null;
+      scaledValueOfLowerLimit: number | null;
+      scaleFactorOfUpperLimit: number | null;
+      scaledValueOfUpperLimit: number | null;
+    };
+
 export interface BundleVariable {
   numericId: number;
   id: DataVariableId;
@@ -1717,6 +1764,9 @@ export interface BundleVariable {
   /** The species, size and wavelength of an aerosol field, when the
    * variable is one. */
   aerosol?: BundleAerosol;
+  /** The ensemble statistic (mean, spread, percentile, probability), when
+   * the variable is one rather than a single forecast. */
+  ensemble?: BundleEnsemble;
   quantization: LinearQuantization | LogQuantization;
 }
 
@@ -2059,6 +2109,62 @@ function validateAerosol(variable: Record<string, unknown>, schemaVersion: numbe
   }
 }
 
+/** Which limits a probability type uses (code table 4.9): below, above or
+ * equal to the lower limit; above or below the upper one; between both. */
+const PROBABILITY_LIMITS: ReadonlyArray<readonly [lower: boolean, upper: boolean]> = [
+  [true, false],
+  [false, true],
+  [true, true],
+  [true, false],
+  [false, true],
+  [true, false],
+];
+const PROBABILITY_FIELDS = [
+  "probabilityType",
+  "scaleFactorOfLowerLimit",
+  "scaledValueOfLowerLimit",
+  "scaleFactorOfUpperLimit",
+  "scaledValueOfUpperLimit",
+] as const;
+
+function validateEnsemble(variable: Record<string, unknown>, schemaVersion: number): void {
+  if (!("ensemble" in variable)) return;
+  if (schemaVersion < 3) throw new Error("an ensemble block requires schema version 3");
+  const ensemble = object(variable.ensemble);
+  const keys = Object.keys(ensemble);
+  const integer = (field: string, low: number, high: number): void => {
+    const value = ensemble[field];
+    if (typeof value !== "number" || !Number.isInteger(value) || value < low || value > high) {
+      throw new Error(`invalid bundle ensemble ${field}`);
+    }
+  };
+  if (keys.length === 1 && keys[0] === "derivedForecast") return integer("derivedForecast", 0, 0xff);
+  if (keys.length === 1 && keys[0] === "percentileValue") return integer("percentileValue", 0, 100);
+  if (keys.length !== PROBABILITY_FIELDS.length || !PROBABILITY_FIELDS.every((field) => field in ensemble)) {
+    throw new Error("bundle ensemble block must be exactly one of its three shapes");
+  }
+  integer("probabilityType", 0, PROBABILITY_LIMITS.length - 1);
+  const [lowerUsed, upperUsed] = PROBABILITY_LIMITS[ensemble.probabilityType as number]!;
+  for (const [limit, used] of [
+    ["Lower", lowerUsed],
+    ["Upper", upperUsed],
+  ] as const) {
+    const scale = ensemble[`scaleFactorOf${limit}Limit`];
+    const value = ensemble[`scaledValueOf${limit}Limit`];
+    // Both halves of a limit at once, as GRIB2 writes a missing one.
+    if ((scale === null) !== (value === null)) {
+      throw new Error(`bundle ensemble ${limit.toLowerCase()} limit must be wholly present or wholly null`);
+    }
+    if (!used) {
+      if (scale !== null) throw new Error(`bundle ensemble probability type does not use the ${limit.toLowerCase()} limit`);
+      continue;
+    }
+    if (scale === null) throw new Error(`bundle ensemble probability type requires the ${limit.toLowerCase()} limit`);
+    integer(`scaleFactorOf${limit}Limit`, -127, 127);
+    integer(`scaledValueOf${limit}Limit`, 0, 0xfffffffe);
+  }
+}
+
 export function parseBundleMetadata(json: string): BundleMetadata {
   const value = object(JSON.parse(json));
   const schemaVersion = value.schemaVersion;
@@ -2089,6 +2195,7 @@ export function parseBundleMetadata(json: string): BundleMetadata {
     validateBand(variable, schemaVersion);
     validateProducer(variable, schemaVersion);
     validateAerosol(variable, schemaVersion);
+    validateEnsemble(variable, schemaVersion);
     const quantization = object(variable.quantization);
     if (quantization.type !== "linear" && quantization.type !== "log1p") {
       throw new Error("unsupported bundle quantization");

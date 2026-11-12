@@ -1,5 +1,6 @@
-import type { BundleAerosol, BundleBand, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
+import type { BundleAerosol, BundleBand, BundleEnsemble, BundleParameter, BundleProducer, BundleVariable, KnownBundleId } from "./manifest";
 import { REGISTRY } from "./registry";
+import { SPREAD_FAMILIES, SPREAD_KEY, chartsAsQuantity, statisticKey, statisticProbability } from "./statistics";
 import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables";
 
 /**
@@ -42,7 +43,11 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * per species, and the surface particulate matter by size cut, told apart
  * by the `aerosol` block beside a parameter that is the same for every
  * species — and the hydrology set: the river discharge, and the
- * return-period class and upstream area a producer derived beside it). */
+ * return-period class and upstream area a producer derived beside it —
+ * and the two ensemble statistics that are not their quantity: the spread
+ * of the pressure family's surfaces (`hgtsd`, at MSL and on the isobaric
+ * levels like `hgt`), and the probability of the precipitation total past
+ * a threshold (`pop`), told apart by the `ensemble` block). */
 export type ChartFamily =
   | "hgt"
   | "tmp"
@@ -115,6 +120,8 @@ export type ChartFamily =
   | "dis06"
   | "disrp"
   | "upstream"
+  | "hgtsd"
+  | "pop"
   | SoilChartFamily;
 
 /** The soil layers, one chart family per layer like the cloud layers: the
@@ -138,6 +145,10 @@ export interface VariableIdentity {
   level: number | null;
   /** True when the bundle carries a u/v component pair rather than a scalar. */
   vector: boolean;
+  /** The ensemble statistic the field is (`statistics.ts`: `q75`, `mean`,
+   * `spread`, `p3:10:`), absent for a single forecast. Two fields that
+   * differ only here are different fields. */
+  statistic?: string;
 }
 
 function scalar(family: ChartFamily, level: number | null): VariableIdentity {
@@ -162,7 +173,57 @@ export function isCompositeIdentity(identity: VariableIdentity | null): boolean 
 
 export function sameIdentity(a: VariableIdentity | null, b: VariableIdentity | null): boolean {
   if (a === null || b === null) return a === b;
-  return a.family === b.family && a.level === b.level && a.vector === b.vector;
+  return a.family === b.family && a.level === b.level && a.vector === b.vector && a.statistic === b.statistic;
+}
+
+/** Whether two identities draw as the same chart: the same field, or one a
+ * mean or percentile of the other's quantity — the name an ensemble's
+ * median is published under says nothing of its statistic, and charts as
+ * the quantity. */
+export function sameChart(a: VariableIdentity | null, b: VariableIdentity | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.family !== b.family || a.level !== b.level || a.vector !== b.vector) return false;
+  if (a.statistic === b.statistic) return true;
+  return a.statistic === undefined ? chartsAsQuantity(b.statistic) : b.statistic === undefined && chartsAsQuantity(a.statistic);
+}
+
+/** The registered probability fields: a parameter on a precipitation
+ * total and an `ensemble` block of the probability shape. Their
+ * parameter is what a probability on the same quantity is matched by;
+ * the threshold is the block's, carried in the statistic. */
+const PROBABILITY_FIELDS = (Object.keys(REGISTRY.variables) as RegistryVariableId[]).filter((id) => {
+  const ensemble = (REGISTRY.variables[id] as { ensemble?: object }).ensemble;
+  return ensemble !== undefined && "probabilityType" in ensemble;
+});
+
+/**
+ * What a field is once its `ensemble` block is read: `base` is the identity
+ * of the quantity the parameter names (null when the shell has no chart for
+ * it). A mean or a percentile is that quantity under its statistic; the
+ * spread of a family with a spread chart is that chart; a probability on a
+ * registered probability field's parameter is the probability chart; any
+ * other spread or probability is a field this build does not chart, never
+ * the quantity itself.
+ */
+export function identityForEnsemble(
+  base: VariableIdentity | null,
+  parameter: BundleParameter,
+  ensemble: BundleEnsemble | undefined,
+): VariableIdentity | null {
+  if (ensemble === undefined) return base;
+  const statistic = statisticKey(ensemble);
+  if (statisticProbability(statistic)) {
+    // The threshold is the statistic's; the interval the total is over is
+    // no more the identity's than a rate's step is.
+    const known = PROBABILITY_FIELDS.some((id) => isOnSurfaceOf(parameter, id));
+    return known ? { family: "pop", level: null, vector: false, statistic } : null;
+  }
+  if (base === null) return null;
+  if (statistic === SPREAD_KEY) {
+    const family = SPREAD_FAMILIES[base.family];
+    return family === undefined || base.vector ? null : { family, level: base.level, vector: false, statistic };
+  }
+  return { ...base, statistic };
 }
 
 /** The fixed surface's value in its own unit, or null where GRIB2 writes the
@@ -253,9 +314,16 @@ function isFirstSwell(parameter: BundleParameter): boolean {
  * business (volume.ts), not the identity's; the river discharge is
  * accepted on whatever surface the source writes it. The statistical
  * process (code table 4.10) is not part of the identity: a parameter
- * names one chart however the step was reduced.
+ * names one chart however the step was reduced. An `ensemble` block is
+ * (`identityForEnsemble`): the quantity's identity carries the statistic.
  */
-export function identityForParameter(parameter: BundleParameter, band?: BundleBand, aerosol?: BundleAerosol): VariableIdentity | null {
+export function identityForParameter(
+  parameter: BundleParameter,
+  band?: BundleBand,
+  aerosol?: BundleAerosol,
+  ensemble?: BundleEnsemble,
+): VariableIdentity | null {
+  if (ensemble !== undefined) return identityForEnsemble(identityForParameter(parameter, band, aerosol), parameter, ensemble);
   const surface = parameter.typeOfFirstFixedSurface;
   const level = isobaricLevel(parameter);
   const value = surfaceValue(parameter);
@@ -675,7 +743,7 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
   const identity = first.parameter
     ? isLocalUse(first.parameter)
       ? (identityForProducedScalar(first) ?? identityForLocalScalar(first.parameter))
-      : identityForParameter(first.parameter, first.band, first.aerosol)
+      : identityForParameter(first.parameter, first.band, first.aerosol, first.ensemble)
     : (LEGACY_IDENTITIES[first.id] ?? null);
   return identity === null ? null : { identity, variables: [first] };
 }
@@ -692,7 +760,11 @@ export function identifyBundle(variables: readonly BundleVariable[]): BundleIden
  */
 export function identityForBundleId(id: string): VariableIdentity | null {
   const spec = variableSpec(id);
-  if (spec) return { family: spec.chart, level: spec.level, vector: spec.vector };
+  if (spec) {
+    const identity: VariableIdentity = { family: spec.chart, level: spec.level, vector: spec.vector };
+    if (spec.statistic !== null) identity.statistic = spec.statistic;
+    return identity;
+  }
   const match = /^([a-z]+)(\d+)$/.exec(id);
   if (!match) return null;
   const family = match[1] as ChartFamily;

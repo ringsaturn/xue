@@ -27,8 +27,29 @@
 
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { CAT_CLASSES, DISRP_CLASSES, PTYPE_CLASSES, PTYPE_ECMWF_CLASSES, familyLabel, isobaricCode, isobaricLegend, type IsobaricFamily } from "./levels";
-import { CAT_LEVELS, ISOBARIC_LEVELS, type IsobaricLevel, type KnownBundleId } from "./manifest";
+import {
+  CAT_CLASSES,
+  DISRP_CLASSES,
+  PTYPE_CLASSES,
+  PTYPE_ECMWF_CLASSES,
+  familyLabel,
+  isobaricCode,
+  isobaricLegend,
+  probabilityLabel,
+  probabilityWindowHours,
+  type IsobaricFamily,
+} from "./levels";
+import { CAT_LEVELS, ENSEMBLE_IDS, ISOBARIC_LEVELS, registeredEnsemble, type BundleParameter, type IsobaricLevel, type KnownBundleId } from "./manifest";
+import { REGISTRY } from "./registry";
+import {
+  MEAN_KEY,
+  MEDIAN_KEY,
+  SPREAD_FAMILIES,
+  SPREAD_KEY,
+  statisticKey,
+  statisticPercentile,
+  statisticProbability,
+} from "./statistics";
 import { PRESSURE_BUNDLE_IDS, PRESSURE_LEVELS, pressureCode, pressureLabel, pressureLegend, type PressureBundleId } from "./pressure";
 
 /** The field sheet's groups, in the order it lists them. A quantity's
@@ -83,6 +104,10 @@ export interface VariableSpec {
   chart: ChartFamily;
   level: IsobaricLevel | null;
   vector: boolean;
+  /** The ensemble statistic the field is (`statistics.ts`), null for a
+   * quantity's own field — which is also what an ensemble's median or mean
+   * is published under. */
+  statistic: string | null;
   /** The rail tile the field is behind, or null for a tile of its own. */
   family: IsobaricFamily | null;
   /** True when the codebook's bottom code is no data rather than a value —
@@ -237,6 +262,7 @@ function surface(entry: SurfaceEntry): VariableSpec {
     chart: entry.chart,
     level: null,
     vector: entry.vector ?? false,
+    statistic: null,
     family: entry.family ?? null,
     floorIsNoData: entry.floorIsNoData ?? false,
     sampling: entry.sampling ?? "smooth",
@@ -285,6 +311,7 @@ function isobaric(entry: IsobaricEntry): VariableSpec[] {
       chart: entry.family,
       level,
       vector: entry.vector ?? false,
+      statistic: null,
       family: entry.family,
       floorIsNoData: false,
       sampling: "smooth",
@@ -349,6 +376,7 @@ function pressure(): VariableSpec[] {
       chart: "hgt",
       level,
       vector: false,
+      statistic: null,
       family: "hgt",
       floorIsNoData: false,
       sampling: "smooth",
@@ -1445,6 +1473,120 @@ function buildSpecs(): readonly VariableSpec[] {
   ...pressure(),
   ];
 }
+/** A registered variable's parameter block, or null. */
+function registeredParameter(id: string): BundleParameter | null {
+  return (REGISTRY.variables as Record<string, { parameter?: BundleParameter }>)[id]?.parameter ?? null;
+}
+
+function sameParameter(a: BundleParameter, b: BundleParameter): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as (keyof BundleParameter)[]);
+  return [...keys].every((key) => a[key] === b[key]);
+}
+
+/** The ensemble statistics' rows, each built from the row of the quantity
+ * it is of — the registered field whose parameter block it shares and
+ * that carries no `ensemble` block — so a quartile keeps its quantity's
+ * group, ground and legend, and draws on its palette (identity.ts), and a
+ * spread takes its family's spread chart. Either is reached from the
+ * quantity's rail tile (`statisticBase`), on the level row. A probability is of no field's
+ * row: it is the `pop` family's, the threshold its level-row member. */
+function ensembleSpecs(base: readonly VariableSpec[]): VariableSpec[] {
+  const specs: VariableSpec[] = [];
+  for (const id of ENSEMBLE_IDS) {
+    const ensemble = registeredEnsemble(id);
+    const parameter = registeredParameter(id);
+    if (ensemble === null || parameter === null) continue;
+    const statistic = statisticKey(ensemble);
+    const probability = statisticProbability(statistic);
+    if (probability) {
+      const threshold = probability.lower ?? probability.upper ?? 0;
+      const hours = probabilityWindowHours(id) ?? 24;
+      const identity: VariableIdentity = { family: "pop", level: null, vector: false, statistic };
+      specs.push({
+        id,
+        chart: "pop",
+        level: null,
+        vector: false,
+        statistic,
+        family: "pop",
+        floorIsNoData: false,
+        sampling: "smooth",
+        group: "moisture",
+        code: `APCP ${hours}H >${threshold}`,
+        title: [`${hours}-Hour Precip`, `> ${threshold} mm`],
+        bufferTitle: "Probability buffer",
+        label: () => probabilityLabel(id),
+        legend: () => isobaricLegend(identity) ?? [],
+        legendGradient: "palette",
+        legendKey: null,
+        ground: "slate",
+        urlName: id,
+        urlAliases: [],
+        meteogramCode: null,
+        showcaseCode: `P${hours}H >${threshold}`,
+      });
+      continue;
+    }
+    const of = base.find(
+      (spec) => spec.statistic === null && registeredEnsemble(spec.id) === null && sameParameterAs(spec.id, parameter),
+    );
+    if (!of) continue;
+    if (statistic === SPREAD_KEY) {
+      const chart = SPREAD_FAMILIES[of.chart];
+      if (chart === undefined) continue;
+      const identity: VariableIdentity = { family: chart, level: of.level, vector: false, statistic };
+      specs.push({
+        ...of,
+        id,
+        chart,
+        statistic,
+        family: null,
+        group: "dynamics",
+        code: `${of.code} SD`,
+        title: [of.title.join(" "), "Spread"],
+        bufferTitle: "Spread buffer",
+        label: () => t("varLabelSpread", { label: of.label() }),
+        legend: () => isobaricLegend(identity) ?? [],
+        legendGradient: "palette",
+        legendKey: null,
+        ground: "slate",
+        urlName: id,
+        urlAliases: [],
+        meteogramCode: null,
+        showcaseCode: `${of.showcaseCode} SD`,
+      });
+      continue;
+    }
+    const percentile = statisticPercentile(statistic);
+    const suffix = percentile !== null ? `Q${percentile}` : statistic.toUpperCase();
+    specs.push({
+      ...of,
+      id,
+      statistic,
+      // Behind the quantity's tile but no member of its family: the level
+      // row's statistic group reaches it, never the family's surfaces.
+      family: null,
+      code: `${of.code} ${suffix}`,
+      title: [...of.title.slice(0, -1), `${of.title.at(-1) ?? ""} ${suffix}`.trim()],
+      label: () =>
+        percentile !== null ? t("varLabelPercentile", { label: of.label(), n: percentile }) : `${of.label()} (${statistic})`,
+      // The stylesheet's hand-written bars are keyed by the quantity's own
+      // id; the quartile's bar is read off the palette it shares.
+      legendGradient: "palette",
+      urlName: id,
+      urlAliases: [],
+      meteogramCode: null,
+      showcaseCode: `${of.showcaseCode} ${suffix}`,
+    });
+  }
+  return specs;
+}
+
+function sameParameterAs(id: string, parameter: BundleParameter): boolean {
+  const own = registeredParameter(id);
+  return own !== null && sameParameter(own, parameter);
+}
+
 interface VariableTable {
   specs: readonly VariableSpec[];
   /** By id. Complete over `KnownBundleId`: a bundle id added to the type
@@ -1460,11 +1602,12 @@ let built: VariableTable | null = null;
 
 function table(): VariableTable {
   if (built) return built;
-  const specs = buildSpecs();
+  const own = buildSpecs();
+  const specs = [...own, ...ensembleSpecs(own)];
   built = {
     specs,
     byId: Object.fromEntries(specs.map((spec) => [spec.id, spec])) as Record<KnownBundleId, VariableSpec>,
-    byIdentity: new Map(specs.map((spec) => [`${spec.chart}/${spec.level}/${spec.vector}`, spec])),
+    byIdentity: new Map(specs.map((spec) => [identityKey(spec.chart, spec.level, spec.vector, spec.statistic ?? undefined), spec])),
     isobaricFamilies: new Map(specs.filter((spec) => spec.level !== null).map((spec) => [spec.chart, spec.vector])),
   };
   return built;
@@ -1485,7 +1628,85 @@ export function variableSpec(id: string): VariableSpec | null {
  * does not chart. */
 export function specForIdentity(identity: VariableIdentity | null): VariableSpec | null {
   if (identity === null) return null;
-  return table().byIdentity.get(`${identity.family}/${identity.level}/${identity.vector}`) ?? null;
+  const { family, level, vector, statistic } = identity;
+  const byIdentity = table().byIdentity;
+  const own = byIdentity.get(identityKey(family, level, vector, statistic));
+  if (own || statistic === undefined) return own ?? null;
+  // A mean or a percentile no row is written for (the median an ensemble
+  // publishes under the quantity's id) is the quantity's chart; a spread
+  // or a probability has its own family, so it never lands on a
+  // quantity's row this way.
+  return byIdentity.get(identityKey(family, level, vector, undefined)) ?? null;
+}
+
+function identityKey(family: ChartFamily, level: number | null, vector: boolean, statistic: string | undefined): string {
+  return `${family}/${level}/${vector}/${statistic ?? ""}`;
+}
+
+/** The field a statistic's row is of — `tmp2m` for `tmp2mq75`, `prmsl`
+ * for `prmslsd` — or null for a field that is no statistic of another
+ * (a quantity's own field, a probability). */
+export function statisticBase(id: string): KnownBundleId | null {
+  const spec = variableSpec(id);
+  if (!spec || spec.statistic === null || statisticProbability(spec.statistic)) return null;
+  const chart = spec.statistic === SPREAD_KEY ? baseOfSpreadChart(spec.chart) : spec.chart;
+  if (chart === null) return null;
+  return specForIdentity({ family: chart, level: spec.level, vector: spec.vector })?.id ?? null;
+}
+
+function baseOfSpreadChart(chart: ChartFamily): ChartFamily | null {
+  for (const [base, spread] of Object.entries(SPREAD_FAMILIES)) if (spread === chart) return base as ChartFamily;
+  return null;
+}
+
+/** One member of a statistic group: the field, the statistic it is, and
+ * its instrument code on the level row. */
+export interface StatisticMember {
+  id: KnownBundleId;
+  statistic: string;
+  code: string;
+}
+
+/**
+ * The statistics of one field a run publishes, in the level row's order —
+ * the percentiles low to high with the centre among them, else the mean
+ * then the spread — or none when the run publishes no statistic of it.
+ * `id` is any member: the field itself or one of its statistics. The
+ * field's own id is the centre, the median beside percentiles and the
+ * mean beside a spread, since an ensemble publishes its centre under the
+ * quantity's id.
+ */
+export function statisticMembers(id: string, published: (id: string) => boolean): StatisticMember[] {
+  const base = statisticBase(id) ?? (variableSpec(id) ? (id as KnownBundleId) : null);
+  if (base === null || !published(base)) return [];
+  const others = table().specs.filter((spec) => spec.statistic !== null && published(spec.id) && statisticBase(spec.id) === base);
+  if (others.length === 0) return [];
+  const percentiles = others.filter((spec) => statisticPercentile(spec.statistic!) !== null);
+  const members: StatisticMember[] = [];
+  if (percentiles.length > 0) {
+    const ordered = [...percentiles, { id: base, statistic: MEDIAN_KEY }].map((spec) => ({
+      id: spec.id,
+      statistic: spec.statistic!,
+    }));
+    ordered.sort((a, b) => statisticPercentile(a.statistic)! - statisticPercentile(b.statistic)!);
+    for (const member of ordered) members.push({ ...member, code: statisticCode(member.statistic) });
+  } else {
+    members.push({ id: base, statistic: MEAN_KEY, code: statisticCode(MEAN_KEY) });
+  }
+  for (const spec of others) {
+    if (statisticPercentile(spec.statistic!) !== null) continue;
+    members.push({ id: spec.id, statistic: spec.statistic!, code: statisticCode(spec.statistic!) });
+  }
+  return members;
+}
+
+/** A statistic's level-row code: an instrument code, English everywhere. */
+function statisticCode(statistic: string): string {
+  if (statistic === MEDIAN_KEY) return "MEDIAN";
+  if (statistic === MEAN_KEY) return "MEAN";
+  if (statistic === SPREAD_KEY) return "SPREAD";
+  const percentile = statisticPercentile(statistic);
+  return percentile !== null ? `${percentile}%` : statistic.toUpperCase();
 }
 
 /** Whether a chart family is registered on isobaric surfaces — and if so

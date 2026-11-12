@@ -16,7 +16,7 @@ import {
   identityForParameter,
   isCompositeIdentity,
   registeredBundleId,
-  sameIdentity,
+  sameChart,
   type VariableIdentity,
 } from "./identity";
 import {
@@ -172,7 +172,9 @@ function fallbackVariables(variableId: ForecastBundleId, bundleMetadata: BundleM
  * English in both locales. */
 function warnOnIdentityMismatch(variableId: ForecastBundleId, identity: VariableIdentity | null): void {
   const guess = identityForBundleId(variableId);
-  if (guess === null || sameIdentity(guess, identity)) return;
+  // An ensemble's median or mean is published under the quantity's own
+  // name, which cannot say the statistic: that is the same chart.
+  if (guess === null || sameChart(guess, identity)) return;
   console.warn(
     `bundle "${variableId}" is named for ${guess.family}${guess.level ?? ""} but its parameter block says ` +
       (identity === null ? "something this build does not know" : `${identity.family}${identity.level ?? ""}`) +

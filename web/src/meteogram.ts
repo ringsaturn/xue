@@ -21,10 +21,15 @@
  * Every series is drawn in the theme's own ink — the shell's charts are
  * instrument traces, not colored plots — and a second series in a row is
  * told apart by its dashes and named by the row's code, never by hue.
+ *
+ * Where the run publishes the quartiles of a row's quantity (an ensemble's
+ * 25th and 75th percentiles beside its median), the row shades the band
+ * between them behind its trace: the half of the members in the middle.
  */
 
 import type { ProbeValue } from "./probe";
-import { variableSpec } from "./variables";
+import { statisticPercentile } from "./statistics";
+import { statisticMembers, variableSpec } from "./variables";
 
 export type MeteogramRowId =
   | "temperature"
@@ -57,6 +62,10 @@ export interface MeteogramRowSpec {
   /** A value the fitted range must include — precipitation and wind start
    * at zero however small the series is. */
   baseline: number | null;
+  /** The 25th and 75th percentiles of the row's headline quantity, when
+   * the run publishes both: read like the row's bundles, shaded as one
+   * band behind the trace. */
+  quartiles?: readonly [string, string];
 }
 
 interface RowTemplate {
@@ -106,9 +115,27 @@ export function meteogramRows(published: (bundleId: string) => boolean): Meteogr
     let bundles = template.bundles.filter(published);
     if (bundles.length === 0 && template.fallback) bundles = template.fallback.filter(published);
     if (bundles.length === 0) continue;
-    rows.push({ id: template.id, kind: template.kind, bundles, range: template.range, baseline: template.baseline });
+    const row: MeteogramRowSpec = { id: template.id, kind: template.kind, bundles, range: template.range, baseline: template.baseline };
+    const quartiles = template.kind === "bands" ? null : rowQuartiles(bundles[0]!, published);
+    if (quartiles) row.quartiles = quartiles;
+    rows.push(row);
   }
   return rows;
+}
+
+/** The bundles a row reads: its series, then its quartiles. */
+export function meteogramRowBundles(spec: MeteogramRowSpec): string[] {
+  return [...spec.bundles, ...(spec.quartiles ?? [])];
+}
+
+/** A quantity's published 25th and 75th percentiles, or null unless the
+ * run publishes both. */
+function rowQuartiles(id: string, published: (bundleId: string) => boolean): readonly [string, string] | null {
+  const members = statisticMembers(id, published);
+  const at = (percentile: number) => members.find((member) => statisticPercentile(member.statistic) === percentile)?.id;
+  const low = at(25);
+  const high = at(75);
+  return low !== undefined && high !== undefined ? [low, high] : null;
 }
 
 /** The aerodrome forecast's own row, under the model's. It reads no bundle
@@ -306,6 +333,8 @@ export interface MeteogramRowData {
   spec: MeteogramRowSpec;
   /** One series per bundle of the spec, on the shared axis. */
   series: readonly (readonly ProbeValue[])[];
+  /** The spec's quartiles' series, low then high, on the same axis. */
+  quartiles?: readonly [readonly ProbeValue[], readonly ProbeValue[]];
   /** The precipitation row's total (mm over the timeline's window ending at
    * each frame, or across its range), drawn as a line over the rate's bars
    * on a scale of its own: a depth and a rate share no axis. */
@@ -479,6 +508,40 @@ function drawBands(
   context.restore();
 }
 
+/** The band between a row's quartiles, faint ink behind the trace, broken
+ * wherever either quartile has no value. */
+function drawQuartileBand(
+  context: CanvasRenderingContext2D,
+  [lower, upper]: readonly [readonly ProbeValue[], readonly ProbeValue[]],
+  x: (index: number) => number,
+  y: (value: number) => number,
+  ink: MeteogramInk,
+): void {
+  context.save();
+  context.fillStyle = ink.ink;
+  context.globalAlpha = 0.16;
+  let run: number[] = [];
+  const flush = () => {
+    if (run.length > 1) {
+      context.beginPath();
+      for (const [at, index] of run.entries()) {
+        if (at === 0) context.moveTo(x(index), y(upper[index] as number));
+        else context.lineTo(x(index), y(upper[index] as number));
+      }
+      for (const index of [...run].reverse()) context.lineTo(x(index), y(lower[index] as number));
+      context.closePath();
+      context.fill();
+    }
+    run = [];
+  };
+  for (let index = 0; index < Math.max(lower.length, upper.length); index += 1) {
+    if (typeof lower[index] === "number" && typeof upper[index] === "number") run.push(index);
+    else flush();
+  }
+  flush();
+  context.restore();
+}
+
 export function drawMeteogram(
   context: CanvasRenderingContext2D,
   geometry: MeteogramGeometry,
@@ -547,12 +610,15 @@ export function drawMeteogram(
     // Observations share the row's scale, so the range has to hold them:
     // a gust the model never forecast would otherwise be drawn off the row.
     const observed = row.observations?.map((mark) => mark.y) ?? [];
+    const fitted = row.quartiles ? [...row.series, ...row.quartiles] : row.series;
     const [low, high] = fitRange(
-      observed.length ? [...row.series, observed] : row.series,
+      observed.length ? [...fitted, observed] : fitted,
       row.spec.range,
       row.spec.baseline,
     );
     const y = (value: number): number => plotBottom - ((value - low) / (high - low)) * (plotBottom - plotTop);
+
+    if (row.quartiles && !row.bands) drawQuartileBand(context, row.quartiles, x, y, ink);
 
     if (row.bands) {
       drawBands(context, row.bands, xAt, { top, rowHeight, ink });

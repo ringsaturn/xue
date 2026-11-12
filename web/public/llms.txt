@@ -139,6 +139,20 @@ Facts worth getting right:
   analysis file's gust and cloud cover are zeros). No wind components:
   only speeds are exchanged. A median is smoother than any member and a
   precipitation median drier than the mean where only some members rain.
+  Beside the centres it publishes the ensemble's other statistics, each a
+  bundle whose variable carries an `ensemble` block (docs/format.md,
+  "Ensemble"): the 25th and 75th percentiles `tmp2mq25` / `tmp2mq75`,
+  `tmp850q25` / `tmp850q75`, `gustq25` / `gustq75`, `tcdcq25` / `tcdcq75`,
+  `capeq25` / `capeq75` and `prateq25` / `prateq75` (the six-hour totals'
+  quartiles over six), in the quantity's unit and codebook; the spread
+  (standard deviation of the members) `prmslsd` (hPa) and `hgt500sd` (m);
+  and the probability, in percent of members, that the precipitation over
+  the 24 hours ending at the frame exceeds 1, 5, 10, 25, 50 or 100 mm,
+  `apcp24gt1` / `apcp24gt5` / `apcp24gt10` / `apcp24gt25` / `apcp24gt50` /
+  `apcp24gt100`, whose series start at F024. The viewer switches between a
+  field's statistics on the level row (25% · MEDIAN · 75%, MEAN · SPREAD),
+  picks a probability's threshold there too, and shades the quartile band
+  on the meteogram; any of them is reachable as `?type=<id>`.
   CMA:
   `cref`. MRMS: `cref` (observed composite reflectivity, dBZ), `prate`
   (the MRMS precipitation rate, mm/h) and `rqi` (the radar quality index,

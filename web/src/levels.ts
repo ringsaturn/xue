@@ -1,7 +1,7 @@
 import { linearCodebookOffset, linearCodebookRange, logCodebook } from "./codebooks";
 import { t, type MessageKey } from "./i18n";
 import type { ChartFamily, VariableIdentity } from "./identity";
-import { CAT_LEVELS, ISOBARIC_LEVELS, type ForecastBundleId, type IsobaricLevel } from "./manifest";
+import { CAT_LEVELS, ENSEMBLE_IDS, ISOBARIC_LEVELS, registeredEnsemble, type ForecastBundleId, type IsobaricLevel } from "./manifest";
 import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
 
 /**
@@ -19,7 +19,9 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * the first swell), the aerosol optical depth (the whole
  * column and five species) and the particulate matter (PM2.5, PM10 and
  * the dust part of PM10) and the two soil families (temperature and
- * volumetric moisture, each in four layers from the surface down), and the
+ * volumetric moisture, each in four layers from the surface down) and the
+ * ensemble's probability of the precipitation total past a threshold (one
+ * field per threshold), and the
  * level row or the sheet's chips pick among those the same way. Precipitation, radiation, reflectivity, the
  * other surface diagnostics (gust, CAPE, visibility, dew point, apparent
  * temperature) and the skin temperature are single layers and belong to no
@@ -47,7 +49,8 @@ export type IsobaricFamily =
   | "pm"
   | "smoke"
   | "tsoil"
-  | "soilw";
+  | "soilw"
+  | "pop";
 
 export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "hgt",
@@ -67,6 +70,7 @@ export const ISOBARIC_FAMILIES: readonly IsobaricFamily[] = [
   "smoke",
   "tsoil",
   "soilw",
+  "pop",
 ];
 
 interface FamilyInfo {
@@ -81,6 +85,9 @@ interface FamilyInfo {
   code: string;
   /** The level row's label for the surface member ("2M", "10M", "MSL"). */
   surfaceCode: string;
+  /** The level row's caption for the family's group, when its members are
+   * not surfaces ("Threshold"); the row's "Level" otherwise. */
+  captionKey?: MessageKey;
   /** The rail tile's visually hidden gloss, which the surface member's level
    * button repeats; null for a family the shell writes no tile for. */
   glossKey: MessageKey | null;
@@ -300,7 +307,58 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     glossKey: "varSoilw",
     levels: soilLevels("soilw"),
   },
+  // The probability of the precipitation total past a threshold, one field
+  // per threshold: the level row picks the threshold as it picks a surface,
+  // lowest first, the lowest heading the family.
+  pop: {
+    id: "pop",
+    kind: "scalar",
+    surface: probabilityLevels()[0]?.id ?? null,
+    code: "PROB",
+    surfaceCode: "",
+    captionKey: "thresholdCaption",
+    glossKey: "varPop",
+    levels: probabilityLevels(),
+  },
 };
+
+/** The probability fields, one per threshold, lowest first, each labelled
+ * by its threshold (">10"): the registry's bundles whose `ensemble` block
+ * is a probability above a lower limit. */
+function probabilityLevels(): FamilyMember[] {
+  const levels: { id: ForecastBundleId; threshold: number }[] = [];
+  for (const id of ENSEMBLE_IDS) {
+    const threshold = probabilityThreshold(id);
+    if (threshold !== null) levels.push({ id, threshold });
+  }
+  levels.sort((a, b) => a.threshold - b.threshold);
+  return levels.map(({ id, threshold }) => ({ id, code: `>${threshold}` }));
+}
+
+/** A registered probability field's threshold — the lower limit of a
+ * probability above it, in the quantity's unit (mm for a precipitation
+ * total) — or null for any other field. */
+export function probabilityThreshold(id: string): number | null {
+  const ensemble = registeredEnsemble(id);
+  if (ensemble === null || !("probabilityType" in ensemble)) return null;
+  const { scaleFactorOfLowerLimit: scale, scaledValueOfLowerLimit: value } = ensemble;
+  if (scale === null || value === null) return null;
+  return Math.round(value * 10 ** -scale * 1e9) / 1e9;
+}
+
+/** The window a probability field's total is over, in hours, by the id's
+ * convention (`apcp24gt10` is over 24): the block names the threshold, and
+ * the interval's length is in no metadata the shell reads. */
+export function probabilityWindowHours(id: string): number | null {
+  const match = /^[a-z]+?(\d+)gt\d+$/.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
+/** A probability field's name, naming its window and threshold
+ * ("Probability of 24-hour precipitation above 10 mm"). */
+export function probabilityLabel(id: string): string {
+  return t("varLabelProbability", { hours: probabilityWindowHours(id) ?? "", threshold: probabilityThreshold(id) ?? "" });
+}
 
 /** One soil family's layers, top first, each labelled by its index. */
 function soilLevels(prefix: "tsoil" | "soilw"): FamilyMember[] {
@@ -659,6 +717,8 @@ export const UPSTREAM_CHART: AerosolChart = { ...logCodebook("upstream"), chartM
 export function scalarLegendRange(identity: VariableIdentity): readonly [number, number] | null {
   const { family, level, vector } = identity;
   if (vector) return null;
+  if (family === "pop") return [0, 100];
+  if (family === "hgtsd") return [0, spreadChartMax(level)];
   if (family === "tmp" && isRegisteredLevel(level)) return temperatureLegendRange(level);
   if (family === "thetae" && isRegisteredLevel(level)) return thetaEPaletteDomain(level);
   if (family === "vvel" && isRegisteredLevel(level)) return [-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX];
@@ -818,6 +878,7 @@ export function familyLabel(id: ForecastBundleId): string {
   const family = familyOf(id);
   const level = bundleLevel(id);
   if (family === "hgt") return pressureLabel(id as (typeof PRESSURE_BUNDLE_IDS)[number]);
+  if (family === "pop") return probabilityLabel(id);
   if (level === null) {
     if (id === "tmp2m") return t("varLabelTmp2m");
     if (id === "wind10m") return t("varLabelWind10m");
@@ -914,6 +975,7 @@ export function isobaricCode(id: ForecastBundleId): string {
     smoke: "SMOKE",
     tsoil: "TSOIL",
     soilw: "SOILW",
+    pop: "PROB",
   }[family];
   return `${word} ${level}MB`;
 }
@@ -946,6 +1008,8 @@ export function niceStep(span: number): number {
 export function isobaricLegend(identity: VariableIdentity): string[] | null {
   const { family, level, vector } = identity;
   if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], isWaveVector(family) ? 2 : 10);
+  if (family === "pop") return rangeLegend([0, 100], 20);
+  if (family === "hgtsd") return rangeLegend([0, spreadChartMax(level)], level === null ? 2 : 30);
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
@@ -986,6 +1050,15 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
     return rangeLegend([0, max], max >= 20 ? 5 : max >= 5 ? 1 : 0.25);
   }
   return null;
+}
+
+/** The spread chart's top, where the ramp saturates: 10 hPa of sea level
+ * pressure, a deep low's position uncertain by a day's travel at the end
+ * of the range, and 150 m of geopotential height on an isobaric surface,
+ * the same trough's spread aloft. The codebooks keep going (25 hPa and
+ * 250 m) so a probe still tells the extremes apart. */
+export function spreadChartMax(level: number | null): number {
+  return level === null ? 10 : 150;
 }
 
 /** The isobaric members that are filled fields or vector fields — everything

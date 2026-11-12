@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { identityForBundleId, registeredBundleId } from "../../web/src/identity";
 import { FAMILIES, UNTILED_BUNDLE_IDS, familyMembers, familyOf } from "../../web/src/levels";
 import { KNOWN_BUNDLE_IDS } from "../../web/src/manifest";
-import { FIELD_GROUPS, specForIdentity, variableIds, variableSpec } from "../../web/src/variables";
+import { FIELD_GROUPS, specForIdentity, statisticBase, variableIds, variableSpec } from "../../web/src/variables";
 
 // Read off disk rather than imported: the markup is what the rail is
 // built from, and this holds it to the table.
@@ -32,7 +32,12 @@ describe("the variable table", () => {
     for (const id of variableIds()) {
       const spec = variableSpec(id)!;
       const identity = identityForBundleId(id);
-      expect(identity).toEqual({ family: spec.chart, level: spec.level, vector: spec.vector });
+      expect(identity).toEqual({
+        family: spec.chart,
+        level: spec.level,
+        vector: spec.vector,
+        ...(spec.statistic === null ? {} : { statistic: spec.statistic }),
+      });
       expect(registeredBundleId(identity)).toBe(id);
       expect(specForIdentity(identity)?.id).toBe(id);
     }
@@ -83,6 +88,9 @@ describe("the variable table", () => {
         tiles.includes(id) ||
         (spec.family !== null && tileFamilies.has(spec.family)) ||
         UNTILED_BUNDLE_IDS.includes(id) ||
+        // An ensemble statistic is behind its quantity's tile (or the
+        // pressure switch), on the level row's statistic group.
+        statisticBase(id) !== null ||
         // Specific humidity is registered, shipped by no source, and has
         // no tile (levels.ts).
         spec.family === "spfh";

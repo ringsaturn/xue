@@ -5,6 +5,7 @@ import registryText from "../../rust/xue/registry.json?raw";
 import type {
   BundleAerosol,
   BundleBand,
+  BundleEnsemble,
   BundleMetadata,
   BundleParameter,
   BundleVariable,
@@ -14,7 +15,7 @@ import type {
 
 /** One variable of the registry document (`rust/xue/registry.json`, the
  * one both encoders build from): its label, unit, parameter block, the
- * optional `aerosol` / `producer` blocks, a `band` block per satellite
+ * optional `aerosol` / `producer` / `ensemble` blocks, a `band` block per satellite
  * platform that publishes it, and its two smallest codebooks lifted out
  * of `quantization`. */
 export interface RegistryEntry<Q extends LinearQuantization | LogQuantization = LinearQuantization> {
@@ -23,6 +24,7 @@ export interface RegistryEntry<Q extends LinearQuantization | LogQuantization = 
   parameter: BundleParameter;
   aerosol?: BundleAerosol;
   producer?: { id: string };
+  ensemble?: BundleEnsemble;
   band?: Record<string, BundleBand>;
   quality: Q;
   compact: Q;
@@ -37,6 +39,7 @@ interface RegistryDocument {
       parameter: BundleParameter;
       aerosol?: BundleAerosol;
       producer?: { id: string };
+      ensemble?: BundleEnsemble;
       quantization?: Record<"quality" | "compact" | "balanced", LinearQuantization | LogQuantization>;
     }
   >;
@@ -75,6 +78,7 @@ export function registryEntries<Q extends LinearQuantization | LogQuantization =
     };
     if (variable.aerosol) entry.aerosol = variable.aerosol;
     if (variable.producer) entry.producer = variable.producer;
+    if (variable.ensemble) entry.ensemble = variable.ensemble;
     for (const source of Object.values(REGISTRY_DOCUMENT.sources)) {
       const band = source.bands.find(([bandId]) => bandId === id)?.[1];
       if (!band || source.platform === null) continue;

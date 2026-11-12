@@ -161,7 +161,18 @@ import {
   type ViewComposition,
   type ViewState,
 } from "./viewstate";
-import { FIELD_GROUPS, variableIds, variableSpec, type FieldGroup, type LegendSwatch, type Sampling } from "./variables";
+import {
+  FIELD_GROUPS,
+  statisticBase,
+  statisticMembers,
+  variableIds,
+  variableSpec,
+  type FieldGroup,
+  type LegendSwatch,
+  type Sampling,
+  type StatisticMember,
+} from "./variables";
+import { statisticNote } from "./statistics";
 import { WindParticleLayer } from "./particles";
 import { regionShareOfView, type LambertDomain } from "./domain";
 import { installEmbedApi, type EmbedHub, type EmbedOpenCase, type EmbedSource } from "./embed";
@@ -1155,7 +1166,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   rrfs: "NOAA / RRFS CONUS (3 KM)",
   iconeu: "DWD / ICON-EU EUROPE (0.0625°)",
   arpege: "MÉTÉO-FRANCE / ARPEGE (0.25°)",
-  cmageps: "CMA / GRAPES GEPS ENSEMBLE MEDIAN (0.25°)",
+  cmageps: "CMA / GRAPES GEPS ENSEMBLE (0.25°)",
   woof: "RECAST / WOOF WRF-ARW NEST FUJI",
   efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
   efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",
@@ -3594,6 +3605,9 @@ interface LevelGroup {
   /** The lines group's ALONE switch: pressed while the lines are the whole
    * view, and the way there and back. */
   alone?: boolean;
+  /** A statistic group's members as the row names them (MEDIAN, 75%,
+   * SPREAD), in place of a surface's level code. */
+  statistics?: readonly StatisticMember[];
 }
 
 /** The level row's groups for the composition on screen: the fill's family
@@ -3614,14 +3628,63 @@ function levelGroups(): LevelGroup[] {
     // sheet lists those.
     const levels = familyLevels(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
     if (levels.length > 1 && levels.includes(fill)) {
-      groups.push({ caption: t("levelCaption"), slot: "fill", members: levels, active: fill });
+      const captionKey = FAMILIES[fillFamily].captionKey ?? "levelCaption";
+      groups.push({ caption: t(captionKey), slot: "fill", members: levels, active: fill });
     }
   }
+  const published = (id: string) => hasBundle(run, id);
+  const fillStatistics = fill === null || fireField() !== null ? [] : statisticMembers(fill, published);
+  if (fillStatistics.length > 1) groups.push(statisticGroup(fillStatistics));
   const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
   if (surfaces.length > 0 || view.lines !== null) {
     groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: view.lines, alone: fill === null });
   }
+  // The lines' own statistics — the spread under the mean's isobars —
+  // after the lines, unless the fill's group above already is them.
+  const lineStatistics = view.lines === null ? [] : statisticMembers(view.lines, published);
+  if (lineStatistics.length > 1 && !lineStatistics.some((member) => member.id === fill)) {
+    groups.push(statisticGroup(lineStatistics));
+  }
   return groups;
+}
+
+/** A statistic group of the level row: which statistic of one field is
+ * drawn. The pressed member is the fill when it is one of them, else the
+ * field's centre (the lines' mean, under a fill that is no statistic of
+ * theirs). */
+function statisticGroup(members: readonly StatisticMember[]): LevelGroup {
+  const fill = view.field;
+  const shown = members.find((member) => member.id === fill) ?? members.find((member) => isPressureBundle(member.id));
+  return {
+    caption: t("statisticCaption"),
+    slot: "fill",
+    members: members.map((member) => member.id),
+    active: shown?.id ?? null,
+    statistics: members,
+  };
+}
+
+/** The fill a spread was put under the lines in place of, to put back when
+ * the lines' mean is pressed again; null for none (the lines alone). */
+let fillUnderSpread: ForecastBundleId | null = null;
+
+/** Press one statistic of a group. A field's statistics are fills and
+ * swap the fill. A lines field's (the pressure's mean and spread) keep
+ * the mean as the lines: the spread is drawn as the fill under them, and
+ * the mean takes it away again, putting back the fill it replaced. */
+function chooseStatistic(id: ForecastBundleId, members: readonly ForecastBundleId[]): void {
+  const linesBase = members.find((member) => isPressureBundle(member));
+  if (linesBase === undefined) {
+    void activateComposition({ fill: id, lines: view.lines });
+    return;
+  }
+  const fillIsStatistic = view.field !== null && members.includes(view.field);
+  if (id === linesBase) {
+    if (fillIsStatistic) void activateComposition({ fill: fillUnderSpread, lines: linesBase });
+    return;
+  }
+  if (!fillIsStatistic) fillUnderSpread = view.field;
+  void activateComposition({ fill: id, lines: view.lines ?? linesBase });
 }
 
 /** The field to put back when the lines-alone view is left: the one last
@@ -3684,12 +3747,16 @@ function renderLevelRow(): void {
       button.dataset.slot = group.slot;
       button.disabled = switchingVariable;
       button.setAttribute("aria-pressed", String(id === group.active));
+      const statistic = group.statistics?.find((member) => member.id === id);
+      if (statistic) button.dataset.statistic = statistic.statistic;
       const glyph = document.createElement("b");
       glyph.setAttribute("aria-hidden", "true");
-      glyph.textContent = levelCode(id);
+      glyph.textContent = statistic?.code ?? levelCode(id);
       const name = document.createElement("span");
       name.className = "rail-name";
-      const [code, gloss] = levelButtonName(id);
+      const [code, gloss] = statistic
+        ? [statistic.code, statisticNote(statistic.statistic, "") ?? ""]
+        : levelButtonName(id);
       const codeSpan = document.createElement("span");
       codeSpan.textContent = code;
       const glossSmall = document.createElement("small");
@@ -3707,7 +3774,9 @@ function renderLevelRow(): void {
       button.addEventListener("click", () => {
         // A level changes its own slot: the fill's family member, or the
         // lines wherever they are — the view, or the chart over a field.
-        if (group.slot === "lines") {
+        if (group.statistics) {
+          chooseStatistic(id, group.members);
+        } else if (group.slot === "lines") {
           const fire = { fire: fireField() };
           if (removable) void activateComposition({ fill: view.field, lines: null }, fire);
           else if (isPressureBundle(id)) void activateComposition({ fill: view.field, lines: id }, fire);
@@ -3777,8 +3846,8 @@ function pressedLevelButtons(): HTMLButtonElement[] {
 /** What a level button stands for, the same across the rebuilds that replace
  * the element. */
 function levelButtonKey(button: HTMLButtonElement): string {
-  const { slot, variable, accum, alone } = button.dataset;
-  return [slot, variable, accum, alone].join("/");
+  const { slot, variable, accum, alone, statistic } = button.dataset;
+  return [slot, variable, accum, alone, statistic].join("/");
 }
 
 /** The precipitation's own group on the level row: the rate, then each
@@ -3968,6 +4037,9 @@ window.addEventListener("resize", syncLevelRowFade);
  * that does ship it still gets a way onto the screen. */
 function railTileStandsFor(id: string): boolean {
   if (UNTILED_BUNDLE_IDS.includes(id)) return true;
+  // A statistic is behind its field's tile, reached on the level row.
+  const base = statisticBase(id);
+  if (base !== null) return railTileStandsFor(base);
   const family = familyOf(id as ForecastBundleId);
   return variableButtons().some(
     (button) =>
@@ -4037,8 +4109,11 @@ function fieldTileShipped(button: HTMLButtonElement, run: ForecastManifest): boo
 /** Whether a written field tile stands for the field on screen: its
  * family's member, or the bundle itself. */
 function fieldTileCurrent(button: HTMLButtonElement): boolean {
-  const fill = view.field;
-  if (fill === null || fireField() !== null) return false;
+  const field = view.field;
+  if (field === null || fireField() !== null) return false;
+  // A statistic of a field is that field's tile's, so the tile stays
+  // pressed while the level row switches between them.
+  const fill = statisticBase(field) ?? field;
   const family = button.dataset.family as IsobaricFamily | undefined;
   return family === undefined ? button.dataset.variable === fill : familyOf(fill) === family;
 }
@@ -4053,7 +4128,7 @@ function syncFamilyGloss(button: HTMLButtonElement, current: boolean): void {
   const family = button.dataset.family as IsobaricFamily | undefined;
   const gloss = button.querySelector<HTMLElement>(".rail-name > small");
   if (family === undefined || !gloss) return;
-  const fill = view.field;
+  const fill = view.field === null ? null : (statisticBase(view.field) ?? view.field);
   const info = FAMILIES[family];
   const followed = current && fill !== null && fill !== info.surface ? levelCode(fill) : null;
   const key = gloss.dataset.i18n as MessageKey | undefined;
@@ -4496,7 +4571,9 @@ function syncRailDensity(): void {
 function syncRail(): void {
   // A fire field or a case's picture stands in for the field: its own tile
   // is the pressed one.
-  const fill = fireField() === null && !caseImageryOn() ? view.field : null;
+  // A statistic of a field presses that field's tile.
+  const field = fireField() === null && !caseImageryOn() ? view.field : null;
+  const fill = field === null ? null : (statisticBase(field) ?? field);
   const fillFamily = fill === null ? null : familyOf(fill);
   for (const button of variableButtons()) {
     const family = button.dataset.family as IsobaricFamily | undefined;

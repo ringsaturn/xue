@@ -45,6 +45,7 @@ import {
   seriesState,
   TAF_ROW_SPEC,
   TERRAIN_ROW_SPEC,
+  meteogramRowBundles,
 } from "./meteogram";
 import { decodeValue } from "./palettes";
 import {
@@ -98,6 +99,7 @@ import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
 import { setPinnedZone, zoneAt, zoneDisplayName } from "./timezone";
 import { formatDistance, formatHeight, formatValueReadout, variableDisplayUnit, variableDisplayValue } from "./units";
+import { statisticNote } from "./statistics";
 import type { ViewState } from "./viewstate";
 
 /** What the probe panel reads off the page. Its own state (the pin, the
@@ -778,7 +780,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    */
   function probeBundleIds(): string[] {
     const ids: string[] = [];
-    for (const spec of currentMeteogramRows()) ids.push(...spec.bundles);
+    for (const spec of currentMeteogramRows()) ids.push(...meteogramRowBundles(spec));
     // The run's terrain, so the pin can read its elevation. Published as an
     // ordinary bundle, opened like a row: one extra session for the whole
     // point read, and skipped on a run that ships none.
@@ -1181,6 +1183,13 @@ export function createProbePanel(deps: ProbePanelDeps) {
         if (total && covered !== null && covered < total.span) {
           probePanel.meta.textContent += ` · ${windowCode(covered)}/${windowCode(total.span)}`;
         }
+        // Which statistic of an ensemble the reading is: a 75th percentile
+        // or a spread is not the quantity a single forecast would read. A
+        // probability's threshold is a precipitation total, kg m⁻², read in
+        // millimetres of water.
+        const statistic = session.identity?.statistic;
+        const note = total ? null : statisticNote(statistic, session.identity?.family === "pop" ? "mm" : "");
+        if (note) probePanel.meta.textContent += ` · ${note}`;
       }
     }
 
@@ -1495,6 +1504,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
             : item.values,
         ),
       };
+      if (spec.quartiles) {
+        const [low, high] = spec.quartiles.map((id) => probeSessionSeries(series, sessions.get(id), leads).values);
+        row.quartiles = [low!, high!];
+      }
       const total = spec.id === "precipitation" ? precipitationTotal(row.series[0]!, leads) : null;
       if (total) row.total = total.values;
       const fromStation = station !== null && synopTakesRow(spec.id, hasTerrainRow);

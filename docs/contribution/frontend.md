@@ -18,7 +18,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `decodequeue.ts` | The decode request queue (`createDecodeQueue`): requests in flight by id (one per key), the newest request held back at the inflight cap (twice the planes a frame of the view needs) and sent when a plane lands, the key the primary frame waits on, landed planes filed into the plane cache, and the decode timings the stats graph reads. What a landed plane changes on screen, and which planes to ask for, stay in `main.ts`. |
 | `stats.ts` | The data card's "stats for nerds" rows and decode graph, the debug copy and the map's context menu (`createStats`). |
 | `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
-| `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block; session-scoped keys. |
+| `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block (and the `band`, `aerosol`, `producer` and `ensemble` blocks beside it); session-scoped keys. |
+| `statistics.ts` | An `ensemble` block folded into one statistic key (`q75`, `mean`, `spread`, `p3:10:`), which statistics chart as their quantity, the spread families, and the probe's note. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
 | `viewstate.ts`, `urlstate.ts` | `ViewState`; query and camera-hash parsing. |
 | `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
@@ -668,7 +669,24 @@ when they do not fit.
 surfaces (the level row); `variants` are different quantities behind one
 tile (chips in the sheet, cycled by re-pressing the tile, never on the
 level row). Re-pressing the pressed lines member removes the lines; ALONE
-drops the field, and `lastField` returns on the next press.
+drops the field, and `lastField` returns on the next press. A family whose
+levels are no surfaces names its group (`captionKey`): the probability of
+the 24-hour precipitation (`pop`) lists one field per threshold, lowest
+first, read off the registry's probability blocks, under THRESHOLD.
+
+An ensemble's statistics of one field are a level-row group of their own
+(STATISTIC, `statisticMembers`): the quartiles around the median (25% ·
+MEDIAN · 75%) or the mean and the spread (MEAN · SPREAD), whatever the run
+publishes of them. Membership is the registry's: a statistic is a variable
+with an `ensemble` block whose parameter block is a field's own, and that
+field's id is the centre, since an ensemble publishes its median or mean
+under the quantity's id. A statistic has no tile and is in no family: its
+field's tile stands for it and stays pressed (`statisticBase`). A field's
+statistics swap the fill; a lines field's (the pressure's mean and spread)
+keep the mean as the lines and draw the spread under them, and MEAN puts
+back the fill the spread replaced. The meteogram shades a row's quartile
+band where both quartiles are published, and the probe's line names the
+statistic it reads (median, 75th pct, spread, P>10 mm).
 
 `variables.ts` is complete over `KnownBundleId` and every id-keyed table
 derives from it. `chart` (what the field is) and `family` (which tile) are
@@ -689,8 +707,9 @@ source's label, product, pointer, observation flag, core bundles and
 cadence (`FORECAST_MODELS`); the isobaric and turbulence levels; the
 family lists (`SURFACE_DIAGNOSTIC_IDS`, `OCEAN_IDS`, `SOIL_IDS`,
 `AEROSOL_IDS`, `HYDROLOGY_IDS`, `PRESSURE_BUNDLE_IDS`); the members of every
-vector, composite and volume bundle; the parameter, producer and aerosol
-blocks `identity.ts` matches a file against; the `quality` codebooks the
+vector, composite and volume bundle; the parameter, producer, aerosol and
+ensemble blocks `identity.ts` matches a file against (`ENSEMBLE_IDS` are
+the variables carrying an `ensemble` block); the `quality` codebooks the
 chart ranges in `levels.ts` and `pressure.ts` are drawn over
 (`codebooks.ts`); and the storm agencies, models and basins. What stays
 hand-written, keyed by id, is chart knowledge: palettes, ceilings and

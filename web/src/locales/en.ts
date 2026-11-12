@@ -30,6 +30,8 @@ export const en = {
    * aloud right after the code. */
   varTemp: "2M",
   varPrecip: "RATE",
+  /** The probability tile's gloss: the window its total is over. */
+  varPop: "24H",
   varWind: "10M",
   varSolar: "FLUX",
   varRadar: "CREF",
@@ -129,6 +131,7 @@ export const en = {
    * itself. */
   glyphTmp2m: "T",
   glyphPrate: "R",
+  glyphPop: "%",
   glyphWind10m: "W",
   glyphDswrf: "S",
   glyphCref: "Z",
@@ -204,6 +207,7 @@ export const en = {
   tipPressure: "Pressure and geopotential height",
   tipVapourFlux: "Water vapour flux",
   tipCloud: "Cloud cover",
+  tipPop: "Precipitation probability",
   tipOmega: "Vertical velocity",
   tipThetaE: "Equivalent potential temperature",
   tipCat: "Clear-air turbulence",
@@ -226,6 +230,20 @@ export const en = {
   /** The level row's caption for the lines' group when the fill has a level
    * row of its own beside it. */
   linesCaption: "Lines",
+  /** The level row's caption for the statistic group: which statistic
+   * of an ensemble is drawn (MEDIAN, 25%, 75%; MEAN, SPREAD — those
+   * codes stay English). */
+  statisticCaption: "Statistic",
+  /** The level row's caption for the probability's thresholds (>10). */
+  thresholdCaption: "Threshold",
+  /** The statistic a reading is, on the probe's line and as a statistic
+   * button's gloss: short, lower case like the other notes. `{n}` is a
+   * percentile ("75th pct"); `{code}` a code table 4.7 number. */
+  statMedian: "median",
+  statMean: "mean",
+  statSpread: "spread",
+  statPercentile: "{n}th pct",
+  statDerived: "derived {code}",
   /** The level row's caption for the precipitation's own group: the rate,
    * then the windows it is summed over (`?accum=`). */
   accumCaption: "Total",
@@ -606,6 +624,12 @@ export const en = {
   legendCatSevere: "Severe",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
+  /** An ensemble statistic's name, built on the quantity's own label
+   * (`{label}`); `{n}` is the percentile. The probability names its
+   * window in hours and its threshold in millimetres. */
+  varLabelPercentile: "{label}, {n}th percentile",
+  varLabelSpread: "{label}, ensemble spread",
+  varLabelProbability: "Probability of {hours}-hour precipitation above {threshold} mm",
   varLabelDswrf: "Solar radiation",
   varLabelWind10m: "10 m wind",
   varLabelWind80m: "80 m wind",

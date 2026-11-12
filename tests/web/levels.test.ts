@@ -38,7 +38,12 @@ import { REGISTRY_DOCUMENT, registryEntries } from "./helpers";
  * the pressure family's (pressure.ts). */
 const registry = registryEntries<LinearQuantization>(
   Object.entries(REGISTRY_DOCUMENT.variables)
-    .filter(([id, entry]) => entry.quantization && entry.parameter.typeOfFirstFixedSurface === 100 && !id.startsWith("hgt"))
+    // An ensemble's statistics of an isobaric field (`tmp850q25`) are no
+    // members of its family: the level row's statistic group reaches them.
+    .filter(
+      ([id, entry]) =>
+        entry.quantization && entry.parameter.typeOfFirstFixedSurface === 100 && !id.startsWith("hgt") && !("ensemble" in entry),
+    )
     .map(([id]) => id),
 );
 

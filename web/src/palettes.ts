@@ -24,6 +24,7 @@ import {
   isWaveHeight,
   isWavePeriod,
   isobaricRange,
+  spreadChartMax,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
 } from "./levels";
@@ -450,6 +451,36 @@ const FROZEN_PERCENT_STOPS: Stop[] = [
   [50, 226, 84, 184, 235],
   [90, 110, 110, 240, 245],
   [100, 86, 92, 232, 255],
+];
+
+// The probability of a precipitation total past a threshold, percent of
+// members: clear under 5 % (one member in twenty is no signal), a pale
+// green at a low chance, through yellow and orange at even odds to a deep
+// magenta where nearly every member agrees, so the colours read as the
+// confidence a forecaster would put in words rather than as a rate.
+const PROBABILITY_STOPS: Stop[] = [
+  [0, 120, 200, 120, 0],
+  [5, 120, 200, 120, 0],
+  [10, 120, 200, 120, 110],
+  [30, 70, 170, 90, 175],
+  [50, 238, 200, 66, 215],
+  [70, 236, 122, 44, 235],
+  [90, 196, 30, 70, 248],
+  [100, 140, 20, 120, 255],
+];
+
+// The ensemble spread, from zero to the chart's top as fractions: clear
+// where the members agree, a cool grey-blue rising to violet where they
+// part, so the spread reads as an absence of confidence, never as the
+// quantity it is the spread of. Remapped onto each surface's own top
+// (`levels.ts::spreadChartMax`).
+const SPREAD_UNIT_STOPS: Stop[] = [
+  [0, 150, 170, 200, 0],
+  [0.1, 150, 170, 200, 60],
+  [0.3, 120, 150, 210, 140],
+  [0.55, 120, 110, 220, 195],
+  [0.8, 160, 70, 210, 230],
+  [1, 200, 40, 170, 250],
 ];
 
 // The 0 °C isotherm's height, metres above sea level: ground-hugging cold in the
@@ -1077,6 +1108,8 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
     return linear ? remapStops(TEMPERATURE_STOPS, [-60, 50], codebookRange(linear)) : PRECIPITATION_STOPS;
   }
   const { family, level } = identity;
+  if (family === "pop") return PROBABILITY_STOPS;
+  if (family === "hgtsd") return remapStops(SPREAD_UNIT_STOPS, [0, 1], [0, spreadChartMax(level)]);
   if (family === "prate") return PRECIPITATION_STOPS;
   if (aerosolChart(family)) {
     if (family === "pm25" || family === "smokesfc" || family === "dustfine") return FINE_PARTICULATE_STOPS;
