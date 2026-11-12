@@ -137,8 +137,8 @@ describe("the warning areas", () => {
   it("draws CMA's and HKO's codes on the one set they share", () => {
     const { index, lines } = load();
     const targets = areaTargets(index.networks, lines);
-    const province = targets.get("cma-areas.20261112/province")!;
-    const county = targets.get("cma-areas.20261112/county")!;
+    const province = targets.get("cma-areas.20261112b/province")!;
+    const county = targets.get("cma-areas.20261112b/county")!;
     const hko = lines[index.networks.findIndex((network) => network.id === "hko")]!;
     expect(hko.length).toBeGreaterThan(0);
     expect(province.alerts.get("810000")).toEqual(hko.map((line) => line.id));

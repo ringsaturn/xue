@@ -47,7 +47,7 @@ rounds:
   its file missing (carried over), the gale signal expired, an ``Update``
   of the frost signal under a made-up identifier that references it
   (``replaced``) and 新林区's road-ice signal, a code the boundary set
-  lacks.
+  draws with 呼玛县's outline.
 - ``hko/`` — ``warnsum`` and ``warningInfo`` in three languages, written
   after the API documentation's example. Round one: an amber rainstorm
   signal, a thunderstorm warning expiring at 00:03 UTC and the strong

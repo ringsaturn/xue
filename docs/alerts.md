@@ -825,7 +825,7 @@ index database as the commit holds them):
 
 ```sh
 xue alerts-areas --set cma-areas --source data/raw/alerts-sources/cnmaps-data-e2a1a346 \
-  --version 20261112 --output web/public/data/alerts-areas
+  --version 20261112b --output web/public/data/alerts-areas
 ```
 
 Before `ogr2ogr`, `xuebuild/alerts/cnmaps.py` turns every file from
@@ -837,19 +837,22 @@ forward formula, and files it under the layer its code names:
 |---|---|---|
 | `province` | `xx0000` | 34 |
 | `prefecture` | `xxxx00` | 336 |
-| `county` | any other | 2 871 |
+| `county` | any other | 2 873 |
 
 all zooms 0–11. 香港, 澳门 and 台湾 are one outline each under `810000`,
 `820000` and `710000` (the release draws them at every level from the
 same file), and Hong Kong's eighteen districts (`810001` …) are counties.
 The national outline (`100000`) is not in the set. 沙湾市 is drawn under
 its code since 2021, `654203`, beside the county code the release files it
-under (`654223`); 新林区 and 呼中区 (`232703`, `232704`), 大兴安岭's
-management districts, have no outline in the release, and a warning that
-names them has no box.
+under (`654223`). 新林区 and 呼中区 (`232703`, `232704`), 大兴安岭's
+management districts, have no division in the release, which draws their
+land inside 呼玛县 (`232721`): both are drawn as 呼玛县's outline under
+their own codes, so a warning for either lights about twice the district.
 
-`cma-areas.20261112.pmtiles`: 21 162 186 bytes, CRC32 `62936b04`;
-`cma-areas.20261112.bbox.json`: 143 930 bytes, CRC32 `46f79c49`. Views:
+`cma-areas.20261112b.pmtiles`: 21 166 362 bytes, CRC32 `c1f9f588`;
+`cma-areas.20261112b.bbox.json`: 144 021 bytes, CRC32 `7f44b60f`. The
+`20261112` build before it lacked the two districts. Views (measured on
+`20261112`, which differs only by the two districts):
 all China z3 (`73,18,135,54`) 127 303 bytes, z4 162 563, z5 209 112; the
 Pearl River Delta at z9 (`113,22,114.5,23.5`) 20 893; a 1° box around
 Beijing at z11 80 105.

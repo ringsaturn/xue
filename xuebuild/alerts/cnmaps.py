@@ -30,12 +30,14 @@ LAND = Path("cnmaps_data/data/datasets/administrative/amap/land")
 COUNTRY = "100000"
 """The national outline, which no warning names."""
 
-ALIASES = {"654203": "654223"}
-"""Codes the warnings name that the release files under an older code:
-沙湾市 since it became a city in 2021 (the release names it 沙湾市 under
-the county's 654223). Each is drawn twice, under both codes. 新林区 and
-呼中区 (232703, 232704), 大兴安岭's management districts, have no outline
-in the release and stay unresolved."""
+ALIASES = {"654203": "654223", "232703": "232721", "232704": "232721"}
+"""Codes the warnings name that the release has no outline of, → the
+outline that covers them, drawn again under the warning's code. 沙湾市
+since it became a city in 2021 (the release names it 沙湾市 under the
+county's 654223). 新林区 and 呼中区 (232703, 232704), 大兴安岭's
+management districts: the release has no division for them and draws
+their land inside 呼玛县 (232721), so a warning for either lights the
+whole of that outline, about twice the district."""
 
 _A = 6378245.0
 _EE = 0.00669342162296594323

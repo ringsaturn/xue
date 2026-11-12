@@ -653,8 +653,8 @@ class CmaTest(unittest.TestCase):
         self.assertEqual(ended["cma:33011041600000_20261110151408"], ["replaced", "cma:33011041600000_20261101080400"])
         rows = {row[0]: row for row in index["alerts"] if row[0].startswith("cma:")}
         self.assertIn("cma:12011541600000_20261111192247", rows)  # its message failed: carried over
-        self.assertEqual(rows["cma:23270341600000_20261112070109"][8:12], [None, None, None, None])  # 新林区, not in the set
-        self.assertTrue(all(row[8] is not None for alert, row in rows.items() if "232703" not in alert))
+        self.assertEqual(rows["cma:23270341600000_20261112070109"][8:12], [122.6183, 50.9004, 127.0236, 52.8976])  # 新林区, drawn as 呼玛县
+        self.assertTrue(all(row[8] is not None for row in rows.values()))
 
 
 class HkoTest(unittest.TestCase):
