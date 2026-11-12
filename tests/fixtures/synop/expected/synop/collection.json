@@ -4,7 +4,7 @@
  "stac_extensions": [],
  "id": "synop",
  "title": "Surface weather stations",
- "description": "National surface observation networks, aggregated every ten minutes: per network, every station's position and newest values in a stations file, and its last 24 hours as columns on one line of an NDJSON file beside it, in one set of elements and SI units whatever the network. The networks are the Japan Meteorological Agency's AMeDAS (about 1 300 stations), Deutscher Wetterdienst's national SYNOP reports (about 1 000 German stations) and the Hong Kong Observatory's regional weather (about 50 stations), each every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
+ "description": "National surface observation networks, aggregated every ten minutes: per network, every station's position and newest values in a stations file, and its last 24 hours as columns on one line of an NDJSON file beside it, in one set of elements and SI units whatever the network. The networks are the Japan Meteorological Agency's AMeDAS (about 1 300 stations), Deutscher Wetterdienst's national SYNOP reports (about 1 000 German stations) and the Hong Kong Observatory's regional weather, rain gauges and tide gauges (about 60 stations), each every ten minutes. A rolling window with no fixed start — only the newest round is published, and each round carries the whole window.",
  "license": "other",
  "keywords": ["weather", "observation", "surface", "station", "synop", "amedas", "dwd", "hko"],
  "providers": [
