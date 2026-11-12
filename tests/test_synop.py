@@ -284,6 +284,21 @@ class HkoTest(unittest.TestCase):
         self.assertEqual(hko.resolve("wind", "Waglan Island"), "WGL")
         self.assertIsNone(hko.resolve("wind", "Hong Kong Sea School"))
         self.assertIsNone(hko.resolve("visibility", "Sai Wan Ho"))
+        # The rainfall feed: its own aliases, the global ones, a typographic
+        # apostrophe, and the GEO raingauges the table adds.
+        self.assertEqual(hko.resolve("rainfall", "Tuen Mun"), "TU1")
+        self.assertEqual(hko.resolve("rainfall", "Cheung Ching"), "CPH")
+        self.assertEqual(hko.resolve("rainfall", "Tai Po Market"), "R23")
+        self.assertEqual(hko.resolve("rainfall", "Pak Tam Chung"), "TYW")
+        self.assertEqual(hko.resolve("rainfall", "Tsuen Wan Ho Koon"), "TWN")
+        self.assertEqual(hko.resolve("rainfall", "King\u2019s Park"), "KP")
+        self.assertEqual(hko.resolve("rainfall", "Magazine Gap"), "H17")
+        # The tide gauges: Tai O is the drainage department's gauge, not
+        # the Observatory's anemometer of the same name.
+        self.assertEqual(hko.resolve("tide", "Tai O"), "TAO")
+        self.assertEqual(hko.resolve("wind", "Tai O"), "TO")
+        self.assertEqual(hko.resolve("tide", "Tai Po Kau"), "TPK")
+        self.assertEqual(hko.resolve("tide", "Quarry Bay"), "QUB")
 
     def test_the_table(self) -> None:
         table = hko.station_table()
@@ -292,9 +307,12 @@ class HkoTest(unittest.TestCase):
             self.assertTrue(entry["names"]["zh-Hant"], code)
             self.assertTrue(22.0 < entry["lat"] < 22.7 and 113.8 < entry["lon"] < 114.5, code)
         for kind in table["fileAliases"]:
-            self.assertIn(kind, hko.FILES)
+            self.assertIn(kind, hko.KINDS)
         self.assertEqual(table["stations"]["HKO"]["rank"], 0)
         self.assertEqual(table["stations"]["WGL"]["elev"], 56.0)
+        for gauge in ("N12", "K02", "K09", "H17", "R23", "QUB", "SPW", "TBT", "TMW", "TAO"):
+            self.assertEqual(table["stations"][gauge]["rank"], 2, gauge)
+            self.assertIsNone(table["stations"][gauge]["elev"], gauge)
 
     def test_wind(self) -> None:
         self.assertEqual(hko.wind("Southeast", "22", "34"), {"wd": 135, "ws": 6.1, "gust": 9.4})
@@ -311,6 +329,26 @@ class HkoTest(unittest.TestCase):
         rows = hko.parse_csv("wind", "Date time,Station,d,s,g\n202610050800,Wetland Park,Calm,Calm,5,\n")
         self.assertEqual(rows[0][0], "Wetland Park")
         self.assertEqual(rows[0][2]["ws"], 0.0)
+
+    def test_rainfall(self) -> None:
+        document = {
+            "obsTime": "2026-10-05T08:15:00+08:00",
+            "hourlyRainfall": [
+                {"automaticWeatherStation": "Sha Tin", "automaticWeatherStationID": "RF020", "value": "12", "unit": "mm"},
+                {"automaticWeatherStation": "Sai Kung", "automaticWeatherStationID": "N15", "value": "M", "unit": "mm"},
+                {"automaticWeatherStation": "Kai Tak", "automaticWeatherStationID": "RF025", "value": "0", "unit": "mm"},
+            ],
+        }
+        rows = hko.parse_rainfall(json.dumps(document))
+        epoch = int(datetime(2026, 10, 5, 0, 15, tzinfo=UTC).timestamp())
+        self.assertEqual(rows, [("Sha Tin", epoch, {"pr1h": 12.0}), ("Sai Kung", epoch, {"pr1h": None}), ("Kai Tak", epoch, {"pr1h": 0.0})])
+
+    def test_tide(self) -> None:
+        text = "\ufeffTide Station,Date,Time,Height(m)\nQuarry Bay,2026-10-05,08:05,2.47\nWaglan Island,2026-10-05,08:05,----\nTai O,2026-10-05,08:05,-0.04"
+        rows = hko.parse_tide(text.lstrip("\ufeff"))
+        epoch = int(datetime(2026, 10, 5, 0, 5, tzinfo=UTC).timestamp())
+        self.assertEqual(rows, [("Quarry Bay", epoch, {"tide": 2.47}), ("Waglan Island", epoch, {"tide": None}), ("Tai O", epoch, {"tide": -0.04})])
+        self.assertIsNone(hko.parse_tide("h\nQuarry Bay,2026-10-05,08:05,25.0")[0][2]["tide"])  # outside -2..20
 
 
 @unittest.skipUnless(HAS_BUFR_DUMP, "bufr_dump (eccodes) is not installed: the DWD batches do not decode")
@@ -399,8 +437,10 @@ class RoundsTest(unittest.TestCase):
         self.assertNotIn("amedas:12066", ids)
         self.assertIn("amedas:12217", ids)
         self.assertNotIn("dwd:10004", ids)
-        hko_source = next(source for source in self.indexes[1]["sources"] if source["id"] == hko.SOURCE)
-        self.assertEqual(hko_source["unplaced"], 3)  # Hong Kong Sea School, Central, Sai Wan Ho
+        sources = {source["id"]: source for source in self.indexes[1]["sources"]}
+        self.assertEqual(sources[hko.SOURCE]["unplaced"], 3)  # Hong Kong Sea School, Central, Sai Wan Ho
+        self.assertEqual(sources[hko.RAINFALL_SOURCE]["unplaced"], 0)
+        self.assertEqual(sources[hko.TIDE_SOURCE]["unplaced"], 0)
 
     def test_slow_elements_carry_into_the_stations_file_within_the_hour(self) -> None:
         fuji = self.rows[1]["amedas:50066"]
@@ -436,6 +476,33 @@ class RoundsTest(unittest.TestCase):
         wetland = line_of(self.directories[0], self.rows[0]["hko:WLP"])
         self.assertNotIn("wd", wetland["obs"])  # Calm: no direction at any time
         self.assertEqual(wetland["obs"]["ws"], [0.0])
+
+    def test_hko_rainfall_and_tide_are_their_own_sources(self) -> None:
+        sources = {source["id"]: source for source in self.indexes[1]["sources"]}
+        for source in (hko.SOURCE, hko.RAINFALL_SOURCE, hko.TIDE_SOURCE):
+            self.assertTrue(sources[source]["ok"], source)
+        self.assertEqual(sources[hko.RAINFALL_SOURCE]["files"], 1)
+        # A GEO raingauge measures rain alone: its current value is the
+        # newest hour's total, at its own time.
+        gauge = self.rows[1]["hko:K02"]
+        self.assertEqual(gauge[4], 2)
+        self.assertEqual(gauge[6], "2026-10-05T00:00:00Z")
+        self.assertEqual(gauge[column("pr1h")], 0.0)
+        # Sai Kung's rain was "M": no value, and nothing else placed it.
+        self.assertIsNone(line_of(self.directories[1], self.rows[1]["hko:SKG"])["obs"].get("pr1h"))
+
+    def test_hko_tide_gauges(self) -> None:
+        quarry = self.rows[1]["hko:QUB"]
+        self.assertEqual(quarry[6], "2026-10-05T00:05:00Z")
+        self.assertEqual(quarry[column("tide")], 2.46)
+        self.assertEqual(line_of(self.directories[1], quarry)["obs"]["tide"], [2.47, 2.46])
+        # Tai Po Kau's tide joins its anemometer, which shares the code.
+        tai_po_kau = line_of(self.directories[1], self.rows[1]["hko:TPK"])
+        self.assertIn("ws", tai_po_kau["obs"])
+        self.assertIn("tide", tai_po_kau["obs"])
+        self.assertIn("hko:TAO", self.rows[1])
+        self.assertNotIn("tide", line_of(self.directories[1], self.rows[1]["hko:WGL"])["obs"])  # dashes both rounds
+        self.assertIsNone(self.rows[1]["hko:HKO"][column("tide")])
 
     def test_the_pointer_names_the_newest_round(self) -> None:
         pointer = json.loads((self.output / "latest-synop.json").read_bytes())
@@ -477,8 +544,16 @@ class SwitchTest(unittest.TestCase):
 
         self.assertEqual(without_codes(directory / "amedas.jsonl"), without_codes(EXPECTED / directory.relative_to(self.output) / "amedas.jsonl"))
         self.assertEqual(len(line_of(directory, rows["amedas:44132"])["time"]), 3)
-        # The networks the v1 round did not carry start their window here.
-        self.assertTrue(all(len(line_of(directory, row)["time"]) == 1 for station, row in rows.items() if station.startswith("hko:")))
+        # The networks the v1 round did not carry start their window here:
+        # the HKO lines hold this round's files alone — its 08:10 HKT
+        # regional readings, 08:00 rainfall and 08:05 tide.
+        second = {int(datetime(2026, 10, 5, 0, minute, tzinfo=UTC).timestamp()) for minute in (0, 5, 10)}
+        for station, row in rows.items():
+            if station.startswith("hko:"):
+                line = line_of(directory, row)
+                self.assertLessEqual(set(line["time"]), second, station)
+                for position, value in enumerate(line["obs"].get("t", [])):
+                    self.assertTrue(value is None or line["time"][position] == max(second), station)
 
 
 @unittest.skipUnless(HAS_BUFR_DUMP, "bufr_dump (eccodes) is not installed: the DWD batches do not decode")

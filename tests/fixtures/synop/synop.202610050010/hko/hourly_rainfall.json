@@ -1,0 +1,95 @@
+{
+    "obsTime": "2026-10-05T08:00:00+08:00",
+    "hourlyRainfall": [
+        {
+            "automaticWeatherStation": "Lau Fau Shan",
+            "automaticWeatherStationID": "RF001",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Shui Pin Wai",
+            "automaticWeatherStationID": "N12",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Tai Po Market",
+            "automaticWeatherStationID": "RF005",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Pak Tam Chung",
+            "automaticWeatherStationID": "RF006",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Sai Kung",
+            "automaticWeatherStationID": "N15",
+            "value": "M",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Clear Water Bay",
+            "automaticWeatherStationID": "RF009",
+            "value": "M",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Tsuen Wan Ho Koon",
+            "automaticWeatherStationID": "RF018",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Tuen Mun",
+            "automaticWeatherStationID": "RF019",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Cheung Ching",
+            "automaticWeatherStationID": "RF021",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Hong Kong Observatory",
+            "automaticWeatherStationID": "RF023",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "King’s Park",
+            "automaticWeatherStationID": "RF024",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Broadcast Drive",
+            "automaticWeatherStationID": "K02",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "San Po Kong",
+            "automaticWeatherStationID": "K09",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Kwun Tong",
+            "automaticWeatherStationID": "K03",
+            "value": "0",
+            "unit": "mm"
+        },
+        {
+            "automaticWeatherStation": "Magazine Gap",
+            "automaticWeatherStationID": "H17",
+            "value": "0",
+            "unit": "mm"
+        }
+    ]
+}

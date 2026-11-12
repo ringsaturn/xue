@@ -28,6 +28,14 @@
    "Tsing Yi": "SHL",
    "Tuen Mun": "TUN",
    "Tap Mun": "TME"
+  },
+  "rainfall": {
+   "Cheung Ching": "CPH",
+   "Tai Po Market": "R23",
+   "Tuen Mun": "TU1"
+  },
+  "tide": {
+   "Tai O": "TAO"
   }
  },
  "stations": [
@@ -95,7 +103,7 @@
    "lat": 22.3481,
    "lon": 114.1092,
    "elev": 122.0,
-   "rank": 1
+   "rank": 2
   },
   {
    "code": "CWB",
@@ -129,6 +137,17 @@
    "lon": 114.1128,
    "elev": 88.0,
    "rank": 1
+  },
+  {
+   "code": "H17",
+   "name": "Magazine Gap",
+   "names": {
+    "zh-Hant": "馬己仙峽"
+   },
+   "lat": 22.2717,
+   "lon": 114.1641,
+   "elev": null,
+   "rank": 2
   },
   {
    "code": "HKA",
@@ -195,6 +214,28 @@
    "lon": 114.2556,
    "elev": 38.0,
    "rank": 1
+  },
+  {
+   "code": "K02",
+   "name": "Broadcast Drive",
+   "names": {
+    "zh-Hant": "廣播道"
+   },
+   "lat": 22.343,
+   "lon": 114.1789,
+   "elev": null,
+   "rank": 2
+  },
+  {
+   "code": "K09",
+   "name": "San Po Kong",
+   "names": {
+    "zh-Hant": "新蒲崗"
+   },
+   "lat": 22.3326,
+   "lon": 114.1957,
+   "elev": null,
+   "rank": 2
   },
   {
    "code": "KAT",
@@ -285,6 +326,17 @@
    "rank": 1
   },
   {
+   "code": "N12",
+   "name": "Shui Pin Wai",
+   "names": {
+    "zh-Hant": "水邊圍"
+   },
+   "lat": 22.4461,
+   "lon": 114.021,
+   "elev": null,
+   "rank": 2
+  },
+  {
    "code": "NGP",
    "name": "Ngong Ping",
    "names": {
@@ -338,6 +390,28 @@
    "lon": 114.2375,
    "elev": 51.0,
    "rank": 1
+  },
+  {
+   "code": "QUB",
+   "name": "Quarry Bay",
+   "names": {
+    "zh-Hant": "鰂魚涌"
+   },
+   "lat": 22.2911,
+   "lon": 114.2133,
+   "elev": null,
+   "rank": 2
+  },
+  {
+   "code": "R23",
+   "name": "Tai Po Wong Shiu Chi Secondary School",
+   "names": {
+    "zh-Hant": "大埔王肇枝中學"
+   },
+   "lat": 22.4456,
+   "lon": 114.1717,
+   "elev": null,
+   "rank": 2
   },
   {
    "code": "SC",
@@ -450,6 +524,17 @@
    "rank": 1
   },
   {
+   "code": "SPW",
+   "name": "Shek Pik",
+   "names": {
+    "zh-Hant": "石壁"
+   },
+   "lat": 22.2203,
+   "lon": 113.8944,
+   "elev": null,
+   "rank": 2
+  },
+  {
    "code": "SSH",
    "name": "Sheung Shui",
    "names": {
@@ -483,6 +568,17 @@
    "rank": 1
   },
   {
+   "code": "TAO",
+   "name": "Tai O (tide gauge)",
+   "names": {
+    "zh-Hant": "大澳(潮汐站)"
+   },
+   "lat": 22.2535,
+   "lon": 113.8638,
+   "elev": null,
+   "rank": 2
+  },
+  {
    "code": "TAP",
    "name": "Tap Mun",
    "names": {
@@ -492,6 +588,17 @@
    "lon": 114.3606,
    "elev": 15.0,
    "rank": 1
+  },
+  {
+   "code": "TBT",
+   "name": "Tsim Bei Tsui",
+   "names": {
+    "zh-Hant": "尖鼻咀"
+   },
+   "lat": 22.4872,
+   "lon": 114.0142,
+   "elev": null,
+   "rank": 2
   },
   {
    "code": "TC",
@@ -558,6 +665,17 @@
    "lon": 113.9667,
    "elev": null,
    "rank": 1
+  },
+  {
+   "code": "TMW",
+   "name": "Tai Miu Wan",
+   "names": {
+    "zh-Hant": "大廟灣"
+   },
+   "lat": 22.2697,
+   "lon": 114.2886,
+   "elev": null,
+   "rank": 2
   },
   {
    "code": "TO",

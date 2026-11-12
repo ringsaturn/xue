@@ -12,7 +12,12 @@ each with its ``fetch.json``, beside the AMeDAS station table they share:
 - ``dwd/`` — DWD national SYNOP BUFR batches cut to seven stations and
   re-dated (``tests/fixtures/README.md`` says how);
 - ``hko/`` — the Hong Kong Observatory's five regional-weather CSVs,
-  re-dated, the second round without Waglan Island.
+  re-dated, the second round without Waglan Island; and live samples of
+  its hourly rainfall (cut to fifteen of the 36 stations, among them every
+  name that needs an alias or a gauge of its own, and two ``M``) and its
+  tide file (all seven gauges, Waglan Island without a reading), re-dated
+  to 07:45 and 07:55 HKT in the first round and 08:00 and 08:05 in the
+  second.
 
 This script builds the first round, then the second on top of it, offline
 and with fixed generation times, and writes both under

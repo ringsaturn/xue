@@ -148,9 +148,12 @@ failed. `AIRPORT_KEEP` rounds are kept.
   (`XUE_BUILD_REVISION`, set by the workflow, null offline).
 - DWD is BUFR through `bufr_dump -j f`; values are picked by key plus the
   `timePeriod` / sensor height in force, never by template position, since
-  one batch mixes four templates. HKO's CSVs name stations only in
-  English, so `hko_stations.json` (built once from the Observatory's
-  station page, aliases by hand) places them.
+  one batch mixes four templates. HKO's files name stations only in
+  English, so `hko_stations.json` (built from the Observatory's station
+  page plus the rain and tide gauges its feeds name, aliases by hand)
+  places them. Its regional CSVs, hourly rainfall and tide file are three
+  sources of one network (`hko.FEEDS`), so one failing does not fail the
+  others.
 
 ## Active fires
 
