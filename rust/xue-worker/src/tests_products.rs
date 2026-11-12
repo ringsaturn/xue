@@ -358,8 +358,8 @@ fn the_synop_list_keys_the_values_by_element() {
     let data = Data::in_memory(bucket());
     let body = ok(&data, "synop", "");
     assert_eq!(body["issue"], "synop.202610050010");
-    // amedas 14, dwd 6, hko 51 in the golden.
-    assert_eq!(body["count"], 71);
+    // amedas 14, dwd 6, hko 62 (with its rain and tide gauges) in the golden.
+    assert_eq!(body["count"], 82);
     assert_eq!(body["networks"][0]["id"], "amedas");
     assert!(body["networks"][0].get("file").is_none());
     assert_eq!(body["elements"]["t"]["unit"], "°C");
