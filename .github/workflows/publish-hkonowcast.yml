@@ -1,0 +1,98 @@
+name: publish hkonowcast
+
+# The Hong Kong Observatory's gridded rainfall nowcast over Hong Kong and
+# the Pearl River Delta, from DATA.GOV.HK: one CSV holding the newest issue
+# alone, four half-hourly accumulations ending 30 to 120 minutes after it,
+# replaced every twelve minutes or so about ten minutes after the issue
+# time. A window is that one issue (xuebuild/hkonowcast.py samples it onto
+# a regular 0.019° x 0.018° grid and writes the accumulations as mean
+# rates), rebuilt into a round subdirectory of its run
+# (<model>.<run>/<HHMM>/) whenever a new issue appears and pointed at by
+# latest-hkonowcast.json.
+#
+# The shape is publish-jma.yml's: one round per job, here on a
+# twelve-minute cron, the issue cadence, placed eleven minutes past each
+# issue mark so a punctual issue is already served (GitHub starts a
+# scheduled run late and skips some under load, so a round may find the
+# issue after next; a missed issue is never published, since the feed
+# keeps no archive). A round whose issue is already live writes nothing.
+# Each round is all new frames, so there is no frame cache and no
+# segments; the series is written with NumPy alone, so no dependency
+# group, and GDAL is installed only when the wheel does not know the
+# source.
+#
+# Machine time: five jobs an hour of one to two minutes each, free on a
+# public repository's standard runners.
+
+on:
+  schedule:
+    - cron: "11-59/12 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "4"
+      hours:
+        description: "Window length in hours (three reach an issue's last frame from its first frame's hour)"
+        type: string
+        default: "3"
+      encoder:
+        description: "auto (the xuepy wheel when it knows the hkonowcast source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already holds the newest issue"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job. rounds.yml can only
+  # narrow what it is granted here.
+  actions: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-hkonowcast-dry-{0}', github.run_id) || 'publish-hkonowcast' }}
+  # A late cron queues behind the job still running and then finds nothing
+  # new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/rounds.yml
+    with:
+      model: hkonowcast
+      hours: ${{ inputs.hours || '3' }}
+      round_minutes: ${{ inputs.round_minutes || '4' }}
+      loop: ${{ inputs.loop || false }}
+      encoder: ${{ inputs.encoder || 'auto' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '2' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      gdal: fallback
+    secrets: inherit

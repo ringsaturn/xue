@@ -2,7 +2,7 @@ name: publish rounds
 
 # Reusable rolling-window publisher, one call per feed. Callers
 # (publish-himawari.yml, publish-himawarijp.yml, publish-goeseast.yml,
-# publish-goeswest.yml, publish-jma.yml, publish-aurora.yml,
+# publish-goeswest.yml, publish-jma.yml, publish-hkonowcast.yml, publish-aurora.yml,
 # publish-mrms.yml, publish-mrms3d.yml) own the cron, the manual dispatch,
 # the fork guard and the concurrency group; this file owns the job.
 #
@@ -21,7 +21,7 @@ on:
   workflow_call:
     inputs:
       model:
-        description: "The feed: himawari, himawarijp, goeseast, goeswest, jma, aurora, mrms or mrms3d"
+        description: "The feed: himawari, himawarijp, goeseast, goeswest, jma, hkonowcast, aurora, mrms or mrms3d"
         required: true
         type: string
       hours:
