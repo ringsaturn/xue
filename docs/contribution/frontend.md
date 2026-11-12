@@ -865,10 +865,9 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   index loaded on first pin); the settings sheet can hold it on the
   browser's zone, UTC or any IANA zone instead (`xue-zone` in storage, not
   in the URL). Run cycles and showcase cards stay UTC.
-- Query state lives in `urlstate.ts` (`?model=`, `?type=`, `?lines=`, `?volume=`, `?vexag=`,
-  `?case=`, `?res=`, `?particles=`, `?backend=`, `?flow=`, `?gibs=`,
-  `?tc*=`, `?stations=`, `?projection=`, `?terrain=`); `?lang=` in `i18n.ts`, `?theme=` in `theme.ts`.
-  Unknown values fall back to defaults.
+- Query state is parsed in `urlstate.ts`, except `?lang=` (`i18n.ts`),
+  `?theme=` (`theme.ts`) and `?units=` (`units.ts`); the table below lists
+  every parameter of the main page. Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never
   touches the query. `parseCameraFromHash` only says whether a link fixed
   the view; the region is framed on a model switch or a first open without
@@ -913,6 +912,51 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   the run line with the days the case spans and the track's ends with
   their dates, and leaves the lead hours and the display zone out. Every
   other case is read by its dataset, as before.
+
+### URL parameters
+
+Every parameter the main page (`index.html`) reads. **Written** means the
+shell writes it back into the address bar as the view changes
+(`syncUrl` → `searchForView` + `searchWithScene`, `mapprefs.ts`,
+`theme.ts`), so a copied link reproduces the view; **read once** means it
+is read at load, kept in the link as given, and needs a reload to change.
+**Stored** names the `localStorage` key a parameter falls back to when the
+link says nothing; the link always outranks storage. A switch accepts
+`on/1/true/yes` and `off/0/false/no` (`SWITCH_ALIASES`).
+
+| Parameter | Values | Default | URL | Stored | Notes |
+|---|---|---|---|---|---|
+| `model` | dataset id or alias (`MODEL_ALIASES`) | `gfs` | written | — | A case-only or unserved id falls back to the default. |
+| `case` | showcase case id | — | written | — | Pins its own dataset and run; `model` is dropped. |
+| `type` | field alias, bundle id, pressure surface, or `precipsetup` | dataset default | written | — | The primary; a pressure surface is the lines alone. `precipsetup` is the [precipitation setup](#precipitation-setup) on `prate`. |
+| `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |
+| `flow` | `qflux<level>` or `wind<level>` | `qflux850` | written | — | The setup's particle flow; dropped outside the setup. |
+| `accum` | window (`3h`, `30m`) or UTC range (`2026111106-2026111400`) | rate | written | — | Precipitation total; only on `prate` outside the setup. |
+| `particles` | switch | on (off under reduced motion) | written when chosen off | `xue-particles` | Only a chosen off is written. |
+| `phase` | switch | off | written | — | Precipitation by phase and the 0 °C line; stacks on the setup. |
+| `volume` | volume bundle id (`cloud3d`) or `off` | none (a case's `view.volume`) | written | — | 3D volume over a 2D field; any `volume=` outranks the case's. |
+| `vexag` | number, 0–200 | volume's own | read once | — | Volume vertical exaggeration. |
+| `projection` | `globe` | plane | written | — | |
+| `terrain` | switch or exaggeration (≤ 10) | flat (a case's `view.terrain`) | written | — | `on` is 1.5×; any `terrain=` outranks the case's. |
+| `shadow` | switch | off | written | — | Terrain shadows, from z9. |
+| `contours` | switch | off | written | — | Elevation contour lines over the relief. |
+| `gibs` | `GIBS_LAYERS` id | none | written | — | NASA GIBS daily picture (the `gibs` dataset or a case's imagery). |
+| `radar` | `on`, a NEXRAD site id, `off` | off | written | — | `on` marks the sites; a site draws alone. |
+| `radarproduct` | `n0b` / `ref`, `n0g` / `vel` | `n0b` | written | — | Written only for velocity. |
+| `stations` | comma list: `snd`, `apt`, `synop`, `fire`, `aq`, `alerts` (aliases) | none | written | — | Point-product marks. |
+| `tc` | storm id, or `off` | active storms | written | — | Tropical cyclone tracks. |
+| `tcagency`, `tcmodel` | comma lists of keys | all | written | — | Which agencies and models to draw. |
+| `tcmembers` | switch | off | written | — | Ensemble members. |
+| `grid` | comma list of `mgrs`, `utm`, `gars`, `bng`, `latlon`, or `off` | none | written | `xue-grid` | Reference grids (settings sheet). |
+| `units` | preset and overrides (`units.ts`) | `auto` (region) | read once | `xue-units` | The settings sheet writes storage, not the link. |
+| `lang` | locale code | browser language | removed on switch | `xue-locale` | A language switch stores it and drops `lang`. |
+| `theme` | `light`, `dark` | system | written on switch | `xue-theme` | |
+| `res` | `auto`, `half` / `low`, `full` / `high` | `auto` | read once | — | Pins a resolution tier for the session. |
+| `backend` | `xue`, `zarr` | `zarr` | read once | — | Comparison switch: the `.xue` container where a run ships one. |
+
+The camera is not a query parameter: it is the fragment (above). Other
+pages read their own: `compare.html` (`span`, `fields`), `typhoon.html`
+(`storm`, `issue`), `api.html` (`api`, `route` and the route's fields).
 
 ## Embedding
 
