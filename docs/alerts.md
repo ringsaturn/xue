@@ -640,8 +640,9 @@ release, each feature carrying one property, `id`, the code a line's
 A display joins a round's codes to the set — e.g. MapLibre with
 `promoteId: "id"` and feature state, or a filter on `["get", "id"]` —
 reading only the tiles in view by HTTP range. A set is named
-`<set>.<version>` by the day it was built (the upstream release is named
-in its section); a new release or a new build recipe is a new file and a
+`<set>.<version>` by the day it was built, `YYYYMMDD`, with a letter
+after it for a second build that day (`20261112b`; the upstream release
+is named in its section); a new release or a new build recipe is a new file and a
 new pin in the network table, and older rounds keep naming the
 file they were built against, so a round and its boundaries never
 disagree.

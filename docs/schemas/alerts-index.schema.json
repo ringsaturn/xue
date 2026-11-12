@@ -77,8 +77,8 @@
       "required": ["set", "version", "path", "byteLength", "crc32", "layers"],
       "properties": {
         "set": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
-        "version": {"type": "string", "pattern": "^\\d{8}$"},
-        "path": {"type": "string", "pattern": "^(\\.\\./){1,5}alerts-areas/[a-z0-9-]+\\.\\d{8}\\.pmtiles$"},
+        "version": {"type": "string", "pattern": "^\\d{8}[a-z]?$"},
+        "path": {"type": "string", "pattern": "^(\\.\\./){1,5}alerts-areas/[a-z0-9-]+\\.\\d{8}[a-z]?\\.pmtiles$"},
         "byteLength": {"type": "integer", "minimum": 1},
         "crc32": {"type": "string", "pattern": "^[0-9a-f]{8}$"},
         "layers": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
