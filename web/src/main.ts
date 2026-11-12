@@ -4842,7 +4842,8 @@ function updateVariablePresentation(session: VariableSession): void {
       : {
           path: "/",
           title: t(showingObservations() ? "pageTitleLiveObservation" : "pageTitleLive", {
-            variable: ui.label,
+            // The setup is named for itself, not for the rate it is drawn on.
+            variable: setupOn() && session.chartId === SETUP_ANCHOR ? t("varLabelPrecipSetup") : ui.label,
             model: model.label,
             hours: String(Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)),
           }),
