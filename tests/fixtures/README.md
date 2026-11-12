@@ -834,20 +834,22 @@ active list cut to Norbert and one other system. Its `hko/tc_list.xml` is
 the Hong Kong Observatory's list as served on 2026-11-12 with no system
 active, which is byte for byte what it serves whenever none is. About 180 KB.
 
-`tc/hko/` holds real Observatory track documents, which the Observatory
-does not archive and the Wayback Machine never captured: `tc_list_2102.xml`
-(the list naming SURIGAE) and `hko_tctrack_2102.xml` (its last bulletin,
-2021-04-25 05Z, extratropical, no forecast) and `hko_tctrack_2206.xml`
-(CHABA, 2022-07-02 00Z, nearing landfall, with interpolated and timed
-forecast positions). They are the copies an open-source client of the
-feed committed as its test resources (`test/resources/` of
-`github.com/chilicizz/chilicizz`, `typhoonExample.xml`,
-`typhoonTrackExample.xml`, `typhoonTrackExample2.xml`). They were
-re-indented there, and the second has lost its header's copyright and
-disclaimer text, so whitespace and that block may differ from the bytes
-served. The data are the Observatory's,
-reused under the DATA.GOV.HK terms with the attribution "Hong Kong
-Observatory (DATA.GOV.HK)".
+`tc/hko/` holds real Observatory track documents. The Observatory leaves
+each storm's last bulletin at its address after the storm has left the
+list, so `hko_tctrack_2649.xml` (CEMPAKA, 2026-11-10 06Z, leaving the
+Observatory's area with timed and interpolated forecast positions),
+`hko_tctrack_2648.xml` (IN-FA, 2026-11-05 00Z, first seen as a super
+typhoon) and `hko_tctrack_2620.xml` (an unnamed low pressure area,
+2026-08-03 03Z, no forecast) are the bytes served at
+`https://www.weather.gov.hk/wxinfo/currwx/hko_tctrack_<tcid>.xml` on
+2026-11-12, unaltered. A list naming a storm is not left behind like that
+and neither the Observatory nor the Wayback Machine keeps one, so
+`tc_list_2102.xml` (the list naming SURIGAE in 2021) is the copy an
+open-source client of the feed committed as a test resource
+(`test/resources/typhoonExample.xml` of `github.com/chilicizz/chilicizz`),
+re-indented there. The data are the Observatory's, reused under the
+DATA.GOV.HK terms with the attribution "Hong Kong Observatory
+(DATA.GOV.HK)".
 
 `tc/expected/` is the product built from it, offline, pretty-printed
 with scalar arrays kept on one line; `tests/prepare_tc_golden.py`

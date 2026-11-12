@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TropicalCycloneTrack tcid="2620"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:noNamespaceSchemaLocation="tc_track.xsd">
+<BulletinHeader>
+<BulletinName>Tropical Cyclone Track</BulletinName>
+<BulletinType>R</BulletinType>
+<BulletinProvider>Hong Kong Observatory</BulletinProvider>
+<BulletinTime>2026-08-03T12:30:23+08:00</BulletinTime>
+</BulletinHeader>
+<WeatherReport>
+<TropicalCycloneName>Low Pressure Area</TropicalCycloneName>
+<PastInformation>
+<Index>1</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T00:00:00+00:00</Time>
+<Latitude>15.00N</Latitude>
+<Longitude>125.00E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>2</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T03:00:00+00:00</Time>
+<Latitude>15.00N</Latitude>
+<Longitude>124.70E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>3</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T06:00:00+00:00</Time>
+<Latitude>15.20N</Latitude>
+<Longitude>124.00E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>4</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T09:00:00+00:00</Time>
+<Latitude>15.60N</Latitude>
+<Longitude>123.50E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>5</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T12:00:00+00:00</Time>
+<Latitude>15.90N</Latitude>
+<Longitude>123.30E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>6</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T15:00:00+00:00</Time>
+<Latitude>16.00N</Latitude>
+<Longitude>123.00E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>7</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T18:00:00+00:00</Time>
+<Latitude>16.00N</Latitude>
+<Longitude>123.00E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>8</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-02T21:00:00+00:00</Time>
+<Latitude>16.10N</Latitude>
+<Longitude>123.10E</Longitude>
+</PastInformation>
+<PastInformation>
+<Index>9</Index>
+<Intensity>Tropical Depression</Intensity>
+<MaximumWind>45km/h</MaximumWind>
+<Time>2026-08-03T00:00:00+00:00</Time>
+<Latitude>16.50N</Latitude>
+<Longitude>123.20E</Longitude>
+</PastInformation>
+<AnalysisInformation>
+<Intensity>Low Pressure Area</Intensity>
+<MaximumWind>40km/h</MaximumWind>
+<Time>2026-08-03T03:00:00+00:00</Time>
+<Latitude>17.10N</Latitude>
+<Longitude>123.00E</Longitude>
+</AnalysisInformation>
+</WeatherReport>
+</TropicalCycloneTrack>
