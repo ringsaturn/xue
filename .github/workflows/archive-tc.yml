@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: "Backfill sources instead of the daily harvest: nhc,ucar,ecmwf,ibtracs,curated (empty = harvest)"
+        description: "Backfill sources instead of the daily harvest: nhc,ucar,ecmwf,ibtracs,curated,hko (empty = harvest)"
         type: string
         default: ""
       rekey:

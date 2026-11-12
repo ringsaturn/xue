@@ -35,7 +35,7 @@ from xuebuild.tc.archive import (
     validate_record,
     validate_season_index,
 )
-from xuebuild.tc.backfill import backfill, deck_records, ecmwf_records, released
+from xuebuild.tc.backfill import backfill, backfill_hko, deck_records, ecmwf_records, released
 from xuebuild.tc.build import ecmwf_key
 from xuebuild.tc.harvest import _follow, canonical_storm, clustered_ensemble, ibtracs_best, storm_records
 from xuebuild.tc.identity import dominant_cluster
@@ -495,6 +495,44 @@ class CuratedTest(unittest.TestCase):
         self.assertTrue(is_season_storm_id("WP-COBRA-1944"))
         self.assertFalse(is_season_storm_id("WP-cobra-1944"))
         self.assertFalse(is_season_storm_id("WP-COBRA"))
+
+
+HKO_FIXTURES = Path(__file__).parent / "fixtures" / "tc" / "hko"
+
+
+class HkoBackfillTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.archive = Archive.open(Path(self.directory.name))
+        self.served = {name: (HKO_FIXTURES / name).read_bytes() for name in ("hko_tctrack_2649.xml", "hko_tctrack_2620.xml")}
+
+    def _get(self, url: str) -> bytes | None:
+        return self.served.get(url.rsplit("/", 1)[1])
+
+    def test_a_bulletin_joins_the_storm_its_positions_lie_on(self) -> None:
+        # JTWC's track of CEMPAKA, a little off the Observatory's.
+        usa = {"source": "ibtracs", "provisional": True, "points": [
+            _point("2026-11-08T00:00:00Z", 20.0, 131.0), _point("2026-11-10T06:00:00Z", 25.6, 139.7)]}
+        self.archive.add_best(make_best("WP312026", "CEMPAKA", None, ["WP312026"], {"usa": usa}))
+        self.archive.add_best(make_best("WP302026", "IN-FA", None, ["WP302026"], {"usa": {**usa, "points": [
+            _point("2026-11-10T06:00:00Z", 10.0, 160.0)]}}))
+        report = backfill_hko(self.archive, "2026-01", "2026-12", get=self._get)
+        self.assertEqual(report, {"source": "hko", "bulletins": 2, "storms": ["2649 WP312026"], "unmatched": ["2620"]})
+        record = self.archive.season(2026)["WP312026"]
+        self.assertEqual(record["name"], "CEMPAKA")
+        self.assertEqual(sorted(record["best"]), ["hko", "usa"])
+        hko_track = record["best"]["hko"]
+        self.assertEqual((hko_track["source"], hko_track["provisional"]), ("hko", True))
+        self.assertEqual(hko_track["points"][0]["time"], "2026-11-06T18:00:00Z")
+        self.assertEqual(hko_track["points"][-1]["time"], "2026-11-10T06:00:00Z")
+        self.assertNotIn("hko", self.archive.season(2026)["WP302026"]["best"])
+
+    def test_a_storm_the_archive_does_not_hold_is_left_out(self) -> None:
+        result = backfill_hko(self.archive, "2026-01", "2026-12", get=self._get)
+        self.assertEqual(result["storms"], [])
+        self.assertEqual(result["unmatched"], ["2620", "2649"])
+        self.assertEqual(self.archive.season(2026), {})
 
 
 class IbtracsHistoryTest(unittest.TestCase):

@@ -10,7 +10,10 @@ centres keep themselves, for the months before the live harvest began:
 - ``ecmwf``: the ``tf`` BUFR of ECMWF open data as kept on AWS
   (``s3://ecmwf-forecasts``, from 2023-01-18), every basin;
 - ``ibtracs``: the agencies' best tracks, every storm of the seasons asked
-  for, numbered or not.
+  for, numbered or not;
+- ``hko``: the Hong Kong Observatory's last bulletin on each system of the
+  seasons asked for, which it keeps serving after the system is gone: its
+  past positions are the Observatory's working best track, ``best.hko``.
 
 Each record is filed with its ``origin``; a live record of the same key
 always stays (:func:`.archive.merge_records`). Only numbered systems' forecasts
@@ -25,6 +28,7 @@ import logging
 import re
 import shutil
 import tempfile
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -33,9 +37,10 @@ from typing import Any
 
 from ..errors import DownloadError, TcProductError
 from ..fetch import _http_error_code, get_ok
-from . import atcf
-from .archive import Archive, BestMatcher, make_record, month_of, start_position
+from . import atcf, hko
+from .archive import Archive, BestMatcher, make_best, make_record, month_of, start_position
 from .build import ecmwf_tracks
+from .fetch import HKO_TRACK_URL
 from .harvest import add_best_records, ibtracs_best
 from .registry import NUMBERED_MAX
 from .schema import ATCF_ID
@@ -43,7 +48,7 @@ from .track import Ensemble, Forecast, lead_seconds, member_from_points
 
 LOG = logging.getLogger(__name__)
 
-SOURCES = ("nhc", "ucar", "ecmwf", "ibtracs", "curated")
+SOURCES = ("nhc", "ucar", "ecmwf", "ibtracs", "curated", "hko")
 
 CURATED_FILE = Path(__file__).with_name("curated.json")
 """Tracks reconstructed for this archive, each naming its sources."""
@@ -374,12 +379,81 @@ def backfill_curated(archive: Archive, first: str, last: str) -> dict[str, Any]:
     return {"source": "curated", "storms": add_best_records(archive, records)}
 
 
+# --- the Hong Kong Observatory's last bulletins ----------------------------
+
+
+HKO_SEQUENCE_MAX = 99
+"""A TCID is the season's last two digits and a two-digit sequence number."""
+
+
+def hko_best_record(product: hko.HkoTrack, matcher: BestMatcher) -> dict[str, Any] | None:
+    """The best record one bulletin adds: its past positions under ``hko``,
+    on the archived storm most of its synoptic positions lie on (within
+    ``MATCH_KM`` of that storm's), or None when no storm is the clear
+    choice. The Observatory's number is not an ATCF id, and its name can
+    differ from the one the archive carries, so neither is used; a system
+    the archive does not hold (never numbered) is not added."""
+    track = product.history.to_json()
+    votes: Counter[str] = Counter()
+    for point in track["points"]:
+        storm = matcher.match("WP", point["time"], point["lat"], point["lon"])
+        if storm is not None:
+            votes[storm] += 1
+    ranked = votes.most_common(2)
+    if not ranked or (len(ranked) == 2 and ranked[0][1] == ranked[1][1]):
+        return None
+    storm = ranked[0][0]
+    return make_best(storm, None, None, [storm] if ATCF_ID.match(storm) else [], {"hko": track})
+
+
+def backfill_hko(
+    archive: Archive, first: str, last: str, *, get: Callable[[str], bytes | None] | None = None
+) -> dict[str, Any]:
+    """The seasons named by the years of ``first`` and ``last``. ``get``
+    returns a URL's body, or None where nothing is served."""
+
+    def fetch(url: str) -> bytes | None:
+        try:
+            return get_ok(url, attempts=3, timeout=120)
+        except DownloadError as exc:
+            if _http_error_code(exc) in (403, 404):
+                return None
+            raise
+
+    get = get or fetch
+    matcher = BestMatcher(archive)
+    bulletins = 0
+    added: list[str] = []
+    unmatched: list[str] = []
+    for season in range(int(first[:4]), int(last[:4]) + 1):
+        for sequence in range(1, HKO_SEQUENCE_MAX + 1):
+            tcid = f"{season % 100:02d}{sequence:02d}"
+            payload = get(HKO_TRACK_URL.format(tcid=tcid))
+            if payload is None:
+                continue
+            try:
+                product = hko.parse_track(payload)
+            except ValueError as exc:
+                LOG.warning("tc backfill hko: %s skipped: %s", tcid, exc)
+                unmatched.append(tcid)
+                continue
+            bulletins += 1
+            record = hko_best_record(product, matcher)
+            if record is None or add_best_records(archive, [record]) == 0:
+                unmatched.append(tcid)
+                continue
+            added.append(f"{tcid} {record['storm']}")
+            LOG.info("tc backfill hko: %s on %s", tcid, record["storm"])
+    return {"source": "hko", "bulletins": bulletins, "storms": added, "unmatched": unmatched}
+
+
 RUNNERS: dict[str, Callable[[Archive, str, str], dict[str, Any]]] = {
     "nhc": lambda archive, first, last: backfill_decks(archive, "nhc", first, last),
     "ucar": lambda archive, first, last: backfill_decks(archive, "ucar", first, last),
     "ecmwf": backfill_ecmwf,
     "ibtracs": backfill_ibtracs,
     "curated": backfill_curated,
+    "hko": backfill_hko,
 }
 
 

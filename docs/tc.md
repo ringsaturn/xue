@@ -474,7 +474,13 @@ reader's own check.
   BUFR from 2023-01-18) and `ibtracs` (every storm of the seasons named by
 the years of `--from` and `--to`; `since1980`, or `ALL` before 1980, or a
 copy on disk with `--ibtracs-csv`, since the whole list is hundreds of
-megabytes served slowly). The daily harvest adds numbered storms only, so a
+megabytes served slowly). `hko` reads the Hong Kong Observatory's last
+bulletin on each system of those seasons (`hko_tctrack_<TCID>.xml`, which it
+keeps serving after the system is gone, for the current season only) and adds
+its past positions as the storm's `hko` track, provisional, on the archived
+storm that most of its synoptic positions lie within 333 km of; the
+Observatory's number and name are not used, and a system the archive does not
+hold is left out. The daily harvest adds numbered storms only, so a
 history id appears only where the backfill was run. `gdm` is Google
   DeepMind's experimental model (the ensemble mean NHC files from 2025).
   Its data is CC BY 4.0 only for times past and under Google's real-time
