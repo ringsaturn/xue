@@ -420,7 +420,9 @@ temperature, the 10 m, 850 hPa and 250 hPa wind speeds, the instantaneous
 10 m gust (`i10fg`, 0/2/22 at 10 m), the total cloud cover, the CAPE and
 two wind shears; the percentiles (4.10) of the precipitation over the six
 hours ending at the step and over a longer window, and of the six-hour
-snowfall; and exceedance probabilities (4.5, 4.9). `xuebuild/cmageps.py`
+snowfall; and exceedance probabilities (4.5, 4.9). Only the centre is read:
+the spread, the other percentiles and the probabilities need an ensemble
+statistic the format does not carry yet. `xuebuild/cmageps.py`
 publishes the ensemble's centre under the deterministic identities: the
 mean where it is the only statistic (height, pressure), the median
 elsewhere, and for the precipitation the median of the window that ends at
