@@ -35,6 +35,24 @@
       "file": "synop.202610050010/hko",
       "files": 5,
       "missing": 0
+    },
+    {
+      "id": "hko-hourly-rainfall",
+      "ok": true,
+      "fetched": "2026-10-05T00:14:00Z",
+      "url": "https://data.weather.gov.hk/weatherAPI/opendata/hourlyRainfall.php?lang=en",
+      "file": "synop.202610050010/hko",
+      "files": 1,
+      "missing": 0
+    },
+    {
+      "id": "hko-tide",
+      "ok": true,
+      "fetched": "2026-10-05T00:14:00Z",
+      "url": "https://data.weather.gov.hk/weatherAPI/hko_data/tide/ALL_en.csv",
+      "file": "synop.202610050010/hko",
+      "files": 1,
+      "missing": 0
     }
   ]
 }

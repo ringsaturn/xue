@@ -79,11 +79,14 @@ ELEMENT_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "sun": (0.0, 60.0),
     "snow": (0, 2000),
     "vis": (0, None),
+    "tide": (-2.0, 20.0),
 }
 """The elements §2 defines, in the order the index lays them out, with the
 range each stays inside. ``p`` reaches down to 300 hPa because a summit
-station reports its own pressure (Mt. Fuji's is about 640). The adapters
-write null for a value outside its range rather than lose the round."""
+station reports its own pressure (Mt. Fuji's is about 640); ``tide`` is
+above a chart datum near the lowest tide, so it goes a little below zero
+and as high as the largest tidal ranges reach. The adapters write null for
+a value outside its range rather than lose the round."""
 
 ELEMENTS = tuple(ELEMENT_BOUNDS)
 INTEGER_ELEMENTS = frozenset({"rh", "wd", "snow", "vis"})
@@ -102,6 +105,7 @@ ELEMENT_TABLE: dict[str, dict[str, Any]] = {
     "sun": {"unit": "min", "cell": "sum", "period": "network"},
     "snow": {"unit": "cm", "cell": "point", "period": None},
     "vis": {"unit": "m", "cell": "point", "period": None},
+    "tide": {"unit": "m", "cell": "point", "period": None},
 }
 """The index's ``elementTable``: each element's unit, how its value
 stands for its time (``cell``) and the seconds it covers, ending at its
@@ -128,7 +132,8 @@ ROW_HEAD_V1 = ("id", "network", "lat", "lon", "elev", "rank", "name", "obsTime")
 RANKS = (0, 1, 2)
 """How prominent a station is, which a map thins by: 0 a principal station
 (a staffed office, a summit, a remote island), 1 a multi-element automatic
-station, 2 a station that measures precipitation alone."""
+station, 2 a single-purpose gauge: one that measures precipitation alone,
+or the tide alone."""
 
 LATITUDE_RANGE = (-90.0, 90.0)
 LONGITUDE_RANGE = (-180.0, 180.0)

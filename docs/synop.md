@@ -527,46 +527,111 @@ which is the `attribution` string.
 
 ### 9.3 `hko` — Hong Kong Observatory
 
-The Hong Kong Observatory's regional weather: about fifty manned,
-automatic, buoy and wind stations every ten minutes. `cadence` is 600;
-`wsPeriod` is 600 (the ten-minute mean wind); `prPeriod` is `null`, and there is no `pr` or `pr1h`: the Observatory's
-rain gauges have no machine-readable positions. The network is `partial`
-(§6): each element comes from its own file, and the files of one round
-need not name the same minute.
+The Hong Kong Observatory's regional weather — about fifty manned,
+automatic, buoy and wind stations every ten minutes — with the hourly
+rainfall of its automatic weather stations and the water level of the
+tide gauges around Hong Kong. `cadence` is 600; `wsPeriod` is 600 (the
+ten-minute mean wind); `prPeriod` is `null`: there is no `pr`, and
+rainfall is `pr1h` alone. The network is `partial` (§6): each element
+comes from its own file, and the files of one round need not name the
+same minute — the rainfall is stamped on the quarter hour and the tide on
+five minutes, so a station's rainfall and its regional readings usually
+sit at different times of its line.
 
-Source. `hko-regional-weather` — five CSVs under
-<https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/>:
-`latest_1min_temperature.csv`, `latest_1min_humidity.csv`,
-`latest_1min_pressure.csv`, `latest_10min_wind.csv` and
-`latest_10min_visibility.csv`, each row a time (HKT, `YYYYMMDDHHMM`), a
-station name and the values. Only the latest reading is served, so there
-is no backfill: a round that does not run loses that time for good.
-`files` is how many of the five were read.
+Source. Three sources, each its own entry of §7 so that one failing does
+not take the others with it. `files` is how many of a source's files were
+read. Only the latest reading of each is served, so there is no backfill:
+a round that does not run loses that time for good.
 
-Reading. Missing values are `N/A` or empty. There are no quality flags.
+- `hko-regional-weather` — five CSVs under
+  <https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/>:
+  `latest_1min_temperature.csv`, `latest_1min_humidity.csv`,
+  `latest_1min_pressure.csv`, `latest_10min_wind.csv` and
+  `latest_10min_visibility.csv`, each row a time (HKT, `YYYYMMDDHHMM`), a
+  station name and the values.
+- `hko-hourly-rainfall` —
+  <https://data.weather.gov.hk/weatherAPI/opendata/hourlyRainfall.php?lang=en>,
+  the open-data API's "rainfall in the past hour from automatic weather
+  station" (renewed every fifteen minutes): one `obsTime` (ISO 8601 with
+  `+08:00`) and per station its name, an identifier local to this dataset
+  (`RF001`…, or a GEO raingauge number such as `N12`), the value and the
+  unit (`mm`). The value is the total over the hour ending at `obsTime`,
+  in whole millimetres, or `M` while the system is under maintenance. The
+  Observatory calls the data provisional, with limited validation, and
+  notes that its own station's figure here is not its official rainfall.
+- `hko-tide` — <https://data.weather.gov.hk/weatherAPI/hko_data/tide/ALL_en.csv>,
+  the latest five-minute water level of each tide gauge (UTF-8 with a byte
+  order mark): `Tide Station,Date,Time,Height(m)`, date and time HKT
+  (`2026-11-12,20:35`), the height in metres to a centimetre, or dashes
+  when there is none. The gauges are the Observatory's (Quarry Bay, Shek
+  Pik, Tsim Bei Tsui, Tai Miu Wan, Tai Po Kau, Waglan Island) and the
+  Drainage Services Department's at Tai O; the Observatory states that the
+  real-time tide data are not quality-controlled.
 
-| CSV | element | conversion |
-|---|---|---|
-| Air Temperature (°C) | `t` | — |
-| Relative Humidity (%) | `rh` | — |
-| Mean Sea Level Pressure (hPa) | `slp` | — (no station pressure: `p` stays `null`) |
-| 10-Minute Mean Wind Direction | `wd` | eight compass points, North = 360, Northeast = 45, …; `Calm` and `Variable` have no direction |
-| 10-Minute Mean Speed (km/h) | `ws` | ÷ 3.6; `Calm` is 0 |
-| 10-Minute Maximum Gust (km/h) | `gust` | ÷ 3.6 |
-| 10 minute mean visibility | `vis` | `18 km` → 18000; whole kilometres, no ceiling stated (35 km is the largest in the fixture) |
+Reading. Missing values are `N/A` or empty in the regional CSVs, `M` in
+the rainfall and dashes in the tide file. There are no quality flags.
 
-Stations. The CSVs name stations by English name only, so positions come
-from `xuebuild/synop/hko_stations.json`, built once (2026-10-31) from the
-Observatory's station page <https://www.hko.gov.hk/en/cis/stn.htm> and its
-Chinese twin `/tc/cis/stn.htm`: code, English and Chinese
+| file | field | element | conversion |
+|---|---|---|---|
+| regional | Air Temperature (°C) | `t` | — |
+| regional | Relative Humidity (%) | `rh` | — |
+| regional | Mean Sea Level Pressure (hPa) | `slp` | — (no station pressure: `p` stays `null`) |
+| regional | 10-Minute Mean Wind Direction | `wd` | eight compass points, North = 360, Northeast = 45, …; `Calm` and `Variable` have no direction |
+| regional | 10-Minute Mean Speed (km/h) | `ws` | ÷ 3.6; `Calm` is 0 |
+| regional | 10-Minute Maximum Gust (km/h) | `gust` | ÷ 3.6 |
+| regional | 10 minute mean visibility | `vis` | `18 km` → 18000; whole kilometres, no ceiling stated (35 km is the largest in the fixture) |
+| rainfall | `value` at `obsTime` | `pr1h` | mm, as given |
+| tide | Height(m) | `tide` | m above Hong Kong Chart Datum, as given |
+
+The tide file's heights are "in metre (m) above the Chart Datum, which is
+0.146 m below the Hong Kong Principal Datum" (the file layout,
+<https://data.weather.gov.hk/weatherAPI/hko_data/tide/File_layout_for_latest_tides_en.pdf>);
+the Observatory's real-time tide page labels the same values "metres above
+Chart Datum (mCD)". The Observatory gives the 1995–2014 average annual
+mean sea level at Quarry Bay as 1.45 m above Hong Kong Chart Datum
+(<https://www.hko.gov.hk/en/climate_change/proj_hk_msl_med_conf_info.htm>),
+so a `tide` there of about 1.45 is mean sea level.
+
+Stations. None of the files carries a station number or a position, so
+positions come from `xuebuild/synop/hko_stations.json`, built (2026-10-31)
+from the Observatory's station page <https://www.hko.gov.hk/en/cis/stn.htm>
+and its Chinese twin `/tc/cis/stn.htm`: code, English and Chinese
 (`names: {"zh-Hant": …}`) name, position and ground elevation of every
 current manned and automatic weather station, buoy and wind station. The
-rainfall, tide and terminated sections are left out. The page gives the
-wind stations' anemometer height rather than the ground's, so their
-`elev` is `null`. A CSV name resolves to the table's English name, or to
-an alias the table lists:
+page gives the wind stations' anemometer height rather than the ground's,
+so their `elev` is `null`. To it were added (2026-11-12) the gauges the
+rainfall and tide feeds name that are not among those stations — each with
+`elev` `null`, since the page gives a raingauge's height above sea level
+and nothing for a tide gauge, and `rank` 2:
 
-| CSV name | file | station |
+| code | name | from |
+|---|---|---|
+| `R23` | Tai Po Wong Shiu Chi Secondary School (大埔王肇枝中學) | the station page's automatic rainfall section |
+| `N12` | Shui Pin Wai (水邊圍) | GEO raingauge N12 |
+| `K02` | Broadcast Drive (廣播道) | GEO raingauge K02 |
+| `K09` | San Po Kong (新蒲崗) | GEO raingauge K09 |
+| `H17` | Magazine Gap (馬己仙峽) | GEO raingauge H17 |
+| `QUB` | Quarry Bay (鰂魚涌) | the station page's tide gauge section |
+| `SPW` | Shek Pik (石壁) | the station page's tide gauge section |
+| `TBT` | Tsim Bei Tsui (尖鼻咀) | the station page's tide gauge section |
+| `TMW` | Tai Miu Wan (大廟灣) | the station page's tide gauge section |
+| `TAO` | Tai O (tide gauge) (大澳(潮汐站)) | the Observatory's real-time tide page (<https://www.hko.gov.hk/en/tide/marine/realtide.htm>, its station list `TAO`) |
+
+The GEO raingauges are the Civil Engineering and Development Department's
+Geotechnical Engineering Office's, numbered as the rainfall feed numbers
+them; their positions are those of the "GEO Raingauge Data" dataset on the
+CSDI portal (`cedd_rcd_1636517963140_47030`, records of 2025–2026), their
+names the feed's English and Chinese ones. The station page lists the two
+remaining tide gauges, Tai Po Kau and Waglan Island, under the codes of
+existing stations, `TPK` (the wind station, at the same position) and
+`WGL` (the weather station, about 100 m away), so their water level joins
+those stations' lines.
+
+A file's station name resolves to the table's English name, or to an
+alias the table lists, after a typographic apostrophe is read as `'` (the
+rainfall feed spells `King’s Park`):
+
+| name | file | station |
 |---|---|---|
 | Chek Lap Kok | all | `HKA` Hong Kong International Airport |
 | HK Observatory | all | `HKO` Hong Kong Observatory |
@@ -575,28 +640,50 @@ an alias the table lists:
 | Star Ferry | all | `SF` Star Ferry (Kowloon) |
 | Tai Po | all | `YCT` Tai Po (Yuen Chau Tsai Park) |
 | Tsuen Wan Ho Koon | all | `TWN` Tsuen Wan |
-| Tsing Yi | temperature, humidity | `TY1` New Tsing Yi Station |
+| Tsing Yi | temperature, humidity, pressure | `TY1` New Tsing Yi Station |
 | Tsing Yi | wind | `SHL` Shell Oil Depot |
-| Tuen Mun | temperature, humidity | `TU1` Tuen Mun Children and Juvenile Home |
+| Tuen Mun | temperature, humidity, pressure, rainfall | `TU1` Tuen Mun Children and Juvenile Home |
 | Tuen Mun | wind | `TUN` Tuen Mun Government Offices |
 | Tap Mun | wind | `TME` Tap Mun East |
+| Cheung Ching | rainfall | `CPH` Ching Pak House (Tsing Yi) |
+| Tai Po Market | rainfall | `R23` Tai Po Wong Shiu Chi Secondary School |
+| Tai O | tide | `TAO` Tai O (tide gauge) |
 
 The aliases were resolved by hand: by the name and address in the
 Observatory's "Network of weather stations in Hong Kong" dataset on the
 CSDI portal (which spells `Tsing Yi`, `Tuen Mun`, `Pak Tam Chung` and
 `Tsuen Wan Ho Koon` the CSV's way), by the station page's own remarks
 (the Tai Po station moved to Yuen Chau Tsai Park in 2022; the Tap Mun
-East wind station replaced the Tap Mun one in 2017), and, where one CSV
-name covers two stations, by which of them the station page says
-measures the file's element (New Tsing Yi Station has no anemometer, the
-Shell Oil Depot station is one; likewise Tuen Mun). Three names have no
-station in either source — `Hong Kong Sea School` (wind), `Central` and
-`Sai Wan Ho` (visibility) — and are dropped, counted in `unplaced`.
+East wind station replaced the Tap Mun one in 2017), and, where one name
+covers two stations, by which of them the station page says measures the
+file's element (New Tsing Yi Station has no anemometer, the Shell Oil
+Depot station is one; of the two Tuen Mun stations only the Children and
+Juvenile Home has a raingauge). For the rainfall: Ching Pak House is a
+block of Cheung Ching Estate and the station page's only raingauge there
+(`CPH` measures rainfall alone); Tai Po Market is the town centre of Tai
+Po, where the only raingauge the station page lists is the one at Wong
+Shiu Chi Secondary School (`R23`) — the Yuen Chau Tsai Park station has
+none. Tai O is the drainage department's gauge rather than the
+Observatory's wind station `TO` of the same name, about a kilometre away.
+
+Some rainfall names match an Observatory station whose station page row
+has no raingauge: the feed's numbering says these are GEO raingauges near
+it — `N15` Sai Kung (`SKG`, about 0.9 km away), `K03` Kwun Tong (`KTG`, at
+the same position), `H15` Stanley (`STY`, about 0.3 km) and `H24` Wong
+Chuk Hang (`HKS`, about 0.4 km) — and `RF013` Ngong Ping (`NGP`) is most
+likely the Ngong Ping Fresh Water Reservoir raingauge 0.4 km away. Their
+rainfall is placed at the station of the same name. Three regional names
+have no station in either source — `Hong Kong Sea School` (wind),
+`Central` and `Sai Wan Ho` (visibility) — and are dropped, counted in
+`unplaced`.
 
 Station identity: `hko:<the Observatory's station code>` (`hko:HKO`,
-`hko:HKA`, `hko:WGL`); `name` is the station page's English name. `rank`
-is 0 for the two manned stations (`HKO`, `HKA`) and 1 for every other.
-The station page gives no WMO numbers, so `wmo` is `null`.
+`hko:HKA`, `hko:WGL`), or the GEO raingauge number for a GEO gauge
+(`hko:K02`); `name` is the station page's English name, or the feed's for
+a GEO gauge. `rank` is 0 for the two manned stations (`HKO`, `HKA`), 2 for
+a gauge that measures rainfall or the tide alone (`CPH` and the stations
+added above), and 1 for every other. The station page gives no WMO
+numbers, so `wmo` is `null`.
 
 Terms. DATA.GOV.HK's terms of use
 (<https://data.gov.hk/en/terms-and-conditions>, the `licenseUrl`) allow reuse, commercial

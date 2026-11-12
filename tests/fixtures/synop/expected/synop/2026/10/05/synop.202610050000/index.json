@@ -21,8 +21,8 @@
    },
    "stations": {
     "path": "amedas.stations.json",
-    "byteLength": 2352,
-    "crc32": "f7486d0f",
+    "byteLength": 2436,
+    "crc32": "3569192c",
     "count": 14
    }
   },
@@ -44,8 +44,8 @@
    },
    "stations": {
     "path": "dwd.stations.json",
-    "byteLength": 1178,
-    "crc32": "cf19c2f7",
+    "byteLength": 1222,
+    "crc32": "42dc7856",
     "count": 6
    }
   },
@@ -62,18 +62,18 @@
    "latest": "2026-10-05T00:00:00Z",
    "file": {
     "path": "hko.jsonl",
-    "byteLength": 10676,
-    "crc32": "c84f146d"
+    "byteLength": 13122,
+    "crc32": "3c6f3fea"
    },
    "stations": {
     "path": "hko.stations.json",
-    "byteLength": 7817,
-    "crc32": "3e2ae0e6",
-    "count": 51
+    "byteLength": 9813,
+    "crc32": "71ecbcc0",
+    "count": 62
    }
   }
  ],
- "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "tide"],
  "elementTable": {
   "t": {
    "unit": "°C",
@@ -139,6 +139,11 @@
    "unit": "m",
    "cell": "point",
    "period": null
+  },
+  "tide": {
+   "unit": "m",
+   "cell": "point",
+   "period": null
   }
  },
  "sources": [
@@ -182,6 +187,28 @@
    "reports": 51,
    "unplaced": 3,
    "sha256": "2943e9628ec0b7fcee148be32652f19060fa18e913763414e94007d287a3803c"
+  },
+  {
+   "id": "hko-hourly-rainfall",
+   "ok": true,
+   "fetched": "2026-10-05T00:04:00Z",
+   "url": "https://data.weather.gov.hk/weatherAPI/opendata/hourlyRainfall.php?lang=en",
+   "files": 1,
+   "missing": 0,
+   "reports": 13,
+   "unplaced": 0,
+   "sha256": "0f296e08e5eaeca46768ee7036e52735696e14b0e3769e49fe0918ecd4b12da4"
+  },
+  {
+   "id": "hko-tide",
+   "ok": true,
+   "fetched": "2026-10-05T00:04:00Z",
+   "url": "https://data.weather.gov.hk/weatherAPI/hko_data/tide/ALL_en.csv",
+   "files": 1,
+   "missing": 0,
+   "reports": 6,
+   "unplaced": 0,
+   "sha256": "25d6b7d1907bb69d0e1a2e5212e480b6d00684fc65b79854ff1b574f9f0ab842"
   }
  ],
  "builder": {
