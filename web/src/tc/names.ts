@@ -4,16 +4,19 @@
  * China Meteorological Administration's simplified Chinese for `zh`, the
  * Central Weather Administration's (else the Hong Kong and Macao) form
  * for `zh-Hant`, the Japan Meteorological Agency's katakana for `ja`, the
- * Korea Meteorological Administration's hangul for `ko`. Every other
- * locale, and every other basin, keeps the name as the centres issue it.
+ * Korea Meteorological Administration's hangul for `ko`. Outside the
+ * western Pacific only `zh` has local names: the CMA's for every other
+ * basin's lists. Every other locale keeps the name as the centres issue it.
  *
- * The table holds the current list and every name the archive has used
- * since 2023, retired ones included, keyed by the English name in capitals
- * with only its letters kept (`BANG-LANG` → `BANGLANG`). A name it lacks,
- * or lacks in one script, is shown as issued. Compiled 2026-10-28 from the
- * Chinese, Japanese and Korean Wikipedia lists and season articles, which
- * cite the agencies' own tables; a name added to the list later is added
- * here by hand. */
+ * The tables are keyed by the English name in capitals with only its
+ * letters kept (`BANG-LANG` → `BANGLANG`). The western Pacific one holds
+ * the current list and every name the archive has used since 2023, retired
+ * ones included; a name it lacks, or lacks in one script, is shown as
+ * issued. Its `ja`, `ko` and `zh-Hant` columns were compiled 2026-10-28 from
+ * the Japanese, Korean and Chinese Wikipedia lists, which cite the
+ * agencies' own tables. Every `zh` name, in every basin, is the National
+ * Meteorological Centre's (nmc.cn, 台风命名: 西北太平洋 and 全球其它海域),
+ * checked 2026-11-12. A name added to a list later is added here by hand. */
 
 import { locale, type Locale } from "../i18n";
 import { stormNameIn } from "./namestable";
