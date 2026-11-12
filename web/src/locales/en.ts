@@ -364,6 +364,10 @@ export const en = {
    * source named and the processing noted); the sheet row's name is the
    * agency's website, as the terms spell it. */
   creditsJma: "Radar precipitation: JMA nowcast, Japan (regridded)",
+  /** The HKO line, with the sheet row's name, is the attribution the
+   * DATA.GOV.HK terms ask for ("Hong Kong Observatory (DATA.GOV.HK)"), the
+   * processing noted. */
+  creditsHko: "Rainfall nowcast: HKO gridded nowcast, Hong Kong (resampled)",
   /** The Himawari line names the agency, the spacecraft and the host, and
    * notes the processing, as NOAA's terms ask. */
   creditsHimawari: "Satellite imagery: Himawari-9 AHI, JMA, on NOAA Open Data (reprojected)",

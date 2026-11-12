@@ -193,6 +193,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsMrms: "雷達觀測：MRMS，美國本土",
   creditsNexrad: "單站雷達：基本反射率與徑向速度，美國",
   creditsJma: "雷達降水：氣象廳臨近預報，日本（重採樣）",
+  creditsHko: "降雨臨近預報：香港天文台網格臨近預報，香港（重採樣）",
   creditsHimawari: "衛星影像：向日葵 9 號 AHI，日本氣象廳，經 NOAA 開放資料（重投影）",
   creditsGoes: "衛星影像：GOES-19 東、GOES-18 西 ABI，NOAA NESDIS，經 NOAA 開放資料（重投影）",
   creditsMeteosat: "衛星影像：含經修改的 EUMETSAT Meteosat 資料 {year}；Meteosat-12 FCI，整點掃描週期，CC-BY-4.0（重投影）",

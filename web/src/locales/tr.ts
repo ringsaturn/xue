@@ -199,6 +199,7 @@ export const tr: Record<MessageKey, string> = {
   creditsMrms: "Radar gözlemleri: MRMS, ABD anakarası",
   creditsNexrad: "Tekil radar: yansıtıcılık ve radyal hız, ABD",
   creditsJma: "Radar yağışı: JMA nowcast, Japonya (yeniden ızgaralanmış)",
+  creditsHko: "Yağış nowcast: HKO ızgara nowcast, Hong Kong (yeniden ızgaralanmış)",
   creditsHimawari: "Uydu görüntüleri: Himawari-9 AHI, JMA, NOAA açık veri üzerinden (yeniden projeksiyon)",
   creditsGoes: "Uydu görüntüleri: GOES-19 Doğu ve GOES-18 Batı ABI, NOAA NESDIS, NOAA açık veri üzerinden (yeniden projeksiyon)",
   creditsMeteosat: "Uydu görüntüleri: değiştirilmiş EUMETSAT Meteosat verisi içerir {year}; Meteosat-12 FCI, saatlik döngü, CC-BY-4.0 (yeniden projeksiyon)",
