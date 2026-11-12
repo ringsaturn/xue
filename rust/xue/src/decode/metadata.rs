@@ -1198,9 +1198,14 @@ mod band_tests {
         let block = variable(ABOVE_10_MM)["ensemble"].as_object().unwrap().clone();
         let identity = EnsembleIdentity::from_block(&block).unwrap();
         assert_eq!(identity, EnsembleIdentity::probability(3, Some((2, 1000)), Some((2, 1000))));
+        let expected = r#"{"probabilityType":3,"scaleFactorOfLowerLimit":2,"scaledValueOfLowerLimit":1000,"scaleFactorOfUpperLimit":null,"scaledValueOfUpperLimit":null}"#;
+        // Key order is only kept where the writer runs: the encoder feature
+        // turns on serde_json's preserve_order, the decoder build sorts keys.
+        #[cfg(feature = "encoder")]
+        assert_eq!(serde_json::to_string(&identity.metadata()).unwrap(), expected);
         assert_eq!(
-            serde_json::to_string(&identity.metadata()).unwrap(),
-            r#"{"probabilityType":3,"scaleFactorOfLowerLimit":2,"scaledValueOfLowerLimit":1000,"scaleFactorOfUpperLimit":null,"scaledValueOfUpperLimit":null}"#
+            serde_json::Value::Object(identity.metadata()),
+            serde_json::from_str::<serde_json::Value>(expected).unwrap()
         );
         assert_eq!(serde_json::to_string(&EnsembleIdentity::Derived(4).metadata()).unwrap(), r#"{"derivedForecast":4}"#);
         assert_eq!(EnsembleIdentity::Percentile(50).templates(), (6, 10));
