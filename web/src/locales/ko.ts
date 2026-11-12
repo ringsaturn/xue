@@ -184,7 +184,7 @@ export const ko: Record<MessageKey, string> = {
   creditsIconEu: "예보 자료: DWD ICON-EU 0.0625°, 유럽, CC BY 4.0",
   creditsArpege: "예보 자료: Météo-France ARPEGE 0.25°, Licence Ouverte 2.0",
   creditsCmaGeps: "앙상블 예보: 중국기상국 GRAPES GEPS 0.25°, 중앙값과 평균, WMO WIS2 경유",
-  creditsCnmaps: "중국 특보 구역 경계: 가오더 지도(Amap) 경계, cnmaps-data(MIT) 경유, xue가 GCJ-02에서 WGS84로 변환; 측량 승인 지도 아님",
+  creditsCnmaps: "중국 특보 구역 경계: 가오더 지도(Amap) 경계, cnmaps-data(MIT) 경유, xue가 GCJ-02에서 WGS84로 변환",
   creditsSwic: "중국 기상특보: 각급 기상대의 CAP 특보, WMO 위험기상정보센터(SWIC) 경유",
   creditsHkoWarnings: "홍콩 기상특보: 홍콩 천문대, DATA.GOV.HK 경유",
   creditsSilam: "대기질 예보: FMI SILAM v6.1 전 지구 0.2°, CC BY 4.0",

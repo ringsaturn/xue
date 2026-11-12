@@ -859,10 +859,9 @@ Beijing at z11 80 105.
 
 Terms. Wherever the set or a map drawn from it is shown it carries
 "边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by
-xue · not a survey-approved map (无审图号)". The outlines are a commercial
-map provider's, packaged by cnmaps-data under its MIT licence without a
-licence from the provider for redistribution; they are boundaries to
-place warnings by, not a survey-approved map of China.
+xue". The outlines are a commercial map provider's, packaged by
+cnmaps-data under its MIT licence without a licence from the provider for
+redistribution; they are boundaries to place warnings by.
 
 ## 10. Networks
 

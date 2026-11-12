@@ -182,7 +182,7 @@ export const pt: Record<MessageKey, string> = {
   creditsIconEu: "Dados de previsão: DWD ICON-EU 0,0625° sobre a Europa, CC BY 4.0",
   creditsArpege: "Dados de previsão: Météo-France ARPEGE 0,25°, Licence Ouverte 2.0",
   creditsCmaGeps: "Previsão por conjunto: CMA GRAPES GEPS 0,25°, mediana e média, via WMO WIS2",
-  creditsCnmaps: "Limites das áreas de aviso na China: contornos da Amap via cnmaps-data (MIT), convertidos de GCJ-02 para WGS84 pelo xue; não é um mapa homologado",
+  creditsCnmaps: "Limites das áreas de aviso na China: contornos da Amap via cnmaps-data (MIT), convertidos de GCJ-02 para WGS84 pelo xue",
   creditsSwic: "Avisos meteorológicos na China: avisos CAP dos observatórios da CMA via Severe Weather Information Centre da OMM",
   creditsHkoWarnings: "Avisos meteorológicos em Hong Kong: Hong Kong Observatory via DATA.GOV.HK",
   creditsSilam: "Previsão da qualidade do ar: FMI SILAM v6.1 global 0,2°, CC BY 4.0",
