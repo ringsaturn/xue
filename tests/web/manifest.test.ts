@@ -859,22 +859,26 @@ describe("dataset kinds", () => {
       expect(isObservationModel(model)).toBe(false);
   });
 
-  it("marks only the aurora window as running ahead of the clock", () => {
+  it("marks only the aurora and HKO windows as running ahead of the clock", () => {
     // OVATION's grids are valid when the solar wind reaches the Earth, about
-    // an hour after L1 measured it; the radar and imager windows are past.
+    // an hour after L1 measured it; an HKO window is one nowcast issue, every
+    // frame of it 30 to 120 minutes ahead; the radar and imager windows are
+    // past.
     expect(isNowcastModel("aurora")).toBe(true);
     expect(isObservationModel("aurora")).toBe(true);
+    expect(isNowcastModel("hkonowcast")).toBe(true);
+    expect(isObservationModel("hkonowcast")).toBe(true);
     for (const model of ["mrms", "jma", "cma", "himawari", "goeseast", "gfs"] as const)
       expect(isNowcastModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the ten observation windows among them", () => {
+  it("lists the live feeds, the eleven observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the ten observation windows are the
+    // SourceSpec.latest_filename); the eleven observation windows are the
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "hkonowcast", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -995,6 +999,26 @@ describe("dataset kinds", () => {
       railCore: ["aurora"],
     });
     expect(isObservationModel("aurora")).toBe(true);
+  });
+
+  it("opens the HKO rainfall nowcast on the precipitation rate over the Pearl River Delta", () => {
+    // Mirrors the `hkonowcast` entry of SOURCES: one issue's four
+    // half-hourly accumulations as rates, valid times on six-minute marks.
+    expect(FORECAST_MODELS.hkonowcast).toMatchObject({
+      id: "hkonowcast",
+      label: "HKO-NOWCAST",
+      product: "hongkong-prate",
+      latestFilename: "latest-hkonowcast.json",
+      observation: true,
+      leadsClock: true,
+      coreBundles: ["prate"],
+      cadenceSeconds: 360,
+      defaultVariable: "prate",
+      railCore: ["prate"],
+    });
+    const [west, south, east, north] = FORECAST_MODELS.hkonowcast.region!;
+    // Hong Kong Observatory headquarters, 22.302°N 114.174°E.
+    expect(west < 114.174 && 114.174 < east && south < 22.302 && 22.302 < north).toBe(true);
   });
 
   it("opens the two GOES disks on the infrared channel, the West one past the antimeridian", () => {

@@ -1438,7 +1438,8 @@ def observation_window_start(
     """Where a live observation window starts: the hour ``hours - 1`` before
     the newest frame, every feed whose own listing or archive reaches that
     far back. A feed whose window cannot — the aurora cache, grown a frame
-    a round — answers for itself (``Feed.window_start``), always so that the
+    a round; the HKO nowcast, one issue whose frames all lie ahead of the
+    clock — answers for itself (``Feed.window_start``), always so that the
     run id is the hour of the window's first frame, which is the manifest's
     run time (the observation rule) and what the pointer requires."""
     return _fetcher(spec).window_start(spec, newest, hours, raw_root)

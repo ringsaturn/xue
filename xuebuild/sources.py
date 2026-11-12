@@ -177,7 +177,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "gefsaero", "cfs",
-    "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "hkonowcast", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -2324,6 +2324,45 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=3,
         cadence_seconds=300,
+    ),
+    # The Hong Kong Observatory's gridded rainfall nowcast over the Pearl
+    # River Delta, from DATA.GOV.HK: one CSV holding the newest issue alone
+    # (every twelve minutes or so, no archive), four half-hourly
+    # accumulations ending 30 to 120 minutes after the issue on 121 x 121
+    # points spaced evenly in Mercator. The fetch (xuebuild/hkonowcast.py)
+    # samples the points onto a regular 0.019° x 0.018° grid by nearest
+    # point and writes each accumulation as the mean rate over its half
+    # hour, so this is a ``series_file`` window like the JMA nowcast. A
+    # window is one issue: its four valid times, under the hour the first
+    # falls in (``window_hours`` 3 reaches the last from any issue minute),
+    # every one ahead of the clock. Issues land on twelve-minute marks, so
+    # every valid time is on a six-minute one, the cadence the axis is
+    # counted in. Each round is a new issue, so nothing is cached and
+    # nothing is carried from the round before.
+    "hkonowcast": SourceSpec(
+        id="hkonowcast",
+        feed="hko-nowcast",
+        manifest_model="HKO-NOWCAST",
+        product="hongkong-prate",
+        latest_filename="latest-hkonowcast.json",
+        steps=(),
+        input_variable_ids=("prate",),
+        accumulated_precipitation=False,
+        statistical_processes=(("prate", 0),),
+        bundle_scalar_ids=("prate",),
+        core_bundle_ids=("prate",),
+        # 112.955°E to 115.292°E by 0.019°, 21.33°N to 23.49°N by 0.018°
+        # (xuebuild/hkonowcast.py, regular_axis).
+        production_grid=(124, 121),
+        # Two by two tiles, the last column and row clipped; a plane is
+        # fifteen thousand cells, so there is no ladder.
+        tile=(64, 64),
+        variant_factors=(),
+        observation=True,
+        series_file=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=360,
     ),
     # Himawari-9 AHI, the JMA geostationary imager at 140.7°E, as NOAA
     # redistributes it on its own bucket: the ISatSS product, each channel

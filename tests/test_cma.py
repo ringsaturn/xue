@@ -119,9 +119,9 @@ class SourceRegistryTests(unittest.TestCase):
         # a forecast rather than an observation (tests/test_ifshres.py).
         self.assertEqual(
             [spec.id for spec in SOURCES.values() if spec.series_file],
-            ["ifshres", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cams", "cma", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
+            ["ifshres", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cams", "cma", "jma", "hkonowcast", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"],
         )
-        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "mrms3d", "jma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"])
+        self.assertEqual([spec.id for spec in SOURCES.values() if spec.observation], ["cma", "mrms", "mrms3d", "jma", "hkonowcast", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora"])
         # Every source but the WOOF nest and the two EFAS runs, forecasts
         # with no feed built from a local dataset alone (tests/test_woof.py,
         # tests/test_efas.py).

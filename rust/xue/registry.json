@@ -24090,6 +24090,70 @@
       "video": false,
       "catCalibration": []
     },
+    "hkonowcast": {
+      "id": "hkonowcast",
+      "manifestModel": "HKO-NOWCAST",
+      "product": "hongkong-prate",
+      "latestFilename": "latest-hkonowcast.json",
+      "steps": [],
+      "inputVariableIds": [
+        "prate"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [
+        [
+          "prate",
+          0
+        ]
+      ],
+      "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "prate"
+      ],
+      "coreBundleIds": [
+        "prate"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        124,
+        121
+      ],
+      "tile": [
+        64,
+        64
+      ],
+      "variantFactors": [],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": true,
+      "windowHours": 3,
+      "cadenceSeconds": 360,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 1,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "gridRelativeWinds": false,
+      "gaussianN": null,
+      "video": false,
+      "catCalibration": []
+    },
     "himawari": {
       "id": "himawari",
       "manifestModel": "HIMAWARI",

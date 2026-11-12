@@ -502,6 +502,21 @@ array and sliced to latitudes 50–89 and longitudes 0–59, the second and
 third frames scaled 0.8 and 0.6, written with the same encoding
 `xuebuild/aurora.py` uses.
 
+`hkonowcast.202611122000.crop.csv` and `hkonowcast.202611122036.crop.csv`
+are two real issues of the Hong Kong Observatory's
+`Gridded_rainfall_nowcast.csv` (DATA.GOV.HK; issued 20:00 and 20:36 Hong
+Kong time on 2026-11-12, 12:00 and 12:36 UTC), byte for byte as served bar
+the rows left out: the header and the 24 x 24 points of each of the four
+accumulations from 21.708N to 22.124N and 113.034E to 113.482E, around the
+showers west of Hong Kong (80 and 216 rows with rain). The first issue's
+frames fall in its own hour, the second's in the next, so the run-hour rule
+and both axis units (1800 s and 360 s) are held to real files. Cut with
+
+```sh
+awk -F, 'NR==1 || ($3>=21.70 && $3<=22.13 && $4>=113.03 && $4<=113.49)' \
+  Gridded_rainfall_nowcast.csv > hkonowcast.<issue, HKT>.crop.csv
+```
+
 `himawari/` holds twenty-four ISatSS tiles of the Himawari-9 AHI infrared
 channels (bands 7, 8, 11, 13, 14 and 15) exactly as NOAA's
 `noaa-himawari9` bucket serves them: tiles T020 and T021 of the 03:00 and

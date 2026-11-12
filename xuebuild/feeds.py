@@ -24,7 +24,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from . import aurora, cmadust, cmageps, fetch, silam
+from . import aurora, cmadust, cmageps, fetch, hkonowcast, silam
+from .idx import ByteRange
 from .errors import DownloadError
 from .model import GfsRun
 from .sources import SourceSpec
@@ -468,6 +469,36 @@ class Ovation(Feed):
         return fetch._fetch_aurora_run(spec, run, hours, raw_root, force=force, input_ids=input_ids)
 
 
+class HkoNowcast(Feed):
+    """The Hong Kong Observatory's rainfall nowcast CSV on DATA.GOV.HK
+    (:mod:`xuebuild.hkonowcast`): the newest issue alone."""
+
+    @staticmethod
+    def _head(length: int) -> bytes:
+        return fetch.fetch_range(hkonowcast.URL, ByteRange(0, length - 1))
+
+    def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
+        return hkonowcast.latest_slot(fetch_head=self._head)
+
+    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
+        # A window is one issue, every frame of it ahead of the clock: it
+        # starts at the hour its first frame falls in, which the plain rule
+        # misses whenever that frame is in the first half of an hour.
+        return hkonowcast.window_start(newest)
+
+    def is_complete(
+        self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
+    ) -> bool:
+        return hkonowcast.run_is_complete(run, fetch_head=self._head)
+
+    def fetch_run(
+        self, spec: SourceSpec, run: GfsRun, hours: int, raw_root: Path, *, force: bool, input_ids: InputIds, bbox: BBox
+    ) -> list[Path]:
+        return hkonowcast.fetch_run(
+            spec, run, hours, raw_root, force=force, input_ids=input_ids, fetch_bytes=lambda url: fetch.get_ok(url)
+        )
+
+
 class Satellite(Feed):
     """A geostationary disk, read through its platform's reader
     (:attr:`~xuebuild.sources.SourceSpec.platform`)."""
@@ -505,6 +536,7 @@ FEEDS: dict[str, Fetcher] = {
     "jma-nowcast": JmaNowcast(),
     "cma-archive": CmaArchive(),
     "ovation": Ovation(),
+    "hko-nowcast": HkoNowcast(),
     "satellite": Satellite(),
     # Read from a file or directory a tool wrote: nothing to fetch.
     "local": Feed(),

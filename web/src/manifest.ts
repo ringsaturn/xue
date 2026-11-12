@@ -317,6 +317,18 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     railCore: ["prate"],
     region: [121, 20.5, 149, 45.5],
   },
+  // The Hong Kong Observatory's gridded rainfall nowcast over the Pearl
+  // River Delta: the newest issue's four half-hourly accumulations, ending
+  // 30 to 120 minutes after it, as mean rates under `prate` on a 0.019° x
+  // 0.018° grid. A window is one issue, every frame of it ahead of the
+  // clock, so it is read as a nowcast; a new issue every twelve minutes or
+  // so replaces it.
+  hkonowcast: {
+    leadsClock: true,
+    defaultVariable: "prate",
+    railCore: ["prate"],
+    region: [112.94, 21.32, 115.30, 23.50],
+  },
   // Himawari-9, the JMA geostationary imager at 140.7°E, as NOAA
   // redistributes it: the 10.4 µm infrared window as brightness
   // temperature, one full-disk scan every ten minutes, warped by the
@@ -532,8 +544,8 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
 }
 
 /** The datasets in the model switch's order: the twelve live forecasts, the
- * ten rolling observation windows (MRMS and its 3D volume, the JMA
- * nowcast, the CMA mosaic, the four geostationary imagers and Himawari's
+ * eleven rolling observation windows (MRMS and its 3D volume, the JMA
+ * and HKO nowcasts, the CMA mosaic, the four geostationary imagers and Himawari's
  * Japan box, and the SWPC aurora probability) and the geostationary
  * mosaic, a view over the imagers with no feed of its own. The switch
  * offers the ones index.html has a button for. A dataset with no pointer
@@ -558,6 +570,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "mrms",
   "mrms3d",
   "jma",
+  "hkonowcast",
   "cma",
   "himawari",
   "himawarijp",

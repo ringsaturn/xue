@@ -980,7 +980,7 @@ mod tests {
         assert_eq!(registry.source("efas").unwrap().latest_filename, None);
         assert_eq!(registry.source_by_manifest_model("HRRR").unwrap().id, "hrrr");
         assert!(registry.source("nothing").is_err());
-        assert_eq!(registry.sources().count(), 30);
+        assert_eq!(registry.sources().count(), 31);
         assert_eq!(registry.variables().count(), 260);
     }
 
