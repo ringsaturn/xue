@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import alertsPointerJson from "../fixtures/alerts/expected/latest-alerts.json";
 
-import { alertHeadline } from "../../web/src/alerts/card";
+import { alertBody, alertHeadline } from "../../web/src/alerts/card";
 import {
   areaColorExpression,
   areaFilter,
@@ -222,6 +222,15 @@ describe("the warnings card", () => {
     } as unknown as AlertLine;
     expect(alertHeadline(line, "fr")).toBe("Avis de brouillard");
     expect(alertHeadline(line, "ja")).toBe("Fog advisory");
+    expect(alertBody(line, "fr")).toEqual([]);
+    const cma = {
+      texts: {
+        "zh-CN": { headline: "大雾橙色预警", description: "预计今晨有雾。", instruction: "减少户外活动。" },
+        "en-US": { headline: "Orange fog warning", description: "Fog expected this morning." },
+      },
+    } as unknown as AlertLine;
+    expect(alertBody(cma, "zh")).toEqual(["预计今晨有雾。", "减少户外活动。"]);
+    expect(alertBody(cma, "en")).toEqual(["Fog expected this morning."]);
     expect(pickLanguageTag(["zh-Hant"], "zh")).toBe("zh-Hant");
     expect(pickLanguageTag(["en"], "zh-Hant")).toBeNull();
   });

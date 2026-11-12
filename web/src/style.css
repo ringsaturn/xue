@@ -3289,6 +3289,20 @@ html[lang="ja"] .rail-glyph {
   line-height: 1.35;
 }
 
+/* A headline with a description folds open onto it; the service's line
+   breaks are kept. */
+.alerts-card-text summary {
+  cursor: pointer;
+}
+
+.alerts-card-body {
+  margin: 4px 0 0;
+  font-size: var(--fs-1);
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .alerts-card-item a,
 .alerts-card-set a {
   color: inherit;

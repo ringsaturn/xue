@@ -6,8 +6,9 @@
  * service's own language), the product's category and level, when it
  * begins and ends ("until cancelled" where the service states no end),
  * when it was issued, its headline in the reader's language when the
- * service publishes one, else in the first language it does, and the
- * issuing office. The credit lines are each network's own, once per
+ * service publishes one, else in the first language it does — folding
+ * open onto the description and instruction in that same language — and
+ * the issuing office. The credit lines are each network's own, once per
  * network; for JMA also the boundary set's (docs/alerts.md §9.2): the 出典
  * and 加工 lines are legal text and stay in Japanese, and the survey
  * approval notice folds away; for MeteoAlarm a link to meteoalarm.org and
@@ -45,18 +46,42 @@ export function alertCategoryLabel(category: string): string {
   return key ? t(key) : category;
 }
 
-/** The headline the reader gets: their language when the service
- * publishes it, else the first one it does. A service with no headline
- * (none does yet) falls back to the start of its description. */
-export function alertHeadline(line: AlertLine, wanted: string): string | null {
+/** The texts the reader gets: their language when the service publishes
+ * it, else the first one it does. */
+function alertTexts(line: AlertLine, wanted: string): AlertLine["texts"][string] | null {
   const tags = Object.keys(line.texts);
   const tag = pickLanguageTag(tags, wanted) ?? tags[0];
-  if (tag === undefined) return null;
-  const texts = line.texts[tag]!;
+  return tag === undefined ? null : line.texts[tag]!;
+}
+
+/** The headline the reader gets, in {@link alertTexts}' language. A
+ * service with no headline (none does yet) falls back to the start of its
+ * description. */
+export function alertHeadline(line: AlertLine, wanted: string): string | null {
+  const texts = alertTexts(line, wanted);
+  if (!texts) return null;
   if (texts.headline) return texts.headline;
   if (!texts.description) return null;
   const description = texts.description.replace(/\s+/g, " ").trim();
   return description.length > 200 ? `${description.slice(0, 199)}…` : description;
+}
+
+/** The paragraphs behind the headline, in the headline's language: the
+ * description and the instruction, as the service wrote them. */
+export function alertBody(line: AlertLine, wanted: string): string[] {
+  const texts = alertTexts(line, wanted);
+  return [texts?.description, texts?.instruction].filter((text): text is string => Boolean(text?.trim())).map((text) => text.trim());
+}
+
+function headlineElement(line: AlertLine): HTMLElement | null {
+  const headline = alertHeadline(line, locale);
+  if (!headline) return null;
+  const body = alertBody(line, locale);
+  if (body.length === 0) return element("div", "alerts-card-headline", headline);
+  const fold = element("details", "alerts-card-text");
+  fold.append(element("summary", "alerts-card-headline", headline));
+  for (const paragraph of body) fold.append(element("p", "alerts-card-body", paragraph));
+  return fold;
 }
 
 /** The boundary set's credit (docs/alerts.md §9.2), shown wherever a map
@@ -147,8 +172,8 @@ export function buildAlertsCard(
     const until = line.expires ? options.formatTime(line.expires) : t("alertsUntilCancelled");
     item.append(element("div", "station-card-time", from ? `${from} → ${until}` : `→ ${until}`));
     item.append(element("div", "station-card-time", t("alertsIssued", { time: options.formatTime(line.sent) })));
-    const headline = alertHeadline(line, locale);
-    if (headline) item.append(element("div", "alerts-card-headline", headline));
+    const headline = headlineElement(line);
+    if (headline) item.append(headline);
     const issuer = line.sender ? `${line.sender} · ${network.name}` : network.name;
     if (line.url) {
       const link = element("a", "station-card-kind", issuer);
