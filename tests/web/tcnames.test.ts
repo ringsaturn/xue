@@ -14,9 +14,21 @@ describe("local storm names", () => {
     expect(localStormName("Bang-Lang", "WP", "zh")).toBe("班朗");
   });
 
+  it("names other basins' storms the way the CMA does, in zh only", () => {
+    expect(localStormName("ERIN", "AL", "zh")).toBe("埃林");
+    expect(localStormName("FLOR", "EP", "zh")).toBe("弗洛尔");
+    expect(localStormName("HONE", "CP", "zh")).toBe("霍恩");
+    expect(localStormName("AL-JARZ", "IO", "zh")).toBe("艾贾尔兹");
+    expect(localStormName("CEMPAKA", "SH", "zh")).toBe("森帕卡");
+    // The same name is transliterated per list: Cempaka is 查帕卡 in the western Pacific.
+    expect(localStormName("CEMPAKA", "WP", "zh")).toBe("查帕卡");
+    expect(localStormName("ERIN", "AL", "zh-Hant")).toBe("ERIN");
+    expect(localStormName("ERIN", "AL", "ja")).toBe("ERIN");
+  });
+
   it("keeps the issued name elsewhere and when the table lacks one", () => {
     expect(localStormName("KHANUN", "WP", "en")).toBe("KHANUN");
-    expect(localStormName("ERIN", "AL", "zh")).toBe("ERIN");
+    expect(localStormName("NOT-A-NAME", "AL", "zh")).toBe("NOT-A-NAME");
     expect(localStormName("SENYAR", "WP", "ja")).toBe("SENYAR");
     expect(localStormName("NOT-A-NAME", "WP", "zh")).toBe("NOT-A-NAME");
     expect(localStormName(null, "WP", "zh")).toBeNull();

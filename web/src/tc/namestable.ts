@@ -1,5 +1,6 @@
 /** The western Pacific's storm names in the scripts the agencies write them
- * in — the table behind `names.ts`, kept free of the page's i18n so the
+ * in, and every other basin's in the CMA's simplified Chinese — the tables
+ * behind `names.ts`, kept free of the page's i18n so the
  * build (the storm pages, `web/tooling/stormpages.ts`) reads it too. See
  * `names.ts` for what each column is and where it was compiled from. */
 
@@ -55,9 +56,9 @@ export const NAMES: Record<string, readonly [string | null, string | null, strin
   HIGOS: ["海高斯", "無花果", "ヒーゴス", "히고스"],
   HOABAN: ["花斑", "花斑", "ホアバン", null],
   HODU: ["核桃", "核桃", "ホードゥー", null],
-  HONE: ["霍涅", "霍恩", null, null],
+  HONE: ["霍恩", "霍恩", null, null],
   INFA: ["烟花", "煙花", "インファ", "인파"],
-  IONA: ["艾欧娜", "艾歐娜", null, null],
+  IONA: ["艾奥娜", "艾歐娜", null, null],
   JAMJARI: ["蜻蜓", "蜻蜓", "ツァンザリー", null],
   JANGMI: ["蔷薇", "薔蜜", "チャンミー", "장미"],
   JEBI: ["飞燕", "飛燕", "チェービー", "제비"],
@@ -77,7 +78,7 @@ export const NAMES: Record<string, readonly [string | null, string | null, strin
   KROVANH: ["科罗旺", "科羅旺", "クロヴァン", "크로반"],
   KUJIRA: ["鲸鱼", "鯨魚", "クジラ", "구지라"],
   KULAP: ["玫瑰", "庫拉", "クラー", null],
-  LALA: ["拉拉", "拉拉", null, null],
+  LALA: ["拉娜", "拉拉", null, null],
   LAN: ["兰恩", "蘭恩", "ラン", "란"],
   LEEPI: ["丽琵", "麗琵", "リーピ", "리피"],
   LINGLING: ["玲玲", "玲玲", "レンレン", "링링"],
@@ -166,11 +167,172 @@ export const NAMES: Record<string, readonly [string | null, string | null, strin
   YUNYEUNG: ["鸳鸯", "鴛鴦", "インニョン", "윈욍"],
 };
 
+/** English key → the simplified Chinese name the CMA uses, per basin outside
+ * the western Pacific (NMC's 全球热带气旋中文名称表). */
+export const ZH_ELSEWHERE: Record<string, Readonly<Record<string, string>>> = {
+  // North Atlantic, Caribbean and Gulf of Mexico (table 1)
+  AL: {
+    ADRIA: "阿德里亚", ALBERTO: "阿尔贝托", ALEX: "亚历克斯", ANA: "安娜", ANDREA: "安德烈娅", ARLENE: "阿琳",
+    ARTHUR: "阿瑟", BARRY: "巴里", BERTHA: "伯莎", BILL: "比尔", BONNIE: "邦妮", BRAYLEN: "布雷伦", BRET: "布雷特",
+    BRIANNA: "布里安娜", CARIDAD: "卡里达", CHANTAL: "钱特尔", CHRIS: "克里斯", CINDY: "辛迪", CLAUDETTE: "克劳德特",
+    COLIN: "科林", CRISTOBAL: "基斯托巴", DANIELLE: "丹妮尔", DANNY: "丹尼", DEBBY: "黛比", DESHAWN: "德肖恩",
+    DEXTER: "德克斯特", DOLLY: "多利", DON: "多恩", EARL: "厄尔", EDOUARD: "爱德华", ELSA: "埃尔莎", EMERY: "埃梅里",
+    EMILY: "艾米莉", ERIN: "埃林", ERNESTO: "埃内斯托", FAY: "费伊", FERNAND: "费尔南德", FIONA: "菲奥娜",
+    FOSTER: "福斯特", FRANCINE: "弗朗辛", FRANKLIN: "弗兰克林", FRED: "弗雷德", GABRIELLE: "加布丽埃", GASTON: "加斯顿",
+    GEMMA: "杰马", GERT: "格特", GONZALO: "贡萨洛", GORDON: "戈登", GRACE: "格雷斯", HANNA: "汉娜", HAROLD: "哈罗德",
+    HEATH: "希思", HENRI: "亨利", HERMINE: "赫尔米内", HOLLY: "霍莉", HUMBERTO: "温贝托", IAN: "伊恩", IDA: "艾达",
+    IDALIA: "伊达利娅", IMELDA: "伊梅尔达", ISAAC: "艾萨克", ISAIAS: "伊萨亚斯", ISLA: "艾拉", JACOBUS: "雅各布斯",
+    JERRY: "杰里", JOSE: "乔斯", JOSEPHINE: "约瑟芬", JOYCE: "乔伊斯", JULIA: "朱莉娅", JULIAN: "朱利安",
+    KAREN: "卡伦", KARL: "卡尔", KATE: "凯特", KATIA: "凯蒂娅", KENZIE: "肯齐", KIRK: "柯克", KYLE: "凯尔",
+    LARRY: "拉里", LEAH: "利娅", LEE: "李尔", LESLIE: "莱斯莉", LISA: "莉萨", LORENZO: "洛伦佐", LUCIO: "卢西奥",
+    MAKAYLA: "玛凯拉", MARCO: "马尔科", MARGOT: "马戈特", MARTIN: "马丁", MELISSA: "梅利莎", MIGUEL: "米格尔",
+    MINDY: "明迪", NADINE: "娜丁", NANA: "娜娜", NESTOR: "内斯特", NICHOLAS: "尼古拉斯", NICOLE: "妮科尔",
+    NIGEL: "奈杰尔", NOLAN: "诺兰", ODETTE: "奥黛特", OLGA: "奥尔加", OMAR: "奥马尔", OPHELIA: "奥菲莉娅",
+    ORLANDA: "奥尔兰达", OSCAR: "奥斯卡", OWEN: "欧文", PABLO: "巴勃罗", PATTY: "帕蒂", PAULA: "葆拉",
+    PAULETTE: "波莱特", PAX: "帕克斯", PETER: "彼得", PHILIPPE: "菲利普", RAFAEL: "拉斐尔", REBEKAH: "丽贝卡",
+    RENE: "勒内", RICHARD: "理查德", RINA: "里娜", RONIN: "罗南", ROSE: "露丝", SALLY: "萨莉", SAM: "萨姆",
+    SARA: "萨拉", SEAN: "肖恩", SEBASTIEN: "塞巴斯蒂安", SHARY: "谢里", SOPHIE: "索菲", TAMMY: "塔米",
+    TANYA: "塔尼娅", TAYSHAUN: "泰肖恩", TEDDY: "特迪", TERESA: "特雷莎", TOBIAS: "托拜厄斯", TONY: "托尼",
+    VALERIE: "瓦莱丽", VAN: "范恩", VICKY: "薇姬", VICTOR: "维克托", VINCE: "文斯", VIRGINIE: "维尔日妮",
+    VIVIANA: "维维安娜", WALTER: "沃尔特", WANDA: "旺达", WENDY: "温迪", WHITNEY: "惠特尼", WILFRED: "韦弗雷德",
+    WILL: "威尔", WILLIAM: "威廉",
+  },
+  // Eastern North Pacific (table 2)
+  EP: {
+    ADRIAN: "阿德里安", AGATHA: "阿加莎", AIDAN: "艾登", ALETTA: "阿莱塔", ALVIN: "阿尔文", AMANDA: "阿曼达",
+    ANDRES: "安德烈斯", BARBARA: "芭芭拉", BEATRIZ: "碧翠丝", BLANCA: "布兰卡", BLAS: "布拉斯", BORIS: "鲍里斯",
+    BRUNA: "布鲁纳", BUD: "巴德", CALVIN: "加尔文", CARLOS: "卡洛斯", CARLOTTA: "卡洛塔", CARMELO: "卡梅洛",
+    CELIA: "希利娅", COSME: "科斯梅", CRISTINA: "克里斯蒂娜", DALILA: "达莉拉", DANIEL: "丹尼尔", DANIELLA: "丹妮拉",
+    DARBY: "达比", DOLORES: "多洛雷丝", DORA: "多拉", DOUGLAS: "道格拉斯", ELIDA: "埃莉达", EMILIA: "埃米莉亚",
+    ENRIQUE: "恩里克", ERICK: "埃里克", ESTEBAN: "埃斯特班", ESTELLE: "埃丝特勒", EUGENE: "尤金", FABIO: "法比奥",
+    FAUSTO: "福斯托", FELICIA: "费利西娅", FERNANDA: "费尔南达", FLOR: "弗洛尔", FLOSSIE: "弗洛茜", FRANK: "弗兰克",
+    GENEVIEVE: "吉纳维芙", GEORGETTE: "乔吉特", GERARDO: "杰拉多", GIL: "吉尔", GILMA: "吉尔玛", GREG: "格雷格",
+    GUILLERMO: "吉列尔莫", HECTOR: "赫克托", HEDDA: "赫达", HENRIETTE: "亨丽埃特", HERNAN: "埃尔南", HILARY: "希拉里",
+    HILDA: "希尔达", HOWARD: "霍华德", IGNACIO: "伊纳西奥", ILEANA: "伊利安娜", IRWIN: "欧文", ISELLE: "伊塞莱",
+    IVETTE: "伊薇特", IVO: "伊沃", IZZY: "伊齐", JACINTA: "贾辛塔", JAKE: "杰克", JAVIER: "杰维尔", JIMENA: "希梅纳",
+    JOVA: "乔瓦", JULIETTE: "朱丽叶", JULIO: "朱利奥", KARINA: "卡琳娜", KAY: "凯伊", KENITO: "凯尼托",
+    KENNETH: "肯尼思", KEVIN: "凯文", KIKO: "基科", KRISTY: "克里斯蒂", LANE: "莱恩", LESTER: "莱斯特",
+    LIDIA: "利迪娅", LINDA: "琳达", LORENA: "洛雷娜", LOWELL: "洛厄尔", LUNA: "卢纳", MADELINE: "马德琳",
+    MARIE: "玛丽", MARINA: "马里纳", MARIO: "马里奥", MARTY: "马蒂", MAX: "马克斯", MIRIAM: "米丽娅姆", NANCY: "南希",
+    NARDA: "纳尔达", NEWTON: "牛顿", NORA: "诺拉", NORBERT: "诺伯特", NORMA: "诺尔玛", NORMAN: "诺曼",
+    OCTAVE: "奥克塔夫", ODALYS: "奥达莉丝", OLAF: "奥拉夫", OLIVIA: "奥利维娅", ORLENE: "奥莱娜", OTIS: "奥蒂斯",
+    OVIDIO: "奥维迪奥", PAINE: "佩因", PAMELA: "帕梅拉", PAUL: "保罗", PIA: "皮亚", PILAR: "皮拉尔", POLO: "波洛",
+    PRISCILLA: "普丽西拉", RACHEL: "雷切尔", RAMON: "拉蒙", RAYMOND: "雷蒙德", REY: "雷伊", RICK: "里克",
+    ROSA: "罗莎", ROSLYN: "罗斯林", SANDRA: "桑德拉", SELMA: "塞尔玛", SERGIO: "塞尔吉奥", SEYMOUR: "西摩",
+    SIMON: "施蒙", SKYLAR: "斯凯拉", SONIA: "索尼娅", TARA: "塔拉", TEO: "泰奥", TERRY: "特里", TICO: "蒂科",
+    TINA: "蒂娜", TODD: "托德", TRUDY: "特鲁迪", VANCE: "万斯", VELMA: "韦尔玛", VERONICA: "韦罗妮卡",
+    VICENTE: "维森特", VIOLETA: "维奥莱塔", VIRGIL: "弗吉尔", VIVIAN: "维维安", WALDO: "沃尔多", WALLIS: "沃利斯",
+    WILEY: "威利", WILFREDO: "维弗雷多", WILLA: "威拉", WINIFRED: "威妮弗德", WINNIE: "温妮", XAVIER: "泽维尔",
+    XINA: "希娜", XINIA: "希尼亚", YARIEL: "亚里奥", YOLANDA: "约兰达", YORK: "约克", ZEKE: "齐克", ZELDA: "泽尔达",
+    ZOE: "佐伊",
+  },
+  // Central North Pacific (table 3)
+  CP: {
+    AKA: "阿卡", AKONI: "阿科尼", ALIKA: "阿利卡", ANA: "安娜", EKEKA: "埃克卡", ELA: "埃拉", ELE: "埃莱", EMA: "埃玛",
+    HALOLA: "哈洛拉", HENE: "希妮", HONE: "霍恩", HUKO: "赫科", IOLANA: "约拉娜", IONA: "艾奥娜", IOPA: "艾奥帕",
+    IUNE: "尤内", KELI: "凯利", KEONI: "基奥尼", KIKA: "基卡", KILO: "基洛", LALA: "拉娜", LANA: "拉纳",
+    LINO: "利诺", LOKE: "洛基", MAKA: "马卡", MALIA: "马莉娅", MELE: "米尔", MOKE: "莫克", NEKI: "内基",
+    NIALA: "尼亚拉", NOLO: "诺洛", NONA: "诺娜", OHO: "奥贺", OLANA: "奥拉娜", OLIWA: "奥利瓦", OMEKA: "奥梅卡",
+    PALI: "帕利", PAMA: "帕马", PENA: "佩娜", PEWA: "佩娃", ULANA: "乌拉娜", ULIKA: "乌利卡", UNALA: "乌娜拉",
+    UPANA: "乌帕纳", WALAKA: "瓦拉卡", WALE: "威尔", WALI: "瓦利", WENE: "韦内",
+  },
+  // North Indian Ocean (table 4)
+  IO: {
+    AAG: "阿格", AFOOR: "阿富尔", AFSHAN: "阿夫尚", AIYARA: "艾亚拉", AKVAN: "阿克万", ALJARZ: "艾贾尔兹",
+    ALREEM: "里姆", AMBUD: "安布德", ANAHITA: "阿娜希塔", ANBAR: "安芭尔", ARNAB: "阿尔纳卜", ARSHAM: "阿沙姆",
+    ASANI: "阿萨尼", ASIF: "阿西夫", ASNA: "阿斯纳", ASURI: "阿苏里", ATHMAD: "阿斯玛德", AZAR: "阿扎尔",
+    BADBAN: "巴德班", BAHAR: "巴哈尔", BAKHUR: "巴胡尔", BALHAF: "巴尔哈夫", BAREQ: "巴雷克", BARSHON: "巴尔雄",
+    BAUTPHAT: "博特法特", BIPARJOY: "比帕乔伊", BOOM: "博姆", BOORAN: "博兰", BROM: "布罗姆", BULAN: "布兰",
+    BUREVI: "布雷维", DAAMAN: "达曼", DANA: "达纳", DARSAH: "达尔萨", DEEM: "迪姆", DEGL: "德格尔", DIKSAM: "迪克萨姆",
+    DIMA: "迪马", DITWAH: "迪特瓦", ENDHERI: "安德里", FAANA: "法纳", FAID: "费德", FANAR: "法纳尔",
+    FARTAK: "法尔塔克", FENGAL: "芬加尔", GAGANA: "加加纳", GARGOOR: "加古尔", GARJANA: "加贾纳", GATI: "加蒂",
+    GHAZEER: "加齐尔", GHURNI: "古尔尼", GHWYZI: "格维齐", GIGUM: "吉古姆", GULAB: "古拉卜", GULNAR: "古勒娜",
+    GURUVA: "古鲁瓦", HABOOB: "哈卜布", HAMOON: "哈蒙", HAREED: "哈里德", HAWF: "豪夫", HENGAME: "亨贾玛",
+    HORANGU: "胡兰古", JALADHI: "贾拉齐", JAWAD: "贾瓦德", JHAR: "吉哈尔", KAANI: "卡尼", KASEER: "卡西尔",
+    KENAU: "克瑙", KHUBB: "胡卜", KRAISON: "克赖森", KURANGI: "库兰吉", KUREDHI: "库雷迪", KYARTHIT: "凯亚特",
+    KYEEKAN: "基坎", KYWE: "凯维", LINYONE: "利尼奥内", LULU: "露露", MAHANISHA: "马哈妮莎", MAHINGSA: "马欣萨",
+    MANAHIL: "马娜希勒", MANDOUS: "曼杜斯", MANJOUR: "曼朱尔", MATCHA: "马恰", MEGHALA: "梅加拉", MICHAUNG: "米昌",
+    MIDHILI: "米迪利", MOCHA: "穆查", MONTHA: "蒙萨", MOUJ: "穆杰", MURASU: "穆拉苏", MUZN: "穆兹恩",
+    MWAIHOUT: "姆韦胡特", NAHHAAM: "纳赫哈姆", NAKHEEL: "纳克希尔", NASEEM: "纳西姆", NEEBA: "尼芭", NEER: "尼尔",
+    NGAMANN: "恩加曼", NINNADA: "宁纳达", NISARGA: "尼萨尔加", NISHITH: "尼希特", NIVAR: "尼瓦尔", ODI: "奥蒂",
+    OGHA: "奥加", OUD: "乌德", PARWAZ: "帕尔瓦兹", PHRAEWA: "费尔瓦", PHUTALA: "普塔拉", PINKU: "平库",
+    POOYAN: "普延", PRABHANJAN: "普拉班詹", PRATIKUL: "普拉提库", PROBAHO: "普鲁巴胡", QUFFAL: "库法尔", RAAD: "拉德",
+    RABAB: "拉芭卜", RAJANI: "拉贾尼", RAYHAN: "莱汉", REEM: "丽姆", REMAL: "雷马尔", RIVI: "里维", RIYAU: "里尧",
+    RUDU: "鲁杜", RUKAM: "鲁卡姆", SADAF: "萨达夫", SADEEM: "萨迪姆", SAFFAR: "萨法尔", SAHAB: "萨哈卜", SAIL: "赛尔",
+    SALITHA: "萨利提", SAMHAH: "萨姆哈", SAMING: "沙明", SAMIRON: "萨米伦", SAPAKYEE: "萨帕基", SAROBOR: "萨鲁布尔",
+    SARRAB: "萨拉卜", SARSAR: "萨尔瑟尔", SAVAS: "萨瓦斯", SEEF: "西夫", SENYAR: "森亚尔", SEPAND: "塞潘德",
+    SHAHEEN: "沙欣", SHAKHTI: "沙赫提", SHUJANA: "舒贾娜", SHUQRA: "舒克拉", SIDRAH: "茜德拉", SIRA: "茜拉",
+    SITRANG: "西特朗", SUHAIL: "苏海尔", TAHAMTAN: "塔哈姆坦", TAUKTAE: "陶克塔伊", TEJ: "泰杰", THARA: "萨拉",
+    THIANYOT: "提安诺特", THUNDI: "图恩迪", TOOFAN: "图凡", UPAKUL: "乌帕库勒", URMI: "乌尔米", VEGA: "韦加",
+    VERAMBHA: "韦兰巴", VIDULI: "维杜利", VYOM: "维奥姆", WABIL: "瓦比勒", WASEQ: "瓦塞克", WATAD: "瓦塔德",
+    WETWUN: "韦温", YAAS: "亚斯", YINKAUNG: "因冈", ZANNATA: "赞纳塔",
+  },
+  // South Pacific, Australian region, South-West Indian Ocean, Port Moresby and Jakarta (tables 5–9)
+  SH: {
+    ALESSIA: "阿莱西娅", ALFRED: "艾弗雷德", ALU: "阿卢", ALVARO: "阿尔瓦罗", ALVIN: "阿尔文", AMOS: "阿莫斯",
+    ANA: "安娜", ANGGREK: "安格雷克", ANGGUR: "安格尔", ANIKA: "阿尼卡", ANN: "安妮", ANTHONY: "安东尼",
+    ARTHUR: "阿瑟", ARU: "阿鲁", ASHLEY: "阿什莉", AURAM: "奥拉姆", BAKUNG: "巴孔", BALITA: "巴利塔", BART: "巴特",
+    BATSIRAI: "巴齐雷", BECKY: "贝姬", BELAL: "贝拉尔", BELIMBING: "贝林宾", BEN: "本恩", BILLY: "比利",
+    BINA: "比纳", BLAKE: "布莱克", BLANCHE: "布兰奇", BRUCE: "布鲁斯", BUNE: "比纳", BURI: "布里", CALEB: "凯莱布",
+    CANDICE: "坎迪丝", CATHERINE: "凯瑟琳", CEMPAKA: "森帕卡", CHARLOTTE: "夏洛特", CHENESO: "切内索", CHIP: "奇普",
+    CHRIS: "克里斯", CLAUDIA: "克劳迪娅", CLIFF: "克利夫", CODY: "科迪", COURTNEY: "考特尼", CRYSTAL: "克丽丝特",
+    CYRIL: "西里尔", DAHLIA: "戴利亚", DAMIEN: "达明", DANIAL: "丹尼亚尔", DAPHNE: "达夫妮", DARA: "达拉",
+    DARIAN: "达里安", DECLAN: "德克兰", DENIA: "德尼亚", DIANNE: "黛安娜", DINGANI: "丁加尼", DJOUNGOU: "乔恩古",
+    DODO: "多多", DOMINIC: "多米尼奇", DONNA: "唐娜", DOVI: "多维", DUKU: "杜库", DUMAKO: "杜马科", DYLAN: "迪伦",
+    EDEN: "伊登", EDNA: "埃德娜", ELEANOR: "埃莉诺", ELISA: "埃莉萨", ELLA: "埃拉", ELLIE: "埃莉", EMAU: "埃马乌",
+    EMNATI: "埃姆纳蒂", EMOSI: "埃穆西", ENALA: "埃纳拉", ERNIE: "厄尼", ERROL: "埃罗尔", ESTHER: "埃斯特", EVA: "伊娃",
+    FABIEN: "法比安", FEHI: "费希", FEKI: "菲基", FERDINAND: "费迪南德", FERE: "费雷", FEZILE: "费赛尔", FILI: "菲利",
+    FILIPO: "菲利波", FINA: "菲纳", FLAMBOYAN: "弗兰博扬", FLETCHER: "弗莱彻", FLORIN: "弗洛林", FOTU: "福图",
+    FRANCES: "弗朗西丝", FREDDY: "弗雷迪", GABRIELLE: "加布丽埃", GAMANE: "加马内", GARRY: "加里", GARTH: "加思",
+    GEMM: "杰姆", GERMAINE: "杰曼", GEZANI: "盖扎尼", GILLIAN: "吉莉恩", GINA: "吉娜", GLEN: "格伦", GOMBE: "贡贝",
+    GRANT: "格兰特", GREG: "格雷格", GRETEL: "格雷特尔", HADI: "哈迪", HALE: "黑尔", HALEY: "黑利", HALIMA: "哈利马",
+    HAROLD: "哈罗德", HART: "哈特", HAYLEY: "海利", HEATH: "希思", HERMAN: "赫尔曼", HETTIE: "赫蒂", HIBU: "赫布",
+    HIDAYA: "希达娅", HILDA: "希尔达", HOLA: "霍拉", HORACIO: "霍拉西奥", IALY: "伊莉", IGGY: "伊格吉", ILA: "伊拉",
+    ILI: "艾利", ILSA: "伊尔莎", IMOGEN: "伊莫金", INDUSA: "茵杜萨", INNIS: "英尼斯", IRENE: "艾琳", IRIS: "艾里斯",
+    IRVING: "欧文", ISA: "艾萨", ISABELLA: "伊莎贝拉", ISSA: "伊萨", IVANA: "伊万娜", JACK: "杰克", JAMBU: "让比",
+    JASMINE: "茉莉", JASPER: "贾斯珀", JENNA: "詹纳", JEREMY: "杰里米", JO: "乔奥", JOSESE: "乔塞斯",
+    JOSHUA: "乔舒亚", JOYCE: "乔伊斯", JUDY: "朱迪", JULIAN: "朱利安", JULIE: "朱莉", JULUKA: "朱卢卡", JUNE: "琼恩",
+    KALA: "卡拉", KAMA: "卡马", KANGA: "坎加", KARIM: "卡里姆", KELVIN: "凯尔文", KEN: "凯恩", KENANGA: "克南加",
+    KEVIN: "凯文", KIMA: "基玛", KIMI: "基米", KIRIO: "吉里奥", KIRRILY: "基里莉", KOFI: "科菲", KOJI: "科吉",
+    KUNDAI: "孔代", LASZLO: "拉斯洛", LENGKENG: "伦格肯", LETLAMA: "莱特拉马", LILI: "莉莉", LIN: "林恩",
+    LINCOLN: "林肯", LINDA: "琳达", LISEBO: "利塞博", LIUA: "柳娃", LOBU: "洛布", LOLA: "洛拉", LOUISE: "路易丝",
+    LUANA: "卢安娜", LUCAS: "卢卡斯", LUDZI: "卢齐", LUTE: "卢特", MACIU: "马丘", MAILA: "迈拉", MAIPELO: "梅佩洛",
+    MAL: "马尔", MANGGA: "曼加", MARCO: "马尔科", MARIAN: "玛丽安", MATA: "马塔", MEGAN: "梅甘", MELATI: "梅拉蒂",
+    MELINA: "梅利纳", MERRYN: "梅林", MICHEL: "米歇尔", MIKE: "迈克", MINGZHU: "明珠", MITCHELL: "米切尔",
+    MONA: "莫娜", NANGKA: "楠卡", NARELLE: "纳蕾勒", NAT: "纳特", NATHAN: "内森", NEIL: "尼尔", NETA: "内塔",
+    NEVILLE: "内维尔", NIKO: "尼科", NIRAN: "尼兰", NISHA: "尼莎", NJAZI: "尼亚齐", NOAH: "诺亚", NORA: "诺拉",
+    NOU: "努尔", NOUSRA: "努斯拉", OBAHA: "奥巴哈", ODETTE: "奥黛特", OLGA: "奥尔加", OLIVIA: "奥利维娅",
+    OLIVIER: "奥利维耶", OLWYN: "奥尔文", OMA: "奥马", ONIAS: "奥尼亚斯", OPETI: "奥佩蒂", ORAN: "奥兰", OREA: "奥雷亚",
+    ORIANA: "奥丽安娜", OSAI: "奥赛", OSCAR: "奥斯卡", OWEN: "欧文", PADDY: "帕迪", PAIA: "帕伊亚", PAMELA: "帕梅拉",
+    PANA: "帕纳", PAUL: "保罗", PEARL: "珀尔", PELAGIE: "佩拉杰", PENNY: "彭妮", PERRY: "佩里", PETA: "佩塔",
+    PISANG: "皮桑", PITA: "皮塔", POKERA: "朴克拉", POLA: "波拉", QUAMAR: "卡马尔", QUENTIN: "昆廷", QUINCY: "昆西",
+    RAE: "雷埃", RAJAB: "拉杰卜", RAMBUTA: "兰布塔", RANU: "拉努", RAQUEL: "拉克尔", REBAONE: "雷鲍内", RENE: "勒内",
+    REUBEN: "鲁本", REX: "雷克斯", RILEY: "赖利", RIORDAN: "里尔登", RITA: "丽塔", ROBYN: "罗宾", RUBY: "鲁比",
+    SABI: "萨比", SALAMA: "萨拉马", SAMADIYO: "萨马迪约", SANDRA: "桑德拉", SARAH: "莎拉", SARAI: "萨莱",
+    SAVANA: "萨瓦娜", SAVANNAH: "萨万娜", SAWO: "萨沃", SEAN: "肖恩", SEROJA: "塞洛亚", SERU: "塞鲁", SETH: "塞思",
+    SOLANI: "索拉尼", SOLO: "索洛", STAFFORD: "斯塔福德", STAN: "斯坦", TALIAH: "塔利亚", TAM: "塔姆", TARIK: "塔里克",
+    TASHA: "塔莎", TASI: "塔西", TATJANA: "塔季扬娜", TAU: "塔乌", TERATAI: "特拉泰", THEMBA: "滕巴",
+    TIFFANY: "蒂法尼", TIM: "蒂姆", TINO: "蒂诺", TREVOR: "特雷弗", TRISTAN: "特里斯坦", TROY: "特洛伊", TRUNG: "仲恩",
+    TUNI: "图尼", UESI: "尤西", UILA: "尤利娅", UINITA: "尤伊尼塔", ULU: "乌卢", UME: "乌梅", URIAH: "尤赖亚",
+    URILIA: "尤里利亚", URMIL: "厄米尔", URSULA: "厄休拉", UYAPO: "尤亚波", VAIANU: "韦亚努", VALI: "瓦利",
+    VANESSA: "瓦妮萨", VELMA: "韦尔玛", VEMON: "韦蒙", VERONICA: "韦罗妮卡", VICKY: "薇姬", VICTOR: "维克托",
+    VICTORIA: "维多利亚", VINCE: "文斯", VIOLET: "维奥莉特", VIVIANE: "维维亚娜", VUYANE: "武亚尼", WAGNER: "瓦格纳",
+    WALLACE: "华莱士", WALTER: "瓦尔特", WANE: "瓦尼", WANITA: "瓦尼达", WANO: "韦诺", WASI: "瓦西", WATI: "瓦蒂",
+    WAU: "瓦乌", WILSON: "威尔逊", XANGY: "赞吉", XAVIER: "泽维尔", XILA: "希拉", XUSA: "苏萨", YANI: "亚尼",
+    YARONA: "亚罗娜", YASA: "亚萨", YATES: "耶茨", YEKELA: "耶克拉", YEMURAI: "耶穆雷", YOLANDA: "约兰达",
+    YVETTE: "伊薇特", YVONNE: "伊冯娜", ZACARIAS: "萨卡雷斯", ZAINA: "扎伊娜", ZAKA: "扎卡", ZANE: "赞恩",
+    ZANELE: "扎内莱", ZANNA: "赞娜", ZAZU: "扎祖", ZELIA: "泽利娅", ZIDANE: "齐达内", ZITA: "齐塔",
+  },
+};
+
 const COLUMN: Record<NameScript, 0 | 1 | 2 | 3> = { zh: 0, "zh-Hant": 1, ja: 2, ko: 3 };
 
-/** A storm's name in `script` when it is a western Pacific storm the table
- * knows, else the name as issued (null stays null). */
+/** A storm's name in `script` when a table knows it — any script for a
+ * western Pacific storm, simplified Chinese in every basin — else the name
+ * as issued (null stays null). */
 export function stormNameIn(name: string | null, basin: string, script: string): string | null {
-  if (name === null || basin !== "WP" || !(script in COLUMN)) return name;
-  return NAMES[name.toUpperCase().replace(/[^A-Z]/g, "")]?.[COLUMN[script as NameScript]] ?? name;
+  if (name === null || !(script in COLUMN)) return name;
+  const key = name.toUpperCase().replace(/[^A-Z]/g, "");
+  if (basin === "WP") return NAMES[key]?.[COLUMN[script as NameScript]] ?? name;
+  return script === "zh" ? (ZH_ELSEWHERE[basin]?.[key] ?? name) : name;
 }

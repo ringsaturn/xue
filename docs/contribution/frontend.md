@@ -793,11 +793,13 @@ and its Open Graph locales. Built in `discovery.ts`'s bundle step from the
 published archive, so `deploy-pages.yml` also runs daily after the archive
 job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
 
-Storm names: `tc/names.ts` holds the western Pacific list in the scripts
-the CMA, CWA, JMA and KMA write it in, and `localStormName` is what every
-storm label, list and card shows (`tests/web/tcnames.test.ts`). It was
-compiled from the agencies' tables as the Wikipedias cite them; a name the
-Typhoon Committee adds is added there by hand.
+Storm names: `tc/namestable.ts` holds the western Pacific list in the
+scripts the CMA, CWA, JMA and KMA write it in, plus the CMA's simplified
+Chinese for every other basin's lists, and `localStormName` (`tc/names.ts`)
+is what every storm label, list and card shows (`tests/web/tcnames.test.ts`).
+The `zh` names follow the National Meteorological Centre's naming tables on
+nmc.cn; the other scripts were compiled from the agencies' tables as the
+Wikipedias cite them. A name a naming committee adds is added by hand.
 
 ## Layout and theming
 
