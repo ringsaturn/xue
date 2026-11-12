@@ -123,6 +123,7 @@
         "band": {"$ref": "#/$defs/Band"},
         "producer": {"$ref": "#/$defs/Producer"},
         "aerosol": {"$ref": "#/$defs/Aerosol"},
+        "ensemble": {"$ref": "#/$defs/Ensemble"},
         "quantization": {"$ref": "#/$defs/Quantization"}
       }
     },
@@ -188,6 +189,71 @@
       },
       "additionalProperties": false
     },
+    "Ensemble": {
+      "description": "Which statistic of an ensemble the field is (docs/format.md, \"Ensemble\"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter.",
+      "anyOf": [
+        {"$ref": "#/$defs/EnsembleDerived"},
+        {"$ref": "#/$defs/EnsemblePercentile"},
+        {"$ref": "#/$defs/EnsembleProbabilityLower"},
+        {"$ref": "#/$defs/EnsembleProbabilityUpper"},
+        {"$ref": "#/$defs/EnsembleProbabilityBetween"}
+      ]
+    },
+    "EnsembleDerived": {
+      "description": "A derived forecast of every member, templates 4.2 / 4.12: code table 4.7 (0 the unweighted mean, 4 the spread).",
+      "type": "object",
+      "required": ["derivedForecast"],
+      "properties": {"derivedForecast": {"type": "integer", "minimum": 0, "maximum": 255}},
+      "additionalProperties": false
+    },
+    "EnsemblePercentile": {
+      "description": "A percentile of the members' distribution, templates 4.6 / 4.10.",
+      "type": "object",
+      "required": ["percentileValue"],
+      "properties": {"percentileValue": {"type": "integer", "minimum": 0, "maximum": 100}},
+      "additionalProperties": false
+    },
+    "EnsembleProbabilityLower": {
+      "description": "A probability against the lower limit, templates 4.5 / 4.9: below (0), above (3) or equal to (5) it.",
+      "type": "object",
+      "required": ["probabilityType", "scaleFactorOfLowerLimit", "scaledValueOfLowerLimit", "scaleFactorOfUpperLimit", "scaledValueOfUpperLimit"],
+      "properties": {
+        "probabilityType": {"enum": [0, 3, 5]},
+        "scaleFactorOfLowerLimit": {"$ref": "#/$defs/LimitScaleFactor"},
+        "scaledValueOfLowerLimit": {"$ref": "#/$defs/LimitScaledValue"},
+        "scaleFactorOfUpperLimit": {"type": "null"},
+        "scaledValueOfUpperLimit": {"type": "null"}
+      },
+      "additionalProperties": false
+    },
+    "EnsembleProbabilityUpper": {
+      "description": "A probability against the upper limit, templates 4.5 / 4.9: above (1) or below (4) it.",
+      "type": "object",
+      "required": ["probabilityType", "scaleFactorOfLowerLimit", "scaledValueOfLowerLimit", "scaleFactorOfUpperLimit", "scaledValueOfUpperLimit"],
+      "properties": {
+        "probabilityType": {"enum": [1, 4]},
+        "scaleFactorOfLowerLimit": {"type": "null"},
+        "scaledValueOfLowerLimit": {"type": "null"},
+        "scaleFactorOfUpperLimit": {"$ref": "#/$defs/LimitScaleFactor"},
+        "scaledValueOfUpperLimit": {"$ref": "#/$defs/LimitScaledValue"}
+      },
+      "additionalProperties": false
+    },
+    "EnsembleProbabilityBetween": {
+      "description": "A probability between the two limits (type 2), templates 4.5 / 4.9.",
+      "type": "object",
+      "required": ["probabilityType", "scaleFactorOfLowerLimit", "scaledValueOfLowerLimit", "scaleFactorOfUpperLimit", "scaledValueOfUpperLimit"],
+      "properties": {
+        "probabilityType": {"const": 2},
+        "scaleFactorOfLowerLimit": {"$ref": "#/$defs/LimitScaleFactor"},
+        "scaledValueOfLowerLimit": {"$ref": "#/$defs/LimitScaledValue"},
+        "scaleFactorOfUpperLimit": {"$ref": "#/$defs/LimitScaleFactor"},
+        "scaledValueOfUpperLimit": {"$ref": "#/$defs/LimitScaledValue"}
+      },
+      "additionalProperties": false
+    },
+    "LimitScaleFactor": {"description": "A probability limit's GRIB2 scale factor.", "type": "integer", "minimum": -127, "maximum": 127},
+    "LimitScaledValue": {"description": "A probability limit's GRIB2 scaled value.", "type": "integer", "minimum": 0, "maximum": 4294967294},
     "ScaleFactor": {"description": "A GRIB2 scale factor, or null where the value is missing.", "type": ["integer", "null"], "minimum": -127, "maximum": 127},
     "ScaledValue": {"description": "A GRIB2 scaled value, or null where the value is missing.", "type": ["integer", "null"], "minimum": 0, "maximum": 4294967294},
     "Quantization": {

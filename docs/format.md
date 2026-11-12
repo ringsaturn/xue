@@ -249,7 +249,7 @@ versioned by the FixedHeader `version` field.
 |---:|---|---|
 | 1 | — | a uniform whole-hour `time` axis declaring `stepHours` |
 | 2 | Explicitly listed forecast hours | a whole-hour `time` axis listing `hours` |
-| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` / `aerosol` beside it), and a `time` block declaring `unitSeconds` |
+| 3 | Per-variable GRIB2 identity, and a time axis in units it names | a `parameter` block on every variable (optionally with `band` / `producer` / `aerosol` / `ensemble` beside it), and a `time` block declaring `unitSeconds` |
 | 4 | A grid on a map projection | a `grid.projection` block in place of the four regular grid fields; variables and time block as in version 3 |
 
 An encoder must emit the lowest version that can express the file: the
@@ -558,6 +558,80 @@ lets them widen version 3 rather than open a version 4. A block that is
 present must be well formed; a reader that implements this section rejects
 a malformed one (see Error Handling). A block is present or absent, never
 `null`, so a variable has exactly one encoding.
+
+#### Ensemble
+
+A `parameter` block names a quantity; a field computed from an ensemble of
+forecasts of that quantity is not the quantity itself but a statistic of it
+— the members' mean, their spread, a percentile of their distribution, or
+the share of members past a threshold — and GRIB2 says which in the product
+definition template (4.2 and 4.12 for a derived forecast, 4.6 and 4.10 for a
+percentile, 4.5 and 4.9 for a probability), not in the parameter. The
+optional `ensemble` block, beside `parameter` like the three above, carries
+it. A variable without the block is a single forecast (or an observation).
+
+The block has exactly one of three shapes; which keys it carries says
+which:
+
+```jsonc
+"ensemble": { "derivedForecast": 4 }        // templates 4.2 / 4.12
+"ensemble": { "percentileValue": 75 }       // templates 4.6 / 4.10
+"ensemble": {                               // templates 4.5 / 4.9
+  "probabilityType": 3,
+  "scaleFactorOfLowerLimit": 2, "scaledValueOfLowerLimit": 1000,
+  "scaleFactorOfUpperLimit": null, "scaledValueOfUpperLimit": null
+}
+```
+
+| `ensemble` field | GRIB2 origin | Rule |
+|---|---|---|
+| `derivedForecast` | Templates 4.2 / 4.12, code table 4.7 | 0–255 (0 is the unweighted mean of all members, 4 their spread) |
+| `percentileValue` | Templates 4.6 / 4.10 | 0–100 |
+| `probabilityType` | Templates 4.5 / 4.9, code table 4.9 | 0–5 |
+| `scaleFactorOfLowerLimit` / `scaledValueOfLowerLimit` | Templates 4.5 / 4.9 | −127…127 / 0…4294967294, or both `null` |
+| `scaleFactorOfUpperLimit` / `scaledValueOfUpperLimit` | Templates 4.5 / 4.9 | as above |
+
+A derived forecast carries `derivedForecast` alone and a percentile
+`percentileValue` alone. A probability carries all five of its keys, and
+which limits are integers is fixed by its type, whatever a record wrote in
+the octets the type does not use (CMA writes the threshold into both):
+types 0 (below the lower limit), 3 (above the lower limit) and 5 (equal to
+the lower limit) carry the lower limit and a `null` upper one; types 1
+(above the upper limit) and 4 (below the upper limit) the upper limit and a
+`null` lower one; type 2 (between the limits) both. A limit is
+`scaledValue × 10^−scaleFactor` in the GRIB2 unit of the quantity the
+`parameter` names (kg m⁻² for a precipitation total, m s⁻¹ for a speed),
+never the variable's `unit`; each limit is a pair whose two halves are both
+integers or both `null`, as for the fixed surface value.
+
+A probability's `unit` is `%` and its values the percentage of members past
+the limit; its `parameter` is the quantity the limit is on, a total over an
+interval carrying `typeOfStatisticalProcessing` 1. A percentile, a mean and
+a spread keep the quantity's unit. `parameter` stays the identity a reader
+keys on together with this block: two variables are the same field exactly
+when both agree, so a reader that charts the quantity can draw an ensemble
+member's percentile or mean beside a single forecast of it, and tells a
+spread or a probability from the quantity by the block.
+
+`ensemble` is optional, valid only from schemaVersion 3, and does not raise
+the version a file must declare, on the same terms as `band`, `producer` and
+`aerosol` above. A version 3 reader that predates it would draw a spread or
+a probability as the quantity itself, so a shell that charts it is deployed
+before the first file carrying one is published (see
+[`contribution/delivery.md`](contribution/delivery.md)).
+
+The ensemble fields this pipeline publishes (CMA GRAPES GEPS, `cmageps`)
+are below. Its central fields keep the ids of the single-forecast fields
+they stand in for (`tmp2m`, `prate`, `prmsl`, …) and carry the block that
+says which statistic they are: `{"percentileValue": 50}`, or
+`{"derivedForecast": 0}` for the 500 hPa height and the sea-level pressure,
+where the mean is the only statistic CMA exchanges.
+
+| `id` | Parameter, surface | `ensemble` | Notes |
+|---|---|---|---|
+| `<id>q25` / `<id>q75` for `tmp2m`, `prate`, `gust`, `tcdc`, `cape`, `tmp850` | as `<id>` | `percentileValue` 25 / 75 | The quartiles of the members' distribution, in the quantity's unit and codebook; `prateq25` / `prateq75` are the six-hour totals' quartiles divided by six, as `prate` is the median's |
+| `prmslsd` / `hgt500sd` | as `prmsl` / `hgt500` | `derivedForecast` 4 | The members' spread, in hPa / m |
+| `apcp24gt1`, `apcp24gt5`, `apcp24gt10`, `apcp24gt25`, `apcp24gt50`, `apcp24gt100` | 0 / 1 / 8, 1, 0, `typeOfStatisticalProcessing` 1 | `probabilityType` 3, the lower limit 1 / 5 / 10 / 25 / 50 / 100 kg m⁻² | The percentage of members whose precipitation over the 24 hours ending at the frame exceeds the limit; from the 24th hour |
 
 #### Time Axis
 
@@ -1280,6 +1354,13 @@ A decoder must reject:
   define, a type outside its range, a limit with exactly one of its scale
   factor and scaled value `null`, a `null` limit under an interval type
   other than 255, or a non-`null` limit under type 255.
+- An `ensemble` block in a file below schemaVersion 3; one that is not an
+  object (`null` included); one whose keys are not exactly one of the three
+  shapes (`derivedForecast` alone, `percentileValue` alone, or
+  `probabilityType` with its four limit fields); a value outside its range;
+  a limit with exactly one of its scale factor and scaled value `null`; a
+  limit that is `null` where its probability type uses it, or not `null`
+  where the type does not.
 - A `grid.projection` that is not an object (`null` included), whose `kind`
   is not one the decoder implements, missing one of its ten fields, carrying a
   key it does not define, with a field of the wrong type or not finite, a

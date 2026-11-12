@@ -189,7 +189,7 @@ export function checkProjection(v: unknown, at: string): asserts v is Projection
 }
 
 /** One variable of the bundle: its file-local numericId (1..n in list order, the index's variableId), its GRIB2 identity and its codebook. */
-export type Variable = { numericId: number; id: string; label: string; unit: string; parameter: Parameter; band?: Band; producer?: Producer; aerosol?: Aerosol; quantization: Quantization };
+export type Variable = { numericId: number; id: string; label: string; unit: string; parameter: Parameter; band?: Band; producer?: Producer; aerosol?: Aerosol; ensemble?: Ensemble; quantization: Quantization };
 
 export function checkVariable(v: unknown, at: string): asserts v is Variable {
   isObject(v, at);
@@ -215,8 +215,12 @@ export function checkVariable(v: unknown, at: string): asserts v is Variable {
   if (v47 !== undefined) {
     checkAerosol(v47, at + ".aerosol");
   }
-  const v48 = field(v, "quantization", at);
-  checkQuantization(v48, at + ".quantization");
+  const v48 = v["ensemble"];
+  if (v48 !== undefined) {
+    checkEnsemble(v48, at + ".ensemble");
+  }
+  const v49 = field(v, "quantization", at);
+  checkQuantization(v49, at + ".quantization");
 }
 
 /** The variable's identity in GRIB2's terms (docs/format.md, "Variable Identity"). No other key is allowed. */
@@ -224,21 +228,21 @@ export type Parameter = { discipline: number; parameterCategory: number; paramet
 
 export function checkParameter(v: unknown, at: string): asserts v is Parameter {
   isObject(v, at);
-  const v49 = field(v, "discipline", at);
-  isInteger(v49, at + ".discipline", 0, 255);
-  const v50 = field(v, "parameterCategory", at);
-  isInteger(v50, at + ".parameterCategory", 0, 255);
-  const v51 = field(v, "parameterNumber", at);
-  isInteger(v51, at + ".parameterNumber", 0, 255);
-  const v52 = field(v, "typeOfFirstFixedSurface", at);
-  isInteger(v52, at + ".typeOfFirstFixedSurface", 0, 255);
-  const v53 = field(v, "scaleFactorOfFirstFixedSurface", at);
-  checkScaleFactor(v53, at + ".scaleFactorOfFirstFixedSurface");
-  const v54 = field(v, "scaledValueOfFirstFixedSurface", at);
-  checkScaledValue(v54, at + ".scaledValueOfFirstFixedSurface");
-  const v55 = v["typeOfStatisticalProcessing"];
-  if (v55 !== undefined) {
-    isInteger(v55, at + ".typeOfStatisticalProcessing", 0, 255);
+  const v50 = field(v, "discipline", at);
+  isInteger(v50, at + ".discipline", 0, 255);
+  const v51 = field(v, "parameterCategory", at);
+  isInteger(v51, at + ".parameterCategory", 0, 255);
+  const v52 = field(v, "parameterNumber", at);
+  isInteger(v52, at + ".parameterNumber", 0, 255);
+  const v53 = field(v, "typeOfFirstFixedSurface", at);
+  isInteger(v53, at + ".typeOfFirstFixedSurface", 0, 255);
+  const v54 = field(v, "scaleFactorOfFirstFixedSurface", at);
+  checkScaleFactor(v54, at + ".scaleFactorOfFirstFixedSurface");
+  const v55 = field(v, "scaledValueOfFirstFixedSurface", at);
+  checkScaledValue(v55, at + ".scaledValueOfFirstFixedSurface");
+  const v56 = v["typeOfStatisticalProcessing"];
+  if (v56 !== undefined) {
+    isInteger(v56, at + ".typeOfStatisticalProcessing", 0, 255);
   }
   isClosed(v, at, ["discipline","parameterCategory","parameterNumber","typeOfFirstFixedSurface","scaleFactorOfFirstFixedSurface","scaledValueOfFirstFixedSurface","typeOfStatisticalProcessing"]);
 }
@@ -248,16 +252,16 @@ export type Band = { satelliteSeries: number; satelliteNumber: number; instrumen
 
 export function checkBand(v: unknown, at: string): asserts v is Band {
   isObject(v, at);
-  const v56 = field(v, "satelliteSeries", at);
-  isInteger(v56, at + ".satelliteSeries", 0, 65535);
-  const v57 = field(v, "satelliteNumber", at);
-  isInteger(v57, at + ".satelliteNumber", 0, 65535);
-  const v58 = field(v, "instrumentType", at);
-  isInteger(v58, at + ".instrumentType", 0, 65535);
-  const v59 = field(v, "scaleFactorOfCentralWaveNumber", at);
-  isInteger(v59, at + ".scaleFactorOfCentralWaveNumber", -127, 127);
-  const v60 = field(v, "scaledValueOfCentralWaveNumber", at);
-  isInteger(v60, at + ".scaledValueOfCentralWaveNumber", 0, 4294967294);
+  const v57 = field(v, "satelliteSeries", at);
+  isInteger(v57, at + ".satelliteSeries", 0, 65535);
+  const v58 = field(v, "satelliteNumber", at);
+  isInteger(v58, at + ".satelliteNumber", 0, 65535);
+  const v59 = field(v, "instrumentType", at);
+  isInteger(v59, at + ".instrumentType", 0, 65535);
+  const v60 = field(v, "scaleFactorOfCentralWaveNumber", at);
+  isInteger(v60, at + ".scaleFactorOfCentralWaveNumber", -127, 127);
+  const v61 = field(v, "scaledValueOfCentralWaveNumber", at);
+  isInteger(v61, at + ".scaledValueOfCentralWaveNumber", 0, 4294967294);
   isClosed(v, at, ["satelliteSeries","satelliteNumber","instrumentType","scaleFactorOfCentralWaveNumber","scaledValueOfCentralWaveNumber"]);
 }
 
@@ -266,10 +270,10 @@ export type Producer = { id: string; version: string };
 
 export function checkProducer(v: unknown, at: string): asserts v is Producer {
   isObject(v, at);
-  const v61 = field(v, "id", at);
-  isString(v61, at + ".id", PATTERN_2);
-  const v62 = field(v, "version", at);
-  isString(v62, at + ".version", undefined, 1);
+  const v62 = field(v, "id", at);
+  isString(v62, at + ".id", PATTERN_2);
+  const v63 = field(v, "version", at);
+  isString(v63, at + ".version", undefined, 1);
   isClosed(v, at, ["id","version"]);
 }
 
@@ -278,29 +282,140 @@ export type Aerosol = { aerosolType: number; typeOfSizeInterval: number; scaleFa
 
 export function checkAerosol(v: unknown, at: string): asserts v is Aerosol {
   isObject(v, at);
-  const v63 = field(v, "aerosolType", at);
-  isInteger(v63, at + ".aerosolType", 0, 65535);
-  const v64 = field(v, "typeOfSizeInterval", at);
-  isInteger(v64, at + ".typeOfSizeInterval", 0, 255);
-  const v65 = field(v, "scaleFactorOfFirstSize", at);
-  checkScaleFactor(v65, at + ".scaleFactorOfFirstSize");
-  const v66 = field(v, "scaledValueOfFirstSize", at);
-  checkScaledValue(v66, at + ".scaledValueOfFirstSize");
-  const v67 = field(v, "scaleFactorOfSecondSize", at);
-  checkScaleFactor(v67, at + ".scaleFactorOfSecondSize");
-  const v68 = field(v, "scaledValueOfSecondSize", at);
-  checkScaledValue(v68, at + ".scaledValueOfSecondSize");
-  const v69 = field(v, "typeOfWavelengthInterval", at);
-  isInteger(v69, at + ".typeOfWavelengthInterval", 0, 255);
-  const v70 = field(v, "scaleFactorOfFirstWavelength", at);
-  checkScaleFactor(v70, at + ".scaleFactorOfFirstWavelength");
-  const v71 = field(v, "scaledValueOfFirstWavelength", at);
-  checkScaledValue(v71, at + ".scaledValueOfFirstWavelength");
-  const v72 = field(v, "scaleFactorOfSecondWavelength", at);
-  checkScaleFactor(v72, at + ".scaleFactorOfSecondWavelength");
-  const v73 = field(v, "scaledValueOfSecondWavelength", at);
-  checkScaledValue(v73, at + ".scaledValueOfSecondWavelength");
+  const v64 = field(v, "aerosolType", at);
+  isInteger(v64, at + ".aerosolType", 0, 65535);
+  const v65 = field(v, "typeOfSizeInterval", at);
+  isInteger(v65, at + ".typeOfSizeInterval", 0, 255);
+  const v66 = field(v, "scaleFactorOfFirstSize", at);
+  checkScaleFactor(v66, at + ".scaleFactorOfFirstSize");
+  const v67 = field(v, "scaledValueOfFirstSize", at);
+  checkScaledValue(v67, at + ".scaledValueOfFirstSize");
+  const v68 = field(v, "scaleFactorOfSecondSize", at);
+  checkScaleFactor(v68, at + ".scaleFactorOfSecondSize");
+  const v69 = field(v, "scaledValueOfSecondSize", at);
+  checkScaledValue(v69, at + ".scaledValueOfSecondSize");
+  const v70 = field(v, "typeOfWavelengthInterval", at);
+  isInteger(v70, at + ".typeOfWavelengthInterval", 0, 255);
+  const v71 = field(v, "scaleFactorOfFirstWavelength", at);
+  checkScaleFactor(v71, at + ".scaleFactorOfFirstWavelength");
+  const v72 = field(v, "scaledValueOfFirstWavelength", at);
+  checkScaledValue(v72, at + ".scaledValueOfFirstWavelength");
+  const v73 = field(v, "scaleFactorOfSecondWavelength", at);
+  checkScaleFactor(v73, at + ".scaleFactorOfSecondWavelength");
+  const v74 = field(v, "scaledValueOfSecondWavelength", at);
+  checkScaledValue(v74, at + ".scaledValueOfSecondWavelength");
   isClosed(v, at, ["aerosolType","typeOfSizeInterval","scaleFactorOfFirstSize","scaledValueOfFirstSize","scaleFactorOfSecondSize","scaledValueOfSecondSize","typeOfWavelengthInterval","scaleFactorOfFirstWavelength","scaledValueOfFirstWavelength","scaleFactorOfSecondWavelength","scaledValueOfSecondWavelength"]);
+}
+
+/** Which statistic of an ensemble the field is (docs/format.md, "Ensemble"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter. */
+export type Ensemble = (EnsembleDerived) | (EnsemblePercentile) | (EnsembleProbabilityLower) | (EnsembleProbabilityUpper) | (EnsembleProbabilityBetween);
+
+export function checkEnsemble(v: unknown, at: string): asserts v is Ensemble {
+  isAnyOf(v, at, [
+    (x: unknown, a: string): void => {
+      checkEnsembleDerived(x, a);
+    },
+    (x: unknown, a: string): void => {
+      checkEnsemblePercentile(x, a);
+    },
+    (x: unknown, a: string): void => {
+      checkEnsembleProbabilityLower(x, a);
+    },
+    (x: unknown, a: string): void => {
+      checkEnsembleProbabilityUpper(x, a);
+    },
+    (x: unknown, a: string): void => {
+      checkEnsembleProbabilityBetween(x, a);
+    },
+  ]);
+}
+
+/** A derived forecast of every member, templates 4.2 / 4.12: code table 4.7 (0 the unweighted mean, 4 the spread). */
+export type EnsembleDerived = { derivedForecast: number };
+
+export function checkEnsembleDerived(v: unknown, at: string): asserts v is EnsembleDerived {
+  isObject(v, at);
+  const v75 = field(v, "derivedForecast", at);
+  isInteger(v75, at + ".derivedForecast", 0, 255);
+  isClosed(v, at, ["derivedForecast"]);
+}
+
+/** A percentile of the members' distribution, templates 4.6 / 4.10. */
+export type EnsemblePercentile = { percentileValue: number };
+
+export function checkEnsemblePercentile(v: unknown, at: string): asserts v is EnsemblePercentile {
+  isObject(v, at);
+  const v76 = field(v, "percentileValue", at);
+  isInteger(v76, at + ".percentileValue", 0, 100);
+  isClosed(v, at, ["percentileValue"]);
+}
+
+/** A probability against the lower limit, templates 4.5 / 4.9: below (0), above (3) or equal to (5) it. */
+export type EnsembleProbabilityLower = { probabilityType: 0 | 3 | 5; scaleFactorOfLowerLimit: LimitScaleFactor; scaledValueOfLowerLimit: LimitScaledValue; scaleFactorOfUpperLimit: null; scaledValueOfUpperLimit: null };
+
+export function checkEnsembleProbabilityLower(v: unknown, at: string): asserts v is EnsembleProbabilityLower {
+  isObject(v, at);
+  const v77 = field(v, "probabilityType", at);
+  isOneOf(v77, at + ".probabilityType", [0,3,5]);
+  const v78 = field(v, "scaleFactorOfLowerLimit", at);
+  checkLimitScaleFactor(v78, at + ".scaleFactorOfLowerLimit");
+  const v79 = field(v, "scaledValueOfLowerLimit", at);
+  checkLimitScaledValue(v79, at + ".scaledValueOfLowerLimit");
+  const v80 = field(v, "scaleFactorOfUpperLimit", at);
+  isOneOf(v80, at + ".scaleFactorOfUpperLimit", [null]);
+  const v81 = field(v, "scaledValueOfUpperLimit", at);
+  isOneOf(v81, at + ".scaledValueOfUpperLimit", [null]);
+  isClosed(v, at, ["probabilityType","scaleFactorOfLowerLimit","scaledValueOfLowerLimit","scaleFactorOfUpperLimit","scaledValueOfUpperLimit"]);
+}
+
+/** A probability against the upper limit, templates 4.5 / 4.9: above (1) or below (4) it. */
+export type EnsembleProbabilityUpper = { probabilityType: 1 | 4; scaleFactorOfLowerLimit: null; scaledValueOfLowerLimit: null; scaleFactorOfUpperLimit: LimitScaleFactor; scaledValueOfUpperLimit: LimitScaledValue };
+
+export function checkEnsembleProbabilityUpper(v: unknown, at: string): asserts v is EnsembleProbabilityUpper {
+  isObject(v, at);
+  const v82 = field(v, "probabilityType", at);
+  isOneOf(v82, at + ".probabilityType", [1,4]);
+  const v83 = field(v, "scaleFactorOfLowerLimit", at);
+  isOneOf(v83, at + ".scaleFactorOfLowerLimit", [null]);
+  const v84 = field(v, "scaledValueOfLowerLimit", at);
+  isOneOf(v84, at + ".scaledValueOfLowerLimit", [null]);
+  const v85 = field(v, "scaleFactorOfUpperLimit", at);
+  checkLimitScaleFactor(v85, at + ".scaleFactorOfUpperLimit");
+  const v86 = field(v, "scaledValueOfUpperLimit", at);
+  checkLimitScaledValue(v86, at + ".scaledValueOfUpperLimit");
+  isClosed(v, at, ["probabilityType","scaleFactorOfLowerLimit","scaledValueOfLowerLimit","scaleFactorOfUpperLimit","scaledValueOfUpperLimit"]);
+}
+
+/** A probability between the two limits (type 2), templates 4.5 / 4.9. */
+export type EnsembleProbabilityBetween = { probabilityType: 2; scaleFactorOfLowerLimit: LimitScaleFactor; scaledValueOfLowerLimit: LimitScaledValue; scaleFactorOfUpperLimit: LimitScaleFactor; scaledValueOfUpperLimit: LimitScaledValue };
+
+export function checkEnsembleProbabilityBetween(v: unknown, at: string): asserts v is EnsembleProbabilityBetween {
+  isObject(v, at);
+  const v87 = field(v, "probabilityType", at);
+  isOneOf(v87, at + ".probabilityType", [2]);
+  const v88 = field(v, "scaleFactorOfLowerLimit", at);
+  checkLimitScaleFactor(v88, at + ".scaleFactorOfLowerLimit");
+  const v89 = field(v, "scaledValueOfLowerLimit", at);
+  checkLimitScaledValue(v89, at + ".scaledValueOfLowerLimit");
+  const v90 = field(v, "scaleFactorOfUpperLimit", at);
+  checkLimitScaleFactor(v90, at + ".scaleFactorOfUpperLimit");
+  const v91 = field(v, "scaledValueOfUpperLimit", at);
+  checkLimitScaledValue(v91, at + ".scaledValueOfUpperLimit");
+  isClosed(v, at, ["probabilityType","scaleFactorOfLowerLimit","scaledValueOfLowerLimit","scaleFactorOfUpperLimit","scaledValueOfUpperLimit"]);
+}
+
+/** A probability limit's GRIB2 scale factor. */
+export type LimitScaleFactor = number;
+
+export function checkLimitScaleFactor(v: unknown, at: string): asserts v is LimitScaleFactor {
+  isInteger(v, at, -127, 127);
+}
+
+/** A probability limit's GRIB2 scaled value. */
+export type LimitScaledValue = number;
+
+export function checkLimitScaledValue(v: unknown, at: string): asserts v is LimitScaledValue {
+  isInteger(v, at, 0, 4294967294);
 }
 
 /** A GRIB2 scale factor, or null where the value is missing. */
@@ -340,20 +455,20 @@ export type LinearQuantization = { type: "linear"; offset: number; scale: number
 
 export function checkLinearQuantization(v: unknown, at: string): asserts v is LinearQuantization {
   isObject(v, at);
-  const v74 = field(v, "type", at);
-  isString(v74, at + ".type");
-  isOneOf(v74, at + ".type", ["linear"]);
-  const v75 = field(v, "offset", at);
-  isNumber(v75, at + ".offset");
-  const v76 = field(v, "scale", at);
-  isNumber(v76, at + ".scale");
-  isAbove(v76, at + ".scale", 0);
-  const v77 = field(v, "minimumCode", at);
-  checkCode(v77, at + ".minimumCode");
-  const v78 = field(v, "maximumCode", at);
-  checkCode(v78, at + ".maximumCode");
-  const v79 = field(v, "nodataCode", at);
-  checkCode(v79, at + ".nodataCode");
+  const v92 = field(v, "type", at);
+  isString(v92, at + ".type");
+  isOneOf(v92, at + ".type", ["linear"]);
+  const v93 = field(v, "offset", at);
+  isNumber(v93, at + ".offset");
+  const v94 = field(v, "scale", at);
+  isNumber(v94, at + ".scale");
+  isAbove(v94, at + ".scale", 0);
+  const v95 = field(v, "minimumCode", at);
+  checkCode(v95, at + ".minimumCode");
+  const v96 = field(v, "maximumCode", at);
+  checkCode(v96, at + ".maximumCode");
+  const v97 = field(v, "nodataCode", at);
+  checkCode(v97, at + ".nodataCode");
 }
 
 /** The logarithmic codebook: zeroCode below trace, minimumCode..maximumCode on the log1p grid up to maximum, overflowCode above it, nodataCode missing. */
@@ -361,28 +476,28 @@ export type LogQuantization = { type: "log1p"; trace: number; scale: number; max
 
 export function checkLogQuantization(v: unknown, at: string): asserts v is LogQuantization {
   isObject(v, at);
-  const v80 = field(v, "type", at);
-  isString(v80, at + ".type");
-  isOneOf(v80, at + ".type", ["log1p"]);
-  const v81 = field(v, "trace", at);
-  isNumber(v81, at + ".trace");
-  isAbove(v81, at + ".trace", 0);
-  const v82 = field(v, "scale", at);
-  isNumber(v82, at + ".scale");
-  isAbove(v82, at + ".scale", 0);
-  const v83 = field(v, "maximum", at);
-  isNumber(v83, at + ".maximum");
-  isAbove(v83, at + ".maximum", 0);
-  const v84 = field(v, "minimumCode", at);
-  checkCode(v84, at + ".minimumCode");
-  const v85 = field(v, "maximumCode", at);
-  checkCode(v85, at + ".maximumCode");
-  const v86 = field(v, "zeroCode", at);
-  checkCode(v86, at + ".zeroCode");
-  const v87 = field(v, "overflowCode", at);
-  checkCode(v87, at + ".overflowCode");
-  const v88 = field(v, "nodataCode", at);
-  checkCode(v88, at + ".nodataCode");
+  const v98 = field(v, "type", at);
+  isString(v98, at + ".type");
+  isOneOf(v98, at + ".type", ["log1p"]);
+  const v99 = field(v, "trace", at);
+  isNumber(v99, at + ".trace");
+  isAbove(v99, at + ".trace", 0);
+  const v100 = field(v, "scale", at);
+  isNumber(v100, at + ".scale");
+  isAbove(v100, at + ".scale", 0);
+  const v101 = field(v, "maximum", at);
+  isNumber(v101, at + ".maximum");
+  isAbove(v101, at + ".maximum", 0);
+  const v102 = field(v, "minimumCode", at);
+  checkCode(v102, at + ".minimumCode");
+  const v103 = field(v, "maximumCode", at);
+  checkCode(v103, at + ".maximumCode");
+  const v104 = field(v, "zeroCode", at);
+  checkCode(v104, at + ".zeroCode");
+  const v105 = field(v, "overflowCode", at);
+  checkCode(v105, at + ".overflowCode");
+  const v106 = field(v, "nodataCode", at);
+  checkCode(v106, at + ".nodataCode");
 }
 
 /** A uint8 code. */
@@ -397,57 +512,57 @@ export type BundleMetadataV3 = { schemaVersion: 3 | 4; model: string; product?: 
 
 export function checkBundleMetadataV3(v: unknown, at: string): asserts v is BundleMetadataV3 {
   isObject(v, at);
-  const v89 = field(v, "schemaVersion", at);
-  isInteger(v89, at + ".schemaVersion");
-  isOneOf(v89, at + ".schemaVersion", [3,4]);
-  const v90 = field(v, "model", at);
-  isString(v90, at + ".model", undefined, 1);
-  const v91 = v["product"];
-  if (v91 !== undefined) {
-    isString(v91, at + ".product", undefined, 1);
+  const v107 = field(v, "schemaVersion", at);
+  isInteger(v107, at + ".schemaVersion");
+  isOneOf(v107, at + ".schemaVersion", [3,4]);
+  const v108 = field(v, "model", at);
+  isString(v108, at + ".model", undefined, 1);
+  const v109 = v["product"];
+  if (v109 !== undefined) {
+    isString(v109, at + ".product", undefined, 1);
   }
-  const v92 = field(v, "runTime", at);
-  checkTimestamp(v92, at + ".runTime");
-  const v93 = v["profile"];
-  if (v93 !== undefined) {
-    isString(v93, at + ".profile", undefined, 1);
+  const v110 = field(v, "runTime", at);
+  checkTimestamp(v110, at + ".runTime");
+  const v111 = v["profile"];
+  if (v111 !== undefined) {
+    isString(v111, at + ".profile", undefined, 1);
   }
-  const v94 = field(v, "time", at);
-  checkTime(v94, at + ".time");
-  const v95 = field(v, "grid", at);
-  checkGrid(v95, at + ".grid");
-  const v96 = field(v, "variables", at);
-  isList(v96, at + ".variables", 1, 255);
-  for (let i97 = 0; i97 < v96.length; i97++) {
-    const v98: unknown = v96[i97];
-    checkVariable(v98, at + ".variables[" + i97 + "]");
+  const v112 = field(v, "time", at);
+  checkTime(v112, at + ".time");
+  const v113 = field(v, "grid", at);
+  checkGrid(v113, at + ".grid");
+  const v114 = field(v, "variables", at);
+  isList(v114, at + ".variables", 1, 255);
+  for (let i115 = 0; i115 < v114.length; i115++) {
+    const v116: unknown = v114[i115];
+    checkVariable(v116, at + ".variables[" + i115 + "]");
   }
   isAnyOf(v, at, [
     (x: unknown, a: string): void => {
       isObject(x, a);
-      const v99 = x["schemaVersion"];
-      if (v99 !== undefined) {
-        isOneOf(v99, a + ".schemaVersion", [3]);
+      const v117 = x["schemaVersion"];
+      if (v117 !== undefined) {
+        isOneOf(v117, a + ".schemaVersion", [3]);
       }
-      const v100 = x["grid"];
-      if (v100 !== undefined) {
-        isObject(v100, a + ".grid");
-        const v101 = v100["projection"];
-        if (v101 !== undefined) {
-          isOneOf(v101, a + ".grid.projection", [null]);
+      const v118 = x["grid"];
+      if (v118 !== undefined) {
+        isObject(v118, a + ".grid");
+        const v119 = v118["projection"];
+        if (v119 !== undefined) {
+          isOneOf(v119, a + ".grid.projection", [null]);
         }
       }
     },
     (x: unknown, a: string): void => {
       isObject(x, a);
-      const v102 = x["schemaVersion"];
-      if (v102 !== undefined) {
-        isOneOf(v102, a + ".schemaVersion", [4]);
+      const v120 = x["schemaVersion"];
+      if (v120 !== undefined) {
+        isOneOf(v120, a + ".schemaVersion", [4]);
       }
-      const v103 = x["grid"];
-      if (v103 !== undefined) {
-        isObject(v103, a + ".grid");
-        field(v103, "projection", a + ".grid");
+      const v121 = x["grid"];
+      if (v121 !== undefined) {
+        isObject(v121, a + ".grid");
+        field(v121, "projection", a + ".grid");
       }
     },
   ]);
