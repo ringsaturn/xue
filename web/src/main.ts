@@ -37,6 +37,8 @@ import {
   type FramePlanes,
 } from "./layer";
 import {
+  steppedPhaseGradient,
+  steppedPhasePalette,
   steppedPrecipitationLegend,
   steppedPrecipitationPalette,
 } from "./composite";
@@ -139,8 +141,10 @@ import {
   parseBackendFromSearch,
   parseCameraFromHash,
   parseCaseFromSearch,
-  parseExperimentFromSearch,
   DERIVED_FIRE_IDS,
+  SETUP_ANCHOR,
+  SETUP_DEFAULT_FLOW,
+  SETUP_DEFAULT_LINES,
   FIRE_FIELD_ANCHOR,
   type DerivedFireId,
   parseModelFromSearch,
@@ -263,7 +267,7 @@ import {
 import { createProbePanel } from "./probepanel";
 import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
-import { createDerived, type DerivedId } from "./derived";
+import { createDerived, type DerivedId, storedSetupLayers } from "./derived";
 import { createExportSheet } from "./exportsheet";
 import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, hillshadeOverFieldsPaint, RELIEF_OVER_FIELDS_LAYER, syncReliefLayers, COASTLINE_LAYER, RIVER_LAYER, FORECAST_ANCHOR_LAYER, FIELD_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
 import { createStats } from "./stats";
@@ -276,22 +280,6 @@ import { genericRailGlyph, genericRailTileIds } from "./railtiles";
 applyStaticMessages();
 applyTheme();
 
-/** The experimental synoptic composite (`?x=true`, urlstate.ts): the
- * precipitation on a stepped key, the sea level pressure
- * lines and their H/L marks over it, the particles run by the 850 hPa
- * vapour flux instead of the fill's own vector, and two fields the frontend
- * computes from several bundles at once (composite.ts) — the warm moist
- * inflow and the frontal zone. Opt-in and unremembered: it is a look at how
- * far the published data goes, not a product. */
-const experiment = parseExperimentFromSearch(window.location.search);
-const experimentEnabled = experiment.enabled;
-/** What the experiment opens when the URL names nothing else. */
-const EXPERIMENT_FILL: ForecastBundleId = "prate";
-const EXPERIMENT_LINES: PressureBundleId = "prmsl";
-/** The bundles the experiment's derived fields are computed from: the
- * vapour flux pair (whose particles also run over the fill) and the θe. */
-const EXPERIMENT_FLOW_ID: ForecastBundleId = "qflux850";
-const EXPERIMENT_WARMTH_ID: ForecastBundleId = "thetae850";
 
 /** Playback pacing (the ladder and the per-frame dwell live in playback.ts).
  * The rate is user-adjustable from the transport's speed button because a
@@ -535,7 +523,7 @@ const RANGE_PIPELINE = 4;
 
 function accumulationOn(session: VariableSession | null = activeSession): TotalOn | null {
   const accumulation = view.accumulation;
-  if (accumulation === null || !session || session !== activeSession || fireField() !== null) return null;
+  if (accumulation === null || !session || session !== activeSession || fireField() !== null || setupOn()) return null;
   const offered = offeredWindows(session);
   if (!offered) return null;
   if (accumulation.type === "range") {
@@ -1014,6 +1002,8 @@ const exportProgress = required<HTMLElement>("export-progress");
 const exportRun = required<HTMLButtonElement>("export-run");
 const exportRing = exportTrigger.querySelector<SVGCircleElement>(".export-ring circle")!;
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
+/** The precipitation setup's field tile: the rate with what makes it. */
+const setupTile = required<HTMLButtonElement>("setup-tile");
 const volumeTile = required<HTMLButtonElement>("volume-tile");
 const speedLabel = required<HTMLElement>("speed-label");
 const validTime = required<HTMLTimeElement>("valid-time");
@@ -1102,7 +1092,7 @@ function variableButtons(): HTMLButtonElement[] {
 function fieldTiles(): HTMLButtonElement[] {
   return fieldSection ? [...fieldSection.querySelectorAll<HTMLButtonElement>("button[data-variable]:not([data-unknown])")] : [];
 }
-/** The experiment's toggle tiles for its derived layers. */
+/** The derived layers' tiles: the setup's two switches and the fire fields. */
 function derivedButtons(): HTMLButtonElement[] {
   return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-derived]")] : [];
 }
@@ -1690,9 +1680,10 @@ function storedParticles(): boolean | null {
  * that the field carries the layer on its own, a still scatter of dots is
  * worse than no overlay at all. An explicit `?particles=on` still wins. */
 const requestedView = parseView(window.location.search, {
-  field: experimentEnabled ? EXPERIMENT_FILL : DEFAULT_VARIABLE,
-  lines: experimentEnabled ? EXPERIMENT_LINES : null,
+  field: DEFAULT_VARIABLE,
+  lines: null,
   particles: storedParticles() ?? !reducedMotion.matches,
+  setupLayers: storedSetupLayers(),
 });
 /** What is on screen, or being switched to: the field and the lines (the
  * composition), the overlays, the marks. One object, mutated in place;
@@ -1736,16 +1727,19 @@ function particleInk(): readonly [number, number, number, number] {
   return isDark ? [1, 1, 1, 0.45] : [0.11, 0.1, 0.09, 0.4];
 }
 
-/** The particles' ink for what they run on: the experiment's flow over a
+/** The particles' ink for what they run on: the setup's flow over its
  * scalar fill, the wind's own otherwise. */
 function refreshParticleInk(): void {
-  windLayer?.setInk(activeSession && !activeSession.vector && composite?.flow ? experimentFlowInk() : particleInk());
+  const flow = activeSession && !activeSession.vector ? composite.flow : null;
+  windLayer?.setInk(flow ? flowInk(flow.id) : particleInk());
 }
 
-/** The ink of the experiment's flow particles over a scalar fill: the
- * inflow tint's own red-brown, heavier than the wind's grey so the stream
- * reads over the stepped rain and the chart paper. */
-function experimentFlowInk(): readonly [number, number, number, number] {
+/** The ink of the setup's flow particles over the stepped rate: a vapour
+ * flux in the inflow tint's own red-brown, heavier than the wind's grey so
+ * the stream reads over the rain and the chart paper; a wind in the
+ * wind's own. */
+function flowInk(flow: ForecastBundleId): readonly [number, number, number, number] {
+  if (familyOf(flow) !== "qflux") return particleInk();
   return isDark ? [1, 0.72, 0.6, 0.7] : [0.55, 0.16, 0.08, 0.85];
 }
 
@@ -3257,7 +3251,7 @@ function displayedKeys(): Set<string> {
     for (const gun of overlay.shownGuns) displayedKeys.add(gun);
   }
   for (const shown of totalShownKeys) displayedKeys.add(shown);
-  for (const shown of composite?.shownKeys ?? []) displayedKeys.add(shown);
+  for (const shown of composite.shownKeys) displayedKeys.add(shown);
   for (const shown of fireDerived.shownKeys) displayedKeys.add(shown);
   for (const shown of fireWind.shownKeys) displayedKeys.add(shown);
   for (const shown of volumeOverlay.shownKeys) displayedKeys.add(shown);
@@ -3304,7 +3298,7 @@ function frameLanded(key: string, frameOffset: number, wanted: boolean): void {
     if (overlay.wantedKey === key && activeFrameIndex !== null) trySelectOverlayFrame(overlay, activeFrameIndex);
   }
   if (volumeOverlay.wantedKeys.has(key) && activeFrameIndex !== null) trySelectVolumeOverlay(activeFrameIndex);
-  if (composite?.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
+  if (composite.wantedKeys.has(key) && activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
   if (fireDerived.wantedKeys.has(key) && activeFrameIndex !== null) trySelectFireDerived(activeFrameIndex);
   if (fireWind.wantedKeys.has(key) && activeFrameIndex !== null) trySelectFireWind(activeFrameIndex);
 }
@@ -3597,7 +3591,8 @@ function setVariableButtonsDisabled(disabled: boolean): void {
  * for one slot. */
 interface LevelGroup {
   caption: string;
-  slot: RasterSlot["role"];
+  /** What a press changes: the fill, the lines, or the setup's flow. */
+  slot: RasterSlot["role"] | "flow";
   members: ForecastBundleId[];
   /** The pressed member; null for the lines group over a field with no
    * lines on it. */
@@ -3635,6 +3630,16 @@ function levelGroups(): LevelGroup[] {
   const published = (id: string) => hasBundle(run, id);
   const fillStatistics = fill === null || fireField() !== null ? [] : statisticMembers(fill, published);
   if (fillStatistics.length > 1) groups.push(statisticGroup(fillStatistics));
+  // The setup's flow: which vapour flux or wind surface its particles run
+  // on, from what the run ships.
+  if (setupOn()) {
+    const flows = setupFlows(run);
+    const flow = setupFlow();
+    const flux = flows.filter((id) => familyOf(id) === "qflux");
+    const winds = flows.filter((id) => familyOf(id) === "wind");
+    if (flux.length > 0) groups.push({ caption: t("flowFluxCaption"), slot: "flow", members: flux, active: flux.includes(flow) ? flow : null });
+    if (winds.length > 0) groups.push({ caption: t("flowWindCaption"), slot: "flow", members: winds, active: winds.includes(flow) ? flow : null });
+  }
   const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
   if (surfaces.length > 0 || view.lines !== null) {
     groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: view.lines, alone: fill === null });
@@ -3776,6 +3781,8 @@ function renderLevelRow(): void {
         // lines wherever they are — the view, or the chart over a field.
         if (group.statistics) {
           chooseStatistic(id, group.members);
+        } else if (group.slot === "flow") {
+          setSetupFlow(id);
         } else if (group.slot === "lines") {
           const fire = { fire: fireField() };
           if (removable) void activateComposition({ fill: view.field, lines: null }, fire);
@@ -3855,7 +3862,8 @@ function levelButtonKey(button: HTMLButtonElement): string {
  * pressed. */
 function renderTotalGroup(): void {
   const session = activeSession;
-  if (!session || view.field !== session.id || fireField() !== null) return;
+  // The setup is the rate's own picture: no total is made of it.
+  if (!session || view.field !== session.id || fireField() !== null || setupOn()) return;
   const offered = offeredWindows(session);
   // A range needs two frames; a window, one the dataset offers.
   if (!offered || frameCount() < 2) return;
@@ -4110,7 +4118,8 @@ function fieldTileShipped(button: HTMLButtonElement, run: ForecastManifest): boo
  * family's member, or the bundle itself. */
 function fieldTileCurrent(button: HTMLButtonElement): boolean {
   const field = view.field;
-  if (field === null || fireField() !== null) return false;
+  // The setup's tile is the pressed one while the setup stands for the rate.
+  if (field === null || fireField() !== null || setupOn()) return false;
   // A statistic of a field is that field's tile's, so the tile stays
   // pressed while the level row switches between them.
   const fill = statisticBase(field) ?? field;
@@ -4166,6 +4175,7 @@ function syncFieldTiles(run: ForecastManifest): void {
     const id = button.dataset.derived as DerivedId;
     if (isFireDerivedId(id)) button.hidden = imageryMode() || !fireTileShown(run, id);
   }
+  setupTile.hidden = imageryMode() || !setupPublished(run);
   const rows = fieldSheetRows(run);
   fieldMore.hidden = rows.every((row) => row.core);
   if (fieldMore.hidden) fieldSheetControl.close();
@@ -4210,6 +4220,8 @@ interface FieldSheetRow {
   /** The fire field a press opens over `id`, its anchor; none for a
    * published field. */
   fire?: DerivedFireId;
+  /** Whether a press opens the precipitation setup over `id`. */
+  setup?: boolean;
 }
 
 /** One row per field the run publishes, grouped and ordered as the sheet
@@ -4235,6 +4247,10 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
         core: core.includes(id),
         current: fieldTileCurrent(tile),
       });
+      // The setup is listed under the rate it is drawn on.
+      if (id === SETUP_ANCHOR && setupPublished(run)) {
+        rows.push({ group, id: SETUP_ANCHOR, members: [], tile: setupTile, core: true, current: setupOn(), setup: true });
+      }
     }
   }
   // The fire fields the run can feed, after the published ones: computed
@@ -4297,7 +4313,8 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
     button.append(icon, text, check);
     button.addEventListener("click", () => {
       fieldSheetControl.close();
-      void activateComposition({ fill: row.id, lines: view.lines }, { fire: row.fire ?? null });
+      if (row.setup) openSetup();
+      else void activateComposition({ fill: row.id, lines: view.lines }, { fire: row.fire ?? null, setup: false });
     });
     if (row.members.length === 0) {
       nodes.push(button);
@@ -4564,7 +4581,7 @@ function syncRailDensity(): void {
 
 /** Every pressed state on the rail, from the view: a field tile for the
  * field on screen (its family's, for a family tile), the pressure switch
- * while lines are drawn, the particles, the experiment's derived layers,
+ * while lines are drawn, the particles, the setup's derived layers,
  * and the two station products where their tiles show. The one exception
  * is the storm tile, pressed while tracks are drawn, which `applyTcView`
  * sets from what actually loaded. */
@@ -4572,7 +4589,7 @@ function syncRail(): void {
   // A fire field or a case's picture stands in for the field: its own tile
   // is the pressed one.
   // A statistic of a field presses that field's tile.
-  const field = fireField() === null && !caseImageryOn() ? view.field : null;
+  const field = fireField() === null && !caseImageryOn() && !setupOn() ? view.field : null;
   const fill = field === null ? null : (statisticBase(field) ?? field);
   const fillFamily = fill === null ? null : familyOf(fill);
   for (const button of variableButtons()) {
@@ -4587,6 +4604,7 @@ function syncRail(): void {
     // view — clear of the fade, which is what the rail's scroll padding is.
     if (pressed && !button.hidden) button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
+  setupTile.setAttribute("aria-pressed", String(setupOn() && !caseImageryOn()));
   particlesToggle.setAttribute("aria-pressed", String(view.particles));
   syncVolumeTile();
   for (const button of derivedButtons()) {
@@ -4848,6 +4866,12 @@ function updateVariablePresentation(session: VariableSession): void {
   applyPrecipPhase();
   // A fire field names itself over the map; its key is the derived row,
   // the anchor's colour bar is hidden with the anchor (style.css).
+  if (setupOn() && session.chartId === SETUP_ANCHOR) {
+    const title = t("varLabelPrecipSetup");
+    variableCode.textContent = `${model.label} / SETUP`;
+    variableTitle.textContent = title;
+    legend.setAttribute("aria-label", t("legendAria", { label: title }));
+  }
   const fire = fireField();
   if (fire !== null) {
     const title = t(FIRE_FIELD_TITLE[fire]);
@@ -4861,7 +4885,7 @@ function updateVariablePresentation(session: VariableSession): void {
     renderRadarLegend(radarProduct, true);
     if (overlaysControl.lastRadarReadout) applyRadarTitle(overlaysControl.lastRadarReadout);
   }
-  if (experimentEnabled && session.chartId === "prate") {
+  if (setupOn() && session.chartId === SETUP_ANCHOR) {
     const key = steppedPrecipitationLegend();
     legendBar.style.background = key.gradient;
     legendLabels.replaceChildren(...key.labels.map((label) => {
@@ -5105,7 +5129,6 @@ function syncUrl(): void {
     {
       model: selectedModelId,
       caseId: activeCase?.id ?? null,
-      experimentEnabled,
       particlesChosen,
     },
     DEFAULT_VARIABLE,
@@ -5487,11 +5510,9 @@ function ensureLayers(): void {
   map.addLayer(slots.fill.layer, FIELD_ANCHOR_LAYER);
   // The derived fields sit over the fill and under the lines: a tint over
   // the rain, the isobars over both.
-  if (composite) {
-    for (const derived of Object.values(composite.layers)) {
-      derived.layer.setVisible(false);
-      map.addLayer(derived.layer, FIELD_ANCHOR_LAYER);
-    }
+  for (const derived of Object.values(composite.layers)) {
+    derived.layer.setVisible(false);
+    map.addLayer(derived.layer, FIELD_ANCHOR_LAYER);
   }
   precipPhase.frostLayer.setVisible(false);
   map.addLayer(precipPhase.frostLayer, FIELD_ANCHOR_LAYER);
@@ -5536,10 +5557,10 @@ function samplingFor(chartId: KnownBundleId | null, bundleId: string): Sampling 
   return chartId === null ? "smooth" : (variableSpec(chartId)?.sampling ?? "smooth");
 }
 
-/** A scalar field's own palette: the stepped key under the experiment for
- * the precipitation, its ramp otherwise. */
+/** A scalar field's own palette: the stepped key for the rate in the
+ * precipitation setup, its ramp otherwise. */
 function scalarPalette(session: VariableSession): Uint8Array {
-  return experimentEnabled && session.chartId === "prate"
+  return setupOn() && session.chartId === SETUP_ANCHOR
     ? steppedPrecipitationPalette(session.variable)
     : buildPalette(session.variable, session.identity);
 }
@@ -5631,9 +5652,9 @@ function setParticlesEnabled(next: boolean): void {
       else if (activeFrameIndex !== null) trySelectFireWind(activeFrameIndex);
       return;
     }
-    // Over a scalar fill the particles are the experiment's flow, when it
+    // Over a scalar fill the particles are the setup's flow, when it
     // has one: a visibility flip, and the frame's planes handed over again.
-    if (!composite?.flow) return;
+    if (!composite.flow) return;
     if (next) {
       ensureWindLayer();
       ensureWindGrid(composite.flow);
@@ -5889,7 +5910,7 @@ function applyVariable(session: VariableSession): void {
   if (wind && view.particles) {
     ensureWindLayer();
     ensureWindGrid(session);
-    // Back from the experiment's flow, if it was on: the wind's own ink.
+    // Back from the setup's flow, if it was on: the wind's own ink.
     windLayer?.setInk(particleInk());
   }
   windLayer?.setVisible(wind && view.particles);
@@ -6302,7 +6323,6 @@ function precipPhaseOffered(): boolean {
     !session.vector &&
     !session.composite &&
     !session.volume &&
-    !experimentEnabled &&
     !mosaic &&
     fireField() === null &&
     accumulationOn(session) === null &&
@@ -6428,14 +6448,15 @@ function syncPrecipPhase(index: number): void {
   if (type === null || frozen === null || height === null || ground === null) return;
   const part = (entry: { plane: PhasePlane; key: string } | undefined) =>
     entry ? `${entry.key}:${JSON.stringify(entry.plane.tiles)}` : "";
-  const key = `${part(type)}|${part(frozen)}|${part(height)}|${part(ground)}|${session.variable.id}`;
+  const stepped = setupOn();
+  const key = `${part(type)}|${part(frozen)}|${part(height)}|${part(ground)}|${session.variable.id}|${stepped}`;
   if (key === precipPhase.fieldKey) return;
   precipPhase.fieldKey = key;
   let field: PhaseField | null = null;
   if (type || frozen) {
     field = buildPhaseField(type?.plane ?? null, frozen?.plane ?? null, precipPhase.weights ?? undefined);
     precipPhase.weights = field.weights;
-    slots.fill.layer.setPhase({ field, palette: phasePalette(session.variable), ink: freezingZoneInk() });
+    slots.fill.layer.setPhase({ field, palette: phasePalette(session.variable, stepped), ink: freezingZoneInk() });
   } else {
     slots.fill.layer.setPhase(null);
   }
@@ -6466,12 +6487,15 @@ function showFrostLine(height: PhasePlane, ground: PhasePlane): PhasePlane {
   return { ...height, variable: FROST_PLANE_VARIABLE, plane };
 }
 
-const phasePalettes = new WeakMap<BundleVariable, Uint8Array>();
-function phasePalette(variable: BundleVariable): Uint8Array {
-  const known = phasePalettes.get(variable);
+/** The phase palette for a rate variable, banded in the setup as its
+ * rain is. */
+const phasePalettes = { smooth: new WeakMap<BundleVariable, Uint8Array>(), stepped: new WeakMap<BundleVariable, Uint8Array>() };
+function phasePalette(variable: BundleVariable, stepped: boolean): Uint8Array {
+  const cache = stepped ? phasePalettes.stepped : phasePalettes.smooth;
+  const known = cache.get(variable);
   if (known) return known;
-  const palette = buildPhasePalette(variable);
-  phasePalettes.set(variable, palette);
+  const palette = stepped ? steppedPhasePalette(variable) : buildPhasePalette(variable);
+  cache.set(variable, palette);
   return palette;
 }
 
@@ -6555,7 +6579,7 @@ function renderPhaseLegend(can: { type: boolean; mix: boolean; line: boolean }):
     const chip = document.createElement("span");
     chip.className = "legend-swatch legend-swatch-phase";
     chip.setAttribute("aria-hidden", "true");
-    chip.style.background = phaseLegendGradient(row);
+    chip.style.background = setupOn() ? steppedPhaseGradient(row) : phaseLegendGradient(row);
     const label = document.createElement("span");
     label.textContent = t(key);
     item.append(chip, label);
@@ -6745,9 +6769,6 @@ function setVolumeShown(shown: boolean): void {
 }
 
 const derivedControl = createDerived({
-  experimentEnabled,
-  EXPERIMENT_FLOW_ID,
-  EXPERIMENT_WARMTH_ID,
   map,
   slider,
   particlesToggle,
@@ -6785,7 +6806,7 @@ const derivedControl = createDerived({
   },
   planeCache: planeCache.frames,
   view,
-  experimentFlowInk,
+  flowInk,
   frameLeadSeconds,
   frameValidTime,
   cacheKey,
@@ -6803,34 +6824,54 @@ const derivedControl = createDerived({
   syncFillSuppressed,
   ensureWindLayer,
 });
-const { fireField, compositeSessions, composite, isCompositeInput, trySelectComposite, trySelectFireDerived, requestCompositeDecode, fireDerived, isFireDerivedId, fireTileShown, fireInputsPublished, FIRE_RAIL_CORE, syncDerivedLegend, FIRE_FIELD_TITLE, FIRE_FIELD_CODE, compositeFlowPublished, applyComposite, applyFireDerived, setFireField, resetComposite, resetFireDerived, syncDerivedTiles, setDerivedShown } = derivedControl;
+const { fireField, compositeSessions, composite, isCompositeInput, trySelectComposite, trySelectFireDerived, requestCompositeDecode, fireDerived, isFireDerivedId, fireTileShown, fireInputsPublished, FIRE_RAIL_CORE, syncDerivedLegend, FIRE_FIELD_TITLE, FIRE_FIELD_CODE, compositeFlowPublished, applyComposite, applyFireDerived, setFireField, resetComposite, resetFireDerived, syncDerivedTiles, setDerivedShown, setupOn, setupPublished, setupFlows, setupFlow } = derivedControl;
 
 /** Switch to a composition: load its primary if it is not the one on screen
  * (the existing variable switch), then reconcile the overlays. A slot the
  * run does not ship empties rather than errors. */
 async function activateComposition(
   next: ViewComposition,
-  { fire = null }: { fire?: DerivedFireId | null } = {},
+  { fire = null, setup }: { fire?: DerivedFireId | null; setup?: boolean } = {},
 ): Promise<void> {
   variableChosen = true;
   if (!manifest || !layersAdded || switchingVariable) return;
   const resolved = resolveComposition(next, manifest, activeCase?.defaultVariable ?? DEFAULT_VARIABLE);
   const primary = compositionPrimary(resolved, DEFAULT_VARIABLE);
+  // The setup holds while its field does (a change of lines over it), and
+  // a field tile says whether it is wanted.
+  const wasSetup = setupOn();
+  view.setup = (setup ?? (view.setup && resolved.fill === view.field)) && resolved.fill === SETUP_ANCHOR;
+  // The setup is the rate's: a total on screen gives way to it.
+  if (view.setup && view.accumulation !== null) {
+    if (primary === activeSession?.id) setAccumulation(null);
+    else view.accumulation = null;
+  }
   setComposition(resolved);
   setFireField(fire);
   if (primary !== activeSession?.id) {
     await activateVariable(primary);
     return;
   }
-  // The same primary, other lines or the fire field on or off over it:
-  // only those change.
+  // The same primary, other lines, the setup or the fire field on or off
+  // over it: only those change.
+  if (setupOn() !== wasSetup) applySetupPalette();
   applyOverlays();
   applyFireDerived();
+  applyComposite();
   refreshViewportTiles();
   if (activeSession) {
     updateVariablePresentation(activeSession);
     syncUrl();
+    if (activeFrameIndex !== null) trySelectFrame(activeFrameIndex);
   }
+}
+
+/** Repaint the rate in its setup key or its own ramp, after the setup went
+ * on or off over it. A total on screen keeps the totals' key. */
+function applySetupPalette(): void {
+  const session = activeSession;
+  if (!session || session.chartId !== SETUP_ANCHOR || session.vector || paletteTotals) return;
+  slotFor(session.id).layer.setPalette(scalarPalette(session));
 }
 
 async function activateVariable(variableId: ForecastBundleId): Promise<void> {
@@ -7048,7 +7089,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // for when that leaves nothing, and a live run always carries its core
     // set — the forecast pair, or the reflectivity on a radar mosaic, which
     // is what a switch onto one opens.
-    if (!activeCase && !variableChosen && !experimentEnabled) {
+    if (!activeCase && !variableChosen) {
       setComposition(compositionForPrimary(modelDefaultVariable(selectedModelId, DEFAULT_VARIABLE), view.lines));
     }
     setComposition(
@@ -7062,7 +7103,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // The rail for this run: the field section from what it ships and what
     // is about to be on screen (a showcase case ships only the fields its
     // event is about, so even the core can be missing), the pressure switch
-    // when it has a surface to chart, the experiment's tiles on its inputs.
+    // when it has a surface to chart, the derived tiles on their inputs.
     for (const button of variableButtons()) {
       if (button.dataset.group !== "pressure") continue;
       button.hidden = !PRESSURE_BUNDLE_IDS.some((id) => hasBundle(loadedManifest, id));
@@ -7181,12 +7222,36 @@ for (const button of variableButtons()) {
       const variants = run ? familyVariants(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member)) : [];
       const at = view.field === null ? -1 : variants.indexOf(view.field);
       const next = at >= 0 && variants.length > 1 ? variants[(at + 1) % variants.length]! : preferredFamilyMember(family);
-      void activateComposition({ fill: next, lines: view.lines });
+      void activateComposition({ fill: next, lines: view.lines }, { setup: false });
     } else {
       // A fill tile changes the field alone; lines over it stay.
-      void activateComposition({ fill: id, lines: view.lines });
+      void activateComposition({ fill: id, lines: view.lines }, { setup: false });
     }
   });
+}
+setupTile.addEventListener("click", () => {
+  if (caseImageryOn()) setCaseImagery(null);
+  openSetup();
+});
+
+/** Put the precipitation setup on screen — a radio like any field tile,
+ * which pressing again keeps — with the sea level pressure over it unless
+ * other lines are drawn. */
+function openSetup(): void {
+  if (setupOn()) return;
+  void activateComposition({ fill: SETUP_ANCHOR, lines: view.lines ?? SETUP_DEFAULT_LINES }, { setup: true });
+}
+
+/** Run the setup's particles on another flow: the view's choice, opened
+ * beside the composition when the run ships it. */
+function setSetupFlow(id: ForecastBundleId): void {
+  if (setupFlow() === id) return;
+  view.flow = id === SETUP_DEFAULT_FLOW ? null : id;
+  syncUrl();
+  applyComposite();
+  renderLevelRow();
+  refreshParticleInk();
+  if (activeFrameIndex !== null) trySelectComposite(activeFrameIndex);
 }
 for (const button of derivedButtons()) {
   button.addEventListener("click", () => {

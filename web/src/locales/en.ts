@@ -30,6 +30,9 @@ export const en = {
    * aloud right after the code. */
   varTemp: "2M",
   varPrecip: "RATE",
+  /** The precipitation setup tile's gloss under its SETUP code: what
+   * it is a setup of. */
+  varPrecipSetup: "PRECIP",
   /** The probability tile's gloss: the window its total is over. */
   varPop: "24H",
   varWind: "10M",
@@ -80,7 +83,7 @@ export const en = {
   /** Clear-air turbulence names its quantity, EDR, in every Latin-script
    * locale (the instrument word, like CAT beside it); CJK glosses the code. */
   varCat: "EDR",
-  // The experiment's derived layers' captions: one word under the code.
+  // The precipitation setup's derived layers' captions: one word under the code.
   varInflow: "INFLOW",
   varFront: "FRONT",
   varHotspot: "IR 3.9",
@@ -131,6 +134,7 @@ export const en = {
    * itself. */
   glyphTmp2m: "T",
   glyphPrate: "R",
+  glyphPrecipSetup: "S",
   glyphPop: "%",
   glyphWind10m: "W",
   glyphDswrf: "S",
@@ -170,7 +174,7 @@ export const en = {
   glyphThetae: "θ",
   // ε is the eddy dissipation rate's own symbol in every script.
   glyphCat: "ε",
-  // The experiment's two derived layers (`?x=`): M for moist, F for front.
+  // The precipitation setup's two derived layers: M for moist, F for front.
   glyphInflow: "M",
   glyphFront: "F",
   glyphHotspot: "H",
@@ -247,6 +251,10 @@ export const en = {
   /** The level row's caption for the precipitation's own group: the rate,
    * then the windows it is summed over (`?accum=`). */
   accumCaption: "Total",
+  /** The level row's captions for the precipitation setup's flow: the
+   * vapour flux surfaces and the wind surfaces its particles can run on. */
+  flowFluxCaption: "Flux",
+  flowWindCaption: "Wind",
   /** The rate button's gloss in that group. */
   accumRateGloss: "rate",
   /** A window button's gloss; `{window}` is its instrument code ("24H"). */
@@ -572,7 +580,7 @@ export const en = {
   decodeFailed: "Decode failed",
   frameDecodeFailed: "Frame decode failed: {message}",
   legendAria: "{label} color scale",
-  // The experimental composite's key (`?x=true`): one row per derived
+  // The precipitation setup's key: one row per derived
   // layer beside its swatch, under the fill's bar. Short — a noun phrase
   // that fits on one line at 10px mono next to a 10px square.
   legendInflow: "Warm moist inflow",
@@ -624,6 +632,9 @@ export const en = {
   legendCatSevere: "Severe",
   varLabelTmp2m: "2 m temperature",
   varLabelPrate: "Precipitation rate",
+  /** The precipitation setup: the rate with the pressure, the flow, the
+   * warm moist inflow and the frontal zone that make it. */
+  varLabelPrecipSetup: "Precipitation setup",
   /** An ensemble statistic's name, built on the quantity's own label
    * (`{label}`); `{n}` is the percentile. The probability names its
    * window in hours and its threshold in millimetres. */

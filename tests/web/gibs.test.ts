@@ -63,11 +63,11 @@ describe("?gibs=", () => {
   });
 
   it("round-trips through the view", () => {
-    const defaults = { field: "tmp2m", lines: null, particles: true } as const;
+    const defaults = { field: "tmp2m", lines: null, particles: true, setupLayers: { inflow: true, front: true } } as const;
     const search = "?model=gfs&type=temp&gibs=noaa21-fc";
     const { view } = parseView(search, defaults);
     expect(view.imagery).toBe("noaa21-fc");
-    expect(searchForView(view, search, { model: "gfs", caseId: null, experimentEnabled: false, particlesChosen: false }, "tmp2m")).toBe(search);
+    expect(searchForView(view, search, { model: "gfs", caseId: null, particlesChosen: false }, "tmp2m")).toBe(search);
   });
 });
 

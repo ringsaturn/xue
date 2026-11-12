@@ -449,16 +449,17 @@ fall back to defaults rather than fail, so a constructed link always opens.
   descriptor, and the container is what the rest, and every run published
   before stores, play from; the data card reads `Zarr` or `Xue` for the
   path in use. A comparison switch, not shareable state.
-- `?x=true` — the experimental synoptic composite: the precipitation on a
-  stepped 0.1/1/2/5/10/20/50 mm/h key, the sea level
-  pressure lines with their H/L marks over it, the particles run by the
-  850 hPa vapour flux, and two fields computed in the browser from several
-  bundles, drawn as outlined washes — a warm moist inflow (strong
-  `qflux850` in high `thetae850` air) and a frontal zone (a sharp
-  `thetae850` gradient). `?x=inflow`, `?x=front` or `?x=none` picks which
-  of the two are drawn (the rail's two toggle tiles rewrite it). A look at
-  how far the published data goes, not a product; the layers are the
-  ordinary ones and `?type=` / `?lines=` still pick them.
+- `?type=precipsetup` — the precipitation setup: the rate on a stepped
+  0.1/1/2/5/10/20/50 mm/h key with what makes it — the sea level pressure
+  lines with their H/L marks (`lines=` changes them, `lines=none` takes them
+  off), particles run by the 850 hPa vapour flux, and two fields computed in
+  the browser from several bundles, drawn as outlined washes: a warm moist
+  inflow (strong `qflux850` in high `thetae850` air) and a frontal zone (a
+  sharp `thetae850` gradient). Offered on a run that ships `prate`, `prmsl`,
+  `qflux850` and `thetae850`; `?phase=on` stacks on it.
+- `?flow=<id>` — with `type=precipsetup`, what the particles run on: a
+  vapour flux surface (`qflux925` … `qflux200`) or a wind one (`wind10m`,
+  `wind925` … `wind200`) the run ships; the default is `qflux850`.
 - `?model=gibs&gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
   `snpp-fc|noaa20-fc|noaa21-fc` (VIIRS M11-I2-I1) or `terra-721|aqua-721`
   (MODIS bands 7-2-1) — NASA GIBS's daily corrected-reflectance picture

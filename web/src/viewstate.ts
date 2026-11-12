@@ -7,9 +7,11 @@
  * both, and a pressure surface named as the field is the lines alone).
  * A fire layer the shell derives (hotspots, fire weather) stands in for
  * the field, drawn on its anchor input's session with that held off screen.
+ * The precipitation setup is the rate drawn with what makes it: the
+ * lines, the particles run by a flow and two derived layers over it.
  * The **overlays** follow the playhead over the field: the particles, a volume
- * (the cloud water drawn in 3D over a 2D field) and, under the experiment,
- * its two derived layers. The **marks** — the storm tracks and the
+ * (the cloud water drawn in 3D over a 2D field) and, in the setup, its two
+ * derived layers. The **marks** — the storm tracks and the
  * two station products — take no session and have their own pointers.
  * `ViewState` holds all of it; the rail's pressed states, the level row and
  * the address bar are projections of it, and the two functions here are the
@@ -24,12 +26,13 @@ import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
   parseAccumulationFromSearch,
   parseGibsFromSearch,
-  parseExperimentFromSearch,
+  parseFlowFromSearch,
   parseLinesFromSearch,
   parseParticlesFromSearch,
   parsePhaseFromSearch,
   parseStationsFromSearch,
   parseRadarFromSearch,
+  parseSetupFromSearch,
   parseTcFromSearch,
   parseVariableFromSearch,
   parseVolumeFromSearch,
@@ -37,17 +40,19 @@ import {
   searchForVariable,
   searchWithAccumulation,
   searchWithGibs,
-  searchWithExperiment,
   searchWithLines,
   searchWithParticles,
   searchWithPhase,
   searchWithRadar,
+  searchWithSetup,
   searchWithStations,
   searchWithTc,
   searchNamesVolume,
   searchWithVolume,
   type DerivedFireState,
   type RadarUrlState,
+  SETUP_ANCHOR,
+  SETUP_DEFAULT_LINES,
   type StationsUrlState,
   type TcUrlState,
 } from "./urlstate";
@@ -63,8 +68,9 @@ export interface ViewComposition {
   lines: PressureBundleId | null;
 }
 
-/** The derived layers: the experiment's two (`?x=`, meaningful only while
- * it is on) and the fire fields (at most one on, never in the link). */
+/** The derived layers: the precipitation setup's two (meaningful only
+ * while it is on, remembered on the device, never in the link) and the fire
+ * fields (at most one on, never in the link). */
 interface DerivedShown extends DerivedFireState {
   inflow: boolean;
   front: boolean;
@@ -75,6 +81,12 @@ export interface ViewState {
   field: ForecastBundleId | null;
   /** The pressure surface drawn as lines, over the field or alone. */
   lines: PressureBundleId | null;
+  /** Whether the field is the precipitation setup (`?type=precipsetup`),
+   * drawn on the rate's session: meaningful only while `field` is that. */
+  setup: boolean;
+  /** What the setup's particles run on (`?flow=`); null for the default,
+   * the 850 hPa vapour flux. Kept while the setup is off. */
+  flow: ForecastBundleId | null;
   /** What the precipitation field is summed over (`?accum=`,
    * accumulation.ts): a window ending at the playhead or a fixed range of
    * valid times; null for the rate. Kept while another field is on screen,
@@ -101,14 +113,13 @@ export interface ViewState {
 }
 
 /** What the view is written against: the dataset the page is on, and the
- * two session facts the writer needs that the view does not carry — the
- * experiment's switch (a page-load choice) and whether the particles were
- * ever chosen (only a chosen off is written, so a reduced-motion visitor
- * who never touched the switch hands out ordinary links). */
+ * session fact the writer needs that the view does not carry — whether the
+ * particles were ever chosen (only a chosen off is written, so a
+ * reduced-motion visitor who never touched the switch hands out ordinary
+ * links). */
 interface ViewContext {
   model: ForecastModelId;
   caseId: string | null;
-  experimentEnabled: boolean;
   particlesChosen: boolean;
 }
 
@@ -116,12 +127,13 @@ interface ViewContext {
 export interface ViewDefaults {
   /** The field when `?type=` names none. */
   field: ForecastBundleId;
-  /** The lines when neither `?type=` nor `?lines=` is given (the
-   * experiment opens with the sea level pressure over its fill). */
+  /** The lines when neither `?type=` nor `?lines=` is given. */
   lines: PressureBundleId | null;
   /** The particle overlay when `?particles=` says nothing this shell
    * understands: the viewer's stored choice, else the device's default. */
   particles: boolean;
+  /** The setup's two derived layers: the viewer's stored choice, else both. */
+  setupLayers: { inflow: boolean; front: boolean };
 }
 
 interface ParsedView {
@@ -149,23 +161,28 @@ export function compositionPrimary(view: ViewComposition, fallback: ForecastBund
 
 /** The view a query string names, with `defaults` filling what it does not. */
 export function parseView(search: string, defaults: ViewDefaults): ParsedView {
-  const requestedField = parseVariableFromSearch(search);
+  const setup = parseSetupFromSearch(search);
+  const requestedField = setup ? SETUP_ANCHOR : parseVariableFromSearch(search);
   const requestedLines = parseLinesFromSearch(search);
   const requestedParticles = parseParticlesFromSearch(search);
-  const experiment = parseExperimentFromSearch(search);
+  // A setup link that says nothing of its lines draws the sea level
+  // pressure; `lines=none` is the setup with them taken off.
+  const setupLines = setup && !new URLSearchParams(search).has("lines") ? SETUP_DEFAULT_LINES : null;
   const composition = compositionForPrimary(
     requestedField ?? defaults.field,
-    requestedLines ?? (requestedField === null ? defaults.lines : null),
+    requestedLines ?? setupLines ?? (requestedField === null ? defaults.lines : null),
   );
   return {
     view: {
       field: composition.fill,
       lines: composition.lines,
-      accumulation: parseAccumulationFromSearch(search),
+      setup,
+      flow: parseFlowFromSearch(search),
+      accumulation: setup ? null : parseAccumulationFromSearch(search),
       particles: requestedParticles ?? defaults.particles,
       phase: parsePhaseFromSearch(search),
       volume: parseVolumeFromSearch(search),
-      derived: { inflow: experiment.inflow, front: experiment.front, hotspot: false, ffwi: false, fwalert: false },
+      derived: { ...defaults.setupLayers, hotspot: false, ffwi: false, fwalert: false },
       imagery: parseGibsFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
@@ -197,17 +214,20 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
       ? searchForCaseVariable(primary, search, context.caseId)
       : searchForVariable(primary, search, context.model);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
-  const withAccumulation = searchWithAccumulation(withLines, view.field === "prate" ? view.accumulation : null);
+  const setup = setupInView(view);
+  const withSetup = searchWithSetup(withLines, setup, view.flow, view.lines);
+  const withAccumulation = searchWithAccumulation(withSetup, view.field === "prate" && !setup ? view.accumulation : null);
   const withVolume = searchWithVolume(withAccumulation, volumeOverField(view));
   const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
   const withPhase = searchWithPhase(withParticles, view.phase);
-  const withExperiment = searchWithExperiment(withPhase, {
-    enabled: context.experimentEnabled,
-    inflow: view.derived.inflow,
-    front: view.derived.front,
-  });
-  const withGibs = searchWithGibs(withExperiment, view.imagery);
+  const withGibs = searchWithGibs(withPhase, view.imagery);
   const withStations = searchWithStations(withGibs, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);
   return searchWithTc(withRadar, view.marks.tc);
+}
+
+/** Whether the view's field is the precipitation setup: its switch, on the
+ * field it is drawn on. */
+export function setupInView(view: Pick<ViewState, "field" | "setup">): boolean {
+  return view.setup && view.field === SETUP_ANCHOR;
 }

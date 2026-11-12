@@ -1247,6 +1247,16 @@ const PHASE_STOPS: readonly Stop[][] = [
   frozenRamp([222, 186, 130], [166, 108, 46], [84, 48, 18]), // ice pellets
 ];
 
+/** One phase class's ramp at a rate in mm/h — what the stepped phase key
+ * (composite.ts) samples per band, as the stepped rain key samples the
+ * rain's own. */
+export function phaseColor(row: number, rate: number): [number, number, number, number] {
+  return interpolate(PHASE_STOPS[row]!, rate);
+}
+
+/** How many phase classes the phase palette has rows for. */
+export const PHASE_ROW_COUNT = PHASE_STOPS.length;
+
 /** The phase palette: 256 x one row per class, in `precipphase.ts`'s order,
  * each row indexed by the precipitation's code like the ordinary palette. */
 export function buildPhasePalette(variable: BundleVariable): Uint8Array {

@@ -1,12 +1,12 @@
 /**
- * Experimental synoptic composite (`?x=true`): fields *computed* on the
+ * The precipitation setup (`?type=precipsetup`): fields *computed* on the
  * frontend from the planes of several bundles, the way a forecaster's chart
  * combines what the model published rather than showing one variable at a
  * time.
  *
  * Everything here is pure arithmetic on decoded planes and geographic grids:
  * no WebGL, no sessions. main.ts feeds it whole planes from the sessions it
- * opened for the experiment and hands the result to an ordinary
+ * opened for the setup and hands the result to an ordinary
  * `ForecastLayer` as a plane of derived codes with a palette of its own. A
  * derived plane uses codes 0..DERIVED_MAX_CODE (0 is nothing, the top is the
  * strongest signal); 255 stays reserved and transparent like every scalar
@@ -26,7 +26,7 @@
  */
 
 import type { BundleVariable } from "./manifest";
-import { decodeValue, precipitationColor } from "./palettes";
+import { decodeValue, PHASE_ROW_COUNT, phaseColor, precipitationColor } from "./palettes";
 import { lambertCone, lambertMapFactor } from "./domain";
 import { gridMapFor, sameGrid, wrap } from "./gridmap";
 import type { GeoGrid } from "./probe";
@@ -322,7 +322,7 @@ export function frontPalette(): Uint8Array {
   return derivedPalette([116, 44, 150], 0.7, 0.1);
 }
 
-/** The stepped precipitation key of the experiment: the lower bound of
+/** The stepped precipitation key of the setup: the lower bound of
  * each band in mm/h. The colours are not a table of their own but the
  * viewer's continuous precipitation ramp sampled at each band's geometric
  * middle and made opaque — so the key is Xue's ramp banded the way a
@@ -333,9 +333,7 @@ export const PRECIPITATION_STEP_BOUNDS: readonly number[] = [0.1, 1, 2, 5, 10, 2
 /** One band's colour: the ramp at the geometric middle of the band, the
  * top band sampled a step above its floor. */
 function precipitationStepColor(step: number): readonly [number, number, number] {
-  const from = PRECIPITATION_STEP_BOUNDS[step]!;
-  const to = PRECIPITATION_STEP_BOUNDS[step + 1] ?? from * 2;
-  const [r, g, b] = precipitationColor(Math.sqrt(from * to));
+  const [r, g, b] = precipitationColor(stepMiddle(step));
   return [r, g, b];
 }
 
@@ -383,4 +381,44 @@ export function steppedPrecipitationLegend(): { gradient: string; labels: string
     gradient: `linear-gradient(to bottom, ${stops.join(", ")})`,
     labels: PRECIPITATION_STEPS.map(([from]) => String(from)).reverse(),
   };
+}
+
+/** The stepped key by phase: the phase palette's rows (palettes.ts
+ * `buildPhasePalette`), each banded as the stepped rain key is — a code takes
+ * its band's colour in its class's own ramp, opaque — so turning the phase on
+ * over the setup keeps its bands. */
+export function steppedPhasePalette(variable: BundleVariable): Uint8Array {
+  const palette = new Uint8Array(256 * PHASE_ROW_COUNT * 4);
+  for (let code = 0; code < 256; code += 1) {
+    const rate = decodeValue(variable, code);
+    if (rate === null) continue;
+    const step = precipitationStep(rate);
+    if (step < 0) continue;
+    const rateAt = stepMiddle(step);
+    for (let row = 0; row < PHASE_ROW_COUNT; row += 1) {
+      const [r, g, b] = phaseColor(row, rateAt);
+      palette.set([r, g, b, 255], (row * 256 + code) * 4);
+    }
+  }
+  return palette;
+}
+
+/** One phase class's stepped ramp as a CSS gradient, light rates to the
+ * left, for its key. */
+export function steppedPhaseGradient(row: number): string {
+  const bands = PRECIPITATION_STEP_BOUNDS.length;
+  const stops: string[] = [];
+  for (let step = 0; step < bands; step += 1) {
+    const [r, g, b] = phaseColor(row, stepMiddle(step));
+    stops.push(`rgb(${r}, ${g}, ${b}) ${((step / bands) * 100).toFixed(2)}% ${(((step + 1) / bands) * 100).toFixed(2)}%`);
+  }
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+}
+
+/** The rate a band is coloured at: its geometric middle, the top band a
+ * step above its floor. */
+function stepMiddle(step: number): number {
+  const from = PRECIPITATION_STEP_BOUNDS[step]!;
+  const to = PRECIPITATION_STEP_BOUNDS[step + 1] ?? from * 2;
+  return Math.sqrt(from * to);
 }
