@@ -1,0 +1,20 @@
+{
+ "details": [
+  {
+   "contents": [
+    "The Red Rainstorm Warning Signal was issued at 8:02 a.m.",
+    "Heavy rain has fallen or is expected to fall generally over Hong Kong, exceeding 50 millimetres in an hour."
+   ],
+   "warningStatementCode": "WRAIN",
+   "updateTime": "2026-11-01T08:02:00+08:00",
+   "subtype": "WRAINR"
+  },
+  {
+   "contents": [
+    "Thunderstorm Warning issued at 7:10 a.m. on 1 Nov 2026 will remain in force until 8:03 a.m. today."
+   ],
+   "warningStatementCode": "WTS",
+   "updateTime": "2026-11-01T07:10:00+08:00"
+  }
+ ]
+}

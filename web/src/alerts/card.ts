@@ -67,6 +67,11 @@ const JMA_SET_URL = "https://www.data.jma.go.jp/developer/gis.html";
 const JMA_SURVEY_NOTICE =
   "この地図の作成に当たっては、国土地理院長の承認を得て、同院発行の数値地図25000（空間データ基盤）、数値地図（国土基本情報）、電子国土基本図（地図情報）を使用した。（承認番号　平30情使 第401号・令２情使 第125号・令３情使 第90号・令３情使 第123号・令３情使 第648号・令４情使 第437号・令５情使 第71号・令６情使 第382号・令７情使 第395号）";
 
+/** The `cma-areas` credit (docs/alerts.md §9.4): whose outlines they are,
+ * and that they place warnings rather than make a survey-approved map. */
+export const CMA_SET_CREDIT =
+  "边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by xue · not a survey-approved map (无审图号)";
+
 /** MeteoAlarm's terms (docs/alerts.md §10.4): the credit links to
  * meteoalarm.org, and every redistributor publishes this disclaimer. */
 const METEOALARM_URL = "https://meteoalarm.org/en/live/";
@@ -166,8 +171,9 @@ export function buildAlertsCard(
       continue;
     }
     root.append(element("div", "station-card-credit", network.attribution));
-    if (network.areas?.set.startsWith("jma-") && hits.some((hit) => hit.network === network && hit.line.geometry === null))
-      root.append(jmaSetCredit());
+    const drawnBySet = hits.some((hit) => hit.network === network && hit.line.geometry === null);
+    if (network.areas?.set.startsWith("jma-") && drawnBySet) root.append(jmaSetCredit());
+    if (network.areas?.set === "cma-areas" && drawnBySet) root.append(element("div", "station-card-credit alerts-card-set", CMA_SET_CREDIT));
   }
   return root;
 }

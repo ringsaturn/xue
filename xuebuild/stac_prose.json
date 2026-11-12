@@ -1579,7 +1579,7 @@
     },
     "alerts": {
       "title": "Weather warnings",
-      "description": "The weather warnings in force, as a snapshot every five minutes: one row per warning in the index with a common category and a 1–5 level beside the issuing service's own event and level, and per service one NDJSON file holding every warning's full text in every language the service publishes it in, its area codes and its polygon where the service draws one. Area codes resolve against versioned boundary sets published once per upstream release. The services are the US National Weather Service, the Japan Meteorological Agency, Environment and Climate Change Canada and Europe's national services through EUMETNET – MeteoAlarm. Only the newest snapshot is published; it is not an official warning service, and the issuing service's own channels take precedence. Time delays between this website and the www.meteoalarm.org website are possible. For the most up-to-date awareness information as published by the participating National Meteorological and Hydrological Services, please refer to www.meteoalarm.org.",
+      "description": "The weather warnings in force, as a snapshot every five minutes: one row per warning in the index with a common category and a 1–5 level beside the issuing service's own event and level, and per service one NDJSON file holding every warning's full text in every language the service publishes it in, its area codes and its polygon where the service draws one. Area codes resolve against versioned boundary sets published once per upstream release. The services are the US National Weather Service, the Japan Meteorological Agency, Environment and Climate Change Canada, Europe's national services through EUMETNET – MeteoAlarm, China's meteorological observatories through the WMO Severe Weather Information Centre, and the Hong Kong Observatory. Only the newest snapshot is published; it is not an official warning service, and the issuing service's own channels take precedence. Time delays between this website and the www.meteoalarm.org website are possible. For the most up-to-date awareness information as published by the participating National Meteorological and Hydrological Services, please refer to www.meteoalarm.org.",
       "license": "other",
       "keywords": [
         "weather",
@@ -1589,7 +1589,9 @@
         "nws",
         "jma",
         "eccc",
-        "meteoalarm"
+        "meteoalarm",
+        "cma",
+        "hko"
       ],
       "providers": [
         {
@@ -1627,6 +1629,32 @@
             "licensor"
           ],
           "url": "https://meteoalarm.org/en/live/"
+        },
+        {
+          "name": "China Meteorological Administration",
+          "description": "The warning signals of China's national, provincial, prefecture and county meteorological observatories, each naming its issuing observatory, as the WMO Severe Weather Information Centre aggregates their CAP messages; Chinese and English texts kept verbatim. Free for re-use by other websites that say which service issued them (SWIC notes to users). The area boundaries: 边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by xue · not a survey-approved map (无审图号).",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.12379.cn/"
+        },
+        {
+          "name": "WMO Severe Weather Information Centre",
+          "description": "WMO's centre for official CAP warnings, run by the Hong Kong Observatory; the channel the CMA warnings are read through.",
+          "roles": [
+            "host"
+          ],
+          "url": "https://severeweather.wmo.int/"
+        },
+        {
+          "name": "Hong Kong Observatory",
+          "description": "Warnings and signals in force from the Observatory's open data API, in English, Traditional and Simplified Chinese; reused under the DATA.GOV.HK terms and conditions of use with the source acknowledged.",
+          "roles": [
+            "producer",
+            "licensor"
+          ],
+          "url": "https://www.hko.gov.hk/en/wxinfo/dailywx/wxwarntoday.htm"
         },
         {
           "name": "Xue",
@@ -1685,6 +1713,24 @@
           "href": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
           "type": "text/html",
           "title": "Licence Ouverte / Open Licence 2.0 (IGN ADMIN EXPRESS, the département boundaries)"
+        },
+        {
+          "rel": "license",
+          "href": "https://severeweather.wmo.int/note.html",
+          "type": "text/html",
+          "title": "SWIC notes to users: free for re-use by other websites, naming the issuing service (the CMA warnings)"
+        },
+        {
+          "rel": "via",
+          "href": "https://github.com/cnmetlab/cnmaps-data",
+          "type": "text/html",
+          "title": "cnmaps-data (MIT): the Amap outlines the cma-areas boundaries are built from"
+        },
+        {
+          "rel": "license",
+          "href": "https://data.gov.hk/en/terms-and-conditions",
+          "type": "text/html",
+          "title": "DATA.GOV.HK terms and conditions of use: source and ownership acknowledged (the HKO warnings)"
         }
       ]
     }

@@ -44,6 +44,22 @@
    "fetched": "2026-11-01T00:12:05Z",
    "url": "https://feeds.meteoalarm.org/api/v1/warnings/feeds-italy",
    "file": "alerts.202611010005/meteoalarm/italy.json"
+  },
+  {
+   "id": "cma-swic",
+   "ok": true,
+   "fetched": "2026-11-01T00:11:50Z",
+   "url": "https://severeweather.wmo.int/json/wmo_all.json",
+   "file": "alerts.202611010005/cma",
+   "new": 2,
+   "missing": 1
+  },
+  {
+   "id": "hko-warnings",
+   "ok": true,
+   "fetched": "2026-11-01T00:11:50Z",
+   "url": "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en",
+   "file": "alerts.202611010005/hko"
   }
  ]
 }

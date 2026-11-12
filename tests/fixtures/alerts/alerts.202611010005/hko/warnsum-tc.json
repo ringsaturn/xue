@@ -1,0 +1,25 @@
+{
+ "WRAIN": {
+  "name": "暴雨警告信號",
+  "code": "WRAINR",
+  "type": "紅色",
+  "actionCode": "ISSUE",
+  "issueTime": "2026-11-01T08:02:00+08:00",
+  "updateTime": "2026-11-01T08:02:00+08:00"
+ },
+ "WTS": {
+  "name": "雷暴警告",
+  "code": "WTS",
+  "actionCode": "ISSUE",
+  "issueTime": "2026-11-01T07:10:00+08:00",
+  "expireTime": "2026-11-01T08:03:00+08:00",
+  "updateTime": "2026-11-01T07:10:00+08:00"
+ },
+ "WMSGNL": {
+  "name": "強烈季候風信號",
+  "code": "WMSGNL",
+  "actionCode": "CANCEL",
+  "issueTime": "2026-11-01T06:00:00+08:00",
+  "updateTime": "2026-11-01T06:00:00+08:00"
+ }
+}

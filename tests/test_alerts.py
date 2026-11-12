@@ -1,4 +1,4 @@
-"""The alerts product (``xuebuild/alerts``): the four adapters on the
+"""The alerts product (``xuebuild/alerts``): the six adapters on the
 fetched fixture and on constructed input, the category and level tables,
 polygon rounding, the snapshot with its ``ended[]`` and carry-over,
 the validators on malformed input, and two consecutive rounds held to a
@@ -14,15 +14,17 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
+
 from tests import jsonschemas
 from tests.prepare_alerts_golden import FIXTURES, ROUNDS, build_rounds, pretty
 from xuebuild.airport.fetch import SourceStatus
-from xuebuild.alerts import archive, areas, eccc, jma, meteoalarm, nws
+from xuebuild.alerts import archive, areas, cma, cnmaps, eccc, hko, jma, meteoalarm, nws
 from xuebuild.alerts.build import build_product, load_previous_index
 from xuebuild.alerts.geometry import bbox, normalize
 from xuebuild.alerts.boxes import area_box, load_boxes
 from xuebuild.alerts.build import _union
-from xuebuild.alerts.networks import JMA_CLASS20, METEOALARM_AREAS, NETWORKS, NWS_ZONES
+from xuebuild.alerts.networks import CMA_AREAS, JMA_CLASS20, METEOALARM_AREAS, NETWORKS, NWS_ZONES
 from xuebuild.alerts.schema import (
     CATEGORIES,
     ROW_FIELDS,
@@ -40,8 +42,12 @@ from xuebuild.alerts.schema import (
     validate_pointer,
 )
 from xuebuild.alerts.tables import (
+    cma_category,
+    cma_level,
     eccc_category,
     eccc_level,
+    hko_category,
+    hko_level,
     jma_kind,
     meteoalarm_category,
     meteoalarm_level,
@@ -582,6 +588,107 @@ class MeteoAlarmTest(unittest.TestCase):
         self.assertIsNone(_union((0.0, 0.0, 1.0, 1.0), None))
 
 
+class CmaTest(unittest.TestCase):
+    def caps(self, moment: datetime) -> dict[str, bytes]:
+        directory = FIXTURES / f"alerts.{moment:%Y%m%d%H%M}" / "cma"
+        listing = json.loads((directory / cma.LIST_FILENAME).read_text(encoding="utf-8"))
+        return {
+            path: (directory / cma.CAP_DIRECTORY / cma._cap_filename(path)).read_bytes()
+            for path in cma._listed(listing)
+            if (directory / cma.CAP_DIRECTORY / cma._cap_filename(path)).exists()
+        }
+
+    def test_levels_by_severity_and_categories_by_the_chinese_event(self) -> None:
+        self.assertEqual([cma_level(severity) for severity in ("Minor", "Moderate", "Severe", "Extreme", None)], [2, 2, 3, 4, 2])
+        self.assertEqual(cma_category("大雾"), "fog")
+        self.assertEqual(cma_category("地质灾害气象风险"), "landslide")
+        self.assertEqual(cma_category("新的预警"), "other")
+        self.assertLessEqual(set(tables()["cma"]["categoryByEvent"].values()), set(CATEGORIES))
+
+    def test_the_listing_keeps_china_alone(self) -> None:
+        listing = json.loads((FIXTURES / f"alerts.{ROUNDS[0]}" / "cma" / cma.LIST_FILENAME).read_text(encoding="utf-8"))
+        paths = cma._listed(listing)
+        self.assertEqual(len(paths), 3)
+        self.assertTrue(all(path.startswith("cn-cma-xx/") for path in paths))
+        self.assertEqual(cma._cap_filename("cn-cma-xx/2026/11/12/01/45/14-b8111d9e4d5a50fd37eba18cf1dc93c3.xml"), "20261112014514-b8111d9e4d5a50fd37eba18cf1dc93c3.xml")
+        with self.assertRaises(ValueError):
+            cma._listed({"items": None})
+
+    def test_a_message_is_two_languages_and_its_county_codes(self) -> None:
+        lines = [cma.convert(body, path, FIRST) for path, body in self.caps(FIRST).items()]
+        by_event = {line["native"]["event"]: line for line in lines if line is not None}
+        fog = by_event["大雾"]
+        self.assertEqual(set(fog["texts"]), {"zh-CN", "en-US"})
+        self.assertEqual((fog["level"], fog["native"]["colour"]), (2, "yellow"))
+        self.assertEqual(fog["areas"], ["120115"])
+        self.assertIsNone(fog["geometry"])
+        self.assertTrue(fog["url"].startswith(cma.CAP_URL.format(path="cn-cma-xx/")))
+        validate_alert_line(fog, "cma")
+        # A township's code is drawn by its county; the twelve digits stay in native.
+        frost = by_event["霜冻"]
+        self.assertEqual(frost["areas"], ["330110"])
+        self.assertEqual(frost["native"]["geocodes"], ["330110014000"])
+        self.assertEqual(by_event["大风"]["sender"], "Nongan County Meteorological Observatory")
+
+    def test_references_take_the_identifier_second_from_the_end(self) -> None:
+        update = next(line for path, body in self.caps(SECOND).items() for line in [cma.convert(body, path, SECOND)] if line and line["native"]["msgType"] == "Update")
+        self.assertEqual(update["replaces"], ["cma:33011041600000_20261110151408"])
+
+    def test_a_message_that_did_not_arrive_carries_over(self) -> None:
+        status = SourceStatus(cma.SOURCE, True, file=f"alerts.{ROUNDS[1]}/cma")
+        result = cma.read(FIXTURES, SECOND, {cma.SOURCE: status})
+        self.assertTrue(result.ok)
+        assert result.carry is not None
+        missing = next(path for path in cma._listed(json.loads((FIXTURES / f"alerts.{ROUNDS[1]}" / "cma" / cma.LIST_FILENAME).read_bytes())) if path not in self.caps(SECOND))
+        self.assertTrue(result.carry({"url": cma.CAP_URL.format(path=missing)}))
+        self.assertFalse(result.carry({"url": None}))
+        self.assertEqual(result.latest, datetime(2026, 11, 1, 0, 9, tzinfo=UTC))
+        self.assertFalse(cma.read(FIXTURES, SECOND, {}).ok)
+
+    def test_the_rounds(self) -> None:
+        index = json.loads((EXPECTED / round_directory(SECOND) / "index.json").read_text(encoding="utf-8"))
+        ended = {row[0]: row[2:] for row in index["ended"] if row[0].startswith("cma:")}
+        self.assertEqual(ended["cma:22012241600000_20261112094751"], ["expired"])
+        self.assertEqual(ended["cma:33011041600000_20261110151408"], ["replaced", "cma:33011041600000_20261101080400"])
+        rows = {row[0]: row for row in index["alerts"] if row[0].startswith("cma:")}
+        self.assertIn("cma:12011541600000_20261111192247", rows)  # its message failed: carried over
+        self.assertEqual(rows["cma:23270341600000_20261112070109"][8:12], [None, None, None, None])  # 新林区, not in the set
+        self.assertTrue(all(row[8] is not None for alert, row in rows.items() if "232703" not in alert))
+
+
+class HkoTest(unittest.TestCase):
+    def test_levels_and_categories_by_code(self) -> None:
+        self.assertEqual([hko_level(code) for code in ("WRAINA", "WRAINR", "WRAINB", "TC1", "TC8NE", "TC10", "WFNTSA")], [2, 3, 4, 2, 3, 4, 1])
+        self.assertEqual(hko_category("TC9"), "wind")
+        self.assertEqual(hko_category("WL"), "landslide")
+        self.assertEqual((hko_category("WNEW"), hko_level("WNEW")), ("other", 2))
+
+    def test_a_warning_is_three_languages_over_the_territory(self) -> None:
+        status = SourceStatus(hko.SOURCE, True, file=f"alerts.{ROUNDS[0]}/hko")
+        result = hko.read(FIXTURES, FIRST, {hko.SOURCE: status})
+        by_code = {line["native"]["code"]: line for line in result.alerts}
+        rain = by_code["WRAINA"]
+        self.assertEqual(rain["id"], "hko:WRAINA-20261031T232000Z")
+        self.assertEqual(set(rain["texts"]), {"en", "zh-Hant", "zh-Hans"})
+        self.assertEqual(rain["texts"]["en"]["headline"], "Rainstorm Warning Signal (Amber)")
+        self.assertEqual(rain["texts"]["zh-Hant"]["headline"], "暴雨警告信號 (黃色)")
+        self.assertIn("Amber Rainstorm", rain["texts"]["en"]["description"])
+        self.assertEqual(rain["areas"], [hko.AREA])
+        self.assertEqual(by_code["WTS"]["expires"], "2026-11-01T00:03:00Z")
+        for line in result.alerts:
+            validate_alert_line(line, "hko")
+        self.assertEqual(status.detail["reports"], 3)
+
+    def test_a_cancel_is_not_in_force_and_ends_as_cancelled(self) -> None:
+        status = SourceStatus(hko.SOURCE, True, file=f"alerts.{ROUNDS[1]}/hko")
+        result = hko.read(FIXTURES, SECOND, {hko.SOURCE: status})
+        self.assertEqual([line["id"] for line in result.alerts], ["hko:WRAINR-20261101T000200Z"])
+        self.assertEqual(result.cancelled, {"hko:WMSGNL-20261031T220000Z"})
+        index = json.loads((EXPECTED / round_directory(SECOND) / "index.json").read_text(encoding="utf-8"))
+        ended = {row[0]: row[2:] for row in index["ended"] if row[0].startswith("hko:")}
+        self.assertEqual(ended, {"hko:WMSGNL-20261031T220000Z": ["cancelled"], "hko:WRAINA-20261031T232000Z": ["gone"], "hko:WTS-20261031T231000Z": ["expired"]})
+
+
 class ArchiveTest(unittest.TestCase):
     def archived(self, archive_root: Path) -> tuple[dict, dict, list[dict]]:
         scratch, output = built()
@@ -679,8 +786,34 @@ class AreasTest(unittest.TestCase):
         self.assertEqual(areas._departement_code({"code_insee": "75"}), "NUTS3:FR101")
         self.assertIsNone(areas._departement_code({"code_insee": "975"}))
 
+    def test_cma_codes_by_level_and_gcj_turned_into_wgs84(self) -> None:
+        self.assertEqual(tuple(layer.name for layer in areas.SETS["cma-areas"].layers), CMA_AREAS.layers)
+        self.assertEqual([cnmaps.layer_of(code) for code in ("110000", "441900", "419001", "810000")], ["cn_province", "cn_prefecture", "cn_county", "cn_province"])
+        self.assertEqual(areas._adcode({"adcode": "120115"}), "120115")
+        self.assertIsNone(areas._adcode({"adcode": "1201"}))
+        # Tiananmen in GCJ-02 (Amap) and WGS84: the offset is about 600 m.
+        lon, lat = cnmaps.gcj_to_wgs(np.array([116.403963]), np.array([39.915119]))
+        self.assertAlmostEqual(float(lon[0]), 116.39772, places=4)
+        self.assertAlmostEqual(float(lat[0]), 39.91372, places=4)
+
+    def test_the_cnmaps_release_becomes_three_layers_with_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            land = Path(scratch) / "release" / cnmaps.LAND
+            land.mkdir(parents=True)
+            square = {"type": "MultiPolygon", "coordinates": [[[[87.0, 44.0], [87.1, 44.0], [87.1, 44.1], [87.0, 44.0]]]]}
+            for code in ("100000", "650000", "654200", "654223"):
+                (land / f"{code}.geojson").write_text(json.dumps(square), encoding="utf-8")
+            directory = cnmaps.prepare(Path(scratch) / "release", Path(scratch))
+            layers = {path.stem: json.loads(path.read_text()) for path in directory.glob("*.geojson")}
+            codes = {name: [feature["properties"]["adcode"] for feature in layer["features"]] for name, layer in layers.items()}
+            self.assertEqual(codes, {"cn_province": ["650000"], "cn_prefecture": ["654200"], "cn_county": ["654223", "654203"]})
+            ring = layers["cn_county"]["features"][0]["geometry"]["coordinates"][0][0]
+            self.assertNotEqual(ring[0], [87.0, 44.0])  # moved off GCJ-02
+            with self.assertRaises(AlertsProductError):
+                cnmaps.prepare(Path(scratch) / "nothing", Path(scratch))
+
     def test_the_pinned_box_files_are_the_fixture(self) -> None:
-        for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS):
+        for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS, CMA_AREAS):
             body = (FIXTURES / "alerts-areas" / area_set.bbox_filename).read_bytes()
             self.assertEqual((len(body), crc32_hex(body)), (area_set.bbox_byte_length, area_set.bbox_crc32))
             self.assertEqual(list(json.loads(body)["layers"]), list(area_set.layers))

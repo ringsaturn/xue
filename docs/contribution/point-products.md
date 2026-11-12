@@ -249,7 +249,8 @@ per frame and never gate the playhead; a showcase case hides them, and
   polygon and codes, for different parts of its area, and both are drawn.
   A click inside an area still pins the probe and opens the card of every
   warning there, each with its issue time; JMA's card carries the
-  boundary set's 出典 and 加工 lines and folds the survey notice, and
+  boundary set's 出典 and 加工 lines and folds the survey notice, CMA's and
+  HKO's (both drawn by `cma-areas`) carry the Amap outline credit, and
   MeteoAlarm's links its credit to meteoalarm.org and carries the
   disclaimer its terms require.
 - URL state: `?tc=<id>|off`, `?tcagency=`, `?tcmodel=`, `?tcmembers=`,

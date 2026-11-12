@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import cnmaps
 from .schema import COORDINATE_DECIMALS, AlertsProductError, areas_bbox_filename, areas_filename, crc32_hex, encode_json
 
 LOG = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ class AreaSet:
     tippecanoe: tuple[str, ...]
     """The low-zoom thinning, tuned to the view budgets in
     ``docs/alerts.md`` §9."""
+    prepare: Callable[[Path, Path], Path] | None = None
+    """``prepare(source, scratch)`` → the directory the layers are found
+    in, for a release that is not yet one file per layer in a datum
+    ``ogr2ogr`` knows (cnmaps-data: a file per code, in GCJ-02)."""
 
 
 def _text(value: Any) -> str:
@@ -114,6 +119,13 @@ def _warncell_code(properties: dict[str, Any]) -> str | None:
     return f"WARNCELLID:{code}" if re.fullmatch(r"\d{9}", code) else None
 
 
+def _adcode(properties: dict[str, Any]) -> str | None:
+    """A Chinese division's six-digit administrative code, the code a CMA
+    line names (``docs/alerts.md`` §10.5)."""
+    code = _text(properties.get("adcode"))
+    return code if re.fullmatch(r"\d{6}", code) else None
+
+
 FR_NUTS_PATH = Path(__file__).with_name("fr_nuts2013.json")
 
 
@@ -146,6 +158,17 @@ SETS: dict[str, AreaSet] = {
         maxzoom=MAXZOOM,
         source_srs="EPSG:6668",
         tippecanoe=TIPPECANOE,
+    ),
+    "cma-areas": AreaSet(
+        id="cma-areas",
+        layers=tuple(
+            LayerSpec(name.removeprefix("cn_"), re.compile(f"^{name}$"), ("adcode",), _adcode)
+            for name in ("cn_province", "cn_prefecture", "cn_county")
+        ),
+        maxzoom=MAXZOOM,
+        source_srs="EPSG:4326",
+        tippecanoe=TIPPECANOE,
+        prepare=cnmaps.prepare,
     ),
     "meteoalarm-areas": AreaSet(
         id="meteoalarm-areas",
@@ -306,6 +329,8 @@ def build_area_set(set_id: str, source: Path, version: str, output: Path) -> dic
     boxes: dict[str, dict[str, list[float]]] = {}
     with tempfile.TemporaryDirectory(prefix=f"alerts-areas-{set_id}-") as scratch_name:
         scratch = Path(scratch_name)
+        if area_set.prepare is not None:
+            source = area_set.prepare(source, scratch)
         inputs: list[str] = []
         for layer in area_set.layers:
             datasource = find_datasource(source, layer, area_set)

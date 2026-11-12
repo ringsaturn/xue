@@ -369,7 +369,7 @@ the id that replaced it, where the round names one, else `null`).
 
 | Parameter | Meaning |
 |---|---|
-| `network` | keep one network (`nws`, `jma`, `eccc`, `meteoalarm`); `404 unknown_network` otherwise, `detail.available` listing them. Also filters `ended[]` |
+| `network` | keep one network (`nws`, `jma`, `eccc`, `meteoalarm`, `cma`, `hko`); `404 unknown_network` otherwise, `detail.available` listing them. Also filters `ended[]` |
 | `category` | keep one of the index's `categories`; any other is `400 invalid_parameter`, `detail.available` listing them |
 | `level` | keep the alerts at this level or above, an integer 1 … 5 |
 | `lat`, `lon` | together: keep the alerts in force at this point |
