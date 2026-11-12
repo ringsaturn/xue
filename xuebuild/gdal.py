@@ -579,9 +579,10 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
 
 
 #: What GDAL's degrib writes in place of the unit of a derived forecast
-#: other than a mean (code table 4.7: a spread, a standard deviation, …).
-#: It leaves the values in the parameter's own unit, which the comment
-#: still names, so the unit is read from there.
+#: other than a mean (code table 4.7: a spread, a standard deviation, …),
+#: in the unit and the comment alike. It converts nothing for such a
+#: record, so the values are in the parameter's own GRIB unit: the one the
+#: registry names as GDAL's spelling of it (``gdal_unit``).
 DERIVED_UNIT_LABELS = frozenset(
     ("[spread]", "[stddev]", "[stddev normalized]", "[large anomaly index]", "[interquantile range]")
 )
@@ -589,7 +590,9 @@ DERIVED_UNIT_LABELS = frozenset(
 def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> SourceFrame:
     spec = variable_spec(variable_id)
     unit_value = metadata.get("GRIB_UNIT", "")
-    if not unit_value or unit_value in DERIVED_UNIT_LABELS:
+    if unit_value in DERIVED_UNIT_LABELS:
+        unit_value = spec.gdal_unit
+    elif not unit_value:
         unit_value = metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
     # A temperature's unit is carried as the one letter its rule reads it
     # through; any other as GDAL spells it, brackets off.

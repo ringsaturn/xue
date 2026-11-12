@@ -631,15 +631,18 @@ fn timestamp(band: &BandInfo, key: &str) -> Option<OffsetDateTime> {
 }
 
 /// What GDAL's degrib writes in place of the unit of a derived forecast
-/// other than a mean (code table 4.7: a spread, a standard deviation, …).
-/// It leaves the values in the parameter's own unit, which the comment
-/// still names, so the unit is read from there.
+/// other than a mean (code table 4.7: a spread, a standard deviation, …),
+/// in the unit and the comment alike. It converts nothing for such a
+/// record, so the values are in the parameter's own GRIB unit: the one the
+/// registry names as GDAL's spelling of it (`gdal_unit`).
 const DERIVED_UNIT_LABELS: [&str; 5] =
     ["[spread]", "[stddev]", "[stddev normalized]", "[large anomaly index]", "[interquantile range]"];
 
 fn frame_from_band(path: &Path, spec: &VariableSpec, band: &BandInfo) -> Result<SourceFrame> {
     let grib_unit = band.item("GRIB_UNIT");
-    let raw_unit = if grib_unit.is_empty() || DERIVED_UNIT_LABELS.contains(&grib_unit) {
+    let raw_unit = if DERIVED_UNIT_LABELS.contains(&grib_unit) {
+        spec.matching.gdal_unit.clone()
+    } else if grib_unit.is_empty() {
         band.item("GRIB_COMMENT")
             .rsplit_once('[')
             .map_or("", |(_, tail)| tail)
