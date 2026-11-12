@@ -130,11 +130,11 @@ describe("display zone", () => {
   });
 
   it("matches a typed zone leniently", () => {
-    const zones = ["America/New_York", "America/Kentucky/Louisville", "America/Louisville", "Asia/Kolkata", "Asia/Tokyo", "UTC"];
+    const zones = ["America/New_York", "America/Kentucky/Louisville", "America/Indiana/Indianapolis", "Asia/Kolkata", "Asia/Tokyo", "UTC"];
     expect(matchZone("asia/tokyo", zones)).toBe("Asia/Tokyo");
     expect(matchZone(" new york ", zones)).toBe("America/New_York");
     expect(matchZone("kolk", zones)).toBe("Asia/Kolkata");
-    expect(matchZone("louisville", zones)).toBe("America/Louisville");
+    expect(matchZone("louisville", zones)).toBe("America/Kentucky/Louisville");
     expect(matchZone("America", zones)).toBeNull();
     expect(matchZone("gmt", zones)).toBe("UTC");
     expect(matchZone("", zones)).toBeNull();
