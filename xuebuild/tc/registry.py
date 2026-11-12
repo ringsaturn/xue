@@ -37,7 +37,7 @@ class AgencySpec:
     ``TOKYO_``…), None when IBTrACS has no column set for it."""
     forecasts: bool
     """True when the product carries this centre's *forecast* — the
-    centres phase 0 ingests. A best-track-only centre is False."""
+    centres the hourly build ingests. A best-track-only centre is False."""
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ AGENCIES: dict[str, AgencySpec] = {
         AgencySpec("jma", "Japan Meteorological Agency", _BLUE, ("WP",), "jma", "TOKYO", False),
         AgencySpec("cma", "China Meteorological Administration", _GREEN, ("WP",), "cma", "CMA", False),
         AgencySpec("cwa", "Central Weather Administration", _PURPLE, ("WP",), "cwa", None, False),
-        AgencySpec("hko", "Hong Kong Observatory", _SKY, ("WP",), "hko", "HKO", False),
+        AgencySpec("hko", "Hong Kong Observatory", _SKY, ("WP",), "hko", "HKO", True),
         AgencySpec("kma", "Korea Meteorological Administration", _YELLOW, ("WP",), "kma", "KMA", False),
         AgencySpec("imd", "India Meteorological Department", _GREY, ("IO",), "imd", "NEWDELHI", False),
         AgencySpec("mfr", "Météo-France La Réunion", _GREY, ("SH",), "mfr", "REUNION", False),

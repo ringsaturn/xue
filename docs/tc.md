@@ -64,7 +64,7 @@ SI throughout, converted at the parser:
 
 | quantity | unit | note |
 |---|---|---|
-| wind (`vmax`, `gust`) | m/s | on whatever averaging the source uses: one-minute for NHC and JTWC, ten-minute for JMA and the other RSMCs, the model's own for a model |
+| wind (`vmax`, `gust`) | m/s | on whatever averaging the source uses: one-minute for NHC and JTWC, ten-minute for JMA, the Hong Kong Observatory and the other RSMCs, the model's own for a model |
 | pressure (`pmin`) | hPa | |
 | radii (`radii`, `rmw`, `cone`, alert `halfWidth`) | km | |
 | position | degrees, longitude in (−180, 180] | a track crossing the antimeridian is split by the reader, not the file |
@@ -82,7 +82,11 @@ way.
 `class` is the source's own intensity string, verbatim (`TS`, `HU`, `TY`,
 JMA's grade digit, CMA's category…). A reader colours it by the source's
 own scale (`registry.py` names the scale per agency) and never converts
-between scales.
+between scales. The Hong Kong Observatory spells its categories out; its
+six tropical cyclone categories are written as the abbreviations IBTrACS
+carries for it (`TD`, `TS`, `STS`, `T`, `ST`, `SuperT`), so every `hko`
+track speaks one vocabulary, and `Low Pressure Area` and `Extratropical
+Low`, which have none, stay verbatim.
 
 Numbers are JSON numbers; a value not reported is `null`. The files are
 written compactly with ASCII escaping, and a file's identity is its bytes:
@@ -117,6 +121,12 @@ A system has one id for its whole life in the product:
   within 333 km (three degrees of arc) of that system's position nearest in
   time, and otherwise stands alone, matched the same way to the previous
   hour's C-level systems so its id holds while the model keeps finding it.
+- A centre's own number that is not an ATCF id (the Hong Kong
+  Observatory's four-digit `TCID`, `2206`) is placed by position the same
+  way and kept as the alias `hko:<TCID>`. Unlike a model's it names one
+  system for its whole life, so a sighting near no current system finds
+  the previous hour's system carrying that alias (within 48 hours), and a
+  system only a centre tracks is B-level, not C.
 
 When an invest is numbered, its B-level system merges into the A-level
 storm: the previous hour's B or C system that no source names any more,
@@ -205,12 +215,13 @@ number, verbatim.
 
 Track. A best track: points by `time`, strictly increasing, no leads.
 `source` says where it came from: `ibtracs`, or the centre whose working
-file it is (`nhc` for its b-deck, `jtwc` for a warning's history block);
+file it is (`nhc` for its b-deck, `jtwc` for a warning's history block,
+`hko` for the past positions and analysis of its track information);
 `provisional` is true for every working track of a live storm. Keys of
 `best` are IBTrACS' agency keys: `usa` (the NHC / JTWC joint best track),
 `jma`, `cma`, `hko`, `kma`, `imd`, `mfr`, `bom`, `fms`, `mnz`. When more
 than one source supplies the same key, the fresher working file is taken
-(`nhc`, then `jtwc`, then `ibtracs`).
+(`nhc`, then `jtwc`, then `ibtracs`; `hko`, then `ibtracs`).
 
 Ensemble. A member set on one lead axis, as fixed-point integer arrays
 flattened member-major: `index = member position × len(leads) + lead
@@ -251,9 +262,32 @@ in every storm file so a storm can be read on its own.
 
 Source ids in v1: `jtwc` (JMV 3.0 warnings and formation alerts, via the
 RSS feed), `nhc` (`CurrentStorms.json`, the a-deck's `OFCL` lines, the
-b-deck), `gfs` (the NCEP tracker's `avno` file), `gefs` (its `ac00`,
+b-deck), `hko` (the Hong Kong Observatory's tropical cyclone track
+information, below), `gfs` (the NCEP tracker's `avno` file), `gefs` (its `ac00`,
 `ap01`–`ap30` members and the `aemn` mean), `ecmwf` (open data `oper` `tf`
 BUFR), `ecmwfens` (`enfo` `tf` BUFR), `ibtracs` (the v04r01 active list).
+
+`hko` is the DATA.GOV.HK dataset `hk-hko-rss-tc-track-info`, reused under
+the DATA.GOV.HK terms of use with the attribution "Hong Kong Observatory
+(DATA.GOV.HK)". `tc_list.xml` names the systems the Observatory issues
+forecast tracks for (`storms` counts them), each with a
+`hko_tctrack_<TCID>.xml`, which maps onto a storm file as:
+
+| feed | product |
+|---|---|
+| `BulletinTime` (Hong Kong time) | `agencies.hko.issued`, in UTC |
+| `AnalysisInformation` | `agencies.hko.base` and its point at lead 0; the last point of `best.hko` |
+| `ForecastInformation` with a `Time` | the forecast's later points; an entry without one is a position interpolated for the Observatory's own map and is skipped |
+| `PastInformation` | `best.hko` before the analysis (`source: "hko"`, `provisional: true`) |
+| `MaximumWind` (`145km/h`, ten-minute mean) | `vmax` in m/s; `--` is `null` |
+| `Intensity` | `class`, as §2 says |
+| `TropicalCycloneName` | `name`, `null` while it is a category |
+
+The feed gives no pressure, radii or advisory number: `pmin`, `radii` and
+`number` are `null` or absent. Every system it tracks is filed under `WP`.
+A bulletin with no position past its analysis (the last, on a system that
+has weakened or turned extratropical) contributes its best track and no
+forecast.
 
 ## 7. Validation
 

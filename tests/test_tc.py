@@ -15,7 +15,7 @@ from pathlib import Path
 
 from tests._support import FIXTURES
 from xuebuild.errors import TcProductError
-from xuebuild.tc import atcf, bufrtracks, ibtracs, tcw
+from xuebuild.tc import atcf, bufrtracks, hko, ibtracs, tcw
 from xuebuild.tc.build import build_product, previous_systems
 from xuebuild.tc.fetch import ecmwf_tf_url
 from xuebuild.tc.identity import MATCH_KM, PreviousSystem, Sighting, distance_km, resolve, sighting_kind
@@ -29,11 +29,12 @@ from xuebuild.tc.schema import (
     validate_pointer,
     validate_storm,
 )
-from xuebuild.tc.track import MISSING, wrap_longitude
+from xuebuild.tc.track import MISSING, iso_z, wrap_longitude
 
 TC_FIXTURES = FIXTURES / "tc"
 RAW = TC_FIXTURES / "tc.2026091206"
 EXPECTED = TC_FIXTURES / "expected"
+HKO = TC_FIXTURES / "hko"
 ISSUE = parse_issue("2026091206")
 HAS_BUFR_DUMP = shutil.which("bufr_dump") is not None
 
@@ -47,6 +48,9 @@ class RegistryTests(unittest.TestCase):
         for key in (*AGENCIES, *MODELS):
             self.assertRegex(key, r"^[a-z][a-z0-9]*$")
         self.assertEqual(len(MODELS["gefs"].techs), 31)
+
+    def test_forecasting_centres(self) -> None:
+        self.assertEqual(sorted(key for key, spec in AGENCIES.items() if spec.forecasts), ["hko", "jtwc", "nhc"])
 
 
 class AtcfTests(unittest.TestCase):
@@ -336,6 +340,113 @@ def _previous(
     return PreviousSystem(
         id=system_id, level=level, basin=basin, aliases=aliases, last_time=time, last_lat=lat, last_lon=lon
     )
+
+
+class HkoTests(unittest.TestCase):
+    """The Observatory's track information on real bulletins: CHABA (2206)
+    nearing landfall west of Hong Kong, and SURIGAE's (2102) last bulletin
+    after it turned extratropical."""
+
+    def test_track_with_forecast(self) -> None:
+        product = hko.parse_track((HKO / "hko_tctrack_2206.xml").read_bytes())
+        self.assertEqual((product.tcid, product.name), ("2206", "CHABA"))
+        self.assertEqual(product.issued, utc(2022, 7, 2, 0, 0, 18))
+        history = product.history
+        self.assertEqual((history.source, history.provisional), ("hko", True))
+        self.assertEqual(history.points[0].time, utc(2022, 6, 29, 3))
+        times = [point.time for point in history.points]
+        self.assertEqual(times, sorted(set(times)))
+        analysis = history.points[-1]
+        self.assertEqual((analysis.time, analysis.lat, analysis.lon), (utc(2022, 7, 2), 20.4, 111.8))
+        # 110 km/h; the feed gives no pressure and no radii.
+        self.assertEqual((analysis.vmax, analysis.cls, analysis.pmin, analysis.radii), (30.6, "STS", None, None))
+        forecast = product.forecast
+        assert forecast is not None
+        self.assertEqual((forecast.base, forecast.issued, forecast.number), (utc(2022, 7, 2), product.issued, None))
+        # Only the timed entries: the interpolated positions between them
+        # are the Observatory's map drawing, not forecasts.
+        leads = [round((p.time - forecast.base).total_seconds()) // 3600 for p in forecast.points]
+        self.assertEqual(leads, [0, 21, 45, 69])
+        self.assertEqual(forecast.points[0], analysis)
+        self.assertEqual((forecast.points[1].lat, forecast.points[1].lon, forecast.points[1].vmax), (22.6, 109.8, 29.2))
+        self.assertEqual([p.cls for p in forecast.points], ["STS", "STS", "TS", "Low Pressure Area"])
+
+    def test_last_bulletin_has_no_forecast(self) -> None:
+        product = hko.parse_track((HKO / "hko_tctrack_2102.xml").read_bytes())
+        self.assertEqual((product.tcid, product.name), ("2102", "SURIGAE"))
+        self.assertIsNone(product.forecast)
+        self.assertEqual(len(product.history.points), 55)
+        last = product.history.points[-1]
+        self.assertEqual((last.cls, last.vmax), ("Extratropical Low", None))  # "--"
+        self.assertEqual(product.history.points[14].cls, "SuperT")
+        self.assertEqual(product.history.points[14].vmax, 54.2)  # 195 km/h
+
+    def test_unnamed_system_and_southern_west_positions(self) -> None:
+        text = (HKO / "hko_tctrack_2206.xml").read_text(encoding="utf-8")
+        text = text.replace("<TropicalCycloneName>CHABA<", "<TropicalCycloneName>Tropical Depression<")
+        text = text.replace("<Latitude>20.40N<", "<Latitude>20.40S<")
+        text = text.replace("<Longitude>111.80E<", "<Longitude>111.80W<")
+        product = hko.parse_track(text.encode("utf-8"))
+        self.assertIsNone(product.name)
+        self.assertEqual((product.history.points[-1].lat, product.history.points[-1].lon), (-20.4, -111.8))
+
+    def test_list(self) -> None:
+        self.assertEqual(
+            hko.parse_list((HKO / "tc_list_2102.xml").read_bytes()), [hko.ListEntry("2102", "SURIGAE")]
+        )
+        self.assertEqual(hko.parse_list((RAW / "hko" / "tc_list.xml").read_bytes()), [])
+
+    def test_rejects_other_documents(self) -> None:
+        with self.assertRaises(ValueError):
+            hko.parse_track(b"<TropicalCycloneList></TropicalCycloneList>")
+        with self.assertRaises(ValueError):
+            hko.parse_list(b"<html>")
+        with self.assertRaises(ValueError):
+            hko.parse_track((HKO / "hko_tctrack_2206.xml").read_bytes().replace(b'tcid="2206"', b'tcid="x"'))
+
+    def _build(self, raw: Path, output: Path, issue: datetime, previous: dict | None = None) -> dict:
+        directory = raw / f"tc.{issue:%Y%m%d%H}" / "hko"
+        directory.mkdir(parents=True)
+        shutil.copy(HKO / "hko_tctrack_2206.xml", directory)
+        record = {"id": "hko", "ok": True, "fetched": iso_z(issue), "storms": 1, "files": ["hko_tctrack_2206.xml"]}
+        (directory / "fetch.json").write_text(json.dumps(record))
+        return build_product(issue, raw, output, sources=("hko",), previous_index=previous, force=True, now=issue)
+
+    def test_build_alone_is_a_b_level_system_that_keeps_its_id(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            raw, output = Path(scratch) / "raw", Path(scratch) / "out"
+            issue = utc(2022, 7, 2, 1)
+            report = self._build(raw, output, issue)
+            self.assertEqual(
+                report["storms"], [{"id": "x-wp-2022062903-1", "level": "B", "name": "CHABA", "basin": "WP"}]
+            )
+            directory = output / "tc" / "2022" / "07" / "02" / "tc.2022070201"
+            storm = json.loads((directory / "x-wp-2022062903-1.json").read_bytes())
+            self.assertEqual(sorted(storm["agencies"]), ["hko"])
+            self.assertEqual((storm["best"]["hko"]["source"], storm["best"]["hko"]["provisional"]), ("hko", True))
+            self.assertEqual(list(storm["aliases"]), ["hko:2206"])
+            index = json.loads((directory / "index.json").read_bytes())
+            self.assertEqual((index["storms"][0]["classAgency"], index["storms"][0]["class"]), ("hko", "STS"))
+            self.assertIsNotNone(report["pointer"])
+            # The next hour the alias finds it again.
+            later = self._build(raw, output, issue + timedelta(hours=1), previous=index)
+            self.assertEqual([s["id"] for s in later["storms"]], ["x-wp-2022062903-1"])
+
+    def test_attaches_to_the_numbered_storm(self) -> None:
+        now = utc(2022, 7, 2, 1)
+        base = utc(2022, 7, 2)
+        sightings = [
+            _sighting("jtwc", "WP042022", "WP", base, 20.5, 111.6, name="CHABA"),
+            Sighting(source="hko", key="2206", kind="unnumbered", basin="WP", time=base, lat=20.4, lon=111.8),
+        ]
+        resolution = resolve(sightings, [], now)
+        self.assertEqual([(s.id, s.level) for s in resolution.systems], [("WP042022", "A")])
+        self.assertIn("hko:2206", resolution.systems[0].aliases)
+        # A previous HKO-only system the storm now carries merges into it.
+        window = {"from": iso_z(base), "to": iso_z(base)}
+        previous = [_previous("x-wp-2022062903-1", "B", "WP", {"hko:2206": window}, base, 20.4, 111.8)]
+        merged = resolve(sightings, previous, now)
+        self.assertEqual(merged.crosswalk, {"x-wp-2022062903-1": "WP042022"})
 
 
 class IdentityTests(unittest.TestCase):

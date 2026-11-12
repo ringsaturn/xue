@@ -36,6 +36,10 @@
     "ok": true
    },
    {
+    "id": "hko",
+    "ok": true
+   },
+   {
     "id": "gfs",
     "ok": true
    },
@@ -76,50 +80,50 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=5c0d1654",
+   "href": "index.json?v=bbc2ab4c",
    "type": "application/json",
    "title": "tc index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 2679,
-   "xue:crc32": "5c0d1654",
-   "file:checksum": "b202045c0d1654"
+   "file:size": 2819,
+   "xue:crc32": "bbc2ab4c",
+   "file:checksum": "b20204bbc2ab4c"
   },
   "EP142026": {
-   "href": "EP142026.json?v=3d613283",
+   "href": "EP142026.json?v=13856c1f",
    "type": "application/json",
    "title": "NORBERT (EP142026)",
    "roles": ["data"],
    "xue:kind": "storm",
    "xue:level": "A",
    "xue:basin": "EP",
-   "file:size": 100903,
-   "xue:crc32": "3d613283",
-   "file:checksum": "b202043d613283"
+   "file:size": 101043,
+   "xue:crc32": "13856c1f",
+   "file:checksum": "b2020413856c1f"
   },
   "x-ep-2026091012-1": {
-   "href": "x-ep-2026091012-1.json?v=24eebb54",
+   "href": "x-ep-2026091012-1.json?v=95993998",
    "type": "application/json",
    "title": "x-ep-2026091012-1",
    "roles": ["data"],
    "xue:kind": "storm",
    "xue:level": "B",
    "xue:basin": "EP",
-   "file:size": 19155,
-   "xue:crc32": "24eebb54",
-   "file:checksum": "b2020424eebb54"
+   "file:size": 19295,
+   "xue:crc32": "95993998",
+   "file:checksum": "b2020495993998"
   },
   "x-wp-2026091200-1": {
-   "href": "x-wp-2026091200-1.json?v=95419395",
+   "href": "x-wp-2026091200-1.json?v=6201c32f",
    "type": "application/json",
    "title": "x-wp-2026091200-1",
    "roles": ["data"],
    "xue:kind": "storm",
    "xue:level": "B",
    "xue:basin": "WP",
-   "file:size": 12766,
-   "xue:crc32": "95419395",
-   "file:checksum": "b2020495419395"
+   "file:size": 12906,
+   "xue:crc32": "6201c32f",
+   "file:checksum": "b202046201c32f"
   }
  }
 }

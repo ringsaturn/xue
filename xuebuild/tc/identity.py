@@ -16,7 +16,10 @@ Every source names a system its own way. The rules, in priority order:
    proximity — within ``MATCH_KM`` of that system's position nearest in
    time — and otherwise becomes a C-level system of its own, matched to
    the previous hour's C-level systems the same way so its id holds while
-   the model keeps finding it.
+   the model keeps finding it. A centre's own number (the Hong Kong
+   Observatory's ``2206``) attaches by proximity the same way, but it is
+   stable, so failing that the previous hour's alias finds its system,
+   and a system only a centre tracks is B-level, not C.
 4. When an invest is numbered, the B-level system is *merged into* the
    A-level storm: a previous B/C system that no source names this hour,
    whose last position lies within ``MATCH_KM`` / 48 h of a current
@@ -36,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from .registry import INVEST_MIN, NUMBERED_MAX
+from .registry import AGENCIES, INVEST_MIN, NUMBERED_MAX
 from .track import iso_z
 
 MATCH_KM = 333.0
@@ -249,8 +252,10 @@ def resolve(sightings: list[Sighting], previous: list[PreviousSystem], now: date
         system.note_alias(alias, sighting.time)
         system.add(sighting)
 
-    # Rule 3: unnumbered model systems attach by proximity, else stand alone.
+    # Rule 3: unnumbered systems attach by proximity, else stand alone.
     for sighting in (s for s in sightings if s.kind == "unnumbered"):
+        alias = f"{sighting.source}:{sighting.key}"
+        centre = sighting.source in AGENCIES
         host = next(
             (
                 system
@@ -259,6 +264,23 @@ def resolve(sightings: list[Sighting], previous: list[PreviousSystem], now: date
             ),
             None,
         )
+        if host is None and centre:
+            # A centre's own number names one system for its whole life,
+            # unlike a model's, so the previous index's alias finds it.
+            prior = next(
+                (
+                    item
+                    for item in previous
+                    if alias in item.aliases and now - item.last_time <= timedelta(hours=MERGE_HOURS)
+                ),
+                None,
+            )
+            if prior is not None:
+                host = systems.get(prior.id)
+                if host is None:
+                    host = System(id=prior.id, level=prior.level, basin=prior.basin)
+                    systems[prior.id] = host
+                    remember(host, prior)
         if host is None:
             prior = next(
                 (
@@ -278,14 +300,18 @@ def resolve(sightings: list[Sighting], previous: list[PreviousSystem], now: date
                 systems[prior.id] = host
                 remember(host, prior)
             else:
+                # A disturbance a centre tracks is B-level even unnumbered;
+                # only a model's own find is C-level.
                 host = System(
                     id=synthetic_id(sighting.basin, sighting.first_seen or sighting.time, taken),
-                    level="C",
+                    level="B" if centre else "C",
                     basin=sighting.basin,
                 )
                 systems[host.id] = host
                 taken.add(host.id)
-        host.note_alias(f"{sighting.source}:{sighting.key}", sighting.time)
+        if centre and host.level == "C":
+            host.level = "B"
+        host.note_alias(alias, sighting.time)
         host.add(sighting)
 
     # Rule 4: a previous B/C system nobody names this hour merges into the
