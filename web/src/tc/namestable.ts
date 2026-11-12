@@ -78,7 +78,7 @@ export const NAMES: Record<string, readonly [string | null, string | null, strin
   KROVANH: ["科罗旺", "科羅旺", "クロヴァン", "크로반"],
   KUJIRA: ["鲸鱼", "鯨魚", "クジラ", "구지라"],
   KULAP: ["玫瑰", "庫拉", "クラー", null],
-  LALA: ["拉娜", "拉拉", null, null],
+  LALA: ["拉拉", "拉拉", null, null],
   LAN: ["兰恩", "蘭恩", "ラン", "란"],
   LEEPI: ["丽琵", "麗琵", "リーピ", "리피"],
   LINGLING: ["玲玲", "玲玲", "レンレン", "링링"],
@@ -230,7 +230,7 @@ export const ZH_ELSEWHERE: Record<string, Readonly<Record<string, string>>> = {
   CP: {
     AKA: "阿卡", AKONI: "阿科尼", ALIKA: "阿利卡", ANA: "安娜", EKEKA: "埃克卡", ELA: "埃拉", ELE: "埃莱", EMA: "埃玛",
     HALOLA: "哈洛拉", HENE: "希妮", HONE: "霍恩", HUKO: "赫科", IOLANA: "约拉娜", IONA: "艾奥娜", IOPA: "艾奥帕",
-    IUNE: "尤内", KELI: "凯利", KEONI: "基奥尼", KIKA: "基卡", KILO: "基洛", LALA: "拉娜", LANA: "拉纳",
+    IUNE: "尤内", KELI: "凯利", KEONI: "基奥尼", KIKA: "基卡", KILO: "基洛", LALA: "拉拉", LANA: "拉纳",
     LINO: "利诺", LOKE: "洛基", MAKA: "马卡", MALIA: "马莉娅", MELE: "米尔", MOKE: "莫克", NEKI: "内基",
     NIALA: "尼亚拉", NOLO: "诺洛", NONA: "诺娜", OHO: "奥贺", OLANA: "奥拉娜", OLIWA: "奥利瓦", OMEKA: "奥梅卡",
     PALI: "帕利", PAMA: "帕马", PENA: "佩娜", PEWA: "佩娃", ULANA: "乌拉娜", ULIKA: "乌利卡", UNALA: "乌娜拉",

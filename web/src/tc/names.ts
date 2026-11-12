@@ -16,7 +16,9 @@
  * the Japanese, Korean and Chinese Wikipedia lists, which cite the
  * agencies' own tables. Every `zh` name, in every basin, is the National
  * Meteorological Centre's (nmc.cn, 台风命名: 西北太平洋 and 全球其它海域),
- * checked 2026-11-12. A name added to a list later is added here by hand. */
+ * checked 2026-11-12, except Lala: NMC writes 拉娜, next to Lana's 拉纳,
+ * which reads as a slip, so it stays 拉拉. A name added to a list later is
+ * added here by hand. */
 
 import { locale, type Locale } from "../i18n";
 import { stormNameIn } from "./namestable";
