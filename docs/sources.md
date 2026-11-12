@@ -259,6 +259,20 @@ publishes intensity classes, not reflectivity, so it ships `prate` alone at
 each class's representative rate (0.5, 3, 7.5, 15, 25, 40, 65, 100 mm/h).
 Fetched through [jma-radar](https://github.com/ringsaturn/jma-radar).
 
+### HKO rainfall nowcast (`hkonowcast`)
+
+0.019° × 0.018° over Hong Kong and the Pearl River Delta (112.955–115.292°E,
+21.33–23.49°N, 124 × 121), one issue every twelve minutes or so. The Hong
+Kong Observatory's gridded rainfall nowcast: four half-hourly accumulations
+ending 30, 60, 90 and 120 minutes after the issue, published as `prate`,
+the mean rate over each half hour (`typeOfStatisticalProcessing` 0). A
+window is the newest issue alone, under the hour its first frame falls in,
+and every frame of it lies ahead of the clock; there is no archive, so a
+missed issue is not published. The Observatory's points are evenly spaced
+in Mercator, not in latitude, and are sampled onto the regular grid by
+nearest point. No reduced tier. Attribution: Hong Kong Observatory
+(DATA.GOV.HK).
+
 ### Geostationary imagers (`himawari`, `himawarijp`, `goeseast`, `goeswest`, `meteosat`)
 
 | Source | Spacecraft | Disk | Cadence and window |
