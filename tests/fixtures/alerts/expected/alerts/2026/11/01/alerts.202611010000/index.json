@@ -114,15 +114,15 @@
    },
    "areas": {
     "set": "cma-areas",
-    "version": "20261112",
-    "path": "../../../../../alerts-areas/cma-areas.20261112.pmtiles",
-    "byteLength": 21162186,
-    "crc32": "62936b04",
+    "version": "20261112b",
+    "path": "../../../../../alerts-areas/cma-areas.20261112b.pmtiles",
+    "byteLength": 21166362,
+    "crc32": "c1f9f588",
     "layers": ["province", "prefecture", "county"],
     "bbox": {
-     "path": "../../../../../alerts-areas/cma-areas.20261112.bbox.json",
-     "byteLength": 143930,
-     "crc32": "46f79c49"
+     "path": "../../../../../alerts-areas/cma-areas.20261112b.bbox.json",
+     "byteLength": 144021,
+     "crc32": "7f44b60f"
     }
    }
   },
@@ -141,15 +141,15 @@
    },
    "areas": {
     "set": "cma-areas",
-    "version": "20261112",
-    "path": "../../../../../alerts-areas/cma-areas.20261112.pmtiles",
-    "byteLength": 21162186,
-    "crc32": "62936b04",
+    "version": "20261112b",
+    "path": "../../../../../alerts-areas/cma-areas.20261112b.pmtiles",
+    "byteLength": 21166362,
+    "crc32": "c1f9f588",
     "layers": ["province", "prefecture", "county"],
     "bbox": {
-     "path": "../../../../../alerts-areas/cma-areas.20261112.bbox.json",
-     "byteLength": 143930,
-     "crc32": "46f79c49"
+     "path": "../../../../../alerts-areas/cma-areas.20261112b.bbox.json",
+     "byteLength": 144021,
+     "crc32": "7f44b60f"
     }
    }
   }

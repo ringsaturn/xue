@@ -133,12 +133,12 @@ IGN's ADMIN EXPRESS départements (Licence Ouverte 2.0) under their NUTS
 
 CMA_AREAS = AreaSet(
     set="cma-areas",
-    version="20261112",
-    byte_length=21162186,
-    crc32="62936b04",
+    version="20261112b",
+    byte_length=21166362,
+    crc32="c1f9f588",
     layers=("province", "prefecture", "county"),
-    bbox_byte_length=143930,
-    bbox_crc32="46f79c49",
+    bbox_byte_length=144021,
+    bbox_crc32="7f44b60f",
 )
 """China's provinces, prefectures and counties by their six-digit
 administrative codes: the Amap outlines packaged by cnmaps-data (MIT,
