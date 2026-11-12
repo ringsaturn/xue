@@ -737,10 +737,11 @@ class SourceLadderTests(unittest.TestCase):
                 factors = spec.variant_factors
                 self.assertIsInstance(factors, tuple)
                 # The WOOF nest is under 5000 cells a plane, an EFAS case
-                # a box of a few thousand and a CMA-CW/DUST plane a quarter
-                # of a GFS one: they publish no reduced tier; every other
+                # a box of a few thousand, a CMA-CW/DUST plane a quarter
+                # of a GFS one and the HKO nowcast 124 × 121 cells: they
+                # publish no reduced tier; every other
                 # grid has at least the half.
-                self.assertEqual(bool(factors), source_id not in ("woof", "efas", "efaswb", "era5", "cams", "cmadust"), "a source publishes at least the half tier")
+                self.assertEqual(bool(factors), source_id not in ("woof", "efas", "efaswb", "era5", "cams", "cmadust", "hkonowcast"), "a source publishes at least the half tier")
                 self.assertEqual(list(factors), sorted(set(factors)), "ascending, no repeats")
                 for factor in factors:
                     self.assertGreaterEqual(factor, 2)
@@ -760,7 +761,7 @@ class SourceLadderTests(unittest.TestCase):
                 # cells and a satellite disk 9 M, past the shell's frame
                 # budget, so they take two rungs; every other grid the half.
                 expected = (
-                    (2, 4) if source_id in satellites | {"ifshres", "ifs"} else () if source_id in ("woof", "efas", "efaswb", "era5", "cams", "cmadust") else (2,)
+                    (2, 4) if source_id in satellites | {"ifshres", "ifs"} else () if source_id in ("woof", "efas", "efaswb", "era5", "cams", "cmadust", "hkonowcast") else (2,)
                 )
                 self.assertEqual(factors, expected)
 
