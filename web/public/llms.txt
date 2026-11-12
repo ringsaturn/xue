@@ -21,7 +21,7 @@ Facts worth getting right:
 - Live sources, one shell (the ids are the `?model=` and `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`, `rrfs`,
   `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
-  `mrms`, `jma`, `aurora` and the satellites `himawari`, `himawarijp`,
+  `mrms`, `jma`, `hkonowcast`, `aurora` and the satellites `himawari`, `himawarijp`,
   `goeseast`, `goeswest`, `meteosat`. Cases only (no live pointer, no place
   in the model switch): `mrms3d`, `woof`, `efas`, `efaswb`, `era5`, `cams`.
   The grid, axis, cadence, variables and caveats of each are in
@@ -165,7 +165,10 @@ Facts worth getting right:
   (g/kg, GRIB2 0/1/22 on surface 102) on 24 altitudes above mean sea level
   (every 0.25 km from 0.25 to 3 km, every 0.5 km to 6 km, every 1 km to
   12 km; variables `clw250` … `clw12000`), 0 g/kg below the model ground. JMA: `prate` (precipitation intensity class representative rate,
-  mm/h). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
+  mm/h). HKO-NOWCAST (`hkonowcast`): `prate` (the mean rate over the half
+  hour ending at the frame, mm/h, statistical process 0, from the Hong Kong
+  Observatory's half-hourly nowcast accumulations; a window is one issue,
+  every frame 30 to 120 minutes ahead of it). HIMAWARI: `ir104` (10.4 µm brightness temperature, K) and
   `dustrgb` (the Dust RGB's red, green and blue guns, 0–1, a composite
   with no physical unit), `dustcf` (the DEBRA dust confidence, 0–1) and
   `zhouye` (the ZHOUYE dust confidence, 0–1, diurnally consistent) and
@@ -212,7 +215,10 @@ Facts worth getting right:
   NOAA product (public domain); `jma` is derived from the Japan Meteorological Agency
   website (出典：気象庁ホームページ; the agency's terms of use, compatible
   with CC BY 4.0, ask that the source be named and the processing —
-  regridding and reclassification by jma-radar — be noted); `himawari` and
+  regridding and reclassification by jma-radar — be noted); `hkonowcast`
+  is the Hong Kong Observatory's gridded rainfall nowcast from DATA.GOV.HK
+  (reuse under its terms of use, attribution "Hong Kong Observatory
+  (DATA.GOV.HK)", resampled and converted to a rate); `himawari` and
   `himawarijp` are JMA's Himawari-9 imagery distributed by NOAA
   (attribution required, the reprojection noted, no endorsement implied by
   either agency); `goeseast`
@@ -290,9 +296,9 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
@@ -501,7 +507,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`, `latest-hkonowcast.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),

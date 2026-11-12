@@ -196,6 +196,7 @@ export const es: Record<MessageKey, string> = {
   creditsMrms: "Observaciones de radar: MRMS, EE. UU. contiguos",
   creditsNexrad: "Radar individual: reflectividad y velocidad radial, EE. UU.",
   creditsJma: "Precipitación radar: nowcast JMA, Japón (remallado)",
+  creditsHko: "Nowcast de lluvia: nowcast en malla del HKO, Hong Kong (remallado)",
   creditsHimawari: "Imágenes de satélite: Himawari-9 AHI, JMA, vía NOAA Open Data (reproyectado)",
   creditsGoes: "Imágenes de satélite: GOES-19 Este y GOES-18 Oeste ABI, NOAA NESDIS, vía NOAA Open Data (reproyectado)",
   creditsMeteosat: "Imágenes de satélite: contiene datos Meteosat de EUMETSAT modificados {year}; Meteosat-12 FCI, ciclo horario, CC-BY-4.0 (reproyectado)",
