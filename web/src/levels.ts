@@ -109,6 +109,9 @@ interface FamilyMember {
   id: ForecastBundleId;
   /** The level row's or the chip's label. */
   code: string;
+  /** The label shown on screen in place of `code`, translated, for a
+   * member whose code is a word rather than a level (the wave family). */
+  labelKey?: MessageKey;
   standInFor?: ForecastBundleId;
 }
 
@@ -221,15 +224,15 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
     surfaceCode: "HEIGHT",
     glossKey: "varWave",
     variants: [
-      { id: "wave", code: "HEIGHT" },
-      { id: "htsgw", code: "HEIGHT", standInFor: "wave" },
-      { id: "perpw", code: "PERIOD" },
-      { id: "windwave", code: "WIND SEA" },
-      { id: "wvhgt", code: "WIND SEA", standInFor: "windwave" },
-      { id: "wvper", code: "SEA PERIOD" },
-      { id: "swell", code: "SWELL" },
-      { id: "swhgt", code: "SWELL", standInFor: "swell" },
-      { id: "swper", code: "SWELL PERIOD" },
+      { id: "wave", code: "HEIGHT", labelKey: "waveChipHeight" },
+      { id: "htsgw", code: "HEIGHT", labelKey: "waveChipHeight", standInFor: "wave" },
+      { id: "perpw", code: "PERIOD", labelKey: "waveChipPeriod" },
+      { id: "windwave", code: "WIND SEA", labelKey: "waveChipWindSea" },
+      { id: "wvhgt", code: "WIND SEA", labelKey: "waveChipWindSea", standInFor: "windwave" },
+      { id: "wvper", code: "SEA PERIOD", labelKey: "waveChipSeaPeriod" },
+      { id: "swell", code: "SWELL", labelKey: "waveChipSwell" },
+      { id: "swhgt", code: "SWELL", labelKey: "waveChipSwell", standInFor: "swell" },
+      { id: "swper", code: "SWELL PERIOD", labelKey: "waveChipSwellPeriod" },
     ],
   },
   // The aerosol optical depth at 550 nm: the whole column heads the
@@ -467,6 +470,16 @@ export function levelCode(id: ForecastBundleId): string {
   if (listed) return listed.code;
   const level = bundleLevel(id);
   return level === null ? FAMILIES[family].surfaceCode : String(level);
+}
+
+/** The level row's glyph or the chip's text on screen: the member's
+ * translated label where it has one (the wave family), `levelCode`
+ * otherwise. */
+export function levelLabel(id: ForecastBundleId): string {
+  const family = familyOf(id);
+  if (family === null) return levelCode(id);
+  const listed = listedMembers(FAMILIES[family]).find((member) => member.id === id);
+  return listed?.labelKey ? t(listed.labelKey) : levelCode(id);
 }
 
 

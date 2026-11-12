@@ -697,6 +697,14 @@ export const en = {
    * the vector labels name height and direction both. */
   varLabelWindwave: "Wind sea: significant height and direction",
   varLabelSwell: "Swell: significant height and direction (first partition)",
+  /** The wave family's chips and level-row glyphs ("WAVE" is the
+   * family code): short, a chip each. */
+  waveChipHeight: "HEIGHT",
+  waveChipPeriod: "PERIOD",
+  waveChipWindSea: "WIND SEA",
+  waveChipSeaPeriod: "SEA PERIOD",
+  waveChipSwell: "SWELL",
+  waveChipSwellPeriod: "SWELL PERIOD",
   varLabelWvhgt: "Significant height of wind waves",
   varLabelWvper: "Mean period of wind waves",
   varLabelWvdir: "Direction of wind waves",

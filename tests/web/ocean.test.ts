@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { setLocale } from "../../web/src/i18n";
 import {
   identifyBundle,
   identityForBundleId,
@@ -17,6 +18,7 @@ import {
   familyOf,
   isobaricLegend,
   levelCode,
+  levelLabel,
   scalarLegendRange,
   temperaturePaletteDomain,
 } from "../../web/src/levels";
@@ -124,6 +126,19 @@ describe("the ocean registry", () => {
       "SWELL",
       "SWELL PERIOD",
     ]);
+  });
+
+  it("translates the wave members' chips, keeping the English codes", () => {
+    const ids = ["wave", "htsgw", "perpw", "windwave", "wvper", "swell", "swper"] as const;
+    try {
+      setLocale("zh");
+      expect(ids.map(levelLabel)).toEqual(["波高", "波高", "周期", "风浪", "风浪周期", "涌浪", "涌浪周期"]);
+      expect(levelCode("windwave")).toBe("WIND SEA");
+      expect(levelLabel("icec")).toBe("COVER");
+    } finally {
+      setLocale("en");
+    }
+    expect(ids.map(levelLabel)).toEqual(ids.map(levelCode));
   });
 
   it("offers the scalar height only on a run without the wave vector", () => {

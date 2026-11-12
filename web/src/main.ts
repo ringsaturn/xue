@@ -112,6 +112,7 @@ import {
   familyVariants,
   isobaricCode,
   levelCode,
+  levelLabel,
   niceStep,
   rangeLegend,
   scalarLegendRange,
@@ -3757,7 +3758,7 @@ function renderLevelRow(): void {
       if (statistic) button.dataset.statistic = statistic.statistic;
       const glyph = document.createElement("b");
       glyph.setAttribute("aria-hidden", "true");
-      glyph.textContent = statistic?.code ?? levelCode(id);
+      glyph.textContent = statistic?.code ?? levelLabel(id);
       const name = document.createElement("span");
       name.className = "rail-name";
       const [code, gloss] = statistic
@@ -4140,7 +4141,7 @@ function syncFamilyGloss(button: HTMLButtonElement, current: boolean): void {
   if (family === undefined || !gloss) return;
   const fill = view.field === null ? null : (statisticBase(view.field) ?? view.field);
   const info = FAMILIES[family];
-  const followed = current && fill !== null && fill !== info.surface ? levelCode(fill) : null;
+  const followed = current && fill !== null && fill !== info.surface ? levelLabel(fill) : null;
   const key = gloss.dataset.i18n as MessageKey | undefined;
   gloss.textContent = followed ?? (key ? t(key) : gloss.textContent);
 }
@@ -4332,7 +4333,7 @@ function renderFieldSheet(rows: FieldSheetRow[]): void {
       chip.dataset.member = member;
       chip.disabled = variableButtonsDisabled || switchingVariable;
       chip.setAttribute("aria-pressed", String(member === view.field));
-      chip.textContent = levelCode(member);
+      chip.textContent = levelLabel(member);
       chip.title = familyLabel(member);
       chip.addEventListener("click", () => {
         fieldSheetControl.close();
