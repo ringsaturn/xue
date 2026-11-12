@@ -1632,7 +1632,7 @@
         },
         {
           "name": "China Meteorological Administration",
-          "description": "The warning signals of China's national, provincial, prefecture and county meteorological observatories, each naming its issuing observatory, as the WMO Severe Weather Information Centre aggregates their CAP messages; Chinese and English texts kept verbatim. Free for re-use by other websites that say which service issued them (SWIC notes to users). The area boundaries: 边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by xue · not a survey-approved map (无审图号).",
+          "description": "The warning signals of China's national, provincial, prefecture and county meteorological observatories, each naming its issuing observatory, as the WMO Severe Weather Information Centre aggregates their CAP messages; Chinese and English texts kept verbatim. Free for re-use by other websites that say which service issued them (SWIC notes to users). The area boundaries: 边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by xue.",
           "roles": [
             "producer",
             "licensor"
