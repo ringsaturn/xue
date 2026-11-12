@@ -143,6 +143,23 @@ export function matchZone(query: string, zones: readonly string[]): string | nul
   return partial.length === 1 ? partial[0]! : null;
 }
 
+/** The zones a typed query could mean, best first, at most `limit`: those
+ * whose city starts with it, then those whose id does, then those holding
+ * it anywhere (`tok` → Asia/Tokyo; `america/a` → America/Adak, …). */
+export function searchZones(query: string, zones: readonly string[], limit: number): string[] {
+  const wanted = query.trim().toLowerCase().replace(/\s+/g, "_");
+  if (wanted === "") return [];
+  const ranked: [number, string][] = [];
+  for (const zone of zones) {
+    const lower = zone.toLowerCase();
+    const city = lower.slice(lower.lastIndexOf("/") + 1);
+    const rank = city.startsWith(wanted) ? 0 : lower.startsWith(wanted) ? 1 : lower.includes(wanted) ? 2 : -1;
+    if (rank >= 0) ranked.push([rank, zone]);
+  }
+  ranked.sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
+  return ranked.slice(0, limit).map(([, zone]) => zone);
+}
+
 /** Whether this engine's tz data can format in `zone`. */
 export function isKnownZone(zone: string): boolean {
   try {

@@ -8,6 +8,7 @@ import {
   formatStamp,
   isKnownZone,
   matchZone,
+  searchZones,
   onDisplayZoneChange,
   parseZonePref,
   resolveZone,
@@ -138,6 +139,15 @@ describe("display zone", () => {
     expect(matchZone("America", zones)).toBeNull();
     expect(matchZone("gmt", zones)).toBe("UTC");
     expect(matchZone("", zones)).toBeNull();
+  });
+
+  it("suggests zones by city first, then by id", () => {
+    const zones = ["America/Adak", "America/New_York", "Asia/Tokyo", "Europe/Tirane", "Pacific/Tongatapu"];
+    expect(searchZones("to", zones, 8)).toEqual(["Asia/Tokyo", "Pacific/Tongatapu"]);
+    expect(searchZones("america", zones, 8)).toEqual(["America/Adak", "America/New_York"]);
+    expect(searchZones("new york", zones, 8)).toEqual(["America/New_York"]);
+    expect(searchZones("a", zones, 2)).toHaveLength(2);
+    expect(searchZones("  ", zones, 8)).toEqual([]);
   });
 
   it("reads a stored choice leniently", () => {
