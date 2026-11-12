@@ -676,7 +676,7 @@ def parser() -> argparse.ArgumentParser:
     )
     alerts_areas.add_argument("--set", required=True, choices=tuple(ALERTS_AREA_SETS), dest="area_set")
     alerts_areas.add_argument("--source", type=Path, required=True, help="the directory holding the release's shapefiles or zips")
-    alerts_areas.add_argument("--version", required=True, help="the release's effective date, YYYYMMDD")
+    alerts_areas.add_argument("--version", required=True, help="the day the set is built, YYYYMMDD (a letter after it for a second build that day)")
     alerts_areas.add_argument("--output", type=Path, default=Path("web/public/data/alerts-areas"))
 
     fire_build = commands.add_parser(

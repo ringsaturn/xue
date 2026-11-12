@@ -316,8 +316,8 @@ def build_area_set(set_id: str, source: Path, version: str, output: Path) -> dic
     area_set = SETS.get(set_id)
     if area_set is None:
         raise AlertsProductError(f"unknown boundary set {set_id!r}; choose from {', '.join(SETS)}")
-    if not re.fullmatch(r"\d{8}", version):
-        raise AlertsProductError("version must be the day the set is built, YYYYMMDD")
+    if not re.fullmatch(r"\d{8}[a-z]?", version):
+        raise AlertsProductError("version must be the day the set is built, YYYYMMDD, and a letter for a second build that day")
     if not source.is_dir():
         raise AlertsProductError(f"{source} is not a directory of the downloaded release")
     if shutil.which("tippecanoe") is None:
