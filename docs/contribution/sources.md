@@ -36,6 +36,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `mrms` | fetched observation | gzipped GRIB listed off the bucket | `cref` |
 | `mrms3d` | fetched observation (volume) | 33 gzipped GRIBs a frame, listed off the bucket | `refl3d` |
 | `jma` | series-file observation | `jma-radar` tool, frame cache | `prate` |
+| `hkonowcast` | series-file observation (a nowcast, one issue a window) | one CSV on DATA.GOV.HK, the newest issue only | `prate` |
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | `cref` |
 | `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | `aurora` |
 | `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | `ir104` |
@@ -64,7 +65,11 @@ first hour (`window_hours`, the `--hours` default), and `cadence_seconds`
 makes the window's slots the axis, so `unitSeconds` is the cadence.
 `--run latest` resolves (`fetch.py::resolve_run`, `latest_observation_slot`
 asking the source's feed, `observation_window_start`) to the window whose last
-hour holds the newest frame. The same run is rebuilt as frames arrive, so
+hour holds the newest frame. Where a window starts is the feed's answer
+(`Feed.window_start`): the plain rule is the hour `hours - 1` before the
+newest frame, and a feed whose window cannot reach that far back (the
+aurora cache, an HKO issue) starts it at its first frame's hour, since the
+run id must be the manifest's run time. The same run is rebuilt as frames arrive, so
 each build takes `--round HHMM` and lands in `<model>.<run>/<HHMM>/` with a
 `window.json` (`fetch.py::window_summary`). A new round is a new
 directory, because nothing is overwritten under an unchanged `?v=`
@@ -92,8 +97,8 @@ object names; `noaa-hrrr`, `noaa-rrfs`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs
 `dwd-icon-eu`, `meteofrance-arpege` and `cmageps` are the other one-GRIB-per-hour
 feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
 `open-meteo`, `cmadust` and `fmi-silam` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
-`jma-nowcast`, `cma-archive`, `ovation` and `satellite` (every disk) are
-observation windows; `local` is a source nothing fetches (`woof`, `efas`,
+`jma-nowcast`, `hko-nowcast`, `cma-archive`, `ovation` and `satellite`
+(every disk) are observation windows; `local` is a source nothing fetches (`woof`, `efas`,
 `efaswb`, `era5`, `cams`). What a family needs to tell its sources apart
 comes from their own fields (`platform`, `open_meteo`, `companion_files`)
 or a table in the family's code (`ECMWF_OPEN_DATA_MODELS`). The families'
@@ -700,6 +705,35 @@ per window at 0.005°, the finest grid the zoom-8 tiles support (constants
 beside `fetch.py::_fetch_jma_run`).
 The agency publishes intensity classes, not dBZ, so the source ships `prate`
 alone at each class's representative rate (all nine distinct codes).
+
+**hkonowcast.** The Hong Kong Observatory's gridded rainfall nowcast,
+`Gridded_rainfall_nowcast.csv` on DATA.GOV.HK (`xuebuild/hkonowcast.py`):
+one CSV of about 2.7 MB holding the newest issue alone, replaced every
+twelve minutes or so and some ten minutes after the issue time, with no
+listing and no archive. The live slot is a 512-byte Range read of its head
+(the first row names the issue); the fetch reads the whole file and refuses
+anything but one issue, four accumulations ending exactly 30, 60, 90 and
+120 minutes after it, and every point of each once. Times are Hong Kong
+time (UTC+8) in the file and UTC everywhere after. The 121 × 121 points are
+evenly spaced in spherical Mercator at the longitude step (0.01946°), so
+their latitude spacing shrinks northwards from 0.0181° to 0.0178° and a
+regular latitude axis through the end rows misses the middle ones by up to
+a quarter of a row. The series path reads only regular latitude/longitude
+grids and leaves projections to the fetch, so the fetch samples the points
+onto 0.019° × 0.018° (whole thousandths, which `grid.snap_regional_steps`
+recognises, so both encoders read the same doubles) by nearest point along
+each axis: every row is its own point, three columns in 124 repeat one. An
+accumulation becomes the mean rate over its half hour (millimetres times
+two, mm/h; `statistical_processes` marks `prate` a mean). The series is
+written by `cmadust.write_series` with time in hours from the issue, which
+half hours keep exact. A window is the issue alone, published under the
+hour its first frame falls in (`HkoNowcast.window_start`; a three-hour
+window reaches the last frame from any issue minute), so every frame lies
+ahead of the clock and the shell reads it as a nowcast (`leadsClock`).
+Issues land on twelve-minute marks, so valid times sit on six-minute ones,
+the `cadence_seconds`; the fetch refuses one off them rather than snap it.
+A round is all-new frames, so neither a frame cache nor segments save
+anything, and only the run the newest issue falls under can be fetched.
 
 **cma.** The CMA level-3 composite reflectivity mosaic over China, read out
 of an archive rather than decoded live. A private sync job keeps the

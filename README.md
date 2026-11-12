@@ -52,6 +52,7 @@ is no longer published and every decoder still reads it.
 | NCEP CFSv2 (`cfs`) | T126 Gaussian / 1° global · 6-hourly F6–F6552 (39 weeks); 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cfs.json"><img alt="the newest cfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cfs.json&query=%24.runTime&label=&color=4f7942&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA MRMS radar (`mrms`) | 0.02° contiguous US · 2 min, rolling 4 h | <a href="https://dataset.ringsaturn.me/xue/latest-mrms.json"><img alt="the newest mrms run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-mrms.json&query=%24.runTime&label=&color=b7472a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | JMA precipitation nowcast (`jma`) | 0.005° Japan · 5 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-jma.json"><img alt="the newest jma run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-jma.json&query=%24.runTime&label=&color=c25b2c&style=flat-square&cacheSeconds=600" width="170"></a> |
+| HKO rainfall nowcast (`hkonowcast`) | 0.019° × 0.018° Hong Kong · the newest issue, 30–120 min ahead | <a href="https://dataset.ringsaturn.me/xue/latest-hkonowcast.json"><img alt="the newest hkonowcast run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hkonowcast.json&query=%24.runTime&label=&color=b5523b&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Himawari-9 (`himawari`) | 0.04° disk at 140.7°E · 10 min, rolling 6 h | <a href="https://dataset.ringsaturn.me/xue/latest-himawari.json"><img alt="the newest himawari run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-himawari.json&query=%24.runTime&label=&color=6d597a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Himawari-9 over Japan (`himawarijp`) | 0.01° Japan box, 24–46°N 122–148°E · 10 min, rolling 3 h | <a href="https://dataset.ringsaturn.me/xue/latest-himawarijp.json"><img alt="the newest himawarijp run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-himawarijp.json&query=%24.runTime&label=&color=6d597a&style=flat-square&cacheSeconds=600" width="170"></a> |
 | GOES-19 East (`goeseast`) | 0.04° disk at 75.2°W · 10 min, rolling 6 h | <a href="https://dataset.ringsaturn.me/xue/latest-goeseast.json"><img alt="the newest goeseast run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-goeseast.json&query=%24.runTime&label=&color=5c677d&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -218,6 +219,10 @@ The other sources:
 - JMA precipitation nowcast: Source: Japan Meteorological Agency website
   (出典：気象庁ホームページ), regridded and reclassified by
   [jma-radar](https://github.com/ringsaturn/jma-radar).
+- HKO rainfall nowcast (`hkonowcast`): Source: Hong Kong Observatory
+  (DATA.GOV.HK), under the
+  [DATA.GOV.HK terms](https://data.gov.hk/en/terms-and-conditions);
+  resampled onto a regular grid and converted to a rate.
 - CMA radar mosaic: a product of the China Meteorological Administration
   (中国气象局国家气象中心, www.nmc.cn).
 - CMA GRAPES GEPS (`cmageps`): Source: China Meteorological Administration
