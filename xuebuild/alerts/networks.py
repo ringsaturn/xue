@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..airport.fetch import SourceStatus
-from . import eccc, jma, meteoalarm, nws
+from . import cma, eccc, hko, jma, meteoalarm, nws
 from .alert import NetworkRead
 from .schema import areas_bbox_filename, areas_bbox_path, areas_path
 
@@ -131,6 +131,20 @@ geocode a line names (``WARNCELLID:…``, ``NUTS3:…``): the DWD's warn cells
 IGN's ADMIN EXPRESS départements (Licence Ouverte 2.0) under their NUTS
 2013 codes, as fetched on 2026-11-01 (``docs/alerts.md`` §9.3)."""
 
+CMA_AREAS = AreaSet(
+    set="cma-areas",
+    version="20261112",
+    byte_length=21162186,
+    crc32="62936b04",
+    layers=("province", "prefecture", "county"),
+    bbox_byte_length=143930,
+    bbox_crc32="46f79c49",
+)
+"""China's provinces, prefectures and counties by their six-digit
+administrative codes: the Amap outlines packaged by cnmaps-data (MIT,
+commit e2a1a346, 2026-04-02), GCJ-02 turned into WGS84 by xue
+(``docs/alerts.md`` §9.4)."""
+
 NWS = Network(
     id=nws.NETWORK,
     name="US National Weather Service",
@@ -190,9 +204,39 @@ METEOALARM = Network(
 further requirements (credit, issue time, link, disclaimer, delay) that
 ``docs/alerts.md`` §10.4 lists."""
 
-NETWORKS: tuple[Network, ...] = (NWS, JMA, ECCC, METEOALARM)
+CMA = Network(
+    id=cma.NETWORK,
+    name="China Meteorological Administration",
+    attribution="China Meteorological Administration, via the WMO Severe Weather Information Centre",
+    license="WMO-SWIC",
+    license_url="https://severeweather.wmo.int/note.html",
+    url="https://www.12379.cn/",
+    sources=(cma.SOURCE,),
+    fetch=cma.fetch,
+    read=cma.read,
+    areas=CMA_AREAS,
+    area_layers=lambda line: CMA_AREAS.layers,
+)
+"""The warning signals of China's meteorological observatories as SWIC
+aggregates them for WMO (``docs/alerts.md`` §10.5)."""
 
-AREA_SETS: dict[str, AreaSet] = {area_set.set: area_set for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS)}
+HKO = Network(
+    id=hko.NETWORK,
+    name="Hong Kong Observatory",
+    attribution="Hong Kong Observatory, HKSAR Government (DATA.GOV.HK)",
+    license="DATA.GOV.HK",
+    license_url="https://data.gov.hk/en/terms-and-conditions",
+    url="https://www.hko.gov.hk/en/wxinfo/dailywx/wxwarntoday.htm",
+    sources=(hko.SOURCE,),
+    fetch=hko.fetch,
+    read=hko.read,
+    areas=CMA_AREAS,
+    area_layers=lambda line: CMA_AREAS.layers,
+)
+
+NETWORKS: tuple[Network, ...] = (NWS, JMA, ECCC, METEOALARM, CMA, HKO)
+
+AREA_SETS: dict[str, AreaSet] = {area_set.set: area_set for area_set in (NWS_ZONES, JMA_CLASS20, METEOALARM_AREAS, CMA_AREAS)}
 
 
 def network_by_id(network_id: str) -> Network | None:

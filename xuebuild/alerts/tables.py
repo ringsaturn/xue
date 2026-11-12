@@ -1,6 +1,7 @@
 """The category and level mappings, read from ``tables.json`` beside this
 module. They are data, not code: a new NWS event name, ECCC subject, JMA
-kind code or MeteoAlarm awareness type is a line in that file and a row
+kind code, MeteoAlarm awareness type, CMA event or HKO warning code is a
+line in that file and a row
 in ``docs/alerts.md`` §3, and nothing else changes."""
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ TABLES_PATH = Path(__file__).with_name("tables.json")
 @cache
 def tables() -> dict[str, Any]:
     payload = json.loads(TABLES_PATH.read_text(encoding="utf-8"))
-    for network in ("nws", "jma", "eccc", "meteoalarm"):
+    for network in ("nws", "jma", "eccc", "meteoalarm", "cma", "hko"):
         if network not in payload:
             raise AlertsProductError(f"tables.json has no {network} table")
     categories = (
@@ -27,6 +28,8 @@ def tables() -> dict[str, Any]:
         + [kind["category"] for kind in payload["jma"]["kinds"].values()]
         + list(payload["eccc"]["subjects"].values())
         + list(payload["meteoalarm"]["categoryByAwarenessType"].values())
+        + list(payload["cma"]["categoryByEvent"].values())
+        + [code["category"] for code in payload["hko"]["codes"].values()]
     )
     unknown = sorted(set(categories) - set(CATEGORIES))
     if unknown:
@@ -38,6 +41,10 @@ def tables() -> dict[str, Any]:
         + list(payload["eccc"]["levelByColour"].values())
         + list(payload["eccc"]["levelByType"].values())
         + list(payload["meteoalarm"]["levelByAwareness"].values())
+        + list(payload["cma"]["levelBySeverity"].values())
+        + [payload["cma"]["defaultLevel"]]
+        + [code["level"] for code in payload["hko"]["codes"].values()]
+        + [payload["hko"]["defaultLevel"]]
     )
     if not set(levels) <= set(LEVELS):
         raise AlertsProductError("tables.json uses a level outside 1–5")
@@ -136,3 +143,40 @@ def meteoalarm_level(awareness_level: str | None) -> int | None:
 def meteoalarm_category(awareness_type: str | None) -> str:
     """By the awareness type's code (``1; Wind`` → ``wind``)."""
     return tables()["meteoalarm"]["categoryByAwarenessType"].get(_leading_code(awareness_type), "other")
+
+
+# --- cma ---------------------------------------------------------------
+
+
+def cma_category(event: str | None) -> str:
+    """By the Chinese event name (``大雾`` → ``fog``): the English names
+    the CAP files carry beside it are not spelt consistently."""
+    return tables()["cma"]["categoryByEvent"].get((event or "").strip(), "other")
+
+
+def cma_level(severity: str | None) -> int:
+    """By CAP severity, which the CMA profile ties to the signal's
+    colour: blue (Minor) and yellow (Moderate) 2, orange (Severe) 3, red
+    (Extreme) 4."""
+    table = tables()["cma"]
+    return int(table["levelBySeverity"].get(severity or "", table["defaultLevel"]))
+
+
+def cma_colour(severity: str | None) -> str | None:
+    return tables()["cma"]["colourBySeverity"].get(severity or "")
+
+
+# --- hko ---------------------------------------------------------------
+
+
+def hko_category(code: str) -> str:
+    entry = tables()["hko"]["codes"].get(code)
+    return entry["category"] if entry else "other"
+
+
+def hko_level(code: str) -> int:
+    """By the warning's code, its signal or colour where it has one
+    (``WRAINB``, ``TC8NE``, ``WFIRER``)."""
+    table = tables()["hko"]
+    entry = table["codes"].get(code)
+    return int(entry["level"] if entry else table["defaultLevel"])

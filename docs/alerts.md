@@ -109,13 +109,13 @@ repeats in this order (`categories`):
 and given one **level**, an integer 1 … 5 on a scale every network maps
 onto:
 
-| level | meaning | NWS | JMA | ECCC | MeteoAlarm |
-|---|---|---|---|---|---|
-| 1 | statement, information | Statement, Outlook, Message, Forecast | — | statement (no colour) | — |
-| 2 | advisory, be aware | Advisory, Watch | 注意報 (レベル２) | yellow; advisory or watch (no colour) | yellow |
-| 3 | warning | Warning | 警報 (レベル３) | orange; warning (no colour) | orange |
-| 4 | danger | Warning with CAP severity Extreme | 危険警報 (レベル４) | red | red |
-| 5 | exceptional | — | 特別警報 (レベル５) | — | — |
+| level | meaning | NWS | JMA | ECCC | MeteoAlarm | CMA | HKO |
+|---|---|---|---|---|---|---|---|
+| 1 | statement, information | Statement, Outlook, Message, Forecast | — | statement (no colour) | — | — | special announcement |
+| 2 | advisory, be aware | Advisory, Watch | 注意報 (レベル２) | yellow; advisory or watch (no colour) | yellow | blue, yellow | amber rain, yellow fire, signals 1 and 3, the other warnings |
+| 3 | warning | Warning | 警報 (レベル３) | orange; warning (no colour) | orange | orange | red rain, red fire, signal 8, landslip, tsunami |
+| 4 | danger | Warning with CAP severity Extreme | 危険警報 (レベル４) | red | red | red | black rain, signals 9 and 10 |
+| 5 | exceptional | — | 特別警報 (レベル５) | — | — | — | — |
 
 Level 5 is JMA's 特別警報 alone: no other network has a tier above its
 danger level, and folding it into 4 would lose the distinction the agency
@@ -295,14 +295,76 @@ Category by the code that leads `awareness_type`:
 The services spell the names in either case (`1; Wind`, `1; wind`); only
 the code is read. Any other code is `other`.
 
+### 3.5 CMA
+
+Level by CAP `severity`, which the CMA profile ties to the signal's
+colour (预警信号 blue Ⅳ/一般, yellow Ⅲ/较重, orange Ⅱ/严重, red Ⅰ/特别严重):
+
+| severity | colour | level |
+|---|---|---|
+| `Minor` | blue | 2 |
+| `Moderate` | yellow | 2 |
+| `Severe` | orange | 3 |
+| `Extreme` | red | 4 |
+
+Blue and yellow share level 2: the scale has one "be aware" tier and
+CMA's red is its highest, as MeteoAlarm's is; the colour stays in
+`native.colour`. A severity the table does not list is level 2.
+
+Category by the Chinese event name (the English names beside it are not
+spelt consistently: `gale`, `Dense fog`, `Icy Road`):
+
+| category | CMA events |
+|---|---|
+| `rain` | 暴雨, 短时强降水 |
+| `flood` | 城市内涝, 渍涝风险, 山洪灾害气象风险, 中小河流洪水气象风险 |
+| `landslide` | 地质灾害气象风险 |
+| `wind` | 台风, 大风 |
+| `thunderstorm` | 雷电, 雷暴大风, 雷雨大风, 冰雹, 强对流 |
+| `snow-ice` | 暴雪, 大雪, 雪灾, 道路结冰, 道路冰雪, 电线积冰, 冰冻, 低温雨雪冰冻 |
+| `heat` | 高温, 干热风 |
+| `cold` | 寒潮, 低温, 持续低温, 霜冻, 降温 |
+| `fog` | 大雾 |
+| `dust` | 沙尘暴, 沙尘, 扬沙 |
+| `fire` | 森林火险, 草原火险, 森林（草原）火险 |
+| `air` | 霾, 臭氧, 空气污染, 重污染天气 |
+| `coastal` | 风暴潮 |
+| `marine` | 海上大风, 海上大雾, 海浪 |
+| `other` | 干旱, 气象干旱, 农业干旱 |
+
+Any other event is `other`.
+
+### 3.6 HKO
+
+By the warning's code, its signal or colour where it has several:
+
+| code | warning | level | category |
+|---|---|---|---|
+| `TC1`, `TC3` | Standby Signal No. 1, Strong Wind Signal No. 3 | 2 | `wind` |
+| `TC8NE`, `TC8SE`, `TC8SW`, `TC8NW` | No. 8 Gale or Storm Signal | 3 | `wind` |
+| `TC9`, `TC10` | Increasing Gale or Storm Signal No. 9, Hurricane Signal No. 10 | 4 | `wind` |
+| `WRAINA`, `WRAINR`, `WRAINB` | Amber, Red, Black Rainstorm Warning Signal | 2, 3, 4 | `rain` |
+| `WFNTSA` | Special Announcement on Flooding in the northern New Territories | 1 | `flood` |
+| `WL` | Landslip Warning | 3 | `landslide` |
+| `WTS` | Thunderstorm Warning | 2 | `thunderstorm` |
+| `WHOT` | Very Hot Weather Warning | 2 | `heat` |
+| `WCOLD`, `WFROST` | Cold Weather Warning, Frost Warning | 2 | `cold` |
+| `WMSGNL` | Strong Monsoon Signal | 2 | `wind` |
+| `WFIREY`, `WFIRER` | Yellow, Red Fire Danger Warning | 2, 3 | `fire` |
+| `WTMW` | Tsunami Warning | 3 | `tsunami` |
+
+Any other code is `other` at level 2.
+
 ## 4. Identity
 
 An alert is `<network>:<the network's own identifier>`: the CAP
 identifier for NWS (`nws:urn:oid:2.49.0.1.840.0.…`) and MeteoAlarm
 (`meteoalarm:2.49.0.0.276.0.DWD.PVW.…`), the feature id for
-ECCC (`eccc:<CAP identifier>_<region>`), and `jma:<office>-<kind>` for
+ECCC (`eccc:<CAP identifier>_<region>`), the CAP identifier for CMA
+(`cma:12011541600000_20261111192247`), `jma:<office>-<kind>` for
 JMA, whose map has no per-alert identifier (`jma:130000-10` is Tokyo's
-レベル２大雨注意報). The network id is lowercase,
+レベル２大雨注意報), and `hko:<code>-<issue time>` for HKO, whose API has
+none either (`hko:WRAINR-20261101T000200Z`). The network id is lowercase,
 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`; the rest is the upstream's identifier
 unchanged and may itself contain `:`. The id is the key everywhere: the
 index's rows are sorted by it, each network file's lines are sorted by
@@ -361,13 +423,14 @@ This section says what the fields mean and the rules across them.
 
 - `issued` is the round, `generated` when the build ran.
 - `networks[]` is one entry per network that has a file this round
-  (§7), in the publisher's order (nws, jma, eccc, meteoalarm): its id and display
+  (§7), in the publisher's order (nws, jma, eccc, meteoalarm, cma, hko): its id and display
   `name`; the `attribution` a display must show, the `license` the
   network's data is reused under, `licenseUrl`, the page stating those
   terms (optional), and the network's `url`; `latest`, the
   upstream's own time of the state the file holds (NWS `updated`, JMA
   `latestControlDatetime`, ECCC `timeStamp`, MeteoAlarm the newest `sent`
-  of any message its feeds listed; on a carry-over, the previous
+  of any message its feeds listed, CMA the SWIC listing's `lastUpdated`,
+  HKO the newest `updateTime`; on a carry-over, the previous
   round's); `file`, the network file's name (always `<id>.jsonl`), length
   and CRC32 — an empty file when nothing is in force; and `areas`, the
   boundary set the network's area codes resolve against (§9), or `null`.
@@ -397,7 +460,8 @@ This section says what the fields mean and the rules across them.
 
   `network` is the index into `networks[]`, and the id's prefix is that
   network's id. `event` is the network's event name in its primary
-  language (English for NWS and ECCC, Japanese for JMA) — the line's
+  language (English for NWS, ECCC and HKO, Japanese for JMA, Chinese for
+  CMA) — the line's
   `native.event`. `sent` is when the network issued the alert's current
   message; `onset` when the hazard begins and `expires` when the alert
   stops being in force, ISO 8601 UTC, or `null` where the network states
@@ -492,7 +556,8 @@ round's `networks[]`. `reason` is the first of these that holds:
   this round's rows;
 - `cancelled` — the network withdrew it in so many words this round: an
   NWS `Cancel` message referencing it, a JMA kind whose status is 解除, an
-  ECCC feature whose status is `ended` or `cancelled`;
+  ECCC feature whose status is `ended` or `cancelled`, an HKO entry whose
+  action is `CANCEL`;
 - `gone` — anything else: it is simply no longer listed (a JMA kind
   raised to another code, the network dropped it without a word).
 
@@ -518,7 +583,9 @@ A network read from several sources carries over **per source**:
 MeteoAlarm reads one feed per country, and a country whose feed failed
 keeps its previous round's lines (by `native.country`), byte for byte,
 less the expired, beside the lines of the countries that arrived. The
-network carries over as a whole only when no country arrived.
+network carries over as a whole only when no country arrived. CMA reads
+one CAP file per message beside the listing, and a message the listing
+names whose file did not arrive keeps its previous line (by its `url`).
 
 ## 8. `sources[]`
 
@@ -544,13 +611,16 @@ One entry per source, every network's in turn, in build order:
 (optional), the SHA-256 of the raw bytes the network was read from, in
 the order they were fetched: NWS `active.json`; JMA `map_time.json`, then
 `map.json` when it was fetched; ECCC every page in turn; a MeteoAlarm
-country its feed. A reader holding
+country its feed; CMA the listing, then each CAP file read in the
+listing's order; HKO `warnsum` then `warningInfo`, each in English,
+Traditional and Simplified Chinese. A reader holding
 the upstream answer can tell whether a round was built from it.
 `reports` is how many upstream
 records the source held (features, JMA office reports); `skipped` how
 many of them were not published — a test or a cancel message, an ended
 ECCC feature, a JMA report from an office or a kind code the tables do
-not know, an expired or green MeteoAlarm message. A network's own fields are described in its section.
+not know, an expired or green MeteoAlarm message, an expired CMA
+message, an HKO entry cancelled or expired. A network's own fields are described in its section.
 
 ## 9. Geometry and boundary sets
 
@@ -739,6 +809,56 @@ it carries:
 - for the French layer: "IGN – ADMIN EXPRESS COG CARTO, Licence Ouverte
   2.0 (<https://www.etalab.gouv.fr/licence-ouverte-open-licence/>),
   tuilé par xue".
+
+### 9.4 `cma-areas`
+
+China's provinces, prefectures and counties, each feature's `id` its
+six-digit administrative code (`120115` 宝坻区, `654200` 塔城地区,
+`650000` 新疆): the Amap outlines that cnmaps-data packages
+(<https://github.com/cnmetlab/cnmaps-data>, MIT, commit `e2a1a346`,
+2026-04-02), one GeoJSON file per code under
+`cnmaps_data/data/datasets/administrative/amap/land/`. The set is built
+from a snapshot of that directory kept beside the raw rounds
+(`data/raw/alerts-sources/cnmaps-data-e2a1a346/`, the land files and the
+index database as the commit holds them):
+
+```sh
+xue alerts-areas --set cma-areas --source data/raw/alerts-sources/cnmaps-data-e2a1a346 \
+  --version 20261112 --output web/public/data/alerts-areas
+```
+
+Before `ogr2ogr`, `xuebuild/alerts/cnmaps.py` turns every file from
+GCJ-02 (the mainland's offset datum, which Amap draws in, a few hundred
+metres from WGS84) into WGS84 by fixed-point iteration on the published
+forward formula, and files it under the layer its code names:
+
+| layer | codes | features |
+|---|---|---|
+| `province` | `xx0000` | 34 |
+| `prefecture` | `xxxx00` | 336 |
+| `county` | any other | 2 871 |
+
+all zooms 0–11. 香港, 澳门 and 台湾 are one outline each under `810000`,
+`820000` and `710000` (the release draws them at every level from the
+same file), and Hong Kong's eighteen districts (`810001` …) are counties.
+The national outline (`100000`) is not in the set. 沙湾市 is drawn under
+its code since 2021, `654203`, beside the county code the release files it
+under (`654223`); 新林区 and 呼中区 (`232703`, `232704`), 大兴安岭's
+management districts, have no outline in the release, and a warning that
+names them has no box.
+
+`cma-areas.20261112.pmtiles`: 21 162 186 bytes, CRC32 `62936b04`;
+`cma-areas.20261112.bbox.json`: 143 930 bytes, CRC32 `46f79c49`. Views:
+all China z3 (`73,18,135,54`) 127 303 bytes, z4 162 563, z5 209 112; the
+Pearl River Delta at z9 (`113,22,114.5,23.5`) 20 893; a 1° box around
+Beijing at z11 80 105.
+
+Terms. Wherever the set or a map drawn from it is shown it carries
+"边界：高德地图 (Amap), via cnmaps-data; GCJ-02 → WGS84 and tiling by
+xue · not a survey-approved map (无审图号)". The outlines are a commercial
+map provider's, packaged by cnmaps-data under its MIT licence without a
+licence from the provider for redistribution; they are boundaries to
+place warnings by, not a survey-approved map of China.
 
 ## 10. Networks
 
@@ -984,6 +1104,115 @@ and any display of it meets them so:
 `license` `MeteoAlarm-Terms`, `licenseUrl` the terms page, attribution
 `EUMETNET – MeteoAlarm`, url `https://meteoalarm.org/en/live/`.
 
+### 10.5 `cma` — China Meteorological Administration
+
+The warning signals (预警信号) China's national, provincial, prefecture
+and county meteorological observatories issue, as the WMO Severe Weather
+Information Centre aggregates them. SWIC (`https://severeweather.wmo.int/`)
+is WMO's centre for official CAP warnings, developed and run by the Hong
+Kong Observatory. The CMA's own feed in the WMO Register of Alerting
+Authorities (`http://www.12379.cn/rss/china_rss.xml`) answered 404 on
+2026-11-12, and the national release centre's site (12379.cn) publishes no
+interface of its own. `cma-swic`:
+
+- `https://severeweather.wmo.int/json/wmo_all.json` — every alert SWIC has
+  in force worldwide (1 802 on 2026-11-12, 903 KB), each with the path of
+  its CAP file; China's are those under `cn-cma-xx/`
+  (`cn-cma-xx/YYYY/MM/DD/hh/mm/ss-<md5>.xml`). Saved as fetched.
+- `https://severeweather.wmo.int/v2/cap-alerts/<path>` — one CAP 1.2
+  message per file, about 3.5 KB. A path carries the message's digest, so
+  a file never changes: fetched files are kept in
+  `<raw>/alerts-cache/cma/` while the listing names them, a round fetches
+  only the ones it has not seen (eight at a time) and copies every listed
+  file into its own `cma/cap/` as `YYYYMMDDhhmmss-<md5>.xml`. The status
+  records `new`, the files fetched this round, and `missing`, those that
+  failed.
+
+Reading:
+
+- A message whose `status` is not `Actual` or whose `msgType` is `Cancel`
+  is not in force, nor one whose `expires` is at or before the round.
+  SWIC lists no cancels: a lifted signal leaves the listing and ends as
+  `gone`. An `Update` names the message it updates in `references`
+  (`sender,identifier,sent`, the sender possibly holding a comma itself,
+  so the identifier is read second from the end); that is its `replaces`.
+- The primary block is the `zh-CN` one. `event` and `native.event`: its
+  `event` (`大雾`). `native`: `code` `null`; `level` CAP `severity`;
+  `colour` the signal's colour (`blue`, `yellow`, `orange`, `red`, §3.5);
+  `eventEn`, the English block's `event` (`Dense fog`); CAP `urgency`,
+  `certainty` and `msgType`; `geocodes`, the area's twelve-digit CPEAS
+  codes as given.
+- `sent` the message's `sent`; `onset` `onset`, else `effective`;
+  `expires` `expires`.
+- `texts`: `zh-CN` and `en-US`, as given, with `headline`,
+  `description`, `instruction` and `area` (`areaDesc`).
+- `areas`: the first six digits of each `CPEAS Geographic Code` (the
+  administrative code of the county, prefecture or province), drawn by
+  `cma-areas` (§9.4). A township's code (its last six digits not zero) is
+  drawn by its county, and `native.geocodes` keeps the twelve digits.
+  `geometry` is `null`: the messages carry no polygon.
+- `url`: the message's CAP file at SWIC; `sender`: CAP `sender`, its
+  underscores as spaces (`Nongan County Meteorological Observatory`).
+  The person named in `senderName` is not published.
+
+`latest` is the listing's `lastUpdated` (UTC, written without a zone).
+
+Terms. SWIC's notes to users (<https://severeweather.wmo.int/note.html>):
+the information "is free for re-use by media or other websites. When doing
+so, it should be indicated that they are issued by the respective …
+NMHSs." Every line names its issuing observatory in `sender`, and the
+network's attribution names the CMA and SWIC. `license` `WMO-SWIC`,
+`licenseUrl` the notes page, attribution
+`China Meteorological Administration, via the WMO Severe Weather Information Centre`,
+url `https://www.12379.cn/`.
+
+### 10.6 `hko` — Hong Kong Observatory
+
+The warnings and signals the Observatory has in force, from its open data
+API on DATA.GOV.HK. `hko-warnings` fetches six documents a round,
+`https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=<kind>&lang=<lang>`
+for `warnsum` (the summary: one entry per warning statement in force, its
+code, `type`, `actionCode`, `issueTime`, `expireTime` and `updateTime`)
+and `warningInfo` (each statement's text), in `en`, `tc` and `sc`; a
+round reads them together, and any one failing fails the source.
+
+Reading:
+
+- One entry of the English `warnsum` is one alert, `id`
+  `hko:<code>-<issueTime>` (the issue time in UTC, `YYYYMMDDThhmmssZ`):
+  the API has no identifier, and a warning issued again, or raised to
+  another signal or colour (a new code), is a new alert; the one it
+  follows ends as `gone`. An entry whose `actionCode` is `CANCEL`, or the
+  tropical cyclone code `CANCEL` (all signals lowered), is not in force;
+  the alert it names ends as `cancelled`.
+- `event` and `native.event`: the English `name` (`Rainstorm Warning
+  Signal`). `native`: `code` the warning's code (`WRAINR`, `TC8NE`),
+  `level` the English `type` (`Red`, `No. 8 North East`) or `null`,
+  `statement` the summary key (`WRAIN`), `action` `actionCode`.
+- `sent` `updateTime`, else `issueTime`; `onset` `issueTime`; `expires`
+  `expireTime`, or `null` (most warnings stay in force until cancelled).
+- `texts`: `en`, `zh-Hant` (`tc`) and `zh-Hans` (`sc`); `headline` the
+  language's `name`, with its `type` in parentheses where there is one
+  (`暴雨警告信號 (黃色)`); `description` the statement's `warningInfo`
+  contents, paragraphs joined by blank lines.
+- `areas`: `["810000"]`, the Hong Kong SAR's code: every warning covers
+  the territory, drawn by `cma-areas` (§9.4). `geometry` `null`.
+- `url`: the Observatory's warnings page; `sender`: `Hong Kong Observatory`.
+
+`latest` is the newest `updateTime` (or `issueTime`) of the English
+summary, `null` when nothing is in force.
+
+The Observatory's CAP feed (`https://alerts.weather.gov.hk/V1/cap_atom.xml`,
+registered with WMO) carries the same warnings with a polygon, but it is
+website material, whose commercial use needs the Observatory's prior
+written authorisation; the API is a DATA.GOV.HK dataset.
+
+Terms. DATA.GOV.HK terms and conditions of use
+(<https://data.gov.hk/en/terms-and-conditions>), with the source and its
+ownership acknowledged. `license` `DATA.GOV.HK`, `licenseUrl` the terms
+page, attribution `Hong Kong Observatory, HKSAR Government (DATA.GOV.HK)`,
+url `https://www.hko.gov.hk/en/wxinfo/dailywx/wxwarntoday.htm`.
+
 ## 11. Validation
 
 The JSON Schemas of §5 and §6 are normative for shape: a file that does
@@ -1004,8 +1233,11 @@ the boundary sets' box files in `alerts-areas/`) to the
 committed golden (`tests/fixtures/alerts/expected/`), regenerated by
 `tests/prepare_alerts_golden.py`. The second round exercises every
 `ended[]` reason (an NWS `Update` for `replaced`), an NWS cancel, a stale JMA map carried over, a failed
-ECCC fetch carried over with an expiry, and a failed MeteoAlarm country
-carried over beside two that arrived; every index row's span is checked
+ECCC fetch carried over with an expiry, a failed MeteoAlarm country
+carried over beside two that arrived, a CMA message whose file did not
+arrive carried over beside an `Update` (`replaced`), an expiry and a code
+the boundary set lacks, and an HKO rainstorm raised from amber to red
+(`gone`), a cancel and an expiry; every index row's span is checked
 against the network file it addresses. Admission is structural: a
 network, an event or a native field a reader has never seen is not an
 error; the categories are the index's own list, the levels 1 … 5, the
@@ -1019,7 +1251,10 @@ Sizes on a calm day (2026-10-31 15:20 UTC): `nws.jsonl` 380 alerts,
 times that, mostly NWS text and polygons. MeteoAlarm on 2026-11-01 07:30
 UTC: 221 warnings in force (1 222 unexpired messages, 1 001 of them
 green), `meteoalarm.jsonl` about 450 KB (35 KB gzipped) — every language
-kept — and 38 source entries in the index.
+kept — and 38 source entries in the index. CMA on 2026-11-12 02:35 UTC:
+152 warnings in force, `cma.jsonl` 391 KB (49 KB gzipped), Chinese and
+English kept; the round's raw directory holds the 903 KB SWIC listing and
+624 KB of CAP files, all but the new ones copied from the cache.
 
 ## 12. The archive
 

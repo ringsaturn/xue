@@ -669,7 +669,8 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   each station's `agency`.
 
 - Weather warnings are a JSON product under the same root, every five
-  minutes (schema 1, `docs/alerts.md`): every warning US NWS, JMA and ECCC
+  minutes (schema 1, `docs/alerts.md`): every warning US NWS, JMA, ECCC,
+  MeteoAlarm, China's CMA (through WMO SWIC) and the Hong Kong Observatory
   have in force, each filed under one of sixteen categories and a common
   level 1–5 (5 is JMA's 特別警報 alone), with the service's own event
   name, code and level kept verbatim. The mutable pointer

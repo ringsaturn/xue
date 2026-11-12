@@ -1,0 +1,66 @@
+{
+ "itemCount": 4,
+ "lastUpdated": "2026-10-31 23:58:00",
+ "items": [
+  {
+   "id": "urn:oid:2.49.0.1.840.0.example",
+   "event": "Marine Weather Statement",
+   "headline": "Marine Weather Statement",
+   "sent": "2026-10-31 23:40:00",
+   "expires": "2026-11-01 03:00:00",
+   "areaDesc": "",
+   "mid": "093",
+   "ra": "4",
+   "s": 1,
+   "u": 3,
+   "c": 4,
+   "capURL": "us-noaa-nws-en-marine/2026/10/31/23/40/00-2e66eaedc738fd7ebaa8946d22e7f6b4.xml",
+   "effective": "2026-10-31 23:40:00"
+  },
+  {
+   "id": "12011541600000_20261111192247",
+   "event": "Dense fog",
+   "headline": "Baodi District Meteorological Observatory issues yellow warning for heavy fog/level III/severe",
+   "sent": "2026-10-31 23:20:00",
+   "expires": "2026-11-01 11:20:00",
+   "areaDesc": "",
+   "mid": "001",
+   "ra": "2",
+   "s": 1,
+   "u": 0,
+   "c": 0,
+   "url": "cn-cma-xx/2026/10/31/23/20/00-03b1435478ef3d8fb3753b6653a8a2f2.xml",
+   "effective": "2026-10-31 23:20:00"
+  },
+  {
+   "id": "22012241600000_20261112094751",
+   "event": "gale",
+   "headline": "Nongan County Meteorological Observatory Strong Wind Blue Warning Signal [IV/General]",
+   "sent": "2026-10-31 23:25:00",
+   "expires": "2026-11-01 00:03:00",
+   "areaDesc": "",
+   "mid": "001",
+   "ra": "2",
+   "s": 1,
+   "u": 0,
+   "c": 0,
+   "url": "cn-cma-xx/2026/10/31/23/25/00-b517efc12b303833a7f70e2d11dc0598.xml",
+   "effective": "2026-10-31 23:25:00"
+  },
+  {
+   "id": "33011041600000_20261110151408",
+   "event": "Frost",
+   "headline": "Yuhang District Meteorological Observatory in Hangzhou City issues a blue frost warning [Level IV/General]",
+   "sent": "2026-10-31 23:30:00",
+   "expires": "2026-11-01 23:30:00",
+   "areaDesc": "",
+   "mid": "001",
+   "ra": "2",
+   "s": 1,
+   "u": 0,
+   "c": 0,
+   "url": "cn-cma-xx/2026/10/31/23/30/00-2ee4ab1e4d4b57541972d6714a0fb227.xml",
+   "effective": "2026-10-31 23:30:00"
+  }
+ ]
+}

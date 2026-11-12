@@ -98,15 +98,73 @@
      "crc32": "97b9b07f"
     }
    }
+  },
+  {
+   "id": "cma",
+   "name": "China Meteorological Administration",
+   "attribution": "China Meteorological Administration, via the WMO Severe Weather Information Centre",
+   "license": "WMO-SWIC",
+   "licenseUrl": "https://severeweather.wmo.int/note.html",
+   "url": "https://www.12379.cn/",
+   "latest": "2026-11-01T00:09:00Z",
+   "file": {
+    "path": "cma.jsonl",
+    "byteLength": 6940,
+    "crc32": "0cd1ca0a"
+   },
+   "areas": {
+    "set": "cma-areas",
+    "version": "20261112",
+    "path": "../../../../../alerts-areas/cma-areas.20261112.pmtiles",
+    "byteLength": 21162186,
+    "crc32": "62936b04",
+    "layers": ["province", "prefecture", "county"],
+    "bbox": {
+     "path": "../../../../../alerts-areas/cma-areas.20261112.bbox.json",
+     "byteLength": 143930,
+     "crc32": "46f79c49"
+    }
+   }
+  },
+  {
+   "id": "hko",
+   "name": "Hong Kong Observatory",
+   "attribution": "Hong Kong Observatory, HKSAR Government (DATA.GOV.HK)",
+   "license": "DATA.GOV.HK",
+   "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
+   "url": "https://www.hko.gov.hk/en/wxinfo/dailywx/wxwarntoday.htm",
+   "latest": "2026-11-01T00:02:00Z",
+   "file": {
+    "path": "hko.jsonl",
+    "byteLength": 1052,
+    "crc32": "3adc88d5"
+   },
+   "areas": {
+    "set": "cma-areas",
+    "version": "20261112",
+    "path": "../../../../../alerts-areas/cma-areas.20261112.pmtiles",
+    "byteLength": 21162186,
+    "crc32": "62936b04",
+    "layers": ["province", "prefecture", "county"],
+    "bbox": {
+     "path": "../../../../../alerts-areas/cma-areas.20261112.bbox.json",
+     "byteLength": 143930,
+     "crc32": "46f79c49"
+    }
+   }
   }
  ],
  "categories": ["rain", "flood", "landslide", "wind", "thunderstorm", "snow-ice", "heat", "cold", "fog", "dust", "fire", "air", "coastal", "marine", "tsunami", "other"],
  "mapping": {
-  "tables": "dac58e75"
+  "tables": "9b05c0ee"
  },
  "columns": ["id", "network", "category", "level", "event", "sent", "onset", "expires", "west", "south", "east", "north", "offset", "length"],
  "alerts": [
+  ["cma:12011541600000_20261111192247", 4, "fog", 2, "大雾", "2026-10-31T23:20:00Z", "2026-10-31T23:20:00Z", "2026-11-01T11:20:00Z", 117.1402, 39.3452, 117.704, 39.8338, 0, 1946],
+  ["cma:23270341600000_20261112070109", 4, "snow-ice", 2, "道路冰雪", "2026-11-01T00:01:00Z", "2026-11-01T00:01:00Z", null, null, null, null, null, 1947, 2313],
+  ["cma:33011041600000_20261101080400", 4, "cold", 2, "霜冻", "2026-11-01T00:04:00Z", "2026-11-01T00:04:00Z", "2026-11-02T00:04:00Z", 119.6762, 30.1613, 120.1458, 30.569, 4261, 2678],
   ["eccc:125386601972808215202610310502_fea1-2437", 2, "wind", 2, "wind warning", "2026-10-31T21:30:39Z", "2026-10-31T21:25:00Z", "2026-11-01T13:30:39Z", -141.0017, 60.2997, -137.252, 61.9997, 0, 4036],
+  ["hko:WRAINR-20261101T000200Z", 5, "rain", 3, "Rainstorm Warning Signal", "2026-11-01T00:02:00Z", "2026-11-01T00:02:00Z", null, 113.8348, 22.154, 114.4424, 22.562, 0, 1051],
   ["jma:011000-14", 1, "thunderstorm", 2, "雷注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 0, 642],
   ["jma:011000-26", 1, "snow-ice", 2, "着雪注意報", "2026-10-31T06:20:00Z", null, null, 141.5684, 44.7779, 142.5044, 45.5265, 643, 651],
   ["jma:150000-29", 1, "landslide", 2, "レベル２土砂災害注意報", "2026-10-31T11:31:00Z", null, null, 137.6349, 36.7661, 139.1243, 37.7103, 1295, 682],
@@ -119,7 +177,12 @@
   ["nws:urn:oid:2.49.0.1.840.0.f65e88f5c6a519b2e8712025553c50a017cbc425.002.1", 0, "marine", 2, "Small Craft Advisory", "2026-10-31T23:40:00Z", "2026-11-01T00:00:00Z", "2026-11-01T12:00:00Z", -76.5116, 36.8323, -76.2653, 37.0524, 4372, 1327]
  ],
  "ended": [
+  ["cma:22012241600000_20261112094751", 4, "expired"],
+  ["cma:33011041600000_20261110151408", 4, "replaced", "cma:33011041600000_20261101080400"],
   ["eccc:700460001437647014202610310502_fea1-2388", 2, "expired"],
+  ["hko:WMSGNL-20261031T220000Z", 5, "cancelled"],
+  ["hko:WRAINA-20261031T232000Z", 5, "gone"],
+  ["hko:WTS-20261031T231000Z", 5, "expired"],
   ["meteoalarm:2.49.0.0.250.0.FR.20261101060012.602021", 3, "replaced", "meteoalarm:2.49.0.0.250.0.FR.20261101060012.999021"],
   ["meteoalarm:2.49.0.0.250.0.FR.20261101060015.836029", 3, "gone"],
   ["meteoalarm:2.49.0.0.276.0.DWD.PVW.1793441280000.33aa44fa-1ca9-4950-aa68-00c62d2a060d.MUL", 3, "expired"],
@@ -353,6 +416,26 @@
    "id": "meteoalarm-united-kingdom",
    "ok": false,
    "error": "not fetched"
+  },
+  {
+   "id": "cma-swic",
+   "ok": true,
+   "fetched": "2026-11-01T00:11:50Z",
+   "url": "https://severeweather.wmo.int/json/wmo_all.json",
+   "new": 2,
+   "missing": 1,
+   "reports": 4,
+   "skipped": 1,
+   "sha256": "5671b80fb622141e1cf15a30220fe2f799191cb0358500a58de5eabd5a55db6e"
+  },
+  {
+   "id": "hko-warnings",
+   "ok": true,
+   "fetched": "2026-11-01T00:11:50Z",
+   "url": "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en",
+   "reports": 3,
+   "skipped": 2,
+   "sha256": "b4975d176e6d3ed6a8f5157021fafde628e6aeb1ef20ea0053611c71a9e34a57"
   }
  ],
  "builder": {

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+	<identifier>23270341600000_20261112070109</identifier>
+	<sender>Xinlin_District_Meteorological_Observatory</sender>
+	<sent>2026-11-01T08:01:00+08:00</sent>
+	<status>Actual</status>
+	<msgType>Alert</msgType>
+	<scope>Public</scope>
+	<note></note>
+	<info>
+		<language>en-US</language>
+		<category>Met</category>
+		<event>Road ice and snow</event>
+		<urgency>Unknown</urgency>
+		<severity>Moderate</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T08:01:00+08:00</effective>
+		<senderName>Xinlin District Meteorological Warning Issuing Officer</senderName>
+		<headline>Xinlin District Meteorological Observatory issues yellow warning for road ice and snow [Level III/Heavy]</headline>
+		<description>The Xinlin District Meteorological Observatory issued a yellow warning signal for road ice and snow at 07:06 on November 12, 2026: It is expected that the road surface temperature will be below 0 ℃ in the next 24 hours, with rainy and snowy weather, and there will be road icing or snow accumulation, which will have a certain impact on traffic.</description>
+		<instruction>Defense Guide:</instruction>
+		<area>
+			<areaDesc>1. Transportation, public security and other departments should prepare for road icing or snow accumulation according to their responsibilities;</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>232703000000</value>
+			</geocode>
+		</area>
+	</info>
+	<info>
+		<language>zh-CN</language>
+		<category>Met</category>
+		<event>道路冰雪</event>
+		<urgency>Unknown</urgency>
+		<severity>Moderate</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T08:01:00+08:00</effective>
+		<senderName>新林区气象预警签发员</senderName>
+		<headline>新林区气象台发布道路冰雪黄色预警[III级/较重]</headline>
+		<description>新林区气象台2026年11月12日07时06分发布道路冰雪黄色预警信号：预计未来24小时内，路表温度低于0℃，有雨雪天气，将出现道路结冰或积雪，对交通有一定影响。 防御指南： 1.交通、公安等部门要按照职责做好道路结冰或积雪的应对准备工作； 2.驾驶人员应当注意路况，安全行驶； 3.行人外出尽量少骑自行车，注意防滑。</description>
+		<area>
+			<areaDesc>新林区</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>232703000000</value>
+			</geocode>
+		</area>
+	</info>
+</alert>

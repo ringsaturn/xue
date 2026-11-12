@@ -1,0 +1,26 @@
+{
+ "details": [
+  {
+   "contents": [
+    "黄色暴雨警告信号在上午7时20分发出。"
+   ],
+   "warningStatementCode": "WRAIN",
+   "updateTime": "2026-11-01T07:20:00+08:00",
+   "subtype": "WRAINA"
+  },
+  {
+   "contents": [
+    "天文台在11月1日上午7时10分发出的雷暴警告，有效时间至今日上午8时03分。"
+   ],
+   "warningStatementCode": "WTS",
+   "updateTime": "2026-11-01T07:10:00+08:00"
+  },
+  {
+   "contents": [
+    "强烈季候风信号在上午6时正发出。"
+   ],
+   "warningStatementCode": "WMSGNL",
+   "updateTime": "2026-11-01T06:00:00+08:00"
+  }
+ ]
+}

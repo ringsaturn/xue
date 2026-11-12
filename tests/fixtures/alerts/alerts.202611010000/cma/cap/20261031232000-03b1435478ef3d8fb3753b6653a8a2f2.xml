@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+	<identifier>12011541600000_20261111192247</identifier>
+	<sender>Baodi_District_Meteorological_Observatory</sender>
+	<sent>2026-11-01T07:20:00+08:00</sent>
+	<status>Actual</status>
+	<msgType>Alert</msgType>
+	<scope>Public</scope>
+	<note></note>
+	<info>
+		<language>en-US</language>
+		<category>Met</category>
+		<event>Dense fog</event>
+		<urgency>Unknown</urgency>
+		<severity>Moderate</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T07:20:00+08:00</effective>
+		<onset>2026-11-01T07:20:00+08:00</onset>
+		<expires>2026-11-01T19:20:00+08:00</expires>
+		<senderName>Sun Jing</senderName>
+		<headline>Baodi District Meteorological Observatory issues yellow warning for heavy fog/level III/severe</headline>
+		<description>The Baodi District Meteorological Observatory issued a yellow warning signal for heavy fog at 19:25 on November 11, 2026: It is expected that from tonight to tomorrow morning, all streets and towns in our district will experience fog with visibility less than 1 kilometer, some areas with visibility less than 500 meters, and some areas with visibility less than 200 meters. Relevant units and personnel are requested to be prepared for prevention.</description>
+		<instruction></instruction>
+		<area>
+			<areaDesc>Baodi District</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>120115000000</value>
+			</geocode>
+		</area>
+	</info>
+	<info>
+		<language>zh-CN</language>
+		<category>Met</category>
+		<event>大雾</event>
+		<urgency>Unknown</urgency>
+		<severity>Moderate</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T07:20:00+08:00</effective>
+		<onset>2026-11-01T07:20:00+08:00</onset>
+		<expires>2026-11-01T19:20:00+08:00</expires>
+		<senderName>孙敬</senderName>
+		<headline>宝坻区气象台发布大雾黄色预警/Ⅲ级/较重</headline>
+		<description>宝坻区气象台于2026年11月11日19时25分发布大雾黄色预警信号：预计今天夜间到明天早晨，我区所有街镇将出现能见度小于1千米的雾，部分地区能见度小于500米，局地能见度不足200米，请有关单位和人员做好防范准备。</description>
+		<area>
+			<areaDesc>宝坻区</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>120115000000</value>
+			</geocode>
+		</area>
+	</info>
+</alert>

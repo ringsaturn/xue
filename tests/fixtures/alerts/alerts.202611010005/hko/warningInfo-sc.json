@@ -1,0 +1,19 @@
+{
+ "details": [
+  {
+   "contents": [
+    "红色暴雨警告信号在上午8时02分发出。"
+   ],
+   "warningStatementCode": "WRAIN",
+   "updateTime": "2026-11-01T08:02:00+08:00",
+   "subtype": "WRAINR"
+  },
+  {
+   "contents": [
+    "天文台在11月1日上午7时10分发出的雷暴警告，有效时间至今日上午8时03分。"
+   ],
+   "warningStatementCode": "WTS",
+   "updateTime": "2026-11-01T07:10:00+08:00"
+  }
+ ]
+}

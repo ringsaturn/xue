@@ -132,6 +132,17 @@ describe("the warning areas", () => {
           if (!id.startsWith("meteoalarm:")) expect(lines.flat().find((line) => line.id === id)!.geometry).toBeNull();
   });
 
+  it("draws CMA's and HKO's codes on the one set they share", () => {
+    const { index, lines } = load();
+    const targets = areaTargets(index.networks, lines);
+    const province = targets.get("cma-areas.20261112/province")!;
+    const county = targets.get("cma-areas.20261112/county")!;
+    const hko = lines[index.networks.findIndex((network) => network.id === "hko")]!;
+    expect(hko.length).toBeGreaterThan(0);
+    expect(province.alerts.get("810000")).toEqual(hko.map((line) => line.id));
+    expect(county.alerts.get("120115")).toEqual(["cma:12011541600000_20261111192247"]);
+  });
+
   it("draws a MeteoAlarm warning's codes beside its polygon", () => {
     const { index, lines } = load();
     const coded = lines[3]!.find((line) => line.areas.length > 0)!;

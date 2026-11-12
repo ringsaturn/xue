@@ -39,8 +39,23 @@ rounds:
   warning under a made-up identifier that references it (``replaced``)
   and no coastal warning (``gone``); Italy unchanged. The other countries
   are not in ``fetch.json`` and so are recorded as not fetched.
+- ``cma/`` — the SWIC listing cut to three China messages and one US
+  entry, and the messages' CAP files (recorded on 2026-11-12, times moved
+  onto the rounds). Round one: Baodi's yellow fog signal, Nong'an's blue
+  gale signal (its ``expires`` moved to 00:03 UTC) and Yuhang's frost
+  signal by a township code. Round two: the fog signal still listed but
+  its file missing (carried over), the gale signal expired, an ``Update``
+  of the frost signal under a made-up identifier that references it
+  (``replaced``) and 新林区's road-ice signal, a code the boundary set
+  lacks.
+- ``hko/`` — ``warnsum`` and ``warningInfo`` in three languages, written
+  after the API documentation's example. Round one: an amber rainstorm
+  signal, a thunderstorm warning expiring at 00:03 UTC and the strong
+  monsoon signal. Round two: the rainstorm raised to red (a new alert,
+  the amber one ``gone``), the thunderstorm warning still listed but
+  expired and the monsoon signal cancelled.
 
-``alerts-areas/`` holds the three boundary sets' box files exactly as
+``alerts-areas/`` holds the four boundary sets' box files exactly as
 published (the CRC32s ``xuebuild/alerts/networks.py`` pins), where a
 build's raw directory caches them, so the area-coded rows get their boxes
 offline.

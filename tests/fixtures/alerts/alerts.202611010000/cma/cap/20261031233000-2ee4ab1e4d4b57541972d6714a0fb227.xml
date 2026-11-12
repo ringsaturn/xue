@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+	<identifier>33011041600000_20261110151408</identifier>
+	<sender>Yuhang_District_Meteorological_Observatory,_Hangzhou_City</sender>
+	<sent>2026-11-01T07:30:00+08:00</sent>
+	<status>Actual</status>
+	<msgType>Update</msgType>
+	<scope>Public</scope>
+	<note></note>
+	<references>Yuhang_District_Meteorological_Observatory,_Hangzhou_City,33011041600000_20261109153650,2026-11-10T15:12:00+08:00</references>
+	<info>
+		<language>en-US</language>
+		<category>Met</category>
+		<event>Frost</event>
+		<urgency>Unknown</urgency>
+		<severity>Minor</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T07:30:00+08:00</effective>
+		<expires>2026-11-02T07:30:00+08:00</expires>
+		<senderName>Yuhang Meteorological Collector</senderName>
+		<headline>Yuhang District Meteorological Observatory in Hangzhou City issues a blue frost warning [Level IV/General]</headline>
+		<description>The Yuhang District Meteorological Observatory in Hangzhou City will continue to issue a blue frost warning signal at 15:12 on November 10, 2026: Due to the combined effects of cold air and radiation cooling, it is expected that the lowest temperature in towns and streets such as Baizhang, Luoniao, Huanghu, Jingshan, etc. in our district will drop below 4 ℃ tomorrow morning. There will be frost, and all relevant parties should pay attention to preventing the adverse effects of frost on agriculture and forestry.</description>
+		<instruction>1. The government and relevant departments should make preparations for frost prevention; 2. Take certain protective measures for crops such as tea, vegetables, flowers, fruits, etc.</instruction>
+		<area>
+			<areaDesc>Yuhang District</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>330110014000</value>
+			</geocode>
+		</area>
+	</info>
+	<info>
+		<language>zh-CN</language>
+		<category>Met</category>
+		<event>霜冻</event>
+		<urgency>Unknown</urgency>
+		<severity>Minor</severity>
+		<certainty>Unknown</certainty>
+		<effective>2026-11-01T07:30:00+08:00</effective>
+		<expires>2026-11-02T07:30:00+08:00</expires>
+		<senderName>余杭气象采集员</senderName>
+		<headline>杭州市余杭区气象台发布霜冻蓝色预警[Ⅳ级/一般]</headline>
+		<description>杭州市余杭区气象台2026年11月10日15时12分继续发布霜冻蓝色预警信号：受冷空气和辐射降温共同影响，预计明天早晨我区百丈、鸬鸟、黄湖、径山等镇、街道最低气温将降至4℃以下，有霜冻，请各有关方面注意防范霜冻对农业、林业产生的不利影响。</description>
+		<instruction>1.政府及相关部门做好防霜冻准备工作； 2.对茶叶、蔬菜、花卉、瓜果等作物采取一定防护措施。</instruction>
+		<area>
+			<areaDesc>中泰街道</areaDesc>
+			<geocode>
+				<valueName>CPEAS Geographic Code</valueName>
+				<value>330110014000</value>
+			</geocode>
+		</area>
+	</info>
+</alert>

@@ -1,0 +1,25 @@
+{
+ "WRAIN": {
+  "name": "Rainstorm Warning Signal",
+  "code": "WRAINR",
+  "type": "Red",
+  "actionCode": "ISSUE",
+  "issueTime": "2026-11-01T08:02:00+08:00",
+  "updateTime": "2026-11-01T08:02:00+08:00"
+ },
+ "WTS": {
+  "name": "Thunderstorm Warning",
+  "code": "WTS",
+  "actionCode": "ISSUE",
+  "issueTime": "2026-11-01T07:10:00+08:00",
+  "expireTime": "2026-11-01T08:03:00+08:00",
+  "updateTime": "2026-11-01T07:10:00+08:00"
+ },
+ "WMSGNL": {
+  "name": "Strong Monsoon Signal",
+  "code": "WMSGNL",
+  "actionCode": "CANCEL",
+  "issueTime": "2026-11-01T06:00:00+08:00",
+  "updateTime": "2026-11-01T06:00:00+08:00"
+ }
+}

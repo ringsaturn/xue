@@ -1,0 +1,27 @@
+{
+ "details": [
+  {
+   "contents": [
+    "The Amber Rainstorm Warning Signal was issued at 7:20 a.m.",
+    "Heavy rain has fallen or is expected to fall generally over Hong Kong."
+   ],
+   "warningStatementCode": "WRAIN",
+   "updateTime": "2026-11-01T07:20:00+08:00",
+   "subtype": "WRAINA"
+  },
+  {
+   "contents": [
+    "Thunderstorm Warning issued at 7:10 a.m. on 1 Nov 2026 will remain in force until 8:03 a.m. today."
+   ],
+   "warningStatementCode": "WTS",
+   "updateTime": "2026-11-01T07:10:00+08:00"
+  },
+  {
+   "contents": [
+    "The Strong Monsoon Signal was issued at 6:00 a.m."
+   ],
+   "warningStatementCode": "WMSGNL",
+   "updateTime": "2026-11-01T06:00:00+08:00"
+  }
+ ]
+}
