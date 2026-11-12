@@ -17,7 +17,7 @@ import { COORDINATE_FORMATS, coordinateFormat, grid, onMapPrefsChange, setCoordi
 import { GRID_KINDS, type GridKind } from "./urlstate";
 import { createSheet, mountLanguageList } from "./sheet";
 import { isDark, onThemeChange, toggleTheme } from "./theme";
-import { browserZone, displayZone, knownZones, onDisplayZoneChange, setZonePref, zoneOffsetLabel, zonePref } from "./timezone";
+import { browserZone, knownZones, matchZone, onDisplayZoneChange, setZonePref, ZONE_MODES, zoneOffsetLabel, zonePref } from "./timezone";
 import {
   browserRegion,
   onUnitsChange,
@@ -88,9 +88,12 @@ function field(caption: string, choices: readonly Choice[], switches = false): H
 
 const ZONE_MODE_KEYS: Record<string, MessageKey> = { auto: "zoneAuto", local: "zoneLocal" };
 
-/** The clock row: the three modes as chips, and every other zone in a list
- * under them. A zone picked from the list unchecks the chips. The list is
- * the engine's own (some four hundred ids), built when the row is. */
+/** The clock row: the three modes as chips, and a search box for every
+ * other zone under them. The box suggests from the engine's own list (some
+ * four hundred ids, each with its offset now), filled on first focus rather
+ * than with the sheet; what is typed is matched leniently (`tokyo`,
+ * `new york`) on Enter or on leaving the box. A zone picked there unchecks
+ * the chips. */
 function zoneField(): HTMLElement {
   const now = Date.now();
   const wrapper = field(
@@ -103,21 +106,40 @@ function zoneField(): HTMLElement {
       ...(mode === "auto" ? { title: t("zoneAutoHint") } : mode === "local" ? { title: browserZone() } : {}),
     })),
   );
-  const select = document.createElement("select");
-  select.className = "settings-select";
-  select.setAttribute("aria-label", t("zoneOther"));
-  const custom = !["auto", "local", "utc"].includes(zonePref);
-  const placeholder = new Option(`${t("zoneOther")}…`, "");
-  placeholder.disabled = true;
-  select.append(placeholder);
-  for (const zone of knownZones()) {
-    select.append(new Option(zone === displayZone && custom ? `${zone} · ${zoneOffsetLabel(zone, now)}` : zone, zone));
-  }
-  select.value = custom ? zonePref : "";
-  select.addEventListener("change", () => {
-    if (select.value) setZonePref(select.value);
+  const custom = !(ZONE_MODES as readonly string[]).includes(zonePref);
+  const input = document.createElement("input");
+  input.type = "search";
+  input.className = "settings-select";
+  input.placeholder = `${t("zoneOther")}…`;
+  input.setAttribute("aria-label", t("zoneOther"));
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.value = custom ? zonePref : "";
+  if (custom) input.setAttribute("aria-current", "true");
+  const list = document.createElement("datalist");
+  list.id = "settings-zone-list";
+  input.setAttribute("list", list.id);
+  input.addEventListener(
+    "focus",
+    () => {
+      for (const zone of knownZones()) list.append(new Option(zoneOffsetLabel(zone, now), zone));
+    },
+    { once: true },
+  );
+  const commit = () => {
+    const zone = matchZone(input.value, knownZones());
+    if (zone === null) {
+      input.setAttribute("aria-invalid", String(input.value.trim() !== ""));
+      return;
+    }
+    input.removeAttribute("aria-invalid");
+    if (zone !== zonePref) setZonePref(zone);
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") commit();
   });
-  wrapper.append(select);
+  input.addEventListener("change", commit);
+  wrapper.append(input, list);
   return wrapper;
 }
 
@@ -208,10 +230,10 @@ export function mountSettingsSheet(
 function focusPath(element: HTMLElement): [number, number] | null {
   const row = element.closest(".settings-field");
   if (!row?.parentElement) return null;
-  const buttons = [...row.querySelectorAll<HTMLElement>("button, select")];
+  const buttons = [...row.querySelectorAll<HTMLElement>("button, input")];
   return [[...row.parentElement.children].indexOf(row), buttons.indexOf(element)];
 }
 
 function restoreFocus(body: HTMLElement, [row, index]: [number, number]): void {
-  body.children[row]?.querySelectorAll<HTMLElement>("button, select")[index]?.focus();
+  body.children[row]?.querySelectorAll<HTMLElement>("button, input")[index]?.focus();
 }

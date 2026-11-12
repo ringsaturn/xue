@@ -2365,7 +2365,8 @@ html[lang="ja"] .rail-glyph {
   overscroll-behavior: contain;
 }
 
-/* The time zone list under the clock chips: the API console's field. */
+/* The time zone search under the clock chips: the API console's field,
+   inked when it holds the zone in force, warned on a query naming none. */
 .settings-select {
   width: 100%;
   height: 32px;
@@ -2377,6 +2378,14 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--fs-1);
+}
+
+.settings-select[aria-current="true"] {
+  border-color: var(--text);
+}
+
+.settings-select[aria-invalid="true"] {
+  border-color: var(--warning);
 }
 
 .settings-select:focus-visible {
