@@ -656,16 +656,17 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   (the flat `synop.<YYYYMMDDHHMM>/index.json` before that layout), which lists
   `networks[]` (id, name, `cadence`, `prPeriod`, the `attribution` to show,
   `license`, `latest`, and its `<network>.jsonl` file with length and
-  CRC32), the `elements` order (`t`, `rh`, `p`, `slp`, `wd`, `ws`, `gust`,
-  `pr`, `pr1h`, `sun`, `snow`, `vis`) and one compact row per station:
+  CRC32), the `elements` order (`t`, `td`, `rh`, `p`, `slp`, `wd`, `ws`,
+  `gust`, `pr`, `pr1h`, `sun`, `snow`, `vis`, `tide`) and one compact row per station:
   `id` (`<network>:<number>`, e.g. `amedas:50066` for Mt. Fuji), network
   index, `lat`, `lon`, `elev`, `rank` (0 principal, 1 automatic, 2
-  precipitation gauge), `name`, `obsTime`, the current value of each
+  rain or tide gauge), `name`, `obsTime`, the current value of each
   element, then the `offset` / `length` of the station's line in its
   network's file. That line holds the last 24 hours as columns: `time`
   (epoch seconds, oldest first) and `obs.<element>` arrays as long, null
   where not reported. Units are SI (°C, %, hPa, m/s, mm, minutes of
-  sunshine, cm of snow, metres of visibility); doubtful or missing values
+  sunshine, cm of snow, metres of visibility, metres of tide above the
+  network's chart datum); doubtful or missing values
   are null; nothing is derived. AMeDAS is reused under JMA's website terms
   (Public Data License v1.0): credit 「出典：気象庁ホームページ」.
 

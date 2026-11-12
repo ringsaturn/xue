@@ -102,6 +102,7 @@ the adapter. The index lists them in this order (`elements`):
 | `sun` | sunshine over the network's `prPeriod` ending at the time | minutes | number, 0 … 60 |
 | `snow` | snow depth | cm | integer, 0 … 2000 |
 | `vis` | visibility | metres | integer, ≥ 0; each network's ceiling in §9 |
+| `tide` | water level at a tide gauge, above the network's chart datum | m, to a hundredth | number, −2 … 20 |
 
 - A network publishes the elements it measures and leaves the others
   `null`; nothing is derived — no dew point from temperature and humidity,
@@ -117,6 +118,13 @@ the adapter. The index lists them in this order (`elements`):
   codes as negative (BUFR's −0.01 m "a little" and −0.02 m "patchy" are
   not depths). Each network's section (§9) says which of its quality
   flags are kept.
+- `tide` is the height of the sea surface at a tide gauge above the
+  chart datum the network states (§9) — the zero of its tide tables and
+  nautical charts, near the lowest astronomical tide — not above mean sea
+  level and not a surge residual: the astronomical tide is in it. Datums
+  differ between networks, so two networks' values are not comparable
+  without the offsets §9 gives. The range admits the largest tidal
+  ranges on Earth above such a datum.
 - Times in the network files are **epoch seconds, UTC**; times in the
   index and the stations files are ISO 8601 UTC with a `Z` suffix.
 - Positions are decimal degrees to four places; `elev` is metres above
@@ -166,7 +174,7 @@ This section says what the fields mean and the rules across them.
      "file": {"path": "amedas.jsonl", "byteLength": 6779928, "crc32": "3b0b746f"},
      "stations": {"path": "amedas.stations.json", "byteLength": 182000, "crc32": "0a1b2c3d", "count": 1286}}
   ],
-  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+  "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "tide"],
   "elementTable": {"t": {"unit": "°C", "cell": "point", "period": null}, …,
                    "pr": {"unit": "mm", "cell": "sum", "period": "network"}, …},
   "sources": [ … ],
@@ -213,12 +221,12 @@ The shape is [`schemas/synop-stations.schema.json`](schemas/synop-stations.schem
 
 ```json
 {"schemaVersion": 2, "network": "amedas", "issued": "2026-10-05T00:10:00Z",
- "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis"],
+ "elements": ["t", "td", "rh", "p", "slp", "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "tide"],
  "columns": ["id", "lat", "lon", "elev", "rank", "name", "obsTime", "t", "td", "rh", "p", "slp",
-             "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "offset", "length"],
+             "wd", "ws", "gust", "pr", "pr1h", "sun", "snow", "vis", "tide", "offset", "length"],
  "stations": [
    ["amedas:50066", 35.36, 138.7267, 3775.0, 0, "Mt. Fuji", "2026-10-05T00:10:00Z",
-    5.8, null, 98, 646.7, null, null, null, null, null, null, null, null, null, 3563, 283]
+    5.8, null, 98, 646.7, null, null, null, null, null, null, null, null, null, null, 3563, 283]
  ]}
 ```
 
@@ -240,7 +248,8 @@ The shape is [`schemas/synop-stations.schema.json`](schemas/synop-stations.schem
   Every id's prefix is the file's network. `rank` is how prominent the station
   is, which a map thins by: `0` a principal station (a staffed office, a
   summit, a remote island, a WMO station), `1` a multi-element automatic
-  station, `2` a station that measures precipitation alone. `name` is the
+  station, `2` a single-purpose gauge: one that measures precipitation
+  alone, or the tide alone. `name` is the
   station's name in Latin script, or `null`. `obsTime` is the station's
   newest time. The element values are the station's **current** values:
   for each element, its newest non-null value no more than an hour before

@@ -602,6 +602,7 @@ export const tr: Record<MessageKey, string> = {
   stationSeaLevelPressure: "Deniz seviyesi basıncı",
   stationSunshine: "Güneşlenme",
   stationSnowDepth: "Kar derinliği",
+  stationTide: "Gelgit (harita datumu üstü)",
   stationElevation: "Yükseklik",
   stationOpenSounding: "Sondajı aç",
   stationPinHere: "Buraya sabitle",

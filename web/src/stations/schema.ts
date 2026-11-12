@@ -601,6 +601,7 @@ const SYNOP_BOUNDS: Record<string, [number, number]> = {
   sun: [0, 60],
   snow: [0, 2000],
   vis: [0, Infinity],
+  tide: [-2, 20],
 };
 const SYNOP_INTEGERS = new Set(["rh", "wd", "snow", "vis"]);
 
@@ -610,7 +611,8 @@ const SYNOP_ROW_HEAD = ["id", "lat", "lon", "elev", "rank", "name", "obsTime"] a
 const SYNOP_ROW_TAIL = ["offset", "length"] as const;
 
 /** How prominent a station is, which the map thins by: 0 a principal
- * station, 1 a multi-element automatic one, 2 a precipitation gauge. */
+ * station, 1 a multi-element automatic one, 2 a single-purpose gauge
+ * (precipitation or tide alone). */
 export type SynopRank = 0 | 1 | 2;
 
 export interface SynopNetwork {

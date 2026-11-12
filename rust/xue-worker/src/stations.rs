@@ -65,6 +65,7 @@ pub const SYNOP: Kind = Kind {
         ("sun", "sunshine over the network's period", "min"),
         ("snow", "snow depth", "cm"),
         ("vis", "visibility", "m"),
+        ("tide", "tide height above the network's chart datum", "m"),
     ],
     station_fields: &["name", "names", "lat", "lon", "elev", "wmo", "rank"],
 };

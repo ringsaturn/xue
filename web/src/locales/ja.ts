@@ -596,6 +596,7 @@ export const ja: Record<MessageKey, string> = {
   stationSeaLevelPressure: "海面気圧",
   stationSunshine: "日照時間",
   stationSnowDepth: "積雪深",
+  stationTide: "潮位（海図基準面上）",
   stationElevation: "標高",
   stationOpenSounding: "探空図を開く",
   stationPinHere: "ここにピン",
