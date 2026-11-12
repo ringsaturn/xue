@@ -127,6 +127,22 @@ export function knownZones(): string[] {
   }
 }
 
+/** The zone a typed query names, or `null` when it names none or several:
+ * an id in any case (`asia/tokyo`), a city with spaces for underscores
+ * (`new york`, `Tokyo`), or a part of exactly one id (`kolk`). */
+export function matchZone(query: string, zones: readonly string[]): string | null {
+  const wanted = query.trim().toLowerCase().replace(/\s+/g, "_");
+  if (wanted === "") return null;
+  const lower = zones.map((zone) => zone.toLowerCase());
+  const exact = lower.indexOf(wanted);
+  if (exact >= 0) return zones[exact]!;
+  if (wanted === "utc" || wanted === "gmt") return zones.includes("UTC") ? "UTC" : null;
+  const city = lower.flatMap((zone, index) => (zone.slice(zone.lastIndexOf("/") + 1) === wanted ? [zones[index]!] : []));
+  if (city.length === 1) return city[0]!;
+  const partial = lower.flatMap((zone, index) => (zone.includes(wanted) ? [zones[index]!] : []));
+  return partial.length === 1 ? partial[0]! : null;
+}
+
 /** Whether this engine's tz data can format in `zone`. */
 export function isKnownZone(zone: string): boolean {
   try {

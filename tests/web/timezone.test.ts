@@ -7,6 +7,7 @@ import {
   formatDayMark,
   formatStamp,
   isKnownZone,
+  matchZone,
   onDisplayZoneChange,
   parseZonePref,
   resolveZone,
@@ -126,6 +127,17 @@ describe("display zone", () => {
     expect((await import("../../web/src/timezone")).displayZone).toBe("Asia/Kolkata");
     setZonePref("auto");
     expect((await import("../../web/src/timezone")).displayZone).toBe(other);
+  });
+
+  it("matches a typed zone leniently", () => {
+    const zones = ["America/New_York", "America/Kentucky/Louisville", "America/Louisville", "Asia/Kolkata", "Asia/Tokyo", "UTC"];
+    expect(matchZone("asia/tokyo", zones)).toBe("Asia/Tokyo");
+    expect(matchZone(" new york ", zones)).toBe("America/New_York");
+    expect(matchZone("kolk", zones)).toBe("Asia/Kolkata");
+    expect(matchZone("louisville", zones)).toBe("America/Louisville");
+    expect(matchZone("America", zones)).toBeNull();
+    expect(matchZone("gmt", zones)).toBe("UTC");
+    expect(matchZone("", zones)).toBeNull();
   });
 
   it("reads a stored choice leniently", () => {
