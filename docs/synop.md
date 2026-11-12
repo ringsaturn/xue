@@ -255,8 +255,10 @@ The shape is [`schemas/synop-stations.schema.json`](schemas/synop-stations.schem
   for each element, its newest non-null value no more than an hour before
   `obsTime` — some elements arrive less often than the station reports
   (AMeDAS sends Mt. Fuji's humidity and pressure on the hour only) —
-  except that `pr`, `pr1h` and `sun`, which are totals over a period
-  ending at their time, are only ever taken at `obsTime`. `offset` and
+  except that `pr` and `sun`, which are totals over a period ending at
+  their time, are only ever taken at `obsTime`, and `pr1h`, a rolling
+  hour, no more than 20 minutes before it (a network may stamp its rain
+  gauges on another beat than its other sensors, §9.3). `offset` and
   `length` are the byte span of the station's line in `<network>.jsonl`,
   the JSON object alone; the spans are in row order, do not overlap, and
   lie inside that file's `byteLength`.

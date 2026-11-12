@@ -72,14 +72,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=afadc7ac",
+   "href": "index.json?v=e5ae2b8b",
    "type": "application/json",
    "title": "synop index (schema v2)",
    "roles": ["metadata"],
    "xue:kind": "index",
    "file:size": 3888,
-   "xue:crc32": "afadc7ac",
-   "file:checksum": "b20204afadc7ac"
+   "xue:crc32": "e5ae2b8b",
+   "file:checksum": "b20204e5ae2b8b"
   },
   "amedas": {
    "href": "amedas.jsonl?v=b709c94c",
@@ -144,7 +144,7 @@
    "file:checksum": "b202043c6f3fea"
   },
   "hko.stations": {
-   "href": "hko.stations.json?v=71ecbcc0",
+   "href": "hko.stations.json?v=8bd5280d",
    "type": "application/json",
    "title": "Hong Kong Observatory: stations and current values",
    "description": "One row per station, sorted by id: position, rank, name, newest time, the current value of each element and the byte span of the station's line in the network's NDJSON file.",
@@ -152,9 +152,9 @@
    "xue:kind": "stations",
    "xue:network": "hko",
    "xue:stations": 62,
-   "file:size": 9813,
-   "xue:crc32": "71ecbcc0",
-   "file:checksum": "b2020471ecbcc0"
+   "file:size": 9806,
+   "xue:crc32": "8bd5280d",
+   "file:checksum": "b202048bd5280d"
   }
  }
 }

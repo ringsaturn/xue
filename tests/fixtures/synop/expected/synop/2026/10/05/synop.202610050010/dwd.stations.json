@@ -10,6 +10,6 @@
   ["dwd:10961", 47.421, 10.9848, 2956.0, 0, "Zugspitze", "2026-10-04T23:40:00Z", -3.5, -24.9, 17, 713.2, null, 360, 3.7, 6.8, null, null, null, null, 70509, null, 1049, 437],
   ["dwd:A116", 54.6831, 8.472, 7.5, 1, "Foehr", "2026-10-04T23:50:00Z", null, null, null, null, null, 340, 2.0, 3.2, null, null, null, null, null, null, 1487, 235],
   ["dwd:M031", 51.5835, 10.709, 240.0, 2, "Ellrich-Werna", "2026-10-04T23:40:00Z", null, null, null, null, null, null, null, null, null, 0.0, null, null, null, null, 1723, 249],
-  ["dwd:O598", 50.8992, 14.7456, 270.5, 1, "Bertsdorf-Hoernitz", "2026-10-04T23:50:00Z", 8.6, 6.2, 85, null, null, 320, 3.6, 7.6, 0.0, null, null, null, null, null, 1973, 346]
+  ["dwd:O598", 50.8992, 14.7456, 270.5, 1, "Bertsdorf-Hoernitz", "2026-10-04T23:50:00Z", 8.6, 6.2, 85, null, null, 320, 3.6, 7.6, 0.0, 0.4, null, null, null, null, 1973, 346]
  ]
 }

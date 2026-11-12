@@ -78,6 +78,13 @@ ACCUMULATED = frozenset({"pr", "pr1h", "sun"})
 one is a different period, not a late copy of this one, so these are only
 ever read at the station's newest time."""
 
+ACCUMULATED_LAG = {"pr1h": 1200}
+"""Seconds before the station's newest time an accumulation may still be
+read from, by element. ``pr1h`` is a rolling hour: a network can stamp it
+on its own beat (the Observatory's rain gauges every quarter hour, its
+other sensors every ten minutes), and an hour ending a few minutes earlier
+still says how wet the last hour was, where null would say nothing."""
+
 
 _published = pointproduct.published_source
 
@@ -147,12 +154,16 @@ def _read_network(network: Network, raw_root: Path, record_statuses: dict[str, S
 
 def _current_values(observations: dict[int, dict[str, Any]], newest: int) -> list[Any]:
     """Each element's newest non-null value at most :data:`CURRENT_SECONDS`
-    before ``newest`` (an accumulation: at ``newest`` only), in
-    :data:`ELEMENTS` order."""
+    before ``newest`` (an accumulation: at ``newest`` only, or within its
+    :data:`ACCUMULATED_LAG`), in :data:`ELEMENTS` order."""
     recent = sorted((epoch for epoch in observations if epoch >= newest - CURRENT_SECONDS), reverse=True)
     values: list[Any] = []
     for key in ELEMENTS:
-        epochs = (newest,) if key in ACCUMULATED else recent
+        if key in ACCUMULATED:
+            lag = ACCUMULATED_LAG.get(key, 0)
+            epochs = tuple(epoch for epoch in recent if epoch >= newest - lag)
+        else:
+            epochs = recent
         values.append(next((observations[epoch][key] for epoch in epochs if observations[epoch].get(key) is not None), None))
     return values
 
