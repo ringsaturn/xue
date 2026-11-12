@@ -114,7 +114,9 @@ pub(super) fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result
 
 /// Inspect every file once for all variables, in parallel across files.
 ///
-/// Variables in `optional_at_analysis` may be absent from the f000 file only.
+/// Variables in `optional_at_analysis` may be absent from the f000 file only,
+/// and one with a first hour of its own (`first_hours`) from every file
+/// before it, where it is not read even when present.
 /// Inspection uses the GRIB2 header index; the first file is cross-checked
 /// against `reference_frames` (a real GDAL pass) and a run whose files the
 /// header index cannot parse falls back to GDAL inspection.
@@ -131,6 +133,7 @@ pub(super) fn prepare_frames_all(
     paths: &[PathBuf],
     variable_ids: &[&str],
     optional_at_analysis: &[&str],
+    first_hours: &[(String, i64)],
     reference_frames: &FileFrames,
     cadence_seconds: Option<i64>,
     families: &[(String, Option<&str>)],
@@ -171,6 +174,15 @@ pub(super) fn prepare_frames_all(
     // required below.
     let mut inspection_optional: Vec<&str> = optional_at_analysis.to_vec();
     inspection_optional.extend_from_slice(static_ids);
+    // A variable with a first hour of its own is missing before it; its
+    // presence from then on is required below.
+    let first_hour_of = |variable_id: &str| {
+        first_hours
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .map(|(_, hour)| *hour)
+    };
+    inspection_optional.extend(variable_ids.iter().copied().filter(|id| first_hour_of(id).is_some()));
     let inspect_all = |inspect: &(dyn Fn(&Path, &[&str]) -> Result<FileFrames> + Sync)| -> Result<Vec<FileFrames>> {
         paths
             .par_iter()
@@ -205,6 +217,12 @@ pub(super) fn prepare_frames_all(
         }
     };
     log!(options, "indexed {} files", per_file.len());
+    // Before its first hour a variable is not read, whatever the file holds.
+    for frames in &mut per_file {
+        frames.retain(|(variable_id, frame)| {
+            first_hour_of(variable_id).is_none_or(|hour| frame.lead_seconds >= hour * HOUR_SECONDS)
+        });
+    }
     if let Some(cadence_seconds) = cadence_seconds {
         per_file = snap_observation_frames(per_file, cadence_seconds)?;
     }
@@ -251,6 +269,10 @@ pub(super) fn prepare_frames_all(
                     continue;
                 }
                 let lead = frames[0].1.lead_seconds;
+                let before_first_hour = first_hour_of(variable_id).is_some_and(|hour| lead < hour * HOUR_SECONDS);
+                if before_first_hour {
+                    continue;
+                }
                 if !optional_at_analysis.contains(variable_id) || lead != 0 {
                     return Err(EncodeError::conversion(format!(
                         "missing {variable_id} record at forecast hour {}",
@@ -616,6 +638,9 @@ pub(super) fn discover_records<'a>(
     }
     let mut optional: Vec<&str> = source.optional_at_analysis.iter().map(String::as_str).collect();
     optional.extend(vector_only_ids.iter().map(String::as_str));
+    // The reference file is the run's first, before any variable's own
+    // first hour.
+    optional.extend(source.variable_first_hours.iter().map(|(id, _)| id.as_str()));
     // Which grid family each input is read from — `None` for every input
     // of every source but CFSv2. The reference pass runs once per family
     // in play, each over that family's own file.
@@ -719,9 +744,16 @@ pub(super) fn discover_records<'a>(
     // its forecast hour, so it must be one no file can lack. Stable-sorting
     // the analysis-optional inputs to the back is enough unless nothing
     // else was asked for.
-    ordered.sort_by_key(|id| (registry.is_static(id), source.is_optional_at_analysis(id)));
+    ordered.sort_by_key(|id| {
+        (
+            registry.is_static(id),
+            source.first_hour_of(id).is_some(),
+            source.is_optional_at_analysis(id),
+        )
+    });
     if ordered.is_empty()
         || source.is_optional_at_analysis(&ordered[0])
+        || source.first_hour_of(&ordered[0]).is_some()
         || registry.is_static(&ordered[0])
     {
         return Err(EncodeError::conversion(format!(
@@ -742,6 +774,7 @@ pub(super) fn discover_records<'a>(
         &paths,
         &ordered_refs,
         &optional_at_analysis,
+        &source.variable_first_hours,
         &reference_frames,
         source.cadence_seconds,
         &input_families,

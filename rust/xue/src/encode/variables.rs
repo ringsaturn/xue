@@ -124,6 +124,41 @@ impl AerosolIdentity {
     pub const MISSING_TYPE: u8 = 255;
 }
 
+/// What an ensemble product is a statistic of its members as (docs/format.md
+/// §"Ensemble"): the decoder's parse of the block, which the registry's
+/// `ensemble` blocks, a source's `ensembles` and the `template-ensemble`
+/// rule share, and which the metadata writer writes back out in the spec's
+/// key order.
+pub use crate::decode::metadata::EnsembleIdentity;
+
+/// An `ensemble` block of the document, refused unless it is one the
+/// format admits.
+pub(crate) fn deserialize_ensemble<'de, D>(deserializer: D) -> std::result::Result<EnsembleIdentity, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let block = Map::<String, Value>::deserialize(deserializer)?;
+    EnsembleIdentity::from_block(&block).map_err(|error| serde::de::Error::custom(error.0))
+}
+
+/// A list of `[variable id, ensemble block]` pairs (a source's `ensembles`).
+pub(crate) fn deserialize_ensembles<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<(String, EnsembleIdentity)>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let pairs = Vec::<(String, Map<String, Value>)>::deserialize(deserializer)?;
+    pairs
+        .into_iter()
+        .map(|(id, block)| {
+            EnsembleIdentity::from_block(&block)
+                .map(|identity| (id.clone(), identity))
+                .map_err(|error| serde::de::Error::custom(format!("ensembles {id}: {}", error.0)))
+        })
+        .collect()
+}
+
 /// One variable of the document: the metadata blocks a store carries, the
 /// GRIB2 identity derived from them, and the rules the pipeline applies.
 #[derive(Debug, Clone)]
@@ -167,6 +202,11 @@ pub struct VariableSpec {
     /// The schema v3 `aerosol` block, written verbatim, and its parse.
     pub aerosol: Option<Map<String, Value>>,
     pub grib2_aerosol: Option<AerosolIdentity>,
+    /// The `ensemble` block of a variable that is an ensemble statistic
+    /// wherever it is published (a spread, a quartile, a probability); a
+    /// source may give a single-forecast variable one of its own
+    /// (`SourceSpec::ensembles`).
+    pub ensemble: Option<EnsembleIdentity>,
     /// One codebook per profile; empty for a variable read and never
     /// published (`tp`, the categorical precipitation flags).
     pub codebooks: HashMap<String, Codebook>,

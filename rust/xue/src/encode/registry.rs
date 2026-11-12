@@ -24,7 +24,7 @@ use serde_json::{Map, Value};
 use crate::encode::errors::{EncodeError, Result};
 use crate::encode::quantize::Codebook;
 use crate::encode::sources::SourceSpec;
-use crate::encode::variables::{AerosolIdentity, MatchSpec, VariableSpec};
+use crate::encode::variables::{deserialize_ensemble, AerosolIdentity, EnsembleIdentity, MatchSpec, VariableSpec};
 
 /// The document schema this reader implements.
 pub const REGISTRY_SCHEMA: u64 = 1;
@@ -120,6 +120,28 @@ pub enum GdalRule {
     },
     Template,
     TemplateAerosol,
+    /// An ensemble product under an identity of its own: the parameter and
+    /// first surface read off the assembled template beside the record's
+    /// ensemble identity and, for a template over a time interval, the one
+    /// interval's length in hours and its process.
+    #[serde(rename_all = "camelCase")]
+    TemplateEnsemble {
+        discipline: u8,
+        category: u8,
+        number: u8,
+        level_type: u8,
+        /// `None` accepts any surface value, a missing one included.
+        #[serde(default)]
+        level_value: Option<f64>,
+        #[serde(deserialize_with = "deserialize_ensemble")]
+        ensemble: EnsembleIdentity,
+        /// Set for a record over a time interval (templates 4.9, 4.10,
+        /// 4.12), together with `statistical`.
+        #[serde(default)]
+        hours: Option<u32>,
+        #[serde(default)]
+        statistical: Option<u8>,
+    },
     TemplateRank,
     TemplateMrms,
     TotalPrecipitation,
@@ -219,6 +241,8 @@ struct VariableEntry {
     #[serde(default)]
     aerosol: Option<Map<String, Value>>,
     #[serde(default)]
+    ensemble: Option<Map<String, Value>>,
+    #[serde(default)]
     quantization: Option<Map<String, Value>>,
     value_range: (f64, f64),
     fill_values: Vec<f64>,
@@ -301,6 +325,25 @@ fn variable_spec(id: &str, entry: VariableEntry) -> Result<VariableSpec> {
         .as_ref()
         .map(|block| parse_aerosol(block, &format!("variables.{id}: aerosol")))
         .transpose()?;
+    let ensemble = entry
+        .ensemble
+        .as_ref()
+        .map(|block| {
+            EnsembleIdentity::from_block(block)
+                .map_err(|error| refused(format!("variables.{id}: ensemble: {}", error.0)))
+        })
+        .transpose()?;
+    for rule in &entry.matching.gdal {
+        if let GdalRule::TemplateEnsemble { hours, statistical, .. } = rule {
+            // An interval template names both its length and its process;
+            // an instantaneous one neither.
+            if hours.is_some() != statistical.is_some() || *hours == Some(0) {
+                return Err(refused(format!(
+                    "variables.{id}: a template-ensemble rule sets hours and statistical together, hours above zero"
+                )));
+            }
+        }
+    }
     let mut codebooks: HashMap<String, Codebook> = HashMap::new();
     if let Some(quantization) = &entry.quantization {
         for (profile, block) in quantization {
@@ -332,6 +375,7 @@ fn variable_spec(id: &str, entry: VariableEntry) -> Result<VariableSpec> {
         producer_id: entry.producer.map(|producer| producer.id),
         aerosol: entry.aerosol,
         grib2_aerosol,
+        ensemble,
         codebooks,
         matching: entry.matching,
     })
@@ -460,6 +504,14 @@ impl Registry {
                 .chain(&source.optional_at_analysis)
                 .chain(source.statistical_processes.iter().map(|(id, _)| id))
                 .chain(source.bands.iter().map(|(id, _)| id))
+                .chain(source.ensembles.iter().map(|(id, _)| id))
+                .chain(
+                    source
+                        .interval_precipitation_pairs
+                        .iter()
+                        .flat_map(|(rate_id, total_id)| [rate_id, total_id]),
+                )
+                .chain(source.variable_first_hours.iter().map(|(id, _)| id))
                 .chain(source.companion_files.iter().flat_map(|companion| &companion.variable_ids))
             {
                 if !is_variable(variable_id) {
@@ -467,6 +519,14 @@ impl Registry {
                         "{context} names {variable_id:?}, which is not a variable"
                     )));
                 }
+            }
+            if !source.interval_precipitation_pairs.is_empty() && !source.interval_precipitation {
+                return Err(refused(format!(
+                    "{context} lists intervalPrecipitationPairs without intervalPrecipitation"
+                )));
+            }
+            if source.variable_first_hours.iter().any(|(_, hour)| *hour <= 0) {
+                return Err(refused(format!("{context} variableFirstHours must be above zero")));
             }
             for bundle_id in source
                 .bundle_scalar_ids
@@ -613,6 +673,9 @@ impl Registry {
     /// source does not fetch; the precipitation rate reads the first of its
     /// derivation's inputs the source lists.
     pub fn bundle_input_ids(&self, source: &SourceSpec, bundle_id: &str) -> Vec<String> {
+        if let Some(total_id) = source.interval_total_of(bundle_id) {
+            return vec![total_id.to_string()];
+        }
         let Some(bundle) = self.bundles.get(bundle_id) else {
             return vec![bundle_id.to_string()];
         };
@@ -651,6 +714,9 @@ impl Registry {
         }
         let mut found: Option<(String, String)> = None;
         for bundle_id in &source.bundle_scalar_ids {
+            if source.interval_total_of(bundle_id).is_some() {
+                continue;
+            }
             let is_rate = self
                 .derivation(bundle_id)
                 .is_some_and(|derivation| derivation.kind == DerivationKind::PrecipitationRate);
@@ -669,6 +735,39 @@ impl Registry {
             found = Some((bundle_id.clone(), raw_id));
         }
         Ok(found)
+    }
+
+    /// The further rates a source derives from interval totals beside its
+    /// one precipitation rate, as `(bundle id, raw input id)`, those whose
+    /// total this build reads (`SourceSpec::interval_precipitation_pairs`).
+    pub fn interval_precipitation_pairs(&self, source: &SourceSpec) -> Vec<(String, String)> {
+        source
+            .interval_precipitation_pairs
+            .iter()
+            .filter(|(rate_id, _)| source.bundle_scalar_ids.contains(rate_id))
+            .cloned()
+            .collect()
+    }
+
+    /// The forecast hour a bundle's series starts at when its inputs are
+    /// absent from every earlier frame (`SourceSpec::variable_first_hours`):
+    /// the latest of its inputs', `None` for a bundle whose inputs are in
+    /// every frame.
+    pub fn bundle_first_hour(&self, source: &SourceSpec, bundle_id: &str) -> Option<i64> {
+        self.bundle_input_ids(source, bundle_id)
+            .iter()
+            .chain(std::iter::once(&bundle_id.to_string()))
+            .filter_map(|id| source.first_hour_of(id))
+            .max()
+    }
+
+    /// The ensemble block a variable is written with on a source: the
+    /// source's own for it (`SourceSpec::ensembles`), else the variable's.
+    pub fn ensemble(&self, source: &SourceSpec, variable_id: &str) -> Result<Option<EnsembleIdentity>> {
+        if let Some((_, identity)) = source.ensembles.iter().find(|(id, _)| id == variable_id) {
+            return Ok(Some(*identity));
+        }
+        Ok(self.variable(variable_id)?.ensemble)
     }
 
     /// Every bundle a source can publish, in manifest order: its scalars,
@@ -716,9 +815,71 @@ impl Registry {
     }
 }
 
+/// The snapshot widened by hand with the ensemble keys of the registry
+/// document, independent of which source publishes them: a median rule on
+/// `tmp2m`, its 25th percentile, a spread, a 24-hour probability, a pair
+/// of interval totals and a first hour on CMA GEPS.
+#[cfg(test)]
+pub(crate) mod ensemble_fixture {
+    use serde_json::{json, Value};
+
+    pub(crate) fn rule(category: u8, number: u8, level_type: u8, level_value: Value, ensemble: Value, hours: Value, statistical: Value) -> Value {
+        json!({
+            "rule": "template-ensemble", "discipline": 0, "category": category, "number": number,
+            "levelType": level_type, "levelValue": level_value, "ensemble": ensemble,
+            "hours": hours, "statistical": statistical,
+        })
+    }
+
+    pub(crate) fn document() -> Value {
+        let mut document: Value = serde_json::from_str(super::EMBEDDED_DOCUMENT).unwrap();
+        let variables = &mut document["variables"];
+        let median = rule(0, 0, 103, json!(2.0), json!({"percentileValue": 50}), json!(null), json!(null));
+        variables["tmp2m"]["match"]["gdal"].as_array_mut().unwrap().push(median);
+        let mut quartile = variables["tmp2m"].clone();
+        quartile["label"] = json!("2 meter temperature, 25th percentile");
+        quartile["ensemble"] = json!({"percentileValue": 25});
+        quartile["match"]["gdal"] = json!([rule(0, 0, 103, json!(2.0), json!({"percentileValue": 25}), json!(null), json!(null))]);
+        variables["tmp2mq25"] = quartile;
+        let mut total = variables["apcp"].clone();
+        total["match"]["gdal"] = json!([rule(1, 8, 1, json!(null), json!({"percentileValue": 25}), json!(6), json!(1))]);
+        variables["apcpq25"] = total;
+        let mut rate = variables["prate"].clone();
+        rate["ensemble"] = json!({"percentileValue": 25});
+        rate["match"]["gdal"] = json!([]);
+        variables["prateq25"] = rate;
+        let mut spread = variables["prmsl"].clone();
+        spread["ensemble"] = json!({"derivedForecast": 4});
+        spread["match"]["gdal"] = json!([rule(3, 1, 101, json!(null), json!({"derivedForecast": 4}), json!(null), json!(null))]);
+        variables["prmslsd"] = spread;
+        let probability = json!({
+            "probabilityType": 3, "scaleFactorOfLowerLimit": 2, "scaledValueOfLowerLimit": 1000,
+            "scaleFactorOfUpperLimit": null, "scaledValueOfUpperLimit": null,
+        });
+        let mut above = variables["apcp"].clone();
+        above["unit"] = json!("%");
+        above["ensemble"] = probability.clone();
+        above["quantization"] = variables["tmp2m"]["quantization"].clone();
+        above["match"]["gdal"] = json!([rule(1, 8, 1, json!(null), probability, json!(24), json!(1))]);
+        variables["apcp24gt10"] = above;
+        let source = &mut document["sources"]["cmageps"];
+        source["ensembles"] = json!([["tmp2m", {"percentileValue": 50}], ["prmsl", {"derivedForecast": 0}]]);
+        source["intervalPrecipitationPairs"] = json!([["prateq25", "apcpq25"]]);
+        source["variableFirstHours"] = json!([["apcp24gt10", 24]]);
+        for id in ["tmp2mq25", "prateq25", "prmslsd", "apcp24gt10"] {
+            source["bundleScalarIds"].as_array_mut().unwrap().push(json!(id));
+        }
+        for id in ["tmp2mq25", "apcpq25", "prmslsd", "apcp24gt10"] {
+            source["inputVariableIds"].as_array_mut().unwrap().push(json!(id));
+        }
+        source["optionalAtAnalysis"].as_array_mut().unwrap().push(json!("apcpq25"));
+        document
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{BundleKind, Companion, Conversion, Decimation, DerivationKind, GdalRule, Predictor, Registry};
+    use super::{BundleKind, Companion, Conversion, Decimation, DerivationKind, EnsembleIdentity, GdalRule, Predictor, Registry};
     use serde_json::{json, Value};
 
     #[test]
@@ -820,7 +981,54 @@ mod tests {
         assert_eq!(registry.source_by_manifest_model("HRRR").unwrap().id, "hrrr");
         assert!(registry.source("nothing").is_err());
         assert_eq!(registry.sources().count(), 30);
-        assert_eq!(registry.variables().count(), 238);
+        assert_eq!(registry.variables().count(), 260);
+    }
+
+    /// The ensemble keys of the document: a variable's own block, a
+    /// source's override of a single-forecast variable, the rule with its
+    /// parameters, a pair of interval totals and a first hour.
+    #[test]
+    fn the_ensemble_keys_parse_into_the_identities_they_name() {
+        let registry = Registry::parse(&super::ensemble_fixture::document().to_string()).unwrap();
+        let cmageps = registry.source("cmageps").unwrap();
+        assert_eq!(registry.ensemble(cmageps, "tmp2m").unwrap(), Some(EnsembleIdentity::Percentile(50)));
+        assert_eq!(registry.ensemble(cmageps, "prmsl").unwrap(), Some(EnsembleIdentity::Derived(0)));
+        assert_eq!(registry.ensemble(cmageps, "tmp2mq25").unwrap(), Some(EnsembleIdentity::Percentile(25)));
+        assert_eq!(registry.ensemble(cmageps, "prmslsd").unwrap(), Some(EnsembleIdentity::Derived(4)));
+        assert_eq!(
+            registry.ensemble(cmageps, "apcp24gt10").unwrap(),
+            Some(EnsembleIdentity::probability(3, Some((2, 1000)), None))
+        );
+        let gfs = registry.source("gfs").unwrap();
+        assert_eq!(registry.ensemble(gfs, "tmp2m").unwrap(), None, "the override is the source's");
+        assert_eq!(
+            registry.variable("apcp24gt10").unwrap().matching.gdal,
+            [GdalRule::TemplateEnsemble {
+                discipline: 0,
+                category: 1,
+                number: 8,
+                level_type: 1,
+                level_value: None,
+                ensemble: EnsembleIdentity::probability(3, Some((2, 1000)), None),
+                hours: Some(24),
+                statistical: Some(1),
+            }]
+        );
+        // The pair's rate reads its total and is published only when the
+        // build reads it; the rate has no analysis frame, like `prate`.
+        assert_eq!(registry.bundle_input_ids(cmageps, "prateq25"), ["apcpq25"]);
+        assert_eq!(
+            registry.interval_precipitation_pairs(cmageps),
+            [("prateq25".to_string(), "apcpq25".to_string())]
+        );
+        assert!(registry.published_bundle_ids(cmageps).contains(&"prateq25"));
+        assert_eq!(registry.analysis_optional_ids(cmageps, &["tmp2m", "prateq25"]), ["prateq25"]);
+        assert_eq!(
+            registry.derived_precipitation(cmageps).unwrap(),
+            Some(("prate".to_string(), "apcp".to_string()))
+        );
+        assert_eq!(registry.bundle_first_hour(cmageps, "apcp24gt10"), Some(24));
+        assert_eq!(registry.bundle_first_hour(cmageps, "tmp2m"), None);
     }
 
     fn snapshot() -> Value {
@@ -875,6 +1083,28 @@ mod tests {
         let mut document = snapshot();
         document["sources"]["gfs"]["inputVariableIds"][0] = json!("tmp3m");
         assert!(refusal(&document).contains("tmp3m"));
+
+        // An ensemble block the format does not admit, wherever it is.
+        let mut document = super::ensemble_fixture::document();
+        document["variables"]["prmslsd"]["ensemble"] = json!({"derivedForecast": 4, "percentileValue": 50});
+        assert!(refusal(&document).contains("variables.prmslsd"));
+        let mut document = super::ensemble_fixture::document();
+        document["variables"]["tmp2mq25"]["match"]["gdal"][0]["ensemble"] = json!({"percentileValue": 101});
+        assert!(refusal(&document).contains("percentileValue"));
+        let mut document = super::ensemble_fixture::document();
+        document["sources"]["cmageps"]["ensembles"][0][1] = json!({"probabilityType": 3});
+        assert!(refusal(&document).contains("sources.cmageps"));
+        // An interval rule names its hours and its process together.
+        let mut document = super::ensemble_fixture::document();
+        document["variables"]["apcpq25"]["match"]["gdal"][0]["statistical"] = json!(null);
+        assert!(refusal(&document).contains("variables.apcpq25"));
+        // Every id the three source keys name is a variable.
+        for (key, path) in [("ensembles", 0), ("intervalPrecipitationPairs", 1), ("variableFirstHours", 0)] {
+            let mut document = super::ensemble_fixture::document();
+            document["sources"]["cmageps"][key][0][path] = json!("tmp3m");
+            let message = refusal(&document);
+            assert!(message.contains("sources.cmageps") && message.contains("tmp3m"), "{key}: {message}");
+        }
 
         // A key a reader does not know is ignored, not refused.
         let mut document = snapshot();

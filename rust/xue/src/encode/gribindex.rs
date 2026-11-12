@@ -16,9 +16,10 @@ use grib::{Code, ForecastTime};
 use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::inspect::ENSEMBLE_TEMPLATES;
 use crate::encode::model::SourceFrame;
-use crate::encode::registry::Registry;
-use crate::encode::variables::{AerosolIdentity, VariableSpec};
+use crate::encode::registry::{GdalRule, Registry};
+use crate::encode::variables::{AerosolIdentity, EnsembleIdentity, VariableSpec};
 
 /// Product definition templates whose octets 10-34 share the 4.0 layout and
 /// that we know how to time-stamp. 4.8 adds the statistical interval. 4.48
@@ -27,9 +28,11 @@ use crate::encode::variables::{AerosolIdentity, VariableSpec};
 /// number and the generating process; grib-rs knows where its time and
 /// surface octets sit, and the aerosol octets are read here. 4.44 and 4.46,
 /// the aerosol templates without the optical fields, are its subsets and
-/// are not read by any source yet.
-const INSTANTANEOUS_TEMPLATES: &[u16] = &[0, 1, 2];
-const STATISTICAL_TEMPLATES: &[u16] = &[8, 11, 12];
+/// are not read by any source yet. The ensemble products (4.2, 4.5, 4.6 and
+/// their interval forms 4.12, 4.9, 4.10) carry their identity after octet
+/// 34 and are told apart by it (`ensemble_identity`).
+const INSTANTANEOUS_TEMPLATES: &[u16] = &[0, 1, 2, 5, 6];
+const STATISTICAL_TEMPLATES: &[u16] = &[8, 9, 10, 11, 12];
 const AEROSOL_TEMPLATES: &[u16] = &[48];
 const MISSING_U32: u32 = 0xFFFF_FFFF;
 /// Section 4 payload starts at octet 6, so the template's first octet (10)
@@ -54,6 +57,60 @@ pub struct MessageInfo {
     /// 4.48); `None` for every other template, which no aerosol variable
     /// matches.
     pub aerosol: Option<AerosolIdentity>,
+    /// The ensemble identity of an ensemble product (`ENSEMBLE_TEMPLATES`),
+    /// and whether it is the template over a time interval; `None` for a
+    /// single forecast.
+    pub ensemble: Option<(EnsembleIdentity, bool)>,
+    /// A statistical template's time ranges: their count, and the first's
+    /// unit (code table 4.4) and length in it.
+    pub time_range: Option<(u8, u8, u32)>,
+}
+
+/// Octet 35 on, per template: where the end of the overall interval sits
+/// in a statistical template — after the fields a template inserts beside
+/// 4.8's layout (4.11's three ensemble octets, 4.12's two, 4.10's
+/// percentile, 4.9's thirteen probability octets).
+fn interval_end_octet(template: u16) -> u16 {
+    match template {
+        9 => 48,
+        10 => 36,
+        11 => 38,
+        12 => 37,
+        _ => 35,
+    }
+}
+
+/// A GRIB2 sign-and-magnitude octet, as a scale factor is written.
+fn signed_octet(octet: u8) -> i8 {
+    let magnitude = (octet & 0x7F) as i8;
+    if octet & 0x80 != 0 {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// The ensemble identity of an ensemble product's section 4 payload
+/// (payload index = octet − 6): the derived forecast (4.2, 4.12) or the
+/// percentile (4.6, 4.10) at octet 35; a probability's (4.5, 4.9) type at
+/// 37 and its limits at 38–42 and 43–47, a limit whose scale factor or
+/// scaled value is all ones missing, normalized by the type as the GDAL
+/// matcher reads them (`inspect::assembled_ensemble`).
+fn ensemble_identity(template: u16, payload: &[u8]) -> Option<EnsembleIdentity> {
+    let at = |octet: usize| payload.get(octet - 6).copied();
+    match template {
+        2 | 12 => Some(EnsembleIdentity::Derived(at(35)?)),
+        6 | 10 => Some(EnsembleIdentity::Percentile(at(35)?)),
+        5 | 9 => {
+            let limit = |octet: usize| -> Option<Option<(i8, u32)>> {
+                let scale = at(octet)?;
+                let value = u32::from_be_bytes([at(octet + 1)?, at(octet + 2)?, at(octet + 3)?, at(octet + 4)?]);
+                Some((scale != 0xFF && value != MISSING_U32).then(|| (signed_octet(scale), value)))
+            };
+            Some(EnsembleIdentity::probability(at(37)?, limit(38)?, limit(43)?))
+        }
+        _ => None,
+    }
 }
 
 /// One `(scaleFactor, scaledValue)` limit of an aerosol interval at
@@ -180,6 +237,17 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
         } else {
             None
         };
+        let ensemble = if ENSEMBLE_TEMPLATES.contains(&template) {
+            let identity = ensemble_identity(template, &payload).ok_or_else(|| {
+                EncodeError::conversion(format!(
+                    "GRIB2 product definition section is too short in {}",
+                    path.display()
+                ))
+            })?;
+            Some((identity, statistical.is_some()))
+        } else {
+            None
+        };
 
         let (category, number) = (
             product.parameter_category(),
@@ -206,8 +274,10 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
             // Statistical products are valid at the end of the overall
             // interval (section 4 octets 35-41); the forecast time octets hold
             // the interval start.
-            let start = START_OF_PROD_TEMPLATE + 25;
-            if payload.len() < START_OF_PROD_TEMPLATE + 38 {
+            let end_octet = usize::from(interval_end_octet(template));
+            let start = end_octet - 6;
+            // Through the first range's length, octets end + 15 to end + 18.
+            if payload.len() < end_octet + 19 - 6 {
                 return Err(EncodeError::conversion(format!(
                     "GRIB2 product definition section is too short in {}",
                     path.display()
@@ -241,7 +311,17 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
             };
             reference_time + Duration::seconds(i64::from(value) * seconds)
         };
-        let statistical_process = statistical.map(|()| payload[START_OF_PROD_TEMPLATE + 37]);
+        let statistical_process = statistical.map(|()| {
+            payload[usize::from(interval_end_octet(template)) + 12 - 6]
+        });
+        let time_range = statistical.map(|()| {
+            let end = usize::from(interval_end_octet(template)) - 6;
+            (
+                payload[end + 7],
+                payload[end + 14],
+                u32::from_be_bytes([payload[end + 15], payload[end + 16], payload[end + 17], payload[end + 18]]),
+            )
+        });
 
         messages.push(MessageInfo {
             band: band + 1,
@@ -254,6 +334,8 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
             valid_time,
             statistical_process,
             aerosol,
+            ensemble,
+            time_range,
         });
     }
     if messages.is_empty() {
@@ -274,6 +356,43 @@ pub fn index_messages(path: &Path) -> Result<Vec<MessageInfo>> {
 /// a variable registered with one matches it. Mirrors `_matching_unit` in
 /// `xuebuild/grib2.py`.
 fn matching_unit<'a>(spec: &'a VariableSpec, message: &MessageInfo) -> Option<&'a str> {
+    if let Some((ensemble, interval)) = &message.ensemble {
+        // An ensemble product is only ever a `template-ensemble` rule's,
+        // as the GDAL matcher takes it (`inspect::band_matches`).
+        let accepted = spec.matching.gdal.iter().any(|rule| {
+            let GdalRule::TemplateEnsemble {
+                discipline,
+                category,
+                number,
+                level_type,
+                level_value,
+                ensemble: expected,
+                hours,
+                statistical,
+            } = rule
+            else {
+                return false;
+            };
+            (message.discipline, message.parameter_category, message.parameter_number, message.level_type)
+                == (*discipline, *category, *number, *level_type)
+                && level_value.is_none_or(|expected| message.level_value == Some(expected))
+                && ensemble == expected
+                && *interval == hours.is_some()
+                && match (hours, message.time_range) {
+                    (None, _) => true,
+                    (Some(hours), Some((count, unit, length))) => {
+                        count == 1 && unit == 1 && length == *hours && message.statistical_process == *statistical
+                    }
+                    (Some(_), None) => false,
+                }
+        });
+        return accepted.then_some(spec.matching.gdal_unit.as_str());
+    }
+    if spec.ensemble.is_some() {
+        // A spread, a quartile, a probability is never a single forecast's
+        // record, whatever its parameter.
+        return None;
+    }
     let triple = (
         message.discipline,
         message.parameter_category,
@@ -383,9 +502,9 @@ pub fn inspect_grib_fast(
 
 #[cfg(test)]
 mod tests {
-    use super::{matches, matching_unit, MessageInfo};
+    use super::{ensemble_identity, interval_end_octet, matches, matching_unit, MessageInfo};
     use crate::encode::registry::Registry;
-    use crate::encode::variables::AerosolIdentity;
+    use crate::encode::variables::{AerosolIdentity, EnsembleIdentity};
     use time::OffsetDateTime;
 
     fn message(category: u8, number: u8, level_type: u8) -> MessageInfo {
@@ -400,6 +519,8 @@ mod tests {
             valid_time: OffsetDateTime::UNIX_EPOCH,
             statistical_process: None,
             aerosol: None,
+            ensemble: None,
+            time_range: None,
         }
     }
 
@@ -436,6 +557,70 @@ mod tests {
         assert_eq!(matching_unit(pm10dust, &coarse), None);
         coarse.aerosol = Some(AerosolIdentity { size_first: Some((7, 25)), ..pm10.grib2_aerosol.unwrap() });
         assert_eq!(matching_unit(pm10, &coarse), None);
+    }
+
+    /// An ensemble product's identity off its section 4 octets: CMA's
+    /// threshold in both limits of a type 3 probability keeps the lower
+    /// alone, a sign-and-magnitude scale factor reads negative, and an
+    /// all-ones limit is missing.
+    #[test]
+    fn an_ensemble_identity_is_read_off_its_octets() {
+        let mut payload = vec![0u8; 80];
+        let mut put = |octet: usize, bytes: &[u8]| payload[octet - 6..octet - 6 + bytes.len()].copy_from_slice(bytes);
+        put(35, &[3, 6, 3]);
+        put(38, &[2]);
+        put(39, &1000u32.to_be_bytes());
+        put(43, &[2]);
+        put(44, &1000u32.to_be_bytes());
+        assert_eq!(ensemble_identity(9, &payload), Some(EnsembleIdentity::probability(3, Some((2, 1000)), None)));
+        assert_eq!(ensemble_identity(6, &payload), Some(EnsembleIdentity::Percentile(3)));
+        assert_eq!(ensemble_identity(12, &payload), Some(EnsembleIdentity::Derived(3)));
+        assert_eq!(ensemble_identity(0, &payload), None);
+        payload[37 - 6] = 2;
+        payload[38 - 6] = 0x82;
+        payload[43 - 6] = 0xFF;
+        assert_eq!(
+            ensemble_identity(5, &payload),
+            Some(EnsembleIdentity::Probability { probability_type: 2, lower: Some((-2, 1000)), upper: None })
+        );
+        assert_eq!(ensemble_identity(5, &payload[..30]), None);
+        assert_eq!((interval_end_octet(8), interval_end_octet(9), interval_end_octet(10), interval_end_octet(12)), (35, 48, 36, 37));
+    }
+
+    /// An ensemble product matches a `template-ensemble` rule alone, on its
+    /// identity and interval; a variable that is an ensemble statistic
+    /// matches no single forecast under its parameter.
+    #[test]
+    fn an_ensemble_message_matches_its_rule_alone() {
+        let registry = Registry::parse(&crate::encode::registry::ensemble_fixture::document().to_string()).unwrap();
+        let tmp2m = registry.variable("tmp2m").unwrap();
+        let quartile = registry.variable("tmp2mq25").unwrap();
+        let mut median = message(0, 0, 103);
+        median.level_value = Some(2.0);
+        median.ensemble = Some((EnsembleIdentity::Percentile(50), false));
+        assert!(matches(tmp2m, &median) && !matches(quartile, &median));
+        median.ensemble = Some((EnsembleIdentity::Percentile(25), false));
+        assert!(matches(quartile, &median) && !matches(tmp2m, &median));
+        median.ensemble = Some((EnsembleIdentity::Percentile(25), true));
+        assert!(!matches(quartile, &median), "an interval template is another record");
+        let mut single = message(0, 0, 103);
+        single.level_value = Some(2.0);
+        assert!(matches(tmp2m, &single) && !matches(quartile, &single));
+
+        let above = registry.variable("apcp24gt10").unwrap();
+        let mut total = message(1, 8, 1);
+        total.ensemble = Some((EnsembleIdentity::probability(3, Some((2, 1000)), None), true));
+        total.statistical_process = Some(1);
+        total.time_range = Some((1, 1, 24));
+        assert!(matches(above, &total));
+        assert!(!matches(registry.variable("apcp").unwrap(), &total));
+        total.time_range = Some((1, 1, 6));
+        assert!(!matches(above, &total));
+        total.time_range = Some((2, 1, 24));
+        assert!(!matches(above, &total));
+        total.time_range = Some((1, 1, 24));
+        total.statistical_process = Some(0);
+        assert!(!matches(above, &total));
     }
 
     /// ECMWF `msl`: plain pressure (0/3/0) on the mean sea level surface is

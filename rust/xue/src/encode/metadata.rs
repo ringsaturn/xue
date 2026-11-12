@@ -135,6 +135,13 @@ fn variable_metadata(
         // the rest of the identity a template 4.48 record carries.
         block.insert("aerosol".into(), Value::Object(aerosol.clone()));
     }
+    if let Some(ensemble) = registry.ensemble(source, variable_id)? {
+        // An ensemble statistic: the parameter names the quantity, the
+        // block which statistic of the members this is — a median under
+        // the id of the single forecast it stands in for, a quartile, a
+        // spread, a probability.
+        block.insert("ensemble".into(), Value::Object(ensemble.metadata()));
+    }
     block.insert(
         "quantization".into(),
         Value::Object(registry.codebook(profile, variable_id)?.metadata()),
@@ -274,6 +281,38 @@ mod tests {
         assert!(!serde_json::to_string(&plain).unwrap().contains("aerosol"));
     }
 
+    /// An ensemble statistic writes its `ensemble` block after the parameter
+    /// (and any aerosol block) and before the quantization, in the spec's
+    /// key order: a source's override of a single-forecast variable, or the
+    /// variable's own; the decoder reads it back, and a variable the source
+    /// does not override writes none.
+    #[test]
+    fn an_ensemble_statistic_writes_its_identity_beside_the_parameter() {
+        let registry = Registry::parse(&crate::encode::registry::ensemble_fixture::document().to_string()).unwrap();
+        let source = registry.source("cmageps").expect("cmageps");
+        let grid = GridInfo::new(16, 8, -180.0, 90.0, 22.5, -22.5);
+        let run_time = time::macros::datetime!(2026-11-11 12:00:00 UTC);
+        let ids = ["tmp2m", "tmp2mq25", "prmslsd", "apcp24gt10"];
+        let metadata = build_metadata(run_time, &[24, 30], &grid, "quality", &ids, source, 3600, &[], &registry)
+            .expect("metadata");
+        let text = serde_json::to_string(&metadata).expect("json");
+        for block in [
+            r#""ensemble":{"percentileValue":50},"quantization""#,
+            r#""ensemble":{"percentileValue":25},"quantization""#,
+            r#""ensemble":{"derivedForecast":4},"quantization""#,
+            r#""ensemble":{"probabilityType":3,"scaleFactorOfLowerLimit":2,"scaledValueOfLowerLimit":1000,"scaleFactorOfUpperLimit":null,"scaledValueOfUpperLimit":null},"quantization""#,
+        ] {
+            assert!(text.contains(block), "{block}");
+        }
+        crate::decode::metadata::parse_metadata(text.as_bytes()).expect("the decoder reads it back");
+        let plain = build_metadata(run_time, &[0, 6], &grid, "quality", &["tmp850"], source, 3600, &[], &registry)
+            .expect("metadata");
+        assert!(!serde_json::to_string(&plain).unwrap().contains("ensemble"));
+        let gfs = build_metadata(run_time, &[0, 1], &grid, "quality", &["tmp2m"], registry.source("gfs").unwrap(), 3600, &[], &registry)
+            .expect("metadata");
+        assert!(!serde_json::to_string(&gfs).unwrap().contains("ensemble"));
+    }
+
     /// Only a projected grid raises the version, and the decoder reads the
     /// document back; a Gaussian block sits beside the regular fields at 3.
     #[test]
@@ -370,7 +409,7 @@ mod schema_tie_tests {
         assert_named(
             SCHEMA,
             "/$defs/Variable",
-            &["numericId", "id", "label", "unit", "parameter", "band", "producer", "aerosol", "quantization"],
+            &["numericId", "id", "label", "unit", "parameter", "band", "producer", "aerosol", "ensemble", "quantization"],
         );
         assert_named(SCHEMA, "/$defs/Parameter", &["typeOfStatisticalProcessing"]);
         assert_named(SCHEMA, "/$defs/Producer", &["id", "version"]);

@@ -394,6 +394,189 @@ fn parse_aerosol(variable: &serde_json::Value, schema_version: u64) -> Result<()
     Ok(())
 }
 
+/// The ensemble block's three shapes (docs/format.md §"Ensemble"): which
+/// keys it carries says which statistic of the members the variable is.
+pub(crate) const ENSEMBLE_DERIVED_FIELD: &str = "derivedForecast";
+pub(crate) const ENSEMBLE_PERCENTILE_FIELD: &str = "percentileValue";
+pub(crate) const ENSEMBLE_PROBABILITY_TYPE_FIELD: &str = "probabilityType";
+/// A probability's two limits, each a (scale factor, scaled value) pair.
+pub(crate) const ENSEMBLE_LIMITS: [(&str, &str); 2] = [
+    ("scaleFactorOfLowerLimit", "scaledValueOfLowerLimit"),
+    ("scaleFactorOfUpperLimit", "scaledValueOfUpperLimit"),
+];
+
+/// One `(scaleFactor, scaledValue)` limit, `None` where both are null.
+pub type EnsembleLimit = Option<(i8, u32)>;
+
+/// What an ensemble product is a statistic of its members as: the identity
+/// GRIB2 carries in product definition templates 4.2 / 4.12 (a derived
+/// forecast, code table 4.7), 4.6 / 4.10 (a percentile) and 4.5 / 4.9 (a
+/// probability, code table 4.9). The metadata block and the registry's
+/// `ensemble` blocks parse into it, and a GRIB record's template is read
+/// into it to be compared whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnsembleIdentity {
+    Derived(u8),
+    Percentile(u8),
+    Probability {
+        probability_type: u8,
+        lower: EnsembleLimit,
+        upper: EnsembleLimit,
+    },
+}
+
+impl EnsembleIdentity {
+    /// Which limits a probability type uses, `(lower, upper)`: types 0, 3
+    /// and 5 the lower, 1 and 4 the upper, 2 both.
+    pub fn limits_used(probability_type: u8) -> (bool, bool) {
+        match probability_type {
+            1 | 4 => (false, true),
+            2 => (true, true),
+            _ => (true, false),
+        }
+    }
+
+}
+
+/// What only the encoder needs: building an identity off a record and
+/// writing it back out.
+#[cfg(any(feature = "encoder", test))]
+impl EnsembleIdentity {
+    /// A probability with the limits its type does not use dropped, whatever
+    /// the record wrote there (CMA writes the threshold into both).
+    pub fn probability(probability_type: u8, lower: EnsembleLimit, upper: EnsembleLimit) -> Self {
+        let (uses_lower, uses_upper) = Self::limits_used(probability_type);
+        EnsembleIdentity::Probability {
+            probability_type,
+            lower: lower.filter(|_| uses_lower),
+            upper: upper.filter(|_| uses_upper),
+        }
+    }
+
+    /// The product definition templates that carry this shape:
+    /// `(instantaneous, over a time interval)`.
+    pub fn templates(&self) -> (u16, u16) {
+        match self {
+            EnsembleIdentity::Derived(_) => (2, 12),
+            EnsembleIdentity::Percentile(_) => (6, 10),
+            EnsembleIdentity::Probability { .. } => (5, 9),
+        }
+    }
+
+    /// The block as written, keys in the order docs/format.md lists them.
+    pub fn metadata(&self) -> serde_json::Map<String, serde_json::Value> {
+        use serde_json::Value;
+        let mut block = serde_json::Map::new();
+        match *self {
+            EnsembleIdentity::Derived(code) => {
+                block.insert(ENSEMBLE_DERIVED_FIELD.into(), code.into());
+            }
+            EnsembleIdentity::Percentile(value) => {
+                block.insert(ENSEMBLE_PERCENTILE_FIELD.into(), value.into());
+            }
+            EnsembleIdentity::Probability {
+                probability_type,
+                lower,
+                upper,
+            } => {
+                block.insert(ENSEMBLE_PROBABILITY_TYPE_FIELD.into(), probability_type.into());
+                for ((scale_field, value_field), limit) in ENSEMBLE_LIMITS.into_iter().zip([lower, upper]) {
+                    let (scale, value) = match limit {
+                        Some((scale, value)) => (Value::from(scale), Value::from(value)),
+                        None => (Value::Null, Value::Null),
+                    };
+                    block.insert(scale_field.into(), scale);
+                    block.insert(value_field.into(), value);
+                }
+            }
+        }
+        block
+    }
+}
+
+impl EnsembleIdentity {
+    /// A block as docs/format.md's Error Handling admits it: exactly one of
+    /// the three shapes, every value in range, each limit whole or null,
+    /// and null exactly where the probability type does not use it.
+    pub fn from_block(block: &serde_json::Map<String, serde_json::Value>) -> Result<Self, DecodeError> {
+        let code = |field: &str, high: u64| {
+            block
+                .get(field)
+                .and_then(|value| value.as_u64())
+                .filter(|&value| value <= high)
+                .ok_or_else(|| err(format!("metadata ensemble {field} is invalid")))
+        };
+        let has = |field: &str| block.contains_key(field);
+        if has(ENSEMBLE_DERIVED_FIELD) {
+            if block.len() != 1 {
+                return Err(err("metadata ensemble derivedForecast must stand alone"));
+            }
+            return Ok(EnsembleIdentity::Derived(code(ENSEMBLE_DERIVED_FIELD, 255)? as u8));
+        }
+        if has(ENSEMBLE_PERCENTILE_FIELD) {
+            if block.len() != 1 {
+                return Err(err("metadata ensemble percentileValue must stand alone"));
+            }
+            return Ok(EnsembleIdentity::Percentile(code(ENSEMBLE_PERCENTILE_FIELD, 100)? as u8));
+        }
+        if !has(ENSEMBLE_PROBABILITY_TYPE_FIELD) {
+            return Err(err("metadata ensemble block is none of its three shapes"));
+        }
+        if block.len() != 1 + 2 * ENSEMBLE_LIMITS.len() {
+            return Err(err("metadata ensemble probability must carry exactly its five fields"));
+        }
+        let probability_type = code(ENSEMBLE_PROBABILITY_TYPE_FIELD, 5)? as u8;
+        let used = Self::limits_used(probability_type);
+        let mut limits: [EnsembleLimit; 2] = [None, None];
+        for (index, (scale_field, value_field)) in ENSEMBLE_LIMITS.into_iter().enumerate() {
+            let scale_factor = block
+                .get(scale_field)
+                .ok_or_else(|| err("metadata ensemble limit is incomplete"))?;
+            let scaled_value = block
+                .get(value_field)
+                .ok_or_else(|| err("metadata ensemble limit is incomplete"))?;
+            if scale_factor.is_null() != scaled_value.is_null() {
+                return Err(err("metadata ensemble limit must be wholly present or wholly null"));
+            }
+            let uses = if index == 0 { used.0 } else { used.1 };
+            if scale_factor.is_null() == uses {
+                return Err(err("metadata ensemble limit must be null exactly where its type does not use it"));
+            }
+            if !uses {
+                continue;
+            }
+            let scale_factor = scale_factor
+                .as_i64()
+                .filter(|factor| (-127..=127).contains(factor))
+                .ok_or_else(|| err("metadata ensemble scale factor is invalid"))?;
+            let scaled_value = scaled_value
+                .as_u64()
+                .filter(|&value| value <= 0xFFFF_FFFE)
+                .ok_or_else(|| err("metadata ensemble scaled value is invalid"))?;
+            limits[index] = Some((scale_factor as i8, scaled_value as u32));
+        }
+        Ok(EnsembleIdentity::Probability {
+            probability_type,
+            lower: limits[0],
+            upper: limits[1],
+        })
+    }
+}
+
+fn parse_ensemble(variable: &serde_json::Value, schema_version: u64) -> Result<(), DecodeError> {
+    let Some(ensemble) = variable.get("ensemble") else {
+        return Ok(());
+    };
+    if schema_version < 3 {
+        return Err(err("an ensemble block requires schemaVersion 3"));
+    }
+    let ensemble = ensemble
+        .as_object()
+        .ok_or_else(|| err("metadata ensemble must be an object"))?;
+    EnsembleIdentity::from_block(ensemble)?;
+    Ok(())
+}
+
 /// The fields a regular grid names and a projected one must not.
 const REGULAR_GRID_FIELDS: [&str; 4] =
     ["firstLongitude", "firstLatitude", "longitudeStep", "latitudeStep"];
@@ -623,6 +806,7 @@ pub(crate) fn parse_metadata(raw: &[u8]) -> Result<Metadata, DecodeError> {
         parse_band(variable, schema_version)?;
         parse_producer(variable, schema_version)?;
         parse_aerosol(variable, schema_version)?;
+        parse_ensemble(variable, schema_version)?;
         variable_ids.push(numeric as u8);
     }
     if variable_ids.is_empty() {
@@ -831,7 +1015,7 @@ mod parameter_tests {
 
 #[cfg(test)]
 mod band_tests {
-    use super::{parse_aerosol, parse_band, parse_producer};
+    use super::{parse_aerosol, parse_band, parse_ensemble, parse_producer, EnsembleIdentity};
 
     fn variable(json: &str) -> serde_json::Value {
         serde_json::from_str(json).unwrap()
@@ -937,6 +1121,89 @@ mod band_tests {
         ] {
             assert!(parse_aerosol(&variable(&json), 3).is_err(), "{json}");
         }
+    }
+
+    const SPREAD: &str = r#"{"ensemble": {"derivedForecast": 4}}"#;
+    const QUARTILE: &str = r#"{"ensemble": {"percentileValue": 75}}"#;
+    const ABOVE_10_MM: &str = r#"{"ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2, "scaledValueOfLowerLimit": 1000,
+        "scaleFactorOfUpperLimit": null, "scaledValueOfUpperLimit": null}}"#;
+    const BETWEEN: &str = r#"{"ensemble": {
+        "probabilityType": 2,
+        "scaleFactorOfLowerLimit": 0, "scaledValueOfLowerLimit": 1,
+        "scaleFactorOfUpperLimit": 0, "scaledValueOfUpperLimit": 5}}"#;
+    const BELOW_UPPER: &str = r#"{"ensemble": {
+        "probabilityType": 4,
+        "scaleFactorOfLowerLimit": null, "scaledValueOfLowerLimit": null,
+        "scaleFactorOfUpperLimit": -1, "scaledValueOfUpperLimit": 4294967294}}"#;
+
+    #[test]
+    fn an_ensemble_block_is_optional_and_needs_version_3() {
+        assert!(parse_ensemble(&variable("{}"), 1).is_ok());
+        for json in [SPREAD, QUARTILE, ABOVE_10_MM, BETWEEN, BELOW_UPPER] {
+            assert!(parse_ensemble(&variable(json), 3).is_ok(), "{json}");
+            assert!(parse_ensemble(&variable(json), 4).is_ok(), "{json}");
+            assert!(parse_ensemble(&variable(json), 2).is_err(), "{json}");
+        }
+        assert!(parse_ensemble(&variable(r#"{"ensemble": {"derivedForecast": 255}}"#), 3).is_ok());
+        assert!(parse_ensemble(&variable(r#"{"ensemble": {"percentileValue": 0}}"#), 3).is_ok());
+    }
+
+    #[test]
+    fn malformed_ensemble_blocks_rejected() {
+        let above = |from: &str, to: &str| ABOVE_10_MM.replacen(from, to, 1);
+        for json in [
+            // Null, not an object, no shape, two shapes at once, a key the
+            // shape does not define, values out of range or of the wrong
+            // type, a missing limit field, half a limit null, a limit the
+            // type uses null, and one it does not use present.
+            r#"{"ensemble": null}"#.to_string(),
+            r#"{"ensemble": 4}"#.to_string(),
+            r#"{"ensemble": {}}"#.to_string(),
+            r#"{"ensemble": {"derivedForecast": 4, "percentileValue": 50}}"#.to_string(),
+            r#"{"ensemble": {"percentileValue": 50, "members": 31}}"#.to_string(),
+            r#"{"ensemble": {"derivedForecast": 256}}"#.to_string(),
+            r#"{"ensemble": {"derivedForecast": -1}}"#.to_string(),
+            r#"{"ensemble": {"percentileValue": 101}}"#.to_string(),
+            r#"{"ensemble": {"percentileValue": "50"}}"#.to_string(),
+            r#"{"ensemble": {"percentileValue": 50.5}}"#.to_string(),
+            r#"{"ensemble": {"scaleFactorOfLowerLimit": 2, "scaledValueOfLowerLimit": 1000}}"#.to_string(),
+            above(r#""probabilityType": 3"#, r#""probabilityType": 6"#),
+            above(r#""probabilityType": 3,"#, r#""probabilityType": 3, "derivedForecast": 0,"#),
+            above(r#""probabilityType": 3,"#, r#""probabilityType": 3, "members": 31,"#),
+            above(r#", "scaledValueOfUpperLimit": null"#, ""),
+            above(r#""scaledValueOfLowerLimit": 1000"#, r#""scaledValueOfLowerLimit": null"#),
+            above(r#""scaleFactorOfLowerLimit": 2, "scaledValueOfLowerLimit": 1000"#,
+                  r#""scaleFactorOfLowerLimit": null, "scaledValueOfLowerLimit": null"#),
+            above(r#""scaleFactorOfUpperLimit": null, "scaledValueOfUpperLimit": null"#,
+                  r#""scaleFactorOfUpperLimit": 2, "scaledValueOfUpperLimit": 1000"#),
+            above(r#""scaleFactorOfLowerLimit": 2"#, r#""scaleFactorOfLowerLimit": 128"#),
+            above(r#""scaleFactorOfLowerLimit": 2"#, r#""scaleFactorOfLowerLimit": -128"#),
+            above(r#""scaledValueOfLowerLimit": 1000"#, r#""scaledValueOfLowerLimit": 4294967295"#),
+            above(r#""scaledValueOfLowerLimit": 1000"#, r#""scaledValueOfLowerLimit": -1"#),
+            BETWEEN.replacen(r#""scaleFactorOfUpperLimit": 0, "scaledValueOfUpperLimit": 5"#,
+                             r#""scaleFactorOfUpperLimit": null, "scaledValueOfUpperLimit": null"#, 1),
+            BELOW_UPPER.replacen(r#""scaleFactorOfLowerLimit": null, "scaledValueOfLowerLimit": null"#,
+                                 r#""scaleFactorOfLowerLimit": 0, "scaledValueOfLowerLimit": 1"#, 1),
+        ] {
+            assert!(parse_ensemble(&variable(&json), 3).is_err(), "{json}");
+        }
+    }
+
+    /// The block written is the block read, keys in the spec's order, and a
+    /// probability drops the limit its type does not use.
+    #[test]
+    fn an_ensemble_identity_writes_its_block_in_the_spec_s_order() {
+        let block = variable(ABOVE_10_MM)["ensemble"].as_object().unwrap().clone();
+        let identity = EnsembleIdentity::from_block(&block).unwrap();
+        assert_eq!(identity, EnsembleIdentity::probability(3, Some((2, 1000)), Some((2, 1000))));
+        assert_eq!(
+            serde_json::to_string(&identity.metadata()).unwrap(),
+            r#"{"probabilityType":3,"scaleFactorOfLowerLimit":2,"scaledValueOfLowerLimit":1000,"scaleFactorOfUpperLimit":null,"scaledValueOfUpperLimit":null}"#
+        );
+        assert_eq!(serde_json::to_string(&EnsembleIdentity::Derived(4).metadata()).unwrap(), r#"{"derivedForecast":4}"#);
+        assert_eq!(EnsembleIdentity::Percentile(50).templates(), (6, 10));
     }
 }
 
@@ -1153,7 +1420,7 @@ mod schema_tie_tests {
         assert_named(
             SCHEMA,
             "/$defs/Variable",
-            &["numericId", "id", "parameter", "band", "producer", "aerosol"],
+            &["numericId", "id", "parameter", "band", "producer", "aerosol", "ensemble"],
         );
     }
 

@@ -19,7 +19,7 @@ use crate::encode::gdalio::{BandInfo, Dataset};
 use crate::encode::model::SourceFrame;
 use crate::encode::registry::{Conversion, GdalRule, Registry};
 use crate::encode::units::temperature_unit;
-use crate::encode::variables::{AerosolIdentity, VariableSpec};
+use crate::encode::variables::{AerosolIdentity, EnsembleIdentity, VariableSpec};
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["grb", "grb2", "grib2"];
 
@@ -345,6 +345,129 @@ fn assembled_aerosol(values: &[i64]) -> AerosolIdentity {
     }
 }
 
+/// The product definition templates of an ensemble product: a derived
+/// forecast (4.2, 4.12), a percentile (4.6, 4.10), a probability (4.5,
+/// 4.9). Such a record is a statistic of the members rather than the
+/// quantity its element names, so only a `template-ensemble` rule may take
+/// it; every other rule, which knows the quantity by element and surface
+/// alone, would take a median, a quartile and a spread for one field.
+pub(crate) const ENSEMBLE_TEMPLATES: [u16; 6] = [2, 5, 6, 9, 10, 12];
+
+/// GRIB2's missing scale factor and scaled value as the driver prints
+/// them, signed or not.
+fn missing_scale(scale: i64) -> bool {
+    scale == -127 || scale == 255
+}
+
+fn missing_scaled_value(value: i64) -> bool {
+    value == -2_147_483_647 || value == i64::from(u32::MAX)
+}
+
+/// An interval template's time ranges as the matcher reads them: `(count,
+/// process, unit, length)` of the first.
+type TimeRanges = (i64, i64, i64, i64);
+
+/// The ensemble identity and the time ranges' `(count, process, unit,
+/// length)` of an ensemble template's assembled values, `None` for any
+/// other template or a list too short for its layout. Past the 15 values
+/// every template shares (the parameter, the processes, the forecast time
+/// and the two surfaces): 4.2 the derived forecast at 15; 4.12 the same,
+/// then the end of the interval at 17–22 and its ranges from 23; 4.6 the
+/// percentile at 15; 4.10 the same, the end at 16–21 and the ranges from
+/// 22; 4.5 the probability's type at 17 and its limits at 18–21; 4.9 the
+/// same, the end at 22–27 and the ranges from 28. A range is (process,
+/// increment type, unit, length, increment unit, increment) after the
+/// count and the missing count. Mirrors `_assembled_ensemble`.
+pub(crate) fn assembled_ensemble(template: u16, values: &[i64]) -> Option<(EnsembleIdentity, Option<TimeRanges>)> {
+    let ranges_at = match template {
+        2 | 5 | 6 => None,
+        12 => Some(23),
+        10 => Some(22),
+        9 => Some(28),
+        _ => return None,
+    };
+    let needed = match (template, ranges_at) {
+        (_, Some(at)) => at + 6,
+        (5, None) => 22,
+        _ => 16,
+    };
+    if values.len() < needed {
+        return None;
+    }
+    let identity = match template {
+        2 | 12 => EnsembleIdentity::Derived(u8::try_from(values[15]).ok()?),
+        6 | 10 => EnsembleIdentity::Percentile(u8::try_from(values[15]).ok()?),
+        _ => {
+            let limit = |at: usize| -> Option<(i8, u32)> {
+                let (scale, value) = (values[at], values[at + 1]);
+                if missing_scale(scale) || missing_scaled_value(value) {
+                    return None;
+                }
+                Some((i8::try_from(scale).ok()?, u32::try_from(value).ok()?))
+            };
+            EnsembleIdentity::probability(u8::try_from(values[17]).ok()?, limit(18), limit(20))
+        }
+    };
+    let ranges = ranges_at.map(|at| (values[at], values[at + 2], values[at + 4], values[at + 5]));
+    Some((identity, ranges))
+}
+
+/// One ensemble product under a `template-ensemble` rule: its template is
+/// one of the shape the rule's identity has (the interval one exactly when
+/// the rule names hours), and the discipline, parameter, first surface,
+/// ensemble identity and — over an interval — the one range of `hours`
+/// hours under `statistical` are the rule's. Mirrors `_is_ensemble_record`.
+fn is_ensemble_record(
+    band: &BandInfo,
+    identity: (u8, u8, u8, u8, Option<f64>),
+    ensemble: &EnsembleIdentity,
+    hours: Option<u32>,
+    statistical: Option<u8>,
+) -> bool {
+    let (instantaneous, interval) = ensemble.templates();
+    let template = if hours.is_some() { interval } else { instantaneous };
+    if band.item("GRIB_PDS_PDTN") != template.to_string() {
+        return false;
+    }
+    let Some(discipline) = discipline(band) else {
+        return false;
+    };
+    let values = assembled_values(band);
+    let Some((record_ensemble, ranges)) = assembled_ensemble(template, &values) else {
+        return false;
+    };
+    let (rule_discipline, category, number, level_type, level_value) = identity;
+    if (discipline, values[0], values[1], values[9])
+        != (
+            i64::from(rule_discipline),
+            i64::from(category),
+            i64::from(number),
+            i64::from(level_type),
+        )
+    {
+        return false;
+    }
+    if let Some(expected) = level_value {
+        let (scale, scaled_value) = (values[10], values[11]);
+        if missing_scale(scale)
+            || missing_scaled_value(scaled_value)
+            || scaled_value as f64 / 10f64.powi(scale as i32) != expected
+        {
+            return false;
+        }
+    }
+    if record_ensemble != *ensemble {
+        return false;
+    }
+    match (ranges, hours, statistical) {
+        (None, None, _) => true,
+        (Some((count, process, unit, length)), Some(hours), Some(statistical)) => {
+            count == 1 && unit == 1 && length == i64::from(hours) && process == i64::from(statistical)
+        }
+        _ => false,
+    }
+}
+
 /// A record under the registry's identity or an alternate, read off the
 /// assembled template 4.0 values (the type of first fixed surface, its
 /// scale factor and scaled value at indices 9–11) beside the discipline: a
@@ -461,6 +584,22 @@ fn rule_matches(rule: &GdalRule, spec: &VariableSpec, band: &BandInfo) -> bool {
         } => is_cloud_layer_record(band, element, short_name, phrases),
         GdalRule::Template => is_template_record(band, spec),
         GdalRule::TemplateAerosol => is_aerosol_record(band, spec),
+        GdalRule::TemplateEnsemble {
+            discipline,
+            category,
+            number,
+            level_type,
+            level_value,
+            ensemble,
+            hours,
+            statistical,
+        } => is_ensemble_record(
+            band,
+            (*discipline, *category, *number, *level_type, *level_value),
+            ensemble,
+            *hours,
+            *statistical,
+        ),
         GdalRule::TemplateRank => is_rank_record(band, spec),
         GdalRule::TemplateMrms => is_mrms_record(band, spec),
         GdalRule::TotalPrecipitation => is_total_precipitation(band),
@@ -475,9 +614,14 @@ fn rule_matches(rule: &GdalRule, spec: &VariableSpec, band: &BandInfo) -> bool {
 /// series-file variable) has no rules and matches nothing. Mirrors
 /// `_band_matches`.
 pub(crate) fn band_matches(spec: &VariableSpec, band: &BandInfo) -> bool {
+    let ensemble_product = band
+        .item("GRIB_PDS_PDTN")
+        .parse::<u16>()
+        .is_ok_and(|template| ENSEMBLE_TEMPLATES.contains(&template));
     spec.matching
         .gdal
         .iter()
+        .filter(|rule| !ensemble_product || matches!(rule, GdalRule::TemplateEnsemble { .. }))
         .any(|rule| rule_matches(rule, spec, band))
 }
 
@@ -582,7 +726,8 @@ pub fn inspect_grib_multi(
 
 #[cfg(test)]
 mod tests {
-    use super::{band_matches, raster_expression, BandInfo};
+    use super::{assembled_ensemble, band_matches, raster_expression, BandInfo};
+    use crate::encode::variables::EnsembleIdentity;
     use crate::encode::registry::Registry;
     use std::collections::HashMap;
 
@@ -740,6 +885,106 @@ mod tests {
         assert!(!matches("ptype", &prate));
         assert!(!matches("thetae850", &prate));
         assert!(!matches("ir039", &prate));
+    }
+
+    /// An ensemble product is a `template-ensemble` rule's alone, compared
+    /// on its template, parameter, surface, identity and interval: the
+    /// median and the quartile of one field are two records, the spread is
+    /// not the mean, and an element and surface the plain rules know do not
+    /// let a percentile in. The values are GDAL 3.13's for CMA GEPS.
+    #[test]
+    fn an_ensemble_product_matches_its_template_ensemble_rule_alone() {
+        let registry = Registry::parse(&crate::encode::registry::ensemble_fixture::document().to_string()).unwrap();
+        let matches = |variable_id: &str, band: &BandInfo| band_matches(registry.variable(variable_id).unwrap(), band);
+        let record = |element: &str, short_name: &str, template: &str, values: &str| {
+            band(
+                &[
+                    ("GRIB_ELEMENT", element),
+                    ("GRIB_SHORT_NAME", short_name),
+                    ("GRIB_DISCIPLINE", "0(Meteorological)"),
+                    ("GRIB_PDS_PDTN", template),
+                    ("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES", values),
+                ],
+                "",
+            )
+        };
+        let temperature = |percentile: u8| {
+            record(
+                &format!("TMP{percentile:02}"),
+                "2-HTGL",
+                "6",
+                &format!("0 0 4 128 128 0 0 1 24 103 0 2 255 -127 -2147483647 {percentile}"),
+            )
+        };
+        assert!(matches("tmp2m", &temperature(50)) && !matches("tmp2mq25", &temperature(50)));
+        assert!(matches("tmp2mq25", &temperature(25)) && !matches("tmp2m", &temperature(25)));
+        assert!(!matches("tmp2m", &temperature(75)));
+        let mut plainly_named = temperature(75);
+        plainly_named.metadata.insert("GRIB_ELEMENT".into(), "TMP".into());
+        assert!(!matches("tmp2m", &plainly_named), "a percentile is not the height rule's");
+        let ten_metres = record("TMP50", "10-HTGL", "6", "0 0 4 128 128 0 0 1 24 103 0 10 255 -127 -2147483647 50");
+        assert!(!matches("tmp2m", &ten_metres));
+        let single = band(&[("GRIB_ELEMENT", "TMP"), ("GRIB_SHORT_NAME", "2-HTGL"), ("GRIB_PDS_PDTN", "0")], "");
+        assert!(matches("tmp2m", &single) && !matches("tmp2mq25", &single));
+
+        let pressure = |derived: u8, template: &str| {
+            record(
+                "PRMSL",
+                "0-MSL",
+                template,
+                &format!("3 1 4 128 128 0 0 1 24 101 -127 -2147483647 255 -127 -2147483647 {derived} 31"),
+            )
+        };
+        assert!(matches("prmslsd", &pressure(4, "2")) && !matches("prmsl", &pressure(4, "2")));
+        assert!(!matches("prmslsd", &pressure(0, "2")));
+        assert!(!matches("prmslsd", &pressure(4, "12")), "an interval template is another record");
+
+        // The contract's 24-hour probability above 10 mm: CMA writes the
+        // threshold into both limits, and type 3 keeps the lower alone.
+        let above = |threshold: u32, hours: u32| {
+            record(
+                "ProbAPCP24",
+                "0-SFC",
+                "9",
+                &format!(
+                    "1 8 4 128 128 0 0 1 0 1 -127 -2147483647 255 -127 -2147483647 3 6 3 2 {threshold} 2 {threshold} 2026 11 11 12 0 0 1 0 1 2 1 {hours} 255 0"
+                ),
+            )
+        };
+        assert!(matches("apcp24gt10", &above(1000, 24)));
+        assert!(!matches("apcp24gt10", &above(500, 24)));
+        assert!(!matches("apcp24gt10", &above(1000, 6)));
+        assert!(!matches("apcp", &above(1000, 24)));
+        let values: Vec<i64> = above(1000, 24)
+            .item("GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES")
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+        assert_eq!(
+            assembled_ensemble(9, &values),
+            Some((EnsembleIdentity::probability(3, Some((2, 1000)), None), Some((1, 1, 1, 24))))
+        );
+        // Two time ranges are not the rule's one.
+        let mut two_ranges = above(1000, 24);
+        two_ranges.metadata.insert(
+            "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES".into(),
+            "1 8 4 128 128 0 0 1 0 1 -127 -2147483647 255 -127 -2147483647 3 6 3 2 1000 2 1000 2026 11 11 12 0 0 2 0 1 2 1 24 255 0".into(),
+        );
+        assert!(!matches("apcp24gt10", &two_ranges));
+
+        // The six-hour total's quartile, under 4.10.
+        let quartile_total = |hours: u32, template: &str| {
+            record(
+                "APCP25",
+                "0-SFC",
+                template,
+                &format!("1 8 4 128 128 0 0 1 18 1 -127 -2147483647 255 -127 -2147483647 25 2026 11 11 12 0 0 1 0 1 2 1 {hours} 255 0"),
+            )
+        };
+        assert!(matches("apcpq25", &quartile_total(6, "10")));
+        assert!(!matches("apcpq25", &quartile_total(24, "10")));
+        assert!(!matches("apcpq25", &quartile_total(6, "6")));
+        assert!(!matches("apcp", &quartile_total(6, "10")));
     }
 
     #[test]

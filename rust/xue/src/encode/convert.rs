@@ -159,7 +159,9 @@ pub fn bundle_grid_family<'a>(
 /// bundle uses there. Mirrors `store_dimensions` in `xuebuild/discover.py`.
 ///
 /// `time_<bundle id>` for a published scalar whose series has no analysis
-/// frame (`Registry::analysis_optional_ids`) and for a static field;
+/// frame (`Registry::analysis_optional_ids`), for one whose series starts at
+/// a first hour of its own (`Registry::bundle_first_hour`) and for a static
+/// field;
 /// `latitude_<family>` / `longitude_<family>` for a bundle on a grid family
 /// of its own, `<family>` being exactly what [`bundle_grid_family`] returns;
 /// `y` and `x` in place of the latitude and longitude names throughout on a
@@ -170,7 +172,8 @@ pub fn bundle_grid_family<'a>(
 pub fn store_dimensions(registry: &Registry, source: &SourceSpec, bundle_id: &str) -> Result<[String; 3]> {
     let variable_ids = registry.bundle_variable_ids(bundle_id);
     let own_axis = (source.bundle_scalar_ids.iter().any(|id| id == bundle_id)
-        && !registry.analysis_optional_ids(source, &[bundle_id]).is_empty())
+        && (!registry.analysis_optional_ids(source, &[bundle_id]).is_empty()
+            || registry.bundle_first_hour(source, bundle_id).is_some()))
         || registry.is_static(&variable_ids[0]);
     let family = bundle_grid_family(registry, source, bundle_id)?;
     if let Some(family) = family {
@@ -602,6 +605,8 @@ fn quantize_file(
     plane_source: &PlaneSources,
     source: &SourceSpec,
     precipitation: Option<&DerivedPrecipitation>,
+    interval_pairs: &[DerivedPrecipitation],
+    interval_start: Option<i64>,
     previous: Option<(i64, Option<Arc<PlaneSlot>>)>,
     own: Option<Arc<PlaneSlot>>,
     derived_vector_ids: &[&str],
@@ -700,6 +705,20 @@ fn quantize_file(
             )?
         };
         values.insert(position, (bundle_id.clone(), derived));
+    }
+    // The further interval totals, each to its rate the way the one above
+    // is, over the same interval.
+    for (rate_id, total_id) in interval_pairs {
+        let Some(position) = values.iter().position(|(name, _)| name == total_id) else {
+            continue;
+        };
+        let interval_start = interval_start.ok_or_else(|| {
+            EncodeError::conversion(format!(
+                "the interval precipitation frame at hour {hour} names no interval"
+            ))
+        })?;
+        let (_, total) = values.remove(position);
+        values.insert(position, (rate_id.clone(), interval_rate(&total, hour - interval_start)?));
     }
 
     // Grid-relative pairs turned to east and north once the extraction has cut
@@ -1268,6 +1287,21 @@ pub fn convert_bin(
         .derived_precipitation(source)?
         .filter(|(_, raw_id)| variable_ids.contains(raw_id));
     let plan = sharing_plan(&per_file, precipitation.as_ref().map(|(_, raw_id)| raw_id.as_str()), source)?;
+    // The further rates an interval source derives, whose totals this build
+    // reads, and each file's interval where it holds one of those totals.
+    let interval_pairs: Vec<DerivedPrecipitation> = registry
+        .interval_precipitation_pairs(source)
+        .into_iter()
+        .filter(|(_, total_id)| variable_ids.contains(total_id))
+        .collect();
+    let interval_starts: Vec<Option<i64>> = per_file
+        .iter()
+        .enumerate()
+        .map(|(index, frames)| {
+            let held = interval_pairs.iter().find_map(|(_, total_id)| frame_of(frames, total_id));
+            held.map(|frame| interval_start(&per_file, index, frame, source)).transpose()
+        })
+        .collect::<Result<_>>()?;
     let derived_vector_ids: Vec<&str> = available_vector_ids
         .iter()
         .copied()
@@ -1284,6 +1318,8 @@ pub fn convert_bin(
             &plane_source,
             source,
             precipitation.as_ref(),
+            &interval_pairs,
+            interval_starts[index],
             previous,
             own,
             &derived_vector_ids,
@@ -1331,7 +1367,7 @@ pub fn convert_bin(
     // lists one; the contour-drawn pressure family lists none, since a
     // filled first-frame poster would misrepresent it. A `video` companion
     // names the retired H.264 artifact, which no encoder builds.
-    let companion_variable_ids: Vec<&str> = scalar_variable_ids
+    let mut companion_variable_ids: Vec<&str> = scalar_variable_ids
         .iter()
         .copied()
         .filter(|id| {
@@ -1358,6 +1394,34 @@ pub fn convert_bin(
     if offsets.len() > 1 && offsets[0] == 0 {
         for variable_id in registry.analysis_optional_ids(source, &scalar_variable_ids) {
             variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
+        }
+    }
+    // A variable absent before an hour of its own starts there, and a bundle
+    // with no frame from that hour on is left out of this build.
+    let mut late_ids: Vec<String> = Vec::new();
+    for bundle_id in &scalar_variable_ids {
+        let Some(first_hour) = registry.bundle_first_hour(source, bundle_id) else { continue };
+        let kept: Vec<i64> = variable_offsets[*bundle_id]
+            .iter()
+            .copied()
+            .filter(|offset| offset * unit_seconds >= first_hour * HOUR_SECONDS)
+            .collect();
+        if kept.is_empty() {
+            late_ids.push((*bundle_id).to_string());
+        } else {
+            variable_offsets.insert((*bundle_id).to_string(), kept);
+        }
+    }
+    if !late_ids.is_empty() {
+        eprintln!(
+            "WARNING building without {}, which start past the last frame of this run",
+            late_ids.join(", ")
+        );
+        scalar_variable_ids.retain(|id| !late_ids.iter().any(|late| late == id));
+        companion_variable_ids.retain(|id| !late_ids.iter().any(|late| late == id));
+        encoded_variable_ids.retain(|id| !late_ids.contains(id));
+        for id in &late_ids {
+            variable_offsets.remove(id);
         }
     }
     // A static field does not vary in time: its one frame is the first, and
@@ -1735,6 +1799,30 @@ pub fn zstd_version() -> String {
     )
 }
 
+/// The hour an interval total at `per_file[index]` (`frame`) accumulated
+/// from: the frame before it on the axis being built. A series that starts
+/// at a step of its own — the rate's, whose analysis frame does not exist —
+/// takes the distance from the previous step of the source's published axis
+/// instead, which is the interval the model itself accumulated over; and
+/// the first step of an axis that itself starts past the analysis
+/// (`first_hour`) accumulated from the run time, hour 0. Only a total at
+/// the analysis names no interval at all.
+fn interval_start(per_file: &[FileFrames], index: usize, frame: &SourceFrame, source: &SourceSpec) -> Result<i64> {
+    let hour = frame.lead_seconds / HOUR_SECONDS;
+    if index > 0 {
+        return Ok(per_file[index - 1][0].1.lead_seconds / HOUR_SECONDS);
+    }
+    let cycle = frame.run_time.to_offset(time::UtcOffset::UTC).hour();
+    let axis = source.forecast_hours(hour, Some(u32::from(cycle)))?;
+    match axis.get(axis.len().wrapping_sub(2)) {
+        Some(&start) => Ok(start),
+        None if hour > 0 => Ok(0),
+        None => Err(EncodeError::conversion(format!(
+            "the interval precipitation frame at hour {hour} names no interval"
+        ))),
+    }
+}
+
 /// Yield `(previous (hour, slot), own slot)` per file. A slot is created only
 /// when the next file will difference against this file's raw plane, so each
 /// shared plane is freed once its consumer finishes. An interval total
@@ -1754,36 +1842,7 @@ fn sharing_plan(
         let frame = raw_precipitation_id.and_then(|id| frame_of(frames, id));
         let previous = match (&previous_slot, frame) {
             _ if frame.is_some() && source.interval_precipitation => {
-                // The interval this total covers is the distance to the frame
-                // before it on the axis being built. A series that starts at a
-                // step of its own — the rate's, whose analysis frame does not
-                // exist — takes the distance from the previous step of the
-                // source's published axis instead, which is the interval the
-                // model itself accumulated over; and the first step of an axis
-                // that itself starts past the analysis (`first_hour`)
-                // accumulated from the run time, hour 0. Only a total at the
-                // analysis names no interval at all.
-                let hour = frame.expect("a frame").lead_seconds / HOUR_SECONDS;
-                let interval_start = if index > 0 {
-                    per_file[index - 1][0].1.lead_seconds / HOUR_SECONDS
-                } else {
-                    let cycle = frame
-                        .expect("a frame")
-                        .run_time
-                        .to_offset(time::UtcOffset::UTC)
-                        .hour();
-                    let axis = source.forecast_hours(hour, Some(u32::from(cycle)))?;
-                    match axis.get(axis.len().wrapping_sub(2)) {
-                        Some(&start) => start,
-                        None if hour > 0 => 0,
-                        None => {
-                            return Err(EncodeError::conversion(format!(
-                                "the interval precipitation frame at hour {hour} names no interval"
-                            )))
-                        }
-                    }
-                };
-                Some((interval_start, None))
+                Some((interval_start(per_file, index, frame.expect("a frame"), source)?, None))
             }
             (Some(slot), Some(_)) => Some((
                 frame_of(&per_file[index - 1], raw_precipitation_id.expect("id"))
@@ -2053,5 +2112,21 @@ mod store_dimension_tests {
         assert_eq!(names("hrrr", "wind10m"), ["time", "y", "x"]);
         assert_eq!(names("hrrr", "orog"), ["time_orog", "y", "x"]);
         assert_eq!(names("rrfs", "smokesfc"), ["time", "y", "x"]);
+    }
+
+    /// An ensemble source's further rates cut the axis as its one rate
+    /// does, and a variable with a first hour of its own takes a time of its
+    /// own; a quartile read at every frame shares the run's.
+    #[test]
+    fn a_first_hour_and_an_interval_pair_cut_the_axis() {
+        let document = crate::encode::registry::ensemble_fixture::document().to_string();
+        let registry = Registry::parse(&document).unwrap();
+        let source = registry.source("cmageps").unwrap();
+        let names = |bundle_id: &str| store_dimensions(&registry, source, bundle_id).expect("dimensions");
+        assert_eq!(names("apcp24gt10"), ["time_apcp24gt10", "latitude", "longitude"]);
+        assert_eq!(names("prateq25"), ["time_prateq25", "latitude", "longitude"]);
+        assert_eq!(names("prate"), ["time_prate", "latitude", "longitude"]);
+        assert_eq!(names("tmp2mq25"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("prmslsd"), ["time", "latitude", "longitude"]);
     }
 }

@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::encode::errors::{EncodeError, Result};
+use crate::encode::variables::{deserialize_ensembles, EnsembleIdentity};
 
 /// A second file family of the same cycle some of a source's inputs are read
 /// from — GFS-Wave beside the pgrb2 atmosphere, ECMWF's `wave` stream beside
@@ -197,6 +198,24 @@ pub struct SourceSpec {
     /// band it was measured in, written as the variable's `band` block.
     #[serde(default)]
     pub bands: Vec<(String, SatelliteBand)>,
+    /// Published variables that are, on this source, an ensemble statistic
+    /// of the quantity they name (an ensemble's median under the id of the
+    /// single forecast it stands in for), each with the block written as
+    /// the variable's `ensemble`.
+    #[serde(default, deserialize_with = "deserialize_ensembles")]
+    pub ensembles: Vec<(String, EnsembleIdentity)>,
+    /// Further `(rate, interval total)` pairs on an `interval_precipitation`
+    /// source, each rate derived from its total the way the source's one
+    /// precipitation rate is (the total over the interval's hours), with
+    /// the same axis.
+    #[serde(default)]
+    pub interval_precipitation_pairs: Vec<(String, String)>,
+    /// Inputs absent from every frame before an hour of their own (a total
+    /// over the 24 hours ending at the frame): each one's series, and its
+    /// bundle's axis, start at that hour, and earlier frames are neither
+    /// required nor read for it.
+    #[serde(default)]
+    pub variable_first_hours: Vec<(String, i64)>,
     #[serde(default)]
     pub platform: Option<String>,
     /// For a source fetched from the Open-Meteo open data bucket, the model
@@ -332,6 +351,23 @@ impl SourceSpec {
     /// Whether `variable_id` may be absent from the analysis file.
     pub fn is_optional_at_analysis(&self, variable_id: &str) -> bool {
         self.optional_at_analysis.iter().any(|id| id == variable_id)
+    }
+
+    /// The first forecast hour `variable_id` is present at, when the source
+    /// lists one for it.
+    pub fn first_hour_of(&self, variable_id: &str) -> Option<i64> {
+        self.variable_first_hours
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .map(|(_, hour)| *hour)
+    }
+
+    /// The interval total a further precipitation rate is derived from.
+    pub fn interval_total_of(&self, rate_id: &str) -> Option<&str> {
+        self.interval_precipitation_pairs
+            .iter()
+            .find(|(id, _)| id == rate_id)
+            .map(|(_, total_id)| total_id.as_str())
     }
 
     /// The companion family `variable_id` is read from, or `None` for an
