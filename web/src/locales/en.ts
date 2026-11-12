@@ -314,6 +314,14 @@ export const en = {
   creditsIconEu: "Forecast data: DWD ICON-EU 0.0625° over Europe, CC BY 4.0",
   creditsArpege: "Forecast data: Météo-France ARPEGE 0.25°, Licence Ouverte 2.0",
   creditsCmaGeps: "Ensemble forecast: CMA GRAPES GEPS 0.25°, median and mean, via WMO WIS2",
+  /** The `cma-areas` boundaries the China and Hong Kong warnings are drawn
+   * by (docs/alerts.md §9.4): whose outlines they are, and that they are
+   * not a survey-approved map; cnmaps-data and Amap stay as written. */
+  creditsCnmaps: "Warning area boundaries in China: Amap outlines via cnmaps-data (MIT), GCJ-02 → WGS84 by xue; not a survey-approved map",
+  /** China's warnings as WMO's SWIC aggregates them; SWIC's terms ask
+   * that the issuing services be named. */
+  creditsSwic: "Weather warnings in China: CMA observatories' CAP warnings via the WMO Severe Weather Information Centre",
+  creditsHkoWarnings: "Weather warnings in Hong Kong: Hong Kong Observatory via DATA.GOV.HK",
   /** FMI's global air-quality model; the model name stays as written. */
   creditsSilam: "Air-quality forecast: FMI SILAM v6.1 global 0.2°, CC BY 4.0",
   /** The seasonal run: one forecast nine months deep, so the strip under
