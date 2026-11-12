@@ -277,7 +277,8 @@ class BuildTest(unittest.TestCase):
     def test_ended_reasons(self) -> None:
         scratch, output = built()
         with scratch:
-            rows = [row for row in index_of(output, SECOND)["ended"] if not row[0].startswith("meteoalarm:")]
+            # MeteoAlarm's, CMA's and HKO's ends are held in their own tests.
+            rows = [row for row in index_of(output, SECOND)["ended"] if not row[0].startswith(("meteoalarm:", "cma:", "hko:"))]
         ended = {row[0].split(":", 1)[0] + ":" + row[2] for row in rows}
         reasons = {row[0]: row[2] for row in rows}
         self.assertEqual(sorted(reasons.values()), ["cancelled", "expired", "expired", "gone", "replaced"])

@@ -357,7 +357,7 @@ class SchemaTest(unittest.TestCase):
         (catalog,) = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/catalog.json")]
         self.assertEqual([entry["month"] for entry in catalog["months"]], ["2026-10", "2026-11"])
         indexes = [json.loads(path.read_text(encoding="utf-8")) for path in self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json")]
-        self.assertEqual([index["networks"] for index in indexes], [["jma", "nws"], ["eccc", "jma", "meteoalarm", "nws"]])
+        self.assertEqual([index["networks"] for index in indexes], [["jma", "nws"], ["cma", "eccc", "hko", "jma", "meteoalarm", "nws"]])
         self.assertEqual([index["columns"] for index in indexes], [list(archive.ROW_FIELDS)] * 2)
         for path, index in zip(self.paths(f"{ALERTS_ARCHIVE}/[0-9]*/[0-9]*/index.json"), indexes):
             ends = [row[8] + row[9] + 1 for row in index["rows"]]

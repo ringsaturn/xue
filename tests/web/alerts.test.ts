@@ -75,10 +75,12 @@ describe("the alerts pointer", () => {
 describe("the alerts index and network files", () => {
   it("reads every row, each span naming its own line", () => {
     const { index, lines } = load();
-    expect(index.networks.map((network) => network.id)).toEqual(["nws", "jma", "eccc", "meteoalarm"]);
+    expect(index.networks.map((network) => network.id)).toEqual(["nws", "jma", "eccc", "meteoalarm", "cma", "hko"]);
     expect(index.networks[1]!.areas?.set).toBe("jma-class20");
     expect(index.networks[2]!.areas).toBeNull();
     expect(index.networks[3]!.areas?.set).toBe("meteoalarm-areas");
+    expect(index.networks[4]!.areas?.set).toBe("cma-areas");
+    expect(index.networks[5]!.areas?.set).toBe("cma-areas");
     for (const row of index.alerts) {
       const network = index.networks[row.network]!;
       const bytes = readFileSync(join(ROUND, network.file.path));
