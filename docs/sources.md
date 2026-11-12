@@ -207,7 +207,14 @@ cloud cover (from F006, since the analysis file's is a field of zeros) and
 CAPE. Every field keeps the identity the deterministic sources use, so it
 compares with them directly, but a median is smoother than any member, and
 a precipitation median is drier than the mean wherever only some members
-rain. No wind components (CMA exchanges only speeds). A run is complete on
+rain. No wind components (CMA exchanges only speeds). Nothing else of the
+model is exchanged: no member fields, no deterministic CMA-GFS run, no
+isobaric level beyond the 850 hPa temperature and wind speed, the 500 hPa
+height and the 250 hPa wind speed, and no humidity. The National
+Meteorological Centre's website draws more of the same ensemble over China
+(stamp maps of the 31 members, spaghetti plots, the extreme forecast index,
+24-hour precipitation probabilities), but as images whose reuse needs CMA's
+permission, so they are not a source. A run is complete on
 the caches about 18–20 UTC the same day for both cycles. Data: China
 Meteorological Administration (CMA), via WMO WIS2, core data under the WMO
 Unified Data Policy, free and unrestricted.
