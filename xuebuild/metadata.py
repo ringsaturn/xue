@@ -115,6 +115,12 @@ def _variable_metadata(
         # beside it the species and the intervals it was computed over —
         # the rest of the identity a template 4.48 record carries.
         block["aerosol"] = spec.grib2_aerosol.metadata()
+    ensemble = dict(source.ensembles).get(variable_id, spec.grib2_ensemble)
+    if ensemble is not None:
+        # A statistic of an ensemble: the parameter names the quantity, the
+        # block which statistic of the members this field is — the mean or
+        # median standing in for the deterministic field included.
+        block["ensemble"] = ensemble.metadata()
     block["quantization"] = PROFILES[profile][variable_id].metadata()
     return block
 

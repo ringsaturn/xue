@@ -19,6 +19,7 @@ from typing import BinaryIO
 
 from .errors import ConversionError
 from .model import SourceFrame
+from .rules import EnsembleIdentity, EnsembleRecord, ensemble_rule_accepts
 from .variables import AerosolIdentity, VariableSpec, variable_spec
 
 # Code table 4.4 (indicator of unit of time range) for the units our
@@ -39,11 +40,34 @@ _TIME_UNIT = {
 # and the generating process, so its time and surface octets sit that much
 # further along; 4.44 and 4.46, the aerosol templates without the optical
 # fields, are its subsets and are not read by any source yet.
-_INSTANTANEOUS_TEMPLATES = {0, 1, 2}
-_STATISTICAL_TEMPLATES = {8, 11, 12}
+#
+# The ensemble templates (docs/format.md §"Ensemble") share the 4.0 layout
+# too and append the statistic: 4.2 the derived forecast at octet 35, 4.6
+# the percentile at 35, 4.5 the probability's type and limits at 37-47;
+# their interval forms 4.12, 4.10 and 4.9 append 4.8's time range after
+# it. Each maps to the octets (1-based, as GRIB2 numbers them, so index
+# ``octet - 1`` of the section) of the interval's end time, its range
+# count, the first range's process, unit and length.
+_INSTANTANEOUS_TEMPLATES = {0, 1}
+# 4.8 and 4.11 (an ensemble member's statistic, three octets of member
+# fields before the interval): the octets of the interval's end time and the
+# first range's process, and the section's minimum length.
+_STATISTICAL_TEMPLATES: dict[int, tuple[int, int, int]] = {8: (35, 47, 47), 11: (38, 50, 50)}
 _AEROSOL_TEMPLATES = {48}
 _AEROSOL_SHIFT = 24
 _MISSING_UINT32 = 0xFFFFFFFF
+_ENSEMBLE_MINIMUM_LENGTH = {2: 36, 6: 35, 5: 47, 12: 60, 10: 59, 9: 71}
+_ENSEMBLE_INTERVALS: dict[int, tuple[int, int, int, int, int]] = {
+    # template: (end time, ranges, process, unit, length)
+    12: (37, 44, 49, 51, 52),
+    10: (36, 43, 48, 50, 51),
+    9: (48, 55, 60, 62, 63),
+}
+_HOURS_UNIT = 1
+
+
+class UnsupportedTemplate(ConversionError):
+    """A record of a product definition template the index cannot read."""
 
 
 @dataclass(frozen=True)
@@ -64,6 +88,16 @@ class MessageInfo:
     aerosol: AerosolIdentity | None = None
     """The aerosol type and intervals of an aerosol product (template 4.48);
     None for every other template, which no aerosol variable matches."""
+    template: int = 0
+    """The product definition template number."""
+    ensemble: EnsembleIdentity | None = None
+    """The statistic of an ensemble product (templates 4.2 / 4.12, 4.6 /
+    4.10, 4.5 / 4.9): matched by a ``template-ensemble`` rule alone. None
+    for every other template."""
+    interval_hours: int | None = None
+    """The length in hours of an ensemble interval template's one time
+    range; None elsewhere, and where the range is not one, or not in
+    hours."""
 
 
 def _read_exact(handle: BinaryIO, count: int, path: Path, label: str) -> bytes:
@@ -109,25 +143,63 @@ def _parse_aerosol(body: bytes) -> AerosolIdentity:
     )
 
 
-def _parse_product(
-    body: bytes, reference_time: datetime, path: Path
-) -> tuple[int, int, int, float | None, datetime, int | None, AerosolIdentity | None]:
-    """Parse a section 4 body (header included) into (category, number,
-    level_type, level_value, valid_time, statistical_process, aerosol)."""
+@dataclass(frozen=True)
+class _Product:
+    template: int
+    category: int
+    number: int
+    level_type: int
+    level_value: float | None
+    valid_time: datetime
+    statistical: int | None
+    aerosol: AerosolIdentity | None = None
+    ensemble: EnsembleIdentity | None = None
+    interval_hours: int | None = None
+
+
+def _sign_magnitude(octet: int) -> int:
+    return -(octet & 0x7F) if octet & 0x80 else octet
+
+
+def _parse_probability_limit(body: bytes, offset: int) -> tuple[int, int] | None:
+    """One ``(scaleFactor, scaledValue)`` limit of a probability at
+    ``offset``: the scale factor sign-and-magnitude, as GRIB2 writes signed
+    octets (GDAL reads it so), and None when either half is missing."""
+    scale_octet = body[offset]
+    scaled_value = struct.unpack_from(">I", body, offset + 1)[0]
+    if scale_octet == 0xFF or scaled_value == _MISSING_UINT32:
+        return None
+    return _sign_magnitude(scale_octet), scaled_value
+
+
+def _parse_ensemble(template: int, body: bytes) -> EnsembleIdentity:
+    if template in (2, 12):
+        return EnsembleIdentity.derived(body[34])
+    if template in (6, 10):
+        return EnsembleIdentity.percentile_of(body[34])
+    return EnsembleIdentity.probability(body[36], _parse_probability_limit(body, 37), _parse_probability_limit(body, 42))
+
+
+def _parse_product(body: bytes, reference_time: datetime, path: Path) -> _Product:
+    """Parse a section 4 body (header included) into the record's
+    identity and valid time."""
     template = struct.unpack_from(">H", body, 7)[0]
     shift = 0
     aerosol: AerosolIdentity | None = None
+    ensemble: EnsembleIdentity | None = None
+    interval_hours: int | None = None
+    statistical: int | None = None
     if template in _INSTANTANEOUS_TEMPLATES:
-        statistical: int | None = None
         minimum_length = 34
     elif template in _STATISTICAL_TEMPLATES:
-        minimum_length = 47
+        minimum_length = _STATISTICAL_TEMPLATES[template][2]
     elif template in _AEROSOL_TEMPLATES:
-        statistical = None
         shift = _AEROSOL_SHIFT
         minimum_length = 34 + shift
+    elif template in _ENSEMBLE_MINIMUM_LENGTH:
+        minimum_length = _ENSEMBLE_MINIMUM_LENGTH[template]
     else:
-        raise ConversionError(f"unsupported GRIB2 product definition template 4.{template} in {path}")
+        raise UnsupportedTemplate(f"unsupported GRIB2 product definition template 4.{template} in {path}")
     if len(body) < minimum_length:
         raise ConversionError(f"GRIB2 product definition section is too short in {path}")
     category, number = body[9], body[10]
@@ -140,15 +212,54 @@ def _parse_product(
     level_type = body[22 + shift]
     scale = struct.unpack_from(">b", body, 23 + shift)[0]
     scaled_value = struct.unpack_from(">I", body, 24 + shift)[0]
-    level_value = None if scaled_value == _MISSING_UINT32 else scaled_value / (10.0**scale)
+    # A missing surface value is the scale octet's all-ones or the value's.
+    missing_level = body[23 + shift] == 0xFF or scaled_value == _MISSING_UINT32
+    level_value = None if missing_level else scaled_value / (10.0**scale)
     if template in _STATISTICAL_TEMPLATES:
-        # Statistical products are valid at the end of the overall interval
-        # (octets 35-41); the forecast time octets hold the interval start.
-        valid_time = _parse_time(body, 34, path)
-        statistical = body[46]
+        # Statistical products are valid at the end of the overall interval;
+        # the forecast time octets hold the interval start.
+        end, process, _ = _STATISTICAL_TEMPLATES[template]
+        valid_time = _parse_time(body, end - 1, path)
+        statistical = body[process - 1]
+    elif template in _ENSEMBLE_INTERVALS:
+        end, ranges, process, unit, length = _ENSEMBLE_INTERVALS[template]
+        valid_time = _parse_time(body, end - 1, path)
+        statistical = body[process - 1]
+        if body[ranges - 1] == 1 and body[unit - 1] == _HOURS_UNIT:
+            interval_hours = struct.unpack_from(">I", body, length - 1)[0]
     else:
         valid_time = reference_time + forecast_time * _TIME_UNIT[unit_code]
-    return category, number, level_type, level_value, valid_time, statistical, aerosol
+    if template in _ENSEMBLE_MINIMUM_LENGTH:
+        ensemble = _parse_ensemble(template, body)
+    return _Product(
+        template, category, number, level_type, level_value, valid_time, statistical, aerosol, ensemble, interval_hours
+    )
+
+
+def _message_info(band: int, discipline: int, reference_time: datetime, product: _Product) -> MessageInfo:
+    return MessageInfo(
+        band=band,
+        discipline=discipline,
+        parameter_category=product.category,
+        parameter_number=product.number,
+        level_type=product.level_type,
+        level_value=product.level_value,
+        reference_time=reference_time,
+        valid_time=product.valid_time,
+        statistical_process=product.statistical,
+        aerosol=product.aerosol,
+        template=product.template,
+        ensemble=product.ensemble,
+        interval_hours=product.interval_hours,
+    )
+
+
+def product_identity(body: bytes, discipline: int, reference_time: datetime, source: str) -> MessageInfo:
+    """The identity of one message from its product definition section
+    ``body`` (header included), for a reader that walks message heads of
+    its own (:mod:`xuebuild.cmageps`). Raises :class:`UnsupportedTemplate`
+    for a template the index does not read."""
+    return _message_info(1, discipline, reference_time, _parse_product(body, reference_time, Path(source)))
 
 
 def index_messages(path: Path) -> list[MessageInfo]:
@@ -175,7 +286,7 @@ def index_messages(path: Path) -> list[MessageInfo]:
             if total_length < 16 + 4 or offset + total_length > size:
                 raise ConversionError(f"GRIB2 message length is out of bounds in {path}")
             reference_time: datetime | None = None
-            product: tuple[int, int, int, float | None, datetime, int | None, AerosolIdentity | None] | None = None
+            product: _Product | None = None
             position = 16
             while product is None:
                 if position + 5 > total_length - 4:
@@ -198,21 +309,7 @@ def index_messages(path: Path) -> list[MessageInfo]:
                     handle.seek(section_length - 5, 1)
                 position += section_length
             assert reference_time is not None
-            category, number, level_type, level_value, valid_time, statistical, aerosol = product
-            messages.append(
-                MessageInfo(
-                    band=len(messages) + 1,
-                    discipline=discipline,
-                    parameter_category=category,
-                    parameter_number=number,
-                    level_type=level_type,
-                    level_value=level_value,
-                    reference_time=reference_time,
-                    valid_time=valid_time,
-                    statistical_process=statistical,
-                    aerosol=aerosol,
-                )
-            )
+            messages.append(_message_info(len(messages) + 1, discipline, reference_time, product))
             offset += total_length
             handle.seek(offset)
     if not messages:
@@ -272,21 +369,7 @@ def message_head(head: bytes, source: str) -> tuple[int, MessageInfo]:
         elif section_number == 4:
             if reference_time is None:
                 raise ConversionError(f"GRIB2 product definition precedes identification in {source}")
-            category, number, level_type, level_value, valid_time, statistical, aerosol = _parse_product(
-                body, reference_time, label
-            )
-            return total_length, MessageInfo(
-                band=1,
-                discipline=head[6],
-                parameter_category=category,
-                parameter_number=number,
-                level_type=level_type,
-                level_value=level_value,
-                reference_time=reference_time,
-                valid_time=valid_time,
-                statistical_process=statistical,
-                aerosol=aerosol,
-            )
+            return total_length, _message_info(1, head[6], reference_time, _parse_product(body, reference_time, label))
         position += section_length
     raise ConversionError(f"the first {len(head)} bytes of a message in {source} hold no product definition")
 
@@ -304,7 +387,29 @@ def _matching_unit(spec: VariableSpec, message: MessageInfo) -> str | None:
     alternate identities — and None when it does not. The unit is the
     identity's own: an alternate may spell it differently (ECMWF's cloud
     cover fraction). An aerosol product matches on its aerosol identity
-    too, whole, and only a variable registered with one matches it."""
+    too, whole, and only a variable registered with one matches it. An
+    ensemble product matches only a ``template-ensemble`` rule of the
+    variable's — the same test the GDAL pass applies to the assembled
+    template (:mod:`xuebuild.gdal`) — and a variable registered as a
+    statistic of an ensemble matches nothing else."""
+    if message.ensemble is not None:
+        record = EnsembleRecord(
+            template=message.template,
+            discipline=message.discipline,
+            category=message.parameter_category,
+            number=message.parameter_number,
+            level_type=message.level_type,
+            level_value=message.level_value,
+            ensemble=message.ensemble,
+            interval_hours=message.interval_hours,
+            statistical=message.statistical_process,
+        )
+        accepted = any(
+            rule.rule == "template-ensemble" and ensemble_rule_accepts(rule, record) for rule in spec.gdal_rules or ()
+        )
+        return spec.gdal_unit if accepted else None
+    if spec.grib2_ensemble is not None:
+        return None
     triple = (message.discipline, message.parameter_category, message.parameter_number)
     if (
         (triple == (spec.grib2_discipline, spec.grib2_category, spec.grib2_number) or triple in spec.grib2_aliases)

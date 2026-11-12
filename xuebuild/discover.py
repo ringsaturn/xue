@@ -51,7 +51,12 @@ def bundle_input_ids(source: SourceSpec, bundle_id: str) -> tuple[str, ...]:
     not fetch. The precipitation rate's input is whichever of the
     derivation's inputs the source lists (GFS prate, ECMWF tp, sflux
     prate_ave, Open-Meteo apcp), resolved off the source's own input list
-    rather than hard-coded per model."""
+    rather than hard-coded per model; a further rate an interval source
+    pairs with a total (``interval_precipitation_pairs``) reads that total.
+    """
+    for rate_id, total_id in source.interval_precipitation_pairs:
+        if rate_id == bundle_id:
+            return (total_id,)
     spec = bundle(bundle_id)
     if spec is None:
         return (bundle_id,)
@@ -121,18 +126,32 @@ def discover_frames(input_path: Path | Sequence[Path], source: SourceSpec) -> li
         raise
 
 
+def first_hour(source: SourceSpec, variable_id: str) -> int:
+    """The hour before which no frame carries an input
+    (``SourceSpec.variable_first_hours``), 0 for every other input."""
+    return dict(source.variable_first_hours).get(variable_id, 0)
+
+
+def bundle_first_hour(source: SourceSpec, bundle_id: str) -> int:
+    """The hour one bundle's series starts at, at the latest: the latest
+    first hour of its inputs."""
+    return max((first_hour(source, input_id) for input_id in bundle_input_ids(source, bundle_id)), default=0)
+
+
 def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tuple[str, ...]:
     """The published scalars of ``scalar_ids`` whose series has no analysis
     frame: the precipitation rate a source derives by de-accumulating or
-    de-averaging, and any scalar read from a record the source lists under
+    de-averaging, any scalar read from a record the source lists under
     ``optional_at_analysis`` (which is how the interval-precipitation
     sources' rate, radiation and gust qualify — their inputs describe an
-    interval that would precede the run)."""
+    interval that would precede the run), and any read from one that starts
+    past the analysis (``variable_first_hours``)."""
     return tuple(
         variable_id
         for variable_id in scalar_ids
         if (variable_id == PRECIPITATION_RATE_BUNDLE_ID and precipitation_mode(source) in ("accumulated", "averaged"))
         or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
+        or bundle_first_hour(source, variable_id) > 0
     )
 
 
@@ -311,6 +330,7 @@ def prepare_frames_all(
     cadence_seconds: int | None = None,
     families: Mapping[str, str | None] | None = None,
     static_ids: tuple[str, ...] = (),
+    first_hours: Mapping[str, int] | None = None,
 ) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
@@ -326,6 +346,9 @@ def prepare_frames_all(
     ``cadence_seconds`` the files are a fetched observation, each stamped
     with its own time, and are re-keyed onto the window's axis
     (:func:`snap_observation_frames`).
+    Variables in ``first_hours`` may be absent from every file before
+    their hour (``SourceSpec.variable_first_hours``) and must be present
+    from it.
 
     ``families`` maps a variable to the grid family it is read from, where a
     source has one: those variables are inspected in the frame's sibling
@@ -352,7 +375,8 @@ def prepare_frames_all(
     # A static record is expected only at the first frame, so it is optional
     # everywhere the inspector looks; its presence at the first frame is
     # required below.
-    inspection_optional = optional_at_analysis + static_ids
+    first_hours = dict(first_hours or {})
+    inspection_optional = optional_at_analysis + static_ids + tuple(first_hours)
 
     def inspect_all(inspect) -> list[dict[str, SourceFrame]]:
         def one(path: Path) -> dict[str, SourceFrame]:
@@ -396,6 +420,8 @@ def prepare_frames_all(
             if variable_id in frames:
                 continue
             lead = next(iter(frames.values())).lead_seconds
+            if lead < first_hours.get(variable_id, 0) * binformat.HOUR_SECONDS:
+                continue
             if variable_id not in optional_at_analysis or lead != 0:
                 raise ConversionError(
                     f"missing {variable_id} record at forecast hour {lead // binformat.HOUR_SECONDS}"
@@ -574,7 +600,9 @@ def discover_records(
                 tuple(
                     variable_id for variable_id in inspect_ids if input_families[variable_id] == family
                 ),
-                optional_ids=source.optional_at_analysis + derivation_only_ids,
+                optional_ids=source.optional_at_analysis
+                + derivation_only_ids
+                + tuple(variable_id for variable_id, _ in source.variable_first_hours),
             )
         )
     available_vector_ids = tuple(
@@ -637,11 +665,16 @@ def discover_records(
             input_scalar_ids + vector_read_ids,
             key=lambda variable_id: (
                 VARIABLES[variable_id].static,
-                variable_id in source.optional_at_analysis,
+                variable_id in source.optional_at_analysis or first_hour(source, variable_id) > 0,
             ),
         )
     )
-    if not variable_ids or variable_ids[0] in source.optional_at_analysis or VARIABLES[variable_ids[0]].static:
+    if (
+        not variable_ids
+        or variable_ids[0] in source.optional_at_analysis
+        or first_hour(source, variable_ids[0]) > 0
+        or VARIABLES[variable_ids[0]].static
+    ):
         raise ConversionError(
             f"a {source.manifest_model} build needs at least one variable present in every file, "
             f"including the analysis; {list(variable_ids)} is not enough"
@@ -654,6 +687,7 @@ def discover_records(
         source.cadence_seconds,
         families=input_families,
         static_ids=tuple(variable_id for variable_id in variable_ids if VARIABLES[variable_id].static),
+        first_hours=dict(source.variable_first_hours),
     )
     available_composite_ids = ()
     grid_path = paths[0]

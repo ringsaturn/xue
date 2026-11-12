@@ -231,8 +231,8 @@ class MeteoFranceArpege(FrameFeed):
 class CmaGeps(FrameFeed):
     """CMA GRAPES GEPS's ensemble product files off two WIS2 caches
     (:mod:`xuebuild.cmageps`): one file per lead time with no index, whose
-    central records are found by walking the message heads over Range and
-    rewritten to the plain templates."""
+    records are found by walking the message heads over Range against the
+    registry's ensemble rules."""
 
     def __init__(self) -> None:
         # The run's listing, taken once before the frames: every frame
@@ -266,8 +266,6 @@ class CmaGeps(FrameFeed):
     def frame_payload(
         self, spec: SourceSpec, run: GfsRun, forecast_hour: int, destination: Path, input_ids: InputIds
     ) -> bytes:
-        from .eccodescli import set_keys
-
         objects = self._listings.get((spec.id, run.id))
         if objects is None:
             objects = cmageps.list_run(run, fetch=fetch.fetch_text)
@@ -278,7 +276,6 @@ class CmaGeps(FrameFeed):
             fetch._frame_variable_ids(spec, forecast_hour, input_ids),
             cmageps.candidates(run, forecast_hour, objects),
             fetch.fetch_range,
-            set_keys,
         )
 
 

@@ -125,13 +125,15 @@ def bundle_groups(
 
     def anchored(bundle_id: str) -> bool:
         # A group needs a variable present in every fetched frame to key the
-        # run's axis: an input that is neither optional at the analysis nor
-        # static. A static field (the terrain) is fetched at the analysis
+        # run's axis: an input that is neither optional at the analysis, nor
+        # first written past it, nor static. A static field (the terrain) is fetched at the analysis
         # alone, so it cannot anchor a group — a top-up of `orog` by itself
         # would fetch nothing past f000 and leave the converter with no
         # frames to read.
         return any(
-            input_id not in source.optional_at_analysis and not variable_spec(input_id).static
+            input_id not in source.optional_at_analysis
+            and input_id not in dict(source.variable_first_hours)
+            and not variable_spec(input_id).static
             for input_id in bundle_input_ids(source, bundle_id)
         )
 

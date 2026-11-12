@@ -19,10 +19,45 @@ from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, Satel
 from .variables import (
     AEROSOL_VARIABLE_IDS,
     CLOUD_WATER_VARIABLE_IDS,
+    ENSEMBLE_PROBABILITY_THRESHOLDS_MM,
     REFLECTIVITY_VARIABLE_IDS,
     RIVER_VARIABLE_IDS,
     SMOKE_DUST_VARIABLE_IDS,
     VARIABLES,
+    EnsembleIdentity,
+    ensemble_probability_id,
+    ensemble_quartile_id,
+    ensemble_spread_id,
+)
+
+def _quartiles(base_id: str) -> tuple[str, str]:
+    return ensemble_quartile_id(base_id, 25), ensemble_quartile_id(base_id, 75)
+
+
+#: CMA GRAPES GEPS's 24-hour precipitation probabilities, lowest threshold
+#: first.
+CMAGEPS_PROBABILITY_IDS = tuple(ensemble_probability_id(threshold) for threshold in ENSEMBLE_PROBABILITY_THRESHOLDS_MM)
+#: What CMA GRAPES GEPS's fetch reads of each product file, each quantity's
+#: centre then its spread or quartiles: the order the frame's records are
+#: written in.
+CMAGEPS_INPUT_IDS = (
+    "hgt500",
+    ensemble_spread_id("hgt500"),
+    "prmsl",
+    ensemble_spread_id("prmsl"),
+    *CMAGEPS_PROBABILITY_IDS,
+    "apcp",
+    *_quartiles("apcp"),
+    "tmp2m",
+    *_quartiles("tmp2m"),
+    "tmp850",
+    *_quartiles("tmp850"),
+    "gust",
+    *_quartiles("gust"),
+    "cape",
+    *_quartiles("cape"),
+    "tcdc",
+    *_quartiles("tcdc"),
 )
 
 #: The aerosol quantities a CAMS window carries (xuebuild/cams/), in file
@@ -230,6 +265,28 @@ class SourceSpec:
     variable's ``band`` block beside ``parameter``. A satellite source lists
     one per channel it publishes (:meth:`~xuebuild.satellite.platforms.Platform.bands`);
     every other source lists none."""
+    ensembles: tuple[tuple[str, EnsembleIdentity], ...] = ()
+    """Published variables that are a statistic of an ensemble standing in
+    for the deterministic field under its id, each with the statistic:
+    CMA GRAPES GEPS's median ``tmp2m``, its mean ``prmsl``. Written into
+    the bundle's metadata as the variable's ``ensemble`` block beside
+    ``parameter`` (docs/format.md §"Ensemble"), as :attr:`bands` writes a
+    channel's; a variable that is a statistic under an id of its own
+    carries the block itself (:attr:`~xuebuild.variables.VariableSpec.grib2_ensemble`)."""
+    interval_precipitation_pairs: tuple[tuple[str, str], ...] = ()
+    """Further ``(rate, total)`` pairs an :attr:`interval_precipitation`
+    source derives beside ``prate`` from its input: each total over the
+    interval ending at the frame divided by the interval's hours, on the
+    same axis and with the same handling of an analysis that carries no
+    total (CMA GRAPES GEPS's precipitation quartiles, ``prateq25`` from
+    ``apcpq25``). The rate is the published scalar, the total an input."""
+    variable_first_hours: tuple[tuple[str, int], ...] = ()
+    """Input variables absent from every frame before an hour, with that
+    hour: their series, and the time axis of every bundle read from them,
+    start there, and no earlier frame is read for them or required to carry
+    them — CMA GRAPES GEPS's 24-hour precipitation probabilities, which the
+    files carry from the 24th hour. Composes with
+    :attr:`optional_at_analysis`."""
     platform: str | None = None
     """For a satellite source, the orbital role its files are read under
     in the platform registry (``xuebuild/satellite/platforms.py``):
@@ -1835,18 +1892,24 @@ SOURCES: dict[str, SourceSpec] = {
     # CMA GRAPES GEPS v1.3, the China Meteorological Administration's
     # global ensemble (30 perturbed members and the control), as WMO WIS2
     # exchanges it: no members, one file of ensemble products per lead time
-    # on the two global caches (xuebuild/cmageps.py). What is published is
-    # the ensemble's centre under the deterministic identities: the mean of
-    # the 500 hPa height and the sea-level pressure, the only statistics
-    # CMA writes of them, and the median (50th percentile) of every other
-    # field. The precipitation is the median of the total over the six
-    # hours ending at each step (``interval_precipitation``, the registry's
-    # ``apcp``), which no analysis carries; the gust is the median of the
-    # instantaneous 10 m gust, published on GFS's instantaneous gust
-    # identity. The files are on the 0.25° grid without its pole rows
-    # (cell centres 89.875°N to 89.875°S), JPEG2000 packed. The 00Z and
-    # 12Z cycles run to 360 hours, three-hourly to 78 and six-hourly after;
-    # only the six-hourly files are read.
+    # on the two global caches (xuebuild/cmageps.py), each record matched by
+    # the ``template-ensemble`` rules of the registry. The ensemble's centre
+    # is published under the deterministic identities, with the block that
+    # says which statistic it is (``ensembles``): the mean of the 500 hPa
+    # height and the sea-level pressure, the only centre CMA writes of them,
+    # and the median (50th percentile) of every other field. Beside the
+    # centre: the 25th and 75th percentiles of the median fields, the spread
+    # of the two mean fields, and the probabilities of more than 1, 5, 10,
+    # 25, 50 and 100 mm of precipitation in the 24 hours ending at each step,
+    # which the files carry from the 24th hour (``variable_first_hours``).
+    # The precipitation and its quartiles are totals over the six hours
+    # ending at each step (``interval_precipitation`` and its pairs), which
+    # no analysis carries; the gust is CMA's instantaneous 10 m gust,
+    # published on GFS's instantaneous gust identity. The files are on the
+    # 0.25° grid without its pole rows (cell centres 89.875°N to 89.875°S),
+    # JPEG2000 packed. The 00Z and 12Z cycles run to 360 hours,
+    # three-hourly to 78 and six-hourly after; only the six-hourly files are
+    # read.
     "cmageps": SourceSpec(
         id="cmageps",
         feed="cmageps",
@@ -1856,20 +1919,55 @@ SOURCES: dict[str, SourceSpec] = {
         latest_filename="latest-cmageps.json",
         # Six-hourly through 360 hours: 61 frames.
         steps=((360, 6),),
-        input_variable_ids=("hgt500", "prmsl", "apcp", "tmp2m", "tmp850", "gust", "cape", "tcdc"),
+        input_variable_ids=CMAGEPS_INPUT_IDS,
         accumulated_precipitation=False,
         interval_precipitation=True,
         # The analysis file carries the gust and the cloud cover as fields of
-        # zeros (the analysis has no such diagnostic), so neither is read
-        # there: their series start at the first step, like the rate's.
-        optional_at_analysis=("apcp", "gust", "tcdc"),
-        statistical_processes=(("prate", 0),),
-        bundle_scalar_ids=("tmp2m", "prate", "prmsl", "gust", "tcdc", "cape", "tmp850", "hgt500"),
+        # zeros (the analysis has no such diagnostic), so none of their
+        # percentiles is read there: their series start at the first step,
+        # like the rates'.
+        optional_at_analysis=(
+            "apcp",
+            *_quartiles("apcp"),
+            "gust",
+            *_quartiles("gust"),
+            "tcdc",
+            *_quartiles("tcdc"),
+        ),
+        statistical_processes=(
+            ("prate", 0),
+            *((rate_id, 0) for rate_id in _quartiles("prate")),
+        ),
+        ensembles=(
+            *((variable_id, EnsembleIdentity.percentile_of(50)) for variable_id in ("tmp2m", "prate", "gust", "tcdc", "cape", "tmp850")),
+            *((variable_id, EnsembleIdentity.derived(0)) for variable_id in ("prmsl", "hgt500")),
+        ),
+        interval_precipitation_pairs=tuple(zip(_quartiles("prate"), _quartiles("apcp"))),
+        variable_first_hours=tuple((probability_id, 24) for probability_id in CMAGEPS_PROBABILITY_IDS),
+        bundle_scalar_ids=(
+            "tmp2m",
+            *_quartiles("tmp2m"),
+            "prate",
+            *_quartiles("prate"),
+            *CMAGEPS_PROBABILITY_IDS,
+            "prmsl",
+            ensemble_spread_id("prmsl"),
+            "gust",
+            *_quartiles("gust"),
+            "tcdc",
+            *_quartiles("tcdc"),
+            "cape",
+            *_quartiles("cape"),
+            "tmp850",
+            *_quartiles("tmp850"),
+            "hgt500",
+            ensemble_spread_id("hgt500"),
+        ),
         production_grid=(1440, 720),
         # 48 x 48 cells is 12° x 12°: 30 x 15 = 450 tiles, no clipped edge.
         tile=(48, 48),
-        # Each frame is a walk of some eighty message heads over Range and
-        # eight record reads, on public S3 buckets.
+        # Each frame is a walk of some ninety message heads over Range and
+        # thirty record reads, on public S3 buckets.
         fetch_concurrency=8,
         cycle_hours=12,
     ),

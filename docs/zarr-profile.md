@@ -375,8 +375,10 @@ array follows these rules.
   with that bundle's axis (same encoding as `time`). The rules are the two
   by which the encoder shortens a bundle's axis: a published scalar whose
   series has no analysis frame (`discover.analysis_optional_ids`: a
-  de-accumulated or de-averaged rate, an interval maximum such as `gust`),
-  and a static field (the terrain, one frame at the analysis).
+  de-accumulated or de-averaged rate, an interval maximum such as `gust`,
+  a field the source writes only from a later hour, such as CMA GRAPES
+  GEPS's 24-hour precipitation probabilities from +24 h, whose axis starts
+  there), and a static field (the terrain, one frame at the analysis).
 - A bundle on a grid family of its own takes `latitude_<family>` and
   `longitude_<family>`, `<family>` being exactly the string
   `discover.bundle_grid_family` returns for it: the id of the companion

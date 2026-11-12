@@ -131,6 +131,80 @@ class TemplateAerosolRuleTests(unittest.TestCase):
         self.assertFalse(rule_matches(rule, variable_spec("tmp2m"), dust, ""))
 
 
+class TemplateEnsembleRuleTests(unittest.TestCase):
+    """CMA GRAPES GEPS's products, with the assembled values GDAL 3.13
+    reports for them (one record of each template the source reads)."""
+
+    METEOROLOGICAL = "0(Meteorological)"
+    HGT_MEAN = "3 5 4 128 128 0 0 1 24 100 0 50000 255 -127 -2147483647 0 31"
+    HGT_SPREAD = "3 5 4 128 128 0 0 1 24 100 0 50000 255 -127 -2147483647 4 31"
+    PRMSL_MEAN = "3 1 4 128 128 0 0 1 24 101 -127 -2147483647 255 -127 -2147483647 0 31"
+    TMP2M_Q25 = "0 0 4 128 128 0 0 1 24 103 0 2 255 -127 -2147483647 25"
+    APCP_Q50_6H = "1 8 4 128 128 0 0 1 18 1 -127 -2147483647 255 -127 -2147483647 50 2026 11 11 12 0 0 1 0 1 2 1 6 255 0"
+    APCP_Q50_24H = "1 8 4 128 128 0 0 1 0 1 -127 -2147483647 255 -127 -2147483647 50 2026 11 11 12 0 0 1 0 1 2 1 24 255 0"
+    # CMA writes the threshold into both limits; type 3 reads the lower.
+    PROB_10MM_24H = (
+        "1 8 4 128 128 0 0 1 0 1 -127 -2147483647 255 -127 -2147483647 3 6 3 2 1000 2 1000 2026 11 11 12 0 0 1 0 1 2 1 24 255 0"
+    )
+    PROB_10MM_6H = (
+        "1 8 4 128 128 0 0 1 18 1 -127 -2147483647 255 -127 -2147483647 3 5 3 2 1000 2 1000 2026 11 11 12 0 0 1 0 1 2 1 6 255 0"
+    )
+
+    @classmethod
+    def product(cls, template: int, assembled: str, element: str = "HGT", short_name: str = "50000-ISBL") -> dict[str, str]:
+        return band(
+            GRIB_ELEMENT=element,
+            GRIB_SHORT_NAME=short_name,
+            GRIB_DISCIPLINE=cls.METEOROLOGICAL,
+            GRIB_PDS_PDTN=str(template),
+            GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES=assembled,
+        )
+
+    def test_the_mean_and_the_spread_are_told_apart_by_the_template(self) -> None:
+        mean, spread = self.product(2, self.HGT_MEAN), self.product(2, self.HGT_SPREAD)
+        self.assertTrue(_band_matches("hgt500", mean, ""))
+        self.assertFalse(_band_matches("hgt500", spread, ""))
+        self.assertTrue(_band_matches("hgt500sd", spread, ""))
+        self.assertFalse(_band_matches("hgt500sd", mean, ""))
+        # The isobaric rule alone would take both: an ensemble template is
+        # read by a template-ensemble rule or by none.
+        self.assertFalse(rule_matches(rules.isobaric("HGT", 500), variable_spec("hgt500"), mean, ""))
+        self.assertFalse(_band_matches("hgt850", mean, ""))
+        prmsl = self.product(2, self.PRMSL_MEAN, "PRMSL", "0-MSL")
+        self.assertTrue(_band_matches("prmsl", prmsl, ""))
+        self.assertFalse(_band_matches("prmslsd", prmsl, ""))
+
+    def test_a_percentile_and_its_interval(self) -> None:
+        q25 = self.product(6, self.TMP2M_Q25, "TMP25", "2-HTGL")
+        self.assertTrue(_band_matches("tmp2mq25", q25, ""))
+        self.assertFalse(_band_matches("tmp2mq75", q25, ""))
+        self.assertFalse(_band_matches("tmp2m", q25, ""))
+        six = self.product(10, self.APCP_Q50_6H, "APCP50", "0-SFC")
+        day = self.product(10, self.APCP_Q50_24H, "APCP50", "0-SFC")
+        self.assertTrue(_band_matches("apcp", six, ""))
+        # The run-long window beside it is the same percentile of the same
+        # parameter; its length is what refuses it.
+        self.assertFalse(_band_matches("apcp", day, ""))
+        self.assertFalse(_band_matches("apcpq25", six, ""))
+        # An instantaneous percentile's template is not the interval's.
+        self.assertFalse(_band_matches("apcp", {**six, "GRIB_PDS_PDTN": "6"}, ""))
+
+    def test_a_probability_reads_the_limit_its_type_uses(self) -> None:
+        day = self.product(9, self.PROB_10MM_24H, "ProbAPCP24", "0-SFC")
+        self.assertTrue(_band_matches("apcp24gt10", day, ""))
+        self.assertFalse(_band_matches("apcp24gt5", day, ""))
+        self.assertFalse(_band_matches("apcp24gt10", self.product(9, self.PROB_10MM_6H, "ProbAPCP06", "0-SFC"), ""))
+        self.assertFalse(_band_matches("apcp", day, ""))
+        # Unassembled, or assembled short, is no record.
+        self.assertFalse(_band_matches("apcp24gt10", {k: v for k, v in day.items() if k != "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES"}, ""))
+        self.assertFalse(_band_matches("apcp24gt10", {**day, "GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES": self.PROB_10MM_24H.rsplit(" ", 4)[0]}, ""))
+
+    def test_a_single_forecast_is_not_an_ensemble_product(self) -> None:
+        plain = self.product(0, "0 0 2 0 96 0 0 1 24 103 0 2 255 0 0", "TMP", "2-HTGL")
+        self.assertTrue(_band_matches("tmp2m", plain, ""))
+        self.assertFalse(_band_matches("tmp2mq25", plain, ""))
+
+
 class TemplateRankRuleTests(unittest.TestCase):
     @staticmethod
     def swell(rank: int, assembled: bool = True, number: int = 8) -> dict[str, str]:

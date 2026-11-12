@@ -260,19 +260,23 @@ fetched for `orog` alone (`fetch_frame(run, 0, …, input_ids=("orog",))`),
 cut with the window above and appended to each `f000` crop, the records
 before them untouched.
 
-`cmageps.2026111012.f000.crop.grib2` and `cmageps.2026111012.f006.crop.grib2`
-are an 80 by 80 cell window of the analysis and the first six-hourly step
-of the 2026-11-10 12:00 UTC CMA GRAPES GEPS cycle, 130°E to 149.75°E and
-49.875°N to 30.125°N (Japan and the Pacific east of it, with up to 16 mm of
-median precipitation in the six hours), every record the fetcher writes in
-source order, already rewritten to the plain templates and repacked: five
-at the analysis (no precipitation, gust or cloud cover is read there) and
-eight at the step. GDAL reads the global grid from 180°W, hence the column
-offset; the grid has no pole rows, so the first row is 89.875°N. Cut with:
+`cmageps.2026111012.f000.crop.grib2` through `cmageps.2026111012.f024.crop.grib2`
+are an 80 by 80 cell window of the analysis and the first four six-hourly
+steps of the 2026-11-10 12:00 UTC CMA GRAPES GEPS cycle, 130°E to 149.75°E
+and 49.875°N to 30.125°N (Japan and the Pacific east of it, with up to
+16 mm of median precipitation in six hours, and every member past 1 mm in
+the 24 hours to the last step somewhere in it), every record the fetcher
+writes in source order, as CMA wrote them (templates 4.2, 4.6, 4.9 and
+4.10) and repacked: thirteen at the analysis (no precipitation, gust or
+cloud cover is read there), twenty-two at +6 h to +18 h, and twenty-eight
+at +24 h, where the 24-hour probabilities begin. GDAL reads the global grid
+from 180°W, hence the column offset; the grid has no pole rows, so the
+first row is 89.875°N. GDAL's GRIB writer keeps each record's product
+definition template whole. Cut with:
 
 ```sh
-python -m xuebuild fetch --model cmageps --run 2026111012 --hours 6 --raw-dir /tmp/raw
-for h in 000 006; do
+python -m xuebuild fetch --model cmageps --run 2026111012 --hours 24 --raw-dir /tmp/raw
+for h in 000 006 012 018 024; do
   gdal_translate -srcwin 1240 160 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
     /tmp/raw/cmageps.2026111012/cmageps.2026111012.f$h.grib2 \
     tests/fixtures/cmageps.2026111012.f$h.crop.grib2

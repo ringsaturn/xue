@@ -188,6 +188,65 @@ class DocumentShapeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GdalRule("surface-ish")
 
+    def test_a_template_ensemble_rule_writes_its_whole_identity(self) -> None:
+        median = rules.EnsembleIdentity.percentile_of(50)
+        self.assertEqual(
+            rules.template_ensemble(1, 8, 1, None, median, hours=6, statistical=1).document(),
+            {
+                "rule": "template-ensemble",
+                "discipline": 0,
+                "category": 1,
+                "number": 8,
+                "levelType": 1,
+                "levelValue": None,
+                "ensemble": {"percentileValue": 50},
+                "hours": 6,
+                "statistical": 1,
+            },
+        )
+        self.assertEqual(
+            rules.template_ensemble(3, 5, 100, 50000.0, rules.EnsembleIdentity.derived(4)).document()["ensemble"],
+            {"derivedForecast": 4},
+        )
+        # An interval names its length and process together, and is an
+        # hour or more; the identity is one of the three shapes.
+        with self.assertRaises(ValueError):
+            rules.template_ensemble(1, 8, 1, None, median, hours=6)
+        with self.assertRaises(ValueError):
+            rules.template_ensemble(1, 8, 1, None, median, hours=0, statistical=1)
+        with self.assertRaises(ValueError):
+            rules.template_ensemble(1, 8, 1, None, rules.EnsembleIdentity())
+        with self.assertRaises(ValueError):
+            GdalRule("template-ensemble")
+
+    def test_an_ensemble_identity_keeps_the_limits_its_type_uses(self) -> None:
+        identity = rules.EnsembleIdentity
+        self.assertEqual(identity.probability(3, (2, 1000), (2, 1000)), identity(probability_type=3, lower_limit=(2, 1000)))
+        self.assertEqual(identity.probability(1, (2, 1000), (2, 1000)), identity(probability_type=1, upper_limit=(2, 1000)))
+        self.assertEqual(identity.probability(2, (2, 100), (2, 500)), identity(probability_type=2, lower_limit=(2, 100), upper_limit=(2, 500)))
+        self.assertEqual(
+            identity.probability(3, (2, 1000), None).metadata(),
+            {
+                "probabilityType": 3,
+                "scaleFactorOfLowerLimit": 2,
+                "scaledValueOfLowerLimit": 1000,
+                "scaleFactorOfUpperLimit": None,
+                "scaledValueOfUpperLimit": None,
+            },
+        )
+        self.assertEqual(identity.derived(0).metadata(), {"derivedForecast": 0})
+        self.assertEqual(identity.percentile_of(75).metadata(), {"percentileValue": 75})
+        self.assertEqual(identity.percentile_of(75).templates, (6, 10))
+        for bad in (
+            identity(percentile=101),
+            identity(derived_forecast=0, percentile=50),
+            identity(probability_type=3),
+            identity(probability_type=6, lower_limit=(2, 100)),
+            identity(percentile=50, lower_limit=(2, 100)),
+        ):
+            with self.subTest(identity=bad), self.assertRaises(ValueError):
+                bad.validate()
+
     def test_every_registered_variable_names_rules_out_of_the_closed_sets(self) -> None:
         for variable_id, spec in VARIABLES.items():
             with self.subTest(variable=variable_id):

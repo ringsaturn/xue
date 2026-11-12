@@ -73,6 +73,19 @@
             "rule": "height",
             "element": "TMP",
             "metres": 2
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 103,
+            "levelValue": 2.0,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -280,10 +293,17 @@
         "alternates": [],
         "gdal": [
           {
-            "rule": "surface",
-            "elements": [
-              "APCP06"
-            ]
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": 6,
+            "statistical": 1
           }
         ]
       }
@@ -1013,6 +1033,19 @@
               "MSLMA",
               "MSLET"
             ]
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 1,
+            "levelType": 101,
+            "levelValue": null,
+            "ensemble": {
+              "derivedForecast": 0
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -1304,6 +1337,19 @@
             "rule": "height",
             "element": "GUST",
             "metres": 10
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 2,
+            "number": 22,
+            "levelType": 103,
+            "levelValue": 10.0,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -1421,6 +1467,19 @@
             "elements": [
               "TCDC"
             ]
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 6,
+            "number": 1,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -1520,6 +1579,19 @@
               "most unstable",
               "mudl"
             ]
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 7,
+            "number": 6,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -7656,6 +7728,19 @@
             "rule": "isobaric",
             "element": "HGT",
             "hpa": 500
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 5,
+            "levelType": 100,
+            "levelValue": 50000.0,
+            "ensemble": {
+              "derivedForecast": 0
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -8112,6 +8197,19 @@
             "rule": "isobaric",
             "element": "TMP",
             "hpa": 850
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 100,
+            "levelValue": 85000.0,
+            "ensemble": {
+              "percentileValue": 50
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -18553,6 +18651,1942 @@
           }
         ]
       }
+    },
+    "tmp2mq25": {
+      "label": "2 meter temperature, 25th percentile",
+      "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 103,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 2
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 220,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 110,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 220,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        -60,
+        50
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster",
+        "video"
+      ],
+      "conversion": {
+        "rule": "celsius"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "C",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 103,
+            "levelValue": 2.0,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "tmp2mq75": {
+      "label": "2 meter temperature, 75th percentile",
+      "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 103,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 2
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 220,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 110,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": -60.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 220,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        -60,
+        50
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster",
+        "video"
+      ],
+      "conversion": {
+        "rule": "celsius"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "C",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 103,
+            "levelValue": 2.0,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "tmp850q25": {
+      "label": "850 hPa temperature, 25th percentile",
+      "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 100,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 85000
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 230,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 115,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 230,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        -70,
+        45
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "celsius"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "C",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 100,
+            "levelValue": 85000.0,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "tmp850q75": {
+      "label": "850 hPa temperature, 75th percentile",
+      "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 100,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 85000
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 230,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 115,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": -70.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 230,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        -70,
+        45
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "celsius"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "C",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 100,
+            "levelValue": 85000.0,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "gustq25": {
+      "label": "Wind gust, 25th percentile",
+      "unit": "m/s",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 2,
+        "parameterNumber": 22,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 127,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        127
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "m/s",
+          "m/sec",
+          "ms-1",
+          "ms^-1",
+          "mps"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "m/s",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 2,
+            "number": 22,
+            "levelType": 103,
+            "levelValue": 10.0,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "gustq75": {
+      "label": "Wind gust, 75th percentile",
+      "unit": "m/s",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 2,
+        "parameterNumber": 22,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 127,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        127
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "m/s",
+          "m/sec",
+          "ms-1",
+          "ms^-1",
+          "mps"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "m/s",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 2,
+            "number": 22,
+            "levelType": 103,
+            "levelValue": 10.0,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "tcdcq25": {
+      "label": "Total cloud cover, 25th percentile",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 6,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 10,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "cloud-cover"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 6,
+            "number": 1,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "tcdcq75": {
+      "label": "Total cloud cover, 75th percentile",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 6,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 10,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 100,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "cloud-cover"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 6,
+            "number": 1,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "capeq25": {
+      "label": "Convective available potential energy, 25th percentile",
+      "unit": "J/kg",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 7,
+        "parameterNumber": 6,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 50.0,
+          "minimumCode": 0,
+          "maximumCode": 127,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        6350
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "j/kg",
+          "jkg-1",
+          "jkg^-1"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "J/kg",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 7,
+            "number": 6,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "capeq75": {
+      "label": "Convective available potential energy, 75th percentile",
+      "unit": "J/kg",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 7,
+        "parameterNumber": 6,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 50.0,
+          "minimumCode": 0,
+          "maximumCode": 127,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 25.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        6350
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "j/kg",
+          "jkg-1",
+          "jkg^-1"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "J/kg",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 7,
+            "number": 6,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "prmslsd": {
+      "label": "Mean sea level pressure, ensemble spread",
+      "unit": "hPa",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 3,
+        "parameterNumber": 1,
+        "typeOfFirstFixedSurface": 101,
+        "scaleFactorOfFirstFixedSurface": null,
+        "scaledValueOfFirstFixedSurface": null
+      },
+      "ensemble": {
+        "derivedForecast": 4
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.1,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        25.0
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [],
+      "conversion": {
+        "rule": "pascal-to-hectopascal"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "Pa",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 1,
+            "levelType": 101,
+            "levelValue": null,
+            "ensemble": {
+              "derivedForecast": 4
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "hgt500sd": {
+      "label": "500 hPa geopotential height, ensemble spread",
+      "unit": "m",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 3,
+        "parameterNumber": 5,
+        "typeOfFirstFixedSurface": 100,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 50000
+      },
+      "ensemble": {
+        "derivedForecast": 4
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 1.0,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        250.0
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "gpm",
+          "m"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "gpm",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 5,
+            "levelType": 100,
+            "levelValue": 50000.0,
+            "ensemble": {
+              "derivedForecast": 4
+            },
+            "hours": null,
+            "statistical": null
+          }
+        ]
+      }
+    },
+    "apcpq25": {
+      "label": "Total precipitation, 25th percentile",
+      "unit": "mm",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "valueRange": [
+        0,
+        1000
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "kg/(m^2)",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 25
+            },
+            "hours": 6,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "prateq25": {
+      "label": "Precipitation rate, 25th percentile",
+      "unit": "mm/h",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 7,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 25
+      },
+      "quantization": {
+        "quality": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 253,
+          "zeroCode": 0,
+          "overflowCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        },
+        "balanced": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        }
+      },
+      "valueRange": [
+        0,
+        50
+      ],
+      "fillValues": [
+        -3.0
+      ],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster",
+        "video"
+      ],
+      "conversion": {
+        "rule": "precipitation-rate"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "kg/(m^2 s)",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": []
+      }
+    },
+    "apcpq75": {
+      "label": "Total precipitation, 75th percentile",
+      "unit": "mm",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "valueRange": [
+        0,
+        1000
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "kg/(m^2)",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "percentileValue": 75
+            },
+            "hours": 6,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "prateq75": {
+      "label": "Precipitation rate, 75th percentile",
+      "unit": "mm/h",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 7,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0
+      },
+      "ensemble": {
+        "percentileValue": 75
+      },
+      "quantization": {
+        "quality": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 253,
+          "zeroCode": 0,
+          "overflowCode": 254,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        },
+        "balanced": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        }
+      },
+      "valueRange": [
+        0,
+        50
+      ],
+      "fillValues": [
+        -3.0
+      ],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster",
+        "video"
+      ],
+      "conversion": {
+        "rule": "precipitation-rate"
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "kg/(m^2 s)",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": []
+      }
+    },
+    "apcp24gt1": {
+      "label": "Probability of 24-hour precipitation above 1 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 100,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 100,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "apcp24gt5": {
+      "label": "Probability of 24-hour precipitation above 5 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 500,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 500,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "apcp24gt10": {
+      "label": "Probability of 24-hour precipitation above 10 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 1000,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 1000,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "apcp24gt25": {
+      "label": "Probability of 24-hour precipitation above 25 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 2500,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 2500,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "apcp24gt50": {
+      "label": "Probability of 24-hour precipitation above 50 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 5000,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 5000,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "apcp24gt100": {
+      "label": "Probability of 24-hour precipitation above 100 mm",
+      "unit": "%",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 1,
+        "parameterNumber": 8,
+        "typeOfFirstFixedSurface": 1,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 0,
+        "typeOfStatisticalProcessing": 1
+      },
+      "ensemble": {
+        "probabilityType": 3,
+        "scaleFactorOfLowerLimit": 2,
+        "scaledValueOfLowerLimit": 10000,
+        "scaleFactorOfUpperLimit": null,
+        "scaledValueOfUpperLimit": null
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.5,
+          "minimumCode": 0,
+          "maximumCode": 200,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0,
+        100
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "raw",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "%"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "%",
+        "statistical": 1,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 8,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 2,
+              "scaledValueOfLowerLimit": 10000,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
     }
   },
   "bundles": {
@@ -19225,6 +21259,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -19484,6 +21521,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -19721,6 +21761,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -19915,6 +21958,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20051,6 +22097,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": "ecmwf_ifs",
       "gridStep": null,
@@ -20147,6 +22196,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20251,6 +22303,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20414,6 +22469,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20524,6 +22582,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20600,6 +22661,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20667,6 +22731,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20829,6 +22896,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -20947,6 +23017,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21040,6 +23113,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21101,13 +23177,33 @@
       ],
       "inputVariableIds": [
         "hgt500",
+        "hgt500sd",
         "prmsl",
+        "prmslsd",
+        "apcp24gt1",
+        "apcp24gt5",
+        "apcp24gt10",
+        "apcp24gt25",
+        "apcp24gt50",
+        "apcp24gt100",
         "apcp",
+        "apcpq25",
+        "apcpq75",
         "tmp2m",
+        "tmp2mq25",
+        "tmp2mq75",
         "tmp850",
+        "tmp850q25",
+        "tmp850q75",
         "gust",
+        "gustq25",
+        "gustq75",
         "cape",
-        "tcdc"
+        "capeq25",
+        "capeq75",
+        "tcdc",
+        "tcdcq25",
+        "tcdcq75"
       ],
       "accumulatedPrecipitation": false,
       "companionFiles": [],
@@ -21117,29 +23213,149 @@
       "firstHour": 0,
       "optionalAtAnalysis": [
         "apcp",
+        "apcpq25",
+        "apcpq75",
         "gust",
-        "tcdc"
+        "gustq25",
+        "gustq75",
+        "tcdc",
+        "tcdcq25",
+        "tcdcq75"
       ],
       "statisticalProcesses": [
         [
           "prate",
           0
+        ],
+        [
+          "prateq25",
+          0
+        ],
+        [
+          "prateq75",
+          0
         ]
       ],
       "bands": [],
+      "ensembles": [
+        [
+          "tmp2m",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "prate",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "gust",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "tcdc",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "cape",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "tmp850",
+          {
+            "percentileValue": 50
+          }
+        ],
+        [
+          "prmsl",
+          {
+            "derivedForecast": 0
+          }
+        ],
+        [
+          "hgt500",
+          {
+            "derivedForecast": 0
+          }
+        ]
+      ],
+      "intervalPrecipitationPairs": [
+        [
+          "prateq25",
+          "apcpq25"
+        ],
+        [
+          "prateq75",
+          "apcpq75"
+        ]
+      ],
+      "variableFirstHours": [
+        [
+          "apcp24gt1",
+          24
+        ],
+        [
+          "apcp24gt5",
+          24
+        ],
+        [
+          "apcp24gt10",
+          24
+        ],
+        [
+          "apcp24gt25",
+          24
+        ],
+        [
+          "apcp24gt50",
+          24
+        ],
+        [
+          "apcp24gt100",
+          24
+        ]
+      ],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
       "region": null,
       "bundleScalarIds": [
         "tmp2m",
+        "tmp2mq25",
+        "tmp2mq75",
         "prate",
+        "prateq25",
+        "prateq75",
+        "apcp24gt1",
+        "apcp24gt5",
+        "apcp24gt10",
+        "apcp24gt25",
+        "apcp24gt50",
+        "apcp24gt100",
         "prmsl",
+        "prmslsd",
         "gust",
+        "gustq25",
+        "gustq75",
         "tcdc",
+        "tcdcq25",
+        "tcdcq75",
         "cape",
+        "capeq25",
+        "capeq75",
         "tmp850",
-        "hgt500"
+        "tmp850q25",
+        "tmp850q75",
+        "hgt500",
+        "hgt500sd"
       ],
       "coreBundleIds": [
         "tmp2m",
@@ -21242,6 +23458,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21326,6 +23545,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21396,6 +23618,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21468,6 +23693,9 @@
         ]
       ],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21535,6 +23763,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21593,6 +23824,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21653,6 +23887,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21747,6 +23984,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21807,6 +24047,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -21965,6 +24208,9 @@
           }
         ]
       ],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": "himawari",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -22120,6 +24366,9 @@
           }
         ]
       ],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": "himawari",
       "openMeteo": null,
       "gridStep": 0.01,
@@ -22278,6 +24527,9 @@
           }
         ]
       ],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": "goeseast",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -22433,6 +24685,9 @@
           }
         ]
       ],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": "goeswest",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -22578,6 +24833,9 @@
           }
         ]
       ],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": "meteosat",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -22641,6 +24899,9 @@
       "optionalAtAnalysis": [],
       "statisticalProcesses": [],
       "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,

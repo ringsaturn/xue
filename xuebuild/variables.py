@@ -21,10 +21,10 @@ a local number is an ordinary number.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from . import rules
-from .rules import STANDARD_GRAVITY, Conversion, GdalRule  # noqa: F401  (re-exported)
+from .rules import STANDARD_GRAVITY, Conversion, EnsembleIdentity, GdalRule  # noqa: F401  (re-exported)
 
 
 #: The fill value of the EFAS series ``xue efas-series`` writes: a cell
@@ -221,6 +221,15 @@ class VariableSpec:
     parameter and written as the ``aerosol`` block beside it. None for
     every other variable, which matches no aerosol record. An aerosol
     variable takes no aliases and no alternates."""
+    grib2_ensemble: EnsembleIdentity | None = None
+    """For a field that is a statistic of an ensemble — a spread, a
+    quartile, a probability — which statistic (:class:`EnsembleIdentity`),
+    written as the ``ensemble`` block beside the parameter (docs/format.md
+    §"Ensemble"). Its records are matched by its ``template-ensemble``
+    rules alone, and it matches no record of a single forecast. None for
+    every other variable; a source whose central fields stand in for the
+    deterministic ones names their block itself
+    (:attr:`~xuebuild.sources.SourceSpec.ensembles`)."""
     gdal_unit: str = ""
     """Unit string GDAL's GRIB driver reports for this record (it normalizes
     temperatures to Celsius); carried by header-indexed frames and
@@ -317,6 +326,11 @@ class VariableSpec:
             scale_factor, scaled_value = _scaled_surface_value(self.grib2_level_value)
             block["scaleFactorOfFirstFixedSurface"] = scale_factor
             block["scaledValueOfFirstFixedSurface"] = scaled_value
+        if self.grib2_ensemble is not None and self.grib2_statistical is not None:
+            # A statistic of the members of a total over an interval (a
+            # probability of 24-hour precipitation) is of that total, whatever
+            # the source: the process is the identity's own, not a source's.
+            block["typeOfStatisticalProcessing"] = self.grib2_statistical
         return block
 
 
@@ -465,14 +479,17 @@ VARIABLES: dict[str, VariableSpec] = {
     # tp and prate_ave it is an input-only variable: the converter divides it
     # by the interval into prate (``SourceSpec.interval_precipitation``) and
     # apcp itself never reaches a bundle. GFS pgrb2 carries APCP records too;
-    # no source fetches them. CMA GRAPES GEPS's ensemble median of the total
-    # over the six hours ending at each step is read as a GRIB band, once
-    # the fetch has rewritten it to template 4.8 (xuebuild/cmageps.py).
+    # no source fetches them. The one GRIB band read as apcp is CMA GRAPES
+    # GEPS's ensemble median of the total over the six hours ending at each
+    # step (template 4.10), which stands in for the deterministic total.
     "apcp": VariableSpec(
         id="apcp",
-        # GDAL names an interval total by its length in hours: a six-hour
-        # one is ``APCP06``, the only length a source reads off a band.
-        gdal_rules=(rules.surface("APCP06"),),
+        # The surface value is missing on CMA's record, and the run-long
+        # window beside it is the same percentile of the same parameter: the
+        # interval's length is what picks the six hours.
+        gdal_rules=(
+            rules.template_ensemble(1, 8, 1, None, EnsembleIdentity.percentile_of(50), hours=6, statistical=1),
+        ),
         label="Total precipitation",
         output_unit="mm",
         value_range=(0, 1000),
@@ -2746,6 +2763,185 @@ def _soil_spec(variable_id: str) -> VariableSpec:
 for _variable_id in SOIL_VARIABLE_IDS:
     VARIABLES[_variable_id] = _soil_spec(_variable_id)
 del _variable_id
+
+# CMA GRAPES GEPS's ensemble products (``cmageps``, xuebuild/cmageps.py):
+# CMA exchanges no members, only statistics of them, each a GRIB2 record of
+# an ensemble template whose identity is the parameter *and* the statistic
+# (docs/format.md §"Ensemble"). The central statistic of each quantity — the
+# median, or the mean where CMA writes no percentiles — stands in for the
+# deterministic field under its own id, so the shared variable takes one
+# more record rule and the source names the block it writes
+# (``SourceSpec.ensembles``). The rest are variables of their own: the
+# quartiles and the spread keep the quantity's parameter, unit and codebook
+# (a quartile is the same quantity, drawn on the same scale), and the
+# probabilities are the share of members whose 24-hour precipitation
+# exceeds a threshold.
+
+#: The quantities CMA writes percentiles of, by id, with the record's
+#: parameter (category, number) and surface (type, value; None where CMA
+#: leaves the value missing) — which is not always the published identity:
+#: the gust is CMA's 10 m one, published on GFS's ground-surface identity.
+ENSEMBLE_PERCENTILE_FIELDS: dict[str, tuple[int, int, int, float | None]] = {
+    "tmp2m": (0, 0, 103, 2.0),
+    "tmp850": (0, 0, 100, 85000.0),
+    "gust": (2, 22, 103, 10.0),
+    "tcdc": (6, 1, 1, None),
+    "cape": (7, 6, 1, None),
+}
+#: The quantities CMA writes only the mean and the spread of.
+ENSEMBLE_MEAN_FIELDS: dict[str, tuple[int, int, int, float | None]] = {
+    "prmsl": (3, 1, 101, None),
+    "hgt500": (3, 5, 100, 50000.0),
+}
+#: The quartiles each percentile field publishes, and the interval totals
+#: they are read as beside the rate (``apcpq25`` → ``prateq25``).
+ENSEMBLE_QUARTILES = (25, 75)
+#: The 24-hour precipitation thresholds of the probabilities, in mm
+#: (kg m⁻²), each written by CMA as scaled value / 10².
+ENSEMBLE_PROBABILITY_THRESHOLDS_MM = (1, 5, 10, 25, 50, 100)
+ENSEMBLE_PROBABILITY_HOURS = 24
+UNWEIGHTED_MEAN = 0
+SPREAD = 4
+MEDIAN = 50
+_ABOVE_LOWER_LIMIT = 3
+_ACCUMULATION = 1
+_PRECIPITATION_HOURS = 6
+
+
+def ensemble_quartile_id(base_id: str, percentile: int) -> str:
+    return f"{base_id}q{percentile}"
+
+
+def ensemble_spread_id(base_id: str) -> str:
+    return f"{base_id}sd"
+
+
+def ensemble_probability_id(threshold_mm: int) -> str:
+    return f"apcp{ENSEMBLE_PROBABILITY_HOURS}gt{threshold_mm}"
+
+
+def _ordinal(value: int) -> str:
+    return f"{value}{'th' if 10 <= value % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(value % 10, 'th')}"
+
+
+def _ensemble_rule(fields: tuple[int, int, int, float | None], ensemble: EnsembleIdentity) -> GdalRule:
+    category, number, level_type, level_value = fields
+    return rules.template_ensemble(category, number, level_type, level_value, ensemble)
+
+
+def _ensemble_statistic(
+    base: VariableSpec, variable_id: str, label: str, ensemble: EnsembleIdentity, rule: GdalRule | None
+) -> VariableSpec:
+    """A statistic of ``base`` under its parameter, unit, unit rule and
+    record conventions, matched by ``rule`` alone (None for one the
+    converter derives). The fetch-side spellings of the deterministic
+    record stay behind: the statistic is read only where CMA writes it."""
+    return replace(
+        base,
+        id=variable_id,
+        label=label,
+        grib_element="",
+        index_field="",
+        excluded_index_phrases=(),
+        index_qualifier="",
+        alternate_index_fields=(),
+        ecmwf_param="",
+        ecmwf_alternate_params=(),
+        open_meteo="",
+        dwd_param="",
+        mrms_product="",
+        grib2_aliases=(),
+        grib2_alternates=(),
+        grib2_ensemble=ensemble,
+        gdal_rules=(rule,) if rule is not None else (),
+    )
+
+
+def _register_ensemble_products() -> None:
+    for base_id, fields in ENSEMBLE_PERCENTILE_FIELDS.items():
+        base = VARIABLES[base_id]
+        VARIABLES[base_id] = replace(
+            base, gdal_rules=(*(base.gdal_rules or ()), _ensemble_rule(fields, EnsembleIdentity.percentile_of(MEDIAN)))
+        )
+        for percentile in ENSEMBLE_QUARTILES:
+            ensemble = EnsembleIdentity.percentile_of(percentile)
+            variable_id = ensemble_quartile_id(base_id, percentile)
+            VARIABLES[variable_id] = _ensemble_statistic(
+                base, variable_id, f"{base.label}, {_ordinal(percentile)} percentile", ensemble, _ensemble_rule(fields, ensemble)
+            )
+    for base_id, fields in ENSEMBLE_MEAN_FIELDS.items():
+        base = VARIABLES[base_id]
+        VARIABLES[base_id] = replace(
+            base, gdal_rules=(*(base.gdal_rules or ()), _ensemble_rule(fields, EnsembleIdentity.derived(UNWEIGHTED_MEAN)))
+        )
+        ensemble = EnsembleIdentity.derived(SPREAD)
+        variable_id = ensemble_spread_id(base_id)
+        # A spread is a non-negative departure in the quantity's unit; its
+        # codebook (quantize.py) starts at zero.
+        VARIABLES[variable_id] = replace(
+            _ensemble_statistic(base, variable_id, f"{base.label}, ensemble spread", ensemble, _ensemble_rule(fields, ensemble)),
+            value_range=_SPREAD_VALUE_RANGES[base_id],
+        )
+    # The precipitation's quartiles are totals over the six hours ending at
+    # the step, input-only like ``apcp``: the converter divides each by the
+    # interval into the rate quartile (``SourceSpec.interval_precipitation_pairs``),
+    # which keeps the rate's identity and codebook.
+    apcp, prate = VARIABLES["apcp"], VARIABLES["prate"]
+    for percentile in ENSEMBLE_QUARTILES:
+        ensemble = EnsembleIdentity.percentile_of(percentile)
+        total_id = ensemble_quartile_id("apcp", percentile)
+        VARIABLES[total_id] = _ensemble_statistic(
+            apcp,
+            total_id,
+            f"{apcp.label}, {_ordinal(percentile)} percentile",
+            ensemble,
+            rules.template_ensemble(1, 8, 1, None, ensemble, hours=_PRECIPITATION_HOURS, statistical=_ACCUMULATION),
+        )
+        rate_id = ensemble_quartile_id("prate", percentile)
+        VARIABLES[rate_id] = _ensemble_statistic(
+            prate, rate_id, f"{prate.label}, {_ordinal(percentile)} percentile", ensemble, None
+        )
+    for threshold in ENSEMBLE_PROBABILITY_THRESHOLDS_MM:
+        ensemble = EnsembleIdentity.probability(_ABOVE_LOWER_LIMIT, (2, threshold * 100), None)
+        variable_id = ensemble_probability_id(threshold)
+        VARIABLES[variable_id] = VariableSpec(
+            id=variable_id,
+            label=f"Probability of {ENSEMBLE_PROBABILITY_HOURS}-hour precipitation above {threshold} mm",
+            output_unit="%",
+            value_range=(0, 100),
+            conversion=rules.PERCENT,
+            # The probability moves with the rain systems it follows, as the
+            # rate does: the codes stack raw.
+            predictor="raw",
+            # The retired video companion stays the rate's alone.
+            companions=("poster",),
+            grib2_category=1,
+            grib2_number=8,
+            grib2_level_type=1,
+            grib2_level_value=0.0,
+            grib2_statistical=_ACCUMULATION,
+            grib2_ensemble=ensemble,
+            gdal_rules=(
+                rules.template_ensemble(
+                    1, 8, 1, None, ensemble, hours=ENSEMBLE_PROBABILITY_HOURS, statistical=_ACCUMULATION
+                ),
+            ),
+            gdal_unit="%",
+        )
+
+
+#: The spreads' value ranges: what their codebooks cover (quantize.py).
+_SPREAD_VALUE_RANGES: dict[str, tuple[float, float]] = {"prmsl": (0.0, 25.0), "hgt500": (0.0, 250.0)}
+
+_register_ensemble_products()
+
+#: Every variable an ensemble product file is read for, in registration
+#: order: the quartiles, the spreads, the quartile totals and rates, the
+#: probabilities.
+ENSEMBLE_VARIABLE_IDS: tuple[str, ...] = tuple(
+    variable_id for variable_id, spec in VARIABLES.items() if spec.grib2_ensemble is not None
+)
+
 
 def variable_spec(variable_id: str) -> VariableSpec:
     try:

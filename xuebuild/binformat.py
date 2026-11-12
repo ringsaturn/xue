@@ -133,6 +133,29 @@ _AEROSOL_FIELDS = frozenset(_AEROSOL_TYPE_FIELDS) | frozenset(
     field for pairs in _AEROSOL_INTERVALS.values() for pair in pairs for field in pair
 )
 
+# The fourth: which statistic of an ensemble a field is, in one of three
+# shapes told apart by their keys (docs/format.md §"Ensemble"). A
+# probability's two limits are (scale factor, scaled value) pairs whole or
+# null like the fixed surface's, and which of them is integer is fixed by
+# the probability type (code table 4.9).
+_ENSEMBLE_DERIVED_FIELDS = frozenset({"derivedForecast"})
+_ENSEMBLE_PERCENTILE_FIELDS = frozenset({"percentileValue"})
+_ENSEMBLE_LIMITS = (
+    ("scaleFactorOfLowerLimit", "scaledValueOfLowerLimit"),
+    ("scaleFactorOfUpperLimit", "scaledValueOfUpperLimit"),
+)
+_ENSEMBLE_PROBABILITY_FIELDS = frozenset({"probabilityType"}) | frozenset(
+    field for pair in _ENSEMBLE_LIMITS for field in pair
+)
+_ENSEMBLE_LIMITS_USED: dict[int, tuple[bool, bool]] = {
+    0: (True, False),
+    1: (False, True),
+    2: (True, True),
+    3: (True, False),
+    4: (False, True),
+    5: (True, False),
+}
+
 _HEADER_STRUCT = struct.Struct("<8sHHIQQQQQQQQ")
 _INDEX_HEADER_STRUCT = struct.Struct("<4sHHII")
 _ENTRY_STRUCT = struct.Struct("<BBBBHHHHIQIIBB6s")
@@ -691,6 +714,7 @@ class BundleMetadata:
             self._parse_band(variable, schema_version)
             self._parse_producer(variable, schema_version)
             self._parse_aerosol(variable, schema_version)
+            self._parse_ensemble(variable, schema_version)
             variable_ids[numeric_id] = name
         if not variable_ids:
             raise BundleError("metadata must declare at least one variable")
@@ -829,6 +853,46 @@ class BundleMetadata:
                     or not 0 <= scaled_value <= 0xFFFFFFFE
                 ):
                     raise BundleError(f"aerosol {value_field} is invalid")
+
+    @staticmethod
+    def _parse_ensemble(variable: dict[str, Any], schema_version: int) -> None:
+        """Validate a variable's optional ensemble block: exactly one of
+        its three shapes, every value in range, and of a probability the
+        limits its type uses integer pairs and the others null
+        (docs/format.md §"Ensemble")."""
+        if "ensemble" not in variable:
+            return
+        ensemble = variable["ensemble"]
+        if schema_version < 3:
+            raise BundleError("an ensemble block requires schemaVersion 3")
+        if not isinstance(ensemble, dict):
+            raise BundleError("ensemble must be an object")
+
+        def integer(value: Any, low: int, high: int) -> bool:
+            return isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
+
+        keys = set(ensemble)
+        if keys == _ENSEMBLE_DERIVED_FIELDS:
+            if not integer(ensemble["derivedForecast"], 0, 255):
+                raise BundleError("ensemble derivedForecast is invalid")
+            return
+        if keys == _ENSEMBLE_PERCENTILE_FIELDS:
+            if not integer(ensemble["percentileValue"], 0, 100):
+                raise BundleError("ensemble percentileValue is invalid")
+            return
+        if keys != _ENSEMBLE_PROBABILITY_FIELDS:
+            raise BundleError("ensemble block must be a derived forecast, a percentile or a probability")
+        probability_type = ensemble["probabilityType"]
+        if not integer(probability_type, 0, 5):
+            raise BundleError("ensemble probabilityType is invalid")
+        for (scale_field, value_field), used in zip(_ENSEMBLE_LIMITS, _ENSEMBLE_LIMITS_USED[probability_type]):
+            scale_factor, scaled_value = ensemble[scale_field], ensemble[value_field]
+            if (scale_factor is None) != (scaled_value is None):
+                raise BundleError(f"ensemble {scale_field} and {value_field} must both be present or both null")
+            if (scale_factor is not None) != used:
+                raise BundleError(f"ensemble {value_field} must be an integer exactly when probabilityType uses it")
+            if used and not (integer(scale_factor, -127, 127) and integer(scaled_value, 0, 0xFFFFFFFE)):
+                raise BundleError(f"ensemble {value_field} is invalid")
 
     @classmethod
     def _parse_time_axis(

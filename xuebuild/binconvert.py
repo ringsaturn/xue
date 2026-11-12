@@ -55,6 +55,7 @@ from .derive import (
 from .discover import (
     Discovered,
     analysis_optional_ids,
+    bundle_first_hour,
     bundle_grid_family,
     bundle_input_ids,
     discover_records,
@@ -257,6 +258,8 @@ def _quantize_file(
     cat_calibration: Mapping[int, tuple[float, float]] | None = None,
     precipitation: tuple[str, str] | None = None,
     rotated_vector_ids: tuple[str, ...] = (),
+    interval_pairs: tuple[tuple[str, str], ...] = (),
+    interval_start: int | None = None,
 ) -> tuple[int, dict[str, np.ndarray], list[PlaneStats]]:
     """Extract and quantize every variable of one file; runs on a worker thread.
 
@@ -289,6 +292,11 @@ def _quantize_file(
     is always already running or done. Shared planes are never mutated. An
     interval total (Open-Meteo apcp) needs no predecessor plane at all — only
     the hour beside the future, which is then None.
+
+    ``interval_pairs`` are the further ``(rate, total)`` pairs of an
+    interval source (``SourceSpec.interval_precipitation_pairs``), each
+    total divided by the hours since ``interval_start`` exactly as the
+    rate's own; a frame that carries none of the totals derives none.
     """
     lead = next(iter(frames.values())).lead_seconds
     # The precipitation derivations below are GRIB-only, and every GRIB record
@@ -339,7 +347,13 @@ def _quantize_file(
         if previous_hour is None:
             raise ConversionError(f"the interval precipitation frame at hour {hour} names no interval")
         values[PRECIPITATION_RATE_BUNDLE_ID] = interval_rate(values.pop(raw_precipitation_id), hour - previous_hour)
-    elif mode == "averaged":
+    for rate_id, total_id in interval_pairs:
+        if total_id not in values:
+            continue
+        if interval_start is None:
+            raise ConversionError(f"the interval precipitation frame at hour {hour} names no interval")
+        values[rate_id] = interval_rate(values.pop(total_id), hour - interval_start)
+    if mode == "averaged":
         # sflux: PRATE is the window-cumulative mean rate (kg/m^2 s); derive
         # the per-step rate against the previous frame of the same averaging
         # window (the window's first frame differences against zero).
@@ -595,6 +609,29 @@ def _family_grids(
     return grids
 
 
+def _interval_start(
+    per_file: list[dict[str, SourceFrame]], index: int, source: SourceSpec, run_time: datetime
+) -> int | None:
+    """The hour the interval a total at file ``index`` covers starts at, on
+    an interval-precipitation source: the frame before it on the axis being
+    built. A series that starts at a step of its own — the rate's, whose
+    analysis frame does not exist — takes the distance from the previous
+    step of the source's published axis instead, which is the interval the
+    model itself accumulated over; and the first step of an axis that
+    itself starts past the analysis (``first_hour``) accumulated from the
+    run time, hour 0. None at the analysis, where a total names no
+    interval at all."""
+    if index:
+        return series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
+    hour = series_lead_seconds(per_file[index]) // binformat.HOUR_SECONDS
+    axis = source.forecast_hours(hour, cycle=run_time.hour)
+    if len(axis) >= 2:
+        return axis[-2]
+    if hour > 0:
+        return 0
+    return None
+
+
 def _sharing_plan(
     per_file: list[dict[str, SourceFrame]],
     raw_precipitation_id: str | None,
@@ -602,7 +639,7 @@ def _sharing_plan(
     run_time: datetime,
 ):
     """Yield (frames, previous (hour, future | None) | None, own future
-    | None) per file. A future is created only when the next file will
+    | None, interval start hour | None) per file. A future is created only when the next file will
     difference against this file's raw plane; no reference is kept
     here, so each shared plane is freed once its consumer finishes."""
     previous_future: Future | None = None
@@ -610,30 +647,13 @@ def _sharing_plan(
         frame = frames.get(raw_precipitation_id) if raw_precipitation_id else None
         previous: tuple[int, Future | None] | None = None
         own: Future | None = None
+        interval_start = _interval_start(per_file, index, source, run_time) if source.interval_precipitation else None
         if frame is not None and source.interval_precipitation:
-            # The interval this total covers is the distance to the
-            # frame before it on the axis being built. A series that
-            # starts at a step of its own — the rate's, whose analysis
-            # frame does not exist — takes the distance from the
-            # previous step of the source's published axis instead,
-            # which is the interval the model itself accumulated over;
-            # and the first step of an axis that itself starts past
-            # the analysis (``first_hour``) accumulated from the run
-            # time, hour 0. Only a total at the analysis names no
-            # interval at all.
-            hour = frame.lead_seconds // binformat.HOUR_SECONDS
-            if index:
-                interval_start = series_lead_seconds(per_file[index - 1]) // binformat.HOUR_SECONDS
-            else:
-                axis = source.forecast_hours(hour, cycle=run_time.hour)
-                if len(axis) >= 2:
-                    interval_start = axis[-2]
-                elif hour > 0:
-                    interval_start = 0
-                else:
-                    raise ConversionError(
-                        f"the interval precipitation frame at hour {hour} names no interval"
-                    )
+            if interval_start is None:
+                raise ConversionError(
+                    f"the interval precipitation frame at hour {frame.lead_seconds // binformat.HOUR_SECONDS} "
+                    "names no interval"
+                )
             previous = (interval_start, None)
         elif previous_future is not None and frame is not None:
             previous = (
@@ -651,7 +671,7 @@ def _sharing_plan(
             ):
                 own = Future()
         previous_future = own
-        yield frames, previous, own
+        yield frames, previous, own, interval_start
 
 
 def _quantize_run(
@@ -688,6 +708,11 @@ def _quantize_run(
         # predecessor plane, only the length of the interval it covers.
         precipitation = _precipitation_plan(source, variable_ids)
         raw_precipitation_id = precipitation[0] if precipitation is not None else None
+        interval_pairs = tuple(
+            (rate_id, total_id)
+            for rate_id, total_id in source.interval_precipitation_pairs
+            if total_id in variable_ids
+        )
 
         derived_vector_ids = tuple(bundle_id for bundle_id in available_vector_ids if bundle_id in DERIVED_VECTORS)
         # Derived after the vapour flux and before the derivation-only inputs
@@ -712,6 +737,8 @@ def _quantize_run(
                     cat_calibration,
                     precipitation,
                     rotated_vector_ids,
+                    interval_pairs,
+                    item[3],
                 ),
                 _sharing_plan(per_file, raw_precipitation_id, source, run_time),
             )
@@ -727,6 +754,7 @@ def _variable_offsets(
     offsets: list[int],
     scalar_variable_ids: tuple[str, ...],
     encoded_variable_ids: tuple[str, ...],
+    unit_seconds: int = binformat.HOUR_SECONDS,
 ) -> dict[str, list[int]]:
     # Per-variable time axes. A variable with no data for the analysis frame
     # starts at the first real step, and every artifact of it (bundle,
@@ -744,6 +772,17 @@ def _variable_offsets(
         # no analysis file) carries every frame it read.
         for variable_id in analysis_optional_ids(source, scalar_variable_ids):
             variable_offsets[variable_id] = offsets[1:]
+    # A scalar read from an input the source writes only from some hour on
+    # (``variable_first_hours``) starts at that hour, wherever the build's
+    # axis starts.
+    for variable_id in scalar_variable_ids:
+        start = bundle_first_hour(source, variable_id) * binformat.HOUR_SECONDS
+        if start:
+            # Empty when the build ends before that hour: the caller leaves
+            # the bundle out.
+            variable_offsets[variable_id] = [
+                offset for offset in variable_offsets[variable_id] if offset * unit_seconds >= start
+            ]
     # A static field does not vary in time: its one frame is the first, and
     # its bundle carries just that offset (docs/format.md — a one-frame axis
     # is a uniform axis with frameStep 1). The fetch reads it only from the
@@ -1138,14 +1177,24 @@ def convert_bin(
         for bundle_id in available_vector_ids + available_composite_ids + available_volume_ids
         for variable_id in bundle_variable_ids(bundle_id)
     )
+    variable_offsets = _variable_offsets(source, offsets, scalar_variable_ids, encoded_variable_ids, unit_seconds)
+    # A scalar the source writes only from an hour this build ends before
+    # (``variable_first_hours``) has no frame to publish.
+    beyond = tuple(variable_id for variable_id in scalar_variable_ids if not variable_offsets[variable_id])
+    if beyond:
+        LOG.warning(
+            "building without %s: %s writes them only past the last frame of this build",
+            ", ".join(beyond),
+            source.manifest_model,
+        )
+        scalar_variable_ids = tuple(variable_id for variable_id in scalar_variable_ids if variable_id not in beyond)
+        encoded_variable_ids = tuple(variable_id for variable_id in encoded_variable_ids if variable_id not in beyond)
     # Scalars that also ship a poster — every published scalar whose
     # companions name one, which leaves out the contour-drawn pressure
     # family.
     companion_variable_ids = tuple(
         variable_id for variable_id in scalar_variable_ids if "poster" in variable_spec(variable_id).companions
     )
-
-    variable_offsets = _variable_offsets(source, offsets, scalar_variable_ids, encoded_variable_ids)
 
     poster_reports = _write_posters(
         output_dir,

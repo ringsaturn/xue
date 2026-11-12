@@ -57,6 +57,7 @@ MATCH_RULES = frozenset(
         "cloud-layer",
         "template",
         "template-aerosol",
+        "template-ensemble",
         "template-rank",
         "template-mrms",
         "total-precipitation",
@@ -385,6 +386,175 @@ def convert(conversion: Conversion, unit: str, values: np.ndarray) -> np.ndarray
 
 
 # ---------------------------------------------------------------------------
+# Ensemble products
+
+
+@dataclass(frozen=True)
+class EnsembleIdentity:
+    """Which statistic of an ensemble a field is: the derived forecast of
+    every member (code table 4.7: 0 the unweighted mean, 4 the spread), a
+    percentile of the members' distribution, or the share of members past
+    a threshold (code table 4.9 type and its limits) — what GRIB2 product
+    definition templates 4.2 / 4.12, 4.6 / 4.10 and 4.5 / 4.9 carry beyond
+    the parameter, and what the metadata's ``ensemble`` block writes
+    (docs/format.md §"Ensemble"). Exactly one of the three shapes is set;
+    which one says which templates a record of it is written in.
+
+    A limit is a ``(scaleFactor, scaledValue)`` pair, ``scaledValue ×
+    10^−scaleFactor`` in the GRIB2 unit of the parameter, or None. Which
+    limits a probability carries is fixed by its type
+    (:meth:`probability`), whatever the record wrote in the octets the type
+    does not use: CMA writes the threshold into both."""
+
+    derived_forecast: int | None = None
+    percentile: int | None = None
+    probability_type: int | None = None
+    lower_limit: tuple[int, int] | None = None
+    upper_limit: tuple[int, int] | None = None
+
+    #: Code table 4.9 types that read the lower limit, the upper, or both.
+    LOWER_TYPES = (0, 3, 5)
+    UPPER_TYPES = (1, 4)
+    BOTH_TYPES = (2,)
+
+    @classmethod
+    def derived(cls, code: int) -> EnsembleIdentity:
+        return cls(derived_forecast=code)
+
+    @classmethod
+    def percentile_of(cls, value: int) -> EnsembleIdentity:
+        return cls(percentile=value)
+
+    @classmethod
+    def probability(
+        cls, probability_type: int, lower: tuple[int, int] | None, upper: tuple[int, int] | None
+    ) -> EnsembleIdentity:
+        """A probability with the limits its type does not use dropped."""
+        uses_lower = probability_type in cls.LOWER_TYPES + cls.BOTH_TYPES
+        uses_upper = probability_type in cls.UPPER_TYPES + cls.BOTH_TYPES
+        return cls(
+            probability_type=probability_type,
+            lower_limit=lower if uses_lower else None,
+            upper_limit=upper if uses_upper else None,
+        )
+
+    @property
+    def kind(self) -> str:
+        """``derived``, ``percentile`` or ``probability``."""
+        if self.derived_forecast is not None:
+            return "derived"
+        if self.percentile is not None:
+            return "percentile"
+        return "probability"
+
+    @property
+    def templates(self) -> tuple[int, int]:
+        """The product definition templates of the shape: instantaneous,
+        then over a time interval."""
+        return ENSEMBLE_TEMPLATES[self.kind]
+
+    def validate(self) -> None:
+        """Refuse an identity no metadata block can carry: not exactly one
+        shape, a value out of its range, a limit the type needs missing."""
+        shapes = (
+            self.derived_forecast is not None,
+            self.percentile is not None,
+            self.probability_type is not None,
+        )
+        if sum(shapes) != 1:
+            raise ValueError("an ensemble identity has exactly one shape")
+        if self.derived_forecast is not None and not 0 <= self.derived_forecast <= 255:
+            raise ValueError("derivedForecast is out of range")
+        if self.percentile is not None and not 0 <= self.percentile <= 100:
+            raise ValueError("percentileValue is out of range")
+        if self.probability_type is None:
+            if self.lower_limit is not None or self.upper_limit is not None:
+                raise ValueError("only a probability carries limits")
+            return
+        if not 0 <= self.probability_type <= 5:
+            raise ValueError("probabilityType is out of range")
+        uses_lower = self.probability_type in self.LOWER_TYPES + self.BOTH_TYPES
+        uses_upper = self.probability_type in self.UPPER_TYPES + self.BOTH_TYPES
+        for limit, used in ((self.lower_limit, uses_lower), (self.upper_limit, uses_upper)):
+            if (limit is not None) != used:
+                raise ValueError("a probability carries exactly the limits its type uses")
+            if limit is not None and not (-127 <= limit[0] <= 127 and 0 <= limit[1] <= 0xFFFFFFFE):
+                raise ValueError("a probability limit is out of range")
+
+    def metadata(self) -> dict[str, Any]:
+        """The schema v3 ``ensemble`` block, in its key order."""
+        if self.derived_forecast is not None:
+            return {"derivedForecast": self.derived_forecast}
+        if self.percentile is not None:
+            return {"percentileValue": self.percentile}
+        lower = self.lower_limit or (None, None)
+        upper = self.upper_limit or (None, None)
+        return {
+            "probabilityType": self.probability_type,
+            "scaleFactorOfLowerLimit": lower[0],
+            "scaledValueOfLowerLimit": lower[1],
+            "scaleFactorOfUpperLimit": upper[0],
+            "scaledValueOfUpperLimit": upper[1],
+        }
+
+
+#: Product definition templates of each ensemble shape, instantaneous then
+#: over a time interval.
+ENSEMBLE_TEMPLATES: dict[str, tuple[int, int]] = {"derived": (2, 12), "percentile": (6, 10), "probability": (5, 9)}
+#: Every template that carries an ensemble identity: a record in one is
+#: accepted by a ``template-ensemble`` rule alone.
+ENSEMBLE_TEMPLATE_NUMBERS = frozenset(number for pair in ENSEMBLE_TEMPLATES.values() for number in pair)
+ENSEMBLE_INTERVAL_TEMPLATES = frozenset(pair[1] for pair in ENSEMBLE_TEMPLATES.values())
+
+
+@dataclass(frozen=True)
+class EnsembleRecord:
+    """What a ``template-ensemble`` rule reads of one record, however it
+    was read (GDAL's assembled template, :mod:`xuebuild.gdal`; the header
+    index, :mod:`xuebuild.grib2`). ``interval_hours`` and ``statistical``
+    are the one time range of an interval template, in hours, and its code
+    table 4.10 process; ``interval_hours`` is None where the record has
+    another number of ranges or another unit."""
+
+    template: int
+    discipline: int
+    category: int
+    number: int
+    level_type: int
+    level_value: float | None
+    ensemble: EnsembleIdentity
+    interval_hours: int | None = None
+    statistical: int | None = None
+
+
+def ensemble_rule_accepts(rule: GdalRule, record: EnsembleRecord) -> bool:
+    """Whether a ``template-ensemble`` rule accepts a record
+    (docs/registry.md §match): the template of the rule's shape, its
+    interval form exactly when the rule names ``hours``; the parameter,
+    the surface (a None ``level_value`` accepting any) and the ensemble
+    identity; and of an interval, one range in hours of the rule's length
+    and process."""
+    assert rule.rule == "template-ensemble" and rule.ensemble is not None
+    instant, interval = rule.ensemble.templates
+    if record.template != (instant if rule.hours is None else interval):
+        return False
+    if (record.discipline, record.category, record.number, record.level_type) != (
+        rule.discipline,
+        rule.category,
+        rule.number,
+        rule.level_type,
+    ):
+        return False
+    if rule.level_value is not None and record.level_value != rule.level_value:
+        return False
+    if record.ensemble != rule.ensemble:
+        return False
+    if rule.hours is not None:
+        return record.interval_hours == rule.hours and record.statistical == rule.statistical
+    return True
+
+
+# ---------------------------------------------------------------------------
 # GDAL band-matching rules
 
 
@@ -404,10 +574,24 @@ class GdalRule:
     phrases: tuple[str, ...] = ()
     category: int | None = None
     number: int | None = None
+    discipline: int | None = None
+    level_type: int | None = None
+    level_value: float | None = None
+    ensemble: EnsembleIdentity | None = None
+    hours: int | None = None
+    statistical: int | None = None
 
     def __post_init__(self) -> None:
         if self.rule not in MATCH_RULES:
             raise ValueError(f"unknown match rule: {self.rule}")
+        if self.rule == "template-ensemble":
+            if self.ensemble is None or None in (self.discipline, self.category, self.number, self.level_type):
+                raise ValueError("a template-ensemble rule names its parameter, surface and ensemble identity")
+            self.ensemble.validate()
+            if (self.hours is None) != (self.statistical is None):
+                raise ValueError("a template-ensemble rule names an interval's hours and process together")
+            if self.hours is not None and self.hours <= 0:
+                raise ValueError("a template-ensemble rule's interval is at least an hour")
 
     def document(self) -> dict[str, Any]:
         entry: dict[str, Any] = {"rule": self.rule}
@@ -431,6 +615,16 @@ class GdalRule:
         elif self.rule == "phrase":
             entry["element"] = self.element
             entry["phrases"] = list(self.phrases)
+        elif self.rule == "template-ensemble":
+            assert self.ensemble is not None
+            entry["discipline"] = self.discipline
+            entry["category"] = self.category
+            entry["number"] = self.number
+            entry["levelType"] = self.level_type
+            entry["levelValue"] = self.level_value
+            entry["ensemble"] = self.ensemble.metadata()
+            entry["hours"] = self.hours
+            entry["statistical"] = self.statistical
         return entry
 
 
@@ -468,6 +662,34 @@ def template() -> GdalRule:
 
 def template_aerosol() -> GdalRule:
     return GdalRule("template-aerosol")
+
+
+def template_ensemble(
+    category: int,
+    number: int,
+    level_type: int,
+    level_value: float | None,
+    ensemble: EnsembleIdentity,
+    *,
+    discipline: int = 0,
+    hours: int | None = None,
+    statistical: int | None = None,
+) -> GdalRule:
+    """One ensemble product: the parameter on its surface (a None
+    ``level_value`` accepting any, a missing one included), the ensemble
+    identity, and for a statistic over an interval its length in hours and
+    code table 4.10 process."""
+    return GdalRule(
+        "template-ensemble",
+        discipline=discipline,
+        category=category,
+        number=number,
+        level_type=level_type,
+        level_value=level_value,
+        ensemble=ensemble,
+        hours=hours,
+        statistical=statistical,
+    )
 
 
 def template_rank() -> GdalRule:

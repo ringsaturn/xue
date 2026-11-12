@@ -2293,8 +2293,12 @@ def _frame_variable_ids(
     since it does not vary in time and its bundle carries one frame.
 
     ``input_ids`` narrows the download to the variables a build needs, which
-    is what lets a showcase case fetch only its own fields."""
+    is what lets a showcase case fetch only its own fields. A variable the
+    source writes only from some hour on (``variable_first_hours``) is not
+    asked of an earlier frame."""
     wanted = spec.input_variable_ids if input_ids is None else input_ids
+    first_hours = dict(spec.variable_first_hours)
+    wanted = tuple(variable_id for variable_id in wanted if forecast_hour >= first_hours.get(variable_id, 0))
     if forecast_hour == 0:
         return tuple(variable_id for variable_id in wanted if variable_id not in spec.optional_at_analysis)
     return tuple(variable_id for variable_id in wanted if not VARIABLES[variable_id].static)

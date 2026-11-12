@@ -40,6 +40,7 @@ MATCH_RULES = {
     "cloud-layer",
     "template",
     "template-aerosol",
+    "template-ensemble",
     "template-rank",
     "template-mrms",
     "total-precipitation",
@@ -83,6 +84,7 @@ class RegistryDocumentTests(unittest.TestCase):
                 self.assertEqual(entry["parameter"], full["parameter"])
                 self.assertEqual(entry["quality"], full["quantization"]["quality"])
                 self.assertEqual(entry.get("aerosol"), full.get("aerosol"))
+                self.assertEqual(entry.get("ensemble"), full.get("ensemble"))
                 self.assertEqual(entry.get("producer"), full.get("producer"))
         for family, ids in shell["families"].items():
             with self.subTest(family=family):
@@ -134,6 +136,15 @@ class RegistryDocumentTests(unittest.TestCase):
                         self.assertTrue(bundle_id in variables or bundle_id in bundles, bundle_id)
                 for variable_id in source["inputVariableIds"]:
                     self.assertIn(variable_id, variables)
+                for variable_id, _ in source["ensembles"]:
+                    self.assertIn(variable_id, variables)
+                for rate_id, total_id in source["intervalPrecipitationPairs"]:
+                    self.assertTrue(source["intervalPrecipitation"], rate_id)
+                    self.assertIn(rate_id, variables)
+                    self.assertIn(total_id, source["inputVariableIds"])
+                for variable_id, hour in source["variableFirstHours"]:
+                    self.assertIn(variable_id, source["inputVariableIds"])
+                    self.assertGreater(hour, 0)
 
     def test_a_published_variable_carries_every_profile(self) -> None:
         for variable_id, entry in document()["variables"].items():

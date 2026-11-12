@@ -9,7 +9,8 @@ nothing has to be released for it; the committed snapshot
 ``rust/xue/registry.json`` is held to :func:`document` by a test.
 
 The half of a variable entry that describes the published field (``label``,
-``unit``, ``parameter``, ``producer``, ``aerosol``, ``quantization``) is the
+``unit``, ``parameter``, ``producer``, ``aerosol``, ``ensemble``,
+``quantization``) is the
 variable block a store's ``attributes.xue`` carries, key for key: the
 encoders copy it, the readers read it. The rest is how to obtain the field
 and what to do with it, and never reaches a store.
@@ -75,6 +76,8 @@ def variable_entry(spec: VariableSpec) -> dict[str, Any]:
         entry["producer"] = {"id": spec.producer_id}
     if spec.grib2_aerosol is not None:
         entry["aerosol"] = spec.grib2_aerosol.metadata()
+    if spec.grib2_ensemble is not None:
+        entry["ensemble"] = spec.grib2_ensemble.metadata()
     quantization = {
         profile: codebooks[spec.id].metadata() for profile, codebooks in PROFILES.items() if spec.id in codebooks
     }
@@ -132,6 +135,7 @@ def _sources() -> dict[str, Any]:
         fields = {key: value for key, value in asdict(spec).items() if key not in FETCH_ONLY_SOURCE_FIELDS}
         entry = _camel_keys(fields)
         entry["bands"] = [[variable_id, band] for variable_id, band in entry["bands"]]
+        entry["ensembles"] = [[variable_id, ensemble.metadata()] for variable_id, ensemble in spec.ensembles]
         entry["companionFiles"] = [_companion_entry(companion) for companion in entry["companionFiles"]]
         sources[source_id] = entry
     return sources
@@ -207,7 +211,7 @@ _SHELL_HEADER = (
 
 def _shell_variable(entry: dict[str, Any]) -> dict[str, Any]:
     trimmed: dict[str, Any] = {"unit": entry["unit"], "parameter": entry["parameter"]}
-    for key in ("producer", "aerosol"):
+    for key in ("producer", "aerosol", "ensemble"):
         if key in entry:
             trimmed[key] = entry[key]
     trimmed["quality"] = entry["quantization"]["quality"]

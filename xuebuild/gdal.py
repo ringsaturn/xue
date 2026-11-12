@@ -14,7 +14,7 @@ from typing import Any
 from . import rules
 from .errors import ConversionError
 from .model import SourceFrame
-from .rules import GdalRule
+from .rules import ENSEMBLE_TEMPLATE_NUMBERS, EnsembleIdentity, EnsembleRecord, GdalRule
 from .variables import AerosolIdentity, VariableSpec, variable_spec
 
 
@@ -342,6 +342,86 @@ def _assembled_aerosol(values: list[int]) -> AerosolIdentity:
     )
 
 
+# Where an ensemble template's own fields sit among GDAL's assembled values,
+# after the fifteen it shares with template 4.0: the statistic, then for an
+# interval template the time range count, its process, unit and length.
+_ENSEMBLE_FIELD = 15
+_PROBABILITY_FIELDS = 17
+_ENSEMBLE_INTERVAL_FIELDS: dict[int, tuple[int, int, int, int]] = {
+    # template: (ranges, process, unit, length)
+    12: (23, 25, 27, 28),
+    10: (22, 24, 26, 27),
+    9: (28, 30, 32, 33),
+}
+_ENSEMBLE_MINIMUM_VALUES = {2: 16, 6: 16, 5: 22, 12: 29, 10: 28, 9: 34}
+# GDAL assembles a missing scale factor as -127 (or 255) and a missing
+# scaled value as -2147483647 (or 4294967295), as it reads the octets.
+_MISSING_SCALES = (-127, 255)
+_MISSING_SCALED_VALUES = (-2147483647, 0xFFFFFFFF)
+_HOURS = 1
+
+
+def _assembled_pair(values: list[int], index: int) -> tuple[int, int] | None:
+    scale, scaled_value = values[index], values[index + 1]
+    if scale in _MISSING_SCALES or scaled_value in _MISSING_SCALED_VALUES:
+        return None
+    return scale, scaled_value
+
+
+def _assembled_ensemble(metadata: dict[str, str]) -> EnsembleRecord | None:
+    """What a ``template-ensemble`` rule reads of a band, off GDAL's
+    assembled template (docs/registry.md §match): None for a band of
+    another template, or one the driver did not assemble whole."""
+    try:
+        template = int(metadata.get("GRIB_PDS_PDTN", ""))
+    except ValueError:
+        return None
+    if template not in ENSEMBLE_TEMPLATE_NUMBERS:
+        return None
+    values, discipline = _assembled(metadata)
+    if discipline < 0 or len(values) < _ENSEMBLE_MINIMUM_VALUES[template]:
+        return None
+    if template in (2, 12):
+        ensemble = EnsembleIdentity.derived(values[_ENSEMBLE_FIELD])
+    elif template in (6, 10):
+        ensemble = EnsembleIdentity.percentile_of(values[_ENSEMBLE_FIELD])
+    else:
+        ensemble = EnsembleIdentity.probability(
+            values[_PROBABILITY_FIELDS],
+            _assembled_pair(values, _PROBABILITY_FIELDS + 1),
+            _assembled_pair(values, _PROBABILITY_FIELDS + 3),
+        )
+    surface = _assembled_pair(values, 10)
+    interval_hours: int | None = None
+    statistical: int | None = None
+    if template in _ENSEMBLE_INTERVAL_FIELDS:
+        ranges, process, unit, length = _ENSEMBLE_INTERVAL_FIELDS[template]
+        statistical = values[process]
+        if values[ranges] == 1 and values[unit] == _HOURS:
+            interval_hours = values[length]
+    return EnsembleRecord(
+        template=template,
+        discipline=discipline,
+        category=values[0],
+        number=values[1],
+        level_type=values[9],
+        level_value=None if surface is None else surface[1] / (10.0 ** surface[0]),
+        ensemble=ensemble,
+        interval_hours=interval_hours,
+        statistical=statistical,
+    )
+
+
+def _is_template_ensemble(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
+    """One ensemble product (templates 4.2 / 4.12, 4.6 / 4.10, 4.5 / 4.9)
+    under the rule's parameter, surface and ensemble identity. GDAL names
+    CMA GRAPES GEPS's percentiles by an element of their own (``TMP50``)
+    and its mean and spread by the quantity's (``HGT``): what tells the
+    statistics apart is the template, which the driver assembles whole."""
+    record = _assembled_ensemble(metadata)
+    return record is not None and rules.ensemble_rule_accepts(rule, record)
+
+
 def _is_template_rank(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
     """One rank of an ordered sequence (code table 4.5 type 241, local to
     NCEP): a GFS-Wave swell partition, under the entry's parameter and
@@ -462,6 +542,7 @@ _MATCHERS: dict[str, Callable[[GdalRule, VariableSpec, dict[str, str], str], boo
     "cloud-layer": _is_cloud_layer,
     "template": _is_template,
     "template-aerosol": _is_template_aerosol,
+    "template-ensemble": _is_template_ensemble,
     "template-rank": _is_template_rank,
     "template-mrms": _is_template_mrms,
     "total-precipitation": _is_total_precipitation,
@@ -472,8 +553,20 @@ _MATCHERS: dict[str, Callable[[GdalRule, VariableSpec, dict[str, str], str], boo
 assert set(_MATCHERS) == rules.MATCH_RULES
 
 
+def _is_ensemble_template(metadata: dict[str, str]) -> bool:
+    try:
+        return int(metadata.get("GRIB_PDS_PDTN", "")) in ENSEMBLE_TEMPLATE_NUMBERS
+    except ValueError:
+        return False
+
+
 def rule_matches(rule: GdalRule, spec: VariableSpec, metadata: dict[str, str], description: str) -> bool:
-    """Whether one rule accepts the band."""
+    """Whether one rule accepts the band. A band of an ensemble template is
+    a statistic of the members, which the element and surface the other
+    rules read do not tell from the quantity (a spread is spelled as the
+    mean is): only a ``template-ensemble`` rule accepts it."""
+    if rule.rule != "template-ensemble" and _is_ensemble_template(metadata):
+        return False
     return _MATCHERS[rule.rule](rule, spec, metadata, description)
 
 

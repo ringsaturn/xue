@@ -339,7 +339,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
     # The run is keyed by forecast hour off its first variable, so a case
     # whose every input is absent from the analysis file has nothing to key on.
     if all(
-        input_id in source.optional_at_analysis
+        input_id in source.optional_at_analysis or input_id in dict(source.variable_first_hours)
         for bundle_id in ordered
         for input_id in bundle_input_ids(source, bundle_id)
     ):

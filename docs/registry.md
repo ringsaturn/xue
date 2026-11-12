@@ -9,8 +9,8 @@ the tables by a test.
 
 The document is not a published artifact and not part of the format. What
 reaches a store is the variable block of `docs/format.md`, which the
-`label`, `unit`, `parameter`, `producer`, `aerosol` and `quantization` keys
-of a variable entry are, key for key: an encoder copies them into
+`label`, `unit`, `parameter`, `producer`, `aerosol`, `ensemble` and
+`quantization` keys of a variable entry are, key for key: an encoder copies them into
 `attributes.xue`, it never computes them. Everything else in an entry is
 how to obtain the field and what to do with it.
 
@@ -46,6 +46,7 @@ changing what a reader must do with an existing key raises it.
                  "scaleFactorOfFirstFixedSurface": 0, "scaledValueOfFirstFixedSurface": 2 },
   "producer": { "id": "shachen" },                 // optional
   "aerosol": { "aerosolType": 62001, … },          // optional
+  "ensemble": { "percentileValue": 25 },           // optional
   "quantization": {                                // optional: absent = input-only
     "quality":  { "type": "linear", "offset": -60.0, "scale": 0.5, "minimumCode": 0, "maximumCode": 220, "nodataCode": 255 },
     "compact":  { … },
@@ -64,7 +65,7 @@ changing what a reader must do with an existing key raises it.
 
 | Key | Meaning |
 |---|---|
-| `label`, `unit`, `parameter`, `producer`, `aerosol` | Exactly the metadata blocks of `docs/format.md`. `producer` carries the `id` alone; the version is stamped on the series the producer wrote and read off it at build time. |
+| `label`, `unit`, `parameter`, `producer`, `aerosol`, `ensemble` | Exactly the metadata blocks of `docs/format.md`. `producer` carries the `id` alone; the version is stamped on the series the producer wrote and read off it at build time. `ensemble` is the variable's own statistic (a quartile, a spread, a probability); a shared variable whose record a source reads as an ensemble's centre has none, and the source names the block it writes (`ensembles`, below). |
 | `quantization` | One codebook block per profile, each exactly as the metadata writes it. The `type` is one of the closed set below. A variable without this key is read and never published (`tp`, the categorical precipitation flags). |
 | `valueRange` | `[low, high]` in `unit`: the range the pipeline treats as the field's own. |
 | `fillValues` | Values GDAL hands back where the record carries no data; folded to `valueRange[0]` before anything else touches the plane. |
@@ -151,6 +152,15 @@ description joined and lower-cased, except that `isobaric`, `phrase`,
 description without the short name. Elements compare upper-cased; the
 `template-mrms` element compares as written.
 
+A band whose `GRIB_PDS_PDTN` is an ensemble template — 2, 12 (a derived
+forecast), 6, 10 (a percentile), 5, 9 (a probability) — is a statistic of
+an ensemble's members, which the element and surface do not tell from the
+quantity (GDAL spells a spread as it spells the mean): only a
+`template-ensemble` rule accepts it, every other rule refuses it. The GRIB2
+header index applies the same rules to the octets it reads, and a variable
+that carries its own `ensemble` block matches no record of another
+template.
+
 | Rule | Parameters | Accepts the band when |
 |---|---|---|
 | `surface` | `elements` | the element is one of `elements`, and the short name ends in `-SFC`, or the text contains `sfc="` or `ground or water surface` |
@@ -161,12 +171,50 @@ description without the short name. Elements compare upper-cased; the
 | `cloud-layer` | `element`, `shortName`, `phrases` | the element matches, and the short name is `shortName` or the text contains one of `phrases` |
 | `template` | — | `GRIB_PDS_PDTN` is 0 and the assembled values' parameter category and number, surface type and surface value equal the entry's `parameter` or one of its `alternates` (a `null` level value accepts any) |
 | `template-aerosol` | — | `GRIB_PDS_PDTN` is 48 and the assembled values equal the entry's `parameter` and `aerosol` blocks whole |
+| `template-ensemble` | `discipline`, `category`, `number`, `levelType`, `levelValue`, `ensemble`, `hours`, `statistical` | see below |
 | `template-rank` | — | the element is `match.gribElement`, then as `template` against the entry's own identity, the surface value being the rank; without an assembled template, the short name is `<rank>-RESERVED(<surface type>)` |
 | `template-mrms` | — | the element is the entry's `mrmsProduct` up to its first `_`, the discipline is 209, and the assembled template 4.0 values equal the entry's discipline-209 alternate (or its own identity); without an assembled template, a surface of type 102 must spell `<value>-GPML` in the short name |
 | `total-precipitation` | — | the element is `unknown`, `tp`, `apcp` or `tprate`; the short name is `0-SFC` or the text contains `surface`; and the comment contains `cat 1, subcat 193` or the text `total precipitation` |
 | `local-parameter` | `category`, `number` | the element is `unknown`, the short name is `0-SFC` or the text contains `ground or water surface`, and the comment contains `cat <category>, subcat <number>` |
 | `phrase` | `element`, `phrases` | the element matches and the text contains one of `phrases` |
 | `geopotential-surface` | `elements` | the element is one of `elements`, the short name ends in `-SFC` or the text contains `ground or water surface`, and the text contains `geopotential` |
+
+`template-ensemble` names the record whole:
+
+```jsonc
+{ "rule": "template-ensemble", "discipline": 0, "category": 1, "number": 8,
+  "levelType": 1, "levelValue": null, "ensemble": { "percentileValue": 50 },
+  "hours": 6, "statistical": 1 }
+```
+
+`levelValue` is a number or `null` (any value, a missing one included);
+`ensemble` is a block of `docs/format.md` §"Ensemble"; `hours` and
+`statistical` are both integers (an interval of at least one hour and its
+code table 4.10 process) or both `null`. It accepts a band when all hold:
+
+- `GRIB_PDS_PDTN` is the template of the block's shape: a derived forecast
+  2 (`hours` `null`) or 12 (`hours` set), a percentile 6 or 10, a
+  probability 5 or 9;
+- the leading integer of `GRIB_DISCIPLINE` is `discipline`;
+- in `GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES` (space-separated integers, from
+  index 0): index 0 is `category`, 1 `number`, 9 `levelType`, and when
+  `levelValue` is not `null` the surface value, index 11 × 10^−(index 10),
+  equals it (a missing pair never equals a number);
+- the record's statistic equals `ensemble`. After the fifteen values every
+  template shares with 4.0, a derived forecast's code is index 15, a
+  percentile's index 15, a probability's type index 17 with the lower limit
+  at 18–19 and the upper at 20–21; a limit with either half missing is
+  `null`, and a probability keeps only the limits its type uses (types 0, 3,
+  5 the lower, 1, 4 the upper, 2 both), whatever the record wrote in the
+  others;
+- of an interval template, there is exactly one time range, its unit is
+  hours (1), its length is `hours` and its process `statistical`: indices
+  23, 25, 27, 28 of 4.12, 22, 24, 26, 27 of 4.10, 28, 30, 32, 33 of 4.9
+  (the range count, the process, the unit, the length).
+
+A missing scale factor is −127 or 255 and a missing scaled value
+−2147483647 or 4294967295, whichever way the driver assembles them. A
+template the driver did not assemble, or assembled short, is no record.
 
 ## Bundles
 
@@ -221,6 +269,9 @@ repacking is the source's `packing`, not a family's.
   "optionalAtAnalysis": ["prate", …],
   "statisticalProcesses": [["gust", 2]],
   "bands": [["ir039", { "satelliteSeries": 0, "satelliteNumber": 174, "instrumentType": 297, "centralWavenumber": 257380 }]],
+  "ensembles": [["tmp2m", { "percentileValue": 50 }]],
+  "intervalPrecipitationPairs": [["prateq25", "apcpq25"]],
+  "variableFirstHours": [["apcp24gt1", 24]],
   "platform": null, "openMeteo": null, "gridStep": null, "region": null,
   "bundleScalarIds": [...], "coreBundleIds": [...], "bundleVectorIds": [...], "bundleCompositeIds": [], "bundleVolumeIds": [],
   "productionGrid": [1440, 721], "tile": [48, 52], "variantFactors": [2], "seriesBundleIds": [...],
@@ -229,6 +280,20 @@ repacking is the source's `packing`, not a family's.
   "gridRelativeWinds": false, "gaussianN": null, "video": true, "catCalibration": [[300, 0.0, 0.0], …]
 }
 ```
+
+`ensembles` names, per published variable that is an ensemble's centre
+standing in for the deterministic field under its id, the `ensemble` block
+written onto that variable's metadata, as `bands` names a channel's.
+`intervalPrecipitationPairs` are further `[rate, total]` pairs an
+`intervalPrecipitation` source derives the way it derives `prate` from its
+input: the total over the interval ending at the frame divided by the
+interval's hours, on the same axis and analysis-optional through the
+total's own `optionalAtAnalysis` entry; the rate is then the bundle the
+total is read for. `variableFirstHours` names inputs absent from every
+frame before an hour (an integer above 0): no earlier frame is read for
+them or required to carry them, they never key a run's axis, and the
+series of a bundle read from them starts at that hour, on a `time_<id>`
+axis of its own; a build that ends before the hour leaves the bundle out.
 
 `downsample` is `{"factor": n}` or `null`. `gridRelativeWinds` is true on a
 source published on a map projection, whose wind pairs a reader turns to east and
@@ -243,7 +308,7 @@ Gaussian, or `null`. The meaning of each field is `SourceSpec`'s docstring and
 the part of it the shell reads, as a TypeScript module (`export const
 REGISTRY = {…} as const`) so the ids reach the type checker as literal
 unions. It carries every published variable's `unit`, `parameter`,
-`producer`, `aerosol` and `quality` codebook; every bundle's `kind` and
+`producer`, `aerosol`, `ensemble` and `quality` codebook; every bundle's `kind` and
 `members`; each source's label (`manifestModel`), `product`,
 `latestFilename`, `observation`, `coreBundleIds` and `cadenceSeconds`;
 and, from the same tables, the isobaric and turbulence levels, the family
@@ -263,7 +328,7 @@ existing name on a new entry does not.
 |---|---|
 | `quantization.<profile>.type` | `linear`, `log1p` |
 | `conversion.rule` | the thirteen rules above |
-| `match.gdal[].rule` | the fourteen rules above |
+| `match.gdal[].rule` | the fifteen rules above |
 | `predictor` | `delta`, `raw` |
 | `decimation` | `sample`, `peak` |
 | `companions[]` | `poster`, `video` |
@@ -276,6 +341,9 @@ existing name on a new entry does not.
 Before reading any input, a reader checks: the schema; every name above;
 that every `members`, `inputs` and `derivation.inputs` id is a variable;
 that every bundle id a source lists is a variable or a `bundles` entry;
+that every id a source's `ensembles`, `intervalPrecipitationPairs` and
+`variableFirstHours` name is a variable, the pairs only on an
+`intervalPrecipitation` source and every first hour above 0;
 that a `vector` has two members; that a published variable (one with
 `quantization`) has every profile the reader is asked for. Any failure
 refuses the whole build. A build is handed one source's part of the document:

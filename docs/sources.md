@@ -191,31 +191,47 @@ UTC ones about 5 h. The same basic set as `iconeu`; the gust is the
 maximum over the hour ending at the frame. Data: Météo-France, Licence
 Ouverte / Etalab 2.0.
 
-### CMA GRAPES GEPS ensemble median (`cmageps`)
+### CMA GRAPES GEPS ensemble products (`cmageps`)
 
 0.25° global without the pole rows (1440 × 720 cells, centres 89.875°N to
 89.875°S), 6-hourly to F360 from the 00 / 12 UTC cycles. **Not a member
-and not a deterministic run: the centre of the ensemble** (CMA GRAPES GEPS
-v1.3, 30 perturbed members and the control), which is all CMA exchanges —
-the ensemble mean of the 500 hPa geopotential height and the mean sea
-level pressure (the only statistic it publishes of those two), and the
-ensemble median (50th percentile) of everything else: 2 m and 850 hPa
-temperature, precipitation rate (the median of the total over the six
-hours ending at the frame, divided by six; from F006), 10 m gust (the
-instantaneous gust, published under GFS's gust identity; from F006), total
-cloud cover (from F006, since the analysis file's is a field of zeros) and
-CAPE. Every field keeps the identity the deterministic sources use, so it
-compares with them directly, but a median is smoother than any member, and
-a precipitation median is drier than the mean wherever only some members
-rain. No wind components (CMA exchanges only speeds). Nothing else of the
-model is exchanged: no member fields, no deterministic CMA-GFS run, no
-isobaric level beyond the 850 hPa temperature and wind speed, the 500 hPa
-height and the 250 hPa wind speed, and no humidity. The National
-Meteorological Centre's website draws more of the same ensemble over China
-(stamp maps of the 31 members, spaghetti plots, the extreme forecast index,
-24-hour precipitation probabilities), but as images whose reuse needs CMA's
-permission, so they are not a source. A run is complete on
-the caches about 18–20 UTC the same day for both cycles. Data: China
+and not a deterministic run: statistics of the ensemble** (CMA GRAPES GEPS
+v1.3, 30 perturbed members and the control), which is all CMA exchanges.
+Every field carries an `ensemble` block saying which statistic it is
+(docs/format.md, "Ensemble").
+
+- **The centre**, under the ids and identities the deterministic sources
+  use, so it compares with them directly: the ensemble mean of the 500 hPa
+  geopotential height (`hgt500`) and the mean sea level pressure (`prmsl`),
+  the only centre CMA publishes of those two, and the ensemble median
+  (50th percentile) of 2 m and 850 hPa temperature (`tmp2m`, `tmp850`),
+  precipitation rate (`prate`: the median of the total over the six hours
+  ending at the frame, divided by six; from F006), 10 m gust (`gust`, the
+  instantaneous gust, published under GFS's gust identity; from F006), total
+  cloud cover (`tcdc`, from F006, since the analysis file's is a field of
+  zeros) and CAPE (`cape`). A median is smoother than any member, and a
+  precipitation median is drier than the mean wherever only some members
+  rain.
+- **The quartiles** of each median field, in its unit and on its codebook:
+  `tmp2mq25` / `tmp2mq75`, `tmp850q25` / `tmp850q75`, `prateq25` /
+  `prateq75` (the 25th and 75th percentile six-hour totals divided by six),
+  `gustq25` / `gustq75`, `tcdcq25` / `tcdcq75`, `capeq25` / `capeq75`. Half
+  the members lie between them.
+- **The spread** of the two mean fields: `prmslsd` (hPa, 0.1 hPa steps to
+  25 hPa) and `hgt500sd` (m, 1 m steps to 250 m).
+- **The probabilities** of more than 1, 5, 10, 25, 50 and 100 mm of
+  precipitation in the 24 hours ending at the frame (`apcp24gt1` …
+  `apcp24gt100`): the percentage of members past the threshold, at 0.5 %
+  steps, from F024.
+
+No wind components (CMA exchanges only speeds). Nothing else of the model
+is exchanged: no member fields, no deterministic CMA-GFS run, no isobaric
+level beyond the 850 hPa temperature and wind speed, the 500 hPa height and
+the 250 hPa wind speed, and no humidity. The National Meteorological
+Centre's website draws more of the same ensemble over China (stamp maps of
+the 31 members, spaghetti plots, the extreme forecast index), but as images
+whose reuse needs CMA's permission, so they are not a source. A run is
+complete on the caches about 18–20 UTC the same day for both cycles. Data: China
 Meteorological Administration (CMA), via WMO WIS2, core data under the WMO
 Unified Data Policy, free and unrestricted.
 

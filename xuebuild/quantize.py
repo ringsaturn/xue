@@ -18,6 +18,10 @@ from .variables import (
     AEROSOL_VARIABLE_IDS,
     CAT_LEVELS_HPA,
     CLOUD_WATER_VARIABLE_IDS,
+    ENSEMBLE_MEAN_FIELDS,
+    ENSEMBLE_PERCENTILE_FIELDS,
+    ENSEMBLE_PROBABILITY_THRESHOLDS_MM,
+    ENSEMBLE_QUARTILES,
     DUST_CF_COMPONENT_IDS,
     ZHOUYE_COMPONENT_IDS,
     DUST_RGB_COMPONENT_IDS,
@@ -35,6 +39,9 @@ from .variables import (
     WAVE_PARTITION_IDS,
     WAVE_VECTOR_COMPONENT_IDS,
     WIND_WAVE_VECTOR_COMPONENT_IDS,
+    ensemble_probability_id,
+    ensemble_quartile_id,
+    ensemble_spread_id,
     isobaric_variable_id,
 )
 
@@ -962,6 +969,31 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
         **{variable_id: COMPACT_HUMIDITY for variable_id in QUALITY_ISOBARIC if variable_id.startswith("rh")},
     },
 }
+
+# The ensemble products (CMA GRAPES GEPS, variables.py). A quartile is the
+# quantity itself, so it takes the quantity's codebook in every profile —
+# the rate's quartiles the rate's. A spread is a departure from the mean in
+# the quantity's unit, small beside the quantity's own range: the sea-level
+# pressure's at 0.1 hPa to 25 hPa and the 500 hPa height's at 1 m to 250 m,
+# both past any spread a 31-member global ensemble shows, clamped above
+# like the quantity's own codebook. A probability is a percentage of the
+# members at half a percent, finer than one member in 31. Neither has a
+# coarser profile to trade: the same codebook everywhere.
+SPREAD_CODEBOOKS: dict[str, TemperatureCodebook] = {
+    ensemble_spread_id("prmsl"): TemperatureCodebook(minimum=0.0, maximum=25.0, step=0.1, name="prmslsd"),
+    ensemble_spread_id("hgt500"): TemperatureCodebook(minimum=0.0, maximum=250.0, step=1.0, name="hgt500sd"),
+}
+assert set(SPREAD_CODEBOOKS) == {ensemble_spread_id(base_id) for base_id in ENSEMBLE_MEAN_FIELDS}
+PROBABILITY = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="probability")
+
+for _books in PROFILES.values():
+    for _base_id in (*ENSEMBLE_PERCENTILE_FIELDS, "prate"):
+        for _percentile in ENSEMBLE_QUARTILES:
+            _books[ensemble_quartile_id(_base_id, _percentile)] = _books[_base_id]
+    _books.update(SPREAD_CODEBOOKS)
+    for _threshold in ENSEMBLE_PROBABILITY_THRESHOLDS_MM:
+        _books[ensemble_probability_id(_threshold)] = PROBABILITY
+del _books, _base_id, _percentile, _threshold
 
 
 def codebook_from_metadata(

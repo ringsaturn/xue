@@ -27,7 +27,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `cfs` | forecast (seasonal) | one object per variable per run | `tmp2m`, `prate` |
 | `iconeu` | forecast (regional) | DWD open data, one `.bz2` field per parameter and step | `tmp2m`, `prate` |
 | `arpege` | forecast | Météo-France packages, whole objects cut by identity | `tmp2m`, `prate` |
-| `cmageps` | forecast (ensemble centre) | WMO WIS2 caches, message heads walked by Range, products rewritten to plain templates | `tmp2m`, `prate` |
+| `cmageps` | forecast (ensemble products) | WMO WIS2 caches, message heads walked by Range against the registry's `template-ensemble` rules | `tmp2m`, `prate` |
 | `ifshres` | series-file forecast | om2nc (Open-Meteo `.om`) | `tmp2m`, `prate` |
 | `woof` | series-file forecast, no feed (cases only) | `xue wrf-series` over a local WRF run | `tmp2m` |
 | `efas`, `efaswb` | series-file forecast, no feed (cases only) | `xue efas-series` over an EWDS GRIB | `dis06` |
@@ -420,30 +420,43 @@ temperature, the 10 m, 850 hPa and 250 hPa wind speeds, the instantaneous
 10 m gust (`i10fg`, 0/2/22 at 10 m), the total cloud cover, the CAPE and
 two wind shears; the percentiles (4.10) of the precipitation over the six
 hours ending at the step and over a longer window, and of the six-hour
-snowfall; and exceedance probabilities (4.5, 4.9). Only the centre is read:
-the spread, the other percentiles and the probabilities need an ensemble
-statistic the format does not carry yet. `xuebuild/cmageps.py`
-publishes the ensemble's centre under the deterministic identities: the
+snowfall; and exceedance probabilities (4.5, 4.9). What the source reads
+is registry data: every input names its product in a `template-ensemble`
+GDAL rule (the template's shape, the parameter on CMA's surface, the
+statistic, and for an interval its length and process, docs/registry.md),
+and the walk, the header index and the GDAL pass all match a record against
+those rules alone, so the fetch holds no list of products. The centre of
+each quantity stands in for the deterministic field under its id — the
 mean where it is the only statistic (height, pressure), the median
-elsewhere, and for the precipitation the median of the window that ends at
-the step and starts at the axis's previous step. The files have no index,
-so a frame is a walk of the message heads over Range (512 bytes each:
-section 0 gives the message's length, sections 1 and 4 its identity),
-stopping once every input is found — about eighty reads — and one Range
-read of each record. Each record is then rewritten with `grib_set`
-(`eccodescli.set_keys`) to the plain template its identity is matched on
-(4.2 and 4.6 → 4.0, 4.10 → 4.8, eccodes carrying the interval and the
-statistical process across), the ground surface's missing value is written
-as 0, and the gust is moved from 10 m to the ground surface, the identity
-GFS's instantaneous gust has (`SURFACE_ALIASES`); the frame is then
-repacked to `grid_simple` (`packing="jpeg2000"`). GDAL names the
-rewritten six-hour total `APCP06`, which is the `surface` rule the
-registry's `apcp` carries; it is the interval-precipitation path, as on
+elsewhere, the shared variable taking the rule beside its own and the
+source naming the block it writes (`SourceSpec.ensembles`). Beside it: the
+25th and 75th percentiles of the six median fields (`tmp2mq25`, …), the
+spread of the two mean fields (`prmslsd`, `hgt500sd`), and the
+probabilities of more than 1, 5, 10, 25, 50 and 100 mm in the 24 hours
+ending at the step (`apcp24gt1`, …), which the files carry from +24 h
+(`SourceSpec.variable_first_hours`: not asked of an earlier frame, and the
+bundles on their own time axis from 24). The precipitation is the median
+total of the window of six hours ending at the step (the rule's `hours`;
+the run-long window beside it is the same percentile), and its quartiles
+are the 25th and 75th percentile totals of the same window, each divided
+by six as the median is (`SourceSpec.interval_precipitation_pairs`,
+`apcpq25` → `prateq25`). The files have no index, so a frame is a walk of
+the message heads over Range (512 bytes each: section 0 gives the
+message's length, sections 1 and 4 its identity, read by
+`grib2.product_identity`), stopping once every input is found — about
+eighty reads — and one Range read of each record, written as CMA wrote it,
+templates 4.2, 4.6, 4.9 and 4.10 included. The gust is CMA's at 10 m,
+matched by its rule on that surface and published on the ground-surface
+identity GFS's instantaneous gust has. A band of an ensemble template is
+accepted by a `template-ensemble` rule alone: the other rules read the
+element and the surface, which do not tell a spread from the mean GDAL
+spells the same way. The frame is then repacked to `grid_simple`
+(`packing="jpeg2000"`). It is the interval-precipitation path, as on
 Open-Meteo's series, but on GRIB frames: the rate is the total over six.
 The analysis file has no precipitation, and its gust and cloud cover are
-fields of zeros, so all three are `optional_at_analysis` and never read
-at +0. The grid is the 0.25° grid without the pole rows (1440 × 720, first
-centre 89.875°N, 0°E), which the global snap takes as it is; tile 48 × 48
+fields of zeros, so all three and their percentiles are
+`optional_at_analysis` and never read at +0. The grid is the 0.25° grid
+without the pole rows (1440 × 720, first centre 89.875°N, 0°E), which the global snap takes as it is; tile 48 × 48
 (30 × 15, no clipped edge), the half tier. The caches are data
 (`cmageps.CACHES`, `xuebuild/wis2.py`): the Met Office/NOAA one and JMA's
 are listed, and a run is complete when their listings together name
