@@ -578,9 +578,19 @@ def _band_matches(variable_id: str, metadata: dict[str, str], description: str) 
     return any(rule_matches(rule, spec, metadata, description) for rule in spec.gdal_rules or ())
 
 
+#: What GDAL's degrib writes in place of the unit of a derived forecast
+#: other than a mean (code table 4.7: a spread, a standard deviation, …).
+#: It leaves the values in the parameter's own unit, which the comment
+#: still names, so the unit is read from there.
+DERIVED_UNIT_LABELS = frozenset(
+    ("[spread]", "[stddev]", "[stddev normalized]", "[large anomaly index]", "[interquantile range]")
+)
+
 def _frame_from_band(path: Path, variable_id: str, band_number: int, metadata: dict[str, str]) -> SourceFrame:
     spec = variable_spec(variable_id)
-    unit_value = metadata.get("GRIB_UNIT") or metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
+    unit_value = metadata.get("GRIB_UNIT", "")
+    if not unit_value or unit_value in DERIVED_UNIT_LABELS:
+        unit_value = metadata.get("GRIB_COMMENT", "").rsplit("[", 1)[-1].rstrip("]")
     # A temperature's unit is carried as the one letter its rule reads it
     # through; any other as GDAL spells it, brackets off.
     unit = (

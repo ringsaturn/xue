@@ -630,15 +630,23 @@ fn timestamp(band: &BandInfo, key: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::from_unix_timestamp(raw as i64).ok()
 }
 
+/// What GDAL's degrib writes in place of the unit of a derived forecast
+/// other than a mean (code table 4.7: a spread, a standard deviation, …).
+/// It leaves the values in the parameter's own unit, which the comment
+/// still names, so the unit is read from there.
+const DERIVED_UNIT_LABELS: [&str; 5] =
+    ["[spread]", "[stddev]", "[stddev normalized]", "[large anomaly index]", "[interquantile range]"];
+
 fn frame_from_band(path: &Path, spec: &VariableSpec, band: &BandInfo) -> Result<SourceFrame> {
-    let raw_unit = if band.item("GRIB_UNIT").is_empty() {
+    let grib_unit = band.item("GRIB_UNIT");
+    let raw_unit = if grib_unit.is_empty() || DERIVED_UNIT_LABELS.contains(&grib_unit) {
         band.item("GRIB_COMMENT")
             .rsplit_once('[')
             .map_or("", |(_, tail)| tail)
             .trim_end_matches(']')
             .to_string()
     } else {
-        band.item("GRIB_UNIT").to_string()
+        grib_unit.to_string()
     };
     // A temperature's unit is carried as the one letter its rule reads it
     // through; any other as GDAL spelled it, brackets off.

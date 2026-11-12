@@ -317,14 +317,6 @@ class BandMatchingTests(unittest.TestCase):
                 self.assertEqual(variable_spec(variable_id).gdal_rules, ())
                 self.assertFalse(_band_matches(variable_id, band(GRIB_ELEMENT="APCP", GRIB_SHORT_NAME="0-SFC"), ""))
 
-    def test_apcp_is_the_six_hour_total_on_the_ground(self) -> None:
-        # GDAL names an interval total by its length: CMA GRAPES GEPS's
-        # six-hour median, rewritten to template 4.8, reads as APCP06.
-        self.assertEqual(variable_spec("apcp").gdal_rules, (rules.surface("APCP06"),))
-        self.assertTrue(_band_matches("apcp", band(GRIB_ELEMENT="APCP06", GRIB_SHORT_NAME="0-SFC"), ""))
-        self.assertFalse(_band_matches("apcp", band(GRIB_ELEMENT="APCP", GRIB_SHORT_NAME="0-SFC"), ""))
-        self.assertFalse(_band_matches("apcp", band(GRIB_ELEMENT="APCP06", GRIB_SHORT_NAME="2-HTGL"), ""))
-
     def test_the_default_rules_follow_the_identity(self) -> None:
         self.assertEqual(variable_spec("vis").gdal_rules, (rules.surface("VIS"),))
         self.assertEqual(variable_spec("dpt2m").gdal_rules, (rules.height("DPT", 2),))

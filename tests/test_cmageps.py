@@ -728,7 +728,10 @@ class ConversionTests(unittest.TestCase):
             metadata = stored_bundle(self.output, bundle_id).metadata
             self.assertEqual(metadata["time"]["firstFrameOffset"], 6, bundle_id)
             self.assertNotIn("typeOfStatisticalProcessing", metadata["variables"][0]["parameter"], bundle_id)
-            self.assertEqual(metadata["variables"][0]["parameter"]["typeOfFirstFixedSurface"], 1, bundle_id)
+            # The registered identities: the gust on the ground, the cloud
+            # cover over the entire atmosphere, whatever surface CMA wrote.
+            surface = 10 if bundle_id.startswith("tcdc") else 1
+            self.assertEqual(metadata["variables"][0]["parameter"]["typeOfFirstFixedSurface"], surface, bundle_id)
 
     def test_the_temperature_is_celsius(self) -> None:
         values = self._values("tmp2m", 6)
