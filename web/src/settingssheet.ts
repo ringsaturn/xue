@@ -17,7 +17,7 @@ import { COORDINATE_FORMATS, coordinateFormat, grid, onMapPrefsChange, setCoordi
 import { GRID_KINDS, type GridKind } from "./urlstate";
 import { createSheet, mountLanguageList } from "./sheet";
 import { isDark, onThemeChange, toggleTheme } from "./theme";
-import { browserZone, knownZones, matchZone, onDisplayZoneChange, setZonePref, ZONE_MODES, zoneOffsetLabel, zonePref } from "./timezone";
+import { browserZone, knownZones, matchZone, onDisplayZoneChange, searchZones, setZonePref, ZONE_MODES, zoneOffsetLabel, zonePref } from "./timezone";
 import {
   browserRegion,
   onUnitsChange,
@@ -88,12 +88,15 @@ function field(caption: string, choices: readonly Choice[], switches = false): H
 
 const ZONE_MODE_KEYS: Record<string, MessageKey> = { auto: "zoneAuto", local: "zoneLocal" };
 
+/** How many zones the search box offers at once. */
+const ZONE_SUGGESTIONS = 8;
+
 /** The clock row: the three modes as chips, and a search box for every
- * other zone under them. The box suggests from the engine's own list (some
- * four hundred ids, each with its offset now), filled on first focus rather
- * than with the sheet; what is typed is matched leniently (`tokyo`,
- * `new york`) on Enter or on leaving the box. A zone picked there unchecks
- * the chips. */
+ * other zone under them. The suggestions are the sheet's own buttons, a
+ * handful at a time, not a native `<datalist>`: handed the engine's four
+ * hundred ids, the browser's own popup can hang the page (WebKit on macOS
+ * does). Enter takes the zone the query names, or failing that the first
+ * suggestion; a zone picked there unchecks the chips. */
 function zoneField(): HTMLElement {
   const now = Date.now();
   const wrapper = field(
@@ -116,30 +119,58 @@ function zoneField(): HTMLElement {
   input.spellcheck = false;
   input.value = custom ? zonePref : "";
   if (custom) input.setAttribute("aria-current", "true");
-  const list = document.createElement("datalist");
-  list.id = "settings-zone-list";
-  input.setAttribute("list", list.id);
-  input.addEventListener(
-    "focus",
-    () => {
-      for (const zone of knownZones()) list.append(new Option(zoneOffsetLabel(zone, now), zone));
-    },
-    { once: true },
-  );
-  const commit = () => {
-    const zone = matchZone(input.value, knownZones());
-    if (zone === null) {
-      input.setAttribute("aria-invalid", String(input.value.trim() !== ""));
-      return;
-    }
-    input.removeAttribute("aria-invalid");
+  const suggestions = document.createElement("div");
+  suggestions.className = "settings-zone-suggestions";
+  suggestions.id = "settings-zone-suggestions";
+  suggestions.setAttribute("role", "listbox");
+  suggestions.setAttribute("aria-label", t("zoneOther"));
+  input.setAttribute("aria-controls", suggestions.id);
+  let shown: string[] = [];
+
+  const pick = (zone: string) => {
     if (zone !== zonePref) setZonePref(zone);
+    else {
+      input.value = zone;
+      suggestions.replaceChildren();
+    }
   };
+  const suggest = () => {
+    input.removeAttribute("aria-invalid");
+    shown = input.value.trim() === "" ? [] : searchZones(input.value, knownZones(), ZONE_SUGGESTIONS);
+    suggestions.replaceChildren(
+      ...shown.map((zone) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("role", "option");
+        const name = document.createElement("span");
+        name.textContent = zone;
+        const offset = document.createElement("span");
+        offset.className = "settings-zone-offset";
+        offset.textContent = zoneOffsetLabel(zone, now);
+        button.append(name, offset);
+        button.addEventListener("click", () => pick(zone));
+        button.addEventListener("keydown", (event) => moveFocus(event, button));
+        return button;
+      }),
+    );
+  };
+  const moveFocus = (event: KeyboardEvent, from: HTMLElement) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = [...suggestions.querySelectorAll<HTMLElement>("button")];
+    const index = from === input ? -1 : buttons.indexOf(from);
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    (next < 0 ? input : buttons[Math.min(next, buttons.length - 1)])?.focus();
+  };
+  input.addEventListener("input", suggest);
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") commit();
+    moveFocus(event, input);
+    if (event.key !== "Enter") return;
+    const zone = matchZone(input.value, knownZones()) ?? shown[0] ?? null;
+    if (zone !== null) pick(zone);
+    else input.setAttribute("aria-invalid", String(input.value.trim() !== ""));
   });
-  input.addEventListener("change", commit);
-  wrapper.append(input, list);
+  wrapper.append(input, suggestions);
   return wrapper;
 }
 

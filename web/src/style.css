@@ -2388,6 +2388,46 @@ html[lang="ja"] .rail-glyph {
   border-color: var(--warning);
 }
 
+/* The search box's suggestions: a short column of rows under it, the zone
+   and its offset now. */
+.settings-zone-suggestions {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.settings-zone-suggestions:empty {
+  display: none;
+}
+
+.settings-zone-suggestions button {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  text-align: left;
+}
+
+.settings-zone-suggestions button:hover,
+.settings-zone-suggestions button:focus-visible {
+  background: var(--line);
+  outline: none;
+}
+
+.settings-zone-offset {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
