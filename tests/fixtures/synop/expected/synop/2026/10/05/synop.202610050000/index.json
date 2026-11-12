@@ -67,8 +67,8 @@
    },
    "stations": {
     "path": "hko.stations.json",
-    "byteLength": 9813,
-    "crc32": "71ecbcc0",
+    "byteLength": 9806,
+    "crc32": "8bd5280d",
     "count": 62
    }
   }
