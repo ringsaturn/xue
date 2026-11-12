@@ -13,7 +13,7 @@ export function checkStationId(v: unknown, at: string): asserts v is StationId {
   isString(v, at, PATTERN_1);
 }
 
-/** 0 a principal station, 1 a multi-element automatic station, 2 a precipitation gauge. */
+/** 0 a principal station, 1 a multi-element automatic station, 2 a single-purpose gauge (precipitation or tide alone). */
 export type Rank = 0 | 1 | 2;
 
 export function checkRank(v: unknown, at: string): asserts v is Rank {
@@ -21,7 +21,7 @@ export function checkRank(v: unknown, at: string): asserts v is Rank {
 }
 
 /** One line of synop.<round>/<network>.jsonl (docs/synop.md section 6), index v1 and v2 alike: a station and its 24-hour window, column by column. That time strictly increases and every obs and qc array is as long as it are the readers' own checks. */
-export type SynopLine = { id: StationId; name?: string | null; names?: Record<string, string> | null; lat: number; lon: number; elev?: number | null; wmo?: string | null; wigos?: string | null; rank: Rank; time: number[]; obs: { t?: (number | null)[]; td?: (number | null)[]; rh?: (number | null)[]; p?: (number | null)[]; slp?: (number | null)[]; wd?: (number | null)[]; ws?: (number | null)[]; gust?: (number | null)[]; pr?: (number | null)[]; pr1h?: (number | null)[]; sun?: (number | null)[]; snow?: (number | null)[]; vis?: (number | null)[] } & Record<string, (number | null)[]>; qc?: Record<string, (number | null)[]> | null };
+export type SynopLine = { id: StationId; name?: string | null; names?: Record<string, string> | null; lat: number; lon: number; elev?: number | null; wmo?: string | null; wigos?: string | null; rank: Rank; time: number[]; obs: { t?: (number | null)[]; td?: (number | null)[]; rh?: (number | null)[]; p?: (number | null)[]; slp?: (number | null)[]; wd?: (number | null)[]; ws?: (number | null)[]; gust?: (number | null)[]; pr?: (number | null)[]; pr1h?: (number | null)[]; sun?: (number | null)[]; snow?: (number | null)[]; vis?: (number | null)[]; tide?: (number | null)[] } & Record<string, (number | null)[]>; qc?: Record<string, (number | null)[]> | null };
 
 export function checkSynopLine(v: unknown, at: string): asserts v is SynopLine {
   isObject(v, at);
@@ -204,26 +204,36 @@ export function checkSynopLine(v: unknown, at: string): asserts v is SynopLine {
       }
     }
   }
-  for (const [k55, v56] of Object.entries(v15)) {
-    if ((["t","td","rh","p","slp","wd","ws","gust","pr","pr1h","sun","snow","vis"] as string[]).includes(k55)) continue;
-    isList(v56, at + ".obs." + k55);
-    for (let i57 = 0; i57 < v56.length; i57++) {
-      const v58: unknown = v56[i57];
-      if (v58 !== null) {
-        isNumber(v58, at + ".obs." + k55 + "[" + i57 + "]");
+  const v55 = v15["tide"];
+  if (v55 !== undefined) {
+    isList(v55, at + ".obs.tide");
+    for (let i56 = 0; i56 < v55.length; i56++) {
+      const v57: unknown = v55[i56];
+      if (v57 !== null) {
+        isNumber(v57, at + ".obs.tide[" + i56 + "]", -2, 20);
       }
     }
   }
-  const v59 = v["qc"];
-  if (v59 !== undefined) {
-    if (v59 !== null) {
-      isObject(v59, at + ".qc");
-      for (const [k60, v61] of Object.entries(v59)) {
-        isList(v61, at + ".qc." + k60);
-        for (let i62 = 0; i62 < v61.length; i62++) {
-          const v63: unknown = v61[i62];
-          if (v63 !== null) {
-            isInteger(v63, at + ".qc." + k60 + "[" + i62 + "]", 0, 255);
+  for (const [k58, v59] of Object.entries(v15)) {
+    if ((["t","td","rh","p","slp","wd","ws","gust","pr","pr1h","sun","snow","vis","tide"] as string[]).includes(k58)) continue;
+    isList(v59, at + ".obs." + k58);
+    for (let i60 = 0; i60 < v59.length; i60++) {
+      const v61: unknown = v59[i60];
+      if (v61 !== null) {
+        isNumber(v61, at + ".obs." + k58 + "[" + i60 + "]");
+      }
+    }
+  }
+  const v62 = v["qc"];
+  if (v62 !== undefined) {
+    if (v62 !== null) {
+      isObject(v62, at + ".qc");
+      for (const [k63, v64] of Object.entries(v62)) {
+        isList(v64, at + ".qc." + k63);
+        for (let i65 = 0; i65 < v64.length; i65++) {
+          const v66: unknown = v64[i65];
+          if (v66 !== null) {
+            isInteger(v66, at + ".qc." + k63 + "[" + i65 + "]", 0, 255);
           }
         }
       }

@@ -240,6 +240,7 @@ export function buildSynopCard(
     [t("stationSunshine") + period(network.prPeriod), values.sun === null || values.sun === undefined ? null : `${Math.round(values.sun)} min`],
     [t("stationSnowDepth"), present(values.snow, snowDepth)],
     [t("stationVisibility"), visibility(values.vis ?? null)],
+    [t("stationTide"), present(values.tide, (value) => formatHeight(value, 2))],
     [t("stationElevation"), station.elev === null ? null : formatHeight(station.elev)],
   ]);
   if (table) root.append(table);

@@ -601,6 +601,7 @@ export const ru: Record<MessageKey, string> = {
   stationSeaLevelPressure: "Давление на уровне моря",
   stationSunshine: "Солнечное сияние",
   stationSnowDepth: "Высота снега",
+  stationTide: "Уровень моря (над нулём глубин)",
   stationElevation: "Высота",
   stationOpenSounding: "Открыть зондирование",
   stationPinHere: "Закрепить здесь",

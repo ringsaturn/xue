@@ -47,8 +47,8 @@ const LAYERS = {
   /** Every other airport, from `AIRPORT_ALL_ZOOM` up. */
   airportMinor: "station-airport-minor",
   /** Surface stations by rank: the principal ones at every zoom, the
-   * automatic ones from `SYNOP_AUTOMATIC_ZOOM`, the precipitation gauges
-   * from `SYNOP_GAUGE_ZOOM`. */
+   * automatic ones from `SYNOP_AUTOMATIC_ZOOM`, the single-purpose gauges
+   * (precipitation, tide) from `SYNOP_GAUGE_ZOOM`. */
   synopPrincipal: "station-synop-principal",
   synopAutomatic: "station-synop-automatic",
   synopGauge: "station-synop-gauge",
@@ -111,7 +111,7 @@ const SYNOP_HOVER_RADIUS = 4.5;
 /** The surface stations' temperature ramp, °C, cold to hot. It is a ramp
  * for telling a cold valley from a warm coast at a glance, not one to read
  * a value off — the card does that — and a station with no thermometer
- * (a precipitation gauge) is drawn in the neutral grey. */
+ * (a rain or tide gauge) is drawn in the neutral grey. */
 const SURFACE_T_RAMP: readonly (readonly [number, string])[] = [
   [-20, "#2c4fa8"],
   [-5, "#5b8fd6"],

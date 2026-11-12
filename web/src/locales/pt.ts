@@ -599,6 +599,7 @@ export const pt: Record<MessageKey, string> = {
   stationSeaLevelPressure: "Pressão ao nível do mar",
   stationSunshine: "Insolação",
   stationSnowDepth: "Altura da neve",
+  stationTide: "Maré (acima do zero hidrográfico)",
   stationElevation: "Altitude",
   stationOpenSounding: "Abrir a sondagem",
   stationPinHere: "Fixar aqui",

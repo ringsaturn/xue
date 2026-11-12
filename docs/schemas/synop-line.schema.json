@@ -40,7 +40,8 @@
         "pr1h": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 1000}},
         "sun": {"type": "array", "items": {"type": ["number", "null"], "minimum": 0, "maximum": 60}},
         "snow": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0, "maximum": 2000}},
-        "vis": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0}}
+        "vis": {"type": "array", "items": {"type": ["integer", "null"], "minimum": 0}},
+        "tide": {"type": "array", "items": {"type": ["number", "null"], "minimum": -2, "maximum": 20}}
       },
       "additionalProperties": {"type": "array", "items": {"type": ["number", "null"]}}
     },
@@ -57,7 +58,7 @@
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:[0-9A-Za-z_.-]+$"
     },
     "Rank": {
-      "description": "0 a principal station, 1 a multi-element automatic station, 2 a precipitation gauge.",
+      "description": "0 a principal station, 1 a multi-element automatic station, 2 a single-purpose gauge (precipitation or tide alone).",
       "enum": [0, 1, 2]
     }
   }

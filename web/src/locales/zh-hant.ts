@@ -594,6 +594,7 @@ export const zhHant: Record<MessageKey, string> = {
   stationSeaLevelPressure: "海平面氣壓",
   stationSunshine: "日照",
   stationSnowDepth: "積雪深度",
+  stationTide: "潮位（海圖基準面以上）",
   stationElevation: "海拔",
   stationOpenSounding: "查看探空",
   stationPinHere: "釘在此處",

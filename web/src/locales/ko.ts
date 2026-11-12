@@ -601,6 +601,7 @@ export const ko: Record<MessageKey, string> = {
   stationSeaLevelPressure: "해면 기압",
   stationSunshine: "일조",
   stationSnowDepth: "적설",
+  stationTide: "조위 (기본수준면 기준)",
   stationElevation: "해발고도",
   stationOpenSounding: "탐공 열기",
   stationPinHere: "여기에 고정",

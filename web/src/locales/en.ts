@@ -945,6 +945,9 @@ export const en = {
   stationSeaLevelPressure: "Sea-level pressure",
   stationSunshine: "Sunshine",
   stationSnowDepth: "Snow depth",
+  /** A tide gauge's water level, which the product gives above the
+   * network's chart datum (docs/synop.md §2), not above mean sea level. */
+  stationTide: "Tide (above chart datum)",
   stationElevation: "Elevation",
   /** The card's button: pins the probe on the station, and for a sounding
    * also opens the chart under the panel. */

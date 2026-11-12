@@ -599,6 +599,7 @@ export const de: Record<MessageKey, string> = {
   stationSeaLevelPressure: "Luftdruck auf Meereshöhe",
   stationSunshine: "Sonnenschein",
   stationSnowDepth: "Schneehöhe",
+  stationTide: "Wasserstand (über Seekartennull)",
   stationElevation: "Höhe",
   stationOpenSounding: "Sondierung öffnen",
   stationPinHere: "Hier anheften",
