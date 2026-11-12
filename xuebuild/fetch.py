@@ -1437,20 +1437,11 @@ def observation_window_start(
 ) -> datetime:
     """Where a live observation window starts: the hour ``hours - 1`` before
     the newest frame, every feed whose own listing or archive reaches that
-    far back. The aurora cache is the exception — the live service keeps
-    only the newest grid, so the window is grown from a frame cache and may
-    not yet reach back a whole window — and there the start is the hour of
-    its **earliest cached frame**, so the run id and the manifest's run
-    time (the first frame's hour, the observation rule) agree from the
-    first round and the window lengthens as the cache fills. An empty
-    cache starts at the newest frame's own hour."""
-    start = newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
-    if spec.id != "aurora" or raw_root is None:
-        return start
-    frames = aurora.cached_frames(raw_root / aurora.FRAMES_DIRNAME)
-    if not frames:
-        return newest.replace(minute=0, second=0, microsecond=0)
-    return max(start, frames[0][0].replace(minute=0, second=0, microsecond=0))
+    far back. A feed whose window cannot — the aurora cache, grown a frame
+    a round — answers for itself (``Feed.window_start``), always so that the
+    run id is the hour of the window's first frame, which is the manifest's
+    run time (the observation rule) and what the pointer requires."""
+    return _fetcher(spec).window_start(spec, newest, hours, raw_root)
 
 
 # -- CMA radar mosaic ---------------------------------------------------------

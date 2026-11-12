@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from . import cmadust, cmageps, fetch, silam
+from . import aurora, cmadust, cmageps, fetch, silam
 from .errors import DownloadError
 from .model import GfsRun
 from .sources import SourceSpec
@@ -41,6 +41,11 @@ class Fetcher(Protocol):
 
     def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
         """The newest frame a live observation feed holds."""
+        ...
+
+    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
+        """Where the live window whose newest frame is ``newest`` starts:
+        the run ``--run latest`` resolves to."""
         ...
 
     def is_complete(
@@ -65,6 +70,11 @@ class Feed:
 
     def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
         raise DownloadError(f"{spec.manifest_model} is not a live observation source")
+
+    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
+        # The hour ``hours - 1`` before the newest frame: every feed whose
+        # own listing or archive reaches that far back.
+        return newest.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours - 1)
 
     def is_complete(
         self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
@@ -431,6 +441,21 @@ class Ovation(Feed):
 
     def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
         return fetch.latest_aurora_slot(spec, now=now)
+
+    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
+        # The live service keeps only the newest grid, so the window grows
+        # from the frame cache and may not yet reach back a whole window:
+        # it starts at the hour of the earliest cached frame, so the run id
+        # and the manifest's run time (the first frame's hour, the
+        # observation rule) agree from the first round. An empty cache
+        # starts at the newest frame's own hour.
+        start = super().window_start(spec, newest, hours, raw_root)
+        if raw_root is None:
+            return start
+        frames = aurora.cached_frames(raw_root / aurora.FRAMES_DIRNAME)
+        if not frames:
+            return newest.replace(minute=0, second=0, microsecond=0)
+        return max(start, frames[0][0].replace(minute=0, second=0, microsecond=0))
 
     def is_complete(
         self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
