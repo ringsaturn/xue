@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { axisTicks, gapSeconds, linePath, valueRange } from "../../web/src/stations/sparkline";
+import { axisTicks, gapSeconds, linePath, nearestIndex, valueRange } from "../../web/src/stations/sparkline";
 
 describe("station sparklines", () => {
   it("calls a pair a gap at three steps, never under an hour", () => {
@@ -34,5 +34,15 @@ describe("station sparklines", () => {
     const india = axisTicks([start, start + 86400], "Asia/Kolkata");
     expect(india.map((tick) => tick.hour)).toEqual([0, 6, 12, 18]);
     expect(india[0]!.seconds).toBe(Date.UTC(2026, 10, 13, 18, 30) / 1000);
+  });
+
+  it("reads the report nearest the pointer's time", () => {
+    const time = [0, 600, 1200, 3600];
+    expect(nearestIndex(time, -50)).toBe(0);
+    expect(nearestIndex(time, 290)).toBe(0);
+    expect(nearestIndex(time, 310)).toBe(1);
+    expect(nearestIndex(time, 2500)).toBe(3);
+    expect(nearestIndex(time, 9999)).toBe(3);
+    expect(nearestIndex([42], 0)).toBe(0);
   });
 });

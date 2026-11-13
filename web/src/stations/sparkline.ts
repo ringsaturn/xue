@@ -174,13 +174,42 @@ function convert(values: readonly (number | null)[] | undefined, to: (value: num
   return (values ?? []).map((value) => (value === null ? null : to(value)));
 }
 
-function row(label: string, summary: string, plot: SVGSVGElement): HTMLElement {
+/** One chart row as drawn, with what the pointer needs to read it: the
+ * summary it shows at rest and how it reads at one report. */
+interface Row {
+  summary: HTMLElement;
+  rest: string;
+  at: (index: number) => string;
+  cursor: SVGLineElement;
+}
+
+function row(label: string, summary: string, plot: SVGSVGElement, at: (index: number) => string): { root: HTMLElement; row: Row } {
   const block = element("div", "station-spark");
   const head = element("div", "station-spark-head");
   head.append(element("span", "", label));
-  head.append(element("span", "station-spark-range", summary));
+  const value = element("span", "station-spark-range", summary);
+  head.append(value);
+  const cursor = document.createElementNS(SVG, "line");
+  cursor.setAttribute("y1", "0");
+  cursor.setAttribute("y2", String(HEIGHT));
+  cursor.setAttribute("class", "station-spark-cursor");
+  cursor.setAttribute("vector-effect", "non-scaling-stroke");
+  cursor.style.display = "none";
+  plot.append(cursor);
   block.append(head, plot);
-  return block;
+  return { root: block, row: { summary: value, rest: summary, at, cursor } };
+}
+
+/** The report nearest a time: the index into `time`, oldest first. */
+export function nearestIndex(time: readonly number[], seconds: number): number {
+  let low = 0;
+  let high = time.length - 1;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (time[middle]! <= seconds) low = middle;
+    else high = middle;
+  }
+  return Math.abs(time[high]! - seconds) < Math.abs(time[low]! - seconds) ? high : low;
 }
 
 /** The low–high of a series, in its display formatter. */
@@ -198,6 +227,8 @@ export class Sparks {
   private readonly span: [number, number];
   private readonly ticks: { seconds: number; hour: number; day: string }[];
   private readonly block = element("div", "station-sparks");
+  private readonly rows: Row[] = [];
+  private readonly when = element("span", "station-spark-when");
 
   /** `time` is epoch seconds, oldest first. */
   constructor(
@@ -206,7 +237,9 @@ export class Sparks {
   ) {
     this.span = [time[0] ?? 0, time[time.length - 1] ?? 0];
     this.ticks = axisTicks(this.span, displayZone);
-    this.block.append(element("div", "station-spark-title", t("stationLast24h")));
+    const title = element("div", "station-spark-title");
+    title.append(element("span", "", t("stationLast24h")), this.when);
+    this.block.append(title);
   }
 
   /** One line, with a quieter second (dew point, gust) where given. */
@@ -222,17 +255,74 @@ export class Sparks {
     const second = present(options.second);
     if (second.length >= 2) traces.push({ values: convert(options.second, to), className: "station-spark-line station-spark-second" });
     const all = second.length >= 2 ? [...first, ...second] : first;
-    this.block.append(row(label, spread(all, options.format), lineChart(this.time, traces, this.span, to(options.minSpan) - to(0), this.gridTimes())));
+    const read = (column: Column, index: number) => {
+      const value = column?.[index];
+      return value === null || value === undefined ? "--" : options.format(value);
+    };
+    const at = (index: number) =>
+      second.length >= 2 ? `${read(values, index)} · ${read(options.second, index)}` : read(values, index);
+    this.add(row(label, spread(all, options.format), lineChart(this.time, traces, this.span, to(options.minSpan) - to(0), this.gridTimes()), at));
     return this;
   }
 
   /** Totals over each report's own period, as bars; `summary` from the
    * values in canonical units. */
-  bars(label: string, values: Column, to: (value: number) => number, summary: (values: number[]) => string): this {
+  bars(
+    label: string,
+    values: Column,
+    to: (value: number) => number,
+    summary: (values: number[]) => string,
+    format: (value: number) => string,
+  ): this {
     const present_ = present(values);
     if (this.time.length < 2 || !present_.length) return this;
-    this.block.append(row(label, summary(present_), barChart(this.time, convert(values, to), this.span, this.gridTimes())));
+    const at = (index: number) => {
+      const value = values?.[index];
+      return value === null || value === undefined ? "--" : format(value);
+    };
+    this.add(row(label, summary(present_), barChart(this.time, convert(values, to), this.span, this.gridTimes()), at));
     return this;
+  }
+
+  private add(drawn: { root: HTMLElement; row: Row }): void {
+    this.block.append(drawn.root);
+    this.rows.push(drawn.row);
+  }
+
+  /** The pointer over any chart reads every chart at the report nearest
+   * it: one cursor across the rows, each row's value at that report in
+   * place of its range, the report's time in the title. Leaving puts the
+   * ranges back. A finger does the same while it drags. */
+  private bindPointer(): void {
+    const show = (event: PointerEvent) => {
+      const plot = (event.target as Element | null)?.closest?.(".station-spark-plot");
+      if (!plot) return;
+      const box = plot.getBoundingClientRect();
+      if (box.width <= 0) return;
+      const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+      const index = nearestIndex(this.time, this.span[0] + share * (this.span[1] - this.span[0]));
+      const x = (fraction(this.time[index]!, this.span) * WIDTH).toFixed(1);
+      for (const each of this.rows) {
+        each.cursor.setAttribute("x1", x);
+        each.cursor.setAttribute("x2", x);
+        each.cursor.style.display = "";
+        each.summary.textContent = each.at(index);
+      }
+      this.when.textContent = this.formatTime(this.time[index]!);
+      this.block.classList.add("is-reading");
+    };
+    const hide = () => {
+      for (const each of this.rows) {
+        each.cursor.style.display = "none";
+        each.summary.textContent = each.rest;
+      }
+      this.when.textContent = "";
+      this.block.classList.remove("is-reading");
+    };
+    this.block.addEventListener("pointermove", show);
+    this.block.addEventListener("pointerdown", show);
+    this.block.addEventListener("pointerleave", hide);
+    this.block.addEventListener("pointercancel", hide);
   }
 
   private gridTimes(): number[] {
@@ -257,6 +347,7 @@ export class Sparks {
     const ends = element("div", "station-spark-ends");
     ends.append(element("span", "", this.formatTime(this.span[0])), element("span", "", this.formatTime(this.span[1])));
     this.block.append(axis, ends);
+    this.bindPointer();
     return this.block;
   }
 }
@@ -282,8 +373,13 @@ export function buildSynopSparklines(
   // same rain six times, so those show their peak instead of a sum.
   const prKey = present(obs.pr).length ? "pr" : "pr1h";
   const overlapping = prKey === "pr1h" && (prPeriod ?? 3600) < 3600;
-  sparks.bars(t("stationPrecipitation"), obs[prKey], (value) => convertPrecipitation(value), (values) =>
-    overlapping ? `↑ ${formatPrecipitation(Math.max(...values))}` : `Σ ${formatPrecipitation(values.reduce((sum, value) => sum + value, 0))}`,
+  sparks.bars(
+    t("stationPrecipitation"),
+    obs[prKey],
+    (value) => convertPrecipitation(value),
+    (values) =>
+      overlapping ? `↑ ${formatPrecipitation(Math.max(...values))}` : `Σ ${formatPrecipitation(values.reduce((sum, value) => sum + value, 0))}`,
+    (value) => formatPrecipitation(value),
   );
   return sparks.finish();
 }
