@@ -636,7 +636,6 @@ export const ru: Record<MessageKey, string> = {
   aqAgency: "Организация",
   aqNetwork: "Сеть",
   aqPreliminary: "Предварительные данные: не проверены, могут измениться",
-  aqDayRange: "PM2.5, последние 24 ч",
   aqNearest: "Ближайшая станция качества воздуха, {distance}",
   alertsTileTip: "Действующие погодные предупреждения",
   varAlerts: "ПРЕДУПР.",

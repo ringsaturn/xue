@@ -4,8 +4,8 @@
  * the network's credit line — both of which the networks' terms ask to be
  * shown with the values — and, for a network publishing unvalidated data,
  * a line saying so. The station's 24-hour window is read once the card is
- * open and adds the day's PM2.5 range and the network's own spelling of
- * the name in the reader's language.
+ * open and adds a chart of each pollutant over the day and the network's
+ * own spelling of the name in the reader's language.
  *
  * No index is computed or named: the product publishes concentrations
  * (docs/aq.md §2). Element names (`PM2.5`, `O₃`) and units are instrument
@@ -16,6 +16,7 @@ import { formatPointDegrees } from "../format";
 import { locale, t } from "../i18n";
 import { pickLanguageTag } from "../langtag";
 import { pm25Color } from "../stations/layers";
+import { Sparks } from "../stations/sparkline";
 import { aqUnit, type AqIndex, type AqNetwork, type AqStation, type AqStationSeries } from "./schema";
 
 const ELEMENT_LABELS: Record<string, string> = {
@@ -47,7 +48,7 @@ export function buildAqCard(
   station: AqStation,
   network: AqNetwork,
   index: AqIndex,
-  options: { formatTime(time: string): string; onPin?: () => void },
+  options: { formatTime(time: string): string; formatSeconds?(seconds: number): string; onPin?: () => void },
 ): AqCard {
   const root = element("div", "station-card");
   const pm25 = station.values.pm25 ?? null;
@@ -87,10 +88,9 @@ export function buildAqCard(
   list.append(element("dd", "", network.name));
   root.append(list);
 
-  // Filled in from the window: the day's PM2.5 range, a row of its own.
-  const range = element("dl", "station-card-rows");
-  range.hidden = true;
-  root.append(range);
+  // Filled in from the window: a chart per pollutant.
+  const charts = element("div", "");
+  root.append(charts);
 
   if (network.preliminary) root.append(element("div", "station-card-note", t("aqPreliminary")));
   root.append(
@@ -119,18 +119,17 @@ export function buildAqCard(
         const tag = pickLanguageTag(Object.keys(series.names), locale);
         if (tag) name.textContent = series.names[tag]!;
       }
-      const values = (series.obs.pm25 ?? []).filter((value): value is number => value !== null);
-      if (values.length < 2) return;
-      const unit = aqUnit(index, "pm25");
-      range.replaceChildren(
-        element("dt", "", t("aqDayRange")),
-        element(
-          "dd",
-          "",
-          `${formatAqValue("pm25", Math.min(...values))}–${formatAqValue("pm25", Math.max(...values))} ${unit}`,
-        ),
-      );
-      range.hidden = false;
+      if (!options.formatSeconds) return;
+      const sparks = new Sparks(series.time, options.formatSeconds);
+      for (const key of index.elements) {
+        const unit = aqUnit(index, key);
+        sparks.line(aqElementLabel(key), series.obs[key], {
+          format: (value) => `${formatAqValue(key, value)} ${unit}`.trimEnd(),
+          minSpan: key === "co" ? 0.2 : 2,
+        });
+      }
+      const block = sparks.finish();
+      if (block) charts.replaceChildren(block);
     },
   };
 }

@@ -39,6 +39,7 @@ import type { SoundingSection } from "./sounding/section";
 import { buildAirportCard, buildSoundingCard, buildSynopCard } from "./stations/card";
 import {
   fetchAirportIndex,
+  fetchAirportStation,
   fetchSoundingIndex,
   fetchSynopIndex,
   fetchSynopStation,
@@ -54,7 +55,7 @@ import { pointDataOf, StormLayers, type StormView, TC_CLICKABLE_LAYERS, type TcP
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, type LoadedTcIndex, resolveTcStormId, stormBounds } from "./tc/tracks";
-import type { SynopStationSeries } from "./stations/schema";
+import type { AirportStationHistory, SynopStationSeries } from "./stations/schema";
 import type { TileRect } from "./tiles";
 import { displayZone, formatCompactStamp } from "./timezone";
 import { onUnitsChange } from "./units";
@@ -954,28 +955,40 @@ export function createMarks(deps: MarksDeps) {
           });
       }
     } else {
-      // A weather station's card draws its 24-hour window once its line
-      // has been read: one range request, made when the card opens, kept
-      // so a change of units redraws the charts rather than dropping them.
+      // A weather station's or an airport's card draws its 24-hour window
+      // once its line has been read: one range request, made when the card
+      // opens, kept so a change of units redraws the charts rather than
+      // dropping them.
       let series: SynopStationSeries | null = null;
+      let history: AirportStationHistory | null = null;
       const build = () =>
         data.kind === "sounding"
           ? buildSoundingCard(data.station, options)
           : data.kind === "synop"
             ? buildSynopCard(data.station, data.network, options, series)
-            : buildAirportCard(data.station, options);
+            : buildAirportCard(data.station, options, history);
       content = build();
       rebuild = build;
-      const loaded = synopLoaded;
-      if (data.kind === "synop" && loaded) {
-        void fetchSynopStation(loaded, data.station)
+      const redraw = () => {
+        if (stationCard === card) card.setDOMContent(build());
+      };
+      const failed = (id: string) => (error: unknown) => {
+        console.warn(`${data.kind}: ${id} window not read:`, error instanceof Error ? error.message : error);
+      };
+      if (data.kind === "synop" && synopLoaded) {
+        void fetchSynopStation(synopLoaded, data.station)
           .then((read) => {
             series = read;
-            if (stationCard === card) card.setDOMContent(build());
+            redraw();
           })
-          .catch((error: unknown) => {
-            console.warn(`synop: ${data.station.id} window not read:`, error instanceof Error ? error.message : error);
-          });
+          .catch(failed(data.station.id));
+      } else if (data.kind === "airport" && airportLoaded) {
+        void fetchAirportStation(airportLoaded, data.station)
+          .then((read) => {
+            history = read;
+            redraw();
+          })
+          .catch(failed(data.station.icao));
       }
     }
     const card = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 10 })

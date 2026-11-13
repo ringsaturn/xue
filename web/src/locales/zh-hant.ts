@@ -629,7 +629,6 @@ export const zhHant: Record<MessageKey, string> = {
   aqAgency: "營運機構",
   aqNetwork: "網絡",
   aqPreliminary: "初步數據：未經審核，可能修改",
-  aqDayRange: "PM2.5，近 24 小時",
   aqNearest: "最近的空氣品質測站，{distance}",
   alertsTileTip: "目前生效的天氣警告",
   varAlerts: "警告",

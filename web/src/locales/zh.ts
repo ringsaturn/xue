@@ -629,7 +629,6 @@ export const zh: Record<MessageKey, string> = {
   aqAgency: "运营机构",
   aqNetwork: "网络",
   aqPreliminary: "初步数据：未经审核，可能修改",
-  aqDayRange: "PM2.5，近 24 小时",
   aqNearest: "最近的空气质量监测站，{distance}",
   alertsTileTip: "当前生效的天气预警",
   varAlerts: "预警",
