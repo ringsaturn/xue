@@ -3277,6 +3277,30 @@ html[lang="ja"] .rail-glyph {
   font-size: var(--fs-1);
 }
 
+/* The title carries the time of the report the pointer reads. */
+.station-spark-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.station-spark-when {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A finger dragging across the charts reads them rather than scrolling
+   the card sideways; up and down still scroll. */
+.station-spark-plot {
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+
+.station-spark-cursor {
+  stroke: var(--text);
+  stroke-width: 1;
+}
+
 .station-spark-head {
   display: flex;
   justify-content: space-between;
@@ -3804,14 +3828,21 @@ html[lang="ja"] .rail-glyph {
 
 /* The pin's surface station and its day, on the rows' two columns. */
 .obs-section {
-  display: grid;
-  grid-template-columns: var(--probe-column) minmax(0, 1fr);
   margin-top: 4px;
-  padding-top: 4px;
   border-top: var(--hair) solid var(--line);
 }
 
 .obs-section[hidden] {
+  display: none;
+}
+
+.obs-body {
+  display: grid;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  padding-bottom: 6px;
+}
+
+.obs-body[hidden] {
   display: none;
 }
 
