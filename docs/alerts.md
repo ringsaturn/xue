@@ -1153,6 +1153,12 @@ Reading:
   administrative code of the county, prefecture or province), drawn by
   `cma-areas` (§9.4). A township's code (its last six digits not zero) is
   drawn by its county, and `native.geocodes` keeps the twelve digits.
+  A prefecture observatory often codes a city-wide warning to its seat
+  county alone (Langfang's 大雾 to 安次区 `131002`, its text saying 全市):
+  when the identifier's first six digits, the issuing office's code, are a
+  prefecture's (`XXYY00`, not a province's `XX0000`) and the message's one
+  code is a county of that prefecture, `areas` is the prefecture
+  (`131000`). Several codes, or the prefecture's own, are kept as given.
   `geometry` is `null`: the messages carry no polygon.
 - `url`: the message's CAP file at SWIC; `sender`: CAP `sender`, its
   underscores as spaces (`Nongan County Meteorological Observatory`).
