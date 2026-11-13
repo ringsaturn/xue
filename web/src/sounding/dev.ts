@@ -26,11 +26,11 @@ import type { SkewTInk, SkewTLayout } from "./skewt";
  * and never reads a stylesheet, so a dev page can hold both themes on screen
  * at once — which is the point of the page. */
 const LIGHT: SkewTInk = {
-  ink: "#1b1a17",
-  inkMuted: "#6e6a60",
-  grid: "rgba(27, 26, 23, 0.20)",
-  gridStrong: "rgba(27, 26, 23, 0.45)",
-  paper: "#f3efe6",
+  ink: "#111111",
+  inkMuted: "#666666",
+  grid: "rgba(17, 17, 17, 0.20)",
+  gridStrong: "rgba(17, 17, 17, 0.45)",
+  paper: "#ffffff",
   model: "#e8763a",
   parcel: "#2f8a3a",
   temperature: "#b4441a",
@@ -39,9 +39,9 @@ const LIGHT: SkewTInk = {
   dryAdiabat: "rgba(58, 128, 44, 0.42)",
   moistAdiabat: "rgba(58, 128, 44, 0.32)",
   mixingRatio: "rgba(146, 58, 168, 0.42)",
-  tag: "rgba(27, 26, 23, 0.82)",
-  tagText: "#f3efe6",
-  halo: "#f3efe6",
+  tag: "rgba(17, 17, 17, 0.82)",
+  tagText: "#ffffff",
+  halo: "#ffffff",
 };
 
 /** And the void palette. */
