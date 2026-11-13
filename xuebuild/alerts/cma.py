@@ -12,6 +12,8 @@ whose area is one or more CPEAS geographic codes (twelve digits, the
 first six the administrative code of the county, prefecture or province):
 no polygon. The codes resolve against ``cma-areas`` by those six digits;
 a township code (its last six digits not zero) is drawn by its county.
+A prefecture observatory's warning coded to one county of its own
+prefecture is drawn as the prefecture (``_issuer_areas``).
 
 A CAP path carries the message's digest, so a file never changes: fetched
 files are kept in ``<raw>/alerts-cache/cma/`` across rounds and each round
@@ -176,6 +178,24 @@ def _area_codes(info: ET.Element) -> tuple[list[str], list[str], list[str]]:
     return list(dict.fromkeys(codes)), list(dict.fromkeys(geocodes)), descriptions
 
 
+def _issuer_areas(identifier: str, codes: list[str]) -> list[str]:
+    """The areas a prefecture observatory's warning is drawn over.
+
+    The identifier opens with the issuing office's six-digit administrative
+    code (``131000…`` for Langfang). Many prefecture observatories code a
+    city-wide warning to their seat county alone (Langfang's 大雾 to 安次区
+    131002, its text saying 全市), so a warning from a prefecture-level
+    office (``XXYY00``, not a province's ``XX0000``) whose one code is a
+    county of that same prefecture is drawn as the prefecture. A warning
+    naming several counties, or the prefecture itself, keeps its codes."""
+    issuer = identifier[:6]
+    if not re.fullmatch(r"\d{4}00", issuer) or issuer.endswith("0000"):
+        return codes
+    if len(codes) == 1 and codes[0] != issuer and codes[0][:4] == issuer[:4]:
+        return [issuer]
+    return codes
+
+
 def references(alert: ET.Element) -> list[str]:
     """The messages CAP ``references`` names (space-separated
     ``sender,identifier,sent`` triples), as product ids. The identifier is
@@ -212,6 +232,7 @@ def convert(body: bytes, path: str, moment: datetime) -> dict[str, Any] | None:
     if expires is not None and expires <= moment:
         return None
     codes, geocodes, _ = _area_codes(primary)
+    codes = _issuer_areas(identifier, codes)
     languages: dict[str, dict[str, str]] = {}
     for language, info in by_language.items():
         if not LANGUAGE.match(language) or language in languages:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -630,6 +631,24 @@ class CmaTest(unittest.TestCase):
         self.assertEqual(frost["areas"], ["330110"])
         self.assertEqual(frost["native"]["geocodes"], ["330110014000"])
         self.assertEqual(by_event["大风"]["sender"], "Nongan County Meteorological Observatory")
+
+    def test_a_prefecture_office_coding_its_seat_county_draws_the_prefecture(self) -> None:
+        self.assertEqual(cma._issuer_areas("13100041600000", ["131002"]), ["131000"])
+        # The prefecture itself, several counties, another prefecture's county,
+        # a county office and a province office keep their codes.
+        self.assertEqual(cma._issuer_areas("13100041600000", ["131000"]), ["131000"])
+        self.assertEqual(cma._issuer_areas("13100041600000", ["131002", "131003"]), ["131002", "131003"])
+        self.assertEqual(cma._issuer_areas("13100041600000", ["130202"]), ["130202"])
+        self.assertEqual(cma._issuer_areas("12011541600000", ["120115"]), ["120115"])
+        self.assertEqual(cma._issuer_areas("13000041600000", ["131002"]), ["131002"])
+        path, body = next((path, body) for path, body in self.caps(FIRST).items() if b"120115" in body)
+        identifier = re.search(rb"<identifier>(\d+)", body)
+        assert identifier is not None
+        moved = body.replace(identifier.group(1), b"120100" + identifier.group(1)[6:])
+        line = cma.convert(moved, path, FIRST)
+        assert line is not None
+        self.assertEqual(line["areas"], ["120100"])
+        self.assertEqual(line["native"]["geocodes"][0][:6], "120115")
 
     def test_references_take_the_identifier_second_from_the_end(self) -> None:
         update = next(line for path, body in self.caps(SECOND).items() for line in [cma.convert(body, path, SECOND)] if line and line["native"]["msgType"] == "Update")
