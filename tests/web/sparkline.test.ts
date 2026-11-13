@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gapSeconds, linePath, valueRange } from "../../web/src/stations/sparkline";
+import { axisTicks, gapSeconds, linePath, valueRange } from "../../web/src/stations/sparkline";
 
 describe("station sparklines", () => {
   it("calls a pair a gap at three steps, never under an hour", () => {
@@ -21,5 +21,18 @@ describe("station sparklines", () => {
     expect(path.match(/M/g)).toHaveLength(3);
     expect(path.match(/L/g)).toHaveLength(2);
     expect(path.startsWith("M0.0 8.0L6.0 2.0M18.0 2.0M90.0 8.0L96.0 2.0")).toBe(true);
+  });
+
+  it("marks every six hours of the zone's clock, with the date at midnight", () => {
+    // 2026-11-13 13:30 UTC → 2026-11-14 13:30 UTC is 22:30 → 22:30 in Tokyo.
+    const start = Date.UTC(2026, 10, 13, 13, 30) / 1000;
+    const ticks = axisTicks([start, start + 86400], "Asia/Tokyo");
+    expect(ticks.map((tick) => tick.hour)).toEqual([0, 6, 12, 18]);
+    expect(ticks[0]!.day).toBe("11/14");
+    expect(ticks[0]!.seconds).toBe(Date.UTC(2026, 10, 13, 15) / 1000);
+    // A half-hour zone lands on its own whole hours.
+    const india = axisTicks([start, start + 86400], "Asia/Kolkata");
+    expect(india.map((tick) => tick.hour)).toEqual([0, 6, 12, 18]);
+    expect(india[0]!.seconds).toBe(Date.UTC(2026, 10, 13, 18, 30) / 1000);
   });
 });
