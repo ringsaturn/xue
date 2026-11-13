@@ -93,7 +93,7 @@ test("the air-quality tile toggles the stations and a station opens its card", a
   await expect.poll(() => new URL(page.url()).searchParams.has("stations")).toBe(false);
 });
 
-test("the warnings tile draws what is in force and a click inside one opens its card", async ({ page }, testInfo) => {
+test("the warnings tile draws what is in force, a click inside one opens its card and a second pins the point", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
   await routeRun(page);
   await routeProduct(page, "alerts", ALERTS_ROOT);
@@ -114,7 +114,12 @@ test("the warnings tile draws what is in force and a click inside one opens its 
   await expect(card).toContainText("Level 4");
   await expect(card).toContainText("NWS Phoenix AZ");
   await expect(card).toContainText("US National Weather Service");
-  // The pin under the card names the warning too.
+  await expect(card).toContainText("Click the area again");
+  // The first click is the card's alone; a second inside the same warning,
+  // clear of the card's tip, pins the point, whose panel names it too.
+  const box = (await page.locator("#map").boundingBox())!;
+  await page.locator("#map").click({ position: { x: box.width / 2 - 60, y: box.height / 2 } });
+  await expect(page.locator(".station-popup")).toHaveCount(0);
   await expect(page.locator("#probe-alert")).toContainText("Tornado Warning");
 
   await tile.click();

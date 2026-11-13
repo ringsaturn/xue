@@ -3248,6 +3248,68 @@ html[lang="ja"] .rail-glyph {
   line-height: 1.3;
 }
 
+/* A weather station's 24-hour window: one small chart per quantity on a
+   shared time axis, the second trace (dew point, gust) quieter. */
+.station-sparks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.station-spark-title,
+.station-spark-axis {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.station-spark-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-1);
+}
+
+.station-spark-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.station-spark-plot {
+  display: block;
+  width: 100%;
+  height: 34px;
+  overflow: visible;
+}
+
+.station-spark-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.station-spark-second {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+.station-spark-bar {
+  fill: var(--muted);
+}
+
+.station-spark-axis {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+
+.alerts-card-hint {
+  color: var(--muted);
+}
+
 /* The warnings card: one entry per warning in force at the spot, highest
    level first, each led by its level in the level's colour. Long lists
    scroll inside the card rather than over the map. */

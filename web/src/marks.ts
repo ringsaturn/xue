@@ -41,6 +41,7 @@ import {
   fetchAirportIndex,
   fetchSoundingIndex,
   fetchSynopIndex,
+  fetchSynopStation,
   type LoadedAirportIndex,
   type LoadedSoundingIndex,
   type LoadedSynopIndex,
@@ -53,7 +54,9 @@ import { pointDataOf, StormLayers, type StormView, TC_CLICKABLE_LAYERS, type TcP
 import { renderTcPanel } from "./tc/panel";
 import type { TcIndexEntry, TcStorm } from "./tc/schema";
 import { fetchTcIndex, fetchTcStorm, type LoadedTcIndex, resolveTcStormId, stormBounds } from "./tc/tracks";
+import type { SynopStationSeries } from "./stations/schema";
 import type { TileRect } from "./tiles";
+import { displayZone, formatCompactStamp } from "./timezone";
 import { onUnitsChange } from "./units";
 import type { StationsUrlState } from "./urlstate";
 import type { ViewState } from "./viewstate";
@@ -922,6 +925,7 @@ export function createMarks(deps: MarksDeps) {
     closeStationCard();
     const options = {
       formatTime: (time: string) => formatDate(time),
+      formatSeconds: (seconds: number) => formatCompactStamp(seconds * 1000, displayZone),
       darkGround: document.body.dataset.ground === "dark",
       // The card's button pins the probe on the station itself, which is
       // where the whole ascent, or the airport's day of reports, is read;
@@ -950,26 +954,57 @@ export function createMarks(deps: MarksDeps) {
           });
       }
     } else {
+      // A weather station's card draws its 24-hour window once its line
+      // has been read: one range request, made when the card opens, kept
+      // so a change of units redraws the charts rather than dropping them.
+      let series: SynopStationSeries | null = null;
       const build = () =>
         data.kind === "sounding"
           ? buildSoundingCard(data.station, options)
           : data.kind === "synop"
-            ? buildSynopCard(data.station, data.network, options)
+            ? buildSynopCard(data.station, data.network, options, series)
             : buildAirportCard(data.station, options);
       content = build();
       rebuild = build;
+      const loaded = synopLoaded;
+      if (data.kind === "synop" && loaded) {
+        void fetchSynopStation(loaded, data.station)
+          .then((read) => {
+            series = read;
+            if (stationCard === card) card.setDOMContent(build());
+          })
+          .catch((error: unknown) => {
+            console.warn(`synop: ${data.station.id} window not read:`, error instanceof Error ? error.message : error);
+          });
+      }
     }
-    stationCard = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 10 })
+    const card = cardPopup({ className: "station-popup", maxWidth: "280px", offset: 10 })
       .setLngLat(lngLat)
       .setDOMContent(content)
       .addTo(map);
+    stationCard = card;
     rebuildStationCard = rebuild;
+  }
+
+  /** The warnings the open warnings card lists, by id; null when the card
+   * open (if any) is not a warnings card. */
+  let alertsCardKey: string | null = null;
+
+  function alertsKey(hits: readonly AlertHit[]): string {
+    return hits.map((hit) => `${hit.network.id}/${hit.line.id}`).join(" ");
+  }
+
+  /** Whether the open card already lists exactly these warnings: a second
+   * click on the same area is the way past the card to the point's data. */
+  function alertsCardShows(hits: readonly AlertHit[]): boolean {
+    return stationCard !== null && stationCard.isOpen() && alertsCardKey !== null && alertsCardKey === alertsKey(hits);
   }
 
   /** The warnings card at a clicked point: every warning drawn there. */
   function showAlertsCard(hits: AlertHit[], lngLat: [number, number]): void {
     closeStationCard();
     if (!alertsLoaded) return;
+    alertsCardKey = alertsKey(hits);
     stationCard = cardPopup({ className: "station-popup", maxWidth: "300px", offset: 6 })
       .setLngLat(lngLat)
       .setDOMContent(
@@ -986,6 +1021,7 @@ export function createMarks(deps: MarksDeps) {
     stationCard?.remove();
     stationCard = null;
     rebuildStationCard = null;
+    alertsCardKey = null;
   }
 
   onUnitsChange(() => {
@@ -1001,6 +1037,7 @@ export function createMarks(deps: MarksDeps) {
    * place, so the next mark or storm card closes it. */
   function adoptStationCard(card: Popup): void {
     stationCard = card;
+    alertsCardKey = null;
     rebuildStationCard = null;
   }
 
@@ -1037,6 +1074,7 @@ export function createMarks(deps: MarksDeps) {
     firePointAt,
     openFire,
     showAlertsCard,
+    alertsCardShows,
     loadTc,
     loadStations,
     get tcLayers() {

@@ -5408,7 +5408,7 @@ const marksControl = createMarks({
   syncRadarTime: () => syncRadarTime(),
   ensureWindLayer,
 });
-const { fireWind, syncFireWindArrow, syncTcTime, syncStationTime, trySelectFireWind, renderTcLevelGroup, applyTcView, applyStationView, stationTime, closeStationCard, closeTcCard, adoptStationCard, acceptFireWindSeries, toggleStationProduct, applyFireWind, resetFireWind, renderTcSheet, tcPointAt, showTcCard, stationPointAt, showStationCard, firePointAt, openFire, showAlertsCard, loadTc, loadStations } = marksControl;
+const { fireWind, syncFireWindArrow, syncTcTime, syncStationTime, trySelectFireWind, renderTcLevelGroup, applyTcView, applyStationView, stationTime, closeStationCard, closeTcCard, adoptStationCard, acceptFireWindSeries, toggleStationProduct, applyFireWind, resetFireWind, renderTcSheet, tcPointAt, showTcCard, stationPointAt, showStationCard, firePointAt, openFire, showAlertsCard, alertsCardShows, loadTc, loadStations } = marksControl;
 
 /** Whether the link named imagery: a case's own picture then does not
  * override it. */
@@ -7435,12 +7435,17 @@ map.on("click", (event) => {
     openFire(fire);
     return;
   }
+  // A warning is an area, not a mark: the first click inside one opens the
+  // card of what is in force there, and a second click on the same
+  // warnings goes past the card to the point's data. A click on other
+  // warnings opens theirs.
+  const warnings = marksControl.alertLayers?.alertsAt(event.point) ?? [];
+  if (warnings.length && !alertsCardShows(warnings)) {
+    showAlertsCard(warnings, [event.lngLat.lng, event.lngLat.lat]);
+    return;
+  }
   closeStationCard();
   if (!imageryMode()) setProbe(event.lngLat.lng, event.lngLat.lat);
-  // A warning is an area, not a mark: a click inside one still pins the
-  // point, and opens the card of what is in force there beside it.
-  const warnings = marksControl.alertLayers?.alertsAt(event.point) ?? [];
-  if (warnings.length) showAlertsCard(warnings, [event.lngLat.lng, event.lngLat.lat]);
 });
 map.on("mousemove", (event) => {
   if (measureTool?.armed) return;
