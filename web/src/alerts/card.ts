@@ -198,5 +198,6 @@ export function buildAlertsCard(
     if (network.areas?.set.startsWith("jma-") && drawnBySet) root.append(jmaSetCredit());
     if (network.areas?.set === "cma-areas" && drawnBySet) root.append(element("div", "station-card-credit alerts-card-set", CMA_SET_CREDIT));
   }
+  root.append(element("div", "station-card-note alerts-card-hint", t("alertsClickAgain")));
   return root;
 }

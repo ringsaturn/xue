@@ -2,7 +2,8 @@
 // fires, air quality, warnings) are MapLibre popups with the sheet's surface
 // put on (style.css, `.tc-popup` / `.station-popup`). Each carries a close
 // button: Escape and a click elsewhere also close a card, but a phone has no
-// Escape, and a click inside a warning area opens that area's card again.
+// Escape, and a second click inside a warning area goes on to the point's
+// data rather than closing its card.
 //
 // A card opens towards the side of its point with room — above it when the
 // point is low on the screen — and is never taller than that room: the

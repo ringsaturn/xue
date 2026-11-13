@@ -965,6 +965,10 @@ export const en = {
    * also opens the chart under the panel. */
   stationOpenSounding: "Open sounding",
   stationPinHere: "Pin here",
+  /** The station card's 24-hour charts: their title and two row labels. */
+  stationLast24h: "Last 24 h",
+  stationTemperature: "Temperature",
+  stationWind: "Wind",
 
   /** The active fire marks (`docs/fire.md`): satellite fire detections from
    * NASA FIRMS over the day before the playhead. "Radiative power" is the
@@ -1019,6 +1023,8 @@ export const en = {
   alertsLevel: "Level {level}",
   alertsUntilCancelled: "until cancelled",
   alertsIssued: "issued {time}",
+  /** Under the warnings card: a second click on the same area pins the point. */
+  alertsClickAgain: "Click the area again for this point's data",
   alertCategoryRain: "Heavy rain",
   alertCategoryFlood: "Flood",
   alertCategoryLandslide: "Landslide",

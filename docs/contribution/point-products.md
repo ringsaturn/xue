@@ -250,8 +250,9 @@ per frame and never gate the playhead; a showcase case hides them, and
   highest level on each code. NWS fire weather events go to the `fire`
   layer, the rest to the others. A MeteoAlarm warning can have both a
   polygon and codes, for different parts of its area, and both are drawn.
-  A click inside an area still pins the probe and opens the card of every
-  warning there, each with its issue time; JMA's card carries the
+  A click inside an area opens the card of every warning there, each with
+  its issue time, and a second click on the same warnings closes it and
+  pins the probe; JMA's card carries the
   boundary set's 出典 and 加工 lines and folds the survey notice, CMA's and
   HKO's (both drawn by `cma-areas`) carry the Amap outline credit, and
   MeteoAlarm's links its credit to meteoalarm.org and carries the

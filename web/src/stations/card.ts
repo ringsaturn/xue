@@ -18,13 +18,16 @@ import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
 import { convertHeight, convertPrecipitation, formatDistance, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
 import { categoryColor } from "./layers";
-import type { AirportStation, SoundingStationEntry, SynopNetwork, SynopStation } from "./schema";
+import type { AirportStation, SoundingStationEntry, SynopNetwork, SynopStation, SynopStationSeries } from "./schema";
+import { buildSynopSparklines } from "./sparkline";
 
 interface StationCardOptions {
   /** The valid time, formatted the way the capsule formats one. */
   formatTime(time: string): string;
   /** Which ground the map is on, for the category's own color. */
   darkGround?: boolean;
+  /** A time in epoch seconds, short, for a chart's axis. */
+  formatSeconds?(seconds: number): string;
   /** Pin the probe at this station: the card's one action, which is how a
    * viewer gets from a mark to the full ascent under the panel, or to the
    * airport's observations laid over the rows. Absent, no button. */
@@ -204,12 +207,14 @@ function present(value: number | null | undefined, format: (value: number) => st
 
 /** A surface station's card: its current values from the index — each
  * element's newest within the hour, so a summit station's hourly humidity
- * shows between the hours — and the network it belongs to, whose credit
- * line the terms ask to be shown with the data. */
+ * shows between the hours — the network it belongs to, whose credit line
+ * the terms ask to be shown with the data, and, once its line has been
+ * read, the station's 24-hour window as charts. */
 export function buildSynopCard(
   station: SynopStation,
   network: SynopNetwork,
   options: StationCardOptions,
+  series: SynopStationSeries | null = null,
 ): HTMLElement {
   const root = element("div", "station-card");
   const values = station.values;
@@ -244,6 +249,9 @@ export function buildSynopCard(
     [t("stationElevation"), station.elev === null ? null : formatHeight(station.elev)],
   ]);
   if (table) root.append(table);
+
+  const charts = series && options.formatSeconds ? buildSynopSparklines(series, network.prPeriod, options.formatSeconds) : null;
+  if (charts) root.append(charts);
 
   root.append(position(station.lat, station.lon));
   root.append(element("div", "station-card-credit", `${network.name} · ${network.attribution}`));
