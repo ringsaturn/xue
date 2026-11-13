@@ -2877,11 +2877,23 @@ html[lang="ja"] .rail-glyph {
   font-family: var(--font-ui);
 }
 
-/* The close button sits in the card's top-right corner; the content keeps
-   clear of it. MapLibre's own button is restyled, not replaced. */
+/* The close button sits in the card's top-right corner; only the card's
+   first row keeps clear of it, so the body and its scrollbar run to the
+   card's edge below the button. MapLibre's own button is restyled, not
+   replaced. */
 .tc-popup .maplibregl-popup-content,
 .station-popup .maplibregl-popup-content {
-  padding-right: 34px;
+  padding-right: 6px;
+}
+
+.tc-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button),
+.station-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button) {
+  padding-right: 8px;
+}
+
+.tc-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button) > :first-child,
+.station-popup .maplibregl-popup-content > :not(.maplibregl-popup-close-button) > :first-child {
+  padding-right: 20px;
 }
 
 /* A long card (several warnings in force at one spot) scrolls inside
