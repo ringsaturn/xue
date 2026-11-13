@@ -3312,9 +3312,35 @@ html[lang="ja"] .rail-glyph {
   fill: var(--muted);
 }
 
+.station-spark-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+/* The time axis: six-hour marks placed by their time, the window's two
+   ends under them. */
 .station-spark-axis {
+  position: relative;
+  height: 1.3em;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-spark-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.station-spark-day {
+  color: var(--text);
+}
+
+.station-spark-ends {
   display: flex;
   justify-content: space-between;
+  color: var(--muted);
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
 }
 

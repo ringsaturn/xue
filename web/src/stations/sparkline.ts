@@ -19,6 +19,7 @@ import {
   formatTemperature,
   formatWind,
 } from "../units";
+import { displayZone } from "../timezone";
 import type { SynopStationSeries } from "./schema";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -79,17 +80,48 @@ export function linePath(
   return path;
 }
 
+/** Every six hours of the display zone's clock inside the span: where the
+ * charts draw their grid and the axis its labels. Stepped by the half
+ * hour so a half-hour zone still lands on its own whole hours. */
+export function axisTicks(span: readonly [number, number], zone: string): { seconds: number; hour: number; day: string }[] {
+  const format = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", hourCycle: "h23" });
+  const ticks: { seconds: number; hour: number; day: string }[] = [];
+  for (let seconds = Math.ceil(span[0] / 1800) * 1800; seconds <= span[1]; seconds += 1800) {
+    const parts = Object.fromEntries(format.formatToParts(new Date(seconds * 1000)).map((part) => [part.type, part.value]));
+    const hour = Number(parts.hour);
+    if (parts.minute !== "00" || hour % 6 !== 0) continue;
+    ticks.push({ seconds, hour, day: `${parts.month}/${parts.day}` });
+  }
+  return ticks;
+}
+
 interface Trace {
   values: (number | null)[];
   className: string;
 }
 
-function svg(): SVGSVGElement {
+/** Where on the chart's width a time falls, 0 … 1. */
+function fraction(seconds: number, span: readonly [number, number]): number {
+  return (seconds - span[0]) / Math.max(1, span[1] - span[0]);
+}
+
+function svg(span: readonly [number, number], ticks: readonly number[]): SVGSVGElement {
   const root = document.createElementNS(SVG, "svg");
   root.setAttribute("viewBox", `0 0 ${WIDTH} ${HEIGHT}`);
   root.setAttribute("preserveAspectRatio", "none");
   root.setAttribute("aria-hidden", "true");
   root.classList.add("station-spark-plot");
+  for (const seconds of ticks) {
+    const x = (fraction(seconds, span) * WIDTH).toFixed(1);
+    const line = document.createElementNS(SVG, "line");
+    line.setAttribute("x1", x);
+    line.setAttribute("x2", x);
+    line.setAttribute("y1", "0");
+    line.setAttribute("y2", String(HEIGHT));
+    line.setAttribute("class", "station-spark-grid");
+    line.setAttribute("vector-effect", "non-scaling-stroke");
+    root.append(line);
+  }
   return root;
 }
 
@@ -98,8 +130,9 @@ function lineChart(
   traces: readonly Trace[],
   span: readonly [number, number],
   minSpan: number,
+  ticks: readonly number[],
 ): SVGSVGElement {
-  const root = svg();
+  const root = svg(span, ticks);
   const all = traces.flatMap((trace) => trace.values).filter((value): value is number => value !== null);
   const range = valueRange(all, minSpan);
   const gap = gapSeconds(time);
@@ -113,8 +146,8 @@ function lineChart(
   return root;
 }
 
-function barChart(time: readonly number[], values: readonly (number | null)[], span: readonly [number, number]): SVGSVGElement {
-  const root = svg();
+function barChart(time: readonly number[], values: readonly (number | null)[], span: readonly [number, number], ticks: readonly number[]): SVGSVGElement {
+  const root = svg(span, ticks);
   const high = Math.max(1, ...values.filter((value): value is number => value !== null));
   const x = (seconds: number) => ((seconds - span[0]) / Math.max(1, span[1] - span[0])) * WIDTH;
   const bar = Math.max(1.5, WIDTH / Math.max(24, time.length) - 0.5);
@@ -163,6 +196,7 @@ type Column = readonly (number | null)[] | undefined;
  * so a chart's shape and its labels agree. */
 export class Sparks {
   private readonly span: [number, number];
+  private readonly ticks: { seconds: number; hour: number; day: string }[];
   private readonly block = element("div", "station-sparks");
 
   /** `time` is epoch seconds, oldest first. */
@@ -171,6 +205,7 @@ export class Sparks {
     private readonly formatTime: (seconds: number) => string,
   ) {
     this.span = [time[0] ?? 0, time[time.length - 1] ?? 0];
+    this.ticks = axisTicks(this.span, displayZone);
     this.block.append(element("div", "station-spark-title", t("stationLast24h")));
   }
 
@@ -187,7 +222,7 @@ export class Sparks {
     const second = present(options.second);
     if (second.length >= 2) traces.push({ values: convert(options.second, to), className: "station-spark-line station-spark-second" });
     const all = second.length >= 2 ? [...first, ...second] : first;
-    this.block.append(row(label, spread(all, options.format), lineChart(this.time, traces, this.span, to(options.minSpan) - to(0))));
+    this.block.append(row(label, spread(all, options.format), lineChart(this.time, traces, this.span, to(options.minSpan) - to(0), this.gridTimes())));
     return this;
   }
 
@@ -196,15 +231,32 @@ export class Sparks {
   bars(label: string, values: Column, to: (value: number) => number, summary: (values: number[]) => string): this {
     const present_ = present(values);
     if (this.time.length < 2 || !present_.length) return this;
-    this.block.append(row(label, summary(present_), barChart(this.time, convert(values, to), this.span)));
+    this.block.append(row(label, summary(present_), barChart(this.time, convert(values, to), this.span, this.gridTimes())));
     return this;
   }
 
+  private gridTimes(): number[] {
+    return this.ticks.map((tick) => tick.seconds);
+  }
+
+  /** The axis under the charts: each six-hour mark at its place, the
+   * date at midnight, and the window's two ends spelled out beneath. */
   finish(): HTMLElement | null {
     if (this.block.childElementCount === 1) return null;
     const axis = element("div", "station-spark-axis");
-    axis.append(element("span", "", this.formatTime(this.span[0])), element("span", "", this.formatTime(this.span[1])));
-    this.block.append(axis);
+    for (const tick of this.ticks) {
+      const at = fraction(tick.seconds, this.span);
+      const label = element("span", "station-spark-tick", tick.hour === 0 ? tick.day : `${String(tick.hour).padStart(2, "0")}:00`);
+      label.style.left = `${(at * 100).toFixed(2)}%`;
+      // A mark at either end stays inside the card.
+      if (at < 0.08) label.style.transform = "none";
+      else if (at > 0.92) label.style.transform = "translateX(-100%)";
+      if (tick.hour === 0) label.classList.add("station-spark-day");
+      axis.append(label);
+    }
+    const ends = element("div", "station-spark-ends");
+    ends.append(element("span", "", this.formatTime(this.span[0])), element("span", "", this.formatTime(this.span[1])));
+    this.block.append(axis, ends);
     return this.block;
   }
 }
