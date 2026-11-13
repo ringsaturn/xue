@@ -9,7 +9,7 @@
 /* ---------------------------------------------------------------------------
    Xue — design tokens.
 
-   Two grounds: white by day, void by night. Everything else is derived
+   Two grounds: warm paper by day, void by night. Everything else is derived
    from six colors, so a surface never hard-codes a value that would have to
    be found again in the other theme.
 
@@ -26,37 +26,37 @@
 :root {
   color-scheme: light;
 
-  --bg: #ffffff;
-  --text: #111111;
-  --muted: #666666;
-  --line: rgba(17, 17, 17, 0.16);
-  --surface: rgba(255, 255, 255, 0.88);
-  --sheet: #ffffff;
-  --card: #ffffff;
-  --row-hover: rgba(17, 17, 17, 0.07);
-  --accent: #111111;
-  --accent-rgb: 17, 17, 17;
+  --bg: #f3efe6;
+  --text: #1b1a17;
+  --muted: #6e6a60;
+  --line: rgba(27, 26, 23, 0.16);
+  --surface: rgba(251, 249, 244, 0.88);
+  --sheet: #fbf9f4;
+  --card: #fbf9f4;
+  --row-hover: rgba(27, 26, 23, 0.07);
+  --accent: #1b1a17;
+  --accent-rgb: 27, 26, 23;
   --warning: #b3541e;
   --warning-rgb: 179, 84, 30;
-  --grid-line: rgba(17, 17, 17, 0.06);
-  --tick-off: rgba(17, 17, 17, 0.25);
-  --label-shadow: 0 0 3px rgba(255, 255, 255, 0.95), 0 0 9px rgba(255, 255, 255, 0.85);
-  --scrim: rgba(17, 17, 17, 0.28);
+  --grid-line: rgba(27, 26, 23, 0.06);
+  --tick-off: rgba(27, 26, 23, 0.25);
+  --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
+  --scrim: rgba(27, 26, 23, 0.28);
   /* The skew-T's own ink (sounding/section.ts reads these at every draw):
      a paper it is drawn on, the grid, a hue per background family (dry
      adiabats green, pseudoadiabats green and dashed, isohumes purple), the
      lifted parcel's green, the model profile, and the crosshair's tags. */
-  --skewt-paper: rgba(17, 17, 17, 0.04);
-  --skewt-grid: rgba(17, 17, 17, 0.2);
-  --skewt-grid-strong: rgba(17, 17, 17, 0.45);
+  --skewt-paper: rgba(27, 26, 23, 0.04);
+  --skewt-grid: rgba(27, 26, 23, 0.2);
+  --skewt-grid-strong: rgba(27, 26, 23, 0.45);
   --skewt-model: #e8763a;
   --skewt-parcel: #2f8a3a;
   --skewt-dry: rgba(58, 128, 44, 0.42);
   --skewt-moist: rgba(58, 128, 44, 0.32);
   --skewt-mixing: rgba(146, 58, 168, 0.42);
-  --skewt-tag: rgba(17, 17, 17, 0.82);
-  --skewt-tag-text: #ffffff;
-  --skewt-halo: #ffffff;
+  --skewt-tag: rgba(27, 26, 23, 0.82);
+  --skewt-tag-text: #f3efe6;
+  --skewt-halo: #f3efe6;
   /* The two quantities' hues: temperature warm, dew point cool; the model's
      traces are the same hues a step lighter, and dotted. */
   --skewt-temperature: #b4441a;
@@ -66,8 +66,8 @@
      menu, an error — not to the controls affixed to it, the probe panel now
      among them: the capsule and the data card sit on the map, and a shadow under them
      only smudges the ground they are meant to read against. */
-  --lift: 0 8px 24px rgba(17, 17, 17, 0.12);
-  --lift-small: 0 4px 12px rgba(17, 17, 17, 0.1);
+  --lift: 0 8px 24px rgba(27, 26, 23, 0.12);
+  --lift-small: 0 4px 12px rgba(27, 26, 23, 0.1);
 
   /* The platform's own face: its Latin and its CJK are drawn as one
      family (SF Pro with PingFang, Segoe UI with Microsoft YaHei), so a

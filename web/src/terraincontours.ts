@@ -83,7 +83,7 @@ export interface ContourInk {
 export function contourInk(darkGround: boolean): ContourInk {
   return darkGround
     ? { line: "rgba(255, 230, 190, 0.85)", casing: "rgba(0, 0, 0, 0.45)", text: "#f3e6cc", halo: "rgba(0, 0, 0, 0.75)" }
-    : { line: "rgba(70, 45, 20, 0.85)", casing: "rgba(255, 255, 255, 0.6)", text: "#4a3014", halo: "rgba(255, 255, 255, 0.92)" };
+    : { line: "rgba(70, 45, 20, 0.85)", casing: "rgba(243, 239, 230, 0.6)", text: "#4a3014", halo: "rgba(243, 239, 230, 0.92)" };
 }
 
 export interface TerrainContoursOptions {

@@ -724,10 +724,10 @@ function applyBasemapInk(darkGround: boolean): void {
   // wait out every tile in flight and skip the repaint after a pan.
   if (!mapStyleReady) return;
   const ink = darkGround ? "#eef1f4" : "#3a3730";
-  const halo = darkGround ? "rgba(0, 0, 0, 0.75)" : "rgba(255, 255, 255, 0.92)";
-  const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(17, 17, 17, 0.3)";
+  const halo = darkGround ? "rgba(0, 0, 0, 0.75)" : "rgba(243, 239, 230, 0.92)";
+  const border = darkGround ? "rgba(255, 255, 255, 0.32)" : "rgba(27, 26, 23, 0.3)";
   // The coast reads darker than a border, the way it does on a chart.
-  const coast = darkGround ? "rgba(255, 255, 255, 0.55)" : "rgba(17, 17, 17, 0.6)";
+  const coast = darkGround ? "rgba(255, 255, 255, 0.55)" : "rgba(27, 26, 23, 0.6)";
   // A saturated blue, not the coast's neutral ink: on the dark theme the
   // brightest fields sit under it, and only the hue still parts it from them.
   const river = darkGround ? "rgba(60, 165, 250, 0.9)" : "rgba(40, 110, 170, 0.6)";
