@@ -827,8 +827,8 @@ export function gridInk(darkGround: boolean): GridInk {
         gars: "rgba(165, 95, 0, 0.85)",
         bng: "rgba(0, 118, 108, 0.85)",
         latlon: "rgba(160, 30, 110, 0.8)",
-        casing: "rgba(243, 239, 230, 0.55)",
-        halo: "rgba(243, 239, 230, 0.92)",
+        casing: "rgba(255, 255, 255, 0.55)",
+        halo: "rgba(255, 255, 255, 0.92)",
       };
 }
 
@@ -854,7 +854,7 @@ export function quietGridInk(darkGround: boolean): GridInk {
         bng: "rgba(15, 110, 100, 0.5)",
         latlon: "rgba(150, 40, 110, 0.5)",
         casing: "rgba(0, 0, 0, 0)",
-        halo: "rgba(243, 239, 230, 0.92)",
+        halo: "rgba(255, 255, 255, 0.92)",
       };
 }
 

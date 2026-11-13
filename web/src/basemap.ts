@@ -52,14 +52,14 @@ const PAPER_GROUND: BasemapTones = {
  * edge read weaker on white than on the dark slate — the accepted cost of
  * one palette serving both themes (see PRECIPITATION_STOPS in palettes.ts).
  * The lines keep their chart stock: contours are a weather chart, and the
- * warm sheet is the design's own paper for one. */
+ * grey sheet is the design's own paper for one. */
 const GROUND_TONES: Record<GroundId, { dark: BasemapTones; light: BasemapTones }> = {
   coat: { dark: { ocean: "#0b1826", land: "#182c3d" }, light: PAPER_GROUND },
   slate: { dark: { ocean: "#16344a", land: "#28495f" }, light: PAPER_GROUND },
   wind: { dark: { ocean: "#0e2131", land: "#1d3849" }, light: PAPER_GROUND },
   solar: { dark: { ocean: "#0d1b2b", land: "#1c3242" }, light: PAPER_GROUND },
   radar: { dark: { ocean: "#0c1a26", land: "#1a2f3d" }, light: PAPER_GROUND },
-  chart: { dark: { ocean: "#101f2c", land: "#22384a" }, light: { ocean: "#dcd6c8", land: "#c9c2b2" } },
+  chart: { dark: { ocean: "#101f2c", land: "#22384a" }, light: { ocean: "#d6d6d6", land: "#c2c2c2" } },
 };
 
 /** The ground under the field on screen. Read at every use rather than
@@ -374,7 +374,7 @@ function withCoastline(layers: BasemapStyle["layers"]): BasemapStyle["layers"] {
     layout: { "line-join": "round", "line-cap": "round" },
     // The color is the ground's ink, set by `applyBasemapInk`; this is only
     // what the layer carries until the style has loaded.
-    paint: { "line-color": "rgba(27, 26, 23, 0.6)", "line-width": COASTLINE_WIDTH },
+    paint: { "line-color": "rgba(17, 17, 17, 0.6)", "line-width": COASTLINE_WIDTH },
   };
   const at = layers.findIndex((layer) => layer.id === "boundaries_country");
   if (at < 0) throw new Error("basemap style has no boundaries_country layer");

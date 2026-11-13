@@ -172,7 +172,7 @@ export class RadarOverlay {
   private added = false;
   private shown: { key: string; time: number } | null = null;
   private ink = "#1d2430";
-  private halo = "#f3efe6";
+  private halo = "#ffffff";
 
   constructor(
     private readonly map: MaplibreMap,
