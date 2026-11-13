@@ -3802,6 +3802,55 @@ html[lang="ja"] .rail-glyph {
    readouts on the left, the chart over the capsule's track on the right,
    the reported peaks listed under it. */
 
+/* The pin's surface station and its day, on the rows' two columns. */
+.obs-section {
+  display: grid;
+  grid-template-columns: var(--probe-column) minmax(0, 1fr);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.obs-section[hidden] {
+  display: none;
+}
+
+.obs-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.obs-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-1);
+  line-height: 14px;
+  text-overflow: ellipsis;
+}
+
+.obs-source {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 13px;
+  text-overflow: ellipsis;
+}
+
+.obs-plot {
+  min-width: 0;
+}
+
+/* In the panel the charts sit under the section's own border. */
+.obs-plot .station-sparks {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .gauge-section {
   display: grid;
   grid-template-columns: var(--probe-column) minmax(0, 1fr);

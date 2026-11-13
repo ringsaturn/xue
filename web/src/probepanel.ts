@@ -94,6 +94,7 @@ import {
   tafBands,
 } from "./stations/observations";
 import type { AirportStation, AirportStationHistory, SynopStation, SynopStationSeries } from "./stations/schema";
+import { createObservationSection } from "./stations/obssection";
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
@@ -328,6 +329,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   /** A river case's gauge in the probe panel, under the meteogram rows
    * (`river/gauge.ts`); shown only while a gauge's mark opened the pin. */
   const gaugeSection = createGaugeSection(() => scheduleProbeRender());
+  const observationSection = createObservationSection();
   const probePanel = buildProbePanel();
 
   // The full-height copy of the chart, one of the shell's sheets: the panel's
@@ -493,7 +495,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     rows.append(rowList, rowsChart);
     // The sounding section is the last thing in the panel: the rows are the
     // point's own forecast, and the ascent beside it is context under them.
-    root.append(head, rows, gaugeSection.root, soundingSection.root);
+    root.append(head, rows, gaugeSection.root, observationSection.root, soundingSection.root);
     timelinePanel.parentElement!.insertBefore(root, timelinePanel);
     return {
       root,
@@ -735,6 +737,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probeAlert = null;
     soundingSection.setStation(null, null, 0);
     gaugeSection.setGauge(null, null);
+    observationSection.render(null);
     probeMarker?.remove();
     probePanel.root.hidden = true;
     // Unpinned, the clock is the viewer's own again.
@@ -1125,6 +1128,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       probePanel.canvas.getContext("2d")?.clearRect(0, 0, probePanel.canvas.width, probePanel.canvas.height);
       syncProbeRowElements([]);
       renderProbeAirportChip();
+      renderProbeObservations();
       soundingSection.render();
       return;
     }
@@ -1199,6 +1203,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     drawProbeChart(values, index, variable);
     renderProbeRows(series, index);
     renderProbeGauge(series, index);
+    renderProbeObservations();
     // The ascent under the rows: its own time, never the playhead's, but the
     // model column laid over it comes from the series just read.
     soundingSection.render();
@@ -1584,6 +1589,14 @@ export function createProbePanel(deps: ProbePanelDeps) {
   /** The pinned gauge's hydrograph: its observed line (the section reads it),
    * and the model at it — the track's column on a network case, the case's
    * own discharge field at the pin on a grid one. */
+  /** The station whose marks the rows carry, its whole window as charts:
+   * the rows reach back only to the run's first frame. */
+  function renderProbeObservations(): void {
+    const chosen = probe ? probeSynop() : null;
+    const network = chosen ? (deps.synopLoaded?.index.networks[chosen.station.network] ?? null) : null;
+    observationSection.render(chosen ? { ...chosen, network } : null);
+  }
+
   function renderProbeGauge(series: ProbeSeries, index: number): void {
     const gauge = gaugeSection.gauge();
     if (!gauge || !deps.metadata) return;

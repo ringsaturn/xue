@@ -289,4 +289,7 @@ highest one under the pin is a chip only while the warnings are drawn.
   300 m of the DEM height under the pin (the nearest outright until the DEM
   answers) replaces the airport on the temperature, wind and pressure rows;
   its temperature goes on the terrain row when there is one. Its window is
-  one range request, made the first time a render picks the station.
+  one range request, made the first time a render picks the station. The
+  rows reach back only to the run's first frame, so the whole window is
+  also drawn under them (`stations/obssection.ts`, the cards' charts from
+  `stations/sparkline.ts`).
