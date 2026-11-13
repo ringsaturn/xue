@@ -310,8 +310,8 @@ export function createOverlays(deps: OverlaysDeps) {
     radarOverlay.ensure(before);
     const style = getComputedStyle(document.body);
     radarOverlay.setInk(
-      style.getPropertyValue("--text").trim() || "#111111",
-      style.getPropertyValue("--bg").trim() || "#ffffff",
+      style.getPropertyValue("--text").trim() || "#1b1a17",
+      style.getPropertyValue("--bg").trim() || "#f3efe6",
     );
     return radarOverlay;
   }

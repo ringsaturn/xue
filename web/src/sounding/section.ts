@@ -128,22 +128,22 @@ function skewTInkFrom(node: Element): SkewTInk {
   const read = (name: string, fallback: string): string =>
     styles.getPropertyValue(name).trim() || fallback;
   return {
-    ink: read("--text", "#111111"),
-    inkMuted: read("--muted", "#666666"),
-    grid: read("--skewt-grid", "rgba(17, 17, 17, 0.20)"),
-    gridStrong: read("--skewt-grid-strong", "rgba(17, 17, 17, 0.45)"),
-    paper: read("--skewt-paper", "#ffffff"),
+    ink: read("--text", "#1b1a17"),
+    inkMuted: read("--muted", "#6e6a60"),
+    grid: read("--skewt-grid", "rgba(27, 26, 23, 0.20)"),
+    gridStrong: read("--skewt-grid-strong", "rgba(27, 26, 23, 0.45)"),
+    paper: read("--skewt-paper", "#f3efe6"),
     model: read("--skewt-model", "#e8763a"),
-    parcel: read("--skewt-parcel", "rgba(17, 17, 17, 0.5)"),
+    parcel: read("--skewt-parcel", "rgba(27, 26, 23, 0.5)"),
     temperature: read("--skewt-temperature", "#b4441a"),
     dew: read("--skewt-dew", "#0e7c72"),
     modelDew: read("--skewt-model-dew", "#3bb8a8"),
     dryAdiabat: read("--skewt-dry", "rgba(58, 128, 44, 0.42)"),
     moistAdiabat: read("--skewt-moist", "rgba(58, 128, 44, 0.32)"),
     mixingRatio: read("--skewt-mixing", "rgba(146, 58, 168, 0.42)"),
-    tag: read("--skewt-tag", "rgba(17, 17, 17, 0.82)"),
-    tagText: read("--skewt-tag-text", "#ffffff"),
-    halo: read("--skewt-halo", "#ffffff"),
+    tag: read("--skewt-tag", "rgba(27, 26, 23, 0.82)"),
+    tagText: read("--skewt-tag-text", "#f3efe6"),
+    halo: read("--skewt-halo", "#f3efe6"),
   };
 }
 
