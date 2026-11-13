@@ -5,7 +5,9 @@
  * point, the freezing level, the precipitable water and the level count —
  * under the nominal time the ascent is filed at. An airport's is its
  * newest observation decoded: the raw METAR is not in the index, so the
- * card shows the values rather than the line.
+ * card shows the values rather than the line. A weather station's and an
+ * airport's cards add their 24-hour window as charts once the caller has
+ * read the station's line.
  *
  * Station identifiers (`RJTT`, a WMO number), unit symbols and the flight
  * categories (`VFR`) are instrument text and stay English; the row labels
@@ -16,10 +18,10 @@
 import { element } from "../dom";
 import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
-import { convertHeight, convertPrecipitation, formatDistance, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
+import { convertDistance, convertHeight, convertPrecipitation, convertPressure, convertTemperature, convertWind, formatDistance, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
 import { categoryColor } from "./layers";
-import type { AirportStation, SoundingStationEntry, SynopNetwork, SynopStation, SynopStationSeries } from "./schema";
-import { buildSynopSparklines } from "./sparkline";
+import type { AirportStation, AirportStationHistory, SoundingStationEntry, SynopNetwork, SynopStation, SynopStationSeries } from "./schema";
+import { buildSynopSparklines, Sparks } from "./sparkline";
 
 interface StationCardOptions {
   /** The valid time, formatted the way the capsule formats one. */
@@ -152,9 +154,26 @@ export function buildSoundingCard(
   return root;
 }
 
+/** An airport's last 24 hours of METARs as charts: temperature (dew
+ * point), wind (gust), QNH and visibility. */
+function airportSparklines(history: AirportStationHistory, formatTime: (seconds: number) => string): HTMLElement | null {
+  const metars = [...history.metars].reverse();
+  const column = (key: "t" | "td" | "ws" | "gust" | "qnh" | "vis") => metars.map((metar) => metar[key]);
+  return new Sparks(
+    metars.map((metar) => Date.parse(metar.time) / 1000),
+    formatTime,
+  )
+    .line(t("stationTemperature"), column("t"), { second: column("td"), to: (value) => convertTemperature(value), format: (value) => formatTemperature(value), minSpan: 2 })
+    .line(t("stationWind"), column("ws"), { second: column("gust"), to: (value) => convertWind(value), format: (value) => formatWind(value), minSpan: 2 })
+    .line(t("stationQnh"), column("qnh"), { to: (value) => convertPressure(value), format: (value) => formatPressure(value), minSpan: 2 })
+    .line(t("stationVisibility"), column("vis"), { to: (value) => convertDistance(value / 1000), format: (value) => visibility(value)!, minSpan: 1000 })
+    .finish();
+}
+
 export function buildAirportCard(
   station: AirportStation,
   options: StationCardOptions,
+  history: AirportStationHistory | null = null,
 ): HTMLElement {
   const root = element("div", "station-card");
   root.style.setProperty(
@@ -188,6 +207,9 @@ export function buildAirportCard(
     [t("stationQnh"), station.qnh === null ? null : formatPressure(station.qnh)],
   ]);
   if (table) root.append(table);
+
+  const charts = history && options.formatSeconds ? airportSparklines(history, options.formatSeconds) : null;
+  if (charts) root.append(charts);
 
   root.append(position(station.lat, station.lon));
   if (options.onPin) root.append(action(t("stationPinHere"), options.onPin));

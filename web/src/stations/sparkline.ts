@@ -155,68 +155,83 @@ function spread(values: readonly number[], format: (value: number) => string): s
   return `${format(Math.min(...values))} – ${format(Math.max(...values))}`;
 }
 
-/** The window's charts, or null when it holds fewer than two reports. The
- * values are converted to the viewer's units before they are drawn, so a
- * chart's shape and its labels agree. */
+type Column = readonly (number | null)[] | undefined;
+
+/** A station's window as charts, row by row: each row is added only when
+ * its series holds two values or more, and the block is null when no row
+ * was. Values are converted to the viewer's units before they are drawn,
+ * so a chart's shape and its labels agree. */
+export class Sparks {
+  private readonly span: [number, number];
+  private readonly block = element("div", "station-sparks");
+
+  /** `time` is epoch seconds, oldest first. */
+  constructor(
+    private readonly time: readonly number[],
+    private readonly formatTime: (seconds: number) => string,
+  ) {
+    this.span = [time[0] ?? 0, time[time.length - 1] ?? 0];
+    this.block.append(element("div", "station-spark-title", t("stationLast24h")));
+  }
+
+  /** One line, with a quieter second (dew point, gust) where given. */
+  line(
+    label: string,
+    values: Column,
+    options: { second?: Column; to?: (value: number) => number; format: (value: number) => string; minSpan: number },
+  ): this {
+    const first = present(values);
+    if (this.time.length < 2 || first.length < 2) return this;
+    const to = options.to ?? ((value: number) => value);
+    const traces: Trace[] = [{ values: convert(values, to), className: "station-spark-line" }];
+    const second = present(options.second);
+    if (second.length >= 2) traces.push({ values: convert(options.second, to), className: "station-spark-line station-spark-second" });
+    const all = second.length >= 2 ? [...first, ...second] : first;
+    this.block.append(row(label, spread(all, options.format), lineChart(this.time, traces, this.span, to(options.minSpan) - to(0))));
+    return this;
+  }
+
+  /** Totals over each report's own period, as bars; `summary` from the
+   * values in canonical units. */
+  bars(label: string, values: Column, to: (value: number) => number, summary: (values: number[]) => string): this {
+    const present_ = present(values);
+    if (this.time.length < 2 || !present_.length) return this;
+    this.block.append(row(label, summary(present_), barChart(this.time, convert(values, to), this.span)));
+    return this;
+  }
+
+  finish(): HTMLElement | null {
+    if (this.block.childElementCount === 1) return null;
+    const axis = element("div", "station-spark-axis");
+    axis.append(element("span", "", this.formatTime(this.span[0])), element("span", "", this.formatTime(this.span[1])));
+    this.block.append(axis);
+    return this.block;
+  }
+}
+
+/** A surface station's window (docs/synop.md §6). */
 export function buildSynopSparklines(
   series: SynopStationSeries,
   prPeriod: number | null,
   formatTime: (seconds: number) => string,
 ): HTMLElement | null {
-  const time = series.time;
-  if (time.length < 2) return null;
-  const span: [number, number] = [time[0]!, time[time.length - 1]!];
   const obs = series.obs;
-  const block = element("div", "station-sparks");
-  block.append(element("div", "station-spark-title", t("stationLast24h")));
-
-  const t2 = present(obs.t);
-  if (t2.length >= 2) {
-    const traces: Trace[] = [{ values: convert(obs.t, (value) => convertTemperature(value)), className: "station-spark-line" }];
-    if (present(obs.td).length >= 2)
-      traces.push({ values: convert(obs.td, (value) => convertTemperature(value)), className: "station-spark-line station-spark-second" });
-    block.append(row(t("stationTemperature"), spread(t2, (value) => formatTemperature(value)), lineChart(time, traces, span, 2)));
-  }
-
-  const ws = present(obs.ws);
-  if (ws.length >= 2) {
-    const traces: Trace[] = [{ values: convert(obs.ws, (value) => convertWind(value)), className: "station-spark-line" }];
-    const gust = present(obs.gust);
-    if (gust.length >= 2)
-      traces.push({ values: convert(obs.gust, (value) => convertWind(value)), className: "station-spark-line station-spark-second" });
-    const all = gust.length ? [...ws, ...gust] : ws;
-    block.append(row(t("stationWind"), spread(all, (value) => formatWind(value)), lineChart(time, traces, span, convertWind(2))));
-  }
-
-  const pressureKey = present(obs.slp).length >= 2 ? "slp" : present(obs.p).length >= 2 ? "p" : null;
-  if (pressureKey) {
-    const values = present(obs[pressureKey]);
-    block.append(
-      row(
-        t(pressureKey === "slp" ? "stationSeaLevelPressure" : "stationPressure"),
-        spread(values, (value) => formatPressure(value)),
-        lineChart(time, [{ values: convert(obs[pressureKey], (value) => convertPressure(value)), className: "station-spark-line" }], span, convertPressure(2)),
-      ),
-    );
-  }
-
-  // The network's own period when it reports one, else its hourly total;
-  // the sum is over the window, which is what a viewer asks of a day.
-  const prKey = present(obs.pr).length ? "pr" : present(obs.pr1h).length ? "pr1h" : null;
-  if (prKey) {
-    const values = obs[prKey]!;
-    const hourly = prKey === "pr1h" && (prPeriod ?? 3600) < 3600;
-    // Adding up overlapping hourly totals reported every ten minutes would
-    // count the same rain six times, so the sum is only of the network's
-    // own period's totals.
-    const total = hourly ? null : present(values).reduce((sum, value) => sum + value, 0);
-    const summary = total === null ? `↑ ${formatPrecipitation(Math.max(...present(values)))}` : `Σ ${formatPrecipitation(total)}`;
-    block.append(row(t("stationPrecipitation"), summary, barChart(time, convert(values, (value) => convertPrecipitation(value)), span)));
-  }
-
-  if (block.childElementCount === 1) return null;
-  const axis = element("div", "station-spark-axis");
-  axis.append(element("span", "", formatTime(span[0])), element("span", "", formatTime(span[1])));
-  block.append(axis);
-  return block;
+  const sparks = new Sparks(series.time, formatTime)
+    .line(t("stationTemperature"), obs.t, { second: obs.td, to: (value) => convertTemperature(value), format: (value) => formatTemperature(value), minSpan: 2 })
+    .line(t("stationWind"), obs.ws, { second: obs.gust, to: (value) => convertWind(value), format: (value) => formatWind(value), minSpan: 2 });
+  const pressureKey = present(obs.slp).length >= 2 ? "slp" : "p";
+  sparks.line(t(pressureKey === "slp" ? "stationSeaLevelPressure" : "stationPressure"), obs[pressureKey], {
+    to: (value) => convertPressure(value),
+    format: (value) => formatPressure(value),
+    minSpan: 2,
+  });
+  // The network's own period when it reports one, else its hourly total.
+  // Adding up hourly totals reported every ten minutes would count the
+  // same rain six times, so those show their peak instead of a sum.
+  const prKey = present(obs.pr).length ? "pr" : "pr1h";
+  const overlapping = prKey === "pr1h" && (prPeriod ?? 3600) < 3600;
+  sparks.bars(t("stationPrecipitation"), obs[prKey], (value) => convertPrecipitation(value), (values) =>
+    overlapping ? `↑ ${formatPrecipitation(Math.max(...values))}` : `Σ ${formatPrecipitation(values.reduce((sum, value) => sum + value, 0))}`,
+  );
+  return sparks.finish();
 }

@@ -631,7 +631,6 @@ export const ja: Record<MessageKey, string> = {
   aqAgency: "運営機関",
   aqNetwork: "ネットワーク",
   aqPreliminary: "速報値：未確定で、変更されることがあります",
-  aqDayRange: "PM2.5（過去 24 時間）",
   aqNearest: "最寄りの大気汚染測定局 {distance}",
   alertsTileTip: "発表中の気象警報・注意報",
   varAlerts: "警報",

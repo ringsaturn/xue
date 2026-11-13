@@ -636,7 +636,6 @@ export const ko: Record<MessageKey, string> = {
   aqAgency: "운영 기관",
   aqNetwork: "네트워크",
   aqPreliminary: "잠정 자료: 검증되지 않았으며 변경될 수 있음",
-  aqDayRange: "PM2.5, 최근 24시간",
   aqNearest: "가장 가까운 대기질 측정소, {distance}",
   alertsTileTip: "현재 발효 중인 기상 특보",
   varAlerts: "특보",

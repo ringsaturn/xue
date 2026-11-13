@@ -637,7 +637,6 @@ export const tr: Record<MessageKey, string> = {
   aqAgency: "Kurum",
   aqNetwork: "Ağ",
   aqPreliminary: "Ön veri: doğrulanmamıştır, değişebilir",
-  aqDayRange: "PM2.5, son 24 sa",
   aqNearest: "En yakın hava kalitesi istasyonu, {distance}",
   alertsTileTip: "Şu an geçerli hava uyarıları",
   varAlerts: "UYARILAR",

@@ -1006,7 +1006,6 @@ export const en = {
   aqAgency: "Agency",
   aqNetwork: "Network",
   aqPreliminary: "Preliminary data: not validated, subject to change",
-  aqDayRange: "PM2.5, last 24 h",
   aqNearest: "Nearest air-quality station, {distance}",
   /** The weather warnings (`docs/alerts.md`): every warning a national
    * service (US NWS, JMA, ECCC, Europe's through MeteoAlarm) has in force

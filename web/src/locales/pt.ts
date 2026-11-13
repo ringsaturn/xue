@@ -634,7 +634,6 @@ export const pt: Record<MessageKey, string> = {
   aqAgency: "Órgão",
   aqNetwork: "Rede",
   aqPreliminary: "Dados preliminares: não validados, sujeitos a alteração",
-  aqDayRange: "PM2.5, últimas 24 h",
   aqNearest: "Estação de qualidade do ar mais próxima, {distance}",
   alertsTileTip: "Alertas meteorológicos em vigor",
   varAlerts: "ALERTAS",
