@@ -345,8 +345,9 @@ export const en = {
    * Amap stay as written. */
   creditsCnmaps: "Warning area boundaries in China: Amap outlines via cnmaps-data (MIT), GCJ-02 → WGS84 by xue",
   /** China's warnings as WMO's SWIC aggregates them; SWIC's terms ask
-   * that the issuing services be named. */
-  creditsSwic: "Weather warnings in China: CMA observatories' CAP warnings via the WMO Severe Weather Information Centre",
+   * that the issuing services be named. The gap clause says what SWIC
+   * does not carry (docs/alerts.md §10.5). */
+  creditsSwic: "Weather warnings in China: CMA observatories' CAP warnings via the WMO Severe Weather Information Centre, which lacks most provincial observatories and some provinces",
   creditsHkoWarnings: "Weather warnings in Hong Kong: Hong Kong Observatory via DATA.GOV.HK",
   /** FMI's global air-quality model; the model name stays as written. */
   creditsSilam: "Air-quality forecast: FMI SILAM v6.1 global 0.2°, CC BY 4.0",

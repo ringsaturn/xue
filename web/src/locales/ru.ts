@@ -189,7 +189,7 @@ export const ru: Record<MessageKey, string> = {
   creditsArpege: "Прогнозные данные: Météo-France ARPEGE 0,25°, Licence Ouverte 2.0",
   creditsCmaGeps: "Ансамблевый прогноз: CMA GRAPES GEPS 0,25°, медиана и среднее, через WMO WIS2",
   creditsCnmaps: "Границы зон предупреждений в Китае: контуры Amap через cnmaps-data (MIT), пересчитаны xue из GCJ-02 в WGS84",
-  creditsSwic: "Метеопредупреждения в Китае: CAP-предупреждения метеообсерваторий CMA через Severe Weather Information Centre ВМО",
+  creditsSwic: "Метеопредупреждения в Китае: CAP-предупреждения метеообсерваторий CMA через Severe Weather Information Centre ВМО, без большинства провинциальных обсерваторий и некоторых провинций",
   creditsHkoWarnings: "Метеопредупреждения в Гонконге: Hong Kong Observatory через DATA.GOV.HK",
   creditsSilam: "Прогноз качества воздуха: FMI SILAM v6.1, глобально, 0,2°, CC BY 4.0",
   creditsCfs: "Сезонный прогноз: CFSv2, 9 месяцев, каждые 6 часов",

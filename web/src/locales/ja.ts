@@ -184,7 +184,7 @@ export const ja: Record<MessageKey, string> = {
   creditsArpege: "予報データ：Météo-France ARPEGE 0.25°、Licence Ouverte 2.0",
   creditsCmaGeps: "アンサンブル予報：中国気象局 GRAPES GEPS 0.25°、中央値と平均、WMO WIS2 経由",
   creditsCnmaps: "中国の警報区域の境界：高徳地図（Amap）の境界、cnmaps-data（MIT）経由、xue が GCJ-02 から WGS84 に変換",
-  creditsSwic: "中国の気象警報：各級気象台の CAP 警報、WMO 悪天情報センター（SWIC）経由",
+  creditsSwic: "中国の気象警報：気象台の CAP 警報、WMO 悪天情報センター（SWIC）経由。省級気象台の大半と一部の省は含まれない",
   creditsHkoWarnings: "香港の気象警報：香港天文台、DATA.GOV.HK 経由",
   creditsSilam: "大気質予報：FMI SILAM v6.1 全球 0.2°、CC BY 4.0",
   creditsCfs: "季節予報：CFSv2、9 か月、6 時間間隔",

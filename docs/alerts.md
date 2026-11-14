@@ -1109,14 +1109,28 @@ and any display of it meets them so:
 
 ### 10.5 `cma` — China Meteorological Administration
 
-The warning signals (预警信号) China's national, provincial, prefecture
-and county meteorological observatories issue, as the WMO Severe Weather
-Information Centre aggregates them. SWIC (`https://severeweather.wmo.int/`)
+The warning signals (预警信号) China's meteorological observatories
+issue, as far as the WMO Severe Weather Information Centre aggregates
+them. SWIC (`https://severeweather.wmo.int/`)
 is WMO's centre for official CAP warnings, developed and run by the Hong
 Kong Observatory. The CMA's own feed in the WMO Register of Alerting
 Authorities (`http://www.12379.cn/rss/china_rss.xml`) answered 404 on
 2026-11-12, and the national release centre's site (12379.cn) publishes no
-interface of its own. `cma-swic`:
+interface of its own (on 2026-11-14 its http site answered only a
+"系统升级中" page dated 2024-01-17, its https site did not connect).
+
+Coverage is SWIC's, not the CMA's. Between 2026-11-12 and 2026-11-14
+(1 166 messages) SWIC carried prefecture and county observatories from
+21 provinces, but of the province-level offices only the municipalities
+Beijing (`110000`), Tianjin (`120000`) and Chongqing (`500000`), no
+provincial observatory and not the National Meteorological Centre. No
+message at all came from Inner Mongolia (`15`), Liaoning (`21`), Fujian
+(`35`), Henan (`41`), Hunan (`43`), Guangxi (`45`), Hainan (`46`), Sichuan
+(`51`), Shaanxi (`61`) or Gansu (`62`). The NMC's own warning pages carry
+the provincial warnings but forbid download without authorisation, so
+they are not read. The credits say what is missing.
+
+`cma-swic`:
 
 - `https://severeweather.wmo.int/json/wmo_all.json` — every alert SWIC has
   in force worldwide (1 802 on 2026-11-12, 903 KB), each with the path of

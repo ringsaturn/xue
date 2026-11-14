@@ -184,7 +184,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsArpege: "預報資料：Météo-France ARPEGE 0.25°，Licence Ouverte 2.0",
   creditsCmaGeps: "系集預報：中國氣象局 GRAPES GEPS 0.25°，中位數與平均，經 WMO WIS2",
   creditsCnmaps: "中國預警區域邊界：高德地圖邊界，經 cnmaps-data（MIT），由 xue 從 GCJ-02 轉為 WGS84",
-  creditsSwic: "中國氣象預警：各級氣象台的 CAP 預警，經 WMO 惡劣天氣信息中心",
+  creditsSwic: "中國氣象預警：氣象台的 CAP 預警，經 WMO 惡劣天氣信息中心；不含大部分省級氣象台，部分省份缺失",
   creditsHkoWarnings: "香港天氣警告：香港天文台，經 DATA.GOV.HK",
   creditsSilam: "空氣品質預報：FMI SILAM v6.1 全球 0.2°，CC BY 4.0",
   creditsCfs: "季節預報：CFSv2，9 個月，6 小時間隔",

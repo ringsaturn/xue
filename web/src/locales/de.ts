@@ -187,7 +187,7 @@ export const de: Record<MessageKey, string> = {
   creditsArpege: "Vorhersagedaten: Météo-France ARPEGE 0,25°, Licence Ouverte 2.0",
   creditsCmaGeps: "Ensemblevorhersage: CMA GRAPES GEPS 0,25°, Median und Mittel, über WMO WIS2",
   creditsCnmaps: "Warngebietsgrenzen in China: Amap-Umrisse über cnmaps-data (MIT), von xue von GCJ-02 nach WGS84 umgerechnet",
-  creditsSwic: "Wetterwarnungen in China: CAP-Warnungen der CMA-Wetterämter über das WMO Severe Weather Information Centre",
+  creditsSwic: "Wetterwarnungen in China: CAP-Warnungen der CMA-Wetterämter über das WMO Severe Weather Information Centre, ohne die meisten Provinzwetterämter und einige Provinzen",
   creditsHkoWarnings: "Wetterwarnungen in Hongkong: Hong Kong Observatory über DATA.GOV.HK",
   creditsSilam: "Luftqualitätsvorhersage: FMI SILAM v6.1 global 0,2°, CC BY 4.0",
   creditsCfs: "Saisonvorhersage: CFSv2, 9 Monate, 6-stündlich",
