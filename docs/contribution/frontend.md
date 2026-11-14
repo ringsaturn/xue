@@ -862,7 +862,9 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   has no run to count from.
 - Valid times use one display zone (`timezone.ts`). Under the default
   `auto` it is the browser's, or the pinned point's (`tzf-wasm`, a 4 MB
-  index loaded on first pin); the settings sheet can hold it on the
+  index loaded on first pin); an open showcase case stands in for the
+  browser with its own zone (its row's `timeZone`, or the one at its box's
+  centre), and a pin still wins over it; the settings sheet can hold it on the
   browser's zone, UTC or any IANA zone instead (`xue-zone` in storage, not
   in the URL). Run cycles and showcase cards stay UTC.
 - Query state is parsed in `urlstate.ts`, except `?lang=` (`i18n.ts`),

@@ -276,7 +276,7 @@ export const tr: Record<MessageKey, string> = {
   settingsLanguage: "Dil",
   settingsZone: "Saat dilimi",
   zoneAuto: "Otomatik",
-  zoneAutoHint: "Cihazın saat dilimi; bir nokta sabitlendiğinde o noktanınki",
+  zoneAutoHint: "Cihazın saat dilimi, vakada olayın kendi saat dilimi; bir nokta sabitlendiğinde o noktanınki",
   zoneLocal: "Yerel",
   zoneOther: "Başka dilim",
   settingsUnits: "Birimler",

@@ -12,6 +12,7 @@ import {
   onDisplayZoneChange,
   parseZonePref,
   resolveZone,
+  setCaseZone,
   setPinnedZone,
   setZonePref,
   useZoneFinder,
@@ -96,6 +97,7 @@ describe("display zone", () => {
   afterEach(() => {
     setZonePref("auto");
     setPinnedZone(null);
+    setCaseZone(null);
     useZoneFinder(null);
   });
 
@@ -128,6 +130,20 @@ describe("display zone", () => {
     expect((await import("../../web/src/timezone")).displayZone).toBe("Asia/Kolkata");
     setZonePref("auto");
     expect((await import("../../web/src/timezone")).displayZone).toBe(other);
+  });
+
+  it("reads an open case in its own zone under auto, with a pin over it", async () => {
+    setCaseZone("Asia/Kolkata");
+    expect((await import("../../web/src/timezone")).displayZone).toBe("Asia/Kolkata");
+    setPinnedZone(other);
+    expect((await import("../../web/src/timezone")).displayZone).toBe(other);
+    setPinnedZone(null);
+    setZonePref("local");
+    expect((await import("../../web/src/timezone")).displayZone).toBe(browserZone());
+    setZonePref("auto");
+    setCaseZone("Mars/Olympus_Mons");
+    expect((await import("../../web/src/timezone")).displayZone).toBe(browserZone());
+    expect(resolveZone("auto", null, "Asia/Kolkata")).toBe("Asia/Kolkata");
   });
 
   it("matches a typed zone leniently", () => {

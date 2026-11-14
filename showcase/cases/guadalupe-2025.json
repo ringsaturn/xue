@@ -33,6 +33,7 @@
   "variables": ["prate", "cref"],
   "defaultVariable": "prate",
   "eventTime": "2025-07-04T10:05:00Z",
+  "timeZone": "America/Chicago",
   "tags": ["flood", "north-america"],
   "credit": "NOAA HRRR; NOAA National Water Model v3.0; USGS NWIS",
   "markers": [

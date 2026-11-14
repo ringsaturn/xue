@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FORECAST_MODELS, isCaseOnlyModel, validateManifest, type ForecastModelId } from "../../web/src/manifest";
 import { spawnRectangle } from "../../web/src/particles";
 import {
+  boundsCentre,
   boundsWidth,
   caseCameraLimits,
   fitBoundsCorners,
@@ -526,6 +527,12 @@ describe("case framing", () => {
 
   it("treats equal longitudes as the whole world, matching the encoder", () => {
     expect(boundsWidth([-180, -30, 180, 30])).toBe(360);
+  });
+
+  it("centres a box, across the antimeridian too, and the whole world nowhere", () => {
+    expect(boundsCentre([105, 28, 122, 42])).toEqual([113.5, 35]);
+    expect(boundsCentre([170, -20, -150, 10])).toEqual([-170, -5]);
+    expect(boundsCentre([-180, -30, 180, 30])).toBeNull();
   });
 
   it("keeps an antimeridian fit contiguous by running east past +180", () => {

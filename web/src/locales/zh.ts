@@ -270,7 +270,7 @@ export const zh: Record<MessageKey, string> = {
   settingsLanguage: "语言",
   settingsZone: "时区",
   zoneAuto: "自动",
-  zoneAutoHint: "默认用本机时区；钉住一个点时改用该点所在时区",
+  zoneAutoHint: "默认用本机时区，打开历史个例时用该个例所在时区；钉住一个点时改用该点所在时区",
   zoneLocal: "本机",
   zoneOther: "其他时区",
   settingsUnits: "单位",

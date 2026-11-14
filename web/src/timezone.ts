@@ -7,7 +7,11 @@
  * It is the browser's zone until a point is pinned; then it is the zone the
  * pinned point lies in, so a viewer in Tokyo reading a storm over New York
  * sees it land at New York's hour; and the browser's again when the pin is
- * removed. A model run's cycle is not a display time: 00Z is the cycle's
+ * removed. A showcase case stands in for the browser while it is open:
+ * an event is read at the hour it happened where it happened, so the case
+ * names its own zone (`timeZone` on its catalog row), or failing that the
+ * zone at its box's centre is looked up; a pin still overrides it. A model
+ * run's cycle is not a display time: 00Z is the cycle's
  * name, and it stays in UTC wherever it is stamped.
  *
  * The point → zone lookup is `tzf-wasm`, a 4 MB polygon index (the
@@ -62,22 +66,26 @@ function readZonePref(): ZonePref {
   }
 }
 
-/** The zone a choice puts the clock on, given the pinned point's zone. */
-export function resolveZone(pref: ZonePref, pinned: string | null): string {
+/** The zone a choice puts the clock on, given the pinned point's zone and
+ * the open showcase case's. */
+export function resolveZone(pref: ZonePref, pinned: string | null, place: string | null = null): string {
   if (pref === "utc") return "UTC";
   if (pref === "local") return browserZone();
-  if (pref === "auto") return pinned ?? browserZone();
+  if (pref === "auto") return pinned ?? place ?? browserZone();
   return isKnownZone(pref) ? pref : browserZone();
 }
 
 /** The pinned point's zone, `null` with nothing pinned. */
 let pinnedZone: string | null = null;
 
+/** The open showcase case's zone, `null` outside a case. */
+let caseZone: string | null = null;
+
 /** The reader's choice of clock. A live binding. */
 export let zonePref: ZonePref = readZonePref();
 
 /** The zone in force for every valid-time stamp on screen. */
-export let displayZone: string = resolveZone(zonePref, pinnedZone);
+export let displayZone: string = resolveZone(zonePref, pinnedZone, caseZone);
 
 const listeners = new Set<() => void>();
 
@@ -92,15 +100,27 @@ function notify(): void {
   for (const listener of listeners) listener();
 }
 
+function moveClock(): void {
+  const next = resolveZone(zonePref, pinnedZone, caseZone);
+  if (next === displayZone) return;
+  displayZone = next;
+  notify();
+}
+
 /** Record the pinned point's zone, or (`null`) that nothing is pinned. A
  * zone the engine cannot format in counts as none, so an unknown id can
  * never blank the capsule. The clock moves only under `auto`. */
 export function setPinnedZone(zone: string | null): void {
   pinnedZone = zone !== null && isKnownZone(zone) ? zone : null;
-  const next = resolveZone(zonePref, pinnedZone);
-  if (next === displayZone) return;
-  displayZone = next;
-  notify();
+  moveClock();
+}
+
+/** Record the open showcase case's zone, or (`null`) that no case is
+ * open. Read like a pinned point's: an unknown id counts as none, and the
+ * clock moves only under `auto` with nothing pinned. */
+export function setCaseZone(zone: string | null): void {
+  caseZone = zone !== null && isKnownZone(zone) ? zone : null;
+  moveClock();
 }
 
 /** Replace the reader's choice: persist it and repaint. Listeners hear of
@@ -108,7 +128,7 @@ export function setPinnedZone(zone: string | null): void {
  * the settings sheet can mark the new choice. */
 export function setZonePref(pref: ZonePref): void {
   zonePref = parseZonePref(pref);
-  displayZone = resolveZone(zonePref, pinnedZone);
+  displayZone = resolveZone(zonePref, pinnedZone, caseZone);
   try {
     localStorage.setItem(STORAGE_KEY, zonePref);
   } catch {

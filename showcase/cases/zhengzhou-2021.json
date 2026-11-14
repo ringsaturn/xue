@@ -41,6 +41,7 @@
   ],
   "defaultVariable": "prate",
   "eventTime": "2021-07-20T08:00:00Z",
+  "timeZone": "Asia/Shanghai",
   "tags": [
     "rainstorm",
     "asia"

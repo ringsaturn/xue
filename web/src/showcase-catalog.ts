@@ -10,6 +10,7 @@ import {
   type ForecastModelId,
 } from "./manifest";
 import { gibsLayer } from "./gibs";
+import { isKnownZone } from "./timezone";
 import { latitudeOf, longitudeOf, mercatorX, mercatorY, worldPixels, zoomForSpan } from "./mercator";
 
 /**
@@ -55,6 +56,9 @@ export interface ShowcaseCase {
   byteLength: number;
   /** When the event itself peaked, if the case names one. */
   eventTime?: string;
+  /** The IANA zone the case's clock reads in by default (`timezone.ts`),
+   * if the case names one; absent, the zone at its box's centre. */
+  timeZone?: string;
   /** How the case's axis is read: absent, as a forecast run (leads from
    * its cycle) or an observation window, by its dataset; `daily`, as a
    * record of days — a model's simulated or reanalysed days — read by the
@@ -679,6 +683,13 @@ function validateCase(input: unknown): ShowcaseCase {
     bbox,
     dataBbox,
   };
+  if (typeof value.timeZone === "string" && isKnownZone(value.timeZone)) entry.timeZone = value.timeZone;
+  else {
+    if (value.timeZone !== undefined) {
+      console.warn(`showcase: case ${id} names a time zone this engine does not know; reading it in the zone of its box`);
+    }
+    delete entry.timeZone;
+  }
   if (markers) entry.markers = markers;
   else delete entry.markers;
   if (captions) entry.captions = captions;
@@ -748,6 +759,16 @@ export function localizedText(strings: Record<string, string>, locale: string): 
 }
 
 /** Longitude span of a box, handling the antimeridian. */
+/** The point a case's box is centred on, `null` for a box around the
+ * whole globe, which has no one place. */
+export function boundsCentre(box: CaseBounds): [number, number] | null {
+  const width = boundsWidth(box);
+  if (width >= 360) return null;
+  const [west, south, , north] = box;
+  const lon = west + width / 2;
+  return [lon > 180 ? lon - 360 : lon, (south + north) / 2];
+}
+
 export function boundsWidth([west, , east]: CaseBounds): number {
   const span = (east - west) % 360;
   return span === 0 ? 360 : ((span % 360) + 360) % 360;

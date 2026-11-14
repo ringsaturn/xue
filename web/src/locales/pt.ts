@@ -273,7 +273,7 @@ export const pt: Record<MessageKey, string> = {
   settingsLanguage: "Idioma",
   settingsZone: "Fuso horário",
   zoneAuto: "Auto",
-  zoneAutoHint: "O fuso do dispositivo; o do ponto fixado enquanto houver um",
+  zoneAutoHint: "O fuso do dispositivo, ou o do próprio evento num caso de estudo; o do ponto fixado enquanto houver um",
   zoneLocal: "Local",
   zoneOther: "Outro fuso",
   settingsUnits: "Unidades",

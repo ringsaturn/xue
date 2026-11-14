@@ -56,7 +56,10 @@ rivers, roads and the routes a case's story runs along, drawn under the
 markers; a shell that does not know the block draws none. Its
 ``captions`` are lines of text timed on the case's clock, each shown over
 the map while the playhead is inside its span — the story told as the
-picture plays; a shell that does not know them shows none.
+picture plays; a shell that does not know them shows none. Its
+``timeZone`` is the IANA zone the shell's clock reads the case in by
+default, where the event happened; absent, the shell looks up the zone at
+the box's centre.
 """
 
 from __future__ import annotations
@@ -71,6 +74,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .common import crc32_hex
 from .bundles import VOLUME_BUNDLES
@@ -161,6 +165,10 @@ class CaseSpec:
     tags: tuple[str, ...]
     credit: str | None
     profile: str
+    time_zone: str | None = None
+    """The IANA zone the viewer's clock reads the case in by default
+    (``timeZone``): where the event happened, so its hours read as they were
+    lived there. Absent, the viewer looks up the zone at the box's centre."""
     timeline: str | None = None
     """How the viewer reads the case's axis: absent, by its dataset (a
     forecast's leads, an observation window's clock); ``daily``, as a record
@@ -361,6 +369,10 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         except ValueError as exc:
             raise ShowcaseError(f"case {case_id}: eventTime is not a valid ISO timestamp") from exc
 
+    time_zone = payload.get("timeZone")
+    if time_zone is not None:
+        _time_zone(time_zone, case_id)
+
     tags = payload.get("tags", [])
     if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
         raise ShowcaseError(f"case {case_id}: tags must be a list of strings")
@@ -425,6 +437,7 @@ def parse_case(payload: dict[str, Any], *, source_name: str = "<case>") -> CaseS
         variables=ordered,
         default_variable=default_variable,
         event_time=event_time,
+        time_zone=time_zone,
         tags=tuple(tags),
         credit=credit,
         timeline=timeline,
@@ -1068,6 +1081,8 @@ def build_catalog_entry(
     }
     if spec.event_time:
         entry["eventTime"] = spec.event_time
+    if spec.time_zone:
+        entry["timeZone"] = spec.time_zone
     if spec.tags:
         entry["tags"] = list(spec.tags)
     if spec.credit:
@@ -1098,6 +1113,17 @@ def build_catalog_entry(
     return entry
 
 
+def _time_zone(value: Any, case_id: str) -> str:
+    """A case's ``timeZone``: an IANA id the tz database knows."""
+    if not isinstance(value, str) or not value:
+        raise ShowcaseError(f"case {case_id}: timeZone must be an IANA zone id")
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ShowcaseError(f"case {case_id}: timeZone {value!r} is not a known zone") from exc
+    return value
+
+
 def validate_catalog_entry(entry: dict[str, Any]) -> None:
     """Reject a catalog row the frontend could not render."""
     for key in ("id", "modelId", "model", "product", "run", "runTime", "manifestPath", "manifestCrc32"):
@@ -1122,6 +1148,8 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
         raise ShowcaseError(f"catalog entry {entry['id']} defaults to a variable it does not ship")
     if not isinstance(entry.get("forecastHours"), int) or entry["forecastHours"] <= 0:
         raise ShowcaseError(f"catalog entry {entry['id']} has an invalid forecastHours")
+    if "timeZone" in entry:
+        _time_zone(entry["timeZone"], entry["id"])
     if "timeline" in entry and entry["timeline"] not in TIMELINES:
         raise ShowcaseError(f"catalog entry {entry['id']} has an unknown timeline")
     if "radar" in entry:
@@ -1149,7 +1177,7 @@ def validate_catalog_entry(entry: dict[str, Any]) -> None:
 def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     """Rewrite a built case's sidecar from its definition without rebuilding
     it: the prose (title, summary), the default variable, the event time,
-    the tags, the credit, the river, the context, the markers, the captions, the view and the parts are the definition's to change — a
+    the time zone, the tags, the credit, the river, the context, the markers, the captions, the view and the parts are the definition's to change — a
     translation added, a summary corrected, the camera moved — and none of
     them names a byte of the bundles. What does (model, run, box, variables) must still match, so a
     definition that has moved on from what was built is refused and the
@@ -1188,6 +1216,7 @@ def refresh_sidecar(spec: CaseSpec, output_root: Path) -> dict[str, Any]:
     entry["defaultVariable"] = spec.default_variable
     for key, value in (
         ("eventTime", spec.event_time),
+        ("timeZone", spec.time_zone),
         ("tags", list(spec.tags)),
         ("credit", spec.credit),
         ("timeline", spec.timeline),
