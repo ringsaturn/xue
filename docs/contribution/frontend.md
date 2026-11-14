@@ -199,7 +199,16 @@ and the window shrinks to fit it.
   with the camera still). With relief on, the globe hands over to the plane between
   z9 and z10 instead of MapLibre's z11–12 (`globeProjection`): the globe's
   controls ignore terrain, so the ground grabbed did not follow the cursor
-  and the center never landed. The zoom ceiling is z16 for every
+  and the center never landed. The zoom floor is z0 on the plane and
+  MapLibre's z−2 on the globe (`syncMinZoom`, told the projection by the
+  globe switch): the globe keeps its
+  size by lowering the zoom as the center moves poleward, so a whole globe
+  centred near a pole sits below z0, and at z0 a drag north stalled near
+  75°. Setting a projection constrains the camera to it without a move
+  event, so the switch jumps to where the camera landed and the layers and
+  the address bar follow. A `#map=` link on the globe is applied again once
+  the projection is set, since the plane the map opens on clamps a low-zoom
+  center (85° opened at 49°). The zoom ceiling is z16 for every
   view: in relief, real detail where a regional archive reaches it (Japan's
   does), the z12 tile overzoomed elsewhere. The switches and the way back to north and to a flat camera share
   one tile under the zoom tile (`viewcontrol.ts`); the two resets show only

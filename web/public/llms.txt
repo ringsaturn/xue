@@ -359,7 +359,8 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?particles=off` — hide the wind particle animation (default on, off under
   prefers-reduced-motion).
 - `?projection=globe` — draw the map as a globe (default: the flat Web
-  Mercator plane).
+  Mercator plane). The globe reaches the poles: `#map=-1.4/85/0` looks down
+  on the Arctic, `#map=-1.4/-85/0` on the Antarctic.
 - `?terrain=on|<exaggeration>` — lift the ground into 3D relief with the
   forecast draped over it (`on` = 1.5×, a number up to 10). Bearing and
   pitch go in the camera fragment: `#map=<zoom>/<lat>/<lon>/<bearing>/<pitch>`.

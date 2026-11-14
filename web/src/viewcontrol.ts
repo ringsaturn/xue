@@ -36,6 +36,9 @@ export interface ViewControlOptions {
   /** The ruler or the area tool was pressed (`main.ts` arms it or puts it
    * away); `setMeasure` reports which is armed. */
   onMeasure?: (kind: "distance" | "area") => void;
+  /** The globe switch set a projection, the globe or the plane: the page
+   * holds the zoom floor to it (`syncMinZoom`). */
+  onProjection?: (globe: boolean) => void;
 }
 
 /** What the volume tools show: whether they are offered at all (only over
@@ -102,7 +105,9 @@ export class ViewControl implements IControl {
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group view-control";
     this.globe = this.button(container, "maplibregl-ctrl-globe", "viewGlobeAria", () => {
-      map.setProjection(isGlobeProjection(map) ? { type: "mercator" } : globeProjection(map.getTerrain() !== null));
+      const globe = !isGlobeProjection(map);
+      map.setProjection(globe ? globeProjection(map.getTerrain() !== null) : { type: "mercator" });
+      this.options.onProjection?.(globe);
     });
     this.terrain = this.button(container, "maplibregl-ctrl-terrain", "viewTerrainAria", () => {
       if (map.getTerrain()) map.setTerrain(null);
