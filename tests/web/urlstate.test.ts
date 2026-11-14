@@ -481,7 +481,11 @@ describe("parseCameraFromHash", () => {
     expect(parseCameraFromHash("#map=4.5/38.5")).toBeNull();
     expect(parseCameraFromHash("#map=zoom/lat/lon")).toBeNull();
     expect(parseCameraFromHash("#map=4.5/91/0")).toBeNull();
-    expect(parseCameraFromHash("#map=-1/38.5/-97.5")).toBeNull();
+  });
+
+  it("reads a camera below z0, where a globe centred near a pole sits, held to the globe's floor", () => {
+    expect(parseCameraFromHash("#map=-1.4/85/0")).toEqual({ center: [0, 85], zoom: -1.4 });
+    expect(parseCameraFromHash("#map=-2.11/83/45")).toEqual({ center: [45, 83], zoom: -2 });
   });
 });
 

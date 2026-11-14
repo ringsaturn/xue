@@ -458,3 +458,14 @@ export function globeProjection(terrain: boolean): ProjectionSpecification {
 export function isGlobeProjection(map: MaplibreMap): boolean {
   return (map.getProjection()?.type ?? "mercator") !== "mercator";
 }
+
+/** The plane's floor: below z0 the world is narrower than a viewport and
+ * the field, drawn over three world copies, would leave the rest bare. */
+export const PLANE_MIN_ZOOM = 0;
+
+/** The globe's floor, MapLibre's own. The globe keeps its size on screen
+ * by lowering the zoom as the center moves poleward (by log2 cos φ), so a
+ * view of the whole globe centred near a pole sits well below z0: at the
+ * plane's floor a drag north stalls around 75° and the pole stays on the
+ * limb. */
+export const GLOBE_MIN_ZOOM = -2;

@@ -186,7 +186,7 @@ import { clipDomain, geoGrid, gridMapFor, type RegularGrid } from "./gridmap";
 import type { ProbeVariable } from "./probe";
 import { convertFileLegendLabel, convertLegendLabel, displayUnit, formatTemperature, onUnitsChange, variableDisplayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
-import { globeProjection, isGlobeProjection } from "./projection";
+import { GLOBE_MIN_ZOOM, globeProjection, isGlobeProjection, PLANE_MIN_ZOOM } from "./projection";
 import { cacheKey, createPlaneCache, MEBIBYTE } from "./planecache";
 import { createDecodeQueue, DECODE_GRAPH_BUCKET_MS, DECODE_GRAPH_WINDOW_MS, type DecodedFrameMessage } from "./decodequeue";
 import { variableKey } from "./sessionkeys";
@@ -864,7 +864,7 @@ const map = new MaplibreMap({
   // default view; this opens such a link on its own place instead.
   center: urlCamera?.center ?? [128, 28],
   zoom: urlCamera ? Math.min(urlCamera.zoom, MAX_ZOOM) : 1.65,
-  minZoom: 0,
+  minZoom: PLANE_MIN_ZOOM,
   maxZoom: MAX_ZOOM,
   // The view lives in the fragment, `#map=<zoom>/<lat>/<lon>`, kept
   // current on every move — so a copied address reproduces the view, and
@@ -886,6 +886,7 @@ const viewControl = new ViewControl({
   onVolumeTool: (kind) => pressVolumeTool(kind),
   onContours: () => terrainContours?.setEnabled(!terrainContours.enabled),
   onMeasure: (kind) => pressMeasureTool(kind),
+  onProjection: (globe) => syncMinZoom(globe),
 });
 map.addControl(viewControl, "top-right");
 
@@ -923,6 +924,19 @@ function currentScene(): SceneState {
   };
 }
 
+/** Hold the zoom floor to the projection just set: the globe's, or the
+ * plane's. A case holds its own (`applyCaseCamera`), measured on the plane. */
+function syncMinZoom(globe: boolean): void {
+  if (activeCase !== null) return;
+  const floor = globe ? GLOBE_MIN_ZOOM : PLANE_MIN_ZOOM;
+  map.setMinZoom(floor);
+  // Changing projection constrains the camera to the new one (a globe at
+  // 85° and z−1.4 lands on the plane at 0° and z0.87) without a move event,
+  // which would leave the layers and the address bar on the old camera;
+  // a jump to where the camera now is moves.
+  map.jumpTo({ center: map.getCenter(), zoom: Math.max(map.getZoom(), floor) });
+}
+
 /** Named peaks, drawn while the ground is in 3D relief. */
 const peakLabels = new PeakLabels(map, () => ({ basemapLang, htmlLang }));
 
@@ -933,7 +947,14 @@ function syncPeakLabels(): void {
 /** Put the link's scene on the map once the style (and the relief source in
  * it) exists, then keep the address bar following the map's controls. */
 function applySceneFromUrl(): void {
-  if (urlScene.globe) map.setProjection(globeProjection(urlScene.terrain !== null));
+  if (urlScene.globe) {
+    map.setProjection(globeProjection(urlScene.terrain !== null));
+    syncMinZoom(true);
+    // The map opened on the plane, which holds a low-zoom center to the
+    // latitudes that fill the viewport (a link to 85° opened at 49°); the
+    // globe takes the link's camera as written.
+    if (urlCamera) map.jumpTo({ center: urlCamera.center, zoom: Math.min(urlCamera.zoom, MAX_ZOOM) });
+  }
   if (urlScene.terrain !== null) map.setTerrain({ source: TERRAIN_MESH_SOURCE, exaggeration: urlScene.terrain });
   sceneApplied = true;
   map.on("projectiontransition", syncUrl);
@@ -4953,7 +4974,7 @@ function applyCaseCamera(showcaseCase: ShowcaseCase, recenter: boolean): void {
   // Drop the standing limits first: they would otherwise constrain the very
   // camera the new ones are measured from.
   map.setMaxBounds(null);
-  map.setMinZoom(0);
+  map.setMinZoom(PLANE_MIN_ZOOM);
   // A case with single-site radar holds the camera to its region and every
   // site's reach, so a sweep running off the region can still be panned to.
   const box =

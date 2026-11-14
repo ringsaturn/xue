@@ -12,6 +12,7 @@ import {
   VOLUME_BUNDLE_LEVELS,
 } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
+import { GLOBE_MIN_ZOOM } from "./projection";
 import { variableIds, variableSpec } from "./variables";
 
 /** Default model when the URL names none (or names one this app does not
@@ -605,8 +606,10 @@ export function parseCameraFromHash(hash: string): MapCamera | null {
   if (parts.length < 3) return null;
   const [zoom, latitude, longitude] = parts.map(Number) as [number, number, number];
   if (!Number.isFinite(zoom) || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if (zoom < 0 || Math.abs(latitude) > 90) return null;
-  return { center: [longitude, latitude], zoom };
+  if (Math.abs(latitude) > 90) return null;
+  // A globe centred near a pole sits below z0, and MapLibre's poleward drag
+  // can carry it a little past the floor (projection.ts, GLOBE_MIN_ZOOM).
+  return { center: [longitude, latitude], zoom: Math.max(zoom, GLOBE_MIN_ZOOM) };
 }
 
 /** The tropical cyclone marks a link carries. `?tc=<storm id>` focuses one
