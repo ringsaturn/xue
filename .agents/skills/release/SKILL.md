@@ -65,9 +65,13 @@ scheduled publishes do not fail during the release window.
    git checkout main && git merge --ff-only release/0.N && git push origin main
    git branch -d release/0.N && git push origin --delete release/0.N
    ```
-   If `main` moved on in the meantime, rebase the branch onto `main` first
-   (the tag stays on the published release commit), push it with
-   `--force-with-lease`, wait for `test.yml`, then fast-forward.
+   If `main` moved on in the meantime, merge `main` into the branch
+   (`git merge origin/main`), push it, wait for `test.yml`, then
+   fast-forward. Never rebase the branch: the tag stays on the published
+   release commit, and a rebase leaves it off `main`'s history, which
+   breaks `git describe` and the previous-tag lookup. Land it locally, never
+   through a pull request: GitHub's rebase merge rewrites every commit even
+   when `main` has not moved.
 
 ## Rules
 

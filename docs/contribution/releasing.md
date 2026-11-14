@@ -68,9 +68,12 @@ already installed (see "Why the floor tracks the current release").
    (`dry_run` shows the commit without pushing).
 5. **Merge into `main`** with a fast-forward, so the change, the release
    commit and the relock land on `main` together and keep their history.
-   If `main` moved on meanwhile, rebase the branch onto it first (the tag
-   stays on the published release commit), push it and wait for its
-   tests. Then delete the branch.
+   If `main` moved on meanwhile, merge `main` into the branch first, push
+   it and wait for its tests. Do not rebase: the tag stays on the
+   published release commit, and only a merge keeps that commit in
+   `main`'s history. Land it locally, never through a pull request:
+   GitHub's rebase merge rewrites every commit even when `main` has not
+   moved. Then delete the branch.
 
 A manual dispatch of either workflow is a rehearsal: `cargo publish
 --dry-run`, or wheels uploaded as workflow artifacts only.

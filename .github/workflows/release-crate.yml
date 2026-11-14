@@ -72,9 +72,9 @@ jobs:
       # to whichever one exists.
       #
       # The notes start at the previous v* tag by version, named explicitly:
-      # release branches are rebase-merged, so the previous tag is not an
-      # ancestor of this one and --generate-notes alone falls back to an
-      # older release.
+      # a previous tag that is not an ancestor of this one (a release branch
+      # rebased onto main, v0.45.0) makes --generate-notes alone fall back
+      # to an older release.
       - name: Create GitHub release
         if: github.event_name == 'push'
         run: |
