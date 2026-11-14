@@ -511,6 +511,9 @@ export const tr: Record<MessageKey, string> = {
   showcaseHours: "{count} sa",
   showcaseCaseAria: "{title} vakasını aç",
   showcaseListAria: "Örnek vaka listesi",
+  showcaseBuiltOn: "Xue üzerine kurulu",
+  showcaseHongSummary:
+    "Hong: GraphRiverCast ile 2000–2019 küresel günlük nehir debisi, derinliği ve depolaması; Xue'nun veri biçimi ve görüntüleyicisiyle. Bağımsız bir proje.",
 
   tcTileTip: "Tropikal siklonlar",
   varTc: "ROTA",

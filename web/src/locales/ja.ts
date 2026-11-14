@@ -505,6 +505,9 @@ export const ja: Record<MessageKey, string> = {
   showcaseHours: "{count} 時間",
   showcaseCaseAria: "事例 {title} を開く",
   showcaseListAria: "過去事例の一覧",
+  showcaseBuiltOn: "Xue を使ったプロジェクト",
+  showcaseHongSummary:
+    "洪：GraphRiverCast による 2000〜2019 年の全球日別河川流量・水深・貯留量。Xue のデータ形式とビューアを使った独立プロジェクト。",
 
   tcTileTip: "熱帯低気圧",
   varTc: "進路",

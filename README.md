@@ -153,6 +153,10 @@ Cases are past weather events cropped to their region and hours, listed at
 file under `showcase/cases/`, built with `make showcase CASE=<id>` and
 published permanently. See [`showcase/README.md`](showcase/README.md).
 
+Built on Xue: [Hong](https://hong.ringsaturn.me/), an independent project
+that publishes GraphRiverCast's daily global river fields for 2000–2019 in
+Xue's format and plays them in its viewer.
+
 ## Documentation
 
 - Specifications: [`docs/zarr-profile.md`](docs/zarr-profile.md),
