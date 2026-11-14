@@ -273,7 +273,7 @@ export const fr: Record<MessageKey, string> = {
   settingsLanguage: "Langue",
   settingsZone: "Fuseau horaire",
   zoneAuto: "Auto",
-  zoneAutoHint: "Fuseau de l’appareil ; celui du point épinglé quand un point l’est",
+  zoneAutoHint: "Fuseau de l’appareil, ou celui de l’événement dans un cas d’étude ; celui du point épinglé quand un point l’est",
   zoneLocal: "Local",
   zoneOther: "Autre fuseau",
   settingsUnits: "Unités",

@@ -270,7 +270,7 @@ export const zhHant: Record<MessageKey, string> = {
   settingsLanguage: "語言",
   settingsZone: "時區",
   zoneAuto: "自動",
-  zoneAutoHint: "預設用本機時區；釘選一個點時改用該點所在時區",
+  zoneAutoHint: "預設用本機時區，打開歷史個案時用該個案所在時區；釘選一個點時改用該點所在時區",
   zoneLocal: "本機",
   zoneOther: "其他時區",
   settingsUnits: "單位",

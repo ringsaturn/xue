@@ -49,6 +49,7 @@
   ],
   "defaultVariable": "tmpsfc",
   "eventTime": "2026-10-10T12:00:00Z",
+  "timeZone": "Asia/Tokyo",
   "tags": ["mountain", "downscaling", "fog", "asia"],
   "credit": "Recast Systems WOOF (WRF-ARW via gpuwm 2.8.7), run commissioned by the author · initial and boundary conditions NOAA GFS 2026-10-10 06Z · model terrain Copernicus DEM GLO-30",
   "view": {

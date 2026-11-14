@@ -273,7 +273,7 @@ export const de: Record<MessageKey, string> = {
   settingsLanguage: "Sprache",
   settingsZone: "Zeitzone",
   zoneAuto: "Automatisch",
-  zoneAutoHint: "Zeitzone des Geräts; bei einem angehefteten Punkt dessen Zeitzone",
+  zoneAutoHint: "Zeitzone des Geräts, in einem Wetterfall die des Ereignisses; bei einem angehefteten Punkt dessen Zeitzone",
   zoneLocal: "Lokal",
   zoneOther: "Andere Zeitzone",
   settingsUnits: "Einheiten",

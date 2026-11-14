@@ -215,6 +215,8 @@ import {
   formatStamp,
   monthKey,
   onDisplayZoneChange,
+  setCaseZone,
+  zoneAt,
 } from "./timezone";
 import {
   coversTiles,
@@ -236,6 +238,7 @@ import { CoordinateGrid } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
 import { applyPageMeta } from "./pagemeta";
 import {
+  boundsCentre,
   caseCameraLimits,
   caseParts,
   radarReachBox,
@@ -7007,6 +7010,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
       if (!found) throw new Error(t("showcaseCaseMissing", { id: requestedCaseId }));
       activeCase = found;
       activeCaseParts = caseParts(catalog.cases, found.id);
+      applyCaseZone(found);
       selectedModelId = found.modelId;
       // The case names the layer its event is about — a heat dome opens on
       // temperature, not on the app's usual precipitation. Only an explicit
@@ -7339,6 +7343,22 @@ function applyLocale(): void {
   // The H/L letters on the pressure centers are the dictionary's.
   refreshLabels();
   renderTcSheet();
+}
+
+/** Put the clock on the case's own zone (`timezone.ts`): the one it
+ * names, or the one at its box's centre, looked up the way a pin's is. A
+ * lookup that answers after another case has opened is dropped. */
+function applyCaseZone(entry: ShowcaseCase): void {
+  if (entry.timeZone) {
+    setCaseZone(entry.timeZone);
+    return;
+  }
+  setCaseZone(null);
+  const centre = boundsCentre(entry.bbox);
+  if (centre === null) return;
+  void zoneAt(centre[0], centre[1]).then((zone) => {
+    if (activeCase?.id === entry.id) setCaseZone(zone);
+  });
 }
 
 /** Rewrite every valid-time stamp in the display zone in force: the

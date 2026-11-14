@@ -270,7 +270,7 @@ export const ja: Record<MessageKey, string> = {
   settingsLanguage: "言語",
   settingsZone: "タイムゾーン",
   zoneAuto: "自動",
-  zoneAutoHint: "通常は端末のタイムゾーン。地点をピン留めするとその地点のタイムゾーン",
+  zoneAutoHint: "通常は端末のタイムゾーン、過去事例ではその事例のタイムゾーン。地点をピン留めするとその地点のタイムゾーン",
   zoneLocal: "端末",
   zoneOther: "その他",
   settingsUnits: "単位",

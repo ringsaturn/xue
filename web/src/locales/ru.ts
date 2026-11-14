@@ -275,7 +275,7 @@ export const ru: Record<MessageKey, string> = {
   settingsLanguage: "Язык",
   settingsZone: "Часовой пояс",
   zoneAuto: "Авто",
-  zoneAutoHint: "Пояс устройства; при закреплённой точке — пояс этой точки",
+  zoneAutoHint: "Пояс устройства, в архивном случае — пояс самого события; при закреплённой точке — пояс этой точки",
   zoneLocal: "Местное",
   zoneOther: "Другой пояс",
   settingsUnits: "Единицы",

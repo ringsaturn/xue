@@ -42,6 +42,7 @@
   ],
   "defaultVariable": "tmp2m",
   "eventTime": "2021-06-27T23:00:00Z",
+  "timeZone": "America/Los_Angeles",
   "tags": [
     "heatwave",
     "north-america"

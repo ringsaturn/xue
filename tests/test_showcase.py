@@ -227,6 +227,13 @@ class CaseDefinitionTest(unittest.TestCase):
         self.assertEqual(spec.output_subdirectory, "showcase/demo-case")
         self.assertEqual(spec.profile, "quality")
 
+    def test_a_case_names_its_own_zone(self) -> None:
+        self.assertEqual(parse_case(case_payload(timeZone="Asia/Shanghai")).time_zone, "Asia/Shanghai")
+        self.assertIsNone(parse_case(case_payload()).time_zone)
+        for bad in ("Mars/Olympus_Mons", "", 9, "../etc/passwd"):
+            with self.assertRaises(ShowcaseError):
+                parse_case(case_payload(timeZone=bad))
+
     def test_variables_are_reordered_into_manifest_order(self) -> None:
         spec = parse_case(case_payload(variables=["wind10m", "prate", "tmp2m"]))
         self.assertEqual(spec.variables, ("tmp2m", "prate", "wind10m"))
@@ -563,6 +570,7 @@ class RefreshSidecarTest(TempRoot, unittest.TestCase):
                 tags=["typhoon"],
                 credit="NOAA GFS",
                 eventTime="2021-07-20T08:00:00Z",
+                timeZone="Asia/Shanghai",
                 defaultVariable="wind10m",
             )
         )
@@ -573,6 +581,7 @@ class RefreshSidecarTest(TempRoot, unittest.TestCase):
         self.assertEqual(on_disk["summary"]["en"], "Corrected")
         self.assertEqual((on_disk["tags"], on_disk["credit"], on_disk["eventTime"]), (["typhoon"], "NOAA GFS", "2021-07-20T08:00:00Z"))
         self.assertEqual(on_disk["defaultVariable"], "wind10m")
+        self.assertEqual(on_disk["timeZone"], "Asia/Shanghai")
         # Everything that names the bytes is as built.
         for key in ("manifestCrc32", "byteLength", "bbox", "dataBbox", "grid", "variables", "run", "runTime"):
             self.assertEqual(on_disk[key], self.entry[key])
@@ -581,6 +590,7 @@ class RefreshSidecarTest(TempRoot, unittest.TestCase):
         on_disk = json.loads((self.root / "showcase" / "demo-case" / "case.json").read_text(encoding="utf-8"))
         self.assertNotIn("tags", on_disk)
         self.assertNotIn("credit", on_disk)
+        self.assertNotIn("timeZone", on_disk)
         # And the catalog collects the refreshed row.
         catalog = collect_catalog(self.root)
         self.assertEqual(catalog["cases"][0]["summary"]["en"], "Demo summary")

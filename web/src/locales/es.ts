@@ -273,7 +273,7 @@ export const es: Record<MessageKey, string> = {
   settingsLanguage: "Idioma",
   settingsZone: "Zona horaria",
   zoneAuto: "Auto",
-  zoneAutoHint: "La zona del dispositivo; la del punto fijado mientras haya uno",
+  zoneAutoHint: "La zona del dispositivo, o la del propio evento en un caso de estudio; la del punto fijado mientras haya uno",
   zoneLocal: "Local",
   zoneOther: "Otra zona",
   settingsUnits: "Unidades",

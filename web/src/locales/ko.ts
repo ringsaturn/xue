@@ -275,7 +275,7 @@ export const ko: Record<MessageKey, string> = {
   settingsLanguage: "언어",
   settingsZone: "시간대",
   zoneAuto: "자동",
-  zoneAutoHint: "기기의 시간대, 지점을 고정하면 그 지점의 시간대",
+  zoneAutoHint: "기기의 시간대, 과거 사례에서는 그 사례의 시간대, 지점을 고정하면 그 지점의 시간대",
   zoneLocal: "기기",
   zoneOther: "다른 시간대",
   settingsUnits: "단위",
