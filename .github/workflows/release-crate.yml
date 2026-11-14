@@ -70,14 +70,27 @@ jobs:
       # created (the UI creates the two together), so the release is created
       # only when the tag came alone; release-xuepy.yml attaches the wheels
       # to whichever one exists.
+      #
+      # The notes start at the previous v* tag by version, named explicitly:
+      # release branches are rebase-merged, so the previous tag is not an
+      # ancestor of this one and --generate-notes alone falls back to an
+      # older release.
       - name: Create GitHub release
         if: github.event_name == 'push'
         run: |
           set -euo pipefail
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "release ${GITHUB_REF_NAME} already exists; keeping it"
-          else
-            gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+            exit 0
           fi
+          prev="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/tags" -q '.[].name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | { cat; echo "${GITHUB_REF_NAME}"; } | sort -uV \
+            | grep -B1 -Fx "${GITHUB_REF_NAME}" | head -n1)"
+          start=()
+          if [ -n "${prev}" ] && [ "${prev}" != "${GITHUB_REF_NAME}" ]; then
+            start=(--notes-start-tag "${prev}")
+          fi
+          gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag "${start[@]}"
         env:
           GH_TOKEN: ${{ github.token }}
