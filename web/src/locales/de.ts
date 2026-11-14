@@ -508,6 +508,9 @@ export const de: Record<MessageKey, string> = {
   showcaseHours: "{count} h",
   showcaseCaseAria: "Fall {title} öffnen",
   showcaseListAria: "Liste der Wetterfälle",
+  showcaseBuiltOn: "Auf Xue aufgebaut",
+  showcaseHongSummary:
+    "Hong: GraphRiverCast, tägliche globale Abflüsse, Wassertiefen und Speicher der Flüsse 2000–2019, mit Xues Datenformat und Viewer. Ein unabhängiges Projekt.",
 
   tcTileTip: "Tropische Wirbelstürme",
   varTc: "ZUGBAHN",

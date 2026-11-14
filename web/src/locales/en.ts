@@ -832,6 +832,11 @@ export const en = {
   showcaseHours: "{count} h",
   showcaseCaseAria: "Open case {title}",
   showcaseListAria: "Showcase case list",
+  /** The section under the cases that links projects built on Xue's
+   * format and viewer elsewhere. */
+  showcaseBuiltOn: "Built on Xue",
+  showcaseHongSummary:
+    "Hong: GraphRiverCast daily global river discharge, depth and storage, 2000–2019, on Xue's stores and viewer. An independent project.",
 
   /** The tropical cyclone marks: the rail tile (its gloss and glyph — the
    * CJK locales use their one character for a typhoon, the others C for

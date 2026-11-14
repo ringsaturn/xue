@@ -5173,6 +5173,43 @@ html:has(.showcase-page) {
   border-left: 9px solid currentColor;
 }
 
+/* Links out to projects built on Xue, set as a quiet list between the
+   cards and the credits. */
+.showcase-built-on {
+  margin: 0 0 32px;
+  padding-top: 22px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.showcase-built-on h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.showcase-built-on ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.showcase-built-on a {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-2);
+}
+
+.showcase-built-on p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
 /* A sentence of credits, punctuated as prose, so it flows as text rather
    than as a row of spaced items. */
 .showcase-page .source-note {

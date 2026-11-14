@@ -503,6 +503,9 @@ export const zhHant: Record<MessageKey, string> = {
   showcaseHours: "{count} 小時",
   showcaseCaseAria: "開啟個案 {title}",
   showcaseListAria: "歷史個案列表",
+  showcaseBuiltOn: "基於 Xue 的專案",
+  showcaseHongSummary:
+    "洪：GraphRiverCast 2000–2019 年全球逐日河道流量、水深與蓄量，使用 Xue 的資料格式與檢視器。獨立的二次開發專案。",
 
   tcTileTip: "熱帶氣旋",
   varTc: "路徑",

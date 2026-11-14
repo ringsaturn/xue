@@ -510,6 +510,9 @@ export const ru: Record<MessageKey, string> = {
   showcaseHours: "{count} ч",
   showcaseCaseAria: "Открыть случай {title}",
   showcaseListAria: "Список архивных случаев",
+  showcaseBuiltOn: "Проекты на Xue",
+  showcaseHongSummary:
+    "Hong: суточные расход, глубина и запас воды рек мира за 2000–2019 годы по GraphRiverCast, в формате и просмотрщике Xue. Независимый проект.",
 
   tcTileTip: "Тропические циклоны",
   varTc: "ТРЕК",

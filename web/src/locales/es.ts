@@ -508,6 +508,9 @@ export const es: Record<MessageKey, string> = {
   showcaseHours: "{count} h",
   showcaseCaseAria: "Abrir el caso {title}",
   showcaseListAria: "Lista de casos de estudio",
+  showcaseBuiltOn: "Hecho con Xue",
+  showcaseHongSummary:
+    "Hong: caudal, profundidad y almacenamiento diarios de los ríos del mundo 2000–2019 de GraphRiverCast, con el formato y el visor de Xue. Un proyecto independiente.",
 
   tcTileTip: "Ciclones tropicales",
   varTc: "TRAYECT",

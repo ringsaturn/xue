@@ -510,6 +510,9 @@ export const ko: Record<MessageKey, string> = {
   showcaseHours: "{count} 시간",
   showcaseCaseAria: "사례 {title} 열기",
   showcaseListAria: "과거 사례 목록",
+  showcaseBuiltOn: "Xue 기반 프로젝트",
+  showcaseHongSummary:
+    "홍: GraphRiverCast 2000–2019년 전 지구 일별 하천 유량·수심·저류량. Xue의 데이터 형식과 뷰어를 쓴 독립 프로젝트.",
 
   tcTileTip: "열대저기압",
   varTc: "경로",

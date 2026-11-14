@@ -508,6 +508,9 @@ export const fr: Record<MessageKey, string> = {
   showcaseHours: "{count} h",
   showcaseCaseAria: "Ouvrir le cas {title}",
   showcaseListAria: "Liste des cas d'étude",
+  showcaseBuiltOn: "Construit sur Xue",
+  showcaseHongSummary:
+    "Hong : débits, profondeurs et stocks quotidiens des fleuves du globe 2000–2019 par GraphRiverCast, avec le format et le visualiseur de Xue. Un projet indépendant.",
 
   tcTileTip: "Cyclones tropicaux",
   varTc: "TRAJET",
