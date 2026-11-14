@@ -24,7 +24,8 @@ with the versions in use and the compatibility rules), which win over
 anything here:
 
 - [`docs/zarr-profile.md`](../zarr-profile.md): the Zarr store profile
-- [`docs/format.md`](../format.md): bundle metadata and the retired `.xue` container
+- [`docs/bundle.md`](../bundle.md): bundle metadata and codebooks
+- [`docs/format.md`](../format.md): the legacy `.xue` container
 - [`docs/encoder.md`](../encoder.md): the native encoder and its parity rule
 - [`docs/stac.md`](../stac.md): the STAC catalog
 - [`docs/satellite.md`](../satellite.md): the satellite fetch stage and producers

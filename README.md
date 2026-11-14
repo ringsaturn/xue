@@ -26,7 +26,7 @@ tiles × six consecutive steps per chunk, one shard per variable;
 published as static files on a CDN. The page reads them with HTTP Range
 requests: a Rust WebAssembly worker decodes chunks on demand, and a WebGL2
 layer projects and colours them on the GPU. The same stores open in
-Python with `xarray` or the `xuepy` wheel. Code is MIT or Apache-2.0.
+Python with `xarray`. Code is MIT or Apache-2.0.
 The earlier single-file container, `.xue` ([`docs/format.md`](docs/format.md)),
 is no longer published and every decoder still reads it.
 
@@ -155,8 +155,9 @@ published permanently. See [`showcase/README.md`](showcase/README.md).
 
 ## Documentation
 
-- Specifications: [`docs/format.md`](docs/format.md) (container and
-  bundle metadata), [`docs/zarr-profile.md`](docs/zarr-profile.md),
+- Specifications: [`docs/zarr-profile.md`](docs/zarr-profile.md),
+  [`docs/bundle.md`](docs/bundle.md) (bundle metadata and codebooks),
+  [`docs/format.md`](docs/format.md) (the legacy `.xue` container),
   [`docs/stac.md`](docs/stac.md), [`docs/api.md`](docs/api.md) (data API),
   [`docs/encoder.md`](docs/encoder.md)
   (native encoder), [`docs/satellite.md`](docs/satellite.md),

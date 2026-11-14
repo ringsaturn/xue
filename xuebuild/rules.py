@@ -397,7 +397,7 @@ class EnsembleIdentity:
     a threshold (code table 4.9 type and its limits) — what GRIB2 product
     definition templates 4.2 / 4.12, 4.6 / 4.10 and 4.5 / 4.9 carry beyond
     the parameter, and what the metadata's ``ensemble`` block writes
-    (docs/format.md §"Ensemble"). Exactly one of the three shapes is set;
+    (docs/bundle.md §"Ensemble"). Exactly one of the three shapes is set;
     which one says which templates a record of it is written in.
 
     A limit is a ``(scaleFactor, scaledValue)`` pair, ``scaledValue ×

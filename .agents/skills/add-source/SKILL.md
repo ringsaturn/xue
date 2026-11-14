@@ -65,7 +65,7 @@ code: open access only, and record the attribution the licence requires.
    fails for a published bundle with no `variables.ts` row. Also add the
    static metadata in `web/index.html`. If the source exceeds a manifest limit (as
    `forecastHours` was for CFS), widen it in all three validators and in
-   `docs/format.md`.
+   `docs/bundle.md`.
 7. **Workflow**: `publish-<id>.yml`. A forecast calls `publish.yml` and is
    added to its model allow-list. An observation copies the nearest rounds
    workflow (`publish-jma.yml` shape), sets `FRAME_CACHE` if it caches

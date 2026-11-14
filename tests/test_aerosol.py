@@ -10,7 +10,7 @@ and the size and wavelength intervals in the template tell the species and
 the band apart — a dozen ``AOTK`` records on the entire atmosphere per frame.
 So a variable's identity is its parameter block *and* an ``AerosolIdentity``
 (``xuebuild/variables.py``), written beside the parameter as the metadata's
-``aerosol`` block (docs/format.md §"Band, Producer and Aerosol"), read off
+``aerosol`` block (docs/bundle.md §"Band, Producer and Aerosol"), read off
 the template by the header index (``xuebuild/grib2.py``) and off GDAL's
 assembled template values by the band matcher (``xuebuild/gdal.py``), and
 spelled out in the ``.idx`` line after the forecast hour, which is what the

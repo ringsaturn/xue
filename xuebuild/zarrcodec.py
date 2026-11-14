@@ -3,8 +3,8 @@
 An array-to-array codec: along one axis, the first slice is kept whole and
 every later slice is stored as its modulo-256 difference against the slice
 before it; decoding is a running sum, modulo 256. On ``uint8`` that is
-exactly the container's PREVIOUS predictor (docs/format.md, "Temporal
-Prediction"), lifted into a Zarr codec chain so a chunk's compressed bytes
+the residual arithmetic of docs/bundle.md, "Residuals" (the ``.xue``
+container's PREVIOUS predictor), lifted into a Zarr codec chain so a chunk's compressed bytes
 come out the same as the bundle's. It is *not* numcodecs' ``Delta``, which
 differences the flattened buffer — on a C-ordered ``(time, y, x)`` chunk
 that is a spatial difference along x with one stray residual per row.

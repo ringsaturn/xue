@@ -195,7 +195,7 @@ class SourceSpec:
     series runs at ``step_hours`` up to and including ``last_hour``, then the
     next segment takes over. No source publishes one cadence all the way to
     240 hours, so an axis that crosses a segment boundary is mixed-step and
-    its bundles carry metadata schemaVersion 2 (docs/format.md)."""
+    its bundles carry metadata schemaVersion 2 (docs/bundle.md)."""
     input_variable_ids: tuple[str, ...]
     """Variables fetched from the source, in GRIB assembly order: the primary
     file's records first, then each companion family's."""
@@ -256,7 +256,7 @@ class SourceSpec:
     with the code table 4.10 process: the rate a source derives by
     de-accumulating or de-averaging is a mean (0), ECMWF's gust a maximum
     (2). Written into the bundle's metadata as
-    ``typeOfStatisticalProcessing`` (docs/format.md), which is what tells a
+    ``typeOfStatisticalProcessing`` (docs/bundle.md), which is what tells a
     reader that ECMWF's ``prate`` or ``gust`` and GFS's are not quite the
     same field under the same parameter."""
     bands: tuple[tuple[str, SatelliteBand], ...] = ()
@@ -270,7 +270,7 @@ class SourceSpec:
     for the deterministic field under its id, each with the statistic:
     CMA GRAPES GEPS's median ``tmp2m``, its mean ``prmsl``. Written into
     the bundle's metadata as the variable's ``ensemble`` block beside
-    ``parameter`` (docs/format.md §"Ensemble"), as :attr:`bands` writes a
+    ``parameter`` (docs/bundle.md §"Ensemble"), as :attr:`bands` writes a
     channel's; a variable that is a statistic under an id of its own
     carries the block itself (:attr:`~xuebuild.variables.VariableSpec.grib2_ensemble`)."""
     interval_precipitation_pairs: tuple[tuple[str, str], ...] = ()
@@ -2378,7 +2378,7 @@ SOURCES: dict[str, SourceSpec] = {
     # geostationary arithmetic. The source id is the orbital role, not the
     # spacecraft (Himawari-10 takes the slot around 2029 and changes the
     # platform row alone); the spacecraft and channel are the ``band``
-    # block on the variable (``bands``, docs/format.md). Four channels are
+    # block on the variable (``bands``, docs/bundle.md). Four channels are
     # fetched, the infrared windows at 8.6, 10.4, 11.2 and 12.3 µm (AHI
     # bands 11, 13, 14, 15); the 10.4 µm one is published as brightness
     # temperature (``ir104``), and all four feed the Dust RGB composite

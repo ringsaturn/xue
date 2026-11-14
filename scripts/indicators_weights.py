@@ -41,7 +41,7 @@ does the whole resampling with NumPy; no raster library is involved at that
 step. The result is cropped to the region's bounding box and normalised to
 sum to 1.
 
-Published-grid convention (docs/format.md, ``grid`` block): the published
+Published-grid convention (docs/bundle.md, ``grid`` block): the published
 values are samples at the grid points, the first column is longitude -180
 (Greenwich-first grids are rolled), rows run north to south, and a point's
 cell is the rectangle of one step around it. So for ``0p25`` the longitudes

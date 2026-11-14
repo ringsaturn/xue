@@ -51,7 +51,7 @@ export function checkGeometry(v: unknown, at: string): asserts v is Geometry {
   isInteger(v14, at + ".rowGroupRows", 1);
 }
 
-/** A network store's root zarr.json (docs/zarr-profile.md, "Network store"): one track of one quantity on the reaches of a river network, the xue_network block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block, that its one variable is the data array's, and the time axis rules of bundle metadata beyond its shape (docs/format.md, "Time Axis"). */
+/** A network store's root zarr.json (docs/zarr-profile.md, "Network store"): one track of one quantity on the reaches of a river network, the xue_network block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block, that its one variable is the data array's, and the time axis rules of bundle metadata beyond its shape (docs/bundle.md, "Time Axis"). */
 export type NetworkGroup = { zarr_format: 3; node_type: "group"; attributes: { xue_network: Network }; consolidated_metadata?: ConsolidatedMetadata };
 
 export function checkNetworkGroup(v: unknown, at: string): asserts v is NetworkGroup {

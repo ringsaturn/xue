@@ -1,6 +1,6 @@
 //! Grid geometry a reader needs without the encoder: the Lambert conformal
 //! projection a `grid.projection` block declares, and the true latitudes of a
-//! `grid.gaussian` block (`docs/format.md`, "Regional Grids").
+//! `grid.gaussian` block (`docs/bundle.md`, "Regional Grids").
 //!
 //! The trigonometry runs through `f64`'s methods, the C library's
 //! `sin`/`cos`/`tan`/`pow`, which is what Python's `math` module calls too, so

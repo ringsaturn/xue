@@ -486,11 +486,11 @@ hand-written bilinear. The particle shader keeps the analytic form: where it
 samples the wind moves by a fraction of a cell at most, and nothing is drawn
 from a single cell. `tests/e2e/shader.spec.ts` holds the raster to 120 m.
 
-A bundle's `grid` block ([`docs/format.md`](../format.md)) is read in one place,
+A bundle's `grid` block ([`docs/bundle.md`](../bundle.md)) is read in one place,
 `gridmap.ts::parseGrid` (through `geoGrid(metadata)`, memoized on the metadata;
 `parseBundleMetadata` runs it too, so a bad block never reaches a session). It
 throws on a malformed block. Published regular grids may leave fields out, which
-take format.md's values; a projected grid never may. `GeoGrid` is a union, so the
+take bundle.md's values; a projected grid never may. `GeoGrid` is a union, so the
 regular fields cannot be read without `grid.projection` having been ruled out, and
 the compiler finds what assumes them.
 

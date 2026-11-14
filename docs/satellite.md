@@ -4,7 +4,7 @@ How a geostationary imager's channels become Xue bundles: the `himawari`,
 `goeseast`, `goeswest` and `meteosat` sources, the `himawarijp` box over
 Japan, their Dust RGB and true colour composites and dust confidences, and the seams a further satellite, a second
 channel and another composite product go through. The bundle format is
-unchanged (`format.md`); what this document fixes is the fetch stage,
+unchanged (`bundle.md`); what this document fixes is the fetch stage,
 `xuebuild/satellite/`, and the metadata a satellite variable carries.
 
 ## Shape
@@ -599,7 +599,7 @@ to nothing.
 A satellite variable's identity is its `parameter` block, brightness
 temperature at the nominal top of the atmosphere (GRIB2 0 / 4 / 4 on
 surface 8), which every infrared band of every imager shares, plus the
-`band` block beside it (`format.md` §"Band, Producer and Aerosol"), template
+`band` block beside it (`bundle.md` §"Band, Producer and Aerosol"), template
 4.31's five fields:
 
 ```json

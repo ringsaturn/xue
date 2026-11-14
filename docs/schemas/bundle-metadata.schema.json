@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/bundle-metadata.schema.json",
   "title": "BundleMetadataV3",
-  "description": "A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/format.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n.",
+  "description": "A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/bundle.md, \"Metadata JSON\"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n.",
   "type": "object",
   "required": ["schemaVersion", "model", "runTime", "time", "grid", "variables"],
   "anyOf": [
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "schemaVersion": {"description": "4 exactly when the grid carries a projection, 3 otherwise: the lowest version that fits.", "type": "integer", "enum": [3, 4]},
-    "model": {"description": "The source dataset, with product (docs/format.md, \"Projected Sources\").", "type": "string", "minLength": 1},
+    "model": {"description": "The source dataset, with product (docs/bundle.md, \"Projected Sources\").", "type": "string", "minLength": 1},
     "product": {"description": "Every writer writes it; no reader needs it.", "type": "string", "minLength": 1},
     "runTime": {"$ref": "#/$defs/Timestamp"},
     "profile": {"description": "The quantization profile the codebooks come from. Every writer writes it; no reader needs it.", "type": "string", "minLength": 1},
@@ -27,7 +27,7 @@
       "format": "date-time"
     },
     "Time": {
-      "description": "The schemaVersion 3 time axis (docs/format.md, \"Time Axis\"): integer offsets from runTime, each unitSeconds long, uniform with frameStep or listed with frameOffsets. No other field may appear.",
+      "description": "The schemaVersion 3 time axis (docs/bundle.md, \"Time Axis\"): integer offsets from runTime, each unitSeconds long, uniform with frameStep or listed with frameOffsets. No other field may appear.",
       "type": "object",
       "required": ["unitSeconds", "firstFrameOffset", "frameCount"],
       "properties": {
@@ -44,7 +44,7 @@
       ]
     },
     "Grid": {
-      "description": "The grid the planes are on (docs/format.md, \"Regional Grids\"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them.",
+      "description": "The grid the planes are on (docs/bundle.md, \"Regional Grids\"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them.",
       "type": "object",
       "required": ["width", "height", "wrapLongitude"],
       "anyOf": [
@@ -128,7 +128,7 @@
       }
     },
     "Parameter": {
-      "description": "The variable's identity in GRIB2's terms (docs/format.md, \"Variable Identity\"). No other key is allowed.",
+      "description": "The variable's identity in GRIB2's terms (docs/bundle.md, \"Variable Identity\"). No other key is allowed.",
       "type": "object",
       "required": ["discipline", "parameterCategory", "parameterNumber", "typeOfFirstFixedSurface", "scaleFactorOfFirstFixedSurface", "scaledValueOfFirstFixedSurface"],
       "properties": {
@@ -143,7 +143,7 @@
       "additionalProperties": false
     },
     "Band": {
-      "description": "The spectral band a satellite image was measured in, in the fields of GRIB2 template 4.31 (docs/format.md, \"Band, Producer and Aerosol\"). All five keys, no other.",
+      "description": "The spectral band a satellite image was measured in, in the fields of GRIB2 template 4.31 (docs/bundle.md, \"Band, Producer and Aerosol\"). All five keys, no other.",
       "type": "object",
       "required": ["satelliteSeries", "satelliteNumber", "instrumentType", "scaleFactorOfCentralWaveNumber", "scaledValueOfCentralWaveNumber"],
       "properties": {
@@ -190,7 +190,7 @@
       "additionalProperties": false
     },
     "Ensemble": {
-      "description": "Which statistic of an ensemble the field is (docs/format.md, \"Ensemble\"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter.",
+      "description": "Which statistic of an ensemble the field is (docs/bundle.md, \"Ensemble\"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter.",
       "anyOf": [
         {"$ref": "#/$defs/EnsembleDerived"},
         {"$ref": "#/$defs/EnsemblePercentile"},
@@ -257,7 +257,7 @@
     "ScaleFactor": {"description": "A GRIB2 scale factor, or null where the value is missing.", "type": ["integer", "null"], "minimum": -127, "maximum": 127},
     "ScaledValue": {"description": "A GRIB2 scaled value, or null where the value is missing.", "type": ["integer", "null"], "minimum": 0, "maximum": 4294967294},
     "Quantization": {
-      "description": "One of the codebooks of docs/format.md, \"Quantization Codebooks\".",
+      "description": "One of the codebooks of docs/bundle.md, \"Quantization Codebooks\".",
       "anyOf": [{"$ref": "#/$defs/LinearQuantization"}, {"$ref": "#/$defs/LogQuantization"}]
     },
     "LinearQuantization": {

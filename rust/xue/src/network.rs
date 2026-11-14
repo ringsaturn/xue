@@ -163,7 +163,7 @@ fn nonempty(block: &Map<String, Value>, key: &str) -> Result<String, DecodeError
         .ok_or_else(|| err(format!("xue_network {key} must be a non-empty string")))
 }
 
-/// The container's time block (`docs/format.md`, "Time Axis"): `unitSeconds`
+/// The container's time block (`docs/bundle.md`, "Time Axis"): `unitSeconds`
 /// a whole divisor of an hour and the coarsest that fits, exactly one of
 /// `frameStep` (uniform) and `frameOffsets` (listed, strictly increasing,
 /// starting at `firstFrameOffset`, never uniform), offsets below 65535.

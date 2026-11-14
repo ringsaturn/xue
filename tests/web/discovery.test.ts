@@ -132,8 +132,9 @@ describe("llms-full", () => {
     expect(LLMS_FULL_SOURCES).toEqual([
       "README.md",
       "docs/sources.md",
-      "docs/format.md",
       "docs/zarr-profile.md",
+      "docs/bundle.md",
+      "docs/format.md",
       "docs/encoder.md",
       "docs/tc.md",
       "docs/airport.md",

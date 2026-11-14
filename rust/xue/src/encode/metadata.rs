@@ -76,11 +76,11 @@ fn time_metadata(offsets: &[i64], unit_seconds: i64) -> Map<String, Value> {
 /// fixed surface), what its values mean, and how they are quantized.
 ///
 /// `numeric_id` is the file-local `variableId` handle that ties this
-/// descriptor to the index (docs/format.md): the variable's 1-based position
+/// descriptor to the index (docs/bundle.md): the variable's 1-based position
 /// in the bundle's variable list, assigned by [`build_metadata`].
 /// `producers` is what the observation series was stamped with, by variable
 /// id: a produced variable's `producer` block is its registered id and that
-/// version (docs/format.md §"Band, Producer and Aerosol").
+/// version (docs/bundle.md §"Band, Producer and Aerosol").
 fn variable_metadata(
     variable_id: &str,
     numeric_id: u8,

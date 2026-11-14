@@ -1,29 +1,31 @@
 # xue
 
-Parser and frame decoder for the Xue (雪) bundle format — a per-variable
-spatiotemporal container that packs global weather forecasts (quantized
-single-byte planes, temporal residual prediction, zstd) for streaming
-playback in the browser.
+Decoder for Xue (雪) weather bundles: global forecasts and observation
+windows as quantized single-byte planes with temporal residual prediction
+and zstd, streamed by HTTP range reads for playback in the browser.
 
-Since 2026-09-15 the Xue service publishes its runs as Zarr v3 stores rather
-than `.xue` files; this crate is still what decodes them (the store's
-chunks are the container's, decoded through `decode_chunk`), and it keeps
-reading the container itself. Both container versions are read, and a
-decoder must keep reading v1: runs and cases published before the switch
-carry those bytes and are never rebuilt. In v1 a payload is
-one whole plane of one frame; in v2 it is a chunk — one spatial tile of one
-temporal group for one variable — which is what makes a partial read cheap.
+The Xue service publishes its runs as Zarr v3 stores
+([`docs/zarr-profile.md`](https://github.com/ringsaturn/xue/blob/main/docs/zarr-profile.md));
+what a bundle carries, its metadata and codebooks, is
+[`docs/bundle.md`](https://github.com/ringsaturn/xue/blob/main/docs/bundle.md).
+The `zarr` module parses a store's group and array documents and its shard
+index, and `decode_chunk` decodes one inner chunk. The crate also reads the
+single-file `.xue` container
+([`docs/format.md`](https://github.com/ringsaturn/xue/blob/main/docs/format.md)),
+both versions, forever: runs and cases published before the stores carry
+those bytes and are never rebuilt. In v1 a payload is one whole plane of one
+frame; in v2 it is a chunk — one spatial tile of one temporal group for one
+variable — which is what makes a partial read cheap.
 
 This crate is the decoding half of the [Xue
 project](https://github.com/ringsaturn/xue); the production encoder is the
-Python pipeline in the same repository, and the normative format specification
-is
-[`docs/format.md`](https://github.com/ringsaturn/xue/blob/main/docs/format.md).
-Every integer computation on untrusted input uses checked arithmetic, and no
-allocation is sized from a file value before it is validated against the
-metadata grid and the file length.
+Python pipeline in the same repository. Every integer computation on
+untrusted input uses checked arithmetic, and no allocation is sized from a
+file value before it is validated against the metadata grid and the file
+length.
 
-Two readers share the same structural validation and decode logic:
+For the container, two readers share the same structural validation and
+decode logic:
 
 - `Bundle` opens a complete `.xue` file held in memory.
 - `StreamingBundle` opens only the structural prefix (header + metadata +
@@ -71,8 +73,8 @@ MIT OR Apache-2.0.
 ## The `encoder` feature
 
 Off by default, and not part of what this crate is for. It enables an
-experimental native encoder that links GDAL and writes `.xue` bundles
-byte-identically to the Python reference pipeline — see
+experimental native encoder that links GDAL and writes the stores (and,
+when asked, `.xue` containers) byte-identically to the Python reference pipeline — see
 [`docs/encoder.md`](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md).
 Enabling it requires a system GDAL and libclang at build time. A decode-only
 build resolves none of its dependencies and needs neither: `cargo add xue`

@@ -10,7 +10,8 @@ terms (see the [README](../README.md#data-and-licensing)).
 | Document | Specifies |
 |---|---|
 | [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store: what is published today, so read this first |
-| [format.md](format.md) | The bundle metadata JSON (`schemaVersion` 1–3), the codebooks and the residual arithmetic, then the retired `.xue` container (v1, v2) that published runs still carry |
+| [bundle.md](bundle.md) | What every bundle carries: the metadata JSON (`schemaVersion` 1–4), the codebooks and the residual arithmetic |
+| [format.md](format.md) | The legacy `.xue` container (v1, v2) that runs published before the stores still carry |
 | [schemas/](schemas/) | The JSON Schemas (draft 2020-12) normative for shape: the manifest, bundle metadata v3, a store's group and array documents, the pointer and the point products' files |
 | [stac.md](stac.md) | The STAC catalog: layout, run Items, source Collections, point products, the showcase |
 | [registry.md](registry.md) | The registry document: the variables, bundles and sources an encoder builds, the closed sets of rules it names |
@@ -30,8 +31,8 @@ Every artifact carries its own version, none tied to a code release.
 
 | Artifact | Written today | Read |
 |---|---|---|
-| Container (`FixedHeader.version`) | 2, as a build intermediate only | 1 and 2 |
 | Bundle metadata (`schemaVersion`) | 3 | 1 to 3 |
+| Container (`FixedHeader.version`) | 2, only when a build asks (`--xue`) | 1 and 2 |
 | Manifest | schema 5 | 5; unknown fields ignored |
 | Live pointer | schema 1 | 1 |
 | Zarr store (`zarr_format`) | 3 | 3 |

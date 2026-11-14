@@ -13,7 +13,7 @@ export function checkTimestamp(v: unknown, at: string): asserts v is Timestamp {
   isString(v, at, PATTERN_1, undefined, true);
 }
 
-/** The schemaVersion 3 time axis (docs/format.md, "Time Axis"): integer offsets from runTime, each unitSeconds long, uniform with frameStep or listed with frameOffsets. No other field may appear. */
+/** The schemaVersion 3 time axis (docs/bundle.md, "Time Axis"): integer offsets from runTime, each unitSeconds long, uniform with frameStep or listed with frameOffsets. No other field may appear. */
 export type Time = { unitSeconds: number; firstFrameOffset: number; frameCount: number; frameStep?: number; frameOffsets?: number[] };
 
 export function checkTime(v: unknown, at: string): asserts v is Time {
@@ -49,7 +49,7 @@ export function checkTime(v: unknown, at: string): asserts v is Time {
   ]);
 }
 
-/** The grid the planes are on (docs/format.md, "Regional Grids"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them. */
+/** The grid the planes are on (docs/bundle.md, "Regional Grids"): row-major, north to south, west to east. Regular, with the four latitude/longitude fields (and a gaussian block when its rows are really a Gaussian grid's), or projected, with a projection instead of them. A field of the other kind is refused: each branch below requires its own fields and demands null of the other's, which the property's own schema here refuses. Every writer writes layout, rowOrder and columnOrder, which have one value each; no reader needs them. */
 export type Grid = { width: number; height: number; layout?: "row-major"; rowOrder?: "north-to-south"; columnOrder?: "west-to-east"; firstLongitude?: number; firstLatitude?: number; longitudeStep?: number; latitudeStep?: number; wrapLongitude: boolean; gaussian?: Gaussian; projection?: Projection };
 
 export function checkGrid(v: unknown, at: string): asserts v is Grid {
@@ -223,7 +223,7 @@ export function checkVariable(v: unknown, at: string): asserts v is Variable {
   checkQuantization(v49, at + ".quantization");
 }
 
-/** The variable's identity in GRIB2's terms (docs/format.md, "Variable Identity"). No other key is allowed. */
+/** The variable's identity in GRIB2's terms (docs/bundle.md, "Variable Identity"). No other key is allowed. */
 export type Parameter = { discipline: number; parameterCategory: number; parameterNumber: number; typeOfFirstFixedSurface: number; scaleFactorOfFirstFixedSurface: ScaleFactor; scaledValueOfFirstFixedSurface: ScaledValue; typeOfStatisticalProcessing?: number };
 
 export function checkParameter(v: unknown, at: string): asserts v is Parameter {
@@ -247,7 +247,7 @@ export function checkParameter(v: unknown, at: string): asserts v is Parameter {
   isClosed(v, at, ["discipline","parameterCategory","parameterNumber","typeOfFirstFixedSurface","scaleFactorOfFirstFixedSurface","scaledValueOfFirstFixedSurface","typeOfStatisticalProcessing"]);
 }
 
-/** The spectral band a satellite image was measured in, in the fields of GRIB2 template 4.31 (docs/format.md, "Band, Producer and Aerosol"). All five keys, no other. */
+/** The spectral band a satellite image was measured in, in the fields of GRIB2 template 4.31 (docs/bundle.md, "Band, Producer and Aerosol"). All five keys, no other. */
 export type Band = { satelliteSeries: number; satelliteNumber: number; instrumentType: number; scaleFactorOfCentralWaveNumber: number; scaledValueOfCentralWaveNumber: number };
 
 export function checkBand(v: unknown, at: string): asserts v is Band {
@@ -307,7 +307,7 @@ export function checkAerosol(v: unknown, at: string): asserts v is Aerosol {
   isClosed(v, at, ["aerosolType","typeOfSizeInterval","scaleFactorOfFirstSize","scaledValueOfFirstSize","scaleFactorOfSecondSize","scaledValueOfSecondSize","typeOfWavelengthInterval","scaleFactorOfFirstWavelength","scaledValueOfFirstWavelength","scaleFactorOfSecondWavelength","scaledValueOfSecondWavelength"]);
 }
 
-/** Which statistic of an ensemble the field is (docs/format.md, "Ensemble"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter. */
+/** Which statistic of an ensemble the field is (docs/bundle.md, "Ensemble"): exactly one of three shapes, told apart by their keys. A probability's limits are integer exactly where its type uses them (types 0, 3 and 5 the lower, 1 and 4 the upper, 2 both) and null elsewhere; a limit is scaledValue x 10^-scaleFactor in the GRIB2 unit of the parameter. */
 export type Ensemble = (EnsembleDerived) | (EnsemblePercentile) | (EnsembleProbabilityLower) | (EnsembleProbabilityUpper) | (EnsembleProbabilityBetween);
 
 export function checkEnsemble(v: unknown, at: string): asserts v is Ensemble {
@@ -436,7 +436,7 @@ export function checkScaledValue(v: unknown, at: string): asserts v is ScaledVal
   }
 }
 
-/** One of the codebooks of docs/format.md, "Quantization Codebooks". */
+/** One of the codebooks of docs/bundle.md, "Quantization Codebooks". */
 export type Quantization = (LinearQuantization) | (LogQuantization);
 
 export function checkQuantization(v: unknown, at: string): asserts v is Quantization {
@@ -507,7 +507,7 @@ export function checkCode(v: unknown, at: string): asserts v is Code {
   isInteger(v, at, 0, 255);
 }
 
-/** A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/format.md, "Metadata JSON"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n. */
+/** A bundle's metadata JSON, schemaVersion 3, or 4 on a projected grid (docs/bundle.md, "Metadata JSON"): the document a .xue container embeds, a grid store's group carries as attributes.xue or attributes.xue_bundles[<bundle id>], and a manifest poster's metadataJson holds as a string. Versions 1 and 2 are read forever and published by nothing; they are the readers' own checks. Also the readers': that the declared version is the lowest the metadata needs, that exactly one of frameStep and frameOffsets is present, that frameOffsets has frameCount strictly increasing elements beginning with firstFrameOffset and does not hold one step throughout, that the last offset of a uniform axis is at most 65534, that unitSeconds divides 3600 and is the coarsest unit that fits, that the numericIds are unique, that a fixed surface value or an aerosol limit is wholly present or wholly null, that an aerosol interval of type 255 carries null limits and any other type integer ones, that a projection's latitudes are strictly between the poles, its two standard parallels do not sum to zero and its dy is not zero, that no field of the other grid kind is present even as null, and that a gaussian block's rows firstRow + row x rowStride stay below 2n. */
 export type BundleMetadataV3 = { schemaVersion: 3 | 4; model: string; product?: string; runTime: Timestamp; profile?: string; time: Time; grid: Grid; variables: Variable[] };
 
 export function checkBundleMetadataV3(v: unknown, at: string): asserts v is BundleMetadataV3 {

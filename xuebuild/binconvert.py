@@ -223,7 +223,7 @@ def _extract_planes(
 
 def _fill_missing(variable_id: str, plane: np.ndarray) -> np.ndarray:
     """Map the points a record does not cover to the bottom of the
-    variable's codebook — a value, not a gap (docs/format.md). Which values
+    variable's codebook — a value, not a gap (docs/bundle.md). Which values
     mark them is the variable's own to declare (``VariableSpec.fill_values``:
     GDAL's 9999 for a GRIB2 bitmap); a variable that covers its grid declares
     none and passes through untouched. Runs before unit conversion, on the
@@ -784,7 +784,7 @@ def _variable_offsets(
                 offset for offset in variable_offsets[variable_id] if offset * unit_seconds >= start
             ]
     # A static field does not vary in time: its one frame is the first, and
-    # its bundle carries just that offset (docs/format.md — a one-frame axis
+    # its bundle carries just that offset (docs/bundle.md — a one-frame axis
     # is a uniform axis with frameStep 1). The fetch reads it only from the
     # analysis and the inspector accepts it nowhere else.
     for variable_id in encoded_variable_ids:

@@ -103,7 +103,7 @@ pub fn family_frame_path(frame: &Path, family: Option<&str>) -> PathBuf {
 /// template 4.31's identification of the instrument's channel: the
 /// satellite series and number, the instrument type (BUFR code table
 /// 0 02 019) and the band's central wave number in m⁻¹. Written verbatim as
-/// the variable's `band` block (docs/format.md §"Band and Producer").
+/// the variable's `band` block (docs/bundle.md §"Band and Producer").
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SatelliteBand {

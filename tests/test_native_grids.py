@@ -1,4 +1,4 @@
-"""Grids published as the model computes them (docs/format.md, "Regional
+"""Grids published as the model computes them (docs/bundle.md, "Regional
 Grids" and "Projected Sources"; docs/zarr-profile.md, "Coordinates"): every
 reader here, and the schemas, accept a schemaVersion 4 projected grid and a
 version 3 ``gaussian`` block, refuse each malformed field, and keep reading

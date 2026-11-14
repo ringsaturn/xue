@@ -22,8 +22,8 @@
 //!
 //! It is behind the off-by-default `encoder` feature: it links GDAL, which the
 //! decoder does not, and nothing that only decodes should have to find a GDAL
-//! to build. `docs/format.md` is the normative spec for everything written
-//! here, and `xuebuild/binconvert.py` is the reference the outputs are diffed
+//! to build. `docs/bundle.md`, `docs/zarr-profile.md` and `docs/format.md` are
+//! the normative specs for everything written here, and `xuebuild/binconvert.py` is the reference the outputs are diffed
 //! against.
 
 /// An `INFO` line on stderr when the build asked for a verbose log.

@@ -2,7 +2,7 @@
  * Which statistic of an ensemble a field is, as the shell keys it.
  *
  * A file says it in the `ensemble` block beside the parameter
- * (`BundleEnsemble`, docs/format.md "Ensemble"); the shell folds the block
+ * (`BundleEnsemble`, docs/bundle.md "Ensemble"); the shell folds the block
  * into one short key so an identity can carry it and compare it by
  * equality: `mean` and `spread` (derived forecasts 0 and 4), `d<code>` for
  * any other derived forecast, `q<percentile>`, and `p<type>:<lower>:<upper>`

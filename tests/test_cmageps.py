@@ -13,7 +13,7 @@ hours ending at the step and the probabilities of more than 1 to 100 mm in
 the 24 hours ending at it — as CMA wrote it; the frame is then repacked to
 grid_simple. The centre is published under the deterministic identities
 with an ``ensemble`` block saying which statistic it is, the rest under ids
-of their own (docs/format.md §"Ensemble").
+of their own (docs/bundle.md §"Ensemble").
 
 ``tests/fixtures/cmageps.2026111012.f000.crop.grib2`` through ``f024`` are
 an 80 x 80 cell window from 130°E to 149.75°E and 49.875°N to 30.125°N

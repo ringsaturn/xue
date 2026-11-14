@@ -82,7 +82,7 @@ function reader(grid: GeoGrid, input: ScalarInput): (cell: number, longitude: nu
 
 /** Whether a cell is land by the top soil layer's moisture, or always
  * when there is none to read. Water carries no soil: GFS and AIFS write it
- * as the codebook's bottom (−0.01 m³/m³), the IFS as 0 (format.md), so
+ * as the codebook's bottom (−0.01 m³/m³), the IFS as 0 (bundle.md), so
  * anything at or below 0 is not soil — the rule the indicators use. */
 function landTest(grid: GeoGrid, land: ScalarInput | null): (cell: number, longitude: number, latitude: number) => boolean {
   if (land === null) return () => true;

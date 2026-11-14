@@ -140,7 +140,7 @@ Facts worth getting right:
   only speeds are exchanged. A median is smoother than any member and a
   precipitation median drier than the mean where only some members rain.
   Beside the centres it publishes the ensemble's other statistics, each a
-  bundle whose variable carries an `ensemble` block (docs/format.md,
+  bundle whose variable carries an `ensemble` block (docs/bundle.md,
   "Ensemble"): the 25th and 75th percentiles `tmp2mq25` / `tmp2mq75`,
   `tmp850q25` / `tmp850q75`, `gustq25` / `gustq75`, `tcdcq25` / `tcdcq75`,
   `capeq25` / `capeq75` and `prateq25` / `prateq75` (the six-hour totals'
@@ -722,15 +722,17 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
   back, so any span of hours is one Range request. FIRMS data are NASA
   open data; acknowledge LANCE FIRMS (NASA ESDIS).
 
-A `.xue` bundle is one gridded variable (or a u/v pair) for a whole run:
-8-bit quantized planes on the native grid, temporal residual prediction in
-anchor groups, one Zstandard frame per spatial tile per group, all indexed so
-a viewport or a single point's time series can be fetched by byte range. The
-format is specified in `docs/format.md` (link below). Decoders you can call:
+A bundle is one gridded variable (or a u/v pair) for a whole run: 8-bit
+quantized planes on the native grid (`docs/bundle.md`), published as arrays
+of a Zarr v3 store (`docs/zarr-profile.md`), one Zstandard chunk per spatial
+tile per six frames, so a viewport or a single point's time series can be
+fetched by byte range. `xarray.open_zarr` reads the stores. Runs published
+before the stores carry the legacy single-file `.xue` container
+(`docs/format.md`). Libraries:
 
-- Python: `pip install xuepy`, then `import xue` — opens a bundle, decodes a
-  frame or one cell's whole series to a NumPy array of quantized codes (the
-  metadata's codebook dequantizes them), and carries the native encoder.
+- Python: `pip install xuepy`, then `import xue` — the native encoder, and
+  `xue.Bundle` to read a legacy `.xue` file to NumPy arrays of quantized
+  codes (the metadata's codebook dequantizes them).
   https://pypi.org/project/xuepy/
 - Rust: crate `xue` on crates.io, API docs at https://ringsaturn.github.io/xue/
 - The build pipeline itself (`xuebuild`, in the repository) fetches a run
@@ -745,9 +747,12 @@ format is specified in `docs/format.md` (link below). Decoders you can call:
   what each source publishes, its grid, axis and caveats.
 - [Zarr store profile](https://github.com/ringsaturn/xue/blob/main/docs/zarr-profile.md):
   the normative layout of the published stores.
-- [Format specification](https://github.com/ringsaturn/xue/blob/main/docs/format.md):
-  the normative `.xue` container spec (both container versions, the bundle
-  metadata schema, quantization and the residual arithmetic).
+- [Bundle metadata and codes](https://github.com/ringsaturn/xue/blob/main/docs/bundle.md):
+  the metadata schema, quantization codebooks and residual arithmetic every
+  store carries.
+- [Container format](https://github.com/ringsaturn/xue/blob/main/docs/format.md):
+  the legacy `.xue` container (both versions), which every decoder still
+  reads.
 - [Native encoder](https://github.com/ringsaturn/xue/blob/main/docs/encoder.md):
   the Rust port of the encoder and how it is held byte-identical to the
   Python reference.

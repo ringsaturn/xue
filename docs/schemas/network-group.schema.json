@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/network-group.schema.json",
   "title": "NetworkGroup",
-  "description": "A network store's root zarr.json (docs/zarr-profile.md, \"Network store\"): one track of one quantity on the reaches of a river network, the xue_network block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block, that its one variable is the data array's, and the time axis rules of bundle metadata beyond its shape (docs/format.md, \"Time Axis\").",
+  "description": "A network store's root zarr.json (docs/zarr-profile.md, \"Network store\"): one track of one quantity on the reaches of a river network, the xue_network block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block, that its one variable is the data array's, and the time axis rules of bundle metadata beyond its shape (docs/bundle.md, \"Time Axis\").",
   "type": "object",
   "required": ["zarr_format", "node_type", "attributes"],
   "properties": {

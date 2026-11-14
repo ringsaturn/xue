@@ -216,7 +216,7 @@ export function parseNetworkArrayMetadata(input: unknown): NetworkLayout {
   };
 }
 
-/** Every code's value in m³/s: the `log1p` codebook of `format.md`, code 0
+/** Every code's value in m³/s: the `log1p` codebook of `bundle.md`, code 0
  * a flow under the trace (read as 0), the overflow code the maximum, the
  * no-data code NaN. */
 export function codebookTable(book: NetworkCodebook): Float32Array {

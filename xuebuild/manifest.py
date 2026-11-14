@@ -33,7 +33,7 @@ from .sources import MODEL_CORE_BUNDLES, MODEL_PRODUCTS
 # own admission test, which made every new bundle a two-sided deploy: the
 # shell had to learn the name before a run could publish it. The shell that
 # carries this relaxation is the last one that ever needs to; from it on, an
-# unknown bundle name is skipped rather than rejected (docs/format.md).
+# unknown bundle name is skipped rather than rejected (docs/bundle.md).
 
 _BUNDLE_VARIABLE_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
 

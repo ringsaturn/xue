@@ -106,7 +106,7 @@ def _parse_time(value: str) -> datetime:
 
 def time_block(run_time: datetime, valid_times: list[datetime]) -> dict[str, Any]:
     """The container's ``time`` block over these frames: offsets from
-    ``run_time`` on the coarsest unit that fits (docs/format.md, "Time
+    ``run_time`` on the coarsest unit that fits (docs/bundle.md, "Time
     Axis")."""
     leads = [int((moment - run_time).total_seconds()) for moment in valid_times]
     if not leads or any(lead < 0 for lead in leads) or any(b <= a for a, b in zip(leads, leads[1:])):
