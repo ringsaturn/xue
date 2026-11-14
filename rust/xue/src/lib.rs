@@ -4,8 +4,10 @@
 
 //! Xue bundle parser and frame decoder.
 //!
-//! The binary contract is defined in `docs/format.md` and mirrored by the
-//! Python reference implementation in `xuebuild/binformat.py`. Every
+//! The contract is defined in `docs/bundle.md` (metadata, codebooks),
+//! `docs/zarr-profile.md` (stores) and `docs/format.md` (the legacy
+//! container), mirrored by the Python reference implementation in
+//! `xuebuild/`. Every
 //! integer computation on untrusted input uses checked arithmetic, and no
 //! allocation is sized from a file value before it is validated against the
 //! metadata grid and the file length.

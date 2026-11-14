@@ -185,7 +185,7 @@ const PARAMETER_NULLABLE_FIELDS: [&str; 3] = [
 /// Validate a variable's GRIB2 identity block. The block is what
 /// schemaVersion 3 introduces, so it must be present in a version 3 file and
 /// absent below — the declared version is always the lowest able to express
-/// the metadata (docs/format.md).
+/// the metadata (docs/bundle.md).
 fn parse_parameter(
     parameter: Option<&serde_json::Value>,
     schema_version: u64,
@@ -245,7 +245,7 @@ fn parse_parameter(
     Ok(())
 }
 
-/// The optional blocks beside `parameter` (docs/format.md §"Band, Producer
+/// The optional blocks beside `parameter` (docs/bundle.md §"Band, Producer
 /// and Aerosol"): the spectral band a satellite image was taken in, in the
 /// fields of GRIB2 product definition template 4.31 with their byte widths,
 /// the algorithm that derived a composite field, and an aerosol product's
@@ -394,7 +394,7 @@ fn parse_aerosol(variable: &serde_json::Value, schema_version: u64) -> Result<()
     Ok(())
 }
 
-/// The ensemble block's three shapes (docs/format.md §"Ensemble"): which
+/// The ensemble block's three shapes (docs/bundle.md §"Ensemble"): which
 /// keys it carries says which statistic of the members the variable is.
 pub(crate) const ENSEMBLE_DERIVED_FIELD: &str = "derivedForecast";
 pub(crate) const ENSEMBLE_PERCENTILE_FIELD: &str = "percentileValue";
@@ -463,7 +463,7 @@ impl EnsembleIdentity {
         }
     }
 
-    /// The block as written, keys in the order docs/format.md lists them.
+    /// The block as written, keys in the order docs/bundle.md lists them.
     pub fn metadata(&self) -> serde_json::Map<String, serde_json::Value> {
         use serde_json::Value;
         let mut block = serde_json::Map::new();
@@ -495,7 +495,7 @@ impl EnsembleIdentity {
 }
 
 impl EnsembleIdentity {
-    /// A block as docs/format.md's Error Handling admits it: exactly one of
+    /// A block as docs/bundle.md's Error Handling admits it: exactly one of
     /// the three shapes, every value in range, each limit whole or null,
     /// and null exactly where the probability type does not use it.
     pub fn from_block(block: &serde_json::Map<String, serde_json::Value>) -> Result<Self, DecodeError> {

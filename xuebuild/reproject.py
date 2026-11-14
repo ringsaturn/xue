@@ -2,7 +2,7 @@
 and the true latitudes of a regular Gaussian grid.
 
 A model computed on a Lambert conformal conic keeps its grid: the bundle's
-``grid.projection`` block declares it (docs/format.md, "Projected Sources") and
+``grid.projection`` block declares it (docs/bundle.md, "Projected Sources") and
 every plane stays as the model wrote it. What the encoder does with the
 projection is place the published cells (:class:`ProjectedGrid`), cut a
 geographic box out of them, and turn the model's grid-relative winds to east and

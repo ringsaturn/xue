@@ -79,7 +79,7 @@ normative in [../tc.md](../tc.md), [../airport.md](../airport.md),
   revision adds) and refuses a schema that leaves it. The grid contracts
   (the manifest, bundle metadata, a store's documents) use the same
   harness; their schemas `$ref` one another by file name, and bundle
-  metadata closes the blocks `format.md` declares closed. So do the tc
+  metadata closes the blocks `bundle.md` declares closed. So do the tc
   archive (`docs/tc.md` §8–9) and the alerts archive (`docs/alerts.md`
   §12), whose goldens `tests/test_schemas.py` builds with the archive and
   score writers, the alerts one folded from the alerts goldens' rounds.

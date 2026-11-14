@@ -1,43 +1,38 @@
 # Xue Zarr Profile
 
-This document specifies how Xue bundles are written as Zarr v3 stores: the
-same quantized codes as the `.xue` container, in a layout any Zarr client
-reads. It is normative for what the store writers (`xuebuild/zarrstore.py`,
-the native encoder's `encode/zarrstore.rs`, `build-bin`)
-write and for what a store must look like to be one of these. The container itself is specified in
-[`format.md`](format.md); this profile adds nothing to it and changes
-nothing in it. A second branch, the [polar store](#polar-store), carries
-radar sweeps in beam-and-gate coordinates for products that have no grid
-and no container, and a third, the [network store](#network-store), one
-value per river reach per frame.
+This document specifies how Xue bundles are written as Zarr v3 stores, the
+layout every live run, rolling-window round and showcase case is published
+in and a [STAC catalog](stac.md) lists. It is normative for what the store
+writers (`xuebuild/zarrstore.py`, the native encoder's
+`encode/zarrstore.rs`, `build-bin`) write and for what a store must look
+like to be one of these. What a bundle carries, its metadata JSON,
+quantization codebooks and residual arithmetic, is
+[`bundle.md`](bundle.md); this profile says how those land in a store. A
+second branch, the [polar store](#polar-store), carries radar sweeps in
+beam-and-gate coordinates for products that have no grid, and a third, the
+[network store](#network-store), one value per river reach per frame.
 
 A store is a function of its bundles' metadata, their quantized codes, their
 tiles, each variable's predictor and each bundle's dimension names (see
-"Coordinates"), and of nothing else. A build writes it
-straight from the codes it quantized; where it writes a `.xue` as well, the
-container comes from the same codes, so the two carry identical codes by
-construction. The frontend plays a store by default wherever a bundle's manifest
-entry names one (see "Reading"; `?backend=xue` asks for the container
-instead), and a run whose entries name only their stores is accepted; a run
-published without stores plays from its containers, and a reader that does
-not know the manifest field ignores it. The store is the published
-artifact: every live run, rolling-window round and showcase case publishes
-the store alone, with no `.xue` written at all, and a [STAC
-catalog](stac.md) lists them. The container is a legacy format that every
-decoder keeps reading, since runs, cases and rounds already published are
-never rebuilt.
+"Coordinates"), and of nothing else. A build writes it straight from the
+codes it quantized. The frontend plays a store wherever a bundle's manifest
+entry names one (see "Reading"). Runs published before the switch to stores
+carry `.xue` containers ([`format.md`](format.md)), a legacy layout every
+decoder keeps reading: such a run plays from its containers, and
+`?backend=xue` asks for the container where an entry names both.
 
 ## Why a profile
 
-A container v2 bundle is, to within its index format, a sharded Zarr v3
-`uint8` array: one chunk is one spatial tile of one six-frame temporal
-group, a group is one contiguous run of chunks in row-major tile order, each
-chunk is one Zstandard frame, and the temporal residual is a wrapping
-difference against the previous frame inside the chunk. Zarr spells the same
-things as a `sharding_indexed` codec, a `zstd` codec and, optionally, an
-array-to-array delta codec. Writing the convention down lets a store written
-by anyone else be played the same way, and lets xarray, zarrs or zarrita
-read a Xue run without a decoder of their own.
+A player streams a bundle by range reads: one spatial tile of six frames
+at a time, a viewport as a few contiguous spans, one cell's series as one
+chunk per six frames, each chunk one Zstandard frame whose frames may be
+wrapping differences against the frame before. Zarr spells that as a
+`uint8` array under a `sharding_indexed` codec, a `zstd` codec and,
+optionally, an array-to-array delta codec. Writing the convention down lets
+a store written by anyone else be played the same way, and lets xarray,
+zarrs or zarrita read a Xue run without a decoder of their own. (The `.xue`
+container's v2 index ([`format.md`](format.md)) cuts the same chunks; the
+store replaces it.)
 
 ## Layout
 
@@ -96,7 +91,7 @@ applies to both profiles except where it names one.
 ## Array metadata
 
 Every variable array is `uint8` of shape `[frameCount, height, width]`
-(time, then the grid in the container's row-major, north-to-south,
+(time, then the grid in the metadata grid's row-major, north-to-south,
 west-to-east order) and carries exactly one codec, `sharding_indexed`.
 
 ```json
@@ -167,9 +162,9 @@ west-to-east order) and carries exactly one codec, `sharding_indexed`.
 
 Array-to-array. Along `axis` the first slice is stored whole and every later
 slice as its modulo-256 difference against the slice before it; decoding is
-the running sum, modulo 256. On `uint8` this is the container's PREVIOUS
-predictor ([`format.md`](format.md), "Temporal Prediction") moved into the
-codec chain: an inner chunk under `[xue.delta, bytes, zstd]` compresses to
+the running sum, modulo 256: the residual arithmetic of
+[`bundle.md`](bundle.md), "Residuals", the `.xue` container's PREVIOUS
+predictor moved into the codec chain: an inner chunk under `[xue.delta, bytes, zstd]` compresses to
 the same bytes as the bundle's chunk over the same frames and the same
 unclipped tile. It is not numcodecs' `Delta`, which differences the
 flattened buffer. `xuebuild/zarrcodec.py` implements it for zarr-python
@@ -186,7 +181,7 @@ the polar and network branches' groups are
 [`schemas/polar-group.schema.json`](schemas/polar-group.schema.json) and
 [`schemas/network-group.schema.json`](schemas/network-group.schema.json).
 They are normative for shape, and embed the bundle metadata schema
-([`format.md`](format.md), "Metadata JSON") wherever a document carries a
+([`bundle.md`](bundle.md), "Metadata JSON") wherever a document carries a
 bundle's metadata or a variable of it. This section and the ones below say
 what the fields mean and what a reader checks across them: the profile it
 implements, exactly one branch's block, the bundle it opens by id, key
@@ -224,8 +219,7 @@ A shared store's `zarr.json`:
 ```
 
 - `xue_bundles` maps each bundle id to that bundle's metadata JSON
-  verbatim, the same document the container embeds ([`format.md`](format.md),
-  "Metadata JSON"), so the parsers that read a bundle's metadata read a
+  verbatim ([`bundle.md`](bundle.md), "Metadata JSON"), so the parsers that read a bundle's metadata read a
   store's. Its keys are in manifest bundle order (the source's publication
   order). A group whose `xue_bundles` is missing, empty or not an object is
   invalid. There is no `attributes.xue` on a shared group: a profile-1
@@ -471,9 +465,8 @@ profile's.
    `xue_profile` 2, `attributes.xue_bundles[<bundle id>]` is the bundle
    metadata verbatim; on `xue_profile` 1, `attributes.xue` is: the grid,
    the time axis, the variable set with their codebooks and GRIB2 parameter
-   blocks. It is parsed with the same rules as the container's embedded
-   metadata (`format.md`, "Metadata JSON"), so a player that reads bundles
-   already reads this. A reader must refuse a group with an `xue_profile`
+   blocks. It is parsed by the rules of [`bundle.md`](bundle.md),
+   "Metadata JSON", wherever it comes from. A reader must refuse a group with an `xue_profile`
    it does not implement, a profile-1 group without `xue`, a profile-2
    group whose `xue_bundles` is missing, empty or not an object, and a
    profile-2 group without the bundle asked for. Grid and axis checks are
@@ -622,7 +615,7 @@ the bundle's.
 - In a segment each bundle is the bundle over its own frames there:
   `xue_bundles[<id>]` is the bundle's metadata with `runTime` the bundle's
   first frame in the segment and the `time` block recomputed over its
-  frames by the container's rules (the coarsest `unitSeconds` that fits,
+  frames by the rules of `bundle.md`, "Time Axis" (the coarsest `unitSeconds` that fits,
   `frameStep` when uniform, `frameOffsets` where a slot is missing).
   Everything else in the metadata, its dimension names, its codec choices
   and the cutting of every array are the bundle's.
@@ -633,7 +626,7 @@ the bundle's.
   bundle in the segment's `xue_bundles` order: the bundle id's UTF-8 bytes
   and a newline (`0x0a`); its three dimension names as the JSON array
   `["time", "latitude", "longitude"]` (comma-space separated); its segment
-  metadata as the bytes a container embeds (`binformat.metadata_json_bytes`); the JSON
+  metadata as its canonical JSON bytes (`binformat.metadata_json_bytes`); the JSON
   array `[<delta>, "<index location>"]` (`[false, "end"]`); then for each
   variable id in sorted order, its UTF-8 bytes followed by its codes, frame
   by frame. The same contents always land under the same path, and
@@ -815,8 +808,7 @@ its own.
   ```
 
   `runTime` is the cycle of a forecast and the first frame of an analysis
-  window. `time` follows the container's rules exactly
-  ([`format.md`](format.md), "Time Axis"): offsets from `runTime` on the
+  window. `time` follows [`bundle.md`](bundle.md), "Time Axis", exactly: offsets from `runTime` on the
   coarsest unit that fits, `frameStep` when uniform, `frameOffsets`
   otherwise. `geometry` names the GeoParquet by a path relative to the
   directory holding the store, its length and the CRC-32 of its bytes, its
@@ -843,7 +835,7 @@ its own.
   little-endian, crc32c]`, `index_location` `end`, and the never-written
   pair are as above.
 - `fill_value` is the codebook's `nodataCode`, 255.
-- Codes. The `log1p` codebook of [`format.md`](format.md) with `trace`
+- Codes. The `log1p` codebook of [`bundle.md`](bundle.md) with `trace`
   0.01, `scale` 1.0 and `maximum` 100000 (m³/s): code 0 is a flow below
   0.01 m³/s, codes 1–253 the logarithmic grid, about 4.7 % apart, 254 a
   flow above the maximum, and 255 no value — a reach the model does not
@@ -894,8 +886,9 @@ reach's row group.
 
 ## Equivalence with the container
 
-The codes are identical by construction: a build writes the store and the
-container from the same codes. `tests/test_zarr.py` holds a NumPy-only
+A build asked for `.xue` containers as well ([`format.md`](format.md))
+writes them and the stores from the same codes, so the two carry identical
+codes by construction. `tests/test_zarr.py` holds a NumPy-only
 read-back of every frame to the codes a store was written from, and the
 container parity test (`tests/test_native.py`) builds both deliveries and
 reads the container back through the wheel's decoder. Compressed bytes are

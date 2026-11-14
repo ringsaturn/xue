@@ -1702,7 +1702,7 @@ export interface BundleParameter {
  * instrument by their WMO common code table numbers (C-5 and C-8) and the
  * band's central wave number, `scaledValue × 10^-scaleFactor` m⁻¹. Optional
  * beside `parameter` from schemaVersion 3; a chart classifies a channel by
- * its wave number, never by the spacecraft (docs/format.md §"Band and
+ * its wave number, never by the spacecraft (docs/bundle.md §"Band and
  * Producer"). */
 export interface BundleBand {
   satelliteSeries: number;
@@ -1728,7 +1728,7 @@ export interface BundleProducer {
  * type 255 (missing — the particulate matter fields have no wavelength)
  * has both its pairs null. Optional beside `parameter` from schemaVersion
  * 3; the parameter alone is one number for every species' optical depth,
- * so this block is the rest of such a variable's identity (docs/format.md,
+ * so this block is the rest of such a variable's identity (docs/bundle.md,
  * the aerosol block beside `band` and `producer`). */
 export interface BundleAerosol {
   aerosolType: number;
@@ -1751,7 +1751,7 @@ export interface BundleAerosol {
  * `scaledValue × 10^-scaleFactor` in the GRIB2 unit of the parameter's
  * quantity). Exactly one shape is present; a probability carries the limits
  * its type uses as integers and the others null. Optional beside
- * `parameter` from schemaVersion 3 (docs/format.md, "Ensemble"). */
+ * `parameter` from schemaVersion 3 (docs/bundle.md, "Ensemble"). */
 export type BundleEnsemble =
   | { derivedForecast: number }
   | { percentileValue: number }
@@ -1791,7 +1791,7 @@ export interface BundleVariable {
  * `frameOffsets` (listed outright). Versions 1 and 2 used a whole-hour axis
  * with `firstForecastHour` plus `stepHours` or `hours`; both shapes are
  * still read, and `axisUnitSeconds`/`frameOffsets` normalize them
- * (docs/format.md). */
+ * (docs/bundle.md). */
 export interface BundleTimeAxis {
   frameCount: number;
   /** Schema v3. */

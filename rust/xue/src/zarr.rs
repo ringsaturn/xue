@@ -280,7 +280,7 @@ fn lambert_cell(grid: &LambertGrid, column: u32, row: u32) -> Option<ProbeCell> 
 // -- quantisation --------------------------------------------------------------
 
 /// A codebook: how a stored `uint8` code maps back to a physical value
-/// (`docs/format.md`, "Codebooks").
+/// (`docs/bundle.md`, "Codebooks").
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Quantization {
     Linear {

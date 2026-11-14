@@ -2,7 +2,7 @@
  * The one place a bundle's `grid` block is read and a cell is turned into a
  * coordinate and back.
  *
- * Three shapes (docs/format.md, "Regional Grids"): a regular
+ * Three shapes (docs/bundle.md, "Regional Grids"): a regular
  * latitude/longitude grid; the same with a `gaussian` block, whose rows really
  * lie on Legendre roots; and a Lambert conformal grid, the model's own cells.
  * `GeoGrid` is the parsed block; `gridMapFor` gives its `GridMap`.
@@ -174,7 +174,7 @@ function parseGaussian(input: unknown, height: number, latitudeStep: number): Ga
 }
 
 /** A `grid` block, whole or refused. Only a regular grid may leave fields out,
- * and only because published files do: format.md's regular global grid is what
+ * and only because published files do: bundle.md's regular global grid is what
  * those fields default to in every reader. A projected grid has no defaults,
  * and a field that is present and wrong is refused on any grid. */
 export function parseGrid(input: unknown): GeoGrid {

@@ -5,7 +5,7 @@ A satellite source is named by its **orbital role** (``himawari`` at
 140.7°E, ``goeseast`` at 75.2°W), never by the spacecraft: the pointer, the
 run directories and the manifest ``model`` string must outlive a handover
 (Himawari-10 relieves Himawari-9 around 2029), so the spacecraft lives in
-the file, as the ``band`` block on each variable (docs/format.md §"Band and
+the file, as the ``band`` block on each variable (docs/bundle.md §"Band and
 Producer"), and in this table. A channel is a bundle: its id is the
 nominal wavelength, instrument-neutral (``ir104`` is AHI band 13 and ABI
 channel 13 alike, both an infrared window at 10.4 µm), and the exact
@@ -31,7 +31,7 @@ class SatelliteBand:
     fields of GRIB2 product definition template 4.31: the spacecraft and
     instrument by their WMO common code table numbers (C-5 and C-8) and the
     band's central wave number in m⁻¹ as a scaled value. Written verbatim as
-    the variable's ``band`` block (docs/format.md §"Band, Producer and Aerosol")."""
+    the variable's ``band`` block (docs/bundle.md §"Band, Producer and Aerosol")."""
 
     satellite_series: int
     satellite_number: int

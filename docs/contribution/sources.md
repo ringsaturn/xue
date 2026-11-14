@@ -870,7 +870,7 @@ forecast).
    copy in all eleven locales (`en.ts` first); the static metadata in
    `web/index.html`; `tests/web/manifest.test.ts`. Widen any manifest limit
    the source exceeds (as `forecastHours` was for CFS) in all three
-   validators and `docs/format.md`.
+   validators and `docs/bundle.md`.
 7. **Workflow.** `publish-<id>.yml`: a forecast calls `publish.yml` and is
    added to its model allow-list; an observation copies the nearest
    rounds workflow (`publish-jma.yml` shape) with `FRAME_CACHE` set if it

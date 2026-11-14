@@ -5,7 +5,7 @@ composite reflectivity, out of a NetCDF observation file — is identified the
 way GRIB2 identifies a field: a parameter triple (discipline, category,
 number) and a fixed surface (type plus an optional value). That identity is
 both what the fetchers match records on and what a bundle's metadata carries
-from schema version 3 onwards (docs/format.md), so there is one description
+from schema version 3 onwards (docs/bundle.md), so there is one description
 of a variable rather than one per pipeline stage.
 
 Most entries are meteorological (discipline 0); the sea ice and wave fields
@@ -74,7 +74,7 @@ class AerosolIdentity:
     thicknesses at once (0/20/102 on the entire atmosphere is the total,
     the dust, the sea salt, ... at seven wavelengths), so for such a record
     the identity is the parameter block *and* this one, written beside it
-    as the metadata's ``aerosol`` block (docs/format.md §"Band, Producer
+    as the metadata's ``aerosol`` block (docs/bundle.md §"Band, Producer
     and Aerosol") and compared whole when matching a record.
 
     A limit is a ``(scaleFactor, scaledValue)`` pair, the value being
@@ -224,7 +224,7 @@ class VariableSpec:
     grib2_ensemble: EnsembleIdentity | None = None
     """For a field that is a statistic of an ensemble — a spread, a
     quartile, a probability — which statistic (:class:`EnsembleIdentity`),
-    written as the ``ensemble`` block beside the parameter (docs/format.md
+    written as the ``ensemble`` block beside the parameter (docs/bundle.md
     §"Ensemble"). Its records are matched by its ``template-ensemble``
     rules alone, and it matches no record of a single forecast. None for
     every other variable; a source whose central fields stand in for the
@@ -237,7 +237,7 @@ class VariableSpec:
     producer_id: str | None = None
     """For a field an algorithm derived from other variables rather than an
     instrument measured — a satellite composite — the ``producer.id`` of the
-    block written beside its ``parameter`` (docs/format.md §"Band and
+    block written beside its ``parameter`` (docs/bundle.md §"Band and
     Producer"): ``shachen`` for the Dust RGB guns. The algorithm's
     *version* is not registered: the fetch stage stamps it on the series
     it produced (:mod:`xuebuild.satellite.producers`), the converters read
@@ -251,7 +251,7 @@ class VariableSpec:
     carries no bitmap, so the converter maps them to the bottom of the
     variable's codebook (``value_range[0]``) before anything else touches
     the plane — a value, not a gap, the way the radar mosaic's fill is
-    handled (docs/format.md). Empty for a field that covers its whole
+    handled (docs/bundle.md). Empty for a field that covers its whole
     grid."""
     static: bool = False
     """True for a field that does not vary in time — the model's own
@@ -2767,7 +2767,7 @@ del _variable_id
 # CMA GRAPES GEPS's ensemble products (``cmageps``, xuebuild/cmageps.py):
 # CMA exchanges no members, only statistics of them, each a GRIB2 record of
 # an ensemble template whose identity is the parameter *and* the statistic
-# (docs/format.md §"Ensemble"). The central statistic of each quantity — the
+# (docs/bundle.md §"Ensemble"). The central statistic of each quantity — the
 # median, or the mean where CMA writes no percentiles — stands in for the
 # deterministic field under its own id, so the shared variable takes one
 # more record rule and the source names the block it writes

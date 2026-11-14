@@ -8,7 +8,7 @@ forever, since published runs and cases carry it and are never rebuilt.
 Both encoders write each store straight from the codes they quantized.
 
 Normative specs, which win over this page: [zarr-profile.md](../zarr-profile.md),
-[format.md](../format.md), [encoder.md](../encoder.md), [stac.md](../stac.md).
+[bundle.md](../bundle.md), [format.md](../format.md), [encoder.md](../encoder.md), [stac.md](../stac.md).
 Why the format looks like this: [architecture-rationale.md](architecture-rationale.md).
 
 ## Map

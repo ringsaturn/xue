@@ -79,7 +79,7 @@ class BlockReduction:
 @dataclass(frozen=True)
 class GaussianRows:
     """Which rows of a whole regular Gaussian grid a grid's rows are: its
-    ``grid.gaussian`` block (docs/format.md, "Gaussian rows"). Row ``r`` is row
+    ``grid.gaussian`` block (docs/bundle.md, "Gaussian rows"). Row ``r`` is row
     ``first_row + r * row_stride`` of the ``2n``, counted from the north."""
 
     n: int

@@ -406,7 +406,7 @@ export function identityForParameter(
 /** The soil layers by the upper bound of the layer the registry writes
  * them on (surface 106, depth below land in metres): GFS's Noah layers
  * start at 0, 0.1, 0.4 and 1 m. The IFS's layers are cut elsewhere, but the
- * encoders write them on the same four values (docs/format.md), so the
+ * encoders write them on the same four values (docs/bundle.md), so the
  * value names the layer's index and never its depth. Millimetres, so the
  * comparison is exact whatever float a scale factor of 1 leaves behind. */
 const SOIL_TEMPERATURE_LAYERS = ["tsoil1", "tsoil2", "tsoil3", "tsoil4"] as const satisfies readonly SoilChartFamily[];
@@ -551,7 +551,7 @@ function localScalarOf(id: RegistryVariableId) {
 }
 
 /** The composites by producer: a produced field's `parameter` is in
- * GRIB2's local-use range (category 192 and above, docs/format.md §"Band
+ * GRIB2's local-use range (category 192 and above, docs/bundle.md §"Band
  * and Producer"), where a number means nothing without the `producer.id`
  * beside it, so a composite is named by the producer and the parameter
  * numbers of its guns together. The Dust RGB is shachen's local numbers

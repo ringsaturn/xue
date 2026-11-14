@@ -1,4 +1,4 @@
-"""A bundle's metadata document (docs/format.md, schema v3), mirrored in
+"""A bundle's metadata document (docs/bundle.md, schema v3), mirrored in
 ``encode/metadata.rs``: the time axis on its coarsest unit, the grid, and
 one descriptor per variable naming its GRIB2 identity and quantization.
 """
@@ -21,7 +21,7 @@ from .variables import variable_spec
 
 METADATA_SCHEMA_VERSION = 3
 """Bundle metadata schema this encoder writes: every variable descriptor
-carries its GRIB2 parameter identity (docs/format.md). Earlier versions
+carries its GRIB2 parameter identity (docs/bundle.md). Earlier versions
 remain readable; nothing new is written at them."""
 
 PROJECTED_METADATA_SCHEMA_VERSION = 4
@@ -36,7 +36,7 @@ def axis_unit_seconds(lead_seconds: Sequence[int]) -> int:
     An hour for every forecast source, and whatever the file carries for an
     observation series — six minutes for the radar mosaic. Capping at an hour
     keeps a whole-hour axis indexed by its forecast hours, exactly as before
-    (docs/format.md)."""
+    (docs/bundle.md)."""
     return math.gcd(binformat.HOUR_SECONDS, *lead_seconds)
 
 
@@ -49,7 +49,7 @@ def lead_hours(offset: int, unit_seconds: int) -> int:
 def time_metadata(offsets: list[int], unit_seconds: int) -> dict[str, Any]:
     """The metadata ``time`` block: offsets on a declared unit, uniform ones
     declaring a ``frameStep`` and the rest listing their offsets outright
-    (docs/format.md). A forecast run lists them because its source changes
+    (docs/bundle.md). A forecast run lists them because its source changes
     cadence partway; an observation series lists them wherever a publication
     was missed."""
     steps = {after - before for before, after in zip(offsets, offsets[1:])}
@@ -76,11 +76,11 @@ def _variable_metadata(
     and fixed surface), what its values mean, and how they are quantized.
 
     ``numeric_id`` is the file-local ``variableId`` handle that ties this
-    descriptor to the index (docs/format.md): the variable's 1-based position
+    descriptor to the index (docs/bundle.md): the variable's 1-based position
     in the bundle's variable list, assigned by :func:`build_metadata`.
     ``producers`` is what the observation series was stamped with, by
     variable id: a produced variable's ``producer`` block is its registered
-    id and that version (docs/format.md §"Band, Producer and Aerosol")."""
+    id and that version (docs/bundle.md §"Band, Producer and Aerosol")."""
     spec = variable_spec(variable_id)
     parameter = spec.parameter_metadata()
     for statistical_id, process in source.statistical_processes:

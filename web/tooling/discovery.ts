@@ -140,8 +140,9 @@ export function renderLlmsFull(docs: readonly DocSource[]): string {
 export const LLMS_FULL_SOURCES: readonly string[] = [
   "README.md",
   "docs/sources.md",
-  "docs/format.md",
   "docs/zarr-profile.md",
+  "docs/bundle.md",
+  "docs/format.md",
   "docs/encoder.md",
   "docs/tc.md",
   "docs/airport.md",

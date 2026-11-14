@@ -15,7 +15,7 @@ import { REGISTRY } from "./registry";
  * interval to draw or which line to thicken. What does live in the file — and
  * what the whole rendering depends on — is that the encoder chose each
  * codebook's offset so every contour value below lands exactly half a code
- * off (docs/format.md, "Registered linear codebooks"). A contour drawn where
+ * off (docs/bundle.md, "Registered linear codebooks"). A contour drawn where
  * the code is flat would light up a whole plateau instead of a line.
  *
  * The ids, the codebook ranges and the contour intervals are the

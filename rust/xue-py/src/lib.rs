@@ -127,7 +127,7 @@ impl Bundle {
         Self::new(&data)
     }
 
-    /// The metadata block, parsed. `docs/format.md` is the normative
+    /// The metadata block, parsed. `docs/bundle.md` is the normative
     /// description of what is in it.
     #[getter]
     fn metadata(&self, python: Python<'_>) -> PyResult<Py<PyAny>> {

@@ -577,7 +577,7 @@ class TiledContainerTests(unittest.TestCase):
 
 
 class SchemaV2Tests(unittest.TestCase):
-    """Mixed-step time axes (metadata schemaVersion 2, docs/format.md)."""
+    """Mixed-step time axes (metadata schemaVersion 2, docs/bundle.md)."""
 
     HOURS = [0, 1, 2, 3, 6, 9]
 
@@ -816,7 +816,7 @@ class TimeMetadataTests(unittest.TestCase):
 
 
 class ParameterMetadataTests(unittest.TestCase):
-    """Schema v3: every variable carries its GRIB2 identity (docs/format.md)."""
+    """Schema v3: every variable carries its GRIB2 identity (docs/bundle.md)."""
 
     def _metadata(self) -> dict:
         from xuebuild.metadata import build_metadata
@@ -914,7 +914,7 @@ class ParameterMetadataTests(unittest.TestCase):
     PRODUCER = {"id": "shachen", "version": "0.3.1"}
 
     def test_band_and_producer_blocks_are_optional_beside_the_parameter(self) -> None:
-        """The satellite widening of schema v3 (docs/format.md §"Band and
+        """The satellite widening of schema v3 (docs/bundle.md §"Band and
         Producer"): either block may sit beside ``parameter``, neither
         raises the version, and a file without them is unchanged."""
         metadata = self._metadata()

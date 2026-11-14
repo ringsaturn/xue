@@ -130,7 +130,7 @@ fn parse_limit(payload: &[u8], offset: usize) -> Option<(i8, u32)> {
 /// The aerosol fields of a template 4.48 payload: octets 12-35, the type
 /// then the size and wavelength intervals, each a code table 4.91 type and
 /// two limits. An interval of the missing type carries no limits whatever
-/// the octets hold (docs/format.md §"Band, Producer and Aerosol"). Mirrors
+/// the octets hold (docs/bundle.md §"Band, Producer and Aerosol"). Mirrors
 /// `_parse_aerosol` in `xuebuild/grib2.py`; the payload starts at octet 6,
 /// so octet `n` is index `n - 6`.
 fn parse_aerosol(payload: &[u8]) -> AerosolIdentity {

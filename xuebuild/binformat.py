@@ -95,7 +95,7 @@ _PARAMETER_NULLABLE_FIELDS = frozenset(
     }
 )
 
-# The optional blocks beside ``parameter`` (docs/format.md §"Band and
+# The optional blocks beside ``parameter`` (docs/bundle.md §"Band and
 # Producer"): the spectral band a satellite image was taken in, in the fields
 # of GRIB2 product definition template 4.31 with their byte widths, and the
 # algorithm that derived a composite field. Each is present whole or absent.
@@ -134,7 +134,7 @@ _AEROSOL_FIELDS = frozenset(_AEROSOL_TYPE_FIELDS) | frozenset(
 )
 
 # The fourth: which statistic of an ensemble a field is, in one of three
-# shapes told apart by their keys (docs/format.md §"Ensemble"). A
+# shapes told apart by their keys (docs/bundle.md §"Ensemble"). A
 # probability's two limits are (scale factor, scaled value) pairs whole or
 # null like the fixed surface's, and which of them is integer is fixed by
 # the probability type (code table 4.9).
@@ -189,7 +189,7 @@ _MAX_GAUSSIAN_N = 32768
 
 
 def validate_projection(projection: Any) -> None:
-    """A ``grid.projection`` block (docs/format.md, "Regional Grids"): closed,
+    """A ``grid.projection`` block (docs/bundle.md, "Regional Grids"): closed,
     of a known kind, with finite numbers, a cone that exists (its two parallels
     neither at a pole nor mirrored across the equator, where the constant is
     zero), and steps in the grid's column and row order."""
@@ -658,7 +658,7 @@ def write_bundle_v2(
 
 class BundleMetadata:
     """A bundle's metadata document, validated by the rules every reader
-    applies (docs/format.md): the schema version, the grid, the time axis and
+    applies (docs/bundle.md): the schema version, the grid, the time axis and
     each variable's identity blocks. The store writers check the document
     they embed with it; containers are decoded by the wheel's ``xue.Bundle``.
 
@@ -740,7 +740,7 @@ class BundleMetadata:
 
         The block is what schemaVersion 3 introduces, so it must be present
         in a version 3 file and absent below — the declared version is always
-        the lowest able to express the metadata (docs/format.md)."""
+        the lowest able to express the metadata (docs/bundle.md)."""
         if schema_version < 3:
             if parameter is not None:
                 raise BundleError("a GRIB2 parameter block requires schemaVersion 3")
@@ -820,7 +820,7 @@ class BundleMetadata:
         """Validate a variable's optional aerosol block: template 4.48's
         type and two intervals, every field present, each limit a whole
         pair, null exactly when its interval's type is missing
-        (docs/format.md §"Band, Producer and Aerosol")."""
+        (docs/bundle.md §"Band, Producer and Aerosol")."""
         if "aerosol" not in variable:
             return
         aerosol = variable["aerosol"]
@@ -859,7 +859,7 @@ class BundleMetadata:
         """Validate a variable's optional ensemble block: exactly one of
         its three shapes, every value in range, and of a probability the
         limits its type uses integer pairs and the others null
-        (docs/format.md §"Ensemble")."""
+        (docs/bundle.md §"Ensemble")."""
         if "ensemble" not in variable:
             return
         ensemble = variable["ensemble"]
@@ -906,7 +906,7 @@ class BundleMetadata:
         and ``hours`` (listed outright, version 2). Version 3 replaces the
         block with a unit-neutral one — ``unitSeconds`` plus offsets in that
         unit — so a series finer than an hour (the six-minute radar mosaic)
-        has an exact axis (docs/format.md)."""
+        has an exact axis (docs/bundle.md)."""
         if schema_version >= 3:
             return cls._parse_offset_axis(time_info, frame_count)
         if _V3_TIME_FIELDS & set(time_info):

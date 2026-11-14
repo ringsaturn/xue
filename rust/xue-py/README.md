@@ -1,16 +1,18 @@
 # xuepy
 
-Xue (雪) weather bundles for Python: the decoder, and an experimental native
-encoder — the [Xue](https://github.com/ringsaturn/xue) Rust crate through PyO3.
+Xue (雪) weather bundles for Python: an experimental native encoder and the
+reader for legacy `.xue` files — the [Xue](https://github.com/ringsaturn/xue)
+Rust crate through PyO3.
 
-A `.xue` file packs one variable of a global forecast run as quantized
-single-byte planes with temporal residual prediction and per-plane Zstandard,
-so a browser can animate a 240-hour run frame by frame. `docs/format.md` in the
-repository is the normative specification. Since 2026-09-15 the service
-publishes the same bundles as Zarr v3 stores (`docs/zarr-profile.md`) rather
-than `.xue` files, which xarray reads without this package; the decoder here
-still reads every `.xue`, and the encoder still writes one as the
-intermediate the store is derived from.
+The service publishes every run as Zarr v3 stores, specified in
+[`docs/zarr-profile.md`](https://github.com/ringsaturn/xue/blob/main/docs/zarr-profile.md),
+with the metadata and codebooks of
+[`docs/bundle.md`](https://github.com/ringsaturn/xue/blob/main/docs/bundle.md).
+Reading a store needs no part of this package: `xarray.open_zarr` returns
+physical values through the stores' CF attributes. This wheel writes those
+stores, and reads the single-file `.xue` container
+([`docs/format.md`](https://github.com/ringsaturn/xue/blob/main/docs/format.md))
+that runs published before the stores carry.
 
 ## Installing
 
@@ -23,9 +25,27 @@ arm64 only. There is no sdist: building from source needs GDAL, libclang and
 cmake, and an unsupported platform is better served by a clear "no matching
 distribution" than by a confusing build failure.
 
-## Decoding
+## Encoding
 
-`Bundle` is the same reader the browser runs through wasm, so a bundle that
+Experimental, and held to the Python reference pipeline by byte-for-byte
+identical output on every source it supports — GFS, ECMWF, GFS surface flux,
+and the CMA radar mosaic.
+
+```python
+report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
+```
+
+A build writes the run's Zarr v3 stores by default; `container=True` writes
+each bundle's `.xue` beside them, and `zarr=False, container=True` the
+`.xue` alone.
+
+The stages are also exposed on their own — `quantize`, `encode_residual`,
+`decimate`, `encode_poster`, `write_store` — taking and returning NumPy
+arrays.
+
+## Reading a `.xue` file
+
+`Bundle` is the same container reader the browser runs through wasm, so a bundle that
 decodes here decodes there. A plane comes back as the `uint8` NumPy array of
 quantized codes the shader would have uploaded to an R8 texture; the
 metadata's `quantization` block turns it back into physical values.
@@ -43,25 +63,6 @@ celsius = codebook["offset"] + plane * codebook["scale"]
 `bundle.frame_offsets`, `bundle.unit_seconds` and `bundle.metadata` describe
 the time axis and the grid. Reconstruction is checked against the CRC-32 the
 encoder wrote, so a corrupt file raises rather than returning wrong numbers.
-
-## Encoding
-
-Experimental, and held to the Python reference pipeline by byte-for-byte
-identical output on every source it supports — GFS, ECMWF, GFS surface flux,
-and the CMA radar mosaic.
-
-```python
-report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")
-```
-
-A build writes one Zarr v3 store per bundle (`out/tmp2m.zarr`, …) by
-default; `container=True` writes each bundle's `.xue` beside it, and
-`zarr=False, container=True` the `.xue` alone (what earlier releases wrote
-by default).
-
-The stages are also exposed on their own — `quantize`, `encode_residual`,
-`decimate`, `encode_poster`, `write_store` — taking and returning NumPy
-arrays.
 
 ## What is in the wheel
 

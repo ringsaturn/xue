@@ -124,7 +124,7 @@ impl AerosolIdentity {
     pub const MISSING_TYPE: u8 = 255;
 }
 
-/// What an ensemble product is a statistic of its members as (docs/format.md
+/// What an ensemble product is a statistic of its members as (docs/bundle.md
 /// §"Ensemble"): the decoder's parse of the block, which the registry's
 /// `ensemble` blocks, a source's `ensembles` and the `template-ensemble`
 /// rule share, and which the metadata writer writes back out in the spec's

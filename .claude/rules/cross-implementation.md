@@ -21,8 +21,8 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 
 1. The **Python encoder is the reference**. A format or encoding change goes
    there first, and the native encoder (`rust/xue/src/encode/`) follows.
-2. A format change means changing **the spec (`docs/format.md` /
-   `docs/zarr-profile.md`), both encoders, every reader and the fixtures
+2. A format change means changing **the spec (`docs/bundle.md` /
+   `docs/zarr-profile.md`, `docs/format.md` for the container), both encoders, every reader and the fixtures
    together**, in one change.
 3. The native encoder must produce **byte-for-byte identical** output.
    `tests/test_native.py` and the per-source tests (`test_ecmwf`, `test_hrrr`,

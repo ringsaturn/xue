@@ -8,7 +8,7 @@ engineering notes (fetch stages, quirks) are in
 (`latest.json` for GFS, `latest-<model>.json` for the rest). The id in each
 heading is the `--model` value and the `?model=` value. Time axes with
 mixed steps are listed outright in the bundle metadata
-([`format.md`](format.md), schema v3).
+([`bundle.md`](bundle.md), schema v3).
 
 The geostationary mosaic (`?model=geo`) is a view, not a dataset: the
 viewer opens whichever imager runs answer, clips each disk at the
@@ -198,7 +198,7 @@ Ouverte / Etalab 2.0.
 and not a deterministic run: statistics of the ensemble** (CMA GRAPES GEPS
 v1.3, 30 perturbed members and the control), which is all CMA exchanges.
 Every field carries an `ensemble` block saying which statistic it is
-(docs/format.md, "Ensemble").
+(docs/bundle.md, "Ensemble").
 
 - **The centre**, under the ids and identities the deterministic sources
   use, so it compares with them directly: the ensemble mean of the 500 hPa

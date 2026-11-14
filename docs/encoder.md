@@ -366,7 +366,7 @@ comparisons still skip when the two link different libzstd versions
 
 ## Native grids
 
-A model on its own grid (`docs/format.md`, "Projected Sources", "Gaussian rows")
+A model on its own grid (`docs/bundle.md`, "Projected Sources", "Gaussian rows")
 adds three pieces of arithmetic on top of what a regular grid does. The operation
 order is normative: both encoders land on the same doubles. On the native side
 `rust/xue/src/projection.rs` holds the projection and the Gaussian iteration,

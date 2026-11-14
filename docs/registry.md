@@ -8,7 +8,7 @@ release. The committed snapshot `rust/xue/registry.json` is held to
 the tables by a test.
 
 The document is not a published artifact and not part of the format. What
-reaches a store is the variable block of `docs/format.md`, which the
+reaches a store is the variable block of `docs/bundle.md`, which the
 `label`, `unit`, `parameter`, `producer`, `aerosol`, `ensemble` and
 `quantization` keys of a variable entry are, key for key: an encoder copies them into
 `attributes.xue`, it never computes them. Everything else in an entry is
@@ -65,7 +65,7 @@ changing what a reader must do with an existing key raises it.
 
 | Key | Meaning |
 |---|---|
-| `label`, `unit`, `parameter`, `producer`, `aerosol`, `ensemble` | Exactly the metadata blocks of `docs/format.md`. `producer` carries the `id` alone; the version is stamped on the series the producer wrote and read off it at build time. `ensemble` is the variable's own statistic (a quartile, a spread, a probability); a shared variable whose record a source reads as an ensemble's centre has none, and the source names the block it writes (`ensembles`, below). |
+| `label`, `unit`, `parameter`, `producer`, `aerosol`, `ensemble` | Exactly the metadata blocks of `docs/bundle.md`. `producer` carries the `id` alone; the version is stamped on the series the producer wrote and read off it at build time. `ensemble` is the variable's own statistic (a quartile, a spread, a probability); a shared variable whose record a source reads as an ensemble's centre has none, and the source names the block it writes (`ensembles`, below). |
 | `quantization` | One codebook block per profile, each exactly as the metadata writes it. The `type` is one of the closed set below. A variable without this key is read and never published (`tp`, the categorical precipitation flags). |
 | `valueRange` | `[low, high]` in `unit`: the range the pipeline treats as the field's own. |
 | `fillValues` | Values GDAL hands back where the record carries no data; folded to `valueRange[0]` before anything else touches the plane. |
@@ -188,7 +188,7 @@ template.
 ```
 
 `levelValue` is a number or `null` (any value, a missing one included);
-`ensemble` is a block of `docs/format.md` §"Ensemble"; `hours` and
+`ensemble` is a block of `docs/bundle.md` §"Ensemble"; `hours` and
 `statistical` are both integers (an interval of at least one hour and its
 code table 4.10 process) or both `null`. It accepts a band when all hold:
 

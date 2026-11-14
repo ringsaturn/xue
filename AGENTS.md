@@ -15,12 +15,12 @@ forever.
 
 | Path | What |
 |---|---|
-| `xuebuild/` | Python build pipeline and **reference encoder** (fetch → GDAL → quantize → residuals → zstd → container → Zarr store → manifest → STAC) |
+| `xuebuild/` | Python build pipeline and **reference encoder** (fetch → GDAL → quantize → residuals → zstd → Zarr store, `.xue` on request → manifest → STAC) |
 | `rust/xue` | Rust decoder; native encoder behind the off-by-default `encoder` feature |
 | `rust/xue-wasm`, `rust/xue-py`, `rust/xue-worker` | wasm bindings (→ `web/src/wasm/`), PyO3 wheel `xuepy` (imported as `xue`), read-only data API Worker |
 | `web/src/` | TypeScript frontend: manifest resolution, decode workers, WebGL layers, playback |
 | `tests/` | Python unit/parity tests, `tests/web` (vitest), `tests/e2e` (Playwright) |
-| `docs/` | Normative specs (`format.md`, `zarr-profile.md`, `stac.md`, `encoder.md`, products) |
+| `docs/` | Normative specs (`zarr-profile.md`, `bundle.md`, `format.md` for the legacy container, `stac.md`, `encoder.md`, products) |
 | `docs/contribution/` | Developer docs: architecture, pipeline, sources, frontend, publishing, releasing |
 | `.claude/rules/` | The rules below, in detail; path-scoped (Claude Code loads each when you touch matching files; other agents follow the table below) |
 | `.agents/skills/` | Task playbooks (also reachable as `.claude/skills/`) |

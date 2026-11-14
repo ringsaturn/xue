@@ -41,7 +41,7 @@ _TIME_UNIT = {
 # further along; 4.44 and 4.46, the aerosol templates without the optical
 # fields, are its subsets and are not read by any source yet.
 #
-# The ensemble templates (docs/format.md §"Ensemble") share the 4.0 layout
+# The ensemble templates (docs/bundle.md §"Ensemble") share the 4.0 layout
 # too and append the statistic: 4.2 the derived forecast at octet 35, 4.6
 # the percentile at 35, 4.5 the probability's type and limits at 37-47;
 # their interval forms 4.12, 4.10 and 4.9 append 4.8's time range after
@@ -127,7 +127,7 @@ def _parse_aerosol(body: bytes) -> AerosolIdentity:
     """The aerosol fields of a template 4.48 body: octets 12-35, the type
     then the size and wavelength intervals, each a code table 4.91 type and
     two limits. An interval of the missing type carries no limits whatever
-    the octets hold (docs/format.md §"Band, Producer and Aerosol")."""
+    the octets hold (docs/bundle.md §"Band, Producer and Aerosol")."""
     aerosol_type = struct.unpack_from(">H", body, 11)[0]
     size_type = body[13]
     wavelength_type = body[24]
