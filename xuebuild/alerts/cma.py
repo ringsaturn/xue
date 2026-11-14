@@ -1,7 +1,8 @@
 """The ``cma`` network: the warning signals China's meteorological
-observatories issue (national, provincial, prefecture and county), as the
-WMO Severe Weather Information Centre (SWIC, run by the Hong Kong
-Observatory for WMO) aggregates them.
+observatories issue, as far as the WMO Severe Weather Information Centre
+(SWIC, run by the Hong Kong Observatory for WMO) aggregates them: most
+provincial observatories and some provinces are missing
+(``docs/alerts.md`` §10.5).
 
 The CMA's own feed in the WMO Register of Alerting Authorities
 (``http://www.12379.cn/rss/china_rss.xml``) answers 404; SWIC holds the
