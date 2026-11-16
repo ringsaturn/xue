@@ -42,6 +42,7 @@ is no longer published and every decoder still reads it.
 | ECMWF IFS HRES via Open-Meteo (`ifshres`) | 0.1° global · hourly to F090, then 3- and 6-hourly to F360; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-ifshres.json"><img alt="the newest ifshres run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-ifshres.json&query=%24.runTime&label=&color=2a9d8f&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA HRRR (`hrrr`) | 3 km Lambert contiguous US · hourly to F18, hourly cycles | <a href="https://dataset.ringsaturn.me/xue/latest-hrrr.json"><img alt="the newest hrrr run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-hrrr.json&query=%24.runTime&label=&color=7b4ea3&style=flat-square&cacheSeconds=600" width="170"></a> |
 | NOAA RRFS with smoke and dust (`rrfs`) | 3 km Lambert contiguous US · hourly to F84 | <a href="https://dataset.ringsaturn.me/xue/latest-rrfs.json"><img alt="the newest rrfs run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-rrfs.json&query=%24.runTime&label=&color=8e5fb0&style=flat-square&cacheSeconds=600" width="170"></a> |
+| WOOF-NAM by Recast (`woofnam`) | 12 km Lambert North America · hourly to F84; not a NOAA forecast | <a href="https://dataset.ringsaturn.me/xue/latest-woofnam.json"><img alt="the newest woofnam run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-woofnam.json&query=%24.runTime&label=&color=a06bb8&style=flat-square&cacheSeconds=600" width="170"></a> |
 | DWD ICON-EU (`iconeu`) | 0.0625° Europe · hourly to F78, 3-hourly to F120 | <a href="https://dataset.ringsaturn.me/xue/latest-iconeu.json"><img alt="the newest iconeu run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-iconeu.json&query=%24.runTime&label=&color=5a6b8c&style=flat-square&cacheSeconds=600" width="170"></a> |
 | Météo-France ARPEGE (`arpege`) | 0.25° global · hourly to F48, 3-hourly to F102 | <a href="https://dataset.ringsaturn.me/xue/latest-arpege.json"><img alt="the newest arpege run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-arpege.json&query=%24.runTime&label=&color=3d5a98&style=flat-square&cacheSeconds=600" width="170"></a> |
 | CMA GRAPES GEPS ensemble (`cmageps`) | 0.25° global · 6-hourly to F360; 00Z/12Z | <a href="https://dataset.ringsaturn.me/xue/latest-cmageps.json"><img alt="the newest cmageps run" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdataset.ringsaturn.me%2Fxue%2Flatest-cmageps.json&query=%24.runTime&label=&color=b5523b&style=flat-square&cacheSeconds=600" width="170"></a> |
@@ -76,7 +77,7 @@ driver. Some sources need more (eccodes, om2nc, credentials); see
 uv sync                   # creates .venv with NumPy and the xuepy wheel
 make check                # verifies tool versions
 make mvp                  # builds the latest GFS run and the frontend
-make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, rrfs, gefsaero, cmadust, silam, cfs, iconeu, arpege, cmageps
+make mvp MODEL=ecmwf      # or another forecast: ifs, aifs, ifshres, sflux, hrrr, rrfs, woofnam, gefsaero, cmadust, silam, cfs, iconeu, arpege, cmageps
 make serve                # serves the result on 127.0.0.1
 ```
 
@@ -217,6 +218,9 @@ The other sources:
 - ARPEGE (`arpege`): Source: Météo-France, the
   [data.gouv.fr ARPEGE 0.25° packages](https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-25deg/),
   under the Licence Ouverte / Etalab 2.0; quantized derivative.
+- WOOF-NAM (`woofnam`): [WOOF-NAM by Recast](https://woof-nam.recastsystems.com/README.txt),
+  licensed under CC BY 4.0; quantized derivative. Not an official forecast
+  of NOAA or the National Weather Service.
 
 - HRRR, MRMS, GOES-East / GOES-West imagery and the SWPC OVATION aurora
   model are NOAA products, works of the United States government in the

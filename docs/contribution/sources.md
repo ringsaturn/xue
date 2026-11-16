@@ -21,6 +21,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `aifs` | forecast | ECMWF open data (`aifs-single`) | `tmp2m`, `prate` |
 | `hrrr` | forecast (regional, on its own Lambert grid) | NOAA, two mirrors | `tmp2m`, `prate` |
 | `rrfs` | forecast (regional, on its own Lambert grid), with smoke and dust | NOAA, every hour proves a run | `tmp2m`, `prate` |
+| `woofnam` | forecast (regional, on its own Lambert grid) | NOAA's `.idx` layout on Recast's host | `tmp2m` |
 | `gefsaero` | forecast (aerosol) | GEFS chem files, Google mirror | `aod` |
 | `cmadust` | series-file forecast (dust, regional) | WMO WIS2 caches, NetCDF classic by byte range | `dustsfc` |
 | `silam` | series-file forecast (air quality) | FMI open data on AWS, whole NetCDF-4 day files | `pm25` |
@@ -91,9 +92,9 @@ questions `fetch.py` asks of a source — the object of a forecast hour
 (`object_url`), whether a run has landed (`is_complete`), an observation's
 newest frame (`latest_slot`) and the run's download (`fetch_run`) — so
 nothing in the fetch tests a source id. A family is an upstream service and
-the shape of its objects: `noaa-gfs`, `noaa-sflux` and
-`noaa-gefs-aerosols` share the `.idx` byte-range path under their own
-object names; `noaa-hrrr`, `noaa-rrfs`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
+the shape of its objects: `noaa-gfs`, `noaa-sflux`,
+`noaa-gefs-aerosols` and `recast-woof-nam` share the `.idx` byte-range path
+under their own object names; `noaa-hrrr`, `noaa-rrfs`, `ecmwf-open-data` (`ecmwf`, `ifs`, `aifs`),
 `dwd-icon-eu`, `meteofrance-arpege` and `cmageps` are the other one-GRIB-per-hour
 feeds (`FrameFeed`, whose frames `fetch_frame` writes); `noaa-cfs`,
 `open-meteo`, `cmadust` and `fmi-silam` fetch series; `noaa-mrms` (`mrms`, `mrms3d`),
@@ -258,6 +259,28 @@ so it is `aotk` rather than `aod`. Three spellings differ from HRRR's: `PRATE`
 has a maximum beside it (excluded), `REFC` is WMO 0/16/5 on surface 200 (an
 alternate), and the sea level pressure is `MSLET`, accepted under `prmsl` as
 `MSLMA` is. `tests/test_rrfs.py`.
+
+**woofnam.** WOOF-NAM by Recast, a GPU port of the retired NAM (NMMB) run
+from the GFS analysis four times a day, from Recast's own host
+(`XUE_WOOFNAM_BASE_URL`), which keeps a run seven days: one `awphys` object
+per hour with a wgrib2 `.idx`, some 66 MB and 450 records, of which a frame
+takes twenty-five ranges (about 4.5 MB; the analysis one more, the terrain).
+CC BY 4.0, credited "WOOF-NAM by Recast",
+and not a NOAA forecast, which the STAC prose and the credits say. The files
+follow NOAA's NAM layout under NCEP's centre number with generating process
+254, so every record is read by the rules the NOAA sources are and the feed
+is `NoaaGrib` under another object name; the hours land in order, so both
+ends prove a run. The grid is NCEP 218, tangent at 25°N and centred on 95°W
+(614 × 428 at 12 191 m), read out of GDAL's WKT like HRRR's; the tile is
+16 × 16 cells, the 195 km an HRRR tile covers. `TCDC` is on NCEP's surface
+200, an alternate CFSv2 already needed. Both `PRMSL` and `MSLET` are there
+and the first phrase wins. Precipitation waits on a bucket-reset
+de-accumulation rule: the files carry no `PRATE`, only `APCP` totals that
+reset every 3 and 12 hours, which neither encoder turns into a rate. `REFC`
+is NCEP's local 0/16/196 on surface 200, a pairing the `cref` identity does
+not accept (HRRR's is 196 on surface 10, RRFS's 5 on 200), so it is not
+published either; the layer cloud covers and `CPOFP` are not in the files.
+`tests/test_woofnam.py`.
 
 **gefsaero.** GEFS-Aerosols, the `chem/pgrb2ap25/` `a2d_0p25` files
 (`XUE_GEFS_BASE_URL`). Nine scalars: 550 nm AOD total

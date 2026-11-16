@@ -119,6 +119,21 @@ smoke and dust the model carries inline (RRFS-SD): near-surface smoke, fine dust
 sea level pressure is the model's only one, NCEP's Shuell reduction (`MSLET`),
 published as `prmsl`. The viewer clips to the model's footprint.
 
+### WOOF-NAM by Recast (`woofnam`)
+
+12.19 km Lambert conformal over North America, NCEP grid 218 (614 × 428),
+nothing resampled and the winds turned to east and north. Hourly to F84 from
+the 00 / 06 / 12 / 18 UTC cycles, complete about 4 h 20 min after the cycle.
+A GPU port of the NAM (NMMB) that NOAA retired, run by Recast from the GFS
+analysis of the same cycle, in NOAA's NAM `awphys` layout; **not an official
+forecast of NOAA or the National Weather Service**. 2 m temperature and dew
+point, sea level pressure, 850 / 700 / 500 / 250 hPa heights, 925 / 850 /
+500 hPa temperature, 10 m / 80 m / 925 / 850 / 250 hPa winds, gust, total
+cloud cover, CAPE, visibility, the freezing level and the terrain. No
+precipitation: the files carry totals in buckets that reset every 3 and 12
+hours and no rate. No layer cloud, and no composite reflectivity. Data:
+WOOF-NAM by Recast, CC BY 4.0.
+
 ### NOAA GEFS-Aerosols (`gefsaero`)
 
 0.25° global, 3-hourly to F120, complete about 6 h after the cycle. Aerosol

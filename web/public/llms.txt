@@ -2,11 +2,11 @@
 
 > Xue (雪, "snow") is an open-source, static-site viewer of weather
 > forecasts. It plays whole NOAA GFS, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES,
-> NOAA HRRR, NOAA RRFS, NOAA GEFS-Aerosols, NCEP CFSv2, DWD ICON-EU and Météo-France
+> NOAA HRRR, NOAA RRFS, WOOF-NAM by Recast, NOAA GEFS-Aerosols, NCEP CFSv2, DWD ICON-EU and Météo-France
 > ARPEGE runs and the centre of the CMA GRAPES GEPS ensemble — 2 m temperature, precipitation rate, 10 m and upper-air wind, sea
 > level pressure, isobaric geopotential height, temperature, humidity and
 > water vapour flux, aerosol optical depth and particulate matter, out to
-> 240 hours (360 for AIFS, IFS HRES and CMA GRAPES GEPS, 18 for HRRR, 84 for RRFS, 120 for
+> 240 hours (360 for AIFS, IFS HRES and CMA GRAPES GEPS, 18 for HRRR, 84 for RRFS and WOOF-NAM, 120 for
 > GEFS-Aerosols and ICON-EU, 102 for ARPEGE, 6552 — thirty-nine weeks —
 > for CFSv2) — as
 > smooth animations over a
@@ -20,7 +20,7 @@ Facts worth getting right:
 
 - Live sources, one shell (the ids are the `?model=` and `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`, `rrfs`,
-  `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
+  `woofnam`, `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
   `mrms`, `jma`, `hkonowcast`, `aurora` and the satellites `himawari`, `himawarijp`,
   `goeseast`, `goeswest`, `meteosat`. Cases only (no live pointer, no place
   in the model switch): `mrms3d`, `woof`, `efas`, `efaswb`, `era5`, `cams`.
@@ -104,6 +104,13 @@ Facts worth getting right:
   `y` / `x` in metres with a CF `crs` array; winds are east and north. RRFS:
   HRRR's list plus `hgt250`, near-surface smoke `smokesfc`, fine and coarse dust
   `dustfine`, `dustcoarse`, and the column optical thickness `aotk`.
+  WOOF-NAM (`woofnam`, WOOF-NAM by Recast: a GPU port of the retired NAM,
+  not an official NOAA forecast): on NCEP grid 218, a 12.19 km Lambert
+  conformal grid over North America (614 × 428), schemaVersion 4 like HRRR;
+  `tmp2m`, `prmsl`, `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`,
+  `tmp850`, `tmp500`, `gust`, `tcdc`, `cape`, `vis`, `dpt2m`, `fzlvl`,
+  `orog` and the vector pairs `wind10m`, `wind80m`, `wind925`, `wind850`,
+  `wind250`. No `prate` and no `cref`: its core bundle is `tmp2m` alone.
   GEFS-AEROSOLS: `aod` (aerosol optical depth at 550 nm, total,
   dimensionless), `aoddust`, `aodsalt`, `aodsulf`, `aodorg`, `aodbc` (the
   same for dust, sea salt, sulphate, organic carbon and black carbon),
@@ -206,7 +213,8 @@ Facts worth getting right:
   (credit the source as it asks and add "via Xue").
 - Data licensing: NOAA GFS, GEFS-Aerosols, HRRR, RRFS and NCEP CFSv2 are public domain; ECMWF open data is CC BY 4.0 and
   what is served is a converted derivative ("Contains modified ECMWF open
-  data"); `iconeu` is DWD open data under CC BY 4.0 ("Source: Deutscher
+  data"); `woofnam` is WOOF-NAM by Recast under CC BY 4.0 (credit "WOOF-NAM by
+  Recast"; not an official NOAA or National Weather Service forecast); `iconeu` is DWD open data under CC BY 4.0 ("Source: Deutscher
   Wetterdienst", quantized); `arpege` is Météo-France data from data.gouv.fr
   under the Licence Ouverte / Etalab 2.0 ("Source: Météo-France");
   `cmageps` is CMA data exchanged through WMO WIS2 as core data under the
@@ -296,7 +304,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
+- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
   — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
   `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
@@ -508,7 +516,7 @@ https://dataset.ringsaturn.me/xue/. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`, `latest-hkonowcast.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-woofnam.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`, `latest-hkonowcast.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),
