@@ -524,6 +524,8 @@ FEEDS: dict[str, Fetcher] = {
     "noaa-gefs-aerosols": NoaaGrib(fetch.gefsaero_object_url),
     "noaa-hrrr": NoaaHrrr(),
     "noaa-rrfs": NoaaRrfs(fetch.rrfs_object_url),
+    # NOAA's layout on Recast's host, whose hours land in order.
+    "recast-woof-nam": NoaaGrib(fetch.woofnam_object_url),
     "noaa-cfs": NoaaCfs(),
     "noaa-mrms": NoaaMrms(),
     "ecmwf-open-data": EcmwfOpenData(),

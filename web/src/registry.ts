@@ -316,6 +316,7 @@ export const REGISTRY = {
     "sflux": {"label": "GFS-SFLUX", "product": "sfluxgrb", "latestFilename": "latest-sflux.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "hrrr": {"label": "HRRR", "product": "wrfsfc", "latestFilename": "latest-hrrr.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
     "rrfs": {"label": "RRFS", "product": "2dfld.3km.conus", "latestFilename": "latest-rrfs.json", "observation": false, "coreBundleIds": ["tmp2m", "prate"], "cadenceSeconds": null},
+    "woofnam": {"label": "WOOF-NAM", "product": "awphys", "latestFilename": "latest-woofnam.json", "observation": false, "coreBundleIds": ["tmp2m"], "cadenceSeconds": null},
     "gefsaero": {"label": "GEFS-AEROSOLS", "product": "chem-a2d-0p25", "latestFilename": "latest-gefsaero.json", "observation": false, "coreBundleIds": ["aod"], "cadenceSeconds": null},
     "cmadust": {"label": "CMA-CW-DUST", "product": "cma-cw-dust-0p15", "latestFilename": "latest-cmadust.json", "observation": false, "coreBundleIds": ["dustsfc"], "cadenceSeconds": null},
     "silam": {"label": "SILAM", "product": "silam-glob02", "latestFilename": "latest-silam.json", "observation": false, "coreBundleIds": ["pm25"], "cadenceSeconds": null},
