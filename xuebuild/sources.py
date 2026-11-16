@@ -1650,9 +1650,7 @@ SOURCES: dict[str, SourceSpec] = {
     # (``windowed_precipitation``); the analysis's covers no interval and
     # is not read. Where a forecast hour is a multiple of three past its
     # window's first three, the file carries the last three hours' total as
-    # a second ``APCP`` record, which the fetch leaves behind. The core set
-    # is the temperature alone, so the validators accept a run that carries
-    # no rate.
+    # a second ``APCP`` record, which the fetch leaves behind.
     "woofnam": SourceSpec(
         id="woofnam",
         feed="recast-woof-nam",
@@ -1714,7 +1712,6 @@ SOURCES: dict[str, SourceSpec] = {
             "fzlvl",
             "orog",
         ),
-        core_bundle_ids=("tmp2m",),
         bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
         production_grid=(614, 428),
         # 16 x 16 cells is 195 km, the ground an HRRR tile covers: 39 x 27 =

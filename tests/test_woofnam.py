@@ -133,8 +133,8 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(analysis_optional_ids(WOOFNAM, WOOFNAM.bundle_scalar_ids), ("prate",))
         self.assertEqual(WOOFNAM.statistical_processes, (("prate", 0),))
 
-    def test_a_run_without_the_rate_is_still_a_complete_one(self) -> None:
-        self.assertEqual(WOOFNAM.core_bundle_ids, ("tmp2m",))
+    def test_a_run_without_the_rate_is_not_a_complete_one(self) -> None:
+        self.assertEqual(WOOFNAM.core_bundle_ids, ("tmp2m", "prate"))
 
     def test_every_published_scalar_but_the_rate_is_an_input(self) -> None:
         self.assertEqual(set(WOOFNAM.bundle_scalar_ids) - set(WOOFNAM.input_variable_ids), {"prate"})

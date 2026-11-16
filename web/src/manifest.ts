@@ -161,12 +161,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // WOOF-NAM by Recast, a GPU port of the retired NAM on NCEP grid 218:
   // 12 km Lambert conformal over North America, hourly to F84 from the
   // 00/06/12/18Z cycles, on the model's own grid, so nothing needs clipping.
-  // The run's core is the temperature alone, which it opens on, and the gust
-  // has the tile the rain has on other forecasts; the precipitation rate it
-  // publishes is reached through MORE.
   woofnam: {
-    defaultVariable: "tmp2m",
-    railCore: ["tmp2m", "wind10m", "tcdc", "gust"],
     region: [-152.99, 12.12, -49.31, 61.35],
   },
   // DWD ICON-EU, the European nest of ICON at 0.0625°: a regional model
