@@ -129,10 +129,10 @@ analysis of the same cycle, in NOAA's NAM `awphys` layout; **not an official
 forecast of NOAA or the National Weather Service**. 2 m temperature and dew
 point, sea level pressure, 850 / 700 / 500 / 250 hPa heights, 925 / 850 /
 500 hPa temperature, 10 m / 80 m / 925 / 850 / 250 hPa winds, gust, total
-cloud cover, CAPE, visibility, the freezing level and the terrain. No
-precipitation: the files carry totals in buckets that reset every 3 and 12
-hours and no rate. No layer cloud, and no composite reflectivity. Data:
-WOOF-NAM by Recast, CC BY 4.0.
+cloud cover, CAPE, visibility, composite reflectivity, the freezing level and
+the terrain. No precipitation: the files carry totals in buckets that reset
+every 3 and 12 hours and no rate. No layer cloud. Data: WOOF-NAM by Recast,
+CC BY 4.0.
 
 ### NOAA GEFS-Aerosols (`gefsaero`)
 
