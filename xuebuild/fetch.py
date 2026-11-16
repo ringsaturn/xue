@@ -16,7 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import aurora, cmaarchive, jmacli, om2nccli
 from . import satellite
+from .bundles import BUNDLES, PRECIPITATION_RATE_BUNDLE_ID
 from .common import (
     S3_NAMESPACE,
     s3_continuation,
@@ -36,6 +37,7 @@ from .common import (
 )
 from .satellite import fetch as satellite_fetch
 from .satellite import producers as satellite_producers
+from .derive import average_window_start
 from .errors import ConversionError, DownloadError
 from .idx import (
     ByteRange,
@@ -2309,9 +2311,35 @@ def _frame_variable_ids(
     return tuple(variable_id for variable_id in wanted if not VARIABLES[variable_id].static)
 
 
-def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
+def window_index_qualifier(spec: SourceSpec, variable_id: str, forecast_hour: int) -> str | None:
+    """The ``.idx`` phrase that picks a windowed-precipitation source's
+    accumulation out of the records of its parameter
+    (``SourceSpec.windowed_precipitation``): the one whose interval runs
+    from the start of the window the hour falls in, ``:0-6 hour acc fcst:``
+    at F06 and ``:12-13 hour acc fcst:`` at F13 on a twelve-hour window.
+    The same file may hold the last three hours' total beside it
+    (``:3-6 hour acc fcst:``), which the field and surface alone do not
+    tell from it. None for every other variable, and on every other
+    source."""
+    if not spec.windowed_precipitation or forecast_hour <= 0:
+        return None
+    derivation = BUNDLES[PRECIPITATION_RATE_BUNDLE_ID].derivation
+    assert derivation is not None
+    total_id = next((input_id for input_id in spec.input_variable_ids if input_id in derivation.inputs), None)
+    if variable_id != total_id:
+        return None
+    window_start = average_window_start(forecast_hour, spec.accumulation_window_hours)
+    return f":{window_start}-{forecast_hour} hour acc fcst:"
+
+
+def _download_noaa_records(
+    url: str, variable_ids: tuple[str, ...], qualifiers: Mapping[str, str] | None = None
+) -> bytes:
     """The requested records of one NOAA object, located through its
-    ``.idx`` sidecar and fetched as byte ranges, in the order given."""
+    ``.idx`` sidecar and fetched as byte ranges, in the order given.
+    ``qualifiers`` names, per variable, a phrase the line must carry in
+    place of the entry's own ``index_qualifier``: what a frame's hour adds
+    to it (:func:`window_index_qualifier`)."""
     if not variable_ids:
         return b""
     index_text = fetch_text(url + ".idx")
@@ -2321,7 +2349,7 @@ def _download_noaa_records(url: str, variable_ids: tuple[str, ...]) -> bytes:
             variable.index_field,
             excluded_phrases=variable.excluded_index_phrases,
             alternate_fields=variable.alternate_index_fields,
-            qualifier=variable.index_qualifier,
+            qualifier=(qualifiers or {}).get(variable.id, variable.index_qualifier),
         )
         for variable in (VARIABLES[variable_id] for variable_id in variable_ids)
     ]
@@ -2335,14 +2363,20 @@ def _download_noaa_payload(
     family's — so a frame narrowed to one family's variables (a bundle group
     of the fan-out build) touches only that family's object."""
     wanted = _frame_variable_ids(spec, forecast_hour, input_ids)
+    qualifiers = {
+        variable_id: qualifier
+        for variable_id in wanted
+        if (qualifier := window_index_qualifier(spec, variable_id, forecast_hour)) is not None
+    }
     payload = _download_noaa_records(
         model_object_url(run, forecast_hour, spec.id),
         tuple(variable_id for variable_id in wanted if spec.companion_of(variable_id) is None),
+        qualifiers,
     )
     for companion in spec.companion_files:
         url = companion_object_url(run, forecast_hour, companion.id)
         payload += _download_noaa_records(
-            url, tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids)
+            url, tuple(variable_id for variable_id in wanted if variable_id in companion.variable_ids), qualifiers
         )
     return payload
 

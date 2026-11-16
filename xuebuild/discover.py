@@ -140,16 +140,20 @@ def bundle_first_hour(source: SourceSpec, bundle_id: str) -> int:
 
 def analysis_optional_ids(source: SourceSpec, scalar_ids: tuple[str, ...]) -> tuple[str, ...]:
     """The published scalars of ``scalar_ids`` whose series has no analysis
-    frame: the precipitation rate a source derives by de-accumulating or
-    de-averaging, any scalar read from a record the source lists under
-    ``optional_at_analysis`` (which is how the interval-precipitation
-    sources' rate, radiation and gust qualify — their inputs describe an
-    interval that would precede the run), and any read from one that starts
-    past the analysis (``variable_first_hours``)."""
+    frame: the precipitation rate a source derives by de-accumulating,
+    de-averaging or differencing a window, any scalar read from a record
+    the source lists under ``optional_at_analysis`` (which is how the
+    interval-precipitation sources' rate, radiation and gust qualify —
+    their inputs describe an interval that would precede the run), and any
+    read from one that starts past the analysis
+    (``variable_first_hours``)."""
     return tuple(
         variable_id
         for variable_id in scalar_ids
-        if (variable_id == PRECIPITATION_RATE_BUNDLE_ID and precipitation_mode(source) in ("accumulated", "averaged"))
+        if (
+            variable_id == PRECIPITATION_RATE_BUNDLE_ID
+            and precipitation_mode(source) in ("accumulated", "averaged", "windowed")
+        )
         or any(input_id in source.optional_at_analysis for input_id in bundle_input_ids(source, variable_id))
         or bundle_first_hour(source, variable_id) > 0
     )

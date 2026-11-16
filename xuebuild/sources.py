@@ -230,8 +230,22 @@ class SourceSpec:
     beside :attr:`accumulated_precipitation` (a run total, differenced) and
     :attr:`averaged_precipitation` (a window average, de-averaged); a source
     declares at most one."""
+    windowed_precipitation: bool = False
+    """True when precipitation arrives as the total accumulated since the
+    start of a window that resets every :attr:`accumulation_window_hours`
+    (the NAM's ``APCP``: ``0-5 hour acc`` at F05, ``12-13 hour acc`` at F13,
+    in millimetres) and becomes a rate by differencing against the previous
+    frame of the same window, the window's first frame against zero
+    (:func:`xuebuild.derive.dewindow_precipitation`). The fourth arrival
+    shape: a run total that starts over, where
+    :attr:`averaged_precipitation` is a mean that does. The fetch takes the
+    record whose interval begins at the window's start and no other of the
+    parameter (:func:`xuebuild.fetch.window_index_qualifier`)."""
     average_window_hours: int = 6
     """Length of the averaging-window reset cycle for averaged precipitation."""
+    accumulation_window_hours: int = 12
+    """Length of the accumulation-window reset cycle for windowed
+    precipitation."""
     first_hour: int = 0
     """The first forecast hour the source publishes.
 
@@ -254,8 +268,8 @@ class SourceSpec:
     """Published scalars whose values are a statistic over the step ending
     at the frame rather than the instantaneous field their identity names,
     with the code table 4.10 process: the rate a source derives by
-    de-accumulating or de-averaging is a mean (0), ECMWF's gust a maximum
-    (2). Written into the bundle's metadata as
+    de-accumulating, de-averaging or differencing a window is a mean (0),
+    ECMWF's gust a maximum (2). Written into the bundle's metadata as
     ``typeOfStatisticalProcessing`` (docs/bundle.md), which is what tells a
     reader that ECMWF's ``prate`` or ``gust`` and GFS's are not quite the
     same field under the same parameter."""

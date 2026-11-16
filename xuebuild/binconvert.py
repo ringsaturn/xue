@@ -48,8 +48,10 @@ from .derive import (
     derive_cat_plane,
     derive_scalar,
     derive_vector,
+    dewindow_precipitation,
     interval_rate,
     precipitation_mode,
+    precipitation_window_hours,
     soil_temperature_unit,
 )
 from .discover import (
@@ -249,7 +251,7 @@ def _quantize_file(
     work: Path,
     codebooks: dict[str, TemperatureCodebook | PrecipitationCodebook],
     previous_precipitation: tuple[int, Future | None] | None = None,
-    average_window_hours: int = 6,
+    window_hours: int = 6,
     own_precipitation: Future | None = None,
     plane_source: PlaneSource | Mapping[str, PlaneSource] = GRIB_PLANE_SOURCE,
     derived_vector_ids: tuple[str, ...] = (),
@@ -284,10 +286,12 @@ def _quantize_file(
     the ladder's decimation among it, sees a wind in earth terms.
 
     Derived-precipitation sources (ECMWF run-total tp, sflux window-averaged
-    prate_ave) difference against the previous file's raw plane. Instead of
-    re-extracting that file, workers share planes through futures: each worker
-    publishes its own converted raw plane into ``own_precipitation`` and reads
-    the predecessor's from ``previous_precipitation`` (its hour and future).
+    prate_ave, the NAM's window-accumulated apcp, the last two over a window
+    of ``window_hours``) difference against the previous file's raw plane.
+    Instead of re-extracting that file, workers share planes through
+    futures: each worker publishes its own converted raw plane into
+    ``own_precipitation`` and reads the predecessor's from
+    ``previous_precipitation`` (its hour and future).
     The pool runs files in submission (hour) order, so the awaited predecessor
     is always already running or done. Shared planes are never mutated. An
     interval total (Open-Meteo apcp) needs no predecessor plane at all — only
@@ -362,7 +366,19 @@ def _quantize_file(
             hour,
             previous_plane,
             previous_hour,
-            average_window_hours,
+            window_hours,
+        )
+    elif mode == "windowed":
+        # The NAM: APCP is the total (mm) since the start of a window that
+        # resets every twelve hours; derive the per-step rate against the
+        # previous frame of the same window (the window's first frame
+        # differences against zero).
+        values[PRECIPITATION_RATE_BUNDLE_ID] = dewindow_precipitation(
+            values.pop(raw_precipitation_id),
+            hour,
+            previous_plane,
+            previous_hour,
+            window_hours,
         )
     for bundle_id in rotated_vector_ids:
         u_id, v_id = VECTOR_BUNDLES[bundle_id]
@@ -665,7 +681,7 @@ def _sharing_plan(
             if successor is not None and (
                 precipitation_mode(source) == "accumulated"
                 or average_window_start(
-                    successor.lead_seconds // binformat.HOUR_SECONDS, source.average_window_hours
+                    successor.lead_seconds // binformat.HOUR_SECONDS, precipitation_window_hours(source)
                 )
                 < frame.lead_seconds // binformat.HOUR_SECONDS
             ):
@@ -702,10 +718,11 @@ def _quantize_run(
         LOG.info("extracting and quantizing %d files with %d workers", len(per_file), _EXTRACT_WORKERS)
         # Precipitation derivation predecessors, shared between workers as
         # futures (see _quantize_file): ECMWF tp differences against the
-        # previous frame unconditionally; sflux prate_ave only against the
-        # previous frame of the same averaging window (the window's first
-        # frame differences against zero). An Open-Meteo apcp total needs no
-        # predecessor plane, only the length of the interval it covers.
+        # previous frame unconditionally; sflux prate_ave and the NAM's
+        # apcp only against the previous frame of the same window (the
+        # window's first frame differences against zero). An Open-Meteo
+        # apcp total needs no predecessor plane, only the length of the
+        # interval it covers.
         precipitation = _precipitation_plan(source, variable_ids)
         raw_precipitation_id = precipitation[0] if precipitation is not None else None
         interval_pairs = tuple(
@@ -728,7 +745,7 @@ def _quantize_run(
                     work,
                     codebooks,
                     item[1],
-                    source.average_window_hours,
+                    precipitation_window_hours(source),
                     item[2],
                     plane_source,
                     derived_vector_ids,

@@ -175,11 +175,22 @@ pub struct SourceSpec {
     /// interval since the previous frame (Open-Meteo's `precipitation`, in
     /// millimetres) and becomes a rate by one division
     /// (`convert::interval_rate`). A source declares at most one of the
-    /// three arrival shapes.
+    /// four arrival shapes.
     #[serde(default)]
     pub interval_precipitation: bool,
+    /// True when precipitation arrives as the total accumulated since the
+    /// start of a window that resets every `accumulation_window_hours` (the
+    /// NAM's `APCP`: `0-5 hour acc`, then `12-13 hour acc`, in millimetres)
+    /// and becomes a rate by differencing within the window
+    /// (`derive::dewindow_precipitation`).
+    #[serde(default)]
+    pub windowed_precipitation: bool,
     #[serde(default = "default_average_window_hours")]
     pub average_window_hours: i64,
+    /// Length of the accumulation-window reset cycle for windowed
+    /// precipitation.
+    #[serde(default = "default_accumulation_window_hours")]
+    pub accumulation_window_hours: i64,
     /// The first forecast hour the source publishes: zero for every source
     /// whose cycle ships an analysis file, 6 for CFSv2, 1 for the WOOF nest.
     /// [`SourceSpec::forecast_hours`] counts from here.
@@ -325,6 +336,10 @@ fn default_average_window_hours() -> i64 {
     6
 }
 
+fn default_accumulation_window_hours() -> i64 {
+    12
+}
+
 impl SourceSpec {
     /// Whether the source has a live feed to fetch and point at.
     pub fn live(&self) -> bool {
@@ -346,6 +361,18 @@ impl SourceSpec {
     /// Whether `variable_id` is one of the source's inputs.
     pub fn has_input(&self, variable_id: &str) -> bool {
         self.input_variable_ids.iter().any(|id| id == variable_id)
+    }
+
+    /// The reset cycle, in hours, of the window the source's precipitation
+    /// input is taken over: the accumulation window's on a windowed source,
+    /// the averaging window's on any other (an averaged source alone reads
+    /// it). Mirrors `precipitation_window_hours` in `xuebuild/derive.py`.
+    pub fn precipitation_window_hours(&self) -> i64 {
+        if self.windowed_precipitation {
+            self.accumulation_window_hours
+        } else {
+            self.average_window_hours
+        }
     }
 
     /// Whether `variable_id` may be absent from the analysis file.

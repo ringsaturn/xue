@@ -47,6 +47,7 @@ use crate::encode::report::{build_report, write_manifest};
 // has always imported it from.
 pub use crate::encode::derive::{
     average_window_start, deaccumulate_precipitation, deaverage_precipitation,
+    dewindow_precipitation,
 };
 // The wheel's `decimate` is this sampling, so the two cannot drift.
 pub use crate::encode::ladder::decimate_codes;
@@ -593,8 +594,9 @@ impl PlaneSlot {
 type QuantizedFile = (i64, Vec<(String, Vec<u8>)>, Vec<PlaneStats>);
 
 /// The precipitation rate the per-file stage derives on a source whose
-/// precipitation arrives accumulated, averaged or as an interval total:
-/// `(bundle id, raw input id)` (`Registry::derived_precipitation`).
+/// precipitation arrives accumulated, averaged, as an interval total or
+/// as a window's: `(bundle id, raw input id)`
+/// (`Registry::derived_precipitation`).
 type DerivedPrecipitation = (String, String);
 
 #[allow(clippy::too_many_arguments)]
@@ -692,6 +694,17 @@ fn quantize_file(
                 ))
             })?;
             interval_rate(&raw, hour - previous_hour)?
+        } else if source.windowed_precipitation {
+            // The NAM: APCP is the total (mm) since the start of a window
+            // that resets every twelve hours; derive the per-step rate
+            // against the previous frame of the same window.
+            dewindow_precipitation(
+                &raw,
+                hour,
+                previous_plane.as_deref().map(Vec::as_slice),
+                previous_hour,
+                source.accumulation_window_hours,
+            )?
         } else {
             // sflux: PRATE is the window-cumulative mean rate (kg/m^2 s);
             // derive the per-step rate against the previous frame of the same
@@ -1859,12 +1872,12 @@ fn sharing_plan(
                 if let Some(successor) = frame_of(&per_file[index + 1], raw_id) {
                     let hour = frame.lead_seconds / HOUR_SECONDS;
                     // A run total differences against its predecessor
-                    // unconditionally; a window average only against the
-                    // previous frame of the same window.
+                    // unconditionally; a window's average or total only
+                    // against the previous frame of the same window.
                     let shares = source.accumulated_precipitation
                         || average_window_start(
                             successor.lead_seconds / HOUR_SECONDS,
-                            source.average_window_hours,
+                            source.precipitation_window_hours(),
                         )? < hour;
                     if shares {
                         own = Some(Arc::new(PlaneSlot::default()));

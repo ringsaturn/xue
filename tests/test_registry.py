@@ -145,6 +145,17 @@ class RegistryDocumentTests(unittest.TestCase):
                 for variable_id, hour in source["variableFirstHours"]:
                     self.assertIn(variable_id, source["inputVariableIds"])
                     self.assertGreater(hour, 0)
+                # One way, at most, for the precipitation input to become
+                # the rate, over a window of at least an hour.
+                shapes = (
+                    "accumulatedPrecipitation",
+                    "averagedPrecipitation",
+                    "intervalPrecipitation",
+                    "windowedPrecipitation",
+                )
+                self.assertLessEqual(sum(source[key] for key in shapes), 1)
+                self.assertGreater(source["averageWindowHours"], 0)
+                self.assertGreater(source["accumulationWindowHours"], 0)
 
     def test_a_published_variable_carries_every_profile(self) -> None:
         for variable_id, entry in document()["variables"].items():

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use xue::encode::convert::{
     average_window_start, convert_bin, deaccumulate_precipitation, deaverage_precipitation,
-    ConvertOptions,
+    dewindow_precipitation, ConvertOptions,
 };
 use xue::Bundle;
 use xue::encode::grid::{crop_grid, GridInfo};
@@ -185,6 +185,34 @@ fn deaveraging_differences_within_the_window() {
     assert!((second[0] - 1.0).abs() < 1e-9);
     // A frame from the previous window is not a valid predecessor.
     assert!(deaverage_precipitation(&[0.0], 7, Some(&[0.0]), Some(6), 6).is_err());
+}
+
+#[test]
+fn accumulation_windows_reset_every_twelve_hours() {
+    assert_eq!(average_window_start(1, 12).expect("start"), 0);
+    assert_eq!(average_window_start(12, 12).expect("start"), 0);
+    assert_eq!(average_window_start(13, 12).expect("start"), 12);
+    assert_eq!(average_window_start(84, 12).expect("start"), 72);
+}
+
+#[test]
+fn dewindowing_differences_within_the_window() {
+    // f001 holds the first hour's total, which is its own interval.
+    let first = dewindow_precipitation(&[2.5, 0.0], 1, None, None, 12).expect("first frame");
+    assert_eq!(first, vec![2.5, 0.0]);
+    // f005 after f002: the total grew by 4.5 mm over three hours; a total
+    // that dips under packing noise clamps to zero.
+    let later = dewindow_precipitation(&[7.0, 1.0], 5, Some(&[2.5, 1.25]), Some(2), 12).expect("later frame");
+    assert_eq!(later, vec![1.5, 0.0]);
+    // f013 opens the next window: its total is the hour's alone, whatever
+    // f012 held, and f012 is no predecessor of it.
+    let reopened = dewindow_precipitation(&[0.75], 13, None, None, 12).expect("the window's first frame");
+    assert_eq!(reopened, vec![0.75]);
+    assert!(dewindow_precipitation(&[0.75], 13, Some(&[9.0]), Some(12), 12).is_err());
+    // A window read from its third hour on spans the three hours behind it.
+    let sparse = dewindow_precipitation(&[6.0], 15, None, None, 12).expect("a window entered late");
+    assert_eq!(sparse, vec![2.0]);
+    assert!(dewindow_precipitation(&[0.0], 0, None, None, 12).is_err());
 }
 
 // -- posters ----------------------------------------------------------------

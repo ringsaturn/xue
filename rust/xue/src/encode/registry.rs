@@ -528,6 +528,18 @@ impl Registry {
             if source.variable_first_hours.iter().any(|(_, hour)| *hour <= 0) {
                 return Err(refused(format!("{context} variableFirstHours must be above zero")));
             }
+            if source.windowed_precipitation && source.accumulation_window_hours <= 0 {
+                return Err(refused(format!("{context} accumulationWindowHours must be above zero")));
+            }
+            let shapes = [
+                source.accumulated_precipitation,
+                source.averaged_precipitation,
+                source.interval_precipitation,
+                source.windowed_precipitation,
+            ];
+            if shapes.iter().filter(|shape| **shape).count() > 1 {
+                return Err(refused(format!("{context} declares more than one precipitation shape")));
+            }
             for bundle_id in source
                 .bundle_scalar_ids
                 .iter()
@@ -706,10 +718,14 @@ impl Registry {
     /// The precipitation-rate bundle a source derives in its per-file
     /// stage, as `(bundle id, raw input id)`: the listed scalar whose
     /// derivation is the rate, on a source whose precipitation arrives
-    /// accumulated, averaged or as an interval total. `None` on a source
-    /// that reads the rate as it is.
+    /// accumulated, averaged, as an interval total or as a window's.
+    /// `None` on a source that reads the rate as it is.
     pub fn derived_precipitation(&self, source: &SourceSpec) -> Result<Option<(String, String)>> {
-        if !(source.accumulated_precipitation || source.averaged_precipitation || source.interval_precipitation) {
+        if !(source.accumulated_precipitation
+            || source.averaged_precipitation
+            || source.interval_precipitation
+            || source.windowed_precipitation)
+        {
             return Ok(None);
         }
         let mut found: Option<(String, String)> = None;
@@ -793,9 +809,9 @@ impl Registry {
     }
 
     /// The published scalars of `scalar_ids` whose series has no analysis
-    /// frame: the rate a source derives by de-accumulating or de-averaging,
-    /// and any scalar read from a record the source lists under
-    /// `optional_at_analysis`.
+    /// frame: the rate a source derives by de-accumulating, de-averaging
+    /// or differencing a window, and any scalar read from a record the
+    /// source lists under `optional_at_analysis`.
     pub fn analysis_optional_ids<'a>(&self, source: &SourceSpec, scalar_ids: &[&'a str]) -> Vec<&'a str> {
         scalar_ids
             .iter()
@@ -804,7 +820,9 @@ impl Registry {
                 let derived_rate = self
                     .derivation(bundle_id)
                     .is_some_and(|derivation| derivation.kind == DerivationKind::PrecipitationRate)
-                    && (source.accumulated_precipitation || source.averaged_precipitation);
+                    && (source.accumulated_precipitation
+                        || source.averaged_precipitation
+                        || source.windowed_precipitation);
                 derived_rate
                     || self
                         .bundle_input_ids(source, bundle_id)
@@ -966,6 +984,10 @@ mod tests {
             Some(("prate".to_string(), "tp".to_string()))
         );
         assert_eq!(registry.analysis_optional_ids(ecmwf, &["tmp2m", "prate", "gust"]), ["prate", "gust"]);
+        // The window a source's precipitation input is taken over: the
+        // averaging window's wherever no total is accumulated over one.
+        assert_eq!(registry.source("sflux").unwrap().precipitation_window_hours(), 6);
+        assert!(!gfs.windowed_precipitation && gfs.accumulation_window_hours == 12);
         let cfs = registry.source("cfs").unwrap();
         assert_eq!(cfs.companion_files[0].production_grid, Some((360, 181)));
         assert!(cfs.companion_files[0].own_grid());
@@ -1105,6 +1127,18 @@ mod tests {
             let message = refusal(&document);
             assert!(message.contains("sources.cmageps") && message.contains("tmp3m"), "{key}: {message}");
         }
+
+        // One precipitation shape to a source, over a window of at least an
+        // hour.
+        let mut document = snapshot();
+        document["sources"]["gfs"]["averagedPrecipitation"] = json!(true);
+        document["sources"]["gfs"]["windowedPrecipitation"] = json!(true);
+        let message = refusal(&document);
+        assert!(message.contains("sources.gfs") && message.contains("more than one precipitation shape"), "{message}");
+        let mut document = snapshot();
+        document["sources"]["gfs"]["windowedPrecipitation"] = json!(true);
+        document["sources"]["gfs"]["accumulationWindowHours"] = json!(0);
+        assert!(refusal(&document).contains("accumulationWindowHours"));
 
         // A key a reader does not know is ignored, not refused.
         let mut document = snapshot();

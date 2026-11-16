@@ -247,8 +247,8 @@ direction), `theta-e` (Bolton's equivalent potential temperature at
 `levelHpa`), `precipitation-type` (the four categorical flags combined),
 `clear-air-turbulence` (Ellrod at `levelHpa`, calibrated by the source's
 `catCalibration`), `precipitation-rate` (the first of `inputs` the source
-lists, de-accumulated, de-averaged or taken as is by the source's
-precipitation flags).
+lists, de-accumulated, de-averaged, divided by its interval, differenced
+within its window or taken as is by the source's precipitation flags).
 
 ## Sources
 
@@ -264,7 +264,7 @@ repacking is the source's `packing`, not a family's.
   "steps": [[120, 1], [384, 3]],
   "inputVariableIds": ["tmp2m", "prate", …],
   "accumulatedPrecipitation": false, "averagedPrecipitation": false, "intervalPrecipitation": false,
-  "averageWindowHours": 6, "firstHour": 0,
+  "windowedPrecipitation": false, "averageWindowHours": 6, "accumulationWindowHours": 12, "firstHour": 0,
   "companionFiles": [{ "id": "wave", "variableIds": ["htsgw", …], "repack": false, "productionGrid": null, "tile": null }],
   "optionalAtAnalysis": ["prate", …],
   "statisticalProcesses": [["gust", 2]],
@@ -280,6 +280,19 @@ repacking is the source's `packing`, not a family's.
   "gridRelativeWinds": false, "gaussianN": null, "video": true, "catCalibration": [[300, 0.0, 0.0], …]
 }
 ```
+
+The four precipitation flags name how the source's precipitation input
+becomes `prate`, and a source sets at most one: `accumulatedPrecipitation`
+(a total since the run began, differenced against the previous frame),
+`averagedPrecipitation` (a mean rate since the start of a window of
+`averageWindowHours`, scaled to a total and differenced within the window),
+`intervalPrecipitation` (the total over the interval ending at the frame,
+divided by the interval's hours) and `windowedPrecipitation` (a total since
+the start of a window of `accumulationWindowHours`, differenced against
+the previous frame of the same window and, on the window's first frame,
+against zero). A window that ends at hour `h` starts at
+`w × ⌊(h − 1) / w⌋` for its length `w`. A source that sets none reads the
+rate as it is.
 
 `ensembles` names, per published variable that is an ensemble's centre
 standing in for the deterministic field under its id, the `ensemble` block
@@ -344,6 +357,8 @@ that every bundle id a source lists is a variable or a `bundles` entry;
 that every id a source's `ensembles`, `intervalPrecipitationPairs` and
 `variableFirstHours` name is a variable, the pairs only on an
 `intervalPrecipitation` source and every first hour above 0;
+that a source sets at most one precipitation flag, and a
+`windowedPrecipitation` source an `accumulationWindowHours` above 0;
 that a `vector` has two members; that a published variable (one with
 `quantization`) has every profile the reader is asked for. Any failure
 refuses the whole build. A build is handed one source's part of the document:

@@ -5,6 +5,13 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-16
+
+- The registry document's sources carry `windowedPrecipitation` and
+  `accumulationWindowHours`, a fourth way a source's precipitation input
+  becomes `prate`; a reader that predates them does not derive that rate
+  (`docs/registry.md`).
+
 ## 2026-11-02
 
 - `mrms` publishes `rqi`, the MRMS radar quality index (0–1 in tenths,

@@ -67,14 +67,16 @@ pub fn interval_rate(total_mm: &[f64], step_hours: i64) -> Result<Vec<f64>> {
     Ok(total_mm.iter().map(|total| total / step_hours as f64).collect())
 }
 
-/// First hour of the averaging window whose interval ends at `hour`.
+/// First hour of the window whose interval ends at `hour`.
 ///
 /// GFS interval averages reset every `window_hours`: f001–f006 average from
-/// hour 0, f007–f012 from hour 6, and so on.
+/// hour 0, f007–f012 from hour 6, and so on. The NAM's accumulations reset
+/// the same way every twelve: f001–f012 accumulate from hour 0, f013–f024
+/// from hour 12.
 pub fn average_window_start(hour: i64, window_hours: i64) -> Result<i64> {
     if hour <= 0 {
         return Err(EncodeError::conversion(
-            "averaged precipitation has no analysis frame",
+            "precipitation over a window has no analysis frame",
         ));
     }
     Ok(window_hours * ((hour - 1) / window_hours))
@@ -116,6 +118,43 @@ pub fn deaverage_precipitation(
     Ok(deaccumulate_precipitation(
         &accumulated_mm,
         Some(&previous_mm),
+        hour - interval_start,
+    ))
+}
+
+/// Mean rate (mm/h) over the step ending at `hour`, from totals in mm
+/// accumulated since the start of a window that resets every `window_hours`
+/// (the NAM's `APCP`: `0-5 hour acc`, `12-13 hour acc`).
+///
+/// The fourth arrival shape, and `deaverage_precipitation` without its
+/// scaling: a frame is already the millimetres since its window's start, so
+/// it is differenced as it is against the previous frame of the same
+/// window, and the window's first frame against zero. The rate divisor is
+/// the interval the difference spans. Mirrors `dewindow_precipitation` in
+/// `xuebuild/derive.py`, subtraction for subtraction.
+pub fn dewindow_precipitation(
+    current_mm: &[f64],
+    hour: i64,
+    previous_mm: Option<&[f64]>,
+    previous_hour: Option<i64>,
+    window_hours: i64,
+) -> Result<Vec<f64>> {
+    let window_start = average_window_start(hour, window_hours)?;
+    let zeros = vec![0.0; current_mm.len()];
+    let mut predecessor_mm: &[f64] = &zeros;
+    let mut interval_start = window_start;
+    if let (Some(previous_mm), Some(previous_hour)) = (previous_mm, previous_hour) {
+        if !(window_start < previous_hour && previous_hour < hour) {
+            return Err(EncodeError::conversion(
+                "previous accumulated frame is outside the current accumulation window",
+            ));
+        }
+        predecessor_mm = previous_mm;
+        interval_start = previous_hour;
+    }
+    Ok(deaccumulate_precipitation(
+        current_mm,
+        Some(predecessor_mm),
         hour - interval_start,
     ))
 }

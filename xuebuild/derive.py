@@ -33,14 +33,28 @@ def precipitation_mode(source: SourceSpec) -> str | None:
     """How the source's precipitation input becomes the published rate:
     ``accumulated`` (a run total, differenced against the previous frame),
     ``averaged`` (a window mean, de-averaged), ``interval`` (the total over
-    the step, divided by its length), or None for a rate read as it is."""
+    the step, divided by its length), ``windowed`` (the total since a
+    window's start, differenced within the window), or None for a rate
+    read as it is."""
     if source.accumulated_precipitation:
         return "accumulated"
     if source.averaged_precipitation:
         return "averaged"
     if source.interval_precipitation:
         return "interval"
+    if source.windowed_precipitation:
+        return "windowed"
     return None
+
+
+def precipitation_window_hours(source: SourceSpec) -> int:
+    """The reset cycle, in hours, of the window the source's precipitation
+    input is taken over: the accumulation window's on a windowed source,
+    the averaging window's on any other (an averaged source alone reads
+    it)."""
+    if source.windowed_precipitation:
+        return source.accumulation_window_hours
+    return source.average_window_hours
 
 
 # Above this a temperature the GDAL GRIB driver labels Celsius is kelvin
@@ -395,12 +409,14 @@ def interval_rate(total_mm: np.ndarray, step_hours: int) -> np.ndarray:
 
 
 def average_window_start(hour: int, window_hours: int) -> int:
-    """First hour of the averaging window whose interval ends at ``hour``.
+    """First hour of the window whose interval ends at ``hour``.
 
     GFS interval averages reset every ``window_hours``: f001–f006 average
-    from hour 0, f007–f012 from hour 6, and so on."""
+    from hour 0, f007–f012 from hour 6, and so on. The NAM's accumulations
+    reset the same way every twelve: f001–f012 accumulate from hour 0,
+    f013–f024 from hour 12."""
     if hour <= 0:
-        raise ConversionError("averaged precipitation has no analysis frame")
+        raise ConversionError("precipitation over a window has no analysis frame")
     return window_hours * ((hour - 1) // window_hours)
 
 
@@ -429,3 +445,32 @@ def deaverage_precipitation(
         previous_mm = previous_average * 3600.0 * (previous_hour - window_start)
         interval_start = previous_hour
     return deaccumulate_precipitation(accumulated_mm, previous_mm, hour - interval_start)
+
+
+def dewindow_precipitation(
+    current_mm: np.ndarray,
+    hour: int,
+    previous_mm: np.ndarray | None,
+    previous_hour: int | None,
+    window_hours: int,
+) -> np.ndarray:
+    """Mean rate (mm/h) over the step ending at ``hour``, from totals in mm
+    accumulated since the start of a window that resets every
+    ``window_hours`` (the NAM's ``APCP``: ``0-5 hour acc``, ``12-13 hour
+    acc``).
+
+    The fourth arrival shape, and :func:`deaverage_precipitation` without
+    its scaling: a frame is already the millimetres since its window's
+    start, so it is differenced as it is against the previous frame of the
+    same window, and the window's first frame (no ``previous_mm``) against
+    zero. The rate divisor is the interval the difference spans. Mirrored,
+    subtraction for subtraction, in ``encode/derive.rs``."""
+    window_start = average_window_start(hour, window_hours)
+    predecessor_mm = np.zeros_like(current_mm)
+    interval_start = window_start
+    if previous_mm is not None and previous_hour is not None:
+        if not window_start < previous_hour < hour:
+            raise ConversionError("previous accumulated frame is outside the current accumulation window")
+        predecessor_mm = previous_mm
+        interval_start = previous_hour
+    return deaccumulate_precipitation(current_mm, predecessor_mm, hour - interval_start)
