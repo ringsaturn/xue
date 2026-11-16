@@ -1149,6 +1149,15 @@
             "levelValue": null,
             "statistical": null,
             "gdalUnit": ""
+          },
+          {
+            "discipline": 0,
+            "category": 16,
+            "number": 196,
+            "levelType": 200,
+            "levelValue": null,
+            "statistical": null,
+            "gdalUnit": ""
           }
         ],
         "gdal": [
@@ -22586,6 +22595,7 @@
         "tcdc",
         "cape",
         "vis",
+        "cref",
         "dpt2m",
         "fzlvl",
         "orog"
@@ -22620,6 +22630,7 @@
         "tcdc",
         "cape",
         "vis",
+        "cref",
         "dpt2m",
         "fzlvl",
         "orog"

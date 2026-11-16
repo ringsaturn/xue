@@ -264,7 +264,7 @@ alternate), and the sea level pressure is `MSLET`, accepted under `prmsl` as
 from the GFS analysis four times a day, from Recast's own host
 (`XUE_WOOFNAM_BASE_URL`), which keeps a run seven days: one `awphys` object
 per hour with a wgrib2 `.idx`, some 66 MB and 450 records, of which a frame
-takes twenty-five ranges (about 4.5 MB; the analysis one more, the terrain).
+takes twenty-six ranges (about 4.6 MB; the analysis one more, the terrain).
 CC BY 4.0, credited "WOOF-NAM by Recast",
 and not a NOAA forecast, which the STAC prose and the credits say. The files
 follow NOAA's NAM layout under NCEP's centre number with generating process
@@ -277,9 +277,9 @@ ends prove a run. The grid is NCEP 218, tangent at 25°N and centred on 95°W
 and the first phrase wins. Precipitation waits on a bucket-reset
 de-accumulation rule: the files carry no `PRATE`, only `APCP` totals that
 reset every 3 and 12 hours, which neither encoder turns into a rate. `REFC`
-is NCEP's local 0/16/196 on surface 200, a pairing the `cref` identity does
-not accept (HRRR's is 196 on surface 10, RRFS's 5 on 200), so it is not
-published either; the layer cloud covers and `CPOFP` are not in the files.
+is NCEP's local 0/16/196 on surface 200 (HRRR's is 196 on surface 10, RRFS's
+5 on 200), an alternate of `cref` of its own; the layer cloud covers and
+`CPOFP` are not in the files.
 `tests/test_woofnam.py`.
 
 **gefsaero.** GEFS-Aerosols, the `chem/pgrb2ap25/` `a2d_0p25` files

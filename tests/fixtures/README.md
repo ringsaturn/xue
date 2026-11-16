@@ -307,7 +307,7 @@ gdal_translate -srcwin 240 480 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKIN
 
 `woofnam.2026111600.f000.crop.grib2` is an 80 by 80 cell window over
 California and the Sierra Nevada (125W to 113W, 32N to 42N) of the 2026-11-16
-00:00 UTC analysis of WOOF-NAM by Recast (CC BY 4.0), the twenty-six records
+00:00 UTC analysis of WOOF-NAM by Recast (CC BY 4.0), the twenty-seven records
 the source fetches in `xuebuild/sources.py` order, still on NCEP grid 218's
 Lambert conformal grid, with NCEP's centre number, the generating process of
 Recast's own (254) and the cloud cover on NCEP's single-layer surface (type

@@ -718,6 +718,9 @@ VARIABLES: dict[str, VariableSpec] = {
             RecordAlternate(209, 10, 0, 102, 500.0, gdal_unit="dBZ"),
             # RRFS: the WMO number on NCEP's single-layer atmosphere.
             RecordAlternate(0, 16, 5, 200),
+            # The NAM's awphys output (WOOF-NAM): NCEP's local number on the
+            # same single-layer atmosphere.
+            RecordAlternate(0, 16, 196, 200),
         ),
         fill_values=(-999.0, -99.0),
     ),
