@@ -20,7 +20,8 @@ describe("WOOF-NAM", () => {
 
   it("has the forecast core and opens on the rain like any other forecast", () => {
     expect(REGISTRY.sources.woofnam.coreBundleIds).toEqual(["tmp2m", "prate"]);
-    expect(FORECAST_MODELS.woofnam.coreBundles).toEqual(["tmp2m", "prate"]);
+    // Absent on the shell's entry is the forecast pair.
+    expect(FORECAST_MODELS.woofnam.coreBundles).toBeUndefined();
     expect(modelDefaultVariable("woofnam", "prate")).toBe("prate");
     // No rail of its own: the forecast core's, which carries the rate.
     expect(FORECAST_MODELS.woofnam.railCore).toBeUndefined();
