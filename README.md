@@ -89,7 +89,7 @@ Everything is static files on `https://dataset.ringsaturn.me/xue/`, read
 with HTTP Range requests. There is no registration and no key. If your own
 code or app reads them, send a `User-Agent` that names it and a way to reach
 you, and tell us what you are building or what broke in the
-[issues](https://github.com/ringsaturn/xue/issues).
+[issues](https://github.com/ringsaturn/xue/issues) or at <ringsaturn.me@gmail.com>.
 
 - **STAC catalog**: `catalog.json` at the data root, one Collection per
   source with a stable live Item, an Item per run, and the showcase cases

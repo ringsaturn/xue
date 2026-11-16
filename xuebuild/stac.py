@@ -1379,7 +1379,7 @@ def root_catalog() -> dict[str, Any]:
             "run or issue; the showcase Collection keeps historical cases. "
             "No registration: a program reading these files is asked to send a User-Agent that names "
             "itself and a way to reach its author. Contact and problem reports: "
-            "https://github.com/ringsaturn/xue/issues."
+            "https://github.com/ringsaturn/xue/issues or ringsaturn.me@gmail.com."
         ),
         "links": [
             {"rel": "root", "href": f"./{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
