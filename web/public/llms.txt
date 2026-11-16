@@ -512,7 +512,10 @@ Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
 ## Data access
 
 Everything the page reads is a plain file with CORS open, under
-https://dataset.ringsaturn.me/xue/. The contract is two layers:
+https://dataset.ringsaturn.me/xue/. There is no registration and no key. A
+program that reads these files is asked to send a `User-Agent` that names
+itself and a way to reach its author; contact and problem reports go to
+https://github.com/ringsaturn/xue/issues. The contract is two layers:
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
