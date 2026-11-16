@@ -26,6 +26,7 @@ IDENTITIES = {
     "sflux": ("GFS-SFLUX", "sfluxgrb", "latest-sflux.json", FORECAST_CORE),
     "hrrr": ("HRRR", "wrfsfc", "latest-hrrr.json", FORECAST_CORE),
     "rrfs": ("RRFS", "2dfld.3km.conus", "latest-rrfs.json", FORECAST_CORE),
+    "woofnam": ("WOOF-NAM", "awphys", "latest-woofnam.json", ("tmp2m",)),
     "gefsaero": ("GEFS-AEROSOLS", "chem-a2d-0p25", "latest-gefsaero.json", ("aod",)),
     "cmadust": ("CMA-CW-DUST", "cma-cw-dust-0p15", "latest-cmadust.json", ("dustsfc",)),
     "silam": ("SILAM", "silam-glob02", "latest-silam.json", ("pm25",)),

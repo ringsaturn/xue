@@ -305,6 +305,24 @@ gdal_translate -srcwin 240 480 120 120 -of GRIB -co DATA_ENCODING=COMPLEX_PACKIN
   /tmp/rrfs.f000.grib2 tests/fixtures/rrfs.2026110500.f000.crop.grib2
 ```
 
+`woofnam.2026111600.f000.crop.grib2` is an 80 by 80 cell window over
+California and the Sierra Nevada (125W to 113W, 32N to 42N) of the 2026-11-16
+00:00 UTC analysis of WOOF-NAM by Recast (CC BY 4.0), the twenty-six records
+the source fetches in `xuebuild/sources.py` order, still on NCEP grid 218's
+Lambert conformal grid, with NCEP's centre number, the generating process of
+Recast's own (254) and the cloud cover on NCEP's single-layer surface (type
+200) as the files carry them. The window runs from the Pacific to 3135 m of
+model terrain, far enough west of the grid's 95W meridian that the wind turn
+shows. GDAL's writer repacks each record, and the crop reads back within
+0.2 °C, 0.04 gpm and 0.33 m of the source window. Fetched and cut with:
+
+```sh
+python -m xuebuild fetch --model woofnam --run 2026111600 --hours 0 --raw-dir /tmp/raw
+gdal_translate -srcwin 130 190 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+  /tmp/raw/woofnam.2026111600/woofnam.2026111600.f000.grib2 \
+  tests/fixtures/woofnam.2026111600.f000.crop.grib2
+```
+
 `gefsaero.2026091900.f000.crop.grib2` and `gefsaero.2026091900.f003.crop.grib2`
 are an 80 by 80 cell window over the Sahara and the Gulf of Guinea
 (`-srcwin 680 240 80 80`: 10W to 10E, 10N to 30N) of the analysis and the

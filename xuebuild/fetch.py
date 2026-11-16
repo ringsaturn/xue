@@ -84,6 +84,8 @@ HRRR_BASE_URLS = tuple(
 )
 # RRFS has one copy on NODD; NOMADS throttles a run's worth of ranges.
 RRFS_BASE_URL = os.environ.get("XUE_RRFS_BASE_URL", "https://noaa-rrfs-ops-pds.s3.amazonaws.com").rstrip("/")
+# WOOF-NAM has one copy, Recast's own host, which keeps a run for seven days.
+WOOFNAM_BASE_URL = os.environ.get("XUE_WOOFNAM_BASE_URL", "https://woof-nam.recastsystems.com").rstrip("/")
 if not HRRR_BASE_URLS:
     raise ValueError("XUE_HRRR_BASE_URLS must contain at least one URL")
 ECMWF_BASE_URLS = tuple(
@@ -251,6 +253,17 @@ def hrrr_object_url(run: GfsRun, forecast_hour: int, *, base_url: str | None = N
 def rrfs_object_url(run: GfsRun, forecast_hour: int, family: str = "2dfld") -> str:
     """One forecast hour of one RRFS CONUS file family."""
     return f"{RRFS_BASE_URL}/rrfs.{run.date}/{run.cycle}/rrfs.t{run.cycle}z.{family}.3km.f{forecast_hour:03d}.conus.grib2"
+
+
+def woofnam_object_url(run: GfsRun, forecast_hour: int) -> str:
+    """The WOOF-NAM ``awphys`` file of one forecast hour on NCEP grid 218:
+    NOAA's NAM layout under Recast's own names, a directory per day and
+    cycle, the hour in two digits (the run stops at F84), a wgrib2 ``.idx``
+    beside every object."""
+    return (
+        f"{WOOFNAM_BASE_URL}/woof-nam/12km/{run.date}/{run.cycle}z/"
+        f"woof-nam.t{run.cycle}z.awphys{forecast_hour:02d}.tm00.grib2"
+    )
 
 
 def gefsaero_object_url(run: GfsRun, forecast_hour: int) -> str:

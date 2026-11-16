@@ -22551,6 +22551,118 @@
       "video": false,
       "catCalibration": []
     },
+    "woofnam": {
+      "id": "woofnam",
+      "manifestModel": "WOOF-NAM",
+      "product": "awphys",
+      "latestFilename": "latest-woofnam.json",
+      "steps": [
+        [
+          84,
+          1
+        ]
+      ],
+      "inputVariableIds": [
+        "tmp2m",
+        "ugrd10m",
+        "vgrd10m",
+        "ugrd80m",
+        "vgrd80m",
+        "prmsl",
+        "hgt850",
+        "hgt700",
+        "hgt500",
+        "hgt250",
+        "tmp925",
+        "tmp850",
+        "tmp500",
+        "ugrd925",
+        "vgrd925",
+        "ugrd850",
+        "vgrd850",
+        "ugrd250",
+        "vgrd250",
+        "gust",
+        "tcdc",
+        "cape",
+        "vis",
+        "dpt2m",
+        "fzlvl",
+        "orog"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "averageWindowHours": 6,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [],
+      "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "tmp2m",
+        "prmsl",
+        "hgt850",
+        "hgt700",
+        "hgt500",
+        "hgt250",
+        "tmp925",
+        "tmp850",
+        "tmp500",
+        "gust",
+        "tcdc",
+        "cape",
+        "vis",
+        "dpt2m",
+        "fzlvl",
+        "orog"
+      ],
+      "coreBundleIds": [
+        "tmp2m"
+      ],
+      "bundleVectorIds": [
+        "wind10m",
+        "wind80m",
+        "wind925",
+        "wind850",
+        "wind250"
+      ],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        614,
+        428
+      ],
+      "tile": [
+        16,
+        16
+      ],
+      "variantFactors": [
+        2
+      ],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": false,
+      "windowHours": null,
+      "cadenceSeconds": null,
+      "objectCadenceSeconds": null,
+      "seriesFile": false,
+      "downsample": null,
+      "cycleHours": 6,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "gridRelativeWinds": true,
+      "gaussianN": null,
+      "video": false,
+      "catCalibration": []
+    },
     "gefsaero": {
       "id": "gefsaero",
       "manifestModel": "GEFS-AEROSOLS",

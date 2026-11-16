@@ -176,7 +176,7 @@ class Downsample:
 @dataclass(frozen=True)
 class SourceSpec:
     id: str
-    """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "gefsaero", "cfs",
+    """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "woofnam", "gefsaero", "cfs",
     "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "hkonowcast", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
@@ -1622,6 +1622,78 @@ SOURCES: dict[str, SourceSpec] = {
         fetch_concurrency=8,
         grid_relative_winds=True,
         series_bundle_ids=("tmp2m", "wind10m", "gust", "tcdc", "wind80m", "smokesfc"),
+    ),
+    # WOOF-NAM, Recast's GPU port of the NAM (NMMB) that NOAA retired: the
+    # ``awphys`` output on NCEP grid 218, 12.19 km Lambert conformal over
+    # North America, in NOAA's NAM file layout under NCEP's centre number
+    # with a generating process of its own, so every record is read by the
+    # rules the NOAA sources are. Four cycles a day to F84, each started
+    # from the GFS analysis and complete some four hours twenty minutes
+    # after it. Not a NOAA forecast: CC BY 4.0, credited to Recast. The
+    # files carry no precipitation rate, only totals in buckets that reset
+    # every three and twelve hours, which no rule de-accumulates; the source
+    # publishes none, so the core set is the temperature alone.
+    "woofnam": SourceSpec(
+        id="woofnam",
+        feed="recast-woof-nam",
+        manifest_model="WOOF-NAM",
+        product="awphys",
+        latest_filename="latest-woofnam.json",
+        steps=((84, 1),),
+        input_variable_ids=(
+            "tmp2m",
+            "ugrd10m",
+            "vgrd10m",
+            "ugrd80m",
+            "vgrd80m",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "ugrd925",
+            "vgrd925",
+            "ugrd850",
+            "vgrd850",
+            "ugrd250",
+            "vgrd250",
+            "gust",
+            "tcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "fzlvl",
+            "orog",
+        ),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=(
+            "tmp2m",
+            "prmsl",
+            "hgt850",
+            "hgt700",
+            "hgt500",
+            "hgt250",
+            "tmp925",
+            "tmp850",
+            "tmp500",
+            "gust",
+            "tcdc",
+            "cape",
+            "vis",
+            "dpt2m",
+            "fzlvl",
+            "orog",
+        ),
+        core_bundle_ids=("tmp2m",),
+        bundle_vector_ids=("wind10m", "wind80m", "wind925", "wind850", "wind250"),
+        production_grid=(614, 428),
+        # 16 x 16 cells is 195 km, the ground an HRRR tile covers: 39 x 27 =
+        # 1053 tiles.
+        tile=(16, 16),
+        grid_relative_winds=True,
     ),
     # GEFS-Aerosols: the GEFS cycle's ``chem`` member, the GOCART aerosol
     # model coupled to the GFS, whose two-dimensional output sits beside the

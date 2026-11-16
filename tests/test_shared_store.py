@@ -106,7 +106,7 @@ class StoreDimensionsTest(unittest.TestCase):
                     zarrstore._check_dimensions(bundle_id, store_dimensions(source, bundle_id))
 
     def test_a_projected_source_takes_y_and_x(self) -> None:
-        for model in ("hrrr", "rrfs"):
+        for model in ("hrrr", "rrfs", "woofnam"):
             source = source_spec(model)
             self.assertEqual(store_dimensions(source, "tmp2m"), ("time", "y", "x"))
             self.assertEqual(store_dimensions(source, "wind10m"), ("time", "y", "x"))
