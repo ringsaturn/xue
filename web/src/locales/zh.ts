@@ -178,6 +178,7 @@ export const zh: Record<MessageKey, string> = {
   creditsGfs: "预报数据：GFS 0.25° 与 sflux",
   creditsHrrr: "预报数据：HRRR 3 公里，美国本土",
   creditsRrfs: "预报数据：RRFS 3 公里（含烟尘），美国本土",
+  creditsWoofNam: "预报数据：WOOF-NAM 12 公里，北美；CC BY 4.0，非 NOAA 官方预报",
   creditsGefsAero: "气溶胶预报：GEFS-Aerosols 0.25°，光学厚度与地面颗粒物",
   creditsCmaDust: "沙尘预报：CMA-CW v1.0/DUST（WMO SDS-WAS 亚洲中心）0.15°，亚洲区域，经 WMO WIS2",
   creditsIconEu: "预报数据：DWD ICON-EU 0.0625°，欧洲区域，CC BY 4.0",

@@ -181,6 +181,7 @@ export const de: Record<MessageKey, string> = {
   creditsGfs: "Vorhersagedaten: GFS 0.25° und sflux",
   creditsHrrr: "Vorhersagedaten: HRRR 3 km, kontinentale USA",
   creditsRrfs: "Vorhersagedaten: RRFS 3 km mit Rauch und Staub, kontinentale USA",
+  creditsWoofNam: "Vorhersagedaten: WOOF-NAM 12 km, Nordamerika; CC BY 4.0, keine offizielle NOAA-Vorhersage",
   creditsGefsAero: "Aerosolvorhersage: GEFS-Aerosols 0,25°, AOD und Feinstaub am Boden",
   creditsCmaDust: "Staubvorhersage: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15° über Asien, über WMO WIS2",
   creditsIconEu: "Vorhersagedaten: DWD ICON-EU 0,0625° über Europa, CC BY 4.0",

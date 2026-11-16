@@ -1179,6 +1179,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   sflux: "NOAA / GFS SFLUX (13 KM)",
   hrrr: "NOAA / HRRR CONUS (3 KM)",
   rrfs: "NOAA / RRFS CONUS (3 KM)",
+  woofnam: "RECAST / WOOF-NAM NORTH AMERICA (12 KM)",
   iconeu: "DWD / ICON-EU EUROPE (0.0625°)",
   arpege: "MÉTÉO-FRANCE / ARPEGE (0.25°)",
   cmageps: "CMA / GRAPES GEPS ENSEMBLE (0.25°)",

@@ -178,6 +178,7 @@ export const ja: Record<MessageKey, string> = {
   creditsGfs: "予報データ：GFS 0.25° および sflux",
   creditsHrrr: "予報データ：HRRR 3 km、米国本土",
   creditsRrfs: "予報データ：RRFS 3 km（煙・ダスト付き）、米国本土",
+  creditsWoofNam: "予報データ：WOOF-NAM 12 km、北米；CC BY 4.0、NOAA の公式予報ではありません",
   creditsGefsAero: "エーロゾル予報：GEFS-Aerosols 0.25°、光学的厚さと地上 PM",
   creditsCmaDust: "ダスト予報：CMA-CW v1.0/DUST（WMO SDS-WAS アジアセンター）0.15°、アジア域、WMO WIS2 経由",
   creditsIconEu: "予報データ：DWD ICON-EU 0.0625°、ヨーロッパ域、CC BY 4.0",

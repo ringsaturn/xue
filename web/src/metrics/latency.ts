@@ -188,6 +188,7 @@ export const TYPICAL_UPSTREAM_MINUTES: Readonly<Record<string, number>> = {
   ecmwf: 420,
   hrrr: 50,
   rrfs: 215,
+  woofnam: 260,
   aifs: 330,
   iconeu: 215,
   arpege: 240,

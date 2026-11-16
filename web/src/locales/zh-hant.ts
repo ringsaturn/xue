@@ -178,6 +178,7 @@ export const zhHant: Record<MessageKey, string> = {
   creditsGfs: "預報資料：GFS 0.25° 與 sflux",
   creditsHrrr: "預報資料：HRRR 3 公里，美國本土",
   creditsRrfs: "預報資料：RRFS 3 公里（含煙塵），美國本土",
+  creditsWoofNam: "預報資料：WOOF-NAM 12 公里，北美；CC BY 4.0，非 NOAA 官方預報",
   creditsGefsAero: "氣溶膠預報：GEFS-Aerosols 0.25°，光學厚度與地面懸浮微粒",
   creditsCmaDust: "沙塵預報：CMA-CW v1.0/DUST（WMO SDS-WAS 亞洲中心）0.15°，亞洲區域，經 WMO WIS2",
   creditsIconEu: "預報資料：DWD ICON-EU 0.0625°，歐洲區域，CC BY 4.0",
