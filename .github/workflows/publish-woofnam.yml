@@ -1,0 +1,61 @@
+name: publish woofnam
+
+# WOOF-NAM by Recast, a GPU port of the retired NAM, 12 km over North America
+# on NCEP grid 218 (614 × 428, Lambert conformal): the 00/06/12/18Z cycles,
+# hourly to F84. Not a NOAA forecast; CC BY 4.0. A plane is a quarter of a GFS
+# one and the files come from one small host, so the run is split into two
+# jobs. The pipeline lives in the reusable publish.yml.
+
+on:
+  schedule:
+    # A run starts when its GFS analysis is posted and all 85 hours are
+    # usually there 4:20 after the cycle; the second try catches a late one.
+    - cron: "40 4,10,16,22 * * *"
+    - cron: "40 5,11,17,23 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Cycle to publish: latest or YYYYMMDDHH (00, 06, 12 or 18)"
+        type: string
+        default: latest
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (1 = live run only)"
+        type: string
+        default: "1"
+      force:
+        description: "Rebuild even when R2 already serves this run"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what pruning would delete, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-woofnam-dry-{0}', github.run_id) || 'publish-woofnam' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/publish.yml
+    with:
+      model: woofnam
+      run: ${{ inputs.run || 'latest' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '1' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      max_jobs: 2
+    secrets: inherit
