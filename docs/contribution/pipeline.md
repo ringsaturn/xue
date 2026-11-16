@@ -49,9 +49,18 @@ defaults and the rest follows. It feeds both record matching and the v3
   writes a label (`[spread]`, …) in place of the unit
   (`gdal.DERIVED_UNIT_LABELS`, mirrored in `inspect.rs`): its values are
   in the parameter's GRIB unit, read as the variable's `gdal_unit`.
-- Input-only entries are read, never published: ECMWF `tp` and sflux
-  `prate_ave` (into `prate`), `dirpw`, `spfh<level>`, and GFS's
-  `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`, `derive.derive_ptype`).
+- Input-only entries are read, never published: ECMWF `tp`, sflux
+  `prate_ave` and the totals read as `apcp` (into `prate`), `dirpw`,
+  `spfh<level>`, and GFS's `crain`/`cfrzr`/`cicep`/`csnow` (into `ptype`,
+  `derive.derive_ptype`).
+- A source's precipitation input becomes `prate` one of four ways, by the
+  flag it sets (`derive.precipitation_mode`, mirrored in `convert.rs`): a
+  run total differenced (`accumulated_precipitation`), a window's mean
+  de-averaged (`averaged_precipitation`), an interval's total divided by
+  its length (`interval_precipitation`), or a window's total differenced
+  within the window (`windowed_precipitation`, WOOF-NAM's twelve hours).
+  The two window shapes share a frame's raw plane with its successor only
+  inside one window.
 - Isobaric families come from one eight-level table (`cat` uses only
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.

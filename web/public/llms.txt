@@ -107,10 +107,12 @@ Facts worth getting right:
   WOOF-NAM (`woofnam`, WOOF-NAM by Recast: a GPU port of the retired NAM,
   not an official NOAA forecast): on NCEP grid 218, a 12.19 km Lambert
   conformal grid over North America (614 × 428), schemaVersion 4 like HRRR;
-  `tmp2m`, `prmsl`, `hgt850`, `hgt700`, `hgt500`, `hgt250`, `tmp925`,
-  `tmp850`, `tmp500`, `gust`, `tcdc`, `cape`, `vis`, `cref`, `dpt2m`,
-  `fzlvl`, `orog` and the vector pairs `wind10m`, `wind80m`, `wind925`,
-  `wind850`, `wind250`. No `prate`: its core bundle is `tmp2m` alone.
+  `tmp2m`, `prate`, `prmsl`, `hgt850`, `hgt700`, `hgt500`, `hgt250`,
+  `tmp925`, `tmp850`, `tmp500`, `gust`, `tcdc`, `cape`, `vis`, `cref`,
+  `dpt2m`, `fzlvl`, `orog` and the vector pairs `wind10m`, `wind80m`,
+  `wind925`, `wind850`, `wind250`. `prate` is the mean over each hour,
+  differenced from the model's totals, which restart every 12 hours, and
+  has no analysis frame; the core bundle is `tmp2m` alone.
   GEFS-AEROSOLS: `aod` (aerosol optical depth at 550 nm, total,
   dimensionless), `aoddust`, `aodsalt`, `aodsulf`, `aodorg`, `aodbc` (the
   same for dust, sea salt, sulphate, organic carbon and black carbon),

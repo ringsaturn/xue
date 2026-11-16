@@ -260,7 +260,7 @@
     },
     "woofnam": {
       "title": "WOOF-NAM by Recast 12 km",
-      "description": "WOOF-NAM by Recast, a GPU port of the NAM (NMMB) model that NOAA retired, run by Recast over North America and started from the NOAA GFS analysis of the same cycle: its awphys output on NCEP grid 218, a 12.19 km Lambert conformal grid (614 × 428 cells), published on that grid with the winds turned to east and north, hourly to 84 hours. Four cycles a day; only the newest is kept. This is not an official forecast of NOAA or the National Weather Service. No precipitation is published. Contains modified WOOF-NAM data; the published bundles are a quantized derivative. Credit: WOOF-NAM by Recast.",
+      "description": "WOOF-NAM by Recast, a GPU port of the NAM (NMMB) model that NOAA retired, run by Recast over North America and started from the NOAA GFS analysis of the same cycle: its awphys output on NCEP grid 218, a 12.19 km Lambert conformal grid (614 × 428 cells), published on that grid with the winds turned to east and north, hourly to 84 hours. Four cycles a day; only the newest is kept. This is not an official forecast of NOAA or the National Weather Service. The precipitation rate is the mean over each hour, differenced from the model's totals, which restart every twelve hours. Contains modified WOOF-NAM data; the published bundles are a quantized derivative. Credit: WOOF-NAM by Recast.",
       "license": "CC-BY-4.0",
       "providers": [
         {

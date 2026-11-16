@@ -479,16 +479,26 @@ VARIABLES: dict[str, VariableSpec] = {
     # tp and prate_ave it is an input-only variable: the converter divides it
     # by the interval into prate (``SourceSpec.interval_precipitation``) and
     # apcp itself never reaches a bundle. GFS pgrb2 carries APCP records too;
-    # no source fetches them. The one GRIB band read as apcp is CMA GRAPES
-    # GEPS's ensemble median of the total over the six hours ending at each
-    # step (template 4.10), which stands in for the deterministic total.
+    # no source fetches them. Two GRIB bands are read as apcp. CMA GRAPES
+    # GEPS's is the ensemble median of the total over the six hours ending
+    # at each step (template 4.10), which stands in for the deterministic
+    # total. The NAM's is the total since the start of a twelve-hour window
+    # (template 4.8), which a source that says so differences into the rate
+    # (``SourceSpec.windowed_precipitation``).
     "apcp": VariableSpec(
         id="apcp",
-        # The surface value is missing on CMA's record, and the run-long
-        # window beside it is the same percentile of the same parameter: the
-        # interval's length is what picks the six hours.
         gdal_rules=(
+            # The surface value is missing on CMA's record, and the run-long
+            # window beside it is the same percentile of the same parameter:
+            # the interval's length is what picks the six hours.
             rules.template_ensemble(1, 8, 1, None, EnsembleIdentity.percentile_of(50), hours=6, statistical=1),
+            # GDAL names an accumulation by its length in hours: ``APCP01``
+            # to ``APCP12`` inside a twelve-hour window. The element does not
+            # say where the interval begins, so a file that also holds the
+            # last three hours' total (``APCP03`` beside ``APCP06``) has two
+            # bands of the variable and is refused; the fetch downloads the
+            # window's record alone.
+            rules.surface(*(f"APCP{hours:02d}" for hours in range(1, 13))),
         ),
         label="Total precipitation",
         output_unit="mm",

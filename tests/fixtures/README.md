@@ -323,6 +323,42 @@ gdal_translate -srcwin 130 190 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING 
   tests/fixtures/woofnam.2026111600.f000.crop.grib2
 ```
 
+`woofnam.2026111600.f001.crop.grib2` and `woofnam.2026111600.f002.crop.grib2`
+are the same window of the run's first two hours, twenty-seven records
+each: the analysis's less the terrain, and, second in the file, the
+precipitation total, GRIB2 template 4.8 `APCP` accumulated since the run
+began (`0-1 hour acc`, `0-2 hour acc`), which GDAL names `APCP01` and
+`APCP02`. The first is the opening frame of its twelve-hour window and the
+second is differenced against it. Northern California is wet in both: up
+to 3.4 mm in the first hour and 7.4 mm by the end of the second, on one cell
+in twenty-three and then one in eleven, the rest of the window dry. Fetched
+and cut with:
+
+```sh
+python -m xuebuild fetch --model woofnam --run 2026111600 --hours 2 --raw-dir /tmp/raw
+for h in 001 002; do
+  gdal_translate -srcwin 130 190 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+    /tmp/raw/woofnam.2026111600/woofnam.2026111600.f$h.grib2 \
+    tests/fixtures/woofnam.2026111600.f$h.crop.grib2
+done
+```
+
+`woofnam.2026111600.f006.apcp.crop.grib2` is the same window of the two
+`APCP` records the sixth hour's file holds, which no frame the fetch writes
+does: the total since the run began (`0-6 hour acc`, record 371) and the
+last three hours' (`3-6 hour acc`, record 450). Both are the same parameter
+on the same surface under the same process, so both inspection paths find
+two bands of the one variable and refuse the file. Fetched by the byte
+ranges the hour's `.idx` gives and cut with:
+
+```sh
+url=https://woof-nam.recastsystems.com/woof-nam/12km/20261116/00z/woof-nam.t00z.awphys06.tm00.grib2
+curl -s -r 51633947-51701150 "$url" > /tmp/apcp.f006.grib2
+curl -s -r 63458536-63520003 "$url" >> /tmp/apcp.f006.grib2
+gdal_translate -srcwin 130 190 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+  /tmp/apcp.f006.grib2 tests/fixtures/woofnam.2026111600.f006.apcp.crop.grib2
+```
+
 `gefsaero.2026091900.f000.crop.grib2` and `gefsaero.2026091900.f003.crop.grib2`
 are an 80 by 80 cell window over the Sahara and the Gulf of Guinea
 (`-srcwin 680 240 80 80`: 10W to 10E, 10N to 30N) of the analysis and the

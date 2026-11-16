@@ -1644,9 +1644,15 @@ SOURCES: dict[str, SourceSpec] = {
     # rules the NOAA sources are. Four cycles a day to F84, each started
     # from the GFS analysis and complete some four hours twenty minutes
     # after it. Not a NOAA forecast: CC BY 4.0, credited to Recast. The
-    # files carry no precipitation rate, only totals in buckets that reset
-    # every three and twelve hours, which no rule de-accumulates; the source
-    # publishes none, so the core set is the temperature alone.
+    # files carry no precipitation rate: ``APCP`` is the total since the
+    # start of a window that resets every twelve hours (``0-5 hour acc``,
+    # ``12-13 hour acc``), differenced into the rate within each window
+    # (``windowed_precipitation``); the analysis's covers no interval and
+    # is not read. Where a forecast hour is a multiple of three past its
+    # window's first three, the file carries the last three hours' total as
+    # a second ``APCP`` record, which the fetch leaves behind. The core set
+    # is the temperature alone, so the validators accept a run that carries
+    # no rate.
     "woofnam": SourceSpec(
         id="woofnam",
         feed="recast-woof-nam",
@@ -1656,6 +1662,7 @@ SOURCES: dict[str, SourceSpec] = {
         steps=((84, 1),),
         input_variable_ids=(
             "tmp2m",
+            "apcp",
             "ugrd10m",
             "vgrd10m",
             "ugrd80m",
@@ -1684,8 +1691,12 @@ SOURCES: dict[str, SourceSpec] = {
             "orog",
         ),
         accumulated_precipitation=False,
+        windowed_precipitation=True,
+        optional_at_analysis=("apcp",),
+        statistical_processes=(("prate", 0),),
         bundle_scalar_ids=(
             "tmp2m",
+            "prate",
             "prmsl",
             "hgt850",
             "hgt700",

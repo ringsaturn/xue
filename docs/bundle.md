@@ -170,8 +170,8 @@ invalid. Both keys are always present.
 `typeOfStatisticalProcessing` is absent for an instantaneous field and
 present when the values are a statistic over the step. It distinguishes a
 `prate` bundle whose source carried an instantaneous rate (GFS pgrb2) from
-one derived by de-accumulating or de-averaging (ECMWF, GFS sflux), which are
-otherwise the same parameter.
+one derived by de-accumulating, de-averaging or differencing a window's
+total (ECMWF, GFS sflux, WOOF-NAM), which are otherwise the same parameter.
 
 No other keys are allowed; a version 3 decoder must reject an unknown one,
 so any later addition is a new schema version. GRIB2's local-use ranges
@@ -740,7 +740,7 @@ the field without requiring it. Registered pairs:
 | `GFS-SFLUX` | `sfluxgrb` | 3072 × 1536 Gaussian, ~13 km | 1 h to f120, 3 h to f240 | `prate` is de-averaged from window-cumulative records and starts at `firstFrameOffset: 1`; the only source shipping `dswrf` |
 | `HRRR` | `wrfsfc` | 1799 × 1059, 3 km Lambert conformal, regional (see "Projected Sources" above) | 1 h to f18 | A new cycle every hour. Runs published before schemaVersion 4 are on a regular 2441 × 1051 grid at 0.03° (134.10 W – 60.90 W, 52.62 N – 21.12 N), resampled by the encoder. Its `prmsl` is the MAPS reduction and its `cref` the model's forecast reflectivity |
 | `RRFS` | `2dfld.3km.conus` | 1799 × 1059, 3 km Lambert conformal, regional: HRRR's grid | 1 h to f84 | The 00/06/12/18Z cycles. Isobaric records come from the `prslev` file of each hour. Carries the near-surface smoke and dust of RRFS-SD |
-| `WOOF-NAM` | `awphys` | 614 × 428, 12.19 km Lambert conformal, regional: NCEP grid 218 | 1 h to f84 | The 00/06/12/18Z cycles of WOOF-NAM by Recast, not a NOAA forecast. Publishes no `prate`: its core is `tmp2m` alone |
+| `WOOF-NAM` | `awphys` | 614 × 428, 12.19 km Lambert conformal, regional: NCEP grid 218 | 1 h to f84 | The 00/06/12/18Z cycles of WOOF-NAM by Recast, not a NOAA forecast. `prate` is differenced from totals that restart every 12 hours, so its series has no analysis frame and starts at `firstFrameOffset: 1`; the core is `tmp2m` alone |
 | `CFSv2` | `time-grib-01` | 384 × 190 Gaussian, 0.9375° (T126) | 6 h from f6 to f6552 | The seasonal source: ensemble member 01 of the 00Z and 12Z cycles, thirty-nine weeks of a nine-month run. Its series begin at the first step, so every bundle starts at `firstFrameOffset: 6` — the cycle's analysis is in another file family and is not published. `prate`, `dswrf` and `tcdc` are means over the six hours ending at the frame (`typeOfStatisticalProcessing: 0`) although the records carry the instantaneous template |
 | `CMA-RADAR` | `l3-mst-cref` | tile grid, 360/(256·2^z) degrees | 6 min, as published | Observations, not a forecast: `runTime` is the first observation and offsets count from it. The only one whose `unitSeconds` is not 3600; the axis lists its offsets wherever a publication was missed |
 

@@ -7,6 +7,10 @@ changes are in `git log`.
 
 ## 2026-11-16
 
+- `woofnam` publishes `prate`: the mean rate over each hour, differenced
+  from the model's `APCP` totals, which restart every twelve hours. Its
+  series starts at F001, and the source's core set is unchanged
+  (`docs/sources.md`).
 - The registry document's sources carry `windowedPrecipitation` and
   `accumulationWindowHours`, a fourth way a source's precipitation input
   becomes `prate`; a reader that predates them does not derive that rate

@@ -988,6 +988,16 @@ mod tests {
         // averaging window's wherever no total is accumulated over one.
         assert_eq!(registry.source("sflux").unwrap().precipitation_window_hours(), 6);
         assert!(!gfs.windowed_precipitation && gfs.accumulation_window_hours == 12);
+        // A total that starts over every twelve hours: the rate is derived
+        // from it, and has no analysis frame, on that flag.
+        let woofnam = registry.source("woofnam").unwrap();
+        assert!(woofnam.windowed_precipitation);
+        assert_eq!(woofnam.precipitation_window_hours(), 12);
+        assert_eq!(
+            registry.derived_precipitation(woofnam).unwrap(),
+            Some(("prate".to_string(), "apcp".to_string()))
+        );
+        assert_eq!(registry.analysis_optional_ids(woofnam, &["tmp2m", "prate"]), ["prate"]);
         let cfs = registry.source("cfs").unwrap();
         assert_eq!(cfs.companion_files[0].production_grid, Some((360, 181)));
         assert!(cfs.companion_files[0].own_grid());

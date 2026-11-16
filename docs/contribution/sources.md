@@ -264,7 +264,8 @@ alternate), and the sea level pressure is `MSLET`, accepted under `prmsl` as
 from the GFS analysis four times a day, from Recast's own host
 (`XUE_WOOFNAM_BASE_URL`), which keeps a run seven days: one `awphys` object
 per hour with a wgrib2 `.idx`, some 66 MB and 450 records, of which a frame
-takes twenty-six ranges (about 4.6 MB; the analysis one more, the terrain).
+takes twenty-seven ranges (about 4.7 MB): the terrain at the analysis, the
+precipitation total at every later hour.
 CC BY 4.0, credited "WOOF-NAM by Recast",
 and not a NOAA forecast, which the STAC prose and the credits say. The files
 follow NOAA's NAM layout under NCEP's centre number with generating process
@@ -274,9 +275,22 @@ ends prove a run. The grid is NCEP 218, tangent at 25°N and centred on 95°W
 (614 × 428 at 12 191 m), read out of GDAL's WKT like HRRR's; the tile is
 16 × 16 cells, the 195 km an HRRR tile covers. `TCDC` is on NCEP's surface
 200, an alternate CFSv2 already needed. Both `PRMSL` and `MSLET` are there
-and the first phrase wins. Precipitation waits on a bucket-reset
-de-accumulation rule: the files carry no `PRATE`, only `APCP` totals that
-reset every 3 and 12 hours, which neither encoder turns into a rate. `REFC`
+and the first phrase wins. The files carry no `PRATE`. `APCP` is the total
+since the start of a window that restarts every twelve hours (`0-5 hour
+acc` at F05, `12-13 hour acc` at F13; an empty `0-0 hour acc` at the
+analysis, which is not read), the fourth way precipitation arrives
+(`windowed_precipitation`): each frame is differenced against the previous
+one of the same window and a window's first frame against zero, in both
+encoders (`dewindow_precipitation`), so `prate` is the hour's mean and its
+series starts at F001. Where an hour is a multiple of three and more than
+three into its window, the file holds a second `APCP`, the last three hours'
+total (`3-6 hour acc` beside `0-6 hour acc`). The field and surface name
+both, so the fetch adds the phrase of the window the hour falls in
+(`fetch.window_index_qualifier`) and a frame holds the one record; GDAL
+calls it `APCP01` to `APCP12` by its length, which is what the `apcp` entry
+lists, and nothing in a band says where its interval begins, so a file with
+both totals is refused rather than guessed at. The core set stays `tmp2m`:
+a run without the rate is a complete one. `REFC`
 is NCEP's local 0/16/196 on surface 200 (HRRR's is 196 on surface 10, RRFS's
 5 on 200), an alternate of `cref` of its own; the layer cloud covers and
 `CPOFP` are not in the files.

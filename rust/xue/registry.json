@@ -304,6 +304,23 @@
             },
             "hours": 6,
             "statistical": 1
+          },
+          {
+            "rule": "surface",
+            "elements": [
+              "APCP01",
+              "APCP02",
+              "APCP03",
+              "APCP04",
+              "APCP05",
+              "APCP06",
+              "APCP07",
+              "APCP08",
+              "APCP09",
+              "APCP10",
+              "APCP11",
+              "APCP12"
+            ]
           }
         ]
       }
@@ -22589,6 +22606,7 @@
       ],
       "inputVariableIds": [
         "tmp2m",
+        "apcp",
         "ugrd10m",
         "vgrd10m",
         "ugrd80m",
@@ -22620,12 +22638,19 @@
       "companionFiles": [],
       "averagedPrecipitation": false,
       "intervalPrecipitation": false,
-      "windowedPrecipitation": false,
+      "windowedPrecipitation": true,
       "averageWindowHours": 6,
       "accumulationWindowHours": 12,
       "firstHour": 0,
-      "optionalAtAnalysis": [],
-      "statisticalProcesses": [],
+      "optionalAtAnalysis": [
+        "apcp"
+      ],
+      "statisticalProcesses": [
+        [
+          "prate",
+          0
+        ]
+      ],
       "bands": [],
       "ensembles": [],
       "intervalPrecipitationPairs": [],
@@ -22636,6 +22661,7 @@
       "region": null,
       "bundleScalarIds": [
         "tmp2m",
+        "prate",
         "prmsl",
         "hgt850",
         "hgt700",

@@ -439,21 +439,21 @@ class VariableRegistryTests(unittest.TestCase):
                 }
             ],
         )
+        # The first of the entry's rules: the NAM's window total is matched
+        # by another, after it.
         self.assertEqual(
-            whole["variables"]["apcp"]["match"]["gdal"],
-            [
-                {
-                    "rule": "template-ensemble",
-                    "discipline": 0,
-                    "category": 1,
-                    "number": 8,
-                    "levelType": 1,
-                    "levelValue": None,
-                    "ensemble": MEDIAN,
-                    "hours": 6,
-                    "statistical": 1,
-                }
-            ],
+            whole["variables"]["apcp"]["match"]["gdal"][0],
+            {
+                "rule": "template-ensemble",
+                "discipline": 0,
+                "category": 1,
+                "number": 8,
+                "levelType": 1,
+                "levelValue": None,
+                "ensemble": MEDIAN,
+                "hours": 6,
+                "statistical": 1,
+            },
         )
         self.assertEqual(
             whole["variables"]["tmp2m"]["match"]["gdal"][-1],
