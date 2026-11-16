@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FORECAST_MODELS, KNOWN_BUNDLE_IDS, isCaseOnlyModel, isObservationModel, modelDefaultVariable } from "../../web/src/manifest";
+import { FORECAST_MODELS, isCaseOnlyModel, isObservationModel, modelDefaultVariable } from "../../web/src/manifest";
 import { REGISTRY } from "../../web/src/registry";
 import { parseModelFromSearch } from "../../web/src/urlstate";
 
@@ -18,12 +18,12 @@ describe("WOOF-NAM", () => {
     expect(FORECAST_MODELS.woofnam.region).toEqual([-152.99, 12.12, -49.31, 61.35]);
   });
 
-  it("opens on the temperature, its one core bundle", () => {
-    expect(REGISTRY.sources.woofnam.coreBundleIds).toEqual(["tmp2m"]);
-    expect(FORECAST_MODELS.woofnam.coreBundles).toEqual(["tmp2m"]);
-    expect(modelDefaultVariable("woofnam", "prate")).toBe("tmp2m");
-    expect(FORECAST_MODELS.woofnam.railCore).not.toContain("prate");
-    for (const id of FORECAST_MODELS.woofnam.railCore ?? []) expect(KNOWN_BUNDLE_IDS).toContain(id);
+  it("has the forecast core and opens on the rain like any other forecast", () => {
+    expect(REGISTRY.sources.woofnam.coreBundleIds).toEqual(["tmp2m", "prate"]);
+    expect(FORECAST_MODELS.woofnam.coreBundles).toEqual(["tmp2m", "prate"]);
+    expect(modelDefaultVariable("woofnam", "prate")).toBe("prate");
+    // No rail of its own: the forecast core's, which carries the rate.
+    expect(FORECAST_MODELS.woofnam.railCore).toBeUndefined();
   });
 
   it("is told apart from the WOOF nest in a link", () => {

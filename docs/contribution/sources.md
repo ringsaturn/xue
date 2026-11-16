@@ -289,8 +289,8 @@ both, so the fetch adds the phrase of the window the hour falls in
 (`fetch.window_index_qualifier`) and a frame holds the one record; GDAL
 calls it `APCP01` to `APCP12` by its length, which is what the `apcp` entry
 lists, and nothing in a band says where its interval begins, so a file with
-both totals is refused rather than guessed at. The core set stays `tmp2m`:
-a run without the rate is a complete one. `REFC`
+both totals is refused rather than guessed at. The rate is in the core set,
+as on the other forecasts: a run without it is not a complete one. `REFC`
 is NCEP's local 0/16/196 on surface 200 (HRRR's is 196 on surface 10, RRFS's
 5 on 200), an alternate of `cref` of its own; the layer cloud covers and
 `CPOFP` are not in the files.

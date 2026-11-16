@@ -5,6 +5,11 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-17
+
+- `woofnam`'s core set is `tmp2m` and `prate`, the forecast default: a
+  run that lacks the rate is refused by the validators.
+
 ## 2026-11-16
 
 - `woofnam` publishes `prate`: the mean rate over each hour, differenced

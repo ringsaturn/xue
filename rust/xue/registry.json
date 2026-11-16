@@ -22680,7 +22680,8 @@
         "orog"
       ],
       "coreBundleIds": [
-        "tmp2m"
+        "tmp2m",
+        "prate"
       ],
       "bundleVectorIds": [
         "wind10m",
