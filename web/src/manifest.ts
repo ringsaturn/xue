@@ -158,6 +158,16 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     railCore: ["tmp2m", "prate", "wind10m", "smokesfc"],
     region: [-134.1, 21.12, -60.9, 52.62],
   },
+  // WOOF-NAM by Recast, a GPU port of the retired NAM on NCEP grid 218:
+  // 12 km Lambert conformal over North America, hourly to F84 from the
+  // 00/06/12/18Z cycles, on the model's own grid, so nothing needs clipping.
+  // It publishes no precipitation: the run's core is the temperature, which
+  // it opens on, and the gust takes the rain's tile.
+  woofnam: {
+    defaultVariable: "tmp2m",
+    railCore: ["tmp2m", "wind10m", "tcdc", "gust"],
+    region: [-152.99, 12.12, -49.31, 61.35],
+  },
   // DWD ICON-EU, the European nest of ICON at 0.0625°: a regional model
   // already on a regular latitude/longitude grid (1377 × 657 cells, centres
   // 23.5°W–62.5°E, 29.5°N–70.5°N), so the rectangle is the model's own
@@ -561,6 +571,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "cfs",
   "hrrr",
   "rrfs",
+  "woofnam",
   "iconeu",
   "arpege",
   "cmageps",

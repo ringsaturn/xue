@@ -333,6 +333,7 @@ export const en = {
   creditsGfs: "Forecast data: GFS 0.25° and sflux",
   creditsHrrr: "Forecast data: HRRR 3 km, contiguous US",
   creditsRrfs: "Forecast data: RRFS 3 km with smoke and dust, contiguous US",
+  creditsWoofNam: "Forecast data: WOOF-NAM 12 km, North America; CC BY 4.0, not an official NOAA forecast",
   creditsGefsAero: "Aerosol forecast: GEFS-Aerosols 0.25°, AOD and surface PM",
   /** The CMA's sand-and-dust model, the WMO SDS-WAS Asian Center's,
    * carried by WMO WIS2; the model and programme names stay as written. */

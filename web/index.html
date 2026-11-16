@@ -160,6 +160,7 @@
               { "@type": "Dataset", "name": "NOAA Global Forecast System (GFS)", "url": "https://registry.opendata.aws/noaa-gfs-bdp-pds/" },
               { "@type": "Dataset", "name": "NOAA High-Resolution Rapid Refresh (HRRR)", "url": "https://registry.opendata.aws/noaa-hrrr-pds/" },
               { "@type": "Dataset", "name": "NOAA Rapid Refresh Forecast System (RRFS)", "url": "https://registry.opendata.aws/noaa-rrfs-ops/" },
+              { "@type": "Dataset", "name": "WOOF-NAM by Recast (12 km over North America; not an official NOAA forecast)", "url": "https://woof-nam.recastsystems.com/README.txt", "license": "https://creativecommons.org/licenses/by/4.0/" },
               { "@type": "Dataset", "name": "Recast WOOF (WRF-ARW nested run at 500 m over Mount Fuji; showcase cases only, no live run)" },
               { "@type": "Dataset", "name": "Copernicus Emergency Management Service EFAS v5 river discharge, forecast and water balance (1 arcmin over Europe; showcase cases only, no live run)", "url": "https://ewds.climate.copernicus.eu/datasets/efas-forecast" },
               { "@type": "Dataset", "name": "Copernicus Climate Change Service ERA5 hourly reanalysis on single levels (0.25° global; showcase cases only, no live run)", "url": "https://doi.org/10.24381/cds.adbb2d47", "license": "https://creativecommons.org/licenses/by/4.0/" },
@@ -209,6 +210,7 @@
               { "@type": "DataDownload", "name": "ECMWF IFS HRES 0.1° live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-ifshres.json" },
               { "@type": "DataDownload", "name": "HRRR live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hrrr.json" },
               { "@type": "DataDownload", "name": "RRFS live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-rrfs.json" },
+              { "@type": "DataDownload", "name": "WOOF-NAM live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-woofnam.json" },
               { "@type": "DataDownload", "name": "CFSv2 seasonal live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cfs.json" },
               { "@type": "DataDownload", "name": "DWD ICON-EU live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-iconeu.json" },
               { "@type": "DataDownload", "name": "Météo-France ARPEGE live pointer", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-arpege.json" },
@@ -1020,6 +1022,11 @@
               <small>CONUS 3 km, smoke</small>
               <span class="model-check" aria-hidden="true"></span>
             </button>
+            <button type="button" data-model="woofnam" aria-pressed="false">
+              <span class="model-name">WOOF-NAM</span>
+              <small>Recast N. America 12 km</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </button>
             <button type="button" data-model="iconeu" aria-pressed="false">
               <span class="model-name">ICON-EU</span>
               <small>DWD Europe 7 km</small>
@@ -1288,6 +1295,13 @@
               <a href="https://registry.opendata.aws/noaa-rrfs-ops/" target="_blank" rel="noreferrer">
                 <span class="credits-name">NOAA RRFS</span>
                 <small data-i18n="creditsRrfs">Forecast data: RRFS 3 km with smoke and dust, contiguous US</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://woof-nam.recastsystems.com/README.txt" target="_blank" rel="noreferrer">
+                <span class="credits-name">WOOF-NAM by Recast</span>
+                <small data-i18n="creditsWoofNam">Forecast data: WOOF-NAM 12 km, North America; CC BY 4.0, not an official NOAA forecast</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>

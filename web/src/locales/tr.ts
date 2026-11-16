@@ -184,6 +184,7 @@ export const tr: Record<MessageKey, string> = {
   creditsGfs: "Tahmin verisi: GFS 0.25° ve sflux",
   creditsHrrr: "Tahmin verisi: HRRR 3 km, ABD anakarası",
   creditsRrfs: "Tahmin verisi: RRFS 3 km, duman ve toz dahil, ABD anakarası",
+  creditsWoofNam: "Tahmin verisi: WOOF-NAM 12 km, Kuzey Amerika; CC BY 4.0, resmî NOAA tahmini değildir",
   creditsGefsAero: "Aerosol tahmini: GEFS-Aerosols 0,25°, AOD ve yüzey partikülleri",
   creditsCmaDust: "Toz tahmini: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15°, Asya, WMO WIS2 üzerinden",
   creditsIconEu: "Tahmin verisi: DWD ICON-EU 0,0625°, Avrupa, CC BY 4.0",

@@ -183,6 +183,7 @@ export const ru: Record<MessageKey, string> = {
   creditsGfs: "Прогностические данные: GFS 0.25° и sflux",
   creditsHrrr: "Прогностические данные: HRRR 3 км, континентальные США",
   creditsRrfs: "Прогностические данные: RRFS 3 км с дымом и пылью, континентальные США",
+  creditsWoofNam: "Прогностические данные: WOOF-NAM 12 км, Северная Америка; CC BY 4.0, не официальный прогноз NOAA",
   creditsGefsAero: "Прогноз аэрозолей: GEFS-Aerosols 0,25°, АОТ и приземные частицы",
   creditsCmaDust: "Прогноз пыли: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0,15° над Азией, через WMO WIS2",
   creditsIconEu: "Прогнозные данные: DWD ICON-EU 0,0625° над Европой, CC BY 4.0",

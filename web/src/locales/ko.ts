@@ -183,6 +183,7 @@ export const ko: Record<MessageKey, string> = {
   creditsGfs: "예보 자료: GFS 0.25° 및 sflux",
   creditsHrrr: "예보 자료: HRRR 3 km, 미국 본토",
   creditsRrfs: "예보 자료: RRFS 3 km(연기·먼지 포함), 미국 본토",
+  creditsWoofNam: "예보 자료: WOOF-NAM 12 km, 북미; CC BY 4.0, NOAA 공식 예보가 아님",
   creditsGefsAero: "에어로졸 예보: GEFS-Aerosols 0.25°, 광학 두께와 지상 미세먼지",
   creditsCmaDust: "황사 예보: CMA-CW v1.0/DUST(WMO SDS-WAS 아시아 센터) 0.15°, 아시아, WMO WIS2 경유",
   creditsIconEu: "예보 자료: DWD ICON-EU 0.0625°, 유럽, CC BY 4.0",
