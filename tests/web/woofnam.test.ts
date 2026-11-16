@@ -18,7 +18,7 @@ describe("WOOF-NAM", () => {
     expect(FORECAST_MODELS.woofnam.region).toEqual([-152.99, 12.12, -49.31, 61.35]);
   });
 
-  it("opens on the temperature, since it publishes no precipitation", () => {
+  it("opens on the temperature, its one core bundle", () => {
     expect(REGISTRY.sources.woofnam.coreBundleIds).toEqual(["tmp2m"]);
     expect(FORECAST_MODELS.woofnam.coreBundles).toEqual(["tmp2m"]);
     expect(modelDefaultVariable("woofnam", "prate")).toBe("tmp2m");

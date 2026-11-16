@@ -161,8 +161,9 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // WOOF-NAM by Recast, a GPU port of the retired NAM on NCEP grid 218:
   // 12 km Lambert conformal over North America, hourly to F84 from the
   // 00/06/12/18Z cycles, on the model's own grid, so nothing needs clipping.
-  // It publishes no precipitation: the run's core is the temperature, which
-  // it opens on, and the gust takes the rain's tile.
+  // The run's core is the temperature alone, which it opens on, and the gust
+  // has the tile the rain has on other forecasts; the precipitation rate it
+  // publishes is reached through MORE.
   woofnam: {
     defaultVariable: "tmp2m",
     railCore: ["tmp2m", "wind10m", "tcdc", "gust"],
