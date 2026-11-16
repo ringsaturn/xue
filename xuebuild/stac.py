@@ -1376,7 +1376,10 @@ def root_catalog() -> dict[str, Any]:
             "beside four point products in plain JSON — radiosonde soundings, airport reports, surface "
             "station observations and tropical cyclone tracks — and single-site radar sweeps as polar Zarr "
             "stores. One Collection per source or product, whose Item is the newest "
-            "run or issue; the showcase Collection keeps historical cases."
+            "run or issue; the showcase Collection keeps historical cases. "
+            "No registration: a program reading these files is asked to send a User-Agent that names "
+            "itself and a way to reach its author. Contact and problem reports: "
+            "https://github.com/ringsaturn/xue/issues."
         ),
         "links": [
             {"rel": "root", "href": f"./{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},

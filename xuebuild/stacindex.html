@@ -123,6 +123,12 @@ ds = xr.open_zarr(run.assets["tmp2m"].get_absolute_href())</code></pre>
     an Item no longer than the source's cadence; a link into a run directory
     (<code>gfs.&lt;run&gt;/</code>) stops resolving when the run is pruned.
   </p>
+  <p>
+    There is no registration and no key. A program that reads these files is
+    asked to send a <code>User-Agent</code> that names itself and a way to
+    reach its author. Tell us what you are building, or what broke, in the
+    <a href="$repo_url/issues">issues</a>.
+  </p>
 
   <h2>Collections</h2>
   <p class="status" id="status">The live column is read from each Collection with JavaScript.</p>
