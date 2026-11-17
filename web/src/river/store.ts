@@ -13,10 +13,14 @@
  */
 
 import { checkNetworkGroup } from "../schema/generated/network-group";
-import { PREDICTOR_PREVIOUS, PREDICTOR_RAW } from "../zarr/shard";
 import type { ZarrStore } from "../zarr/store";
 import type * as Wasm from "../wasm/xue";
 import type { RiverGeometry } from "./index";
+
+/** Predictor codes as `decodeChunk` takes them — the container's own
+ * numbering (docs/format.md). */
+const PREDICTOR_RAW = 0;
+const PREDICTOR_PREVIOUS = 2;
 
 /** What a network store needs of the WASM module. */
 export type NetworkCodec = Pick<typeof Wasm, "decodeChunk" | "parseShardIndex" | "shardIndexLength">;

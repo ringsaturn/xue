@@ -18,7 +18,8 @@
  * holds the layout, the verified shard indices and the decoded tiles of the
  * time chunk being read — dropped when the read moves on, which keeps
  * scrubbing inside six frames free and memory at one time chunk's tiles —
- * and assembles a frame from them. A frame is a new plane every time: with
+ * and assembles a frame from them, or a cell's series straight from the
+ * chunks. A frame is a new plane every time: with
  * tile rectangles only their tiles are written and the cells outside are
  * zero, which a caller must not read, the coverage contract the `.xue`
  * worker's tiled decode has.
@@ -34,13 +35,8 @@
 import { frameOffsets } from "../manifest";
 import type { TileRect } from "../tiles";
 import {
-  framesInTimeChunk,
-  PREDICTOR_PREVIOUS,
-  PREDICTOR_RAW,
   readArray,
   readGroup,
-  tileOf,
-  tileOrigin,
   type ZarrArrayLayout,
   type ZarrArrayReader,
   type ZarrCodec,
@@ -207,7 +203,6 @@ export class ZarrSession implements ZarrReader, PoolMember {
 
   private constructor(
     readonly store: ZarrStore,
-    private readonly codec: ZarrCodec,
     readonly group: ZarrGroup,
     arrays: { numericId: number; id: string; layout: ZarrArrayLayout; reader: ZarrArrayReader }[],
   ) {
@@ -263,7 +258,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
         throw new Error("every array of a bundle must be cut the same way");
       }
     }
-    const session = new ZarrSession(store, codec, group, arrays);
+    const session = new ZarrSession(store, group, arrays);
     // A shared store's descriptor sizes this bundle's arrays and coordinates
     // but not the group, which carries every bundle of the tier; progress
     // is reported against that size, so the group is left out of it too.
@@ -458,22 +453,6 @@ export class ZarrSession implements ZarrReader, PoolMember {
     }
   }
 
-  /** One inner chunk decoded to codes at the full inner shape, or `null`
-   * for a chunk the shard never held. */
-  private buildChunk(array: VariableArray, key: ChunkKey): Uint8Array | null {
-    const payload = this.payloads.get(chunkKey(key));
-    if (payload === undefined) throw new Error("chunk is not resident yet");
-    if (payload === null) return null;
-    const { layout } = array;
-    return this.codec.decodeChunk(
-      payload,
-      layout.timeChunk,
-      layout.tileHeight,
-      layout.tileWidth,
-      layout.delta ? PREDICTOR_PREVIOUS : PREDICTOR_RAW,
-    );
-  }
-
   /** Assemble one frame and return it. With `rects` only those tiles are
    * fetched and written; the cells outside them are zero and mean nothing.
    *
@@ -508,33 +487,44 @@ export class ZarrSession implements ZarrReader, PoolMember {
 
   /** The chunks one cell's series needs: one per time chunk of its tile. */
   seriesChunks(variableId: number, column: number, row: number): ChunkKey[] {
-    const { layout } = this.array(variableId);
-    const tile = tileOf(layout, row, column);
+    const { layout, reader } = this.array(variableId);
+    if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0) throw new Error("cell is outside the grid");
+    const tile = reader.tileOf(row, column);
     return Array.from({ length: layout.timeChunks }, (_, timeChunk) => ({ variableId, timeChunk, tile }));
   }
 
-  /** One cell's code on every frame of the axis. Chunks are read straight
-   * through rather than cached: each is touched once. */
+  /** One held chunk's bytes, `null` for one the shard never held. A series
+   * touches every time chunk of one tile, more than a tight budget may hold
+   * at once, so a chunk evicted since it was fetched is fetched again here;
+   * the caller keeps the bytes it is given, whatever the cache then does. */
+  private async heldPayload(key: ChunkKey): Promise<Uint8Array | null> {
+    const name = chunkKey(key);
+    for (let attempt = 0; ; attempt += 1) {
+      const payload = this.payloads.get(name);
+      if (payload !== undefined) return payload;
+      if (attempt >= 3) throw new Error("chunks evicted faster than a series reads them; raise the payload budget");
+      await this.ensureChunk(key);
+    }
+  }
+
+  /** One cell's code on every frame of the axis. The chunks are handed to
+   * the reader in one call, joined end to end with the boundaries between
+   * them, and decoded there one after another: each is touched once, so
+   * none is kept. */
   async decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array> {
-    const array = this.array(variableId);
-    const { layout } = array;
+    const { reader } = this.array(variableId);
     const keys = this.seriesChunks(variableId, column, row);
     await this.ensureChunks(keys);
-    const origin = tileOrigin(layout, keys[0]!.tile);
-    const cell = (row - origin.row) * layout.tileWidth + (column - origin.column);
-    const stride = layout.tileHeight * layout.tileWidth;
-    const series = new Uint8Array(layout.frameCount);
-    for (const key of keys) {
-      const frames = framesInTimeChunk(layout, key.timeChunk);
-      // A series touches every time chunk of one tile, more than a tight
-      // budget may hold at once; a chunk evicted since the fetch above is
-      // fetched again here, one at a time.
-      if (!this.payloads.has(chunkKey(key))) await this.ensureChunk(key);
-      const chunk = this.buildChunk(array, key);
-      for (let frame = 0; frame < frames; frame += 1) {
-        series[key.timeChunk * layout.timeChunk + frame] = chunk === null ? layout.fillValue : chunk[frame * stride + cell]!;
-      }
-    }
-    return series;
+    const payloads: (Uint8Array | null)[] = [];
+    for (const key of keys) payloads.push(await this.heldPayload(key));
+    const offsets = new Uint32Array(payloads.length + 1);
+    payloads.forEach((payload, index) => {
+      offsets[index + 1] = offsets[index]! + (payload?.byteLength ?? 0);
+    });
+    const joined = new Uint8Array(offsets[payloads.length]!);
+    payloads.forEach((payload, index) => {
+      if (payload) joined.set(payload, offsets[index]!);
+    });
+    return reader.series(row, column, joined, offsets);
   }
 }

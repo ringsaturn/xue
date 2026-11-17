@@ -16,14 +16,14 @@
  * `resident` fires once every frame of the axis is local within the tiles
  * the window names.
  *
- * The WASM module reads the format for both channels: decoding is the
- * container's own chunk path, `decodeChunk`, so the only thing this channel
+ * The WASM module reads the format for both channels, and a chunk decodes
+ * down the container's own chunk path, so the only thing this channel
  * changes is where the bytes come from and how they are indexed, which is
  * what the comparison with the `.xue` channel is meant to isolate.
  */
 
 import { sameTileRects, type TileRect } from "../tiles";
-import wasmInit, { decodeChunk, parseZarrGroup, WasmZarrArray } from "../wasm/xue";
+import wasmInit, { parseZarrGroup, WasmZarrArray } from "../wasm/xue";
 import wasmUrl from "../wasm/xue_bg.wasm?url";
 import type { ZarrDecodeMessage, ZarrInitStreamMessage, ZarrSeriesMessage, ZarrWorkerRequest } from "./protocol";
 import { SegmentedZarrSession } from "./segmented";
@@ -32,7 +32,7 @@ import type { ZarrCodec } from "./shard";
 import { ZarrStore } from "./store";
 
 const PREFETCH_RETRIES = 3;
-const CODEC: ZarrCodec = { decodeChunk, parseZarrGroup, WasmZarrArray };
+const CODEC: ZarrCodec = { parseZarrGroup, WasmZarrArray };
 
 let session: ZarrReader | null = null;
 let variableKey = "";

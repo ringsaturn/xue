@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { viewportTileRects, type TileRect } from "../../web/src/tiles";
-import { readArray, readGroup, tileOf, tileShape, type ZarrArrayReader } from "../../web/src/zarr/shard";
+import { readArray, readGroup, type ZarrArrayReader } from "../../web/src/zarr/shard";
 import { canonicalTimeBlock, mergeSegmentMetadata, SegmentedZarrSession } from "../../web/src/zarr/segmented";
 import { ZarrSession } from "../../web/src/zarr/session";
 import { coalesceRanges, ZarrStore, type FetchLike } from "../../web/src/zarr/store";
@@ -265,8 +265,8 @@ describe("readArray", () => {
       indexLocation: "end",
       fillValue: 255,
     });
-    expect(tileShape(layout, 44)).toEqual({ height: 9, width: 16 });
-    expect(tileOf(layout, 72, 143)).toBe(44);
+    expect(reader.tileOf(72, 143)).toBe(44);
+    expect(() => reader.tileOf(73, 0)).toThrow(/outside the grid/);
     expect(locate(reader, 0)).toEqual({ shard: 0, position: 0 });
     expect(locate(reader, 20)).toEqual({ shard: 0, position: 900 });
     expect(() => reader.shardOf(21)).toThrow(/outside the array/);

@@ -99,7 +99,8 @@ assembled in the reader: the session hands it the compressed chunks not yet
 decoded for the frame's time chunk (`undecodedTiles`, `feedChunk`) and takes
 the plane (`assembleFrame`) with no `await` in between. The plane is a new
 array each time, so concurrent decodes never share a buffer, and the worker
-posts it as it is; a store's planes are not recycled. Compressed chunks are an LRU
+posts it as it is; a store's planes are not recycled. A cell's series is one
+call, `series`, over its tile's chunk in every time chunk. Compressed chunks are an LRU
 under `payloadBudgetBytes` (`zarrPayloadBudgetBytes`: 192 MB, 96 MB on a
 ≤ 4 GB device, 64 MB on a constrained connection), so memory follows the
 window ahead of the playhead, not the axis; a decode re-fetches what was
