@@ -12,6 +12,10 @@
 //! the byte spans either still needs. `tileGeometry` returning `undefined` is
 //! how the Worker tells the two versions apart without an error path.
 
+mod zarr;
+
+pub use zarr::{WasmZarrArray, WasmZarrGroup};
+
 use xue::{Bundle, FrameRequest, Level3Sweep, Predictor, StreamingBundle, TileGeometry, TileRect};
 use wasm_bindgen::prelude::*;
 

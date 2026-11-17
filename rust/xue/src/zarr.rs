@@ -19,8 +19,12 @@
 
 use serde_json::Value;
 
+mod reader;
+
+pub use reader::ArrayReader;
+
 use crate::decode::metadata::{parse_gaussian, parse_projection};
-use crate::format::{err, DecodeError, TileGeometry};
+use crate::format::{err, DecodeError, TileGeometry, MAX_PLANE_LENGTH};
 use crate::projection::{GaussianRows, LambertConformal};
 
 /// Bytes of one `(offset, nbytes)` pair in a shard index.
@@ -575,6 +579,31 @@ fn grid_group(text: &str) -> Result<(u32, serde_json::Map<String, Value>), Decod
     }
 }
 
+/// One bundle's metadata block out of a grid store's attributes: `xue` on a
+/// single-bundle store, whatever `bundle` says, since that group holds one
+/// bundle and does not name it; `xue_bundles[bundle]` on a shared one, which
+/// is refused without a bundle named, since nothing else in it says whose
+/// metadata a reader would be holding.
+fn group_block<'a>(
+    attributes: &'a serde_json::Map<String, Value>,
+    profile: u32,
+    bundle: Option<&str>,
+) -> Result<&'a Value, DecodeError> {
+    if profile == PROFILE_SINGLE {
+        return Ok(&attributes["xue"]);
+    }
+    let bundle = bundle.ok_or_else(|| {
+        err("a shared (profile 2) group holds several bundles; open it by bundle id")
+    })?;
+    let metadata = attributes["xue_bundles"]
+        .get(bundle)
+        .ok_or_else(|| err(format!("shared group holds no bundle {bundle:?}")))?;
+    if !metadata.is_object() {
+        return Err(err(format!("shared group's bundle {bundle:?} is not an object")));
+    }
+    Ok(metadata)
+}
+
 fn group_of(metadata: &Value, profile: u32, bundle: Option<&str>) -> Result<ZarrGroup, DecodeError> {
     let metadata_json =
         serde_json::to_string(metadata).map_err(|_| err("xue metadata is not serializable"))?;
@@ -592,12 +621,7 @@ fn group_of(metadata: &Value, profile: u32, bundle: Option<&str>) -> Result<Zarr
 /// bundles and is refused here: open it with [`parse_group_metadata_for`].
 pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
     let (profile, attributes) = grid_group(text)?;
-    if profile != PROFILE_SINGLE {
-        return Err(err(
-            "a shared (profile 2) group holds several bundles; select one by id",
-        ));
-    }
-    group_of(&attributes["xue"], profile, None)
+    group_of(group_block(&attributes, profile, None)?, profile, None)
 }
 
 /// One bundle's view of a store's root `zarr.json`, whichever profile wrote
@@ -607,16 +631,26 @@ pub fn parse_group_metadata(text: &str) -> Result<ZarrGroup, DecodeError> {
 /// store by `(path, bundle id)` and the manifest entry gives it both.
 pub fn parse_group_metadata_for(text: &str, bundle: &str) -> Result<ZarrGroup, DecodeError> {
     let (profile, attributes) = grid_group(text)?;
-    if profile == PROFILE_SINGLE {
-        return group_of(&attributes["xue"], profile, None);
-    }
-    let metadata = attributes["xue_bundles"]
-        .get(bundle)
-        .ok_or_else(|| err(format!("shared group holds no bundle {bundle:?}")))?;
-    if !metadata.is_object() {
-        return Err(err(format!("shared group's bundle {bundle:?} is not an object")));
-    }
-    group_of(metadata, profile, Some(bundle))
+    let selected = (profile == PROFILE_SHARED).then_some(bundle);
+    group_of(group_block(&attributes, profile, Some(bundle))?, profile, selected)
+}
+
+/// The group document read no further than its envelope: the profile, and
+/// the selected bundle's metadata block as compact JSON, selected as
+/// [`parse_group_metadata_for`] selects it and refused without a bundle named
+/// on a shared store. The block itself is not validated here. This is for a
+/// reader that holds the block to the metadata rules with a validator of its
+/// own, as the shell does; every other caller wants [`parse_group_metadata_for`].
+///
+/// The JSON keeps the document's key order only where `serde_json` keeps
+/// insertion order (the `encoder` feature turns that on); otherwise the keys
+/// come out sorted.
+pub fn group_metadata_json(text: &str, bundle: Option<&str>) -> Result<(u32, String), DecodeError> {
+    let (profile, attributes) = grid_group(text)?;
+    let block = group_block(&attributes, profile, bundle)?;
+    let metadata_json =
+        serde_json::to_string(block).map_err(|_| err("xue metadata is not serializable"))?;
+    Ok((profile, metadata_json))
 }
 
 /// The bundle ids a store's group holds: every key of `xue_bundles` on a
@@ -760,14 +794,17 @@ pub(crate) fn parse_sharded_array(text: &str, rank: usize) -> Result<ShardedArra
     if key_encoding.get("name").and_then(|v| v.as_str()) != Some("default") {
         return Err(err("chunk key encoding must be default"));
     }
-    if let Some(separator) = key_encoding
-        .get("configuration")
-        .and_then(|v| v.get("separator"))
-        .and_then(|v| v.as_str())
-    {
-        if separator != "/" {
-            return Err(err("chunk key separator must be /"));
-        }
+    // A configuration is optional and so is its separator, but one that is
+    // present must say `/`: anything else names objects this reader never
+    // asks for.
+    match key_encoding.get("configuration") {
+        None => {}
+        Some(Value::Object(configuration)) => match configuration.get("separator") {
+            None => {}
+            Some(Value::String(separator)) if separator == "/" => {}
+            Some(_) => return Err(err("chunk key separator must be /")),
+        },
+        Some(_) => return Err(err("chunk key encoding configuration is not an object")),
     }
     let fill_value = value
         .get("fill_value")
@@ -829,25 +866,25 @@ pub(crate) fn parse_sharded_array(text: &str, rank: usize) -> Result<ShardedArra
     if index != ["bytes", "crc32c"] {
         return Err(err("index codecs must be [bytes, crc32c]"));
     }
-    let endian = sharding
+    // Little-endian is the `bytes` codec's default only where it carries no
+    // configuration at all; one that is there has to say so.
+    let little = match sharding
         .get("index_codecs")
         .and_then(|v| v.as_array())
         .and_then(|list| list.first())
         .and_then(|codec| codec.get("configuration"))
-        .and_then(|v| v.get("endian"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("little");
-    if endian != "little" {
+    {
+        None => true,
+        Some(configuration) => configuration.get("endian").and_then(|v| v.as_str()) == Some("little"),
+    };
+    if !little {
         return Err(err("shard index must be little-endian"));
     }
-    let index_location = match sharding
-        .get("index_location")
-        .and_then(|v| v.as_str())
-        .unwrap_or("end")
-    {
-        "start" => IndexLocation::Start,
-        "end" => IndexLocation::End,
-        other => return Err(err(format!("unknown index location {other}"))),
+    let index_location = match sharding.get("index_location") {
+        None | Some(Value::Null) => IndexLocation::End,
+        Some(Value::String(location)) if location == "start" => IndexLocation::Start,
+        Some(Value::String(location)) if location == "end" => IndexLocation::End,
+        Some(other) => return Err(err(format!("unknown index location {other}"))),
     };
     Ok(ShardedArray {
         value,
@@ -860,55 +897,109 @@ pub(crate) fn parse_sharded_array(text: &str, rank: usize) -> Result<ShardedArra
     })
 }
 
+/// A variable array's document: how the array is cut, and the bundle it says
+/// it belongs to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayDocument {
+    pub layout: ArrayLayout,
+    /// `attributes.xue.bundle`, which a shared store's arrays carry; `None`
+    /// where the array declares none.
+    pub bundle: Option<String>,
+}
+
 /// The array's `zarr.json`, held to the profile: `uint8`, three dimensions, a
 /// regular chunk grid, exactly one `sharding_indexed` codec, an inner chain of
 /// `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes, zstd]`, index codecs
 /// `[bytes, crc32c]` little-endian, and an outer chunk of whole time chunks of
 /// whole tiles.
 pub fn parse_array_metadata(text: &str) -> Result<ArrayLayout, DecodeError> {
+    parse_array_document(text).map(|document| document.layout)
+}
+
+/// [`parse_array_metadata`], with the bundle the array names.
+///
+/// Every size a reader later allocates from is bounded here: a plane and an
+/// inner chunk by the container's own limit on a decoded plane, and a shard's
+/// index by the same limit in bytes.
+pub fn parse_array_document(text: &str) -> Result<ArrayDocument, DecodeError> {
     let ShardedArray {
+        value,
         shape,
         shard_shape,
         inner_shape,
         delta,
         index_location,
         fill_value,
-        ..
     } = parse_sharded_array(text, 3)?;
-    let frame_count = shape[0] as u32;
-    let height = shape[1] as u32;
-    let width = shape[2] as u32;
-    let time_chunk = inner_shape[0] as u32;
-    let tile_height = inner_shape[1] as u32;
-    let tile_width = inner_shape[2] as u32;
+    let [frames, height, width] = [shape[0], shape[1], shape[2]];
+    let [time_chunk, tile_height, tile_width] = [inner_shape[0], inner_shape[1], inner_shape[2]];
+    let within = |cells: Option<u64>| cells.is_some_and(|cells| cells <= MAX_PLANE_LENGTH);
+    let shard_frames = shard_shape[0];
+    if frames.max(shard_frames) > u64::from(u32::MAX) || !within(height.checked_mul(width)) {
+        return Err(err("array shape exceeds the decoded size limit"));
+    }
+    if !within(
+        tile_height
+            .checked_mul(tile_width)
+            .and_then(|cells| cells.checked_mul(time_chunk)),
+    ) {
+        return Err(err("inner chunk exceeds the decoded size limit"));
+    }
+    // Bounded above: a tile is at least one cell, so there are no more tiles
+    // along an axis than cells.
     let tile_rows = height.div_ceil(tile_height);
     let tile_columns = width.div_ceil(tile_width);
-    let shard_frames = shard_shape[0] as u32;
+    let tile_count = tile_rows * tile_columns;
     if shard_frames % time_chunk != 0
-        || shard_shape[1] as u32 != tile_rows * tile_height
-        || shard_shape[2] as u32 != tile_columns * tile_width
+        || shard_shape[1] != tile_rows * tile_height
+        || shard_shape[2] != tile_columns * tile_width
     {
         return Err(err("outer chunk must be whole time chunks of whole tiles"));
     }
-    let tile_count = tile_rows * tile_columns;
-    Ok(ArrayLayout {
-        frame_count,
-        height,
-        width,
-        time_chunk,
-        tile_height,
-        tile_width,
-        tile_rows,
-        tile_columns,
-        tile_count,
-        time_chunks: frame_count.div_ceil(time_chunk),
-        shard_frames,
-        shard_count: frame_count.div_ceil(shard_frames),
-        chunks_per_shard: (shard_frames / time_chunk) * tile_count,
+    let chunks_per_shard = (shard_frames / time_chunk)
+        .checked_mul(tile_count)
+        .filter(|&count| count.saturating_mul(INDEX_ENTRY_BYTES as u64) <= MAX_PLANE_LENGTH)
+        .ok_or_else(|| err("shard index exceeds the decoded size limit"))?;
+    // Every value below is under one of the limits above, or counts
+    // something one of them bounds.
+    let layout = ArrayLayout {
+        frame_count: frames as u32,
+        height: height as u32,
+        width: width as u32,
+        time_chunk: time_chunk as u32,
+        tile_height: tile_height as u32,
+        tile_width: tile_width as u32,
+        tile_rows: tile_rows as u32,
+        tile_columns: tile_columns as u32,
+        tile_count: tile_count as u32,
+        time_chunks: frames.div_ceil(time_chunk) as u32,
+        shard_frames: shard_frames as u32,
+        shard_count: frames.div_ceil(shard_frames) as u32,
+        chunks_per_shard: chunks_per_shard as u32,
         delta,
         index_location,
         fill_value,
+    };
+    Ok(ArrayDocument {
+        layout,
+        bundle: array_bundle(&value)?,
     })
+}
+
+/// `attributes.xue.bundle`, where an array carries one. Anything else in the
+/// attributes is informational and left alone.
+fn array_bundle(array: &Value) -> Result<Option<String>, DecodeError> {
+    let Some(bundle) = array
+        .get("attributes")
+        .and_then(|attributes| attributes.get("xue"))
+        .and_then(|xue| xue.get("bundle"))
+    else {
+        return Ok(None);
+    };
+    match bundle.as_str() {
+        Some(id) if !id.is_empty() => Ok(Some(id.to_owned())),
+        _ => Err(err("array attributes name no bundle id")),
+    }
 }
 
 // -- shard index ---------------------------------------------------------------
@@ -1341,6 +1432,154 @@ mod tests {
         ] {
             assert!(parse_array_metadata(&array_document(edit)).is_err());
         }
+    }
+
+    #[test]
+    fn rejects_configuration_that_is_present_and_wrong() {
+        for edit in [
+            |d: &mut Value| d["chunk_key_encoding"]["configuration"] = json!(null),
+            |d: &mut Value| d["chunk_key_encoding"]["configuration"] = json!({"separator": "."}),
+            |d: &mut Value| d["chunk_key_encoding"]["configuration"] = json!({"separator": 5}),
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_codecs"][0]["configuration"] = json!({}),
+            |d: &mut Value| {
+                d["codecs"][0]["configuration"]["index_codecs"][0]["configuration"] = json!({"endian": "big"});
+            },
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_codecs"][0]["configuration"] = json!(7),
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_location"] = json!(5),
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_location"] = json!(true),
+        ] {
+            let text = array_document(edit);
+            assert!(parse_array_metadata(&text).is_err(), "{text} was accepted");
+        }
+        // Absent, the same fields take the codec's defaults.
+        for edit in [
+            |d: &mut Value| d["chunk_key_encoding"]["configuration"] = json!({}),
+            |d: &mut Value| d["chunk_key_encoding"]["configuration"] = json!({"separator": "/"}),
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_codecs"] = json!([{"name": "bytes"}, {"name": "crc32c"}]),
+            |d: &mut Value| d["codecs"][0]["configuration"]["index_location"] = json!(null),
+            |d: &mut Value| {
+                d["codecs"][0]["configuration"].as_object_mut().unwrap().remove("index_location");
+            },
+        ] {
+            let layout = parse_array_metadata(&array_document(edit)).unwrap();
+            assert_eq!(layout.index_location, IndexLocation::End);
+        }
+    }
+
+    #[test]
+    fn refuses_shapes_past_what_a_reader_may_allocate() {
+        const BIG: u64 = 1 << 32;
+        for edit in [
+            // A height that would read as 720 once cut to 32 bits.
+            |d: &mut Value| {
+                d["shape"] = json!([121, BIG + 720, 144]);
+                d["chunk_grid"]["configuration"]["chunk_shape"] = json!([126, 720, 144]);
+                d["codecs"][0]["configuration"]["chunk_shape"] = json!([6, 720, 16]);
+            },
+            // A tile height that would read as zero.
+            |d: &mut Value| d["codecs"][0]["configuration"]["chunk_shape"] = json!([6, BIG, 16]),
+            |d: &mut Value| d["codecs"][0]["configuration"]["chunk_shape"] = json!([BIG, 16, 16]),
+            |d: &mut Value| d["shape"] = json!([BIG, 73, 144]),
+            // More cells than a decoded plane may hold.
+            |d: &mut Value| {
+                d["shape"] = json!([121, 16_000, 16_000]);
+                d["chunk_grid"]["configuration"]["chunk_shape"] = json!([126, 16_000, 16_000]);
+            },
+            // A shard whose index alone passes the limit.
+            |d: &mut Value| {
+                d["shape"] = json!([121, 8_000, 8_000]);
+                d["chunk_grid"]["configuration"]["chunk_shape"] = json!([126, 8_000, 8_000]);
+                d["codecs"][0]["configuration"]["chunk_shape"] = json!([6, 1, 1]);
+            },
+        ] {
+            let text = array_document(edit);
+            assert!(parse_array_metadata(&text).is_err(), "{text} was accepted");
+        }
+    }
+
+    #[test]
+    fn an_array_names_its_bundle_or_none() {
+        assert_eq!(parse_array_document(&array_document(|_| {})).unwrap().bundle, None);
+        let named = array_document(|d| d["attributes"] = json!({"xue": {"bundle": "tmp2m", "predictor": "raw"}}));
+        assert_eq!(parse_array_document(&named).unwrap().bundle.as_deref(), Some("tmp2m"));
+        let unnamed = array_document(|d| d["attributes"] = json!({"xue": {"predictor": "raw"}}));
+        assert_eq!(parse_array_document(&unnamed).unwrap().bundle, None);
+        let absent = array_document(|d| {
+            d.as_object_mut().unwrap().remove("attributes");
+        });
+        assert_eq!(parse_array_document(&absent).unwrap().bundle, None);
+        for bundle in [json!(7), json!(""), json!(null)] {
+            let text = array_document(|d| d["attributes"] = json!({"xue": {"bundle": bundle}}));
+            assert!(parse_array_document(&text).is_err(), "{text} was accepted");
+        }
+    }
+
+    #[test]
+    fn a_group_gives_one_bundle_block_without_reading_it() {
+        // Not a valid bundle metadata document: this entry point leaves the
+        // block to the caller's validator.
+        let single = json!({"zarr_format": 3, "node_type": "group",
+            "attributes": {"xue_profile": 1, "xue": {"anything": [1, 2.5]}}})
+        .to_string();
+        assert_eq!(
+            group_metadata_json(&single, None).unwrap(),
+            (PROFILE_SINGLE, r#"{"anything":[1,2.5]}"#.to_owned())
+        );
+        assert_eq!(
+            group_metadata_json(&single, Some("whichever")).unwrap(),
+            group_metadata_json(&single, None).unwrap()
+        );
+        let shared = json!({"zarr_format": 3, "node_type": "group",
+            "attributes": {"xue_profile": 2, "xue_bundles": {"tmp2m": {"a": 1}, "prate": {"a": 2}, "gust": 3}}})
+        .to_string();
+        assert_eq!(
+            group_metadata_json(&shared, Some("prate")).unwrap(),
+            (PROFILE_SHARED, r#"{"a":2}"#.to_owned())
+        );
+        assert!(group_metadata_json(&shared, None).is_err());
+        assert!(group_metadata_json(&shared, Some("tmp")).is_err());
+        assert!(group_metadata_json(&shared, Some("gust")).is_err());
+        assert!(group_metadata_json(&shared, Some("constructor")).is_err());
+    }
+
+    #[test]
+    fn a_reader_places_chunks_through_the_indices_it_was_given() {
+        // Two shards of one time chunk each would not hold 121 frames; cut the
+        // axis to twelve so the array is two shards of 45 tiles.
+        let layout = parse_array_metadata(&array_document(|d| {
+            d["shape"] = json!([12, 73, 144]);
+            d["chunk_grid"]["configuration"]["chunk_shape"] = json!([6, 80, 144]);
+        }))
+        .unwrap();
+        assert_eq!((layout.shard_count, layout.chunks_per_shard), (2, 45));
+        let mut reader = ArrayReader::new(layout);
+        assert_eq!(reader.shard_of(0).unwrap(), 0);
+        assert_eq!(reader.shard_of(1).unwrap(), 1);
+        assert!(reader.shard_of(2).is_err());
+
+        // Nothing is answered about a shard whose index was never handed over.
+        assert!(!reader.has_shard_index(1));
+        assert!(reader.chunk_range(1, 0).is_err());
+
+        let mut entries = vec![None; 45];
+        entries[0] = Some((0, 40));
+        entries[44] = Some((40, 7));
+        let index = build_index(&entries);
+        assert!(reader.set_shard_index(2, &index).is_err());
+        let mut corrupt = index.clone();
+        corrupt[3] ^= 1;
+        assert!(reader.set_shard_index(1, &corrupt).is_err());
+        assert!(reader.set_shard_index(1, &index[..index.len() - 16]).is_err());
+        assert!(!reader.has_shard_index(1));
+
+        reader.set_shard_index(1, &index).unwrap();
+        assert!(reader.has_shard_index(1));
+        assert!(!reader.has_shard_index(0));
+        assert_eq!(reader.chunk_range(1, 0).unwrap(), Some(ShardIndexEntry { offset: 0, length: 40 }));
+        assert_eq!(reader.chunk_range(1, 1).unwrap(), None);
+        assert_eq!(reader.chunk_range(1, 44).unwrap(), Some(ShardIndexEntry { offset: 40, length: 7 }));
+        assert!(reader.chunk_range(1, 45).is_err());
+        assert!(reader.chunk_range(0, 0).is_err());
     }
 
     #[test]
