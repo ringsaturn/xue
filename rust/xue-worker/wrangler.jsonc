@@ -5,8 +5,10 @@
   "name": "xue-api",
   "main": "build/worker/shim.mjs",
   "compatibility_date": "2026-07-08",
+  // worker-build refuses a `worker` crate older than its own minor, so it
+  // tracks the `worker` line in Cargo.toml.
   "build": {
-    "command": "cargo install -q worker-build && worker-build --release"
+    "command": "cargo install -q worker-build@^0.8 && worker-build --release"
   },
   // The Swagger UI (`public/docs/`, a pinned swagger-ui-dist) is served by the
   // static-assets server, not compiled into the wasm; only `/v1/*` reaches the
