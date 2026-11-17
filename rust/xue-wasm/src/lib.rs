@@ -113,7 +113,7 @@ impl WasmLevel3Sweep {
 /// A list rather than one rectangle because a viewport straddling the
 /// antimeridian covers two disjoint column ranges of a wrapping grid; the
 /// caller splits it, and the decoder unions them into the same plane buffer.
-fn parse_rects(flat: &[u32]) -> Result<Vec<TileRect>, JsError> {
+pub(crate) fn parse_rects(flat: &[u32]) -> Result<Vec<TileRect>, JsError> {
     if flat.is_empty() || flat.len() % 4 != 0 {
         return Err(JsError::new("tile rectangles come in groups of four"));
     }

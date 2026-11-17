@@ -3,11 +3,31 @@
 //! The Worker keeps the network — requests, range merging, the compressed
 //! chunks it holds and their budget — and asks here what the format says:
 //! which block of the group is a bundle's metadata, how an array is cut,
-//! where a shard's index and an inner chunk sit. Nothing in this module
-//! fetches or awaits; every call is synchronous over bytes already local.
+//! where a shard's index and an inner chunk sit, and what a frame is once its
+//! chunks are local. Nothing in this module fetches or awaits; every call is
+//! synchronous over bytes already local.
+//!
+//! A frame is `tilesFor` → fetch what is missing → `undecodedTiles` →
+//! `feedChunk` for each → `assembleFrame`. The last three run without an
+//! `await` between them, and `assembleFrame` returns a new array every time,
+//! so frames decoded concurrently cannot write into one another.
 
 use wasm_bindgen::prelude::*;
 use xue::zarr::{self, ArrayReader, IndexLocation};
+use xue::TileRect;
+
+use crate::parse_rects;
+
+/// A viewport's tile rectangles as the reader takes them: `None` for the
+/// whole plane, else the list `parse_rects` reads. An empty list names no
+/// tile at all, which is not the whole plane.
+fn optional_rects(rects: Option<Vec<u32>>) -> Result<Option<Vec<TileRect>>, JsError> {
+    match rects {
+        None => Ok(None),
+        Some(flat) if flat.is_empty() => Ok(Some(Vec::new())),
+        Some(flat) => parse_rects(&flat).map(Some),
+    }
+}
 
 fn js_error(error: xue::DecodeError) -> JsError {
     JsError::new(&error.0)
@@ -75,8 +95,8 @@ pub fn parse_shard_index(bytes: &[u8], chunk_count: u32) -> Result<Vec<f64>, JsE
         .collect())
 }
 
-/// One variable array of a store: its layout and the shard indices handed
-/// over so far.
+/// One variable array of a store: its layout, the shard indices handed over
+/// so far, and the decoded tiles of the time chunk being read.
 #[wasm_bindgen]
 pub struct WasmZarrArray {
     inner: ArrayReader,
@@ -226,5 +246,45 @@ impl WasmZarrArray {
     pub fn chunk_range(&self, time_chunk: u32, tile: u32) -> Result<Option<Box<[f64]>>, JsError> {
         let entry = self.inner.chunk_range(time_chunk, tile).map_err(js_error)?;
         Ok(entry.map(|entry| vec![entry.offset as f64, entry.length as f64].into_boxed_slice()))
+    }
+
+    /// The tiles the rectangles name (`[firstColumn, firstRow, lastColumn,
+    /// lastRow, ...]`), ascending, or every tile without a list.
+    #[wasm_bindgen(js_name = tilesFor)]
+    pub fn tiles_for(&self, rects: Option<Vec<u32>>) -> Result<Vec<u32>, JsError> {
+        let rects = optional_rects(rects)?;
+        self.inner.tiles_for(rects.as_deref()).map_err(js_error)
+    }
+
+    /// Which of `tiles` still have to be fed before a frame of `timeChunk`
+    /// assembles over them.
+    #[wasm_bindgen(js_name = undecodedTiles)]
+    pub fn undecoded_tiles(&self, time_chunk: u32, tiles: &[u32]) -> Vec<u32> {
+        self.inner.undecoded_tiles(time_chunk, tiles)
+    }
+
+    /// Decode one inner chunk and hold it for the frames of its time chunk.
+    /// An empty `payload` is a chunk the shard never held. Feeding another
+    /// time chunk drops the tiles of the one held.
+    #[wasm_bindgen(js_name = feedChunk)]
+    pub fn feed_chunk(&mut self, time_chunk: u32, tile: u32, payload: &[u8]) -> Result<(), JsError> {
+        let payload = (!payload.is_empty()).then_some(payload);
+        self.inner.feed_chunk(time_chunk, tile, payload).map_err(js_error)
+    }
+
+    /// One frame as a new plane. With rectangles, only their tiles are
+    /// written and the cells outside them are zero, which says nothing about
+    /// the data there. Throws unless every tile named was fed for the
+    /// frame's time chunk.
+    #[wasm_bindgen(js_name = assembleFrame)]
+    pub fn assemble_frame(&self, frame_index: u32, rects: Option<Vec<u32>>) -> Result<Vec<u8>, JsError> {
+        let rects = optional_rects(rects)?;
+        self.inner.assemble_frame(frame_index, rects.as_deref()).map_err(js_error)
+    }
+
+    /// Drop the decoded tiles; the shard indices stay.
+    #[wasm_bindgen(js_name = clearCache)]
+    pub fn clear_cache(&mut self) {
+        self.inner.clear_cache();
     }
 }
