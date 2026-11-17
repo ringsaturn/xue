@@ -82,8 +82,9 @@ pub fn shard_index_length(chunk_count: u32) -> f64 {
 
 /// One shard's index, verified (length, CRC-32C, every entry), flattened as
 /// `[offset, length, ...]` with one pair per inner chunk. A chunk the shard
-/// never held is the pair `[-1, -1]`. For a store whose array document is
-/// read elsewhere; a variable array is read through [`WasmZarrArray`].
+/// never held is the pair `[-1, -1]`. For a store whose layout is held
+/// elsewhere, as a network store's is; a grid store's variable array is read
+/// through [`WasmZarrArray`].
 #[wasm_bindgen(js_name = parseShardIndex)]
 pub fn parse_shard_index(bytes: &[u8], chunk_count: u32) -> Result<Vec<f64>, JsError> {
     let index = zarr::parse_shard_index(bytes, chunk_count as usize).map_err(js_error)?;

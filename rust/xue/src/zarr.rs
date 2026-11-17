@@ -2078,6 +2078,8 @@ mod schema_tie_tests {
 
     #[test]
     fn the_network_block_read_is_the_schemas() {
+        assert_named("network-group", "", &["consolidated_metadata"]);
+        assert_named("store-group", "/$defs/ConsolidatedMetadata", &["metadata"]);
         assert_named(
             "network-group",
             "/$defs/Network",
