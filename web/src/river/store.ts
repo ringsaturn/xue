@@ -8,8 +8,10 @@
  * range-coalescing `ZarrStore` (a frame's row groups, or a reach's time
  * chunks, asked for in one microtask go out as merged ranges) and the WASM
  * module's shard index parser, with its CRC-32C, and `decodeChunk`, which
- * verifies each Zstandard frame's checksum and replays the delta chain. What is its
- * own is the two-dimensional cut and the `xue_network` block.
+ * verifies each Zstandard frame's checksum and replays the delta chain. The
+ * data array's document is read by the WASM module as well
+ * (`xue::network`), against the group. What is this file's own is the
+ * `xue_network` block as the shell uses it and the two-dimensional read.
  */
 
 import { checkNetworkGroup } from "../schema/generated/network-group";
@@ -23,7 +25,7 @@ const PREDICTOR_RAW = 0;
 const PREDICTOR_PREVIOUS = 2;
 
 /** What a network store needs of the WASM module. */
-export type NetworkCodec = Pick<typeof Wasm, "decodeChunk" | "parseShardIndex" | "shardIndexLength">;
+export type NetworkCodec = Pick<typeof Wasm, "decodeChunk" | "parseNetworkArray" | "parseShardIndex" | "shardIndexLength">;
 
 /** One inner chunk's byte span within the shard. */
 interface ShardIndexEntry {
@@ -43,8 +45,6 @@ function indexEntries(flat: Float64Array): (ShardIndexEntry | null)[] {
 
 export const NETWORK_VERSION = 1;
 export const NETWORK_ARRAY = "streamflow";
-/** Frames per inner chunk, as on a grid store. */
-export const NETWORK_TIME_CHUNK = 6;
 
 export interface NetworkCodebook {
   type: "log1p";
@@ -77,7 +77,7 @@ export interface NetworkLayout {
   rowGroupRows: number;
   rowGroups: number;
   timeChunks: number;
-  shardFrames: number;
+  /** Inner chunks in the one shard, and pairs in its index. */
   chunksPerShard: number;
   delta: boolean;
   indexLocation: "start" | "end";
@@ -94,24 +94,9 @@ function positiveInt(value: unknown, what: string): number {
   return value;
 }
 
-function positiveInts(value: unknown, count: number, what: string): number[] {
-  if (!Array.isArray(value) || value.length !== count) throw new Error(`${what} must list ${count} entries`);
-  return value.map((item, index) => positiveInt(item, `${what}[${index}]`));
-}
-
 function finite(value: unknown, what: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${what} must be a finite number`);
   return value;
-}
-
-function names(value: unknown, what: string): { names: string[]; codecs: Record<string, unknown>[] } {
-  if (!Array.isArray(value)) throw new Error(`${what} must be a list`);
-  const codecs = value.map((item) => object(item, `${what} entry`));
-  return { names: codecs.map((codec) => String(codec.name)), codecs };
-}
-
-function same(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
 function codebook(value: unknown): NetworkCodebook {
@@ -177,65 +162,33 @@ export function parseNetworkGroup(text: string): NetworkGroup {
   };
 }
 
-/** The data array's document, held to the profile: `uint8 [time,
- * feature]`, one `sharding_indexed` codec with inner chunk `[6,
- * rowGroupRows]`, inner chain `[xue.delta, bytes, zstd]` or `[bytes,
- * zstd]`, index `[bytes, crc32c]`, and a shard of whole inner chunks
- * spanning every feature. */
-export function parseNetworkArrayMetadata(input: unknown): NetworkLayout {
-  const array = object(input, "array metadata");
-  if (array.zarr_format !== 3 || array.node_type !== "array") throw new Error("not a Zarr v3 array");
-  if (array.data_type !== "uint8") throw new Error(`array data type must be uint8, not ${String(array.data_type)}`);
-  const [frameCount, featureCount] = positiveInts(array.shape, 2, "array shape") as [number, number];
-  const dimensions = array.dimension_names;
-  if (dimensions !== undefined && !(Array.isArray(dimensions) && same(dimensions.map(String), ["time", "feature"]))) {
-    throw new Error("array dimensions must be [time, feature]");
+/** The data array's layout, read by the WASM module against the group:
+ * `uint8 [time, feature]` of the group's frame and reach counts, one
+ * `sharding_indexed` codec with inner chunk `[6, rowGroupRows]`, inner chain
+ * `[xue.delta, bytes, zstd]` or `[bytes, zstd]`, index `[bytes, crc32c]`,
+ * one shard of the whole array in whole inner chunks, the codebook's
+ * no-data code as its fill value, and the group's variable repeated in its
+ * attributes. `arrayText` is the store's `streamflow/zarr.json`; without it
+ * the document is the one the group carries in its consolidated metadata,
+ * taken there by the reader so that its numbers stay as written. */
+export function readNetworkArray(codec: NetworkCodec, groupText: string, arrayText?: string): NetworkLayout {
+  const layout = codec.parseNetworkArray(groupText, arrayText);
+  try {
+    return {
+      frameCount: layout.frameCount,
+      featureCount: layout.featureCount,
+      timeChunk: layout.timeChunk,
+      rowGroupRows: layout.rowGroupRows,
+      rowGroups: layout.rowGroups,
+      timeChunks: layout.timeChunks,
+      chunksPerShard: layout.chunksPerShard,
+      delta: layout.delta,
+      indexLocation: layout.indexAtEnd ? "end" : "start",
+      fillValue: layout.fillValue,
+    };
+  } finally {
+    layout.free();
   }
-  const grid = object(array.chunk_grid, "chunk grid");
-  if (grid.name !== "regular") throw new Error("chunk grid must be regular");
-  const [shardFrames, shardFeatures] = positiveInts(object(grid.configuration, "chunk grid configuration").chunk_shape, 2, "chunk shape") as [number, number];
-  const keys = object(array.chunk_key_encoding, "chunk key encoding");
-  if (keys.name !== "default") throw new Error("chunk key encoding must be default");
-  const fillValue = array.fill_value;
-  if (typeof fillValue !== "number" || !Number.isInteger(fillValue) || fillValue < 0 || fillValue > 255) throw new Error("fill value must be a uint8 code");
-  const outer = names(array.codecs, "codecs");
-  if (!same(outer.names, ["sharding_indexed"])) throw new Error("array must carry exactly one sharding_indexed codec");
-  const sharding = object(outer.codecs[0]!.configuration, "sharding configuration");
-  const [timeChunk, rowGroupRows] = positiveInts(sharding.chunk_shape, 2, "inner chunk shape") as [number, number];
-  if (timeChunk !== NETWORK_TIME_CHUNK) throw new Error(`inner chunk must hold ${NETWORK_TIME_CHUNK} frames`);
-  const inner = names(sharding.codecs, "inner codecs");
-  let delta = false;
-  if (same(inner.names, ["xue.delta", "bytes", "zstd"])) {
-    if (object(inner.codecs[0]!.configuration ?? {}, "delta configuration").axis !== 0) throw new Error("xue.delta must run along axis 0");
-    delta = true;
-  } else if (!same(inner.names, ["bytes", "zstd"])) {
-    throw new Error(`inner codec chain [${inner.names.join(", ")}] is not one this profile reads`);
-  }
-  const index = names(sharding.index_codecs, "index codecs");
-  if (!same(index.names, ["bytes", "crc32c"])) throw new Error("index codecs must be [bytes, crc32c]");
-  const endian = index.codecs[0]!.configuration === undefined ? "little" : object(index.codecs[0]!.configuration, "index bytes").endian;
-  if (endian !== "little") throw new Error("shard index must be little-endian");
-  const indexLocation = sharding.index_location ?? "end";
-  if (indexLocation !== "start" && indexLocation !== "end") throw new Error(`unknown index location ${String(indexLocation)}`);
-  const rowGroups = Math.ceil(featureCount / rowGroupRows);
-  if (shardFrames % timeChunk !== 0 || shardFeatures !== rowGroups * rowGroupRows) {
-    throw new Error("outer chunk must be whole time chunks of every row group");
-  }
-  // The profile writes the whole axis as one shard, `c/0/0`.
-  if (shardFrames < frameCount) throw new Error("network array must be one shard over the whole axis");
-  return {
-    frameCount,
-    featureCount,
-    timeChunk,
-    rowGroupRows,
-    rowGroups,
-    timeChunks: Math.ceil(frameCount / timeChunk),
-    shardFrames,
-    chunksPerShard: (shardFrames / timeChunk) * rowGroups,
-    delta,
-    indexLocation,
-    fillValue,
-  };
 }
 
 /** Every code's value in m³/s: the `log1p` codebook of `bundle.md`, code 0
@@ -316,7 +269,8 @@ export class NetworkStore {
    * when the group carries it), the two side arrays. `geometry`, when
    * given, is the index's, which every store of a case must repeat. */
   static async open(store: ZarrStore, codec: NetworkCodec, geometry?: RiverGeometry): Promise<NetworkStore> {
-    const group = parseNetworkGroup(new TextDecoder().decode(await store.get("zarr.json")));
+    const groupText = new TextDecoder().decode(await store.get("zarr.json"));
+    const group = parseNetworkGroup(groupText);
     if (geometry) {
       const own = group.geometry;
       if (
@@ -329,13 +283,11 @@ export class NetworkStore {
         throw new Error("network store names a different GeoParquet from the river index");
       }
     }
-    const arrayDocument = async (name: string): Promise<unknown> =>
-      group.consolidated?.[name] ?? JSON.parse(new TextDecoder().decode(await store.get(`${name}/zarr.json`)));
-    const layout = parseNetworkArrayMetadata(await arrayDocument(NETWORK_ARRAY));
-    if (layout.frameCount !== group.frameCount || layout.featureCount !== group.geometry.featureCount || layout.rowGroupRows !== group.geometry.rowGroupRows) {
-      throw new Error("network array shape disagrees with its group");
-    }
-    if (layout.fillValue !== group.variable.quantization.nodataCode) throw new Error("network array fill value must be the no-data code");
+    // The group's own copy of the array document when it carries one, which
+    // saves the request; else the store's.
+    const arrayText =
+      group.consolidated?.[NETWORK_ARRAY] !== undefined ? undefined : new TextDecoder().decode(await store.get(`${NETWORK_ARRAY}/zarr.json`));
+    const layout = readNetworkArray(codec, groupText, arrayText);
     const [timeBytes, baseBytes] = await Promise.all([store.get("time/c/0"), store.get("baseflow/c/0")]);
     if (timeBytes.byteLength !== layout.frameCount * 8) throw new Error("time side array is not one int64 per frame");
     if (baseBytes.byteLength !== layout.featureCount * 4) throw new Error("baseflow side array is not one float32 per reach");
