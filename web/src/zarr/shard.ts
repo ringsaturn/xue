@@ -198,28 +198,3 @@ export function tileOf(layout: ZarrArrayLayout, row: number, column: number): nu
 export function framesInTimeChunk(layout: ZarrArrayLayout, timeChunk: number): number {
   return Math.min(layout.timeChunk, layout.frameCount - timeChunk * layout.timeChunk);
 }
-
-/** Copy frame `frameInChunk` of one decoded inner chunk — stored whole at
- * the inner shape — into a plane, trimming the padding past the grid's
- * edge. `chunk` is `null` for a chunk the shard never held, which is the
- * fill value throughout. */
-export function placeTile(
-  plane: Uint8Array,
-  layout: ZarrArrayLayout,
-  tile: number,
-  chunk: Uint8Array | null,
-  frameInChunk: number,
-): void {
-  const origin = tileOrigin(layout, tile);
-  const shape = tileShape(layout, tile);
-  const stride = layout.tileHeight * layout.tileWidth;
-  for (let row = 0; row < shape.height; row += 1) {
-    const target = (origin.row + row) * layout.width + origin.column;
-    if (chunk === null) {
-      plane.fill(layout.fillValue, target, target + shape.width);
-      continue;
-    }
-    const source = frameInChunk * stride + row * layout.tileWidth;
-    plane.set(chunk.subarray(source, source + shape.width), target);
-  }
-}

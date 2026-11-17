@@ -15,9 +15,16 @@ class FakeWorker {
   terminate(): void {}
 }
 
-function session(key: number, width = 1024, height = 1024, variables = 1): VariableSession & { worker: FakeWorker } {
+function session(
+  key: number,
+  width = 1024,
+  height = 1024,
+  variables = 1,
+  format: VariableSession["format"] = "Xue",
+): VariableSession & { worker: FakeWorker } {
   return {
     key,
+    format,
     streaming: true,
     resident: false,
     viewTiles: null,
@@ -131,6 +138,18 @@ describe("plane cache", () => {
     cache.store("b", frame(owner, 100));
     cache.evict("b");
     expect(cache.frames.size).toBe(2);
+  });
+
+  it("returns no buffer to a store's worker, which has no pool", () => {
+    const owner = session(1, 1024, 1024, 1, "Zarr");
+    const cache = createPlaneCache(deps(constrained));
+    cache.store("a", frame(owner, 10));
+    cache.store("b", frame(owner, 10));
+    cache.store("c", frame(owner, 10));
+    cache.evict("c");
+    expect([...cache.frames.keys()]).toEqual(["b", "c"]);
+    expect(cache.bytes).toBe(20 * MEBIBYTE);
+    expect(owner.worker.posted).toEqual([]);
   });
 
   it("recycles a buffer into the worker of the session that decoded it", () => {

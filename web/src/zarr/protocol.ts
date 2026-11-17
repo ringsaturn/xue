@@ -5,8 +5,10 @@
  * `booted` → `init-stream` → `ready`, then `decode` → `frame`, `series` →
  * `series`, `prefetch-window`, `recycle` and `clear-cache` (worker.ts is the
  * `.xue` implementation). The Zarr worker is the other one and answers the
- * same messages with the same replies; what differs is only how it is
- * opened, which is the one message declared here. The request shapes below mirror worker.ts's exactly and exist so the
+ * same messages with the same replies, but for `recycle`, which it is never
+ * sent: its planes are new arrays, not buffers out of a pool. What differs
+ * otherwise is only how it is opened, which is the one message declared
+ * here. The request shapes below mirror worker.ts's and exist so the
  * two workers and their tests share one spelling without importing a worker
  * entry module (whose top level posts `booted` on load).
  */
@@ -75,11 +77,6 @@ interface ZarrPrefetchWindowMessage {
   tiles?: TileRect[];
 }
 
-interface ZarrRecycleMessage {
-  type: "recycle";
-  buffer: ArrayBuffer;
-}
-
 interface ZarrClearCacheMessage {
   type: "clear-cache";
 }
@@ -97,5 +94,4 @@ export type ZarrWorkerRequest =
   | ZarrDecodeMessage
   | ZarrSeriesMessage
   | ZarrPrefetchWindowMessage
-  | ZarrRecycleMessage
   | ZarrClearCacheMessage;

@@ -103,8 +103,8 @@ export interface DecodedFrame {
    * them the buffer carries whatever the decoder held before, so a plane is
    * only reusable for a view its tiles still cover. */
   tiles: TileRect[] | null;
-  /** The session that decoded it: the buffer belongs to that worker and is
-   * recycled back into it, and its grid is what the plane's bytes are on.
+  /** The session that decoded it: a container's worker gets the buffer back
+   * for reuse, and its grid is what the plane's bytes are on.
    * A numericId alone cannot say — it is a *file-local* handle, and two open
    * bundles routinely use the same one. */
   session: VariableSession;

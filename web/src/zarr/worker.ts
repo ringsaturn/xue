@@ -2,11 +2,12 @@
 /**
  * The Zarr decode worker: the third implementation of the decode protocol.
  *
- * It answers exactly what worker.ts answers — `booted` → `init-stream` →
- * `ready`, `decode` → `frame` with the same coverage semantics, `series`,
- * `prefetch-window`, `recycle`, `clear-cache`, `progress` and `resident` —
- * over a Zarr v3 store (docs/zarr-profile.md) instead of a `.xue` file, so
- * `main.ts` holds it in the same field without branching. The store,
+ * It answers what worker.ts answers — `booted` → `init-stream` → `ready`,
+ * `decode` → `frame` with the same coverage semantics, `series`,
+ * `prefetch-window`, `clear-cache`, `progress` and `resident` — over a Zarr
+ * v3 store (docs/zarr-profile.md) instead of a `.xue` file, so `main.ts`
+ * holds it in the same field without branching. It takes no `recycle`: a
+ * frame's plane is a new array out of the WASM reader, posted as it is. The store,
  * the shard indices and the assembly live in `session.ts`; this file is the
  * message loop and the windowed prefetch pump, which mirrors the `.xue`
  * worker's: the main thread names the frame offsets ahead of the playhead
@@ -41,7 +42,6 @@ let decodeFetchCount = 0;
  * chunk) it filled — the unit the concurrency cap counts, as the `.xue`
  * worker counts one span per group. */
 let prefetchTasks = 0;
-const recycled: ArrayBuffer[] = [];
 
 let windowOffsets: number[] = [];
 let windowConcurrency = 0;
@@ -142,13 +142,12 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   pumpPrefetch();
 }
 
-/** Decode one frame into `into`, the buffer that is posted back. */
-async function decodeFrame(message: ZarrDecodeMessage, into: Uint8Array): Promise<Uint8Array> {
+async function decodeFrame(message: ZarrDecodeMessage): Promise<Uint8Array> {
   const active = session;
   if (!active) throw new Error("store is not initialized");
   decodeFetchCount += 1;
   try {
-    return await active.decodeFrame(message.variableId, message.frameOffset, message.tiles ?? null, into);
+    return await active.decodeFrame(message.variableId, message.frameOffset, message.tiles ?? null);
   } finally {
     decodeFetchCount -= 1;
     postProgress();
@@ -181,13 +180,8 @@ self.onmessage = async (event: MessageEvent<ZarrWorkerRequest>) => {
     }
     if (message.type === "decode") {
       const started = performance.now();
-      const active = session;
-      if (!active) throw new Error("store is not initialized");
-      // The plane is assembled straight into the buffer posted back, taken
-      // before any await: concurrent decodes never share one.
-      let buffer = recycled.pop();
-      if (!buffer || buffer.byteLength !== active.planeLength) buffer = new ArrayBuffer(active.planeLength);
-      await decodeFrame(message, new Uint8Array(buffer));
+      // The plane is the decode's own array, whole: its buffer is posted.
+      const buffer = (await decodeFrame(message)).buffer as ArrayBuffer;
       post(
         {
           type: "frame",
@@ -196,8 +190,8 @@ self.onmessage = async (event: MessageEvent<ZarrWorkerRequest>) => {
           variableId: message.variableId,
           frameOffset: message.frameOffset,
           decodeMs: performance.now() - started,
-          // The plane outside these rectangles is whatever the buffer held;
-          // absent means the whole plane is valid.
+          // The plane outside these rectangles is not data; absent means
+          // the whole plane is valid.
           tiles: message.tiles,
           buffer,
         },
@@ -221,10 +215,6 @@ self.onmessage = async (event: MessageEvent<ZarrWorkerRequest>) => {
         },
         [buffer],
       );
-      return;
-    }
-    if (message.type === "recycle") {
-      if (recycled.length < 4) recycled.push(message.buffer);
       return;
     }
     if (message.type === "prefetch-window") {

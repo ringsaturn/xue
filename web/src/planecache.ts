@@ -207,8 +207,11 @@ export function createPlaneCache(deps: PlaneCacheDeps) {
         continue;
       }
       bytes -= evicted.plane.byteLength;
-      // The buffer goes back to the worker that produced it — which the frame
-      // itself names, not the key it was filed under.
+      // A container's worker decodes into buffers out of a pool, so the
+      // buffer goes back to the worker that produced it — which the frame
+      // itself names, not the key it was filed under. A store's worker posts
+      // a new array every frame and has no pool to return one to.
+      if (evicted.session.format !== "Xue") continue;
       const buffer = evicted.plane.buffer as ArrayBuffer;
       evicted.session.worker.postMessage({ type: "recycle", buffer }, [buffer]);
     }
