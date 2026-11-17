@@ -23,7 +23,7 @@ import { buildPhaseField } from "../../web/src/precipphase";
 import { bilinearCells, probeCell } from "../../web/src/probe";
 import { viewportTileRects } from "../../web/src/tiles";
 import { cellOf, parseGrid as parseCellGrid } from "../../web/src/apiconsole/locate";
-import { parseGroupMetadata } from "../../web/src/zarr/shard";
+import { groupOf } from "../../web/src/zarr/shard";
 import { globalGrid } from "./helpers";
 
 const PROJECTION = {
@@ -224,10 +224,8 @@ describe("the metadata versions", () => {
   it("refuses a malformed grid at the document, through the store's group too", () => {
     const bad = { ...v4, grid: { ...LAMBERT_BLOCK, projection: { ...PROJECTION, kind: "rotated-pole" } } };
     expect(() => parseBundleMetadata(JSON.stringify(bad))).toThrow();
-    const group = { zarr_format: 3, node_type: "group", attributes: { xue_profile: 1, xue: bad } };
-    expect(() => parseGroupMetadata(JSON.stringify(group))).toThrow();
-    const good = { zarr_format: 3, node_type: "group", attributes: { xue_profile: 1, xue: v4 } };
-    expect(parseGroupMetadata(JSON.stringify(good)).metadata.schemaVersion).toBe(4);
+    expect(() => groupOf(1, JSON.stringify(bad))).toThrow();
+    expect(groupOf(1, JSON.stringify(v4)).metadata.schemaVersion).toBe(4);
   });
 });
 

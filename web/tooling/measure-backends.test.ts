@@ -118,7 +118,7 @@ async function openXue(wasm: Wasm, bundle: string) {
 async function openZarr(wasm: Wasm, bundle: string, gap?: number) {
   const log = newFetchLog();
   const store = new ZarrStore(`local://${bundle}.zarr`, "measure", { fetch: localFetch(RUN_DIR, log), gap });
-  const session = await ZarrSession.open(store, wasm.decodeChunk);
+  const session = await ZarrSession.open(store, wasm);
   return { log, session, variables: session.numericIds, firstOffset: session.frameOffsets[0]! };
 }
 

@@ -79,16 +79,20 @@ whole objects (only when no container ships). Probe sessions are
 streamed or nothing.
 
 Store channel: a session opens a bundle by (store, bundle id),
-`ZarrSession.open(store, decode, { bundle })`: a run's map stores are shared
+`ZarrSession.open(store, codec, { bundle })`: a run's map stores are shared
 ([`zarr-profile.md`](../zarr-profile.md), profile 2: every bundle of a tier
-in `bundles[.<tier>].zarr`), so `zarr/shard.ts::parseGroupMetadata(text,
+in `bundles[.<tier>].zarr`), so `zarr/shard.ts::readGroup(codec, text,
 bundle?)` takes the bundle's metadata out of the group's `xue_bundles`
 (or a one-bundle store's `xue`, profile 1, which published runs and cases
-still are) and checks grid and axis against that bundle alone. Caches keyed
+still are) and checks grid and axis against that bundle alone. `codec` is
+the WASM module: the store's format is read by `rust/xue/src/zarr.rs`
+(`parseZarrGroup`, one `WasmZarrArray` per variable), the reader the data
+API uses, and `shard.ts` adds the generated schema validators and
+`parseBundleMetadata` in front of it. Caches keyed
 by store path (`PayloadPool`, the store) are shared by the tier's bundles,
-so the group and coordinates are fetched once per tier. `zarr/shard.ts`
-parses the CRC-32C-checked shard index once and maps frame and tile to a
-span (`shardOf`; a time chunk is six frames
+so the group and coordinates are fetched once per tier. The array's reader
+verifies each shard's CRC-32C-checked index once (`setShardIndex`) and maps
+time chunk and tile to a span (`chunkRange`; a time chunk is six frames
 and may straddle container groups); `zarr/store.ts` appends `?v=` and
 merges one shard's ranges issued in one microtask (gap ≤ 64 KB). Chunks
 decode via `decodeChunk` from `rust/xue-wasm`. Compressed chunks are an LRU
@@ -617,8 +621,8 @@ a failed request is one console warning and the case plays its field alone.
   (hyparquet's own GeoJSON conversion is off). Row group `g` is the
   store's feature chunk `g`, so a row's index is its feature.
 - **Values**. `river/store.ts::NetworkStore` opens a track's store with the
-  grid reader's pieces: `zarr/store.ts` (range coalescing, `?v=`),
-  `zarr/shard.ts::parseShardIndex`, and the WASM `decodeChunk`
+  grid reader's pieces: `zarr/store.ts` (range coalescing, `?v=`), and the
+  WASM module's `parseShardIndex` and `decodeChunk`
   (`river/decode.ts` loads it on the main thread; a frame is two 24 KB
   chunks). The group must carry `xue_network` version 1 and repeat the
   index's geometry; the array is `uint8 [time, feature]`, one shard,

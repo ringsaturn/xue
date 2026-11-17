@@ -15,21 +15,23 @@
  * `resident` fires once every frame of the axis is local within the tiles
  * the window names.
  *
- * Decoding is the container's own chunk path, `decodeChunk` from the WASM
- * module: the only thing this channel changes is where the bytes come from
- * and how they are indexed, which is what the comparison with the `.xue`
- * channel is meant to isolate.
+ * The WASM module reads the format for both channels: decoding is the
+ * container's own chunk path, `decodeChunk`, so the only thing this channel
+ * changes is where the bytes come from and how they are indexed, which is
+ * what the comparison with the `.xue` channel is meant to isolate.
  */
 
 import { sameTileRects, type TileRect } from "../tiles";
-import wasmInit, { decodeChunk } from "../wasm/xue";
+import wasmInit, { decodeChunk, parseZarrGroup, WasmZarrArray } from "../wasm/xue";
 import wasmUrl from "../wasm/xue_bg.wasm?url";
 import type { ZarrDecodeMessage, ZarrInitStreamMessage, ZarrSeriesMessage, ZarrWorkerRequest } from "./protocol";
 import { SegmentedZarrSession } from "./segmented";
 import { ZarrSession, type ChunkKey, type ZarrReader } from "./session";
+import type { ZarrCodec } from "./shard";
 import { ZarrStore } from "./store";
 
 const PREFETCH_RETRIES = 3;
+const CODEC: ZarrCodec = { decodeChunk, parseZarrGroup, WasmZarrArray };
 
 let session: ZarrReader | null = null;
 let variableKey = "";
@@ -122,10 +124,10 @@ async function initStream(message: ZarrInitStreamMessage): Promise<void> {
   const opened: ZarrReader = message.segments
     ? await SegmentedZarrSession.open(
         message.segments.map((segment) => new ZarrStore(segment.url, segment.crc32, { ranges })),
-        decodeChunk,
+        CODEC,
         options,
       )
-    : await ZarrSession.open(new ZarrStore(message.url, message.crc32, { ranges }), decodeChunk, options);
+    : await ZarrSession.open(new ZarrStore(message.url, message.crc32, { ranges }), CODEC, options);
   session = opened;
   post({
     type: "ready",

@@ -1,6 +1,6 @@
 /**
- * Reading the Xue Zarr profile: the two metadata documents, the shard index,
- * and the arithmetic that maps a frame and a tile to a byte span.
+ * Reading the Xue Zarr profile: the two metadata documents and the shape of
+ * one variable's array.
  *
  * A store is one Zarr v3 group carrying a bundle's metadata JSON verbatim —
  * so the same `parseBundleMetadata` the `.xue` path uses reads it — and one
@@ -17,10 +17,17 @@
  * little-endian `uint64` pairs plus a CRC-32C at one end of it, one pair per
  * inner chunk in row-major order over the shard's chunk grid: time chunk by
  * time chunk, the bundle's tiles in row-major order within each
- * (docs/zarr-profile.md is normative). Everything here validates before it
- * trusts: an array that is not `uint8`, not sharded, or chained through
- * codecs this profile does not name is refused at open, and an index whose
- * checksum fails is refused before any of its offsets are used.
+ * (docs/zarr-profile.md is normative).
+ *
+ * The format is read by the Rust reader behind the WASM module (`xue::zarr`,
+ * the one the data API reads through): which block of a group is a bundle's
+ * metadata, how an array is cut, where a shard's index and an inner chunk
+ * sit, with the index's CRC-32C verified before any of its offsets are used.
+ * What stays here is what the shell adds: both documents are first held to
+ * the validators generated from docs/schemas/, and the bundle's block is
+ * read by the same `parseBundleMetadata` the `.xue` path uses. An array that
+ * is not `uint8`, not sharded, or chained through codecs this profile does
+ * not name is refused at open.
  *
  * The reader takes the shard's frame count from the array's own chunk shape
  * and handles any multiple of the time chunk, so a store cut one shard per
@@ -37,15 +44,21 @@
 import { parseBundleMetadata, type BundleMetadata } from "../manifest";
 import { checkStoreArray } from "../schema/generated/store-array";
 import { checkStoreGroup } from "../schema/generated/store-group";
+import type * as Wasm from "../wasm/xue";
+
+/** What a session needs of the WASM module, injected so it can be opened
+ * where the module is loaded differently (a worker's `?url` import, a
+ * test's file read). */
+export type ZarrCodec = Pick<typeof Wasm, "decodeChunk" | "parseZarrGroup" | "WasmZarrArray">;
+
+/** One variable array as the WASM reader holds it: its layout and the shard
+ * indices handed over so far. */
+export type ZarrArrayReader = Wasm.WasmZarrArray;
 
 /** Predictor codes as `decodeChunk` takes them — the container's own
  * numbering (docs/format.md). */
 export const PREDICTOR_RAW = 0;
 export const PREDICTOR_PREVIOUS = 2;
-
-const DELTA_CODEC = "xue.delta";
-export const INDEX_ENTRY_BYTES = 16;
-const INDEX_CHECKSUM_BYTES = 4;
 
 type IndexLocation = "start" | "end";
 
@@ -53,15 +66,12 @@ export interface ZarrGroup {
   /** The bundle metadata, as the group's `attributes.xue` carries it, or
    * the requested bundle's entry of `attributes.xue_bundles`. */
   metadata: BundleMetadata;
-  /** That block re-serialized, for the `ready` message's `metadataJson`. */
+  /** That block as compact JSON, for the `ready` message's `metadataJson`. */
   metadataJson: string;
   profile: number;
 }
 
-/** The profiles this reader implements: one bundle per store, and one
- * store shared by every bundle of a tier. */
 const PROFILE_SINGLE = 1;
-const PROFILE_SHARED = 2;
 
 /** How one variable's array is cut. `frameCount`, `height` and `width` are
  * the array's shape; the tile and the time chunk are the inner chunk; the
@@ -98,243 +108,67 @@ export interface ZarrArrayLayout {
   fillValue: number;
 }
 
-export interface ShardIndexEntry {
-  offset: number;
-  length: number;
-}
-
-// -- CRC-32C -------------------------------------------------------------------
-
-/** Castagnoli, the `crc32c` codec's checksum over a shard index — a
- * different polynomial from the CRC-32/IEEE the container uses. */
-const CRC32C_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let byte = 0; byte < 256; byte += 1) {
-    let value = byte;
-    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? (value >>> 1) ^ 0x82f63b78 : value >>> 1;
-    table[byte] = value >>> 0;
-  }
-  return table;
-})();
-
-export function crc32c(bytes: Uint8Array): number {
-  let value = 0xffffffff;
-  for (let index = 0; index < bytes.byteLength; index += 1) {
-    value = CRC32C_TABLE[(value ^ bytes[index]!) & 0xff]! ^ (value >>> 8);
-  }
-  return (value ^ 0xffffffff) >>> 0;
-}
-
 // -- metadata ------------------------------------------------------------------
 
-function object(value: unknown, what: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${what} is not an object`);
-  return value as Record<string, unknown>;
-}
-
-function positiveInts(value: unknown, count: number, what: string): number[] {
-  if (!Array.isArray(value) || value.length !== count) throw new Error(`${what} must list ${count} entries`);
-  for (const item of value) {
-    if (typeof item !== "number" || !Number.isInteger(item) || item <= 0) throw new Error(`${what} must be positive integers`);
-  }
-  return value as number[];
-}
-
-function codecNames(value: unknown, what: string): { names: string[]; codecs: Record<string, unknown>[] } {
-  if (!Array.isArray(value)) throw new Error(`${what} must be a list`);
-  const codecs = value.map((item) => object(item, `${what} entry`));
-  return { names: codecs.map((codec) => String(codec.name)), codecs };
-}
-
-function sameList(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((item, index) => item === b[index]);
+/** One bundle's block of a group, held to docs/schemas/store-group.schema.json
+ * and read as bundle metadata. The envelope is rebuilt around the one bundle
+ * a session reads: the other bundles of a shared store are each their own
+ * session's to refuse, and the consolidated block is not read at all. */
+export function groupOf(profile: number, metadataJson: string, bundle?: string): ZarrGroup {
+  const block: unknown = JSON.parse(metadataJson);
+  const attributes =
+    profile === PROFILE_SINGLE ? { xue_profile: profile, xue: block } : { xue_profile: profile, xue_bundles: { [bundle ?? ""]: block } };
+  checkStoreGroup({ zarr_format: 3, node_type: "group", attributes }, "group metadata");
+  return { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
 }
 
 /** The group's `zarr.json`, read as `bundle`'s. A profile-1 group is one
  * bundle's whatever `bundle` says; a profile-2 group must name `bundle` in
  * its `xue_bundles`, and is refused without one asked for, since nothing
  * else in it says which bundle's metadata a session would be reading. */
-export function parseGroupMetadata(text: string, bundle?: string): ZarrGroup {
-  const group = object(JSON.parse(text), "group metadata");
-  if (group.zarr_format !== 3 || group.node_type !== "group") throw new Error("not a Zarr v3 group");
-  const attributes = object(group.attributes, "group attributes");
-  const profile = attributes.xue_profile;
-  if (typeof profile !== "number" || !Number.isInteger(profile) || profile < 1) {
-    throw new Error("group attributes carry no xue_profile version");
+export function readGroup(codec: ZarrCodec, text: string, bundle?: string): ZarrGroup {
+  const group = codec.parseZarrGroup(text, bundle);
+  try {
+    return groupOf(group.profile, group.metadataJson, bundle);
+  } finally {
+    group.free();
   }
-  let block: unknown;
-  if (profile === PROFILE_SINGLE) {
-    if (attributes.xue_bundles !== undefined) throw new Error("a profile-1 group carries no xue_bundles");
-    block = attributes.xue;
-    if (typeof block !== "object" || block === null) throw new Error("group attributes carry no xue metadata block");
-  } else if (profile === PROFILE_SHARED) {
-    if (attributes.xue !== undefined) throw new Error("a profile-2 group carries no xue block of its own");
-    const bundles = object(attributes.xue_bundles, "group attributes' xue_bundles");
-    if (Object.keys(bundles).length === 0) throw new Error("group attributes' xue_bundles is empty");
-    if (bundle === undefined) throw new Error("a shared store is opened by bundle id");
-    if (!Object.prototype.hasOwnProperty.call(bundles, bundle)) throw new Error(`shared store carries no bundle ${bundle}`);
-    block = object(bundles[bundle], `xue_bundles entry ${bundle}`);
-  } else {
-    throw new Error(`xue_profile ${profile} is not one this reader implements`);
-  }
-  // The group as this session reads it, held to
-  // docs/schemas/store-group.schema.json: its envelope and the one bundle
-  // asked for. The other bundles of a shared store are each their own
-  // session's to refuse, and the consolidated block is not read here.
-  checkStoreGroup(
-    {
-      zarr_format: group.zarr_format,
-      node_type: group.node_type,
-      attributes: profile === PROFILE_SINGLE ? { xue_profile: profile, xue: block } : { xue_profile: profile, xue_bundles: { [bundle!]: block } },
-    },
-    "group metadata",
-  );
-  const metadataJson = JSON.stringify(block);
-  return { metadata: parseBundleMetadata(metadataJson), metadataJson, profile };
 }
 
-/** `attributes.xue.bundle`, where an array carries one. Anything else in
- * the attributes is informational and left alone. */
-function arrayBundle(attributes: unknown): string | null {
-  if (typeof attributes !== "object" || attributes === null) return null;
-  const xue = (attributes as Record<string, unknown>).xue;
-  if (typeof xue !== "object" || xue === null) return null;
-  const bundle = (xue as Record<string, unknown>).bundle;
-  if (bundle === undefined) return null;
-  if (typeof bundle !== "string" || bundle.length === 0) throw new Error("array attributes name no bundle id");
-  return bundle;
-}
-
-/** One variable array's `zarr.json`, held to the profile: a `uint8` array of
- * three dimensions on a regular chunk grid, exactly one `sharding_indexed`
- * codec whose inner chain is `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes,
- * zstd]`, whose index chain is `[bytes, crc32c]`, and whose outer chunk is
- * whole time chunks of whole tiles. */
-export function parseArrayMetadata(text: string): ZarrArrayLayout {
-  const array = object(JSON.parse(text), "array metadata");
-  if (array.zarr_format !== 3 || array.node_type !== "array") throw new Error("not a Zarr v3 array");
-  // docs/schemas/store-array.schema.json, then what makes it one of this
-  // profile's variable arrays.
-  checkStoreArray(array, "array metadata");
-  if (array.data_type !== "uint8") throw new Error(`array data type must be uint8, not ${String(array.data_type)}`);
-  const [frameCount, height, width] = positiveInts(array.shape, 3, "array shape") as [number, number, number];
-
-  const chunkGrid = object(array.chunk_grid, "chunk grid");
-  if (chunkGrid.name !== "regular") throw new Error("chunk grid must be regular");
-  const shardShape = positiveInts(object(chunkGrid.configuration, "chunk grid configuration").chunk_shape, 3, "chunk shape");
-
-  const keyEncoding = object(array.chunk_key_encoding, "chunk key encoding");
-  if (keyEncoding.name !== "default") throw new Error("chunk key encoding must be default");
-  const separator = keyEncoding.configuration === undefined ? "/" : object(keyEncoding.configuration, "chunk key encoding configuration").separator;
-  if (separator !== undefined && separator !== "/") throw new Error("chunk key separator must be /");
-
-  const fillValue = array.fill_value;
-  if (typeof fillValue !== "number" || !Number.isInteger(fillValue) || fillValue < 0 || fillValue > 255) {
-    throw new Error("fill value must be a uint8 code");
-  }
-
-  const outer = codecNames(array.codecs, "codecs");
-  if (!sameList(outer.names, ["sharding_indexed"])) throw new Error("array must carry exactly one sharding_indexed codec");
-  const sharding = object(outer.codecs[0]!.configuration, "sharding configuration");
-  const [timeChunk, tileHeight, tileWidth] = positiveInts(sharding.chunk_shape, 3, "inner chunk shape") as [number, number, number];
-
-  const inner = codecNames(sharding.codecs, "inner codecs");
-  let delta = false;
-  if (sameList(inner.names, [DELTA_CODEC, "bytes", "zstd"])) {
-    const axis = object(inner.codecs[0]!.configuration ?? {}, "delta configuration").axis;
-    if (axis !== 0) throw new Error("xue.delta must run along axis 0");
-    delta = true;
-  } else if (!sameList(inner.names, ["bytes", "zstd"])) {
-    throw new Error(`inner codec chain [${inner.names.join(", ")}] is not one this profile reads`);
-  }
-
-  const index = codecNames(sharding.index_codecs, "index codecs");
-  if (!sameList(index.names, ["bytes", "crc32c"])) throw new Error("index codecs must be [bytes, crc32c]");
-  const endian = index.codecs[0]!.configuration === undefined ? "little" : object(index.codecs[0]!.configuration, "index bytes configuration").endian;
-  if (endian !== "little") throw new Error("shard index must be little-endian");
-  const indexLocation = sharding.index_location ?? "end";
-  if (indexLocation !== "start" && indexLocation !== "end") throw new Error(`unknown index location ${String(indexLocation)}`);
-
-  const tileRows = Math.ceil(height / tileHeight);
-  const tileColumns = Math.ceil(width / tileWidth);
-  const shardFrames = shardShape[0]!;
-  if (shardFrames % timeChunk !== 0 || !sameList(shardShape.slice(1).map(String), [tileRows * tileHeight, tileColumns * tileWidth].map(String))) {
-    throw new Error("outer chunk must be whole time chunks of whole tiles");
-  }
-  const tileCount = tileRows * tileColumns;
+/** One variable array's `zarr.json`, held to docs/schemas/store-array.schema.json
+ * and then to the profile: a `uint8` array of three dimensions on a regular
+ * chunk grid, exactly one `sharding_indexed` codec whose inner chain is
+ * `[bytes, zstd]` or `[xue.delta{axis: 0}, bytes, zstd]`, whose index chain
+ * is `[bytes, crc32c]`, and whose outer chunk is whole time chunks of whole
+ * tiles. The layout is the reader's, copied out once: it never changes. */
+export function readArray(codec: ZarrCodec, text: string): { reader: ZarrArrayReader; layout: ZarrArrayLayout } {
+  checkStoreArray(JSON.parse(text), "array metadata");
+  const reader = codec.WasmZarrArray.fromMetadata(text);
   return {
-    bundle: arrayBundle(array.attributes),
-    frameCount,
-    height,
-    width,
-    timeChunk,
-    tileHeight,
-    tileWidth,
-    tileRows,
-    tileColumns,
-    tileCount,
-    timeChunks: Math.ceil(frameCount / timeChunk),
-    shardFrames,
-    shardCount: Math.ceil(frameCount / shardFrames),
-    chunksPerShard: (shardFrames / timeChunk) * tileCount,
-    delta,
-    indexLocation,
-    fillValue,
+    reader,
+    layout: {
+      bundle: reader.bundle ?? null,
+      frameCount: reader.frameCount,
+      height: reader.height,
+      width: reader.width,
+      timeChunk: reader.timeChunk,
+      tileHeight: reader.tileHeight,
+      tileWidth: reader.tileWidth,
+      tileRows: reader.tileRows,
+      tileColumns: reader.tileColumns,
+      tileCount: reader.tileCount,
+      timeChunks: reader.timeChunks,
+      shardFrames: reader.shardFrames,
+      shardCount: reader.shardCount,
+      chunksPerShard: reader.chunksPerShard,
+      delta: reader.delta,
+      indexLocation: reader.indexAtEnd ? "end" : "start",
+      fillValue: reader.fillValue,
+    },
   };
 }
 
-// -- shard index ---------------------------------------------------------------
-
-export function shardIndexLength(chunkCount: number): number {
-  return INDEX_ENTRY_BYTES * chunkCount + INDEX_CHECKSUM_BYTES;
-}
-
-const EMPTY_ENTRY = 0xffffffffffffffffn;
-
-/** The `(offset, nbytes)` pairs of one shard, CRC-32C verified. `null`
- * marks an inner chunk the shard never held — the sentinel pair of all
- * ones — which reads as the fill value. `bytes` is exactly the index: the
- * caller fetched it as a suffix or a prefix of the shard. */
-export function parseShardIndex(bytes: Uint8Array, chunkCount: number): (ShardIndexEntry | null)[] {
-  if (bytes.byteLength !== shardIndexLength(chunkCount)) {
-    throw new Error(`shard index is ${bytes.byteLength} bytes, not ${shardIndexLength(chunkCount)}`);
-  }
-  const entries = bytes.subarray(0, INDEX_ENTRY_BYTES * chunkCount);
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(entries.byteLength, true) !== crc32c(entries)) throw new Error("shard index CRC-32C mismatch");
-  const index: (ShardIndexEntry | null)[] = [];
-  for (let position = 0; position < chunkCount; position += 1) {
-    const offset = view.getBigUint64(position * INDEX_ENTRY_BYTES, true);
-    const length = view.getBigUint64(position * INDEX_ENTRY_BYTES + 8, true);
-    if (offset === EMPTY_ENTRY && length === EMPTY_ENTRY) {
-      index.push(null);
-      continue;
-    }
-    if (offset > BigInt(Number.MAX_SAFE_INTEGER) || length > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new Error("shard index entry exceeds the safe integer range");
-    }
-    if (length === 0n) throw new Error("shard index names an empty chunk");
-    index.push({ offset: Number(offset), length: Number(length) });
-  }
-  return index;
-}
-
 // -- geometry ------------------------------------------------------------------
-
-/** The object holding shard `s` of a variable's array: the default chunk
- * key encoding with the `/` separator, and the two grid dimensions always
- * at chunk 0 because a shard spans the whole grid. */
-export function shardPath(variableId: string, shard: number): string {
-  return `${variableId}/c/${shard}/0/0`;
-}
-
-/** Where a time chunk lives: which shard, and the position of its first
- * tile in that shard's index (row-major over the inner chunk grid, so a
- * time chunk's tiles are `tileCount` consecutive entries). */
-export function shardOf(layout: ZarrArrayLayout, timeChunk: number): { shard: number; position: number } {
-  const perShard = layout.shardFrames / layout.timeChunk;
-  return { shard: Math.floor(timeChunk / perShard), position: (timeChunk % perShard) * layout.tileCount };
-}
 
 export function tileOrigin(layout: ZarrArrayLayout, tile: number): { row: number; column: number } {
   return {

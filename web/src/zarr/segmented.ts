@@ -19,9 +19,8 @@
 import { axisUnitSeconds, frameOffsets, HOUR_SECONDS, parseBundleMetadata } from "../manifest";
 import type { TileRect } from "../tiles";
 import { PayloadPool, ZarrSession, type ChunkKey, type ZarrReader } from "./session";
+import type { ZarrCodec } from "./shard";
 import type { ZarrStore } from "./store";
-
-type DecodeChunkFn = Parameters<typeof ZarrSession.open>[1];
 
 /** A chunk of one segment: the segment's own key plus which segment. */
 export interface SegmentChunkKey extends ChunkKey {
@@ -117,7 +116,7 @@ export class SegmentedZarrSession implements ZarrReader {
    * being played may use all of it. */
   static async open(
     stores: readonly ZarrStore[],
-    decodeChunk: DecodeChunkFn,
+    codec: ZarrCodec,
     options: { bundle?: string; payloadBudgetBytes?: number } = {},
   ): Promise<SegmentedZarrSession> {
     if (stores.length === 0) throw new Error("a segmented store has no segments");
@@ -125,7 +124,7 @@ export class SegmentedZarrSession implements ZarrReader {
     const budget = options.payloadBudgetBytes;
     const pool = budget !== undefined && budget > 0 ? new PayloadPool(budget) : undefined;
     const segments = await Promise.all(
-      stores.map((store) => ZarrSession.open(store, decodeChunk, { bundle, ...(pool ? { payloadPool: pool } : {}) })),
+      stores.map((store) => ZarrSession.open(store, codec, { bundle, ...(pool ? { payloadPool: pool } : {}) })),
     );
     const first = segments[0]!;
     const geometry = first.tileGeometry().join(",");
