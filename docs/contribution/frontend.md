@@ -632,7 +632,9 @@ a failed request is one console warning and the case plays its field alone.
   chunks). The group must carry `xue_network` version 1 and repeat the
   index's geometry; the array is `uint8 [time, feature]`, one shard,
   inner chunk `[6, rowGroupRows]`, `[xue.delta, bytes, zstd]` or `[bytes,
-  zstd]`. A frame is its time chunk's chunks for the row groups in hand,
+  zstd]`, and is read against the group by the module's
+  `parseNetworkArray` (`rust/xue/src/network.rs`), from the group's
+  consolidated metadata when it is there. A frame is its time chunk's chunks for the row groups in hand,
   issued in one microtask (one merged range); a reach's series is one
   chunk per time chunk. Codes go through the `log1p` table
   (`codebookTable`: 0 → 0, 254 → the maximum, 255 → NaN). `time` and

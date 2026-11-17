@@ -9,8 +9,8 @@ import {
   codebookTable,
   framePair,
   NetworkStore,
-  parseNetworkArrayMetadata,
   parseNetworkGroup,
+  readNetworkArray,
   type NetworkCodec,
 } from "../../web/src/river/store";
 import { ZarrStore, type FetchLike } from "../../web/src/zarr/store";
@@ -173,26 +173,66 @@ describe("network metadata", () => {
     expect(() => parseNetworkGroup(JSON.stringify(later))).toThrow(/version/);
   });
 
-  it("reads the array and refuses what the profile does not name", () => {
-    expect(parseNetworkArrayMetadata(array())).toMatchObject({ rowGroupRows: ROWS, shardFrames: 18, chunksPerShard: 9 });
+  it("reads the array against its group and refuses what the profile does not name", () => {
+    const read = (document: Record<string, any>) => readNetworkArray(codec, groupText, JSON.stringify(document));
+    expect(read(array())).toEqual({
+      frameCount: FRAMES,
+      featureCount: FEATURES,
+      timeChunk: 6,
+      rowGroupRows: ROWS,
+      rowGroups: 3,
+      timeChunks: 3,
+      chunksPerShard: 9,
+      delta: true,
+      indexLocation: "end",
+      fillValue: 255,
+    });
     const wrongType = array();
     wrongType.data_type = "uint16";
-    expect(() => parseNetworkArrayMetadata(wrongType)).toThrow(/uint8/);
+    expect(() => read(wrongType)).toThrow(/uint8/);
     const threeD = array();
     threeD.shape = [FRAMES, 1, FEATURES];
-    expect(() => parseNetworkArrayMetadata(threeD)).toThrow(/shape/);
+    expect(() => read(threeD)).toThrow(/shape/);
     const otherChunk = array();
     otherChunk.codecs[0].configuration.chunk_shape = [12, ROWS];
-    expect(() => parseNetworkArrayMetadata(otherChunk)).toThrow(/6 frames/);
+    expect(() => read(otherChunk)).toThrow(/inner chunk/);
     const otherCodec = array();
     otherCodec.codecs[0].configuration.codecs = [{ name: "bytes" }, { name: "gzip" }];
-    expect(() => parseNetworkArrayMetadata(otherCodec)).toThrow(/codec chain/);
+    expect(() => read(otherCodec)).toThrow(/codec chain/);
     const twoShards = array();
     twoShards.chunk_grid.configuration.chunk_shape = [6, 3 * ROWS];
-    expect(() => parseNetworkArrayMetadata(twoShards)).toThrow(/one shard/);
+    expect(() => read(twoShards)).toThrow(/shard/);
     const partialFeatures = array();
     partialFeatures.chunk_grid.configuration.chunk_shape = [18, 2 * ROWS];
-    expect(() => parseNetworkArrayMetadata(partialFeatures)).toThrow(/row group/);
+    expect(() => read(partialFeatures)).toThrow(/shard/);
+  });
+
+  it("holds the array to the group it sits in", () => {
+    const read = (document: Record<string, any>) => readNetworkArray(codec, groupText, JSON.stringify(document));
+    const shorter = array();
+    shorter.shape = [FRAMES - 1, FEATURES];
+    expect(() => read(shorter)).toThrow(/frameCount/);
+    const otherFill = array();
+    otherFill.fill_value = 0;
+    expect(() => read(otherFill)).toThrow(/nodataCode/);
+    const otherVariable = array();
+    otherVariable.attributes.xue_network.variable.unit = "ft3/s";
+    expect(() => read(otherVariable)).toThrow(/repeat/);
+    const unnamed = array();
+    delete unnamed.dimension_names;
+    expect(() => read(unnamed)).toThrow(/dimension_names/);
+  });
+
+  it("takes the array from the group's consolidated metadata when no document is handed over", () => {
+    expect(readNetworkArray(codec, groupText)).toEqual(readNetworkArray(codec, groupText, JSON.stringify(array())));
+    const bare = JSON.parse(groupText);
+    delete bare.consolidated_metadata;
+    expect(() => readNetworkArray(codec, JSON.stringify(bare))).toThrow(/consolidated/);
+    expect(readNetworkArray(codec, JSON.stringify(bare), JSON.stringify(array())).chunksPerShard).toBe(9);
+    // The group's copy is held to the group like the store's own.
+    const stale = JSON.parse(groupText);
+    stale.consolidated_metadata.metadata.streamflow.shape = [FRAMES + 6, FEATURES];
+    expect(() => readNetworkArray(codec, JSON.stringify(stale))).toThrow(/frameCount/);
   });
 });
 
