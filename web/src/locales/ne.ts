@@ -66,7 +66,7 @@ export const ne: Record<MessageKey, string> = {
   varSoilw: "तह 1",
   varHumidity: "सापेक्ष",
   varVapourFlux: "फ्लक्स",
-  varPressure: "समुद्र सतह",
+  varPressure: "समुद्र",
   varHeight: "उचाइ",
   varPressureField: "क्षेत्र",
   varUnknownLayer: "तह",
