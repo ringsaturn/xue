@@ -11,6 +11,7 @@
     "es": "La cúpula de calor de 2021 en el oeste de Norteamérica",
     "pt": "O domo de calor de 2021 no oeste da América do Norte",
     "tr": "2021 Batı Kuzey Amerika ısı kubbesi",
+    "ne": "2021 को पश्चिमी उत्तर अमेरिकाको ताप गुम्बज (हिट डोम)",
     "ru": "Тепловой купол над западом Северной Америки, 2021"
   },
   "summary": {
@@ -24,6 +25,7 @@
     "es": "A finales de junio de 2021 una dorsal excepcionalmente intensa se asentó sobre el oeste de Norteamérica, y Oregón, Washington y la Columbia Británica batieron récords de calor en días consecutivos. Esta es la pasada del 26 de junio a las 00Z: 48 horas de temperatura, precipitación y viento a 10 m que cubren la formación de la dorsal, desde el Pacífico oriental, cruzando las Rocosas, hasta el borde occidental de las Grandes Llanuras. Bajo una dorsal el viento en superficie es débil, así que la capa de viento muestra la entrada costera y las circulaciones de montaña, no una corriente en chorro.",
     "pt": "No fim de junho de 2021, uma crista de alta pressão excepcionalmente forte instalou-se sobre o oeste da América do Norte, e Oregon, Washington e a Colúmbia Britânica quebraram recordes de calor em dias seguidos. Esta é a rodada de 26 de junho às 00Z — 48 horas de temperatura, precipitação e vento a 10 m cobrindo a formação da crista, do Pacífico oriental, pelas Rochosas, até a borda oeste das Grandes Planícies. Sob uma crista o vento à superfície é fraco, por isso a camada de vento mostra a entrada costeira e as circulações de montanha, não um jato.",
     "tr": "2021 Haziran sonunda olağanüstü güçlü bir yüksek basınç sırtı Kuzey Amerika’nın batısına yerleşti; Oregon, Washington ve Britanya Kolumbiyası art arda günlerde sıcaklık rekorlarını kırdı. Bu, 26 Haziran 00Z koşusu — sırtın kuruluşunu kapsayan 48 saatlik sıcaklık, yağış ve 10 m rüzgâr; doğu Pasifik’ten Kayalık Dağlar’ı aşıp Büyük Ovalar’ın batı kenarına kadar. Sırtın altında yüzey rüzgârı zayıftır; rüzgâr katmanı jet değil, kıyıdan içeri akışı ve dağ sirkülasyonlarını gösterir.",
+    "ne": "जुन 2021 को अन्त्यतिर पश्चिमी उत्तर अमेरिकामाथि असाधारण रूपमा बलियो रिज (उच्च चापको धर्सो) स्थिर भयो, र ओरेगन, वासिङ्टन तथा ब्रिटिश कोलम्बियाले लगातार दिनहरूमा गर्मीका कीर्तिमान तोडे। यो 26 जुन 00Z को रन हो — रिज बन्दै गएको अवधि समेट्ने तापक्रम, वर्षा र 10 m हावाका 48 घण्टा, पूर्वी प्रशान्त महासागरदेखि रकीज पार गर्दै पश्चिमी प्लेन्ससम्म। रिजमुनि सतही हावा कमजोर हुन्छ, त्यसैले हावाको तहले जेट होइन, तटीय भित्री प्रवाह र भू-आकृतिजन्य परिसञ्चरण देखाउँछ।",
     "ru": "В конце июня 2021 года над западом Северной Америки установился исключительно мощный гребень высокого давления; Орегон, Вашингтон и Британская Колумбия день за днём били рекорды жары. Это прогон 26 июня 00Z — 48 часов температуры, осадков и ветра на 10 м, охватывающие становление гребня, от восточной части Тихого океана через Скалистые горы до западного края Великих равнин. Под гребнем приземный ветер слаб: слой ветра показывает прибрежный затёк и горные циркуляции, а не струйное течение."
   },
   "model": "gfs",

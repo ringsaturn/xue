@@ -11,6 +11,7 @@
     "es": "La llegada a tierra del tifón Doksuri (2023)",
     "pt": "A chegada do tufão Doksuri (2023) ao continente",
     "tr": "Doksuri Tayfunu’nun (2023) karaya çıkışı",
+    "ne": "टाइफुन डोक्सुरी (2023) को स्थलप्रवेश",
     "ru": "Выход тайфуна «Токсури» (2023) на берег"
   },
   "summary": {
@@ -24,6 +25,7 @@
     "es": "El tifón Doksuri tocó tierra cerca de Jinjiang (Fujian) en la mañana del 28 de julio de 2023; sus restos llevaron después lluvias récord al norte de China. Esta es la pasada del 26 de julio a las 00Z en la malla nativa de 13 km de los flujos de superficie del GFS, intensidad de precipitación y viento a 10 m.",
     "pt": "O tufão Doksuri chegou à costa perto de Jinjiang (Fujian) na manhã de 28 de julho de 2023; os seus remanescentes trouxeram depois chuvas recordes ao norte da China. Esta é a rodada de 26 de julho às 00Z na grade nativa de 13 km dos fluxos de superfície do GFS, taxa de precipitação e vento a 10 m.",
     "tr": "Doksuri Tayfunu 28 Temmuz 2023 sabahı Fujian’daki Jinjiang kıyısında karaya çıktı; kalıntıları sonradan kuzey Çin’e rekor yağış getirdi. Bu, 26 Temmuz 00Z koşusunun GFS yüzey akıları (yerli 13 km ızgara), yağış şiddeti ve 10 m rüzgâr.",
+    "ne": "टाइफुन डोक्सुरीले 28 जुलाई 2023 को बिहान फुजियानको जिनजियाङ नजिक स्थलप्रवेश गर्‍यो; यसका अवशेषले पछि उत्तरी चीनमा कीर्तिमानी वर्षा गराए। यो 26 जुलाई 00Z को रन हो, मूल 13 km GFS सतह-फ्लक्स ग्रिडमा: वर्षाको दर र 10 m हावा।",
     "ru": "Тайфун «Токсури» вышел на берег у Цзиньцзяна (Фуцзянь) утром 28 июля 2023 года; его остатки затем принесли рекордные дожди на север Китая. Это прогон 26 июля 00Z на исходной 13-км сетке приземных потоков GFS — интенсивность осадков и ветер на 10 м."
   },
   "model": "sflux",
