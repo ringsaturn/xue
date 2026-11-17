@@ -14,7 +14,7 @@
  * rewrites the group document into that bundle's own.
  * Every frame and series the session assembles is compared byte for byte
  * to what the WASM `.xue` decoder gives for the same bundle, through the
- * same `decodeChunk` the worker uses, over a fetch that reads the fixture
+ * same WASM reader the worker uses, over a fetch that reads the fixture
  * directory with byte ranges. An array is one shard whose index is read
  * once as a suffix range; the profile's earlier form, one shard per time
  * chunk, is served out of the same fixture by a fetch that cuts the shard
