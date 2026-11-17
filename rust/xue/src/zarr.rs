@@ -1191,6 +1191,81 @@ pub fn place_tile(
     Ok(())
 }
 
+/// A cell's place in the inner chunk grid: the tile it falls in, and its
+/// offset within one frame of that tile's decoded chunk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TileCell {
+    pub tile: u32,
+    pub offset: usize,
+}
+
+/// Where a grid cell sits in its tile's chunks.
+pub fn tile_cell(layout: &ArrayLayout, row: u32, column: u32) -> Result<TileCell, DecodeError> {
+    let tile = tile_of(layout, row, column)?;
+    let (origin_row, origin_column) = tile_origin(layout, tile);
+    Ok(TileCell {
+        tile,
+        offset: (row - origin_row) as usize * layout.tile_width as usize
+            + (column - origin_column) as usize,
+    })
+}
+
+impl TileCell {
+    /// The cell's code on frame `frame_in_chunk` of its tile's decoded chunk
+    /// ([`decode_inner_chunk`]).
+    pub fn code(
+        &self,
+        layout: &ArrayLayout,
+        chunk: &[u8],
+        frame_in_chunk: u32,
+    ) -> Result<u8, DecodeError> {
+        let stride = layout.tile_height as usize * layout.tile_width as usize;
+        if frame_in_chunk >= layout.time_chunk {
+            return Err(err("frame is outside the time chunk"));
+        }
+        chunk
+            .get(frame_in_chunk as usize * stride + self.offset)
+            .copied()
+            .ok_or_else(|| err("decoded chunk does not fit the inner chunk shape"))
+    }
+}
+
+/// One cell's code on every frame of the axis, in axis order. `chunks` holds
+/// the payload of the cell's tile ([`tile_cell`]) in each time chunk, in
+/// order, `None` for a chunk the shard never held, which reads as the fill
+/// value. Each chunk is decoded and let go: a series touches every one once.
+pub fn series_from_chunks<'a>(
+    layout: &ArrayLayout,
+    row: u32,
+    column: u32,
+    chunks: impl IntoIterator<Item = Option<&'a [u8]>>,
+) -> Result<Vec<u8>, DecodeError> {
+    let cell = tile_cell(layout, row, column)?;
+    // Grown as chunks arrive, never sized from the frame count alone.
+    let mut series = Vec::new();
+    let mut time_chunk = 0u32;
+    for payload in chunks {
+        if time_chunk >= layout.time_chunks {
+            return Err(err("a series takes one chunk per time chunk"));
+        }
+        let frames = frames_in_time_chunk(layout, time_chunk);
+        match payload {
+            None => series.extend(std::iter::repeat(layout.fill_value).take(frames as usize)),
+            Some(payload) => {
+                let chunk = decode_inner_chunk(layout, payload)?;
+                for frame in 0..frames {
+                    series.push(cell.code(layout, &chunk, frame)?);
+                }
+            }
+        }
+        time_chunk += 1;
+    }
+    if time_chunk != layout.time_chunks {
+        return Err(err("a series takes one chunk per time chunk"));
+    }
+    Ok(series)
+}
+
 // -- time ----------------------------------------------------------------------
 
 /// Parse an ISO 8601 instant to milliseconds since the Unix epoch, without a

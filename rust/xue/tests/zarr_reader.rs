@@ -3,7 +3,7 @@
 //! The web fixtures (`tests/prepare_web_fixture.py`) hold each bundle as a
 //! `.xue` and as the stores exported from it. A frame the reader assembles
 //! from a store's shards must be, byte for byte, the frame `Bundle` decodes
-//! from the container: one shard with its index at the end (the shared
+//! from the container, and a cell's series the container's: one shard with its index at the end (the shared
 //! stores), the delta chain with its index at the start, a RAW variable and a
 //! two-variable bundle.
 
@@ -132,6 +132,77 @@ fn frames_match_the_container(store: &str, bundle: &str, container: &str) {
             );
         }
     }
+}
+
+/// One cell's series out of an array's shards.
+fn series(array: &Array, row: u32, column: u32) -> Result<Vec<u8>, xue::DecodeError> {
+    let layout = array.layout();
+    let tile = zarr::tile_of(&layout, row, column)?;
+    let chunks: Vec<Option<&[u8]>> = (0..layout.time_chunks)
+        .map(|time_chunk| {
+            let shard = array.reader.shard_of(time_chunk).unwrap();
+            array.reader.chunk_range(time_chunk, tile).unwrap().map(|entry| {
+                let start = entry.offset as usize;
+                &array.shards[shard as usize][start..start + entry.length as usize]
+            })
+        })
+        .collect();
+    zarr::series_from_chunks(&layout, row, column, chunks)
+}
+
+/// The series of a few cells of every variable of `bundle`, read from
+/// `store`, are the container's: the corners, which sit in clipped tiles,
+/// and a cell inside.
+fn series_match_the_container(store: &str, bundle: &str, container: &str) {
+    ensure_fixtures();
+    let store = fixture_root().join(store);
+    let group = zarr::parse_group_metadata_for(&text(store.join("zarr.json")), bundle)
+        .expect("the fixture's group reads");
+    let mut reference =
+        Bundle::open(&read(fixture_root().join(container))).expect("the fixture's container opens");
+    for variable in &group.metadata.variables {
+        let array = Array::open(&store, &variable.id);
+        let layout = array.layout();
+        let (bottom, right) = (layout.height - 1, layout.width - 1);
+        for (row, column) in [(0, 0), (0, right), (bottom, 0), (bottom, right), (bottom / 2, right / 3)] {
+            let expected = reference
+                .decode_series(variable.numeric_id, column, row)
+                .expect("the container decodes the series");
+            assert_eq!(expected.len(), layout.frame_count as usize);
+            assert!(
+                series(&array, row, column).unwrap() == expected,
+                "{} series at ({row}, {column}) of {store:?} differs from {container}",
+                variable.id
+            );
+        }
+    }
+}
+
+#[test]
+fn a_series_reads_as_the_container_does() {
+    series_match_the_container("bundles.zarr", "tmp2m", "tmp2m.xue");
+    series_match_the_container("bundles.zarr", "prate", "prate.xue");
+    series_match_the_container("bundles.zarr", "wind10m", "wind10m.xue");
+    series_match_the_container("bundles.half.zarr", "tmp2m", "tmp2m.half.xue");
+    series_match_the_container("tmp2m.delta.zarr", "tmp2m", "tmp2m.xue");
+}
+
+#[test]
+fn a_series_takes_one_chunk_per_time_chunk_of_a_cell_on_the_grid() {
+    ensure_fixtures();
+    let array = Array::open(&fixture_root().join("bundles.zarr"), "tmp2m");
+    let layout = array.layout();
+    assert!(series(&array, layout.height, 0).is_err());
+    assert!(series(&array, 0, layout.width).is_err());
+    let none = |count: u32| (0..count).map(|_| None);
+    assert!(zarr::series_from_chunks(&layout, 0, 0, none(layout.time_chunks - 1)).is_err());
+    assert!(zarr::series_from_chunks(&layout, 0, 0, none(layout.time_chunks + 1)).is_err());
+    // Chunks the shard never held read as the fill value, on the axis's
+    // frames only: the last time chunk's padding is not part of a series.
+    let filled = zarr::series_from_chunks(&layout, 0, 0, none(layout.time_chunks)).unwrap();
+    assert_eq!(filled, vec![layout.fill_value; layout.frame_count as usize]);
+    let garbage = (0..layout.time_chunks).map(|_| Some(&b"not a zstandard frame"[..]));
+    assert!(zarr::series_from_chunks(&layout, 0, 0, garbage).is_err());
 }
 
 #[test]

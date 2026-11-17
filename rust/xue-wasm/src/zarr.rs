@@ -10,7 +10,9 @@
 //! A frame is `tilesFor` → fetch what is missing → `undecodedTiles` →
 //! `feedChunk` for each → `assembleFrame`. The last three run without an
 //! `await` between them, and `assembleFrame` returns a new array every time,
-//! so frames decoded concurrently cannot write into one another.
+//! so frames decoded concurrently cannot write into one another. A cell's
+//! series is `tileOf` → fetch that tile's chunk in every time chunk →
+//! `series`, one call over all of them.
 
 use wasm_bindgen::prelude::*;
 use xue::zarr::{self, ArrayReader, IndexLocation};
@@ -286,5 +288,34 @@ impl WasmZarrArray {
     #[wasm_bindgen(js_name = clearCache)]
     pub fn clear_cache(&mut self) {
         self.inner.clear_cache();
+    }
+
+    /// The tile a grid cell falls in: the tile whose chunk, in every time
+    /// chunk, a series of that cell needs.
+    #[wasm_bindgen(js_name = tileOf)]
+    pub fn tile_of(&self, row: u32, column: u32) -> Result<u32, JsError> {
+        zarr::tile_of(self.inner.layout(), row, column).map_err(js_error)
+    }
+
+    /// One cell's code on every frame of the axis. `payloads` is the cell's
+    /// tile's chunk in each time chunk, concatenated in order, and `offsets`
+    /// the `timeChunks + 1` boundaries between them; an empty span is a
+    /// chunk the shard never held. The tiles held for frames are not
+    /// touched.
+    #[wasm_bindgen]
+    pub fn series(&self, row: u32, column: u32, payloads: &[u8], offsets: &[u32]) -> Result<Vec<u8>, JsError> {
+        let layout = self.inner.layout();
+        if offsets.len() != layout.time_chunks as usize + 1
+            || offsets.first() != Some(&0)
+            || offsets.last().map(|&end| end as usize) != Some(payloads.len())
+            || offsets.windows(2).any(|span| span[0] > span[1])
+        {
+            return Err(JsError::new("series offsets do not bound one chunk per time chunk"));
+        }
+        let chunks = offsets.windows(2).map(|span| {
+            let payload = &payloads[span[0] as usize..span[1] as usize];
+            (!payload.is_empty()).then_some(payload)
+        });
+        zarr::series_from_chunks(layout, row, column, chunks).map_err(js_error)
     }
 }
