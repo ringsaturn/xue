@@ -11,6 +11,7 @@
     "es": "El monte Fuji a 1 km: las nubes de valle en plano amplio",
     "pt": "O monte Fuji a 1 km: as nuvens de vale em plano aberto",
     "tr": "1 km çözünürlükte Fuji Dağı: vadi bulutlarına geniş bakış",
+    "ne": "1 km मा फुजी पर्वत: उपत्यकाको बादलको फराकिलो दृश्य",
     "ru": "Фудзи с шагом 1 км: долинные облака в широком плане"
   },
   "summary": {
@@ -24,6 +25,7 @@
     "es": "El dominio padre a 1 km del caso a 500 m: la misma simulación WRF-ARW en el servicio WOOF de Recast, leída en su tercer dominio, un recuadro de 60 × 54 km alrededor del monte Fuji, cada hora de 07Z a 18Z (16:00 a 03:00 JST), el plano amplio de la misma tarde. La celda de la cumbre baja de 4 °C a 0 °C mientras la llanura cae de 22 °C a 16 °C; una capa nubosa delgada a 1,75–2 km descende a 1 km antes de medianoche y se disipa; el flujo sobre las crestas alcanza 8–10 m/s a 10 m y 10–12 m/s a 80 m. El caso a 500 m es el primer plano.",
     "pt": "O domínio-mãe a 1 km do caso a 500 m: a mesma simulação WRF-ARW no serviço WOOF da Recast, lida no seu terceiro domínio, uma janela de 60 × 54 km em torno do monte Fuji, de hora em hora das 07Z às 18Z (16:00 às 03:00 JST), o plano aberto da mesma noite. A célula do cume desce de 4 °C para 0 °C enquanto a planície cai de 22 °C para 16 °C; uma camada fina de nuvens a 1,75–2 km baixa para 1 km antes da meia-noite e dissipa-se; o escoamento sobre as cristas atinge 8–10 m/s a 10 m e 10–12 m/s a 80 m. O caso a 500 m é o grande plano.",
     "tr": "500 m vakasının 1 km’lik ana alanı: Recast’ın WOOF hizmetindeki aynı WRF-ARW simülasyonu, üçüncü alanında okunarak Fuji Dağı çevresinde 60 × 54 km’lik bir pencere, 07Z’den 18Z’ye (JST 16:00–03:00) saat saat, aynı akşamın geniş görünümü. Zirve hücresi 4 °C’den 0 °C’ye soğurken ova 22 °C’den 16 °C’ye düşüyor; 1,75–2 km’deki ince bulut katmanı gece yarısından önce 1 km’ye inip dağılıyor; sırtları aşan akış 10 m’de 8–10 m/s, 80 m’de 10–12 m/s’ye ulaşıyor. 500 m vakası yakın plandır.",
+    "ne": "500 m केसको 1 km अभिभावक नेस्ट: Recast को WOOF सेवामा चलाइएको उही WRF-ARW रन, यसको तेस्रो डोमेनमा पढिएको — फुजी पर्वत वरिपरिको 60 × 54 km को क्षेत्र, 07Z देखि 18Z (JST 16:00 देखि 03:00) सम्म प्रतिघण्टा, उही साँझको फराकिलो दृश्य। शिखरको सेल 4 °C बाट 0 °C सम्म चिसिन्छ भने तल्ला भूभाग 22 °C बाट 16 °C सम्म झर्छन्; 1.75–2 km मा रहेको पातलो बादलको तह मध्यरातअघि 1 km सम्म झर्छ र पातलिँदै हराउँछ; डाँडाहरूमाथिको प्रवाह 10 m मा 8–10 m/s र 80 m मा 10–12 m/s मा उच्चतम हुन्छ। 500 m केस नजिकको दृश्य हो।",
     "ru": "Родительская сетка 1 км для случая 500 м: тот же расчёт WRF-ARW на сервисе WOOF компании Recast, прочитанный на третьей области — окно 60 × 54 км вокруг Фудзи, ежечасно с 07Z до 18Z (16:00–03:00 JST), широкий план того же вечера. Ячейка вершины остывает с 4 °C до 0 °C, равнина — с 22 °C до 16 °C; тонкий слой облаков на 1,75–2 км до полуночи опускается до 1 км и рассеивается; поток через гребни достигает 8–10 м/с на 10 м и 10–12 м/с на 80 м. Случай 500 м — крупный план."
   },
   "model": "woof",
