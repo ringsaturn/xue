@@ -28,7 +28,7 @@ import wasmUrl from "../wasm/xue_bg.wasm?url";
 import type { ZarrDecodeMessage, ZarrInitStreamMessage, ZarrSeriesMessage, ZarrWorkerRequest } from "./protocol";
 import { SegmentedZarrSession } from "./segmented";
 import { ZarrSession, type ChunkKey, type ZarrReader } from "./session";
-import type { ZarrCodec } from "./shard";
+import type { ZarrCodec } from "./documents";
 import { ZarrStore } from "./store";
 
 const PREFETCH_RETRIES = 3;

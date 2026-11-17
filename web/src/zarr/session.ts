@@ -41,7 +41,7 @@ import {
   type ZarrArrayReader,
   type ZarrCodec,
   type ZarrGroup,
-} from "./shard";
+} from "./documents";
 import type { ZarrStore } from "./store";
 
 /** One inner chunk's address: a variable, a time chunk, a tile. */

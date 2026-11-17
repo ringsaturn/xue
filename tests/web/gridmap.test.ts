@@ -23,7 +23,7 @@ import { buildPhaseField } from "../../web/src/precipphase";
 import { bilinearCells, probeCell } from "../../web/src/probe";
 import { viewportTileRects } from "../../web/src/tiles";
 import { cellOf, parseGrid as parseCellGrid } from "../../web/src/apiconsole/locate";
-import { groupOf } from "../../web/src/zarr/shard";
+import { groupOf } from "../../web/src/zarr/documents";
 import { globalGrid } from "./helpers";
 
 const PROJECTION = {

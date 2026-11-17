@@ -32,7 +32,7 @@ version that fits, so each file keeps exactly one valid encoding.
    `rust/xue/src/encode/` (`metadata.rs`, `binformat.rs`, `manifest.rs`).
 5. **Frontend**: `web/src/manifest.ts::parseBundleMetadata` and the manifest
    validator. A grid store is read by `rust/xue/src/zarr.rs` through
-   `rust/xue-wasm/src/zarr.rs`; `web/src/zarr/shard.ts` only runs the
+   `rust/xue-wasm/src/zarr.rs`; `web/src/zarr/documents.ts` only runs the
    generated validators in front of it.
 6. **Fixtures**: `.venv/bin/python tests/prepare_bin_fixture.py` (Rust
    golden), the registry fixtures if an identity or codebook moved,

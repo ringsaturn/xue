@@ -81,13 +81,13 @@ streamed or nothing.
 Store channel: a session opens a bundle by (store, bundle id),
 `ZarrSession.open(store, codec, { bundle })`: a run's map stores are shared
 ([`zarr-profile.md`](../zarr-profile.md), profile 2: every bundle of a tier
-in `bundles[.<tier>].zarr`), so `zarr/shard.ts::readGroup(codec, text,
+in `bundles[.<tier>].zarr`), so `zarr/documents.ts::readGroup(codec, text,
 bundle?)` takes the bundle's metadata out of the group's `xue_bundles`
 (or a one-bundle store's `xue`, profile 1, which published runs and cases
 still are) and checks grid and axis against that bundle alone. `codec` is
 the WASM module: the store's format is read by `rust/xue/src/zarr.rs`
 (`parseZarrGroup`, one `WasmZarrArray` per variable), the reader the data
-API uses, and `shard.ts` adds the generated schema validators and
+API uses, and `documents.ts` adds the generated schema validators and
 `parseBundleMetadata` in front of it. Caches keyed
 by store path (`PayloadPool`, the store) are shared by the tier's bundles,
 so the group and coordinates are fetched once per tier. The array's reader
