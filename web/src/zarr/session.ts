@@ -7,21 +7,21 @@
  * a profile-1 store is one bundle's anyway, and a shared (profile-2) store
  * holds every bundle of a tier, of which the session reads only the one it
  * was opened for — that bundle's metadata out of the group and that bundle's
- * variable arrays, by id. It holds the bundle's metadata,
- * one array layout per variable, the shard indices and compressed inner
- * chunks it has fetched (kept for the session's life, as the streaming
- * `.xue` reader keeps its payloads, so a chunk is fetched once), and one
- * plane buffer per variable that a tile decode writes its rectangles into —
- * cells outside them keep what the buffer held, which is the coverage
- * contract the `.xue` worker's tiled decode already has.
+ * variable arrays, by id. It holds the bundle's metadata, one array reader
+ * per variable, and the compressed inner chunks it has fetched, under a
+ * budget. This is the side that waits: requests, range merging, what is
+ * local and what is evicted.
  *
  * The format itself is read by the WASM module (`ZarrCodec`), injected so
  * the session can be opened where the module is loaded differently (a
- * worker's `?url` import, a test's file read): each array's layout and
- * verified shard indices live in a reader there, and decoding is the
- * container's chunk path, `decodeChunk`. A decoded chunk is cached for the time chunk being read, per variable, and
- * dropped when the read moves on, which keeps scrubbing inside six frames
- * free and memory at one time chunk's tiles.
+ * worker's `?url` import, a test's file read). Each array's reader there
+ * holds the layout, the verified shard indices and the decoded tiles of the
+ * time chunk being read — dropped when the read moves on, which keeps
+ * scrubbing inside six frames free and memory at one time chunk's tiles —
+ * and assembles a frame from them. A frame is a new plane every time: with
+ * tile rectangles only their tiles are written and the cells outside are
+ * zero, which a caller must not read, the coverage contract the `.xue`
+ * worker's tiled decode has.
  *
  * A shard's index is read once, on the first chunk wanted from it — a
  * suffix range, no object length needed — and held. On a store the
@@ -35,7 +35,6 @@ import { frameOffsets } from "../manifest";
 import type { TileRect } from "../tiles";
 import {
   framesInTimeChunk,
-  placeTile,
   PREDICTOR_PREVIOUS,
   PREDICTOR_RAW,
   readArray,
@@ -60,11 +59,22 @@ interface VariableArray {
   id: string;
   layout: ZarrArrayLayout;
   /** The array in the WASM module: the layout's source, and the holder of
-   * the shard indices fetched so far. */
+   * the shard indices fetched so far and of the decoded tiles of the time
+   * chunk being read. */
   reader: ZarrArrayReader;
-  /** The time chunk whose decoded tiles `decoded` holds. */
-  decodedTimeChunk: number;
-  decoded: Map<number, Uint8Array | null>;
+}
+
+/** What `feedChunk` takes for a chunk the shard never held. A chunk that
+ * was written is never empty: the index refuses a zero-length entry. */
+const NEVER_HELD = new Uint8Array(0);
+
+/** Tile rectangles as the WASM reader takes them, `[firstColumn, firstRow,
+ * lastColumn, lastRow, ...]`, or null for the whole plane. */
+function flatRects(rects: readonly TileRect[] | null): Uint32Array | null {
+  if (!rects) return null;
+  const flat = new Uint32Array(rects.length * 4);
+  rects.forEach((rect, index) => flat.set([rect.firstColumn, rect.firstRow, rect.lastColumn, rect.lastRow], index * 4));
+  return flat;
 }
 
 /** One least-recently-used payload budget shared by several sessions: the
@@ -142,12 +152,9 @@ export interface ZarrReader {
   isFetching(key: ChunkKey): boolean;
   ensureChunks(keys: readonly ChunkKey[]): Promise<void>;
   frameResident(variableId: number, frameOffset: number, rects: readonly TileRect[] | null): boolean;
-  decodeFrame(
-    variableId: number,
-    frameOffset: number,
-    rects?: readonly TileRect[] | null,
-    into?: Uint8Array,
-  ): Promise<Uint8Array>;
+  /** One frame as a plane of its own. With `rects`, only their tiles are
+   * valid. */
+  decodeFrame(variableId: number, frameOffset: number, rects?: readonly TileRect[] | null): Promise<Uint8Array>;
   decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array>;
 }
 
@@ -210,8 +217,6 @@ export class ZarrSession implements ZarrReader, PoolMember {
         id: array.id,
         layout: array.layout,
         reader: array.reader,
-        decodedTimeChunk: -1,
-        decoded: new Map(),
       });
     }
   }
@@ -304,10 +309,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
   }
 
   clearCache(): void {
-    for (const array of this.arrays.values()) {
-      array.decoded.clear();
-      array.decodedTimeChunk = -1;
-    }
+    for (const array of this.arrays.values()) array.reader.clearCache();
   }
 
   private firstArray(): VariableArray {
@@ -328,28 +330,11 @@ export class ZarrSession implements ZarrReader, PoolMember {
     return index;
   }
 
-  /** The tiles a rectangle list names, in row-major order, or every tile. */
-  private tilesFor(layout: ZarrArrayLayout, rects: readonly TileRect[] | null): number[] {
-    if (!rects) return Array.from({ length: layout.tileCount }, (_, tile) => tile);
-    const tiles = new Set<number>();
-    for (const rect of rects) {
-      for (let row = rect.firstRow; row <= rect.lastRow; row += 1) {
-        for (let column = rect.firstColumn; column <= rect.lastColumn; column += 1) {
-          if (row < 0 || column < 0 || row >= layout.tileRows || column >= layout.tileColumns) {
-            throw new Error("tile rectangle is outside the grid");
-          }
-          tiles.add(row * layout.tileColumns + column);
-        }
-      }
-    }
-    return [...tiles].sort((a, b) => a - b);
-  }
-
   /** The chunks a frame needs within the given tiles, as chunk keys. */
   chunksFor(variableId: number, frameOffset: number, rects: readonly TileRect[] | null): ChunkKey[] {
-    const { layout } = this.array(variableId);
+    const { layout, reader } = this.array(variableId);
     const timeChunk = Math.floor(this.frameIndex(frameOffset) / layout.timeChunk);
-    return this.tilesFor(layout, rects).map((tile) => ({ variableId, timeChunk, tile }));
+    return Array.from(reader.tilesFor(flatRects(rects)), (tile) => ({ variableId, timeChunk, tile }));
   }
 
   isResident(key: ChunkKey): boolean {
@@ -475,18 +460,6 @@ export class ZarrSession implements ZarrReader, PoolMember {
 
   /** One inner chunk decoded to codes at the full inner shape, or `null`
    * for a chunk the shard never held. */
-  private decodedChunk(array: VariableArray, key: ChunkKey): Uint8Array | null {
-    if (array.decodedTimeChunk !== key.timeChunk) {
-      array.decoded.clear();
-      array.decodedTimeChunk = key.timeChunk;
-    }
-    const held = array.decoded.get(key.tile);
-    if (held !== undefined) return held;
-    const chunk = this.buildChunk(array, key);
-    array.decoded.set(key.tile, chunk);
-    return chunk;
-  }
-
   private buildChunk(array: VariableArray, key: ChunkKey): Uint8Array | null {
     const payload = this.payloads.get(chunkKey(key));
     if (payload === undefined) throw new Error("chunk is not resident yet");
@@ -501,26 +474,17 @@ export class ZarrSession implements ZarrReader, PoolMember {
     );
   }
 
-  /** Assemble one frame into `into` (a new plane when none is given) and
-   * return it. With `rects` only those tiles are fetched and written; the
-   * rest of the buffer is whatever it held.
+  /** Assemble one frame and return it. With `rects` only those tiles are
+   * fetched and written; the cells outside them are zero and mean nothing.
    *
-   * Each decode writes a buffer of its own. Decodes run concurrently, and
-   * those whose chunks are already local all resume in one burst of
-   * microtasks: a plane shared between them would hold whichever frame was
-   * assembled last by the time each caller copied it out. */
-  async decodeFrame(
-    variableId: number,
-    frameOffset: number,
-    rects: readonly TileRect[] | null = null,
-    into?: Uint8Array,
-  ): Promise<Uint8Array> {
-    const array = this.array(variableId);
-    const { layout } = array;
+   * Decodes run concurrently, and those whose chunks are already local all
+   * resume in one burst of microtasks. Each gets a plane of its own: the
+   * reader is handed the chunks and assembles the frame with no `await` in
+   * between, and what it returns is a new array. */
+  async decodeFrame(variableId: number, frameOffset: number, rects: readonly TileRect[] | null = null): Promise<Uint8Array> {
+    const { layout, reader } = this.array(variableId);
     const index = this.frameIndex(frameOffset);
     const keys = this.chunksFor(variableId, frameOffset, rects);
-    // Every chunk local, then the assembly in one synchronous pass, so no
-    // other decode's writes to the shared plane interleave with this one.
     // A concurrent insert may have evicted one of these between its fetch
     // and now, when the budget is tighter than what is being asked for at
     // once; those are fetched again, a bounded number of times.
@@ -530,11 +494,16 @@ export class ZarrSession implements ZarrReader, PoolMember {
       if (missing.length === 0) break;
       if (attempt >= 3) throw new Error("chunks evicted faster than a frame assembles; raise the payload budget");
     }
-    const plane = into ?? new Uint8Array(layout.height * layout.width);
-    if (plane.length !== layout.height * layout.width) throw new Error("plane buffer does not fit the grid");
-    const frameInChunk = index % layout.timeChunk;
-    for (const key of keys) placeTile(plane, layout, key.tile, this.decodedChunk(array, key), frameInChunk);
-    return plane;
+    // Synchronous from here: another decode of this variable, for another
+    // time chunk, would otherwise drop the tiles being fed.
+    const timeChunk = Math.floor(index / layout.timeChunk);
+    const tiles = Uint32Array.from(keys, (key) => key.tile);
+    for (const tile of reader.undecodedTiles(timeChunk, tiles)) {
+      const payload = this.payloads.get(chunkKey({ variableId, timeChunk, tile }));
+      if (payload === undefined) throw new Error("chunk is not resident yet");
+      reader.feedChunk(timeChunk, tile, payload ?? NEVER_HELD);
+    }
+    return reader.assembleFrame(index, flatRects(rects));
   }
 
   /** The chunks one cell's series needs: one per time chunk of its tile. */
@@ -561,7 +530,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
       // budget may hold at once; a chunk evicted since the fetch above is
       // fetched again here, one at a time.
       if (!this.payloads.has(chunkKey(key))) await this.ensureChunk(key);
-      const chunk = array.decodedTimeChunk === key.timeChunk ? this.decodedChunk(array, key) : this.buildChunk(array, key);
+      const chunk = this.buildChunk(array, key);
       for (let frame = 0; frame < frames; frame += 1) {
         series[key.timeChunk * layout.timeChunk + frame] = chunk === null ? layout.fillValue : chunk[frame * stride + cell]!;
       }

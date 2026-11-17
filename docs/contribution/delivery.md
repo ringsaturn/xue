@@ -65,10 +65,10 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
   by whole objects (only when there is no container). Probes stream or fail.
 - `zarr/worker.ts` speaks the `worker.ts` protocol. The format is read in
   wasm (`rust/xue/src/zarr.rs` through `rust/xue-wasm`): the group and array
-  documents, the CRC-32C-checked index once per shard, and the span of a
-  frame's tile (a chunk may straddle container groups). `store.ts` coalesces
-  one shard's ranges per microtask (gap ≤ 64 KB). Decoding is wasm
-  `decodeChunk`.
+  documents, the CRC-32C-checked index once per shard, the span of a
+  frame's tile (a chunk may straddle container groups), the decoded tiles of
+  the time chunk being read and the frame assembled from them. `store.ts`
+  coalesces one shard's ranges per microtask (gap ≤ 64 KB).
 - Compressed chunks sit in an LRU under `payloadBudgetBytes`
   (`main.ts::zarrPayloadBudgetBytes`), bounding memory by the prefetch
   window rather than the axis; a decode re-fetches what eviction took.

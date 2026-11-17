@@ -14,7 +14,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `main.ts` | Composition root: sessions, slots, playback, rail, polling. Feature controllers are factories it wires up with their state as explicit `Deps`. |
 | `session.ts` | The `VariableSession` and `DecodedFrame` types the controllers share. |
 | `sessions.ts` | The session registry (`createSessionRegistry`): the run's sessions by bundle id and the mosaic members' by member and bundle, opening one (tier pick through the page's policy, channel choice, whole-bundle download, identity) with concurrent opens of a bundle folded into one, stream progress routed by `streamKey` (kept when it beats registration), and ending sessions. Also the helpers that read one session alone (`sessionOffsetForLead`, `sessionCoverage`, the vector and composite fields). The channel handshake and binding stay in `main.ts`. |
-| `planecache.ts` | The decoded-plane (frame) cache (`createPlaneCache`): planes by `cacheKey` in LRU order under a byte budget sized to the primary's frame, eviction that spares what `main.ts` reports on screen and recycles buffers into their workers, and the windowed prefetch (`sendPrefetchWindow`) with its per-session memo. |
+| `planecache.ts` | The decoded-plane (frame) cache (`createPlaneCache`): planes by `cacheKey` in LRU order under a byte budget sized to the primary's frame, eviction that spares what `main.ts` reports on screen and recycles a container's buffers into its worker, and the windowed prefetch (`sendPrefetchWindow`) with its per-session memo. |
 | `decodequeue.ts` | The decode request queue (`createDecodeQueue`): requests in flight by id (one per key), the newest request held back at the inflight cap (twice the planes a frame of the view needs) and sent when a plane lands, the key the primary frame waits on, landed planes filed into the plane cache, and the decode timings the stats graph reads. What a landed plane changes on screen, and which planes to ask for, stay in `main.ts`. |
 | `stats.ts` | The data card's "stats for nerds" rows and decode graph, the debug copy and the map's context menu (`createStats`). |
 | `manifest.ts` | Pointer/manifest validation, `FORECAST_MODELS`, bundle metadata, tier picks. |
@@ -94,8 +94,12 @@ so the group and coordinates are fetched once per tier. The array's reader
 verifies each shard's CRC-32C-checked index once (`setShardIndex`) and maps
 time chunk and tile to a span (`chunkRange`; a time chunk is six frames
 and may straddle container groups); `zarr/store.ts` appends `?v=` and
-merges one shard's ranges issued in one microtask (gap ≤ 64 KB). Chunks
-decode via `decodeChunk` from `rust/xue-wasm`. Compressed chunks are an LRU
+merges one shard's ranges issued in one microtask (gap ≤ 64 KB). A frame is
+assembled in the reader: the session hands it the compressed chunks not yet
+decoded for the frame's time chunk (`undecodedTiles`, `feedChunk`) and takes
+the plane (`assembleFrame`) with no `await` in between. The plane is a new
+array each time, so concurrent decodes never share a buffer, and the worker
+posts it as it is; a store's planes are not recycled. Compressed chunks are an LRU
 under `payloadBudgetBytes` (`zarrPayloadBudgetBytes`: 192 MB, 96 MB on a
 ≤ 4 GB device, 64 MB on a constrained connection), so memory follows the
 window ahead of the playhead, not the axis; a decode re-fetches what was

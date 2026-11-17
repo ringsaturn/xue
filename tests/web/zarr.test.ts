@@ -771,10 +771,32 @@ describe("ZarrSession", () => {
     for (const [at, offset] of offsets.entries()) {
       expect(Buffer.from(planes[at]!)).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
     }
-    // A buffer handed in is the one written and returned.
-    const into = new Uint8Array(session.planeLength);
-    expect(await session.decodeFrame(1, 3, null, into)).toBe(into);
-    expect(Buffer.from(into)).toEqual(Buffer.from(bundle.decodeFrame(1, 3)));
+    // Each plane is an array of its own, whole, so a worker can post its
+    // buffer without a copy: nothing is shared for a later decode to write.
+    expect(new Set(planes.map((plane) => plane.buffer)).size).toBe(planes.length);
+    for (const plane of planes) {
+      expect(plane.byteOffset).toBe(0);
+      expect(plane.buffer.byteLength).toBe(session.planeLength);
+    }
+  });
+
+  it("decodes frames of two time chunks at once, each from its own chunk", async () => {
+    const { session, bundle } = await open("bundles.zarr", "tmp2m", "tmp2m.xue");
+    // Both time chunks local first, so the decodes interleave: the reader
+    // holds one time chunk's tiles and is moved between the two.
+    await Promise.all([session.decodeFrame(1, 0), session.decodeFrame(1, 6)]);
+    const offsets = [0, 6, 1, 7, 5, 11];
+    const planes = await Promise.all(offsets.map((offset) => session.decodeFrame(1, offset)));
+    for (const [at, offset] of offsets.entries()) {
+      expect(Buffer.from(planes[at]!)).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
+    }
+  });
+
+  it("decodes again after its cache is cleared", async () => {
+    const { session, bundle } = await open("bundles.zarr", "tmp2m", "tmp2m.xue");
+    await session.decodeFrame(1, 3);
+    session.clearCache();
+    expect(Buffer.from(await session.decodeFrame(1, 3))).toEqual(Buffer.from(bundle.decodeFrame(1, 3)));
   });
 
   it("assembles the same frames and series over whole objects, one GET per shard", async () => {
@@ -811,9 +833,10 @@ describe("ZarrSession", () => {
       };
       expect(Buffer.from(region(plane, 144, box))).toEqual(Buffer.from(region(reference, 144, box)));
     }
-    // Nothing outside was touched: the plane's own zeros are still there at
-    // a corner no rectangle covers.
+    // Outside the rectangles the plane is zero, at a corner none covers.
     expect(plane[0]).toBe(0);
+    // No rectangle at all is no tile, not the whole plane.
+    expect((await session.decodeFrame(1, 9, [])).every((code) => code === 0)).toBe(true);
   });
 
   const TMP2M_INDEX_BYTES = indexLength(21 * 45);
