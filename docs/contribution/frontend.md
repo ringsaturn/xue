@@ -975,19 +975,10 @@ A page that builds this shell from source can draw its own layers over the
 map in step with playback through `window.xueViewer` (`embed.ts`). It is
 always installed, at the end of the map's `load` callback, and announced by
 a `xue:ready` event on `window`; a script that runs later finds the object
-already there. A Protomaps key serves only the origins it is bound to, so
-such a page on its own host sets `VITE_PROTOMAPS_KEY` at build time; the
-shell's own key is the fallback. A shell built for another host can also
-point the basemap and relief at mirrors (`VITE_BASEMAP_TILES`, the vector
-tile template; `VITE_BASEMAP_ASSETS`, the root of Protomaps' `fonts/` and
-`sprites/`; `VITE_TERRAIN_TILE_URL`) and offer only the datasets it
-publishes (`VITE_SOURCES`, comma-separated ids; the model switch and
-`?model=` drop the rest). Its data root may publish only some of the point
-products: `VITE_POINT_PRODUCTS`, comma-separated names (`tc`, `sounding`,
-`airport`, `synop`, `fire`, `aq`, `alerts`) or `none`, stops the shell asking
-for the others (`pointerindex.ts`). `VITE_BASEMAP_HIDE`, comma-separated,
-leaves `labels` (every name, and the peaks) or `boundaries` off the basemap,
-from the first frame (`basemap.ts`). Such a page may also colour its own bundles:
+already there. How such a page is laid out and built, the build-time
+variables (`VITE_*`) that fit the shell to another host and data root, and
+what the data root must hold are in
+[building-on-xue.md](building-on-xue.md). Such a page may also colour its own bundles:
 `window.xuePalettes`, set before the shell's module runs, maps a bundle id
 to at least two `[value, r, g, b, a]` stops in increasing value (channels
 0–255, `palettes.ts::readHostPalettes`), or to `{ stops, sampling }` where
