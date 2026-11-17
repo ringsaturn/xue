@@ -1,8 +1,8 @@
 //! One point's series, read straight from the published Zarr stores.
 //!
 //! Resolution is the published chain — Collection (`xue:pointer`) → pointer →
-//! manifest — and decoding reuses the container's `decode_chunk` plus the Zarr
-//! read geometry in `xue::zarr`. No new format, no new artifact. The response
+//! manifest — and decoding is `xue::zarr`'s: the read geometry, and the
+//! container's chunk path behind `decode_inner_chunk`. No new format, no new artifact. The response
 //! carries the source and run, the request, the probed cell and the ISO 8601
 //! axis. `variables` is a flat map keyed by variable id — a vector bundle's
 //! components are separate entries carrying their `bundle` — so a client types
@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 use url::Url;
 
 use xue::zarr::{self, ArrayLayout, ProbeCell, Quantization, VariableMetadata};
-use xue::{decode_chunk, DecodeError, Predictor};
+use xue::DecodeError;
 
 use crate::bucket::Data;
 use crate::error::HttpError;
@@ -285,11 +285,8 @@ async fn read_bundle_series(
             .await?,
     )
     .map_err(storage_error)?;
-    let tile = zarr::tile_of(&layout, cell.row, cell.column).map_err(storage_error)?;
-    let (origin_row, origin_column) = zarr::tile_origin(&layout, tile);
-    let stride = layout.tile_height as usize * layout.tile_width as usize;
-    let cell_offset = (cell.row - origin_row) as usize * layout.tile_width as usize
-        + (cell.column - origin_column) as usize;
+    let tile_cell = zarr::tile_cell(&layout, cell.row, cell.column).map_err(storage_error)?;
+    let tile = tile_cell.tile;
 
     // One chunk holds a time chunk's frames, so group the frames by the chunk
     // they fall in and read each chunk once.
@@ -324,11 +321,6 @@ async fn read_bundle_series(
         shard_indices.push((shard, index));
     }
 
-    let predictor = if layout.delta {
-        Predictor::Previous
-    } else {
-        Predictor::Raw
-    };
     // The chunks a series touches are independent, so read them together
     // rather than one after another: on a map store the whole axis is one
     // round trip per time chunk, and reading them sequentially turned a point
@@ -354,18 +346,13 @@ async fn read_bundle_series(
                     return Ok::<_, HttpError>((positions, vec![None; count]));
                 };
                 let payload = data.range(&path, entry.offset, entry.length).await?;
-                let codes = decode_chunk(
-                    &payload,
-                    layout.time_chunk,
-                    layout.tile_height,
-                    layout.tile_width,
-                    predictor,
-                )
-                .map_err(storage_error)?;
+                let codes = zarr::decode_inner_chunk(&layout, &payload).map_err(storage_error)?;
                 let mut chunk_values = Vec::with_capacity(count);
                 for &position in &positions {
                     let frame_in_chunk = indices[position] - *time_chunk * layout.time_chunk;
-                    let code = codes[frame_in_chunk as usize * stride + cell_offset];
+                    let code = tile_cell
+                        .code(&layout, &codes, frame_in_chunk)
+                        .map_err(storage_error)?;
                     chunk_values.push(zarr::decode_value(&variable.quantization, code));
                 }
                 Ok((positions, chunk_values))
