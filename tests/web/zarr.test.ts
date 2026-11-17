@@ -28,17 +28,7 @@ import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { viewportTileRects, type TileRect } from "../../web/src/tiles";
-import {
-  crc32c,
-  INDEX_ENTRY_BYTES,
-  parseArrayMetadata,
-  parseGroupMetadata,
-  parseShardIndex,
-  shardIndexLength,
-  shardOf,
-  tileOf,
-  tileShape,
-} from "../../web/src/zarr/shard";
+import { readArray, readGroup, tileOf, tileShape, type ZarrArrayReader } from "../../web/src/zarr/shard";
 import { canonicalTimeBlock, mergeSegmentMetadata, SegmentedZarrSession } from "../../web/src/zarr/segmented";
 import { ZarrSession } from "../../web/src/zarr/session";
 import { coalesceRanges, ZarrStore, type FetchLike } from "../../web/src/zarr/store";
@@ -86,16 +76,51 @@ beforeAll(async () => {
 
 // -- pure parts ----------------------------------------------------------------
 
-describe("crc32c", () => {
-  it("is Castagnoli, not the container's IEEE polynomial", () => {
-    expect(crc32c(new TextEncoder().encode("123456789"))).toBe(0xe3069283);
-    expect(crc32c(new Uint8Array(0))).toBe(0);
-  });
-});
+// The reader's index handling is the WASM module's; these build indices for
+// the fixtures to hand it, so they are the test's own and are held to the
+// reader below rather than shared with it.
+
+const INDEX_ENTRY_BYTES = 16;
+
+/** The byte length of a shard index naming `count` inner chunks: one
+ * `(offset, nbytes)` pair of `uint64` each plus the CRC-32C. Plain
+ * arithmetic, so it can size things before the WASM module is loaded. */
+function indexLength(count: number): number {
+  return count * INDEX_ENTRY_BYTES + 4;
+}
+
+const CRC32C_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let byte = 0; byte < 256; byte += 1) {
+    let value = byte;
+    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? (value >>> 1) ^ 0x82f63b78 : value >>> 1;
+    table[byte] = value >>> 0;
+  }
+  return table;
+})();
+
+/** CRC-32C (Castagnoli), the `crc32c` codec's checksum. */
+function crc32c(bytes: Uint8Array): number {
+  let value = 0xffffffff;
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    value = CRC32C_TABLE[(value ^ bytes[index]!) & 0xff]! ^ (value >>> 8);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+/** The reader's flattened `[offset, length, ...]` index as entries, `null`
+ * for a chunk the shard never held. */
+function indexEntries(flat: Float64Array): ({ offset: number; length: number } | null)[] {
+  const entries: ({ offset: number; length: number } | null)[] = [];
+  for (let at = 0; at < flat.length; at += 2) {
+    entries.push(flat[at] === -1 ? null : { offset: flat[at]!, length: flat[at + 1]! });
+  }
+  return entries;
+}
 
 /** A shard index for the given entries, `null` for a chunk never written. */
 function buildIndex(entries: ({ offset: number; length: number } | null)[]): Uint8Array {
-  const bytes = new Uint8Array(shardIndexLength(entries.length));
+  const bytes = new Uint8Array(indexLength(entries.length));
   const view = new DataView(bytes.buffer);
   entries.forEach((entry, position) => {
     const offset = entry ? BigInt(entry.offset) : 0xffffffffffffffffn;
@@ -107,26 +132,40 @@ function buildIndex(entries: ({ offset: number; length: number } | null)[]): Uin
   return bytes;
 }
 
+describe("crc32c", () => {
+  it("is Castagnoli, not the container's IEEE polynomial", () => {
+    // A known vector, so a wrong helper cannot pass by agreeing with
+    // nothing but its own indices.
+    expect(crc32c(new TextEncoder().encode("123456789"))).toBe(0xe3069283);
+    expect(crc32c(new Uint8Array(0))).toBe(0);
+  });
+
+  it("seals an index the reader accepts", () => {
+    expect(() => wasm.parseShardIndex(buildIndex([{ offset: 0, length: 40 }]), 1)).not.toThrow();
+    expect(wasm.shardIndexLength(945)).toBe(indexLength(945));
+  });
+});
+
 describe("parseShardIndex", () => {
   const entries = [{ offset: 0, length: 40 }, null, { offset: 40, length: 7 }];
 
   it("reads the pairs and the missing-chunk sentinel", () => {
-    expect(parseShardIndex(buildIndex(entries), 3)).toEqual(entries);
+    expect(indexEntries(wasm.parseShardIndex(buildIndex(entries), 3))).toEqual(entries);
   });
 
   it("verifies the CRC-32C", () => {
     const corrupt = buildIndex(entries);
     corrupt[3] = corrupt[3]! ^ 0x01;
-    expect(() => parseShardIndex(corrupt, 3)).toThrow(/CRC-32C/);
+    expect(() => wasm.parseShardIndex(corrupt, 3)).toThrow(/CRC-32C/);
   });
 
   it("rejects an index of the wrong length", () => {
-    expect(() => parseShardIndex(buildIndex(entries), 2)).toThrow(/bytes/);
-    expect(() => parseShardIndex(buildIndex(entries).subarray(1), 3)).toThrow(/bytes/);
+    expect(() => wasm.parseShardIndex(buildIndex(entries), 2)).toThrow(/bytes/);
+    expect(() => wasm.parseShardIndex(buildIndex(entries).subarray(1), 3)).toThrow(/bytes/);
   });
 
   it("rejects an entry naming an empty chunk", () => {
-    expect(() => parseShardIndex(buildIndex([{ offset: 0, length: 0 }]), 1)).toThrow(/empty/);
+    expect(() => wasm.parseShardIndex(buildIndex([{ offset: 0, length: 0 }]), 1)).toThrow(/empty/);
   });
 });
 
@@ -190,9 +229,24 @@ function shardingConfiguration(document: Record<string, unknown>): Record<string
   return (document.codecs as { configuration: Record<string, unknown> }[])[0]!.configuration;
 }
 
-describe("parseArrayMetadata", () => {
+/** Where a time chunk's first tile sits: its shard, and its position in that
+ * shard's index. The reader keeps positions to itself, so they are read
+ * back through an index whose every entry's offset is its own position. */
+function locate(reader: ZarrArrayReader, timeChunk: number): { shard: number; position: number } {
+  const shard = reader.shardOf(timeChunk);
+  if (!reader.hasShardIndex(shard)) {
+    reader.setShardIndex(shard, buildIndex(Array.from({ length: reader.chunksPerShard }, (_, position) => ({ offset: position, length: 1 }))));
+  }
+  return { shard, position: reader.chunkRange(timeChunk, 0)![0]! };
+}
+
+function arrayLayout(text: string) {
+  return readArray(wasm, text).layout;
+}
+
+describe("readArray", () => {
   it("reads the profile's layout", () => {
-    const layout = parseArrayMetadata(arrayMetadata());
+    const { reader, layout } = readArray(wasm, arrayMetadata());
     expect(layout).toMatchObject({
       frameCount: 121,
       height: 73,
@@ -213,30 +267,33 @@ describe("parseArrayMetadata", () => {
     });
     expect(tileShape(layout, 44)).toEqual({ height: 9, width: 16 });
     expect(tileOf(layout, 72, 143)).toBe(44);
-    expect(shardOf(layout, 0)).toEqual({ shard: 0, position: 0 });
-    expect(shardOf(layout, 20)).toEqual({ shard: 0, position: 900 });
+    expect(locate(reader, 0)).toEqual({ shard: 0, position: 0 });
+    expect(locate(reader, 20)).toEqual({ shard: 0, position: 900 });
+    expect(() => reader.shardOf(21)).toThrow(/outside the array/);
   });
 
   it("reads a store cut one shard per time chunk, and refuses a shard of partial time chunks", () => {
-    const legacy = parseArrayMetadata(
+    const legacy = readArray(
+      wasm,
       arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [6, 80, 144])),
     );
-    expect(legacy).toMatchObject({ shardFrames: 6, shardCount: 21, chunksPerShard: 45 });
-    expect(shardOf(legacy, 20)).toEqual({ shard: 20, position: 0 });
-    const two = parseArrayMetadata(
+    expect(legacy.layout).toMatchObject({ shardFrames: 6, shardCount: 21, chunksPerShard: 45 });
+    expect(locate(legacy.reader, 20)).toEqual({ shard: 20, position: 0 });
+    const two = readArray(
+      wasm,
       arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [12, 80, 144])),
     );
-    expect(two).toMatchObject({ shardFrames: 12, shardCount: 11, chunksPerShard: 90 });
-    expect(shardOf(two, 7)).toEqual({ shard: 3, position: 45 });
+    expect(two.layout).toMatchObject({ shardFrames: 12, shardCount: 11, chunksPerShard: 90 });
+    expect(locate(two.reader, 7)).toEqual({ shard: 3, position: 45 });
     expect(() =>
-      parseArrayMetadata(
+      arrayLayout(
         arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [9, 80, 144])),
       ),
     ).toThrow(/whole time chunks/);
   });
 
   it("accepts the delta chain and an index at the start", () => {
-    const layout = parseArrayMetadata(
+    const layout = arrayLayout(
       arrayMetadata((document) => {
         const sharding = shardingConfiguration(document);
         sharding.codecs = [{ name: "xue.delta", configuration: { axis: 0 } }, { name: "bytes" }, { name: "zstd" }];
@@ -248,12 +305,12 @@ describe("parseArrayMetadata", () => {
   });
 
   it("rejects a data type other than uint8", () => {
-    expect(() => parseArrayMetadata(arrayMetadata((document) => (document.data_type = "float32")))).toThrow(/uint8/);
+    expect(() => arrayLayout(arrayMetadata((document) => (document.data_type = "float32")))).toThrow(/uint8/);
   });
 
   it("rejects an array that is not sharded", () => {
     expect(() =>
-      parseArrayMetadata(arrayMetadata((document) => (document.codecs = [{ name: "bytes" }, { name: "zstd" }]))),
+      arrayLayout(arrayMetadata((document) => (document.codecs = [{ name: "bytes" }, { name: "zstd" }]))),
     ).toThrow(/sharding_indexed/);
   });
 
@@ -264,19 +321,19 @@ describe("parseArrayMetadata", () => {
       [{ name: "bytes" }, { name: "blosc" }],
       [{ name: "xue.delta", configuration: { axis: 1 } }, { name: "bytes" }, { name: "zstd" }],
     ]) {
-      expect(() => parseArrayMetadata(arrayMetadata((document) => (shardingConfiguration(document).codecs = chain)))).toThrow();
+      expect(() => arrayLayout(arrayMetadata((document) => (shardingConfiguration(document).codecs = chain)))).toThrow();
     }
   });
 
   it("rejects a wrong index chain, location or outer chunk", () => {
     expect(() =>
-      parseArrayMetadata(arrayMetadata((document) => (shardingConfiguration(document).index_codecs = [{ name: "bytes" }]))),
+      arrayLayout(arrayMetadata((document) => (shardingConfiguration(document).index_codecs = [{ name: "bytes" }]))),
     ).toThrow(/index codecs/);
     expect(() =>
-      parseArrayMetadata(arrayMetadata((document) => (shardingConfiguration(document).index_location = "middle"))),
+      arrayLayout(arrayMetadata((document) => (shardingConfiguration(document).index_location = "middle"))),
     ).toThrow(/index location/);
     expect(() =>
-      parseArrayMetadata(
+      arrayLayout(
         arrayMetadata((document) => ((document.chunk_grid as { configuration: { chunk_shape: number[] } }).configuration.chunk_shape = [126, 73, 144])),
       ),
     ).toThrow(/whole tiles/);
@@ -314,7 +371,7 @@ function bundlesNaming(store: string): string[] {
     .map((bundle) => bundle.variable);
 }
 
-describe("parseGroupMetadata", () => {
+describe("readGroup", () => {
   it("reads a shared store as the bundle asked for", () => {
     const text = readFileSync(`${FIXTURE_ROOT}/bundles.zarr/zarr.json`, "utf8");
     const document = JSON.parse(text);
@@ -324,12 +381,12 @@ describe("parseGroupMetadata", () => {
     expect(Object.keys(document.attributes.xue_bundles)).toEqual(bundlesNaming("bundles.zarr"));
     expect(Object.keys(document.attributes.xue_bundles)).toEqual(["tmp2m", "prate", "wind10m"]);
     for (const bundle of ["tmp2m", "prate", "wind10m"]) {
-      const group = parseGroupMetadata(text, bundle);
+      const group = readGroup(wasm, text, bundle);
       expect(group.profile).toBe(2);
       expect(group.metadata).toEqual(parseBundleMetadata(JSON.stringify(document.attributes.xue_bundles[bundle])));
     }
-    expect(parseGroupMetadata(text, "tmp2m").metadata.variables.map((variable) => variable.id)).toEqual(["tmp2m"]);
-    expect(parseGroupMetadata(text, "wind10m").metadata.variables.map((variable) => variable.id)).toEqual(["ugrd10m", "vgrd10m"]);
+    expect(readGroup(wasm, text, "tmp2m").metadata.variables.map((variable) => variable.id)).toEqual(["tmp2m"]);
+    expect(readGroup(wasm, text, "wind10m").metadata.variables.map((variable) => variable.id)).toEqual(["ugrd10m", "vgrd10m"]);
     // The consolidated block repeats every bundle's arrays and the shared
     // coordinates, so a generic client opens the store with no listing.
     for (const name of ["tmp2m", "prate", "ugrd10m", "vgrd10m", "time", "latitude", "longitude"]) {
@@ -340,25 +397,27 @@ describe("parseGroupMetadata", () => {
 
   it("refuses a shared store opened without a bundle, or for one it does not hold", () => {
     const text = readFileSync(`${FIXTURE_ROOT}/bundles.zarr/zarr.json`, "utf8");
-    expect(() => parseGroupMetadata(text)).toThrow(/bundle id/);
-    expect(() => parseGroupMetadata(text, "gust")).toThrow(/no bundle gust/);
+    expect(() => readGroup(wasm, text)).toThrow(/bundle id/);
+    expect(() => readGroup(wasm, text, "gust")).toThrow(/no bundle "gust"/);
     // Not a key the object inherits either.
-    expect(() => parseGroupMetadata(text, "constructor")).toThrow(/no bundle constructor/);
+    expect(() => readGroup(wasm, text, "constructor")).toThrow(/no bundle "constructor"/);
     const document = JSON.parse(text);
     delete document.attributes.xue_bundles;
-    expect(() => parseGroupMetadata(JSON.stringify(document), "tmp2m")).toThrow(/xue_bundles/);
+    // With its only block gone the group declares no branch of the profile
+    // at all, which is refused before its profile is looked at.
+    expect(() => readGroup(wasm, JSON.stringify(document), "tmp2m")).toThrow(/no xue metadata block/);
     const broken = JSON.parse(text);
     broken.attributes.xue_bundles.tmp2m = { schemaVersion: 9 };
-    expect(() => parseGroupMetadata(JSON.stringify(broken), "tmp2m")).toThrow();
+    expect(() => readGroup(wasm, JSON.stringify(broken), "tmp2m")).toThrow();
     // The prate entry is untouched, so only the bundle read is held to it.
-    expect(parseGroupMetadata(JSON.stringify(broken), "prate").metadata.variables[0]!.id).toBe("prate");
+    expect(readGroup(wasm, JSON.stringify(broken), "prate").metadata.variables[0]!.id).toBe("prate");
   });
 
   it("refuses a shared group whose xue_bundles is empty or not an object", () => {
     for (const value of [{}, [], "tmp2m", null, 7]) {
       const document = sharedGroup();
       document.attributes.xue_bundles = value;
-      expect(() => parseGroupMetadata(JSON.stringify(document), "tmp2m")).toThrow(/xue_bundles/);
+      expect(() => readGroup(wasm, JSON.stringify(document), "tmp2m")).toThrow(/xue_bundles/);
     }
   });
 
@@ -366,45 +425,46 @@ describe("parseGroupMetadata", () => {
     for (const profile of [0, 3, 1.5, "2"]) {
       const document = sharedGroup();
       document.attributes.xue_profile = profile;
-      expect(() => parseGroupMetadata(JSON.stringify(document), "tmp2m")).toThrow(/xue_profile/);
+      expect(() => readGroup(wasm, JSON.stringify(document), "tmp2m")).toThrow(/xue_profile/);
     }
   });
 
   it("refuses a group carrying both a bundle's block and xue_bundles", () => {
     const shared = sharedGroup();
     const both = { ...shared, attributes: { ...shared.attributes, xue: shared.attributes.xue_bundles.tmp2m } };
-    expect(() => parseGroupMetadata(JSON.stringify(both), "tmp2m")).toThrow(/xue block/);
+    expect(() => readGroup(wasm, JSON.stringify(both), "tmp2m")).toThrow(/more than one of xue, xue_bundles/);
     const single = profileOneGroup("tmp2m");
     single.attributes.xue_bundles = shared.attributes.xue_bundles;
-    expect(() => parseGroupMetadata(JSON.stringify(single), "tmp2m")).toThrow(/xue_bundles/);
+    expect(() => readGroup(wasm, JSON.stringify(single), "tmp2m")).toThrow(/more than one of xue, xue_bundles/);
   });
 
   it("reads a one-bundle store's attributes.xue through parseBundleMetadata, whichever bundle is named", () => {
     const document = profileOneGroup("tmp2m");
     const text = JSON.stringify(document);
-    const group = parseGroupMetadata(text);
+    const group = readGroup(wasm, text);
     expect(group.profile).toBe(1);
     expect(group.metadata.variables[0]!.id).toBe("tmp2m");
     expect(group.metadata).toEqual(parseBundleMetadata(JSON.stringify(document.attributes.xue)));
-    expect(parseGroupMetadata(text, "tmp2m").metadataJson).toBe(group.metadataJson);
+    expect(readGroup(wasm, text, "tmp2m").metadataJson).toBe(group.metadataJson);
   });
 
   it("rejects a group without the block, or with a broken one", () => {
-    expect(() => parseGroupMetadata(JSON.stringify({ zarr_format: 3, node_type: "group", attributes: {} }))).toThrow(/xue/);
+    expect(() => readGroup(wasm, JSON.stringify({ zarr_format: 3, node_type: "group", attributes: {} }))).toThrow(/xue/);
     expect(() =>
-      parseGroupMetadata(
+      readGroup(
+        wasm,
         JSON.stringify({ zarr_format: 3, node_type: "group", attributes: { xue: { schemaVersion: 9 }, xue_profile: 1 } }),
       ),
     ).toThrow();
     // A profile-1 reader's refusal of the shared group is its missing block.
-    expect(() => parseGroupMetadata(JSON.stringify({ zarr_format: 3, node_type: "group", attributes: { xue_profile: 1 } }))).toThrow(/xue/);
+    expect(() => readGroup(wasm, JSON.stringify({ zarr_format: 3, node_type: "group", attributes: { xue_profile: 1 } }))).toThrow(/xue/);
   });
 
   it("ignores the whole-store index an earlier store declares", () => {
     const text = JSON.stringify(profileOneGroup("tmp2m"));
     const document = JSON.parse(text);
     document.attributes.xue_index = { path: "index.bin", shardIndexBytes: 724, timeChunks: 21, arrays: ["tmp2m"] };
-    expect(parseGroupMetadata(JSON.stringify(document)).metadataJson).toBe(parseGroupMetadata(text).metadataJson);
+    expect(readGroup(wasm, JSON.stringify(document)).metadataJson).toBe(readGroup(wasm, text).metadataJson);
   });
 });
 
@@ -417,16 +477,16 @@ describe("a shared store's arrays", () => {
     ] as const) {
       for (const store of ["bundles.zarr", "bundles.half.zarr"]) {
         for (const id of ids) {
-          expect(parseArrayMetadata(readFileSync(`${FIXTURE_ROOT}/${store}/${id}/zarr.json`, "utf8")).bundle).toBe(bundle);
+          expect(arrayLayout(readFileSync(`${FIXTURE_ROOT}/${store}/${id}/zarr.json`, "utf8")).bundle).toBe(bundle);
         }
       }
     }
   });
 
   it("declare no bundle on an array written without one", () => {
-    expect(parseArrayMetadata(arrayMetadata()).bundle).toBeNull();
-    expect(parseArrayMetadata(arrayMetadata((document) => (document.attributes = { xue: { predictor: "raw" } }))).bundle).toBeNull();
-    expect(() => parseArrayMetadata(arrayMetadata((document) => (document.attributes = { xue: { bundle: 7 } })))).toThrow(/bundle/);
+    expect(arrayLayout(arrayMetadata()).bundle).toBeNull();
+    expect(arrayLayout(arrayMetadata((document) => (document.attributes = { xue: { predictor: "raw" } }))).bundle).toBeNull();
+    expect(() => arrayLayout(arrayMetadata((document) => (document.attributes = { xue: { bundle: 7 } })))).toThrow(/bundle/);
   });
 });
 
@@ -547,7 +607,7 @@ async function open(storeName: string, bundleId: string, bundleFile: string, gap
   const log = newFetchLog();
   const fetch = profile === 1 ? profileOneFetch(bundleId, log) : localFetch(FIXTURE_ROOT, log);
   const store = new ZarrStore(`local://${storeName}`, "deadbeef", { fetch, gap });
-  const session = await ZarrSession.open(store, wasm.decodeChunk, { bundle: bundleId });
+  const session = await ZarrSession.open(store, wasm, { bundle: bundleId });
   const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/${bundleFile}`));
   return { session, bundle, log };
 }
@@ -582,7 +642,7 @@ describe("ZarrSession", () => {
 
   it("refuses a shared store opened without a bundle id", async () => {
     const { store } = openStore("bundles.zarr");
-    await expect(ZarrSession.open(store, wasm.decodeChunk)).rejects.toThrow(/bundle id/);
+    await expect(ZarrSession.open(store, wasm)).rejects.toThrow(/bundle id/);
   });
 
   it("refuses an array that declares another bundle", async () => {
@@ -595,7 +655,7 @@ describe("ZarrSession", () => {
       return new Response(JSON.stringify(document), { status: 200 });
     };
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch });
-    await expect(ZarrSession.open(store, wasm.decodeChunk, { bundle: "tmp2m" })).rejects.toThrow(/belongs to bundle prate/);
+    await expect(ZarrSession.open(store, wasm, { bundle: "tmp2m" })).rejects.toThrow(/belongs to bundle prate/);
   });
 
   for (const [storeName, bundleId, bundleFile, variables, profile] of [
@@ -652,7 +712,7 @@ describe("ZarrSession", () => {
       const { session, bundle } = await open(storeName, bundleId, bundleFile);
       const metadata = parseBundleMetadata(session.metadataJson);
       const { width, height } = metadata.grid;
-      const layout = parseArrayMetadata(
+      const layout = arrayLayout(
         readFileSync(`${FIXTURE_ROOT}/${storeName}/${metadata.variables[0]!.id}/zarr.json`, "utf8"),
       );
       // The whole axis is one time chunk, so a cell's series is one inner
@@ -720,7 +780,7 @@ describe("ZarrSession", () => {
   it("assembles the same frames and series over whole objects, one GET per shard", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
-    const session = await ZarrSession.open(store, wasm.decodeChunk, { bundle: "tmp2m", payloadBudgetBytes: 64 * 1024 * 1024 });
+    const session = await ZarrSession.open(store, wasm, { bundle: "tmp2m", payloadBudgetBytes: 64 * 1024 * 1024 });
     expect(session.payloadBudgetBytes).toBe(64 * 1024 * 1024);
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
     const opened = log.requests;
@@ -756,7 +816,7 @@ describe("ZarrSession", () => {
     expect(plane[0]).toBe(0);
   });
 
-  const TMP2M_INDEX_BYTES = shardIndexLength(21 * 45);
+  const TMP2M_INDEX_BYTES = indexLength(21 * 45);
 
   /** A fetch over the fixture directory whose answer for the tmp2m shard's
    * index — the suffix range — is rewritten, so the session's index
@@ -790,7 +850,7 @@ describe("ZarrSession", () => {
     const doctored = new ZarrStore("local://bundles.zarr", "deadbeef", {
       fetch: fetchWithIndex(log, (bytes) => resealed(bytes, (index) => index.fill(0xff, 0, INDEX_ENTRY_BYTES))),
     });
-    const doctoredSession = await ZarrSession.open(doctored, wasm.decodeChunk, { bundle: "tmp2m" });
+    const doctoredSession = await ZarrSession.open(doctored, wasm, { bundle: "tmp2m" });
     const plane = await doctoredSession.decodeFrame(1, 0);
     const nodata = (metadata.variables[0]!.quantization as { nodataCode: number }).nodataCode;
     expect(plane[0]).toBe(nodata);
@@ -806,7 +866,7 @@ describe("ZarrSession", () => {
         return bytes;
       }),
     });
-    const session = await ZarrSession.open(store, wasm.decodeChunk, { bundle: "tmp2m" });
+    const session = await ZarrSession.open(store, wasm, { bundle: "tmp2m" });
     await expect(session.decodeFrame(1, 0)).rejects.toThrow(/CRC-32C/);
   });
 
@@ -851,11 +911,11 @@ describe("ZarrSession", () => {
   function legacyFetch(log: ReturnType<typeof newFetchLog>): FetchLike {
     const base = localFetch(FIXTURE_ROOT, log);
     const shard = readFileSync(`${FIXTURE_ROOT}/bundles.zarr/tmp2m/c/0/0/0`);
-    const index = parseShardIndex(new Uint8Array(shard.subarray(shard.byteLength - TMP2M_INDEX_BYTES)), 21 * 45);
+    const index = indexEntries(wasm.parseShardIndex(new Uint8Array(shard.subarray(shard.byteLength - TMP2M_INDEX_BYTES)), 21 * 45));
     const shards = new Map<number, Buffer>();
     for (let timeChunk = 0; timeChunk < 21; timeChunk += 1) {
       const payloads = index.slice(timeChunk * 45, (timeChunk + 1) * 45).map((entry) => shard.subarray(entry!.offset, entry!.offset + entry!.length));
-      const table = new Uint8Array(shardIndexLength(45));
+      const table = new Uint8Array(indexLength(45));
       const view = new DataView(table.buffer);
       let cursor = 0;
       payloads.forEach((payload, tile) => {
@@ -891,14 +951,14 @@ describe("ZarrSession", () => {
   it("reads a store cut one shard per time chunk as it reads the container", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: legacyFetch(log) });
-    const session = await ZarrSession.open(store, wasm.decodeChunk, { bundle: "tmp2m" });
+    const session = await ZarrSession.open(store, wasm, { bundle: "tmp2m" });
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
     for (const offset of [0, 5, 6, 64, 120]) {
       expect(Buffer.from(await session.decodeFrame(1, offset))).toEqual(Buffer.from(bundle.decodeFrame(1, offset)));
     }
     expect(Buffer.from(await session.decodeSeries(1, 37, 20))).toEqual(Buffer.from(bundle.decodeSeries(1, 37, 20)));
     // Every shard's index was read as its own suffix range.
-    expect(log.entries.filter((entry) => entry.range === `bytes=-${shardIndexLength(45)}`)).toHaveLength(21);
+    expect(log.entries.filter((entry) => entry.range === `bytes=-${indexLength(45)}`)).toHaveLength(21);
   });
 
   it("refuses arrays of one store cut differently", async () => {
@@ -911,7 +971,7 @@ describe("ZarrSession", () => {
       return new Response(JSON.stringify(document), { status: 200 });
     };
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch });
-    await expect(ZarrSession.open(store, wasm.decodeChunk, { bundle: "wind10m" })).rejects.toThrow(/cut the same way/);
+    await expect(ZarrSession.open(store, wasm, { bundle: "wind10m" })).rejects.toThrow(/cut the same way/);
   });
 
   it("refuses a cell or a frame outside the array", async () => {
@@ -1009,7 +1069,7 @@ describe("SegmentedZarrSession", () => {
   const TMP2M = { bundle: "tmp2m" };
 
   it("reads two segments as one axis, frame by frame and as a series", async () => {
-    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk, TMP2M);
+    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm, TMP2M);
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/tmp2m.xue`));
     const metadata = parseBundleMetadata(session.metadataJson);
     expect(metadata.time.frameCount).toBe(242);
@@ -1032,27 +1092,27 @@ describe("SegmentedZarrSession", () => {
   });
 
   it("reads another bundle over the same shared segments as its own", async () => {
-    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk, { bundle: "wind10m" });
+    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm, { bundle: "wind10m" });
     const bundle = new wasm.WasmBundle(readFileSync(`${FIXTURE_ROOT}/wind10m.xue`));
     expect(session.numericIds).toEqual([1, 2]);
     expect(parseBundleMetadata(session.metadataJson).variables.map((variable) => variable.id)).toEqual(["ugrd10m", "vgrd10m"]);
     for (const variable of [1, 2]) {
       expect(Buffer.from(await session.decodeFrame(variable, 7 + 121))).toEqual(Buffer.from(bundle.decodeFrame(variable, 7)));
     }
-    await expect(SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk)).rejects.toThrow(/bundle id/);
+    await expect(SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm)).rejects.toThrow(/bundle id/);
   });
 
   /** What the time chunk holding `frame` costs in compressed chunks: the
    * payload bytes a whole-plane decode of it leaves held. */
   async function timeChunkBytes(frame: number): Promise<number> {
-    const session = await ZarrSession.open(shiftedStore(0), wasm.decodeChunk, TMP2M);
+    const session = await ZarrSession.open(shiftedStore(0), wasm, TMP2M);
     await session.decodeFrame(1, frame);
     return session.payloadBytes;
   }
 
   it("shares one payload budget over the segments, evicting the least recently used", async () => {
     const budget = await timeChunkBytes(0);
-    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm.decodeChunk, {
+    const session = await SegmentedZarrSession.open([shiftedStore(0), shiftedStore(121)], wasm, {
       ...TMP2M,
       payloadBudgetBytes: budget,
     });
@@ -1071,7 +1131,7 @@ describe("SegmentedZarrSession", () => {
   it("leaves a plain session's own budget as it was", async () => {
     // Room for either time chunk, not both.
     const budget = Math.max(await timeChunkBytes(0), await timeChunkBytes(6));
-    const session = await ZarrSession.open(shiftedStore(0), wasm.decodeChunk, { ...TMP2M, payloadBudgetBytes: budget });
+    const session = await ZarrSession.open(shiftedStore(0), wasm, { ...TMP2M, payloadBudgetBytes: budget });
     expect(session.payloadBudgetBytes).toBe(budget);
     await session.decodeFrame(1, 0);
     await session.decodeFrame(1, 6);
@@ -1081,6 +1141,6 @@ describe("SegmentedZarrSession", () => {
   });
 
   it("refuses segments that overlap in time", async () => {
-    await expect(SegmentedZarrSession.open([shiftedStore(0), shiftedStore(100)], wasm.decodeChunk, TMP2M)).rejects.toThrow(/time order/);
+    await expect(SegmentedZarrSession.open([shiftedStore(0), shiftedStore(100)], wasm, TMP2M)).rejects.toThrow(/time order/);
   });
 });

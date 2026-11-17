@@ -19,7 +19,7 @@ import { fetchImmutable } from "../fetchimmutable";
 import { formatUtcHour } from "../format";
 import { t } from "../i18n";
 import { ZarrStore } from "../zarr/store";
-import { loadDecodeChunk } from "./decode";
+import { loadNetworkCodec } from "./decode";
 import type { TimedSeries } from "./hydrograph";
 import { riverFileUrl, riverPathUrl, type LoadedRiverIndex, type RiverGauge, type RiverTrack } from "./index";
 import { RiverLayer, RIVER_LAYER_ID, type RiverRamp } from "./layer";
@@ -229,8 +229,8 @@ export class RiverCase {
     let opening = this.stores.get(id);
     if (!opening) {
       const url = riverPathUrl(this.loaded.indexUrl, track.store.path);
-      opening = loadDecodeChunk().then((decode) =>
-        NetworkStore.open(new ZarrStore(url, track.store.crc32), decode, this.loaded.index.geometry),
+      opening = loadNetworkCodec().then((codec) =>
+        NetworkStore.open(new ZarrStore(url, track.store.crc32), codec, this.loaded.index.geometry),
       );
       opening.catch((error: unknown) => {
         this.stores.delete(id);

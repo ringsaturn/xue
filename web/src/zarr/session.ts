@@ -15,10 +15,11 @@
  * cells outside them keep what the buffer held, which is the coverage
  * contract the `.xue` worker's tiled decode already has.
  *
- * Decoding itself is the container's chunk path, `decodeChunk` from the
- * WASM module, injected so the session can be opened where the module is
- * loaded differently (a worker's `?url` import, a test's file read). A
- * decoded chunk is cached for the time chunk being read, per variable, and
+ * The format itself is read by the WASM module (`ZarrCodec`), injected so
+ * the session can be opened where the module is loaded differently (a
+ * worker's `?url` import, a test's file read): each array's layout and
+ * verified shard indices live in a reader there, and decoding is the
+ * container's chunk path, `decodeChunk`. A decoded chunk is cached for the time chunk being read, per variable, and
  * dropped when the read moves on, which keeps scrubbing inside six frames
  * free and memory at one time chunk's tiles.
  *
@@ -34,24 +35,19 @@ import { frameOffsets } from "../manifest";
 import type { TileRect } from "../tiles";
 import {
   framesInTimeChunk,
-  parseArrayMetadata,
-  parseGroupMetadata,
-  parseShardIndex,
   placeTile,
   PREDICTOR_PREVIOUS,
   PREDICTOR_RAW,
-  shardIndexLength,
-  shardOf,
-  shardPath,
+  readArray,
+  readGroup,
   tileOf,
   tileOrigin,
-  type ShardIndexEntry,
   type ZarrArrayLayout,
+  type ZarrArrayReader,
+  type ZarrCodec,
   type ZarrGroup,
 } from "./shard";
 import type { ZarrStore } from "./store";
-
-type DecodeChunkFn = (bytes: Uint8Array, frames: number, height: number, width: number, predictor: number) => Uint8Array;
 
 /** One inner chunk's address: a variable, a time chunk, a tile. */
 export interface ChunkKey {
@@ -63,6 +59,9 @@ export interface ChunkKey {
 interface VariableArray {
   id: string;
   layout: ZarrArrayLayout;
+  /** The array in the WASM module: the layout's source, and the holder of
+   * the shard indices fetched so far. */
+  reader: ZarrArrayReader;
   /** The time chunk whose decoded tiles `decoded` holds. */
   decodedTimeChunk: number;
   decoded: Map<number, Uint8Array | null>;
@@ -193,8 +192,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
   private uncountedBytes = 0;
 
   private readonly arrays = new Map<number, VariableArray>();
-  private readonly indices = new Map<string, (ShardIndexEntry | null)[]>();
-  private readonly indexFetches = new Map<string, Promise<(ShardIndexEntry | null)[]>>();
+  private readonly indexFetches = new Map<string, Promise<void>>();
   /** Compressed inner chunks, `null` for one the shard never held. */
   private readonly payloads = new Map<string, Uint8Array | null>();
   private readonly chunkFetches = new Map<string, Promise<void>>();
@@ -202,15 +200,16 @@ export class ZarrSession implements ZarrReader, PoolMember {
 
   private constructor(
     readonly store: ZarrStore,
-    private readonly decodeChunk: DecodeChunkFn,
+    private readonly codec: ZarrCodec,
     readonly group: ZarrGroup,
-    arrays: { numericId: number; id: string; layout: ZarrArrayLayout }[],
+    arrays: { numericId: number; id: string; layout: ZarrArrayLayout; reader: ZarrArrayReader }[],
   ) {
     this.offsetIndex = new Map(frameOffsets(group.metadata.time).map((offset, index) => [offset, index]));
     for (const array of arrays) {
       this.arrays.set(array.numericId, {
         id: array.id,
         layout: array.layout,
+        reader: array.reader,
         decodedTimeChunk: -1,
         decoded: new Map(),
       });
@@ -225,16 +224,16 @@ export class ZarrSession implements ZarrReader, PoolMember {
    * against what an array declares wherever both are known. */
   static async open(
     store: ZarrStore,
-    decodeChunk: DecodeChunkFn,
+    codec: ZarrCodec,
     options: ZarrSessionOptions = {},
   ): Promise<ZarrSession> {
     const { bundle } = options;
     const groupBytes = await store.get("zarr.json");
-    const group = parseGroupMetadata(new TextDecoder().decode(groupBytes), bundle);
+    const group = readGroup(codec, new TextDecoder().decode(groupBytes), bundle);
     const { metadata } = group;
     const arrays = await Promise.all(
       metadata.variables.map(async (variable) => {
-        const layout = parseArrayMetadata(new TextDecoder().decode(await store.get(`${variable.id}/zarr.json`)));
+        const { reader, layout } = readArray(codec, new TextDecoder().decode(await store.get(`${variable.id}/zarr.json`)));
         if (bundle !== undefined && layout.bundle !== null && layout.bundle !== bundle) {
           throw new Error(`array ${variable.id} belongs to bundle ${layout.bundle}, not ${bundle}`);
         }
@@ -244,7 +243,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
         if (layout.frameCount !== metadata.time.frameCount) {
           throw new Error(`array ${variable.id} does not match the bundle's time axis`);
         }
-        return { numericId: variable.numericId, id: variable.id, layout };
+        return { numericId: variable.numericId, id: variable.id, layout, reader };
       }),
     );
     const first = arrays[0]!.layout;
@@ -259,7 +258,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
         throw new Error("every array of a bundle must be cut the same way");
       }
     }
-    const session = new ZarrSession(store, decodeChunk, group, arrays);
+    const session = new ZarrSession(store, codec, group, arrays);
     // A shared store's descriptor sizes this bundle's arrays and coordinates
     // but not the group, which carries every bundle of the tier; progress
     // is reported against that size, so the group is left out of it too.
@@ -366,16 +365,17 @@ export class ZarrSession implements ZarrReader, PoolMember {
     return this.chunksFor(variableId, frameOffset, rects).every((key) => this.isResident(key));
   }
 
-  private ensureIndex(variableId: number, shard: number): Promise<(ShardIndexEntry | null)[]> {
+  /** Make one shard's index local: read once, verified and held by the
+   * array's reader. */
+  private ensureIndex(variableId: number, shard: number): Promise<void> {
+    const { id, layout, reader } = this.array(variableId);
+    if (reader.hasShardIndex(shard)) return Promise.resolve();
     const key = indexKey(variableId, shard);
-    const held = this.indices.get(key);
-    if (held) return Promise.resolve(held);
     const running = this.indexFetches.get(key);
     if (running) return running;
-    const { id, layout } = this.array(variableId);
     if (shard < 0 || shard >= layout.shardCount) throw new Error("shard is outside the array");
-    const length = shardIndexLength(layout.chunksPerShard);
-    const path = shardPath(id, shard);
+    const length = reader.shardIndexLength;
+    const path = reader.shardPath(id, shard);
     // The index sits at whichever end the array declares; at the end it is
     // a suffix range, which needs no object length, and at the start a
     // prefix of known length.
@@ -385,10 +385,8 @@ export class ZarrSession implements ZarrReader, PoolMember {
           path,
           layout.indexLocation === "end" ? { suffixLength: length } : { offset: 0, length },
         );
-        const index = parseShardIndex(bytes, layout.chunksPerShard);
-        this.indices.set(key, index);
+        reader.setShardIndex(shard, bytes);
         this.residentBytes += bytes.byteLength;
-        return index;
       } finally {
         this.indexFetches.delete(key);
       }
@@ -408,19 +406,18 @@ export class ZarrSession implements ZarrReader, PoolMember {
     }
     const running = this.chunkFetches.get(name);
     if (running) return running;
-    const { id, layout } = this.array(key.variableId);
+    const { id, layout, reader } = this.array(key.variableId);
     if (key.timeChunk < 0 || key.timeChunk >= layout.timeChunks) throw new Error("time chunk is outside the array");
     const task = (async () => {
       try {
-        const { shard, position } = shardOf(layout, key.timeChunk);
-        const index = await this.ensureIndex(key.variableId, shard);
-        const entry = index[position + key.tile];
-        if (entry === undefined) throw new Error("tile is outside the shard");
-        if (entry === null) {
+        const shard = reader.shardOf(key.timeChunk);
+        await this.ensureIndex(key.variableId, shard);
+        const range = reader.chunkRange(key.timeChunk, key.tile);
+        if (range === undefined) {
           this.payloads.set(name, null);
           return;
         }
-        const bytes = await this.store.getRange(shardPath(id, shard), entry);
+        const bytes = await this.store.getRange(reader.shardPath(id, shard), { offset: range[0]!, length: range[1]! });
         this.payloads.set(name, bytes);
         this.residentBytes += bytes.byteLength;
         this.payloadBytes += bytes.byteLength;
@@ -495,7 +492,7 @@ export class ZarrSession implements ZarrReader, PoolMember {
     if (payload === undefined) throw new Error("chunk is not resident yet");
     if (payload === null) return null;
     const { layout } = array;
-    return this.decodeChunk(
+    return this.codec.decodeChunk(
       payload,
       layout.timeChunk,
       layout.tileHeight,

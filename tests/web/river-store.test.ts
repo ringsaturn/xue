@@ -11,7 +11,7 @@ import {
   NetworkStore,
   parseNetworkArrayMetadata,
   parseNetworkGroup,
-  type DecodeChunkFn,
+  type NetworkCodec,
 } from "../../web/src/river/store";
 import { ZarrStore, type FetchLike } from "../../web/src/zarr/store";
 import { buildNetworkStore, fixtureCode, LOG1P_CODEBOOK, type NetworkStoreFixture } from "./fixtures/river";
@@ -26,12 +26,12 @@ function repositoryRoot(): string {
   return directory;
 }
 
-let decodeChunk: DecodeChunkFn;
+let codec: NetworkCodec;
 
 beforeAll(async () => {
   const wasm = await import("../../web/src/wasm/xue");
   await wasm.default({ module_or_path: readFileSync(join(repositoryRoot(), "web/src/wasm/xue_bg.wasm")) });
-  decodeChunk = wasm.decodeChunk;
+  codec = wasm;
 });
 
 interface Served {
@@ -65,7 +65,7 @@ const ROWS = 64;
 async function open(delta: boolean, missing: string[] = []) {
   const fixture = buildNetworkStore({ frameCount: FRAMES, featureCount: FEATURES, rowGroupRows: ROWS, delta, missing });
   const served = serve(fixture);
-  const store = await NetworkStore.open(new ZarrStore("mem://store", fixture.crc32, { fetch: served.fetch }), decodeChunk);
+  const store = await NetworkStore.open(new ZarrStore("mem://store", fixture.crc32, { fetch: served.fetch }), codec);
   return { fixture, served, store };
 }
 
@@ -147,7 +147,7 @@ describe("network store", () => {
     const fixture = buildNetworkStore({ frameCount: FRAMES, featureCount: FEATURES, rowGroupRows: ROWS, delta: true });
     const store = new ZarrStore("mem://store", fixture.crc32, { fetch: serve(fixture).fetch });
     await expect(
-      NetworkStore.open(store, decodeChunk, { path: "reaches.parquet", byteLength: 1, crc32: "00000000", featureCount: FEATURES, rowGroupRows: 32 }),
+      NetworkStore.open(store, codec, { path: "reaches.parquet", byteLength: 1, crc32: "00000000", featureCount: FEATURES, rowGroupRows: 32 }),
     ).rejects.toThrow(/GeoParquet/);
   });
 });

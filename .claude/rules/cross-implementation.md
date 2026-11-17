@@ -40,8 +40,8 @@ and the TypeScript frontend (`web/src/`). They must agree. Background:
 | Observation ingest | — | `observation.py` | `encode/observation.rs` | — |
 | Composite inputs, analysis-optional ids | — | `discover.py` | `encode/convert.rs` | — |
 | GRIB matching / template parsing | — | `gdal.py`, `grib2.py` | `inspect.rs`, `gribindex.rs` | — |
-| Zarr group and array documents | `store-group`, `store-array`, `polar-group`, `network-group` | `zarrstore.py`, `nexrad/store.py`, `river/network.py` (writers) | `zarr.rs`, `network.rs`, `encode/zarrstore.rs` | `zarr/shard.ts`, `river/store.ts` |
-| Zarr shard reading | — | `zarrstore.py` (writer) | `zarr.rs` | `zarr/shard.ts` |
+| Zarr group and array documents | `store-group`, `store-array`, `polar-group`, `network-group` | `zarrstore.py`, `nexrad/store.py`, `river/network.py` (writers) | `zarr.rs`, `network.rs`, `encode/zarrstore.rs` | grid store: `zarr.rs` via wasm, behind the generated validators in `zarr/shard.ts`; `river/store.ts` |
+| Zarr shard reading | — | `zarrstore.py` (writer) | `zarr.rs` | via wasm |
 | Tropical cyclone archive and scores | `tc-archive-catalog`, `tc-archive-month-index`, `tc-archive-season-index`, `tc-archive-overview`, `tc-archive-forecast-line`, `tc-archive-best-line`, `tc-scores`, `tc-errors-line` | `tc/archive.py`, `tc/score.py` (writers) | — | `tc/archive.ts` |
 | Alerts archive | `alerts-archive-catalog`, `alerts-archive-index`, `alerts-archive-line` | `alerts/archive.py` (writer) | — | — |
 

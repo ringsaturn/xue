@@ -63,10 +63,12 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
 
 - Fallback order: store by ranges → `.xue` by ranges → `.xue` whole → store
   by whole objects (only when there is no container). Probes stream or fail.
-- `zarr/worker.ts` speaks the `worker.ts` protocol; `shard.ts` parses the
-  CRC-32C-checked index once per shard and maps frame + tile to a span (a
-  chunk may straddle container groups); `store.ts` coalesces one shard's
-  ranges per microtask (gap ≤ 64 KB). Decoding is wasm `decodeChunk`.
+- `zarr/worker.ts` speaks the `worker.ts` protocol. The format is read in
+  wasm (`rust/xue/src/zarr.rs` through `rust/xue-wasm`): the group and array
+  documents, the CRC-32C-checked index once per shard, and the span of a
+  frame's tile (a chunk may straddle container groups). `store.ts` coalesces
+  one shard's ranges per microtask (gap ≤ 64 KB). Decoding is wasm
+  `decodeChunk`.
 - Compressed chunks sit in an LRU under `payloadBudgetBytes`
   (`main.ts::zarrPayloadBudgetBytes`), bounding memory by the prefetch
   window rather than the axis; a decode re-fetches what eviction took.
@@ -117,9 +119,10 @@ the Worker is built.
   to a product's schema that regenerates a golden also runs these tests.
   Adding a product is a `PRODUCTS` row plus a module; the routes are
   listed in `route.rs`.
-- Read geometry lives IO-free in `rust/xue/src/zarr.rs`. The browser's
-  `web/src/zarr/shard.ts` is a second implementation of it; both are held
-  to [zarr-profile.md](../zarr-profile.md).
+- Read geometry lives IO-free in `rust/xue/src/zarr.rs`, held to
+  [zarr-profile.md](../zarr-profile.md). The browser reads through the same
+  code (`rust/xue-wasm/src/zarr.rs`); it keeps the requests and the cache of
+  compressed chunks.
 - The binding is `remote: true` (honoured by `wrangler dev` only), so
   `make api-dev` runs locally against the real bucket; `make api-dev-cdn`
   (`DATA_SOURCE=cdn`) reads the public origin when the network blocks that.

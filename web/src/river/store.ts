@@ -6,18 +6,36 @@
  *
  * It rides the grid reader's pieces rather than a second reader: the
  * range-coalescing `ZarrStore` (a frame's row groups, or a reach's time
- * chunks, asked for in one microtask go out as merged ranges), the shard
- * index parser with its CRC-32C, and the WASM `decodeChunk` that verifies
- * each Zstandard frame's checksum and replays the delta chain. What is its
+ * chunks, asked for in one microtask go out as merged ranges) and the WASM
+ * module's shard index parser, with its CRC-32C, and `decodeChunk`, which
+ * verifies each Zstandard frame's checksum and replays the delta chain. What is its
  * own is the two-dimensional cut and the `xue_network` block.
  */
 
 import { checkNetworkGroup } from "../schema/generated/network-group";
-import { parseShardIndex, shardIndexLength, PREDICTOR_PREVIOUS, PREDICTOR_RAW, type ShardIndexEntry } from "../zarr/shard";
+import { PREDICTOR_PREVIOUS, PREDICTOR_RAW } from "../zarr/shard";
 import type { ZarrStore } from "../zarr/store";
+import type * as Wasm from "../wasm/xue";
 import type { RiverGeometry } from "./index";
 
-export type DecodeChunkFn = (bytes: Uint8Array, frames: number, height: number, width: number, predictor: number) => Uint8Array;
+/** What a network store needs of the WASM module. */
+export type NetworkCodec = Pick<typeof Wasm, "decodeChunk" | "parseShardIndex" | "shardIndexLength">;
+
+/** One inner chunk's byte span within the shard. */
+interface ShardIndexEntry {
+  offset: number;
+  length: number;
+}
+
+/** The WASM parser's flat `[offset, length, ...]` as entries, `null` for a
+ * chunk the shard never held (the pair `[-1, -1]`). */
+function indexEntries(flat: Float64Array): (ShardIndexEntry | null)[] {
+  const entries: (ShardIndexEntry | null)[] = [];
+  for (let at = 0; at + 1 < flat.length; at += 2) {
+    entries.push(flat[at]! < 0 ? null : { offset: flat[at]!, length: flat[at + 1]! });
+  }
+  return entries;
+}
 
 export const NETWORK_VERSION = 1;
 export const NETWORK_ARRAY = "streamflow";
@@ -279,7 +297,7 @@ export class NetworkStore {
 
   private constructor(
     private readonly store: ZarrStore,
-    private readonly decodeChunk: DecodeChunkFn,
+    private readonly codec: NetworkCodec,
     readonly group: NetworkGroup,
     readonly layout: NetworkLayout,
     times: Float64Array,
@@ -293,7 +311,7 @@ export class NetworkStore {
   /** Open a store: the group, the array (from the consolidated metadata
    * when the group carries it), the two side arrays. `geometry`, when
    * given, is the index's, which every store of a case must repeat. */
-  static async open(store: ZarrStore, decodeChunk: DecodeChunkFn, geometry?: RiverGeometry): Promise<NetworkStore> {
+  static async open(store: ZarrStore, codec: NetworkCodec, geometry?: RiverGeometry): Promise<NetworkStore> {
     const group = parseNetworkGroup(new TextDecoder().decode(await store.get("zarr.json")));
     if (geometry) {
       const own = group.geometry;
@@ -326,17 +344,17 @@ export class NetworkStore {
     const baseView = new DataView(baseBytes.buffer, baseBytes.byteOffset, baseBytes.byteLength);
     const baseflow = new Float32Array(layout.featureCount);
     for (let feature = 0; feature < layout.featureCount; feature += 1) baseflow[feature] = baseView.getFloat32(feature * 4, true);
-    return new NetworkStore(store, decodeChunk, group, layout, times, baseflow);
+    return new NetworkStore(store, codec, group, layout, times, baseflow);
   }
 
   /** The shard index, read once (`docs/zarr-profile.md`, "Reading" 4). */
   private shardIndex(shard: number): Promise<(ShardIndexEntry | null)[]> {
     if (shard !== 0) throw new Error("network store holds one shard");
     if (!this.index) {
-      const length = shardIndexLength(this.layout.chunksPerShard);
+      const length = this.codec.shardIndexLength(this.layout.chunksPerShard);
       const path = `${NETWORK_ARRAY}/c/0/0`;
       const range = this.layout.indexLocation === "end" ? { suffixLength: length } : { offset: 0, length };
-      const promise = this.store.getRange(path, range).then((bytes) => parseShardIndex(bytes, this.layout.chunksPerShard));
+      const promise = this.store.getRange(path, range).then((bytes) => indexEntries(this.codec.parseShardIndex(bytes, this.layout.chunksPerShard)));
       promise.catch(() => {
         if (this.index === promise) this.index = null;
       });
@@ -365,7 +383,7 @@ export class NetworkStore {
               : this.store
                   .getRange(path, entry)
                   .then((bytes) =>
-                    this.decodeChunk(bytes, layout.timeChunk, 1, layout.rowGroupRows, layout.delta ? PREDICTOR_PREVIOUS : PREDICTOR_RAW),
+                    this.codec.decodeChunk(bytes, layout.timeChunk, 1, layout.rowGroupRows, layout.delta ? PREDICTOR_PREVIOUS : PREDICTOR_RAW),
                   );
           held.catch(() => this.chunks.delete(key));
           this.chunks.set(key, held);
