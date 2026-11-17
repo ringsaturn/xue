@@ -504,6 +504,28 @@ pub fn parse_network_array(text: &str, group: &NetworkGroup) -> Result<NetworkLa
     })
 }
 
+/// The `streamflow` document a group carries inline in its consolidated
+/// metadata, as JSON, or `None` where it carries none and the document is the
+/// store's own `streamflow/zarr.json`. A reader holds it to the group with
+/// [`parse_network_array`] like the standalone one. Serialized here rather
+/// than by the caller so its numbers keep the spelling the group gives them:
+/// the array repeats the group's variable, and `1.0` re-written as `1` would
+/// no longer be the same document.
+pub fn consolidated_network_array(group_text: &str) -> Result<Option<String>, DecodeError> {
+    let group: Value =
+        serde_json::from_str(group_text).map_err(|_| err("group metadata is not valid JSON"))?;
+    let Some(array) = group
+        .get("consolidated_metadata")
+        .and_then(|v| v.get("metadata"))
+        .and_then(|v| v.get(NETWORK_ARRAY))
+    else {
+        return Ok(None);
+    };
+    serde_json::to_string(array)
+        .map(Some)
+        .map_err(|_| err("consolidated streamflow document is not serializable"))
+}
+
 // -- shard ---------------------------------------------------------------------
 
 /// The index's span within a shard of `shard_length` bytes, `[start, end)`.
@@ -877,6 +899,36 @@ mod tests {
         assert_eq!(layout.features_in_chunk(2), 4);
         assert!(layout.delta);
         assert_eq!(layout.index_length(), 100);
+    }
+
+    #[test]
+    fn reads_the_array_a_group_carries_inline() {
+        let plain = group_document(|_| {});
+        assert_eq!(consolidated_network_array(&plain).unwrap(), None);
+        let array: Value = serde_json::from_str(&array_document(|_| {})).unwrap();
+        let inline = group_document(|d| {
+            d["consolidated_metadata"] =
+                json!({"kind": "inline", "must_understand": false, "metadata": {"streamflow": array}});
+        });
+        let text = consolidated_network_array(&inline).unwrap().expect("the group carries the array");
+        let group = parse_network_group(&inline).unwrap();
+        // The codebook's `1.0` and `100000.0` come back as written, so the
+        // array still repeats the group's variable.
+        assert!(text.contains(r#""scale":1.0"#));
+        assert_eq!(
+            parse_network_array(&text, &group).unwrap(),
+            parse_network_array(&array_document(|_| {}), &group).unwrap()
+        );
+        // Written the way a JavaScript caller would re-serialize it, it is
+        // another document.
+        let rewritten = text.replace(r#""scale":1.0"#, r#""scale":1"#);
+        assert!(parse_network_array(&rewritten, &group).is_err());
+        // Consolidated metadata without the data array says nothing.
+        let other = group_document(|d| {
+            d["consolidated_metadata"] = json!({"kind": "inline", "metadata": {"time": {}}});
+        });
+        assert_eq!(consolidated_network_array(&other).unwrap(), None);
+        assert!(consolidated_network_array("{").is_err());
     }
 
     #[test]
