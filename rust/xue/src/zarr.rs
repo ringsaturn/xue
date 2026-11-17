@@ -24,7 +24,7 @@ mod reader;
 pub use reader::ArrayReader;
 
 use crate::decode::metadata::{parse_gaussian, parse_projection};
-use crate::format::{err, DecodeError, TileGeometry, MAX_PLANE_LENGTH};
+use crate::format::{err, DecodeError, Predictor, TileGeometry, MAX_PLANE_LENGTH};
 use crate::projection::{GaussianRows, LambertConformal};
 
 /// Bytes of one `(offset, nbytes)` pair in a shard index.
@@ -1120,6 +1120,75 @@ pub fn tile_shape(layout: &ArrayLayout, tile: u32) -> (u32, u32) {
 /// The tile a cell falls in.
 pub fn tile_of(layout: &ArrayLayout, row: u32, column: u32) -> Result<u32, DecodeError> {
     layout.tiles().tile_of(row, column)
+}
+
+/// How many of a time chunk's frames lie on the axis: fewer than the chunk
+/// shape on the last one, none past it.
+pub fn frames_in_time_chunk(layout: &ArrayLayout, time_chunk: u32) -> u32 {
+    let first = u64::from(time_chunk) * u64::from(layout.time_chunk);
+    u64::from(layout.frame_count)
+        .saturating_sub(first)
+        .min(u64::from(layout.time_chunk)) as u32
+}
+
+/// The predictor an inner chunk of this array decodes with.
+pub fn chunk_predictor(layout: &ArrayLayout) -> Predictor {
+    if layout.delta {
+        Predictor::Previous
+    } else {
+        Predictor::Raw
+    }
+}
+
+/// One inner chunk's payload decoded to codes at the full inner shape,
+/// `time_chunk × tile_height × tile_width`, padding included: the container's
+/// chunk path, with the Zstandard frame's content checksum required.
+pub fn decode_inner_chunk(layout: &ArrayLayout, payload: &[u8]) -> Result<Vec<u8>, DecodeError> {
+    crate::decode_chunk(
+        payload,
+        layout.time_chunk,
+        layout.tile_height,
+        layout.tile_width,
+        chunk_predictor(layout),
+    )
+}
+
+/// Copy frame `frame_in_chunk` of one decoded inner chunk into a plane of
+/// `height × width` codes, trimming the padding past the grid's edge. `chunk`
+/// is `None` for a chunk the shard never held, which is the fill value
+/// throughout.
+pub fn place_tile(
+    plane: &mut [u8],
+    layout: &ArrayLayout,
+    tile: u32,
+    chunk: Option<&[u8]>,
+    frame_in_chunk: u32,
+) -> Result<(), DecodeError> {
+    let stride = layout.tile_height as usize * layout.tile_width as usize;
+    if plane.len() != layout.height as usize * layout.width as usize {
+        return Err(err("plane buffer does not fit the grid"));
+    }
+    if tile >= layout.tile_count || frame_in_chunk >= layout.time_chunk {
+        return Err(err("tile or frame is outside the inner chunk grid"));
+    }
+    if chunk.is_some_and(|chunk| chunk.len() != stride * layout.time_chunk as usize) {
+        return Err(err("decoded chunk does not fit the inner chunk shape"));
+    }
+    let (origin_row, origin_column) = tile_origin(layout, tile);
+    let (rows, columns) = tile_shape(layout, tile);
+    let columns = columns as usize;
+    for row in 0..rows as usize {
+        let target = (origin_row as usize + row) * layout.width as usize + origin_column as usize;
+        let cells = &mut plane[target..target + columns];
+        match chunk {
+            None => cells.fill(layout.fill_value),
+            Some(chunk) => {
+                let source = frame_in_chunk as usize * stride + row * layout.tile_width as usize;
+                cells.copy_from_slice(&chunk[source..source + columns]);
+            }
+        }
+    }
+    Ok(())
 }
 
 // -- time ----------------------------------------------------------------------
