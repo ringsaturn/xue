@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { viewportTileRects, type TileRect } from "../../web/src/tiles";
-import { readArray, readGroup, type ZarrArrayReader } from "../../web/src/zarr/shard";
+import { readArray, readGroup, type ZarrArrayReader } from "../../web/src/zarr/documents";
 import { canonicalTimeBlock, mergeSegmentMetadata, SegmentedZarrSession } from "../../web/src/zarr/segmented";
 import { ZarrSession } from "../../web/src/zarr/session";
 import { coalesceRanges, ZarrStore, type FetchLike } from "../../web/src/zarr/store";

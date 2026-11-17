@@ -19,7 +19,7 @@
 import { axisUnitSeconds, frameOffsets, HOUR_SECONDS, parseBundleMetadata } from "../manifest";
 import type { TileRect } from "../tiles";
 import { PayloadPool, ZarrSession, type ChunkKey, type ZarrReader } from "./session";
-import type { ZarrCodec } from "./shard";
+import type { ZarrCodec } from "./documents";
 import type { ZarrStore } from "./store";
 
 /** A chunk of one segment: the segment's own key plus which segment. */
