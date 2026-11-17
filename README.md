@@ -159,7 +159,8 @@ published permanently. See [`showcase/README.md`](showcase/README.md).
 
 Built on Xue: [Hong](https://hong.ringsaturn.me/), an independent project
 that publishes GraphRiverCast's daily global river fields for 2000–2019 in
-Xue's format and plays them in its viewer.
+Xue's format and plays them in its viewer. How to build such a site:
+[`docs/contribution/building-on-xue.md`](docs/contribution/building-on-xue.md).
 
 ## Documentation
 

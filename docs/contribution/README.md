@@ -13,6 +13,7 @@ at the [README](../../README.md); for contribution rules, at
 | [delivery.md](delivery.md) | Zarr stores, the STAC catalog, the data API, R2 uploads |
 | [api-origin.md](api-origin.md) | The data API on a self-hosted origin behind a Cloudflare Tunnel |
 | [frontend.md](frontend.md) | The shell (`web/src/`): sessions, layers, rail, probe, compare page |
+| [building-on-xue.md](building-on-xue.md) | A site of your own on the shell: pinning, the Vite config, build-time variables, the data root, the overlay module |
 | [point-products.md](point-products.md) | Tropical cyclones, airports, soundings and the station marks |
 | [setup.md](setup.md) | Requirements and building a run locally |
 | [testing.md](testing.md) | Test commands, what each suite holds, CI |
