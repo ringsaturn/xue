@@ -35,7 +35,7 @@ tzf-rs = { version = "2.1.3", default-features = false, features = ["bundled"] }
 # too, which is what lets `cargo test -p xue-worker` run them over the web
 # fixtures without wrangler.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-worker = "0.8"
+worker = "0.9"
 js-sys = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
