@@ -7,7 +7,7 @@ import { type BasemapStyle, FORECAST_ANCHOR_LAYER } from "./basemap";
 import { CaseContextLayers, type ContextCollection, fetchCaseContext } from "./casecontext";
 import { fetchImmutable } from "./fetchimmutable";
 import { fetchCaseFireIndex, type LoadedFireIndex } from "./fire/fetch";
-import { htmlLang, t } from "./i18n";
+import { intlLocale, t } from "./i18n";
 import type { ForecastLayer } from "./layer";
 import type { BundleMetadata, ForecastBundleId } from "./manifest";
 import { firstSymbolLayerId } from "./marks";
@@ -497,7 +497,7 @@ export function createOverlays(deps: OverlaysDeps) {
     const time =
       readout.sweepTime === null
         ? "--"
-        : new Intl.DateTimeFormat(htmlLang, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: displayZone }).format(
+        : new Intl.DateTimeFormat(intlLocale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: displayZone }).format(
             readout.sweepTime,
           );
     // How far the sweep trails the playhead: a radar scans every few minutes

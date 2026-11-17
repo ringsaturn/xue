@@ -1,4 +1,4 @@
-/** UI locale support: eleven languages. The locale is resolved before the first
+/** UI locale support: twelve languages. The locale is resolved before the first
  * render — detection order is the `?lang=` URL param, then the choice the
  * picker stored on this device, then the browser language — and the basemap
  * label language and `<html lang>` follow it. Only the URL param is ever
@@ -8,7 +8,7 @@
  * Picking another language never reloads: `setLocale` swaps the dictionary,
  * rewrites the static markup and lets every `onLocaleChange` listener redo
  * the copy it owns, so the session keeps its decoded frames and playhead.
- * `locale`, `htmlLang` and `basemapLang` are live bindings — read them when
+ * `locale`, `htmlLang`, `intlLocale` and `basemapLang` are live bindings — read them when
  * needed rather than capturing them at module load.
  *
  * The dictionary itself lives in `locales/`, one module per language, each
@@ -26,6 +26,7 @@ import { es } from "./locales/es";
 import { fr } from "./locales/fr";
 import { ja } from "./locales/ja";
 import { ko } from "./locales/ko";
+import { ne } from "./locales/ne";
 import { pt } from "./locales/pt";
 import { ru } from "./locales/ru";
 import { tr } from "./locales/tr";
@@ -35,27 +36,31 @@ import { convertTemperature, formatWind, UNIT_LABELS, units } from "./units";
 
 export type { MessageKey };
 
-export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru";
+export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru" | "ne";
 
 const STORAGE_KEY = "xue-locale";
 
 interface LocaleDefinition {
   /** The language's own name, in its own script. Never translated: a picker
-   * of eleven languages is only usable if each row reads as itself. */
+   * of twelve languages is only usable if each row reads as itself. */
   endonym: string;
-  /** Value for `<html lang>`, and the Intl locale derived from it. */
+  /** Value for `<html lang>` and the hreflang alternates. */
   htmlLang: string;
+  /** The tag Intl formats dates and numbers with, where it is not
+   * `htmlLang`: Intl writes Nepali in Devanagari digits, while every number
+   * the instrument panel and the map print is in Latin ones. */
+  intlLocale?: string;
   /** Protomaps `name:*` label language. Every code here is one the
    * `@protomaps/basemaps` `language_script_pairs` table declares, so the
-   * basemap's own labels follow the UI in all eleven. */
+   * basemap's own labels follow the UI in all twelve. */
   basemapLang: string;
   messages: Record<MessageKey, string>;
 }
 
-/** The eleven languages, in the order the picker lists them: the two Chinese
+/** The twelve languages, in the order the picker lists them: the two Chinese
  * scripts and English first (the project's own), then the rest by script and
  * proximity — the Latin-script ones together, Turkish closing them before
- * Cyrillic. */
+ * Cyrillic, and Nepali, the one Devanagari language, last. */
 const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   zh: { endonym: "简体中文", htmlLang: "zh-CN", basemapLang: "zh-Hans", messages: zh },
   "zh-Hant": { endonym: "繁體中文", htmlLang: "zh-TW", basemapLang: "zh-Hant", messages: zhHant },
@@ -68,6 +73,7 @@ const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   pt: { endonym: "Português", htmlLang: "pt", basemapLang: "pt", messages: pt },
   tr: { endonym: "Türkçe", htmlLang: "tr", basemapLang: "tr", messages: tr },
   ru: { endonym: "Русский", htmlLang: "ru", basemapLang: "ru", messages: ru },
+  ne: { endonym: "नेपाली", htmlLang: "ne", intlLocale: "ne-u-nu-latn", basemapLang: "ne", messages: ne },
 };
 
 /** What the picker lists, in order. */
@@ -75,7 +81,7 @@ export const LOCALES: readonly { code: Locale; endonym: string }[] = (
   Object.keys(DEFINITIONS) as Locale[]
 ).map((code) => ({ code, endonym: DEFINITIONS[code].endonym }));
 
-/** The `<html lang>` tag of any of the eleven — what the picker stamps on each
+/** The `<html lang>` tag of any of the twelve — what the picker stamps on each
  * row so a screen reader reads each endonym in its own language. */
 export function localeHtmlLang(code: Locale): string {
   return DEFINITIONS[code].htmlLang;
@@ -86,7 +92,7 @@ export function localeHtmlLang(code: Locale): string {
  * Kong and Macau write traditional; the mainland and Singapore simplified. */
 const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 
-/** Map a BCP-47 tag onto one of the eleven, or null. Case-insensitive, and
+/** Map a BCP-47 tag onto one of the twelve, or null. Case-insensitive, and
  * exported for the unit tests and for the canonical-URL logic. */
 export function normalizeLocale(value: string | null | undefined): Locale | null {
   if (!value) return null;
@@ -130,8 +136,11 @@ let active = DEFINITIONS[locale];
 /** Language for the Protomaps basemap labels — the map follows the UI. */
 export let basemapLang: string = active.basemapLang;
 
-/** Value for <html lang>, and the tag every Intl formatter is built on. */
+/** Value for <html lang>. */
 export let htmlLang: string = active.htmlLang;
+
+/** The tag every Intl formatter is built on. */
+export let intlLocale: string = active.intlLocale ?? active.htmlLang;
 
 const listeners = new Set<() => void>();
 
@@ -214,6 +223,7 @@ export function setLocale(next: Locale): void {
   active = DEFINITIONS[next];
   basemapLang = active.basemapLang;
   htmlLang = active.htmlLang;
+  intlLocale = active.intlLocale ?? active.htmlLang;
   applyStaticMessages();
   for (const listener of listeners) listener();
 }

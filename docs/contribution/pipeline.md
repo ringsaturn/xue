@@ -179,7 +179,7 @@ commit). Widening a source's inputs means recutting its crop fixture
 - **`observation.py`** (mirrored by `observation.rs`): NetCDF series into
   the same `SourceFrame` list the GRIB path yields, plus a `PlaneSource`.
 - **`showcase.py`**: cases → cropped bundles → `showcase.json`
-  (`showcase/README.md`). `title` / `summary` carry all eleven locales
+  (`showcase/README.md`). `title` / `summary` carry all twelve locales
   (`showcase.LOCALES`, held to `web/src/i18n.ts` by
   `tests/fixtures/locales.json`). A case is a forecast (`run` + `hours`), a
   local-file observation (`dataset`, under `XUE_OBSERVATION_ROOT`) or a

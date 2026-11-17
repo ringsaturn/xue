@@ -8,6 +8,7 @@ import { es } from "../../web/src/locales/es";
 import { fr } from "../../web/src/locales/fr";
 import { ja } from "../../web/src/locales/ja";
 import { ko } from "../../web/src/locales/ko";
+import { ne } from "../../web/src/locales/ne";
 import { pt } from "../../web/src/locales/pt";
 import { ru } from "../../web/src/locales/ru";
 import { tr } from "../../web/src/locales/tr";
@@ -30,6 +31,7 @@ const DICTIONARIES: Record<Locale, Record<MessageKey, string>> = {
   pt,
   tr,
   ru,
+  ne,
 };
 
 const KEYS = Object.keys(en) as MessageKey[];
@@ -49,6 +51,7 @@ describe("locale detection", () => {
     expect(normalizeLocale("pt")).toBe("pt");
     expect(normalizeLocale("ru")).toBe("ru");
     expect(normalizeLocale("tr-TR")).toBe("tr");
+    expect(normalizeLocale("ne-NP")).toBe("ne");
   });
 
   it("reads the Chinese script out of the script subtag", () => {
@@ -113,6 +116,7 @@ describe("the picker's list", () => {
     expect(LOCALES.find((item) => item.code === "ko")?.endonym).toBe("한국어");
     expect(LOCALES.find((item) => item.code === "ru")?.endonym).toBe("Русский");
     expect(LOCALES.find((item) => item.code === "tr")?.endonym).toBe("Türkçe");
+    expect(LOCALES.find((item) => item.code === "ne")?.endonym).toBe("नेपाली");
   });
 
   it("round-trips every code through <html lang> back onto itself", () => {

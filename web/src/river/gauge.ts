@@ -13,7 +13,7 @@
  */
 
 import { element } from "../dom";
-import { htmlLang, t } from "../i18n";
+import { intlLocale, t } from "../i18n";
 import { drawHydrograph, valueNear, type HydrographData, type HydrographPeak, type TimedSeries } from "./hydrograph";
 import { fetchGaugeSeries, type GaugeSeries, type LoadedRiverIndex, type RiverGauge } from "./index";
 
@@ -32,7 +32,7 @@ export function unitLabel(unit: string): string {
 export function formatFlow(value: number): string {
   if (!Number.isFinite(value)) return "--";
   const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
-  return new Intl.NumberFormat(htmlLang, { maximumFractionDigits: digits, maximumSignificantDigits: 3 }).format(value);
+  return new Intl.NumberFormat(intlLocale, { maximumFractionDigits: digits, maximumSignificantDigits: 3 }).format(value);
 }
 
 export interface GaugeRenderInput {

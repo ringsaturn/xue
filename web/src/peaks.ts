@@ -58,7 +58,7 @@ function peakIcon(pixelRatio: number): ImageData {
 /** The label: the name in the basemap language (English when Wikidata has
  * none), and the height on a second, smaller line, in the viewer's height
  * unit to the whole unit. */
-function peakText(basemapLang: string, htmlLang: string): SymbolLayerSpecification["layout"] {
+function peakText(basemapLang: string, intlLocale: string): SymbolLayerSpecification["layout"] {
   const factor = convertHeight(1);
   const elevation: ExpressionSpecification = ["get", "elevation"];
   const height: ExpressionSpecification = factor === 1 ? elevation : ["round", ["*", elevation, factor]];
@@ -69,20 +69,20 @@ function peakText(basemapLang: string, htmlLang: string): SymbolLayerSpecificati
       {},
       "\n",
       {},
-      ["concat", ["number-format", height, { locale: htmlLang }], ` ${UNIT_LABELS.height[units.height]}`],
+      ["concat", ["number-format", height, { locale: intlLocale }], ` ${UNIT_LABELS.height[units.height]}`],
       { "font-scale": 0.85 },
     ],
   };
 }
 
-function peakLayer(basemapLang: string, htmlLang: string): SymbolLayerSpecification {
+function peakLayer(basemapLang: string, intlLocale: string): SymbolLayerSpecification {
   return {
     id: PEAK_LAYER,
     type: "symbol",
     source: PEAK_SOURCE,
     filter: [">=", ["zoom"], ["get", "min_zoom"]],
     layout: {
-      ...peakText(basemapLang, htmlLang),
+      ...peakText(basemapLang, intlLocale),
       "icon-image": PEAK_ICON,
       "text-font": ["Noto Sans Medium"],
       "text-size": ["interpolate", ["linear"], ["zoom"], 3, 11, 10, 13],
@@ -105,7 +105,7 @@ export class PeakLabels {
 
   constructor(
     private readonly map: MaplibreMap,
-    private readonly language: () => { basemapLang: string; htmlLang: string },
+    private readonly language: () => { basemapLang: string; intlLocale: string },
   ) {}
 
   /** Show or hide the peaks; the first show adds the source and fetches the
@@ -120,8 +120,8 @@ export class PeakLabels {
       const pixelRatio = Math.max(1, Math.ceil(window.devicePixelRatio || 1));
       if (!map.hasImage(PEAK_ICON)) map.addImage(PEAK_ICON, peakIcon(pixelRatio), { pixelRatio });
       map.addSource(PEAK_SOURCE, { type: "geojson", data: PEAKS_URL, attribution: "Wikidata" });
-      const { basemapLang, htmlLang } = this.language();
-      map.addLayer(peakLayer(basemapLang, htmlLang), map.getLayer(BEFORE_LAYER) ? BEFORE_LAYER : undefined);
+      const { basemapLang, intlLocale } = this.language();
+      map.addLayer(peakLayer(basemapLang, intlLocale), map.getLayer(BEFORE_LAYER) ? BEFORE_LAYER : undefined);
       this.added = true;
       addedNow = true;
     }
@@ -133,8 +133,8 @@ export class PeakLabels {
    * height unit. */
   syncLanguage(): void {
     if (!this.added) return;
-    const { basemapLang, htmlLang } = this.language();
-    const layout = peakText(basemapLang, htmlLang);
+    const { basemapLang, intlLocale } = this.language();
+    const layout = peakText(basemapLang, intlLocale);
     this.map.setLayoutProperty(PEAK_LAYER, "text-field", layout?.["text-field"]);
   }
 }
