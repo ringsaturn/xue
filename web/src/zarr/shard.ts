@@ -22,7 +22,8 @@
  * The format is read by the Rust reader behind the WASM module (`xue::zarr`,
  * the one the data API reads through): which block of a group is a bundle's
  * metadata, how an array is cut, where a shard's index and an inner chunk
- * sit, with the index's CRC-32C verified before any of its offsets are used.
+ * sit, with the index's CRC-32C verified before any of its offsets are used,
+ * and what a frame or a cell's series is once the chunks are local.
  * What stays here is what the shell adds: both documents are first held to
  * the validators generated from docs/schemas/, and the bundle's block is
  * read by the same `parseBundleMetadata` the `.xue` path uses. An array that
@@ -49,16 +50,12 @@ import type * as Wasm from "../wasm/xue";
 /** What a session needs of the WASM module, injected so it can be opened
  * where the module is loaded differently (a worker's `?url` import, a
  * test's file read). */
-export type ZarrCodec = Pick<typeof Wasm, "decodeChunk" | "parseZarrGroup" | "WasmZarrArray">;
+export type ZarrCodec = Pick<typeof Wasm, "parseZarrGroup" | "WasmZarrArray">;
 
-/** One variable array as the WASM reader holds it: its layout and the shard
- * indices handed over so far. */
+/** One variable array as the WASM reader holds it: its layout, the shard
+ * indices handed over so far and the decoded tiles of the time chunk being
+ * read. */
 export type ZarrArrayReader = Wasm.WasmZarrArray;
-
-/** Predictor codes as `decodeChunk` takes them — the container's own
- * numbering (docs/format.md). */
-export const PREDICTOR_RAW = 0;
-export const PREDICTOR_PREVIOUS = 2;
 
 type IndexLocation = "start" | "end";
 
@@ -166,35 +163,4 @@ export function readArray(codec: ZarrCodec, text: string): { reader: ZarrArrayRe
       fillValue: reader.fillValue,
     },
   };
-}
-
-// -- geometry ------------------------------------------------------------------
-
-export function tileOrigin(layout: ZarrArrayLayout, tile: number): { row: number; column: number } {
-  return {
-    row: Math.floor(tile / layout.tileColumns) * layout.tileHeight,
-    column: (tile % layout.tileColumns) * layout.tileWidth,
-  };
-}
-
-/** A tile's clipped shape: what of it lies inside the grid. */
-export function tileShape(layout: ZarrArrayLayout, tile: number): { height: number; width: number } {
-  const origin = tileOrigin(layout, tile);
-  return {
-    height: Math.min(layout.tileHeight, layout.height - origin.row),
-    width: Math.min(layout.tileWidth, layout.width - origin.column),
-  };
-}
-
-export function tileOf(layout: ZarrArrayLayout, row: number, column: number): number {
-  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0 || row >= layout.height || column >= layout.width) {
-    throw new Error("cell is outside the grid");
-  }
-  return Math.floor(row / layout.tileHeight) * layout.tileColumns + Math.floor(column / layout.tileWidth);
-}
-
-/** How many of a time chunk's frames lie on the axis; fewer than the chunk
- * shape on the last one. */
-export function framesInTimeChunk(layout: ZarrArrayLayout, timeChunk: number): number {
-  return Math.min(layout.timeChunk, layout.frameCount - timeChunk * layout.timeChunk);
 }

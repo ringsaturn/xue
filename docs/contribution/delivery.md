@@ -67,7 +67,8 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
   wasm (`rust/xue/src/zarr.rs` through `rust/xue-wasm`): the group and array
   documents, the CRC-32C-checked index once per shard, the span of a
   frame's tile (a chunk may straddle container groups), the decoded tiles of
-  the time chunk being read and the frame assembled from them. `store.ts`
+  the time chunk being read, the frame assembled from them and a cell's
+  series. `store.ts`
   coalesces one shard's ranges per microtask (gap ≤ 64 KB).
 - Compressed chunks sit in an LRU under `payloadBudgetBytes`
   (`main.ts::zarrPayloadBudgetBytes`), bounding memory by the prefetch
@@ -122,7 +123,8 @@ the Worker is built.
 - Read geometry lives IO-free in `rust/xue/src/zarr.rs`, held to
   [zarr-profile.md](../zarr-profile.md). The browser reads through the same
   code (`rust/xue-wasm/src/zarr.rs`); it keeps the requests and the cache of
-  compressed chunks.
+  compressed chunks. A point read and the browser's series share the cell
+  arithmetic (`tile_cell`) and the chunk decode (`decode_inner_chunk`).
 - The binding is `remote: true` (honoured by `wrangler dev` only), so
   `make api-dev` runs locally against the real bucket; `make api-dev-cdn`
   (`DATA_SOURCE=cdn`) reads the public origin when the network blocks that.
