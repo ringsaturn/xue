@@ -29,7 +29,7 @@ import {
 } from "./compare/series";
 import {
   applyStaticMessages,
-  htmlLang,
+  intlLocale,
   onLocaleChange,
   t,
 } from "./i18n";
@@ -359,7 +359,7 @@ function fieldLabelNode(field: FieldId, unit: string): DocumentFragment {
  * hours. The hours are the block's own frames, so a six-hourly model shows
  * six-hourly readings and an hourly one every column. */
 function clockRows(ax: Axis, frames: readonly FrameCell[], zone: string): HTMLDivElement[] {
-  const days = dayBands(ax, zone, htmlLang).map((band) => {
+  const days = dayBands(ax, zone, intlLocale).map((band) => {
     const node = element("span", "cmp-day", band.label);
     node.style.left = `${band.x}px`;
     node.style.width = `${band.width}px`;

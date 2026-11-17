@@ -59,7 +59,7 @@ code: open access only, and record the attribution the licence requires.
    without one: `railCore`, `defaultVariable`, `region` / `domain` for a
    regional grid, `subLongitude` for an imager), and for a new quantity a
    `web/src/variables.ts` row, a palette in `palettes.ts`, a chart ceiling
-   in `levels.ts` where it needs one, and copy in all eleven locales
+   in `levels.ts` where it needs one, and copy in all twelve locales
    (`en.ts` first); `identity.ts` needs a rule only when the quantity's
    parameter block is one no existing rule reads. `tests/web/registries.test.ts`
    fails for a published bundle with no `variables.ts` row. Also add the

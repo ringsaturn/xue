@@ -35,11 +35,11 @@ retires a case.
    }
    ```
 
-   - `title` and `summary` must carry every UI locale — the eleven in
+   - `title` and `summary` must carry every UI locale — the twelve in
      `web/src/i18n.ts` (`zh`, `zh-Hant`, `en`, `ja`, `ko`, `de`, `fr`, `es`,
-     `pt`, `tr`, `ru`; `tests/fixtures/locales.json` holds the two lists
-     to one). A case is published content: a shell that speaks eleven
-     languages must not show nine of them an English card.
+     `pt`, `tr`, `ru`, `ne`; `tests/fixtures/locales.json` holds the two lists
+     to one). A case is published content: a shell that speaks twelve
+     languages must not show ten of them an English card.
    - `bbox` is `[west, south, east, north]` in degrees. `west > east` crosses
      the antimeridian. The crop rounds outward to whole grid cells, so the
      published data always covers the box outright.

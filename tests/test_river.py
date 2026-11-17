@@ -475,7 +475,7 @@ class GridBuildTests(ClassTempRoot, unittest.TestCase):
 
 
 def localized(text: str) -> dict[str, str]:
-    return {locale: text for locale in ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru")}
+    return {locale: text for locale in ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru", "ne")}
 
 
 class ShowcaseRiverBlockTests(unittest.TestCase):

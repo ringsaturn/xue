@@ -2433,8 +2433,8 @@ html[lang="ja"] .rail-glyph {
   outline-offset: 1px;
 }
 
-/* The languages as chips, wrapped: eleven endonyms in two or three lines
-   rather than eleven rows. */
+/* The languages as chips, wrapped: twelve endonyms in two or three lines
+   rather than twelve rows. */
 .settings-languages {
   display: flex;
   flex-wrap: wrap;

@@ -388,7 +388,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
   keypads), `bng` (the Ordnance Survey's British National Grid, over Great
   Britain) and `latlon` (parallels and meridians); `off` overrides the
   viewer's stored choice (default: the stored choice, else none).
-- `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru` and `?theme=light|dark` —
+- `?lang=zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru|ne` and `?theme=light|dark` —
   otherwise the browser's language and colour scheme decide.
 - `?units=auto|metric|imperial[,<unit>…]` — display units, a preset then
   any per-quantity units (`c|f`, `ms|kmh|kt|mph`, `hpa|kpa|inhg|mmhg`,

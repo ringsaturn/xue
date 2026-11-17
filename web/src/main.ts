@@ -18,7 +18,7 @@ import { guardContextLoss } from "./glguard";
 import {
   applyStaticMessages,
   basemapLang,
-  htmlLang,
+  intlLocale,
   locale,
   onLocaleChange,
   t,
@@ -941,7 +941,7 @@ function syncMinZoom(globe: boolean): void {
 }
 
 /** Named peaks, drawn while the ground is in 3D relief. */
-const peakLabels = new PeakLabels(map, () => ({ basemapLang, htmlLang }));
+const peakLabels = new PeakLabels(map, () => ({ basemapLang, intlLocale }));
 
 function syncPeakLabels(): void {
   if (peakLabels.setVisible(map.getTerrain() !== null && basemapLabelsShown())) applyBasemapInk(document.body.dataset.ground === "dark");
@@ -972,7 +972,7 @@ function applySceneFromUrl(): void {
 }
 
 /** Bring the basemap onto the current theme and locale without rebuilding
- * it. Both flavors and all eleven label languages come out of the same
+ * it. Both flavors and all twelve label languages come out of the same
  * `basemapLayers` call — the same layers under the same ids, differing only
  * in their paint and layout values — so a switch is the difference between
  * the style the map carries and a fresh build, applied property by property,
@@ -1816,7 +1816,7 @@ function formatCompactDate(value: number): string {
 /** Short weekday in the UI locale and the day of month, read in the display
  * zone like every other valid-time stamp. */
 function formatDayMark(value: number): string {
-  return formatDayMarkIn(value, displayZone, htmlLang);
+  return formatDayMarkIn(value, displayZone, intlLocale);
 }
 
 function frameCount(): number {
@@ -3555,7 +3555,7 @@ function segmentLabel(segment: TimelineSegment): string {
   const valid = frameValidTime(segment.index);
   return segment.kind === "day"
     ? formatDayMark(valid)
-    : formatMonthMark(valid, displayZone, htmlLang, segment.yearChanged);
+    : formatMonthMark(valid, displayZone, intlLocale, segment.yearChanged);
 }
 
 /** The strip under the ticks: day boundaries on an axis of days, each at

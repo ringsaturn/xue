@@ -444,7 +444,7 @@ class ShowcaseTests(unittest.TestCase):
             parse_case(self._payload(model="mrms", dataset="x.nc"))
 
 
-_LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru")
+_LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru", "ne")
 
 
 @requires_gdal
