@@ -37,10 +37,12 @@ on:
       - .github/workflows/deploy-pages.yml
   workflow_dispatch:
   # The storm pages (web/tooling/stormpages.ts) are built from the published
-  # storm archive, which archive-tc.yml rewrites at 00:50 UTC: a daily
-  # deploy after it carries the day's storms into the pages and the sitemap.
-  schedule:
-    - cron: "40 1 * * *"
+  # storm archive: every successful archive-tc.yml run (the daily harvest,
+  # the weekly a-deck pass, a backfill) carries its storms into the pages
+  # and the sitemap as soon as it finishes.
+  workflow_run:
+    workflows: [archive tc]
+    types: [completed]
 
 permissions:
   contents: read
@@ -58,6 +60,8 @@ env:
 jobs:
   deploy:
     name: deploy
+    # A failed archive run changed nothing worth deploying.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
