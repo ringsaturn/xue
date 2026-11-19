@@ -23,18 +23,20 @@ import { join, posix } from "node:path";
 import type { Plugin } from "vite";
 
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
+import { buildCaseSite, parseCaseCatalog } from "./casepages";
 import { buildStormSite, loadStorms } from "./stormpages";
 
 /** Root-relative pages every deploy has, before the cases. */
 export const STATIC_PAGES: readonly string[] = ["/", "/showcase", "/compare", "/metrics", "/typhoon"];
 
-/** The sitemap's URL set: the static pages, one per case and the storm
- * pages (`stormpages.ts`), absolute. */
-export function sitemapUrls(caseIds: readonly string[], stormUrls: readonly string[] = []): string[] {
+/** The sitemap's URL set: the static pages, the viewer's URL for each case
+ * given (the cases when their static pages were not built), and the
+ * generated pages (`casepages.ts`, `stormpages.ts`), absolute. */
+export function sitemapUrls(caseIds: readonly string[], pageUrls: readonly string[] = []): string[] {
   return [
     ...STATIC_PAGES.map((path) => new URL(path, SITE_ORIGIN).href),
     ...caseIds.map((id) => `${SITE_ORIGIN}/?case=${encodeURIComponent(id)}`),
-    ...stormUrls,
+    ...pageUrls,
   ];
 }
 
@@ -95,14 +97,21 @@ export function catalogCaseIds(catalogJson: string): string[] {
  * does not answer fails, because a sitemap silently missing every case is
  * the wrong thing to ship. */
 export async function loadCatalogCaseIds(dataBaseUrl: string | undefined, publicDir: string): Promise<string[]> {
+  const json = await loadCatalogJson(dataBaseUrl, publicDir);
+  return json === null ? [] : catalogCaseIds(json);
+}
+
+/** The catalog's text, found as `loadCatalogCaseIds` finds it; null for a
+ * local build without one. */
+export async function loadCatalogJson(dataBaseUrl: string | undefined, publicDir: string): Promise<string | null> {
   if (dataBaseUrl && /^https?:\/\//.test(dataBaseUrl)) {
     const url = new URL(CATALOG_FILENAME, dataBaseUrl);
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) throw new Error(`showcase catalog request failed (${response.status}) for ${url}`);
-    return catalogCaseIds(await response.text());
+    return response.text();
   }
   const path = join(publicDir, dataBaseUrl || "data/", CATALOG_FILENAME);
-  return existsSync(path) ? catalogCaseIds(readFileSync(path, "utf8")) : [];
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
 /** One document folded into `llms-full.txt`. */
@@ -173,7 +182,27 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
     name: "xue:discovery-files",
     apply: "build",
     async generateBundle() {
-      const caseIds = await loadCatalogCaseIds(dataBaseUrl, join(repoRoot, "web", "public"));
+      const catalogJson = await loadCatalogJson(dataBaseUrl, join(repoRoot, "web", "public"));
+      let caseIds = catalogJson === null ? [] : catalogCaseIds(catalogJson);
+      // The cases' static pages stand for them in the sitemap; if they fail
+      // to build, the shell ships without them and the sitemap keeps the
+      // viewer's `/?case=` addresses.
+      let caseUrls: string[] = [];
+      let caseLastmod: Record<string, string> = {};
+      if (catalogJson !== null) {
+        try {
+          const site = buildCaseSite(parseCaseCatalog(catalogJson));
+          for (const file of site.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
+          if (site.urls.length > 0) {
+            caseIds = [];
+            caseUrls = site.urls;
+            caseLastmod = site.lastmod;
+          }
+          this.info(`case pages: ${site.urls.length} pages`);
+        } catch (error) {
+          this.warn(`case pages skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       // The storm pages need the published archive; a build without a data
       // root (a local one) or with the archive unreachable ships the shell
       // without them rather than failing.
@@ -194,7 +223,7 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds, stormUrls), stormLastmod),
+        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls]), { ...caseLastmod, ...stormLastmod }),
       });
       this.emitFile({
         type: "asset",

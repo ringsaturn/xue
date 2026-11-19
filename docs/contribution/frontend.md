@@ -837,6 +837,18 @@ and its Open Graph locales. Built in `discovery.ts`'s bundle step from the
 published archive, so `deploy-pages.yml` also runs daily after the archive
 job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
 
+Case pages: `web/tooling/casepages.ts` writes one static page per showcase
+case and an index (`/cases/<id>`, `/cases/`), in the storm pages' languages,
+prefixes, head and stylesheet, from the published `showcase.json` alone:
+the case's title, summary, facts, variables, markers and tags, a link into
+the viewer (`/?case=<id>`, with `&lang=` off English) and a schema.org
+`Dataset` for the slice. A part of another case's set has no page; its
+lead's page lists the set. They replace the cases' `/?case=` addresses in
+the sitemap (`lastmod` is the catalog's `generatedAt` day) and appear with
+the next Pages deploy after a catalog upload. A build without a catalog
+skips them, and one whose pages fail to build keeps the `/?case=`
+addresses (`tests/web/casepages.test.ts`).
+
 Storm names: `tc/namestable.ts` holds the western Pacific list in the
 scripts the CMA, CWA, JMA and KMA write it in, plus the CMA's simplified
 Chinese for every other basin's lists, and `localStormName` (`tc/names.ts`)

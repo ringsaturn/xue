@@ -9,6 +9,7 @@ import {
   catalogCaseIds,
   LLMS_FULL_SOURCES,
   loadCatalogCaseIds,
+  loadCatalogJson,
   renderLlmsFull,
   renderSitemap,
   sitemapUrls,
@@ -105,6 +106,8 @@ describe("sitemap", () => {
       "pnw-heat-dome-2021",
     ]);
     await expect(loadCatalogCaseIds(undefined, publicDir())).resolves.toEqual([]);
+    await expect(loadCatalogJson(undefined, publicDir(CATALOG))).resolves.toBe(CATALOG);
+    await expect(loadCatalogJson(undefined, publicDir())).resolves.toBeNull();
   });
 });
 
