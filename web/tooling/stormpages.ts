@@ -762,21 +762,47 @@ export interface StormSite {
   files: { fileName: string; source: string }[];
   /** Absolute addresses, for the sitemap. */
   urls: string[];
+  /** The sitemap's `lastmod` per address (a `YYYY-MM-DD` day): the last
+   * best-track time of the storm, or of the latest storm a list holds, so a
+   * crawler comes back while a storm is still being tracked. */
+  lastmod: Record<string, string>;
+}
+
+/** The day of a storm's last best-track time, or null when the index has none. */
+function lastDay(storm: StormData): string | null {
+  const day = storm.entry.last?.slice(0, 10) ?? null;
+  return day !== null && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+}
+
+function latestDay(storms: readonly StormData[]): string | null {
+  return storms.reduce<string | null>((latest, storm) => {
+    const day = lastDay(storm);
+    return day !== null && (latest === null || day > latest) ? day : latest;
+  }, null);
 }
 
 /** Every page in every language, and the stylesheet they share. */
 export function buildStormSite(storms: readonly StormData[]): StormSite {
   const files: StormSite["files"] = [{ fileName: "tc/pages.css", source: PAGES_CSS }];
   const urls: string[] = [];
-  const add = (page: { path: string; html: string }) => {
+  const lastmod: Record<string, string> = {};
+  const add = (page: { path: string; html: string }, day: string | null) => {
     files.push({ fileName: pageFile(page.path), source: page.html });
-    urls.push(SITE_ORIGIN + page.path);
+    const url = SITE_ORIGIN + page.path;
+    urls.push(url);
+    if (day !== null) lastmod[url] = day;
   };
   const seasons = [...new Set(storms.map((storm) => storm.season))].sort((a, b) => a - b);
   for (const lang of PAGE_LANGS.map((item) => item.code)) {
-    add(renderArchivePage(seasons.map((season) => ({ season, storms: storms.filter((storm) => storm.season === season).length })), lang));
-    for (const season of seasons) add(renderSeasonPage(season, storms.filter((storm) => storm.season === season), lang));
-    for (const storm of storms) add(renderStormPage(storm, lang));
+    add(
+      renderArchivePage(seasons.map((season) => ({ season, storms: storms.filter((storm) => storm.season === season).length })), lang),
+      latestDay(storms),
+    );
+    for (const season of seasons) {
+      const inSeason = storms.filter((storm) => storm.season === season);
+      add(renderSeasonPage(season, inSeason, lang), latestDay(inSeason));
+    }
+    for (const storm of storms) add(renderStormPage(storm, lang), lastDay(storm));
   }
-  return { files, urls };
+  return { files, urls, lastmod };
 }

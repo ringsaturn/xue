@@ -43,7 +43,7 @@ import { applyTheme, toggleTheme } from "./theme";
 
 applyStaticMessages();
 applyTheme();
-applyPageMeta({ path: "/metrics.html" });
+applyPageMeta({ path: "/metrics" });
 
 document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());
 

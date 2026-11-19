@@ -37,7 +37,7 @@ applyStaticMessages();
 applyTheme();
 // Title and description stay the markup's; this pins a `?lang=` rendering's
 // canonical to itself and completes the hreflang set.
-applyPageMeta({ path: "/showcase.html" });
+applyPageMeta({ path: "/showcase" });
 
 const list = document.getElementById("showcase-list") as HTMLUListElement;
 const status = document.getElementById("showcase-status") as HTMLParagraphElement;
@@ -141,7 +141,7 @@ function buildStormCard(
   const item = document.createElement("li");
   item.className = "showcase-card is-pinned";
   const link = document.createElement("a");
-  link.href = "./typhoon.html";
+  link.href = "./typhoon";
   link.setAttribute("aria-label", t("showcaseCaseAria", { title: t("tcHistoryHeading") }));
   const seasons = catalog.seasons.map((entry) => entry.season);
   const span = seasons.length ? `${Math.min(...seasons)}–${Math.max(...seasons)}` : "";
@@ -252,7 +252,7 @@ function publishCaseList(cases: readonly ShowcaseCase[]): void {
   script.textContent = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "ItemList",
-    "@id": `${pageUrl("/showcase.html", null)}#cases`,
+    "@id": `${pageUrl("/showcase", null)}#cases`,
     name: `Historical Weather Cases · ${SITE_NAME}`,
     numberOfItems: cases.length,
     itemListElement: cases.map((showcaseCase, index) => ({
@@ -312,7 +312,7 @@ async function render(): Promise<void> {
 }
 
 onLocaleChange(() => {
-  applyPageMeta({ path: "/showcase.html" });
+  applyPageMeta({ path: "/showcase" });
   if (statusMessage) setStatus(statusMessage.key, statusMessage.params);
   if (cases.length > 0 || stormCatalog) renderCards();
 });

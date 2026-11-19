@@ -15,7 +15,7 @@
 - Observations: MRMS, NEXRAD and JMA radar; Himawari, GOES and
   Meteosat imagery with dust products; METAR, soundings, typhoon tracks.
 - A globe with terrain, 3D radar volumes, and replays of past events
-  ([showcase](https://xue.ringsaturn.me/showcase.html)).
+  ([showcase](https://xue.ringsaturn.me/showcase)).
 
 The title in the top-left corner switches between sources.
 
@@ -143,7 +143,7 @@ within 150 km and the METARs and TAF of an airport within 40 km.
 
 ## Comparing models at a point
 
-`/compare.html?lat=<deg>&lon=<deg>` lays every live forecast model at one
+`/compare?lat=<deg>&lon=<deg>` lays every live forecast model at one
 point on one clock: a block per model, a row per field
 (`?fields=tmp2m,prate,wind10m`), five days hourly or fifteen days
 three-hourly (`?span=360`), with the nearest airport's METARs above. Each
@@ -153,7 +153,7 @@ point probe links here.
 ## Historical showcase
 
 Cases are past weather events cropped to their region and hours, listed at
-`/showcase.html` and played at `/?case=<id>`. A case is a checked-in JSON
+`/showcase` and played at `/?case=<id>`. A case is a checked-in JSON
 file under `showcase/cases/`, built with `make showcase CASE=<id>` and
 published permanently. See [`showcase/README.md`](showcase/README.md).
 

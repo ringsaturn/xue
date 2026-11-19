@@ -1062,10 +1062,16 @@ What the shell says about itself must match what the encoder publishes.
 `web/index.html` and `web/showcase.html` carry static metadata, hreflang and
 JSON-LD; `pagemeta.ts` rewrites title, canonical and `og:url` per view (a
 case is its own page, every live view is `/`, a `?lang=` page is canonical
-to itself). Update `web/public/llms.txt` when `xuebuild/sources.py` changes
+to itself, a storm on `typhoon` that has a static page names that page and
+no alternates). Addresses are written without `.html`: Pages answers a
+`.html` request with a 308 to the bare path, and a canonical, hreflang or
+sitemap entry that redirects is never indexed. Update `web/public/llms.txt` when `xuebuild/sources.py` changes
 what a model publishes or `urlstate.ts` gains a parameter.
 `web/tooling/discovery.ts` generates `sitemap.xml` and `llms-full.txt`
 (README + `docs/*.md` + `showcase/README.md`) at build time, so
 `deploy-pages.yml` triggers on those documents too. Sitemap cases come from
 the published `showcase.json` at `VITE_DATA_BASE_URL`, never from
 `showcase/cases/`: a deploy build fails if the bucket does not answer.
+Storm pages carry a sitemap `lastmod`: the last best-track day of the storm,
+or of the latest storm a season or archive page lists. `deploy-pages.yml`
+runs after every successful `archive-tc.yml` run.

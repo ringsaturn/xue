@@ -78,7 +78,7 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   // The banner names the event and offers the way back to the list.
   await expect(page.locator("#case-title")).toHaveText("Demo typhoon case");
   await expect(page.locator("#case-region")).toContainText("110°E");
-  await expect(page.getByRole("link", { name: "← All cases" })).toHaveAttribute("href", "./showcase.html");
+  await expect(page.getByRole("link", { name: "← All cases" })).toHaveAttribute("href", "./showcase");
 
   // A case is one fixed dataset and run: the title stops being the model
   // switch, and the run stamp shows the historical cycle rather than a live one.
@@ -140,6 +140,6 @@ test("the live viewer links to the showcase and never reads the catalog", async 
   await page.route("**/data/latest.json*", (route) => route.fulfill({ status: 404, body: "missing" }));
   await page.goto("/");
   await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByRole("link", { name: "CASES" })).toHaveAttribute("href", "./showcase.html");
+  await expect(page.getByRole("link", { name: "CASES" })).toHaveAttribute("href", "./showcase");
   expect(catalogRequests).toBe(0);
 });

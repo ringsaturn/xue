@@ -70,7 +70,7 @@ import { variableSpec } from "./variables";
 
 applyStaticMessages();
 applyTheme();
-applyPageMeta({ path: "/compare.html" });
+applyPageMeta({ path: "/compare" });
 
 // ---------------------------------------------------------------------------
 // The fields the page can compare, in row order. Each names the bundle a
@@ -591,7 +591,7 @@ function syncUrl(): void {
 
 function documentTitle(): void {
   applyPageMeta({
-    path: "/compare.html",
+    path: "/compare",
     title: `${t("compareTitle")} · ${formatPointDegrees(state.latitude, "NS")} ${formatPointDegrees(state.longitude, "EW")}`,
   });
 }
