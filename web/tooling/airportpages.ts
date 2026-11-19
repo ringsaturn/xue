@@ -41,6 +41,8 @@ export interface Airport {
   wikidata: string | null;
   /** The name in the other page languages, where there is one. */
   names: Partial<Record<Exclude<PageLang, "en">, string>>;
+  /** The city the airport serves, per language; English is `city`. */
+  cityNames: Partial<Record<Exclude<PageLang, "en">, string>>;
 }
 
 export interface AirportList {
@@ -87,14 +89,17 @@ export function validateAirports(input: unknown): AirportList {
     seen.add(icao);
     const tz = text("tz");
     if (!knownZone(tz)) throw new Error(`${where}.tz ${tz} is not a zone this engine knows`);
-    const names: Airport["names"] = {};
-    const rawNames = (entry.names ?? {}) as Record<string, unknown>;
-    for (const lang of NAME_LANGS) {
-      const value = rawNames[lang];
-      if (value === undefined || value === null || value === "") continue;
-      if (typeof value !== "string") throw new Error(`${where}.names.${lang} must be a string`);
-      names[lang] = value;
-    }
+    const localized = (field: "names" | "cityNames"): Airport["names"] => {
+      const out: Airport["names"] = {};
+      const raw = (entry[field] ?? {}) as Record<string, unknown>;
+      for (const lang of NAME_LANGS) {
+        const value = raw[lang];
+        if (value === undefined || value === null || value === "") continue;
+        if (typeof value !== "string") throw new Error(`${where}.${field}.${lang} must be a string`);
+        out[lang] = value;
+      }
+      return out;
+    };
     return {
       icao,
       iata: entry.iata === null || entry.iata === undefined ? null : text("iata", /^[A-Z0-9]{3}$/),
@@ -106,7 +111,8 @@ export function validateAirports(input: unknown): AirportList {
       elev: entry.elev === null || entry.elev === undefined ? null : number("elev", -500, 9000),
       tz,
       wikidata: entry.wikidata === null || entry.wikidata === undefined ? null : text("wikidata", /^Q\d+$/),
-      names,
+      names: localized("names"),
+      cityNames: localized("cityNames"),
     };
   });
   return { schemaVersion: 1, updated: data.updated, airports };
@@ -366,6 +372,12 @@ export function airportName(airport: Airport, lang: PageLang): string {
   return lang === "en" ? airport.name : (airport.names[lang] ?? airport.name);
 }
 
+/** The city the airport serves in the page's language, English when the
+ * list has no name in it. */
+export function localCity(airport: Airport, lang: PageLang): string {
+  return lang === "en" ? airport.city : (airport.cityNames[lang] ?? airport.city);
+}
+
 export function countryName(code: string, lang: PageLang): string {
   try {
     return new Intl.DisplayNames([spec(lang).htmlLang], { type: "region" }).of(code) ?? code;
@@ -510,13 +522,13 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
   const paths = allPaths((code) => airportPagePath(code, airport.icao));
   const name = airportName(airport, lang);
   const country = countryName(airport.country, lang);
-  const place = `${airport.city}, ${country}`;
+  const place = `${localCity(airport, lang)}, ${country}`;
   const title = words.title(name, codes(airport));
   const description = words.description(name, codes(airport), place);
   const factRows = [
     [words.facts.icao, airport.icao],
     [words.facts.iata, airport.iata ?? "—"],
-    [words.facts.city, airport.city],
+    [words.facts.city, localCity(airport, lang)],
     [words.facts.country, country],
     [words.facts.position, formatPosition(airport.lat, airport.lon)],
     [words.facts.elevation, airport.elev === null ? "—" : `${Math.round(airport.elev)} m · ${Math.round(airport.elev / 0.3048)} ft`],
@@ -553,7 +565,7 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
       longitude: airport.lon,
       ...(airport.elev === null ? {} : { elevation: airport.elev }),
     },
-    address: { "@type": "PostalAddress", addressLocality: airport.city, addressCountry: airport.country },
+    address: { "@type": "PostalAddress", addressLocality: localCity(airport, lang), addressCountry: airport.country },
     ...(airport.wikidata ? { sameAs: `https://www.wikidata.org/wiki/${airport.wikidata}` } : {}),
   };
   return {
@@ -590,7 +602,7 @@ export function renderAirportIndex(all: readonly Airport[], lang: PageLang): { p
         .sort((a, b) => collator.compare(a.name, b.name))
         .map(
           ({ airport, name: local }) =>
-            `<li><a href="${airportPagePath(lang, airport.icao)}"><span class="code">${escapeHtml(codes(airport))}</span> <span class="name">${escapeHtml(local)}</span> <span class="meta">${escapeHtml(airport.city)}</span></a></li>`,
+            `<li><a href="${airportPagePath(lang, airport.icao)}"><span class="code">${escapeHtml(codes(airport))}</span> <span class="name">${escapeHtml(local)}</span> <span class="meta">${escapeHtml(localCity(airport, lang))}</span></a></li>`,
         )
         .join("");
       return `<section id="${code.toLowerCase()}"><h2>${escapeHtml(name)}</h2><ul class="list">${items}</ul></section>`;
