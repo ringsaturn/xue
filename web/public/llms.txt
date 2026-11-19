@@ -287,6 +287,13 @@ fall back to defaults rather than fail, so a constructed link always opens.
   for the archive, in English and under `/zh/`, `/zh-hant/`, `/ja/`, `/ko/`:
   the storm's facts, its six-hourly best track, a track picture and the
   forecast track errors by source and lead, each linking to the map below.
+- https://xue.ringsaturn.me/airports/ — one static page per listed airport
+  (`/airports/<icao, lowercase>`, e.g. `/airports/rjtt`) and an index by
+  country, in English and under `/zh/`, `/zh-hant/`, `/ja/`, `/ko/`: the
+  airport's codes, place, position, elevation and time zone, and in the
+  browser its latest METAR raw and decoded, today's observed high and low on
+  the local clock, the last 24 hours of reports and the current TAF, read
+  from the airport product below.
 - https://xue.ringsaturn.me/typhoon — past tropical cyclones on a map,
   picked by season, basin and storm in the panel beside it (`?storm=<ATCF
   id>`, e.g. `WP062023`, or a storm with no number's history id, e.g.
