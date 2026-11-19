@@ -9,17 +9,19 @@ import { describe, expect, it } from "vitest";
 
 import { onRequest } from "../../functions/_middleware";
 import { FORECAST_MODELS, isCaseOnlyModel, liveModelIds, type ForecastModelId } from "../../web/src/manifest";
-import { modelPageHead } from "../../web/src/modelpage";
+import { modelPageHead, PERSON_ID } from "../../web/src/modelpage";
 import {
   FORECAST_MODEL_IDS,
   legacyModelLocation,
   MODEL_ALIASES,
   modelForAlias,
   modelFromPathname,
+  NO_PAGE_MODEL_IDS,
 } from "../../web/src/modelpaths";
 import { SITE_ORIGIN } from "../../web/src/site";
 import {
   checkModelPageNames,
+  datasetProvenance,
   modelPageIds,
   modelPagePaths,
   renderModelPage,
@@ -36,12 +38,18 @@ describe("the dataset paths", () => {
     // already be the live set.
     for (const id of FORECAST_MODEL_IDS) expect(isCaseOnlyModel(id), id).toBe(false);
     expect(liveModelIds()).toEqual([...FORECAST_MODEL_IDS]);
-    expect(modelPageIds(undefined)).toEqual([...FORECAST_MODEL_IDS]);
-    expect(modelPageIds("")).toEqual([...FORECAST_MODEL_IDS]);
+  });
+
+  it("leave out the datasets with no page, and only them", () => {
+    expect([...NO_PAGE_MODEL_IDS]).toEqual(["mrms3d"]);
+    const pages = FORECAST_MODEL_IDS.filter((id) => id !== "mrms3d");
+    expect(modelPageIds(undefined)).toEqual(pages);
+    expect(modelPageIds("")).toEqual(pages);
+    expect(modelPagePaths(modelPageIds(undefined))).not.toContain("/mrms3d");
   });
 
   it("follow a build's VITE_SOURCES", () => {
-    expect(modelPageIds("hrrr, gfs,woof")).toEqual(["gfs", "hrrr"]);
+    expect(modelPageIds("hrrr, gfs,woof,mrms3d")).toEqual(["gfs", "hrrr"]);
     expect(modelPagePaths(["gfs", "hrrr"])).toEqual(["/gfs", "/hrrr"]);
   });
 
@@ -55,11 +63,14 @@ describe("the dataset paths", () => {
     expect(modelForAlias("icon")).toBeNull();
   });
 
-  it("read one segment, a canonical id or a spelling of one in the set", () => {
+  it("read one segment, a canonical id in the set", () => {
     const ids = new Set(["hrrr", "goeseast"]);
     expect(modelFromPathname("/hrrr", ids)).toBe("hrrr");
-    expect(modelFromPathname("/hrrr.html", ids)).toBe("hrrr");
-    expect(modelFromPathname("/GOES-East", ids)).toBe("goeseast");
+    expect(modelFromPathname("/goeseast", ids)).toBe("goeseast");
+    // Pages serves a page at its id alone; anything else is its 404.
+    expect(modelFromPathname("/hrrr.html", ids)).toBeNull();
+    expect(modelFromPathname("/hrrr/", ids)).toBeNull();
+    expect(modelFromPathname("/GOES-East", ids)).toBeNull();
     expect(modelFromPathname("/gfs", ids)).toBeNull();
     expect(modelFromPathname("/", ids)).toBeNull();
     expect(modelFromPathname("/tc/2026/", ids)).toBeNull();
@@ -87,6 +98,9 @@ describe("the redirect of an old ?model= link", () => {
     expect(legacyModelLocation("/hrrr", "?model=gfs", ids)).toBeNull();
     expect(legacyModelLocation("/showcase", "?model=gfs", ids)).toBeNull();
     expect(legacyModelLocation("/", "?type=wind", ids)).toBeNull();
+    // A dataset with no page is opened by the parameter: its link stays.
+    expect(legacyModelLocation("/", "?model=mrms3d&type=refl3d", ids)).toBeNull();
+    expect(legacyModelLocation("/", "?model=mrms-3d", new Set(["gfs"]))).toBeNull();
   });
 });
 
@@ -114,7 +128,7 @@ describe("the Pages Function", () => {
   });
 
   it("passes everything else through to the static site", async () => {
-    for (const path of ["/", "/?type=wind", "/?case=ida-2021&model=gfs", "/index.html"]) {
+    for (const path of ["/", "/?type=wind", "/?case=ida-2021&model=gfs", "/index.html", "/?model=mrms3d&type=refl3d"]) {
       expect((await request(path)).passed, path).toBe(true);
     }
   });
@@ -185,6 +199,45 @@ describe("a dataset's page", () => {
     expect(modelPageHead("gibs").dataset).not.toHaveProperty("distribution");
   });
 
+  it("names the producers and the licence from the source's STAC prose", () => {
+    const prose = JSON.parse(readFileSync(resolve(REPO_ROOT, "xuebuild/stac_prose.json"), "utf8"));
+    // A licence link of the source's own.
+    expect(datasetProvenance(prose, "hrrr")).toEqual({
+      license: "https://www.noaa.gov/information-technology/open-data-dissemination",
+      producers: [{ name: "NOAA / NCEP", url: "https://www.ncei.noaa.gov/" }],
+    });
+    // No licence link and no SPDX id that names a URL: no licence.
+    expect(datasetProvenance(prose, "cma")).toEqual({
+      producers: [{ name: "China Meteorological Administration", url: "https://www.nmc.cn" }],
+    });
+    // A view has no prose; a mosaic names its members' producers alone.
+    expect(datasetProvenance(prose, "gibs")).toBeUndefined();
+    const mosaic = datasetProvenance(prose, "geo")!;
+    expect(mosaic.license).toBeUndefined();
+    expect(mosaic.producers.map((producer) => producer.name).sort()).toEqual(["EUMETSAT", "Japan Meteorological Agency", "NOAA NESDIS"]);
+
+    const dataset = modelPageHead("ecmwf", datasetProvenance(prose, "ecmwf")).dataset;
+    expect(dataset).toMatchObject({
+      license: "https://creativecommons.org/licenses/by/4.0/",
+      creator: [{ "@type": "Organization", name: "ECMWF", url: "https://www.ecmwf.int/en/forecasts/datasets/open-data" }],
+      publisher: { "@id": PERSON_ID },
+      provider: { "@id": PERSON_ID },
+    });
+    // Without prose, Xue stays the creator and nothing is claimed.
+    const bare = modelPageHead("gibs").dataset;
+    expect(bare.creator).toEqual({ "@id": PERSON_ID });
+    expect(bare).not.toHaveProperty("license");
+    expect(bare).not.toHaveProperty("provider");
+  });
+
+  it("falls back to the SPDX licence's URL where the prose has no link", () => {
+    const prose = { sources: { silam: { license: "CC-BY-4.0", providers: [{ name: "FMI", roles: ["producer"] }] } } };
+    expect(datasetProvenance(prose, "silam")).toEqual({
+      license: "https://creativecommons.org/licenses/by/4.0/",
+      producers: [{ name: "FMI" }],
+    });
+  });
+
   it("fails on a head the build cannot find its way around", () => {
     expect(() => renderModelPage(INDEX_HTML.replace(/<title>[^<]*<\/title>/, ""), "gfs")).toThrow(/title/);
   });
@@ -207,6 +260,17 @@ describe("the names a dataset's page may not take", () => {
     const publicEntries = readdirSync(resolve(REPO_ROOT, "web/public"));
     const pages = readdirSync(resolve(REPO_ROOT, "web")).filter((name) => name.endsWith(".html"));
     const outputs = ["index.html", "showcase.html", "compare.html", "metrics.html", "typhoon.html", "api.html", "assets/x.js", "sitemap.xml", "llms-full.txt"];
-    expect(() => checkModelPageNames(FORECAST_MODEL_IDS, reservedStems(outputs, publicEntries, pages))).not.toThrow();
+    const reserved = reservedStems(outputs, publicEntries, pages);
+    // The 404 page is a public file at the root.
+    expect(reserved.has("404")).toBe(true);
+    expect(() => checkModelPageNames(FORECAST_MODEL_IDS, reserved)).not.toThrow();
+  });
+});
+
+describe("the 404 page", () => {
+  it("is a static page at the output root, linking back into the site", () => {
+    const html = readFileSync(resolve(REPO_ROOT, "web/public/404.html"), "utf8");
+    expect(html).not.toMatch(/<script/);
+    for (const href of ["/", "/showcase", "/tc/", "/typhoon"]) expect(html).toContain(`href="${href}"`);
   });
 });

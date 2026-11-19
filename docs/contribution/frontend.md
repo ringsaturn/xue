@@ -233,7 +233,7 @@ and the window shrinks to fit it.
   basemap POIs, so a tile's OSM copy of the same summit loses the collision.
   The badge is drawn in code because the `white` flavor's sprite has no
   peak icon.
-- Volumes (`volume.ts`; `/mrms3d`, or a `woof` case's `cloud3d`): a volume bundle's levels
+- Volumes (`volume.ts`; `/?model=mrms3d`, or a `woof` case's `cloud3d`): a volume bundle's levels
   (one quantity on GRIB2 surface 102, ascending) are the session's
   variables, every one decoded per frame, the session whole (a ray can
   cross any of it) and its tier weighed for the stack (five planes' worth
@@ -971,36 +971,49 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
 The live dataset is the path, one segment: `/hrrr?type=wind#map=…`. `/` is
 the home on the default dataset; a case stays on `/` (`/?case=<id>`).
 
-- The path set is `liveModelIds()`: `FORECAST_MODEL_IDS` (`modelpaths.ts`)
+- The path set is `pageModelIds()`: `FORECAST_MODEL_IDS` (`modelpaths.ts`)
   that the build serves and that are not case-only, views included (`geo`,
-  `gibs`, `mrms3d`, `cma`, …). Never list it by hand.
-- `urlstate.ts` reads the model from the path, then from an old link's
-  `?model=`, then the default (`parseModelFromLocation`); a path accepts
-  any spelling in `MODEL_ALIASES`. `syncUrl` writes the path with
+  `gibs`, `cma`, …), less `NO_PAGE_MODEL_IDS`. Never list it by hand.
+  `NO_PAGE_MODEL_IDS` (`mrms3d`, its live publishing paused) are live but
+  get no page: no `<id>.html`, no sitemap entry, and the shell keeps them
+  on `/?model=<id>` (`searchForLiveModel`).
+- `urlstate.ts` reads the model from the path (the canonical id only:
+  Pages serves nothing else there), then from `?model=`, then the default
+  (`parseModelFromLocation`). `syncUrl` writes the path with
   `replaceState` (`livePathname`): `/<id>` for a live view, `/` for a
-  case, and `/` while the home shows the default and no dataset was
-  chosen. `searchForVariable` drops `model` from the query.
+  case, a dataset with no page, and the home while it shows the default
+  and no dataset was chosen. `searchForVariable` drops `model` from the
+  query; `searchForLiveModel` puts it back for a dataset with no page.
 - Old links: `legacyModelLocation` (`modelpaths.ts`, no runtime imports)
   maps `/?model=<alias>` to `/<id>?<rest>`, a case-only or unknown dataset
-  to `/` without the parameter, and leaves `?case=` links alone. The Pages
+  to `/` without the parameter, and leaves `?case=` links and a dataset
+  with no page alone. The Pages
   Function `functions/_middleware.ts` applies it with a 301 (routed for `/`
   and `/index.html` only by `web/public/_routes.json`), and `main.ts`
   applies it with `replaceState` on boot, for dev, preview and an outage.
   `wrangler pages deploy` builds `functions/` from the directory it runs
-  in, the repository root (`make deploy-pages`). The function's set is the
-  whole `FORECAST_MODEL_IDS`, since the deploy build sets no
+  in, the repository root (`make deploy-pages`). The function's set is
+  `FORECAST_MODEL_IDS` with a page, since the deploy build sets no
   `VITE_SOURCES`; a deployment that does would send a dataset it does not
   serve to the viewer on the default.
 - Pages: `web/tooling/modelpages.ts` writes `<id>.html` beside
   `index.html` after Vite's HTML step, with the head from `modelpage.ts`
   (title, description, canonical, hreflang, social card, a `Dataset` added
   to the JSON-LD graph: label, product, region, frame step and live
-  pointer, all from the table). Pages serves it at `/<id>`, one segment
+  pointer from the table; the `producer` providers as `creator` and the
+  licence link from `xuebuild/stac_prose.json`, which the tooling reads
+  and passes in so the shell bundle never carries it; a mosaic lists its
+  members' producers and no licence; a view with no prose keeps Xue as
+  creator). Pages serves it at `/<id>`, one segment
   deep, so `base: "./"` still resolves `./assets/` — never emit
   `<id>/index.html`. The build fails when an id takes the name of a page,
-  directory or public file (the build's output, `web/public/`, `web/*.html`,
-  the storm pages' prefixes). The dev and preview servers rewrite a
-  dataset's path the same way (`modelPathRewrite`).
+  directory or public file (the build's output, `web/public/` including
+  `404.html`, `web/*.html`, the storm pages' prefixes). The dev and preview
+  servers rewrite a dataset's path the same way (`modelPathRewrite`).
+- `web/public/404.html` is the site's 404: with a top-level `404.html`
+  Pages answers any path it has no file for with that page and status 404
+  instead of the viewer with 200, so a stray path is no soft 404. It is
+  static (no bundle, no map) and the only page marked `noindex`.
 - On a dataset's page the shell keeps that dataset's description (English,
   as in the static head); the home keeps the site's, translated.
 
@@ -1017,7 +1030,7 @@ link says nothing; the link always outranks storage. A switch accepts
 
 | Parameter | Values | Default | URL | Stored | Notes |
 |---|---|---|---|---|---|
-| `model` | dataset id or alias (`MODEL_ALIASES`) | — | moved to the path | — | An old link's: redirected to `/<id>` ([Dataset paths](#dataset-paths)); a case-only or unserved id goes to `/`. |
+| `model` | dataset id or alias (`MODEL_ALIASES`) | — | moved to the path; written for a dataset with no page | — | An old link's: redirected to `/<id>` ([Dataset paths](#dataset-paths)); a case-only or unserved id goes to `/`; `mrms3d` stays as given. |
 | `case` | showcase case id | — | written | — | Pins its own dataset and run; on `/`, `model` is dropped. |
 | `type` | field alias, bundle id, pressure surface, or `precipsetup` | dataset default | written | — | The primary; a pressure surface is the lines alone. `precipsetup` is the [precipitation setup](#precipitation-setup) on `prate`. |
 | `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |

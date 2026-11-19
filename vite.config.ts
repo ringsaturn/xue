@@ -74,6 +74,7 @@ export default defineConfig(({ mode }) => {
         ids: modelIds,
         publicDir: resolve(import.meta.dirname, "web/public"),
         pagesDir: resolve(import.meta.dirname, "web"),
+        prosePath: resolve(import.meta.dirname, "xuebuild/stac_prose.json"),
       }),
     ],
     build: {
