@@ -210,7 +210,7 @@ describe("a page's copy in a language", () => {
     );
     const site = buildSitePages({ built, models: [{ id: "hrrr" }], cases: [GUADALUPE], catalogDay: "2026-10-28" });
     // Home, one dataset, the list, one case, four other pages.
-    expect(site.files).toHaveLength(LOCALES.length * 9);
+    expect(site.files).toHaveLength(LOCALES.length * 8);
     expect(new Set(site.files.map((file) => file.fileName)).size).toBe(site.files.length);
     expect(site.urls).toContain(`${SITE_ORIGIN}/ne/showcase/guadalupe-2025`);
     expect(site.urls.some((url) => /[?&](lang|case)=/.test(url))).toBe(false);
