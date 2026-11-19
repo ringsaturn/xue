@@ -151,6 +151,7 @@ import {
   CASE_PATHNAME,
   legacyModelUrl,
   livePathname,
+  searchForLiveModel,
   parseModelFromLocation,
   parseResolutionFromSearch,
   parseSceneFromSearch,
@@ -5190,6 +5191,8 @@ function syncUrl(): void {
     for (const key of ["type", "lines", "particles", "volume"]) params.delete(key);
     withScene = `?${params.toString()}`;
   }
+  // A dataset with no page of its own is named in the query on `/`.
+  if (!activeCase) withScene = searchForLiveModel(withScene, selectedModelId);
   const pathname = viewPathname();
   if (pathname === window.location.pathname && withScene === window.location.search) return;
   window.history.replaceState(null, "", `${pathname}${withScene}${window.location.hash}`);

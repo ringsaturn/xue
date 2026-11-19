@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FORECAST_MODELS, isCaseOnlyModel, liveModelIds, type ForecastModelId } from "../../web/src/manifest";
+import { FORECAST_MODELS, isCaseOnlyModel, liveModelIds, pageModelIds, type ForecastModelId } from "../../web/src/manifest";
 
 import {
   legacyModelUrl,
   livePathname,
+  searchForLiveModel,
   parseModelFromLocation,
   parseBackendFromSearch,
   parseCameraFromHash,
@@ -309,17 +310,31 @@ describe("searchForVariable", () => {
 });
 
 describe("the dataset in the path", () => {
-  it("reads every live dataset from its own path, round-tripping the writer", () => {
-    for (const id of liveModelIds()) {
+  it("reads every dataset with a page from its own path, round-tripping the writer", () => {
+    for (const id of pageModelIds()) {
       expect(parseModelFromLocation(livePathname(id, "/hrrr"), "")).toBe(id);
       expect(livePathname(id, "/hrrr")).toBe(`/${id}`);
+      expect(searchForLiveModel("?model=x&type=temp", id)).toBe("?type=temp");
     }
   });
 
-  it("reads a spelling in the path, any case, and the .html Pages serves from", () => {
-    expect(parseModelFromLocation("/HRRR", "")).toBe("hrrr");
-    expect(parseModelFromLocation("/goes-east", "")).toBe("goeseast");
-    expect(parseModelFromLocation("/himawari.html", "")).toBe("himawari");
+  it("keeps a dataset with no page on / and names it in the query", () => {
+    expect(pageModelIds()).not.toContain("mrms3d");
+    expect(liveModelIds()).toContain("mrms3d");
+    expect(livePathname("mrms3d", "/hrrr")).toBe("/");
+    expect(searchForLiveModel("?type=refl3d", "mrms3d")).toBe("?type=refl3d&model=mrms3d");
+    // Read back from the query, not from a path.
+    expect(parseModelFromLocation("/", "?type=refl3d&model=mrms3d")).toBe("mrms3d");
+    expect(parseModelFromLocation("/mrms3d", "")).toBe("gfs");
+    // Its link is left as it is: no redirect, the parameter kept.
+    expect(legacyModelUrl("/", "?model=mrms3d&type=refl3d")).toBeNull();
+    expect(legacyModelUrl("/", "?model=MRMS-3D")).toBeNull();
+  });
+
+  it("reads only the canonical id in the path, the one Pages serves a page at", () => {
+    expect(parseModelFromLocation("/HRRR", "")).toBe("gfs");
+    expect(parseModelFromLocation("/goes-east", "")).toBe("gfs");
+    expect(parseModelFromLocation("/himawari.html", "")).toBe("gfs");
   });
 
   it("prefers the path to an old ?model=, and that to the default", () => {
@@ -338,10 +353,9 @@ describe("the dataset in the path", () => {
     expect(parseModelFromLocation("/%E0%A4%A", "")).toBe("gfs");
   });
 
-  it("keeps the home on / while it shows the default, and tidies a stray path", () => {
+  it("keeps the home on / while it shows the default", () => {
     expect(livePathname("gfs", "/")).toBe("/");
     expect(livePathname("gfs", "/index.html")).toBe("/");
-    expect(livePathname("gfs", "/not-a-model")).toBe("/");
     expect(livePathname("gfs", "/hrrr")).toBe("/gfs");
     expect(livePathname("hrrr", "/")).toBe("/hrrr");
   });

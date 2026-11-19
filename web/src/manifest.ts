@@ -4,7 +4,7 @@ import { t } from "./i18n";
 // Type-only: both modules import this one at runtime.
 import { gridMapFor, parseGrid, type LambertGrid, type RegularGrid } from "./gridmap";
 import type { ViewportBounds } from "./tiles";
-import { FORECAST_MODEL_IDS } from "./modelpaths";
+import { FORECAST_MODEL_IDS, hasModelPage } from "./modelpaths";
 import { REGISTRY } from "./registry";
 import { checkBundleMetadataV3 } from "./schema/generated/bundle-metadata";
 import { checkRunManifest } from "./schema/generated/manifest";
@@ -570,12 +570,18 @@ export function isServedModel(model: ForecastModelId): boolean {
   return SERVED_MODELS === null || SERVED_MODELS.has(model);
 }
 
-/** The datasets with a live view of their own, each at its path (`/<id>`,
- * `modelpaths.ts`): served, and not reached through cases alone. `served`
- * is the build's own answer in the page and the build tooling's (which reads
- * `VITE_SOURCES` itself) when the pages are emitted. */
+/** The datasets with a live view of their own, what `?model=` opens:
+ * served, and not reached through cases alone. `served` is the build's own
+ * answer in the page and the build tooling's (which reads `VITE_SOURCES`
+ * itself) when the pages are emitted. */
 export function liveModelIds(served: (model: ForecastModelId) => boolean = isServedModel): ForecastModelId[] {
   return FORECAST_MODEL_IDS.filter((id) => served(id) && !isCaseOnlyModel(id));
+}
+
+/** The live datasets with a page at their path (`/<id>`, `modelpaths.ts`):
+ * every one but `NO_PAGE_MODEL_IDS`, which stay on `/?model=<id>`. */
+export function pageModelIds(served: (model: ForecastModelId) => boolean = isServedModel): ForecastModelId[] {
+  return liveModelIds(served).filter(hasModelPage);
 }
 
 /** The members of a mosaic this build knows, in the mosaic's order; a
