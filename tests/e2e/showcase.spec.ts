@@ -46,7 +46,7 @@ test("the showcase list renders a card per case and links into the viewer", asyn
   await expect(card).toContainText("2024-09-03 00Z");
   await expect(card).toContainText("24 h");
   await expect(card).toContainText("40×30");
-  await expect(card.locator("a")).toHaveAttribute("href", "./?case=demo-typhoon");
+  await expect(card.locator("a")).toHaveAttribute("href", "/showcase/demo-typhoon");
   // The card's thumbnail is the case's own first frame, decoded from the
   // poster with no WASM and no worker.
   await expect(card.locator("canvas.is-painted")).toBeVisible();
@@ -66,10 +66,10 @@ test("a broken catalog reports the failure", async ({ page }) => {
   await expect(page.locator("#showcase-status")).toContainText("404");
 });
 
-test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) => {
+test("/showcase/<id> plays the case back in the ordinary viewer", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);
-  await page.goto("/?case=demo-typhoon");
+  await page.goto("/showcase/demo-typhoon");
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
   // A case replays its event: the timeline reads by valid time.
   const slider = page.getByRole("slider", { name: "Valid time" });
@@ -78,7 +78,7 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
   // The banner names the event and offers the way back to the list.
   await expect(page.locator("#case-title")).toHaveText("Demo typhoon case");
   await expect(page.locator("#case-region")).toContainText("110°E");
-  await expect(page.getByRole("link", { name: "← All cases" })).toHaveAttribute("href", "./showcase");
+  await expect(page.getByRole("link", { name: "← All cases" })).toHaveAttribute("href", "/showcase");
 
   // A case is one fixed dataset and run: the title stops being the model
   // switch, and the run stamp shows the historical cycle rather than a live one.
@@ -103,7 +103,7 @@ test("?case=<id> plays the case back in the ordinary viewer", async ({ page }) =
 test("a short case axis opens at a slower frame rate", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);
-  await page.goto("/?case=demo-typhoon");
+  await page.goto("/showcase/demo-typhoon");
   await expect(page.getByRole("slider", { name: "Valid time" })).toBeEnabled({ timeout: 20_000 });
   // 25 frames flash past in two seconds at 12 fps, so the case opens a rung
   // down — a four-second loop.
@@ -113,19 +113,22 @@ test("a short case axis opens at a slower frame rate", async ({ page }) => {
 test("an explicit ?type= overrides the case's own default layer", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);
+  // An old `/?case=` link: moved to the case's page on boot.
   await page.goto("/?case=demo-typhoon&type=precip");
+  await expect(page).toHaveURL(/\/showcase\/demo-typhoon\?/);
   await expect(page.locator("#preload-state")).toHaveText("Bundle fully buffered", { timeout: 20_000 });
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
   // Switching layers keeps the case in the address bar and drops the model.
   await page.getByRole("button", { name: "TEMP 2M" }).click();
-  await expect(page).toHaveURL(/case=demo-typhoon/);
+  await expect(page).toHaveURL(/\/showcase\/demo-typhoon\?/);
+  await expect(page).not.toHaveURL(/case=/);
   await expect(page).toHaveURL(/type=temp/);
   await expect(page).not.toHaveURL(/model=/);
 });
 
 test("an unknown case id fails recoverably", async ({ page }) => {
   await routeShowcase(page);
-  await page.goto("/?case=not-a-case");
+  await page.goto("/showcase/not-a-case");
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("not-a-case");
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
@@ -140,6 +143,6 @@ test("the live viewer links to the showcase and never reads the catalog", async 
   await page.route("**/data/latest.json*", (route) => route.fulfill({ status: 404, body: "missing" }));
   await page.goto("/");
   await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByRole("link", { name: "CASES" })).toHaveAttribute("href", "./showcase");
+  await expect(page.getByRole("link", { name: "CASES" })).toHaveAttribute("href", "/showcase");
   expect(catalogRequests).toBe(0);
 });
