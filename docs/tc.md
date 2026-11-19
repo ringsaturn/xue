@@ -311,7 +311,7 @@ reader rejects a `schemaVersion` above the one it implements.
 The hourly directories are the live view. The archive is the record: every
 distinct forecast of a numbered system, once, filed by month, and every
 season's best tracks — what a track-error score is computed from. It is a
-separate tree under the data root, written once a day
+separate tree under the data root, written every six hours
 (`archive-tc.yml`, `xue tc-archive`) and never pruned.
 
 ### 8.1 Layout
@@ -461,11 +461,12 @@ reader's own check.
 
 ### 8.4 Producers
 
-- The daily harvest reads the last 48 hourly issues from the data origin,
+- The harvest (every six hours) reads the last 48 hourly issues from the data origin,
   follows their crosswalk, and for every system it renames reads back ten
   days for the forecasts it carried before it was numbered; hourly
-  directories are therefore kept at least that long. It then merges
-  IBTrACS' last three years into the seasons.
+  directories are therefore kept at least that long. The 00:50 UTC run
+  then merges IBTrACS' last three years into the seasons; the other three
+  pass `--no-ibtracs`.
 - The backfill (`xue tc-archive --backfill <sources> --from YYYY-MM`)
   reads `nhc` (`OFCL` → `nhc`, `AVNO` → `gfs`, `AC00`/`AP01`–`AP30`/`AEMN`
   → `gefs`, `EMX` → `ecmwf`, `EC00`/`EE01`–`EE50`/`EEMN` → `ecmwfens`,
@@ -480,7 +481,7 @@ keeps serving after the system is gone, for the current season only) and adds
 its past positions as the storm's `hko` track, provisional, on the archived
 storm that most of its synoptic positions lie within 333 km of; the
 Observatory's number and name are not used, and a system the archive does not
-hold is left out. The daily harvest adds numbered storms only, so a
+hold is left out. The harvest adds numbered storms only, so a
 history id appears only where the backfill was run. `gdm` is Google
   DeepMind's experimental model (the ensemble mean NHC files from 2025).
   Its data is CC BY 4.0 only for times past and under Google's real-time
@@ -506,7 +507,7 @@ history id appears only where the backfill was run. `gdm` is Google
 ## 9. Track-error scores
 
 Each season of the archive with forecasts carries their errors against its
-best tracks, written by the same daily run (`xue tc-archive`, which scores
+best tracks, written by the same run (`xue tc-archive`, which scores
 every such season whose inputs changed; `--rescore` forces one):
 
 ```
