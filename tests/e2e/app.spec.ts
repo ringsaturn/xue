@@ -738,7 +738,7 @@ test("switching to ECMWF loads its own run on a mixed-cadence 240-hour timeline"
   await pickModel(page, "ECMWF IFS 0.25°");
   await expect(page.locator("body")).toHaveAttribute("data-model", "ecmwf");
   await waitForReady(page);
-  await expect(page).toHaveURL(/model=ecmwf/);
+  await expect(page).toHaveURL(/\/ecmwf(\?|$)/);
   await expect(page.locator("#variable-code")).toContainText("ECMWF");
   // The mixed axis (schemaVersion 2 bundles): 3-hourly to 144 hours, then
   // 6-hourly to 240. The de-accumulated prate has no analysis frame:
@@ -780,7 +780,7 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await pickModel(page, "GFS sflux 13 km");
   await expect(page.locator("body")).toHaveAttribute("data-model", "sflux");
   await waitForReady(page);
-  await expect(page).toHaveURL(/model=sflux/);
+  await expect(page).toHaveURL(/\/sflux(\?|$)/);
   const solarButton = page.getByRole("button", { name: "SOLAR FLUX" });
   await expect(solarButton).toBeVisible();
   // The de-averaged prate has no analysis frame: 120 hourly frames from F001.
@@ -792,7 +792,7 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await expect(page.locator("#legend-unit")).toHaveText("W/m²");
   await expect(page.locator("#variable-title")).toContainText("Radiation");
   await expect(page.locator("#variable-code")).toContainText("GFS-SFLUX");
-  await expect(page).toHaveURL(/model=sflux&type=solar/);
+  await expect(page).toHaveURL(/\/sflux\?type=solar/);
   // dswrf keeps its analysis frame: 121 hourly frames from F000.
   await expect(slider).toHaveAttribute("max", "120");
   await expect(slider).toBeEnabled();
@@ -804,14 +804,27 @@ test("the SFLUX station reveals and renders the solar radiation layer", async ({
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
 });
 
-test("URL entry ?model=gfs&type=wind opens the wind layer directly", async ({ page }) => {
+test("URL entry /gfs?type=wind opens the wind layer directly", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
-  await page.goto("/?model=gfs&type=wind");
+  await page.goto("/gfs?type=wind");
   await expect(page.locator("body")).toHaveAttribute("data-variable", "wind10m", { timeout: 20_000 });
   await expect(page.locator("#legend-unit")).toHaveText("m/s");
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toBeEnabled({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/gfs\?type=wind/);
+});
+
+// The dev server runs no Pages Function: the shell moves an old link to
+// the dataset's path itself, the rest of the query kept.
+test("an old ?model= link moves to the dataset's path", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  await routeBundle(page);
+  await page.goto("/?model=GFS&type=wind");
+  await expect(page.locator("body")).toHaveAttribute("data-variable", "wind10m", { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/gfs\?type=wind/);
+  await expect(page).not.toHaveURL(/model=/);
 });
 
 // `vorticity` is a well-formed bundle name, so the URL parser passes it
@@ -821,10 +834,10 @@ test("URL entry ?model=gfs&type=wind opens the wind layer directly", async ({ pa
 test("a type the run does not ship falls back to the default variable", async ({ page }) => {
   await routeManifest(page);
   await routeBundle(page);
-  await page.goto("/?model=gfs&type=vorticity");
+  await page.goto("/?type=vorticity");
   await waitForReady(page);
   await expect(page.locator("body")).toHaveAttribute("data-variable", "prate");
-  await expect(page).toHaveURL(/model=gfs&type=precip/);
+  await expect(page).toHaveURL(/\/\?type=precip/);
 });
 
 test("switching variables updates the shareable URL", async ({ page }, testInfo) => {
@@ -834,11 +847,11 @@ test("switching variables updates the shareable URL", async ({ page }, testInfo)
   await routeBundle(page);
   await page.goto("/");
   await waitForReady(page);
-  await expect(page).toHaveURL(/model=gfs&type=precip/);
+  await expect(page).toHaveURL(/\/\?type=precip/);
   await page.getByRole("button", { name: "TEMP 2M" }).click();
-  await expect(page).toHaveURL(/model=gfs&type=temp/);
+  await expect(page).toHaveURL(/\/\?type=temp/);
   await page.getByRole("button", { name: "WIND 10M" }).click();
-  await expect(page).toHaveURL(/model=gfs&type=wind/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/\?type=wind/, { timeout: 20_000 });
 });
 
 test("cold start fetches the selected variable's first-frame poster", async ({ page }) => {
