@@ -40,7 +40,7 @@ async function expectPlays(page: Page): Promise<void> {
 test("a bundle on a Lambert grid opens and plays on its own cells", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const errors = await routeRun(page, "hrrr", "latest-hrrr.json");
-  await page.goto("/?model=hrrr#map=4/38/-97.5");
+  await page.goto("/hrrr#map=4/38/-97.5");
   await expect(page.locator("body")).toHaveAttribute("data-model", "hrrr");
   await expectPlays(page);
   await expect(page.locator("#stat-grid")).toHaveText("90 × 53");
@@ -50,7 +50,7 @@ test("a bundle on a Lambert grid opens and plays on its own cells", async ({ pag
 test("a bundle whose rows are Gaussian opens and plays", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const errors = await routeRun(page, "sflux", "latest-sflux.json");
-  await page.goto("/?model=sflux");
+  await page.goto("/sflux");
   await expect(page.locator("body")).toHaveAttribute("data-model", "sflux");
   await expectPlays(page);
   await expect(page.locator("#stat-grid")).toHaveText("144 × 72");
