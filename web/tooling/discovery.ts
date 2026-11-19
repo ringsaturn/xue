@@ -31,12 +31,18 @@ import { buildStormSite, loadStorms } from "./stormpages";
 export const STATIC_PAGES: readonly string[] = ["/", "/showcase", "/compare", "/metrics", "/typhoon"];
 
 /** The sitemap's URL set: the static pages, the viewer's URL for each case
- * given (the cases when their static pages were not built), and the
- * generated pages (`casepages.ts`, `stormpages.ts`, `airportpages.ts`),
- * absolute. */
-export function sitemapUrls(caseIds: readonly string[], pageUrls: readonly string[] = []): string[] {
+ * given (the cases when their static pages were not built), the generated
+ * pages (`casepages.ts`, `stormpages.ts`, `airportpages.ts`) and the
+ * datasets' pages (`modelpages.ts`), absolute. */
+export function sitemapUrls(
+  caseIds: readonly string[],
+  pageUrls: readonly string[] = [],
+  modelPaths: readonly string[] = [],
+): string[] {
   return [
     ...STATIC_PAGES.map((path) => new URL(path, SITE_ORIGIN).href),
+    // The datasets' pages (`modelpages.ts`), right after the home.
+    ...modelPaths.map((path) => new URL(path, SITE_ORIGIN).href),
     ...caseIds.map((id) => `${SITE_ORIGIN}/?case=${encodeURIComponent(id)}`),
     ...pageUrls,
   ];
@@ -174,12 +180,14 @@ interface DiscoveryOptions {
   repoRoot: string;
   /** The page's `VITE_DATA_BASE_URL` for this build mode, if set. */
   dataBaseUrl: string | undefined;
+  /** The datasets' pages this build emits (`modelpages.ts`), root-relative. */
+  modelPaths?: readonly string[];
 }
 
 /** Vite plugin: emit `sitemap.xml` and `llms-full.txt` next to the pages.
  * Build only — the dev server serves the static `web/public/` files and
  * nothing here matters before deploy. */
-export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plugin {
+export function discoveryFiles({ repoRoot, dataBaseUrl, modelPaths = [] }: DiscoveryOptions): Plugin {
   return {
     name: "xue:discovery-files",
     apply: "build",
@@ -229,7 +237,7 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls, ...airports.urls]), {
+        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls, ...airports.urls], modelPaths), {
           ...caseLastmod,
           ...stormLastmod,
           ...airports.lastmod,

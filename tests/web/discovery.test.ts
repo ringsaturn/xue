@@ -56,6 +56,16 @@ describe("sitemap", () => {
     ]);
   });
 
+  it("lists the datasets' pages right after the static pages", () => {
+    const urls = sitemapUrls(["shadel-2026"], [], ["/gfs", "/hrrr"]);
+    expect(urls.slice(4, 8)).toEqual([
+      `${SITE_ORIGIN}/typhoon`,
+      `${SITE_ORIGIN}/gfs`,
+      `${SITE_ORIGIN}/hrrr`,
+      `${SITE_ORIGIN}/?case=shadel-2026`,
+    ]);
+  });
+
   it("escapes the query in XML", () => {
     const xml = renderSitemap([`${SITE_ORIGIN}/?case=a&b`]);
     expect(xml).toContain("<loc>https://xue.ringsaturn.me/?case=a&amp;b</loc>");
