@@ -972,6 +972,9 @@ export const en = {
    * also opens the chart under the panel. */
   stationOpenSounding: "Open sounding",
   stationPinHere: "Pin here",
+  /** On an airport's card when the airport has a static page of its own
+   * (`/airports/<icao>`): the link to it. */
+  stationAirportPage: "Airport page →",
   /** The station card's 24-hour charts: their title and two row labels. */
   stationLast24h: "Last 24 h",
   stationTemperature: "Temperature",

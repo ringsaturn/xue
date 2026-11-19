@@ -875,6 +875,8 @@ station's line), takes its words from the page's `#live-config`, and
 renders the newest METAR raw and decoded, the day's observed high and low on
 the airport's clock (`airports/today.ts`), the TAF and its groups, and the
 24-hour window, in the viewer's units (`tests/web/airportpages.test.ts`).
+The viewer's airport card links a listed airport's page; the shell gets
+the ids alone through `virtual:airport-pages` (`airportPageIds`).
 
 Storm names: `tc/namestable.ts` holds the western Pacific list in the
 scripts the CMA, CWA, JMA and KMA write it in, plus the CMA's simplified

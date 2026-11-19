@@ -611,6 +611,7 @@ export const ja: Record<MessageKey, string> = {
   stationElevation: "標高",
   stationOpenSounding: "探空図を開く",
   stationPinHere: "ここにピン",
+  stationAirportPage: "空港ページ →",
   stationLast24h: "過去 24 時間",
   stationTemperature: "気温",
   stationWind: "風",

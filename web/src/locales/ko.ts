@@ -616,6 +616,7 @@ export const ko: Record<MessageKey, string> = {
   stationElevation: "해발고도",
   stationOpenSounding: "탐공 열기",
   stationPinHere: "여기에 고정",
+  stationAirportPage: "공항 페이지 →",
   stationLast24h: "지난 24시간",
   stationTemperature: "기온",
   stationWind: "바람",

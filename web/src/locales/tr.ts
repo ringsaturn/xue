@@ -617,6 +617,7 @@ export const tr: Record<MessageKey, string> = {
   stationElevation: "Yükseklik",
   stationOpenSounding: "Sondajı aç",
   stationPinHere: "Buraya sabitle",
+  stationAirportPage: "Havalimanı sayfası →",
   stationLast24h: "Son 24 saat",
   stationTemperature: "Sıcaklık",
   stationWind: "Rüzgâr",

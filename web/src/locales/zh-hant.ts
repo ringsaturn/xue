@@ -609,6 +609,7 @@ export const zhHant: Record<MessageKey, string> = {
   stationElevation: "海拔",
   stationOpenSounding: "查看探空",
   stationPinHere: "釘在此處",
+  stationAirportPage: "機場頁面 →",
   stationLast24h: "過去 24 小時",
   stationTemperature: "氣溫",
   stationWind: "風",

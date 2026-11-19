@@ -636,6 +636,7 @@ export const ne: Record<MessageKey, string> = {
   stationElevation: "उचाइ",
   stationOpenSounding: "साउन्डिङ खोल्नुहोस्",
   stationPinHere: "यहाँ पिन गर्नुहोस्",
+  stationAirportPage: "विमानस्थल पृष्ठ →",
   stationLast24h: "पछिल्ला 24 घण्टा",
   stationTemperature: "तापक्रम",
   stationWind: "हावा",
