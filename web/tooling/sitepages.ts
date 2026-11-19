@@ -218,7 +218,7 @@ const SHELL_PAGE_FILES: readonly { file: string; path: string; title: MessageKey
   { file: "compare.html", path: "/compare", title: "compareTitle" },
   { file: "metrics.html", path: "/metrics", title: "metricsHeading" },
   { file: "typhoon.html", path: "/typhoon", title: "tcHistoryHeading" },
-  { file: "api.html", path: "/api", title: null },
+  { file: "api.html", path: "/api", title: "apiConsoleTitle" },
 ];
 
 /** The built file a page in a language is written to: `ja/compare.html`,
@@ -237,7 +237,9 @@ function localizedPage(builtHtml: string, locale: Locale, path: string, titleKey
     // A page's JSON-LD names its own address: this language's.
     html = html.split(`"${SITE_ORIGIN}${path}"`).join(`"${pageUrl(path, locale)}"`);
   }
-  const title = locale === "en" || titleKey === null ? undefined : `${say(locale, titleKey)} · ${SITE_NAME}`;
+  // The home leads with the site's name, as its English markup does.
+  const words = titleKey === null ? null : say(locale, titleKey);
+  const title = locale === "en" || words === null ? undefined : path === "/" ? `${SITE_NAME} · ${words}` : `${words} · ${SITE_NAME}`;
   return writeHead(html, { path, locale, ...(title === undefined ? {} : { title }) });
 }
 
@@ -250,7 +252,7 @@ function localizedPage(builtHtml: string, locale: Locale, path: string, titleKey
  * dataset's own copy in place (the shell rewrites the head itself once it
  * knows the view). The copy is English, as the table's. */
 export function renderModelPage(indexHtml: string, id: ForecastModelId, provenance?: DatasetProvenance, locale: Locale = "en"): string {
-  const head = modelPageHead(id, provenance);
+  const head = modelPageHead(id, provenance, locale);
   let html = locale === "en" ? indexHtml : translateMarkup(indexHtml, locale);
   html = writeHead(html, { path: head.path, locale, title: `${head.title} · ${SITE_NAME}`, description: head.description });
   return replaceOnce(
@@ -547,7 +549,7 @@ export function buildSitePages({ built, models, cases, catalogDay }: SitePagesIn
       if (day !== null) lastmod[url] = day;
     }
   };
-  add("/", (locale) => localizedPage(index, locale, "/", null));
+  add("/", (locale) => localizedPage(index, locale, "/", "pageTitleHome"));
   for (const { id, provenance } of models) add(`/${id}`, (locale) => renderModelPage(index, id, provenance, locale));
   add(SHOWCASE_PATH, (locale) => renderShowcaseList(showcase, listed, locale), cases.length > 0 ? catalogDay : null);
   for (const row of cases) add(casePathname(row.id), (locale) => renderCasePage(index, row, cases, locale), catalogDay);
