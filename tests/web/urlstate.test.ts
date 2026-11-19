@@ -305,7 +305,7 @@ describe("searchForVariable", () => {
   });
 
   it("drops a model param: the dataset is the path's", () => {
-    expect(searchForVariable("prate", "?model=ecmwf&lang=ja")).toBe("?lang=ja&type=precip");
+    expect(searchForVariable("prate", "?model=ecmwf&units=si")).toBe("?units=si&type=precip");
   });
 });
 
@@ -361,7 +361,7 @@ describe("the dataset in the path", () => {
   });
 
   it("moves an old ?model= link to the path, keeping every other param", () => {
-    expect(legacyModelUrl("/", "?model=HRRR&type=wind&lang=ja")).toBe("/hrrr?type=wind&lang=ja");
+    expect(legacyModelUrl("/", "?model=HRRR&type=wind&units=si")).toBe("/hrrr?type=wind&units=si");
     expect(legacyModelUrl("/", "?type=wind&model=goes-east")).toBe("/goeseast?type=wind");
     expect(legacyModelUrl("/index.html", "?model=gfs")).toBe("/gfs");
     // A case-only or unknown dataset belongs at the home, without the param.
@@ -371,6 +371,16 @@ describe("the dataset in the path", () => {
     expect(legacyModelUrl("/", "?case=ida-2021&model=hrrr")).toBeNull();
     expect(legacyModelUrl("/hrrr", "?model=ecmwf")).toBeNull();
     expect(legacyModelUrl("/", "?type=wind")).toBeNull();
+  });
+
+  it("reads and writes the dataset after a language's prefix", () => {
+    expect(parseModelFromLocation("/ja/hrrr", "")).toBe("hrrr");
+    expect(parseModelFromLocation("/zh-hant/", "")).toBe("gfs");
+    expect(parseModelFromLocation("/ja/showcase", "")).toBe("gfs");
+    expect(livePathname("gfs", "/ja/")).toBe("/");
+    expect(livePathname("gfs", "/ja/hrrr")).toBe("/gfs");
+    expect(legacyModelUrl("/ja/", "?model=hrrr&type=wind")).toBe("/ja/hrrr?type=wind");
+    expect(legacyModelUrl("/de/hrrr", "?model=ecmwf")).toBeNull();
   });
 });
 

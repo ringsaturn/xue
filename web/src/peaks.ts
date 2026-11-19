@@ -20,7 +20,8 @@ import { convertHeight, UNIT_LABELS, units } from "./units";
 
 const PEAK_SOURCE = "peaks";
 export const PEAK_LAYER = "peaks";
-const PEAKS_URL = "peaks.json";
+// Root-absolute: the viewer is served up to three segments deep.
+const PEAKS_URL = "/peaks.json";
 /** The basemap layer the peaks go under: place names stay on top. */
 const BEFORE_LAYER = "places_subplace";
 /** The mark is drawn here rather than taken from the flavor's sprite: the

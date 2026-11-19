@@ -1,15 +1,16 @@
 /** The document's own description of itself, kept true after the shell
  * has decided what it is showing.
  *
- * The static markup carries the live viewer's English metadata as its pre-JS
- * fallback — what a social scraper reads. Once main.ts knows the view, the
- * head is rewritten from here: a case is its own page (`/?case=<id>`, its
- * title and summary), a live view is its dataset's page (`/hrrr`, the path
- * the shell writes, `urlstate.ts::livePathname`) or the home (`/`, on the
- * default dataset until another is chosen), and the ten `?lang=` renderings
- * of any of them are declared as hreflang alternates that each name
- * themselves canonical. Search engines render the module bundle, so this is
- * what they index; the pre-JS copy is for everything that does not.
+ * Each language's copy of a page ships its own head (the build writes it,
+ * `web/tooling/sitepages.ts`): what a social scraper and a crawler that
+ * runs no script read. Once the shell knows the view, the head is
+ * rewritten from here: a case is its own page (`/showcase/<id>`, its title
+ * and summary), a live view is its dataset's page (`/hrrr`, the path the
+ * shell writes, `urlstate.ts::livePathname`) or the home (`/`, on the
+ * default dataset until another is chosen), and the twelve languages' copies
+ * of any of them (`/ja/hrrr`, `sitepaths.ts`) are declared as hreflang
+ * alternates that each name themselves canonical, the unprefixed English
+ * copy doubling as the x-default.
  *
  * The dataset is content: each one is a proper noun a reader searches for,
  * with a domain, a cadence and fields of its own, so each has a page. View
@@ -17,13 +18,15 @@
  * canonical URL on purpose: it is the same page, and ranking one beats
  * splitting it forty ways. */
 
-import { LOCALES, localeHtmlLang, normalizeLocale } from "./i18n";
+import { LOCALES, locale, localeHtmlLang, localeOgLocale } from "./i18n";
 import type { Locale } from "./i18n";
+import { localizedPath } from "./sitepaths";
 import { SITE_NAME, SITE_ORIGIN } from "./site";
 
 interface PageMeta {
-  /** Root-relative path with the query that defines the *content* — `/`
-   * or `/<id>` for the live viewer, `/?case=<id>` for a case, `/showcase`. */
+  /** Root-relative path within a language, with the query that defines the
+   * *content* — `/` or `/<id>` for the live viewer, `/showcase/<id>` for a
+   * case, `/showcase`. */
   path: string;
   /** Full document title; `· Xue` is appended here so a caller composes
    * only the part that names the view. */
@@ -35,12 +38,10 @@ interface PageMeta {
   canonical?: string;
 }
 
-/** The absolute URL of a page rendered in one language, or in the
- * browser's own when `lang` is null. */
+/** The absolute URL of a page in one language; null is the x-default, the
+ * unprefixed copy (which is the English one). */
 export function pageUrl(path: string, lang: Locale | null): string {
-  const url = new URL(path, SITE_ORIGIN);
-  if (lang) url.searchParams.set("lang", lang);
-  return url.href;
+  return new URL(localizedPath(lang ?? "en", path), SITE_ORIGIN).href;
 }
 
 /** The hreflang set for a path: one entry per locale plus the x-default. */
@@ -51,11 +52,11 @@ export function alternateUrls(path: string): { hreflang: string; href: string }[
   ];
 }
 
-/** The canonical URL of a page as it was requested: a rendering pinned to a
- * language by `?lang=` is canonical to itself, so every alternate the
- * hreflang set names points back at its own entry. */
-export function canonicalUrl(path: string, search: string): string {
-  return pageUrl(path, normalizeLocale(new URLSearchParams(search).get("lang")));
+/** The canonical URL of a page in a language: each language's copy is
+ * canonical to itself, so every alternate the hreflang set names points
+ * back at its own entry. */
+export function canonicalUrl(path: string, lang: Locale): string {
+  return pageUrl(path, lang);
 }
 
 function headLink(selector: string, create: () => HTMLLinkElement): HTMLLinkElement {
@@ -72,11 +73,13 @@ function setMetaContent(selector: string, content: string): void {
   }
 }
 
-/** Rewrite the head for the view on screen. Elements the markup ships are
- * updated in place; missing ones are added, so a page need not list the
- * whole hreflang set to get it. */
-export function applyPageMeta(meta: PageMeta, search: string = window.location.search): void {
-  const canonical = meta.canonical ?? canonicalUrl(meta.path, search);
+/** Rewrite the head for the view on screen, in the page's language (the
+ * live `locale` unless `lang` says). Elements the markup ships are updated
+ * in place; missing ones are added, so a page need not list the whole
+ * hreflang set to get it. */
+export function applyPageMeta(meta: PageMeta, lang: Locale = locale): void {
+  const canonical = meta.canonical ?? canonicalUrl(meta.path, lang);
+  setMetaContent('meta[property="og:locale"]', localeOgLocale(lang));
   headLink('link[rel="canonical"]', () => {
     const link = document.createElement("link");
     link.rel = "canonical";

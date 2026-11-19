@@ -17,6 +17,7 @@
  * `discovery.ts`, never by a page. */
 
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
+import { localizedPath } from "../src/sitepaths";
 import {
   type ArchiveCatalog,
   type BestRecord,
@@ -489,7 +490,7 @@ export const LANGUAGE_REDIRECT = `
     <script>
       (function () {
         try {
-          var prefixes = ${JSON.stringify(Object.fromEntries(Object.entries(PAGE_PREFIXES).filter(([code]) => code !== "en")))};
+          var prefixes = ${JSON.stringify(Object.fromEntries(PAGE_LANGS.filter((item) => item.code !== "en").map((item) => [item.code, item.prefix])))};
           var chosen = localStorage.getItem("xue-locale");
           var wanted = chosen;
           if (!wanted) {
@@ -556,7 +557,7 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
   const title = words.title(facts.kind, facts.name, issued, storm.season);
   const summary = words.summary(facts);
   const track = synopticTrack(storm.best);
-  const mapLink = `/typhoon?storm=${storm.entry.id}&lang=${encodeURIComponent(lang)}`;
+  const mapLink = localizedPath(lang, `/typhoon?storm=${storm.entry.id}`);
   const factRows = [
     [words.facts.id, storm.entry.id],
     [words.facts.basin, facts.basin],
@@ -647,7 +648,7 @@ export function renderSeasonPage(season: number, storms: readonly StormData[], l
         { name: words.archive, path: pagePath(lang, "archive") },
         { name: title, path: paths[lang] },
       ],
-      body: `<header><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p><p><a class="open" href="/typhoon?lang=${lang}">${words.open} →</a></p></header>${groups}`,
+      body: `<header><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header>${groups}`,
     }),
   };
 }
@@ -670,7 +671,7 @@ export function renderArchivePage(seasons: readonly { season: number; storms: nu
         { name: words.home, path: "/" },
         { name: words.archive, path: paths[lang] },
       ],
-      body: `<header><h1>${escapeHtml(words.archive)}</h1><p class="lead">${escapeHtml(words.archiveIntro)}</p><p><a class="open" href="/typhoon?lang=${lang}">${words.open} →</a></p></header><ul class="storms">${items}</ul>`,
+      body: `<header><h1>${escapeHtml(words.archive)}</h1><p class="lead">${escapeHtml(words.archiveIntro)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header><ul class="storms">${items}</ul>`,
     }),
   };
 }

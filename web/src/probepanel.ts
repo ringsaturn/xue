@@ -20,7 +20,7 @@ import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import { formatPointDegrees } from "./format";
 import { coordinateFormat, onMapPrefsChange } from "./mapprefs";
 import { formatCoordinate } from "./coordinates";
-import { t } from "./i18n";
+import { shellPath, t } from "./i18n";
 import { identifyBundle } from "./identity";
 import { COLUMN_LEVELS_HPA, type ColumnLevel, siteTemperature, sortedColumn } from "./lapse";
 import { disrpClassLabelKey } from "./levels";
@@ -584,13 +584,12 @@ export function createProbePanel(deps: ProbePanelDeps) {
     return pin;
   }
 
-  /** The comparison page at a point: its own page, keyed by the query the
-   * way the viewer is, so the link carries the language and theme along. */
+  /** The comparison page at a point, in the page's language: its own page,
+   * keyed by the query the way the viewer is. Root-relative, so a language
+   * switch moves it with the page's other links (`i18n.ts`). */
   function compareUrl(latitude: number, longitude: number): string {
-    const url = new URL("compare", window.location.href);
-    url.searchParams.set("lat", latitude.toFixed(2));
-    url.searchParams.set("lon", longitude.toFixed(2));
-    return url.href;
+    const params = new URLSearchParams({ lat: latitude.toFixed(2), lon: longitude.toFixed(2) });
+    return `${shellPath("/compare")}?${params.toString()}`;
   }
 
   /** The top-right link into the comparison page follows the camera: the

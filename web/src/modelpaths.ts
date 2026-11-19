@@ -1,19 +1,23 @@
 /** Which dataset a viewer URL names, and where a URL naming it the old way
  * belongs.
  *
- * The live viewer's dataset is the first path segment — `/hrrr?type=wind`,
- * `/himawari` — with `/` the home on the default model. A link from before
+ * The live viewer's dataset is the first path segment after the language
+ * prefix (`sitepaths.ts`) — `/hrrr?type=wind`, `/ja/himawari` — with `/`
+ * (`/ja/`) the home on the default model. A link from before
  * names it as `?model=<alias>` on `/`; the Pages Function at the site root
  * (`functions/_middleware.ts`) answers such a request with a 301 to the
  * path, and the shell does the same with `replaceState` where no function
  * runs (the dev server, a preview, an outage). Both call
- * `legacyModelLocation` below, so the two can never disagree.
+ * `legacyModelLocation` below (the function after `?lang=` and `?case=`
+ * have placed the language, `redirects.ts`), so the two can never
+ * disagree.
  *
  * Nothing here imports at run time: the function bundles this module on
  * its own, and the manifest's graph (the registry, the locales) has no
  * business in a request handler. */
 
 import type { ForecastModelId } from "./manifest";
+import { isHomePath, localizedPath, splitLocalePath } from "./sitepaths";
 
 /** The datasets in the model switch's order: the twelve live forecasts, the
  * eleven rolling observation windows (MRMS and its 3D volume, the JMA
@@ -152,12 +156,6 @@ export function modelForAlias(alias: string): ForecastModelId | null {
   return Object.hasOwn(MODEL_ALIASES, key) ? MODEL_ALIASES[key]! : null;
 }
 
-/** True for the home's own addresses: `/` and the `index.html` Pages
- * redirects to it. */
-export function isHomePathname(pathname: string): boolean {
-  return pathname === "/" || pathname === "/index.html";
-}
-
 /** Live datasets with no page of their own, reached as `/?model=<id>` on
  * the home and through their cases. */
 export const NO_PAGE_MODEL_IDS: ReadonlySet<ForecastModelId> = new Set<ForecastModelId>([
@@ -170,9 +168,10 @@ export function hasModelPage(model: ForecastModelId): boolean {
   return !NO_PAGE_MODEL_IDS.has(model);
 }
 
-/** The dataset a path names, or null when it names none of `pathIds`: the
- * one segment Pages serves a dataset's page at, its canonical id. Any
- * other path answers with the 404 page and never reaches the shell. */
+/** The dataset a path within a language (`splitLocalePath`'s `path`)
+ * names, or null when it names none of `pathIds`: the one segment Pages
+ * serves a dataset's page at, its canonical id. Any other path answers
+ * with the 404 page and never reaches the shell. */
 export function modelFromPathname(pathname: string, pathIds: ReadonlySet<string>): ForecastModelId | null {
   const segment = /^\/([a-z0-9]+)$/.exec(pathname)?.[1];
   return segment !== undefined && pathIds.has(segment) ? (segment as ForecastModelId) : null;
@@ -187,7 +186,7 @@ export function modelPathname(model: ForecastModelId): string {
  * root-relative path and query, or null when it is fine where it is.
  *
  * Only the home reads the parameter: `/?model=hrrr&type=wind` belongs at
- * `/hrrr?type=wind`. A dataset with no page (`NO_PAGE_MODEL_IDS`) is
+ * `/hrrr?type=wind`, `/ja/?model=hrrr` at `/ja/hrrr`. A dataset with no page (`NO_PAGE_MODEL_IDS`) is
  * opened by the parameter itself, so its link is left alone. A spelling of
  * any other dataset outside `pathIds` — unknown, or one reached only
  * through its cases — belongs at `/` without it, where the default opens,
@@ -195,7 +194,8 @@ export function modelPathname(model: ForecastModelId): string {
  * `model`, so a case link is left alone. Every other parameter is kept in
  * order; the fragment is the browser's to keep. */
 export function legacyModelLocation(pathname: string, search: string, pathIds: ReadonlySet<string>): string | null {
-  if (!isHomePathname(pathname)) return null;
+  const { locale, path } = splitLocalePath(pathname);
+  if (!isHomePath(path)) return null;
   const params = new URLSearchParams(search);
   const model = params.get("model");
   if (model === null || params.has("case")) return null;
@@ -204,5 +204,5 @@ export function legacyModelLocation(pathname: string, search: string, pathIds: R
   params.delete("model");
   const rest = params.toString();
   const query = rest === "" ? "" : `?${rest}`;
-  return id !== null && pathIds.has(id) ? `${modelPathname(id)}${query}` : `/${query}`;
+  return localizedPath(locale, id !== null && pathIds.has(id) ? `${modelPathname(id)}${query}` : `/${query}`);
 }

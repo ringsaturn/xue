@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 
 import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
+import { localizedPath } from "../src/sitepaths";
 import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, type PageLang } from "./stormpages";
 
 // --- the list ----------------------------------------------------------------------
@@ -415,11 +416,11 @@ export function nearestAirports(airport: Airport, all: readonly Airport[], count
 /** The live map at the airport with the airport marks on, and the point
  * comparison there. */
 export function mapLink(airport: Airport, lang: PageLang): string {
-  return `/?stations=apt&lang=${encodeURIComponent(lang)}#map=10/${airport.lat}/${airport.lon}`;
+  return localizedPath(lang, `/?stations=apt#map=10/${airport.lat}/${airport.lon}`);
 }
 
 export function compareLink(airport: Airport, lang: PageLang): string {
-  return `/compare?lat=${airport.lat.toFixed(2)}&lon=${airport.lon.toFixed(2)}&lang=${encodeURIComponent(lang)}`;
+  return localizedPath(lang, `/compare?lat=${airport.lat.toFixed(2)}&lon=${airport.lon.toFixed(2)}`);
 }
 
 // --- the frame -----------------------------------------------------------------------
