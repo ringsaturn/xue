@@ -3234,6 +3234,13 @@ html[lang="ja"] .rail-glyph {
   border-color: color-mix(in srgb, var(--text) 40%, transparent);
 }
 
+/* The airport page link sits beside the pin action and reads as one. */
+.station-card-link {
+  display: inline-block;
+  margin-right: 6px;
+  text-decoration: none;
+}
+
 .station-card-rows {
   display: grid;
   margin: 2px 0 0;

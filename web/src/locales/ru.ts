@@ -623,6 +623,7 @@ export const ru: Record<MessageKey, string> = {
   stationElevation: "Высота",
   stationOpenSounding: "Открыть зондирование",
   stationPinHere: "Закрепить здесь",
+  stationAirportPage: "Страница аэропорта →",
   stationLast24h: "За 24 ч",
   stationTemperature: "Температура",
   stationWind: "Ветер",

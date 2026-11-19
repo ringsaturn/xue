@@ -616,6 +616,7 @@ export const zh: Record<MessageKey, string> = {
   stationElevation: "海拔",
   stationOpenSounding: "查看探空",
   stationPinHere: "钉在此处",
+  stationAirportPage: "机场页面 →",
   stationLast24h: "过去 24 小时",
   stationTemperature: "气温",
   stationWind: "风",

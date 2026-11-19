@@ -621,6 +621,7 @@ export const es: Record<MessageKey, string> = {
   stationElevation: "Altitud",
   stationOpenSounding: "Abrir el sondeo",
   stationPinHere: "Fijar aquí",
+  stationAirportPage: "Página del aeropuerto →",
   stationLast24h: "Últimas 24 h",
   stationTemperature: "Temperatura",
   stationWind: "Viento",

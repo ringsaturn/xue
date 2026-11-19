@@ -17,7 +17,10 @@
 
 import { element } from "../dom";
 import { formatPointDegrees } from "../format";
-import { t } from "../i18n";
+import { AIRPORT_PAGE_ICAOS } from "virtual:airport-pages";
+
+import { airportPagePath } from "../airports/pages";
+import { locale, t } from "../i18n";
 import { convertDistance, convertHeight, convertPrecipitation, convertPressure, convertTemperature, convertWind, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
 import { categoryColor } from "./layers";
 import { formatVisibility as visibility, formatWindGust as wind } from "./observations";
@@ -61,6 +64,18 @@ function action(label: string, onPin: () => void): HTMLElement {
     onPin();
   });
   return button;
+}
+
+/** The airports with a static page (`web/tooling/airports.json`). */
+const AIRPORT_PAGES: ReadonlySet<string> = new Set(AIRPORT_PAGE_ICAOS);
+
+/** A link styled as the card's action: the airport's own page, in the
+ * viewer's language where the pages have it (English otherwise). */
+function airportPageLink(icao: string): HTMLElement {
+  const link = element("a", "station-card-action station-card-link", t("stationAirportPage")) as HTMLAnchorElement;
+  link.href = airportPagePath(locale, icao);
+  link.addEventListener("click", (event) => event.stopPropagation());
+  return link;
 }
 
 function position(lat: number, lon: number): HTMLElement {
@@ -192,6 +207,7 @@ export function buildAirportCard(
   if (charts) root.append(charts);
 
   root.append(position(station.lat, station.lon));
+  if (AIRPORT_PAGES.has(station.icao)) root.append(airportPageLink(station.icao));
   if (options.onPin) root.append(action(t("stationPinHere"), options.onPin));
   return root;
 }

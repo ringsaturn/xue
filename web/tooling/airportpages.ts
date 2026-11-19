@@ -18,6 +18,8 @@
 
 import { readFileSync } from "node:fs";
 
+import type { Plugin } from "vite";
+
 import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
 import { localizedPath } from "../src/sitepaths";
@@ -121,6 +123,25 @@ export function validateAirports(input: unknown): AirportList {
 
 export function loadAirports(path: string): AirportList {
   return validateAirports(JSON.parse(readFileSync(path, "utf8")));
+}
+
+const AIRPORT_PAGES_MODULE = "virtual:airport-pages";
+
+/** Vite plugin: `virtual:airport-pages` hands the shell the ids of the
+ * airports with a page (the airport card links them), from the same list
+ * the pages are built from, without bundling the list itself. */
+export function airportPageIds(listPath: string): Plugin {
+  const resolved = `\0${AIRPORT_PAGES_MODULE}`;
+  return {
+    name: "xue:airport-pages",
+    resolveId: (id) => (id === AIRPORT_PAGES_MODULE ? resolved : null),
+    load(id) {
+      if (id !== resolved) return null;
+      this.addWatchFile(listPath);
+      const ids = loadAirports(listPath).airports.map((airport) => airport.icao);
+      return `export const AIRPORT_PAGE_ICAOS = ${JSON.stringify(ids)};\n`;
+    },
+  };
 }
 
 // --- words ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { loadEnv } from "vite";
 import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
+import { airportPageIds } from "./web/tooling/airportpages";
 import { discoveryFiles } from "./web/tooling/discovery";
 import { modelPageIds } from "./web/tooling/modelpages";
 import { languageChooser, sitePathRewrite } from "./web/tooling/sitepages";
@@ -67,6 +68,7 @@ export default defineConfig(({ mode }) => {
     // does, and an unprefixed page carries the language chooser.
     plugins: [
       suffixRanges(),
+      airportPageIds(resolve(import.meta.dirname, "web/tooling/airports.json")),
       languageChooser(),
       sitePathRewrite(modelIds),
       discoveryFiles({
