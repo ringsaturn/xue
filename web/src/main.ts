@@ -18,6 +18,8 @@ import { guardContextLoss } from "./glguard";
 import {
   applyStaticMessages,
   basemapLang,
+  caseHref,
+  LANGUAGE_PATHS,
   intlLocale,
   locale,
   onLocaleChange,
@@ -141,14 +143,13 @@ import {
   DEFAULT_VARIABLE,
   parseBackendFromSearch,
   parseCameraFromHash,
-  parseCaseFromSearch,
+  parseCaseFromLocation,
   DERIVED_FIRE_IDS,
   SETUP_ANCHOR,
   SETUP_DEFAULT_FLOW,
   SETUP_DEFAULT_LINES,
   FIRE_FIELD_ANCHOR,
   type DerivedFireId,
-  CASE_PATHNAME,
   legacyModelUrl,
   livePathname,
   searchForLiveModel,
@@ -242,6 +243,7 @@ import { CoordinateGrid } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
 import { modelPageHead } from "./modelpage";
 import { applyPageMeta } from "./pagemeta";
+import { casePathname, localizedPath } from "./sitepaths";
 import {
   boundsCentre,
   caseCameraLimits,
@@ -1556,13 +1558,13 @@ function resolveComposition(view: ViewComposition, run: ForecastManifest, fallba
   if (fill === null && lines === null) return compositionForPrimary(fallback, null);
   return { fill, lines };
 }
-/** Showcase case named by `?case=<id>`: a past run cropped to one weather
+/** Showcase case named by the path (`/showcase/<id>`): a past run cropped to one weather
  * event. A case pins its own dataset and run, so while one is open the model
  * switch is hidden, the live pointer is never read, and the new-run poll is
  * off — everything below the manifest is the ordinary viewer. */
 /** The case to open: the link's, then whichever an embedding page switched
  * to in place (`embedOpenCase`). */
-let requestedCaseId: string | null = parseCaseFromSearch(window.location.search);
+let requestedCaseId: string | null = parseCaseFromLocation(window.location.pathname, window.location.search);
 /** Which channel a session reads its bundle through. `zarr` — the default
  * — is the Zarr store a run publishes, for the bundles that have one, and
  * the container for the rest; `?backend=xue` takes the container wherever
@@ -4874,7 +4876,7 @@ function updateVariablePresentation(session: VariableSession): void {
   applyPageMeta(
     activeCase
       ? {
-          path: `/?case=${encodeURIComponent(activeCase.id)}`,
+          path: casePathname(activeCase.id),
           title: localizedText(activeCase.title, locale),
           description: localizedText(activeCase.summary, locale),
         }
@@ -5093,7 +5095,7 @@ function renderCaseParts(showcaseCase: ShowcaseCase): void {
   casePartList.replaceChildren(
     ...parts.map((part) => {
       const link = document.createElement("a");
-      link.href = `./?case=${encodeURIComponent(part.case)}`;
+      link.href = caseHref(part.case);
       link.textContent = localizedText(part.label, locale);
       if (part.case === showcaseCase.id) link.setAttribute("aria-current", "page");
       return link;
@@ -5158,9 +5160,15 @@ function showMarkerCard(marker: ShowcaseMarker): void {
   );
 }
 
-/** The path the page is on: a case's, or the live dataset's. */
+/** The path the page is on within its language: a case's, or the live
+ * dataset's (`syncUrl` puts the language's prefix before it). */
 function viewPathname(): string {
-  return activeCase ? CASE_PATHNAME : livePathname(selectedModelId, window.location.pathname);
+  // The case asked for holds the path until its catalog entry is open, so
+  // nothing written meanwhile drops it.
+  // A build with no case pages keeps a case on `/` (`?case=`, `syncUrl`).
+  const caseId = activeCase?.id ?? requestedCaseId;
+  if (caseId !== null) return LANGUAGE_PATHS ? casePathname(caseId) : "/";
+  return livePathname(selectedModelId, window.location.pathname);
 }
 
 /** A live view's description: its dataset's own on the dataset's page —
@@ -5193,7 +5201,13 @@ function syncUrl(): void {
   }
   // A dataset with no page of its own is named in the query on `/`.
   if (!activeCase) withScene = searchForLiveModel(withScene, selectedModelId);
-  const pathname = viewPathname();
+  const caseId = activeCase?.id ?? requestedCaseId;
+  if (caseId !== null && !LANGUAGE_PATHS) {
+    const params = new URLSearchParams(withScene);
+    params.set("case", caseId);
+    withScene = `?${params.toString()}`;
+  }
+  const pathname = LANGUAGE_PATHS ? localizedPath(locale, viewPathname()) : viewPathname();
   if (pathname === window.location.pathname && withScene === window.location.search) return;
   window.history.replaceState(null, "", `${pathname}${withScene}${window.location.hash}`);
 }
@@ -7385,7 +7399,7 @@ function applyLocale(): void {
   }
   if (activeCase) updateCasePresentation(activeCase);
   if (activeSession) updateVariablePresentation(activeSession);
-  else applyPageMeta({ path: activeCase ? `/?case=${encodeURIComponent(activeCase.id)}` : viewPathname() });
+  else applyPageMeta({ path: viewPathname() });
   renderProbe();
   syncBasemapStyle();
   peakLabels.syncLanguage();

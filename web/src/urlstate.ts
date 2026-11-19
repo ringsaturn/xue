@@ -13,6 +13,7 @@ import {
   VOLUME_BUNDLE_LEVELS,
 } from "./manifest";
 import { hasModelPage, legacyModelLocation, modelForAlias, modelFromPathname, modelPathname } from "./modelpaths";
+import { caseFromPath, splitLocalePath } from "./sitepaths";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import { GLOBE_MIN_ZOOM } from "./projection";
 import { variableIds, variableSpec } from "./variables";
@@ -130,12 +131,12 @@ export function parseModelFromSearch(search: string): ForecastModelId {
   return id !== null && liveIds().has(id) ? id : DEFAULT_MODEL;
 }
 
-/** Model requested by the page URL: the path's (`/hrrr`) first, then
+/** Model requested by the page URL: the path's (`/hrrr`, `/ja/hrrr`) first, then
  * `?model=` — a dataset with no page (`NO_PAGE_MODEL_IDS`), or an old link
  * that reached the shell without the root's redirect (`legacyModelUrl`) —
  * then the default. */
 export function parseModelFromLocation(pathname: string, search: string): ForecastModelId {
-  return modelFromPathname(pathname, modelPathIds()) ?? parseModelFromSearch(search);
+  return modelFromPathname(splitLocalePath(pathname).path, modelPathIds()) ?? parseModelFromSearch(search);
 }
 
 /** The address an old `?model=` link is rewritten to on boot, the same one
@@ -145,13 +146,14 @@ export function legacyModelUrl(pathname: string, search: string): string | null 
   return legacyModelLocation(pathname, search, modelPathIds());
 }
 
-/** The path a live view of `model` is written at: `/<id>`, except that the
+/** The path a live view of `model` is written at within the page's
+ * language (`sitepaths.ts::localizedPath` adds the prefix): `/<id>`, except that the
  * home stays `/` while it shows the default — a visitor who lands on `/`
  * and switches nothing keeps the address they typed — and that a dataset
  * with no page is on `/` too, named by `?model=` (`searchForLiveModel`). */
 export function livePathname(model: ForecastModelId, currentPathname: string): string {
   if (!hasModelPage(model)) return "/";
-  if (model === DEFAULT_MODEL && modelFromPathname(currentPathname, modelPathIds()) === null) return "/";
+  if (model === DEFAULT_MODEL && modelFromPathname(splitLocalePath(currentPathname).path, modelPathIds()) === null) return "/";
   return modelPathname(model);
 }
 
@@ -164,15 +166,17 @@ export function searchForLiveModel(search: string, model: ForecastModelId): stri
   return `?${params.toString()}`;
 }
 
-/** The path a case is written at: a case is a page of its own on `/`. */
-export const CASE_PATHNAME = "/";
-
-/** Showcase case requested by the page URL, or null for the live feed. A
- * case pins its own model and run, so `model` is ignored while one is open. */
-export function parseCaseFromSearch(search: string): string | null {
+/** Showcase case requested by the page URL (`/showcase/<id>`,
+ * `/ja/showcase/<id>`), or null for the live feed. On the site a link from
+ * before (`/?case=<id>`) has been moved to the path on boot (`i18n.ts`);
+ * a build with no case pages (`i18n.ts::LANGUAGE_PATHS`) names the case
+ * in the query, read here second. A case pins its own model and run, so
+ * `model` is ignored while one is open. */
+export function parseCaseFromLocation(pathname: string, search: string): string | null {
+  const fromPath = caseFromPath(splitLocalePath(pathname).path);
+  if (fromPath !== null) return fromPath;
   const id = new URLSearchParams(search).get("case");
-  if (id === null || !/^[a-z0-9-]+$/.test(id)) return null;
-  return id;
+  return id !== null && /^[a-z0-9-]+$/.test(id) ? id : null;
 }
 
 /** The precipitation setup (`?type=precipsetup`): the precipitation rate
@@ -538,13 +542,14 @@ export function searchForVariable(variableId: ForecastBundleId, search: string):
   return `?${params.toString()}`;
 }
 
-/** Query string advertising a showcase case and variable. The case names its
- * own dataset, so any `model` param is dropped rather than left to contradict
- * it. Returned with the leading "?". */
-export function searchForCaseVariable(variableId: ForecastBundleId, search: string, caseId: string): string {
+/** Query string advertising a variable on a case's page (the case is the
+ * path, `sitepaths.ts::casePathname`). The case names its own dataset, so any `model`
+ * param is dropped rather than left to contradict it, as is a `case` param
+ * the path now says. Returned with the leading "?". */
+export function searchForCaseVariable(variableId: ForecastBundleId, search: string): string {
   const params = new URLSearchParams(search);
   params.delete("model");
-  params.set("case", caseId);
+  params.delete("case");
   params.set("type", canonicalType(variableId));
   return `?${params.toString()}`;
 }

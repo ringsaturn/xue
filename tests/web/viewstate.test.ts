@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCaseFromSearch } from "../../web/src/urlstate";
+import { parseCaseFromLocation } from "../../web/src/urlstate";
 import {
   compositionForPrimary,
   compositionPrimary,
@@ -15,15 +15,15 @@ const SETUP_LAYERS = { inflow: true, front: true };
 const DEFAULTS: ViewDefaults = { field: "prate", lines: null, particles: true, setupLayers: SETUP_LAYERS };
 
 /** Write back what was parsed, against the same query string, the way the
- * shell does after a load: the case from the URL, the particles chosen
+ * shell does after a load: the case from the path, the particles chosen
  * only if the URL chose them. */
-function roundTrip(search: string, defaults: ViewDefaults = DEFAULTS): string {
+function roundTrip(search: string, defaults: ViewDefaults = DEFAULTS, pathname = "/"): string {
   const parsed = parseView(search, defaults);
   return searchForView(
     parsed.view,
     search,
     {
-      caseId: parseCaseFromSearch(search),
+      caseId: parseCaseFromLocation(pathname, search),
       particlesChosen: parsed.particlesRequested,
     },
     defaults.field,
@@ -103,13 +103,20 @@ describe("searchForView", () => {
     "?type=precip&stations=snd%2Capt",
     "?type=precip&tc=off",
     "?type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",
-    "?case=ida-2021&type=radar&lines=pressure",
+    "?type=radar&lines=pressure",
     "?type=radar&res=half&backend=xue",
-    "?case=fuji-woof-2026-10-10&type=sst&volume=cloud3d",
+    "?type=sst&volume=cloud3d",
     "?type=precip&accum=24h",
     "?type=precip&accum=30m",
   ])("round-trips %s", (search) => {
     expect(roundTrip(search)).toBe(search);
+  });
+
+  it.each([
+    ["/showcase/ida-2021", "?type=radar&lines=pressure"],
+    ["/ja/showcase/fuji-woof-2026-10-10", "?type=sst&volume=cloud3d"],
+  ])("round-trips a case's view on its path %s%s", (pathname, search) => {
+    expect(roundTrip(search, DEFAULTS, pathname)).toBe(search);
   });
 
   it("writes only what differs from the defaults", () => {
@@ -134,11 +141,11 @@ describe("searchForView", () => {
     ).toBe("?type=hgt500");
   });
 
-  it("drops the model under a case", () => {
+  it("drops the model, and a case param the path now says, under a case", () => {
     const view = parseView("?type=temp", DEFAULTS).view;
     expect(
-      searchForView(view, "?model=gfs&type=temp", { caseId: "ida-2021", particlesChosen: false }, "prate"),
-    ).toBe("?type=temp&case=ida-2021");
+      searchForView(view, "?model=gfs&case=ida-2021&type=temp", { caseId: "ida-2021", particlesChosen: false }, "prate"),
+    ).toBe("?type=temp");
   });
 
   it("drops an old model param on a live view: the dataset is the path's", () => {
