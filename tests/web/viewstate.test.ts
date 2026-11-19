@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCaseFromSearch, parseModelFromSearch } from "../../web/src/urlstate";
+import { parseCaseFromSearch } from "../../web/src/urlstate";
 import {
   compositionForPrimary,
   compositionPrimary,
@@ -15,7 +15,7 @@ const SETUP_LAYERS = { inflow: true, front: true };
 const DEFAULTS: ViewDefaults = { field: "prate", lines: null, particles: true, setupLayers: SETUP_LAYERS };
 
 /** Write back what was parsed, against the same query string, the way the
- * shell does after a load: the dataset from the URL, the particles chosen
+ * shell does after a load: the case from the URL, the particles chosen
  * only if the URL chose them. */
 function roundTrip(search: string, defaults: ViewDefaults = DEFAULTS): string {
   const parsed = parseView(search, defaults);
@@ -23,7 +23,6 @@ function roundTrip(search: string, defaults: ViewDefaults = DEFAULTS): string {
     parsed.view,
     search,
     {
-      model: parseModelFromSearch(search),
       caseId: parseCaseFromSearch(search),
       particlesChosen: parsed.particlesRequested,
     },
@@ -41,7 +40,7 @@ describe("parseView", () => {
   });
 
   it("falls back to the defaults where the URL says nothing", () => {
-    const parsed = parseView("?model=gfs", { field: "prate", lines: "prmsl", particles: false, setupLayers: SETUP_LAYERS });
+    const parsed = parseView("", { field: "prate", lines: "prmsl", particles: false, setupLayers: SETUP_LAYERS });
     expect(parsed.view).toMatchObject({ field: "prate", lines: "prmsl", particles: false });
     expect(parsed.fieldRequested).toBe(false);
     expect(parsed.particlesRequested).toBe(false);
@@ -50,10 +49,10 @@ describe("parseView", () => {
   });
 
   it("names no fire field in the link", () => {
-    const { view } = parseView("?model=gfs&type=temp", DEFAULTS);
+    const { view } = parseView("?type=temp", DEFAULTS);
     view.derived.ffwi = true;
-    expect(searchForView(view, "?model=gfs&type=temp", { model: "gfs", caseId: null, particlesChosen: false }, "prate")).toBe(
-      "?model=gfs&type=temp",
+    expect(searchForView(view, "?type=temp", { caseId: null, particlesChosen: false }, "prate")).toBe(
+      "?type=temp",
     );
   });
 
@@ -70,7 +69,7 @@ describe("parseView", () => {
   });
 
   it("reads the precipitation setup on the rate, with the sea level pressure unless told otherwise", () => {
-    const bare = parseView("?model=gfs&type=precipsetup", DEFAULTS);
+    const bare = parseView("?type=precipsetup", DEFAULTS);
     expect(bare.view).toMatchObject({ field: "prate", lines: "prmsl", setup: true, flow: null, accumulation: null });
     expect(bare.fieldRequested).toBe(true);
     expect(setupInView(bare.view)).toBe(true);
@@ -92,66 +91,71 @@ describe("parseView", () => {
 
 describe("searchForView", () => {
   it.each([
-    "?model=gfs&type=precip",
-    "?model=gfs&type=temp&lines=hgt500",
-    "?model=ecmwf&type=hgt500",
-    "?model=gfs&type=wind&particles=off",
-    "?model=gfs&type=precipsetup",
-    "?model=gfs&type=precipsetup&lines=none",
-    "?model=gfs&type=precipsetup&lines=hgt500&flow=wind850",
-    "?model=gfs&type=precipsetup&phase=on",
-    "?model=gfs&type=precip&stations=snd",
-    "?model=gfs&type=precip&stations=snd%2Capt",
-    "?model=gfs&type=precip&tc=off",
-    "?model=gfs&type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",
+    "?type=precip",
+    "?type=temp&lines=hgt500",
+    "?type=hgt500",
+    "?type=wind&particles=off",
+    "?type=precipsetup",
+    "?type=precipsetup&lines=none",
+    "?type=precipsetup&lines=hgt500&flow=wind850",
+    "?type=precipsetup&phase=on",
+    "?type=precip&stations=snd",
+    "?type=precip&stations=snd%2Capt",
+    "?type=precip&tc=off",
+    "?type=precip&tc=EP142026&tcagency=nhc%2Cjtwc&tcmodel=gfs&tcmembers=on",
     "?case=ida-2021&type=radar&lines=pressure",
-    "?model=hrrr&type=radar&res=half&backend=xue",
+    "?type=radar&res=half&backend=xue",
     "?case=fuji-woof-2026-10-10&type=sst&volume=cloud3d",
-    "?model=gfs&type=precip&accum=24h",
-    "?model=mrms&type=precip&accum=30m",
+    "?type=precip&accum=24h",
+    "?type=precip&accum=30m",
   ])("round-trips %s", (search) => {
     expect(roundTrip(search)).toBe(search);
   });
 
   it("writes only what differs from the defaults", () => {
-    const view = parseView("?model=gfs", DEFAULTS).view;
+    const view = parseView("", DEFAULTS).view;
     expect(
-      searchForView(view, "?model=gfs", { model: "gfs", caseId: null, particlesChosen: false }, "prate"),
-    ).toBe("?model=gfs&type=precip");
+      searchForView(view, "", { caseId: null, particlesChosen: false }, "prate"),
+    ).toBe("?type=precip");
     // A default that was never chosen is not written, even when it is off.
     const off = { ...view, particles: false };
     expect(
-      searchForView(off, "?model=gfs", { model: "gfs", caseId: null, particlesChosen: false }, "prate"),
-    ).toBe("?model=gfs&type=precip");
+      searchForView(off, "", { caseId: null, particlesChosen: false }, "prate"),
+    ).toBe("?type=precip");
     expect(
-      searchForView(off, "?model=gfs", { model: "gfs", caseId: null, particlesChosen: true }, "prate"),
-    ).toBe("?model=gfs&type=precip&particles=off");
+      searchForView(off, "", { caseId: null, particlesChosen: true }, "prate"),
+    ).toBe("?type=precip&particles=off");
   });
 
   it("names the lines in type alone when they are the view", () => {
-    const view = { ...parseView("?model=gfs", DEFAULTS).view, field: null, lines: "hgt500" as const };
+    const view = { ...parseView("", DEFAULTS).view, field: null, lines: "hgt500" as const };
     expect(
-      searchForView(view, "?model=gfs&type=temp&lines=hgt500", { model: "gfs", caseId: null, particlesChosen: false }, "prate"),
-    ).toBe("?model=gfs&type=hgt500");
+      searchForView(view, "?type=temp&lines=hgt500", { caseId: null, particlesChosen: false }, "prate"),
+    ).toBe("?type=hgt500");
   });
 
   it("drops the model under a case", () => {
-    const view = parseView("?model=gfs&type=temp", DEFAULTS).view;
+    const view = parseView("?type=temp", DEFAULTS).view;
     expect(
-      searchForView(view, "?model=gfs&type=temp", { model: "gfs", caseId: "ida-2021", particlesChosen: false }, "prate"),
+      searchForView(view, "?model=gfs&type=temp", { caseId: "ida-2021", particlesChosen: false }, "prate"),
     ).toBe("?type=temp&case=ida-2021");
+  });
+
+  it("drops an old model param on a live view: the dataset is the path's", () => {
+    const view = parseView("?type=temp", DEFAULTS).view;
+    expect(searchForView(view, "?model=ecmwf&type=temp", { caseId: null, particlesChosen: false }, "prate")).toBe("?type=temp");
   });
 });
 
 describe("the precipitation setup", () => {
   it("is written only while its field is the rate, and its flow goes with it", () => {
-    const { view } = parseView("?model=gfs&type=precipsetup&flow=wind500", DEFAULTS);
-    const context = { model: "gfs" as const, caseId: null, particlesChosen: false };
-    expect(searchForView(view, "?model=gfs&type=precipsetup&flow=wind500", context, "prate")).toBe("?model=gfs&type=precipsetup&flow=wind500");
+    const { view } = parseView("?type=precipsetup&flow=wind500", DEFAULTS);
+    const context = { caseId: null, particlesChosen: false };
+    expect(searchForView(view, "?type=precipsetup&flow=wind500", context, "prate")).toBe("?type=precipsetup&flow=wind500");
     const other = { ...view, field: "tmp2m" as const };
     expect(setupInView(other)).toBe(false);
     // The lines it drew stay over the next field, as over any.
-    expect(searchForView(other, "?model=gfs&type=precipsetup&flow=wind500", context, "prate")).toBe("?model=gfs&type=temp&lines=pressure");
+    expect(searchForView(other, "?type=precipsetup&flow=wind500", context, "prate")).toBe("?type=temp&lines=pressure");
   });
 });
 
@@ -186,7 +190,7 @@ describe("the volume overlay", () => {
     expect(volumeOverField({ field: null, volume: "cloud3d" })).toBeNull();
     expect(volumeOverField({ field: "refl3d", volume: "cloud3d" })).toBeNull();
     // A volume as the field is named by `type`, and `volume` is dropped.
-    expect(roundTrip("?model=mrms3d&type=refl3d&volume=cloud3d")).toBe("?model=mrms3d&type=refl3d");
+    expect(roundTrip("?type=refl3d&volume=cloud3d")).toBe("?type=refl3d");
   });
 });
 
@@ -195,12 +199,12 @@ describe("an old day-night link", () => {
     // The true colour carries its own night side, so the day-night blend
     // is gone; a link that names it opens the same view as one that does
     // not, and the parameter is left as an unrelated one.
-    const withBlend = parseView("?model=himawari&type=truecolor&blend=night", DEFAULTS);
-    const without = parseView("?model=himawari&type=truecolor", DEFAULTS);
+    const withBlend = parseView("?type=truecolor&blend=night", DEFAULTS);
+    const without = parseView("?type=truecolor", DEFAULTS);
     expect(withBlend).toEqual(without);
     expect(withBlend.view.field).toBe("truecolor");
     expect(withBlend.view).not.toHaveProperty("blend");
-    expect(roundTrip("?model=himawari&type=truecolor")).toBe("?model=himawari&type=truecolor");
+    expect(roundTrip("?type=truecolor")).toBe("?type=truecolor");
   });
 });
 
@@ -219,15 +223,15 @@ describe("the precipitation total", () => {
   });
 
   it("is written only while the precipitation is the field", () => {
-    const view = { ...parseView("?model=gfs&type=temp", DEFAULTS).view, accumulation: { type: "window" as const, seconds: 6 * 3600 } };
-    const context = { model: "gfs" as const, caseId: null, particlesChosen: false };
-    expect(searchForView(view, "?model=gfs&type=temp", context, "prate")).toBe("?model=gfs&type=temp");
-    expect(searchForView({ ...view, field: "prate" }, "?model=gfs&type=temp", context, "prate")).toBe(
-      "?model=gfs&type=precip&accum=6h",
+    const view = { ...parseView("?type=temp", DEFAULTS).view, accumulation: { type: "window" as const, seconds: 6 * 3600 } };
+    const context = { caseId: null, particlesChosen: false };
+    expect(searchForView(view, "?type=temp", context, "prate")).toBe("?type=temp");
+    expect(searchForView({ ...view, field: "prate" }, "?type=temp", context, "prate")).toBe(
+      "?type=precip&accum=6h",
     );
     const range = { type: "range" as const, from: Date.UTC(2026, 10, 11, 6, 30), to: Date.UTC(2026, 10, 11, 9) };
-    expect(searchForView({ ...view, field: "prate", accumulation: range }, "?model=gfs&type=temp", context, "prate")).toBe(
-      "?model=gfs&type=precip&accum=202611110630-2026111109",
+    expect(searchForView({ ...view, field: "prate", accumulation: range }, "?type=temp", context, "prate")).toBe(
+      "?type=precip&accum=202611110630-2026111109",
     );
   });
 });

@@ -4,6 +4,7 @@ import { t } from "./i18n";
 // Type-only: both modules import this one at runtime.
 import { gridMapFor, parseGrid, type LambertGrid, type RegularGrid } from "./gridmap";
 import type { ViewportBounds } from "./tiles";
+import { FORECAST_MODEL_IDS } from "./modelpaths";
 import { REGISTRY } from "./registry";
 import { checkBundleMetadataV3 } from "./schema/generated/bundle-metadata";
 import { checkRunManifest } from "./schema/generated/manifest";
@@ -35,7 +36,7 @@ interface ForecastModelInfo {
   product: string;
   /** Mutable live pointer filename at the data root, absent for a dataset
    * with no live feed — a mosaic, or an archive reached only through its
-   * showcase cases, which the model switch and `?model=` never offer
+   * showcase cases, which the model switch and the model paths never offer
    * (`FORECAST_MODEL_IDS`). On an observation dataset the pointer follows a
    * rolling window: the run is the window's first hour and moves on every
    * hour, and the manifest it names is rebuilt every few minutes into a
@@ -191,7 +192,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
   // Not a live feed: the run is a fixed archive published as showcase
   // cases alone (`/?case=…`), so it has no pointer and no place in the
-  // model switch or behind `?model=`; a case loads its manifest by path.
+  // model switch or a path of its own; a case loads its manifest by path.
   // The whole 79 × 61 grid lies inside the model domain, so unlike HRRR
   // nothing is clipped, and a case frames its own region, so no `region`.
   // Opens on the skin temperature, where the mountain's own relief shows.
@@ -284,7 +285,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // syncs every twenty minutes). The region is where the camera goes when
   // it is opened from elsewhere. The id was `radar` while the source was
   // cases only; the manifest identity CMA-RADAR is unchanged. Not in the
-  // model sheet: it is reached through `?model=cma` and showcase cases.
+  // model sheet: it is reached through its path (`/cma`) and showcase cases.
   cma: {
     defaultVariable: "cref",
     railCore: ["cref"],
@@ -305,7 +306,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // (0.5 to 19 km above mean sea level) of one ten-minute scan each, in
   // one `refl3d` bundle thinned to 0.05°, drawn by the volume layer
   // (volume.ts) on the plane and on the globe. Not in the model sheet: it
-  // is reached through showcase cases (and `?model=mrms3d`).
+  // is reached through showcase cases (and its path, `/mrms3d`).
   mrms3d: {
     defaultVariable: "refl3d",
     railCore: ["refl3d"],
@@ -485,7 +486,7 @@ export interface CaseDataset {
 }
 
 /** Admit a dataset a showcase case names that this build has no entry for,
- * as a case-only one (no pointer, absent from the switch and `?model=`), so
+ * as a case-only one (no pointer, absent from the switch and the model paths), so
  * the case plays like any other and its fields draw generically: the
  * catalog row says everything a case needs from the table. Returns its id.
  * Throws when the id is not a slug, belongs to a built-in dataset, or was
@@ -543,51 +544,15 @@ export function isNowcastModel(model: ForecastModelId): boolean {
 
 /** True when a dataset is reached through its showcase cases alone: no
  * live pointer to poll and no members to open in its place. The switch
- * and `?model=` never offer it; a case loads its manifest by path. */
+ * and the model paths never offer it; a case loads its manifest by path. */
 export function isCaseOnlyModel(model: ForecastModelId): boolean {
   const info = FORECAST_MODELS[model];
   return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
-/** The datasets in the model switch's order: the twelve live forecasts, the
- * eleven rolling observation windows (MRMS and its 3D volume, the JMA
- * and HKO nowcasts, the CMA mosaic, the four geostationary imagers and Himawari's
- * Japan box, and the SWPC aurora probability) and the geostationary
- * mosaic, a view over the imagers with no feed of its own. The switch
- * offers the ones index.html has a button for. A dataset with no pointer
- * that is not a mosaic (the WOOF nest, the two EFAS runs) is absent: it is
- * reached through its showcase cases alone. */
-export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
-  "gfs",
-  "sflux",
-  "ecmwf",
-  "ifs",
-  "aifs",
-  "ifshres",
-  "cfs",
-  "hrrr",
-  "rrfs",
-  "woofnam",
-  "iconeu",
-  "arpege",
-  "cmageps",
-  "gefsaero",
-  "cmadust",
-  "silam",
-  "mrms",
-  "mrms3d",
-  "jma",
-  "hkonowcast",
-  "cma",
-  "himawari",
-  "himawarijp",
-  "goeseast",
-  "goeswest",
-  "meteosat",
-  "aurora",
-  "geo",
-  "gibs",
-];
+/** The datasets in the model switch's order (`modelpaths.ts`, which the
+ * Pages Function reads without this module's graph). */
+export { FORECAST_MODEL_IDS };
 
 /** The datasets this build offers: `VITE_SOURCES`, comma-separated ids, for
  * a deployment that publishes only some of them; empty offers every one. */
@@ -600,9 +565,17 @@ const SERVED_MODELS: ReadonlySet<string> | null = (() => {
   return ids.length > 0 ? new Set(ids) : null;
 })();
 
-/** True when the model switch and `?model=` offer this dataset. */
+/** True when the model switch and a model path offer this dataset. */
 export function isServedModel(model: ForecastModelId): boolean {
   return SERVED_MODELS === null || SERVED_MODELS.has(model);
+}
+
+/** The datasets with a live view of their own, each at its path (`/<id>`,
+ * `modelpaths.ts`): served, and not reached through cases alone. `served`
+ * is the build's own answer in the page and the build tooling's (which reads
+ * `VITE_SOURCES` itself) when the pages are emitted. */
+export function liveModelIds(served: (model: ForecastModelId) => boolean = isServedModel): ForecastModelId[] {
+  return FORECAST_MODEL_IDS.filter((id) => served(id) && !isCaseOnlyModel(id));
 }
 
 /** The members of a mosaic this build knows, in the mosaic's order; a

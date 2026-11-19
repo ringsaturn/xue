@@ -4,14 +4,18 @@
  * The static markup carries the live viewer's English metadata as its pre-JS
  * fallback — what a social scraper reads. Once main.ts knows the view, the
  * head is rewritten from here: a case is its own page (`/?case=<id>`, its
- * title and summary), every live view is the one page at `/`, and the ten
- * `?lang=` renderings of either are declared as hreflang alternates that each
- * name themselves canonical. Search engines render the module bundle, so
- * this is what they index; the pre-JS copy is for everything that does not.
+ * title and summary), a live view is its dataset's page (`/hrrr`, the path
+ * the shell writes, `urlstate.ts::livePathname`) or the home (`/`, on the
+ * default dataset until another is chosen), and the ten `?lang=` renderings
+ * of any of them are declared as hreflang alternates that each name
+ * themselves canonical. Search engines render the module bundle, so this is
+ * what they index; the pre-JS copy is for everything that does not.
  *
- * View state that is not content — `?model=`, `?type=`, `?res=` — folds into
- * the canonical URL on purpose: it is the same application, and ranking one
- * page beats splitting it ten ways. */
+ * The dataset is content: each one is a proper noun a reader searches for,
+ * with a domain, a cadence and fields of its own, so each has a page. View
+ * state within a dataset — `?type=`, `?res=`, the camera — folds into its
+ * canonical URL on purpose: it is the same page, and ranking one beats
+ * splitting it forty ways. */
 
 import { LOCALES, localeHtmlLang, normalizeLocale } from "./i18n";
 import type { Locale } from "./i18n";
@@ -19,7 +23,7 @@ import { SITE_NAME, SITE_ORIGIN } from "./site";
 
 interface PageMeta {
   /** Root-relative path with the query that defines the *content* — `/`
-   * for the live viewer, `/?case=<id>` for a case, `/showcase`. */
+   * or `/<id>` for the live viewer, `/?case=<id>` for a case, `/showcase`. */
   path: string;
   /** Full document title; `· Xue` is appended here so a caller composes
    * only the part that names the view. */

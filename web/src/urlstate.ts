@@ -1,16 +1,17 @@
 import { type Accumulation, accumulationParam, parseAccumulation } from "./accumulation";
 import { gibsLayer } from "./gibs";
 import {
-  FORECAST_MODELS,
   isBundleVariableId,
   FORECAST_MODEL_IDS,
   isCaseOnlyModel,
   isServedModel,
+  liveModelIds,
   type ForecastBundleId,
   type ForecastModelId,
   type ResolutionPreference,
   VOLUME_BUNDLE_LEVELS,
 } from "./manifest";
+import { legacyModelLocation, modelForAlias, modelFromPathname, modelPathname } from "./modelpaths";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import { GLOBE_MIN_ZOOM } from "./projection";
 import { variableIds, variableSpec } from "./variables";
@@ -102,105 +103,50 @@ function resolveType(value: string): ForecastBundleId | null {
   return typeAliases()[lower] ?? isobaricType(lower) ?? (isBundleVariableId(lower) ? lower : null);
 }
 
-/** Accepted spellings for each model. Matching is case-insensitive. */
-const MODEL_ALIASES: Record<string, ForecastModelId> = {
-  gfs: "gfs",
-  ecmwf: "ecmwf",
-  ifs: "ifs",
-  "ifs-0p1": "ifs",
-  aifs: "aifs",
-  "aifs-single": "aifs",
-  ifshres: "ifshres",
-  hres: "ifshres",
-  ifs9km: "ifshres",
-  cfs: "cfs",
-  cfsv2: "cfs",
-  sflux: "sflux",
-  "gfs-sflux": "sflux",
-  hrrr: "hrrr",
-  rrfs: "rrfs",
-  woofnam: "woofnam",
-  "woof-nam": "woofnam",
-  iconeu: "iconeu",
-  "icon-eu": "iconeu",
-  arpege: "arpege",
-  cmageps: "cmageps",
-  "cma-geps": "cmageps",
-  // The WOOF nest is cases only; its spellings are known so a link naming
-  // it beside `?case=` reads as the case, not as a bad model.
-  woof: "woof",
-  wrf: "woof",
-  // The two EFAS runs are cases only too, for the same reason.
-  efas: "efas",
-  "efas-v5": "efas",
-  efaswb: "efaswb",
-  "efas-wb": "efaswb",
-  "efas-v5-wb": "efaswb",
-  // And the ERA5 reanalysis and the CAMS aerosol analyses.
-  era5: "era5",
-  cams: "cams",
-  gefsaero: "gefsaero",
-  "gefs-aerosols": "gefsaero",
-  gefsaerosols: "gefsaero",
-  "gefs-chem": "gefsaero",
-  cmadust: "cmadust",
-  "cma-dust": "cmadust",
-  "cma-cw-dust": "cmadust",
-  silam: "silam",
-  "silam-aq": "silam",
-  mrms: "mrms",
-  mrms3d: "mrms3d",
-  "mrms-3d": "mrms3d",
-  jma: "jma",
-  hrpns: "jma",
-  hkonowcast: "hkonowcast",
-  "hko-nowcast": "hkonowcast",
-  hko: "hkonowcast",
-  cma: "cma",
-  "cma-radar": "cma",
-  radar: "cma",
-  himawari: "himawari",
-  "himawari-9": "himawari",
-  himawari9: "himawari",
-  ahi: "himawari",
-  himawarijp: "himawarijp",
-  "himawari-jp": "himawarijp",
-  "himawari-japan": "himawarijp",
-  goeseast: "goeseast",
-  "goes-east": "goeseast",
-  "goes-19": "goeseast",
-  goes19: "goeseast",
-  goeswest: "goeswest",
-  "goes-west": "goeswest",
-  "goes-18": "goeswest",
-  goes18: "goeswest",
-  meteosat: "meteosat",
-  "meteosat-12": "meteosat",
-  meteosat12: "meteosat",
-  mtg: "meteosat",
-  "mtg-i1": "meteosat",
-  fci: "meteosat",
-  aurora: "aurora",
-  ovation: "aurora",
-  // The geostationary mosaic, a view over the imagers above.
-  geo: "geo",
-  mosaic: "geo",
-  gibs: "gibs",
-  worldview: "gibs",
-  geostationary: "geo",
-};
+/** The datasets with a path of their own on this build (`/<id>`). */
+let pathIdSet: ReadonlySet<string> | null = null;
 
-/** Model requested by the page URL, or the default when the URL names none
- * or names one this app does not serve. A dataset with no live feed
- * (`isCaseOnlyModel`) has nothing to open outside a case, so a bare
+export function modelPathIds(): ReadonlySet<string> {
+  pathIdSet ??= new Set(liveModelIds());
+  return pathIdSet;
+}
+
+/** Model requested by a `?model=` spelling, or the default when the URL
+ * names none or names one this app does not serve. A dataset with no live
+ * feed (`isCaseOnlyModel`) has nothing to open outside a case, so a bare
  * `?model=` naming it falls back too; a case pins its own model. */
 export function parseModelFromSearch(search: string): ForecastModelId {
   const model = new URLSearchParams(search).get("model");
   if (model === null) return DEFAULT_MODEL;
-  const id = MODEL_ALIASES[model.toLowerCase()];
-  if (id === undefined || isCaseOnlyModel(id) || !isServedModel(id)) return DEFAULT_MODEL;
-  return id;
+  const id = modelForAlias(model);
+  return id !== null && modelPathIds().has(id) ? id : DEFAULT_MODEL;
 }
+
+/** Model requested by the page URL: the path's (`/hrrr`) first, then an
+ * old link's `?model=` that reached the shell without the root's redirect
+ * (`legacyModelUrl`), then the default. */
+export function parseModelFromLocation(pathname: string, search: string): ForecastModelId {
+  return modelFromPathname(pathname, modelPathIds()) ?? parseModelFromSearch(search);
+}
+
+/** The address an old `?model=` link is rewritten to on boot, the same one
+ * the site root's Pages Function redirects it to (`modelpaths.ts`), or null
+ * when the URL is fine as it is. */
+export function legacyModelUrl(pathname: string, search: string): string | null {
+  return legacyModelLocation(pathname, search, modelPathIds());
+}
+
+/** The path a live view of `model` is written at: `/<id>`, except that the
+ * home stays `/` while it shows the default — a visitor who lands on `/`
+ * and switches nothing keeps the address they typed. A path naming no
+ * dataset (a typo Pages answered with the viewer) is tidied the same way. */
+export function livePathname(model: ForecastModelId, currentPathname: string): string {
+  if (model === DEFAULT_MODEL && modelFromPathname(currentPathname, modelPathIds()) === null) return "/";
+  return modelPathname(model);
+}
+
+/** The path a case is written at: a case is a page of its own on `/`. */
+export const CASE_PATHNAME = "/";
 
 /** Showcase case requested by the page URL, or null for the live feed. A
  * case pins its own model and run, so `model` is ignored while one is open. */
@@ -498,7 +444,7 @@ export function parseBackendFromSearch(search: string): DataBackend {
 export function parseVariableFromSearch(search: string): ForecastBundleId | null {
   const params = new URLSearchParams(search);
   const model = params.get("model");
-  if (model !== null && !(model.toLowerCase() in MODEL_ALIASES)) return null;
+  if (model !== null && modelForAlias(model) === null) return null;
   const type = params.get("type");
   if (type === null) return null;
   return resolveType(type);
@@ -562,15 +508,13 @@ export function parseVerticalExaggerationFromSearch(search: string): number | nu
   return Number.isFinite(number) && number > 0 && number <= MAX_VERTICAL_EXAGGERATION ? number : null;
 }
 
-/** Query string advertising the given model and variable, preserving any
- * unrelated params already in `search`. Returned with the leading "?". */
-export function searchForVariable(
-  variableId: ForecastBundleId,
-  search: string,
-  modelId: ForecastModelId = DEFAULT_MODEL,
-): string {
+/** Query string advertising the given variable on a live view, preserving
+ * any unrelated params already in `search`. The model is the path's
+ * (`livePathname`), so a `model` param is dropped rather than left to
+ * contradict it. Returned with the leading "?". */
+export function searchForVariable(variableId: ForecastBundleId, search: string): string {
   const params = new URLSearchParams(search);
-  params.set("model", FORECAST_MODELS[modelId].id);
+  params.delete("model");
   params.set("type", canonicalType(variableId));
   return `?${params.toString()}`;
 }
