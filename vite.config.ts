@@ -6,6 +6,7 @@ import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 import { discoveryFiles } from "./web/tooling/discovery";
+import { modelPageIds, modelPagePaths, modelPages, modelPathRewrite } from "./web/tooling/modelpages";
 
 /** The static server behind `vite preview` and the dev server's public
  * directory (both sirv) misread a suffix range — `bytes=-N`, which the Zarr
@@ -46,54 +47,69 @@ function suffixRanges(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => ({
-  root: "web",
-  publicDir: "public",
-  base: "./",
-  // sitemap.xml and llms-full.txt, derived at build time from the published
-  // showcase catalog and the repository's own documentation
-  // (web/tooling/discovery.ts). The catalog is read from wherever this mode
-  // sends the page for data (web/.env.deploy: the public bucket).
-  plugins: [
-    suffixRanges(),
-    discoveryFiles({
-      repoRoot: import.meta.dirname,
-      dataBaseUrl: loadEnv(mode, resolve(import.meta.dirname, "web"), "VITE_").VITE_DATA_BASE_URL,
-    }),
-  ],
-  build: {
-    outDir: "../dist",
-    emptyOutDir: true,
-    sourcemap: true,
-    // The live viewer (which also renders ?case=<id>), the historical
-    // showcase list, the point comparison, the run metrics, the typhoon
-    // page and the API console.
-    rollupOptions: {
-      input: {
-        main: resolve(import.meta.dirname, "web/index.html"),
-        showcase: resolve(import.meta.dirname, "web/showcase.html"),
-        compare: resolve(import.meta.dirname, "web/compare.html"),
-        metrics: resolve(import.meta.dirname, "web/metrics.html"),
-        typhoon: resolve(import.meta.dirname, "web/typhoon.html"),
-        api: resolve(import.meta.dirname, "web/api.html"),
-        // The static airport pages' live block (web/tooling/airportpages.ts
-        // writes the pages and links this entry's file).
-        airport: resolve(import.meta.dirname, "web/src/airports/live.ts"),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, resolve(import.meta.dirname, "web"), "VITE_");
+  // The datasets with a page of their own (`/hrrr`), as this mode's
+  // VITE_SOURCES serves them (web/tooling/modelpages.ts).
+  const modelIds = modelPageIds(env.VITE_SOURCES);
+  return {
+    root: "web",
+    publicDir: "public",
+    base: "./",
+    // sitemap.xml and llms-full.txt, derived at build time from the published
+    // showcase catalog and the repository's own documentation
+    // (web/tooling/discovery.ts). The catalog is read from wherever this mode
+    // sends the page for data (web/.env.deploy: the public bucket). Each
+    // dataset's page is the built viewer under that dataset's head, and the
+    // dev and preview servers answer its path as Pages does.
+    plugins: [
+      suffixRanges(),
+      modelPathRewrite(modelIds),
+      discoveryFiles({
+        repoRoot: import.meta.dirname,
+        dataBaseUrl: env.VITE_DATA_BASE_URL,
+        modelPaths: modelPagePaths(modelIds),
+      }),
+      modelPages({
+        ids: modelIds,
+        publicDir: resolve(import.meta.dirname, "web/public"),
+        pagesDir: resolve(import.meta.dirname, "web"),
+      }),
+    ],
+    build: {
+      outDir: "../dist",
+      emptyOutDir: true,
+      sourcemap: true,
+      // The live viewer (which also renders ?case=<id>), the historical
+      // showcase list, the point comparison, the run metrics, the typhoon
+      // page and the API console.
+      rollupOptions: {
+        input: {
+          main: resolve(import.meta.dirname, "web/index.html"),
+          showcase: resolve(import.meta.dirname, "web/showcase.html"),
+          compare: resolve(import.meta.dirname, "web/compare.html"),
+          metrics: resolve(import.meta.dirname, "web/metrics.html"),
+          typhoon: resolve(import.meta.dirname, "web/typhoon.html"),
+          api: resolve(import.meta.dirname, "web/api.html"),
+          // The static airport pages' live block (web/tooling/airportpages.ts
+          // writes the pages and links this entry's file).
+          airport: resolve(import.meta.dirname, "web/src/airports/live.ts"),
+        },
       },
     },
-  },
-  server: {
-    host: "127.0.0.1",
-  },
-  preview: {
-    host: "127.0.0.1",
-  },
-  test: {
-    environment: "jsdom",
-    include: ["../tests/web/**/*.test.ts"],
-    // jsdom's browser reads en-US, which would put every expectation in
-    // Fahrenheit and miles; the suite reads in metric unless a test says.
-    setupFiles: ["../tests/web/setup.ts"],
-  },
-}));
+    server: {
+      host: "127.0.0.1",
+    },
+    preview: {
+      host: "127.0.0.1",
+    },
+    test: {
+      environment: "jsdom",
+      include: ["../tests/web/**/*.test.ts"],
+      // jsdom's browser reads en-US, which would put every expectation in
+      // Fahrenheit and miles; the suite reads in metric unless a test says.
+      setupFiles: ["../tests/web/setup.ts"],
+    },
+  };
+});
 
