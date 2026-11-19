@@ -105,7 +105,7 @@ Unset means the default.
 | Variable | Effect | Default |
 |---|---|---|
 | `VITE_DATA_BASE_URL` | The data root: pointers, manifests, stores, `showcase.json`. Ends with `/` | `data/`, beside the page |
-| `VITE_SOURCES` | Comma-separated source ids the model switch and `?model=` offer | every source |
+| `VITE_SOURCES` | Comma-separated source ids the model switch and the dataset paths (`/<id>`) offer | every source |
 | `VITE_POINT_PRODUCTS` | Comma-separated point products the shell asks the root for (`tc`, `sounding`, `airport`, `synop`, `fire`, `aq`, `alerts`), or `none` | every product |
 | `VITE_PROTOMAPS_KEY` | The Protomaps key bound to your origin | the shell's, which serves only its own origins |
 | `VITE_BASEMAP_TILES` | Vector tile template of a basemap mirror, absolute | Protomaps' API |
@@ -150,7 +150,7 @@ the sources in `VITE_SOURCES` and the point products in
 - A catalog row may name a dataset the shell has no entry for: a `modelId`
   slug (`[a-z][a-z0-9]*`, not a built-in id), a `model` label no other
   dataset uses, a `product`. The shell admits it as case-only, absent from
-  the model switch and `?model=`, and draws its bundles generically; give
+  the model switch and the dataset paths, and draws its bundles generically; give
   them colours with `window.xuePalettes`.
 - The stores must satisfy [`zarr-profile.md`](../zarr-profile.md) and
   [`bundle.md`](../bundle.md) (shapes in [`docs/schemas/`](../schemas/)).

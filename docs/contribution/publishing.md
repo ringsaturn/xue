@@ -153,7 +153,7 @@ differs from the others only in the inputs it passes:
 `cma` (a private archive with its own credentials and listing check) and
 `meteosat` (every step skipped when the EUMETSAT secrets are absent, and a
 runner GDAL probe) stay standalone workflows. `cma` stays published and
-is reached through `?model=cma` and the showcase cases, but the shell's
+is reached through its path (`/cma`) and the showcase cases, but the shell's
 model sheet and `docs/sources.md` leave it out on purpose.
 
 The steps several workflows share are composite actions under
