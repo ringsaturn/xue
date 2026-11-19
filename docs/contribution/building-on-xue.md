@@ -90,7 +90,10 @@ export default {
 
 - Only `index.html` is an input, so the build ships the viewer and none of
   the shell's other pages (showcase list, comparison, typhoon, metrics, API
-  console).
+  console), and none of Xue's per-language or per-case copies. Without
+  them the shell keeps the language out of the address (a link's
+  `?lang=`, else the stored choice, else the browser's) and a case on the
+  page as `?case=<id>` ([Language paths](frontend.md#language-paths)).
 - `localhost:5173` exactly: the shell's Protomaps key serves `localhost`
   but not `127.0.0.1`, and Xue's public bucket admits that origin
   ([Data](#data)).
@@ -104,7 +107,7 @@ Unset means the default.
 
 | Variable | Effect | Default |
 |---|---|---|
-| `VITE_DATA_BASE_URL` | The data root: pointers, manifests, stores, `showcase.json`. Ends with `/` | `data/`, beside the page |
+| `VITE_DATA_BASE_URL` | The data root: pointers, manifests, stores, `showcase.json`. Ends with `/` | `/data/`, at the site root |
 | `VITE_SOURCES` | Comma-separated source ids the model switch and the dataset paths (`/<id>`) offer | every source |
 | `VITE_POINT_PRODUCTS` | Comma-separated point products the shell asks the root for (`tc`, `sounding`, `airport`, `synop`, `fire`, `aq`, `alerts`), or `none` | every product |
 | `VITE_PROTOMAPS_KEY` | The Protomaps key bound to your origin | the shell's, which serves only its own origins |

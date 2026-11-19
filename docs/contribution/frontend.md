@@ -837,17 +837,25 @@ and its Open Graph locales. Built in `discovery.ts`'s bundle step from the
 published archive, so `deploy-pages.yml` also runs daily after the archive
 job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
 
-Case pages: `web/tooling/casepages.ts` writes one static page per showcase
-case and an index (`/cases/<id>`, `/cases/`), in the storm pages' languages,
-prefixes, head and stylesheet, from the published `showcase.json` alone:
-the case's title, summary, facts, variables, markers and tags, a link into
-the viewer (`/?case=<id>`, with `&lang=` off English) and a schema.org
-`Dataset` for the slice. A part of another case's set has no page; its
-lead's page lists the set. They replace the cases' `/?case=` addresses in
-the sitemap (`lastmod` is the catalog's `generatedAt` day) and appear with
-the next Pages deploy after a catalog upload. A build without a catalog
-skips them, and one whose pages fail to build keeps the `/?case=`
-addresses (`tests/web/casepages.test.ts`).
+Case pages: a case *is* the viewer, at `/showcase/<id>` (camera in
+`#map=`), one page per catalog case, parts included, in every language
+([Language paths](#language-paths)). `web/tooling/sitepages.ts` writes
+each from the built `index.html` and the published `showcase.json`, read
+with the shell's own `validateCatalog`: the case's head (title, the summary
+cut as the description, canonical, hreflang, a `BreadcrumbList` and a
+schema.org `Dataset` for the slice), the case panel (`#case-banner`:
+title, summary, region, marker buttons, the event's part links)
+prerendered, and the `noscript` note replaced by the case in words
+(facts, markers with notes and sources). `main.ts::updateCasePresentation`
+writes the same elements again from the catalog (`textContent`,
+`replaceChildren`), so nothing doubles. The list (`/showcase`) is written
+with the listed cases' cards and their `ItemList` (`showcase-cases`), which
+`showcase.ts` replaces once the catalog loads. `lastmod` in the sitemap is
+the catalog's `generatedAt` day; the pages appear with the next Pages
+deploy after a catalog upload, and a build without a catalog writes none
+(the dev and preview servers still serve the viewer at any case's path).
+The case pages of #223 (`/cases/…`) are redirected by `web/public/_redirects`
+(`/:lang/cases/:id` → `/:lang/showcase/:id`).
 
 Airport pages: `web/tooling/airportpages.ts` writes one static page per
 airport in `web/tooling/airports.json` and an index grouped by country
@@ -918,7 +926,8 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   centre), and a pin still wins over it; the settings sheet can hold it on the
   browser's zone, UTC or any IANA zone instead (`xue-zone` in storage, not
   in the URL). Run cycles and showcase cards stay UTC.
-- Query state is parsed in `urlstate.ts`, except `?lang=` (`i18n.ts`),
+- Query state is parsed in `urlstate.ts`, except the language (the path's
+  prefix, and an old `?lang=`: `i18n.ts`),
   `?theme=` (`theme.ts`) and `?units=` (`units.ts`); the table below lists
   every parameter of the main page. Unknown values fall back to defaults.
 - The camera is the fragment `#map=<zoom>/<lat>/<lon>`, so a pan never
@@ -966,10 +975,76 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   their dates, and leaves the lead hours and the display zone out. Every
   other case is read by its dataset, as before.
 
+### Language paths
+
+Every page of the shell comes in the twelve locales, the language in the
+path (`sitepaths.ts`, no runtime imports): English at the root (and the
+`x-default`), the others under a lowercase prefix (`/zh`, `/zh-hant`,
+`/ja`, `/ko`, `/de`, `/fr`, `/es`, `/pt`, `/tr`, `/ru`, `/ne`;
+`tc/pages.ts::PAGE_PREFIXES` is the same table):
+
+```
+/                 /ja/                 home
+/hrrr?type=wind   /ja/hrrr?type=wind   a dataset (below)
+/showcase         /ja/showcase         the case list
+/showcase/<id>    /ja/showcase/<id>    a case (the viewer), camera in #map=
+/compare /metrics /typhoon /api        and /ja/compare, …
+```
+
+- Pages: `web/tooling/sitepages.ts` (called from `discovery.ts`'s bundle
+  step, after Vite's HTML step) writes a copy of each built page per
+  locale (`ja/index.html`, `ja/hrrr.html`, `ja/showcase/<id>.html`, …):
+  the static copy translated as `applyStaticMessages` would
+  (`translateMarkup`: `data-i18n*`, `<html lang>`, links to the shell's
+  pages), and the head written per language (`writeHead`: canonical to
+  itself, the twelve `hreflang` alternates plus `x-default`, `og:url`,
+  `og:locale`; the title from `compareTitle`, `metricsHeading`,
+  `tcHistoryHeading`, `showcaseHeading` where a message exists, else the
+  English one). Every copy names its assets root-absolute
+  (`absolutizeUrls`): the build's `base: "./"` would resolve `./assets/`
+  under `/ja/showcase/`. Shell code that builds a URL does it
+  root-absolute too (`site.ts::dataBaseUrl` is `/data/`, `peaks.ts`'s
+  `/peaks.json`, `i18n.ts::shellPath` / `caseHref` for links); workers and
+  the wasm resolve against `import.meta.url`.
+- The storm (`/tc/…`) and airport (`/airports/…`) pages keep their five
+  languages (`STORM_PAGE_LOCALES`, `pagePrefix`): a locale without them
+  links to the English ones.
+- `i18n.ts`: the locale is the path's prefix. An unprefixed page doubles
+  as the language chooser: `sitepaths.ts::LANGUAGE_CHOOSER`, injected
+  right after `<meta charset>` of every page by the `languageChooser`
+  plugin (dev and build) and dropped from the other languages' copies,
+  sends a reader whose stored (`xue-locale`) or browser language is
+  another locale to its prefix, path, query and fragment kept; a crawler, a
+  prefixed page and a link still carrying `?lang=` stay. Switching in place
+  (`setLocale`) stores the choice and moves the prefix with
+  `replaceState`; `applyStaticMessages` re-points every link to a shell
+  page (`localizedHref`).
+- A build that ships the viewer alone (an embedding,
+  [building-on-xue.md](building-on-xue.md)) has neither the copies nor the
+  chooser: `LANGUAGE_PATHS` is false there, the locale is `?lang=`, else
+  stored, else the browser's, and a case stays `?case=<id>` on the page.
+- Old links (`redirects.ts::legacyLocation`, one pure mapping):
+  `?lang=<tag>` on any page goes to that prefix without the parameter;
+  `/?case=<id>[&lang=]` to `/<prefix>/showcase/<id>`; then `?model=` on a
+  home to the dataset's path (`/?model=hrrr&lang=ja` → `/ja/hrrr`). The
+  Pages Function `functions/_middleware.ts` answers with a 301, routed by
+  `web/public/_routes.json` for `/`, `/index.html`, `/showcase`,
+  `/compare`, `/metrics`, `/typhoon` and `/api` only (the pages a link
+  from before could name; Pages allows 100 rules). The shell applies the
+  same steps with `replaceState` on boot (`i18n.ts` the language and the
+  case, `main.ts` the dataset) for dev, preview and an outage.
+  `web/public/_redirects` moves #223's `/cases/…` pages to `/showcase/…`.
+- Sitemap: every locale's copy of every page but `/api` (noindex), then
+  the storm and airport pages. The dev and preview servers serve every
+  path as Pages does (`sitePathRewrite`: the source page on the dev
+  server, the built copy on preview). An unknown path, prefixed or not,
+  is Pages' 404.
+
 ### Dataset paths
 
-The live dataset is the path, one segment: `/hrrr?type=wind#map=…`. `/` is
-the home on the default dataset; a case stays on `/` (`/?case=<id>`).
+The live dataset is the path, one segment after the language prefix:
+`/hrrr?type=wind#map=…`, `/ja/hrrr`. `/` is the home on the default
+dataset; a case is at `/showcase/<id>`.
 
 - The path set is `pageModelIds()`: `FORECAST_MODEL_IDS` (`modelpaths.ts`)
   that the build serves and that are not case-only, views included (`geo`,
@@ -977,39 +1052,35 @@ the home on the default dataset; a case stays on `/` (`/?case=<id>`).
   `NO_PAGE_MODEL_IDS` (`mrms3d`, its live publishing paused) are live but
   get no page: no `<id>.html`, no sitemap entry, and the shell keeps them
   on `/?model=<id>` (`searchForLiveModel`).
-- `urlstate.ts` reads the model from the path (the canonical id only:
-  Pages serves nothing else there), then from `?model=`, then the default
-  (`parseModelFromLocation`). `syncUrl` writes the path with
-  `replaceState` (`livePathname`): `/<id>` for a live view, `/` for a
-  case, a dataset with no page, and the home while it shows the default
-  and no dataset was chosen. `searchForVariable` drops `model` from the
-  query; `searchForLiveModel` puts it back for a dataset with no page.
+- `urlstate.ts` reads the model from the path after the prefix (the
+  canonical id only: Pages serves nothing else there), then from
+  `?model=`, then the default (`parseModelFromLocation`). `syncUrl` writes
+  the path with `replaceState` (`livePathname`, behind the page's prefix):
+  `/<id>` for a live view, `/showcase/<id>` for a case, `/` for a dataset
+  with no page and the home while it shows the default and no dataset was
+  chosen. `searchForVariable` drops `model` from the query;
+  `searchForLiveModel` puts it back for a dataset with no page.
 - Old links: `legacyModelLocation` (`modelpaths.ts`, no runtime imports)
-  maps `/?model=<alias>` to `/<id>?<rest>`, a case-only or unknown dataset
-  to `/` without the parameter, and leaves `?case=` links and a dataset
-  with no page alone. The Pages
-  Function `functions/_middleware.ts` applies it with a 301 (routed for `/`
-  and `/index.html` only by `web/public/_routes.json`), and `main.ts`
-  applies it with `replaceState` on boot, for dev, preview and an outage.
-  `wrangler pages deploy` builds `functions/` from the directory it runs
-  in, the repository root (`make deploy-pages`). The function's set is
-  `FORECAST_MODEL_IDS` with a page, since the deploy build sets no
+  maps `/?model=<alias>` (`/ja/?model=` alike) to `/<id>?<rest>`, a
+  case-only or unknown dataset to `/` without the parameter, and leaves a
+  dataset with no page alone; it is the last step of `legacyLocation`
+  above. `wrangler pages deploy` builds `functions/` from the directory
+  it runs in, the repository root (`make deploy-pages`). The function's
+  set is `FORECAST_MODEL_IDS` with a page, since the deploy build sets no
   `VITE_SOURCES`; a deployment that does would send a dataset it does not
   serve to the viewer on the default.
-- Pages: `web/tooling/modelpages.ts` writes `<id>.html` beside
-  `index.html` after Vite's HTML step, with the head from `modelpage.ts`
-  (title, description, canonical, hreflang, social card, a `Dataset` added
-  to the JSON-LD graph: label, product, region, frame step and live
-  pointer from the table; the `producer` providers as `creator` and the
-  licence link from `xuebuild/stac_prose.json`, which the tooling reads
-  and passes in so the shell bundle never carries it; a mosaic lists its
-  members' producers and no licence; a view with no prose keeps Xue as
-  creator). Pages serves it at `/<id>`, one segment
-  deep, so `base: "./"` still resolves `./assets/` — never emit
-  `<id>/index.html`. The build fails when an id takes the name of a page,
+- Pages: `sitepages.ts::renderModelPage` writes `<id>.html` (and
+  `<prefix>/<id>.html`) with the head from `modelpage.ts` (title,
+  description, canonical, hreflang, social card, a `Dataset` added to the
+  JSON-LD graph: label, product, region, frame step and live pointer from
+  the table; the `producer` providers as `creator` and the licence link
+  from `xuebuild/stac_prose.json` (`modelpages.ts::datasetProvenance`),
+  which the tooling reads and passes in so the shell bundle never carries
+  it; a mosaic lists its members' producers and no licence; a view with no
+  prose keeps Xue as creator). The copy is English in every language, as
+  the table's. The build fails when an id takes the name of a page,
   directory or public file (the build's output, `web/public/` including
-  `404.html`, `web/*.html`, the storm pages' prefixes). The dev and preview
-  servers rewrite a dataset's path the same way (`modelPathRewrite`).
+  `404.html`, `web/*.html`, every locale's prefix).
 - `web/public/404.html` is the site's 404: with a top-level `404.html`
   Pages answers any path it has no file for with that page and status 404
   instead of the viewer with 200, so a stray path is no soft 404. It is
@@ -1031,7 +1102,7 @@ link says nothing; the link always outranks storage. A switch accepts
 | Parameter | Values | Default | URL | Stored | Notes |
 |---|---|---|---|---|---|
 | `model` | dataset id or alias (`MODEL_ALIASES`) | — | moved to the path; written for a dataset with no page | — | An old link's: redirected to `/<id>` ([Dataset paths](#dataset-paths)); a case-only or unserved id goes to `/`; `mrms3d` stays as given. |
-| `case` | showcase case id | — | written | — | Pins its own dataset and run; on `/`, `model` is dropped. |
+| `case` | showcase case id | — | moved to the path | — | An old link's: redirected to `/showcase/<id>` ([Language paths](#language-paths)). Written only by a build with no case pages. |
 | `type` | field alias, bundle id, pressure surface, or `precipsetup` | dataset default | written | — | The primary; a pressure surface is the lines alone. `precipsetup` is the [precipitation setup](#precipitation-setup) on `prate`. |
 | `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |
 | `flow` | `qflux<level>` or `wind<level>` | `qflux850` | written | — | The setup's particle flow; dropped outside the setup. |
@@ -1053,7 +1124,7 @@ link says nothing; the link always outranks storage. A switch accepts
 | `tcmembers` | switch | off | written | — | Ensemble members. |
 | `grid` | comma list of `mgrs`, `utm`, `gars`, `bng`, `latlon`, or `off` | none | written | `xue-grid` | Reference grids (settings sheet). |
 | `units` | preset and overrides (`units.ts`) | `auto` (region) | read once | `xue-units` | The settings sheet writes storage, not the link. |
-| `lang` | locale code | browser language | removed on switch | `xue-locale` | A language switch stores it and drops `lang`. |
+| `lang` | locale code | the path's prefix | moved to the path | `xue-locale` | An old link's: redirected to that locale's prefix. Read only by a build with no language copies. |
 | `theme` | `light`, `dark` | system | written on switch | `xue-theme` | |
 | `res` | `auto`, `half` / `low`, `full` / `high` | `auto` | read once | — | Pins a resolution tier for the session. |
 | `backend` | `xue`, `zarr` | `zarr` | read once | — | Comparison switch: the `.xue` container where a run ships one. |
@@ -1106,7 +1177,7 @@ interface XueViewer {
   re-renders the same frame, stays silent. It fires on every frame during
   playback, so a listener must be cheap.
 - **`openCase(id, { time, play })`** opens another case of the catalog in
-  place — the open path a `?case=` link takes, without a reload — and
+  place — the open path a case's link takes, without a reload — and
   resumes at the frame nearest `time` (the first frame without one),
   playing unless `play` is false. The view (layer, camera) stays, the
   last frame stays drawn until the new case's first replaces it, and the
@@ -1143,17 +1214,18 @@ interface XueViewer {
 What the shell says about itself must match what the encoder publishes.
 `web/index.html` and `web/showcase.html` carry static metadata, hreflang and
 JSON-LD; `pagemeta.ts` rewrites title, canonical and `og:url` per view (a
-case is its own page, a live view is its dataset's page `/<id>` or the home
-`/` ([Dataset paths](#dataset-paths)), a `?lang=` page is canonical
-to itself, a storm on `typhoon` that has a static page names that page and
+case is its own page `/showcase/<id>`, a live view is its dataset's page
+`/<id>` or the home `/` ([Dataset paths](#dataset-paths)), each language's
+copy is canonical to itself ([Language paths](#language-paths)), a storm on `typhoon` that has a static page names that page and
 no alternates). Addresses are written without `.html`: Pages answers a
 `.html` request with a 308 to the bare path, and a canonical, hreflang or
 sitemap entry that redirects is never indexed. Update `web/public/llms.txt` when `xuebuild/sources.py` changes
 what a model publishes or `urlstate.ts` gains a parameter.
 `web/tooling/discovery.ts` generates `sitemap.xml` and `llms-full.txt`
 (README + `docs/*.md` + `showcase/README.md`) at build time, so
-`deploy-pages.yml` triggers on those documents too. The sitemap lists the
-datasets' pages after the static ones. Sitemap cases come from
+`deploy-pages.yml` triggers on those documents too. The sitemap lists every
+language's copy of every shell page, then the storm and airport pages.
+Case pages come from
 the published `showcase.json` at `VITE_DATA_BASE_URL`, never from
 `showcase/cases/`: a deploy build fails if the bucket does not answer.
 Storm pages carry a sitemap `lastmod`: the last best-track day of the storm,
