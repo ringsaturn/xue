@@ -18,8 +18,9 @@
 import { element } from "../dom";
 import { formatPointDegrees } from "../format";
 import { t } from "../i18n";
-import { convertDistance, convertHeight, convertPrecipitation, convertPressure, convertTemperature, convertWind, formatDistance, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
+import { convertDistance, convertHeight, convertPrecipitation, convertPressure, convertTemperature, convertWind, formatHeight, formatPrecipitation, formatPressure, formatTemperature, formatWind, units } from "../units";
 import { categoryColor } from "./layers";
+import { formatVisibility as visibility, formatWindGust as wind } from "./observations";
 import type { AirportStation, AirportStationHistory, SoundingStationEntry, SynopNetwork, SynopStation, SynopStationSeries } from "./schema";
 import { buildSynopSparklines, Sparks } from "./sparkline";
 
@@ -74,16 +75,6 @@ function celsius(value: number | null): string | null {
   return value === null ? null : formatTemperature(value);
 }
 
-/** Metres, as the product means them: ten kilometres is the service's
- * "ten or more" ceiling and reads as such (≥ 6 mi, ≥ 5 NM). */
-function visibility(value: number | null): string | null {
-  if (value === null) return null;
-  if (value >= 10000) return `≥ ${formatDistance(10, 0)}`;
-  if (units.distance !== "km") return formatDistance(value / 1000, 1);
-  if (value >= 1000) return formatDistance(value / 1000, 1);
-  return `${value} m`;
-}
-
 /** A geopotential height a sounding reports (the freezing level): gpm,
  * or feet where heights read in feet. */
 function geopotential(metres: number): string {
@@ -93,17 +84,6 @@ function geopotential(metres: number): string {
 /** A snow depth in centimetres, or inches where depths read in inches. */
 function snowDepth(centimetres: number): string {
   return units.precipitation === "in" ? `${convertPrecipitation(centimetres * 10).toFixed(1)} in` : `${centimetres} cm`;
-}
-
-/** The wind as one line: the direction it comes from, the speed, and the
- * gust where one is reported. A variable direction is `VRB`, the code the
- * report itself uses, since the direction is not known. */
-function wind(wd: number | null, ws: number | null, gust: number | null): string | null {
-  if (ws === null) return null;
-  const from = wd === null ? "VRB" : `${String(Math.round(wd)).padStart(3, "0")}°`;
-  const speed = formatWind(ws);
-  // The gust shares the speed's unit, written once after the speed.
-  return gust === null ? `${from} ${speed}` : `${from} ${speed} G ${formatWind(gust).split(" ")[0]}`;
 }
 
 export function buildSoundingCard(

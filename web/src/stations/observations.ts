@@ -26,7 +26,7 @@
 
 import type { MeteogramBand, MeteogramObservation, MeteogramRowId } from "../meteogram";
 import type { CloudLayer, Metar, Taf, TafPeriod } from "./schema";
-import { formatWind as formatWindSpeed } from "../units";
+import { formatDistance, formatHeight, formatWind as formatWindSpeed, units } from "../units";
 
 /**
  * Sky cover in eighths, by the code a layer is reported under.
@@ -200,6 +200,32 @@ export function formatWind(wd: number | null, ws: number | null): string | null 
   if (ws === null || !Number.isFinite(ws)) return null;
   const from = wd === null ? "VRB" : `${String(Math.round(wd)).padStart(3, "0")}°`;
   return `${from} ${formatWindSpeed(ws, 0)}`;
+}
+
+/** `formatWind` with the gust where one is reported, the gust sharing the
+ * speed's unit, written once after the speed. */
+export function formatWindGust(wd: number | null, ws: number | null, gust: number | null): string | null {
+  if (ws === null || !Number.isFinite(ws)) return null;
+  const from = wd === null ? "VRB" : `${String(Math.round(wd)).padStart(3, "0")}°`;
+  const speed = formatWindSpeed(ws);
+  return gust === null ? `${from} ${speed}` : `${from} ${speed} G ${formatWindSpeed(gust).split(" ")[0]}`;
+}
+
+/** Metres, as the product means them: ten kilometres is the service's
+ * "ten or more" ceiling and reads as such (≥ 6 mi, ≥ 5 NM). */
+export function formatVisibility(value: number | null): string | null {
+  if (value === null) return null;
+  if (value >= 10000) return `≥ ${formatDistance(10, 0)}`;
+  if (units.distance !== "km") return formatDistance(value / 1000, 1);
+  if (value >= 1000) return formatDistance(value / 1000, 1);
+  return `${value} m`;
+}
+
+/** Cloud layers as reported, each base in the viewer's height unit:
+ * `FEW 600 m · BKN 1500 m`; a layer without a base is its code alone. */
+export function formatClouds(layers: readonly CloudLayer[]): string | null {
+  if (layers.length === 0) return null;
+  return layers.map((layer) => (layer.base === null ? layer.cover : `${layer.cover} ${formatHeight(layer.base)}`)).join(" · ");
 }
 
 /**
