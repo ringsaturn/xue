@@ -485,7 +485,7 @@ function head(shell: PageShell): string {
  * browser language, is one of the others to that version. A crawler (no
  * storage, an English or no language) stays; the switcher's links record
  * the reader's choice, so picking English is not undone. */
-const LANGUAGE_REDIRECT = `
+export const LANGUAGE_REDIRECT = `
     <script>
       (function () {
         try {
