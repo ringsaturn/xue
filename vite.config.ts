@@ -76,6 +76,9 @@ export default defineConfig(({ mode }) => ({
         metrics: resolve(import.meta.dirname, "web/metrics.html"),
         typhoon: resolve(import.meta.dirname, "web/typhoon.html"),
         api: resolve(import.meta.dirname, "web/api.html"),
+        // The static airport pages' live block (web/tooling/airportpages.ts
+        // writes the pages and links this entry's file).
+        airport: resolve(import.meta.dirname, "web/src/airports/live.ts"),
       },
     },
   },
