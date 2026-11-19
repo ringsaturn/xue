@@ -277,6 +277,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
 - https://xue.ringsaturn.me/showcase — the list of historical cases.
+- https://xue.ringsaturn.me/cases/ — one static page per historical case
+  (`/cases/<case id>`), in English and under `/zh/`, `/zh-hant/`, `/ja/`,
+  `/ko/`: the case's summary, dataset, event time, fields, marked places and
+  credits, each linking to the case in the viewer (`/?case=<case id>`).
 - https://xue.ringsaturn.me/tc/ — one static page per archived tropical
   cyclone of the seasons with forecasts (`/tc/<season>/<name>-<atcf id>`),
   per season (`/tc/<season>/`) and
