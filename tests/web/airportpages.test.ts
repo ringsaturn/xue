@@ -17,6 +17,7 @@ import {
   renderAirportIndex,
   renderAirportPage,
   validateAirports,
+  localCity,
   WORDS,
 } from "../../web/tooling/airportpages";
 import { pageFile } from "../../web/tooling/stormpages";
@@ -49,6 +50,14 @@ describe("the airport list", () => {
     if (missing) expect(airportName(missing, "ja")).toBe(missing.name);
     expect(airportName(byIcao("RJTT"), "en")).toBe(byIcao("RJTT").name);
     expect(airportName(byIcao("RJTT"), "ja")).toBe(byIcao("RJTT").names.ja);
+  });
+
+  it("names the city served in the page language, else in English", () => {
+    expect(localCity(byIcao("RJAA"), "en")).toBe("Tokyo");
+    expect(localCity(byIcao("RJAA"), "ja")).toBe("東京");
+    expect(localCity(byIcao("EGLC"), "zh")).toBe("伦敦");
+    const missing = LIST.airports.find((airport) => airport.cityNames.ko === undefined);
+    if (missing) expect(localCity(missing, "ko")).toBe(missing.city);
   });
 });
 
