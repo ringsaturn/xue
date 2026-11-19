@@ -849,6 +849,25 @@ the next Pages deploy after a catalog upload. A build without a catalog
 skips them, and one whose pages fail to build keeps the `/?case=`
 addresses (`tests/web/casepages.test.ts`).
 
+Airport pages: `web/tooling/airportpages.ts` writes one static page per
+airport in `web/tooling/airports.json` and an index grouped by country
+(`/airports/…`), in the storm pages' five languages, layout and head
+(hreflang, Open Graph, BreadcrumbList plus a schema.org `Airport`). The list
+is checked in and edited by hand (names and the city served in the page languages from Wikidata,
+the IANA zone computed once with tzf), validated at build, and is the only
+membership: a page never depends on the live product, so every build has
+them, and their sitemap `lastmod` is the list's `updated` day. The static
+page states the airport and links the map at it (`?stations=apt`), the
+compare page and its nearest listed neighbours; the weather is the live
+block, `web/src/airports/live.ts`, built as the `airport` entry of
+`vite.config.ts` (a few kB plus chunks shared with the shell, no MapLibre)
+and linked by the pages from the bundle. It reads the product the way the
+probe does (`stations/fetch.ts`: pointer, index, one range read of the
+station's line), takes its words from the page's `#live-config`, and
+renders the newest METAR raw and decoded, the day's observed high and low on
+the airport's clock (`airports/today.ts`), the TAF and its groups, and the
+24-hour window, in the viewer's units (`tests/web/airportpages.test.ts`).
+
 Storm names: `tc/namestable.ts` holds the western Pacific list in the
 scripts the CMA, CWA, JMA and KMA write it in, plus the CMA's simplified
 Chinese for every other basin's lists, and `localStormName` (`tc/names.ts`)
