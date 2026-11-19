@@ -24,10 +24,10 @@ import {
   datasetProvenance,
   modelPageIds,
   modelPagePaths,
-  renderModelPage,
   reservedStems,
   rootStem,
 } from "../../web/tooling/modelpages";
+import { renderModelPage } from "../../web/tooling/sitepages";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 const INDEX_HTML = readFileSync(resolve(REPO_ROOT, "web/index.html"), "utf8");
@@ -124,18 +124,30 @@ describe("the Pages Function", () => {
       passed: false,
     });
     expect(await request("/index.html?model=CMA-RADAR")).toEqual({ status: 301, location: `${SITE_ORIGIN}/cma`, passed: false });
-    expect(await request("/?model=woof&lang=ja")).toEqual({ status: 301, location: `${SITE_ORIGIN}/?lang=ja`, passed: false });
+    expect(await request("/?model=woof&lang=ja")).toEqual({ status: 301, location: `${SITE_ORIGIN}/ja/`, passed: false });
+    expect(await request("/?model=hrrr&lang=ja")).toEqual({ status: 301, location: `${SITE_ORIGIN}/ja/hrrr`, passed: false });
+  });
+
+  it("301s ?lang= to the language's prefix and /?case= to the case's page", async () => {
+    expect(await request("/showcase?lang=zh-TW")).toEqual({ status: 301, location: `${SITE_ORIGIN}/zh-hant/showcase`, passed: false });
+    expect(await request("/compare?lat=35&lang=en&lon=139")).toEqual({ status: 301, location: `${SITE_ORIGIN}/compare?lat=35&lon=139`, passed: false });
+    expect(await request("/?case=ida-2021&type=radar")).toEqual({ status: 301, location: `${SITE_ORIGIN}/showcase/ida-2021?type=radar`, passed: false });
+    expect(await request("/?case=ida-2021&lang=de&model=gfs")).toEqual({ status: 301, location: `${SITE_ORIGIN}/de/showcase/ida-2021?model=gfs`, passed: false });
   });
 
   it("passes everything else through to the static site", async () => {
-    for (const path of ["/", "/?type=wind", "/?case=ida-2021&model=gfs", "/index.html", "/?model=mrms3d&type=refl3d"]) {
+    for (const path of ["/", "/?type=wind", "/index.html", "/?model=mrms3d&type=refl3d", "/showcase", "/typhoon?storm=WP242025"]) {
       expect((await request(path)).passed, path).toBe(true);
     }
   });
 
-  it("is routed for the root alone", () => {
+  it("is routed for the pages a link from before could name, and those alone", () => {
     const routes = JSON.parse(readFileSync(resolve(REPO_ROOT, "web/public/_routes.json"), "utf8"));
-    expect(routes).toEqual({ version: 1, include: ["/", "/index.html"], exclude: [] });
+    expect(routes).toEqual({
+      version: 1,
+      include: ["/", "/index.html", "/showcase", "/compare", "/metrics", "/typhoon", "/api"],
+      exclude: [],
+    });
   });
 });
 
@@ -147,13 +159,13 @@ describe("a dataset's page", () => {
     expect(html).toContain("<title>HRRR live forecast maps · Xue</title>");
     expect(html).toContain(`<link rel="canonical" href="${SITE_ORIGIN}/hrrr" />`);
     expect(html).toContain(`<link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/hrrr" />`);
-    expect(html).toContain(`<link rel="alternate" hreflang="zh-TW" href="${SITE_ORIGIN}/hrrr?lang=zh-Hant" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="zh-TW" href="${SITE_ORIGIN}/zh-hant/hrrr" />`);
     expect(html).toContain(`<meta property="og:url" content="${SITE_ORIGIN}/hrrr" />`);
     expect(html).toContain(`<meta name="description" content="${head.description}" />`);
     expect(html).toContain(`<meta property="og:description" content="${head.description}" />`);
     // The static-message pass must not put the site's description back.
     expect(html).not.toMatch(/<meta name="description"[^>]*data-i18n-content/);
-    expect(html).not.toContain(`href="${SITE_ORIGIN}/?lang=`);
+    expect(html).not.toContain("?lang=");
     // Everything after the head is the viewer's, byte for byte.
     expect(html.slice(html.indexOf("</head>"))).toBe(INDEX_HTML.slice(INDEX_HTML.indexOf("</head>")));
   });
@@ -250,7 +262,7 @@ describe("the names a dataset's page may not take", () => {
     expect(rootStem("zh/tc/2026/x.html")).toBe("zh");
     expect(rootStem("sitemap.xml")).toBe("sitemap");
     const reserved = reservedStems(["index.html", "assets/a.js", "sitemap.xml", "llms-full.txt"], ["data", "llms.txt"], ["skewt.html"]);
-    for (const stem of ["index", "assets", "sitemap", "llms-full", "data", "llms", "skewt", "tc", "zh", "zh-hant", "ja", "ko"]) {
+    for (const stem of ["index", "assets", "sitemap", "llms-full", "data", "llms", "skewt", "tc", "zh", "zh-hant", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru", "ne"]) {
       expect(reserved.has(stem), stem).toBe(true);
     }
   });
