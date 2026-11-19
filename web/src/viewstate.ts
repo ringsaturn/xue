@@ -211,7 +211,7 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const primary = compositionPrimary({ fill: view.field, lines: view.lines }, fallback);
   const base =
     context.caseId !== null
-      ? searchForCaseVariable(primary, search, context.caseId)
+      ? searchForCaseVariable(primary, search)
       : searchForVariable(primary, search);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
   const setup = setupInView(view);

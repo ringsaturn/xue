@@ -191,7 +191,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // Recast WOOF: a WRF-ARW nest run at 500 m over Mount Fuji, hourly from
   // the first forecast hour (no analysis frame, as CFSv2 starts at F6).
   // Not a live feed: the run is a fixed archive published as showcase
-  // cases alone (`/?case=…`), so it has no pointer and no place in the
+  // cases alone (`/showcase/<id>`), so it has no pointer and no place in the
   // model switch or a path of its own; a case loads its manifest by path.
   // The whole 79 × 61 grid lies inside the model domain, so unlike HRRR
   // nothing is clipped, and a case frames its own region, so no `region`.

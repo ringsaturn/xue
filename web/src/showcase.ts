@@ -4,8 +4,10 @@ import "./style.css";
 
 import {
   applyStaticMessages,
+  caseHref,
   locale,
   onLocaleChange,
+  shellPath,
   t,
   type MessageKey,
 } from "./i18n";
@@ -15,6 +17,7 @@ import { isObservationModel, parseBundleMetadata, type PosterDescriptor } from "
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { applyPageMeta, pageUrl } from "./pagemeta";
+import { casePathname } from "./sitepaths";
 import { fetchCaseManifest, fetchCatalog, listedCases, localizedText, type ShowcaseCase } from "./showcase-catalog";
 import { dataBaseUrl, SITE_NAME } from "./site";
 import { formatBytes, formatRegion, formatUtcHour } from "./format";
@@ -26,8 +29,10 @@ import { paintSeason } from "./tc/poster";
  * The historical showcase list.
  *
  * A separate, static page: it reads the mutable `showcase.json` catalog and
- * renders one card per case, each linking into the ordinary viewer at
- * `./?case=<id>`. No decoder, no map — the only heavy thing it touches is
+ * renders one card per case, each linking to the case's page, the ordinary
+ * viewer at `/showcase/<id>` (`/ja/showcase/<id>` in Japanese). The build
+ * writes each language's copy of this page with the cards already in it
+ * (`web/tooling/sitepages.ts`); the catalog read here replaces them. No decoder, no map — the only heavy thing it touches is
  * each case's first-frame poster, which it paints as the card's thumbnail
  * through the same `DecompressionStream` path the viewer uses (a poster is
  * under a kilobyte, so a card costs about as much as an icon).
@@ -35,8 +40,9 @@ import { paintSeason } from "./tc/poster";
 
 applyStaticMessages();
 applyTheme();
-// Title and description stay the markup's; this pins a `?lang=` rendering's
-// canonical to itself and completes the hreflang set.
+// Title and description stay the markup's, which the build wrote in the
+// page's language; this keeps the canonical and the hreflang set on the
+// language the page is in after a switch.
 applyPageMeta({ path: "/showcase" });
 
 const list = document.getElementById("showcase-list") as HTMLUListElement;
@@ -73,7 +79,7 @@ function buildCard(
   const item = document.createElement("li");
   item.className = "showcase-card";
   const link = document.createElement("a");
-  link.href = `./?case=${encodeURIComponent(showcaseCase.id)}`;
+  link.href = caseHref(showcaseCase.id);
   link.setAttribute("aria-label", t("showcaseCaseAria", { title: localizedText(showcaseCase.title, locale) }));
 
   const figure = document.createElement("div");
@@ -141,7 +147,7 @@ function buildStormCard(
   const item = document.createElement("li");
   item.className = "showcase-card is-pinned";
   const link = document.createElement("a");
-  link.href = "./typhoon";
+  link.href = shellPath("/typhoon");
   link.setAttribute("aria-label", t("showcaseCaseAria", { title: t("tcHistoryHeading") }));
   const seasons = catalog.seasons.map((entry) => entry.season);
   const span = seasons.length ? `${Math.min(...seasons)}–${Math.max(...seasons)}` : "";
@@ -243,22 +249,25 @@ async function paintThumbnail(showcaseCase: ShowcaseCase, canvas: HTMLCanvasElem
 
 /** The cases as structured data — an ItemList of the pages they open — so
  * an indexer that ran the page sees the same list the cards show. One
- * element per load, rewritten when the cards are (a language switch). */
-let caseListScript: HTMLScriptElement | null = null;
+ * element per load, rewritten when the cards are (a language switch): the
+ * one the build wrote with the cards (`CASE_LIST_ID`), else a new one. */
+const CASE_LIST_ID = "showcase-cases";
+let caseListScript = document.getElementById(CASE_LIST_ID) as HTMLScriptElement | null;
 
 function publishCaseList(cases: readonly ShowcaseCase[]): void {
   const script = caseListScript ?? document.createElement("script");
   script.type = "application/ld+json";
+  script.id = CASE_LIST_ID;
   script.textContent = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "ItemList",
-    "@id": `${pageUrl("/showcase", null)}#cases`,
+    "@id": `${pageUrl("/showcase", locale)}#cases`,
     name: `Historical Weather Cases · ${SITE_NAME}`,
     numberOfItems: cases.length,
     itemListElement: cases.map((showcaseCase, index) => ({
       "@type": "ListItem",
       position: index + 1,
-      url: pageUrl(`/?case=${encodeURIComponent(showcaseCase.id)}`, null),
+      url: pageUrl(casePathname(showcaseCase.id), locale),
       name: localizedText(showcaseCase.title, locale),
       description: localizedText(showcaseCase.summary, locale),
     })),

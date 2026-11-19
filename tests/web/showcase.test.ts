@@ -13,7 +13,7 @@ import {
   radarReachBox,
   validateCatalog,
 } from "../../web/src/showcase-catalog";
-import { parseCaseFromSearch, searchForCaseVariable } from "../../web/src/urlstate";
+import { parseCaseFromLocation, searchForCaseVariable } from "../../web/src/urlstate";
 
 function caseFixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -544,19 +544,28 @@ describe("case framing", () => {
 });
 
 describe("case URL state", () => {
-  it("reads a case id", () => {
-    expect(parseCaseFromSearch("?case=zhengzhou-2021&type=precip")).toBe("zhengzhou-2021");
-    expect(parseCaseFromSearch("?type=precip")).toBeNull();
-    expect(parseCaseFromSearch("?case=../secrets")).toBeNull();
+  it("reads a case id from the path, in any language", () => {
+    expect(parseCaseFromLocation("/showcase/zhengzhou-2021", "")).toBe("zhengzhou-2021");
+    expect(parseCaseFromLocation("/zh-hant/showcase/zhengzhou-2021", "?type=precip")).toBe("zhengzhou-2021");
+    expect(parseCaseFromLocation("/showcase", "")).toBeNull();
+    expect(parseCaseFromLocation("/", "")).toBeNull();
+    expect(parseCaseFromLocation("/showcase/..%2Fsecrets", "")).toBeNull();
+    expect(parseCaseFromLocation("/showcase/a/b", "")).toBeNull();
   });
 
-  it("drops the model param, which a case pins itself", () => {
-    const search = searchForCaseVariable("wind10m", "?model=ecmwf&type=precip&lang=zh", "doksuri-2023");
+  it("reads ?case= on a build with no case pages, the path first", () => {
+    expect(parseCaseFromLocation("/", "?case=zhengzhou-2021&type=precip")).toBe("zhengzhou-2021");
+    expect(parseCaseFromLocation("/", "?case=../secrets")).toBeNull();
+    expect(parseCaseFromLocation("/showcase/ida-2021", "?case=other")).toBe("ida-2021");
+  });
+
+  it("drops the model param, which a case pins itself, and the case param the path says", () => {
+    const search = searchForCaseVariable("wind10m", "?model=ecmwf&case=doksuri-2023&type=precip&units=si");
     const params = new URLSearchParams(search);
     expect(params.get("model")).toBeNull();
-    expect(params.get("case")).toBe("doksuri-2023");
+    expect(params.get("case")).toBeNull();
     expect(params.get("type")).toBe("wind");
-    expect(params.get("lang")).toBe("zh");
+    expect(params.get("units")).toBe("si");
   });
 });
 

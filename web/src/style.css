@@ -4854,7 +4854,7 @@ body[data-context] .source-credit[data-credit-context] {
 /* ---------------------------------------------------------------------------
    Historical showcase.
 
-   Two surfaces: the case banner inside the viewer (shown only for ?case=<id>,
+   Two surfaces: the case banner inside the viewer (shown only on a case's page,
    above), and the standalone list page. The list page is the one place in
    this app that scrolls, so it undoes the viewer's full-bleed, overflow-hidden
    shell rather than sharing it. */
