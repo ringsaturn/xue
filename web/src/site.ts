@@ -14,7 +14,8 @@ export const DATA_ORIGIN = "https://dataset.ringsaturn.me/xue/";
 
 /** The data root the shell reads pointers, manifests and stores from:
  * `VITE_DATA_BASE_URL` (the bucket, on a deploy build) else the site's own
- * `data/`. */
+ * `/data/`, root-absolute: a page sits up to three segments deep
+ * (`/ja/showcase/<id>`). */
 export function dataBaseUrl(): string {
-  return import.meta.env.VITE_DATA_BASE_URL || "data/";
+  return import.meta.env.VITE_DATA_BASE_URL || "/data/";
 }

@@ -5,11 +5,13 @@ import { alternateUrls, applyPageMeta, canonicalUrl, pageUrl } from "../../web/s
 import { SITE_ORIGIN } from "../../web/src/site";
 
 describe("page URLs", () => {
-  it("names a page, optionally pinned to a language", () => {
+  it("names a page in a language by its prefix, English and the x-default at the root", () => {
     expect(pageUrl("/", null)).toBe(`${SITE_ORIGIN}/`);
-    expect(pageUrl("/", "zh")).toBe(`${SITE_ORIGIN}/?lang=zh`);
-    expect(pageUrl("/?case=zhengzhou-2021", "zh-Hant")).toBe(`${SITE_ORIGIN}/?case=zhengzhou-2021&lang=zh-Hant`);
-    expect(pageUrl("/showcase", "ja")).toBe(`${SITE_ORIGIN}/showcase?lang=ja`);
+    expect(pageUrl("/", "en")).toBe(`${SITE_ORIGIN}/`);
+    expect(pageUrl("/", "zh")).toBe(`${SITE_ORIGIN}/zh/`);
+    expect(pageUrl("/showcase/zhengzhou-2021", "zh-Hant")).toBe(`${SITE_ORIGIN}/zh-hant/showcase/zhengzhou-2021`);
+    expect(pageUrl("/showcase", "ja")).toBe(`${SITE_ORIGIN}/ja/showcase`);
+    expect(pageUrl("/typhoon?storm=WP242025", "ko")).toBe(`${SITE_ORIGIN}/ko/typhoon?storm=WP242025`);
   });
 
   it("declares every locale plus x-default as an alternate", () => {
@@ -31,19 +33,19 @@ describe("page URLs", () => {
       "x-default",
     ]);
     expect(alternates.at(-1)).toEqual({ hreflang: "x-default", href: `${SITE_ORIGIN}/` });
-    expect(alternates[1]).toEqual({ hreflang: "zh-TW", href: `${SITE_ORIGIN}/?lang=zh-Hant` });
+    expect(alternates[1]).toEqual({ hreflang: "zh-TW", href: `${SITE_ORIGIN}/zh-hant/` });
+    expect(alternates[2]).toEqual({ hreflang: "en", href: `${SITE_ORIGIN}/` });
   });
 
-  it("makes a language-pinned rendering canonical to itself, and view state fold into the page", () => {
-    expect(canonicalUrl("/", "?model=ecmwf&type=wind")).toBe(`${SITE_ORIGIN}/`);
-    expect(canonicalUrl("/", "?lang=zh-TW&type=temp")).toBe(`${SITE_ORIGIN}/?lang=zh-Hant`);
-    expect(canonicalUrl("/", "?lang=klingon")).toBe(`${SITE_ORIGIN}/`);
-    expect(canonicalUrl("/?case=x", "?case=x&lang=de")).toBe(`${SITE_ORIGIN}/?case=x&lang=de`);
+  it("makes each language's copy canonical to itself", () => {
+    expect(canonicalUrl("/", "en")).toBe(`${SITE_ORIGIN}/`);
+    expect(canonicalUrl("/", "zh-Hant")).toBe(`${SITE_ORIGIN}/zh-hant/`);
+    expect(canonicalUrl("/showcase/x", "de")).toBe(`${SITE_ORIGIN}/de/showcase/x`);
   });
 
-  it("makes a dataset's page canonical to its path, the view within it folded in", () => {
-    expect(canonicalUrl("/hrrr", "?type=wind&res=half")).toBe(`${SITE_ORIGIN}/hrrr`);
-    expect(canonicalUrl("/hrrr", "?type=wind&lang=ja")).toBe(`${SITE_ORIGIN}/hrrr?lang=ja`);
+  it("makes a dataset's page canonical to its path", () => {
+    expect(canonicalUrl("/hrrr", "en")).toBe(`${SITE_ORIGIN}/hrrr`);
+    expect(canonicalUrl("/hrrr", "ja")).toBe(`${SITE_ORIGIN}/ja/hrrr`);
     expect(alternateUrls("/hrrr").at(-1)).toEqual({ hreflang: "x-default", href: `${SITE_ORIGIN}/hrrr` });
   });
 });
@@ -54,7 +56,8 @@ describe("applyPageMeta", () => {
       <title>Fallback</title>
       <meta name="description" content="old" />
       <link rel="canonical" href="${SITE_ORIGIN}/" />
-      <link rel="alternate" hreflang="en" href="${SITE_ORIGIN}/?lang=en" />
+      <link rel="alternate" hreflang="en" href="${SITE_ORIGIN}/" />
+      <meta property="og:locale" content="en_US" />
       <meta property="og:url" content="${SITE_ORIGIN}/" />
       <meta property="og:title" content="Fallback" />
       <meta property="og:description" content="old" />
@@ -67,16 +70,17 @@ describe("applyPageMeta", () => {
     return document.head.querySelector<HTMLLinkElement>(selector)?.getAttribute("href") ?? null;
   }
 
-  it("rewrites the canonical, og:url and the whole hreflang set for a case", () => {
-    applyPageMeta({ path: "/?case=shadel-2026" }, "?case=shadel-2026&type=radar");
-    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/?case=shadel-2026`);
+  it("rewrites the canonical, og:url, og:locale and the whole hreflang set for a case", () => {
+    applyPageMeta({ path: "/showcase/shadel-2026" }, "ja");
+    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/ja/showcase/shadel-2026`);
     expect(document.head.querySelector('meta[property="og:url"]')?.getAttribute("content")).toBe(
-      `${SITE_ORIGIN}/?case=shadel-2026`,
+      `${SITE_ORIGIN}/ja/showcase/shadel-2026`,
     );
+    expect(document.head.querySelector('meta[property="og:locale"]')?.getAttribute("content")).toBe("ja_JP");
     // The one alternate the markup shipped is updated; the rest are added.
-    expect(href('link[rel="alternate"][hreflang="en"]')).toBe(`${SITE_ORIGIN}/?case=shadel-2026&lang=en`);
-    expect(href('link[rel="alternate"][hreflang="zh-CN"]')).toBe(`${SITE_ORIGIN}/?case=shadel-2026&lang=zh`);
-    expect(href('link[rel="alternate"][hreflang="x-default"]')).toBe(`${SITE_ORIGIN}/?case=shadel-2026`);
+    expect(href('link[rel="alternate"][hreflang="en"]')).toBe(`${SITE_ORIGIN}/showcase/shadel-2026`);
+    expect(href('link[rel="alternate"][hreflang="zh-CN"]')).toBe(`${SITE_ORIGIN}/zh/showcase/shadel-2026`);
+    expect(href('link[rel="alternate"][hreflang="x-default"]')).toBe(`${SITE_ORIGIN}/showcase/shadel-2026`);
     expect(document.head.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(LOCALES.length + 1);
     // Untouched when not given.
     expect(document.title).toBe("Fallback");
@@ -84,7 +88,7 @@ describe("applyPageMeta", () => {
   });
 
   it("sets the title with the site suffix and the description on every card", () => {
-    applyPageMeta({ path: "/", title: "Surface Temperature · GFS 240H", description: "Two-metre temperature." }, "");
+    applyPageMeta({ path: "/", title: "Surface Temperature · GFS 240H", description: "Two-metre temperature." }, "en");
     expect(document.title).toBe("Surface Temperature · GFS 240H · Xue");
     for (const selector of ['meta[property="og:title"]', 'meta[name="twitter:title"]']) {
       expect(document.head.querySelector(selector)?.getAttribute("content")).toBe("Surface Temperature · GFS 240H · Xue");
@@ -96,13 +100,13 @@ describe("applyPageMeta", () => {
 
   it("creates the canonical link when the markup has none", () => {
     document.head.querySelector('link[rel="canonical"]')?.remove();
-    applyPageMeta({ path: "/showcase" }, "?lang=fr");
-    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/showcase?lang=fr`);
+    applyPageMeta({ path: "/showcase" }, "fr");
+    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/fr/showcase`);
   });
 
   it("defers to another page's address and drops its own alternates", () => {
     applyPageMeta({ path: "/typhoon" });
-    applyPageMeta({ path: "/typhoon?storm=WP242025", canonical: `${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025` }, "?lang=ja");
+    applyPageMeta({ path: "/typhoon?storm=WP242025", canonical: `${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025` }, "ja");
     expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`);
     expect(document.head.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(0);
   });

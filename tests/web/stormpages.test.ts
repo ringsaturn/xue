@@ -95,7 +95,7 @@ describe("a storm page", () => {
     expect(html).toContain(`hreflang="x-default" href="${SITE_ORIGIN}/tc/2025/ragasa-wp242025"`);
     expect(html).toContain('<meta property="og:locale" content="zh_CN">');
     expect(html).toContain("<h1>台风桦加沙 ");
-    expect(html).toContain('href="/typhoon?storm=WP242025&lang=zh"');
+    expect(html).toContain('href="/zh/typhoon?storm=WP242025"');
     // Synoptic points only: the 15Z row is IBTrACS' interpolation.
     expect(html.match(/<tr><td>2025-/g)).toHaveLength(3);
     expect(html).not.toContain('localStorage.getItem("xue-locale")');

@@ -93,8 +93,8 @@ describe("an airport page", () => {
   });
 
   it("links the map at the airport with its marks, the comparison and the neighbours", () => {
-    expect(page.html).toContain("/?stations=apt&#38;lang=ja#map=10/35.553/139.781");
-    expect(page.html).toContain("/compare?lat=35.55&#38;lon=139.78");
+    expect(page.html).toContain("/ja/?stations=apt#map=10/35.553/139.781");
+    expect(page.html).toContain("/ja/compare?lat=35.55&#38;lon=139.78");
     expect(nearestAirports(byIcao("RJTT"), LIST.airports)[0]!.airport.icao).toBe("RJAA");
     expect(page.html).toContain('href="/ja/airports/rjaa"');
   });

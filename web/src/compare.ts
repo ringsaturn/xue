@@ -31,6 +31,7 @@ import {
   applyStaticMessages,
   intlLocale,
   onLocaleChange,
+  shellPath,
   t,
 } from "./i18n";
 import { vectorMaxMagnitude } from "./levels";
@@ -577,9 +578,7 @@ function renderControls(): void {
       return button;
     }),
   );
-  const url = new URL("./", window.location.href);
-  url.hash = `map=7/${state.latitude.toFixed(2)}/${state.longitude.toFixed(2)}`;
-  mapLink.href = url.href;
+  mapLink.href = `${shellPath("/")}#map=7/${state.latitude.toFixed(2)}/${state.longitude.toFixed(2)}`;
 }
 
 function syncUrl(): void {

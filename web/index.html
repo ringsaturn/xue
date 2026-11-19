@@ -16,28 +16,29 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Search metadata. The static values describe the live viewer at `/`;
-         the build writes a copy of this page per dataset (`/hrrr`) with
-         that dataset's (web/tooling/modelpages.ts, which expects each of
-         these tags once), and pagemeta.ts rewrites them once the view is
-         known — a case is its own page — and adds the rest of the hreflang
-         set. Only view state that *is* content (the dataset's path,
-         `?case=`, `?lang=`) reaches the canonical URL. -->
+    <!-- Search metadata. The static values describe the live viewer at `/`
+         in English; the build writes a copy of this page per language
+         (`/ja/`), per dataset (`/hrrr`, `/ja/hrrr`) and per case
+         (`/showcase/<id>`) with its own head (web/tooling/sitepages.ts,
+         which expects each of these tags once), and pagemeta.ts rewrites
+         them once the view is known. Only view state that *is* content (the
+         language prefix, the dataset's path, the case) reaches the
+         canonical URL. -->
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://xue.ringsaturn.me/" />
     <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/" />
-    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/?lang=en" />
-    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/?lang=zh" />
-    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/?lang=zh-Hant" />
-    <link rel="alternate" hreflang="ja" href="https://xue.ringsaturn.me/?lang=ja" />
-    <link rel="alternate" hreflang="ko" href="https://xue.ringsaturn.me/?lang=ko" />
-    <link rel="alternate" hreflang="de" href="https://xue.ringsaturn.me/?lang=de" />
-    <link rel="alternate" hreflang="fr" href="https://xue.ringsaturn.me/?lang=fr" />
-    <link rel="alternate" hreflang="es" href="https://xue.ringsaturn.me/?lang=es" />
-    <link rel="alternate" hreflang="pt" href="https://xue.ringsaturn.me/?lang=pt" />
-    <link rel="alternate" hreflang="tr" href="https://xue.ringsaturn.me/?lang=tr" />
-    <link rel="alternate" hreflang="ru" href="https://xue.ringsaturn.me/?lang=ru" />
-    <link rel="alternate" hreflang="ne" href="https://xue.ringsaturn.me/?lang=ne" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/zh/" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/zh-hant/" />
+    <link rel="alternate" hreflang="ja" href="https://xue.ringsaturn.me/ja/" />
+    <link rel="alternate" hreflang="ko" href="https://xue.ringsaturn.me/ko/" />
+    <link rel="alternate" hreflang="de" href="https://xue.ringsaturn.me/de/" />
+    <link rel="alternate" hreflang="fr" href="https://xue.ringsaturn.me/fr/" />
+    <link rel="alternate" hreflang="es" href="https://xue.ringsaturn.me/es/" />
+    <link rel="alternate" hreflang="pt" href="https://xue.ringsaturn.me/pt/" />
+    <link rel="alternate" hreflang="tr" href="https://xue.ringsaturn.me/tr/" />
+    <link rel="alternate" hreflang="ru" href="https://xue.ringsaturn.me/ru/" />
+    <link rel="alternate" hreflang="ne" href="https://xue.ringsaturn.me/ne/" />
 
     <!-- The two cross-origin hosts every session opens before it can paint
          anything: the data bucket (pointer, manifest, bundles) and the
@@ -45,11 +46,12 @@
     <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
     <link rel="preconnect" href="https://api.protomaps.com" crossorigin />
 
-    <!-- A link to a case opens without the live viewer's controls: the markup
-         below describes the live view, and the catalog takes a moment to say
-         what the case is. main.ts::endCaseOpening lifts this. -->
+    <!-- A case's page (`/showcase/<id>`, any language) opens without the
+         live viewer's controls: the markup below describes the live view,
+         and the catalog takes a moment to say what the case is.
+         main.ts::endCaseOpening lifts this. -->
     <script>
-      if (new URLSearchParams(location.search).get("case")) document.documentElement.dataset.caseOpening = "";
+      if (/^(\/[a-z]+(-[a-z]+)?)?\/showcase\/[a-z0-9-]+$/.test(location.pathname) || /[?&]case=/.test(location.search)) document.documentElement.dataset.caseOpening = "";
     </script>
 
     <!-- The appearance is settled before the first paint: the module bundle
@@ -258,7 +260,7 @@
         </p>
         <p>
           <a href="https://github.com/ringsaturn/xue">Source code and documentation</a> ·
-          <a href="./showcase">Historical cases</a> ·
+          <a href="/showcase">Historical cases</a> ·
           <a href="/llms.txt">Plain-text project description</a>
         </p>
       </div>
@@ -286,7 +288,7 @@
       </h1>
 
       <div class="top-actions">
-        <a class="icon-button" href="./showcase">
+        <a class="icon-button" href="/showcase">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
             <path d="M5 17a3 3 0 0 1 3-3h11" />
@@ -296,7 +298,7 @@
         <!-- The comparison page, at the point the map is centred on:
              main.ts keeps the href on the camera, and a pinned point has
              its own link in the probe panel. -->
-        <a class="icon-button" id="compare-link" href="./compare">
+        <a class="icon-button" id="compare-link" href="/compare">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
             <path d="M4 7h16M4 12h10M4 17h13" />
             <path d="M18 10.5l2 1.5-2 1.5M19.5 15.5l1 1.5-1 1.5" />
@@ -324,8 +326,10 @@
         </button>
       </div>
 
-      <!-- Shown only for ?case=<id>: which historical event is on screen, and
-           the way back to the list. -->
+      <!-- Shown only on a case's page (/showcase/<id>): which historical
+           event is on screen, and the way back to the list. The build writes
+           it filled in on each case's page (web/tooling/sitepages.ts);
+           main.ts::updateCasePresentation replaces what it holds. -->
       <div class="case-banner" id="case-banner" hidden>
         <div class="case-pill">
           <span class="case-tag" data-i18n="caseTag">Case</span>
@@ -336,7 +340,7 @@
           <button class="case-toggle" id="case-toggle" type="button" aria-expanded="true" aria-controls="case-detail" data-i18n-aria="caseSummaryAria" aria-label="Case summary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
           </button>
-          <a class="case-back" href="./showcase">
+          <a class="case-back" href="/showcase">
             <span aria-hidden="true">←</span>
             <span class="sr-only" data-i18n="showcaseBack">← All cases</span>
           </a>

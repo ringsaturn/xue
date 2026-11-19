@@ -1,15 +1,17 @@
-/** UI locale support: twelve languages. The locale is resolved before the first
- * render — detection order is the `?lang=` URL param, then the choice the
- * picker stored on this device, then the browser language — and the basemap
- * label language and `<html lang>` follow it. Only the URL param is ever
- * explicit; a shared link carries none unless written by hand, so it opens
- * in each reader's own.
+/** UI locale support: twelve languages. The locale is the page's: its
+ * path prefix (`/ja/…`, none for English — `sitepaths.ts`), settled before
+ * the first render. An unprefixed page has already sent a reader who
+ * prefers another language to that one's prefix (the head's inline
+ * chooser), so the shell never guesses: the address says the language, and
+ * a shared link opens in the language it names. The basemap label language
+ * and `<html lang>` follow it.
  *
  * Picking another language never reloads: `setLocale` swaps the dictionary,
- * rewrites the static markup and lets every `onLocaleChange` listener redo
- * the copy it owns, so the session keeps its decoded frames and playhead.
- * `locale`, `htmlLang`, `intlLocale` and `basemapLang` are live bindings — read them when
- * needed rather than capturing them at module load.
+ * moves the address to the new prefix, rewrites the static markup and lets
+ * every `onLocaleChange` listener redo the copy it owns, so the session
+ * keeps its decoded frames and playhead. `locale`, `htmlLang`, `intlLocale`
+ * and `basemapLang` are live bindings — read them when needed rather than
+ * capturing them at module load.
  *
  * The dictionary itself lives in `locales/`, one module per language, each
  * typed `Record<MessageKey, string>` against `locales/en.ts` — the source of
@@ -32,11 +34,21 @@ import { ru } from "./locales/ru";
 import { tr } from "./locales/tr";
 import { zh } from "./locales/zh";
 import { zhHant } from "./locales/zh-hant";
+import { FORECAST_MODEL_IDS } from "./modelpaths";
+import {
+  casePathname,
+  isShellPath,
+  legacyLocaleLocation,
+  localizedPath,
+  normalizeLocale,
+  relocalizePath,
+  splitLocalePath,
+  type Locale,
+} from "./sitepaths";
 import { convertTemperature, formatWind, UNIT_LABELS, units } from "./units";
 
-export type { MessageKey };
-
-export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru" | "ne";
+export type { Locale, MessageKey };
+export { normalizeLocale };
 
 const STORAGE_KEY = "xue-locale";
 
@@ -46,6 +58,8 @@ interface LocaleDefinition {
   endonym: string;
   /** Value for `<html lang>` and the hreflang alternates. */
   htmlLang: string;
+  /** The Open Graph `og:locale` of the page in this language. */
+  ogLocale: string;
   /** The tag Intl formats dates and numbers with, where it is not
    * `htmlLang`: Intl writes Nepali in Devanagari digits, while every number
    * the instrument panel and the map print is in Latin ones. */
@@ -62,18 +76,18 @@ interface LocaleDefinition {
  * proximity — the Latin-script ones together, Turkish closing them before
  * Cyrillic, and Nepali, the one Devanagari language, last. */
 const DEFINITIONS: Record<Locale, LocaleDefinition> = {
-  zh: { endonym: "简体中文", htmlLang: "zh-CN", basemapLang: "zh-Hans", messages: zh },
-  "zh-Hant": { endonym: "繁體中文", htmlLang: "zh-TW", basemapLang: "zh-Hant", messages: zhHant },
-  en: { endonym: "English", htmlLang: "en", basemapLang: "en", messages: en },
-  ja: { endonym: "日本語", htmlLang: "ja", basemapLang: "ja", messages: ja },
-  ko: { endonym: "한국어", htmlLang: "ko", basemapLang: "ko", messages: ko },
-  de: { endonym: "Deutsch", htmlLang: "de", basemapLang: "de", messages: de },
-  fr: { endonym: "Français", htmlLang: "fr", basemapLang: "fr", messages: fr },
-  es: { endonym: "Español", htmlLang: "es", basemapLang: "es", messages: es },
-  pt: { endonym: "Português", htmlLang: "pt", basemapLang: "pt", messages: pt },
-  tr: { endonym: "Türkçe", htmlLang: "tr", basemapLang: "tr", messages: tr },
-  ru: { endonym: "Русский", htmlLang: "ru", basemapLang: "ru", messages: ru },
-  ne: { endonym: "नेपाली", htmlLang: "ne", intlLocale: "ne-u-nu-latn", basemapLang: "ne", messages: ne },
+  zh: { endonym: "简体中文", htmlLang: "zh-CN", ogLocale: "zh_CN", basemapLang: "zh-Hans", messages: zh },
+  "zh-Hant": { endonym: "繁體中文", htmlLang: "zh-TW", ogLocale: "zh_TW", basemapLang: "zh-Hant", messages: zhHant },
+  en: { endonym: "English", htmlLang: "en", ogLocale: "en_US", basemapLang: "en", messages: en },
+  ja: { endonym: "日本語", htmlLang: "ja", ogLocale: "ja_JP", basemapLang: "ja", messages: ja },
+  ko: { endonym: "한국어", htmlLang: "ko", ogLocale: "ko_KR", basemapLang: "ko", messages: ko },
+  de: { endonym: "Deutsch", htmlLang: "de", ogLocale: "de_DE", basemapLang: "de", messages: de },
+  fr: { endonym: "Français", htmlLang: "fr", ogLocale: "fr_FR", basemapLang: "fr", messages: fr },
+  es: { endonym: "Español", htmlLang: "es", ogLocale: "es_ES", basemapLang: "es", messages: es },
+  pt: { endonym: "Português", htmlLang: "pt", ogLocale: "pt_BR", basemapLang: "pt", messages: pt },
+  tr: { endonym: "Türkçe", htmlLang: "tr", ogLocale: "tr_TR", basemapLang: "tr", messages: tr },
+  ru: { endonym: "Русский", htmlLang: "ru", ogLocale: "ru_RU", basemapLang: "ru", messages: ru },
+  ne: { endonym: "नेपाली", htmlLang: "ne", ogLocale: "ne_NP", intlLocale: "ne-u-nu-latn", basemapLang: "ne", messages: ne },
 };
 
 /** What the picker lists, in order. */
@@ -87,33 +101,35 @@ export function localeHtmlLang(code: Locale): string {
   return DEFINITIONS[code].htmlLang;
 }
 
-/** Chinese is the one language here written in two scripts, and a tag names
- * the script either directly (`zh-Hant`) or through a region. Taiwan, Hong
- * Kong and Macau write traditional; the mainland and Singapore simplified. */
-const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
-
-/** Map a BCP-47 tag onto one of the twelve, or null. Case-insensitive, and
- * exported for the unit tests and for the canonical-URL logic. */
-export function normalizeLocale(value: string | null | undefined): Locale | null {
-  if (!value) return null;
-  const parts = value.trim().toLowerCase().split(/[-_]/).filter(Boolean);
-  const language = parts[0];
-  if (!language) return null;
-  if (language === "zh") {
-    // The script subtag wins where there is one; otherwise the region says
-    // which script the reader expects, and a bare `zh` means simplified.
-    if (parts.includes("hant")) return "zh-Hant";
-    if (parts.includes("hans")) return "zh";
-    return parts.some((part) => TRADITIONAL_REGIONS.has(part)) ? "zh-Hant" : "zh";
-  }
-  // Every other language here has one script, so the region is dropped:
-  // pt-BR and pt-PT are both `pt`, en-GB is `en`.
-  return language in DEFINITIONS ? (language as Locale) : null;
+/** The Open Graph locale of any of the twelve (`og:locale`). */
+export function localeOgLocale(code: Locale): string {
+  return DEFINITIONS[code].ogLocale;
 }
 
-function detectLocale(): Locale {
-  // Unit tests import this module under jsdom/node; never require a browser.
-  if (typeof window === "undefined") return "en";
+/** The dictionary of any of the twelve, for the build that writes each
+ * page's copies (`web/tooling/sitepages.ts`); the shell reads `t`. */
+export function localeMessages(code: Locale): Record<MessageKey, string> {
+  return DEFINITIONS[code].messages;
+}
+
+/** Every dataset the viewer knows, page or not, for telling a link to a
+ * dataset's page from any other root-relative link (a link the build wrote
+ * for one it does not serve is a 404 in any language). */
+const DATASET_PATH_IDS: ReadonlySet<string> = new Set(FORECAST_MODEL_IDS);
+
+/** Whether the page is one of the site's per-language copies
+ * (`web/tooling/sitepages.ts`): under a language's prefix, or the English
+ * copy, which carries the language chooser. A build that ships the viewer
+ * alone (an embedding, docs/contribution/building-on-xue.md) has no such
+ * copies: there the address names no language and no case page — the
+ * locale is a link's `?lang=`, else the stored choice, else the browser's,
+ * and a case stays `?case=<id>` on the page. */
+export const LANGUAGE_PATHS: boolean =
+  typeof document !== "undefined" &&
+  (splitLocalePath(window.location.pathname).prefixed || document.querySelector("script[data-locale-chooser]") !== null);
+
+/** The locale of a page with no language in its address. */
+function chosenLocale(): Locale {
   const fromUrl = normalizeLocale(new URLSearchParams(window.location.search).get("lang"));
   if (fromUrl) return fromUrl;
   try {
@@ -127,6 +143,20 @@ function detectLocale(): Locale {
     if (match) return match;
   }
   return "en";
+}
+
+function detectLocale(): Locale {
+  // Unit tests import this module under jsdom/node; never require a browser.
+  if (typeof window === "undefined") return "en";
+  if (!LANGUAGE_PATHS) return chosenLocale();
+  // An old link naming its language as `?lang=` or its case as `/?case=`
+  // moves to the path the site root's function would have sent it to
+  // (dev, preview, an outage) before anything reads the address. A storm
+  // or airport page has languages of its own and is left alone.
+  const { path } = splitLocalePath(window.location.pathname);
+  const moved = isShellPath(path, DATASET_PATH_IDS) ? legacyLocaleLocation(window.location.pathname, window.location.search) : null;
+  if (moved !== null) window.history.replaceState(null, "", `${moved}${window.location.hash}`);
+  return splitLocalePath(window.location.pathname).locale;
 }
 
 export let locale: Locale = detectLocale();
@@ -174,9 +204,11 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
 }
 
 /** Rewrites every element carrying data-i18n / data-i18n-aria /
- * data-i18n-content / data-i18n-tip from the dictionary, and stamps <html
- * lang> and the meta description. The markup ships the English copy as its
- * pre-JS fallback. */
+ * data-i18n-content / data-i18n-tip from the dictionary, stamps <html
+ * lang> and the meta description, and points the links to the shell's
+ * pages at this language's copies. The build writes each language's copy
+ * of a page already translated (`web/tooling/sitepages.ts`); the source
+ * markup carries the English. */
 export function applyStaticMessages(): void {
   document.documentElement.lang = htmlLang;
   // The one parameter static copy takes: the year of distribution, which
@@ -198,14 +230,48 @@ export function applyStaticMessages(): void {
   for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-tip]")) {
     element.dataset.tip = t(element.dataset.i18nTip as MessageKey);
   }
+  localizeLinks();
 }
 
-/** Switch languages in place: remember the choice on this device, swap the
- * dictionary, rewrite the static markup and let every listener redo its own
- * copy. The choice is deliberately not written into the URL — a link copied
- * afterwards would carry it to everyone it is shared with, overriding their
- * browser's language — and an explicit `?lang=` already on the page is
- * dropped for the same reason. */
+/** A root-relative link to one of the shell's pages, in the page's
+ * language, or the link as it was: `/showcase` on a Japanese page is
+ * `/ja/showcase`. A storm or airport page keeps its own prefix, and a
+ * page with no language copies (`LANGUAGE_PATHS`) every link. */
+export function localizedHref(href: string): string {
+  if (!LANGUAGE_PATHS || !href.startsWith("/") || href.startsWith("//")) return href;
+  const url = new URL(href, "https://localhost");
+  const { path } = splitLocalePath(url.pathname);
+  if (!isShellPath(path, DATASET_PATH_IDS)) return href;
+  return `${localizedPath(locale, path)}${url.search}${url.hash}`;
+}
+
+/** The address of a page of the shell in the page's language
+ * (`sitepaths.ts::localizedPath`). */
+export function shellPath(path: string): string {
+  return LANGUAGE_PATHS ? localizedPath(locale, path) : path;
+}
+
+/** A link to a case: its page (`/ja/showcase/<id>`), or on a build with
+ * no case pages (`LANGUAGE_PATHS`) the viewer naming it in the query. */
+export function caseHref(id: string): string {
+  return LANGUAGE_PATHS ? localizedPath(locale, casePathname(id)) : `./?case=${encodeURIComponent(id)}`;
+}
+
+/** Point every link to a shell page at the page's language. */
+function localizeLinks(): void {
+  if (!LANGUAGE_PATHS) return;
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href^='/']")) {
+    const href = link.getAttribute("href")!;
+    const next = localizedHref(href);
+    if (next !== href) link.setAttribute("href", next);
+  }
+}
+
+/** Switch languages in place: remember the choice on this device, move the
+ * address to the new language's prefix (`replaceState`, no reload), swap
+ * the dictionary, rewrite the static markup and let every listener redo
+ * its own copy. A link copied afterwards names the new language, as the
+ * page now is. */
 export function setLocale(next: Locale): void {
   if (next === locale) return;
   try {
@@ -213,11 +279,20 @@ export function setLocale(next: Locale): void {
   } catch {
     // Without storage the choice lasts this page load only.
   }
-  const params = new URLSearchParams(window.location.search);
-  params.delete("lang");
-  const search = params.size > 0 ? `?${params.toString()}` : "";
-  if (search !== window.location.search) {
-    window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
+  if (LANGUAGE_PATHS) {
+    const pathname = relocalizePath(window.location.pathname, next);
+    if (pathname !== window.location.pathname) {
+      window.history.replaceState(null, "", `${pathname}${window.location.search}${window.location.hash}`);
+    }
+  } else {
+    // The choice lives on this device: a link copied afterwards opens in
+    // each reader's own language, so an explicit `?lang=` goes too.
+    const params = new URLSearchParams(window.location.search);
+    params.delete("lang");
+    const search = params.size > 0 ? `?${params.toString()}` : "";
+    if (search !== window.location.search) {
+      window.history.replaceState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
+    }
   }
   locale = next;
   active = DEFINITIONS[next];
