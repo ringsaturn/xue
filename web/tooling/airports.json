@@ -4656,6 +4656,30 @@
    }
   },
   {
+   "icao": "ZBAD",
+   "iata": "PKX",
+   "name": "Beijing Daxing International Airport",
+   "city": "Beijing",
+   "country": "CN",
+   "lat": 39.501,
+   "lon": 116.412,
+   "elev": 25,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1139574",
+   "names": {
+    "zh": "北京大兴国际机场",
+    "zh-Hant": "北京大興國際機場",
+    "ja": "北京大興国際空港",
+    "ko": "베이징 다싱 국제공항"
+   },
+   "cityNames": {
+    "zh": "北京市",
+    "zh-Hant": "北京市",
+    "ja": "北京市",
+    "ko": "베이징시"
+   }
+  },
+  {
    "icao": "ZBTJ",
    "iata": "TSN",
    "name": "Tianjin Binhai International Airport",
