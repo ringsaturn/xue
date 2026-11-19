@@ -1,7 +1,9 @@
-/** The discovery files a crawler or an agent reads before the page: the
- * sitemap and `llms-full.txt`, emitted by the production build.
+/** The pages and discovery files the production build derives: every
+ * language's copy of the shell's pages, the datasets' and the cases'
+ * (`sitepages.ts`), the storm and airport pages, the sitemap and
+ * `llms-full.txt`.
  *
- * Both are derived, not written: the sitemap's case pages come from the
+ * All are derived, not written: the case pages come from the
  * *published* showcase catalog (`showcase.json` at the data root — the same
  * mutable index the showcase page lists), and `llms-full.txt` is the
  * project's user-facing documentation — README, the source notes, the specs,
@@ -13,39 +15,32 @@
  * The catalog, not the checked-in definitions under `showcase/cases/`, is
  * the source because a definition is only an input: it is authored first
  * and built and uploaded later, sometimes much later (a case pulls a whole
- * archived run), and a sitemap naming `/?case=<id>` for a case the viewer
- * cannot find sends every crawler to an error card.
+ * archived run), and a page for a case the viewer cannot find sends every
+ * crawler to an error card.
  *
  * Node-only: imported by vite.config.ts, never by the page. */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { Plugin } from "vite";
 
+import type { ForecastModelId } from "../src/manifest";
+import { CATALOG_FILENAME, validateCatalog, type ShowcaseCase } from "../src/showcase-catalog";
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
-import { buildCaseSite, parseCaseCatalog } from "./casepages";
+import { splitLocalePath } from "../src/sitepaths";
 import { buildAirportSite, liveScript, loadAirports } from "./airportpages";
+import { checkModelPageNames, datasetProvenance, readStacProse, reservedStems } from "./modelpages";
+import { buildSitePages, UNLISTED_PATHS } from "./sitepages";
 import { buildStormSite, loadStorms } from "./stormpages";
 
-/** Root-relative pages every deploy has, before the cases. */
-export const STATIC_PAGES: readonly string[] = ["/", "/showcase", "/compare", "/metrics", "/typhoon"];
-
-/** The sitemap's URL set: the static pages, the viewer's URL for each case
- * given (the cases when their static pages were not built), the generated
- * pages (`casepages.ts`, `stormpages.ts`, `airportpages.ts`) and the
- * datasets' pages (`modelpages.ts`), absolute. */
-export function sitemapUrls(
-  caseIds: readonly string[],
-  pageUrls: readonly string[] = [],
-  modelPaths: readonly string[] = [],
-): string[] {
-  return [
-    ...STATIC_PAGES.map((path) => new URL(path, SITE_ORIGIN).href),
-    // The datasets' pages (`modelpages.ts`), right after the home.
-    ...modelPaths.map((path) => new URL(path, SITE_ORIGIN).href),
-    ...caseIds.map((id) => `${SITE_ORIGIN}/?case=${encodeURIComponent(id)}`),
-    ...pageUrls,
-  ];
+/** The sitemap's URL set: every language's copy of the shell's pages
+ * (`sitepages.ts`) but the unlisted ones, then the generated storm and
+ * airport pages, absolute. */
+export function sitemapUrls(sitePageUrls: readonly string[], pageUrls: readonly string[] = []): string[] {
+  const listed = sitePageUrls.filter((url) => {
+    return !UNLISTED_PATHS.has(splitLocalePath(new URL(url).pathname).path);
+  });
+  return [...listed, ...pageUrls];
 }
 
 function escapeXml(value: string): string {
@@ -77,40 +72,15 @@ export function renderSitemap(urls: readonly string[], lastmod: Readonly<Record<
 }
 
 /** The catalog's filename at the data root; `xuebuild/showcase.py` writes it
- * and `web/src/showcase-catalog.ts` reads it. Repeated here rather than
- * imported because that module's graph reaches `window` at load time. */
-export const CATALOG_FILENAME = "showcase.json";
+ * and `web/src/showcase-catalog.ts` reads it. */
+export { CATALOG_FILENAME };
 
-/** Case ids from the published catalog, in catalog order. Only the shape the
- * sitemap needs is checked — the id must be the slug the viewer's `?case=`
- * accepts — and anything else is a build error: a catalog the page could
- * not list must not be advertised either. */
-export function catalogCaseIds(catalogJson: string): string[] {
-  const catalog = JSON.parse(catalogJson) as { schemaVersion?: unknown; cases?: unknown };
-  if (catalog.schemaVersion !== 1) throw new Error("showcase catalog: unsupported schema version");
-  if (!Array.isArray(catalog.cases)) throw new Error("showcase catalog: no case list");
-  const ids = catalog.cases.map((entry: unknown, index) => {
-    const id = (entry as { id?: unknown } | null)?.id;
-    if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) throw new Error(`showcase catalog: case ${index} has no slug id`);
-    return id;
-  });
-  if (new Set(ids).size !== ids.length) throw new Error("showcase catalog: duplicate case ids");
-  return ids;
-}
-
-/** Fetch the catalog the deployed page will read. `dataBaseUrl` is the
- * build's `VITE_DATA_BASE_URL`: the public bucket on a deploy build, unset
- * (the local `web/public/data/` directory) otherwise. A local build without
- * a built case has no catalog and lists no case pages; a deploy whose bucket
- * does not answer fails, because a sitemap silently missing every case is
- * the wrong thing to ship. */
-export async function loadCatalogCaseIds(dataBaseUrl: string | undefined, publicDir: string): Promise<string[]> {
-  const json = await loadCatalogJson(dataBaseUrl, publicDir);
-  return json === null ? [] : catalogCaseIds(json);
-}
-
-/** The catalog's text, found as `loadCatalogCaseIds` finds it; null for a
- * local build without one. */
+/** The catalog's text, as the deployed page will read it. `dataBaseUrl` is
+ * the build's `VITE_DATA_BASE_URL`: the public bucket on a deploy build,
+ * unset (the local `web/public/data/` directory) otherwise. A local build
+ * without a built case has no catalog (null) and writes no case pages; a
+ * deploy whose bucket does not answer fails, because a site silently
+ * missing every case is the wrong thing to ship. */
 export async function loadCatalogJson(dataBaseUrl: string | undefined, publicDir: string): Promise<string | null> {
   if (dataBaseUrl && /^https?:\/\//.test(dataBaseUrl)) {
     const url = new URL(CATALOG_FILENAME, dataBaseUrl);
@@ -180,76 +150,95 @@ interface DiscoveryOptions {
   repoRoot: string;
   /** The page's `VITE_DATA_BASE_URL` for this build mode, if set. */
   dataBaseUrl: string | undefined;
-  /** The datasets' pages this build emits (`modelpages.ts`), root-relative. */
-  modelPaths?: readonly string[];
+  /** The datasets with a page on this build (`modelpages.ts::modelPageIds`). */
+  modelIds: readonly ForecastModelId[];
 }
 
-/** Vite plugin: emit `sitemap.xml` and `llms-full.txt` next to the pages.
- * Build only — the dev server serves the static `web/public/` files and
- * nothing here matters before deploy. */
-export function discoveryFiles({ repoRoot, dataBaseUrl, modelPaths = [] }: DiscoveryOptions): Plugin {
+/** The catalog's cases and the day it was written, or none. */
+function readCatalog(json: string | null): { cases: ShowcaseCase[]; day: string | null } {
+  if (json === null) return { cases: [], day: null };
+  // The same reading the shell does: a case it could not play gets no page.
+  const catalog = validateCatalog(JSON.parse(json));
+  const day = catalog.generatedAt.slice(0, 10);
+  return { cases: catalog.cases, day: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null };
+}
+
+/** Vite plugin: after Vite's own HTML step (the hook runs last), write every
+ * language's copy of the shell's pages, the storm and airport pages,
+ * `sitemap.xml` and `llms-full.txt`. Fails on a dataset id that would
+ * shadow another root name. Build only — the dev server serves the source
+ * pages (`sitepages.ts::sitePathRewrite`) and nothing here matters before
+ * deploy. */
+export function discoveryFiles({ repoRoot, dataBaseUrl, modelIds }: DiscoveryOptions): Plugin {
   return {
     name: "xue:discovery-files",
     apply: "build",
-    async generateBundle(_options, bundle) {
-      const catalogJson = await loadCatalogJson(dataBaseUrl, join(repoRoot, "web", "public"));
-      let caseIds = catalogJson === null ? [] : catalogCaseIds(catalogJson);
-      // The cases' static pages stand for them in the sitemap; if they fail
-      // to build, the shell ships without them and the sitemap keeps the
-      // viewer's `/?case=` addresses.
-      let caseUrls: string[] = [];
-      let caseLastmod: Record<string, string> = {};
-      if (catalogJson !== null) {
-        try {
-          const site = buildCaseSite(parseCaseCatalog(catalogJson));
-          for (const file of site.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
-          if (site.urls.length > 0) {
-            caseIds = [];
-            caseUrls = site.urls;
-            caseLastmod = site.lastmod;
+    enforce: "post",
+    generateBundle: {
+      order: "post",
+      async handler(_options, bundle) {
+        const publicDir = join(repoRoot, "web", "public");
+        const sourcePages = readdirSync(join(repoRoot, "web")).filter((name) => name.endsWith(".html"));
+        checkModelPageNames(modelIds, reservedStems(Object.keys(bundle), existsSync(publicDir) ? readdirSync(publicDir) : [], sourcePages));
+        const built: Record<string, string> = {};
+        for (const [fileName, output] of Object.entries(bundle)) {
+          if (output.type !== "asset" || !fileName.endsWith(".html") || fileName.includes("/")) continue;
+          built[fileName] = typeof output.source === "string" ? output.source : new TextDecoder().decode(output.source);
+        }
+        const catalog = readCatalog(await loadCatalogJson(dataBaseUrl, publicDir));
+        const prose = readStacProse(join(repoRoot, "xuebuild", "stac_prose.json"));
+        const site = buildSitePages({
+          built,
+          models: modelIds.map((id) => ({ id, provenance: datasetProvenance(prose, id) })),
+          cases: catalog.cases,
+          catalogDay: catalog.day,
+        });
+        // The built pages are replaced by their English copies, which name
+        // their assets root-absolute.
+        for (const file of site.files) {
+          const existing = bundle[file.fileName];
+          if (existing?.type === "asset") existing.source = file.source;
+          else this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
+        }
+        this.info(`site pages: ${site.files.length} (${modelIds.length} datasets, ${catalog.cases.length} cases, every language)`);
+        // The storm pages need the published archive; a build without a data
+        // root (a local one) or with the archive unreachable ships the shell
+        // without them rather than failing.
+        let stormUrls: string[] = [];
+        let stormLastmod: Record<string, string> = {};
+        if (dataBaseUrl && /^https?:/.test(dataBaseUrl)) {
+          try {
+            const { storms } = await loadStorms(dataBaseUrl);
+            const stormSite = buildStormSite(storms);
+            for (const file of stormSite.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
+            stormUrls = stormSite.urls;
+            stormLastmod = stormSite.lastmod;
+            this.info(`storm pages: ${storms.length} storms, ${stormSite.files.length - 1} pages`);
+          } catch (error) {
+            this.warn(`storm pages skipped: ${error instanceof Error ? error.message : String(error)}`);
           }
-          this.info(`case pages: ${site.urls.length} pages`);
-        } catch (error) {
-          this.warn(`case pages skipped: ${error instanceof Error ? error.message : String(error)}`);
         }
-      }
-      // The storm pages need the published archive; a build without a data
-      // root (a local one) or with the archive unreachable ships the shell
-      // without them rather than failing.
-      let stormUrls: string[] = [];
-      let stormLastmod: Record<string, string> = {};
-      if (dataBaseUrl && /^https?:/.test(dataBaseUrl)) {
-        try {
-          const { storms } = await loadStorms(dataBaseUrl);
-          const site = buildStormSite(storms);
-          for (const file of site.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
-          stormUrls = site.urls;
-          stormLastmod = site.lastmod;
-          this.info(`storm pages: ${storms.length} storms, ${site.files.length - 1} pages`);
-        } catch (error) {
-          this.warn(`storm pages skipped: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-      // The airport pages come from a checked-in list, so every build has
-      // them; their live block is the `airport` entry of this same build.
-      const airports = buildAirportSite(loadAirports(join(repoRoot, "web", "tooling", "airports.json")), liveScript(bundle));
-      for (const file of airports.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
-      this.emitFile({
-        type: "asset",
-        fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls, ...airports.urls], modelPaths), {
-          ...caseLastmod,
-          ...stormLastmod,
-          ...airports.lastmod,
-        }),
-      });
-      this.emitFile({
-        type: "asset",
-        fileName: "llms-full.txt",
-        source: renderLlmsFull(
-          LLMS_FULL_SOURCES.map((repoPath) => ({ repoPath, markdown: readFileSync(join(repoRoot, repoPath), "utf8") })),
-        ),
-      });
+        // The airport pages come from a checked-in list, so every build has
+        // them; their live block is the `airport` entry of this same build.
+        const airports = buildAirportSite(loadAirports(join(repoRoot, "web", "tooling", "airports.json")), liveScript(bundle));
+        for (const file of airports.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
+        this.emitFile({
+          type: "asset",
+          fileName: "sitemap.xml",
+          source: renderSitemap(sitemapUrls(site.urls, [...stormUrls, ...airports.urls]), {
+            ...site.lastmod,
+            ...stormLastmod,
+            ...airports.lastmod,
+          }),
+        });
+        this.emitFile({
+          type: "asset",
+          fileName: "llms-full.txt",
+          source: renderLlmsFull(
+            LLMS_FULL_SOURCES.map((repoPath) => ({ repoPath, markdown: readFileSync(join(repoRoot, repoPath), "utf8") })),
+          ),
+        });
+      },
     },
   };
 }

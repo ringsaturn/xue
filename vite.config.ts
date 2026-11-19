@@ -6,7 +6,8 @@ import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 import { discoveryFiles } from "./web/tooling/discovery";
-import { modelPageIds, modelPagePaths, modelPages, modelPathRewrite } from "./web/tooling/modelpages";
+import { modelPageIds } from "./web/tooling/modelpages";
+import { languageChooser, sitePathRewrite } from "./web/tooling/sitepages";
 
 /** The static server behind `vite preview` and the dev server's public
  * directory (both sirv) misread a suffix range — `bytes=-N`, which the Zarr
@@ -56,32 +57,29 @@ export default defineConfig(({ mode }) => {
     root: "web",
     publicDir: "public",
     base: "./",
-    // sitemap.xml and llms-full.txt, derived at build time from the published
-    // showcase catalog and the repository's own documentation
-    // (web/tooling/discovery.ts). The catalog is read from wherever this mode
-    // sends the page for data (web/.env.deploy: the public bucket). Each
-    // dataset's page is the built viewer under that dataset's head, and the
-    // dev and preview servers answer its path as Pages does.
+    // Every page in every language (`/ja/hrrr`), the datasets' and the
+    // cases' pages, the storm and airport pages, sitemap.xml and
+    // llms-full.txt, derived at build time from the built pages, the
+    // published showcase catalog and the repository's own documentation
+    // (web/tooling/discovery.ts, sitepages.ts). The catalog is read from
+    // wherever this mode sends the page for data (web/.env.deploy: the public
+    // bucket). The dev and preview servers answer every page's path as Pages
+    // does, and an unprefixed page carries the language chooser.
     plugins: [
       suffixRanges(),
-      modelPathRewrite(modelIds),
+      languageChooser(),
+      sitePathRewrite(modelIds),
       discoveryFiles({
         repoRoot: import.meta.dirname,
         dataBaseUrl: env.VITE_DATA_BASE_URL,
-        modelPaths: modelPagePaths(modelIds),
-      }),
-      modelPages({
-        ids: modelIds,
-        publicDir: resolve(import.meta.dirname, "web/public"),
-        pagesDir: resolve(import.meta.dirname, "web"),
-        prosePath: resolve(import.meta.dirname, "xuebuild/stac_prose.json"),
+        modelIds,
       }),
     ],
     build: {
       outDir: "../dist",
       emptyOutDir: true,
       sourcemap: true,
-      // The live viewer (which also renders ?case=<id>), the historical
+      // The live viewer (which is also each case's page), the historical
       // showcase list, the point comparison, the run metrics, the typhoon
       // page and the API console.
       rollupOptions: {

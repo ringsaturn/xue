@@ -6,9 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   absolutizeLinks,
-  catalogCaseIds,
   LLMS_FULL_SOURCES,
-  loadCatalogCaseIds,
   loadCatalogJson,
   renderLlmsFull,
   renderSitemap,
@@ -43,32 +41,22 @@ const CATALOG = JSON.stringify({
 });
 
 describe("sitemap", () => {
-  it("lists the five pages, one URL per case and the storm pages", () => {
-    expect(sitemapUrls(["zhengzhou-2021", "shadel-2026"], [`${SITE_ORIGIN}/tc/`])).toEqual([
-      `${SITE_ORIGIN}/`,
-      `${SITE_ORIGIN}/showcase`,
-      `${SITE_ORIGIN}/compare`,
-      `${SITE_ORIGIN}/metrics`,
-      `${SITE_ORIGIN}/typhoon`,
-      `${SITE_ORIGIN}/?case=zhengzhou-2021`,
-      `${SITE_ORIGIN}/?case=shadel-2026`,
-      `${SITE_ORIGIN}/tc/`,
-    ]);
+  it("lists every language's copy of the site's pages, then the generated pages", () => {
+    const site = [`${SITE_ORIGIN}/`, `${SITE_ORIGIN}/ja/`, `${SITE_ORIGIN}/showcase/shadel-2026`, `${SITE_ORIGIN}/ja/showcase/shadel-2026`];
+    expect(sitemapUrls(site, [`${SITE_ORIGIN}/tc/`])).toEqual([...site, `${SITE_ORIGIN}/tc/`]);
   });
 
-  it("lists the datasets' pages right after the static pages", () => {
-    const urls = sitemapUrls(["shadel-2026"], [], ["/gfs", "/hrrr"]);
-    expect(urls.slice(4, 8)).toEqual([
-      `${SITE_ORIGIN}/typhoon`,
-      `${SITE_ORIGIN}/gfs`,
-      `${SITE_ORIGIN}/hrrr`,
-      `${SITE_ORIGIN}/?case=shadel-2026`,
-    ]);
+  it("leaves the API console out in every language", () => {
+    expect(sitemapUrls([`${SITE_ORIGIN}/api`, `${SITE_ORIGIN}/de/api`, `${SITE_ORIGIN}/de/compare`])).toEqual([`${SITE_ORIGIN}/de/compare`]);
+  });
+
+  it("names no ?lang= or ?case= address", () => {
+    for (const url of sitemapUrls([`${SITE_ORIGIN}/zh-hant/hrrr`, `${SITE_ORIGIN}/showcase`])) expect(url).not.toMatch(/[?&](lang|case)=/);
   });
 
   it("escapes the query in XML", () => {
-    const xml = renderSitemap([`${SITE_ORIGIN}/?case=a&b`]);
-    expect(xml).toContain("<loc>https://xue.ringsaturn.me/?case=a&amp;b</loc>");
+    const xml = renderSitemap([`${SITE_ORIGIN}/?a=1&b=2`]);
+    expect(xml).toContain("<loc>https://xue.ringsaturn.me/?a=1&amp;b=2</loc>");
     expect(xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www.sitemaps.org\/schemas\/sitemap\/0.9">/);
     expect(xml.trimEnd().endsWith("</urlset>")).toBe(true);
   });
@@ -79,43 +67,22 @@ describe("sitemap", () => {
     expect(xml.match(/<lastmod>/g)).toHaveLength(1);
   });
 
-  it("takes case ids from the published catalog, in catalog order", () => {
-    expect(catalogCaseIds(CATALOG)).toEqual(["shadel-2026", "pnw-heat-dome-2021"]);
-  });
-
-  it("rejects a catalog the page could not list", () => {
-    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 2, cases: [] }))).toThrow(/schema version/);
-    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1 }))).toThrow(/no case list/);
-    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1, cases: [{ id: "Not A Slug" }] }))).toThrow(/slug/);
-    expect(() => catalogCaseIds(JSON.stringify({ schemaVersion: 1, cases: [{ id: "a" }, { id: "a" }] }))).toThrow(
-      /duplicate/,
-    );
-  });
-
   it("fetches the catalog from the bucket on a deploy build", async () => {
     const requested: string[] = [];
     vi.stubGlobal("fetch", async (url: URL) => {
       requested.push(url.href);
       return new Response(CATALOG, { status: 200 });
     });
-    await expect(loadCatalogCaseIds("https://dataset.example/xue/", publicDir())).resolves.toEqual([
-      "shadel-2026",
-      "pnw-heat-dome-2021",
-    ]);
+    await expect(loadCatalogJson("https://dataset.example/xue/", publicDir())).resolves.toBe(CATALOG);
     expect(requested).toEqual(["https://dataset.example/xue/showcase.json"]);
   });
 
   it("fails a deploy build whose bucket does not answer", async () => {
     vi.stubGlobal("fetch", async () => new Response("", { status: 503 }));
-    await expect(loadCatalogCaseIds("https://dataset.example/xue/", publicDir())).rejects.toThrow(/503/);
+    await expect(loadCatalogJson("https://dataset.example/xue/", publicDir())).rejects.toThrow(/503/);
   });
 
-  it("reads the local catalog otherwise, and lists no case without one", async () => {
-    await expect(loadCatalogCaseIds(undefined, publicDir(CATALOG))).resolves.toEqual([
-      "shadel-2026",
-      "pnw-heat-dome-2021",
-    ]);
-    await expect(loadCatalogCaseIds(undefined, publicDir())).resolves.toEqual([]);
+  it("reads the local catalog otherwise, and none without one", async () => {
     await expect(loadCatalogJson(undefined, publicDir(CATALOG))).resolves.toBe(CATALOG);
     await expect(loadCatalogJson(undefined, publicDir())).resolves.toBeNull();
   });
