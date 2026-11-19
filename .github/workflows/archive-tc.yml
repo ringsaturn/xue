@@ -1,6 +1,6 @@
 name: archive tc
 
-# The tropical cyclone archive (docs/tc.md §8): once a day the published
+# The tropical cyclone archive (docs/tc.md §8): every six hours the published
 # hourly issues of the last two days are folded into tc/archive/<YYYY>/<MM>/
 # and IBTrACS into the season best tracks. A dispatch with `backfill`
 # instead reads the centres' own archives (NHC and UCAR a-decks, ECMWF's
@@ -9,7 +9,11 @@ name: archive tc
 
 on:
   schedule:
-    - cron: "50 0 * * *"
+    # Every six hours, so a new storm reaches the archive and its static page
+    # (deploy-pages.yml follows each run) the same day. A run writes only the
+    # files that changed; IBTrACS, updated a few times a week, is read on the
+    # 00:50 run only.
+    - cron: "50 */6 * * *"
     # Weekly, NHC's a-decks for last month and this one: the tracks that are
     # archived only once they are history (Google DeepMind's, docs/tc.md
     # §8.4) reach the archive here, and NHC's own revisions with them.
@@ -88,6 +92,9 @@ jobs:
         run: |
           set -euo pipefail
           args=(--lookback "$LOOKBACK")
+          if [ "$SCHEDULE" = "50 */6 * * *" ] && [ "$(date -u +%H)" != "00" ]; then
+            args+=(--no-ibtracs)
+          fi
           if [ "$SCHEDULE" = "30 2 * * 1" ]; then
             BACKFILL=nhc
             FROM=$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y-%m)
