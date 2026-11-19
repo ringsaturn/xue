@@ -18,7 +18,7 @@
 
 Facts worth getting right:
 
-- Live sources, one shell (the ids are the `?model=` and `--model` values).
+- Live sources, one shell (the ids are the viewer paths, `/<id>`, and the `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`, `rrfs`,
   `woofnam`, `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
   `mrms`, `jma`, `hkonowcast`, `aurora` and the satellites `himawari`, `himawarijp`,
@@ -261,7 +261,7 @@ Facts worth getting right:
 
 ## The geostationary mosaic
 
-`/?model=geo` is a view, not a dataset: the shell opens the published run of
+`/geo` is a view, not a dataset: the shell opens the published run of
 every geostationary imager that answers (Himawari-9, GOES-18, GOES-19 and,
 when published, Meteosat-12), clips each layer to the longitudes it sees least
 obliquely (a partition at the midpoints between sub-satellite longitudes,
@@ -272,10 +272,14 @@ whose pointer is missing leaves the basemap between its neighbours' edges.
 
 ## Pages and URL parameters
 
-The viewer is one page whose state is in the query string. Unknown values
-fall back to defaults rather than fail, so a constructed link always opens.
+The viewer is one page: its dataset is in the path, the rest of its state in
+the query string. Unknown values fall back to defaults rather than fail, so a
+constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
+- https://xue.ringsaturn.me/<id> — the live viewer on one dataset, e.g.
+  https://xue.ringsaturn.me/hrrr; the ids are listed under `/<id>` below.
+  Each is a page of its own (title, description, a schema.org `Dataset`).
 - https://xue.ringsaturn.me/showcase — the list of historical cases.
 - https://xue.ringsaturn.me/cases/ — one static page per historical case
   (`/cases/<case id>`), in English and under `/zh/`, `/zh-hant/`, `/ja/`,
@@ -317,15 +321,19 @@ fall back to defaults rather than fail, so a constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `?model=gfs|sflux|ecmwf|ifs|aifs|ifshres|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|cfs|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo`
-  — which live source (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` / `icon` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `radar` of `cma`, `himawari-9` / `ahi` of
+- `/<id>`, one of `/gfs|sflux|ecmwf|ifs|aifs|ifshres|cfs|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|mrms|mrms3d|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo|gibs`
+  (the path, e.g. `/ecmwf?type=wind850`; `/` is GFS) — which live source.
+  An older link's `?model=<id>` on `/` is redirected (301) to `/<id>`,
+  the rest of its query kept, and `?model=` still accepts the aliases
+  (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
   mosaic of every geostationary disk). `woof` (`wrf`), `efas`,
-  `efaswb`, `era5` and `cams` are known but have no live run, so alone they open the
-  default; a case pins its own dataset.
+  `efaswb`, `era5` and `cams` are known but have no live run and no path,
+  so `?model=` naming one goes to `/`; a case (`/?case=<id>`, always on
+  `/`) pins its own dataset.
 - `?type=` — the filled layer: `temp` (2 m temperature), `precip`, `wind`
   (10 m), `solar` (sflux only), `pressure` (sea level pressure as isobars),
   `radar` (composite reflectivity: the radar cases, and the HRRR forecast), the GFS
@@ -488,7 +496,7 @@ fall back to defaults rather than fail, so a constructed link always opens.
 - `?flow=<id>` — with `type=precipsetup`, what the particles run on: a
   vapour flux surface (`qflux925` … `qflux200`) or a wind one (`wind10m`,
   `wind925` … `wind200`) the run ships; the default is `qflux850`.
-- `?model=gibs&gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
+- `/gibs?gibs=snpp|noaa20|noaa21|terra|aqua` (true colour) or
   `snpp-fc|noaa20-fc|noaa21-fc` (VIIRS M11-I2-I1) or `terra-721|aqua-721`
   (MODIS bands 7-2-1) — NASA GIBS's daily corrected-reflectance picture
   of that platform, a dataset of its own in the model switch, fetched
@@ -517,10 +525,10 @@ fall back to defaults rather than fail, so a constructed link always opens.
   bearing, and the relief it asks for unless the link carries
   `?terrain=`).
 
-Examples: `/?model=ecmwf&type=wind850`, `/?type=temp&lines=hgt500`,
+Examples: `/ecmwf?type=wind850`, `/?type=temp&lines=hgt500`,
 `/?case=pnw-heat-dome-2021`, `/?case=ida-2021&type=radar`,
-`/?model=hrrr&type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`,
-`/?type=temp&stations=snd`, `/?model=himawari&type=infrared#map=5/25/140`.
+`/hrrr?type=radar#map=6/32.8/-96.8`, `/?type=wind&tc=EP142026`,
+`/?type=temp&stations=snd`, `/himawari?type=infrared#map=5/25/140`.
 
 ## Data access
 

@@ -17,9 +17,12 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Search metadata. The static values describe the live viewer at `/`;
-         pagemeta.ts rewrites them once the view is known — a case is its own
-         page — and adds the rest of the hreflang set. Only view state that
-         *is* content (`?case=`, `?lang=`) reaches the canonical URL. -->
+         the build writes a copy of this page per dataset (`/hrrr`) with
+         that dataset's (web/tooling/modelpages.ts, which expects each of
+         these tags once), and pagemeta.ts rewrites them once the view is
+         known — a case is its own page — and adds the rest of the hreflang
+         set. Only view state that *is* content (the dataset's path,
+         `?case=`, `?lang=`) reaches the canonical URL. -->
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://xue.ringsaturn.me/" />
     <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/" />
@@ -153,7 +156,7 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, ensemble statistics of the CMA GRAPES GEPS global ensemble, the CMA-CW dust forecast over Asia, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan, the newest Hong Kong Observatory rainfall nowcast over Hong Kong and the Pearl River Delta (four half-hourly frames, 30 to 120 minutes ahead), the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /?model=geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, ensemble statistics of the CMA GRAPES GEPS global ensemble, the CMA-CW dust forecast over Asia, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan, the newest Hong Kong Observatory rainfall nowcast over Hong Kong and the Pearl River Delta (four half-hourly frames, 30 to 120 minutes ahead), the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
@@ -769,7 +772,7 @@
           <b class="rail-glyph" aria-hidden="true" data-i18n="glyphFwalert">R</b>
           <span class="rail-name"><span>RH·GUST</span> <small data-i18n="varFwalert">RED FLAG</small></span>
         </button>
-        <!-- The NASA GIBS dataset's two fields (?model=gibs): the daily
+        <!-- The NASA GIBS dataset's two fields (/gibs): the daily
              picture in true colour or in the fire false colour (a burn
              scar dark red, a fire bright). The platform is picked on the
              level row. Shown on that dataset alone (main.ts::syncImageryRail). -->

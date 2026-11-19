@@ -21,7 +21,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block (and the `band`, `aerosol`, `producer` and `ensemble` blocks beside it); session-scoped keys. |
 | `statistics.ts` | An `ensemble` block folded into one statistic key (`q75`, `mean`, `spread`, `p3:10:`), which statistics chart as their quantity, the spread families, and the probe's note. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
-| `viewstate.ts`, `urlstate.ts` | `ViewState`; query and camera-hash parsing. |
+| `viewstate.ts`, `urlstate.ts`, `modelpaths.ts` | `ViewState`; path, query and camera-hash parsing; the dataset ids, their spellings and the old-`?model=` mapping the root's Pages Function shares. |
 | `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
 | `gridmap.ts` | The one parser of a bundle's `grid` block and the one way between a point and a cell (`gridMapFor`, `GridMap`): regular, Gaussian and Lambert. See "Native grids" below. |
 | `tiles.ts` | Viewport to tile rectangles. |
@@ -48,9 +48,9 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the precipitation setup and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
 | `accumulation.ts` | Precipitation totals (`?accum=`) over a window or a dragged range, from the published rate frames; see "Precipitation totals" below. |
 | `hotspot.ts`, `firewx.ts` | The fire fields (one at a time, drawn alone on an anchor input's session, never in the URL): the 3.9 µm contextual hotspot test on `ir039` + `ir104`, the Fosberg index and the dry-and-gusty alert from `tmp2m` / `dpt2m` / `wind10m` / `gust`. Plain arithmetic on decoded whole planes like `composite.ts`, run through the setup's derived-layer machinery in `derived.ts` (`fireDerived`). |
-| `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`?model=gibs&gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
+| `gibs.ts` | NASA GIBS daily corrected reflectance, a dataset of its own (`/gibs?gibs=`): one raster source and layer, tiles straight from GIBS's WMTS. |
 | `i18n.ts` + `locales/`, `theme.ts`, `timezone.ts` | Locale, appearance, display zone. |
-| `pagemeta.ts`, `site.ts` | Per-view metadata; the only place production hostnames appear. |
+| `pagemeta.ts`, `site.ts`, `modelpage.ts` | Per-view metadata; the only place production hostnames appear; a dataset page's head (title, description, `Dataset`). |
 | `embed.ts` | The embed API, `window.xueViewer` (see "Embedding"). |
 | `compare.ts` + `compare/`, `showcase.ts` | Comparison page; case list page. |
 | `tc/`, `stations/`, `sounding/` | Point-product marks, cards, skew-T. |
@@ -233,7 +233,7 @@ and the window shrinks to fit it.
   basemap POIs, so a tile's OSM copy of the same summit loses the collision.
   The badge is drawn in code because the `white` flavor's sprite has no
   peak icon.
-- Volumes (`volume.ts`; `?model=mrms3d`, or a `woof` case's `cloud3d`): a volume bundle's levels
+- Volumes (`volume.ts`; `/mrms3d`, or a `woof` case's `cloud3d`): a volume bundle's levels
   (one quantity on GRIB2 surface 102, ascending) are the session's
   variables, every one decoded per frame, the session whole (a ray can
   cross any of it) and its tier weighed for the stack (five planes' worth
@@ -468,7 +468,7 @@ and the window shrinks to fit it.
   CPU pass, not a fragment shader, so it can be unit-tested and shares
   the setup's input plumbing: separable box sums keep it linear in
   the cells whatever the window.
-- NASA GIBS (`gibs.ts`, `?model=gibs&gibs=`): a dataset in the model
+- NASA GIBS (`gibs.ts`, `/gibs?gibs=`): a dataset in the model
   switch beside the models and the disks, and the only one whose tiles do
   not come from our bucket. It has no pointer, manifest or session
   (`ForecastModelInfo.imagery`): `initialize` branches to `openImagery`,
@@ -945,7 +945,7 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   the tile still turns it off, and a volume name the shell does not know
   is dropped from the view without a warning. A dataset reached only through cases (`woof`, `efas`, `efaswb`) has no
   pointer: `isCaseOnlyModel`, absent from `FORECAST_MODEL_IDS` and the
-  model sheet, and `?model=` naming it falls back to the default.
+  model sheet, has no path, and `?model=` naming it goes to `/`.
 - A case may name a dataset this build has no `FORECAST_MODELS` entry for:
   a catalog row whose `model` matches no label is admitted from the row
   itself (`registerCaseDataset`, called last in `showcase-catalog.ts::validateCase`)
@@ -957,7 +957,7 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   label. A row is still refused when its `modelId` is a built-in id or is
   not a lowercase slug, when another row admitted the same id with a
   different label or product, or when its label is already another
-  dataset's. Nothing about it reaches the model switch, `?model=` or the
+  dataset's. Nothing about it reaches the model switch, the paths or the
   comparison page.
 - A case may say how its axis is read (`timeline`, `showcase/README.md`).
   `daily` is a record of days: `showingDailyRecord()` reads each frame by
@@ -965,6 +965,44 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
   the run line with the days the case spans and the track's ends with
   their dates, and leaves the lead hours and the display zone out. Every
   other case is read by its dataset, as before.
+
+### Dataset paths
+
+The live dataset is the path, one segment: `/hrrr?type=wind#map=…`. `/` is
+the home on the default dataset; a case stays on `/` (`/?case=<id>`).
+
+- The path set is `liveModelIds()`: `FORECAST_MODEL_IDS` (`modelpaths.ts`)
+  that the build serves and that are not case-only, views included (`geo`,
+  `gibs`, `mrms3d`, `cma`, …). Never list it by hand.
+- `urlstate.ts` reads the model from the path, then from an old link's
+  `?model=`, then the default (`parseModelFromLocation`); a path accepts
+  any spelling in `MODEL_ALIASES`. `syncUrl` writes the path with
+  `replaceState` (`livePathname`): `/<id>` for a live view, `/` for a
+  case, and `/` while the home shows the default and no dataset was
+  chosen. `searchForVariable` drops `model` from the query.
+- Old links: `legacyModelLocation` (`modelpaths.ts`, no runtime imports)
+  maps `/?model=<alias>` to `/<id>?<rest>`, a case-only or unknown dataset
+  to `/` without the parameter, and leaves `?case=` links alone. The Pages
+  Function `functions/_middleware.ts` applies it with a 301 (routed for `/`
+  and `/index.html` only by `web/public/_routes.json`), and `main.ts`
+  applies it with `replaceState` on boot, for dev, preview and an outage.
+  `wrangler pages deploy` builds `functions/` from the directory it runs
+  in, the repository root (`make deploy-pages`). The function's set is the
+  whole `FORECAST_MODEL_IDS`, since the deploy build sets no
+  `VITE_SOURCES`; a deployment that does would send a dataset it does not
+  serve to the viewer on the default.
+- Pages: `web/tooling/modelpages.ts` writes `<id>.html` beside
+  `index.html` after Vite's HTML step, with the head from `modelpage.ts`
+  (title, description, canonical, hreflang, social card, a `Dataset` added
+  to the JSON-LD graph: label, product, region, frame step and live
+  pointer, all from the table). Pages serves it at `/<id>`, one segment
+  deep, so `base: "./"` still resolves `./assets/` — never emit
+  `<id>/index.html`. The build fails when an id takes the name of a page,
+  directory or public file (the build's output, `web/public/`, `web/*.html`,
+  the storm pages' prefixes). The dev and preview servers rewrite a
+  dataset's path the same way (`modelPathRewrite`).
+- On a dataset's page the shell keeps that dataset's description (English,
+  as in the static head); the home keeps the site's, translated.
 
 ### URL parameters
 
@@ -979,8 +1017,8 @@ link says nothing; the link always outranks storage. A switch accepts
 
 | Parameter | Values | Default | URL | Stored | Notes |
 |---|---|---|---|---|---|
-| `model` | dataset id or alias (`MODEL_ALIASES`) | `gfs` | written | — | A case-only or unserved id falls back to the default. |
-| `case` | showcase case id | — | written | — | Pins its own dataset and run; `model` is dropped. |
+| `model` | dataset id or alias (`MODEL_ALIASES`) | — | moved to the path | — | An old link's: redirected to `/<id>` ([Dataset paths](#dataset-paths)); a case-only or unserved id goes to `/`. |
+| `case` | showcase case id | — | written | — | Pins its own dataset and run; on `/`, `model` is dropped. |
 | `type` | field alias, bundle id, pressure surface, or `precipsetup` | dataset default | written | — | The primary; a pressure surface is the lines alone. `precipsetup` is the [precipitation setup](#precipitation-setup) on `prate`. |
 | `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |
 | `flow` | `qflux<level>` or `wind<level>` | `qflux850` | written | — | The setup's particle flow; dropped outside the setup. |
@@ -1092,7 +1130,8 @@ interface XueViewer {
 What the shell says about itself must match what the encoder publishes.
 `web/index.html` and `web/showcase.html` carry static metadata, hreflang and
 JSON-LD; `pagemeta.ts` rewrites title, canonical and `og:url` per view (a
-case is its own page, every live view is `/`, a `?lang=` page is canonical
+case is its own page, a live view is its dataset's page `/<id>` or the home
+`/` ([Dataset paths](#dataset-paths)), a `?lang=` page is canonical
 to itself, a storm on `typhoon` that has a static page names that page and
 no alternates). Addresses are written without `.html`: Pages answers a
 `.html` request with a 308 to the bare path, and a canonical, hreflang or
@@ -1100,7 +1139,8 @@ sitemap entry that redirects is never indexed. Update `web/public/llms.txt` when
 what a model publishes or `urlstate.ts` gains a parameter.
 `web/tooling/discovery.ts` generates `sitemap.xml` and `llms-full.txt`
 (README + `docs/*.md` + `showcase/README.md`) at build time, so
-`deploy-pages.yml` triggers on those documents too. Sitemap cases come from
+`deploy-pages.yml` triggers on those documents too. The sitemap lists the
+datasets' pages after the static ones. Sitemap cases come from
 the published `showcase.json` at `VITE_DATA_BASE_URL`, never from
 `showcase/cases/`: a deploy build fails if the bucket does not answer.
 Storm pages carry a sitemap `lastmod`: the last best-track day of the storm,

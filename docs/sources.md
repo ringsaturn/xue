@@ -6,11 +6,12 @@ engineering notes (fetch stages, quirks) are in
 [`contribution/sources.md`](contribution/sources.md). Every source is an independent dataset under
 `<model>.<run>/` on the data root, taken live by its pointer
 (`latest.json` for GFS, `latest-<model>.json` for the rest). The id in each
-heading is the `--model` value and the `?model=` value. Time axes with
+heading is the `--model` value and, for a live source, the viewer path
+(`/<id>`). Time axes with
 mixed steps are listed outright in the bundle metadata
 ([`bundle.md`](bundle.md), schema v3).
 
-The geostationary mosaic (`?model=geo`) is a view, not a dataset: the
+The geostationary mosaic (`/geo`) is a view, not a dataset: the
 viewer opens whichever imager runs answer, clips each disk at the
 midpoints between sub-satellite longitudes and plays them on one timeline
 by valid time.

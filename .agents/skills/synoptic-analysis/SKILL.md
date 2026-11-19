@@ -201,8 +201,8 @@ Data: <model runs with cycle times>, <observations with their times>
 ## Sources             — runs, products, attribution lines from references/sources.md, and viewer links
 ```
 
-Viewer links let the reader see the maps: `https://xue.ringsaturn.me/?model=ecmwf&type=precip&lines=hgt500#map=4/35/135`,
-`?type=wind850`, `?type=thetae850`, `?model=himawari&type=infrared`,
+Viewer links let the reader see the maps: `https://xue.ringsaturn.me/ecmwf?type=precip&lines=hgt500#map=4/35/135`,
+`?type=wind850`, `?type=thetae850`, `/himawari?type=infrared`,
 `?type=temp&tc=<storm id>`. Put one or two next to the sections they show.
 
 ## Pitfalls

@@ -63,8 +63,9 @@ is no longer published and every decoder still reads it.
 
 The last column reads the source's live pointer: a forecast's cycle, or
 the hour a rolling window starts at. Variables, grids and caveats per
-source are in [`docs/sources.md`](docs/sources.md). `?model=geo` is a
-mosaic of the geostationary imagers, a view rather than a dataset.
+source are in [`docs/sources.md`](docs/sources.md). The viewer opens a
+source at its id (`https://xue.ringsaturn.me/hrrr`); `/geo` is a mosaic of
+the geostationary imagers, a view rather than a dataset.
 
 ## Quick start
 
