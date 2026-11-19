@@ -11,11 +11,12 @@
  * request runs it. The mapping is the shell's own (`modelpaths.ts`), which
  * applies it again on boot where no function ran. */
 
-import { FORECAST_MODEL_IDS, legacyModelLocation } from "../web/src/modelpaths";
+import { FORECAST_MODEL_IDS, hasModelPage, legacyModelLocation } from "../web/src/modelpaths";
 
 /** Every dataset with a page on the deployed site: the deploy build sets
- * no `VITE_SOURCES`, so it emits a page for each one (`modelpages.ts`). */
-const PATH_IDS: ReadonlySet<string> = new Set(FORECAST_MODEL_IDS);
+ * no `VITE_SOURCES`, so it emits a page for each one with a page at all
+ * (`modelpages.ts`); `?model=` naming one without passes through. */
+const PATH_IDS: ReadonlySet<string> = new Set(FORECAST_MODEL_IDS.filter(hasModelPage));
 
 interface PagesContext {
   request: Request;

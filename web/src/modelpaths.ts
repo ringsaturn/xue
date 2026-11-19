@@ -22,8 +22,8 @@ import type { ForecastModelId } from "./manifest";
  * mosaic, a view over the imagers with no feed of its own. The switch
  * offers the ones index.html has a button for. A dataset with no pointer
  * that is not a mosaic (the WOOF nest, the two EFAS runs) is absent: it is
- * reached through its showcase cases alone. Each one here has a path of its
- * own (`/<id>`) on a build that serves it. */
+ * reached through its showcase cases alone. Each one here but `NO_PAGE_MODEL_IDS` has a
+ * path of its own (`/<id>`) on a build that serves it. */
 export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gfs",
   "sflux",
@@ -56,8 +56,8 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "gibs",
 ];
 
-/** Accepted spellings for each model, in `?model=` and in the path. The
- * target is the canonical id, the only spelling a URL is written with.
+/** Accepted spellings for each model in `?model=`. The target is the
+ * canonical id, the only spelling a URL (and a path) is written with.
  * Matching is case-insensitive. */
 export const MODEL_ALIASES: Readonly<Record<string, ForecastModelId>> = {
   gfs: "gfs",
@@ -158,20 +158,24 @@ export function isHomePathname(pathname: string): boolean {
   return pathname === "/" || pathname === "/index.html";
 }
 
-/** The dataset a path names, or null when it names none of `pathIds`: one
- * segment, a canonical id or one of its spellings, any case, with the
- * `.html` Pages serves the page from tolerated. */
+/** Live datasets with no page of their own, reached as `/?model=<id>` on
+ * the home and through their cases. */
+export const NO_PAGE_MODEL_IDS: ReadonlySet<ForecastModelId> = new Set<ForecastModelId>([
+  // MRMS 3D: its live publishing is paused, so a page would index an empty view.
+  "mrms3d",
+]);
+
+/** True when a live dataset is written at a path of its own (`/<id>`). */
+export function hasModelPage(model: ForecastModelId): boolean {
+  return !NO_PAGE_MODEL_IDS.has(model);
+}
+
+/** The dataset a path names, or null when it names none of `pathIds`: the
+ * one segment Pages serves a dataset's page at, its canonical id. Any
+ * other path answers with the 404 page and never reaches the shell. */
 export function modelFromPathname(pathname: string, pathIds: ReadonlySet<string>): ForecastModelId | null {
-  const match = /^\/([^/]+?)(?:\.html)?\/?$/.exec(pathname);
-  if (!match) return null;
-  let segment: string;
-  try {
-    segment = decodeURIComponent(match[1]!);
-  } catch {
-    return null;
-  }
-  const id = modelForAlias(segment);
-  return id !== null && pathIds.has(id) ? id : null;
+  const segment = /^\/([a-z0-9]+)$/.exec(pathname)?.[1];
+  return segment !== undefined && pathIds.has(segment) ? (segment as ForecastModelId) : null;
 }
 
 /** The path a live view of `model` is written at. */
@@ -183,18 +187,21 @@ export function modelPathname(model: ForecastModelId): string {
  * root-relative path and query, or null when it is fine where it is.
  *
  * Only the home reads the parameter: `/?model=hrrr&type=wind` belongs at
- * `/hrrr?type=wind`. A spelling of a dataset outside `pathIds` — unknown,
- * or one reached only through its cases — belongs at `/` without it, where
- * the default opens, as it always did. A case (`?case=`) pins its own
- * dataset and ignores `model`, so a case link is left alone. Every other
- * parameter is kept in order; the fragment is the browser's to keep. */
+ * `/hrrr?type=wind`. A dataset with no page (`NO_PAGE_MODEL_IDS`) is
+ * opened by the parameter itself, so its link is left alone. A spelling of
+ * any other dataset outside `pathIds` — unknown, or one reached only
+ * through its cases — belongs at `/` without it, where the default opens,
+ * as it always did. A case (`?case=`) pins its own dataset and ignores
+ * `model`, so a case link is left alone. Every other parameter is kept in
+ * order; the fragment is the browser's to keep. */
 export function legacyModelLocation(pathname: string, search: string, pathIds: ReadonlySet<string>): string | null {
   if (!isHomePathname(pathname)) return null;
   const params = new URLSearchParams(search);
   const model = params.get("model");
   if (model === null || params.has("case")) return null;
-  params.delete("model");
   const id = modelForAlias(model);
+  if (id !== null && !hasModelPage(id)) return null;
+  params.delete("model");
   const rest = params.toString();
   const query = rest === "" ? "" : `?${rest}`;
   return id !== null && pathIds.has(id) ? `${modelPathname(id)}${query}` : `/${query}`;

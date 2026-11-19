@@ -321,8 +321,10 @@ constructed link always opens.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `/<id>`, one of `/gfs|sflux|ecmwf|ifs|aifs|ifshres|cfs|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|mrms|mrms3d|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo|gibs`
+- `/<id>`, one of `/gfs|sflux|ecmwf|ifs|aifs|ifshres|cfs|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo|gibs`
   (the path, e.g. `/ecmwf?type=wind850`; `/` is GFS) — which live source.
+  `/?model=mrms3d` (the MRMS 3D volume, its live publishing paused) has no
+  path of its own and stays a query on `/`.
   An older link's `?model=<id>` on `/` is redirected (301) to `/<id>`,
   the rest of its query kept, and `?model=` still accepts the aliases
   (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
