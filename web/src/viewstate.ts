@@ -21,7 +21,7 @@
  */
 
 import type { Accumulation } from "./accumulation";
-import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId, type ForecastModelId } from "./manifest";
+import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import {
   parseAccumulationFromSearch,
@@ -112,13 +112,13 @@ export interface ViewState {
   };
 }
 
-/** What the view is written against: the dataset the page is on, and the
+/** What the view is written against: the case the page is on, if any (a
+ * live view's dataset is in its path, `urlstate.ts::livePathname`), and the
  * session fact the writer needs that the view does not carry — whether the
  * particles were ever chosen (only a chosen off is written, so a
  * reduced-motion visitor who never touched the switch hands out ordinary
  * links). */
 interface ViewContext {
-  model: ForecastModelId;
   caseId: string | null;
   particlesChosen: boolean;
 }
@@ -212,7 +212,7 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const base =
     context.caseId !== null
       ? searchForCaseVariable(primary, search, context.caseId)
-      : searchForVariable(primary, search, context.model);
+      : searchForVariable(primary, search);
   const withLines = searchWithLines(base, view.field !== null ? view.lines : null);
   const setup = setupInView(view);
   const withSetup = searchWithSetup(withLines, setup, view.flow, view.lines);

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FORECAST_MODELS, isCaseOnlyModel, type ForecastModelId } from "../../web/src/manifest";
+import { FORECAST_MODELS, isCaseOnlyModel, liveModelIds, type ForecastModelId } from "../../web/src/manifest";
 
 import {
+  legacyModelUrl,
+  livePathname,
+  parseModelFromLocation,
   parseBackendFromSearch,
   parseCameraFromHash,
   parseFlowFromSearch,
@@ -62,8 +65,8 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?type=t550")).toBe("tmp550");
     expect(parseVariableFromSearch("?type=wind1")).toBe("wind1");
     // The level is the layer: the canonical spelling is the id itself.
-    expect(searchForVariable("tmp850", "")).toBe("?model=gfs&type=tmp850");
-    expect(searchForVariable("qflux850", "", "gfs")).toBe("?model=gfs&type=qflux850");
+    expect(searchForVariable("tmp850", "")).toBe("?type=tmp850");
+    expect(searchForVariable("qflux850", "?model=gfs")).toBe("?type=qflux850");
     // A filled isobaric field is never the lines slot.
     expect(parseLinesFromSearch("?lines=tmp850")).toBeNull();
     expect(parseLinesFromSearch("?lines=z500")).toBe("hgt500");
@@ -92,7 +95,7 @@ describe("parseVariableFromSearch", () => {
     // A well-formed unknown name is still not a pressure surface.
     expect(parseLinesFromSearch("?lines=vorticity")).toBeNull();
     // Round-trips under its own name, since it has no canonical alias.
-    expect(searchForVariable("vorticity", "")).toBe("?model=gfs&type=vorticity");
+    expect(searchForVariable("vorticity", "")).toBe("?type=vorticity");
     expect(parseVariableFromSearch(searchForVariable("vorticity", ""))).toBe("vorticity");
   });
 
@@ -207,7 +210,7 @@ describe("the fields' own ?type= spellings", () => {
     ["zhouye", "zhouye"],
     ["truecolor", "truecolor"],
   ])("writes %s as type=%s and reads it back", (id, spelling) => {
-    expect(searchForVariable(id, "")).toBe(`?model=gfs&type=${spelling}`);
+    expect(searchForVariable(id, "")).toBe(`?type=${spelling}`);
     expect(parseVariableFromSearch(searchForVariable(id, ""))).toBe(id);
   });
 });
@@ -284,14 +287,14 @@ describe("parseModelFromSearch", () => {
 });
 
 describe("searchForVariable", () => {
-  it("writes the canonical model and type", () => {
-    expect(searchForVariable("wind10m", "")).toBe("?model=gfs&type=wind");
-    expect(searchForVariable("tmp2m", "")).toBe("?model=gfs&type=temp");
-    expect(searchForVariable("prate", "")).toBe("?model=gfs&type=precip");
+  it("writes the canonical type", () => {
+    expect(searchForVariable("wind10m", "")).toBe("?type=wind");
+    expect(searchForVariable("tmp2m", "")).toBe("?type=temp");
+    expect(searchForVariable("prate", "")).toBe("?type=precip");
   });
 
   it("rewrites an existing type while preserving unrelated params", () => {
-    expect(searchForVariable("wind10m", "?debug=1&type=temp")).toBe("?debug=1&type=wind&model=gfs");
+    expect(searchForVariable("wind10m", "?debug=1&type=temp")).toBe("?debug=1&type=wind");
   });
 
   it("round-trips through parseVariableFromSearch", () => {
@@ -300,11 +303,60 @@ describe("searchForVariable", () => {
     }
   });
 
-  it("writes the requested model and round-trips it", () => {
-    expect(searchForVariable("prate", "", "ecmwf")).toBe("?model=ecmwf&type=precip");
-    expect(parseModelFromSearch(searchForVariable("prate", "", "ecmwf"))).toBe("ecmwf");
-    expect(searchForVariable("dswrf", "", "sflux")).toBe("?model=sflux&type=solar");
-    expect(parseModelFromSearch(searchForVariable("dswrf", "", "sflux"))).toBe("sflux");
+  it("drops a model param: the dataset is the path's", () => {
+    expect(searchForVariable("prate", "?model=ecmwf&lang=ja")).toBe("?lang=ja&type=precip");
+  });
+});
+
+describe("the dataset in the path", () => {
+  it("reads every live dataset from its own path, round-tripping the writer", () => {
+    for (const id of liveModelIds()) {
+      expect(parseModelFromLocation(livePathname(id, "/hrrr"), "")).toBe(id);
+      expect(livePathname(id, "/hrrr")).toBe(`/${id}`);
+    }
+  });
+
+  it("reads a spelling in the path, any case, and the .html Pages serves from", () => {
+    expect(parseModelFromLocation("/HRRR", "")).toBe("hrrr");
+    expect(parseModelFromLocation("/goes-east", "")).toBe("goeseast");
+    expect(parseModelFromLocation("/himawari.html", "")).toBe("himawari");
+  });
+
+  it("prefers the path to an old ?model=, and that to the default", () => {
+    expect(parseModelFromLocation("/hrrr", "?model=ecmwf")).toBe("hrrr");
+    expect(parseModelFromLocation("/", "?model=ecmwf")).toBe("ecmwf");
+    expect(parseModelFromLocation("/", "")).toBe("gfs");
+    expect(parseModelFromLocation("/index.html", "")).toBe("gfs");
+  });
+
+  it("falls back on a path naming no live dataset", () => {
+    // Cases only, unknown, deeper than one segment.
+    expect(parseModelFromLocation("/woof", "")).toBe("gfs");
+    expect(parseModelFromLocation("/efas", "")).toBe("gfs");
+    expect(parseModelFromLocation("/showcase", "")).toBe("gfs");
+    expect(parseModelFromLocation("/hrrr/extra", "")).toBe("gfs");
+    expect(parseModelFromLocation("/%E0%A4%A", "")).toBe("gfs");
+  });
+
+  it("keeps the home on / while it shows the default, and tidies a stray path", () => {
+    expect(livePathname("gfs", "/")).toBe("/");
+    expect(livePathname("gfs", "/index.html")).toBe("/");
+    expect(livePathname("gfs", "/not-a-model")).toBe("/");
+    expect(livePathname("gfs", "/hrrr")).toBe("/gfs");
+    expect(livePathname("hrrr", "/")).toBe("/hrrr");
+  });
+
+  it("moves an old ?model= link to the path, keeping every other param", () => {
+    expect(legacyModelUrl("/", "?model=HRRR&type=wind&lang=ja")).toBe("/hrrr?type=wind&lang=ja");
+    expect(legacyModelUrl("/", "?type=wind&model=goes-east")).toBe("/goeseast?type=wind");
+    expect(legacyModelUrl("/index.html", "?model=gfs")).toBe("/gfs");
+    // A case-only or unknown dataset belongs at the home, without the param.
+    expect(legacyModelUrl("/", "?model=woof&type=temp")).toBe("/?type=temp");
+    expect(legacyModelUrl("/", "?model=icon")).toBe("/");
+    // A case pins its own dataset; a path is already right; nothing named.
+    expect(legacyModelUrl("/", "?case=ida-2021&model=hrrr")).toBeNull();
+    expect(legacyModelUrl("/hrrr", "?model=ecmwf")).toBeNull();
+    expect(legacyModelUrl("/", "?type=wind")).toBeNull();
   });
 });
 

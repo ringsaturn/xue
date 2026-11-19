@@ -148,7 +148,10 @@ import {
   SETUP_DEFAULT_LINES,
   FIRE_FIELD_ANCHOR,
   type DerivedFireId,
-  parseModelFromSearch,
+  CASE_PATHNAME,
+  legacyModelUrl,
+  livePathname,
+  parseModelFromLocation,
   parseResolutionFromSearch,
   parseSceneFromSearch,
   parseVerticalExaggerationFromSearch,
@@ -236,6 +239,7 @@ import { TerrainShadows } from "./shadowlayer";
 import { TerrainContours } from "./terraincontours";
 import { CoordinateGrid } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
+import { modelPageHead } from "./modelpage";
 import { applyPageMeta } from "./pagemeta";
 import {
   boundsCentre,
@@ -1531,9 +1535,16 @@ const volumeOverlay: { session: VariableSession | null; wantedKeys: Set<string>;
   shownKeys: [],
 };
 
-/** Shareable URL entry (e.g. /?model=ecmwf&type=wind) picks the initial model
- * and layer; a missing or unrecognized param falls back to the default. */
-let selectedModelId: ForecastModelId = parseModelFromSearch(window.location.search);
+// An old link (`/?model=ecmwf&type=wind`) is moved to its dataset's path
+// before anything reads the model: the site root's Pages Function redirects
+// it, and this is the same rewrite where none ran (dev, preview, an outage).
+{
+  const legacy = legacyModelUrl(window.location.pathname, window.location.search);
+  if (legacy !== null) window.history.replaceState(null, "", `${legacy}${window.location.hash}`);
+}
+/** Shareable URL entry (e.g. /ecmwf?type=wind) picks the initial model and
+ * layer; a missing or unrecognized one falls back to the default. */
+let selectedModelId: ForecastModelId = parseModelFromLocation(window.location.pathname, window.location.search);
 /** The composition the manifest can actually serve. A slot the run does not
  * ship empties rather than errors — a showcase case carries only the layers
  * its event is about — and if that empties both, the dataset's own default
@@ -4855,10 +4866,10 @@ function updateVariablePresentation(session: VariableSession): void {
   variableCode.textContent = `${model.label} / ${ui.code}`;
   dataCardTitle.textContent = ui.bufferTitle;
   // A case is its own page — its title and summary are what a search result
-  // or a shared link should say; every live view is the one page at `/`,
-  // whose indexed title is whichever view rendered, so it names the kind of
-  // thing this is ("forecast map") and not only the field — in the page's
-  // language, unlike the English headline over the map.
+  // or a shared link should say; a live view is its dataset's page (or the
+  // home), whose indexed title is whichever view rendered, so it names the
+  // kind of thing this is ("forecast map") and not only the field — in the
+  // page's language, unlike the English headline over the map.
   applyPageMeta(
     activeCase
       ? {
@@ -4867,14 +4878,14 @@ function updateVariablePresentation(session: VariableSession): void {
           description: localizedText(activeCase.summary, locale),
         }
       : {
-          path: "/",
+          path: viewPathname(),
           title: t(showingObservations() ? "pageTitleLiveObservation" : "pageTitleLive", {
             // The setup is named for itself, not for the rate it is drawn on.
             variable: setupOn() && session.chartId === SETUP_ANCHOR ? t("varLabelPrecipSetup") : ui.label,
             model: model.label,
             hours: String(Math.round(frameLeadSeconds(frameCount() - 1) / HOUR_SECONDS)),
           }),
-          description: t("metaDescription"),
+          description: liveDescription(),
         },
   );
   // One line at display size: the title sits over the map, and a wrapped
@@ -5146,16 +5157,27 @@ function showMarkerCard(marker: ShowcaseMarker): void {
   );
 }
 
-/** Keep the address bar shareable: reflect the on-screen model and
- * composition into the query string (replaceState — switches are not history
- * entries). `type` names the primary; `lines` the surface over a filled
- * field, and nothing when the lines are the view. */
+/** The path the page is on: a case's, or the live dataset's. */
+function viewPathname(): string {
+  return activeCase ? CASE_PATHNAME : livePathname(selectedModelId, window.location.pathname);
+}
+
+/** A live view's description: its dataset's own on the dataset's page —
+ * the one the build wrote into that page's static head, in English like it
+ * (`modelpage.ts`) — and the site's, in the page's language, on the home. */
+function liveDescription(): string {
+  return viewPathname() === "/" ? t("metaDescription") : modelPageHead(selectedModelId).description;
+}
+
+/** Keep the address bar shareable: reflect the on-screen model into the
+ * path and the composition into the query string (replaceState — switches
+ * are not history entries). `type` names the primary; `lines` the surface
+ * over a filled field, and nothing when the lines are the view. */
 function syncUrl(): void {
   const search = searchForView(
     view,
     window.location.search,
     {
-      model: selectedModelId,
       caseId: activeCase?.id ?? null,
       particlesChosen,
     },
@@ -5168,8 +5190,9 @@ function syncUrl(): void {
     for (const key of ["type", "lines", "particles", "volume"]) params.delete(key);
     withScene = `?${params.toString()}`;
   }
-  if (withScene === window.location.search) return;
-  window.history.replaceState(null, "", `${window.location.pathname}${withScene}${window.location.hash}`);
+  const pathname = viewPathname();
+  if (pathname === window.location.pathname && withScene === window.location.search) return;
+  window.history.replaceState(null, "", `${pathname}${withScene}${window.location.hash}`);
 }
 
 /** Open a channel and wait for its `ready`: boot, hand it the init message,
@@ -5494,6 +5517,7 @@ const overlaysControl = createOverlays({
   updateVariablePresentation,
   applyCaseCamera,
   syncUrl,
+  viewPathname,
   get mapStyleReady() {
     return mapStyleReady;
   },
@@ -7358,7 +7382,7 @@ function applyLocale(): void {
   }
   if (activeCase) updateCasePresentation(activeCase);
   if (activeSession) updateVariablePresentation(activeSession);
-  else applyPageMeta({ path: activeCase ? `/?case=${encodeURIComponent(activeCase.id)}` : "/" });
+  else applyPageMeta({ path: activeCase ? `/?case=${encodeURIComponent(activeCase.id)}` : viewPathname() });
   renderProbe();
   syncBasemapStyle();
   peakLabels.syncLanguage();

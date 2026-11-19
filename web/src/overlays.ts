@@ -70,6 +70,8 @@ export interface OverlaysDeps {
   readonly updateVariablePresentation: (session: VariableSession) => void;
   readonly applyCaseCamera: (showcaseCase: ShowcaseCase, recenter: boolean) => void;
   readonly syncUrl: () => void;
+  /** The path a live view is on (`urlstate.ts::livePathname`). */
+  readonly viewPathname: () => string;
   readonly mapStyleReady: boolean;
   readonly applyStationView: () => void;
   readonly stationTime: () => number;
@@ -464,7 +466,7 @@ export function createOverlays(deps: OverlaysDeps) {
     if (readout.sweepTime !== null) sayText(runTime, formatStamp(readout.sweepTime, "UTC"));
     if (!deps.activeCase) {
       applyPageMeta({
-        path: "/",
+        path: deps.viewPathname(),
         title: t("pageTitleLiveObservation", {
           variable: t(readout.product === "n0b" ? "radarReflectivity" : "radarVelocity"),
           model: `NEXRAD ${readout.site.icao}`,

@@ -40,6 +40,12 @@ describe("page URLs", () => {
     expect(canonicalUrl("/", "?lang=klingon")).toBe(`${SITE_ORIGIN}/`);
     expect(canonicalUrl("/?case=x", "?case=x&lang=de")).toBe(`${SITE_ORIGIN}/?case=x&lang=de`);
   });
+
+  it("makes a dataset's page canonical to its path, the view within it folded in", () => {
+    expect(canonicalUrl("/hrrr", "?type=wind&res=half")).toBe(`${SITE_ORIGIN}/hrrr`);
+    expect(canonicalUrl("/hrrr", "?type=wind&lang=ja")).toBe(`${SITE_ORIGIN}/hrrr?lang=ja`);
+    expect(alternateUrls("/hrrr").at(-1)).toEqual({ hreflang: "x-default", href: `${SITE_ORIGIN}/hrrr` });
+  });
 });
 
 describe("applyPageMeta", () => {
