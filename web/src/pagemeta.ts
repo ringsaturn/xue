@@ -19,12 +19,16 @@ import { SITE_NAME, SITE_ORIGIN } from "./site";
 
 interface PageMeta {
   /** Root-relative path with the query that defines the *content* — `/`
-   * for the live viewer, `/?case=<id>` for a case, `/showcase.html`. */
+   * for the live viewer, `/?case=<id>` for a case, `/showcase`. */
   path: string;
   /** Full document title; `· Xue` is appended here so a caller composes
    * only the part that names the view. */
   title?: string;
   description?: string;
+  /** Absolute URL of another page that holds this content, when there is
+   * one: the head names it canonical and drops this page's hreflang set,
+   * whose alternates would each claim to be canonical themselves. */
+  canonical?: string;
 }
 
 /** The absolute URL of a page rendered in one language, or in the
@@ -68,7 +72,7 @@ function setMetaContent(selector: string, content: string): void {
  * updated in place; missing ones are added, so a page need not list the
  * whole hreflang set to get it. */
 export function applyPageMeta(meta: PageMeta, search: string = window.location.search): void {
-  const canonical = canonicalUrl(meta.path, search);
+  const canonical = meta.canonical ?? canonicalUrl(meta.path, search);
   headLink('link[rel="canonical"]', () => {
     const link = document.createElement("link");
     link.rel = "canonical";
@@ -76,7 +80,10 @@ export function applyPageMeta(meta: PageMeta, search: string = window.location.s
   }).href = canonical;
   setMetaContent('meta[property="og:url"]', canonical);
 
-  for (const { hreflang, href } of alternateUrls(meta.path)) {
+  if (meta.canonical !== undefined) {
+    for (const link of document.head.querySelectorAll('link[rel="alternate"][hreflang]')) link.remove();
+  }
+  for (const { hreflang, href } of meta.canonical === undefined ? alternateUrls(meta.path) : []) {
     headLink(`link[rel="alternate"][hreflang="${hreflang}"]`, () => {
       const link = document.createElement("link");
       link.rel = "alternate";

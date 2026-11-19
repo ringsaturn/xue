@@ -276,14 +276,14 @@ The viewer is one page whose state is in the query string. Unknown values
 fall back to defaults rather than fail, so a constructed link always opens.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.
-- https://xue.ringsaturn.me/showcase.html — the list of historical cases.
+- https://xue.ringsaturn.me/showcase — the list of historical cases.
 - https://xue.ringsaturn.me/tc/ — one static page per archived tropical
   cyclone of the seasons with forecasts (`/tc/<season>/<name>-<atcf id>`),
   per season (`/tc/<season>/`) and
   for the archive, in English and under `/zh/`, `/zh-hant/`, `/ja/`, `/ko/`:
   the storm's facts, its six-hourly best track, a track picture and the
   forecast track errors by source and lead, each linking to the map below.
-- https://xue.ringsaturn.me/typhoon.html — past tropical cyclones on a map,
+- https://xue.ringsaturn.me/typhoon — past tropical cyclones on a map,
   picked by season, basin and storm in the panel beside it (`?storm=<ATCF
   id>`, e.g. `WP062023`, or a storm with no number's history id, e.g.
   `WP-1951123N10140-1951` (`WP-COBRA-1944` for a storm reconstructed from primary sources, whose record lists them under `provenance`); `?issue=YYYYMMDDHH` picks the issue time drawn;
@@ -292,14 +292,14 @@ fall back to defaults rather than fail, so a constructed link always opens.
   deterministic, ensemble), and the storm's track errors in km by source and
   lead. It takes the viewer's `?grid=` (MGRS and/or parallels and meridians)
   and `?units=`.
-- https://xue.ringsaturn.me/compare.html — every live forecast model at
+- https://xue.ringsaturn.me/compare — every live forecast model at
   one point on one clock (`?lat=<deg>&lon=<deg>`, `?span=120|360` hours,
   `?fields=tmp2m,prate,wind10m,...` among `tmp2m dpt2m prate wind10m gust
   tcdc prmsl`), one block per model with the run in its header, a row of
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
-- https://xue.ringsaturn.me/metrics.html — when each forecast run went
+- https://xue.ringsaturn.me/metrics — when each forecast run went
   live, measured from the publish workflows: per source the latest run,
   latency after the cycle time (median / p90 / max), missing cycles and
   workflow outcomes over the window, and for each deadline (ERCOT

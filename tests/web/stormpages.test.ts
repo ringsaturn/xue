@@ -117,4 +117,11 @@ describe("the site", () => {
     expect(site.files.map((file) => file.fileName)).toContain("ko/tc/2025/index.html");
     expect(site.urls).toContain(`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`);
   });
+
+  it("dates every page by the last best-track day it shows", () => {
+    const site = buildStormSite([RAGASA]);
+    expect(Object.keys(site.lastmod)).toHaveLength(site.urls.length);
+    expect(site.lastmod[`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`]).toBe("2025-09-20");
+    expect(site.lastmod[`${SITE_ORIGIN}/tc/`]).toBe("2025-09-20");
+  });
 });

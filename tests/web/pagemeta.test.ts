@@ -9,7 +9,7 @@ describe("page URLs", () => {
     expect(pageUrl("/", null)).toBe(`${SITE_ORIGIN}/`);
     expect(pageUrl("/", "zh")).toBe(`${SITE_ORIGIN}/?lang=zh`);
     expect(pageUrl("/?case=zhengzhou-2021", "zh-Hant")).toBe(`${SITE_ORIGIN}/?case=zhengzhou-2021&lang=zh-Hant`);
-    expect(pageUrl("/showcase.html", "ja")).toBe(`${SITE_ORIGIN}/showcase.html?lang=ja`);
+    expect(pageUrl("/showcase", "ja")).toBe(`${SITE_ORIGIN}/showcase?lang=ja`);
   });
 
   it("declares every locale plus x-default as an alternate", () => {
@@ -90,7 +90,14 @@ describe("applyPageMeta", () => {
 
   it("creates the canonical link when the markup has none", () => {
     document.head.querySelector('link[rel="canonical"]')?.remove();
-    applyPageMeta({ path: "/showcase.html" }, "?lang=fr");
-    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/showcase.html?lang=fr`);
+    applyPageMeta({ path: "/showcase" }, "?lang=fr");
+    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/showcase?lang=fr`);
+  });
+
+  it("defers to another page's address and drops its own alternates", () => {
+    applyPageMeta({ path: "/typhoon" });
+    applyPageMeta({ path: "/typhoon?storm=WP242025", canonical: `${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025` }, "?lang=ja");
+    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`);
+    expect(document.head.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(0);
   });
 });

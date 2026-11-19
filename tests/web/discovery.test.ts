@@ -45,10 +45,10 @@ describe("sitemap", () => {
   it("lists the five pages, one URL per case and the storm pages", () => {
     expect(sitemapUrls(["zhengzhou-2021", "shadel-2026"], [`${SITE_ORIGIN}/tc/`])).toEqual([
       `${SITE_ORIGIN}/`,
-      `${SITE_ORIGIN}/showcase.html`,
-      `${SITE_ORIGIN}/compare.html`,
-      `${SITE_ORIGIN}/metrics.html`,
-      `${SITE_ORIGIN}/typhoon.html`,
+      `${SITE_ORIGIN}/showcase`,
+      `${SITE_ORIGIN}/compare`,
+      `${SITE_ORIGIN}/metrics`,
+      `${SITE_ORIGIN}/typhoon`,
       `${SITE_ORIGIN}/?case=zhengzhou-2021`,
       `${SITE_ORIGIN}/?case=shadel-2026`,
       `${SITE_ORIGIN}/tc/`,
@@ -60,6 +60,12 @@ describe("sitemap", () => {
     expect(xml).toContain("<loc>https://xue.ringsaturn.me/?case=a&amp;b</loc>");
     expect(xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www.sitemaps.org\/schemas\/sitemap\/0.9">/);
     expect(xml.trimEnd().endsWith("</urlset>")).toBe(true);
+  });
+
+  it("dates an address only when it has a day", () => {
+    const xml = renderSitemap([`${SITE_ORIGIN}/`, `${SITE_ORIGIN}/tc/`], { [`${SITE_ORIGIN}/tc/`]: "2026-11-18" });
+    expect(xml).toContain("<loc>https://xue.ringsaturn.me/tc/</loc>\n    <lastmod>2026-11-18</lastmod>");
+    expect(xml.match(/<lastmod>/g)).toHaveLength(1);
   });
 
   it("takes case ids from the published catalog, in catalog order", () => {

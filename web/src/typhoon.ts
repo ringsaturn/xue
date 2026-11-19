@@ -16,7 +16,7 @@ import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i
 import { cardPopup } from "./cardpopup";
 import { applyPageMeta } from "./pagemeta";
 import { mountSettingsSheet } from "./settingssheet";
-import { dataBaseUrl } from "./site";
+import { dataBaseUrl, SITE_ORIGIN } from "./site";
 import { applyTheme, isDark, onThemeChange } from "./theme";
 import { CoordinateGrid, quietGridInk } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
@@ -653,12 +653,15 @@ function renderFacts(): void {
   renderProvenance(loaded.best?.provenance ?? []);
   // A storm with a best track in a season of forecasts has a static page.
   stormLink.hidden = loaded.best === null || !loaded.hasPage;
-  stormLink.href = stormPagePath(locale, seasonOfStorm(entry.id), entry);
+  const pagePath = stormPagePath(locale, seasonOfStorm(entry.id), entry);
+  stormLink.href = pagePath;
   stormLink.textContent = `${t("tcPageDetails")} →`;
+  // The static page is the storm's one indexable address; the map defers to it.
   applyPageMeta({
-    path: `/typhoon.html?storm=${entry.id}`,
+    path: `/typhoon?storm=${entry.id}`,
     title: `${stormName(entry)} (${entry.id})`,
     description: t("tcPageMetaDescription"),
+    canonical: stormLink.hidden ? undefined : `${SITE_ORIGIN}${pagePath}`,
   });
 }
 
@@ -888,7 +891,7 @@ async function loadSeason(wanted: { id: string; issue: string | null } | null): 
 
 async function load(): Promise<void> {
   const state = parseState(window.location.search);
-  applyPageMeta({ path: state.storm ? `/typhoon.html?storm=${state.storm}` : "/typhoon.html" });
+  applyPageMeta({ path: state.storm ? `/typhoon?storm=${state.storm}` : "/typhoon" });
   ensureMap();
   const catalog = await archive.catalog();
   seasons = catalog.seasons.map((entry) => entry.season).sort((a, b) => b - a);

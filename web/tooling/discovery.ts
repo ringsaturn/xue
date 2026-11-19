@@ -26,7 +26,7 @@ import { REPO_URL, SITE_ORIGIN } from "../src/site";
 import { buildStormSite, loadStorms } from "./stormpages";
 
 /** Root-relative pages every deploy has, before the cases. */
-export const STATIC_PAGES: readonly string[] = ["/", "/showcase.html", "/compare.html", "/metrics.html", "/typhoon.html"];
+export const STATIC_PAGES: readonly string[] = ["/", "/showcase", "/compare", "/metrics", "/typhoon"];
 
 /** The sitemap's URL set: the static pages, one per case and the storm
  * pages (`stormpages.ts`), absolute. */
@@ -55,8 +55,14 @@ function escapeXml(value: string): string {
   });
 }
 
-export function renderSitemap(urls: readonly string[]): string {
-  const entries = urls.map((url) => `  <url>\n    <loc>${escapeXml(url)}</loc>\n  </url>`).join("\n");
+export function renderSitemap(urls: readonly string[], lastmod: Readonly<Record<string, string>> = {}): string {
+  const entries = urls
+    .map((url) => {
+      const day = lastmod[url];
+      const modified = day === undefined ? "" : `\n    <lastmod>${escapeXml(day)}</lastmod>`;
+      return `  <url>\n    <loc>${escapeXml(url)}</loc>${modified}\n  </url>`;
+    })
+    .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`;
 }
 
@@ -172,12 +178,14 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
       // root (a local one) or with the archive unreachable ships the shell
       // without them rather than failing.
       let stormUrls: string[] = [];
+      let stormLastmod: Record<string, string> = {};
       if (dataBaseUrl && /^https?:/.test(dataBaseUrl)) {
         try {
           const { storms } = await loadStorms(dataBaseUrl);
           const site = buildStormSite(storms);
           for (const file of site.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
           stormUrls = site.urls;
+          stormLastmod = site.lastmod;
           this.info(`storm pages: ${storms.length} storms, ${site.files.length - 1} pages`);
         } catch (error) {
           this.warn(`storm pages skipped: ${error instanceof Error ? error.message : String(error)}`);
@@ -186,7 +194,7 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds, stormUrls)),
+        source: renderSitemap(sitemapUrls(caseIds, stormUrls), stormLastmod),
       });
       this.emitFile({
         type: "asset",

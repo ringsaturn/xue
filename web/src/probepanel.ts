@@ -587,7 +587,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   /** The comparison page at a point: its own page, keyed by the query the
    * way the viewer is, so the link carries the language and theme along. */
   function compareUrl(latitude: number, longitude: number): string {
-    const url = new URL("compare.html", window.location.href);
+    const url = new URL("compare", window.location.href);
     url.searchParams.set("lat", latitude.toFixed(2));
     url.searchParams.set("lon", longitude.toFixed(2));
     return url.href;
