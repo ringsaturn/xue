@@ -181,9 +181,10 @@ impl Config {
     }
 }
 
-/// A cached `200`: the body, its extra headers and when it stops being fresh.
+/// A cached `200`: the body, its media type, its extra headers and when it stops being fresh.
 struct Held {
     body: Bytes,
+    content_type: &'static str,
     headers: Vec<(&'static str, String)>,
     expires: Instant,
 }
@@ -771,7 +772,13 @@ async fn handle(
     if cacheable {
         if let Some((held, remaining)) = state.responses.borrow_mut().get(target, Instant::now()) {
             let cache_control = format!("public, max-age={remaining}");
-            let reply = reply::json(held.body.to_vec(), 200, &cache_control, &held.headers);
+            let reply = reply::body(
+                held.body.to_vec(),
+                held.content_type,
+                200,
+                &cache_control,
+                &held.headers,
+            );
             return Ok((hyper_response(reply), "hit"));
         }
     }
@@ -800,13 +807,20 @@ async fn handle(
             answer.body = docs::merge(&answer.body, &extra)?;
         }
     }
-    let reply = reply::json(answer.body, 200, answer.cache_control, &answer.headers);
+    let reply = reply::body(
+        answer.body,
+        answer.content_type,
+        200,
+        answer.cache_control,
+        &answer.headers,
+    );
     if cacheable {
         if let Some(seconds) = max_age(answer.cache_control) {
             state.responses.borrow_mut().put(
                 target.to_owned(),
                 Held {
                     body: Bytes::copy_from_slice(&reply.body),
+                    content_type: answer.content_type,
                     headers: answer.headers.clone(),
                     expires: Instant::now() + Duration::from_secs(seconds),
                 },

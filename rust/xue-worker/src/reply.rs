@@ -37,9 +37,13 @@ fn cors() -> Vec<(&'static str, String)> {
     ]
 }
 
+/// The `Content-Type` of every JSON body: the API's answers and its errors.
+pub const JSON: &str = "application/json; charset=utf-8";
+
 fn framed(
     status: u16,
     body: Vec<u8>,
+    content_type: &str,
     cache_control: Option<&str>,
     extra: &[(&'static str, String)],
 ) -> Reply {
@@ -48,7 +52,7 @@ fn framed(
         headers: cors(),
         body,
     }
-    .with_header("content-type", "application/json; charset=utf-8")
+    .with_header("content-type", content_type)
     .with_header("x-xue-api", env!("CARGO_PKG_VERSION"));
     if let Some(cache_control) = cache_control {
         reply = reply.with_header("cache-control", cache_control);
@@ -59,14 +63,15 @@ fn framed(
     reply
 }
 
-/// A serialized JSON body, `Content-Type` and CORS included.
-pub fn json(
+/// A serialized body of `content_type`, CORS included.
+pub fn body(
     body: Vec<u8>,
+    content_type: &str,
     status: u16,
     cache_control: &str,
     extra: &[(&'static str, String)],
 ) -> Reply {
-    framed(status, body, Some(cache_control), extra)
+    framed(status, body, content_type, Some(cache_control), extra)
 }
 
 /// The `204` an `OPTIONS` preflight gets.
@@ -85,5 +90,5 @@ pub fn preflight() -> Reply {
 /// caller that wants one adds it.
 pub fn error_reply(error: &HttpError) -> Reply {
     let body = serde_json::to_vec(&error::body(error)).unwrap_or_default();
-    framed(error.status, body, None, &[])
+    framed(error.status, body, JSON, None, &[])
 }

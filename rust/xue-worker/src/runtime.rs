@@ -49,7 +49,13 @@ async fn handle(request: Request, env: &Env) -> Result<Response, HttpError> {
     }
     let data = Data::from_env(env)?;
     let answer = route::dispatch(path, &url, &data, js_sys::Date::now()).await?;
-    let reply = reply::json(answer.body, 200, answer.cache_control, &answer.headers);
+    let reply = reply::body(
+        answer.body,
+        answer.content_type,
+        200,
+        answer.cache_control,
+        &answer.headers,
+    );
     let mut response = response_from(reply).map_err(HttpError::from)?;
     if cacheable {
         if let Ok(clone) = response.cloned() {

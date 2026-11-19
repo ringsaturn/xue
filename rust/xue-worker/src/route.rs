@@ -10,12 +10,14 @@ use url::Url;
 use crate::bucket::Data;
 use crate::error::HttpError;
 use crate::stations::{AQ, SYNOP};
-use crate::{airport, alerts, docs, point, products, sounding, source, stations, tc};
+use crate::{airport, alerts, docs, point, products, reply, sounding, source, stations, tc};
 
-/// A `200` JSON answer: the serialized body, its `Cache-Control` and any
-/// further headers (`x-xue-run`, `x-xue-issue`).
+/// A `200` answer: the body, its `Content-Type`, its `Cache-Control` and any
+/// further headers (`x-xue-run`, `x-xue-issue`). The API's own routes answer
+/// JSON; a caller's [`crate::server::Routes`] may answer any media type.
 pub struct Answer {
     pub body: Vec<u8>,
+    pub content_type: &'static str,
     pub cache_control: &'static str,
     pub headers: Vec<(&'static str, String)>,
 }
@@ -24,11 +26,17 @@ impl Answer {
     pub fn json(value: &Value, cache_control: &'static str) -> Result<Answer, HttpError> {
         let body = serde_json::to_vec(value)
             .map_err(|error| HttpError::new(502, "internal", error.to_string()))?;
-        Ok(Answer {
+        Ok(Answer::bytes(body, reply::JSON, cache_control))
+    }
+
+    /// A body already serialized, of any media type.
+    pub fn bytes(body: Vec<u8>, content_type: &'static str, cache_control: &'static str) -> Answer {
+        Answer {
             body,
+            content_type,
             cache_control,
             headers: Vec::new(),
-        })
+        }
     }
 
     pub fn with_header(mut self, name: &'static str, value: String) -> Answer {
@@ -65,11 +73,11 @@ pub async fn dispatch(path: &str, url: &Url, data: &Data, now: f64) -> Result<An
             });
             Answer::json(&body, "no-store")
         }
-        "/openapi.json" | "/v1/openapi.json" => Ok(Answer {
-            body: docs::openapi(data, now).await.into_bytes(),
-            cache_control: "public, max-age=60",
-            headers: Vec::new(),
-        }),
+        "/openapi.json" | "/v1/openapi.json" => Ok(Answer::bytes(
+            docs::openapi(data, now).await.into_bytes(),
+            reply::JSON,
+            "public, max-age=60",
+        )),
         "/v1/catalog" => Answer::json(&source::catalog(data).await?, "public, max-age=60"),
         "/v1/point" => {
             let query = point::parse_query(url);
