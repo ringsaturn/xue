@@ -19,6 +19,9 @@ on:
       - web/**
       # The Pages Function at the site root (old ?model= redirects).
       - functions/**
+      # The datasets' pages name each source's producers and licence from it
+      # (web/tooling/modelpages.ts).
+      - xuebuild/stac_prose.json
       - rust/**
       # The build derives llms-full.txt from these documents
       # (web/tooling/discovery.ts). sitemap.xml comes from the published

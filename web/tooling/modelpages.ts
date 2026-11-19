@@ -13,12 +13,12 @@
  *
  * Node-only: imported by vite.config.ts, never by the page. */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
 import type { Connect, Plugin } from "vite";
 
-import { liveModelIds, type ForecastModelId } from "../src/manifest";
-import { modelPageHead, PERSON_ID, SITE_DATASET_ID } from "../src/modelpage";
+import { FORECAST_MODELS, mosaicMembers, pageModelIds, type ForecastModelId } from "../src/manifest";
+import { modelPageHead, PERSON_ID, SITE_DATASET_ID, type DatasetProvenance } from "../src/modelpage";
 import { modelFromPathname } from "../src/modelpaths";
 import { alternateUrls, pageUrl } from "../src/pagemeta";
 import { SITE_NAME } from "../src/site";
@@ -34,7 +34,48 @@ export function modelPageIds(sources: string | undefined): ForecastModelId[] {
       .map((id) => id.trim())
       .filter((id) => id !== ""),
   );
-  return liveModelIds((id) => served.size === 0 || served.has(id));
+  return pageModelIds((id) => served.size === 0 || served.has(id));
+}
+
+/** The part of `xuebuild/stac_prose.json` a page reads: per source, its
+ * licence (an SPDX id or `other`), its links and its providers. */
+interface StacProse {
+  sources: Record<
+    string,
+    {
+      license?: string;
+      links?: readonly { rel: string; href: string }[];
+      providers?: readonly { name: string; roles: readonly string[]; url?: string }[];
+    }
+  >;
+}
+
+/** Licence URLs for the SPDX ids a source may carry without a licence
+ * link of its own. */
+const SPDX_LICENSE_URLS: Readonly<Record<string, string>> = {
+  "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
+};
+
+/** A dataset's producers and licence from its STAC prose, or undefined for
+ * one the prose has no entry for (a view the shell composes). The licence
+ * is the prose's `license` link, else the URL of its SPDX id; a mosaic,
+ * whose members each carry their own licence, names its members'
+ * producers and no licence. */
+export function datasetProvenance(prose: StacProse, id: ForecastModelId): DatasetProvenance | undefined {
+  const producersOf = (sourceId: string) =>
+    (prose.sources[sourceId]?.providers ?? [])
+      .filter((provider) => provider.roles.includes("producer"))
+      .map(({ name, url }) => (url === undefined ? { name } : { name, url }));
+  if (FORECAST_MODELS[id].mosaic) {
+    const producers = new Map<string, { name: string; url?: string }>();
+    for (const member of mosaicMembers(id)) for (const producer of producersOf(member.id)) producers.set(producer.name, producer);
+    return producers.size === 0 ? undefined : { producers: [...producers.values()] };
+  }
+  const entry = prose.sources[id];
+  if (entry === undefined) return undefined;
+  const link = entry.links?.find((candidate) => candidate.rel === "license")?.href;
+  const license = link ?? (entry.license === undefined ? undefined : SPDX_LICENSE_URLS[entry.license]);
+  return { ...(license === undefined ? {} : { license }), producers: producersOf(id) };
 }
 
 /** The root-relative paths of the datasets' pages, for the sitemap. */
@@ -102,8 +143,8 @@ function setMetaContent(html: string, attribute: "name" | "property", key: strin
  * `Dataset` joins the page's JSON-LD graph. The description loses its i18n
  * key, so the shell's static-message pass leaves the dataset's own copy in
  * place (the shell rewrites the head itself once it knows the view). */
-export function renderModelPage(indexHtml: string, id: ForecastModelId): string {
-  const head = modelPageHead(id);
+export function renderModelPage(indexHtml: string, id: ForecastModelId, provenance?: DatasetProvenance): string {
+  const head = modelPageHead(id, provenance);
   const title = `${head.title} · ${SITE_NAME}`;
   let html = replaceOnce(indexHtml, /<title>[^<]*<\/title>/, () => `<title>${escapeText(title)}</title>`, "title");
   html = setMetaContent(html, "name", "description", head.description);
@@ -155,12 +196,14 @@ interface ModelPagesOptions {
   publicDir: string;
   /** The source tree's page directory (`web/`), whose HTML files are pages. */
   pagesDir: string;
+  /** `xuebuild/stac_prose.json`: each source's producers and licence. */
+  prosePath: string;
 }
 
 /** Vite plugin: emit `<id>.html` per dataset after the viewer's
  * `index.html` exists (the hook runs after Vite's own HTML step), failing
  * the build on a name collision. Build only. */
-export function modelPages({ ids, publicDir, pagesDir }: ModelPagesOptions): Plugin {
+export function modelPages({ ids, publicDir, pagesDir, prosePath }: ModelPagesOptions): Plugin {
   return {
     name: "xue:model-pages",
     apply: "build",
@@ -174,7 +217,11 @@ export function modelPages({ ids, publicDir, pagesDir }: ModelPagesOptions): Plu
         const sourcePages = readdirSync(pagesDir).filter((name) => name.endsWith(".html"));
         checkModelPageNames(ids, reservedStems(Object.keys(bundle), publicEntries, sourcePages));
         const indexHtml = typeof index.source === "string" ? index.source : new TextDecoder().decode(index.source);
-        for (const id of ids) this.emitFile({ type: "asset", fileName: `${id}.html`, source: renderModelPage(indexHtml, id) });
+        const prose = JSON.parse(readFileSync(prosePath, "utf8")) as StacProse;
+        for (const id of ids) {
+          const source = renderModelPage(indexHtml, id, datasetProvenance(prose, id));
+          this.emitFile({ type: "asset", fileName: `${id}.html`, source });
+        }
         this.info(`dataset pages: ${ids.length}`);
       },
     },
@@ -193,10 +240,8 @@ export function modelPathRewrite(ids: readonly string[]): Plugin {
     (req, _res, next) => {
       if (req.url) {
         const url = new URL(req.url, "http://localhost");
-        // Only the canonical spelling, as on Pages: a spelling of it is the
-        // shell's to tidy, from the viewer at whatever path served it.
         const id = modelFromPathname(url.pathname, pathIds);
-        if (id !== null && url.pathname === `/${id}`) req.url = `${target(id)}${url.search}`;
+        if (id !== null) req.url = `${target(id)}${url.search}`;
       }
       next();
     };

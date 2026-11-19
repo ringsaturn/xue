@@ -6,10 +6,11 @@
  * once the view is known (`pagemeta.ts`). Every statement is read off the
  * dataset table (`manifest.ts`, whose identity is the registry's): the
  * label, the product, whether it is a forecast, an observation window, a
- * mosaic or daily imagery, the frame step, the region and the live pointer.
- * Nothing is written here that the table does not hold — no resolution, no
- * licence, no upstream agency — and the copy is English, like the static
- * head of every page. */
+ * mosaic or daily imagery, the frame step, the region and the live pointer;
+ * the producers and the licence come from the source's STAC prose, which
+ * the build passes in (`DatasetProvenance`). Nothing else is written — no
+ * resolution, no claim the two do not hold — and the copy is English, like
+ * the static head of every page. */
 
 import { FORECAST_MODELS, mosaicMembers, type ForecastModelId } from "./manifest";
 import { DATA_ORIGIN, SITE_NAME, SITE_ORIGIN } from "./site";
@@ -107,8 +108,20 @@ function describe(id: ForecastModelId, kind: Kind): string {
   }
 }
 
-/** The head of a dataset's page. */
-export function modelPageHead(id: ForecastModelId): ModelPageHead {
+/** Who produced a dataset and under what licence, as its STAC prose says
+ * (`xuebuild/stac_prose.json`, read by the build tooling: the shell never
+ * bundles it, and needs only the description). */
+export interface DatasetProvenance {
+  /** The licence's URL, when the prose names one. */
+  license?: string;
+  /** The providers with the `producer` role. */
+  producers: readonly { name: string; url?: string }[];
+}
+
+/** The head of a dataset's page. With `provenance`, the producers are the
+ * `creator` and the licence is named; Xue, which processes and hosts the
+ * data, stays its `publisher` and `provider`. */
+export function modelPageHead(id: ForecastModelId, provenance?: DatasetProvenance): ModelPageHead {
   const info = FORECAST_MODELS[id];
   const kind = kindOf(id);
   const path = `/${id}`;
@@ -123,8 +136,17 @@ export function modelPageHead(id: ForecastModelId): ModelPageHead {
     url,
     isAccessibleForFree: true,
     isPartOf: { "@id": SITE_DATASET_ID },
-    creator: { "@id": PERSON_ID },
+    creator:
+      provenance && provenance.producers.length > 0
+        ? provenance.producers.map(({ name, url: home }) => ({
+            "@type": "Organization",
+            name,
+            ...(home === undefined ? {} : { url: home }),
+          }))
+        : { "@id": PERSON_ID },
     publisher: { "@id": PERSON_ID },
+    ...(provenance ? { provider: { "@id": PERSON_ID } } : {}),
+    ...(provenance?.license === undefined ? {} : { license: provenance.license }),
     spatialCoverage: { "@type": "Place", geo: { "@type": "GeoShape", box: coverageBox(info.region) } },
     ...(info.latestFilename === undefined
       ? {}
