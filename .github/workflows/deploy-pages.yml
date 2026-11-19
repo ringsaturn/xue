@@ -17,6 +17,8 @@ on:
     branches: [main]
     paths:
       - web/**
+      # The Pages Function at the site root (old ?model= redirects).
+      - functions/**
       - rust/**
       # The build derives llms-full.txt from these documents
       # (web/tooling/discovery.ts). sitemap.xml comes from the published
