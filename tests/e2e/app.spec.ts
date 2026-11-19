@@ -1070,17 +1070,18 @@ test("scrubbing works while data arrives through range requests", async ({ page 
   await expect(page.locator("#frame-tooltip")).toContainText("F001");
 });
 
-// The UI locale follows navigator.language (Playwright defaults to en-US, so
-// every other test runs the English UI); ?lang= overrides it, and the round
-// button in the top-right opens a picker of the twelve languages, each naming
-// itself in its own script. Picking one persists it and switches the page in
-// place — no reload, the session and its frames stay. The basemap label
-// language rides the same detection, but the tests stub out the tile API.
-test("?lang=zh renders the Chinese UI and the picker switches back", async ({ page }) => {
+// The UI locale is the path's prefix (`/zh/`; English has none, and
+// Playwright's en-US browser stays on it, so every other test runs the
+// English UI). The settings sheet lists the twelve languages, each naming
+// itself in its own script. Picking one persists it, moves the address to
+// that language's prefix and switches the page in place — no reload, the
+// session and its frames stay. The basemap label language rides the same
+// locale, but the tests stub out the tile API.
+test("/zh/ renders the Chinese UI and the picker switches back", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
-  await page.goto("/?lang=zh");
+  await page.goto("/zh/");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator("#preload-state")).toHaveText("数据包已驻留内存", { timeout: 20_000 });
   await expect(page.getByRole("slider", { name: "预报时次" })).toBeEnabled({ timeout: 20_000 });
@@ -1105,9 +1106,8 @@ test("?lang=zh renders the Chinese UI and the picker switches back", async ({ pa
     (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
   });
   await sheet.locator('button[data-locale="en"]').click();
-  // The choice lives on this device, not in the link: the param the page
-  // opened with goes, so a copied URL opens in each reader's own language.
-  await expect(page).not.toHaveURL(/lang=/);
+  // The address follows: English has no prefix.
+  await expect(page).toHaveURL(/^http:\/\/[^/]+\/(\?|$)/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(tempLabel).toHaveText("2M");
   // Copy the shell composed itself follows too: the data card's state line,
@@ -1118,13 +1118,14 @@ test("?lang=zh renders the Chinese UI and the picker switches back", async ({ pa
   expect(await page.evaluate(() => (window as unknown as { __xueSameDocument?: boolean }).__xueSameDocument)).toBe(true);
 });
 
-// One of the eight languages the picker added: the same detection path, a
+// An old `?lang=` link moves to its language's prefix: the same page, a
 // different dictionary and a different <html lang>.
-test("?lang=ja renders the Japanese UI", async ({ page }) => {
+test("an old ?lang=ja link renders the Japanese UI under /ja/", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);
   await routeBundle(page);
   await page.goto("/?lang=ja");
+  await expect(page).toHaveURL(/\/ja\/(\?|$)/);
   await expect(page.locator("html")).toHaveAttribute("lang", "ja");
   await expect(page.locator("#preload-state")).toHaveText("バンドルをすべて保持しました", { timeout: 20_000 });
   await expect(page.locator('button[data-variable="tmp2m"] small')).toHaveText("気温");
