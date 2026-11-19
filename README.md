@@ -65,7 +65,9 @@ The last column reads the source's live pointer: a forecast's cycle, or
 the hour a rolling window starts at. Variables, grids and caveats per
 source are in [`docs/sources.md`](docs/sources.md). The viewer opens a
 source at its id (`https://xue.ringsaturn.me/hrrr`); `/geo` is a mosaic of
-the geostationary imagers, a view rather than a dataset.
+the geostationary imagers, a view rather than a dataset. Every page comes
+in twelve languages, English at the root and the others under a prefix
+(`https://xue.ringsaturn.me/ja/hrrr`).
 
 ## Quick start
 
@@ -154,7 +156,7 @@ point probe links here.
 ## Historical showcase
 
 Cases are past weather events cropped to their region and hours, listed at
-`/showcase` and played at `/?case=<id>`. A case is a checked-in JSON
+`/showcase` and played at `/showcase/<id>`. A case is a checked-in JSON
 file under `showcase/cases/`, built with `make showcase CASE=<id>` and
 published permanently. See [`showcase/README.md`](showcase/README.md).
 

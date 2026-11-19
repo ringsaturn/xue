@@ -3,7 +3,7 @@
 A **case** is one past weather event — a forecast run, or a series of
 observations — cropped to the region and hours the event is about, and
 published as a permanent dataset alongside the live feed. Cases are what
-`showcase.html` lists and what `/?case=<id>` plays back.
+`showcase.html` lists and what `/showcase/<id>` plays back.
 
 Everything about a case comes out of the ordinary pipeline: same encoder, same
 Zarr stores (`showcase build` writes them alone, the way live runs are
@@ -390,7 +390,7 @@ retires a case.
    last with `no-cache`, and that is what makes a new case visible.
 
    The sitemap lists what that catalog holds, read at shell build time, so
-   the new case's `/?case=<id>` page appears in `sitemap.xml` at the next
+   the new case's `/showcase/<id>` pages (one per language) appear in `sitemap.xml` at the next
    Pages deploy — run the `deploy pages` workflow by hand if none is due.
 
 ## Choosing a run
