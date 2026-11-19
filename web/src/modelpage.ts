@@ -12,6 +12,7 @@
  * resolution, no claim the two do not hold — and the copy is English, like
  * the static head of every page. */
 
+import { localeMessages, type Locale, type MessageKey } from "./i18n";
 import { FORECAST_MODELS, mosaicMembers, type ForecastModelId } from "./manifest";
 import { DATA_ORIGIN, SITE_NAME, SITE_ORIGIN } from "./site";
 
@@ -78,12 +79,12 @@ function kindOf(id: ForecastModelId): Kind {
   return info.observation ? "observation" : "forecast";
 }
 
-const TITLE_NOUN: Record<Kind, string> = {
-  forecast: "live forecast maps",
-  observation: "live observation maps",
-  nowcast: "live nowcast maps",
-  mosaic: "live satellite mosaic",
-  imagery: "daily imagery map",
+const TITLE_KEY: Record<Kind, MessageKey> = {
+  forecast: "pageTitleModelForecast",
+  observation: "pageTitleModelObservation",
+  nowcast: "pageTitleModelNowcast",
+  mosaic: "pageTitleModelMosaic",
+  imagery: "pageTitleModelImagery",
 };
 
 function describe(id: ForecastModelId, kind: Kind): string {
@@ -121,12 +122,14 @@ export interface DatasetProvenance {
 /** The head of a dataset's page. With `provenance`, the producers are the
  * `creator` and the licence is named; Xue, which processes and hosts the
  * data, stays its `publisher` and `provider`. */
-export function modelPageHead(id: ForecastModelId, provenance?: DatasetProvenance): ModelPageHead {
+/** The head of a dataset's page; the title in `locale`, the description
+ * English (the table's words). */
+export function modelPageHead(id: ForecastModelId, provenance?: DatasetProvenance, locale: Locale = "en"): ModelPageHead {
   const info = FORECAST_MODELS[id];
   const kind = kindOf(id);
   const path = `/${id}`;
   const url = `${SITE_ORIGIN}${path}`;
-  const title = `${info.label} ${TITLE_NOUN[kind]}`;
+  const title = localeMessages(locale)[TITLE_KEY[kind]].replace("{model}", info.label);
   const description = describe(id, kind);
   const dataset: Record<string, unknown> = {
     "@type": "Dataset",

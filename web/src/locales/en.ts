@@ -19,6 +19,17 @@ export const en = {
   /** The same for a live observation dataset (a rolling window): no
    * forecast, and `{hours}` is how far back the window reaches. */
   pageTitleLiveObservation: "{variable} observation map · {model} · last {hours}H",
+  /** The static titles of the pages the build writes per language (the
+   * shell retitles a live view at run time with `pageTitleLive`): the home
+   * after `Xue · `, a dataset's page by its kind (`{model}` is the table's
+   * label, `HRRR`), and the API console; `· Xue` follows the last two. */
+  pageTitleHome: "Live weather models, radar and satellite",
+  pageTitleModelForecast: "{model} live forecast maps",
+  pageTitleModelObservation: "{model} live observation maps",
+  pageTitleModelNowcast: "{model} live nowcast maps",
+  pageTitleModelMosaic: "{model} live satellite mosaic",
+  pageTitleModelImagery: "{model} daily imagery map",
+  apiConsoleTitle: "API console",
   mapAria: "Global temperature and precipitation forecast map",
   modelSwitchAria: "Dataset",
   variableSwitchAria: "Weather variable",

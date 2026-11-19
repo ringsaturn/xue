@@ -217,6 +217,10 @@ describe("a page's copy in a language", () => {
     expect(site.lastmod[`${SITE_ORIGIN}/showcase/guadalupe-2025`]).toBe("2026-10-28");
     const compare = site.files.find((file) => file.fileName === "de/compare.html")!.source;
     expect(compare).toContain("<title>Vorhersagen vergleichen · Xue</title>");
+    const source = (name: string) => site.files.find((file) => file.fileName === name)!.source;
+    expect(source("ja/index.html")).toContain("<title>Xue · リアルタイムの気象モデル・レーダー・衛星</title>");
+    expect(source("ja/hrrr.html")).toContain("<title>HRRR リアルタイム予報図 · Xue</title>");
+    expect(source("ko/api.html")).toContain("<title>API 콘솔 · Xue</title>");
   });
 });
 
