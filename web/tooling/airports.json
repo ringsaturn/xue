@@ -1,0 +1,3927 @@
+{
+ "schemaVersion": 1,
+ "updated": "2026-11-19",
+ "note": "Curated airport page list. Positions from the airport product; English names from OurAirports (public domain); zh/zh-Hant/ja/ko names from Wikidata (CC0) by ICAO (P239), simplified/traditional filled by OpenCC where Wikidata has only one script; IANA time zones (tz) from timezone-boundary-builder via tzf. Edited by hand; `updated` is the day of the last edit.",
+ "airports": [
+  {
+   "icao": "BIKF",
+   "iata": "KEF",
+   "name": "Keflavik International Airport",
+   "city": "Reykjavík",
+   "country": "IS",
+   "lat": 63.987,
+   "lon": -22.614,
+   "elev": 49,
+   "tz": "Atlantic/Reykjavik",
+   "wikidata": "Q139921",
+   "names": {
+    "zh": "凯夫拉维克国际机场",
+    "zh-Hant": "凱夫拉維克國際機場",
+    "ja": "ケプラヴィーク国際空港",
+    "ko": "케플라비크 국제공항"
+   }
+  },
+  {
+   "icao": "CYUL",
+   "iata": "YUL",
+   "name": "Montreal / Pierre Elliott Trudeau International Airport",
+   "city": "Montréal",
+   "country": "CA",
+   "lat": 45.468,
+   "lon": -73.742,
+   "elev": 31,
+   "tz": "America/Toronto",
+   "wikidata": "Q736627",
+   "names": {
+    "zh": "蒙特利尔皮埃尔·埃利奥特·特鲁多国际机场",
+    "zh-Hant": "蒙特婁皮埃爾·埃利奧特·特魯多國際機場",
+    "ja": "モントリオール・ピエール・エリオット・トルドー国際空港",
+    "ko": "몬트리올 피에르 엘리오트 트뤼도 국제공항"
+   }
+  },
+  {
+   "icao": "CYVR",
+   "iata": "YVR",
+   "name": "Vancouver International Airport",
+   "city": "Vancouver",
+   "country": "CA",
+   "lat": 49.183,
+   "lon": -123.168,
+   "elev": 2,
+   "tz": "America/Vancouver",
+   "wikidata": "Q321224",
+   "names": {
+    "zh": "温哥华国际机场",
+    "zh-Hant": "溫哥華國際機場",
+    "ja": "バンクーバー国際空港",
+    "ko": "밴쿠버 국제공항"
+   }
+  },
+  {
+   "icao": "CYYC",
+   "iata": "YYC",
+   "name": "Calgary International Airport",
+   "city": "Calgary",
+   "country": "CA",
+   "lat": 51.116,
+   "lon": -114.011,
+   "elev": 1085,
+   "tz": "America/Edmonton",
+   "wikidata": "Q1160343",
+   "names": {
+    "zh": "卡尔加里国际机场",
+    "zh-Hant": "卡加利國際機場",
+    "ja": "カルガリー国際空港",
+    "ko": "캘거리 국제공항"
+   }
+  },
+  {
+   "icao": "CYYZ",
+   "iata": "YYZ",
+   "name": "Toronto Pearson International Airport",
+   "city": "Toronto",
+   "country": "CA",
+   "lat": 43.679,
+   "lon": -79.629,
+   "elev": 171,
+   "tz": "America/Toronto",
+   "wikidata": "Q242066",
+   "names": {
+    "zh": "多伦多皮尔逊国际机场",
+    "zh-Hant": "多倫多皮爾遜國際機場",
+    "ja": "トロント・ピアソン国際空港",
+    "ko": "토론토 피어슨 국제공항"
+   }
+  },
+  {
+   "icao": "DAAG",
+   "iata": "ALG",
+   "name": "Houari Boumediene Airport",
+   "city": "Algiers",
+   "country": "DZ",
+   "lat": 36.691,
+   "lon": 3.215,
+   "elev": 18,
+   "tz": "Africa/Algiers",
+   "wikidata": "Q623452",
+   "names": {
+    "zh": "阿尔及尔胡阿里·布迈丁机场",
+    "zh-Hant": "阿爾及爾胡阿里·布邁丁機場",
+    "ja": "ウアリ・ブーメディアン空港",
+    "ko": "우아리 부메디엔 공항"
+   }
+  },
+  {
+   "icao": "DGAA",
+   "iata": "ACC",
+   "name": "Kotoka International Airport",
+   "city": "Accra",
+   "country": "GH",
+   "lat": 5.6,
+   "lon": -0.17,
+   "elev": 68,
+   "tz": "Africa/Accra",
+   "wikidata": "Q177689",
+   "names": {
+    "zh": "科托卡国际机场",
+    "zh-Hant": "科託卡國際機場",
+    "ja": "コトカ国際空港",
+    "ko": "코토카 국제공항"
+   }
+  },
+  {
+   "icao": "DNMM",
+   "iata": "LOS",
+   "name": "Murtala Muhammed International Airport",
+   "city": "Lagos",
+   "country": "NG",
+   "lat": 6.577,
+   "lon": 3.321,
+   "elev": 27,
+   "tz": "Africa/Lagos",
+   "wikidata": "Q1043631",
+   "names": {
+    "zh": "穆尔塔拉·穆罕默德国际机场",
+    "zh-Hant": "穆爾塔拉·穆罕默德國際機場",
+    "ja": "ムルタラ・モハンマド国際空港",
+    "ko": "무르탈라 모하메드 국제공항"
+   }
+  },
+  {
+   "icao": "DTTA",
+   "iata": "TUN",
+   "name": "Tunis Carthage International Airport",
+   "city": "Tunis",
+   "country": "TN",
+   "lat": 36.851,
+   "lon": 10.227,
+   "elev": 4,
+   "tz": "Africa/Tunis",
+   "wikidata": "Q1141214",
+   "names": {
+    "zh": "突尼斯－迦太基国际机场",
+    "zh-Hant": "突尼斯－迦太基國際機場",
+    "ja": "チュニス・カルタゴ国際空港",
+    "ko": "튀니스 카르타고 국제공항"
+   }
+  },
+  {
+   "icao": "EDDB",
+   "iata": "BER",
+   "name": "Berlin Brandenburg Airport",
+   "city": "Berlin",
+   "country": "DE",
+   "lat": 52.38068,
+   "lon": 13.53064,
+   "elev": 48,
+   "tz": "Europe/Berlin",
+   "wikidata": "Q160556",
+   "names": {
+    "zh": "柏林勃兰登堡机场",
+    "zh-Hant": "柏林布蘭登堡機場",
+    "ja": "ベルリン・ブランデンブルク国際空港",
+    "ko": "베를린 브란덴부르크 공항"
+   }
+  },
+  {
+   "icao": "EDDF",
+   "iata": "FRA",
+   "name": "Frankfurt Main Airport",
+   "city": "Frankfurt am Main",
+   "country": "DE",
+   "lat": 50.045,
+   "lon": 8.598,
+   "elev": 113,
+   "tz": "Europe/Berlin",
+   "wikidata": "Q46033",
+   "names": {
+    "zh": "法兰克福机场",
+    "zh-Hant": "法蘭克福機場",
+    "ja": "フランクフルト空港",
+    "ko": "프랑크푸르트 공항"
+   }
+  },
+  {
+   "icao": "EDDH",
+   "iata": "HAM",
+   "name": "Hamburg Helmut Schmidt Airport",
+   "city": "Hamburg",
+   "country": "DE",
+   "lat": 53.633,
+   "lon": 9.988,
+   "elev": 8,
+   "tz": "Europe/Berlin",
+   "wikidata": "Q27706",
+   "names": {
+    "zh": "汉堡机场",
+    "zh-Hant": "漢堡機場",
+    "ja": "ハンブルク空港",
+    "ko": "함부르크 공항"
+   }
+  },
+  {
+   "icao": "EDDL",
+   "iata": "DUS",
+   "name": "Düsseldorf Airport",
+   "city": "Düsseldorf",
+   "country": "DE",
+   "lat": 51.296,
+   "lon": 6.769,
+   "elev": 37,
+   "tz": "Europe/Berlin",
+   "wikidata": "Q58226",
+   "names": {
+    "zh": "杜塞尔多夫国际机场",
+    "zh-Hant": "杜塞爾多夫國際機場",
+    "ja": "デュッセルドルフ空港",
+    "ko": "뒤셀도르프 국제공항"
+   }
+  },
+  {
+   "icao": "EDDM",
+   "iata": "MUC",
+   "name": "Munich Airport",
+   "city": "Munich",
+   "country": "DE",
+   "lat": 48.348,
+   "lon": 11.813,
+   "elev": 445,
+   "tz": "Europe/Berlin",
+   "wikidata": "Q131402",
+   "names": {
+    "zh": "慕尼黑机场",
+    "zh-Hant": "慕尼黑機場",
+    "ja": "ミュンヘン空港",
+    "ko": "뮌헨 국제공항"
+   }
+  },
+  {
+   "icao": "EETN",
+   "iata": "TLL",
+   "name": "Lennart Meri Tallinn Airport",
+   "city": "Tallinn",
+   "country": "EE",
+   "lat": 59.413,
+   "lon": 24.801,
+   "elev": 41,
+   "tz": "Europe/Tallinn",
+   "wikidata": "Q630524",
+   "names": {
+    "zh": "塔林机场",
+    "zh-Hant": "塔林機場",
+    "ja": "タリン空港",
+    "ko": "탈린 공항"
+   }
+  },
+  {
+   "icao": "EFHK",
+   "iata": "HEL",
+   "name": "Helsinki Vantaa Airport",
+   "city": "Helsinki (Vantaa)",
+   "country": "FI",
+   "lat": 60.327,
+   "lon": 24.957,
+   "elev": 56,
+   "tz": "Europe/Helsinki",
+   "wikidata": "Q215327",
+   "names": {
+    "zh": "赫尔辛基-万塔机场",
+    "zh-Hant": "赫爾辛基-萬塔機場",
+    "ja": "ヘルシンキ・ヴァンター国際空港",
+    "ko": "헬싱키 공항"
+   }
+  },
+  {
+   "icao": "EGCC",
+   "iata": "MAN",
+   "name": "Manchester Airport",
+   "city": "Manchester, Greater Manchester",
+   "country": "GB",
+   "lat": 53.354,
+   "lon": -2.275,
+   "elev": 78,
+   "tz": "Europe/London",
+   "wikidata": "Q8694",
+   "names": {
+    "zh": "曼彻斯特机场",
+    "zh-Hant": "曼徹斯特機場",
+    "ja": "マンチェスター空港",
+    "ko": "맨체스터 공항"
+   }
+  },
+  {
+   "icao": "EGKK",
+   "iata": "LGW",
+   "name": "London Gatwick Airport",
+   "city": "London",
+   "country": "GB",
+   "lat": 51.148,
+   "lon": -0.19,
+   "elev": 58,
+   "tz": "Europe/London",
+   "wikidata": "Q8703",
+   "names": {
+    "zh": "盖特威克机场",
+    "zh-Hant": "蓋特威克機場",
+    "ja": "ロンドン・ガトウィック空港",
+    "ko": "런던 개트윅 공항"
+   }
+  },
+  {
+   "icao": "EGLC",
+   "iata": "LCY",
+   "name": "London City Airport",
+   "city": "London",
+   "country": "GB",
+   "lat": 51.505,
+   "lon": 0.055,
+   "elev": 10,
+   "tz": "Europe/London",
+   "wikidata": "Q8982",
+   "names": {
+    "zh": "伦敦城市机场",
+    "zh-Hant": "倫敦城市機場",
+    "ja": "ロンドン・シティ空港",
+    "ko": "런던 시티 공항"
+   }
+  },
+  {
+   "icao": "EGLL",
+   "iata": "LHR",
+   "name": "London Heathrow Airport",
+   "city": "London",
+   "country": "GB",
+   "lat": 51.477,
+   "lon": -0.461,
+   "elev": 26,
+   "tz": "Europe/London",
+   "wikidata": "Q8691",
+   "names": {
+    "zh": "希思罗机场",
+    "zh-Hant": "希斯洛機場",
+    "ja": "ロンドン・ヒースロー空港",
+    "ko": "런던 히드로 공항"
+   }
+  },
+  {
+   "icao": "EGPH",
+   "iata": "EDI",
+   "name": "Edinburgh Airport",
+   "city": "Ingliston, Edinburgh",
+   "country": "GB",
+   "lat": 55.952,
+   "lon": -3.36,
+   "elev": 29,
+   "tz": "Europe/London",
+   "wikidata": "Q8716",
+   "names": {
+    "zh": "爱丁堡机场",
+    "zh-Hant": "愛丁堡機場",
+    "ja": "エディンバラ空港",
+    "ko": "에든버러 공항"
+   }
+  },
+  {
+   "icao": "EHAM",
+   "iata": "AMS",
+   "name": "Amsterdam Airport Schiphol",
+   "city": "Amsterdam",
+   "country": "NL",
+   "lat": 52.315,
+   "lon": 4.79,
+   "elev": -2,
+   "tz": "Europe/Amsterdam",
+   "wikidata": "Q9694",
+   "names": {
+    "zh": "阿姆斯特丹斯希普霍尔机场",
+    "zh-Hant": "阿姆斯特丹史基浦機場",
+    "ja": "アムステルダム・スキポール空港",
+    "ko": "스히폴 국제공항"
+   }
+  },
+  {
+   "icao": "EIDW",
+   "iata": "DUB",
+   "name": "Dublin Airport",
+   "city": "Dublin",
+   "country": "IE",
+   "lat": 53.422,
+   "lon": -6.298,
+   "elev": 75,
+   "tz": "Europe/Dublin",
+   "wikidata": "Q178021",
+   "names": {
+    "zh": "都柏林机场",
+    "zh-Hant": "都柏林機場",
+    "ja": "ダブリン空港",
+    "ko": "더블린 공항"
+   }
+  },
+  {
+   "icao": "EKCH",
+   "iata": "CPH",
+   "name": "Copenhagen Kastrup Airport",
+   "city": "Copenhagen",
+   "country": "DK",
+   "lat": 55.618,
+   "lon": 12.656,
+   "elev": 4,
+   "tz": "Europe/Copenhagen",
+   "wikidata": "Q206277",
+   "names": {
+    "zh": "哥本哈根凯斯楚普机场",
+    "zh-Hant": "哥本哈根凱斯楚普機場",
+    "ja": "コペンハーゲン空港",
+    "ko": "코펜하겐 공항"
+   }
+  },
+  {
+   "icao": "ENGM",
+   "iata": "OSL",
+   "name": "Oslo-Gardermoen International Airport",
+   "city": "Oslo (Gardermoen)",
+   "country": "NO",
+   "lat": 60.201,
+   "lon": 11.08,
+   "elev": 204,
+   "tz": "Europe/Oslo",
+   "wikidata": "Q210559",
+   "names": {
+    "zh": "奥斯陆加勒穆恩机场",
+    "zh-Hant": "奧斯陸加勒穆恩機場",
+    "ja": "オスロ空港",
+    "ko": "오슬로 가르데르모엔 공항"
+   }
+  },
+  {
+   "icao": "EPWA",
+   "iata": "WAW",
+   "name": "Warsaw Chopin Airport",
+   "city": "Warsaw",
+   "country": "PL",
+   "lat": 52.163,
+   "lon": 20.961,
+   "elev": 107,
+   "tz": "Europe/Warsaw",
+   "wikidata": "Q465071",
+   "names": {
+    "zh": "华沙肖邦机场",
+    "zh-Hant": "華沙蕭邦機場",
+    "ja": "ワルシャワ・ショパン空港",
+    "ko": "바르샤바 쇼팽 공항"
+   }
+  },
+  {
+   "icao": "ESSA",
+   "iata": "ARN",
+   "name": "Stockholm-Arlanda Airport",
+   "city": "Stockholm",
+   "country": "SE",
+   "lat": 59.664,
+   "lon": 17.92,
+   "elev": 36,
+   "tz": "Europe/Stockholm",
+   "wikidata": "Q223499",
+   "names": {
+    "zh": "斯德哥尔摩阿兰达机场",
+    "zh-Hant": "斯德哥爾摩－阿蘭達機場",
+    "ja": "ストックホルム・アーランダ空港",
+    "ko": "스톡홀름 알란다 공항"
+   }
+  },
+  {
+   "icao": "EVRA",
+   "iata": "RIX",
+   "name": "Riga International Airport",
+   "city": "Riga",
+   "country": "LV",
+   "lat": 56.924,
+   "lon": 23.968,
+   "elev": 7,
+   "tz": "Europe/Riga",
+   "wikidata": "Q505421",
+   "names": {
+    "zh": "里加国际机场",
+    "zh-Hant": "里加國際機場",
+    "ja": "リガ国際空港",
+    "ko": "리가 국제공항"
+   }
+  },
+  {
+   "icao": "EYVI",
+   "iata": "VNO",
+   "name": "Vilnius International Airport",
+   "city": "Vilnius",
+   "country": "LT",
+   "lat": 54.634,
+   "lon": 25.286,
+   "elev": 180,
+   "tz": "Europe/Vilnius",
+   "wikidata": "Q847711",
+   "names": {
+    "zh": "维尔纽斯国际机场",
+    "zh-Hant": "維爾紐斯國際機場",
+    "ja": "ヴィリニュス国際空港",
+    "ko": "빌뉴스 공항"
+   }
+  },
+  {
+   "icao": "FACT",
+   "iata": "CPT",
+   "name": "Cape Town International Airport",
+   "city": "Cape Town",
+   "country": "ZA",
+   "lat": -33.965,
+   "lon": 18.602,
+   "elev": 48,
+   "tz": "Africa/Johannesburg",
+   "wikidata": "Q854130",
+   "names": {
+    "zh": "开普敦国际机场",
+    "zh-Hant": "開普敦國際機場",
+    "ja": "ケープタウン国際空港",
+    "ko": "케이프타운 국제공항"
+   }
+  },
+  {
+   "icao": "FAOR",
+   "iata": "JNB",
+   "name": "O.R. Tambo International Airport",
+   "city": "Johannesburg",
+   "country": "ZA",
+   "lat": -26.139,
+   "lon": 28.246,
+   "elev": 1684,
+   "tz": "Africa/Johannesburg",
+   "wikidata": "Q821750",
+   "names": {
+    "zh": "奥利弗·坦博国际机场",
+    "zh-Hant": "奧利弗·坦博國際機場",
+    "ja": "ヨハネスブルグ国際空港",
+    "ko": "OR 탐보 국제공항"
+   }
+  },
+  {
+   "icao": "FIMP",
+   "iata": "MRU",
+   "name": "Sir Seewoosagur Ramgoolam International Airport",
+   "city": "Plaine Magnien",
+   "country": "MU",
+   "lat": -20.434,
+   "lon": 57.684,
+   "elev": 57,
+   "tz": "Indian/Mauritius",
+   "wikidata": "Q36460",
+   "names": {
+    "zh": "西沃萨古尔·拉姆古兰爵士国际机场",
+    "zh-Hant": "西沃薩古爾·拉姆古蘭爵士國際機場",
+    "ja": "サー・シウサガル・ラングーラム国際空港",
+    "ko": "시우 사구르 람룰람경 국제공항"
+   }
+  },
+  {
+   "icao": "FMMI",
+   "iata": "TNR",
+   "name": "Ivato International Airport",
+   "city": "Antananarivo",
+   "country": "MG",
+   "lat": -18.797,
+   "lon": 47.479,
+   "elev": 1269,
+   "tz": "Indian/Antananarivo",
+   "wikidata": "Q670038",
+   "names": {
+    "zh": "塔那那利佛/伊瓦图国际机场",
+    "zh-Hant": "塔那那利佛/伊瓦圖國際機場",
+    "ja": "イヴァト空港",
+    "ko": "이바토 공항"
+   }
+  },
+  {
+   "icao": "GMMN",
+   "iata": "CMN",
+   "name": "Mohammed V International Airport",
+   "city": "Casablanca",
+   "country": "MA",
+   "lat": 33.367,
+   "lon": -7.59,
+   "elev": 196,
+   "tz": "Africa/Casablanca",
+   "wikidata": "Q955433",
+   "names": {
+    "zh": "穆罕默德五世国际机场",
+    "zh-Hant": "穆罕默德五世國際機場",
+    "ja": "ムハンマド5世国際空港",
+    "ko": "무함마드 5세 국제공항"
+   }
+  },
+  {
+   "icao": "GOBD",
+   "iata": "DSS",
+   "name": "Blaise Diagne International Airport",
+   "city": "Dakar",
+   "country": "SN",
+   "lat": 14.671,
+   "lon": -17.067,
+   "elev": 90,
+   "tz": "Africa/Dakar",
+   "wikidata": "Q597308",
+   "names": {
+    "zh": "达喀尔",
+    "zh-Hant": "達喀爾",
+    "ja": "ブレーズ・ジャーニュ国際空港",
+    "ko": "블레즈-디아뉴 국제공항"
+   }
+  },
+  {
+   "icao": "HAAB",
+   "iata": "ADD",
+   "name": "Addis Ababa Bole International Airport",
+   "city": "Addis Ababa",
+   "country": "ET",
+   "lat": 8.978,
+   "lon": 38.799,
+   "elev": 2319,
+   "tz": "Africa/Addis_Ababa",
+   "wikidata": "Q44923",
+   "names": {
+    "zh": "博莱国际机场",
+    "zh-Hant": "博萊國際機場",
+    "ja": "ボレ国際空港",
+    "ko": "볼레 국제공항"
+   }
+  },
+  {
+   "icao": "HECA",
+   "iata": "CAI",
+   "name": "Cairo International Airport",
+   "city": "Cairo",
+   "country": "EG",
+   "lat": 30.133,
+   "lon": 31.405,
+   "elev": 142,
+   "tz": "Africa/Cairo",
+   "wikidata": "Q461793",
+   "names": {
+    "zh": "开罗国际机场",
+    "zh-Hant": "開羅國際機場",
+    "ja": "カイロ国際空港",
+    "ko": "카이로 국제공항"
+   }
+  },
+  {
+   "icao": "HKJK",
+   "iata": "NBO",
+   "name": "Jomo Kenyatta International Airport",
+   "city": "Nairobi",
+   "country": "KE",
+   "lat": -1.319,
+   "lon": 36.928,
+   "elev": 1615,
+   "tz": "Africa/Nairobi",
+   "wikidata": "Q206349",
+   "names": {
+    "zh": "乔莫·肯雅塔国际机场",
+    "zh-Hant": "喬莫·肯雅塔國際機場",
+    "ja": "ジョモ・ケニヤッタ国際空港",
+    "ko": "조모 케냐타 국제공항"
+   }
+  },
+  {
+   "icao": "HTDA",
+   "iata": "DAR",
+   "name": "Julius Nyerere International Airport",
+   "city": "Dar es Salaam",
+   "country": "TZ",
+   "lat": -6.881,
+   "lon": 39.201,
+   "elev": 53,
+   "tz": "Africa/Dar_es_Salaam",
+   "wikidata": "Q1411192",
+   "names": {
+    "zh": "朱利叶斯·尼雷尔国际机场",
+    "zh-Hant": "朱利葉斯·尼雷爾國際機場",
+    "ja": "ジュリウス・ニエレレ国際空港",
+    "ko": "줄리어스 니에레레 국제공항"
+   }
+  },
+  {
+   "icao": "KATL",
+   "iata": "ATL",
+   "name": "Hartsfield Jackson Atlanta International Airport",
+   "city": "Atlanta",
+   "country": "US",
+   "lat": 33.62972,
+   "lon": -84.44223,
+   "elev": 309,
+   "tz": "America/New_York",
+   "wikidata": "Q214861",
+   "names": {
+    "zh": "哈茨菲尔德－杰克逊亚特兰大国际机场",
+    "zh-Hant": "哈茨菲爾德－傑克遜亞特蘭大國際機場",
+    "ja": "ハーツフィールド・ジャクソン・アトランタ国際空港",
+    "ko": "하츠필드 잭슨 애틀랜타 국제공항"
+   }
+  },
+  {
+   "icao": "KAUS",
+   "iata": "AUS",
+   "name": "Austin Bergstrom International Airport",
+   "city": "Austin",
+   "country": "US",
+   "lat": 30.1831,
+   "lon": -97.68063,
+   "elev": 148,
+   "tz": "America/Chicago",
+   "wikidata": "Q1430913",
+   "names": {
+    "zh": "奥斯汀-伯格斯特龙国际机场",
+    "zh-Hant": "奧斯汀-伯格斯特龍國際機場",
+    "ja": "オースチン・バーグストロム国際空港",
+    "ko": "오스틴 버그스트롬 국제공항"
+   }
+  },
+  {
+   "icao": "KBNA",
+   "iata": "BNA",
+   "name": "Nashville International Airport",
+   "city": "Nashville",
+   "country": "US",
+   "lat": 36.11053,
+   "lon": -86.68815,
+   "elev": 168,
+   "tz": "America/Chicago",
+   "wikidata": "Q1432146",
+   "names": {
+    "zh": "纳什维尔国际机场",
+    "zh-Hant": "納什維爾國際機場",
+    "ja": "ナッシュビル国際空港",
+    "ko": "내슈빌 국제공항"
+   }
+  },
+  {
+   "icao": "KBOS",
+   "iata": "BOS",
+   "name": "Boston Logan International Airport",
+   "city": "Boston",
+   "country": "US",
+   "lat": 42.36057,
+   "lon": -71.00974,
+   "elev": 4,
+   "tz": "America/New_York",
+   "wikidata": "Q671475",
+   "names": {
+    "zh": "爱德华·劳伦斯·洛根将军国际机场",
+    "zh-Hant": "愛德華·勞倫斯·洛根將軍國際機場",
+    "ja": "ジェネラル・エドワード・ローレンス・ローガン国際空港",
+    "ko": "로건 국제공항"
+   }
+  },
+  {
+   "icao": "KBWI",
+   "iata": "BWI",
+   "name": "Baltimore/Washington International Thurgood Marshall Airport",
+   "city": "Baltimore",
+   "country": "US",
+   "lat": 39.17329,
+   "lon": -76.68402,
+   "elev": 42,
+   "tz": "America/New_York",
+   "wikidata": "Q94895",
+   "names": {
+    "zh": "巴尔的摩/华盛顿瑟古德·马歇尔国际机场",
+    "zh-Hant": "巴爾的摩/華盛頓瑟古德·馬歇爾國際機場",
+    "ja": "ボルチモア・ワシントン国際空港",
+    "ko": "볼티모어 워싱턴 서굿 마셜 국제공항"
+   }
+  },
+  {
+   "icao": "KCLT",
+   "iata": "CLT",
+   "name": "Charlotte Douglas International Airport",
+   "city": "Charlotte",
+   "country": "US",
+   "lat": 35.22254,
+   "lon": -80.95432,
+   "elev": 223,
+   "tz": "America/New_York",
+   "wikidata": "Q597649",
+   "names": {
+    "zh": "夏洛特道格拉斯国际机场",
+    "zh-Hant": "夏洛特道格拉斯國際機場",
+    "ja": "シャーロット・ダグラス国際空港",
+    "ko": "샬롯 더글러스 국제공항"
+   }
+  },
+  {
+   "icao": "KDAL",
+   "iata": "DAL",
+   "name": "Dallas Love Field",
+   "city": "Dallas",
+   "country": "US",
+   "lat": 32.83836,
+   "lon": -96.83584,
+   "elev": 148,
+   "tz": "America/Chicago",
+   "wikidata": "Q613569",
+   "names": {
+    "zh": "达拉斯爱田机场",
+    "zh-Hant": "達拉斯-洛夫",
+    "ja": "ダラス・ラブフィールド空港",
+    "ko": "댈러스 러브 필드"
+   }
+  },
+  {
+   "icao": "KDCA",
+   "iata": "DCA",
+   "name": "Ronald Reagan Washington National Airport",
+   "city": "Washington",
+   "country": "US",
+   "lat": 38.8472,
+   "lon": -77.03453,
+   "elev": 4,
+   "tz": "America/New_York",
+   "wikidata": "Q676576",
+   "names": {
+    "zh": "罗纳德·里根华盛顿国家机场",
+    "zh-Hant": "隆納·雷根華盛頓國家機場",
+    "ja": "ロナルド・レーガン・ワシントン・ナショナル空港",
+    "ko": "로널드 레이건 워싱턴 내셔널 공항"
+   }
+  },
+  {
+   "icao": "KDEN",
+   "iata": "DEN",
+   "name": "Denver International Airport",
+   "city": "Denver",
+   "country": "US",
+   "lat": 39.84657,
+   "lon": -104.65623,
+   "elev": 1656,
+   "tz": "America/Denver",
+   "wikidata": "Q330015",
+   "names": {
+    "zh": "丹佛国际机场",
+    "zh-Hant": "丹佛國際機場",
+    "ja": "デンバー国際空港",
+    "ko": "덴버 국제공항"
+   }
+  },
+  {
+   "icao": "KDFW",
+   "iata": "DFW",
+   "name": "Dallas Fort Worth International Airport",
+   "city": "Dallas-Fort Worth",
+   "country": "US",
+   "lat": 32.89744,
+   "lon": -97.02195,
+   "elev": 168,
+   "tz": "America/Chicago",
+   "wikidata": "Q459096",
+   "names": {
+    "zh": "达拉斯－沃思堡国际机场",
+    "zh-Hant": "達拉斯─沃斯堡國際機場",
+    "ja": "ダラス・フォートワース国際空港",
+    "ko": "댈러스 포트워스 국제공항"
+   }
+  },
+  {
+   "icao": "KDTW",
+   "iata": "DTW",
+   "name": "Detroit Metropolitan Wayne County Airport",
+   "city": "Detroit",
+   "country": "US",
+   "lat": 42.23112,
+   "lon": -83.33122,
+   "elev": 192,
+   "tz": "America/Detroit",
+   "wikidata": "Q652505",
+   "names": {
+    "zh": "底特律都会韦恩县机场",
+    "zh-Hant": "底特律都會韋恩縣機場",
+    "ja": "デトロイト・メトロポリタン・ウェイン・カウンティ空港",
+    "ko": "디트로이트 메트로폴리탄 웨인 카운티 공항"
+   }
+  },
+  {
+   "icao": "KEWR",
+   "iata": "EWR",
+   "name": "Newark Liberty International Airport",
+   "city": "Newark",
+   "country": "US",
+   "lat": 40.68277,
+   "lon": -74.16924,
+   "elev": 2,
+   "tz": "America/New_York",
+   "wikidata": "Q466786",
+   "names": {
+    "zh": "纽瓦克自由国际机场",
+    "zh-Hant": "紐華克自由國際機場",
+    "ja": "ニューアーク・リバティー国際空港",
+    "ko": "뉴어크 리버티 국제공항"
+   }
+  },
+  {
+   "icao": "KFLL",
+   "iata": "FLL",
+   "name": "Fort Lauderdale Hollywood International Airport",
+   "city": "Fort Lauderdale",
+   "country": "US",
+   "lat": 26.07872,
+   "lon": -80.16223,
+   "elev": 1,
+   "tz": "America/New_York",
+   "wikidata": "Q635361",
+   "names": {
+    "zh": "劳德代尔堡－好莱坞国际机场",
+    "zh-Hant": "勞德岱堡－好萊塢國際機場",
+    "ja": "フォートローダーデール・ハリウッド国際空港",
+    "ko": "포트로더데일 할리우드 국제공항"
+   }
+  },
+  {
+   "icao": "KHOU",
+   "iata": "HOU",
+   "name": "William P. Hobby Airport",
+   "city": "Houston",
+   "country": "US",
+   "lat": 29.64582,
+   "lon": -95.28214,
+   "elev": 13,
+   "tz": "America/Chicago",
+   "wikidata": "Q771340",
+   "names": {
+    "zh": "威廉·佩特斯·霍比机场",
+    "zh-Hant": "威廉·佩特斯·霍比機場",
+    "ja": "ウィリアム・P・ホビー空港",
+    "ko": "윌리엄 P. 호비 공항"
+   }
+  },
+  {
+   "icao": "KIAD",
+   "iata": "IAD",
+   "name": "Washington Dulles International Airport",
+   "city": "Dulles",
+   "country": "US",
+   "lat": 38.93485,
+   "lon": -77.44728,
+   "elev": 90,
+   "tz": "America/New_York",
+   "wikidata": "Q466835",
+   "names": {
+    "zh": "华盛顿杜勒斯国际机场",
+    "zh-Hant": "華盛頓杜勒斯國際機場",
+    "ja": "ワシントン・ダレス国際空港",
+    "ko": "워싱턴 덜레스 국제공항"
+   }
+  },
+  {
+   "icao": "KIAH",
+   "iata": "IAH",
+   "name": "George Bush Intercontinental Airport",
+   "city": "Houston",
+   "country": "US",
+   "lat": 29.98438,
+   "lon": -95.36072,
+   "elev": 27,
+   "tz": "America/Chicago",
+   "wikidata": "Q744748",
+   "names": {
+    "zh": "乔治·布什洲际机场",
+    "zh-Hant": "喬治·布希洲際機場",
+    "ja": "ジョージ・ブッシュ・インターコンチネンタル空港",
+    "ko": "조지 부시 인터콘티넨털 공항"
+   }
+  },
+  {
+   "icao": "KJFK",
+   "iata": "JFK",
+   "name": "John F. Kennedy International Airport",
+   "city": "New York",
+   "country": "US",
+   "lat": 40.63916,
+   "lon": -73.76394,
+   "elev": 3,
+   "tz": "America/New_York",
+   "wikidata": "Q8685",
+   "names": {
+    "zh": "约翰·F·肯尼迪国际机场",
+    "zh-Hant": "約翰·甘迺迪國際機場",
+    "ja": "ジョン・F・ケネディ国際空港",
+    "ko": "존 F. 케네디 국제공항"
+   }
+  },
+  {
+   "icao": "KLAS",
+   "iata": "LAS",
+   "name": "Harry Reid International Airport",
+   "city": "Las Vegas",
+   "country": "US",
+   "lat": 36.07188,
+   "lon": -115.16343,
+   "elev": 662,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q853886",
+   "names": {
+    "zh": "哈里·里德国际机场",
+    "zh-Hant": "哈里·瑞德國際機場",
+    "ja": "ハリー・リード国際空港",
+    "ko": "매캐런 국제공항"
+   }
+  },
+  {
+   "icao": "KLAX",
+   "iata": "LAX",
+   "name": "Los Angeles International Airport",
+   "city": "Los Angeles",
+   "country": "US",
+   "lat": 33.93817,
+   "lon": -118.3866,
+   "elev": 30,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q8731",
+   "names": {
+    "zh": "洛杉磯國際機場",
+    "zh-Hant": "洛杉磯國際機場",
+    "ja": "ロサンゼルス国際空港",
+    "ko": "로스앤젤레스 국제공항"
+   }
+  },
+  {
+   "icao": "KLGA",
+   "iata": "LGA",
+   "name": "LaGuardia Airport",
+   "city": "New York",
+   "country": "US",
+   "lat": 40.77945,
+   "lon": -73.88027,
+   "elev": 9,
+   "tz": "America/New_York",
+   "wikidata": "Q319654",
+   "names": {
+    "zh": "拉瓜迪亚机场",
+    "zh-Hant": "拉瓜地亞機場",
+    "ja": "ラガーディア空港",
+    "ko": "라과디아 공항"
+   }
+  },
+  {
+   "icao": "KMCO",
+   "iata": "MCO",
+   "name": "Orlando International Airport",
+   "city": "Orlando",
+   "country": "US",
+   "lat": 28.41822,
+   "lon": -81.32413,
+   "elev": 27,
+   "tz": "America/New_York",
+   "wikidata": "Q929859",
+   "names": {
+    "zh": "奥兰多国际机场",
+    "zh-Hant": "奧蘭多國際機場",
+    "ja": "オーランド国際空港",
+    "ko": "올랜도 국제공항"
+   }
+  },
+  {
+   "icao": "KMIA",
+   "iata": "MIA",
+   "name": "Miami International Airport",
+   "city": "Miami",
+   "country": "US",
+   "lat": 25.78806,
+   "lon": -80.31692,
+   "elev": 1,
+   "tz": "America/New_York",
+   "wikidata": "Q127530",
+   "names": {
+    "zh": "迈阿密国际机场",
+    "zh-Hant": "邁阿密國際機場",
+    "ja": "マイアミ国際空港",
+    "ko": "마이애미 국제공항"
+   }
+  },
+  {
+   "icao": "KMSP",
+   "iata": "MSP",
+   "name": "Minneapolis–Saint Paul International Airport / Wold–Chamberlain Field",
+   "city": "Minneapolis",
+   "country": "US",
+   "lat": 44.88523,
+   "lon": -93.23132,
+   "elev": 255,
+   "tz": "America/Chicago",
+   "wikidata": "Q875749",
+   "names": {
+    "zh": "明尼阿波利斯－圣保罗国际机场",
+    "zh-Hant": "明尼阿波利斯－聖保羅國際機場",
+    "ja": "ミネアポリス・セントポール国際空港",
+    "ko": "미니애폴리스 세인트폴 국제공항"
+   }
+  },
+  {
+   "icao": "KMSY",
+   "iata": "MSY",
+   "name": "Louis Armstrong New Orleans International Airport",
+   "city": "New Orleans",
+   "country": "US",
+   "lat": 29.99739,
+   "lon": -90.27773,
+   "elev": 0,
+   "tz": "America/Chicago",
+   "wikidata": "Q1461076",
+   "names": {
+    "zh": "新奥尔良路易斯阿姆斯特朗国际机场",
+    "zh-Hant": "紐奧良路易斯阿姆斯特朗國際機場",
+    "ja": "ルイ・アームストロング・ニューオーリンズ国際空港",
+    "ko": "루이 암스트롱 뉴올리언스 국제공항"
+   }
+  },
+  {
+   "icao": "KORD",
+   "iata": "ORD",
+   "name": "Chicago O'Hare International Airport",
+   "city": "Chicago",
+   "country": "US",
+   "lat": 41.96017,
+   "lon": -87.93161,
+   "elev": 202,
+   "tz": "America/Chicago",
+   "wikidata": "Q213717",
+   "names": {
+    "zh": "奥黑尔国际机场",
+    "zh-Hant": "歐海爾國際機場",
+    "ja": "シカゴ・オヘア国際空港",
+    "ko": "오헤어 국제공항"
+   }
+  },
+  {
+   "icao": "KPDX",
+   "iata": "PDX",
+   "name": "Portland International Airport",
+   "city": "Portland",
+   "country": "US",
+   "lat": 45.59578,
+   "lon": -122.60917,
+   "elev": 7,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q1425566",
+   "names": {
+    "zh": "波特兰国际机场",
+    "zh-Hant": "波特蘭國際機場",
+    "ja": "ポートランド国際空港",
+    "ko": "포틀랜드 국제공항"
+   }
+  },
+  {
+   "icao": "KPHL",
+   "iata": "PHL",
+   "name": "Philadelphia International Airport",
+   "city": "Philadelphia",
+   "country": "US",
+   "lat": 39.87328,
+   "lon": -75.22682,
+   "elev": 2,
+   "tz": "America/New_York",
+   "wikidata": "Q512128",
+   "names": {
+    "zh": "费城国际机场",
+    "zh-Hant": "費城國際機場",
+    "ja": "フィラデルフィア国際空港",
+    "ko": "필라델피아 국제공항"
+   }
+  },
+  {
+   "icao": "KPHX",
+   "iata": "PHX",
+   "name": "Phoenix Sky Harbor International Airport",
+   "city": "Phoenix",
+   "country": "US",
+   "lat": 33.42779,
+   "lon": -112.00366,
+   "elev": 338,
+   "tz": "America/Phoenix",
+   "wikidata": "Q912916",
+   "names": {
+    "zh": "菲尼克斯天港国际机场",
+    "zh-Hant": "鳳凰城天港國際機場",
+    "ja": "フェニックス・スカイハーバー国際空港",
+    "ko": "피닉스 스카이 하버 국제공항"
+   }
+  },
+  {
+   "icao": "KSAN",
+   "iata": "SAN",
+   "name": "San Diego International Airport",
+   "city": "San Diego",
+   "country": "US",
+   "lat": 32.73645,
+   "lon": -117.19727,
+   "elev": 3,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q1333923",
+   "names": {
+    "zh": "圣迭戈国际机场",
+    "zh-Hant": "聖地牙哥國際機場",
+    "ja": "サンディエゴ国際空港",
+    "ko": "샌디에고 국제공항"
+   }
+  },
+  {
+   "icao": "KSEA",
+   "iata": "SEA",
+   "name": "Seattle–Tacoma International Airport",
+   "city": "Seattle",
+   "country": "US",
+   "lat": 47.44467,
+   "lon": -122.31442,
+   "elev": 115,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q14295",
+   "names": {
+    "zh": "西雅图－塔科马国际机场",
+    "zh-Hant": "西雅圖 塔科馬國際機場",
+    "ja": "シアトル・タコマ国際空港",
+    "ko": "시애틀 터코마 국제공항"
+   }
+  },
+  {
+   "icao": "KSFO",
+   "iata": "SFO",
+   "name": "San Francisco International Airport",
+   "city": "San Francisco",
+   "country": "US",
+   "lat": 37.61961,
+   "lon": -122.36561,
+   "elev": 2,
+   "tz": "America/Los_Angeles",
+   "wikidata": "Q8688",
+   "names": {
+    "zh": "旧金山国际机场",
+    "zh-Hant": "舊金山國際機場",
+    "ja": "サンフランシスコ国際空港",
+    "ko": "샌프란시스코 국제공항"
+   }
+  },
+  {
+   "icao": "KSLC",
+   "iata": "SLC",
+   "name": "Salt Lake City International Airport",
+   "city": "Salt Lake City",
+   "country": "US",
+   "lat": 40.7707,
+   "lon": -111.96503,
+   "elev": 1286,
+   "tz": "America/Denver",
+   "wikidata": "Q526488",
+   "names": {
+    "zh": "盐湖城国际机场",
+    "zh-Hant": "鹽湖城國際機場",
+    "ja": "ソルトレイクシティ国際空港",
+    "ko": "솔트레이크시티 국제공항"
+   }
+  },
+  {
+   "icao": "KSTL",
+   "iata": "STL",
+   "name": "St. Louis Lambert International Airport",
+   "city": "St Louis",
+   "country": "US",
+   "lat": 38.75245,
+   "lon": -90.37341,
+   "elev": 163,
+   "tz": "America/Chicago",
+   "wikidata": "Q1425838",
+   "names": {
+    "zh": "圣路易斯兰伯特国际机场",
+    "zh-Hant": "聖路易斯蘭伯特國際機場",
+    "ja": "セントルイス・ランバート国際空港",
+    "ko": "세인트루이스 램버트 국제공항"
+   }
+  },
+  {
+   "icao": "KTPA",
+   "iata": "TPA",
+   "name": "Tampa International Airport",
+   "city": "Tampa",
+   "country": "US",
+   "lat": 27.96332,
+   "lon": -82.53999,
+   "elev": 2,
+   "tz": "America/New_York",
+   "wikidata": "Q571536",
+   "names": {
+    "zh": "坦帕国际机场",
+    "zh-Hant": "塔帕",
+    "ja": "タンパ国際空港",
+    "ko": "탬파 국제공항"
+   }
+  },
+  {
+   "icao": "LBSF",
+   "iata": "SOF",
+   "name": "Sofia Airport",
+   "city": "Sofia",
+   "country": "BG",
+   "lat": 42.694,
+   "lon": 23.414,
+   "elev": 531,
+   "tz": "Europe/Sofia",
+   "wikidata": "Q127951",
+   "names": {
+    "zh": "索菲亚机场",
+    "zh-Hant": "索菲亞機場",
+    "ja": "ソフィア空港",
+    "ko": "소피아 공항"
+   }
+  },
+  {
+   "icao": "LCLK",
+   "iata": "LCA",
+   "name": "Larnaca International Airport",
+   "city": "Larnaca",
+   "country": "CY",
+   "lat": 34.874,
+   "lon": 33.617,
+   "elev": 2,
+   "tz": "Asia/Nicosia",
+   "wikidata": "Q654636",
+   "names": {
+    "zh": "拉纳卡国际机场",
+    "zh-Hant": "拉納卡國際機場",
+    "ja": "ラルナカ国際空港",
+    "ko": "라르나카 국제공항"
+   }
+  },
+  {
+   "icao": "LDZA",
+   "iata": "ZAG",
+   "name": "Zagreb Franjo Tuđman International Airport",
+   "city": "Velika Gorica",
+   "country": "HR",
+   "lat": 45.729,
+   "lon": 16.054,
+   "elev": 103,
+   "tz": "Europe/Zagreb",
+   "wikidata": "Q128016",
+   "names": {
+    "zh": "萨格勒布机场",
+    "zh-Hant": "薩格勒布機場",
+    "ja": "ザグレブ国際空港",
+    "ko": "자그레브 국제공항"
+   }
+  },
+  {
+   "icao": "LEBL",
+   "iata": "BCN",
+   "name": "Josep Tarradellas Barcelona-El Prat Airport",
+   "city": "Barcelona",
+   "country": "ES",
+   "lat": 41.293,
+   "lon": 2.07,
+   "elev": 2,
+   "tz": "Europe/Madrid",
+   "wikidata": "Q56973",
+   "names": {
+    "zh": "巴塞罗那机场",
+    "zh-Hant": "巴塞羅那機場",
+    "ja": "バルセロナ＝エル・プラット空港",
+    "ko": "바르셀로나 엘프라트 공항"
+   }
+  },
+  {
+   "icao": "LEMD",
+   "iata": "MAD",
+   "name": "Adolfo Suárez Madrid–Barajas Airport",
+   "city": "Madrid",
+   "country": "ES",
+   "lat": 40.466,
+   "lon": -3.555,
+   "elev": 589,
+   "tz": "Europe/Madrid",
+   "wikidata": "Q166276",
+   "names": {
+    "zh": "马德里－巴拉哈斯机场",
+    "zh-Hant": "馬德里－巴拉哈斯機場",
+    "ja": "アドルフォ・スアレス・マドリード＝バラハス空港",
+    "ko": "마드리드 바라하스 국제공항"
+   }
+  },
+  {
+   "icao": "LEMG",
+   "iata": "AGP",
+   "name": "Málaga-Costa del Sol Airport",
+   "city": "Málaga",
+   "country": "ES",
+   "lat": 36.666,
+   "lon": -4.482,
+   "elev": 5,
+   "tz": "Europe/Madrid",
+   "wikidata": "Q690894",
+   "names": {
+    "zh": "马拉加",
+    "zh-Hant": "Málaga（AGP）",
+    "ja": "マラガ＝コスタ・デル・ソル空港",
+    "ko": "말라가 코스타델솔 공항"
+   }
+  },
+  {
+   "icao": "LEPA",
+   "iata": "PMI",
+   "name": "Palma de Mallorca Airport",
+   "city": "Palma de Mallorca",
+   "country": "ES",
+   "lat": 39.561,
+   "lon": 2.737,
+   "elev": 8,
+   "tz": "Europe/Madrid",
+   "wikidata": "Q656993",
+   "names": {
+    "zh": "马略卡岛帕尔马机场",
+    "zh-Hant": "馬略卡島帕爾馬機場",
+    "ja": "パルマ・デ・マヨルカ空港",
+    "ko": "팔마데마요르카 공항"
+   }
+  },
+  {
+   "icao": "LFLL",
+   "iata": "LYS",
+   "name": "Lyon Saint-Exupéry Airport",
+   "city": "Colombier-Saugnieu, Rhône",
+   "country": "FR",
+   "lat": 45.726,
+   "lon": 5.078,
+   "elev": 234,
+   "tz": "Europe/Paris",
+   "wikidata": "Q1547",
+   "names": {
+    "zh": "里昂圣埃克絮佩里机场",
+    "zh-Hant": "里昂聖埃克絮佩里機場",
+    "ja": "サン＝テグジュペリ国際空港",
+    "ko": "생텍쥐페리 국제공항"
+   }
+  },
+  {
+   "icao": "LFMN",
+   "iata": "NCE",
+   "name": "Nice-Côte d'Azur Airport",
+   "city": "Nice, Alpes-Maritimes",
+   "country": "FR",
+   "lat": 43.658,
+   "lon": 7.216,
+   "elev": 4,
+   "tz": "Europe/Paris",
+   "wikidata": "Q821557",
+   "names": {
+    "zh": "尼斯蔚蓝海岸机场",
+    "zh-Hant": "尼斯蔚藍海岸機場",
+    "ja": "コート・ダジュール空港",
+    "ko": "니스 코트다쥐르 공항"
+   }
+  },
+  {
+   "icao": "LFPB",
+   "iata": "LBG",
+   "name": "Paris-Le Bourget International Airport",
+   "city": "Paris",
+   "country": "FR",
+   "lat": 48.967,
+   "lon": 2.428,
+   "elev": 50,
+   "tz": "Europe/Paris",
+   "wikidata": "Q738719",
+   "names": {
+    "zh": "巴黎－勒布尔热机场",
+    "zh-Hant": "巴黎－勒布爾熱機場",
+    "ja": "ル・ブルジェ空港",
+    "ko": "파리 르부르제 공항"
+   }
+  },
+  {
+   "icao": "LFPG",
+   "iata": "CDG",
+   "name": "Charles de Gaulle International Airport",
+   "city": "Paris (Roissy-en-France, Val-d'Oise)",
+   "country": "FR",
+   "lat": 49.015,
+   "lon": 2.534,
+   "elev": 107,
+   "tz": "Europe/Paris",
+   "wikidata": "Q46280",
+   "names": {
+    "zh": "巴黎夏尔·戴高乐机场",
+    "zh-Hant": "巴黎夏爾·戴高樂機場",
+    "ja": "パリ＝シャルル・ド・ゴール空港",
+    "ko": "파리 샤를 드 골 공항"
+   }
+  },
+  {
+   "icao": "LFPO",
+   "iata": "ORY",
+   "name": "Paris-Orly Airport",
+   "city": "Paris (Orly, Val-de-Marne)",
+   "country": "FR",
+   "lat": 48.717,
+   "lon": 2.384,
+   "elev": 88,
+   "tz": "Europe/Paris",
+   "wikidata": "Q223416",
+   "names": {
+    "zh": "巴黎－奥利机场",
+    "zh-Hant": "巴黎－奧利機場",
+    "ja": "パリ＝オルリー空港",
+    "ko": "파리 오를리 공항"
+   }
+  },
+  {
+   "icao": "LGAV",
+   "iata": "ATH",
+   "name": "Athens Eleftherios Venizelos International Airport",
+   "city": "Spata-Artemida",
+   "country": "GR",
+   "lat": 37.936,
+   "lon": 23.945,
+   "elev": 83,
+   "tz": "Europe/Athens",
+   "wikidata": "Q211734",
+   "names": {
+    "zh": "雅典埃莱夫塞里奥斯·韦尼泽洛斯国际机场",
+    "zh-Hant": "雅典埃萊夫塞里奧斯·韋尼澤洛斯國際機場",
+    "ja": "アテネ国際空港",
+    "ko": "아테네 국제공항"
+   }
+  },
+  {
+   "icao": "LHBP",
+   "iata": "BUD",
+   "name": "Budapest Liszt Ferenc International Airport",
+   "city": "Budapest",
+   "country": "HU",
+   "lat": 47.437,
+   "lon": 19.256,
+   "elev": 141,
+   "tz": "Europe/Budapest",
+   "wikidata": "Q500945",
+   "names": {
+    "zh": "布达佩斯李斯特·费伦茨国际机场",
+    "zh-Hant": "布達佩斯李斯特·費倫茨國際機場",
+    "ja": "リスト・フェレンツ国際空港",
+    "ko": "부다페스트 리스트 페렌츠 국제공항"
+   }
+  },
+  {
+   "icao": "LIMC",
+   "iata": "MXP",
+   "name": "Milan Malpensa International Airport",
+   "city": "Ferno (VA)",
+   "country": "IT",
+   "lat": 45.631,
+   "lon": 8.728,
+   "elev": 221,
+   "tz": "Europe/Rome",
+   "wikidata": "Q60910",
+   "names": {
+    "zh": "米兰",
+    "zh-Hant": "米蘭",
+    "ja": "ミラノ・マルペンサ空港",
+    "ko": "밀라노 말펜사 공항"
+   }
+  },
+  {
+   "icao": "LIML",
+   "iata": "LIN",
+   "name": "Milano Linate Airport",
+   "city": "Segrate (MI)",
+   "country": "IT",
+   "lat": 45.461,
+   "lon": 9.263,
+   "elev": 109,
+   "tz": "Europe/Rome",
+   "wikidata": "Q828386",
+   "names": {
+    "zh": "连尼治机场",
+    "zh-Hant": "連尼治機場",
+    "ja": "ミラノ・リナーテ国際空港",
+    "ko": "리나테 공항"
+   }
+  },
+  {
+   "icao": "LIPZ",
+   "iata": "VCE",
+   "name": "Venice Marco Polo Airport",
+   "city": "Venezia (VE)",
+   "country": "IT",
+   "lat": 45.505,
+   "lon": 12.352,
+   "elev": 3,
+   "tz": "Europe/Rome",
+   "wikidata": "Q849347",
+   "names": {
+    "zh": "威尼斯－泰塞拉机场",
+    "zh-Hant": "威尼斯－泰塞拉機場",
+    "ja": "ヴェネツィア・マルコ・ポーロ空港",
+    "ko": "베네치아 마르코 폴로 국제공항"
+   }
+  },
+  {
+   "icao": "LIRF",
+   "iata": "FCO",
+   "name": "Rome–Fiumicino Leonardo da Vinci International Airport",
+   "city": "Rome",
+   "country": "IT",
+   "lat": 41.8,
+   "lon": 12.239,
+   "elev": 2,
+   "tz": "Europe/Rome",
+   "wikidata": "Q19101",
+   "names": {
+    "zh": "罗马—菲乌米奇诺机场",
+    "zh-Hant": "羅馬—菲烏米奇諾機場",
+    "ja": "フィウミチーノ空港",
+    "ko": "레오나르도 다 빈치 국제공항"
+   }
+  },
+  {
+   "icao": "LKPR",
+   "iata": "PRG",
+   "name": "Václav Havel Airport Prague",
+   "city": "Prague",
+   "country": "CZ",
+   "lat": 50.101,
+   "lon": 14.26,
+   "elev": 364,
+   "tz": "Europe/Prague",
+   "wikidata": "Q99172",
+   "names": {
+    "zh": "布拉格鲁济涅国际机场",
+    "zh-Hant": "布拉格魯濟涅國際機場",
+    "ja": "ヴァーツラフ・ハヴェル・プラハ国際空港",
+    "ko": "프라하 루지네 국제공항"
+   }
+  },
+  {
+   "icao": "LLBG",
+   "iata": "TLV",
+   "name": "Ben Gurion International Airport",
+   "city": "Tel Aviv",
+   "country": "IL",
+   "lat": 32.011,
+   "lon": 34.887,
+   "elev": 35,
+   "tz": "Asia/Jerusalem",
+   "wikidata": "Q181479",
+   "names": {
+    "zh": "本-古里安国际机场",
+    "zh-Hant": "班古里昂國際機場",
+    "ja": "ベン・グリオン国際空港",
+    "ko": "벤구리온 국제공항"
+   }
+  },
+  {
+   "icao": "LOWW",
+   "iata": "VIE",
+   "name": "Vienna International Airport",
+   "city": "Vienna",
+   "country": "AT",
+   "lat": 48.117,
+   "lon": 16.582,
+   "elev": 179,
+   "tz": "Europe/Vienna",
+   "wikidata": "Q32999",
+   "names": {
+    "zh": "维也纳国际机场",
+    "zh-Hant": "維也納國際機場",
+    "ja": "ウィーン国際空港",
+    "ko": "빈 국제공항"
+   }
+  },
+  {
+   "icao": "LPPT",
+   "iata": "LIS",
+   "name": "Lisbon Humberto Delgado Airport",
+   "city": "Lisbon",
+   "country": "PT",
+   "lat": 38.781,
+   "lon": -9.136,
+   "elev": 98,
+   "tz": "Europe/Lisbon",
+   "wikidata": "Q403671",
+   "names": {
+    "zh": "里斯本机场",
+    "zh-Hant": "里斯本機場",
+    "ja": "ポルテラ空港",
+    "ko": "리스본 공항"
+   }
+  },
+  {
+   "icao": "LROP",
+   "iata": "OTP",
+   "name": "Bucharest Henri Coandă International Airport",
+   "city": "Otopeni",
+   "country": "RO",
+   "lat": 44.572,
+   "lon": 26.102,
+   "elev": 92,
+   "tz": "Europe/Bucharest",
+   "wikidata": "Q257631",
+   "names": {
+    "zh": "布加勒斯特奥托佩尼－亨利·科安德国际机场",
+    "zh-Hant": "布加勒斯特奧托佩尼－亨利·科安德國際機場",
+    "ja": "アンリ・コアンダ国際空港",
+    "ko": "헨리 코안더 국제공항"
+   }
+  },
+  {
+   "icao": "LSGG",
+   "iata": "GVA",
+   "name": "Geneva International Airport",
+   "city": "Geneva",
+   "country": "CH",
+   "lat": 46.248,
+   "lon": 6.128,
+   "elev": 411,
+   "tz": "Europe/Zurich",
+   "wikidata": "Q289972",
+   "names": {
+    "zh": "日内瓦国际机场",
+    "zh-Hant": "日內瓦國際機場",
+    "ja": "ジュネーブ空港",
+    "ko": "제네바 국제공항"
+   }
+  },
+  {
+   "icao": "LSZH",
+   "iata": "ZRH",
+   "name": "Zürich Airport",
+   "city": "Zurich",
+   "country": "CH",
+   "lat": 47.48,
+   "lon": 8.536,
+   "elev": 424,
+   "tz": "Europe/Zurich",
+   "wikidata": "Q15114",
+   "names": {
+    "zh": "苏黎世机场",
+    "zh-Hant": "蘇黎世機場",
+    "ja": "チューリッヒ空港",
+    "ko": "취리히 공항"
+   }
+  },
+  {
+   "icao": "LTAC",
+   "iata": "ESB",
+   "name": "Esenboğa International Airport",
+   "city": "Ankara",
+   "country": "TR",
+   "lat": 40.128,
+   "lon": 32.995,
+   "elev": 952,
+   "tz": "Europe/Istanbul",
+   "wikidata": "Q430490",
+   "names": {
+    "zh": "埃森博阿国际机场",
+    "zh-Hant": "埃森博阿國際機場",
+    "ja": "エセンボーア国際空港",
+    "ko": "에센보아 국제공항"
+   }
+  },
+  {
+   "icao": "LTFM",
+   "iata": "IST",
+   "name": "İstanbul Airport",
+   "city": "Istanbul",
+   "country": "TR",
+   "lat": 41.262,
+   "lon": 28.74,
+   "elev": 99,
+   "tz": "Europe/Istanbul",
+   "wikidata": "Q3661908",
+   "names": {
+    "zh": "伊斯坦布尔机场",
+    "zh-Hant": "伊斯坦堡機場",
+    "ja": "イスタンブール空港",
+    "ko": "이스탄불 공항"
+   }
+  },
+  {
+   "icao": "LYBE",
+   "iata": "BEG",
+   "name": "Belgrade Nikola Tesla Airport",
+   "city": "Belgrade",
+   "country": "RS",
+   "lat": 44.824,
+   "lon": 20.291,
+   "elev": 93,
+   "tz": "Europe/Belgrade",
+   "wikidata": "Q127955",
+   "names": {
+    "zh": "贝尔格莱德尼古拉·特斯拉机场",
+    "zh-Hant": "貝爾格勒國際機場",
+    "ja": "ベオグラード・ニコラ・テスラ空港",
+    "ko": "베오그라드 국제공항"
+   }
+  },
+  {
+   "icao": "MDPC",
+   "iata": "PUJ",
+   "name": "Punta Cana International Airport",
+   "city": "Punta Cana",
+   "country": "DO",
+   "lat": 18.566,
+   "lon": -68.356,
+   "elev": 10,
+   "tz": "America/Santo_Domingo",
+   "wikidata": "Q1352042",
+   "names": {
+    "zh": "蓬塔卡纳国际机场",
+    "zh-Hant": "蓬塔卡納國際機場",
+    "ja": "プンタ・カナ国際空港",
+    "ko": "푼타카나 국제공항"
+   }
+  },
+  {
+   "icao": "MKJP",
+   "iata": "KIN",
+   "name": "Norman Manley International Airport",
+   "city": "Kingston",
+   "country": "JM",
+   "lat": 17.942,
+   "lon": -76.798,
+   "elev": 3,
+   "tz": "America/Jamaica",
+   "wikidata": "Q1432206",
+   "names": {
+    "zh": "金斯敦",
+    "zh-Hant": "金斯敦",
+    "ja": "ノーマン・マンレー国際空港",
+    "ko": "노먼 맨리 국제공항"
+   }
+  },
+  {
+   "icao": "MMGL",
+   "iata": "GDL",
+   "name": "Guadalajara International Airport",
+   "city": "Guadalajara",
+   "country": "MX",
+   "lat": 20.523,
+   "lon": -103.312,
+   "elev": 1531,
+   "tz": "America/Mexico_City",
+   "wikidata": "Q932025",
+   "names": {
+    "zh": "瓜达拉哈拉",
+    "zh-Hant": "瓜達拉哈拉",
+    "ja": "ドン・ミゲル・イダルゴ・イ・コスティージャ国際空港",
+    "ko": "미겔 이달고 이 코스티야 국제공항"
+   }
+  },
+  {
+   "icao": "MMMX",
+   "iata": "MEX",
+   "name": "Mexico City Benito Juárez International Airport",
+   "city": "Mexico City",
+   "country": "MX",
+   "lat": 19.436,
+   "lon": -99.072,
+   "elev": 2224,
+   "tz": "America/Mexico_City",
+   "wikidata": "Q860559",
+   "names": {
+    "zh": "墨西哥城贝尼托·胡亚雷斯国际机场",
+    "zh-Hant": "墨西哥城貝尼托·胡亞雷斯國際機場",
+    "ja": "メキシコシティ国際空港",
+    "ko": "멕시코시티 국제공항"
+   }
+  },
+  {
+   "icao": "MMMY",
+   "iata": "MTY",
+   "name": "Monterrey International Airport",
+   "city": "Monterrey",
+   "country": "MX",
+   "lat": 25.774,
+   "lon": -100.104,
+   "elev": 382,
+   "tz": "America/Monterrey",
+   "wikidata": "Q767660",
+   "names": {
+    "zh": "阿波达卡",
+    "zh-Hant": "阿波達卡",
+    "ja": "モンテレイ国際空港",
+    "ko": "몬테레이 국제공항"
+   }
+  },
+  {
+   "icao": "MMUN",
+   "iata": "CUN",
+   "name": "Cancún International Airport",
+   "city": "Cancún",
+   "country": "MX",
+   "lat": 21.038,
+   "lon": -86.855,
+   "elev": 13,
+   "tz": "America/Cancun",
+   "wikidata": "Q641967",
+   "names": {
+    "zh": "坎昆国际机场",
+    "zh-Hant": "坎昆國際機場",
+    "ja": "カンクン国際空港",
+    "ko": "캉쿤 국제공항"
+   }
+  },
+  {
+   "icao": "MPMG",
+   "iata": "PAC",
+   "name": "Marcos A. Gelabert International Airport",
+   "city": "Albrook",
+   "country": "PA",
+   "lat": 8.967,
+   "lon": -79.555,
+   "elev": 6,
+   "tz": "America/Panama",
+   "wikidata": "Q3496541",
+   "names": {
+    "zh": "阿爾布魯克“Marcos A. Gelabert”國際機場",
+    "zh-Hant": "阿爾布魯克「Marcos A. Gelabert」國際機場",
+    "ja": "アルブロオク \"マルコス A. ヘラベルト\"国際空港"
+   }
+  },
+  {
+   "icao": "MUHA",
+   "iata": "HAV",
+   "name": "José Martí International Airport",
+   "city": "Havana",
+   "country": "CU",
+   "lat": 22.991,
+   "lon": -82.41,
+   "elev": 61,
+   "tz": "America/Havana",
+   "wikidata": "Q381677",
+   "names": {
+    "zh": "何塞·马蒂国际机场",
+    "zh-Hant": "荷西馬提國際機場",
+    "ja": "ホセ・マルティ国際空港",
+    "ko": "호세 마르티 국제공항"
+   }
+  },
+  {
+   "icao": "NFFN",
+   "iata": "NAN",
+   "name": "Nadi International Airport",
+   "city": "Nadi",
+   "country": "FJ",
+   "lat": -17.755,
+   "lon": 177.443,
+   "elev": 14,
+   "tz": "Pacific/Fiji",
+   "wikidata": "Q1150557",
+   "names": {
+    "zh": "楠迪国际机场",
+    "zh-Hant": "楠迪國際機場",
+    "ja": "ナンディ国際空港",
+    "ko": "난디 국제공항"
+   }
+  },
+  {
+   "icao": "NSTU",
+   "iata": "PPG",
+   "name": "Pago Pago International Airport",
+   "city": "Pago Pago",
+   "country": "AS",
+   "lat": -14.337,
+   "lon": -170.721,
+   "elev": 8,
+   "tz": "Pacific/Pago_Pago",
+   "wikidata": "Q939904",
+   "names": {
+    "zh": "帕果帕果国际机场",
+    "zh-Hant": "帕果帕果國際機場",
+    "ja": "パゴパゴ国際空港"
+   }
+  },
+  {
+   "icao": "NZAA",
+   "iata": "AKL",
+   "name": "Auckland International Airport",
+   "city": "Auckland",
+   "country": "NZ",
+   "lat": -37.008,
+   "lon": 174.792,
+   "elev": 7,
+   "tz": "Pacific/Auckland",
+   "wikidata": "Q45938",
+   "names": {
+    "zh": "奥克兰机场",
+    "zh-Hant": "奧克蘭機場",
+    "ja": "オークランド国際空港",
+    "ko": "오클랜드 국제공항"
+   }
+  },
+  {
+   "icao": "NZCH",
+   "iata": "CHC",
+   "name": "Christchurch International Airport",
+   "city": "Christchurch",
+   "country": "NZ",
+   "lat": -43.489,
+   "lon": 172.528,
+   "elev": 36,
+   "tz": "Pacific/Auckland",
+   "wikidata": "Q1061330",
+   "names": {
+    "zh": "克赖斯特彻奇国际机场",
+    "zh-Hant": "基督城國際機場",
+    "ja": "クライストチャーチ国際空港",
+    "ko": "크라이스트처치 국제공항"
+   }
+  },
+  {
+   "icao": "NZWN",
+   "iata": "WLG",
+   "name": "Wellington International Airport",
+   "city": "Wellington",
+   "country": "NZ",
+   "lat": -41.331,
+   "lon": 174.806,
+   "elev": 12,
+   "tz": "Pacific/Auckland",
+   "wikidata": "Q1150574",
+   "names": {
+    "zh": "惠灵顿国际机场",
+    "zh-Hant": "威靈頓國際機場",
+    "ja": "ウェリントン国際空港",
+    "ko": "웰링턴 국제공항"
+   }
+  },
+  {
+   "icao": "OBBI",
+   "iata": "BAH",
+   "name": "Bahrain International Airport",
+   "city": "Manama",
+   "country": "BH",
+   "lat": 26.271,
+   "lon": 50.634,
+   "elev": 6,
+   "tz": "Asia/Bahrain",
+   "wikidata": "Q637639",
+   "names": {
+    "zh": "巴林国际机场",
+    "zh-Hant": "巴林國際機場",
+    "ja": "バーレーン国際空港",
+    "ko": "바레인 국제공항"
+   }
+  },
+  {
+   "icao": "OEJN",
+   "iata": "JED",
+   "name": "King Abdulaziz International Airport",
+   "city": "Jeddah",
+   "country": "SA",
+   "lat": 21.685,
+   "lon": 39.166,
+   "elev": 8,
+   "tz": "Asia/Riyadh",
+   "wikidata": "Q153592",
+   "names": {
+    "zh": "阿卜杜勒-阿齐兹国王国际机场",
+    "zh-Hant": "阿卜杜勒-阿齊茲國王國際機場",
+    "ja": "キング・アブドゥルアズィーズ国際空港",
+    "ko": "킹 압둘아지즈 국제공항"
+   }
+  },
+  {
+   "icao": "OERK",
+   "iata": "RUH",
+   "name": "King Khalid International Airport",
+   "city": "Riyadh",
+   "country": "SA",
+   "lat": 24.945,
+   "lon": 46.702,
+   "elev": 618,
+   "tz": "Asia/Riyadh",
+   "wikidata": "Q47157",
+   "names": {
+    "zh": "哈立德国王国际机场",
+    "zh-Hant": "哈立德國王國際機場",
+    "ja": "キング・ハーリド国際空港",
+    "ko": "킹 칼리드 국제공항"
+   }
+  },
+  {
+   "icao": "OJAI",
+   "iata": "AMM",
+   "name": "Queen Alia International Airport",
+   "city": "Amman",
+   "country": "JO",
+   "lat": 31.723,
+   "lon": 35.993,
+   "elev": 723,
+   "tz": "Asia/Amman",
+   "wikidata": "Q721494",
+   "names": {
+    "zh": "阿勒娅王后国际机场",
+    "zh-Hant": "阿勒婭王后國際機場",
+    "ja": "クィーンアリア国際空港",
+    "ko": "퀸 알리아 국제공항"
+   }
+  },
+  {
+   "icao": "OKKK",
+   "iata": "KWI",
+   "name": "Kuwait International Airport",
+   "city": "Kuwait City",
+   "country": "KW",
+   "lat": 29.227,
+   "lon": 47.969,
+   "elev": 55,
+   "tz": "Asia/Kuwait",
+   "wikidata": "Q527157",
+   "names": {
+    "zh": "科威特国际机场",
+    "zh-Hant": "科威特國際機場",
+    "ja": "クウェート国際空港",
+    "ko": "쿠웨이트 국제공항"
+   }
+  },
+  {
+   "icao": "OMAA",
+   "iata": "AUH",
+   "name": "Zayed International Airport",
+   "city": "Abu Dhabi",
+   "country": "AE",
+   "lat": 24.433,
+   "lon": 54.651,
+   "elev": 13,
+   "tz": "Asia/Dubai",
+   "wikidata": "Q643562",
+   "names": {
+    "zh": "阿布扎比國際機場",
+    "zh-Hant": "阿布達比國際機場",
+    "ja": "ザイード国際空港",
+    "ko": "아부다비 국제공항"
+   }
+  },
+  {
+   "icao": "OMDB",
+   "iata": "DXB",
+   "name": "Dubai International Airport",
+   "city": "Dubai",
+   "country": "AE",
+   "lat": 25.254,
+   "lon": 55.366,
+   "elev": 5,
+   "tz": "Asia/Dubai",
+   "wikidata": "Q193439",
+   "names": {
+    "zh": "迪拜国际机场",
+    "zh-Hant": "杜拜國際機場",
+    "ja": "ドバイ国際空港",
+    "ko": "두바이 국제공항"
+   }
+  },
+  {
+   "icao": "OMSJ",
+   "iata": "SHJ",
+   "name": "Sharjah International Airport",
+   "city": "Sharjah",
+   "country": "AE",
+   "lat": 25.329,
+   "lon": 55.517,
+   "elev": 33,
+   "tz": "Asia/Dubai",
+   "wikidata": "Q635826",
+   "names": {
+    "zh": "沙迦国际机场",
+    "zh-Hant": "沙迦國際機場",
+    "ja": "シャールジャ国際空港",
+    "ko": "샤르자 국제공항"
+   }
+  },
+  {
+   "icao": "OPIS",
+   "iata": "ISB",
+   "name": "Islamabad International Airport",
+   "city": "Attock",
+   "country": "PK",
+   "lat": 33.551,
+   "lon": 72.827,
+   "elev": 542,
+   "tz": "Asia/Karachi",
+   "wikidata": "Q1190316",
+   "names": {
+    "zh": "新伊斯兰玛巴德国际机场",
+    "zh-Hant": "新伊斯蘭瑪巴德國際機場",
+    "ja": "イスラマバード国際空港",
+    "ko": "뉴이슬라마바드 국제공항"
+   }
+  },
+  {
+   "icao": "OPKC",
+   "iata": "KHI",
+   "name": "Jinnah International Airport",
+   "city": "Karachi",
+   "country": "PK",
+   "lat": 24.902,
+   "lon": 67.139,
+   "elev": 20,
+   "tz": "Asia/Karachi",
+   "wikidata": "Q61052",
+   "names": {
+    "zh": "真纳国际机场",
+    "zh-Hant": "真納國際機場",
+    "ja": "ジンナー国際空港",
+    "ko": "진나 국제공항"
+   }
+  },
+  {
+   "icao": "OPLA",
+   "iata": "LHE",
+   "name": "Allama Iqbal International Airport",
+   "city": "Lahore",
+   "country": "PK",
+   "lat": 31.522,
+   "lon": 74.404,
+   "elev": 217,
+   "tz": "Asia/Karachi",
+   "wikidata": "Q60879",
+   "names": {
+    "zh": "拉合尔阿拉马·伊克巴勒国际机场",
+    "zh-Hant": "拉合爾阿拉馬·伊克巴勒國際機場",
+    "ja": "アッラーマ・イクバール国際空港",
+    "ko": "알라마 이크발 국제공항"
+   }
+  },
+  {
+   "icao": "ORBI",
+   "iata": "BGW",
+   "name": "Baghdad International Airport / New Al Muthana Air Base",
+   "city": "Baghdad",
+   "country": "IQ",
+   "lat": 33.263,
+   "lon": 44.235,
+   "elev": 37,
+   "tz": "Asia/Baghdad",
+   "wikidata": "Q304438",
+   "names": {
+    "zh": "巴格达国际机场",
+    "zh-Hant": "巴格達國際機場",
+    "ja": "バグダード国際空港",
+    "ko": "바그다드 국제공항"
+   }
+  },
+  {
+   "icao": "OTHH",
+   "iata": "DOH",
+   "name": "Hamad International Airport",
+   "city": "Doha",
+   "country": "QA",
+   "lat": 25.273,
+   "lon": 51.609,
+   "elev": 3,
+   "tz": "Asia/Qatar",
+   "wikidata": "Q1198791",
+   "names": {
+    "zh": "哈马德国际机场",
+    "zh-Hant": "哈馬德國際機場",
+    "ja": "ハマド国際空港",
+    "ko": "뉴도하 국제공항"
+   }
+  },
+  {
+   "icao": "PANC",
+   "iata": "ANC",
+   "name": "Ted Stevens Anchorage International Airport",
+   "city": "Anchorage",
+   "country": "US",
+   "lat": 61.16914,
+   "lon": -150.02774,
+   "elev": 39,
+   "tz": "America/Anchorage",
+   "wikidata": "Q767753",
+   "names": {
+    "zh": "泰德·史蒂文斯安克雷奇国际机场",
+    "zh-Hant": "泰德·史蒂文斯安克雷奇國際機場",
+    "ja": "テッド・スティーブンス・アンカレッジ国際空港",
+    "ko": "앵커리지 공항"
+   }
+  },
+  {
+   "icao": "PGUM",
+   "iata": "GUM",
+   "name": "Antonio B. Won Pat International Airport",
+   "city": "Hagåtña",
+   "country": "GU",
+   "lat": 13.47964,
+   "lon": 144.7958,
+   "elev": 74,
+   "tz": "Pacific/Guam",
+   "wikidata": "Q1136355",
+   "names": {
+    "zh": "安东尼奥·汪帕特国际机场",
+    "zh-Hant": "安東尼奧·汪帕特國際機場",
+    "ja": "グアム国際空港",
+    "ko": "안토니오 비 원 팻 국제공항"
+   }
+  },
+  {
+   "icao": "PHNL",
+   "iata": "HNL",
+   "name": "Daniel K. Inouye International Airport",
+   "city": "Honolulu, Oahu",
+   "country": "US",
+   "lat": 21.31505,
+   "lon": -157.924,
+   "elev": 2,
+   "tz": "Pacific/Honolulu",
+   "wikidata": "Q531178",
+   "names": {
+    "zh": "丹尼尔·K·井上国际机场",
+    "zh-Hant": "丹尼爾·K·井上國際機場",
+    "ja": "ホノルル国際空港",
+    "ko": "호놀룰루 국제공항"
+   }
+  },
+  {
+   "icao": "RCKH",
+   "iata": "KHH",
+   "name": "Kaohsiung International Airport",
+   "city": "Kaohsiung (Xiaogang)",
+   "country": "TW",
+   "lat": 22.577,
+   "lon": 120.35,
+   "elev": 6,
+   "tz": "Asia/Taipei",
+   "wikidata": "Q16810",
+   "names": {
+    "zh": "高雄国际机场",
+    "zh-Hant": "高雄國際機場",
+    "ja": "高雄国際空港",
+    "ko": "가오슝 국제공항"
+   }
+  },
+  {
+   "icao": "RCSS",
+   "iata": "TSA",
+   "name": "Taipei Songshan International Airport",
+   "city": "Taipei (Songshan)",
+   "country": "TW",
+   "lat": 25.069,
+   "lon": 121.552,
+   "elev": 8,
+   "tz": "Asia/Taipei",
+   "wikidata": "Q702019",
+   "names": {
+    "zh": "台北松山机场",
+    "zh-Hant": "臺北松山機場",
+    "ja": "台北松山空港",
+    "ko": "타이베이 쑹산 공항"
+   }
+  },
+  {
+   "icao": "RCTP",
+   "iata": "TPE",
+   "name": "Taiwan Taoyuan International Airport",
+   "city": "Taoyuan",
+   "country": "TW",
+   "lat": 25.078,
+   "lon": 121.233,
+   "elev": 33,
+   "tz": "Asia/Taipei",
+   "wikidata": "Q44856",
+   "names": {
+    "zh": "台湾桃园国际机场",
+    "zh-Hant": "臺灣桃園國際機場",
+    "ja": "台湾桃園国際空港",
+    "ko": "타이완 타오위안 국제공항"
+   }
+  },
+  {
+   "icao": "RJAA",
+   "iata": "NRT",
+   "name": "Narita International Airport",
+   "city": "Narita",
+   "country": "JP",
+   "lat": 35.765,
+   "lon": 140.386,
+   "elev": 36,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q36454",
+   "names": {
+    "zh": "成田国际机场",
+    "zh-Hant": "成田國際機場",
+    "ja": "成田国際空港",
+    "ko": "나리타 국제공항"
+   }
+  },
+  {
+   "icao": "RJBB",
+   "iata": "KIX",
+   "name": "Kansai International Airport",
+   "city": "Osaka",
+   "country": "JP",
+   "lat": 34.434,
+   "lon": 135.233,
+   "elev": 8,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q193682",
+   "names": {
+    "zh": "关西国际机场",
+    "zh-Hant": "關西國際機場",
+    "ja": "関西国際空港",
+    "ko": "간사이 국제공항"
+   }
+  },
+  {
+   "icao": "RJCC",
+   "iata": "CTS",
+   "name": "New Chitose Airport",
+   "city": "Sapporo",
+   "country": "JP",
+   "lat": 42.774,
+   "lon": 141.693,
+   "elev": 19,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q908296",
+   "names": {
+    "zh": "新千岁机场",
+    "zh-Hant": "新千歲機場",
+    "ja": "新千歳空港",
+    "ko": "신치토세 공항"
+   }
+  },
+  {
+   "icao": "RJFF",
+   "iata": "FUK",
+   "name": "Fukuoka Airport",
+   "city": "Fukuoka",
+   "country": "JP",
+   "lat": 33.584,
+   "lon": 130.452,
+   "elev": 7,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q1137465",
+   "names": {
+    "zh": "福冈机场",
+    "zh-Hant": "福岡機場",
+    "ja": "福岡空港",
+    "ko": "후쿠오카 공항"
+   }
+  },
+  {
+   "icao": "RJGG",
+   "iata": "NGO",
+   "name": "Chubu Centrair International Airport",
+   "city": "Tokoname",
+   "country": "JP",
+   "lat": 34.858,
+   "lon": 136.805,
+   "elev": 5,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q679345",
+   "names": {
+    "zh": "中部国际机场",
+    "zh-Hant": "中部國際機場",
+    "ja": "中部国際空港",
+    "ko": "중부국제공항 센트레어"
+   }
+  },
+  {
+   "icao": "RJOO",
+   "iata": "ITM",
+   "name": "Osaka Itami International Airport",
+   "city": "Osaka",
+   "country": "JP",
+   "lat": 34.784,
+   "lon": 135.439,
+   "elev": 11,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q1046748",
+   "names": {
+    "zh": "大阪国际机场",
+    "zh-Hant": "大阪國際機場",
+    "ja": "大阪国際空港",
+    "ko": "오사카 국제공항"
+   }
+  },
+  {
+   "icao": "RJTT",
+   "iata": "HND",
+   "name": "Tokyo Haneda International Airport",
+   "city": "Tokyo",
+   "country": "JP",
+   "lat": 35.553,
+   "lon": 139.781,
+   "elev": 5,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q204853",
+   "names": {
+    "zh": "东京国际机场",
+    "zh-Hant": "羽田機場",
+    "ja": "東京国際空港",
+    "ko": "도쿄 국제공항"
+   }
+  },
+  {
+   "icao": "RKPC",
+   "iata": "CJU",
+   "name": "Jeju International Airport",
+   "city": "Jeju City",
+   "country": "KR",
+   "lat": 33.511,
+   "lon": 126.493,
+   "elev": 23,
+   "tz": "Asia/Seoul",
+   "wikidata": "Q482497",
+   "names": {
+    "zh": "济州国际机场",
+    "zh-Hant": "濟州國際機場",
+    "ja": "済州国際空港",
+    "ko": "제주국제공항"
+   }
+  },
+  {
+   "icao": "RKPK",
+   "iata": "PUS",
+   "name": "Gimhae International Airport",
+   "city": "Busan",
+   "country": "KR",
+   "lat": 35.179,
+   "lon": 128.938,
+   "elev": 3,
+   "tz": "Asia/Seoul",
+   "wikidata": "Q483223",
+   "names": {
+    "zh": "金海国际机场",
+    "zh-Hant": "金海國際機場",
+    "ja": "金海国際空港",
+    "ko": "김해국제공항"
+   }
+  },
+  {
+   "icao": "RKSI",
+   "iata": "ICN",
+   "name": "Incheon International Airport",
+   "city": "Seoul",
+   "country": "KR",
+   "lat": 37.469,
+   "lon": 126.451,
+   "elev": 7,
+   "tz": "Asia/Seoul",
+   "wikidata": "Q20932",
+   "names": {
+    "zh": "仁川國際機場",
+    "zh-Hant": "仁川國際機場",
+    "ja": "仁川国際空港",
+    "ko": "인천국제공항"
+   }
+  },
+  {
+   "icao": "RKSS",
+   "iata": "GMP",
+   "name": "Seoul Gimpo International Airport",
+   "city": "Seoul",
+   "country": "KR",
+   "lat": 37.558,
+   "lon": 126.791,
+   "elev": 18,
+   "tz": "Asia/Seoul",
+   "wikidata": "Q482493",
+   "names": {
+    "zh": "金浦国际机场",
+    "zh-Hant": "金浦國際機場",
+    "ja": "金浦国際空港",
+    "ko": "김포국제공항"
+   }
+  },
+  {
+   "icao": "ROAH",
+   "iata": "OKA",
+   "name": "Naha International Airport",
+   "city": "Naha",
+   "country": "JP",
+   "lat": 26.196,
+   "lon": 127.646,
+   "elev": 6,
+   "tz": "Asia/Tokyo",
+   "wikidata": "Q1197455",
+   "names": {
+    "zh": "那霸机场",
+    "zh-Hant": "那霸機場",
+    "ja": "那覇空港",
+    "ko": "나하 공항"
+   }
+  },
+  {
+   "icao": "RPLL",
+   "iata": "MNL",
+   "name": "Ninoy Aquino International Airport",
+   "city": "Manila (Pasay)",
+   "country": "PH",
+   "lat": 14.507,
+   "lon": 121.004,
+   "elev": 15,
+   "tz": "Asia/Manila",
+   "wikidata": "Q86446",
+   "names": {
+    "zh": "尼诺伊·阿基诺国际机场",
+    "zh-Hant": "尼諾伊·阿基諾國際機場",
+    "ja": "ニノイ・アキノ国際空港",
+    "ko": "니노이 아키노 국제공항"
+   }
+  },
+  {
+   "icao": "RPVM",
+   "iata": "CEB",
+   "name": "Mactan Cebu International Airport",
+   "city": "Cebu City/Lapu-Lapu City",
+   "country": "PH",
+   "lat": 10.308,
+   "lon": 123.978,
+   "elev": 9,
+   "tz": "Asia/Manila",
+   "wikidata": "Q1048704",
+   "names": {
+    "zh": "麦克坦－宿务国际机场",
+    "zh-Hant": "麥克坦－宿霧國際機場",
+    "ja": "マクタン・セブ国際空港",
+    "ko": "막탄 세부 국제공항"
+   }
+  },
+  {
+   "icao": "SAEZ",
+   "iata": "EZE",
+   "name": "Ezeiza International Airport - Ministro Pistarini",
+   "city": "Buenos Aires (Ezeiza)",
+   "country": "AR",
+   "lat": -34.822,
+   "lon": -58.536,
+   "elev": 16,
+   "tz": "America/Argentina/Buenos_Aires",
+   "wikidata": "Q384788",
+   "names": {
+    "zh": "皮斯塔里尼部长国际机场",
+    "zh-Hant": "皮斯塔里尼部長國際機場",
+    "ja": "エセイサ国際空港",
+    "ko": "미니스토로 피스타리니 국제공항"
+   }
+  },
+  {
+   "icao": "SBBR",
+   "iata": "BSB",
+   "name": "Presidente Juscelino Kubitschek International Airport",
+   "city": "Brasília",
+   "country": "BR",
+   "lat": -15.867,
+   "lon": -47.933,
+   "elev": 1051,
+   "tz": "America/Sao_Paulo",
+   "wikidata": "Q909488",
+   "names": {
+    "zh": "巴西利亚－儒塞利诺·库比契克总统国际机场",
+    "zh-Hant": "巴西利亞－儒塞利諾·庫比契克總統國際機場",
+    "ja": "プレジデント・ジュセリノ・クビシェッキ国際空港",
+    "ko": "브라질리아 국제공항"
+   }
+  },
+  {
+   "icao": "SBGL",
+   "iata": "GIG",
+   "name": "Rio de Janeiro Galeão – Tom Jobim International Airport",
+   "city": "Rio De Janeiro",
+   "country": "BR",
+   "lat": -22.815,
+   "lon": -43.261,
+   "elev": 3,
+   "tz": "America/Sao_Paulo",
+   "wikidata": "Q733998",
+   "names": {
+    "zh": "里约热内卢/加利昂－安东尼奥·卡洛斯·若宾国际机场",
+    "zh-Hant": "里約熱內盧/加利昂－安東尼奧·卡洛斯·若賓國際機場",
+    "ja": "アントニオ・カルロス・ジョビン国際空港",
+    "ko": "리우데자네이루 갈레안 국제공항"
+   }
+  },
+  {
+   "icao": "SBGR",
+   "iata": "GRU",
+   "name": "São Paulo/Guarulhos–Governor André Franco Montoro International Airport",
+   "city": "São Paulo",
+   "country": "BR",
+   "lat": -23.432,
+   "lon": -46.469,
+   "elev": 745,
+   "tz": "America/Sao_Paulo",
+   "wikidata": "Q385406",
+   "names": {
+    "zh": "圣保罗/瓜鲁柳斯－安德烈·弗朗哥·蒙托罗州长国际机场",
+    "zh-Hant": "聖保羅/瓜魯柳斯－安德烈·弗朗哥·蒙託羅州長國際機場",
+    "ja": "グアルーリョス国際空港",
+    "ko": "상파울루 구아룰류스 국제공항"
+   }
+  },
+  {
+   "icao": "SCEL",
+   "iata": "SCL",
+   "name": "Comodoro Arturo Merino Benítez International Airport",
+   "city": "Santiago",
+   "country": "CL",
+   "lat": -33.393,
+   "lon": -70.786,
+   "elev": 478,
+   "tz": "America/Santiago",
+   "wikidata": "Q127671",
+   "names": {
+    "zh": "阿图罗·梅里诺·贝尼特斯准将国际机场",
+    "zh-Hant": "阿圖羅·梅里諾·貝尼特斯准將國際機場",
+    "ja": "アルトゥーロ・メリノ・ベニテス国際空港",
+    "ko": "코모도로 아르투로 메리노 베니테스 국제공항"
+   }
+  },
+  {
+   "icao": "SEQM",
+   "iata": "UIO",
+   "name": "Mariscal Sucre International Airport",
+   "city": "Quito",
+   "country": "EC",
+   "lat": -0.124,
+   "lon": -78.354,
+   "elev": 2386,
+   "tz": "America/Guayaquil",
+   "wikidata": "Q1547557",
+   "names": {
+    "zh": "苏克雷元帅国际机场",
+    "zh-Hant": "蘇克雷元帥國際機場",
+    "ja": "マリスカル・スクレ国際空港",
+    "ko": "마리스칼 수크레 국제공항"
+   }
+  },
+  {
+   "icao": "SGAS",
+   "iata": "ASU",
+   "name": "Silvio Pettirossi International Airport",
+   "city": "Asunción",
+   "country": "PY",
+   "lat": -25.248,
+   "lon": -57.519,
+   "elev": 83,
+   "tz": "America/Asuncion",
+   "wikidata": "Q903521",
+   "names": {
+    "zh": "西尔维奥·佩蒂罗西国际机场",
+    "zh-Hant": "西爾維奧·佩蒂羅西國際機場",
+    "ja": "シルビオ・ペッティロッシ国際空港",
+    "ko": "실비오 페티로시 국제공항"
+   }
+  },
+  {
+   "icao": "SKBO",
+   "iata": "BOG",
+   "name": "El Dorado International Airport",
+   "city": "Bogota",
+   "country": "CO",
+   "lat": 4.706,
+   "lon": -74.151,
+   "elev": 2547,
+   "tz": "America/Bogota",
+   "wikidata": "Q201785",
+   "names": {
+    "zh": "埃尔多拉多国际机场",
+    "zh-Hant": "埃爾多拉多國際機場",
+    "ja": "エルドラド国際空港",
+    "ko": "엘도라도 국제공항"
+   }
+  },
+  {
+   "icao": "SLLP",
+   "iata": "LPB",
+   "name": "El Alto International Airport",
+   "city": "La Paz / El Alto",
+   "country": "BO",
+   "lat": -16.511,
+   "lon": -68.182,
+   "elev": 4061,
+   "tz": "America/La_Paz",
+   "wikidata": "Q1142225",
+   "names": {
+    "zh": "奥尔托国际机场",
+    "zh-Hant": "奧爾托國際機場",
+    "ja": "エル・アルト国際空港",
+    "ko": "엘알토 국제공항"
+   }
+  },
+  {
+   "icao": "SPJC",
+   "iata": "LIM",
+   "name": "Lima/Chávez Intl",
+   "city": "Lima",
+   "country": "PE",
+   "lat": -12.024,
+   "lon": -77.113,
+   "elev": 26,
+   "tz": "America/Lima",
+   "wikidata": "Q1142219",
+   "names": {
+    "zh": "豪尔赫·查韦斯国际机场",
+    "zh-Hant": "豪爾赫·查維茲國際機場",
+    "ja": "ホルヘ・チャベス国際空港",
+    "ko": "호르헤 차베스 국제공항"
+   }
+  },
+  {
+   "icao": "SUMU",
+   "iata": "MVD",
+   "name": "Carrasco General Cesáreo L. Berisso International Airport",
+   "city": "Ciudad de la Costa",
+   "country": "UY",
+   "lat": -34.838,
+   "lon": -56.031,
+   "elev": 32,
+   "tz": "America/Montevideo",
+   "wikidata": "Q9064",
+   "names": {
+    "zh": "卡拉斯科国际机场",
+    "zh-Hant": "卡拉斯科國際機場",
+    "ja": "カラスコ国際空港",
+    "ko": "카라사코 국제공항"
+   }
+  },
+  {
+   "icao": "SVMI",
+   "iata": "CCS",
+   "name": "Maiquetía Simón Bolívar International Airport",
+   "city": "Maiquetía",
+   "country": "VE",
+   "lat": 10.603,
+   "lon": -66.991,
+   "elev": 48,
+   "tz": "America/Caracas",
+   "wikidata": "Q1058344",
+   "names": {
+    "zh": "迈克蒂亚西蒙·玻利瓦尔国际机场",
+    "zh-Hant": "邁克蒂亞西蒙·玻利瓦爾國際機場",
+    "ja": "シモン・ボリバル国際空港",
+    "ko": "시몬 볼리바르 국제공항"
+   }
+  },
+  {
+   "icao": "TJSJ",
+   "iata": "SJU",
+   "name": "Luis Munoz Marin International Airport",
+   "city": "San Juan",
+   "country": "PR",
+   "lat": 18.4326,
+   "lon": -66.01065,
+   "elev": 3,
+   "tz": "America/Puerto_Rico",
+   "wikidata": "Q1360523",
+   "names": {
+    "zh": "路易斯·穆尼奥斯·马林国际机场",
+    "zh-Hant": "路易斯·穆尼奧斯·馬林國際機場",
+    "ja": "ルイス・ムニョス・マリン国際空港",
+    "ko": "루이스 무뇨스 마린 국제공항"
+   }
+  },
+  {
+   "icao": "ULLI",
+   "iata": "LED",
+   "name": "Pulkovo Airport",
+   "city": "St. Petersburg",
+   "country": "RU",
+   "lat": 59.798,
+   "lon": 30.267,
+   "elev": 25,
+   "tz": "Europe/Moscow",
+   "wikidata": "Q690122",
+   "names": {
+    "zh": "列宁格勒普尔科沃机场",
+    "zh-Hant": "普爾科沃機場",
+    "ja": "プルコヴォ空港",
+    "ko": "풀코보 국제공항"
+   }
+  },
+  {
+   "icao": "UMMS",
+   "iata": "MSQ",
+   "name": "Minsk National Airport",
+   "city": "Minsk",
+   "country": "BY",
+   "lat": 53.883,
+   "lon": 28.031,
+   "elev": 196,
+   "tz": "Europe/Minsk",
+   "wikidata": "Q777855",
+   "names": {
+    "zh": "明斯克国际机场",
+    "zh-Hant": "明斯克國際機場",
+    "ja": "ミンスク・ナショナル空港",
+    "ko": "민스크 국제공항"
+   }
+  },
+  {
+   "icao": "UUEE",
+   "iata": "SVO",
+   "name": "Sheremetyevo International Airport",
+   "city": "Moscow",
+   "country": "RU",
+   "lat": 55.973,
+   "lon": 37.415,
+   "elev": 186,
+   "tz": "Europe/Moscow",
+   "wikidata": "Q192733",
+   "names": {
+    "zh": "谢列梅捷沃国际机场",
+    "zh-Hant": "謝列梅捷沃國際機場",
+    "ja": "シェレメーチエヴォ国際空港",
+    "ko": "셰레메티예보 국제공항"
+   }
+  },
+  {
+   "icao": "UUWW",
+   "iata": "VKO",
+   "name": "Vnukovo International Airport",
+   "city": "Moscow",
+   "country": "RU",
+   "lat": 55.592,
+   "lon": 37.261,
+   "elev": 195,
+   "tz": "Europe/Moscow",
+   "wikidata": "Q273462",
+   "names": {
+    "zh": "伏努科沃国际机场",
+    "zh-Hant": "伏努科沃國際機場",
+    "ja": "ヴヌーコヴォ国際空港",
+    "ko": "브누코보 국제공항"
+   }
+  },
+  {
+   "icao": "VABB",
+   "iata": "BOM",
+   "name": "Chhatrapati Shivaji Maharaj International Airport",
+   "city": "Mumbai",
+   "country": "IN",
+   "lat": 19.1,
+   "lon": 72.859,
+   "elev": 14,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q504368",
+   "names": {
+    "zh": "贾特拉帕蒂·希瓦吉国际机场",
+    "zh-Hant": "賈特拉帕蒂·希瓦吉國際機場",
+    "ja": "チャットラパティー・シヴァージー国際空港",
+    "ko": "차트라파티 시바지 국제공항"
+   }
+  },
+  {
+   "icao": "VCBI",
+   "iata": "CMB",
+   "name": "Bandaranaike International Colombo Airport",
+   "city": "Colombo",
+   "country": "LK",
+   "lat": 7.181,
+   "lon": 79.884,
+   "elev": 10,
+   "tz": "Asia/Colombo",
+   "wikidata": "Q60900",
+   "names": {
+    "zh": "班达拉奈克国际机场",
+    "zh-Hant": "班達拉奈克國際機場",
+    "ja": "バンダラナイケ国際空港",
+    "ko": "반다라나이케 국제공항"
+   }
+  },
+  {
+   "icao": "VECC",
+   "iata": "CCU",
+   "name": "Netaji Subhash Chandra Bose International Airport",
+   "city": "Kolkata",
+   "country": "IN",
+   "lat": 22.651,
+   "lon": 88.445,
+   "elev": 11,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q388535",
+   "names": {
+    "zh": "内塔吉·苏巴斯·钱德拉·鲍斯国际机场",
+    "zh-Hant": "內塔吉·蘇巴斯·錢德拉·鮑斯國際機場",
+    "ja": "ネータージー・スバース・チャンドラ・ボース国際空港",
+    "ko": "네타지수바시 찬드라 보스 국제공항"
+   }
+  },
+  {
+   "icao": "VGHS",
+   "iata": "DAC",
+   "name": "Hazrat Shahjalal International Airport",
+   "city": "Dhaka",
+   "country": "BD",
+   "lat": 23.846,
+   "lon": 90.4,
+   "elev": 11,
+   "tz": "Asia/Dhaka",
+   "wikidata": "Q30603",
+   "names": {
+    "zh": "沙阿贾拉勒国际机场",
+    "zh-Hant": "沙阿賈拉勒國際機場",
+    "ja": "シャージャラル国際空港",
+    "ko": "샤잘랄 국제공항"
+   }
+  },
+  {
+   "icao": "VHHH",
+   "iata": "HKG",
+   "name": "Hong Kong International Airport",
+   "city": "Hong Kong",
+   "country": "HK",
+   "lat": 22.309,
+   "lon": 113.922,
+   "elev": 9,
+   "tz": "Asia/Hong_Kong",
+   "wikidata": "Q17704",
+   "names": {
+    "zh": "香港国际机场",
+    "zh-Hant": "香港國際機場",
+    "ja": "香港国際空港",
+    "ko": "홍콩 국제공항"
+   }
+  },
+  {
+   "icao": "VIDP",
+   "iata": "DEL",
+   "name": "Indira Gandhi International Airport",
+   "city": "New Delhi",
+   "country": "IN",
+   "lat": 28.567,
+   "lon": 77.117,
+   "elev": 236,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q821275",
+   "names": {
+    "zh": "英迪拉·甘地国际机场",
+    "zh-Hant": "英迪拉·甘地國際機場",
+    "ja": "インディラ・ガンディー国際空港",
+    "ko": "인디라 간디 국제공항"
+   }
+  },
+  {
+   "icao": "VILK",
+   "iata": "LKO",
+   "name": "Chaudhary Charan Singh International Airport",
+   "city": "Lucknow",
+   "country": "IN",
+   "lat": 26.761,
+   "lon": 80.889,
+   "elev": 121,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q2672666",
+   "names": {
+    "zh": "乔杜里查兰·辛格国际机场",
+    "zh-Hant": "勒克瑙",
+    "ja": "アマウシ空港"
+   }
+  },
+  {
+   "icao": "VMMC",
+   "iata": "MFM",
+   "name": "Macau International Airport",
+   "city": "Nossa Senhora do Carmo",
+   "country": "MO",
+   "lat": 22.141,
+   "lon": 113.596,
+   "elev": 1,
+   "tz": "Asia/Macau",
+   "wikidata": "Q525486",
+   "names": {
+    "zh": "澳门国际机场",
+    "zh-Hant": "澳門國際機場",
+    "ja": "マカオ国際空港",
+    "ko": "마카오 국제공항"
+   }
+  },
+  {
+   "icao": "VNKT",
+   "iata": "KTM",
+   "name": "Tribhuvan International Airport",
+   "city": "Kathmandu",
+   "country": "NP",
+   "lat": 27.697,
+   "lon": 85.359,
+   "elev": 1334,
+   "tz": "Asia/Kathmandu",
+   "wikidata": "Q61066",
+   "names": {
+    "zh": "特里布万国际机场",
+    "zh-Hant": "特里布萬國際機場",
+    "ja": "トリブバン国際空港",
+    "ko": "트리부반 국제공항"
+   }
+  },
+  {
+   "icao": "VOBL",
+   "iata": "BLR",
+   "name": "Kempegowda International Airport Bengaluru",
+   "city": "Bengaluru",
+   "country": "IN",
+   "lat": 13.205,
+   "lon": 77.704,
+   "elev": 908,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q503364",
+   "names": {
+    "zh": "肯佩高达国际机场",
+    "zh-Hant": "肯佩高達國際機場",
+    "ja": "ケンペゴウダ国際空港",
+    "ko": "벵갈루루 국제공항"
+   }
+  },
+  {
+   "icao": "VOMM",
+   "iata": "MAA",
+   "name": "Chennai International Airport",
+   "city": "Chennai",
+   "country": "IN",
+   "lat": 12.994,
+   "lon": 80.18,
+   "elev": 7,
+   "tz": "Asia/Kolkata",
+   "wikidata": "Q502670",
+   "names": {
+    "zh": "金奈国际机场",
+    "zh-Hant": "清奈國際機場",
+    "ja": "チェンナイ国際空港",
+    "ko": "첸나이 국제공항"
+   }
+  },
+  {
+   "icao": "VRMM",
+   "iata": "MLE",
+   "name": "Velana International Airport",
+   "city": "Malé",
+   "country": "MV",
+   "lat": 4.192,
+   "lon": 73.529,
+   "elev": 2,
+   "tz": "Indian/Maldives",
+   "wikidata": "Q29104",
+   "names": {
+    "zh": "维拉纳国际机场",
+    "zh-Hant": "維拉納國際機場",
+    "ja": "マレ国際空港",
+    "ko": "말레 국제공항"
+   }
+  },
+  {
+   "icao": "VTBS",
+   "iata": "BKK",
+   "name": "Suvarnabhumi Airport",
+   "city": "Bangkok",
+   "country": "TH",
+   "lat": 13.686,
+   "lon": 100.767,
+   "elev": 1,
+   "tz": "Asia/Bangkok",
+   "wikidata": "Q194316",
+   "names": {
+    "zh": "素万那普机场",
+    "zh-Hant": "蘇凡納布機場",
+    "ja": "スワンナプーム国際空港",
+    "ko": "수완나품 국제공항"
+   }
+  },
+  {
+   "icao": "VTCC",
+   "iata": "CNX",
+   "name": "Chiang Mai International Airport",
+   "city": "Chiang Mai",
+   "country": "TH",
+   "lat": 18.771,
+   "lon": 98.963,
+   "elev": 308,
+   "tz": "Asia/Bangkok",
+   "wikidata": "Q1065082",
+   "names": {
+    "zh": "清迈国际机场",
+    "zh-Hant": "清邁國際機場",
+    "ja": "チェンマイ国際空港",
+    "ko": "치앙마이 국제공항"
+   }
+  },
+  {
+   "icao": "VTSP",
+   "iata": "HKT",
+   "name": "Phuket International Airport",
+   "city": "Phuket",
+   "country": "TH",
+   "lat": 8.105,
+   "lon": 98.308,
+   "elev": 12,
+   "tz": "Asia/Bangkok",
+   "wikidata": "Q240694",
+   "names": {
+    "zh": "布吉国际机场",
+    "zh-Hant": "布吉國際機場",
+    "ja": "プーケット国際空港",
+    "ko": "푸껫 국제공항"
+   }
+  },
+  {
+   "icao": "VVDN",
+   "iata": "DAD",
+   "name": "Da Nang International Airport",
+   "city": "Da Nang",
+   "country": "VN",
+   "lat": 16.044,
+   "lon": 108.199,
+   "elev": 7,
+   "tz": "Asia/Ho_Chi_Minh",
+   "wikidata": "Q773330",
+   "names": {
+    "zh": "岘港国际机场",
+    "zh-Hant": "峴港國際機場",
+    "ja": "ダナン国際空港",
+    "ko": "다낭 국제공항"
+   }
+  },
+  {
+   "icao": "VVNB",
+   "iata": "HAN",
+   "name": "Noi Bai International Airport",
+   "city": "Hanoi (Soc Son)",
+   "country": "VN",
+   "lat": 21.218,
+   "lon": 105.805,
+   "elev": 6,
+   "tz": "Asia/Bangkok",
+   "wikidata": "Q844098",
+   "names": {
+    "zh": "内排国际机场",
+    "zh-Hant": "內排國際機場",
+    "ja": "ノイバイ国際空港",
+    "ko": "노이바이 국제공항"
+   }
+  },
+  {
+   "icao": "VVTS",
+   "iata": "SGN",
+   "name": "Tan Son Nhat International Airport",
+   "city": "Ho Chi Minh City",
+   "country": "VN",
+   "lat": 10.817,
+   "lon": 106.667,
+   "elev": 10,
+   "tz": "Asia/Ho_Chi_Minh",
+   "wikidata": "Q478595",
+   "names": {
+    "zh": "新山一国际机场",
+    "zh-Hant": "新山一國際機場",
+    "ja": "タンソンニャット国際空港",
+    "ko": "떤선녓 국제공항"
+   }
+  },
+  {
+   "icao": "WADD",
+   "iata": "DPS",
+   "name": "Denpasar I Gusti Ngurah Rai International Airport",
+   "city": "Kuta, Badung",
+   "country": "ID",
+   "lat": -8.748,
+   "lon": 115.167,
+   "elev": 3,
+   "tz": "Asia/Makassar",
+   "wikidata": "Q1061846",
+   "names": {
+    "zh": "伍拉·赖国际机场",
+    "zh-Hant": "伍拉·賴國際機場",
+    "ja": "ングラ・ライ国際空港",
+    "ko": "응우라라이 공항"
+   }
+  },
+  {
+   "icao": "WBKK",
+   "iata": "BKI",
+   "name": "Kota Kinabalu International Airport",
+   "city": "Kota Kinabalu",
+   "country": "MY",
+   "lat": 5.937,
+   "lon": 116.051,
+   "elev": 9,
+   "tz": "Asia/Kuching",
+   "wikidata": "Q645760",
+   "names": {
+    "zh": "哥打基纳巴卢国际机场",
+    "zh-Hant": "亞庇國際機場",
+    "ja": "コタキナバル国際空港",
+    "ko": "코타키나발루 국제공항"
+   }
+  },
+  {
+   "icao": "WIII",
+   "iata": "CGK",
+   "name": "Soekarno-Hatta International Airport",
+   "city": "Jakarta",
+   "country": "ID",
+   "lat": -6.125,
+   "lon": 106.659,
+   "elev": 9,
+   "tz": "Asia/Jakarta",
+   "wikidata": "Q749497",
+   "names": {
+    "zh": "苏加诺－哈达国际机场",
+    "zh-Hant": "蘇加諾－哈達國際機場",
+    "ja": "スカルノ・ハッタ国際空港",
+    "ko": "수카르노 하타 국제공항"
+   }
+  },
+  {
+   "icao": "WMKK",
+   "iata": "KUL",
+   "name": "Kuala Lumpur International Airport",
+   "city": "Sepang",
+   "country": "MY",
+   "lat": 2.747,
+   "lon": 101.714,
+   "elev": 21,
+   "tz": "Asia/Kuala_Lumpur",
+   "wikidata": "Q500253",
+   "names": {
+    "zh": "吉隆坡国际机场",
+    "zh-Hant": "吉隆坡國際機場",
+    "ja": "クアラルンプール国際空港",
+    "ko": "쿠알라룸푸르 국제공항"
+   }
+  },
+  {
+   "icao": "WMKP",
+   "iata": "PEN",
+   "name": "Penang International Airport",
+   "city": "Penang",
+   "country": "MY",
+   "lat": 5.297,
+   "lon": 100.277,
+   "elev": 4,
+   "tz": "Asia/Kuala_Lumpur",
+   "wikidata": "Q669261",
+   "names": {
+    "zh": "槟城国际机场",
+    "zh-Hant": "檳城國際機場",
+    "ja": "ペナン国際空港",
+    "ko": "피낭 국제공항"
+   }
+  },
+  {
+   "icao": "WSSS",
+   "iata": "SIN",
+   "name": "Singapore Changi Airport",
+   "city": "Singapore",
+   "country": "SG",
+   "lat": 1.368,
+   "lon": 103.982,
+   "elev": 17,
+   "tz": "Asia/Singapore",
+   "wikidata": "Q32159",
+   "names": {
+    "zh": "新加坡樟宜机场",
+    "zh-Hant": "新加坡樟宜機場",
+    "ja": "シンガポール・チャンギ国際空港",
+    "ko": "싱가포르 창이 국제공항"
+   }
+  },
+  {
+   "icao": "YBBN",
+   "iata": "BNE",
+   "name": "Brisbane International Airport",
+   "city": "Brisbane",
+   "country": "AU",
+   "lat": -27.391,
+   "lon": 153.13,
+   "elev": 3,
+   "tz": "Australia/Brisbane",
+   "wikidata": "Q45523",
+   "names": {
+    "zh": "布里斯班机场",
+    "zh-Hant": "布里斯班機場",
+    "ja": "ブリスベン空港",
+    "ko": "브리즈번 공항"
+   }
+  },
+  {
+   "icao": "YMML",
+   "iata": "MEL",
+   "name": "Melbourne Airport",
+   "city": "Melbourne",
+   "country": "AU",
+   "lat": -37.666,
+   "lon": 144.832,
+   "elev": 115,
+   "tz": "Australia/Melbourne",
+   "wikidata": "Q733738",
+   "names": {
+    "zh": "墨尔本机场",
+    "zh-Hant": "墨爾本機場",
+    "ja": "メルボルン空港",
+    "ko": "멜버른 공항"
+   }
+  },
+  {
+   "icao": "YPAD",
+   "iata": "ADL",
+   "name": "Adelaide International Airport",
+   "city": "Adelaide",
+   "country": "AU",
+   "lat": -34.952,
+   "lon": 138.52,
+   "elev": 2,
+   "tz": "Australia/Adelaide",
+   "wikidata": "Q14302",
+   "names": {
+    "zh": "阿德莱德机场",
+    "zh-Hant": "阿德萊德機場",
+    "ja": "アデレード空港",
+    "ko": "애들레이드 공항"
+   }
+  },
+  {
+   "icao": "YPPH",
+   "iata": "PER",
+   "name": "Perth International Airport",
+   "city": "Perth",
+   "country": "AU",
+   "lat": -31.927,
+   "lon": 115.976,
+   "elev": 16,
+   "tz": "Australia/Perth",
+   "wikidata": "Q45935",
+   "names": {
+    "zh": "珀斯机场",
+    "zh-Hant": "珀斯機場",
+    "ja": "パース空港",
+    "ko": "퍼스 공항"
+   }
+  },
+  {
+   "icao": "YSSY",
+   "iata": "SYD",
+   "name": "Sydney Kingsford Smith International Airport",
+   "city": "Sydney (Mascot)",
+   "country": "AU",
+   "lat": -33.946,
+   "lon": 151.173,
+   "elev": 3,
+   "tz": "Australia/Sydney",
+   "wikidata": "Q17581",
+   "names": {
+    "zh": "悉尼机场",
+    "zh-Hant": "雪梨機場",
+    "ja": "シドニー国際空港",
+    "ko": "시드니 공항"
+   }
+  },
+  {
+   "icao": "ZBAA",
+   "iata": "PEK",
+   "name": "Beijing Capital International Airport",
+   "city": "Beijing",
+   "country": "CN",
+   "lat": 40.082,
+   "lon": 116.603,
+   "elev": 31,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q32190",
+   "names": {
+    "zh": "北京首都国际机场",
+    "zh-Hant": "北京首都國際機場",
+    "ja": "北京首都国際空港",
+    "ko": "베이징 서우두 국제공항"
+   }
+  },
+  {
+   "icao": "ZBTJ",
+   "iata": "TSN",
+   "name": "Tianjin Binhai International Airport",
+   "city": "Tianjin",
+   "country": "CN",
+   "lat": 39.124,
+   "lon": 117.346,
+   "elev": 4,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q774669",
+   "names": {
+    "zh": "天津滨海国际机场",
+    "zh-Hant": "天津濱海國際機場",
+    "ja": "天津浜海国際空港",
+    "ko": "톈진 빈하이 국제공항"
+   }
+  },
+  {
+   "icao": "ZGGG",
+   "iata": "CAN",
+   "name": "Guangzhou Baiyun International Airport",
+   "city": "Guangzhou (Huadu)",
+   "country": "CN",
+   "lat": 23.392,
+   "lon": 113.307,
+   "elev": 11,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q44868",
+   "names": {
+    "zh": "广州白云国际机场",
+    "zh-Hant": "廣州白雲國際機場",
+    "ja": "広州白雲国際空港",
+    "ko": "광저우 바이윈 국제공항"
+   }
+  },
+  {
+   "icao": "ZGHA",
+   "iata": "CSX",
+   "name": "Changsha Huanghua International Airport",
+   "city": "Changsha (Changsha)",
+   "country": "CN",
+   "lat": 28.18,
+   "lon": 113.219,
+   "elev": 61,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1330618",
+   "names": {
+    "zh": "长沙黄花国际机场",
+    "zh-Hant": "長沙黃花國際機場",
+    "ja": "長沙黄花国際空港",
+    "ko": "창사 황화 국제공항"
+   }
+  },
+  {
+   "icao": "ZGNN",
+   "iata": "NNG",
+   "name": "Nanning Wuxu International Airport",
+   "city": "Nanning (Jiangnan)",
+   "country": "CN",
+   "lat": 22.609,
+   "lon": 108.173,
+   "elev": 128,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q3238350",
+   "names": {
+    "zh": "南宁吴圩国际机场",
+    "zh-Hant": "南寧吳圩國際機場",
+    "ja": "南寧呉圩国際空港",
+    "ko": "난닝 우수 국제공항"
+   }
+  },
+  {
+   "icao": "ZGSZ",
+   "iata": "SZX",
+   "name": "Shenzhen Bao'an International Airport",
+   "city": "Shenzhen",
+   "country": "CN",
+   "lat": 22.639,
+   "lon": 113.803,
+   "elev": 18,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q842297",
+   "names": {
+    "zh": "深圳宝安国际机场",
+    "zh-Hant": "深圳寶安國際機場",
+    "ja": "深圳宝安国際空港",
+    "ko": "선전 바오안 국제공항"
+   }
+  },
+  {
+   "icao": "ZHHH",
+   "iata": "WUH",
+   "name": "Wuhan Tianhe International Airport",
+   "city": "Wuhan (Huangpi)",
+   "country": "CN",
+   "lat": 30.783,
+   "lon": 114.205,
+   "elev": 33,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q601091",
+   "names": {
+    "zh": "武汉天河国际机场",
+    "zh-Hant": "武漢天河國際機場",
+    "ja": "武漢天河国際空港",
+    "ko": "우한 톈허 국제공항"
+   }
+  },
+  {
+   "icao": "ZJHK",
+   "iata": "HAK",
+   "name": "Haikou Meilan International Airport",
+   "city": "Haikou (Meilan)",
+   "country": "CN",
+   "lat": 19.934,
+   "lon": 110.445,
+   "elev": 21,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1143116",
+   "names": {
+    "zh": "海口美兰国际机场",
+    "zh-Hant": "海口美蘭國際機場",
+    "ja": "海口美蘭国際空港",
+    "ko": "하이커우 메이란 국제공항"
+   }
+  },
+  {
+   "icao": "ZJSY",
+   "iata": "SYX",
+   "name": "Sanya Phoenix International Airport",
+   "city": "Sanya (Tianya)",
+   "country": "CN",
+   "lat": 18.303,
+   "lon": 109.412,
+   "elev": 27,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q684964",
+   "names": {
+    "zh": "三亚凤凰国际机场",
+    "zh-Hant": "三亞鳳凰國際機場",
+    "ja": "三亜鳳凰国際空港",
+    "ko": "싼야 펑황 국제공항"
+   }
+  },
+  {
+   "icao": "ZLLL",
+   "iata": "LHW",
+   "name": "Lanzhou Zhongchuan International Airport",
+   "city": "Lanzhou (Yongdeng)",
+   "country": "CN",
+   "lat": 36.513,
+   "lon": 103.623,
+   "elev": 1939,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q3234734",
+   "names": {
+    "zh": "兰州中川机场",
+    "zh-Hant": "蘭州中川機場",
+    "ja": "蘭州中川空港"
+   }
+  },
+  {
+   "icao": "ZLXY",
+   "iata": "XIY",
+   "name": "Xi'an Xianyang International Airport",
+   "city": "Xi'an",
+   "country": "CN",
+   "lat": 34.449,
+   "lon": 108.752,
+   "elev": 478,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q141677",
+   "names": {
+    "zh": "西安咸阳国际机场",
+    "zh-Hant": "西安咸陽國際機場",
+    "ja": "西安咸陽国際空港",
+    "ko": "시안 셴양 국제공항"
+   }
+  },
+  {
+   "icao": "ZPPP",
+   "iata": "KMG",
+   "name": "Kunming Changshui International Airport",
+   "city": "Kunming",
+   "country": "CN",
+   "lat": 25.107,
+   "lon": 102.934,
+   "elev": 2104,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1371636",
+   "names": {
+    "zh": "昆明长水国际机场",
+    "zh-Hant": "昆明長水國際機場",
+    "ja": "昆明長水国際空港",
+    "ko": "쿤밍 창슈이 국제공항"
+   }
+  },
+  {
+   "icao": "ZSAM",
+   "iata": "XMN",
+   "name": "Xiamen Gaoqi International Airport",
+   "city": "Xiamen",
+   "country": "CN",
+   "lat": 24.546,
+   "lon": 118.131,
+   "elev": 13,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q177216",
+   "names": {
+    "zh": "厦门高崎国际机场",
+    "zh-Hant": "廈門高崎國際機場",
+    "ja": "廈門高崎国際空港",
+    "ko": "샤먼 가오치 국제공항"
+   }
+  },
+  {
+   "icao": "ZSFZ",
+   "iata": "FOC",
+   "name": "Fuzhou Changle International Airport",
+   "city": "Fuzhou (Changle)",
+   "country": "CN",
+   "lat": 25.936,
+   "lon": 119.666,
+   "elev": 14,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1350630",
+   "names": {
+    "zh": "福州长乐国际机场",
+    "zh-Hant": "福州長樂國際機場",
+    "ja": "福州長楽国際空港",
+    "ko": "푸저우 창러 국제공항"
+   }
+  },
+  {
+   "icao": "ZSHC",
+   "iata": "HGH",
+   "name": "Hangzhou Xiaoshan International Airport",
+   "city": "Hangzhou",
+   "country": "CN",
+   "lat": 30.229,
+   "lon": 120.434,
+   "elev": 8,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1197691",
+   "names": {
+    "zh": "杭州萧山国际机场",
+    "zh-Hant": "杭州蕭山國際機場",
+    "ja": "杭州蕭山国際空港",
+    "ko": "항저우 샤오산 국제공항"
+   }
+  },
+  {
+   "icao": "ZSNJ",
+   "iata": "NKG",
+   "name": "Nanjing Lukou International Airport",
+   "city": "Nanjing",
+   "country": "CN",
+   "lat": 31.739,
+   "lon": 118.863,
+   "elev": 27,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q559107",
+   "names": {
+    "zh": "南京禄口国际机场",
+    "zh-Hant": "南京祿口國際機場",
+    "ja": "南京禄口国際空港",
+    "ko": "난징 루커우 국제공항"
+   }
+  },
+  {
+   "icao": "ZSPD",
+   "iata": "PVG",
+   "name": "Shanghai Pudong International Airport",
+   "city": "Shanghai (Pudong)",
+   "country": "CN",
+   "lat": 31.146,
+   "lon": 121.8,
+   "elev": 4,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q36420",
+   "names": {
+    "zh": "上海浦东国际机场",
+    "zh-Hant": "上海浦東國際機場",
+    "ja": "上海浦東国際空港",
+    "ko": "상하이 푸동 국제공항"
+   }
+  },
+  {
+   "icao": "ZSQD",
+   "iata": "TAO",
+   "name": "Qingdao Jiaodong International Airport",
+   "city": "Qingdao (Jiaozhou)",
+   "country": "CN",
+   "lat": 36.362,
+   "lon": 120.087,
+   "elev": 2,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q15672491",
+   "names": {
+    "zh": "青岛胶东国际机场",
+    "zh-Hant": "青島膠東國際機場",
+    "ja": "青島膠東国際空港",
+    "ko": "칭다오 자오둥 국제공항"
+   }
+  },
+  {
+   "icao": "ZSSS",
+   "iata": "SHA",
+   "name": "Shanghai Hongqiao International Airport",
+   "city": "Shanghai (Minhang)",
+   "country": "CN",
+   "lat": 31.209,
+   "lon": 121.337,
+   "elev": 2,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q421811",
+   "names": {
+    "zh": "上海虹桥国际机场",
+    "zh-Hant": "上海虹橋國際機場",
+    "ja": "上海虹橋国際空港",
+    "ko": "상하이 훙차오 국제공항"
+   }
+  },
+  {
+   "icao": "ZUCK",
+   "iata": "CKG",
+   "name": "Chongqing Jiangbei International Airport",
+   "city": "Chongqing",
+   "country": "CN",
+   "lat": 29.718,
+   "lon": 106.639,
+   "elev": 416,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q788417",
+   "names": {
+    "zh": "重庆江北国际机场",
+    "zh-Hant": "重慶江北國際機場",
+    "ja": "重慶江北国際空港",
+    "ko": "충칭 장베이 국제공항"
+   }
+  },
+  {
+   "icao": "ZUUU",
+   "iata": "CTU",
+   "name": "Chengdu Shuangliu International Airport",
+   "city": "Chengdu (Shuangliu)",
+   "country": "CN",
+   "lat": 30.576,
+   "lon": 103.95,
+   "elev": 494,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q387560",
+   "names": {
+    "zh": "成都双流国际机场",
+    "zh-Hant": "成都雙流國際機場",
+    "ja": "成都双流国際空港",
+    "ko": "청두 솽류 국제공항"
+   }
+  },
+  {
+   "icao": "ZWWW",
+   "iata": "URC",
+   "name": "Ürümqi Tianshan International Airport",
+   "city": "Ürümqi",
+   "country": "CN",
+   "lat": 43.907,
+   "lon": 87.474,
+   "elev": 654,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q765650",
+   "names": {
+    "zh": "乌鲁木齐天山国际机场",
+    "zh-Hant": "烏魯木齊天山國際機場",
+    "ja": "ウルムチ天山国際空港",
+    "ko": "우루무치 디워푸 국제공항"
+   }
+  },
+  {
+   "icao": "ZYHB",
+   "iata": "HRB",
+   "name": "Harbin Taiping International Airport",
+   "city": "Harbin",
+   "country": "CN",
+   "lat": 45.628,
+   "lon": 126.259,
+   "elev": 134,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1156786",
+   "names": {
+    "zh": "哈尔滨太平国际机场",
+    "zh-Hant": "哈爾濱太平國際機場",
+    "ja": "ハルビン太平国際空港",
+    "ko": "하얼빈 타이핑 국제공항"
+   }
+  },
+  {
+   "icao": "ZYTL",
+   "iata": "DLC",
+   "name": "Dalian Zhoushuizi International Airport",
+   "city": "Dalian (Ganjingzi)",
+   "country": "CN",
+   "lat": 38.961,
+   "lon": 121.556,
+   "elev": 33,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q965083",
+   "names": {
+    "zh": "大连周水子国际机场",
+    "zh-Hant": "大連周水子國際機場",
+    "ja": "大連周水子国際空港",
+    "ko": "다롄 저우수이쯔 국제공항"
+   }
+  },
+  {
+   "icao": "ZYTX",
+   "iata": "SHE",
+   "name": "Shenyang Taoxian International Airport",
+   "city": "Shenyang",
+   "country": "CN",
+   "lat": 41.639,
+   "lon": 123.485,
+   "elev": 56,
+   "tz": "Asia/Shanghai",
+   "wikidata": "Q1144167",
+   "names": {
+    "zh": "沈阳桃仙国际机场",
+    "zh-Hant": "瀋陽桃仙國際機場",
+    "ja": "瀋陽桃仙国際空港",
+    "ko": "선양 타오셴 국제공항"
+   }
+  }
+ ]
+}

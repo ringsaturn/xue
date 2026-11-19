@@ -24,6 +24,7 @@ import type { Plugin } from "vite";
 
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
 import { buildCaseSite, parseCaseCatalog } from "./casepages";
+import { buildAirportSite, liveScript, loadAirports } from "./airportpages";
 import { buildStormSite, loadStorms } from "./stormpages";
 
 /** Root-relative pages every deploy has, before the cases. */
@@ -31,7 +32,8 @@ export const STATIC_PAGES: readonly string[] = ["/", "/showcase", "/compare", "/
 
 /** The sitemap's URL set: the static pages, the viewer's URL for each case
  * given (the cases when their static pages were not built), and the
- * generated pages (`casepages.ts`, `stormpages.ts`), absolute. */
+ * generated pages (`casepages.ts`, `stormpages.ts`, `airportpages.ts`),
+ * absolute. */
 export function sitemapUrls(caseIds: readonly string[], pageUrls: readonly string[] = []): string[] {
   return [
     ...STATIC_PAGES.map((path) => new URL(path, SITE_ORIGIN).href),
@@ -181,7 +183,7 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
   return {
     name: "xue:discovery-files",
     apply: "build",
-    async generateBundle() {
+    async generateBundle(_options, bundle) {
       const catalogJson = await loadCatalogJson(dataBaseUrl, join(repoRoot, "web", "public"));
       let caseIds = catalogJson === null ? [] : catalogCaseIds(catalogJson);
       // The cases' static pages stand for them in the sitemap; if they fail
@@ -220,10 +222,18 @@ export function discoveryFiles({ repoRoot, dataBaseUrl }: DiscoveryOptions): Plu
           this.warn(`storm pages skipped: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
+      // The airport pages come from a checked-in list, so every build has
+      // them; their live block is the `airport` entry of this same build.
+      const airports = buildAirportSite(loadAirports(join(repoRoot, "web", "tooling", "airports.json")), liveScript(bundle));
+      for (const file of airports.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls]), { ...caseLastmod, ...stormLastmod }),
+        source: renderSitemap(sitemapUrls(caseIds, [...caseUrls, ...stormUrls, ...airports.urls]), {
+          ...caseLastmod,
+          ...stormLastmod,
+          ...airports.lastmod,
+        }),
       });
       this.emitFile({
         type: "asset",
