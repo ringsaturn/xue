@@ -538,6 +538,10 @@ export const en = {
    * the last two shown only while the map is turned or tilted — and the
    * ruler and the area tool (measure.ts), whose names say how to end a
    * shape. Tooltips and accessible names. */
+  /** The locate button on the map's control column (main.ts): flies to
+   * the reader's position; the second name replaces it when that fails. */
+  viewLocateAria: "Show my location",
+  viewLocateFailed: "Location unavailable",
   viewGlobeAria: "Globe",
   viewTerrainAria: "3D terrain",
   viewContoursAria: "Contour lines",

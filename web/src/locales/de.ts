@@ -298,6 +298,8 @@ export const de: Record<MessageKey, string> = {
   gridLatlon: "Gradnetz",
   settingsCoordinates: "Koordinaten",
   coordsLatlon: "Breite / Länge",
+  viewLocateAria: "Meinen Standort verwenden",
+  viewLocateFailed: "Standort nicht verfügbar",
   viewGlobeAria: "Globus",
   viewTerrainAria: "3D-Gelände",
   viewContoursAria: "Höhenlinien",

@@ -298,6 +298,8 @@ export const es: Record<MessageKey, string> = {
   gridLatlon: "Meridianos y paralelos",
   settingsCoordinates: "Coordenadas",
   coordsLatlon: "Lat. / lon.",
+  viewLocateAria: "Usar mi ubicación",
+  viewLocateFailed: "Ubicación no disponible",
   viewGlobeAria: "Globo",
   viewTerrainAria: "Relieve 3D",
   viewContoursAria: "Curvas de nivel",

@@ -295,6 +295,8 @@ export const zhHant: Record<MessageKey, string> = {
   gridLatlon: "經緯網",
   settingsCoordinates: "座標",
   coordsLatlon: "經緯度",
+  viewLocateAria: "顯示我的位置",
+  viewLocateFailed: "無法取得位置",
   viewGlobeAria: "地球視圖",
   viewTerrainAria: "三維地形",
   viewContoursAria: "地形等高線",

@@ -300,6 +300,8 @@ export const ko: Record<MessageKey, string> = {
   gridLatlon: "경위선",
   settingsCoordinates: "좌표",
   coordsLatlon: "위경도",
+  viewLocateAria: "내 위치 사용",
+  viewLocateFailed: "위치를 가져올 수 없습니다",
   viewGlobeAria: "지구본 보기",
   viewTerrainAria: "3D 지형",
   viewContoursAria: "등고선",

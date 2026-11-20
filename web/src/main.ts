@@ -3,6 +3,7 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 
 import {
+  GeolocateControl,
   Map as MaplibreMap,
   NavigationControl,
   setWorkerUrl,
@@ -886,6 +887,30 @@ const map = new MaplibreMap({
   maxPitch: 85,
 });
 map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+// One press flies to where the reader is and marks it; no tracking, so
+// the map stays where they then pan it. Zoom 8 is a city and its weather,
+// not a street.
+const locateControl = new GeolocateControl({
+  fitBoundsOptions: { maxZoom: 8 },
+  positionOptions: { maximumAge: 600_000, timeout: 15_000 },
+});
+map.addControl(locateControl, "top-right");
+locateControl._container.classList.add("locate-control");
+
+/** MapLibre names the button from the map's UI strings, at setup and again
+ * when the position fails, so the strings follow the page's language and
+ * the button is renamed in place on a switch. */
+function labelLocateButton(): void {
+  map._locale["GeolocateControl.FindMyLocation"] = t("viewLocateAria");
+  map._locale["GeolocateControl.LocationNotAvailable"] = t("viewLocateFailed");
+  const button = locateControl._geolocateButton;
+  const text = t(button.disabled ? "viewLocateFailed" : "viewLocateAria");
+  button.title = text;
+  button.setAttribute("aria-label", text);
+}
+labelLocateButton();
+onLocaleChange(labelLocateButton);
 
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;
