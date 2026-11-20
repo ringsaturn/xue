@@ -9,12 +9,12 @@ name: publish goeswest
 # starts. The live feed is a rolling window — the last five whole hours
 # plus the hour in progress, the disk warped onto a 0.04° plate carrée
 # grid (a disk across the antimeridian, spelled 163°E to 283°E), the
-# native ten-minute step — rebuilt every ten minutes into a round
+# native ten-minute step — rebuilt every half hour into a round
 # subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
 # latest-goeswest.json.
 #
 # The shape is publish-himawari.yml's, GOES-West at 137.0°W in place of
-# Himawari: one round per job on a ten-minute cron, a dispatch with
+# Himawari: one round per job on a half-hour cron, a dispatch with
 # `loop` on running rounds until the deadline. A round lists the newest
 # hour directory, fetches the six windows' files (24 MB each) and the
 # three solar bands' (100 MB for the 1 km ones, 430 MB for the 0.5 km red
@@ -26,12 +26,18 @@ name: publish goeswest
 # `push-r2-frames`), and stacks the window's frames into the NetCDF series
 # the converter reads.
 #
-# Machine time: six jobs an hour of three to four minutes each, roughly
-# 220 hours a month, free on a public repository's standard runners.
+# A round fetches every slot of the window the frame cache lacks, so the
+# window keeps its ten-minute step on a half-hour cron. Rounds are kept
+# few: each rewrites every store of the window (two R2 Class A
+# operations an array), and each job takes a slot of the account's
+# Actions concurrency.
+#
+# Machine time: two jobs an hour of a few minutes each, free on a
+# public repository's standard runners.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "12,42 * * * *"
   workflow_dispatch:
     inputs:
       loop:
