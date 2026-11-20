@@ -910,7 +910,8 @@ strip's time is opening the chunk — some ten to fifteen minutes once an
 hour.
 `.github/workflows/publish-himawari.yml`, `publish-goeseast.yml`,
 `publish-goeswest.yml` and `publish-meteosat.yml` each run one round per
-job on a ten-minute cron and install `gdal-bin` whichever encoder
+job on a half-hour cron (a round fetches every slot its frame cache lacks,
+so the window keeps its ten-minute step) and install `gdal-bin` whichever encoder
 converts, since the wheel's GDAL is a library with no GeoTIFF driver; the
 three NOAA ones pull the staged CAMEL months before the first build
 (`ANCILLARY=true` in the rounds script, `make pull-r2-ancillary`); the

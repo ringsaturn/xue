@@ -5,8 +5,8 @@ name: publish himawarijp
 # product, 88 calibrated NetCDF tiles a channel a scan), cut to the box
 # 24–46°N, 122–148°E. The live feed is a rolling window — the last two
 # whole hours plus the hour in progress, warped onto a 0.01° plate carrée
-# grid (2600 x 2200), the native ten-minute step — rebuilt every ten
-# minutes into a round subdirectory of its run (<model>.<run>/<HHMM>/) and
+# grid (2600 x 2200), the native ten-minute step — rebuilt every half
+# hour into a round subdirectory of its run (<model>.<run>/<HHMM>/) and
 # pointed at by latest-himawarijp.json. It publishes the 10.4 µm window,
 # the Dust RGB and the true colour (by day and by night); no dust
 # confidence, so no ANCILLARY.
@@ -24,12 +24,18 @@ name: publish himawarijp
 # uploads up to some 650 MB by day and half that at night, when the true
 # colour is empty.
 #
-# Machine time: six jobs an hour of a few minutes each, free on a public
-# repository's standard runners.
+# A round fetches every slot of the window the frame cache lacks, so the
+# window keeps its ten-minute step on a half-hour cron. Rounds are kept
+# few: each rewrites every store of the window (two R2 Class A
+# operations an array), and each job takes a slot of the account's
+# Actions concurrency.
+#
+# Machine time: two jobs an hour of a few minutes each, free on a
+# public repository's standard runners.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "6,36 * * * *"
   workflow_dispatch:
     inputs:
       loop:

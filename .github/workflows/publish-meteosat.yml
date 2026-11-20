@@ -12,9 +12,10 @@ name: publish meteosat
 # a round subdirectory of its run (<model>.<run>/<HHMM>/) and pointed at by
 # latest-meteosat.json.
 #
-# The shape is publish-himawari.yml's: one round per job on a ten-minute
-# cron (a cycle lands in the store some five minutes after its sensing
-# ends; most rounds find nothing new and exit), a dispatch with `loop` on
+# The shape is publish-himawari.yml's: one round per job on a half-hour
+# cron, the first some seven minutes after the hourly cycle lands (a
+# cycle lands in the store some five minutes after its sensing ends; the
+# other round finds nothing new and exits), a dispatch with `loop` on
 # running rounds until the deadline. A round searches the store
 # (anonymous), downloads the cycle's 38 chunks that reach the ±60° grid
 # (~900 MB, with the account's token — the EUMETSAT_CONSUMER_KEY /
@@ -29,12 +30,12 @@ name: publish meteosat
 # the bucket, and stacks the window's frames into the NetCDF series the
 # converter reads.
 #
-# Machine time: six jobs an hour, five of them a listing and an exit; the
+# Machine time: two jobs an hour, one of them a listing and an exit; the
 # one that builds is ten to fifteen minutes. Roughly 60 hours a month.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       loop:
@@ -120,8 +121,8 @@ jobs:
       # scheduled job as soon as it is waiting.
       UNTIL_MINUTE: "80"
       HANDOVER_CHECK: scripts/successor_queued.sh
-      # No edge-cache warm-up: a round's objects are replaced ten minutes
-      # later, and the shell's next poll fills the edge itself.
+      # No edge-cache warm-up: a round's objects are replaced within the
+      # hour, and the shell's next poll fills the edge itself.
       WARM: "false"
       HOURS: ${{ inputs.hours || '24' }}
       PROFILE: ${{ inputs.profile || 'balanced' }}
@@ -154,7 +155,7 @@ jobs:
       # The Data Store's search is anonymous; its downloads take a
       # registered account's consumer key and secret. A repository without
       # them (a fork) warns and builds nothing rather than failing every
-      # ten minutes.
+      # half hour.
       - name: Check EUMETSAT credentials
         id: eumetsat
         env:
