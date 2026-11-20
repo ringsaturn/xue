@@ -911,6 +911,12 @@ function labelLocateButton(): void {
 }
 labelLocateButton();
 onLocaleChange(labelLocateButton);
+// Without tracking MapLibre shows nothing while the browser looks for the
+// position, which can take seconds on a laptop; the button spins until it
+// answers.
+locateControl._geolocateButton.addEventListener("click", () => {
+  locateControl._geolocateButton.classList.add("maplibregl-ctrl-geolocate-waiting");
+});
 
 /** Whether the map holds the scene yet; until then the link's is the one. */
 let sceneApplied = false;
@@ -7493,6 +7499,26 @@ map.on("contextmenu", (event) => {
 // A left click pins the point probe. MapLibre fires this only for a real
 // click on the map (a drag that ends on the canvas does not), and never for
 // clicks on the panels above it.
+// The position is pinned the way a click on the field pins it: the probe's
+// card is the reason to ask where the reader is, and its pin marks the spot.
+locateControl.on("geolocate", (event: { coords: GeolocationCoordinates }) => {
+  locateControl._geolocateButton.classList.remove("maplibregl-ctrl-geolocate-waiting");
+  closeStationCard();
+  if (!imageryMode()) setProbe(event.coords.longitude, event.coords.latitude);
+});
+// The button's own name says it failed, but a phone shows no tooltip: a
+// passing notice in the status line says so too.
+for (const type of ["error", "outofmaxbounds"] as const) {
+  locateControl.on(type, () => {
+    locateControl._geolocateButton.classList.remove("maplibregl-ctrl-geolocate-waiting");
+    const previous = loadStatus.textContent;
+    const notice = t("viewLocateFailed");
+    loadStatus.textContent = notice;
+    window.setTimeout(() => {
+      if (loadStatus.textContent === notice) loadStatus.textContent = previous;
+    }, 2400);
+  });
+}
 map.on("click", (event) => {
   hideContextMenu();
   // While a measuring tool is out, every click is its vertex.
