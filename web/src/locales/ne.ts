@@ -315,6 +315,8 @@ export const ne: Record<MessageKey, string> = {
   gridLatlon: "अक्षांश / देशान्तर",
   settingsCoordinates: "निर्देशाङ्क",
   coordsLatlon: "अक्षांश / देशान्तर",
+  viewLocateAria: "मेरो स्थान प्रयोग गर्नुहोस्",
+  viewLocateFailed: "स्थान उपलब्ध छैन",
   viewGlobeAria: "ग्लोब",
   viewTerrainAria: "3D भू-बनोट",
   viewContoursAria: "समोच्च रेखा",

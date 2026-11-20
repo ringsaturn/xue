@@ -300,6 +300,8 @@ export const ru: Record<MessageKey, string> = {
   gridLatlon: "Градусная сетка",
   settingsCoordinates: "Координаты",
   coordsLatlon: "Широта / долгота",
+  viewLocateAria: "Моё местоположение",
+  viewLocateFailed: "Местоположение недоступно",
   viewGlobeAria: "Глобус",
   viewTerrainAria: "3D-рельеф",
   viewContoursAria: "Горизонтали",

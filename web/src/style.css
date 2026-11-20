@@ -4600,6 +4600,18 @@ body[data-context] .source-credit[data-credit-context] {
   }
 }
 
+/* The locate button's states are coloured (blue found, red failed); the
+   dark theme's inversion would turn them orange and cyan. */
+:root[data-theme="dark"] .locate-control button:is(.maplibregl-ctrl-geolocate-active, .maplibregl-ctrl-geolocate-background, .maplibregl-ctrl-geolocate-active-error, .maplibregl-ctrl-geolocate-background-error) .maplibregl-ctrl-icon {
+  filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .locate-control button:is(.maplibregl-ctrl-geolocate-active, .maplibregl-ctrl-geolocate-background, .maplibregl-ctrl-geolocate-active-error, .maplibregl-ctrl-geolocate-background-error) .maplibregl-ctrl-icon {
+    filter: none;
+  }
+}
+
 @keyframes pulse {
   from { opacity: 0.25; }
   to { opacity: 1; }
@@ -4652,11 +4664,13 @@ body[data-context] .source-credit[data-credit-context] {
     right: 0;
   }
 
-  .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.view-control) {
+  .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.view-control, .locate-control) {
     display: none;
   }
 
-  .maplibregl-ctrl-top-right .view-control {
+  /* With the zoom tile gone the locate tile heads the column; the view
+     tile keeps the gap under it. */
+  .maplibregl-ctrl-top-right .locate-control {
     margin-top: 0;
   }
 

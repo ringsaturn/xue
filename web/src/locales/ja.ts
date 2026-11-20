@@ -295,6 +295,8 @@ export const ja: Record<MessageKey, string> = {
   gridLatlon: "経緯線",
   settingsCoordinates: "座標",
   coordsLatlon: "緯度経度",
+  viewLocateAria: "現在地を表示",
+  viewLocateFailed: "位置情報を取得できません",
   viewGlobeAria: "地球儀表示",
   viewTerrainAria: "3D 地形",
   viewContoursAria: "等高線",

@@ -301,6 +301,8 @@ export const tr: Record<MessageKey, string> = {
   gridLatlon: "Enlem-boylam ağı",
   settingsCoordinates: "Koordinatlar",
   coordsLatlon: "Enlem / boylam",
+  viewLocateAria: "Konumumu kullan",
+  viewLocateFailed: "Konum alınamadı",
   viewGlobeAria: "Küre",
   viewTerrainAria: "3B arazi",
   viewContoursAria: "Eş yükselti eğrileri",
