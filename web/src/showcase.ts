@@ -12,7 +12,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import { mountLanguagePicker } from "./sheet";
-import { applyTheme, toggleTheme } from "./theme";
+import { applyTheme, printOnPaper, toggleTheme } from "./theme";
 import { isObservationModel, parseBundleMetadata, type PosterDescriptor } from "./manifest";
 import { buildPalette } from "./palettes";
 import { fetchPoster, isPosterSupported } from "./poster";
@@ -40,6 +40,7 @@ import { paintSeason } from "./tc/poster";
 
 applyStaticMessages();
 applyTheme();
+printOnPaper();
 // Title and description stay the markup's, which the build wrote in the
 // page's language; this keeps the canonical and the hreflang set on the
 // language the page is in after a switch.

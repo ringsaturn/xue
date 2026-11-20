@@ -24,7 +24,7 @@ import {
 import { applyPageMeta } from "./pagemeta";
 import { mountLanguagePicker } from "./sheet";
 import { dataBaseUrl } from "./site";
-import { applyTheme, toggleTheme } from "./theme";
+import { applyTheme, printOnPaper, toggleTheme } from "./theme";
 
 /**
  * The run-metrics page.
@@ -43,6 +43,7 @@ import { applyTheme, toggleTheme } from "./theme";
 
 applyStaticMessages();
 applyTheme();
+printOnPaper();
 applyPageMeta({ path: "/metrics" });
 
 document.getElementById("theme-toggle")?.addEventListener("click", () => toggleTheme());

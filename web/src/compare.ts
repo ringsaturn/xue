@@ -46,7 +46,7 @@ import { fetchAirportIndex, fetchAirportStation } from "./stations/fetch";
 import { nearestAirport } from "./stations/nearest";
 import { cloudCoverPercent } from "./stations/observations";
 import type { AirportStationHistory, Metar } from "./stations/schema";
-import { applyTheme, onThemeChange, toggleTheme } from "./theme";
+import { applyTheme, onThemeChange, printOnPaper, toggleTheme } from "./theme";
 import { browserZone } from "./timezone";
 import { convertPrecipitation, displayDecimals, displayUnit, displayValue, formatDistance, onUnitsChange, variableDisplayUnit, variableDisplayValue } from "./units";
 import { variableSpec } from "./variables";
@@ -71,6 +71,7 @@ import { variableSpec } from "./variables";
 
 applyStaticMessages();
 applyTheme();
+printOnPaper();
 applyPageMeta({ path: "/compare" });
 
 // ---------------------------------------------------------------------------

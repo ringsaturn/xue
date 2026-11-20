@@ -70,16 +70,39 @@ export function applyTheme(): void {
  * `?theme=` into the address bar (so the page is shareable as-is), restamp
  * the document and let every listener repaint. */
 export function toggleTheme(): void {
-  theme = isDark ? "light" : "dark";
-  isDark = theme === "dark";
+  const next: Theme = isDark ? "light" : "dark";
   try {
-    localStorage.setItem(STORAGE_KEY, theme);
+    localStorage.setItem(STORAGE_KEY, next);
   } catch {
     // The URL param below still carries the choice.
   }
   const params = new URLSearchParams(window.location.search);
-  params.set("theme", theme);
+  params.set("theme", next);
   window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  setTheme(next);
+}
+
+/** Print a document page in the light theme: restamp it (without persisting
+ * or touching the URL) before the print, so whatever the listeners paint
+ * into canvases repaints in dark ink, and put the screen theme back after.
+ * Only for the scrolling pages: the map viewer would rebuild its basemap. */
+export function printOnPaper(): void {
+  let restore: Theme | null = null;
+  window.addEventListener("beforeprint", () => {
+    if (!isDark) return;
+    restore = theme;
+    setTheme("light");
+  });
+  window.addEventListener("afterprint", () => {
+    if (restore === null) return;
+    setTheme(restore);
+    restore = null;
+  });
+}
+
+function setTheme(next: Theme): void {
+  theme = next;
+  isDark = theme === "dark";
   applyTheme();
   for (const listener of listeners) listener();
 }

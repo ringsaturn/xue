@@ -695,6 +695,10 @@ table{width:100%;border-collapse:collapse;font:12px ui-monospace,SFMono-Regular,
 .storms .code,.storms .meta{font:11px ui-monospace,monospace;color:var(--muted)}.storms .name{font-weight:600}.storms .meta{margin-left:auto}
 .langs ul{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;padding:0;margin:32px 0 0;font-size:13px}.langs li[aria-current]{font-weight:600}
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font:9px/1.7 ui-monospace,monospace;letter-spacing:.04em}footer a{color:var(--text);text-decoration:none}
+@media print{:root{color-scheme:light;--bg:#fff;--text:#000;--muted:#555;--line:rgba(0,0,0,.22);--surface:transparent}
+body{font-size:11pt}main{max-width:none;padding:0}.crumbs,.langs,.open,.links{display:none}a{text-decoration:none}
+h2{break-after:avoid}tr,.facts div,.storms li,.list li,.raw,.spark,.tc-track{break-inside:avoid}.scroll{overflow:visible}
+.grade,.category{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 `;
 
 // --- reading the archive and putting the site together ----------------------------
