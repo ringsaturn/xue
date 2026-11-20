@@ -337,7 +337,9 @@ product's build, and `xue stac --model <m> --run <r> [--round HHMM]` or
 with its manifest; the Collection, the live Item, the root catalog and its
 `index.html` (`xuebuild/stacindex.py`) with the pointer
 (`upload-r2-pointer`, `upload-r2-stac-collection`); the showcase's with
-`upload-r2-showcase`.
+`upload-r2-showcase`. The root catalog and `index.html` change only with the
+registry, yet every publish of every source reaches them, so they are put only
+when R2's ETag differs from the local MD5 (`put_if_changed` in `mk/r2.mk`).
 
 ## Showcase cases
 

@@ -37,6 +37,17 @@ export AWS_DEFAULT_REGION AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM
 
 # Prints the CRC32 of the file it is given, as the pointers carry it.
 CRC32 = $(PYTHON) -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')"
+MD5 = $(PYTHON) -c "import sys, hashlib; print(hashlib.md5(open(sys.argv[1], 'rb').read()).hexdigest())"
+
+# $(call put_if_changed,local file,key under R2_ROOT,content type): a no-cache
+# document every round rewrites with the same bytes (the root catalog and its
+# landing page) is put only when R2 holds other bytes. A PutObject is Class A;
+# the HEAD is Class B. A single-part object's ETag is its MD5, and every object
+# is single-part (scripts/aws-config). A failed HEAD reads as changed.
+put_if_changed = remote=$$($(AWS) s3api head-object --endpoint-url $(R2_ENDPOINT) --bucket $(R2_BUCKET) \
+		--key $(R2_PREFIX)/$(2) --query ETag --output text 2>/dev/null || true); \
+	if [ "$$remote" = "\"$$($(MD5) $(1))\"" ]; then echo "$(2) unchanged on R2, not uploaded"; \
+	else $(S3) cp $(1) $(R2_ROOT)/$(2) --no-progress $(DRY_RUN) --content-type "$(3)" --cache-control "no-cache"; fi
 
 .PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-store-groups live-window
 
@@ -146,10 +157,8 @@ upload-r2-stac-collection: ## Upload STAC_DIR's live Item, Collection and the ro
 		--content-type application/geo+json --cache-control "no-cache"; \
 	$(S3) cp web/public/data/$(STAC_DIR)/$(STAC_COLLECTION) $(R2_ROOT)/$(STAC_DIR)/$(STAC_COLLECTION) --no-progress $(DRY_RUN) \
 		--content-type application/json --cache-control "no-cache"; \
-	$(S3) cp web/public/data/$(STAC_CATALOG) $(R2_ROOT)/$(STAC_CATALOG) --no-progress $(DRY_RUN) \
-		--content-type application/json --cache-control "no-cache"; \
-	$(S3) cp web/public/data/$(STAC_INDEX) $(R2_ROOT)/$(STAC_INDEX) --no-progress $(DRY_RUN) \
-		--content-type "text/html; charset=utf-8" --cache-control "no-cache"
+	$(call put_if_changed,web/public/data/$(STAC_CATALOG),$(STAC_CATALOG),application/json); \
+	$(call put_if_changed,web/public/data/$(STAC_INDEX),$(STAC_INDEX),text/html; charset=utf-8)
 
 warm-r2: ## GET every artifact of an uploaded run through the CDN
 	ROUND=$(ROUND) scripts/warm_edge_cache.sh $(MODEL) $(RUN)
