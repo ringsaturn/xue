@@ -6637,3 +6637,68 @@ html:has(.showcase-page) {
   line-height: 1.5;
   tab-size: 2;
 }
+
+/* ---------------------------------------------------------------------------
+   Print.
+
+   The document pages (showcase list, compare, metrics, API) print as ink
+   on white paper whatever the screen theme: theme.ts::printOnPaper stamps
+   the light theme for the print so the canvases repaint in dark ink, and
+   these rules drop the paper tint, the cards' fills and the page's own
+   controls. The map viewer prints as it is drawn. */
+
+@media print {
+  :root,
+  :root[data-theme],
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+    --bg: #fff;
+    --text: #1b1a17;
+    --muted: #6e6a60;
+    --line: rgba(27, 26, 23, 0.16);
+    --accent: #1b1a17;
+    --accent-rgb: 27, 26, 23;
+    --warning: #b3541e;
+    --warning-rgb: 179, 84, 30;
+    --grid-line: rgba(27, 26, 23, 0.06);
+    --tick-off: rgba(27, 26, 23, 0.25);
+    --surface: transparent;
+    --sheet: #fff;
+    --card: transparent;
+    --row-hover: transparent;
+    --lift: none;
+    --lift-small: none;
+  }
+
+  html:has(.showcase-page),
+  .showcase-page {
+    background: #fff;
+  }
+
+  .showcase-page .showcase-shell {
+    max-width: none;
+    padding: 0;
+  }
+
+  .showcase-page :is(.showcase-topbar, .model-sheet, .compare-controls, .compare-hidden, .api-form, .api-actions) {
+    display: none;
+  }
+
+  .showcase-page :is(.compare-scroll, .api-body) {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .showcase-page :is(.showcase-card, .metrics-source, .metrics-deadline, .compare-blocks > *) {
+    break-inside: avoid;
+  }
+
+  /* Three cards to a row: two leave half of every sheet blank. */
+  .showcase-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .showcase-page :is(h1, h2, h3) {
+    break-after: avoid;
+  }
+}

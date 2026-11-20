@@ -16,7 +16,7 @@ import {
 } from "./apiconsole/locate";
 import { FORECAST_MODEL_IDS } from "./manifest";
 import { DATA_ORIGIN } from "./site";
-import { applyTheme, toggleTheme } from "./theme";
+import { applyTheme, printOnPaper, toggleTheme } from "./theme";
 
 /**
  * The API console (api.html): build a request to the data API, send it from
@@ -105,6 +105,7 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: stri
 }
 
 applyTheme();
+printOnPaper();
 byId("theme-toggle").addEventListener("click", () => toggleTheme());
 
 const apiInput = byId<HTMLInputElement>("api-base");
