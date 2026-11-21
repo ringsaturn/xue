@@ -258,6 +258,7 @@ export const ru: Record<MessageKey, string> = {
   exportFrom: "С",
   exportTo: "По",
   exportRun: "Экспортировать",
+  exportPrint: "Печать карты",
   exportCancel: "Отмена",
   exportSummary: "{size}, {frames} кадров, {seconds} с, около {bytes}",
   exportCapturing: "Захват {done}/{total}",

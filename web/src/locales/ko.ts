@@ -258,6 +258,7 @@ export const ko: Record<MessageKey, string> = {
   exportFrom: "시작",
   exportTo: "끝",
   exportRun: "내보내기",
+  exportPrint: "일기도 인쇄",
   exportCancel: "취소",
   exportSummary: "{size}, {frames}프레임, {seconds}초, 약 {bytes}",
   exportCapturing: "캡처 중 {done}/{total}",

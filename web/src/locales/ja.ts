@@ -253,6 +253,7 @@ export const ja: Record<MessageKey, string> = {
   exportFrom: "開始",
   exportTo: "終了",
   exportRun: "書き出す",
+  exportPrint: "天気図を印刷",
   exportCancel: "中止",
   exportSummary: "{size}、{frames} フレーム、{seconds} 秒、約 {bytes}",
   exportCapturing: "取り込み中 {done}/{total}",

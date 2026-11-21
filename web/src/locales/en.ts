@@ -479,6 +479,9 @@ export const en = {
   exportFrom: "From",
   exportTo: "To",
   exportRun: "Export",
+  /** The export sheet's second action: the map as a printed chart, on a
+   * white sheet with the controls gone. */
+  exportPrint: "Print chart",
   exportCancel: "Cancel",
   exportSummary: "{size}, {frames} frames, {seconds} s, about {bytes}",
   exportCapturing: "Capturing {done}/{total}",

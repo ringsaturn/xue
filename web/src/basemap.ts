@@ -6,7 +6,7 @@ import type { Map as MaplibreMap, MapOptions } from "maplibre-gl";
 import { basemapLang } from "./i18n";
 import { TERRAIN_ATTRIBUTION, TERRAIN_MESH_SOURCE, TERRAIN_SOURCE } from "./terrain";
 import { TERRAIN_DETAIL_MAX_ZOOM, TERRAIN_DETAIL_TILES } from "./terrainprotocol";
-import { isDark } from "./theme";
+import { isDark, onPaper } from "./theme";
 import { type GroundId, variableSpec } from "./variables";
 
 interface BasemapTones {
@@ -62,9 +62,15 @@ const GROUND_TONES: Record<GroundId, { dark: BasemapTones; light: BasemapTones }
   chart: { dark: { ocean: "#101f2c", land: "#22384a" }, light: { ocean: "#dcd6c8", land: "#c9c2b2" } },
 };
 
+/** The printed chart's ground, whatever the field: white land and pale blue
+ * water, the way a printed weather map reads, so the field and the lines
+ * carry the ink. */
+const PRINT_GROUND: BasemapTones = { ocean: "#d6e7f2", land: "#ffffff", background: "#ffffff" };
+
 /** The ground under the field on screen. Read at every use rather than
  * once: the theme toggles in place. An unregistered field takes the coat's. */
 export function currentBasemapTheme(): BasemapTones {
+  if (onPaper) return PRINT_GROUND;
   const id = document.body.dataset.variable;
   const ground = (id === undefined ? null : variableSpec(id)?.ground) ?? "coat";
   return isDark ? GROUND_TONES[ground].dark : GROUND_TONES[ground].light;

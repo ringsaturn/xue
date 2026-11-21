@@ -100,6 +100,23 @@ export function printOnPaper(): void {
   });
 }
 
+/** Set while a chart is being printed: the basemap takes its print ground
+ * (see basemap.ts) on top of the light theme. A live binding. */
+export let onPaper = false;
+
+/** Put the map on paper for a print, without persisting anything or touching
+ * the URL, and hand back what puts the screen theme back. The listeners run
+ * even when the theme is already light, so the basemap picks up the ground. */
+export function enterPaper(): () => void {
+  const restore = theme;
+  onPaper = true;
+  setTheme("light");
+  return () => {
+    onPaper = false;
+    setTheme(restore);
+  };
+}
+
 function setTheme(next: Theme): void {
   theme = next;
   isDark = theme === "dark";

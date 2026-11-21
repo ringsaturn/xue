@@ -256,6 +256,7 @@ export const de: Record<MessageKey, string> = {
   exportFrom: "Von",
   exportTo: "Bis",
   exportRun: "Exportieren",
+  exportPrint: "Karte drucken",
   exportCancel: "Abbrechen",
   exportSummary: "{size}, {frames} Bilder, {seconds} s, etwa {bytes}",
   exportCapturing: "Aufnahme {done}/{total}",

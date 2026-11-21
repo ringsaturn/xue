@@ -273,6 +273,7 @@ export const ne: Record<MessageKey, string> = {
   exportFrom: "देखि",
   exportTo: "सम्म",
   exportRun: "निर्यात",
+  exportPrint: "नक्सा छाप्नुहोस्",
   exportCancel: "रद्द",
   exportSummary: "{size}, {frames} फ्रेम, {seconds} s, करिब {bytes}",
   exportCapturing: "क्याप्चर गर्दै {done}/{total}",

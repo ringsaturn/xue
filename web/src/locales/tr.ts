@@ -259,6 +259,7 @@ export const tr: Record<MessageKey, string> = {
   exportFrom: "Başlangıç",
   exportTo: "Bitiş",
   exportRun: "Dışa aktar",
+  exportPrint: "Haritayı yazdır",
   exportCancel: "İptal",
   exportSummary: "{size}, {frames} kare, {seconds} sn, yaklaşık {bytes}",
   exportCapturing: "Yakalanıyor {done}/{total}",

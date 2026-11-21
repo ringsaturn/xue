@@ -256,6 +256,7 @@ export const pt: Record<MessageKey, string> = {
   exportFrom: "De",
   exportTo: "Até",
   exportRun: "Exportar",
+  exportPrint: "Imprimir mapa",
   exportCancel: "Cancelar",
   exportSummary: "{size}, {frames} quadros, {seconds} s, cerca de {bytes}",
   exportCapturing: "Capturando {done}/{total}",

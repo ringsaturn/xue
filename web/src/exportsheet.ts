@@ -83,6 +83,17 @@ export interface ExportSheetDeps {
 
 /** The export sheet's controller: format, size, rate and span choices,
  * the size estimate, and the GIF / MP4 loop export it runs. */
+/** The notices the credit line shows for the data on screen, then the
+ * basemap's, after the site's address. Which notices are on is the
+ * stylesheet's call (`body[data-model]`, `body[data-credits]`), and a
+ * notice's own display reads it even where the line itself is hidden. */
+export function sourceCredit(): string {
+  const notices = [...document.querySelectorAll<HTMLElement>(".source-credit")]
+    .filter((credit) => getComputedStyle(credit).display !== "none")
+    .map((credit) => (credit.textContent ?? "").replace(/\s+/g, " ").replace(/\s*;\s*$/, "").trim());
+  return [window.location.host, ...notices, "© OpenStreetMap, Protomaps"].join("; ");
+}
+
 export function createExportSheet(deps: ExportSheetDeps) {
   const {
     MP4_SIZE_KEY,
@@ -139,7 +150,7 @@ export function createExportSheet(deps: ExportSheetDeps) {
           : `${formatLead(index)} · ${formatDate(frameValidTime(index))}`,
       subtitle: deps.activeCase?.captions ? captionText(deps.activeCase.captions, frameValidTime(index), locale) : "",
     }),
-    credit: gifCredit,
+    credit: sourceCredit,
     holdMs: exportHoldMs,
     mp4Size: () => mp4SizeChoice,
     holdMotion: (stepSeconds) => deps.windLayer?.setFixedStep(stepSeconds),
@@ -184,17 +195,6 @@ export function createExportSheet(deps: ExportSheetDeps) {
     } catch {
       // Preference just won't persist.
     }
-  }
-
-  /** The notices the credit line shows for the data on screen, then the
-   * basemap's, after the site's address. Which notices are on is the
-   * stylesheet's call (`body[data-model]`, `body[data-credits]`), and a
-   * notice's own display reads it even where the line itself is hidden. */
-  function gifCredit(): string {
-    const notices = [...document.querySelectorAll<HTMLElement>(".source-credit")]
-      .filter((credit) => getComputedStyle(credit).display !== "none")
-      .map((credit) => (credit.textContent ?? "").replace(/\s+/g, " ").replace(/\s*;\s*$/, "").trim());
-    return [window.location.host, ...notices, "© OpenStreetMap, Protomaps"].join("; ");
   }
 
   /** One of the two files the loop is saved as. */
@@ -441,13 +441,15 @@ export function createExportSheet(deps: ExportSheetDeps) {
 
   /** The trigger, the sheet's controls and the stored choices, wired where
    * the page's other transport controls are. */
+  let sheetControl: ReturnType<typeof createSheet> | null = null;
+
   function attachExportSheet(): void {
     // A tap opens the sheet; a long press saves again as the sheet was last
     // set, and the tap that ends it must not open the sheet as well.
     let exportLongPress = 0;
     let exportLongPressed = false;
     const EXPORT_LONG_PRESS_MS = 550;
-    createSheet({
+    sheetControl = createSheet({
       trigger: exportTrigger,
       sheet: exportSheet,
       canOpen: () => {
@@ -505,6 +507,7 @@ export function createExportSheet(deps: ExportSheetDeps) {
   return {
     setLoopExportEnabled,
     attachExportSheet,
+    closeSheet: () => sheetControl?.close(),
     get loopExport() {
       return loopExport;
     },
