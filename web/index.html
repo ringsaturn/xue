@@ -267,6 +267,13 @@
     </noscript>
     <main class="app-shell">
       <div id="map" data-i18n-aria="mapAria" aria-label="Global temperature and precipitation forecast map"></div>
+      <!-- The printed chart, filled by printmap.ts as a print starts. -->
+      <div id="print-sheet" class="print-sheet" aria-hidden="true">
+        <p class="print-heading"><b id="print-title"></b> <span id="print-code"></span></p>
+        <p id="print-stamp" class="print-stamp"></p>
+        <div class="print-figure"><img id="print-map" alt="" /><div id="print-legend" class="print-legend"></div></div>
+        <p id="print-credit" class="print-credit"></p>
+      </div>
       <!-- Instrument grid; never interactive. -->
       <div class="atmosphere" aria-hidden="true"></div>
 
@@ -1194,6 +1201,7 @@
           <p id="export-summary" class="export-summary" aria-live="polite"></p>
           <div id="export-progress" class="export-progress" hidden><i></i></div>
           <button id="export-run" class="export-run" type="button" data-i18n="exportRun">Export</button>
+          <button id="export-print" class="export-print" type="button" data-i18n="exportPrint">Print chart</button>
         </div>
       </div>
 

@@ -253,6 +253,7 @@ export const zh: Record<MessageKey, string> = {
   exportFrom: "起",
   exportTo: "止",
   exportRun: "导出",
+  exportPrint: "打印天气图",
   exportCancel: "取消",
   exportSummary: "{size}，{frames} 帧，{seconds} 秒，约 {bytes}",
   exportCapturing: "正在截取 {done}/{total}",
