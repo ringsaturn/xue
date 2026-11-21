@@ -4,6 +4,8 @@ import "./style.css";
 
 import {
   GeolocateControl,
+  LngLat,
+  LngLatBounds,
   Map as MaplibreMap,
   NavigationControl,
   setWorkerUrl,
@@ -7504,7 +7506,24 @@ map.on("contextmenu", (event) => {
 locateControl.on("geolocate", (event: { coords: GeolocationCoordinates }) => {
   locateControl._geolocateButton.classList.remove("maplibregl-ctrl-geolocate-waiting");
   closeStationCard();
-  if (!imageryMode()) setProbe(event.coords.longitude, event.coords.latitude);
+  if (imageryMode()) return;
+  const { longitude, latitude, accuracy } = event.coords;
+  setProbe(longitude, latitude);
+  // The control centres the point on the whole map, and the card that just
+  // opened covers the lower part of it — on a phone, the point itself. Once
+  // the card is laid out the camera is re-aimed at the map left above it;
+  // a card taller than most of the screen still leaves the point a third.
+  requestAnimationFrame(() => {
+    if (probePanel.root.hidden) return;
+    const mapBox = map.getContainer().getBoundingClientRect();
+    const covered = Math.min(mapBox.bottom - probePanel.root.getBoundingClientRect().top, mapBox.height * 2 / 3);
+    if (covered <= 0) return;
+    map.fitBounds(LngLatBounds.fromLngLat(new LngLat(longitude, latitude), accuracy), {
+      maxZoom: 8,
+      bearing: map.getBearing(),
+      padding: { top: 0, right: 0, left: 0, bottom: covered },
+    });
+  });
 });
 // The button's own name says it failed, but a phone shows no tooltip: a
 // passing notice in the status line says so too.
