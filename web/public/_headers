@@ -1,0 +1,8 @@
+# Cloudflare Pages response headers. Discovery links for agents on the
+# home page; RFC 9727 wants the API catalog served as a linkset.
+/
+  Link: </llms.txt>; rel="describedby"; type="text/markdown", </sitemap.xml>; rel="sitemap"; type="application/xml", </.well-known/api-catalog>; rel="api-catalog"
+
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
+  Access-Control-Allow-Origin: *

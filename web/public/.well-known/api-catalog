@@ -1,0 +1,22 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://xue-api.ringsaturn.me/v1",
+      "service-desc": [
+        { "href": "https://xue-api.ringsaturn.me/openapi.json", "type": "application/vnd.oai.openapi+json" }
+      ],
+      "service-doc": [
+        { "href": "https://xue.ringsaturn.me/api", "type": "text/html" }
+      ]
+    },
+    {
+      "anchor": "https://dataset.ringsaturn.me/xue/",
+      "service-desc": [
+        { "href": "https://dataset.ringsaturn.me/xue/catalog.json", "type": "application/json" }
+      ],
+      "service-doc": [
+        { "href": "https://github.com/ringsaturn/xue/blob/main/docs/stac.md", "type": "text/html" }
+      ]
+    }
+  ]
+}

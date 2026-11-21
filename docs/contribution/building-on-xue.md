@@ -218,7 +218,8 @@ corrects each:
 - `index.html`'s static head (title, description, canonical and `hreflang`
   links, social card, JSON-LD, `noscript`): rewrite the HTML in
   `transformIndexHtml`, which may return `{ html, tags }`.
-- `public/` (`llms.txt`, `robots.txt`, `og-image.jpg`, the icons), copied
+- `public/` (`llms.txt`, `robots.txt`, `_headers`, `.well-known/`,
+  `og-image.jpg`, the icons), copied
   into the build as is: replace or delete them in the plugin's
   `closeBundle`.
 - The head the shell rewrites as the view changes (`pagemeta.ts`, against

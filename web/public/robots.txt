@@ -11,7 +11,10 @@
 # and is described in llms.txt. Its size makes it a poor crawl target: read
 # the pointer, not the bundles.
 
+# Content signals (contentsignals.org): search, answers grounded in these
+# pages, and training are all fine.
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
 # AI crawlers and assistants are welcome — the documentation exists to be
@@ -35,6 +38,7 @@ User-agent: Meta-ExternalAgent
 User-agent: CCBot
 User-agent: cohere-ai
 User-agent: MistralAI-User
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
 Sitemap: https://xue.ringsaturn.me/sitemap.xml

@@ -1036,6 +1036,12 @@ path (`sitepaths.ts`, no runtime imports): English at the root (and the
   same steps with `replaceState` on boot (`i18n.ts` the language and the
   case, `main.ts` the dataset) for dev, preview and an outage.
   `web/public/_redirects` moves #223's `/cases/…` pages to `/showcase/…`.
+- Agent discovery: the same function answers `/` with `llms.txt` as
+  `text/markdown` when the request's `Accept` asks for Markdown;
+  `web/public/_headers` puts `Link` headers (llms.txt, sitemap, API
+  catalog) on `/` and serves `/.well-known/api-catalog` (RFC 9727,
+  pointing at the API's OpenAPI document and the STAC root) as
+  `application/linkset+json`; `robots.txt` carries `Content-Signal`.
 - Sitemap: every locale's copy of every page but `/api` (noindex), then
   the storm and airport pages. The dev and preview servers serve every
   path as Pages does (`sitePathRewrite`: the source page on the dev
