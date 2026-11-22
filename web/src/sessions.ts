@@ -144,24 +144,40 @@ const rangeProbes = new Map<string, Promise<boolean>>();
  * it for an attack and closes the connection — with every frame and series
  * then in flight on it. Only an origin that ignores the range and starts
  * sending the whole object is cut off, since that body may be a whole
- * bundle. A probe that fails outright is not remembered: the next session
- * asks again.
+ * bundle. A probe that fails outright, or goes unanswered for
+ * `RANGE_PROBE_MS`, is not remembered: the next session asks again.
  */
+const RANGE_PROBE_MS = 10_000;
+
 function supportsRangeRequests(url: string): Promise<boolean> {
   const known = rangeProbes.get(url);
   if (known) return known;
   const probe = (async () => {
+    // The answer is remembered, and every session of the store waits on
+    // it: a probe that never came back would hold all of them for good, so
+    // it is given up like one that failed, and asked again by the next.
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const quiet = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("range probe went unanswered"));
+      }, RANGE_PROBE_MS);
+    });
+    quiet.catch(() => {});
     try {
-      const response = await fetch(url, { headers: { Range: "bytes=0-0" } });
+      const response = await Promise.race([fetch(url, { headers: { Range: "bytes=0-0" }, signal: controller.signal }), quiet]);
       if (response.status !== 206) {
-        await response.body?.cancel();
+        await Promise.race([response.body?.cancel(), quiet]);
         return false;
       }
-      await response.arrayBuffer();
+      await Promise.race([response.arrayBuffer(), quiet]);
       return true;
     } catch {
       rangeProbes.delete(url);
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   })();
   rangeProbes.set(url, probe);
