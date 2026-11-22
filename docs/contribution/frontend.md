@@ -778,6 +778,12 @@ at the primary's tier, aligned to the primary axis by lead seconds
 capsule share `--probe-column`, so all playheads coincide. Skew-T and
 airport overlays: [point-products.md](point-products.md#in-the-probe-panel).
 
+Each read is asked for once per pin (`probeSeriesRequests`). One the worker
+could not make — the store's own retries exhausted — is the panel's to ask
+again (`probeSeriesFailed`: three more times, two seconds longer each),
+never a dialog over the map: the rows are the pin's context, and a frame's
+failure is the only one that stops the page.
+
 The rows are wide and short and belong over the transport; a sounding is a
 square, and stacked under the rows it made a slab over the middle of the
 map, where the pinned point is. `probelayout.ts` keeps the two apart, by
