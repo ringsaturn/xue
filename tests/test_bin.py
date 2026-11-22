@@ -1022,6 +1022,53 @@ class DeaccumulationTests(unittest.TestCase):
         np.testing.assert_allclose(rate, [0.0, 0.0])
 
 
+class PackingStepTests(unittest.TestCase):
+    """A run total whose packing step doubles between two frames (ECMWF's
+    ``tp`` past 0.5 m) differences no rounding. Mirrors
+    ``packing_step_tests`` in ``encode/derive.rs``."""
+
+    def test_both_planes_are_rounded_onto_the_coarser_lattice(self) -> None:
+        from xuebuild.derive import align_packing_steps
+
+        # The same cells packed at a step of 1, then of 2: the first frame
+        # is rounded onto the even lattice, so 0 → 2 and 4 → 6 read as one
+        # coarse step of rain and the 8 → 12 cell as two.
+        previous = np.array([0.0, 1.0, 3.0, 5.0, 8.0, 9.0])
+        current = np.array([0.0, 2.0, 4.0, 6.0, 12.0, 10.0])
+        current_total, previous_total = align_packing_steps(current, previous)
+        np.testing.assert_array_equal(current_total, current)
+        # Half to even: 0.5 → 0, 1.5 → 2, 2.5 → 2, 4.5 → 4.
+        np.testing.assert_array_equal(previous_total, [0.0, 0.0, 4.0, 4.0, 8.0, 8.0])
+        np.testing.assert_array_equal(previous, [0.0, 1.0, 3.0, 5.0, 8.0, 9.0])
+
+    def test_finer_current_plane_is_rounded_onto_the_coarser_lattice(self) -> None:
+        from xuebuild.derive import align_packing_steps
+
+        previous = np.array([0.0, 2.0, 4.0])
+        current = np.array([0.0, 1.0, 3.0])
+        current_total, previous_total = align_packing_steps(current, previous)
+        np.testing.assert_array_equal(previous_total, previous)
+        np.testing.assert_array_equal(current_total, [0.0, 0.0, 4.0])
+
+    def test_equal_steps_and_unreadable_lattices_pass_through(self) -> None:
+        from xuebuild.derive import align_packing_steps
+
+        for current, previous in (
+            (np.array([0.0, 1.0, 3.0]), np.array([0.0, 1.0, 2.0])),
+            (np.array([0.0, 0.0]), np.array([0.0, 1.0, 3.0])),
+            (np.array([0.0, 2.0]), None),
+        ):
+            current_total, previous_total = align_packing_steps(current, previous)
+            self.assertIs(current_total, current)
+            self.assertIs(previous_total, previous)
+
+    def test_lattice_anchor_is_the_smallest_value(self) -> None:
+        from xuebuild.derive import packing_lattice
+
+        self.assertEqual(packing_lattice(np.array([1.5, 3.5, np.nan, 2.5, 1.5])), (1.5, 1.0))
+        self.assertIsNone(packing_lattice(np.array([np.nan, 4.0])))
+
+
 class BinManifestTests(unittest.TestCase):
     def test_build_and_validate(self) -> None:
         payload = build_bin_manifest(datetime(2026, 8, 15, 6, tzinfo=UTC), bundles=manifest_bundles())

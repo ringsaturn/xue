@@ -389,6 +389,69 @@ def deaccumulate_precipitation(
     return np.maximum(current_mm - previous_mm, 0.0) / step_hours
 
 
+#: How much coarser one plane's packing step must be than the other's before
+#: the finer plane is rounded onto it. A GRIB encoder that keeps its bit
+#: count fixed doubles the step when the field's range crosses a power of
+#: two, so a real change is a factor of two or more; the smallest gap of a
+#: plane whose values are not on a lattice wanders by far less.
+PACKING_STEP_RATIO = 1.5
+
+
+def packing_lattice(plane: np.ndarray) -> tuple[float, float] | None:
+    """The lattice a plane's values sit on, as ``(anchor, step)``: its
+    smallest finite value (a GRIB field's reference value) and the smallest
+    gap between two distinct finite values (its packing step, for a field
+    packed with any cell one step from another — a run total's dry cells
+    and its first drizzle always are). None when the plane holds fewer than
+    two distinct finite values."""
+    distinct = np.unique(plane[np.isfinite(plane)])
+    if distinct.size < 2:
+        return None
+    # ``+ 0.0`` turns a negative zero into the zero it equals, so the anchor
+    # cannot hand its sign to a rounded zero.
+    return float(distinct[0]) + 0.0, float(np.min(np.diff(distinct)))
+
+
+def align_packing_steps(
+    current_mm: np.ndarray,
+    previous_mm: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Round the finer-packed of two run-total accumulations onto the other's
+    lattice before they are differenced.
+
+    ECMWF packs ``tp`` at a fixed bit count, so once the largest total in
+    the field crosses a power of two the step of every value doubles
+    (2⁻¹³ m to 2⁻¹² m at 0.5 m). Differenced across that frame, a dry cell
+    rounded onto the two lattices differs by one fine step, and a scatter of
+    rates appears over every dry region for that one frame. Rounding both
+    planes onto the coarser lattice leaves a difference that is a whole
+    number of coarse steps. Planes whose steps agree, or whose lattice
+    cannot be read, are returned as they are. The shared predecessor plane
+    is never mutated. Mirrors ``align_packing_steps`` in
+    ``encode/derive.rs``, rounding half to even as NumPy does."""
+    if previous_mm is None:
+        return current_mm, previous_mm
+    current = packing_lattice(current_mm)
+    previous = packing_lattice(previous_mm)
+    if current is None or previous is None:
+        return current_mm, previous_mm
+    if current[1] >= PACKING_STEP_RATIO * previous[1]:
+        coarser = current
+    elif previous[1] >= PACKING_STEP_RATIO * current[1]:
+        coarser = previous
+    else:
+        return current_mm, previous_mm
+    # Both planes go through the one rounding, the coarser too: a cell on
+    # the same lattice point in both then holds the same float, and differences
+    # to an exact zero rather than to the last bits of two spellings of it.
+    return _round_onto(current_mm, coarser), _round_onto(previous_mm, coarser)
+
+
+def _round_onto(plane: np.ndarray, lattice: tuple[float, float]) -> np.ndarray:
+    anchor, step = lattice
+    return anchor + np.round((plane - anchor) / step) * step
+
+
 def interval_rate(total_mm: np.ndarray, step_hours: int) -> np.ndarray:
     """Mean precipitation rate (mm/h) over the step ending at the current
     frame, from the total that fell over that step, in mm.
