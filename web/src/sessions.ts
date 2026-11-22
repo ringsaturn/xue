@@ -35,7 +35,7 @@ import { buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette } 
 import { coverageBox, WHOLE_PLANE_COVERAGE, type CoverageBox, type TileGeometry, type TileRect } from "./tiles";
 import type { DataBackend } from "./urlstate";
 import { VOLUME_BUNDLE_LEVELS, volumeLevels } from "./volume";
-import { spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
+import { openZarrHubChannel, spawnZarrWorker, zarrInitMessage, zarrProbeUrl, zarrStoreFor } from "./zarr/channel";
 
 /** Who a session is opened for: the primary layer, an overlay slot, or the
  * probe panel's rows. */
@@ -361,7 +361,9 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
           throw new Error("range requests unsupported; a probe session never downloads a whole shard");
         }
         streaming = true;
-        channel = spawnZarrWorker();
+        // A layer decodes planes and has a worker to itself; a pin's
+        // session reads one cell's series and shares one of a few.
+        channel = role === "probe" ? openZarrHubChannel() : spawnZarrWorker();
         channel.onerror = (event) => deps.showError(event.message || t("workerStartFailed"));
         initMessage = zarrInitMessage(store, descriptor.variable, runUrl, variableKey, storeStreams, deps.zarrPayloadBudgetBytes());
         downloadedBytes = 0;

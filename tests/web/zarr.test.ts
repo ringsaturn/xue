@@ -1049,6 +1049,14 @@ describe("ZarrSession", () => {
     await expect(session.decodeFrame(1, 121)).rejects.toThrow(/no plane/);
     await expect(session.decodeFrame(2, 0)).rejects.toThrow(/no array/);
   });
+
+  it("gives its arrays back when disposed and answers nothing afterwards", async () => {
+    const { session } = await open("bundles.zarr", "tmp2m", "tmp2m.xue");
+    await session.decodeSeries(1, 37, 20);
+    session.dispose();
+    expect(session.numericIds).toEqual([]);
+    await expect(session.decodeSeries(1, 37, 20)).rejects.toThrow(/no array/);
+  });
 });
 
 // -- a window cut along time -----------------------------------------------------

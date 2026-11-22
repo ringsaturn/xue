@@ -75,6 +75,15 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
   HTTP/2 connection, and an edge that closes it takes all of them at once.
   Range support is probed once per object (`sessions.ts`), and the probe's
   byte is read rather than cancelled.
+- A layer's session has a worker to itself. A pinned point's sessions —
+  one per meteogram row, and four per pressure level with a model column on
+  the chart — share at most four hub workers (`zarr/hub.worker.ts`), each
+  hosting many channels: the loop is the same one (`zarr/endpoint.ts`), the
+  messages travel in an envelope naming the channel, and `channel.ts` hands
+  the session a `DecodeChannel` that hides it. `probepanel.ts` opens them
+  six at a time. A hub outlives its channels, so closing one frees its
+  reader's WASM memory (`ZarrReader.dispose`) once its reads in flight have
+  returned; a dedicated worker frees everything by being terminated.
 - Compressed chunks sit in an LRU under `payloadBudgetBytes`
   (`main.ts::zarrPayloadBudgetBytes`), bounding memory by the prefetch
   window rather than the axis; a decode re-fetches what eviction took.

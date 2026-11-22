@@ -170,6 +170,10 @@ export class SegmentedZarrSession implements ZarrReader {
     for (const segment of this.segments) segment.clearCache();
   }
 
+  dispose(): void {
+    for (const segment of this.segments) segment.dispose();
+  }
+
   private locate(frameOffset: number): { segment: number; offset: number } {
     const place = this.located.get(frameOffset);
     if (!place) throw new Error("no plane for the requested variable and forecast hour");
