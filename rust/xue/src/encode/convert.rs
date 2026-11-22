@@ -46,8 +46,8 @@ use crate::encode::report::{build_report, write_manifest};
 // The precipitation arithmetic stays reachable where `tests/encoder.rs`
 // has always imported it from.
 pub use crate::encode::derive::{
-    average_window_start, deaccumulate_precipitation, deaverage_precipitation,
-    dewindow_precipitation,
+    align_packing_steps, average_window_start, deaccumulate_precipitation,
+    deaverage_precipitation, dewindow_precipitation,
 };
 // The wheel's `decimate` is this sampling, so the two cannot drift.
 pub use crate::encode::ladder::decimate_codes;
@@ -681,8 +681,11 @@ fn quantize_file(
             // ECMWF: replace the run-total accumulation (already mm) with the
             // mean rate over the step that ends at this frame (mm/h). The step
             // is the actual distance to the previous frame.
+            // The two totals are first put on one packing lattice.
             let step = previous_hour.map_or(1, |previous| hour - previous);
-            deaccumulate_precipitation(&raw, previous_plane.as_deref().map(Vec::as_slice), step)
+            let (current_total, previous_total) =
+                align_packing_steps(&raw, previous_plane.as_deref().map(Vec::as_slice));
+            deaccumulate_precipitation(&current_total, previous_total.as_deref(), step)
         } else if source.interval_precipitation {
             // Open-Meteo: the file already holds the total that fell over the
             // interval since the model's previous native output time, so the

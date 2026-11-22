@@ -45,6 +45,69 @@ pub fn deaccumulate_precipitation(
         .collect()
 }
 
+/// How much coarser one plane's packing step must be than the other's before
+/// the finer plane is rounded onto it. Mirrors `PACKING_STEP_RATIO` in
+/// `xuebuild/derive.py`, which says why.
+pub const PACKING_STEP_RATIO: f64 = 1.5;
+
+/// The lattice a plane's values sit on, `(anchor, step)`: its smallest finite
+/// value and the smallest gap between two distinct finite values. None when
+/// the plane holds fewer than two distinct finite values. Mirrors
+/// `packing_lattice` in `xuebuild/derive.py`.
+pub fn packing_lattice(plane: &[f64]) -> Option<(f64, f64)> {
+    let mut distinct: Vec<f64> = plane.iter().copied().filter(|value| value.is_finite()).collect();
+    distinct.sort_by(f64::total_cmp);
+    // `==` merges a negative zero with zero, as `np.unique` does.
+    distinct.dedup_by(|later, earlier| later == earlier);
+    if distinct.len() < 2 {
+        return None;
+    }
+    let step = distinct
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .fold(f64::INFINITY, f64::min);
+    Some((distinct[0] + 0.0, step))
+}
+
+/// Round two run-total accumulations onto the coarser of their two packing
+/// lattices before they are differenced, so a frame where the GRIB encoder
+/// coarsened its step does not difference rounding. Returns the planes to
+/// difference, `(current, previous)`, borrowing whichever is unchanged.
+/// Mirrors `align_packing_steps` in `xuebuild/derive.py`, rounding half to
+/// even as NumPy does.
+pub fn align_packing_steps<'a>(
+    current_mm: &'a [f64],
+    previous_mm: Option<&'a [f64]>,
+) -> (std::borrow::Cow<'a, [f64]>, Option<std::borrow::Cow<'a, [f64]>>) {
+    use std::borrow::Cow;
+    let Some(previous_mm) = previous_mm else {
+        return (Cow::Borrowed(current_mm), None);
+    };
+    let unchanged = (Cow::Borrowed(current_mm), Some(Cow::Borrowed(previous_mm)));
+    let (Some(current), Some(previous)) = (packing_lattice(current_mm), packing_lattice(previous_mm)) else {
+        return unchanged;
+    };
+    let coarser = if current.1 >= PACKING_STEP_RATIO * previous.1 {
+        current
+    } else if previous.1 >= PACKING_STEP_RATIO * current.1 {
+        previous
+    } else {
+        return unchanged;
+    };
+    // Both planes go through the one rounding, as in Python.
+    (
+        Cow::Owned(round_onto(current_mm, coarser)),
+        Some(Cow::Owned(round_onto(previous_mm, coarser))),
+    )
+}
+
+fn round_onto(plane: &[f64], (anchor, step): (f64, f64)) -> Vec<f64> {
+    plane
+        .iter()
+        .map(|value| anchor + ((value - anchor) / step).round_ties_even() * step)
+        .collect()
+}
+
 /// Mean precipitation rate (mm/h) over the step ending at the current frame,
 /// from the total that fell over that step, in mm.
 ///
@@ -525,7 +588,9 @@ pub(super) fn derive_cat_plane<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::interval_rate;
+    use std::borrow::Cow;
+
+    use super::{align_packing_steps, interval_rate, packing_lattice};
 
     /// `prate` from an interval total: one division, whatever the step.
     /// Mirrors `IntervalRateTests` in `tests/test_ifshres.py`.
@@ -535,6 +600,36 @@ mod tests {
         assert_eq!(interval_rate(&total, 1).expect("an hour"), vec![0.0, 1.5, 12.0]);
         assert_eq!(interval_rate(&total, 3).expect("three hours"), vec![0.0, 0.5, 4.0]);
         assert_eq!(interval_rate(&total, 6).expect("six hours"), vec![0.0, 0.25, 2.0]);
+    }
+
+    /// A run total whose packing step doubles between two frames differences
+    /// no rounding. Mirrors `PackingStepTests` in `tests/test_bin.py`.
+    #[test]
+    fn the_finer_plane_is_rounded_onto_the_coarser_lattice() {
+        let previous = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0];
+        let current = [0.0, 2.0, 4.0, 6.0, 12.0, 10.0];
+        let (current_total, previous_total) = align_packing_steps(&current, Some(&previous));
+        assert_eq!(&*current_total, &current);
+        assert_eq!(previous_total.as_deref(), Some(&[0.0, 0.0, 4.0, 4.0, 8.0, 8.0][..]));
+
+        let (current_total, previous_total) = align_packing_steps(&[0.0, 1.0, 3.0], Some(&[0.0, 2.0, 4.0]));
+        assert_eq!(&*current_total, &[0.0, 0.0, 4.0]);
+        assert_eq!(previous_total.as_deref(), Some(&[0.0, 2.0, 4.0][..]));
+    }
+
+    #[test]
+    fn equal_steps_and_unreadable_lattices_pass_through() {
+        for (current, previous) in [
+            (&[0.0, 1.0, 3.0][..], Some(&[0.0, 1.0, 2.0][..])),
+            (&[0.0, 0.0][..], Some(&[0.0, 1.0, 3.0][..])),
+            (&[0.0, 2.0][..], None),
+        ] {
+            let (current_total, previous_total) = align_packing_steps(current, previous);
+            assert!(matches!(current_total, Cow::Borrowed(_)));
+            assert!(previous_total.is_none_or(|plane| matches!(plane, Cow::Borrowed(_))));
+        }
+        assert_eq!(packing_lattice(&[1.5, 3.5, f64::NAN, 2.5, 1.5]), Some((1.5, 1.0)));
+        assert_eq!(packing_lattice(&[f64::NAN, 4.0]), None);
     }
 
     #[test]

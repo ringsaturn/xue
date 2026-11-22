@@ -42,6 +42,7 @@ from .bundles import (
 )
 from .common import crc32_hex
 from .derive import (
+    align_packing_steps,
     average_window_start,
     deaccumulate_precipitation,
     deaverage_precipitation,
@@ -339,10 +340,11 @@ def _quantize_file(
         # mean rate over the step that ends at this frame (mm/h). The step is
         # the actual distance to the previous frame — six hours past the
         # 144-hour cadence change, three before it.
+        # The two totals are first put on one packing lattice, so a frame
+        # where the encoder coarsened its step does not difference rounding.
         step = hour - previous_hour if previous_hour is not None else 1
-        values[PRECIPITATION_RATE_BUNDLE_ID] = deaccumulate_precipitation(
-            values.pop(raw_precipitation_id), previous_plane, step
-        )
+        current_total, previous_total = align_packing_steps(values.pop(raw_precipitation_id), previous_plane)
+        values[PRECIPITATION_RATE_BUNDLE_ID] = deaccumulate_precipitation(current_total, previous_total, step)
     elif mode == "interval":
         # Open-Meteo: the file already holds the total that fell over the
         # interval since the model's previous native output time, so the

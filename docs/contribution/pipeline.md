@@ -60,7 +60,11 @@ defaults and the rest follows. It feeds both record matching and the v3
   its length (`interval_precipitation`), or a window's total differenced
   within the window (`windowed_precipitation`, WOOF-NAM's twelve hours).
   The two window shapes share a frame's raw plane with its successor only
-  inside one window.
+  inside one window. A run total is first put on one packing lattice
+  (`derive.align_packing_steps`): a GRIB encoder at a fixed bit count
+  doubles its step once the field's range crosses a power of two (ECMWF
+  `tp` past 0.5 m), and differencing across that frame would otherwise
+  paint one fine step of rounding over every dry cell.
 - Isobaric families come from one table of fifteen levels (`cat` uses only
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.
