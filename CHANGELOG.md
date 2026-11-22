@@ -10,13 +10,12 @@ changes are in `git log`.
 - Seven more isobaric levels are registered for every isobaric family:
   975, 950, 900, 600, 400, 150 and 100 hPa, fifteen in all, each with a
   codebook of its own (`docs/bundle.md`).
-- `gfs` publishes the height, temperature and wind on all fifteen surfaces
-  and the relative humidity on all but 150 and 100 hPa: `hgt`, `tmp` and
-  `wind` on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa and `rh` on
-  975 / 950 / 900 / 600 / 400 hPa, 107 bundles a run.
+- `gfs` publishes the height, temperature, relative humidity and wind on
+  all fifteen surfaces: `hgt`, `tmp`, `rh` and `wind` on 975 / 950 / 900 /
+  600 / 400 / 150 / 100 hPa, 109 bundles a run.
 - `ecmwf` and `ifs` publish the same on 600 / 400 / 150 / 100 hPa, which
-  the open data carries (`rh600` and `rh400` of the humidity), 77 bundles a
-  run. 975, 950 and 900 hPa are GFS's alone (`docs/sources.md`).
+  the open data carries, 79 bundles a run. 975, 950 and 900 hPa are GFS's
+  alone (`docs/sources.md`).
 
 ## 2026-11-17
 

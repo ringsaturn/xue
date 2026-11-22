@@ -65,7 +65,7 @@ GFS = source_spec("gfs")
 # taken up yet (the heights, temperatures and winds beyond the synoptic
 # levels, and the turbulence index they would feed; the records exist in
 # the AIFS open data), and what AIFS adds.
-DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 600, 500, 400, 300, 250, 200)) + (
+DROPPED = tuple(f"rh{level}" for level in (1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100)) + (
     "ptypeec",
     "gust",
     "cape",

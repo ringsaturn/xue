@@ -29,7 +29,7 @@ class IndexMessagesTests(unittest.TestCase):
         # nine wave records — the combined sea, the wind sea and the first
         # swell partition — with the orography, the eight soil layers and
         # the seven further isobaric surfaces between the two.
-        self.assertEqual(len(messages), 123)
+        self.assertEqual(len(messages), 125)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
@@ -42,8 +42,8 @@ class IndexMessagesTests(unittest.TestCase):
         soil = messages[73:81]
         # The surfaces added after the first eight, appended after the soil
         # so the records before them keep their bands.
-        added = messages[81:114]
-        ocean = messages[69:72] + messages[114:]
+        added = messages[81:116]
+        ocean = messages[69:72] + messages[116:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -161,15 +161,15 @@ class IndexMessagesTests(unittest.TestCase):
                 (70, 0, 0, 0, 1, 0.0),
                 (71, 10, 2, 0, 1, 0.0),
                 (72, 10, 2, 1, 1, 0.0),
-                (115, 10, 0, 3, 1, 1.0),
-                (116, 10, 0, 11, 1, 1.0),
-                (117, 10, 0, 10, 1, 1.0),
-                (118, 10, 0, 5, 1, 1.0),
-                (119, 10, 0, 6, 1, 1.0),
-                (120, 10, 0, 4, 1, 1.0),
-                (121, 10, 0, 8, 241, 1.0),
-                (122, 10, 0, 9, 241, 1.0),
-                (123, 10, 0, 7, 241, 1.0),
+                (117, 10, 0, 3, 1, 1.0),
+                (118, 10, 0, 11, 1, 1.0),
+                (119, 10, 0, 10, 1, 1.0),
+                (120, 10, 0, 5, 1, 1.0),
+                (121, 10, 0, 6, 1, 1.0),
+                (122, 10, 0, 4, 1, 1.0),
+                (123, 10, 0, 8, 241, 1.0),
+                (124, 10, 0, 9, 241, 1.0),
+                (125, 10, 0, 7, 241, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))
@@ -186,8 +186,9 @@ class IndexMessagesTests(unittest.TestCase):
         )
         self.assertTrue(all(message.statistical_process is None for message in soil))
         # The height, temperature and relative humidity on the further
-        # surfaces (no humidity on the two stratospheric ones), then the wind
-        # pair on each, all on the isobaric surface in pascals.
+        # surfaces, then the wind pair on each, then the humidity on the two
+        # highest, read last so the records before them keep their bands —
+        # all on the isobaric surface in pascals.
         added_levels = [97500.0, 95000.0, 90000.0, 60000.0, 40000.0, 15000.0, 10000.0]
         humid_levels = added_levels[:5]
         self.assertEqual(
@@ -199,7 +200,8 @@ class IndexMessagesTests(unittest.TestCase):
                 (101 + 2 * index + component, 2, 2 + component, 100, level)
                 for index, level in enumerate(added_levels)
                 for component in (0, 1)
-            ],
+            ]
+            + [(115 + index, 1, 1, 100, level) for index, level in enumerate(added_levels[5:])],
         )
         self.assertTrue(all(message.discipline == 0 and message.statistical_process is None for message in added))
 
