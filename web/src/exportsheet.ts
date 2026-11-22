@@ -4,7 +4,9 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 import { captionText } from "./casecaptions";
 import { formatBytes } from "./format";
 import {
+  deliverFile,
   deliverGif,
+  exportFileName,
   exportGif,
   GIF_MAX_FRAMES,
   gifFileName,
@@ -32,8 +34,10 @@ import {
 } from "./mp4export";
 import type { WindParticleLayer } from "./particles";
 import { FPS_LADDER, parseStoredFps, type PlaybackFps } from "./playback";
+import { chartReady, leavePaper, prepareChart, printAllowedNow, printPrepared, type PrintSheetDeps } from "./printmap";
 import { createSheet } from "./sheet";
 import type { ShowcaseCase } from "./showcase-catalog";
+import { exportStill } from "./stillexport";
 
 /** What the export sheet reads off the page: its own elements, the
  * playhead and the axis (live, through getters), and the transport it
@@ -58,6 +62,11 @@ export interface ExportSheetDeps {
   readonly exportSummary: HTMLElement;
   readonly exportProgress: HTMLElement;
   readonly exportRun: HTMLButtonElement;
+  readonly exportPrint: HTMLButtonElement;
+  readonly exportImage: HTMLButtonElement;
+  readonly legend: HTMLElement;
+  /** What the printed chart reads off the page. */
+  readonly printDeps: PrintSheetDeps;
   readonly exportRing: SVGCircleElement;
   readonly variableCode: HTMLElement;
   readonly variableTitle: HTMLElement;
@@ -113,6 +122,8 @@ export function createExportSheet(deps: ExportSheetDeps) {
     exportSummary,
     exportProgress,
     exportRun,
+    exportPrint,
+    exportImage,
     exportRing,
     variableCode,
     variableTitle,
@@ -439,6 +450,83 @@ export function createExportSheet(deps: ExportSheetDeps) {
     }
   }
 
+  /** The still under way, one at a time. */
+  let stillBusy = false;
+
+  /** Save the frame on screen as a PNG, with its legend and credits. */
+  async function saveStill(): Promise<void> {
+    if (stillBusy) return;
+    stillBusy = true;
+    exportImage.disabled = true;
+    exportFailed = false;
+    try {
+      const index = deps.activeFrameIndex ?? Number(slider.value);
+      const blob = await exportStill(gifHost, index, deps.legend);
+      await deliverFile(blob, exportFileName(variableCode.textContent ?? "", frameValidTime(index), "png"), "image/png");
+    } catch (error) {
+      console.error("PNG export failed", error);
+      exportFailed = true;
+    } finally {
+      stillBusy = false;
+      exportImage.disabled = false;
+      if (!exportSheet.hidden) renderExportSheet();
+    }
+  }
+
+  /** Where the print button stands: the chart being made ready, or ready
+   * and waiting for the tap that opens the dialog. */
+  let printState: "idle" | "preparing" | "ready" = "idle";
+  /** Set while the sheet is shut for the print itself, which keeps the
+   * paper ground for it. */
+  let closingForPrint = false;
+
+  function renderPrintButton(): void {
+    exportPrint.textContent = t(
+      printState === "preparing" ? "exportPrintPreparing" : printState === "ready" ? "exportPrintReady" : "exportPrint",
+    );
+    exportPrint.disabled = printState === "preparing";
+    exportPrint.classList.toggle("is-ready", printState === "ready");
+  }
+
+  function printNow(): void {
+    printState = "idle";
+    closingForPrint = true;
+    sheetControl?.close();
+    closingForPrint = false;
+    renderPrintButton();
+    printPrepared();
+  }
+
+  /** The print: the paper chart is made ready first, which takes the
+   * basemap's tiles; a phone drops a print opened that long after the tap,
+   * so the button then asks for a second tap and prints in that. */
+  async function startPrint(): Promise<void> {
+    if (chartReady()) {
+      printNow();
+      return;
+    }
+    if (printState !== "idle") return;
+    printState = "preparing";
+    renderPrintButton();
+    try {
+      await prepareChart(deps.printDeps);
+    } catch (error) {
+      console.error("print preparation failed", error);
+    }
+    if (!chartReady()) {
+      printState = "idle";
+      renderPrintButton();
+      return;
+    }
+    if (printAllowedNow()) {
+      printNow();
+      return;
+    }
+    printState = "ready";
+    renderPrintButton();
+    exportPrint.focus();
+  }
+
   /** The trigger, the sheet's controls and the stored choices, wired where
    * the page's other transport controls are. */
   let sheetControl: ReturnType<typeof createSheet> | null = null;
@@ -458,6 +546,13 @@ export function createExportSheet(deps: ExportSheetDeps) {
         return false;
       },
       initialFocus: () => exportRun,
+      onClose: () => {
+        // Shut without printing: the screen comes back.
+        if (closingForPrint || printState === "idle") return;
+        printState = "idle";
+        leavePaper();
+        renderPrintButton();
+      },
     });
     exportTrigger.addEventListener("click", () => {
       if (!exportSheet.hidden) renderExportSheet();
@@ -478,6 +573,8 @@ export function createExportSheet(deps: ExportSheetDeps) {
     // The press is held on purpose; no callout or menu over it.
     exportTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
     exportRun.addEventListener("click", () => void saveLoop());
+    exportImage.addEventListener("click", () => void saveStill());
+    exportPrint.addEventListener("click", () => void startPrint());
     exportStart.addEventListener("input", () => setExportBound("start", Number(exportStart.value)));
     exportEnd.addEventListener("input", () => setExportBound("end", Number(exportEnd.value)));
     // MP4 is offered only where the browser can encode H.264 itself.
@@ -500,6 +597,7 @@ export function createExportSheet(deps: ExportSheetDeps) {
       if (!exportSheet.hidden) renderExportSheet();
     });
     onLocaleChange(() => {
+      renderPrintButton();
       if (!exportSheet.hidden) renderExportSheet();
     });
   }
@@ -507,7 +605,6 @@ export function createExportSheet(deps: ExportSheetDeps) {
   return {
     setLoopExportEnabled,
     attachExportSheet,
-    closeSheet: () => sheetControl?.close(),
     get loopExport() {
       return loopExport;
     },

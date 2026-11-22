@@ -2540,9 +2540,17 @@ html[lang="ja"] .rail-glyph {
   font-weight: 600;
 }
 
-.export-print {
-  height: 36px;
+/* The still's two actions, side by side under the loop's. */
+.export-still {
+  display: flex;
+  gap: 8px;
   margin: 0 8px 4px;
+}
+
+.export-print {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
   border: var(--hair) solid var(--line);
   border-radius: var(--r-xl);
   background: transparent;
@@ -2550,6 +2558,19 @@ html[lang="ja"] .rail-glyph {
   cursor: pointer;
   font-size: var(--fs-1);
   font-weight: 500;
+}
+
+.export-print:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Ready and waiting for the tap that opens the print dialog. */
+.export-print.is-ready {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
 }
 
 .export-print:focus-visible {
