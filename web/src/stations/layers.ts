@@ -101,6 +101,11 @@ export const AQ_STALE_MS = 3 * 3600 * 1000;
 
 const FULL_OPACITY = 0.92;
 const STALE_OPACITY = 0.28;
+/** A sounding's mark opens a chart of an ascent that has a time of its own,
+ * whatever the playhead reads, and a forecast's playhead is more than a
+ * sounding interval from the newest ascent for all but its first frames. So
+ * the mark steps back there without becoming hard to find. */
+const SOUNDING_STALE_OPACITY = 0.6;
 
 const RADIUS = 4.5;
 const HOVER_RADIUS = 5.5;
@@ -376,12 +381,16 @@ export function synopColorExpression(): ExpressionSpecification {
  * the product's window, faint outside it. An expression over the feature's
  * own `time`, so a playhead move is two paint properties rather than a
  * rebuilt source. `null` (no dataset open yet) draws everything full. */
-export function freshnessOpacity(time: number | null, limit: number): ExpressionSpecification | number {
+export function freshnessOpacity(
+  time: number | null,
+  limit: number,
+  stale: number = STALE_OPACITY,
+): ExpressionSpecification | number {
   if (time === null) return FULL_OPACITY;
   return [
     "case",
     [">", ["abs", ["-", ["number", ["get", "time"]], time]], limit],
-    STALE_OPACITY,
+    stale,
     FULL_OPACITY,
   ];
 }
@@ -488,7 +497,7 @@ export function stationLayerSpecs(state: {
     "circle-opacity": airportOpacity,
     "circle-stroke-opacity": airportOpacity,
   } as const;
-  const soundingOpacity = freshnessOpacity(state.time, SOUNDING_STALE_MS);
+  const soundingOpacity = freshnessOpacity(state.time, SOUNDING_STALE_MS, SOUNDING_STALE_OPACITY);
   const synopOpacity = freshnessOpacity(state.time, SYNOP_STALE_MS);
   const aqOpacity = freshnessOpacity(state.time, AQ_STALE_MS);
   const synopPaint = {
@@ -653,7 +662,7 @@ export class StationLayers {
       this.map.setPaintProperty(id, "circle-opacity", opacity);
       this.map.setPaintProperty(id, "circle-stroke-opacity", opacity);
     }
-    const opacity = freshnessOpacity(time, SOUNDING_STALE_MS);
+    const opacity = freshnessOpacity(time, SOUNDING_STALE_MS, SOUNDING_STALE_OPACITY);
     this.map.setPaintProperty(LAYERS.sounding, "circle-opacity", opacity);
     this.map.setPaintProperty(LAYERS.sounding, "circle-stroke-opacity", opacity);
     const synopOpacity = freshnessOpacity(time, SYNOP_STALE_MS);
