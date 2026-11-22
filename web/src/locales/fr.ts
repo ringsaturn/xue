@@ -764,6 +764,11 @@ export const fr: Record<MessageKey, string> = {
   soundingGuideWind:
     "Les barbules à droite pointent vers le vent : une longue vaut {full}, une courte {half}, un fanion {flag}. Lisez-les de bas en haut pour voir comment le vent change avec l'altitude.",
 
+  soundingColumnLevels: "{count} niveaux et la surface",
+  soundingSayColumn:
+    "Profil du modèle sur {count} niveaux, jusqu'à {top} : les couches minces de nuages et les inversions n'apparaissent pas",
+  soundingIndexModelOutput: "{name}, sortie du modèle",
+
   // The comparison page (compare.html).
   compareLink: "Comparer",
   compareTitle: "Comparer les prévisions",

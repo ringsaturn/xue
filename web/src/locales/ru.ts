@@ -766,6 +766,11 @@ export const ru: Record<MessageKey, string> = {
   soundingGuideWind:
     "Штрихи справа направлены навстречу ветру: длинный штрих — {full}, короткий — {half}, флажок — {flag}. Читайте их снизу вверх, чтобы увидеть, как ветер меняется с высотой.",
 
+  soundingColumnLevels: "{count} уровней и поверхность",
+  soundingSayColumn:
+    "Профиль модели на {count} уровнях, до {top}: тонкие слои облаков и инверсии на нём не видны",
+  soundingIndexModelOutput: "{name}, расчёт модели",
+
   // The comparison page (compare.html).
   compareLink: "Сравнить",
   compareTitle: "Сравнить прогнозы",

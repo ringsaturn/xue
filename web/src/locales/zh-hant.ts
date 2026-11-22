@@ -751,6 +751,10 @@ export const zhHant: Record<MessageKey, string> = {
     "氣塊線是近地面空氣被抬升後會有的溫度。它在溫度線右側的部分（暖色）表示氣塊比周圍暖、會自己繼續上升，面積越大對流越強；在左側的部分（冷色）表示需要外力才能抬上去。",
   soundingGuideWind: "右側的風標指向來風方向：長劃 {full}，短劃 {half}，三角旗 {flag}。由下往上看，可以讀出風隨高度的變化。",
 
+  soundingColumnLevels: "{count} 層加地面",
+  soundingSayColumn: "模式剖線只有 {count} 層，最高到 {top}：薄雲層和逆溫看不出來",
+  soundingIndexModelOutput: "{name}（模式輸出）",
+
   // The comparison page (compare.html).
   compareLink: "比較",
   compareTitle: "預報比較",

@@ -755,6 +755,10 @@ export const ja: Record<MessageKey, string> = {
   soundingGuideWind:
     "右側の矢羽根は風上を向き、長い羽根は {full}、短い羽根は {half}、旗は {flag} を表します。下から上へ読むと、高さによる風の変化が分かります。",
 
+  soundingColumnLevels: "{count} 層と地表",
+  soundingSayColumn: "モデルの {count} 層のプロファイル（上端 {top}）：薄い雲の層や逆転層は読み取れません",
+  soundingIndexModelOutput: "{name}（モデル出力）",
+
   // The comparison page (compare.html).
   compareLink: "比較",
   compareTitle: "予報を比較",

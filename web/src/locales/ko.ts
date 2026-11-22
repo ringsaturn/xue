@@ -761,6 +761,10 @@ export const ko: Record<MessageKey, string> = {
   soundingGuideWind:
     "오른쪽의 바람깃은 바람이 불어오는 쪽을 가리키며, 긴 깃은 {full}, 짧은 깃은 {half}, 삼각기는 {flag}입니다. 아래에서 위로 읽으면 고도에 따른 바람의 변화를 알 수 있습니다.",
 
+  soundingColumnLevels: "{count}개 층과 지표",
+  soundingSayColumn: "모델 프로파일, {count}개 층, 최고 {top}: 얇은 구름층과 역전층은 나타나지 않음",
+  soundingIndexModelOutput: "{name}, 모델 출력",
+
   // The comparison page (compare.html).
   compareLink: "비교",
   compareTitle: "예보 비교",
