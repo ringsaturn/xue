@@ -25,6 +25,7 @@ product with no stations in it would take an empty map live.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -77,6 +78,23 @@ STALE_HOURS = 48
 """A station whose newest sounding is older than this is not carried
 forward any further; it has stopped reporting, or its identifier has
 changed."""
+
+NAMES_PATH = Path(__file__).with_name("stations.json")
+"""Station names by WMO number (``docs/sounding.md`` §3). TEMP bulletins
+carry none, so they come from this table, checked in rather than fetched:
+a catalogue that is down can then never cost an issue its names."""
+
+
+@functools.cache
+def station_names() -> dict[str, str]:
+    table = json.loads(NAMES_PATH.read_text(encoding="utf-8"))
+    return {str(wmo): str(name) for wmo, name in table["names"].items()}
+
+
+def station_name(wmo: str | None) -> str | None:
+    """The station's name, a function of its WMO number alone, so a line
+    carried forward and a line rewritten this hour say the same."""
+    return None if wmo is None else station_names().get(wmo)
 
 
 def _sounding_json(sounding: bufr.Sounding) -> dict[str, Any]:
@@ -265,7 +283,7 @@ def _station_payload(
     payload = {
         "id": station_id,
         "wmo": wmo,
-        "name": None,
+        "name": station_name(wmo),
         "lat": position["lat"],
         "lon": position["lon"],
         "elev": position.get("elev"),
@@ -411,6 +429,7 @@ def build_product(
             continue
         if datetime.fromisoformat(station["soundings"][0]["time"]) < stale_before:
             continue
+        station["name"] = station_name(station.get("wmo"))
         validate_station_line(station, f"soundings[{station_id}]")
         stations[station_id] = station
         copied += 1

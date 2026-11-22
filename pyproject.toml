@@ -38,6 +38,7 @@ xuebuild = [
     "stac_prose.json",
     "tc/curated.json",
     "synop/*.json",
+    "sounding/*.json",
     "aq/*.json",
     "alerts/*.json",
 ]
