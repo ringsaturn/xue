@@ -283,7 +283,7 @@ import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId, storedSetupLayers } from "./derived";
 import { createExportSheet, sourceCredit } from "./exportsheet";
-import { printChart, printMapSheet, type PrintSheetDeps } from "./printmap";
+import { printMapSheet, type PrintSheetDeps } from "./printmap";
 import { basemapLabelsShown, currentBasemapTheme, luminance, TERRAIN_LAYER, hillshadePaint, hillshadeOverFieldsPaint, RELIEF_OVER_FIELDS_LAYER, syncReliefLayers, COASTLINE_LAYER, RIVER_LAYER, FORECAST_ANCHOR_LAYER, FIELD_ANCHOR_LAYER, buildBasemapStyle, applyBasemapStyleDiff, type PaintName, type PaintValue, type BasemapStyle } from "./basemap";
 import { createStats } from "./stats";
 import { createOverlays } from "./overlays";
@@ -1066,6 +1066,8 @@ const exportEndValue = required<HTMLOutputElement>("export-end-value");
 const exportSummary = required<HTMLElement>("export-summary");
 const exportProgress = required<HTMLElement>("export-progress");
 const exportRun = required<HTMLButtonElement>("export-run");
+const exportPrint = required<HTMLButtonElement>("export-print");
+const exportImage = required<HTMLButtonElement>("export-image");
 const exportRing = exportTrigger.querySelector<SVGCircleElement>(".export-ring circle")!;
 const particlesToggle = required<HTMLButtonElement>("particles-toggle");
 /** The precipitation setup's field tile: the rate with what makes it. */
@@ -2431,6 +2433,10 @@ const exportSheetControl = createExportSheet({
   exportSummary,
   exportProgress,
   exportRun,
+  exportPrint,
+  exportImage,
+  legend,
+  printDeps,
   exportRing,
   variableCode,
   variableTitle,
@@ -7664,10 +7670,6 @@ playButton.addEventListener("click", () => {
 // than it saves, and the label always reads the rate in force.
 speedButton.addEventListener("click", () => setPlaybackFps(nextFps(playbackFps), true));
 attachExportSheet();
-required<HTMLButtonElement>("export-print").addEventListener("click", () => {
-  exportSheetControl.closeSheet();
-  void printChart(printDeps);
-});
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 phaseToggle.addEventListener("click", () => setPhaseShown(!view.phase));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));

@@ -21,6 +21,8 @@ interface SheetOptions {
   canOpen?: () => boolean;
   /** What to focus when it opens. Defaults to the first focusable row. */
   initialFocus?: (sheet: HTMLElement) => HTMLElement | null | undefined;
+  /** Called each time an open sheet shuts, whatever shut it. */
+  onClose?: () => void;
 }
 
 interface SheetController {
@@ -34,11 +36,12 @@ const FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1
 
 /** Wire one sheet and hand back its controls. Every listener it needs — the
  * trigger, the dismiss targets, Escape — is attached here. */
-export function createSheet({ trigger, sheet, canOpen, initialFocus }: SheetOptions): SheetController {
+export function createSheet({ trigger, sheet, canOpen, initialFocus, onClose }: SheetOptions): SheetController {
   const isOpen = () => !sheet.hidden;
 
   function setOpen(open: boolean): void {
     const allowed = open && (canOpen?.() ?? true);
+    const wasOpen = isOpen();
     // Focus must leave the panel before it is hidden: a focused element
     // inside a `hidden` subtree leaves the page with nothing focused.
     if (!allowed && document.activeElement instanceof HTMLElement && sheet.contains(document.activeElement)) {
@@ -46,7 +49,10 @@ export function createSheet({ trigger, sheet, canOpen, initialFocus }: SheetOpti
     }
     sheet.hidden = !allowed;
     trigger.setAttribute("aria-expanded", String(allowed));
-    if (!allowed) return;
+    if (!allowed) {
+      if (wasOpen) onClose?.();
+      return;
+    }
     const target = initialFocus?.(sheet) ?? sheet.querySelector<HTMLElement>(FOCUSABLE);
     target?.focus();
   }

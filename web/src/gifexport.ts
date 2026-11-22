@@ -141,7 +141,7 @@ async function sourcesSettled(map: MaplibreMap, signal: AbortSignal, kind: strin
 /** Draw the frame the map is about to render into `context`: the drawing
  * buffer is only readable in the task that drew it, which is the map's
  * `render` event, so the copy happens there. */
-function captureNextRender(map: MaplibreMap, context: CanvasRenderingContext2D): Promise<void> {
+export function captureNextRender(map: MaplibreMap, context: CanvasRenderingContext2D): Promise<void> {
   return new Promise((resolve) => {
     map.once("render", () => {
       context.drawImage(map.getCanvas(), 0, 0, context.canvas.width, context.canvas.height);
@@ -151,7 +151,7 @@ function captureNextRender(map: MaplibreMap, context: CanvasRenderingContext2D):
   });
 }
 
-function drawCaption(context: CanvasRenderingContext2D, caption: GifCaption, credit: string): void {
+export function drawCaption(context: CanvasRenderingContext2D, caption: GifCaption, credit: string): void {
   const { width, height } = context.canvas;
   // Sized off the short side, so a phone's tall frame reads like a wide one.
   const unit = Math.max(11, Math.round(Math.min(width, height) / 48));

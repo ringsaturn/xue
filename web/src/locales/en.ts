@@ -482,6 +482,14 @@ export const en = {
   /** The export sheet's second action: the map as a printed chart, on a
    * white sheet with the controls gone. */
   exportPrint: "Print chart",
+  /** The export sheet's still: the frame on screen as a PNG, legend and
+   * credits burnt in. */
+  exportImage: "Save image",
+  /** The print button while the paper chart is made ready. */
+  exportPrintPreparing: "Preparing…",
+  /** The print button once the chart is ready but the phone needs a
+   * fresh tap to open the print dialog. */
+  exportPrintReady: "Tap to print",
   exportCancel: "Cancel",
   exportSummary: "{size}, {frames} frames, {seconds} s, about {bytes}",
   exportCapturing: "Capturing {done}/{total}",
