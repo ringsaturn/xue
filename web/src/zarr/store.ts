@@ -84,6 +84,49 @@ interface PendingRange {
   reject: (error: unknown) => void;
 }
 
+/** How long to wait before asking again for an object whose request died on
+ * the wire, attempt by attempt; after the last the failure is the caller's.
+ *
+ * Every request of a page to one origin rides one HTTP/2 connection, so when
+ * that connection is closed under it — an edge does this to a client it
+ * takes for a flood, and a pin that opens forty bundles at once looks like
+ * one — every request in flight fails together, the frame on screen among
+ * them. The browser has a new connection by the time anything asks again,
+ * and the objects are immutable, so asking again is always right. Only a
+ * request that never got an answer is retried: a status is an answer. */
+const RETRY_DELAYS_MS: readonly number[] = [250, 1000];
+
+/** The most requests one worker has on the wire at once, whichever of its
+ * stores they belong to. A layer's worker rarely has a dozen; a hub that
+ * hosts a pin's sessions would otherwise send a few hundred in one tick,
+ * which is the flood. Requests past the limit wait their turn in order. */
+const MAX_IN_FLIGHT = 16;
+let inFlightHere = 0;
+const waiting: (() => void)[] = [];
+
+function takeSlot(): Promise<void> {
+  if (inFlightHere < MAX_IN_FLIGHT) {
+    inFlightHere += 1;
+    return Promise.resolve();
+  }
+  // The slot is handed over by whoever frees one, so the count stays put.
+  return new Promise((resolve) => waiting.push(resolve));
+}
+
+function freeSlot(): void {
+  const next = waiting.shift();
+  if (next) next();
+  else inFlightHere -= 1;
+}
+
+/** What an object's origin answered: its status and, when that was a
+ * success, the bytes. */
+interface Answer {
+  status: number;
+  ok: boolean;
+  bytes: Uint8Array | null;
+}
+
 interface ZarrStoreOptions {
   /** `fetch` to use; the tests and the measurement harness serve a
    * directory through one of their own. */
@@ -93,6 +136,9 @@ interface ZarrStoreOptions {
    * from one whole GET of its object (see the module notes). True by
    * default — the main thread probes range support before opening. */
   ranges?: boolean;
+  /** The waits before a request that died on the wire is asked again
+   * (`RETRY_DELAYS_MS` by default); the tests pass zeros. */
+  retryDelays?: readonly number[];
 }
 
 export class ZarrStore {
@@ -104,6 +150,7 @@ export class ZarrStore {
   private readonly fetchImpl: FetchLike;
   private readonly gap: number;
   private readonly ranges: boolean;
+  private readonly retryDelays: readonly number[];
   private readonly pending = new Map<string, PendingRange[]>();
   private flushScheduled = false;
   /** Whole objects in flight or held, in whole-object mode only. */
@@ -118,6 +165,7 @@ export class ZarrStore {
     this.fetchImpl = options.fetch ?? ((url, init) => fetch(url, init));
     this.gap = options.gap ?? COALESCE_GAP;
     this.ranges = options.ranges ?? true;
+    this.retryDelays = options.retryDelays ?? RETRY_DELAYS_MS;
   }
 
   /** Whether the store reads by range or by whole object. */
@@ -132,14 +180,10 @@ export class ZarrStore {
 
   /** A whole object — a `zarr.json`. */
   async get(path: string): Promise<Uint8Array> {
-    const response = await this.request(path, undefined);
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`store object ${path} failed (HTTP ${response.status})`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    this.stats.bytes += bytes.byteLength;
-    return bytes;
+    const answer = await this.request(path, undefined, (response) => response.ok);
+    if (answer.bytes === null) throw new Error(`store object ${path} failed (HTTP ${answer.status})`);
+    this.stats.bytes += answer.bytes.byteLength;
+    return answer.bytes;
   }
 
   /** Part of an object. Byte ranges are batched per microtask and merged
@@ -213,12 +257,9 @@ export class ZarrStore {
    * a fallback — and the byte count must be exact, except that a suffix
    * longer than the object is legitimately answered with the whole object. */
   private async fetchBytes(path: string, range: string, expected: number, exact: boolean): Promise<Uint8Array> {
-    const response = await this.request(path, range);
-    if (response.status !== 206) {
-      await response.body?.cancel();
-      throw new Error(`range requests unsupported (HTTP ${response.status})`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const answer = await this.request(path, range, (response) => response.status === 206);
+    if (answer.bytes === null) throw new Error(`range requests unsupported (HTTP ${answer.status})`);
+    const { bytes } = answer;
     this.stats.bytes += bytes.byteLength;
     if (exact ? bytes.byteLength !== expected : bytes.byteLength > expected || bytes.byteLength === 0) {
       throw new Error(`range response length mismatch: expected ${expected}, got ${bytes.byteLength}`);
@@ -226,12 +267,37 @@ export class ZarrStore {
     return bytes;
   }
 
-  private async request(path: string, range: string | undefined): Promise<Response> {
+  /**
+   * One request and its body, under the worker's limit and with a request
+   * that died on the wire asked again (`RETRY_DELAYS_MS`). `wanted` says
+   * which answers carry the bytes the caller came for; any other is
+   * returned as its status with the body let go, and is never retried.
+   */
+  private async request(
+    path: string,
+    range: string | undefined,
+    wanted: (response: Response) => boolean,
+  ): Promise<Answer> {
     this.stats.requests += 1;
     this.inFlight += 1;
+    await takeSlot();
     try {
-      return await this.fetchImpl(this.url(path), range ? { headers: { Range: range } } : undefined);
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const response = await this.fetchImpl(this.url(path), range ? { headers: { Range: range } } : undefined);
+          if (!wanted(response)) {
+            await response.body?.cancel();
+            return { status: response.status, ok: response.ok, bytes: null };
+          }
+          return { status: response.status, ok: response.ok, bytes: new Uint8Array(await response.arrayBuffer()) };
+        } catch (error) {
+          const delay = this.retryDelays[attempt];
+          if (delay === undefined) throw error;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
     } finally {
+      freeSlot();
       this.inFlight -= 1;
     }
   }
