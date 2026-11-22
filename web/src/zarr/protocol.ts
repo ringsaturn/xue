@@ -95,3 +95,18 @@ export type ZarrWorkerRequest =
   | ZarrSeriesMessage
   | ZarrPrefetchWindowMessage
   | ZarrClearCacheMessage;
+
+/** What the main thread sends a hub worker (`hub.worker.ts`), which hosts
+ * many channels: a channel is opened, spoken to in the protocol above, and
+ * closed, each under the number it was opened with. */
+export type ZarrHubRequest =
+  | { kind: "open"; channel: number }
+  | { kind: "message"; channel: number; message: ZarrWorkerRequest }
+  | { kind: "close"; channel: number };
+
+/** What a hub worker sends back: a channel's own reply, in an envelope
+ * that names the channel. */
+export interface ZarrHubReply {
+  channel: number;
+  message: unknown;
+}

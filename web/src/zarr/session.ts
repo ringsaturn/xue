@@ -152,6 +152,13 @@ export interface ZarrReader {
    * valid. */
   decodeFrame(variableId: number, frameOffset: number, rects?: readonly TileRect[] | null): Promise<Uint8Array>;
   decodeSeries(variableId: number, column: number, row: number): Promise<Uint8Array>;
+  /** Give back what the reader holds in WASM memory: each array's shard
+   * indices and the decoded tiles of the time chunk it last read. A worker
+   * torn down with its session frees them by dying; one that outlives its
+   * sessions (`hub.worker.ts`) would keep every closed session's until a
+   * collection happened to finalize the handles. Nothing may be asked of
+   * the reader afterwards. */
+  dispose(): void;
 }
 
 export interface ZarrSessionOptions {
@@ -305,6 +312,11 @@ export class ZarrSession implements ZarrReader, PoolMember {
 
   clearCache(): void {
     for (const array of this.arrays.values()) array.reader.clearCache();
+  }
+
+  dispose(): void {
+    for (const array of this.arrays.values()) array.reader.free();
+    this.arrays.clear();
   }
 
   private firstArray(): VariableArray {
